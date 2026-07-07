@@ -1,5 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react"
-import { Ellipsis, Folder, MessageSquare, Pin, Plus, Terminal, Trash2, User, Archive, Pencil, Settings, LogOut, Sun } from "lucide-react"
+import { ChevronDown, Ellipsis, Folder, MessageSquare, Pin, Plus, Terminal, Trash2, User, Archive, Pencil, Settings, LogOut, Sun } from "lucide-react"
+
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 
 import {
   Sidebar,
@@ -28,21 +30,33 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 
-const pinnedChats = [
-  { id: "1", title: "Implementação de autenticação" },
-  { id: "2", title: "Refatorar component Button" },
-]
-
-const todayChats = [
-  { id: "3", title: "API de usuários - revisão" },
-  { id: "4", title: "Configurar Docker Compose" },
-  { id: "5", title: "Testes unitários do módulo X" },
-]
-
-const weekChats = [
-  { id: "6", title: "Documentação do projeto" },
-  { id: "7", title: "Otimização de queries SQL" },
-  { id: "8", title: "Pipeline CI/CD" },
+const folders = [
+  {
+    id: "folder-1",
+    name: "Projeto Alpha",
+    chats: [
+      { id: "1", title: "Implementação de autenticação" },
+      { id: "2", title: "Refatorar component Button" },
+      { id: "3", title: "API de usuários - revisão" },
+    ],
+  },
+  {
+    id: "folder-2",
+    name: "Infraestrutura",
+    chats: [
+      { id: "4", title: "Configurar Docker Compose" },
+      { id: "5", title: "Pipeline CI/CD" },
+    ],
+  },
+  {
+    id: "folder-3",
+    name: "Qualidade",
+    chats: [
+      { id: "6", title: "Testes unitários do módulo X" },
+      { id: "7", title: "Otimização de queries SQL" },
+      { id: "8", title: "Documentação do projeto" },
+    ],
+  },
 ]
 
 function NewChatButton() {
@@ -172,27 +186,35 @@ function ChatItem({ chat }: { chat: { id: string; title: string } }) {
   )
 }
 
-function ChatGroup({ label, chats }: { label: string; chats: { id: string; title: string }[] }) {
+function FolderGroup({ folder }: { folder: { id: string; name: string; chats: { id: string; title: string }[] } }) {
   return (
-    <SidebarGroup>
-      <SidebarGroupLabel>{label}</SidebarGroupLabel>
-      <SidebarGroupContent>
-        <SidebarMenu>
-          {chats.map((chat) => (
-            <ChatItem key={chat.id} chat={chat} />
-          ))}
-        </SidebarMenu>
-      </SidebarGroupContent>
-    </SidebarGroup>
+    <Collapsible defaultOpen className="group/collapsible">
+      <SidebarGroup>
+        <SidebarGroupLabel render={<CollapsibleTrigger />}>
+          <Folder className="size-4 shrink-0" />
+          <span className="flex-1 truncate">{folder.name}</span>
+          <ChevronDown className="size-3 shrink-0 transition-transform group-data-[state=open]/collapsible:rotate-180" />
+        </SidebarGroupLabel>
+        <CollapsibleContent>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              {folder.chats.map((chat) => (
+                <ChatItem key={chat.id} chat={chat} />
+              ))}
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </CollapsibleContent>
+      </SidebarGroup>
+    </Collapsible>
   )
 }
 
 function ChatHistory() {
   return (
     <>
-      <ChatGroup label="Fixados" chats={pinnedChats} />
-      <ChatGroup label="Hoje" chats={todayChats} />
-      <ChatGroup label="Esta semana" chats={weekChats} />
+      {folders.map((folder) => (
+        <FolderGroup key={folder.id} folder={folder} />
+      ))}
     </>
   )
 }
