@@ -1,4 +1,4 @@
-import { MessageSquare, Plus, Terminal, User, Settings, LogOut, Sun } from "lucide-react"
+import { Ellipsis, Folder, MessageSquare, Pin, Plus, Terminal, Trash2, User, Archive, Pencil, Settings, LogOut, Sun } from "lucide-react"
 
 import {
   Sidebar,
@@ -8,6 +8,7 @@ import {
   SidebarGroupContent,
   SidebarHeader,
   SidebarMenu,
+  SidebarMenuAction,
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarSeparator,
@@ -62,18 +63,58 @@ function ModeTabs() {
   )
 }
 
+function ChatItem({ chat }: { chat: { id: string; title: string } }) {
+  return (
+    <SidebarMenuItem>
+      <SidebarMenuButton className="text-xs">
+        <MessageSquare className="size-4" />
+        <span>{chat.title}</span>
+      </SidebarMenuButton>
+      <DropdownMenu>
+        <DropdownMenuTrigger render={<SidebarMenuAction showOnHover />}>
+          <Ellipsis className="size-4" />
+          <span className="sr-only">Opções do chat</span>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent
+          align="start"
+          side="right"
+          sideOffset={8}
+          className="w-48"
+        >
+          <DropdownMenuItem>
+            <Pin className="size-4" />
+            Fixar
+          </DropdownMenuItem>
+          <DropdownMenuItem>
+            <Pencil className="size-4" />
+            Renomear
+          </DropdownMenuItem>
+          <DropdownMenuItem>
+            <Folder className="size-4" />
+            Adicionar a pasta
+          </DropdownMenuItem>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem>
+            <Archive className="size-4" />
+            Arquivar
+          </DropdownMenuItem>
+          <DropdownMenuItem>
+            <Trash2 className="size-4" />
+            Deletar
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+    </SidebarMenuItem>
+  )
+}
+
 function ChatHistory() {
   return (
     <SidebarGroup>
       <SidebarGroupContent>
         <SidebarMenu>
           {chatHistory.map((chat) => (
-            <SidebarMenuItem key={chat.id}>
-              <SidebarMenuButton className="text-xs">
-                <MessageSquare className="size-4" />
-                <span>{chat.title}</span>
-              </SidebarMenuButton>
-            </SidebarMenuItem>
+            <ChatItem key={chat.id} chat={chat} />
           ))}
         </SidebarMenu>
       </SidebarGroupContent>
