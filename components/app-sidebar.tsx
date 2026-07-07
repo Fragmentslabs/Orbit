@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react"
-import { ChevronDown, Circle, Ellipsis, Folder, MessageSquare, Pin, Plus, Terminal, Trash2, User, Archive, Pencil, Settings, LogOut, Sun } from "lucide-react"
+import { ChevronDown, Circle, Ellipsis, Folder, MessageSquare, Pin, Plus, Terminal, Trash2, User, Archive, Pencil, Settings, LogOut, Sun, Moon, Monitor } from "lucide-react"
 
 import {
   Sidebar,
@@ -28,6 +28,9 @@ import {
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubTrigger,
+  DropdownMenuSubContent,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 
@@ -314,6 +317,18 @@ function ChatHistory() {
 }
 
 function AccountDropdown() {
+  const [themeOpen, setThemeOpen] = useState(false)
+  const themeTimeoutRef = useRef<ReturnType<typeof setTimeout>>()
+
+  const openTheme = () => {
+    clearTimeout(themeTimeoutRef.current)
+    setThemeOpen(true)
+  }
+
+  const closeTheme = () => {
+    themeTimeoutRef.current = setTimeout(() => setThemeOpen(false), 100)
+  }
+
   return (
     <DropdownMenu>
       <DropdownMenuTrigger render={<button className="flex w-full items-center gap-2 rounded-md p-2 text-left text-xs hover:bg-sidebar-accent hover:text-sidebar-accent-foreground" />}>
@@ -343,10 +358,32 @@ function AccountDropdown() {
             <Settings className="size-4" />
             Configurações
           </DropdownMenuItem>
-          <DropdownMenuItem>
-            <Sun className="size-4" />
-            Tema
-          </DropdownMenuItem>
+          <DropdownMenuSub open={themeOpen} onOpenChange={setThemeOpen}>
+            <DropdownMenuSubTrigger
+              onMouseEnter={openTheme}
+              onMouseLeave={closeTheme}
+            >
+              <Sun className="size-4" />
+              Alterar tema
+            </DropdownMenuSubTrigger>
+            <DropdownMenuSubContent
+              onMouseEnter={openTheme}
+              onMouseLeave={closeTheme}
+            >
+              <DropdownMenuItem>
+                <Sun className="size-4" />
+                Claro
+              </DropdownMenuItem>
+              <DropdownMenuItem>
+                <Moon className="size-4" />
+                Escuro
+              </DropdownMenuItem>
+              <DropdownMenuItem>
+                <Monitor className="size-4" />
+                Sistema
+              </DropdownMenuItem>
+            </DropdownMenuSubContent>
+          </DropdownMenuSub>
         </DropdownMenuGroup>
         <DropdownMenuSeparator />
         <DropdownMenuItem>
