@@ -73,19 +73,19 @@ export function CodeInput() {
 
   return (
     <div className="w-full max-w-2xl mx-auto pb-4">
+      {(isNewChat || folders.length > 0) && (
+        <div className="flex flex-wrap items-center gap-2 px-3 py-1.5 mb-2 rounded-xl border-2 border-sidebar-border bg-sidebar-accent/20">
+          <FolderSelector folders={folders} onFoldersChange={setFolders} />
+        </div>
+      )}
       <PromptInput
         multiple
         onSubmit={handleSubmit}
         className="rounded-xl border-2 border-sidebar-border overflow-hidden [&>div]:!border-none [&>div]:!rounded-none [&>div]:!bg-transparent"
       >
-        <div className="flex flex-wrap items-center gap-2 px-3 py-1.5 w-full empty:hidden">
-          {(isNewChat || folders.length > 0) && (
-            <FolderSelector folders={folders} onFoldersChange={setFolders} />
-          )}
-          <PromptInputAttachments className="!p-0 !m-0 !gap-2">
-            {(attachment) => <PromptInputAttachment data={attachment} />}
-          </PromptInputAttachments>
-        </div>
+        <PromptInputAttachments className="!px-3 !py-1.5">
+          {(attachment) => <PromptInputAttachment data={attachment} />}
+        </PromptInputAttachments>
         <PromptInputBody>
           <PromptInputTextarea placeholder="Pergunte sobre código..." className="px-3 text-base md:text-base" />
         </PromptInputBody>
