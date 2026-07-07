@@ -42,17 +42,22 @@ export function FolderSelector({ folders, onFoldersChange }: FolderSelectorProps
     }
   }, [recentOpen])
 
-  const addFolder = useCallback(async (path?: string) => {
+  const setPrimaryFolder = useCallback(async (path?: string) => {
     let folderPath: string | undefined = path
     if (!folderPath) {
       const picked = await pickFolder()
       if (!picked) return
       folderPath = picked
     }
-    if (folders.includes(folderPath)) return
-    const next = [...folders, folderPath]
-    onFoldersChange(next)
     setRecentOpen(false)
+    if (folders[0] === folderPath) return
+    onFoldersChange([folderPath, ...folders.slice(1)])
+  }, [folders, onFoldersChange])
+
+  const addAdditionalFolder = useCallback(async () => {
+    const picked = await pickFolder()
+    if (!picked || folders.includes(picked)) return
+    onFoldersChange([...folders, picked])
   }, [folders, onFoldersChange])
 
   const removeFolder = useCallback((path: string, e: React.MouseEvent) => {
@@ -91,7 +96,7 @@ export function FolderSelector({ folders, onFoldersChange }: FolderSelectorProps
                 {recentFolders.map((folder) => (
                   <button
                     key={folder}
-                    onClick={() => addFolder(folder)}
+                    onClick={() => setPrimaryFolder(folder)}
                     className="flex w-full min-h-7 items-center gap-2 rounded-md px-2 py-1 text-xs hover:bg-foreground/10"
                   >
                     <Folder className="size-3.5 shrink-0 text-sidebar-foreground/60" />
@@ -101,7 +106,7 @@ export function FolderSelector({ folders, onFoldersChange }: FolderSelectorProps
               </div>
             )}
             <button
-              onClick={() => addFolder()}
+              onClick={() => setPrimaryFolder()}
               className="flex w-full min-h-7 items-center gap-2 rounded-md px-2 py-1 text-xs hover:bg-foreground/10"
             >
               <Folder className="size-3.5" />
@@ -132,7 +137,7 @@ export function FolderSelector({ folders, onFoldersChange }: FolderSelectorProps
       ))}
       {folders.length > 0 && (
         <button
-          onClick={() => addFolder()}
+          onClick={() => addAdditionalFolder()}
           className="group relative flex h-8 cursor-pointer select-none items-center gap-1.5 rounded-md border border-border px-1.5 font-medium text-sm transition-all hover:bg-accent hover:text-accent-foreground dark:hover:bg-accent/50"
         >
           <div className="relative size-5 shrink-0">
