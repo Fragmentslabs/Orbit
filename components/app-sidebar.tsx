@@ -1,7 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react"
-import { ChevronDown, Ellipsis, Folder, MessageSquare, Pin, Plus, Terminal, Trash2, User, Archive, Pencil, Settings, LogOut, Sun } from "lucide-react"
-
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
+import { ChevronDown, Circle, Ellipsis, Folder, MessageSquare, Pin, Plus, Terminal, Trash2, User, Archive, Pencil, Settings, LogOut, Sun } from "lucide-react"
 
 import {
   Sidebar,
@@ -14,6 +12,9 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
+  SidebarMenuSub,
+  SidebarMenuSubButton,
+  SidebarMenuSubItem,
   SidebarSeparator,
 } from "@/components/ui/sidebar"
 import { cn } from "@/lib/utils"
@@ -30,33 +31,43 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 
+const pinnedChats = [
+  { id: "pinned-1", title: "Setup inicial do projeto" },
+  { id: "pinned-2", title: "Review de código - Sprint 5" },
+]
+
 const folders = [
   {
     id: "folder-1",
     name: "Projeto Alpha",
     chats: [
-      { id: "1", title: "Implementação de autenticação" },
-      { id: "2", title: "Refatorar component Button" },
-      { id: "3", title: "API de usuários - revisão" },
+      { id: "c1", title: "Implementação de autenticação" },
+      { id: "c2", title: "Refatorar component Button" },
+      { id: "c3", title: "API de usuários - revisão" },
     ],
   },
   {
     id: "folder-2",
     name: "Infraestrutura",
     chats: [
-      { id: "4", title: "Configurar Docker Compose" },
-      { id: "5", title: "Pipeline CI/CD" },
+      { id: "c4", title: "Configurar Docker Compose" },
+      { id: "c5", title: "Pipeline CI/CD" },
     ],
   },
   {
     id: "folder-3",
     name: "Qualidade",
     chats: [
-      { id: "6", title: "Testes unitários do módulo X" },
-      { id: "7", title: "Otimização de queries SQL" },
-      { id: "8", title: "Documentação do projeto" },
+      { id: "c6", title: "Testes unitários do módulo X" },
+      { id: "c7", title: "Otimização de queries SQL" },
+      { id: "c8", title: "Documentação do projeto" },
     ],
   },
+]
+
+const recentChats = [
+  { id: "recent-1", title: "Schema do banco de dados" },
+  { id: "recent-2", title: "Configurar ambiente de dev" },
 ]
 
 function NewChatButton() {
@@ -85,7 +96,7 @@ function ModeTabs() {
   )
 }
 
-function ChatItem({ chat }: { chat: { id: string; title: string } }) {
+function EllipsisMenu({ items }: { items: { icon: React.ReactNode; label: string }[] }) {
   const [menuOpen, setMenuOpen] = useState(false)
   const [menuPos, setMenuPos] = useState({ top: 0, left: 0 })
   const buttonRef = useRef<HTMLButtonElement>(null)
@@ -116,27 +127,17 @@ function ChatItem({ chat }: { chat: { id: string; title: string } }) {
   }, [menuOpen])
 
   return (
-    <SidebarMenuItem>
-      <SidebarMenuButton className="text-xs">
-        <MessageSquare className="size-4" />
-        <span>{chat.title}</span>
-      </SidebarMenuButton>
+    <>
       <button
         ref={buttonRef}
         onClick={(e) => {
           e.stopPropagation()
           setMenuOpen((prev) => !prev)
         }}
-        data-slot="sidebar-menu-action"
-        data-sidebar="menu-action"
-        className={cn(
-          "absolute top-1.5 right-1 flex aspect-square w-5 items-center justify-center rounded-[calc(var(--radius-sm)-2px)] p-0 text-sidebar-foreground ring-sidebar-ring outline-hidden transition-transform group-data-[collapsible=icon]:hidden peer-hover/menu-button:text-sidebar-accent-foreground peer-data-[size=default]/menu-button:top-1.5 peer-data-[size=lg]/menu-button:top-2.5 peer-data-[size=sm]/menu-button:top-1 after:absolute after:-inset-2 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 md:after:hidden [&>svg]:size-4 [&>svg]:shrink-0",
-          "opacity-0 group-focus-within/menu-item:opacity-100 group-hover/menu-item:opacity-100",
-          menuOpen && "opacity-100",
-        )}
+        className="absolute right-1 top-1/2 -translate-y-1/2 flex aspect-square w-5 items-center justify-center rounded-[calc(var(--radius-sm)-2px)] p-0 text-sidebar-foreground opacity-0 group-hover/menu-item:opacity-100 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground [&>svg]:size-4 [&>svg]:shrink-0"
       >
         <Ellipsis className="size-4" />
-        <span className="sr-only">Opções do chat</span>
+        <span className="sr-only">Opções</span>
       </button>
       {menuOpen && (
         <div
@@ -144,77 +145,134 @@ function ChatItem({ chat }: { chat: { id: string; title: string } }) {
           className="fixed z-50 w-48 rounded-lg border bg-popover/70 p-1 text-popover-foreground shadow-md ring-1 ring-foreground/10 backdrop-blur-2xl backdrop-saturate-150"
           style={{ top: menuPos.top, left: menuPos.left }}
         >
-          <div
-            className="flex min-h-7 cursor-default items-center gap-2 rounded-md px-2 py-1 text-xs outline-hidden select-none hover:bg-foreground/10"
-            onClick={() => setMenuOpen(false)}
-          >
-            <Pin className="size-4" />
-            Fixar
-          </div>
-          <div
-            className="flex min-h-7 cursor-default items-center gap-2 rounded-md px-2 py-1 text-xs outline-hidden select-none hover:bg-foreground/10"
-            onClick={() => setMenuOpen(false)}
-          >
-            <Pencil className="size-4" />
-            Renomear
-          </div>
-          <div
-            className="flex min-h-7 cursor-default items-center gap-2 rounded-md px-2 py-1 text-xs outline-hidden select-none hover:bg-foreground/10"
-            onClick={() => setMenuOpen(false)}
-          >
-            <Folder className="size-4" />
-            Adicionar a pasta
-          </div>
-          <div className="-mx-1 my-1 h-px bg-border/50" />
-          <div
-            className="flex min-h-7 cursor-default items-center gap-2 rounded-md px-2 py-1 text-xs outline-hidden select-none hover:bg-foreground/10"
-            onClick={() => setMenuOpen(false)}
-          >
-            <Archive className="size-4" />
-            Arquivar
-          </div>
-          <div
-            className="flex min-h-7 cursor-default items-center gap-2 rounded-md px-2 py-1 text-xs outline-hidden select-none hover:bg-foreground/10"
-            onClick={() => setMenuOpen(false)}
-          >
-            <Trash2 className="size-4" />
-            Deletar
-          </div>
+          {items.map((item, i) => (
+            <div
+              key={i}
+              className="flex min-h-7 cursor-default items-center gap-2 rounded-md px-2 py-1 text-xs outline-hidden select-none hover:bg-foreground/10"
+              onClick={() => setMenuOpen(false)}
+            >
+              {item.icon}
+              {item.label}
+            </div>
+          ))}
         </div>
       )}
+    </>
+  )
+}
+
+function ChatItem({ chat, menuItems }: { chat: { id: string; title: string }; menuItems?: { icon: React.ReactNode; label: string }[] }) {
+  return (
+    <SidebarMenuItem>
+      <SidebarMenuButton className="text-xs">
+        <MessageSquare className="size-4" />
+        <span>{chat.title}</span>
+      </SidebarMenuButton>
+      <EllipsisMenu
+        items={menuItems ?? [
+          { icon: <Pin className="size-4" />, label: "Fixar" },
+          { icon: <Pencil className="size-4" />, label: "Renomear" },
+          { icon: <Folder className="size-4" />, label: "Adicionar a pasta" },
+          { icon: <Archive className="size-4" />, label: "Arquivar" },
+          { icon: <Trash2 className="size-4" />, label: "Deletar" },
+        ]}
+      />
     </SidebarMenuItem>
   )
 }
 
-function FolderGroup({ folder }: { folder: { id: string; name: string; chats: { id: string; title: string }[] } }) {
+function FolderItem({ folder }: { folder: { id: string; name: string; chats: { id: string; title: string }[] } }) {
+  const [expanded, setExpanded] = useState(true)
+
   return (
-    <Collapsible defaultOpen className="group/collapsible">
-      <SidebarGroup>
-        <SidebarGroupLabel render={<CollapsibleTrigger />}>
-          <Folder className="size-4 shrink-0" />
-          <span className="flex-1 truncate">{folder.name}</span>
-          <ChevronDown className="size-3 shrink-0 transition-transform group-data-[state=open]/collapsible:rotate-180" />
-        </SidebarGroupLabel>
-        <CollapsibleContent>
-          <SidebarGroupContent>
-            <SidebarMenu>
-              {folder.chats.map((chat) => (
-                <ChatItem key={chat.id} chat={chat} />
-              ))}
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </CollapsibleContent>
-      </SidebarGroup>
-    </Collapsible>
+    <SidebarMenuItem>
+      <SidebarMenuButton className="text-xs">
+        <Folder className="size-4" />
+        <span>{folder.name}</span>
+      </SidebarMenuButton>
+
+      <button
+        onClick={(e) => {
+          e.stopPropagation()
+          setExpanded((prev) => !prev)
+        }}
+        className="absolute right-7 top-1/2 -translate-y-1/2 flex aspect-square w-5 items-center justify-center rounded-[calc(var(--radius-sm)-2px)] p-0 text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground [&>svg]:size-4 [&>svg]:shrink-0"
+      >
+        <ChevronDown className={cn("size-4 transition-transform", expanded && "rotate-180")} />
+        <span className="sr-only">Expandir pasta</span>
+      </button>
+
+      <EllipsisMenu
+        items={[
+          { icon: <Pencil className="size-4" />, label: "Renomear" },
+          { icon: <Pin className="size-4" />, label: "Fixar" },
+          { icon: <Circle className="size-4" />, label: "Alterar cor" },
+          { icon: <Archive className="size-4" />, label: "Arquivar" },
+          { icon: <Trash2 className="size-4" />, label: "Remover" },
+        ]}
+      />
+
+      {expanded && (
+        <SidebarMenuSub>
+          {folder.chats.map((chat) => (
+            <SidebarMenuSubItem key={chat.id}>
+              <SidebarMenuSubButton className="text-xs">
+                <MessageSquare className="size-4" />
+                <span>{chat.title}</span>
+              </SidebarMenuSubButton>
+              <EllipsisMenu
+                items={[
+                  { icon: <Pin className="size-4" />, label: "Fixar" },
+                  { icon: <Pencil className="size-4" />, label: "Renomear" },
+                  { icon: <Archive className="size-4" />, label: "Arquivar" },
+                  { icon: <Trash2 className="size-4" />, label: "Deletar" },
+                ]}
+              />
+            </SidebarMenuSubItem>
+          ))}
+        </SidebarMenuSub>
+      )}
+    </SidebarMenuItem>
   )
 }
 
 function ChatHistory() {
   return (
     <>
-      {folders.map((folder) => (
-        <FolderGroup key={folder.id} folder={folder} />
-      ))}
+      <SidebarGroup>
+        <SidebarGroupLabel>Fixados</SidebarGroupLabel>
+        <SidebarGroupContent>
+          <SidebarMenu>
+            <FolderItem folder={folders[0]} />
+            {pinnedChats.map((chat) => (
+              <ChatItem key={chat.id} chat={chat} />
+            ))}
+            <FolderItem folder={folders[1]} />
+          </SidebarMenu>
+        </SidebarGroupContent>
+      </SidebarGroup>
+
+      <SidebarGroup>
+        <SidebarGroupLabel>Projetos</SidebarGroupLabel>
+        <SidebarGroupContent>
+          <SidebarMenu>
+            {folders.map((folder) => (
+              <FolderItem key={folder.id} folder={folder} />
+            ))}
+          </SidebarMenu>
+        </SidebarGroupContent>
+      </SidebarGroup>
+
+      <SidebarGroup>
+        <SidebarGroupLabel>Recentes</SidebarGroupLabel>
+        <SidebarGroupContent>
+          <SidebarMenu>
+            {recentChats.map((chat) => (
+              <ChatItem key={chat.id} chat={chat} />
+            ))}
+          </SidebarMenu>
+        </SidebarGroupContent>
+      </SidebarGroup>
     </>
   )
 }
