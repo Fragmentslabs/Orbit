@@ -1,29 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from "react"
-import { Brain, Globe, PanelLeftIcon, PlusIcon, Search } from "lucide-react"
+import { PanelLeftIcon } from "lucide-react"
 import { SidebarProvider, useSidebar } from "@/components/ui/sidebar"
 import { TooltipProvider } from "@/components/ui/tooltip"
 import { AppSidebar } from "@/components/app-sidebar"
 import { Button } from "@/components/ui/button"
 import { ThemeProvider } from "@/components/theme-provider"
 import { WorkspaceProvider, useWorkspace } from "@/lib/workspace-context"
-import {
-  DropdownMenu,
-  DropdownMenuCheckboxItem,
-  DropdownMenuContent,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
-import {
-  PromptInput,
-  PromptInputActionAddAttachments,
-  PromptInputAttachment,
-  PromptInputAttachments,
-  PromptInputBody,
-  PromptInputFooter,
-  PromptInputSubmit,
-  PromptInputTextarea,
-  PromptInputTools,
-} from "@/src/components/ai/prompt-input"
+import { ChatInput } from "@/src/components/chat-input"
 
 const HOVER_ZONE_WIDTH = 6
 const SIDEBAR_HIDE_DELAY = 300
@@ -86,69 +69,6 @@ function Placeholder() {
     <div className="flex flex-col items-center gap-2">
       <p>Selecione um contexto de código</p>
       <p className="text-xs text-muted-foreground">Gere, refatore ou analise código</p>
-    </div>
-  )
-}
-
-function ChatInput() {
-  const [search, setSearch] = useState(false)
-  const [browser, setBrowser] = useState(false)
-  const [memory, setMemory] = useState(false)
-
-  return (
-    <div className="w-full max-w-2xl mx-auto pb-4 rounded-xl border-2 border-sidebar-border overflow-hidden">
-      <PromptInput
-        multiple
-        onSubmit={(message) => {
-          console.log("Chat message:", message)
-        }}
-        className="[&>div]:!border-none [&>div]:!rounded-none [&>div]:!bg-transparent"
-      >
-        <PromptInputAttachments>
-          {(attachment) => <PromptInputAttachment data={attachment} />}
-        </PromptInputAttachments>
-        <PromptInputBody>
-          <PromptInputTextarea placeholder="Pergunte qualquer coisa..." className="px-3 text-base md:text-base" />
-        </PromptInputBody>
-        <PromptInputFooter>
-          <PromptInputTools>
-            <DropdownMenu>
-              <DropdownMenuTrigger className="flex size-7 items-center justify-center rounded-md hover:bg-muted hover:text-foreground aria-expanded:bg-muted aria-expanded:text-foreground">
-                <PlusIcon className="size-4" />
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="start" className="min-w-40">
-                <DropdownMenuCheckboxItem
-                  checked={search}
-                  onCheckedChange={(checked) => setSearch(checked)}
-                >
-                  <Search className="size-4" />
-                  Pesquisa
-                </DropdownMenuCheckboxItem>
-                <DropdownMenuCheckboxItem
-                  checked={browser}
-                  onCheckedChange={(checked) => setBrowser(checked)}
-                >
-                  <Globe className="size-4" />
-                  Browser
-                </DropdownMenuCheckboxItem>
-                <DropdownMenuCheckboxItem
-                  checked={memory}
-                  onCheckedChange={(checked) => setMemory(checked)}
-                >
-                  <Brain className="size-4" />
-                  Memória
-                </DropdownMenuCheckboxItem>
-                <DropdownMenuSeparator />
-                <PromptInputActionAddAttachments label="Anexar arquivos" />
-              </DropdownMenuContent>
-            </DropdownMenu>
-            {search && <Search className="size-3 text-sidebar-foreground/40" />}
-            {browser && <Globe className="size-3 text-sidebar-foreground/40" />}
-            {memory && <Brain className="size-3 text-sidebar-foreground/40" />}
-          </PromptInputTools>
-          <PromptInputSubmit />
-        </PromptInputFooter>
-      </PromptInput>
     </div>
   )
 }
