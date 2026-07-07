@@ -21,6 +21,7 @@ import {
   type FormEventHandler,
   Fragment,
   type HTMLAttributes,
+  isValidElement,
   type KeyboardEventHandler,
   type PropsWithChildren,
   type ReactNode,
@@ -312,13 +313,13 @@ export function PromptInputAttachment({ data, className, ...props }: PromptInput
       <PromptInputHoverCardContent className="w-auto p-2">
         <div className="w-auto space-y-3">
           {isImage && (
-            <div className="flex max-h-96 w-96 items-center justify-center overflow-hidden rounded-md border">
+            <div className="flex max-h-36 w-36 items-center justify-center overflow-hidden rounded-md border">
               <img
                 alt={filename || "attachment preview"}
                 className="max-h-full max-w-full object-contain"
-                height={384}
+                height={144}
                 src={data.url}
-                width={448}
+                width={144}
               />
             </div>
           )}
@@ -375,8 +376,7 @@ export const PromptInputActionAddAttachments = ({
   return (
     <DropdownMenuItem
       {...props}
-      onSelect={e => {
-        e.preventDefault()
+      onClick={() => {
         attachments.openFileDialog()
       }}
     >
@@ -735,7 +735,24 @@ export const PromptInput = ({
         type="file"
       />
       <form className={cn("w-full", className)} onSubmit={handleSubmit} ref={formRef} {...props}>
-        <InputGroup className="overflow-hidden">{children}</InputGroup>
+        {(() => {
+          const att: ReactNode[] = []
+          const rest: ReactNode[] = []
+          Children.forEach(children, (child) => {
+            if (isValidElement(child) && child.type === PromptInputAttachments) {
+              att.push(child)
+            } else {
+              rest.push(child)
+            }
+          })
+          const content = (
+            <>
+              {att.length > 0 && <div className="px-3 pt-3">{att}</div>}
+              <InputGroup className="overflow-hidden">{rest}</InputGroup>
+            </>
+          )
+          return content
+        })()}
       </form>
     </>
   )
