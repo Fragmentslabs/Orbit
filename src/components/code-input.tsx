@@ -30,6 +30,21 @@ import {
   ModelSelectorName,
   ModelSelectorTrigger,
 } from "@/src/components/ai/model-selector"
+import { FolderSelector } from "@/src/components/folder-selector"
+
+const RECENT_FOLDERS_KEY = "orbit-recent-folders"
+
+function loadLastFolders(): string[] {
+  try {
+    const stored = localStorage.getItem(RECENT_FOLDERS_KEY)
+    if (stored) return JSON.parse(stored)
+  } catch {}
+  return []
+}
+
+function saveRecentFolders(folders: string[]) {
+  localStorage.setItem(RECENT_FOLDERS_KEY, JSON.stringify(folders))
+}
 
 const models = [
   { id: "gpt-4o", name: "GPT-4o", chef: "OpenAI", chefSlug: "openai", providers: ["openai", "azure"] },
@@ -41,18 +56,33 @@ const models = [
 export function CodeInput() {
   const [modelOpen, setModelOpen] = useState(false)
   const [selectedModel, setSelectedModel] = useState("gpt-4o")
+  const [folders, setFolders] = useState<string[]>(loadLastFolders)
+  const [submitted, setSubmitted] = useState(false)
   const selectedModelData = models.find(m => m.id === selectedModel)
   const chefs = Array.from(new Set(models.map(m => m.chef)))
+
+  const handleSubmit = (message: unknown) => {
+    if (!submitted && folders.length > 0) {
+      saveRecentFolders(folders)
+    }
+    setSubmitted(true)
+    console.log("Code message:", message)
+  }
+
+  const isNewChat = !submitted
 
   return (
     <div className="w-full max-w-2xl mx-auto pb-4">
       <PromptInput
         multiple
-        onSubmit={(message) => {
-          console.log("Code message:", message)
-        }}
+        onSubmit={handleSubmit}
         className="rounded-xl border-2 border-sidebar-border overflow-hidden [&>div]:!border-none [&>div]:!rounded-none [&>div]:!bg-transparent"
       >
+        {(isNewChat || folders.length > 0) && (
+          <div className="flex flex-wrap items-center gap-2 px-3 py-1.5 w-full">
+            <FolderSelector folders={folders} onFoldersChange={setFolders} />
+          </div>
+        )}
         <PromptInputAttachments className="!px-3 !py-1.5">
           {(attachment) => <PromptInputAttachment data={attachment} />}
         </PromptInputAttachments>
