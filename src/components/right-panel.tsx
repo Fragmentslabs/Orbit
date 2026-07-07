@@ -8,6 +8,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { ChatView } from "@/src/components/chat-view"
 import { TerminalTab } from "@/src/components/terminal-tab"
+import { BrowserTab } from "@/src/components/browser-tab"
 import { cn } from "@/lib/utils"
 
 type TabType = "chat" | "terminal" | "folders" | "browser"
@@ -53,8 +54,8 @@ function TabContent({ type }: { type: TabType }) {
       )
     case "browser":
       return (
-        <div className="flex flex-1 items-center justify-center text-sm text-muted-foreground">
-          Browser
+        <div className="flex flex-1 flex-col overflow-hidden">
+          <BrowserTab />
         </div>
       )
   }
@@ -113,7 +114,7 @@ export function RightPanel() {
   const activeTab = tabs.find(t => t.id === activeTabId)
 
   return (
-    <div className="flex h-full flex-col rounded-lg shadow-sm ring-1 ring-sidebar-border bg-sidebar">
+    <div className="flex h-full flex-col rounded-lg shadow-sm ring-1 ring-sidebar-border bg-sidebar overflow-hidden">
       {tabs.length > 0 && (
         <div className="flex items-center gap-0.5 px-2 pt-2 overflow-x-auto">
           {tabs.map((tab) => {
