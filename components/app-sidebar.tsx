@@ -1,3 +1,4 @@
+import { useEffect, useLayoutEffect, useRef, useState } from "react"
 import { Ellipsis, Folder, MessageSquare, Pin, Plus, Terminal, Trash2, User, Archive, Pencil, Settings, LogOut, Sun } from "lucide-react"
 
 import {
@@ -64,54 +65,102 @@ function ModeTabs() {
 }
 
 function ChatItem({ chat }: { chat: { id: string; title: string } }) {
+  const [menuOpen, setMenuOpen] = useState(false)
+  const [menuPos, setMenuPos] = useState({ top: 0, left: 0 })
+  const buttonRef = useRef<HTMLButtonElement>(null)
+  const menuRef = useRef<HTMLDivElement>(null)
+
+  useLayoutEffect(() => {
+    if (menuOpen && buttonRef.current) {
+      const rect = buttonRef.current.getBoundingClientRect()
+      setMenuPos({ top: rect.bottom + 4, left: rect.left })
+    }
+  }, [menuOpen])
+
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (
+        menuRef.current &&
+        !menuRef.current.contains(e.target as Node) &&
+        buttonRef.current &&
+        !buttonRef.current.contains(e.target as Node)
+      ) {
+        setMenuOpen(false)
+      }
+    }
+    if (menuOpen) {
+      document.addEventListener("mousedown", handleClickOutside)
+      return () => document.removeEventListener("mousedown", handleClickOutside)
+    }
+  }, [menuOpen])
+
   return (
     <SidebarMenuItem>
       <SidebarMenuButton className="text-xs">
         <MessageSquare className="size-4" />
         <span>{chat.title}</span>
       </SidebarMenuButton>
-      <DropdownMenu>
-        <DropdownMenuTrigger
-          data-slot="sidebar-menu-action"
-          data-sidebar="menu-action"
-          onClick={(e: React.MouseEvent) => e.stopPropagation()}
-          className={cn(
-            "absolute top-1.5 right-1 flex aspect-square w-5 items-center justify-center rounded-[calc(var(--radius-sm)-2px)] p-0 text-sidebar-foreground ring-sidebar-ring outline-hidden transition-transform group-data-[collapsible=icon]:hidden peer-hover/menu-button:text-sidebar-accent-foreground peer-data-[size=default]/menu-button:top-1.5 peer-data-[size=lg]/menu-button:top-2.5 peer-data-[size=sm]/menu-button:top-1 after:absolute after:-inset-2 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 md:after:hidden [&>svg]:size-4 [&>svg]:shrink-0",
-            "opacity-0 group-focus-within/menu-item:opacity-100 group-hover/menu-item:opacity-100 aria-expanded:opacity-100",
-          )}
+      <button
+        ref={buttonRef}
+        onClick={(e) => {
+          e.stopPropagation()
+          setMenuOpen((prev) => !prev)
+        }}
+        data-slot="sidebar-menu-action"
+        data-sidebar="menu-action"
+        className={cn(
+          "absolute top-1.5 right-1 flex aspect-square w-5 items-center justify-center rounded-[calc(var(--radius-sm)-2px)] p-0 text-sidebar-foreground ring-sidebar-ring outline-hidden transition-transform group-data-[collapsible=icon]:hidden peer-hover/menu-button:text-sidebar-accent-foreground peer-data-[size=default]/menu-button:top-1.5 peer-data-[size=lg]/menu-button:top-2.5 peer-data-[size=sm]/menu-button:top-1 after:absolute after:-inset-2 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 md:after:hidden [&>svg]:size-4 [&>svg]:shrink-0",
+          "opacity-0 group-focus-within/menu-item:opacity-100 group-hover/menu-item:opacity-100",
+          menuOpen && "opacity-100",
+        )}
+      >
+        <Ellipsis className="size-4" />
+        <span className="sr-only">Opções do chat</span>
+      </button>
+      {menuOpen && (
+        <div
+          ref={menuRef}
+          className="fixed z-50 w-48 rounded-lg border bg-popover/70 p-1 text-popover-foreground shadow-md ring-1 ring-foreground/10 backdrop-blur-2xl backdrop-saturate-150"
+          style={{ top: menuPos.top, left: menuPos.left }}
         >
-          <Ellipsis className="size-4" />
-          <span className="sr-only">Opções do chat</span>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent
-          align="start"
-          side="right"
-          sideOffset={8}
-          className="w-48"
-        >
-          <DropdownMenuItem>
+          <div
+            className="flex min-h-7 cursor-default items-center gap-2 rounded-md px-2 py-1 text-xs outline-hidden select-none hover:bg-foreground/10"
+            onClick={() => setMenuOpen(false)}
+          >
             <Pin className="size-4" />
             Fixar
-          </DropdownMenuItem>
-          <DropdownMenuItem>
+          </div>
+          <div
+            className="flex min-h-7 cursor-default items-center gap-2 rounded-md px-2 py-1 text-xs outline-hidden select-none hover:bg-foreground/10"
+            onClick={() => setMenuOpen(false)}
+          >
             <Pencil className="size-4" />
             Renomear
-          </DropdownMenuItem>
-          <DropdownMenuItem>
+          </div>
+          <div
+            className="flex min-h-7 cursor-default items-center gap-2 rounded-md px-2 py-1 text-xs outline-hidden select-none hover:bg-foreground/10"
+            onClick={() => setMenuOpen(false)}
+          >
             <Folder className="size-4" />
             Adicionar a pasta
-          </DropdownMenuItem>
-          <DropdownMenuSeparator />
-          <DropdownMenuItem>
+          </div>
+          <div className="-mx-1 my-1 h-px bg-border/50" />
+          <div
+            className="flex min-h-7 cursor-default items-center gap-2 rounded-md px-2 py-1 text-xs outline-hidden select-none hover:bg-foreground/10"
+            onClick={() => setMenuOpen(false)}
+          >
             <Archive className="size-4" />
             Arquivar
-          </DropdownMenuItem>
-          <DropdownMenuItem>
+          </div>
+          <div
+            className="flex min-h-7 cursor-default items-center gap-2 rounded-md px-2 py-1 text-xs outline-hidden select-none hover:bg-foreground/10"
+            onClick={() => setMenuOpen(false)}
+          >
             <Trash2 className="size-4" />
             Deletar
-          </DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
+          </div>
+        </div>
+      )}
     </SidebarMenuItem>
   )
 }
