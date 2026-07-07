@@ -1,11 +1,27 @@
 import { useCallback, useEffect, useRef, useState } from "react"
-import { PanelLeftIcon } from "lucide-react"
+import { Brain, Globe, PanelLeftIcon, Search } from "lucide-react"
 import { SidebarProvider, useSidebar } from "@/components/ui/sidebar"
 import { TooltipProvider } from "@/components/ui/tooltip"
 import { AppSidebar } from "@/components/app-sidebar"
 import { Button } from "@/components/ui/button"
 import { ThemeProvider } from "@/components/theme-provider"
 import { WorkspaceProvider, useWorkspace } from "@/lib/workspace-context"
+import { cn } from "@/lib/utils"
+import {
+  PromptInput,
+  PromptInputActionAddAttachments,
+  PromptInputActionMenu,
+  PromptInputActionMenuContent,
+  PromptInputActionMenuTrigger,
+  PromptInputAttachment,
+  PromptInputAttachments,
+  PromptInputBody,
+  PromptInputButton,
+  PromptInputFooter,
+  PromptInputSubmit,
+  PromptInputTextarea,
+  PromptInputTools,
+} from "@/src/components/ai/prompt-input"
 
 const HOVER_ZONE_WIDTH = 6
 const SIDEBAR_HIDE_DELAY = 300
@@ -72,8 +88,62 @@ function Placeholder() {
   )
 }
 
+function ChatInput() {
+  const [search, setSearch] = useState(false)
+  const [browser, setBrowser] = useState(false)
+  const [memory, setMemory] = useState(false)
+
+  return (
+    <div className="w-full max-w-2xl mx-auto pb-4">
+      <PromptInput
+        multiple
+        onSubmit={(message) => {
+          console.log("Chat message:", message)
+        }}
+      >
+        <PromptInputAttachments>
+          {(attachment) => <PromptInputAttachment data={attachment} />}
+        </PromptInputAttachments>
+        <PromptInputBody>
+          <PromptInputTextarea placeholder="Pergunte qualquer coisa..." />
+        </PromptInputBody>
+        <PromptInputFooter>
+          <PromptInputTools>
+            <PromptInputActionMenu>
+              <PromptInputActionMenuTrigger />
+              <PromptInputActionMenuContent>
+                <PromptInputActionAddAttachments />
+              </PromptInputActionMenuContent>
+            </PromptInputActionMenu>
+            <PromptInputButton
+              className={cn(search && "bg-accent text-accent-foreground")}
+              onClick={() => setSearch((p) => !p)}
+            >
+              <Search className="size-4" />
+            </PromptInputButton>
+            <PromptInputButton
+              className={cn(browser && "bg-accent text-accent-foreground")}
+              onClick={() => setBrowser((p) => !p)}
+            >
+              <Globe className="size-4" />
+            </PromptInputButton>
+            <PromptInputButton
+              className={cn(memory && "bg-accent text-accent-foreground")}
+              onClick={() => setMemory((p) => !p)}
+            >
+              <Brain className="size-4" />
+            </PromptInputButton>
+          </PromptInputTools>
+          <PromptInputSubmit />
+        </PromptInputFooter>
+      </PromptInput>
+    </div>
+  )
+}
+
 function Layout() {
   const { open, setOpen } = useSidebar()
+  const { mode: workspaceMode } = useWorkspace()
   const [mode, setMode] = useState<SidebarMode>(loadMode)
   const hideTimer = useRef<ReturnType<typeof setTimeout>>()
 
@@ -121,6 +191,7 @@ function Layout() {
         <div className="flex flex-1 items-center justify-center text-muted-foreground">
           <Placeholder />
         </div>
+        {workspaceMode === "chat" && <ChatInput />}
       </main>
     </div>
   )
