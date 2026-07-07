@@ -1,4 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react"
+import { createPortal } from "react-dom"
 import { ChevronDown, Ellipsis, Folder, MessageSquare, Pin, Plus, Terminal, Trash2, User, Archive, Pencil, Settings, LogOut, Sun, Moon, Monitor } from "lucide-react"
 
 import {
@@ -217,7 +218,7 @@ function EllipsisMenu({ items, groupClass = "group-hover/menu-item:opacity-100",
         <Ellipsis className="size-4" />
         <span className="sr-only">Opções</span>
       </button>
-      {menuOpen && (
+      {menuOpen && createPortal(
         <div
           ref={menuRef}
           className="fixed z-50 w-48 rounded-lg border bg-popover/70 p-1 text-popover-foreground shadow-md ring-1 ring-foreground/10 backdrop-blur-2xl backdrop-saturate-150"
@@ -233,7 +234,8 @@ function EllipsisMenu({ items, groupClass = "group-hover/menu-item:opacity-100",
               {item.label}
             </div>
           ))}
-        </div>
+        </div>,
+        document.body
       )}
     </>
   )
