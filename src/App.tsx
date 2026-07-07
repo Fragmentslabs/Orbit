@@ -8,7 +8,7 @@ function App() {
 
   return (
     <>
-      <div>
+      <div className="bg-red-500">
         <a href="https://electron-vite.github.io" target="_blank">
           <img src={viteLogo} className="logo" alt="Vite logo" />
         </a>
