@@ -19,7 +19,6 @@ import {
   PromptInputAttachment,
   PromptInputAttachments,
   PromptInputBody,
-  PromptInputButton,
   PromptInputFooter,
   PromptInputSubmit,
   PromptInputTextarea,
@@ -114,7 +113,9 @@ function ChatInput() {
         <PromptInputFooter>
           <PromptInputTools>
             <DropdownMenu>
-              <DropdownMenuTrigger render={<PromptInputButton><PlusIcon className="size-4" /></PromptInputButton>} />
+              <DropdownMenuTrigger className="flex size-7 items-center justify-center rounded-md hover:bg-muted hover:text-foreground aria-expanded:bg-muted aria-expanded:text-foreground">
+                <PlusIcon className="size-4" />
+              </DropdownMenuTrigger>
               <DropdownMenuContent align="start" className="min-w-40">
                 <DropdownMenuCheckboxItem
                   checked={search}
