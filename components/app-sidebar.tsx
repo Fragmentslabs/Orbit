@@ -157,7 +157,7 @@ function AccordionGroup({ label, defaultExpanded = true, children }: {
         onClick={() => setExpanded((prev) => !prev)}
       >
         <span className="flex-1 truncate">{label}</span>
-        <ChevronDown className={cn("size-3 shrink-0 transition-transform", expanded && "rotate-180")} />
+        <ChevronDown className={cn("size-3 shrink-0 transition-transform", !expanded && "-rotate-90")} />
       </SidebarGroupLabel>
       {expanded && <SidebarGroupContent>{children}</SidebarGroupContent>}
     </SidebarGroup>
