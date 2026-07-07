@@ -129,6 +129,10 @@ function Layout() {
     }
   }, [mode, setOpen])
 
+  const handleToggleSidebar = useCallback(() => {
+    setOpen(!open)
+  }, [open, setOpen])
+
   return (
     <div className="relative flex flex-1">
       {!open && mode === "hover" && <HoverEdge />}
@@ -139,11 +143,12 @@ function Layout() {
         <AppSidebar />
       </div>
       <PanelGroup direction="horizontal" className="flex-1">
-        <Panel defaultSize={rightPanelOpen ? 70 : 100} minSize={40}>
+        <Panel defaultSize={rightPanelOpen ? 65 : 100} minSize={30}>
           <main className="flex h-full flex-col">
             <ChatHeader
               title={workspaceMode === "chat" ? "Nova conversa" : "Novo código"}
               rightPanelOpen={rightPanelOpen}
+              onToggleSidebar={handleToggleSidebar}
               onToggleRightPanel={() => setRightPanelOpen(v => !v)}
             />
             <div className="flex flex-1 flex-col p-4 overflow-hidden">
@@ -156,8 +161,8 @@ function Layout() {
         </Panel>
         {rightPanelOpen && (
           <>
-            <PanelResizeHandle className="w-1 bg-border transition-colors hover:bg-foreground/20 data-[resize-handle-active]:bg-foreground/20" />
-            <Panel defaultSize={30} minSize={20} maxSize={50}>
+            <PanelResizeHandle className="w-0.5 bg-border transition-colors hover:bg-foreground/20 data-[resize-handle-active]:bg-foreground/20" />
+            <Panel defaultSize={35} minSize={25} maxSize={80}>
               <RightPanel />
             </Panel>
           </>
