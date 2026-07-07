@@ -6,7 +6,10 @@ import { AppSidebar } from "@/components/app-sidebar"
 import { Button } from "@/components/ui/button"
 import { ThemeProvider } from "@/components/theme-provider"
 import { WorkspaceProvider, useWorkspace } from "@/lib/workspace-context"
-import { cn } from "@/lib/utils"
+import {
+  DropdownMenuCheckboxItem,
+  DropdownMenuSeparator,
+} from "@/components/ui/dropdown-menu"
 import {
   PromptInput,
   PromptInputActionAddAttachments,
@@ -16,7 +19,6 @@ import {
   PromptInputAttachment,
   PromptInputAttachments,
   PromptInputBody,
-  PromptInputButton,
   PromptInputFooter,
   PromptInputSubmit,
   PromptInputTextarea,
@@ -94,12 +96,13 @@ function ChatInput() {
   const [memory, setMemory] = useState(false)
 
   return (
-    <div className="w-full max-w-2xl mx-auto pb-4">
+    <div className="w-full max-w-2xl mx-auto pb-4 rounded-xl border-2 border-sidebar-border overflow-hidden">
       <PromptInput
         multiple
         onSubmit={(message) => {
           console.log("Chat message:", message)
         }}
+        className="[&>div]:!border-none [&>div]:!rounded-none"
       >
         <PromptInputAttachments>
           {(attachment) => <PromptInputAttachment data={attachment} />}
@@ -112,27 +115,31 @@ function ChatInput() {
             <PromptInputActionMenu>
               <PromptInputActionMenuTrigger />
               <PromptInputActionMenuContent>
-                <PromptInputActionAddAttachments />
+                <DropdownMenuCheckboxItem
+                  checked={search}
+                  onCheckedChange={(checked) => setSearch(checked)}
+                >
+                  <Search className="size-4" />
+                  Pesquisa
+                </DropdownMenuCheckboxItem>
+                <DropdownMenuCheckboxItem
+                  checked={browser}
+                  onCheckedChange={(checked) => setBrowser(checked)}
+                >
+                  <Globe className="size-4" />
+                  Browser
+                </DropdownMenuCheckboxItem>
+                <DropdownMenuCheckboxItem
+                  checked={memory}
+                  onCheckedChange={(checked) => setMemory(checked)}
+                >
+                  <Brain className="size-4" />
+                  Memória
+                </DropdownMenuCheckboxItem>
+                <DropdownMenuSeparator />
+                <PromptInputActionAddAttachments label="Anexar arquivos" />
               </PromptInputActionMenuContent>
             </PromptInputActionMenu>
-            <PromptInputButton
-              className={cn(search && "bg-accent text-accent-foreground")}
-              onClick={() => setSearch((p) => !p)}
-            >
-              <Search className="size-4" />
-            </PromptInputButton>
-            <PromptInputButton
-              className={cn(browser && "bg-accent text-accent-foreground")}
-              onClick={() => setBrowser((p) => !p)}
-            >
-              <Globe className="size-4" />
-            </PromptInputButton>
-            <PromptInputButton
-              className={cn(memory && "bg-accent text-accent-foreground")}
-              onClick={() => setMemory((p) => !p)}
-            >
-              <Brain className="size-4" />
-            </PromptInputButton>
           </PromptInputTools>
           <PromptInputSubmit />
         </PromptInputFooter>
