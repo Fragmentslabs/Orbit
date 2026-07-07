@@ -1,9 +1,9 @@
 import { useCallback, useState } from "react"
 import { Globe, Folder, MessageSquare, Terminal, X, PlusIcon } from "lucide-react"
-import { Button } from "@/components/ui/button"
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import {
@@ -27,11 +27,17 @@ interface PanelTab {
   title: string
 }
 
-const tabMeta: Record<TabType, { icon: typeof MessageSquare; label: string }> = {
-  chat: { icon: MessageSquare, label: "Chat" },
-  terminal: { icon: Terminal, label: "Terminal" },
-  folders: { icon: Folder, label: "Pastas" },
-  browser: { icon: Globe, label: "Browser" },
+interface TabMeta {
+  icon: typeof MessageSquare
+  label: string
+  description: string
+}
+
+const tabMeta: Record<TabType, TabMeta> = {
+  chat: { icon: MessageSquare, label: "Chat", description: "Converse com a IA sobre qualquer assunto" },
+  terminal: { icon: Terminal, label: "Terminal", description: "Execute comandos e scripts" },
+  folders: { icon: Folder, label: "Pastas", description: "Navegue pelos arquivos do projeto" },
+  browser: { icon: Globe, label: "Browser", description: "Pesquise e visualize páginas web" },
 }
 
 function PanelChat() {
@@ -98,6 +104,27 @@ function TabContent({ type }: { type: TabType }) {
   }
 }
 
+function SelectorScreen({ onSelect }: { onSelect: (type: TabType) => void }) {
+  return (
+    <div className="flex flex-1 flex-col items-center justify-center p-6 gap-4">
+      <p className="text-sm font-medium text-foreground">O que deseja abrir?</p>
+      <div className="grid grid-cols-2 gap-3 w-full max-w-xs">
+        {(Object.entries(tabMeta) as [TabType, TabMeta][]).map(([type, { icon: Icon, label, description }]) => (
+          <button
+            key={type}
+            onClick={() => onSelect(type)}
+            className="flex flex-col items-center gap-2 rounded-lg border border-sidebar-border bg-sidebar-accent/30 p-4 text-center transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+          >
+            <Icon className="size-6 shrink-0" />
+            <span className="text-xs font-medium">{label}</span>
+            <span className="text-[10px] leading-tight text-muted-foreground line-clamp-2">{description}</span>
+          </button>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 let tabCounter = 0
 
 export function RightPanel() {
@@ -110,10 +137,7 @@ export function RightPanel() {
     const id = `${type}-${tabCounter}`
     const title = `${meta.label} ${tabCounter > 1 ? tabCounter : ""}`.trim()
     const newTab: PanelTab = { id, type, title }
-    setTabs(prev => {
-      const next = [...prev, newTab]
-      return next
-    })
+    setTabs(prev => [...prev, newTab])
     setActiveTabId(id)
   }, [])
 
@@ -160,39 +184,27 @@ export function RightPanel() {
               </div>
             )
           })}
+          <DropdownMenu>
+            <DropdownMenuTrigger className="ml-auto flex size-5 shrink-0 items-center justify-center rounded-md text-sidebar-foreground/50 hover:text-sidebar-foreground hover:bg-sidebar-accent">
+              <PlusIcon className="size-3.5" />
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="min-w-32">
+              {(Object.entries(tabMeta) as [TabType, TabMeta][]).map(([type, { icon: Icon, label }]) => (
+                <DropdownMenuItem key={type} onClick={() => addTab(type)}>
+                  <Icon className="size-4" />
+                  {label}
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       )}
-
-      <div className={cn(
-        "flex items-center gap-1",
-        tabs.length > 0 ? "px-2 py-1.5" : "px-2 pt-2 pb-1.5",
-      )}>
-        {(Object.entries(tabMeta) as [TabType, typeof tabMeta[TabType]][]).map(([type, { icon: Icon, label }]) => (
-          <Button
-            key={type}
-            variant="ghost"
-            size="xs"
-            className={cn(
-              "gap-1",
-              tabs.length === 0
-                ? "flex-1"
-                : "",
-            )}
-            onClick={() => addTab(type)}
-          >
-            <Icon className="size-3" />
-            {tabs.length === 0 && label}
-          </Button>
-        ))}
-      </div>
 
       <div className="flex flex-1 flex-col overflow-hidden border-t border-sidebar-border">
         {activeTab ? (
           <TabContent type={activeTab.type} />
         ) : (
-          <div className="flex flex-1 items-center justify-center p-6 text-center text-xs text-muted-foreground">
-            Selecione uma opção para começar
-          </div>
+          <SelectorScreen onSelect={addTab} />
         )}
       </div>
     </div>
