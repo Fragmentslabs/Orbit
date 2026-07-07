@@ -19,6 +19,7 @@ import {
 } from "@/components/ui/sidebar"
 import { cn } from "@/lib/utils"
 import { useTheme } from "@/components/theme-provider"
+import { useWorkspace, WorkspaceMode } from "@/lib/workspace-context"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
@@ -35,57 +36,86 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 
-const pinnedChats = [
-  { id: "pinned-1", title: "Setup inicial do projeto" },
-  { id: "pinned-2", title: "Review de código - Sprint 5" },
-]
-
-const folders = [
-  {
-    id: "folder-1",
-    name: "Projeto Alpha",
-    chats: [
-      { id: "c1", title: "Implementação de autenticação" },
-      { id: "c2", title: "Refatorar component Button" },
-      { id: "c3", title: "API de usuários - revisão" },
+const workspaces: Record<WorkspaceMode, {
+  pinned: { id: string; title: string }[]
+  folders: { id: string; name: string; chats: { id: string; title: string }[] }[]
+  recent: { id: string; title: string }[]
+}> = {
+  chat: {
+    pinned: [
+      { id: "chat-pinned-1", title: "Setup inicial do projeto" },
+      { id: "chat-pinned-2", title: "Review de código - Sprint 5" },
+    ],
+    folders: [
+      {
+        id: "chat-folder-1",
+        name: "Projeto Alpha",
+        chats: [
+          { id: "chat-c1", title: "Implementação de autenticação" },
+          { id: "chat-c2", title: "Refatorar component Button" },
+          { id: "chat-c3", title: "API de usuários - revisão" },
+        ],
+      },
+      {
+        id: "chat-folder-2",
+        name: "Infraestrutura",
+        chats: [
+          { id: "chat-c4", title: "Configurar Docker Compose" },
+          { id: "chat-c5", title: "Pipeline CI/CD" },
+        ],
+      },
+    ],
+    recent: [
+      { id: "chat-recent-1", title: "Schema do banco de dados" },
+      { id: "chat-recent-2", title: "Configurar ambiente de dev" },
     ],
   },
-  {
-    id: "folder-2",
-    name: "Infraestrutura",
-    chats: [
-      { id: "c4", title: "Configurar Docker Compose" },
-      { id: "c5", title: "Pipeline CI/CD" },
+  code: {
+    pinned: [
+      { id: "code-pinned-1", title: "Gerar hook useDebounce" },
+      { id: "code-pinned-2", title: "Refatorar API service layer" },
+    ],
+    folders: [
+      {
+        id: "code-folder-1",
+        name: "Componentes",
+        chats: [
+          { id: "code-c1", title: "Criar componente DataTable" },
+          { id: "code-c2", title: "Migrar Button para variantes" },
+          { id: "code-c3", title: "Implementar virtual scroll" },
+        ],
+      },
+      {
+        id: "code-folder-2",
+        name: "Utils",
+        chats: [
+          { id: "code-c4", title: "Função de formatação de data" },
+          { id: "code-c5", title: "Validação de CPF/CNPJ" },
+        ],
+      },
+    ],
+    recent: [
+      { id: "code-recent-1", title: "Script de migração BD" },
+      { id: "code-recent-2", title: "Otimizar consultas N+1" },
     ],
   },
-  {
-    id: "folder-3",
-    name: "Qualidade",
-    chats: [
-      { id: "c6", title: "Testes unitários do módulo X" },
-      { id: "c7", title: "Otimização de queries SQL" },
-      { id: "c8", title: "Documentação do projeto" },
-    ],
-  },
-]
-
-const recentChats = [
-  { id: "recent-1", title: "Schema do banco de dados" },
-  { id: "recent-2", title: "Configurar ambiente de dev" },
-]
+}
 
 function NewChatButton() {
+  const { mode } = useWorkspace()
   return (
     <Button variant="outline" className="w-full justify-start gap-2 text-sm">
       <Plus className="size-4" />
-      Novo Chat
+      {mode === "chat" ? "Novo Chat" : "Novo Código"}
     </Button>
   )
 }
 
 function ModeTabs() {
+  const { mode, setMode } = useWorkspace()
+
   return (
-    <Tabs defaultValue="chat">
+    <Tabs value={mode} onValueChange={(v) => setMode(v as WorkspaceMode)}>
       <TabsList className="w-full">
         <TabsTrigger value="chat" className="flex-1 gap-1.5">
           <MessageSquare className="size-3.5" />
@@ -277,17 +307,20 @@ function FolderItem({ folder }: { folder: { id: string; name: string; chats: { i
 }
 
 function ChatHistory() {
+  const { mode } = useWorkspace()
+  const data = workspaces[mode]
+
   return (
     <>
       <SidebarGroup>
         <SidebarGroupLabel>Fixados</SidebarGroupLabel>
         <SidebarGroupContent>
           <SidebarMenu>
-            <FolderItem folder={folders[0]} />
-            {pinnedChats.map((chat) => (
+            {data.folders.length > 0 && <FolderItem folder={data.folders[0]} />}
+            {data.pinned.map((chat) => (
               <ChatItem key={chat.id} chat={chat} />
             ))}
-            <FolderItem folder={folders[1]} />
+            {data.folders.length > 1 && <FolderItem folder={data.folders[1]} />}
           </SidebarMenu>
         </SidebarGroupContent>
       </SidebarGroup>
@@ -296,7 +329,7 @@ function ChatHistory() {
         <SidebarGroupLabel>Projetos</SidebarGroupLabel>
         <SidebarGroupContent>
           <SidebarMenu>
-            {folders.map((folder) => (
+            {data.folders.map((folder) => (
               <FolderItem key={folder.id} folder={folder} />
             ))}
           </SidebarMenu>
@@ -307,7 +340,7 @@ function ChatHistory() {
         <SidebarGroupLabel>Recentes</SidebarGroupLabel>
         <SidebarGroupContent>
           <SidebarMenu>
-            {recentChats.map((chat) => (
+            {data.recent.map((chat) => (
               <ChatItem key={chat.id} chat={chat} />
             ))}
           </SidebarMenu>

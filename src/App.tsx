@@ -5,6 +5,7 @@ import { TooltipProvider } from "@/components/ui/tooltip"
 import { AppSidebar } from "@/components/app-sidebar"
 import { Button } from "@/components/ui/button"
 import { ThemeProvider } from "@/components/theme-provider"
+import { WorkspaceProvider, useWorkspace } from "@/lib/workspace-context"
 
 const HOVER_ZONE_WIDTH = 6
 const SIDEBAR_HIDE_DELAY = 300
@@ -56,6 +57,21 @@ function SidebarToggle({ onToggle }: { onToggle: () => void }) {
   )
 }
 
+function Placeholder() {
+  const { mode } = useWorkspace()
+
+  if (mode === "chat") {
+    return <p>Selecione um chat ou inicie uma nova conversa</p>
+  }
+
+  return (
+    <div className="flex flex-col items-center gap-2">
+      <p>Selecione um contexto de código</p>
+      <p className="text-xs text-muted-foreground">Gere, refatore ou analise código</p>
+    </div>
+  )
+}
+
 function Layout() {
   const { open, setOpen } = useSidebar()
   const [mode, setMode] = useState<SidebarMode>(loadMode)
@@ -97,7 +113,7 @@ function Layout() {
       <main className="flex flex-1 flex-col p-4">
         <SidebarToggle onToggle={handleToggle} />
         <div className="flex flex-1 items-center justify-center text-muted-foreground">
-          <p>Selecione um chat ou inicie uma nova conversa</p>
+          <Placeholder />
         </div>
       </main>
     </div>
@@ -110,9 +126,11 @@ function App() {
   return (
     <ThemeProvider defaultTheme="system" storageKey="vite-ui-theme">
       <TooltipProvider>
-        <SidebarProvider open={open} onOpenChange={setOpen}>
-          <Layout />
-        </SidebarProvider>
+        <WorkspaceProvider>
+          <SidebarProvider open={open} onOpenChange={setOpen}>
+            <Layout />
+          </SidebarProvider>
+        </WorkspaceProvider>
       </TooltipProvider>
     </ThemeProvider>
   )
