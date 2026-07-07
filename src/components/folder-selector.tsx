@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react"
-import { Folder, X, ChevronUp } from "lucide-react"
+import { Folder, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
 
 const RECENT_FOLDERS_KEY = "orbit-recent-folders"
@@ -66,7 +66,7 @@ export function FolderSelector({ folders, onFoldersChange }: FolderSelectorProps
   }
 
   return (
-    <div className="flex flex-wrap items-center gap-2 w-full">
+    <div className="flex flex-wrap items-center gap-2">
       {folders.map((folder) => (
         <div
           key={folder}
@@ -91,7 +91,6 @@ export function FolderSelector({ folders, onFoldersChange }: FolderSelectorProps
         >
           <Folder className="size-3.5" />
           {folders.length === 0 ? "Associar pasta" : getFolderName(folders[folders.length - 1])}
-          <ChevronUp className="size-3" />
         </Button>
         {recentOpen && (
           <div className="absolute bottom-full left-0 mb-1 z-50 w-56 rounded-lg border bg-popover/70 p-1 text-popover-foreground shadow-md ring-1 ring-foreground/10 backdrop-blur-2xl backdrop-saturate-150">
@@ -116,7 +115,7 @@ export function FolderSelector({ folders, onFoldersChange }: FolderSelectorProps
               onClick={() => addFolder()}
               className="flex w-full min-h-7 items-center gap-2 rounded-md px-2 py-1 text-xs hover:bg-foreground/10"
             >
-              <Folder className="size-3.5 shrink-0" />
+              <Folder className="size-3.5" />
               Nova pasta
             </button>
           </div>

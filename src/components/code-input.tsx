@@ -78,14 +78,14 @@ export function CodeInput() {
         onSubmit={handleSubmit}
         className="rounded-xl border-2 border-sidebar-border overflow-hidden [&>div]:!border-none [&>div]:!rounded-none [&>div]:!bg-transparent"
       >
-        {(isNewChat || folders.length > 0) && (
-          <div className="flex flex-wrap items-center gap-2 px-3 py-1.5 w-full">
+        <div className="flex flex-wrap items-center gap-2 px-3 py-1.5 w-full empty:hidden">
+          {(isNewChat || folders.length > 0) && (
             <FolderSelector folders={folders} onFoldersChange={setFolders} />
-          </div>
-        )}
-        <PromptInputAttachments className="!px-3 !py-1.5">
-          {(attachment) => <PromptInputAttachment data={attachment} />}
-        </PromptInputAttachments>
+          )}
+          <PromptInputAttachments className="!p-0 !m-0 !gap-2">
+            {(attachment) => <PromptInputAttachment data={attachment} />}
+          </PromptInputAttachments>
+        </div>
         <PromptInputBody>
           <PromptInputTextarea placeholder="Pergunte sobre código..." className="px-3 text-base md:text-base" />
         </PromptInputBody>
