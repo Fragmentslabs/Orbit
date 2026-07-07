@@ -206,8 +206,6 @@ function EllipsisMenu({ items, groupClass = "group-hover/menu-item:opacity-100",
           e.stopPropagation()
           setMenuOpen((prev) => !prev)
         }}
-        data-slot="sidebar-menu-action"
-        data-sidebar="menu-action"
           className={cn(
             "absolute right-1 top-1.5 flex size-5 items-center justify-center rounded-[calc(var(--radius-sm)-2px)] p-0 text-sidebar-foreground group-hover/menu-row:bg-sidebar-accent group-hover/menu-row:text-sidebar-accent-foreground [&>svg]:size-4 [&>svg]:shrink-0",
             "opacity-0 transition-all duration-200",
@@ -252,14 +250,14 @@ function ChatRow({ chat, menuItems, button: Button, buttonClassName, actionButto
   return (
     <div className="group/menu-row relative min-w-0">
       <Button className={cn(
-        "hover:bg-transparent hover:text-sidebar-foreground group-hover/menu-row:bg-sidebar-accent group-hover/menu-row:text-sidebar-accent-foreground",
+        "group-hover/menu-row:bg-sidebar-accent group-hover/menu-row:text-sidebar-accent-foreground",
         "text-xs",
-        pinned ? "pr-9 group-hover/menu-row:pr-12" : "group-hover/menu-row:pr-8",
+        pinned ? "pr-8 group-hover/menu-row:pr-10" : "group-hover/menu-row:pr-8",
         buttonClassName,
       )}>
         <MessageSquare className="size-4 shrink-0" />
         <span className="flex-1 truncate">{chat.title}</span>
-        {pinned && <Pin className="size-3 shrink-0 text-sidebar-foreground/40" />}
+        {pinned && <Pin className="size-2.5 shrink-0 text-sidebar-foreground/40" />}
       </Button>
       <EllipsisMenu
         groupClass="group-hover/menu-row:opacity-100"
@@ -275,7 +273,6 @@ function ChatItem({ chat, menuItems, pinned }: { chat: { id: string; title: stri
     <SidebarMenuItem>
       <ChatRow
         button={SidebarMenuButton}
-        buttonClassName="!pr-0"
         chat={chat}
         menuItems={menuItems}
         pinned={pinned}
@@ -291,7 +288,7 @@ function FolderItem({ folder }: { folder: { id: string; name: string; chats: { i
     <SidebarMenuItem>
       <div className="group/menu-row relative min-w-0">
         <SidebarMenuButton
-          className="hover:bg-transparent hover:text-sidebar-foreground group-hover/menu-row:bg-sidebar-accent group-hover/menu-row:text-sidebar-accent-foreground text-xs"
+          className="group-hover/menu-row:bg-sidebar-accent group-hover/menu-row:text-sidebar-accent-foreground group-hover/menu-row:pr-12 text-xs"
           onClick={() => setExpanded((prev) => !prev)}
         >
           <Folder className="size-4 shrink-0" />
@@ -300,14 +297,23 @@ function FolderItem({ folder }: { folder: { id: string; name: string; chats: { i
         </SidebarMenuButton>
 
         <button
-          data-slot="sidebar-menu-action"
-          data-sidebar="menu-action"
           onClick={(e) => e.stopPropagation()}
-          className="absolute right-1 top-1.5 flex size-5 items-center justify-center rounded-[calc(var(--radius-sm)-2px)] p-0 text-sidebar-foreground opacity-0 transition-all duration-200 group-hover/menu-row:opacity-100 group-hover/menu-row:bg-sidebar-accent group-hover/menu-row:text-sidebar-accent-foreground [&>svg]:size-4 [&>svg]:shrink-0"
+          className="absolute right-7 top-1.5 flex size-5 items-center justify-center rounded-[calc(var(--radius-sm)-2px)] p-0 text-sidebar-foreground opacity-0 transition-all duration-200 group-hover/menu-row:opacity-100 group-hover/menu-row:bg-sidebar-accent group-hover/menu-row:text-sidebar-accent-foreground [&>svg]:size-4 [&>svg]:shrink-0"
         >
           <Plus className="size-4" />
           <span className="sr-only">Adicionar</span>
         </button>
+
+        <EllipsisMenu
+          groupClass="group-hover/menu-row:opacity-100"
+          buttonClassName="w-0 overflow-hidden group-hover/menu-row:w-5"
+          items={[
+            { icon: <Pencil className="size-4" />, label: "Renomear" },
+            { icon: <Pin className="size-4" />, label: "Fixar" },
+            { icon: <Archive className="size-4" />, label: "Arquivar" },
+            { icon: <Trash2 className="size-4" />, label: "Remover" },
+          ]}
+        />
       </div>
 
       {expanded && (
