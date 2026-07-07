@@ -8,6 +8,7 @@ import {
 import { Button } from "@/components/ui/button"
 import {
   PromptInput,
+  PromptInputProvider,
   PromptInputActionAddAttachments,
   PromptInputAttachment,
   PromptInputAttachments,
@@ -72,74 +73,76 @@ export function CodeInput() {
   const isNewChat = !submitted
 
   return (
-    <div className="w-full max-w-2xl mx-auto pb-4">
-      <PromptInput
-        multiple
-        onSubmit={handleSubmit}
-        className="rounded-xl border-2 border-sidebar-border overflow-hidden [&>div]:!border-none [&>div]:!rounded-none [&>div]:!bg-transparent"
-      >
-        <div className="flex flex-wrap items-center gap-2 px-3 py-1.5 empty:hidden">
-          {(isNewChat || folders.length > 0) && (
+    <PromptInputProvider>
+      <div className="w-full max-w-2xl mx-auto pb-4">
+        {(isNewChat || folders.length > 0) && (
+          <div className="flex flex-wrap items-center gap-2 px-3 py-1.5">
             <FolderSelector folders={folders} onFoldersChange={setFolders} />
-          )}
-          <PromptInputAttachments className="!p-0 !m-0">
-            {(attachment) => <PromptInputAttachment data={attachment} />}
-          </PromptInputAttachments>
-        </div>
-        <PromptInputBody>
-          <PromptInputTextarea placeholder="Pergunte sobre código..." className="px-3 text-base md:text-base" />
-        </PromptInputBody>
-        <PromptInputFooter>
-          <PromptInputTools>
-            <DropdownMenu>
-              <DropdownMenuTrigger className="flex size-7 items-center justify-center rounded-md hover:bg-muted hover:text-foreground aria-expanded:bg-muted aria-expanded:text-foreground">
-                <PlusIcon className="size-4" />
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="start" className="min-w-40">
-                <PromptInputActionAddAttachments label="Anexar arquivos" />
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </PromptInputTools>
-          <div className="flex items-center gap-1">
-            <ModelSelector onOpenChange={setModelOpen} open={modelOpen}>
-              <ModelSelectorTrigger render={<Button className="h-7 gap-1 px-1.5 text-xs" variant="ghost" />}>
-                <ModelSelectorLogo provider={selectedModelData?.chefSlug ?? "openai"} />
-                <ModelSelectorName>{selectedModelData?.name ?? "GPT-4o"}</ModelSelectorName>
-                <ChevronDownIcon className="size-3 text-muted-foreground" />
-              </ModelSelectorTrigger>
-              <ModelSelectorContent>
-                <ModelSelectorInput placeholder="Search models..." />
-                <ModelSelectorList>
-                  <ModelSelectorEmpty>No models found.</ModelSelectorEmpty>
-                  {chefs.map(chef => (
-                    <ModelSelectorGroup heading={chef} key={chef}>
-                      {models.filter(m => m.chef === chef).map(model => (
-                        <ModelSelectorItem
-                          key={model.id}
-                          onSelect={() => { setSelectedModel(model.id); setModelOpen(false) }}
-                          value={model.id}
-                        >
-                          <ModelSelectorLogo provider={model.chefSlug} />
-                          <ModelSelectorName>{model.name}</ModelSelectorName>
-                          <ModelSelectorLogoGroup>
-                            {model.providers.map(p => (
-                              <ModelSelectorLogo key={p} provider={p} />
-                            ))}
-                          </ModelSelectorLogoGroup>
-                          {selectedModel === model.id
-                            ? <CheckIcon className="ml-auto size-4" />
-                            : <div className="ml-auto size-4" />}
-                        </ModelSelectorItem>
-                      ))}
-                    </ModelSelectorGroup>
-                  ))}
-                </ModelSelectorList>
-              </ModelSelectorContent>
-            </ModelSelector>
-            <PromptInputSubmit />
+            <PromptInputAttachments className="!p-0 !m-0">
+              {(attachment) => <PromptInputAttachment data={attachment} />}
+            </PromptInputAttachments>
           </div>
-        </PromptInputFooter>
-      </PromptInput>
-    </div>
+        )}
+        <PromptInput
+          multiple
+          onSubmit={handleSubmit}
+          className="rounded-xl border-2 border-sidebar-border overflow-hidden [&>div]:!border-none [&>div]:!rounded-none [&>div]:!bg-transparent"
+        >
+          <PromptInputBody>
+            <PromptInputTextarea placeholder="Pergunte sobre código..." className="px-3 text-base md:text-base" />
+          </PromptInputBody>
+          <PromptInputFooter>
+            <PromptInputTools>
+              <DropdownMenu>
+                <DropdownMenuTrigger className="flex size-7 items-center justify-center rounded-md hover:bg-muted hover:text-foreground aria-expanded:bg-muted aria-expanded:text-foreground">
+                  <PlusIcon className="size-4" />
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start" className="min-w-40">
+                  <PromptInputActionAddAttachments label="Anexar arquivos" />
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </PromptInputTools>
+            <div className="flex items-center gap-1">
+              <ModelSelector onOpenChange={setModelOpen} open={modelOpen}>
+                <ModelSelectorTrigger render={<Button className="h-7 gap-1 px-1.5 text-xs" variant="ghost" />}>
+                  <ModelSelectorLogo provider={selectedModelData?.chefSlug ?? "openai"} />
+                  <ModelSelectorName>{selectedModelData?.name ?? "GPT-4o"}</ModelSelectorName>
+                  <ChevronDownIcon className="size-3 text-muted-foreground" />
+                </ModelSelectorTrigger>
+                <ModelSelectorContent>
+                  <ModelSelectorInput placeholder="Search models..." />
+                  <ModelSelectorList>
+                    <ModelSelectorEmpty>No models found.</ModelSelectorEmpty>
+                    {chefs.map(chef => (
+                      <ModelSelectorGroup heading={chef} key={chef}>
+                        {models.filter(m => m.chef === chef).map(model => (
+                          <ModelSelectorItem
+                            key={model.id}
+                            onSelect={() => { setSelectedModel(model.id); setModelOpen(false) }}
+                            value={model.id}
+                          >
+                            <ModelSelectorLogo provider={model.chefSlug} />
+                            <ModelSelectorName>{model.name}</ModelSelectorName>
+                            <ModelSelectorLogoGroup>
+                              {model.providers.map(p => (
+                                <ModelSelectorLogo key={p} provider={p} />
+                              ))}
+                            </ModelSelectorLogoGroup>
+                            {selectedModel === model.id
+                              ? <CheckIcon className="ml-auto size-4" />
+                              : <div className="ml-auto size-4" />}
+                          </ModelSelectorItem>
+                        ))}
+                      </ModelSelectorGroup>
+                    ))}
+                  </ModelSelectorList>
+                </ModelSelectorContent>
+              </ModelSelector>
+              <PromptInputSubmit />
+            </div>
+          </PromptInputFooter>
+        </PromptInput>
+      </div>
+    </PromptInputProvider>
   )
 }
