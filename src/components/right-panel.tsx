@@ -6,17 +6,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import {
-  PromptInput,
-  PromptInputActionAddAttachments,
-  PromptInputAttachment,
-  PromptInputAttachments,
-  PromptInputBody,
-  PromptInputFooter,
-  PromptInputSubmit,
-  PromptInputTextarea,
-  PromptInputTools,
-} from "@/src/components/ai/prompt-input"
+import { ChatView } from "@/src/components/chat-view"
 import { cn } from "@/lib/utils"
 
 type TabType = "chat" | "terminal" | "folders" | "browser"
@@ -40,49 +30,14 @@ const tabMeta: Record<TabType, TabMeta> = {
   browser: { icon: Globe, label: "Browser", description: "Pesquise e visualize páginas web" },
 }
 
-function PanelChat() {
-  return (
-    <div className="flex flex-1 flex-col">
-      <div className="flex-1" />
-      <div className="px-3 pb-2">
-        <PromptInput
-          multiple
-          onSubmit={(message) => {
-            console.log("Right panel chat message:", message)
-          }}
-          className="rounded-xl border border-sidebar-border overflow-hidden [&>div]:!border-none [&>div]:!rounded-none [&>div]:!bg-transparent"
-        >
-          <PromptInputAttachments className="!px-3 !py-1.5">
-            {(attachment) => <PromptInputAttachment data={attachment} />}
-          </PromptInputAttachments>
-          <PromptInputBody>
-            <PromptInputTextarea placeholder="Pergunte qualquer coisa..." className="px-3 text-sm" />
-          </PromptInputBody>
-          <PromptInputFooter>
-            <PromptInputTools>
-              <DropdownMenu>
-                <DropdownMenuTrigger className="flex size-7 items-center justify-center rounded-md hover:bg-muted hover:text-foreground aria-expanded:bg-muted aria-expanded:text-foreground">
-                  <PlusIcon className="size-4" />
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="start" className="min-w-40">
-                  <PromptInputActionAddAttachments label="Anexar arquivos" />
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </PromptInputTools>
-            <div className="flex items-center gap-1">
-              <PromptInputSubmit />
-            </div>
-          </PromptInputFooter>
-        </PromptInput>
-      </div>
-    </div>
-  )
-}
-
 function TabContent({ type }: { type: TabType }) {
   switch (type) {
     case "chat":
-      return <PanelChat />
+      return (
+        <div className="flex flex-1 flex-col overflow-hidden p-4">
+          <ChatView />
+        </div>
+      )
     case "terminal":
       return (
         <div className="flex flex-1 items-center justify-center text-sm text-muted-foreground">
