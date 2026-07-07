@@ -306,14 +306,18 @@ function ChatItem({ chat, menuItems, pinned }: { chat: { id: string; title: stri
   )
 }
 
-function FolderItem({ folder }: { folder: { id: string; name: string; chats: { id: string; title: string }[] } }) {
+function FolderItem({ folder, pinned }: { folder: { id: string; name: string; chats: { id: string; title: string }[] }; pinned?: boolean }) {
   const [expanded, setExpanded] = useState(true)
 
   return (
     <SidebarMenuItem>
       <div className="group/menu-row relative min-w-0">
         <SidebarMenuButton
-          className="group-hover/menu-row:bg-sidebar-accent group-hover/menu-row:text-sidebar-accent-foreground group-hover/menu-row:pr-12 text-xs"
+          className={cn(
+            "group-hover/menu-row:bg-sidebar-accent group-hover/menu-row:text-sidebar-accent-foreground",
+            "text-xs",
+            pinned ? "group-hover/menu-row:pr-14" : "group-hover/menu-row:pr-12",
+          )}
           onClick={() => setExpanded((prev) => !prev)}
         >
           <Folder className="size-4 shrink-0" />
@@ -321,6 +325,7 @@ function FolderItem({ folder }: { folder: { id: string; name: string; chats: { i
             <span className="truncate">{folder.name}</span>
             <ChevronDown className={cn("size-3 shrink-0 transition-transform", !expanded && "-rotate-90")} />
           </div>
+          {pinned && <Pin className="!size-3 shrink-0 text-sidebar-foreground/40" />}
         </SidebarMenuButton>
 
         <button
@@ -336,7 +341,7 @@ function FolderItem({ folder }: { folder: { id: string; name: string; chats: { i
           buttonClassName="w-0 overflow-hidden group-hover/menu-row:w-5"
           items={[
             { icon: <Pencil className="size-4" />, label: "Renomear" },
-            { icon: <Pin className="size-4" />, label: "Fixar" },
+            { icon: <Pin className="size-4" />, label: pinned ? "Desafixar" : "Fixar" },
             { icon: <Archive className="size-4" />, label: "Arquivar" },
             { icon: <Trash2 className="size-4" />, label: "Remover" },
           ]}
@@ -383,7 +388,7 @@ function ChatHistory() {
       <AccordionGroup label="Chats">
         <SidebarMenu>
           {data.pinnedFolders.map((folder) => (
-            <FolderItem key={folder.id} folder={folder} />
+            <FolderItem key={folder.id} folder={folder} pinned />
           ))}
           {data.pinned.map((chat) => (
             <ChatItem key={chat.id} chat={chat} pinned />
