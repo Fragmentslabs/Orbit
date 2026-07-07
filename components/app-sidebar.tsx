@@ -39,6 +39,7 @@ import {
 
 const workspaces: Record<WorkspaceMode, {
   pinned: { id: string; title: string }[]
+  pinnedFolders: { id: string; name: string; chats: { id: string; title: string }[] }[]
   folders: { id: string; name: string; chats: { id: string; title: string }[] }[]
   recent: { id: string; title: string }[]
 }> = {
@@ -46,6 +47,16 @@ const workspaces: Record<WorkspaceMode, {
     pinned: [
       { id: "chat-pinned-1", title: "Setup inicial do projeto" },
       { id: "chat-pinned-2", title: "Review de código - Sprint 5" },
+    ],
+    pinnedFolders: [
+      {
+        id: "chat-folder-pinned-1",
+        name: "Design System",
+        chats: [
+          { id: "chat-pc1", title: "Definir paleta de cores" },
+          { id: "chat-pc2", title: "Componentes base" },
+        ],
+      },
     ],
     folders: [
       {
@@ -75,6 +86,16 @@ const workspaces: Record<WorkspaceMode, {
     pinned: [
       { id: "code-pinned-1", title: "Gerar hook useDebounce" },
       { id: "code-pinned-2", title: "Refatorar API service layer" },
+    ],
+    pinnedFolders: [
+      {
+        id: "code-folder-pinned-1",
+        name: "Hooks reutilizáveis",
+        chats: [
+          { id: "code-pc1", title: "useDebounce" },
+          { id: "code-pc2", title: "useLocalStorage" },
+        ],
+      },
     ],
     folders: [
       {
@@ -261,7 +282,7 @@ function ChatRow({ chat, menuItems, button: Button, buttonClassName, actionButto
           <MessageSquare className="size-4 shrink-0" />
           <span className="truncate">{chat.title}</span>
         </div>
-        {pinned && <Pin className="!size-2.5 shrink-0 text-sidebar-foreground/40" />}
+        {pinned && <Pin className="!size-3 shrink-0 text-sidebar-foreground/40" />}
       </Button>
       <EllipsisMenu
         groupClass="group-hover/menu-row:opacity-100"
@@ -361,6 +382,9 @@ function ChatHistory() {
 
       <AccordionGroup label="Chats">
         <SidebarMenu>
+          {data.pinnedFolders.map((folder) => (
+            <FolderItem key={folder.id} folder={folder} />
+          ))}
           {data.pinned.map((chat) => (
             <ChatItem key={chat.id} chat={chat} pinned />
           ))}
