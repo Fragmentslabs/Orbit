@@ -134,7 +134,9 @@ function EllipsisMenu({ items }: { items: { icon: React.ReactNode; label: string
           e.stopPropagation()
           setMenuOpen((prev) => !prev)
         }}
-        className="absolute right-1 top-1/2 -translate-y-1/2 flex aspect-square w-5 items-center justify-center rounded-[calc(var(--radius-sm)-2px)] p-0 text-sidebar-foreground opacity-0 group-hover/menu-item:opacity-100 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground [&>svg]:size-4 [&>svg]:shrink-0"
+        data-slot="sidebar-menu-action"
+        data-sidebar="menu-action"
+        className="absolute right-1 top-1.5 flex aspect-square w-5 items-center justify-center rounded-[calc(var(--radius-sm)-2px)] p-0 text-sidebar-foreground opacity-0 group-hover/menu-item:opacity-100 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground [&>svg]:size-4 [&>svg]:shrink-0"
       >
         <Ellipsis className="size-4" />
         <span className="sr-only">Opções</span>
@@ -196,7 +198,9 @@ function FolderItem({ folder }: { folder: { id: string; name: string; chats: { i
           e.stopPropagation()
           setExpanded((prev) => !prev)
         }}
-        className="absolute right-7 top-1/2 -translate-y-1/2 flex aspect-square w-5 items-center justify-center rounded-[calc(var(--radius-sm)-2px)] p-0 text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground [&>svg]:size-4 [&>svg]:shrink-0"
+        data-slot="sidebar-menu-action"
+        data-sidebar="menu-action"
+        className="absolute right-8 top-1.5 flex aspect-square w-5 items-center justify-center rounded-[calc(var(--radius-sm)-2px)] p-0 text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground [&>svg]:size-4 [&>svg]:shrink-0"
       >
         <ChevronDown className={cn("size-4 transition-transform", expanded && "rotate-180")} />
         <span className="sr-only">Expandir pasta</span>
