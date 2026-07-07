@@ -12,6 +12,7 @@
   "dependencies": {
     "@base-ui/react": "^1.6.0",
     "@fontsource-variable/geist": "^5.2.9",
+    "@rive-app/react-webgl2": "^4.29.4",
     "@tailwindcss/vite": "^4.3.2",
     "ai": "^7.0.16",
     "class-variance-authority": "^0.7.1",
