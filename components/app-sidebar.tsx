@@ -214,7 +214,7 @@ function ChatRow({ chat, menuItems, button: Button, buttonClassName }: {
   buttonClassName?: string
 }) {
   return (
-    <div className="group/menu-row relative">
+    <div className="group/menu-row relative min-w-0">
       <Button className={cn("group-hover/menu-row:pr-8 text-xs", buttonClassName)}>
         <MessageSquare className="size-4" />
         <span>{chat.title}</span>
@@ -252,7 +252,7 @@ function FolderItem({ folder }: { folder: { id: string; name: string; chats: { i
 
   return (
     <SidebarMenuItem>
-      <div className="group/menu-row relative">
+      <div className="group/menu-row relative min-w-0">
         <SidebarMenuButton className="text-xs">
           <Folder className="size-4" />
           <span>{folder.name}</span>
@@ -447,11 +447,13 @@ export function AppSidebar() {
         <ModeTabs />
       </SidebarHeader>
       <SidebarContent>
-        <div className="px-3 py-2">
-          <NewChatButton />
+        <div className="flex min-w-0 flex-col overflow-x-hidden">
+          <div className="px-3 py-2">
+            <NewChatButton />
+          </div>
+          <SidebarSeparator />
+          <ChatHistory />
         </div>
-        <SidebarSeparator />
-        <ChatHistory />
       </SidebarContent>
       <SidebarFooter>
         <SidebarSeparator />
