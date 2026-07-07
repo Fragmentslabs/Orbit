@@ -162,9 +162,13 @@ function Layout() {
         </Panel>
         {rightPanelOpen && (
           <>
-            <PanelResizeHandle className="w-0.5 bg-border transition-colors hover:bg-foreground/20 data-[resize-handle-active]:bg-foreground/20" />
+            <PanelResizeHandle className="group relative flex items-center justify-center w-2">
+              <div className="h-8 w-0.5 rounded-full bg-transparent group-hover:bg-border group-data-[resize-handle-active]:bg-border transition-colors" />
+            </PanelResizeHandle>
             <Panel defaultSize={35} minSize={25} maxSize={80}>
-              <RightPanel />
+              <div className="flex h-full flex-col pt-2 pr-2 pb-2">
+                <RightPanel />
+              </div>
             </Panel>
           </>
         )}

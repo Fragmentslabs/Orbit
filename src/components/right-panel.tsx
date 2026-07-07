@@ -10,7 +10,7 @@ const items = [
 
 export function RightPanel() {
   return (
-    <div className="flex h-full flex-col border-l border-border bg-sidebar">
+    <div className="flex h-full flex-col rounded-lg shadow-sm ring-1 ring-sidebar-border bg-sidebar">
       <div className="flex h-12 items-center justify-between border-b border-border px-4">
         <span className="text-sm font-medium text-foreground">Painel</span>
       </div>
