@@ -347,9 +347,8 @@ function AccountDropdown() {
         sideOffset={8}
         className="w-(--radix-popper-anchor-width)"
       >
-        <DropdownMenuLabel>Minha Conta</DropdownMenuLabel>
-        <DropdownMenuSeparator />
         <DropdownMenuGroup>
+          <DropdownMenuLabel>Minha Conta</DropdownMenuLabel>
           <DropdownMenuItem>
             <User className="size-4" />
             Perfil
