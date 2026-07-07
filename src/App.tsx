@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button"
 import { ThemeProvider } from "@/components/theme-provider"
 import { WorkspaceProvider, useWorkspace } from "@/lib/workspace-context"
 import { ChatInput } from "@/src/components/chat-input"
+import { CodeInput } from "@/src/components/code-input"
 import { Persona, type PersonaState } from "@/src/components/ai/persona"
 
 const HOVER_ZONE_WIDTH = 6
@@ -70,36 +71,51 @@ function Placeholder() {
     { key: "asleep", label: "Dormindo" },
   ]
 
-  if (mode === "chat") {
-    return (
-      <div className="flex flex-col items-center gap-6">
-        <Persona state={personaState} />
-        <div className="flex flex-col items-center gap-2">
-          <p className="text-lg font-medium text-foreground">Pronto para conversar</p>
-          <p className="text-sm text-muted-foreground">Selecione um chat ou inicie uma nova conversa</p>
-        </div>
-        <div className="flex items-center gap-2">
-          {personaStates.map(({ key, label }) => (
-            <Button
-              key={key}
-              onClick={() => setPersonaState(key)}
-              variant={personaState === key ? "default" : "outline"}
-              size="sm"
-            >
-              {label}
-            </Button>
-          ))}
-        </div>
+  const chatContent = (
+    <div className="flex flex-col items-center gap-6">
+      <Persona state={personaState} />
+      <div className="flex flex-col items-center gap-2">
+        <p className="text-lg font-medium text-foreground">Pronto para conversar</p>
+        <p className="text-sm text-muted-foreground">Selecione um chat ou inicie uma nova conversa</p>
       </div>
-    )
-  }
-
-  return (
-    <div className="flex flex-col items-center gap-2">
-      <p>Selecione um contexto de código</p>
-      <p className="text-xs text-muted-foreground">Gere, refatore ou analise código</p>
+      <div className="flex items-center gap-2">
+        {personaStates.map(({ key, label }) => (
+          <Button
+            key={key}
+            onClick={() => setPersonaState(key)}
+            variant={personaState === key ? "default" : "outline"}
+            size="sm"
+          >
+            {label}
+          </Button>
+        ))}
+      </div>
     </div>
   )
+
+  const codeContent = (
+    <div className="flex flex-col items-center gap-6">
+      <Persona state={personaState} />
+      <div className="flex flex-col items-center gap-2">
+        <p className="text-lg font-medium text-foreground">Pronto para programar</p>
+        <p className="text-sm text-muted-foreground">Selecione um contexto de código ou inicie um novo</p>
+      </div>
+      <div className="flex items-center gap-2">
+        {personaStates.map(({ key, label }) => (
+          <Button
+            key={key}
+            onClick={() => setPersonaState(key)}
+            variant={personaState === key ? "default" : "outline"}
+            size="sm"
+          >
+            {label}
+          </Button>
+        ))}
+      </div>
+    </div>
+  )
+
+  return mode === "chat" ? chatContent : codeContent
 }
 
 function Layout() {
@@ -152,7 +168,7 @@ function Layout() {
         <div className="flex flex-1 items-center justify-center text-muted-foreground">
           <Placeholder />
         </div>
-        {workspaceMode === "chat" && <ChatInput />}
+        {workspaceMode === "chat" ? <ChatInput /> : <CodeInput />}
       </main>
     </div>
   )
