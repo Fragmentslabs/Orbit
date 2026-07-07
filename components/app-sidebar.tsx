@@ -198,35 +198,37 @@ function FolderItem({ folder }: { folder: { id: string; name: string; chats: { i
 
   return (
     <SidebarMenuItem>
-      <SidebarMenuButton className="text-xs">
-        <Folder className="size-4" />
-        <span>{folder.name}</span>
-      </SidebarMenuButton>
+      <div className="group/menu-row relative">
+        <SidebarMenuButton className="text-xs">
+          <Folder className="size-4" />
+          <span>{folder.name}</span>
+        </SidebarMenuButton>
 
-      <button
-        onClick={(e) => {
-          e.stopPropagation()
-          setExpanded((prev) => !prev)
-        }}
-        data-slot="sidebar-menu-action"
-        data-sidebar="menu-action"
-        className="absolute right-1 top-1.5 flex size-5 items-center justify-center rounded-[calc(var(--radius-sm)-2px)] p-0 text-sidebar-foreground transition-all duration-200 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground group-hover/menu-button:right-8 [&>svg]:size-4 [&>svg]:shrink-0"
-      >
-        <ChevronDown className={cn("size-4 transition-transform", expanded && "rotate-180")} />
-        <span className="sr-only">Expandir pasta</span>
-      </button>
+        <button
+          onClick={(e) => {
+            e.stopPropagation()
+            setExpanded((prev) => !prev)
+          }}
+          data-slot="sidebar-menu-action"
+          data-sidebar="menu-action"
+          className="absolute right-1 top-1.5 flex size-5 items-center justify-center rounded-[calc(var(--radius-sm)-2px)] p-0 text-sidebar-foreground transition-all duration-200 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground group-hover/menu-row:right-8 [&>svg]:size-4 [&>svg]:shrink-0"
+        >
+          <ChevronDown className={cn("size-4 transition-transform", expanded && "rotate-180")} />
+          <span className="sr-only">Expandir pasta</span>
+        </button>
 
-      <EllipsisMenu
-        groupClass="group-hover/menu-button:opacity-100"
-        buttonClassName="w-0 overflow-hidden group-hover/menu-button:w-5"
-        items={[
-          { icon: <Pencil className="size-4" />, label: "Renomear" },
-          { icon: <Pin className="size-4" />, label: "Fixar" },
-          { icon: <Circle className="size-4" />, label: "Alterar cor" },
-          { icon: <Archive className="size-4" />, label: "Arquivar" },
-          { icon: <Trash2 className="size-4" />, label: "Remover" },
-        ]}
-      />
+        <EllipsisMenu
+          groupClass="group-hover/menu-row:opacity-100"
+          buttonClassName="w-0 overflow-hidden group-hover/menu-row:w-5"
+          items={[
+            { icon: <Pencil className="size-4" />, label: "Renomear" },
+            { icon: <Pin className="size-4" />, label: "Fixar" },
+            { icon: <Circle className="size-4" />, label: "Alterar cor" },
+            { icon: <Archive className="size-4" />, label: "Arquivar" },
+            { icon: <Trash2 className="size-4" />, label: "Remover" },
+          ]}
+        />
+      </div>
 
       {expanded && (
         <SidebarMenuSub className="mr-0">
