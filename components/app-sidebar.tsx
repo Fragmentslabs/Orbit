@@ -175,7 +175,7 @@ function EllipsisMenu({ items, groupClass = "group-hover/menu-item:opacity-100",
         data-slot="sidebar-menu-action"
         data-sidebar="menu-action"
           className={cn(
-            "absolute right-1 top-1.5 flex size-5 items-center justify-center rounded-[calc(var(--radius-sm)-2px)] p-0 text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground [&>svg]:size-4 [&>svg]:shrink-0",
+            "absolute right-1 top-1 flex size-5 items-center justify-center rounded-[calc(var(--radius-sm)-2px)] p-0 text-sidebar-foreground group-hover/menu-row:bg-sidebar-accent group-hover/menu-row:text-sidebar-accent-foreground [&>svg]:size-4 [&>svg]:shrink-0",
             "opacity-0 transition-all duration-200",
             groupClass,
             menuOpen && "opacity-100",
@@ -215,7 +215,7 @@ function ChatRow({ chat, menuItems, button: Button, buttonClassName }: {
 }) {
   return (
     <div className="group/menu-row relative min-w-0">
-      <Button className={cn("group-hover/menu-row:pr-8 text-xs", buttonClassName)}>
+      <Button className={cn("group-hover/menu-row:pr-8 hover:bg-transparent hover:text-sidebar-foreground group-hover/menu-row:bg-sidebar-accent group-hover/menu-row:text-sidebar-accent-foreground text-xs", buttonClassName)}>
         <MessageSquare className="size-4" />
         <span>{chat.title}</span>
       </Button>
@@ -253,7 +253,7 @@ function FolderItem({ folder }: { folder: { id: string; name: string; chats: { i
   return (
     <SidebarMenuItem>
       <div className="group/menu-row relative min-w-0">
-        <SidebarMenuButton className="text-xs">
+        <SidebarMenuButton className="hover:bg-transparent hover:text-sidebar-foreground group-hover/menu-row:bg-sidebar-accent group-hover/menu-row:text-sidebar-accent-foreground text-xs">
           <Folder className="size-4" />
           <span>{folder.name}</span>
         </SidebarMenuButton>
@@ -265,7 +265,7 @@ function FolderItem({ folder }: { folder: { id: string; name: string; chats: { i
           }}
           data-slot="sidebar-menu-action"
           data-sidebar="menu-action"
-          className="absolute right-1 top-1.5 flex size-5 items-center justify-center rounded-[calc(var(--radius-sm)-2px)] p-0 text-sidebar-foreground transition-all duration-200 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground group-hover/menu-row:right-8 [&>svg]:size-4 [&>svg]:shrink-0"
+          className="absolute right-1 top-1 flex size-5 items-center justify-center rounded-[calc(var(--radius-sm)-2px)] p-0 text-sidebar-foreground transition-all duration-200 group-hover/menu-row:bg-sidebar-accent group-hover/menu-row:text-sidebar-accent-foreground group-hover/menu-row:right-8 [&>svg]:size-4 [&>svg]:shrink-0"
         >
           <ChevronDown className={cn("size-4 transition-transform", expanded && "rotate-180")} />
           <span className="sr-only">Expandir pasta</span>
@@ -451,12 +451,12 @@ export function AppSidebar() {
           <div className="px-3 py-2">
             <NewChatButton />
           </div>
-          <SidebarSeparator />
+          <SidebarSeparator className="mx-3" />
           <ChatHistory />
         </div>
       </SidebarContent>
       <SidebarFooter>
-        <SidebarSeparator />
+        <SidebarSeparator className="mx-3" />
         <AccountSection />
       </SidebarFooter>
     </Sidebar>
