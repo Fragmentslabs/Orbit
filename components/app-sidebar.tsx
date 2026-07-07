@@ -255,9 +255,11 @@ function ChatRow({ chat, menuItems, button: Button, buttonClassName, actionButto
         pinned ? "pr-8 group-hover/menu-row:pr-10" : "group-hover/menu-row:pr-8",
         buttonClassName,
       )}>
-        <MessageSquare className="size-4 shrink-0" />
-        <span className="flex-1 truncate">{chat.title}</span>
-        {pinned && <Pin className="size-2.5 shrink-0 text-sidebar-foreground/40" />}
+        <div className="flex min-w-0 flex-1 items-center gap-2 truncate">
+          <MessageSquare className="size-4 shrink-0" />
+          <span className="truncate">{chat.title}</span>
+        </div>
+        {pinned && <Pin className="!size-2.5 shrink-0 text-sidebar-foreground/40" />}
       </Button>
       <EllipsisMenu
         groupClass="group-hover/menu-row:opacity-100"
@@ -298,9 +300,9 @@ function FolderItem({ folder }: { folder: { id: string; name: string; chats: { i
 
         <button
           onClick={(e) => e.stopPropagation()}
-          className="absolute right-7 top-1.5 flex size-5 items-center justify-center rounded-[calc(var(--radius-sm)-2px)] p-0 text-sidebar-foreground opacity-0 transition-all duration-200 group-hover/menu-row:opacity-100 group-hover/menu-row:bg-sidebar-accent group-hover/menu-row:text-sidebar-accent-foreground [&>svg]:size-4 [&>svg]:shrink-0"
+          className="absolute right-7 top-1.5 flex h-5 w-0 items-center justify-center overflow-hidden rounded-[calc(var(--radius-sm)-2px)] p-0 text-sidebar-foreground transition-all duration-200 group-hover/menu-row:w-5 group-hover/menu-row:bg-sidebar-accent group-hover/menu-row:text-sidebar-accent-foreground [&>svg]:size-4 [&>svg]:shrink-0"
         >
-          <Plus className="size-4" />
+          <Plus className="size-4 shrink-0" />
           <span className="sr-only">Adicionar</span>
         </button>
 
