@@ -252,7 +252,7 @@ function ChatRow({ chat, menuItems, button: Button, buttonClassName, actionButto
       <Button className={cn(
         "group-hover/menu-row:bg-sidebar-accent group-hover/menu-row:text-sidebar-accent-foreground",
         "text-xs",
-        pinned ? "pr-8 group-hover/menu-row:pr-10" : "group-hover/menu-row:pr-8",
+        pinned ? "group-hover/menu-row:pr-10" : "group-hover/menu-row:pr-8",
         buttonClassName,
       )}>
         <div className="flex min-w-0 flex-1 items-center gap-2 truncate">
@@ -294,8 +294,10 @@ function FolderItem({ folder }: { folder: { id: string; name: string; chats: { i
           onClick={() => setExpanded((prev) => !prev)}
         >
           <Folder className="size-4 shrink-0" />
-          <span className="flex-1 truncate">{folder.name}</span>
-          <ChevronDown className={cn("size-4 shrink-0 transition-transform", !expanded && "-rotate-90")} />
+          <div className="flex min-w-0 flex-1 items-center gap-1 overflow-hidden">
+            <span className="truncate">{folder.name}</span>
+            <ChevronDown className={cn("size-3 shrink-0 transition-transform", !expanded && "-rotate-90")} />
+          </div>
         </SidebarMenuButton>
 
         <button
