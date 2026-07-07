@@ -78,7 +78,7 @@ export function CodeInput() {
         {(isNewChat || folders.length > 0) && (
           <div className="flex flex-wrap items-center gap-2 px-3 py-1.5">
             <FolderSelector folders={folders} onFoldersChange={setFolders} />
-            <PromptInputAttachments className="!p-0 !m-0">
+            <PromptInputAttachments className="!p-0 !m-0 !w-auto">
               {(attachment) => <PromptInputAttachment data={attachment} />}
             </PromptInputAttachments>
           </div>
