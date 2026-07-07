@@ -4,6 +4,7 @@ import { SidebarProvider, useSidebar } from "@/components/ui/sidebar"
 import { TooltipProvider } from "@/components/ui/tooltip"
 import { AppSidebar } from "@/components/app-sidebar"
 import { Button } from "@/components/ui/button"
+import { ThemeProvider } from "@/components/theme-provider"
 
 const HOVER_ZONE_WIDTH = 6
 const SIDEBAR_HIDE_DELAY = 300
@@ -107,11 +108,13 @@ function App() {
   const [open, setOpen] = useState(false)
 
   return (
-    <TooltipProvider>
-      <SidebarProvider open={open} onOpenChange={setOpen}>
-        <Layout />
-      </SidebarProvider>
-    </TooltipProvider>
+    <ThemeProvider defaultTheme="system" storageKey="vite-ui-theme">
+      <TooltipProvider>
+        <SidebarProvider open={open} onOpenChange={setOpen}>
+          <Layout />
+        </SidebarProvider>
+      </TooltipProvider>
+    </ThemeProvider>
   )
 }
 

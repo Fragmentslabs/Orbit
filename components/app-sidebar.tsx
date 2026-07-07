@@ -18,6 +18,7 @@ import {
   SidebarSeparator,
 } from "@/components/ui/sidebar"
 import { cn } from "@/lib/utils"
+import { useTheme } from "@/components/theme-provider"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
@@ -317,6 +318,7 @@ function ChatHistory() {
 }
 
 function AccountDropdown() {
+  const { theme, setTheme } = useTheme()
   const [themeOpen, setThemeOpen] = useState(false)
   const themeTimeoutRef = useRef<ReturnType<typeof setTimeout>>()
 
@@ -345,7 +347,7 @@ function AccountDropdown() {
         align="start"
         side="top"
         sideOffset={8}
-        className="w-(--radix-popper-anchor-width)"
+        className="w-56"
       >
         <DropdownMenuGroup>
           <DropdownMenuLabel>Minha Conta</DropdownMenuLabel>
@@ -369,17 +371,20 @@ function AccountDropdown() {
               onMouseEnter={openTheme}
               onMouseLeave={closeTheme}
             >
-              <DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setTheme("light")}>
                 <Sun className="size-4" />
                 Claro
+                {theme === "light" && <span className="ml-auto text-xs">✓</span>}
               </DropdownMenuItem>
-              <DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setTheme("dark")}>
                 <Moon className="size-4" />
                 Escuro
+                {theme === "dark" && <span className="ml-auto text-xs">✓</span>}
               </DropdownMenuItem>
-              <DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setTheme("system")}>
                 <Monitor className="size-4" />
                 Sistema
+                {theme === "system" && <span className="ml-auto text-xs">✓</span>}
               </DropdownMenuItem>
             </DropdownMenuSubContent>
           </DropdownMenuSub>
