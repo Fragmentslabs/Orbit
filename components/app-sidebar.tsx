@@ -136,7 +136,7 @@ function AccountSection() {
 
 export function AppSidebar() {
   return (
-    <Sidebar variant="floating" collapsible="icon">
+    <Sidebar variant="floating" collapsible="offcanvas">
       <SidebarHeader>
         <ModeTabs />
       </SidebarHeader>
