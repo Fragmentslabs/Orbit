@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react"
-import { ChevronDown, Circle, Ellipsis, Folder, MessageSquare, Pin, Plus, Terminal, Trash2, User, Archive, Pencil, Settings, LogOut, Sun, Moon, Monitor } from "lucide-react"
+import { ChevronDown, Ellipsis, Folder, MessageSquare, Pin, Plus, Terminal, Trash2, User, Archive, Pencil, Settings, LogOut, Sun, Moon, Monitor } from "lucide-react"
 
 import {
   Sidebar,
@@ -130,6 +130,40 @@ function ModeTabs() {
   )
 }
 
+function getDefaultRowItems(pinned?: boolean): { icon: React.ReactNode; label: string }[] {
+  const items: { icon: React.ReactNode; label: string }[] = [
+    { icon: <Pin className="size-4" />, label: pinned ? "Desafixar" : "Fixar" },
+    { icon: <Pencil className="size-4" />, label: "Renomear" },
+    { icon: <Archive className="size-4" />, label: "Arquivar" },
+    { icon: <Trash2 className="size-4" />, label: "Deletar" },
+  ]
+  if (!pinned) {
+    items.splice(1, 0, { icon: <Folder className="size-4" />, label: "Adicionar a pasta" })
+  }
+  return items
+}
+
+function AccordionGroup({ label, defaultExpanded = true, children }: {
+  label: string
+  defaultExpanded?: boolean
+  children: React.ReactNode
+}) {
+  const [expanded, setExpanded] = useState(defaultExpanded)
+
+  return (
+    <SidebarGroup>
+      <SidebarGroupLabel
+        className="flex cursor-pointer items-center gap-2"
+        onClick={() => setExpanded((prev) => !prev)}
+      >
+        <span className="flex-1 truncate">{label}</span>
+        <ChevronDown className={cn("size-3 shrink-0 transition-transform", expanded && "rotate-180")} />
+      </SidebarGroupLabel>
+      {expanded && <SidebarGroupContent>{children}</SidebarGroupContent>}
+    </SidebarGroup>
+  )
+}
+
 function EllipsisMenu({ items, groupClass = "group-hover/menu-item:opacity-100", buttonClassName }: {
   items: { icon: React.ReactNode; label: string }[]
   groupClass?: string
@@ -175,7 +209,7 @@ function EllipsisMenu({ items, groupClass = "group-hover/menu-item:opacity-100",
         data-slot="sidebar-menu-action"
         data-sidebar="menu-action"
           className={cn(
-            "absolute right-1 top-1 flex size-5 items-center justify-center rounded-[calc(var(--radius-sm)-2px)] p-0 text-sidebar-foreground group-hover/menu-row:bg-sidebar-accent group-hover/menu-row:text-sidebar-accent-foreground [&>svg]:size-4 [&>svg]:shrink-0",
+            "absolute right-1 top-1.5 flex size-5 items-center justify-center rounded-[calc(var(--radius-sm)-2px)] p-0 text-sidebar-foreground group-hover/menu-row:bg-sidebar-accent group-hover/menu-row:text-sidebar-accent-foreground [&>svg]:size-4 [&>svg]:shrink-0",
             "opacity-0 transition-all duration-200",
             groupClass,
             menuOpen && "opacity-100",
@@ -207,34 +241,36 @@ function EllipsisMenu({ items, groupClass = "group-hover/menu-item:opacity-100",
   )
 }
 
-function ChatRow({ chat, menuItems, button: Button, buttonClassName }: {
+function ChatRow({ chat, menuItems, button: Button, buttonClassName, actionButtonClassName, pinned }: {
   chat: { id: string; title: string }
   menuItems?: { icon: React.ReactNode; label: string }[]
   button: React.ElementType
   buttonClassName?: string
+  actionButtonClassName?: string
+  pinned?: boolean
 }) {
   return (
     <div className="group/menu-row relative min-w-0">
-      <Button className={cn("group-hover/menu-row:pr-8 hover:bg-transparent hover:text-sidebar-foreground group-hover/menu-row:bg-sidebar-accent group-hover/menu-row:text-sidebar-accent-foreground text-xs", buttonClassName)}>
-        <MessageSquare className="size-4" />
-        <span>{chat.title}</span>
+      <Button className={cn(
+        "hover:bg-transparent hover:text-sidebar-foreground group-hover/menu-row:bg-sidebar-accent group-hover/menu-row:text-sidebar-accent-foreground",
+        "text-xs",
+        pinned ? "pr-9 group-hover/menu-row:pr-12" : "group-hover/menu-row:pr-8",
+        buttonClassName,
+      )}>
+        <MessageSquare className="size-4 shrink-0" />
+        <span className="flex-1 truncate">{chat.title}</span>
+        {pinned && <Pin className="size-3 shrink-0 text-sidebar-foreground/40" />}
       </Button>
       <EllipsisMenu
         groupClass="group-hover/menu-row:opacity-100"
-        buttonClassName="w-0 overflow-hidden group-hover/menu-row:w-5"
-        items={menuItems ?? [
-          { icon: <Pin className="size-4" />, label: "Fixar" },
-          { icon: <Pencil className="size-4" />, label: "Renomear" },
-          { icon: <Folder className="size-4" />, label: "Adicionar a pasta" },
-          { icon: <Archive className="size-4" />, label: "Arquivar" },
-          { icon: <Trash2 className="size-4" />, label: "Deletar" },
-        ]}
+        buttonClassName={cn("w-0 overflow-hidden group-hover/menu-row:w-5", actionButtonClassName)}
+        items={menuItems ?? getDefaultRowItems(pinned)}
       />
     </div>
   )
 }
 
-function ChatItem({ chat, menuItems }: { chat: { id: string; title: string }; menuItems?: { icon: React.ReactNode; label: string }[] }) {
+function ChatItem({ chat, menuItems, pinned }: { chat: { id: string; title: string }; menuItems?: { icon: React.ReactNode; label: string }[]; pinned?: boolean }) {
   return (
     <SidebarMenuItem>
       <ChatRow
@@ -242,6 +278,7 @@ function ChatItem({ chat, menuItems }: { chat: { id: string; title: string }; me
         buttonClassName="!pr-0"
         chat={chat}
         menuItems={menuItems}
+        pinned={pinned}
       />
     </SidebarMenuItem>
   )
@@ -253,35 +290,24 @@ function FolderItem({ folder }: { folder: { id: string; name: string; chats: { i
   return (
     <SidebarMenuItem>
       <div className="group/menu-row relative min-w-0">
-        <SidebarMenuButton className="hover:bg-transparent hover:text-sidebar-foreground group-hover/menu-row:bg-sidebar-accent group-hover/menu-row:text-sidebar-accent-foreground text-xs">
-          <Folder className="size-4" />
-          <span>{folder.name}</span>
+        <SidebarMenuButton
+          className="hover:bg-transparent hover:text-sidebar-foreground group-hover/menu-row:bg-sidebar-accent group-hover/menu-row:text-sidebar-accent-foreground text-xs"
+          onClick={() => setExpanded((prev) => !prev)}
+        >
+          <Folder className="size-4 shrink-0" />
+          <span className="flex-1 truncate">{folder.name}</span>
+          <ChevronDown className={cn("size-4 shrink-0 transition-transform", !expanded && "-rotate-90")} />
         </SidebarMenuButton>
 
         <button
-          onClick={(e) => {
-            e.stopPropagation()
-            setExpanded((prev) => !prev)
-          }}
           data-slot="sidebar-menu-action"
           data-sidebar="menu-action"
-          className="absolute right-1 top-1 flex size-5 items-center justify-center rounded-[calc(var(--radius-sm)-2px)] p-0 text-sidebar-foreground transition-all duration-200 group-hover/menu-row:bg-sidebar-accent group-hover/menu-row:text-sidebar-accent-foreground group-hover/menu-row:right-8 [&>svg]:size-4 [&>svg]:shrink-0"
+          onClick={(e) => e.stopPropagation()}
+          className="absolute right-1 top-1.5 flex size-5 items-center justify-center rounded-[calc(var(--radius-sm)-2px)] p-0 text-sidebar-foreground opacity-0 transition-all duration-200 group-hover/menu-row:opacity-100 group-hover/menu-row:bg-sidebar-accent group-hover/menu-row:text-sidebar-accent-foreground [&>svg]:size-4 [&>svg]:shrink-0"
         >
-          <ChevronDown className={cn("size-4 transition-transform", expanded && "rotate-180")} />
-          <span className="sr-only">Expandir pasta</span>
+          <Plus className="size-4" />
+          <span className="sr-only">Adicionar</span>
         </button>
-
-        <EllipsisMenu
-          groupClass="group-hover/menu-row:opacity-100"
-          buttonClassName="w-0 overflow-hidden group-hover/menu-row:w-5"
-          items={[
-            { icon: <Pencil className="size-4" />, label: "Renomear" },
-            { icon: <Pin className="size-4" />, label: "Fixar" },
-            { icon: <Circle className="size-4" />, label: "Alterar cor" },
-            { icon: <Archive className="size-4" />, label: "Arquivar" },
-            { icon: <Trash2 className="size-4" />, label: "Remover" },
-          ]}
-        />
       </div>
 
       {expanded && (
@@ -290,6 +316,7 @@ function FolderItem({ folder }: { folder: { id: string; name: string; chats: { i
             <SidebarMenuSubItem key={chat.id}>
               <ChatRow
                 button={SidebarMenuSubButton}
+                actionButtonClassName="top-1"
                 chat={chat}
                 menuItems={[
                   { icon: <Pin className="size-4" />, label: "Fixar" },
@@ -312,40 +339,24 @@ function ChatHistory() {
 
   return (
     <>
-      <SidebarGroup>
-        <SidebarGroupLabel>Fixados</SidebarGroupLabel>
-        <SidebarGroupContent>
-          <SidebarMenu>
-            {data.folders.length > 0 && <FolderItem folder={data.folders[0]} />}
-            {data.pinned.map((chat) => (
-              <ChatItem key={chat.id} chat={chat} />
-            ))}
-            {data.folders.length > 1 && <FolderItem folder={data.folders[1]} />}
-          </SidebarMenu>
-        </SidebarGroupContent>
-      </SidebarGroup>
+      <AccordionGroup label="Projetos">
+        <SidebarMenu>
+          {data.folders.map((folder) => (
+            <FolderItem key={folder.id} folder={folder} />
+          ))}
+        </SidebarMenu>
+      </AccordionGroup>
 
-      <SidebarGroup>
-        <SidebarGroupLabel>Projetos</SidebarGroupLabel>
-        <SidebarGroupContent>
-          <SidebarMenu>
-            {data.folders.map((folder) => (
-              <FolderItem key={folder.id} folder={folder} />
-            ))}
-          </SidebarMenu>
-        </SidebarGroupContent>
-      </SidebarGroup>
-
-      <SidebarGroup>
-        <SidebarGroupLabel>Recentes</SidebarGroupLabel>
-        <SidebarGroupContent>
-          <SidebarMenu>
-            {data.recent.map((chat) => (
-              <ChatItem key={chat.id} chat={chat} />
-            ))}
-          </SidebarMenu>
-        </SidebarGroupContent>
-      </SidebarGroup>
+      <AccordionGroup label="Chats">
+        <SidebarMenu>
+          {data.pinned.map((chat) => (
+            <ChatItem key={chat.id} chat={chat} pinned />
+          ))}
+          {data.recent.map((chat) => (
+            <ChatItem key={chat.id} chat={chat} />
+          ))}
+        </SidebarMenu>
+      </AccordionGroup>
     </>
   )
 }
