@@ -71,11 +71,13 @@ export function ChatInput() {
                 <PromptInputActionAddAttachments label="Anexar arquivos" />
               </DropdownMenuContent>
             </DropdownMenu>
+          </PromptInputTools>
+          <div className="flex items-center gap-1">
             {search && <Search className="size-3 text-sidebar-foreground/40" />}
             {browser && <Globe className="size-3 text-sidebar-foreground/40" />}
             {memory && <Brain className="size-3 text-sidebar-foreground/40" />}
-          </PromptInputTools>
-          <PromptInputSubmit />
+            <PromptInputSubmit />
+          </div>
         </PromptInputFooter>
       </PromptInput>
     </div>
