@@ -173,26 +173,42 @@ function EllipsisMenu({ items, groupClass = "group-hover/menu-item:opacity-100",
   )
 }
 
+function ChatRow({ chat, menuItems, button: Button, buttonClassName }: {
+  chat: { id: string; title: string }
+  menuItems?: { icon: React.ReactNode; label: string }[]
+  button: React.ElementType
+  buttonClassName?: string
+}) {
+  return (
+    <div className="group/menu-row relative">
+      <Button className={cn("group-hover/menu-row:pr-8 text-xs", buttonClassName)}>
+        <MessageSquare className="size-4" />
+        <span>{chat.title}</span>
+      </Button>
+      <EllipsisMenu
+        groupClass="group-hover/menu-row:opacity-100"
+        buttonClassName="w-0 overflow-hidden group-hover/menu-row:w-5"
+        items={menuItems ?? [
+          { icon: <Pin className="size-4" />, label: "Fixar" },
+          { icon: <Pencil className="size-4" />, label: "Renomear" },
+          { icon: <Folder className="size-4" />, label: "Adicionar a pasta" },
+          { icon: <Archive className="size-4" />, label: "Arquivar" },
+          { icon: <Trash2 className="size-4" />, label: "Deletar" },
+        ]}
+      />
+    </div>
+  )
+}
+
 function ChatItem({ chat, menuItems }: { chat: { id: string; title: string }; menuItems?: { icon: React.ReactNode; label: string }[] }) {
   return (
     <SidebarMenuItem>
-      <div className="group/menu-row relative">
-        <SidebarMenuButton className="!pr-0 group-hover/menu-row:!pr-8 text-xs">
-          <MessageSquare className="size-4" />
-          <span>{chat.title}</span>
-        </SidebarMenuButton>
-        <EllipsisMenu
-          groupClass="group-hover/menu-row:opacity-100"
-          buttonClassName="w-0 overflow-hidden group-hover/menu-row:w-5"
-          items={menuItems ?? [
-            { icon: <Pin className="size-4" />, label: "Fixar" },
-            { icon: <Pencil className="size-4" />, label: "Renomear" },
-            { icon: <Folder className="size-4" />, label: "Adicionar a pasta" },
-            { icon: <Archive className="size-4" />, label: "Arquivar" },
-            { icon: <Trash2 className="size-4" />, label: "Deletar" },
-          ]}
-        />
-      </div>
+      <ChatRow
+        button={SidebarMenuButton}
+        buttonClassName="!pr-0"
+        chat={chat}
+        menuItems={menuItems}
+      />
     </SidebarMenuItem>
   )
 }
@@ -238,13 +254,10 @@ function FolderItem({ folder }: { folder: { id: string; name: string; chats: { i
         <SidebarMenuSub className="mr-0">
           {folder.chats.map((chat) => (
             <SidebarMenuSubItem key={chat.id}>
-              <SidebarMenuSubButton className="text-xs">
-                <MessageSquare className="size-4" />
-                <span>{chat.title}</span>
-              </SidebarMenuSubButton>
-              <EllipsisMenu
-                groupClass="group-hover/menu-sub-item:opacity-100"
-                items={[
+              <ChatRow
+                button={SidebarMenuSubButton}
+                chat={chat}
+                menuItems={[
                   { icon: <Pin className="size-4" />, label: "Fixar" },
                   { icon: <Pencil className="size-4" />, label: "Renomear" },
                   { icon: <Archive className="size-4" />, label: "Arquivar" },
