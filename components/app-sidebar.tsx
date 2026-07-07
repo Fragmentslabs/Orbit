@@ -331,7 +331,7 @@ function AccountDropdown() {
 
   return (
     <DropdownMenu>
-      <DropdownMenuTrigger render={<button className="flex w-full items-center gap-2 rounded-md p-2 text-left text-xs hover:bg-sidebar-accent hover:text-sidebar-accent-foreground" />}>
+      <DropdownMenuTrigger className="flex w-full items-center gap-2 rounded-md p-2 text-left text-xs hover:bg-sidebar-accent hover:text-sidebar-accent-foreground">
         <Avatar size="sm">
           <AvatarImage src="" />
           <AvatarFallback>JD</AvatarFallback>
