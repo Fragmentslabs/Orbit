@@ -176,19 +176,23 @@ function EllipsisMenu({ items, groupClass = "group-hover/menu-item:opacity-100",
 function ChatItem({ chat, menuItems }: { chat: { id: string; title: string }; menuItems?: { icon: React.ReactNode; label: string }[] }) {
   return (
     <SidebarMenuItem>
-      <SidebarMenuButton className="text-xs">
-        <MessageSquare className="size-4" />
-        <span>{chat.title}</span>
-      </SidebarMenuButton>
-      <EllipsisMenu
-        items={menuItems ?? [
-          { icon: <Pin className="size-4" />, label: "Fixar" },
-          { icon: <Pencil className="size-4" />, label: "Renomear" },
-          { icon: <Folder className="size-4" />, label: "Adicionar a pasta" },
-          { icon: <Archive className="size-4" />, label: "Arquivar" },
-          { icon: <Trash2 className="size-4" />, label: "Deletar" },
-        ]}
-      />
+      <div className="group/menu-row relative">
+        <SidebarMenuButton className="!pr-0 group-hover/menu-row:!pr-8 text-xs">
+          <MessageSquare className="size-4" />
+          <span>{chat.title}</span>
+        </SidebarMenuButton>
+        <EllipsisMenu
+          groupClass="group-hover/menu-row:opacity-100"
+          buttonClassName="w-0 overflow-hidden group-hover/menu-row:w-5"
+          items={menuItems ?? [
+            { icon: <Pin className="size-4" />, label: "Fixar" },
+            { icon: <Pencil className="size-4" />, label: "Renomear" },
+            { icon: <Folder className="size-4" />, label: "Adicionar a pasta" },
+            { icon: <Archive className="size-4" />, label: "Arquivar" },
+            { icon: <Trash2 className="size-4" />, label: "Deletar" },
+          ]}
+        />
+      </div>
     </SidebarMenuItem>
   )
 }
