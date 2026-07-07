@@ -108,13 +108,10 @@ function ChatInput() {
           {(attachment) => <PromptInputAttachment data={attachment} />}
         </PromptInputAttachments>
         <PromptInputBody>
-          <PromptInputTextarea placeholder="Pergunte qualquer coisa..." className="px-3 text-base" />
+          <PromptInputTextarea placeholder="Pergunte qualquer coisa..." className="px-3 text-base md:text-base" />
         </PromptInputBody>
         <PromptInputFooter>
           <PromptInputTools>
-            {search && <Search className="size-3.5 text-sidebar-foreground/60" />}
-            {browser && <Globe className="size-3.5 text-sidebar-foreground/60" />}
-            {memory && <Brain className="size-3.5 text-sidebar-foreground/60" />}
             <DropdownMenu>
               <DropdownMenuTrigger className="flex size-7 items-center justify-center rounded-md hover:bg-muted hover:text-foreground aria-expanded:bg-muted aria-expanded:text-foreground">
                 <PlusIcon className="size-4" />
@@ -145,6 +142,9 @@ function ChatInput() {
                 <PromptInputActionAddAttachments label="Anexar arquivos" />
               </DropdownMenuContent>
             </DropdownMenu>
+            {search && <Search className="size-3 text-sidebar-foreground/40" />}
+            {browser && <Globe className="size-3 text-sidebar-foreground/40" />}
+            {memory && <Brain className="size-3 text-sidebar-foreground/40" />}
           </PromptInputTools>
           <PromptInputSubmit />
         </PromptInputFooter>
