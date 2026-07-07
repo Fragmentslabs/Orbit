@@ -2,8 +2,11 @@ import { app, BrowserWindow, ipcMain, dialog } from 'electron'
 import { createRequire } from 'node:module'
 import { fileURLToPath } from 'node:url'
 import path from 'node:path'
+import type * as NodePty from 'node-pty'
 
-const require = createRequire(import.meta.url)
+const _require = createRequire(import.meta.url)
+const nodePty = _require('node-pty') as typeof NodePty
+
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
 // The built directory structure
@@ -65,6 +68,32 @@ app.on('activate', () => {
   }
 })
 
+const terminals = new Map<string, NodePty.IPty>()
+
+function createTerminal(id: string, cols = 80, rows = 24) {
+  const isWin = process.platform === 'win32'
+  const shell = isWin ? 'powershell.exe' : (process.env.SHELL || '/bin/bash')
+
+  const ptyProcess = nodePty.spawn(shell, [], {
+    name: 'xterm-256color',
+    cols,
+    rows,
+    cwd: process.env.HOME || process.env.USERPROFILE || '/',
+    env: process.env as Record<string, string>,
+  })
+
+  ptyProcess.onData((data) => {
+    win?.webContents.send('terminal:output', { id, data })
+  })
+
+  ptyProcess.onExit(({ exitCode }) => {
+    terminals.delete(id)
+    win?.webContents.send('terminal:exit', { id, code: exitCode })
+  })
+
+  return ptyProcess
+}
+
 app.whenReady().then(() => {
   ipcMain.handle('select-folder', async () => {
     const result = await dialog.showOpenDialog(win!, {
@@ -72,6 +101,28 @@ app.whenReady().then(() => {
     })
     if (result.canceled || result.filePaths.length === 0) return null
     return result.filePaths[0]
+  })
+
+  ipcMain.handle('terminal:create', (_event, id: string, cols?: number, rows?: number) => {
+    const proc = createTerminal(id, cols, rows)
+    terminals.set(id, proc)
+    return { pid: proc.pid }
+  })
+
+  ipcMain.handle('terminal:write', (_event, id: string, data: string) => {
+    terminals.get(id)?.write(data)
+  })
+
+  ipcMain.handle('terminal:resize', (_event, id: string, cols: number, rows: number) => {
+    terminals.get(id)?.resize(cols, rows)
+  })
+
+  ipcMain.handle('terminal:kill', (_event, id: string) => {
+    const proc = terminals.get(id)
+    if (proc) {
+      proc.kill()
+      terminals.delete(id)
+    }
   })
 
   createWindow()

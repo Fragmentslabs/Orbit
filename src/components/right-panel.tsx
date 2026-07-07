@@ -7,6 +7,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { ChatView } from "@/src/components/chat-view"
+import { TerminalTab } from "@/src/components/terminal-tab"
 import { cn } from "@/lib/utils"
 
 type TabType = "chat" | "terminal" | "folders" | "browser"
@@ -40,8 +41,8 @@ function TabContent({ type }: { type: TabType }) {
       )
     case "terminal":
       return (
-        <div className="flex flex-1 items-center justify-center text-sm text-muted-foreground">
-          Terminal
+        <div className="flex flex-1 flex-col overflow-hidden">
+          <TerminalTab />
         </div>
       )
     case "folders":

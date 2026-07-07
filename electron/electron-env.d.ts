@@ -23,5 +23,11 @@ declare namespace NodeJS {
 
 // Used in Renderer process, expose in `preload.ts`
 interface Window {
-  ipcRenderer: import('electron').IpcRenderer
+  ipcRenderer: {
+    /** Returns the wrapper function — pass it to `off()` to remove this specific listener. */
+    on(channel: string, listener: (...args: unknown[]) => void): (...args: unknown[]) => void
+    off(channel: string, wrapper: (...args: unknown[]) => void): void
+    send(channel: string, ...args: unknown[]): void
+    invoke(channel: string, ...args: unknown[]): Promise<unknown>
+  }
 }
