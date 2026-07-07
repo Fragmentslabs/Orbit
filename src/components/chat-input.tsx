@@ -25,13 +25,13 @@ export function ChatInput() {
   const [memory, setMemory] = useState(false)
 
   return (
-    <div className="w-full max-w-2xl mx-auto pb-4 rounded-xl border-2 border-sidebar-border overflow-hidden">
+    <div className="w-full max-w-2xl mx-auto pb-4">
       <PromptInput
         multiple
         onSubmit={(message) => {
           console.log("Chat message:", message)
         }}
-        className="[&>div]:!border-none [&>div]:!rounded-none [&>div]:!bg-transparent"
+        className="rounded-xl border-2 border-sidebar-border overflow-hidden [&>div]:!border-none [&>div]:!rounded-none [&>div]:!bg-transparent"
       >
         <PromptInputAttachments>
           {(attachment) => <PromptInputAttachment data={attachment} />}

@@ -734,26 +734,25 @@ export const PromptInput = ({
         title="Upload files"
         type="file"
       />
-      <form className={cn("w-full", className)} onSubmit={handleSubmit} ref={formRef} {...props}>
-        {(() => {
-          const att: ReactNode[] = []
-          const rest: ReactNode[] = []
-          Children.forEach(children, (child) => {
-            if (isValidElement(child) && child.type === PromptInputAttachments) {
-              att.push(child)
-            } else {
-              rest.push(child)
-            }
-          })
-          const content = (
-            <>
-              {att.length > 0 && <div className="px-3 pt-3">{att}</div>}
+      {(() => {
+        const att: ReactNode[] = []
+        const rest: ReactNode[] = []
+        Children.forEach(children, (child) => {
+          if (isValidElement(child) && child.type === PromptInputAttachments) {
+            att.push(child)
+          } else {
+            rest.push(child)
+          }
+        })
+        return (
+          <>
+            {att.length > 0 && <div className="pb-2">{att}</div>}
+            <form className={cn("w-full", className)} onSubmit={handleSubmit} ref={formRef} {...props}>
               <InputGroup className="overflow-hidden">{rest}</InputGroup>
-            </>
-          )
-          return content
-        })()}
-      </form>
+            </form>
+          </>
+        )
+      })()}
     </>
   )
 
