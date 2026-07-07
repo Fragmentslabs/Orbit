@@ -67,26 +67,6 @@ export function FolderSelector({ folders, onFoldersChange }: FolderSelectorProps
 
   return (
     <div className="flex flex-wrap items-center gap-2">
-      {folders.map((folder) => (
-        <div
-          key={folder}
-          className="group relative flex h-8 cursor-default select-none items-center gap-1.5 rounded-md border border-border px-1.5 font-medium text-sm transition-all hover:bg-accent hover:text-accent-foreground dark:hover:bg-accent/50"
-        >
-          <div className="relative size-5 shrink-0">
-            <div className="absolute inset-0 flex size-5 items-center justify-center overflow-hidden rounded bg-background text-sidebar-foreground/60 transition-opacity group-hover:opacity-0">
-              <Folder className="size-3" />
-            </div>
-            <button
-              onClick={(e) => removeFolder(folder, e)}
-              className="absolute inset-0 flex size-5 cursor-pointer items-center justify-center rounded p-0 opacity-0 transition-opacity group-hover:pointer-events-auto group-hover:opacity-100 hover:bg-foreground/10"
-            >
-              <X className="size-2.5" />
-              <span className="sr-only">Remover</span>
-            </button>
-          </div>
-          <span className="flex-1 truncate max-w-28">{getFolderName(folder)}</span>
-        </div>
-      ))}
       <div className="relative" ref={recentRef}>
         <button
           onClick={() => setRecentOpen(v => !v)}
@@ -98,7 +78,7 @@ export function FolderSelector({ folders, onFoldersChange }: FolderSelectorProps
             </div>
           </div>
           <span className="flex-1 truncate">
-            {folders.length === 0 ? "Associar pasta" : getFolderName(folders[folders.length - 1])}
+            {folders.length === 0 ? "Associar pasta" : getFolderName(folders[0])}
           </span>
         </button>
         {recentOpen && (
@@ -130,6 +110,26 @@ export function FolderSelector({ folders, onFoldersChange }: FolderSelectorProps
           </div>
         )}
       </div>
+      {folders.slice(1).map((folder) => (
+        <div
+          key={folder}
+          className="group relative flex h-8 cursor-default select-none items-center gap-1.5 rounded-md border border-border px-1.5 font-medium text-sm transition-all hover:bg-accent hover:text-accent-foreground dark:hover:bg-accent/50"
+        >
+          <div className="relative size-5 shrink-0">
+            <div className="absolute inset-0 flex size-5 items-center justify-center overflow-hidden rounded bg-background text-sidebar-foreground/60 transition-opacity group-hover:opacity-0">
+              <Folder className="size-3" />
+            </div>
+            <button
+              onClick={(e) => removeFolder(folder, e)}
+              className="absolute inset-0 flex size-5 cursor-pointer items-center justify-center rounded p-0 opacity-0 transition-opacity group-hover:pointer-events-auto group-hover:opacity-100 hover:bg-foreground/10"
+            >
+              <X className="size-2.5" />
+              <span className="sr-only">Remover</span>
+            </button>
+          </div>
+          <span className="flex-1 truncate max-w-28">{getFolderName(folder)}</span>
+        </div>
+      ))}
       {folders.length > 0 && (
         <button
           onClick={() => addFolder()}
