@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react"
-import { PanelLeftIcon } from "lucide-react"
+
 import { SidebarProvider, useSidebar } from "@/components/ui/sidebar"
 import { TooltipProvider } from "@/components/ui/tooltip"
 import { AppSidebar } from "@/components/app-sidebar"
@@ -8,7 +8,10 @@ import { ThemeProvider } from "@/components/theme-provider"
 import { WorkspaceProvider, useWorkspace } from "@/lib/workspace-context"
 import { ChatInput } from "@/src/components/chat-input"
 import { CodeInput } from "@/src/components/code-input"
+import { ChatHeader } from "@/src/components/chat-header"
+import { RightPanel } from "@/src/components/right-panel"
 import { Persona, type PersonaState } from "@/src/components/ai/persona"
+import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels"
 
 const HOVER_ZONE_WIDTH = 6
 const SIDEBAR_HIDE_DELAY = 300
@@ -38,25 +41,6 @@ function HoverEdge() {
       style={{ width: HOVER_ZONE_WIDTH }}
       onMouseEnter={handleMouseEnter}
     />
-  )
-}
-
-function SidebarToggle({ onToggle }: { onToggle: () => void }) {
-  const handleClick = useCallback(() => {
-    onToggle()
-  }, [onToggle])
-
-  return (
-    <Button
-      data-sidebar="trigger"
-      data-slot="sidebar-trigger"
-      variant="ghost"
-      size="icon-sm"
-      onClick={handleClick}
-    >
-      <PanelLeftIcon />
-      <span className="sr-only">Toggle Sidebar</span>
-    </Button>
   )
 }
 
@@ -121,7 +105,8 @@ function Placeholder() {
 function Layout() {
   const { open, setOpen } = useSidebar()
   const { mode: workspaceMode } = useWorkspace()
-  const [mode, setMode] = useState<SidebarMode>(loadMode)
+  const [mode] = useState<SidebarMode>(loadMode)
+  const [rightPanelOpen, setRightPanelOpen] = useState(false)
   const hideTimer = useRef<ReturnType<typeof setTimeout>>()
 
   useEffect(() => {
@@ -144,16 +129,6 @@ function Layout() {
     }
   }, [mode, setOpen])
 
-  const handleToggle = useCallback(() => {
-    if (open) {
-      setMode("hover")
-      setOpen(false)
-    } else {
-      setMode("pinned")
-      setOpen(true)
-    }
-  }, [open, setOpen])
-
   return (
     <div className="relative flex flex-1">
       {!open && mode === "hover" && <HoverEdge />}
@@ -163,13 +138,31 @@ function Layout() {
       >
         <AppSidebar />
       </div>
-      <main className="flex flex-1 flex-col p-4">
-        <SidebarToggle onToggle={handleToggle} />
-        <div className="flex flex-1 items-center justify-center text-muted-foreground">
-          <Placeholder />
-        </div>
-        {workspaceMode === "chat" ? <ChatInput /> : <CodeInput />}
-      </main>
+      <PanelGroup direction="horizontal" className="flex-1">
+        <Panel defaultSize={rightPanelOpen ? 70 : 100} minSize={40}>
+          <main className="flex h-full flex-col">
+            <ChatHeader
+              title={workspaceMode === "chat" ? "Nova conversa" : "Novo código"}
+              rightPanelOpen={rightPanelOpen}
+              onToggleRightPanel={() => setRightPanelOpen(v => !v)}
+            />
+            <div className="flex flex-1 flex-col p-4 overflow-hidden">
+              <div className="flex flex-1 items-center justify-center text-muted-foreground">
+                <Placeholder />
+              </div>
+              {workspaceMode === "chat" ? <ChatInput /> : <CodeInput />}
+            </div>
+          </main>
+        </Panel>
+        {rightPanelOpen && (
+          <>
+            <PanelResizeHandle className="w-1 bg-border transition-colors hover:bg-foreground/20 data-[resize-handle-active]:bg-foreground/20" />
+            <Panel defaultSize={30} minSize={20} maxSize={50}>
+              <RightPanel />
+            </Panel>
+          </>
+        )}
+      </PanelGroup>
     </div>
   )
 }
