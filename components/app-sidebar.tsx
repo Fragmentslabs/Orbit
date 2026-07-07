@@ -377,8 +377,11 @@ function ChatHistory() {
 
   return (
     <>
-      <AccordionGroup label="Projetos">
+      <AccordionGroup label="Pastas">
         <SidebarMenu>
+          {data.pinnedFolders.map((folder) => (
+            <FolderItem key={folder.id} folder={folder} pinned />
+          ))}
           {data.folders.map((folder) => (
             <FolderItem key={folder.id} folder={folder} />
           ))}
@@ -387,9 +390,6 @@ function ChatHistory() {
 
       <AccordionGroup label="Chats">
         <SidebarMenu>
-          {data.pinnedFolders.map((folder) => (
-            <FolderItem key={folder.id} folder={folder} pinned />
-          ))}
           {data.pinned.map((chat) => (
             <ChatItem key={chat.id} chat={chat} pinned />
           ))}
