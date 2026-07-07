@@ -128,7 +128,7 @@ function NewChatButton() {
   return (
     <Button variant="outline" className="w-full justify-start gap-2 text-sm">
       <Plus className="size-4" />
-      {mode === "chat" ? "Novo Chat" : "Novo Código"}
+      {mode === "chat" ? "Novo Chat" : "Nova sessão"}
     </Button>
   )
 }

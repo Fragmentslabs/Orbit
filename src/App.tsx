@@ -98,8 +98,14 @@ function Layout() {
   }, [mode, setOpen])
 
   const handleToggle = useCallback(() => {
-    setMode(open ? "hover" : "pinned")
-  }, [open])
+    if (open) {
+      setMode("hover")
+      setOpen(false)
+    } else {
+      setMode("pinned")
+      setOpen(true)
+    }
+  }, [open, setOpen])
 
   return (
     <div className="relative flex flex-1">
