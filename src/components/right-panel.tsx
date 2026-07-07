@@ -1,6 +1,11 @@
 import { useCallback, useState } from "react"
-import { Globe, Folder, MessageSquare, Terminal, X } from "lucide-react"
+import { Globe, Folder, MessageSquare, Terminal, X, PlusIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import {
   PromptInput,
   PromptInputActionAddAttachments,
@@ -49,7 +54,14 @@ function PanelChat() {
           </PromptInputBody>
           <PromptInputFooter>
             <PromptInputTools>
-              <PromptInputActionAddAttachments label="Anexar" />
+              <DropdownMenu>
+                <DropdownMenuTrigger className="flex size-7 items-center justify-center rounded-md hover:bg-muted hover:text-foreground aria-expanded:bg-muted aria-expanded:text-foreground">
+                  <PlusIcon className="size-4" />
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start" className="min-w-40">
+                  <PromptInputActionAddAttachments label="Anexar arquivos" />
+                </DropdownMenuContent>
+              </DropdownMenu>
             </PromptInputTools>
             <div className="flex items-center gap-1">
               <PromptInputSubmit />
