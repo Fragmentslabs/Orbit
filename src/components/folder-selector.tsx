@@ -66,7 +66,7 @@ export function FolderSelector({ folders, onFoldersChange }: FolderSelectorProps
   }
 
   return (
-    <div className="flex flex-wrap items-center gap-2 mb-2">
+    <div className="flex flex-wrap items-center gap-2">
       {folders.map((folder) => (
         <div
           key={folder}
