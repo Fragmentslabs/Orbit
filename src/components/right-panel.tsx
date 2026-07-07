@@ -121,7 +121,7 @@ export function RightPanel() {
               <div
                 key={tab.id}
                 className={cn(
-                  "group flex min-w-0 shrink-0 cursor-pointer items-center gap-1.5 rounded-t-md px-2.5 py-1.5 text-xs transition-colors",
+                  "group flex min-w-0 shrink-0 cursor-pointer items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs transition-colors",
                   tab.id === activeTabId
                     ? "bg-sidebar-accent text-sidebar-accent-foreground"
                     : "text-sidebar-foreground/50 hover:text-sidebar-foreground hover:bg-sidebar-accent/50",
@@ -155,7 +155,7 @@ export function RightPanel() {
         </div>
       )}
 
-      <div className="flex flex-1 flex-col overflow-hidden border-t border-sidebar-border">
+      <div className="flex flex-1 flex-col overflow-hidden">
         {activeTab ? (
           <TabContent type={activeTab.type} />
         ) : (
