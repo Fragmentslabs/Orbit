@@ -50,6 +50,7 @@ function Placeholder() {
 
   const personaStates: { key: PersonaState; label: string }[] = [
     { key: "idle", label: "Parado" },
+    { key: "thinking", label: "Pensando" },
     { key: "listening", label: "Ouvindo" },
     { key: "speaking", label: "Falando" },
     { key: "asleep", label: "Dormindo" },
