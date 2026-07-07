@@ -746,7 +746,7 @@ export const PromptInput = ({
         })
         return (
           <>
-            {att.length > 0 && <div className="pb-2">{att}</div>}
+            {att.length > 0 && <div>{att}</div>}
             <form className={cn("w-full", className)} onSubmit={handleSubmit} ref={formRef} {...props}>
               <InputGroup className="overflow-hidden">{rest}</InputGroup>
             </form>

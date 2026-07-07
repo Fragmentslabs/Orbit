@@ -33,7 +33,7 @@ export function ChatInput() {
         }}
         className="rounded-xl border-2 border-sidebar-border overflow-hidden [&>div]:!border-none [&>div]:!rounded-none [&>div]:!bg-transparent"
       >
-        <PromptInputAttachments>
+        <PromptInputAttachments className="!px-3 !py-1.5">
           {(attachment) => <PromptInputAttachment data={attachment} />}
         </PromptInputAttachments>
         <PromptInputBody>
