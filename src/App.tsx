@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react"
-import { Brain, Globe, PanelLeftIcon, Search } from "lucide-react"
+import { Brain, Globe, PanelLeftIcon, PlusIcon, Search } from "lucide-react"
 import { SidebarProvider, useSidebar } from "@/components/ui/sidebar"
 import { TooltipProvider } from "@/components/ui/tooltip"
 import { AppSidebar } from "@/components/app-sidebar"
@@ -7,18 +7,19 @@ import { Button } from "@/components/ui/button"
 import { ThemeProvider } from "@/components/theme-provider"
 import { WorkspaceProvider, useWorkspace } from "@/lib/workspace-context"
 import {
+  DropdownMenu,
   DropdownMenuCheckboxItem,
+  DropdownMenuContent,
   DropdownMenuSeparator,
+  DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import {
   PromptInput,
   PromptInputActionAddAttachments,
-  PromptInputActionMenu,
-  PromptInputActionMenuContent,
-  PromptInputActionMenuTrigger,
   PromptInputAttachment,
   PromptInputAttachments,
   PromptInputBody,
+  PromptInputButton,
   PromptInputFooter,
   PromptInputSubmit,
   PromptInputTextarea,
@@ -108,13 +109,17 @@ function ChatInput() {
           {(attachment) => <PromptInputAttachment data={attachment} />}
         </PromptInputAttachments>
         <PromptInputBody>
-          <PromptInputTextarea placeholder="Pergunte qualquer coisa..." />
+          <PromptInputTextarea placeholder="Pergunte qualquer coisa..." className="px-3" />
         </PromptInputBody>
         <PromptInputFooter>
           <PromptInputTools>
-            <PromptInputActionMenu>
-              <PromptInputActionMenuTrigger />
-              <PromptInputActionMenuContent>
+            <DropdownMenu>
+              <DropdownMenuTrigger>
+                <PromptInputButton>
+                  <PlusIcon className="size-4" />
+                </PromptInputButton>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start">
                 <DropdownMenuCheckboxItem
                   checked={search}
                   onCheckedChange={(checked) => setSearch(checked)}
@@ -138,8 +143,8 @@ function ChatInput() {
                 </DropdownMenuCheckboxItem>
                 <DropdownMenuSeparator />
                 <PromptInputActionAddAttachments label="Anexar arquivos" />
-              </PromptInputActionMenuContent>
-            </PromptInputActionMenu>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </PromptInputTools>
           <PromptInputSubmit />
         </PromptInputFooter>
