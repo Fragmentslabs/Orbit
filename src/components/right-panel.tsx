@@ -1,151 +1,70 @@
-import { useState } from "react"
-import { Globe, Folder, MessageSquare, Terminal, ChevronDown, Pin } from "lucide-react"
+import { useCallback, useState } from "react"
+import { Globe, Folder, MessageSquare, Terminal, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
-  SidebarGroup,
-  SidebarGroupContent,
-  SidebarGroupLabel,
-  SidebarMenu,
-  SidebarMenuItem,
-  SidebarMenuButton,
-  SidebarMenuSub,
-  SidebarMenuSubItem,
-  SidebarMenuSubButton,
-} from "@/components/ui/sidebar"
+  PromptInput,
+  PromptInputActionAddAttachments,
+  PromptInputAttachment,
+  PromptInputAttachments,
+  PromptInputBody,
+  PromptInputFooter,
+  PromptInputSubmit,
+  PromptInputTextarea,
+  PromptInputTools,
+} from "@/src/components/ai/prompt-input"
 import { cn } from "@/lib/utils"
-import { useWorkspace, WorkspaceMode } from "@/lib/workspace-context"
 
-const tabs = [
-  { id: "chat", icon: MessageSquare, label: "Chat" },
-  { id: "terminal", icon: Terminal, label: "Terminal" },
-  { id: "folders", icon: Folder, label: "Pastas" },
-  { id: "browser", icon: Globe, label: "Browser" },
-] as const
+type TabType = "chat" | "terminal" | "folders" | "browser"
 
-type Tab = (typeof tabs)[number]["id"]
-
-const workspaces: Record<WorkspaceMode, {
-  pinned: { id: string; title: string }[]
-  folders: { id: string; name: string; chats: { id: string; title: string }[] }[]
-  recent: { id: string; title: string }[]
-}> = {
-  chat: {
-    pinned: [
-      { id: "chat-pinned-1", title: "Setup inicial do projeto" },
-      { id: "chat-pinned-2", title: "Review de código - Sprint 5" },
-    ],
-    folders: [
-      {
-        id: "chat-folder-1",
-        name: "Projeto Alpha",
-        chats: [
-          { id: "chat-c1", title: "Implementação de autenticação" },
-          { id: "chat-c2", title: "Refatorar component Button" },
-        ],
-      },
-    ],
-    recent: [
-      { id: "chat-recent-1", title: "Schema do banco de dados" },
-      { id: "chat-recent-2", title: "Configurar ambiente de dev" },
-    ],
-  },
-  code: {
-    pinned: [
-      { id: "code-pinned-1", title: "Gerar hook useDebounce" },
-    ],
-    folders: [
-      {
-        id: "code-folder-1",
-        name: "Hooks",
-        chats: [
-          { id: "code-c1", title: "Criar hook useLocalStorage" },
-        ],
-      },
-    ],
-    recent: [
-      { id: "code-recent-1", title: "Script de migração BD" },
-    ],
-  },
+interface PanelTab {
+  id: string
+  type: TabType
+  title: string
 }
 
-function AccordionGroup({ label, defaultExpanded = true, children }: {
-  label: string
-  defaultExpanded?: boolean
-  children: React.ReactNode
-}) {
-  const [expanded, setExpanded] = useState(defaultExpanded)
-
-  return (
-    <SidebarGroup>
-      <SidebarGroupLabel
-        className="flex cursor-pointer items-center gap-2"
-        onClick={() => setExpanded(v => !v)}
-      >
-        <span className="flex-1 truncate">{label}</span>
-        <ChevronDown className={cn("size-3 shrink-0 transition-transform", !expanded && "-rotate-90")} />
-      </SidebarGroupLabel>
-      {expanded && <SidebarGroupContent>{children}</SidebarGroupContent>}
-    </SidebarGroup>
-  )
+const tabMeta: Record<TabType, { icon: typeof MessageSquare; label: string }> = {
+  chat: { icon: MessageSquare, label: "Chat" },
+  terminal: { icon: Terminal, label: "Terminal" },
+  folders: { icon: Folder, label: "Pastas" },
+  browser: { icon: Globe, label: "Browser" },
 }
 
-function ChatHistory() {
-  const { mode } = useWorkspace()
-  const data = workspaces[mode]
-
+function PanelChat() {
   return (
-    <div className="flex flex-col">
-      <AccordionGroup label="Pastas">
-        <SidebarMenu>
-          {data.folders.map((folder) => (
-            <SidebarMenuItem key={folder.id}>
-              <SidebarMenuButton className="text-xs">
-                <Folder className="size-4 shrink-0" />
-                <span className="truncate">{folder.name}</span>
-              </SidebarMenuButton>
-              <SidebarMenuSub className="mr-0">
-                {folder.chats.map((chat) => (
-                  <SidebarMenuSubItem key={chat.id}>
-                    <SidebarMenuSubButton className="text-xs">
-                      <MessageSquare className="size-4 shrink-0" />
-                      <span className="truncate">{chat.title}</span>
-                    </SidebarMenuSubButton>
-                  </SidebarMenuSubItem>
-                ))}
-              </SidebarMenuSub>
-            </SidebarMenuItem>
-          ))}
-        </SidebarMenu>
-      </AccordionGroup>
-      <AccordionGroup label="Chats">
-        <SidebarMenu>
-          {data.pinned.map((chat) => (
-            <SidebarMenuItem key={chat.id}>
-              <SidebarMenuButton className="text-xs">
-                <MessageSquare className="size-4 shrink-0" />
-                <span className="truncate">{chat.title}</span>
-                <Pin className="!size-3 shrink-0 text-sidebar-foreground/40 ml-auto" />
-              </SidebarMenuButton>
-            </SidebarMenuItem>
-          ))}
-          {data.recent.map((chat) => (
-            <SidebarMenuItem key={chat.id}>
-              <SidebarMenuButton className="text-xs">
-                <MessageSquare className="size-4 shrink-0" />
-                <span className="truncate">{chat.title}</span>
-              </SidebarMenuButton>
-            </SidebarMenuItem>
-          ))}
-        </SidebarMenu>
-      </AccordionGroup>
+    <div className="flex flex-1 flex-col">
+      <div className="flex-1" />
+      <div className="px-3 pb-2">
+        <PromptInput
+          multiple
+          onSubmit={(message) => {
+            console.log("Right panel chat message:", message)
+          }}
+          className="rounded-xl border border-sidebar-border overflow-hidden [&>div]:!border-none [&>div]:!rounded-none [&>div]:!bg-transparent"
+        >
+          <PromptInputAttachments className="!px-3 !py-1.5">
+            {(attachment) => <PromptInputAttachment data={attachment} />}
+          </PromptInputAttachments>
+          <PromptInputBody>
+            <PromptInputTextarea placeholder="Pergunte qualquer coisa..." className="px-3 text-sm" />
+          </PromptInputBody>
+          <PromptInputFooter>
+            <PromptInputTools>
+              <PromptInputActionAddAttachments label="Anexar" />
+            </PromptInputTools>
+            <div className="flex items-center gap-1">
+              <PromptInputSubmit />
+            </div>
+          </PromptInputFooter>
+        </PromptInput>
+      </div>
     </div>
   )
 }
 
-function TabContent({ tab }: { tab: Tab }) {
-  switch (tab) {
+function TabContent({ type }: { type: TabType }) {
+  switch (type) {
     case "chat":
-      return <ChatHistory />
+      return <PanelChat />
     case "terminal":
       return (
         <div className="flex flex-1 items-center justify-center text-sm text-muted-foreground">
@@ -167,32 +86,102 @@ function TabContent({ tab }: { tab: Tab }) {
   }
 }
 
+let tabCounter = 0
+
 export function RightPanel() {
-  const [activeTab, setActiveTab] = useState<Tab>("chat")
+  const [tabs, setTabs] = useState<PanelTab[]>([])
+  const [activeTabId, setActiveTabId] = useState<string | null>(null)
+
+  const addTab = useCallback((type: TabType) => {
+    const meta = tabMeta[type]
+    tabCounter++
+    const id = `${type}-${tabCounter}`
+    const title = `${meta.label} ${tabCounter > 1 ? tabCounter : ""}`.trim()
+    const newTab: PanelTab = { id, type, title }
+    setTabs(prev => {
+      const next = [...prev, newTab]
+      return next
+    })
+    setActiveTabId(id)
+  }, [])
+
+  const removeTab = useCallback((id: string) => {
+    setTabs(prev => {
+      const idx = prev.findIndex(t => t.id === id)
+      const next = prev.filter(t => t.id !== id)
+      if (next.length === 0) {
+        setActiveTabId(null)
+      } else if (activeTabId === id) {
+        setActiveTabId(next[Math.min(idx, next.length - 1)].id)
+      }
+      return next
+    })
+  }, [activeTabId])
+
+  const activeTab = tabs.find(t => t.id === activeTabId)
 
   return (
     <div className="flex h-full flex-col rounded-lg shadow-sm ring-1 ring-sidebar-border bg-sidebar">
-      <div className="flex h-12 items-center gap-0.5 px-2 border-b border-border">
-        {tabs.map(({ id, icon: Icon, label }) => (
+      {tabs.length > 0 && (
+        <div className="flex items-center gap-0.5 px-2 pt-2 overflow-x-auto">
+          {tabs.map((tab) => {
+            const { icon: Icon } = tabMeta[tab.type]
+            return (
+              <div
+                key={tab.id}
+                className={cn(
+                  "group flex min-w-0 shrink-0 cursor-pointer items-center gap-1.5 rounded-t-md px-2.5 py-1.5 text-xs transition-colors",
+                  tab.id === activeTabId
+                    ? "bg-sidebar-accent text-sidebar-accent-foreground"
+                    : "text-sidebar-foreground/50 hover:text-sidebar-foreground hover:bg-sidebar-accent/50",
+                )}
+                onClick={() => setActiveTabId(tab.id)}
+              >
+                <Icon className="size-3.5 shrink-0" />
+                <span className="truncate max-w-24">{tab.title}</span>
+                <button
+                  onClick={(e) => { e.stopPropagation(); removeTab(tab.id) }}
+                  className="ml-0.5 flex size-3.5 shrink-0 items-center justify-center rounded-sm opacity-0 transition-opacity group-hover:opacity-100 hover:bg-sidebar-foreground/10"
+                >
+                  <X className="size-2.5" />
+                </button>
+              </div>
+            )
+          })}
+        </div>
+      )}
+
+      <div className={cn(
+        "flex items-center gap-1",
+        tabs.length > 0 ? "px-2 py-1.5" : "px-2 pt-2 pb-1.5",
+      )}>
+        {(Object.entries(tabMeta) as [TabType, typeof tabMeta[TabType]][]).map(([type, { icon: Icon, label }]) => (
           <Button
-            key={id}
+            key={type}
             variant="ghost"
-            size="sm"
+            size="xs"
             className={cn(
-              "flex-1 gap-1.5 text-xs",
-              activeTab === id
-                ? "bg-sidebar-accent text-sidebar-accent-foreground"
-                : "text-sidebar-foreground/60 hover:text-sidebar-foreground",
+              "gap-1",
+              tabs.length === 0
+                ? "flex-1"
+                : "",
             )}
-            onClick={() => setActiveTab(id)}
+            onClick={() => addTab(type)}
           >
-            <Icon className="size-3.5" />
-            {label}
+            <Icon className="size-3" />
+            {tabs.length === 0 && label}
           </Button>
         ))}
       </div>
-      <div className="flex flex-1 flex-col overflow-auto">
-        <TabContent tab={activeTab} />
+
+      <div className="flex flex-1 flex-col overflow-hidden border-t border-sidebar-border">
+        {activeTab ? (
+          <TabContent type={activeTab.type} />
+        ) : (
+          <div className="flex flex-1 items-center justify-center p-6 text-center text-xs text-muted-foreground">
+            Selecione uma opção para começar
+          </div>
+        )}
       </div>
     </div>
   )
