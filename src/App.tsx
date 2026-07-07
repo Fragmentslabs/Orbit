@@ -109,17 +109,13 @@ function ChatInput() {
           {(attachment) => <PromptInputAttachment data={attachment} />}
         </PromptInputAttachments>
         <PromptInputBody>
-          <PromptInputTextarea placeholder="Pergunte qualquer coisa..." className="px-3" />
+          <PromptInputTextarea placeholder="Pergunte qualquer coisa..." className="px-3 text-sm" />
         </PromptInputBody>
         <PromptInputFooter>
           <PromptInputTools>
             <DropdownMenu>
-              <DropdownMenuTrigger>
-                <PromptInputButton>
-                  <PlusIcon className="size-4" />
-                </PromptInputButton>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="start">
+              <DropdownMenuTrigger render={<PromptInputButton><PlusIcon className="size-4" /></PromptInputButton>} />
+              <DropdownMenuContent align="start" className="min-w-40">
                 <DropdownMenuCheckboxItem
                   checked={search}
                   onCheckedChange={(checked) => setSearch(checked)}
