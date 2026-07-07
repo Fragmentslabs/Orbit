@@ -96,7 +96,11 @@ function ModeTabs() {
   )
 }
 
-function EllipsisMenu({ items }: { items: { icon: React.ReactNode; label: string }[] }) {
+function EllipsisMenu({ items, groupClass = "group-hover/menu-item:opacity-100", buttonClassName }: {
+  items: { icon: React.ReactNode; label: string }[]
+  groupClass?: string
+  buttonClassName?: string
+}) {
   const [menuOpen, setMenuOpen] = useState(false)
   const [menuPos, setMenuPos] = useState({ top: 0, left: 0 })
   const buttonRef = useRef<HTMLButtonElement>(null)
@@ -136,7 +140,13 @@ function EllipsisMenu({ items }: { items: { icon: React.ReactNode; label: string
         }}
         data-slot="sidebar-menu-action"
         data-sidebar="menu-action"
-        className="absolute right-1 top-1.5 flex aspect-square w-5 items-center justify-center rounded-[calc(var(--radius-sm)-2px)] p-0 text-sidebar-foreground opacity-0 group-hover/menu-item:opacity-100 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground [&>svg]:size-4 [&>svg]:shrink-0"
+          className={cn(
+            "absolute right-1 top-1.5 flex aspect-square w-5 items-center justify-center rounded-[calc(var(--radius-sm)-2px)] p-0 text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground [&>svg]:size-4 [&>svg]:shrink-0",
+            "opacity-0 transition-all duration-200",
+            groupClass,
+            menuOpen && "opacity-100",
+            buttonClassName,
+          )}
       >
         <Ellipsis className="size-4" />
         <span className="sr-only">Opções</span>
@@ -200,13 +210,14 @@ function FolderItem({ folder }: { folder: { id: string; name: string; chats: { i
         }}
         data-slot="sidebar-menu-action"
         data-sidebar="menu-action"
-        className="absolute right-8 top-1.5 flex aspect-square w-5 items-center justify-center rounded-[calc(var(--radius-sm)-2px)] p-0 text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground [&>svg]:size-4 [&>svg]:shrink-0"
+        className="absolute right-1 top-1.5 flex aspect-square w-5 items-center justify-center rounded-[calc(var(--radius-sm)-2px)] p-0 text-sidebar-foreground transition-all duration-200 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground group-hover/menu-item:right-8 [&>svg]:size-4 [&>svg]:shrink-0"
       >
         <ChevronDown className={cn("size-4 transition-transform", expanded && "rotate-180")} />
         <span className="sr-only">Expandir pasta</span>
       </button>
 
       <EllipsisMenu
+        buttonClassName="w-0 overflow-hidden group-hover/menu-item:w-5"
         items={[
           { icon: <Pencil className="size-4" />, label: "Renomear" },
           { icon: <Pin className="size-4" />, label: "Fixar" },
@@ -217,7 +228,7 @@ function FolderItem({ folder }: { folder: { id: string; name: string; chats: { i
       />
 
       {expanded && (
-        <SidebarMenuSub>
+        <SidebarMenuSub className="mr-0">
           {folder.chats.map((chat) => (
             <SidebarMenuSubItem key={chat.id}>
               <SidebarMenuSubButton className="text-xs">
@@ -225,6 +236,7 @@ function FolderItem({ folder }: { folder: { id: string; name: string; chats: { i
                 <span>{chat.title}</span>
               </SidebarMenuSubButton>
               <EllipsisMenu
+                groupClass="group-hover/menu-sub-item:opacity-100"
                 items={[
                   { icon: <Pin className="size-4" />, label: "Fixar" },
                   { icon: <Pencil className="size-4" />, label: "Renomear" },
