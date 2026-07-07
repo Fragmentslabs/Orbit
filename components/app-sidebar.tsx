@@ -7,6 +7,7 @@ import {
   SidebarFooter,
   SidebarGroup,
   SidebarGroupContent,
+  SidebarGroupLabel,
   SidebarHeader,
   SidebarMenu,
   SidebarMenuButton,
@@ -27,12 +28,18 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 
-const chatHistory = [
+const pinnedChats = [
   { id: "1", title: "Implementação de autenticação" },
   { id: "2", title: "Refatorar component Button" },
+]
+
+const todayChats = [
   { id: "3", title: "API de usuários - revisão" },
   { id: "4", title: "Configurar Docker Compose" },
   { id: "5", title: "Testes unitários do módulo X" },
+]
+
+const weekChats = [
   { id: "6", title: "Documentação do projeto" },
   { id: "7", title: "Otimização de queries SQL" },
   { id: "8", title: "Pipeline CI/CD" },
@@ -165,17 +172,28 @@ function ChatItem({ chat }: { chat: { id: string; title: string } }) {
   )
 }
 
-function ChatHistory() {
+function ChatGroup({ label, chats }: { label: string; chats: { id: string; title: string }[] }) {
   return (
     <SidebarGroup>
+      <SidebarGroupLabel>{label}</SidebarGroupLabel>
       <SidebarGroupContent>
         <SidebarMenu>
-          {chatHistory.map((chat) => (
+          {chats.map((chat) => (
             <ChatItem key={chat.id} chat={chat} />
           ))}
         </SidebarMenu>
       </SidebarGroupContent>
     </SidebarGroup>
+  )
+}
+
+function ChatHistory() {
+  return (
+    <>
+      <ChatGroup label="Fixados" chats={pinnedChats} />
+      <ChatGroup label="Hoje" chats={todayChats} />
+      <ChatGroup label="Esta semana" chats={weekChats} />
+    </>
   )
 }
 
