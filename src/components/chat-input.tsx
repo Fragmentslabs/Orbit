@@ -1,5 +1,5 @@
 import { useState } from "react"
-import { Brain, Globe, PlusIcon, Search } from "lucide-react"
+import { Brain, CheckIcon, ChevronDownIcon, Globe, PlusIcon, Search } from "lucide-react"
 import {
   DropdownMenu,
   DropdownMenuCheckboxItem,
@@ -7,6 +7,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import { Button } from "@/components/ui/button"
 import {
   PromptInput,
   PromptInputActionAddAttachments,
@@ -18,11 +19,35 @@ import {
   PromptInputTextarea,
   PromptInputTools,
 } from "@/src/components/ai/prompt-input"
+import {
+  ModelSelector,
+  ModelSelectorContent,
+  ModelSelectorEmpty,
+  ModelSelectorGroup,
+  ModelSelectorInput,
+  ModelSelectorItem,
+  ModelSelectorList,
+  ModelSelectorLogo,
+  ModelSelectorLogoGroup,
+  ModelSelectorName,
+  ModelSelectorTrigger,
+} from "@/src/components/ai/model-selector"
+
+const models = [
+  { id: "gpt-4o", name: "GPT-4o", chef: "OpenAI", chefSlug: "openai", providers: ["openai", "azure"] },
+  { id: "gpt-4o-mini", name: "GPT-4o Mini", chef: "OpenAI", chefSlug: "openai", providers: ["openai"] },
+  { id: "claude-sonnet-4-20250514", name: "Claude 4 Sonnet", chef: "Anthropic", chefSlug: "anthropic", providers: ["anthropic"] },
+  { id: "gemini-2.0-flash", name: "Gemini 2.0 Flash", chef: "Google", chefSlug: "google", providers: ["google"] },
+]
 
 export function ChatInput() {
   const [search, setSearch] = useState(false)
   const [browser, setBrowser] = useState(false)
   const [memory, setMemory] = useState(false)
+  const [modelOpen, setModelOpen] = useState(false)
+  const [selectedModel, setSelectedModel] = useState("gpt-4o")
+  const selectedModelData = models.find(m => m.id === selectedModel)
+  const chefs = Array.from(new Set(models.map(m => m.chef)))
 
   return (
     <div className="w-full max-w-2xl mx-auto pb-4">
@@ -76,6 +101,41 @@ export function ChatInput() {
             {search && <Search className="size-3 text-sidebar-foreground/40" />}
             {browser && <Globe className="size-3 text-sidebar-foreground/40" />}
             {memory && <Brain className="size-3 text-sidebar-foreground/40" />}
+            <ModelSelector onOpenChange={setModelOpen} open={modelOpen}>
+              <ModelSelectorTrigger render={<Button className="h-7 gap-1 px-1.5 text-xs" variant="ghost" />}>
+                <ModelSelectorLogo provider={selectedModelData?.chefSlug ?? "openai"} />
+                <ModelSelectorName>{selectedModelData?.name ?? "GPT-4o"}</ModelSelectorName>
+                <ChevronDownIcon className="size-3 text-muted-foreground" />
+              </ModelSelectorTrigger>
+              <ModelSelectorContent>
+                <ModelSelectorInput placeholder="Search models..." />
+                <ModelSelectorList>
+                  <ModelSelectorEmpty>No models found.</ModelSelectorEmpty>
+                  {chefs.map(chef => (
+                    <ModelSelectorGroup heading={chef} key={chef}>
+                      {models.filter(m => m.chef === chef).map(model => (
+                        <ModelSelectorItem
+                          key={model.id}
+                          onSelect={() => { setSelectedModel(model.id); setModelOpen(false) }}
+                          value={model.id}
+                        >
+                          <ModelSelectorLogo provider={model.chefSlug} />
+                          <ModelSelectorName>{model.name}</ModelSelectorName>
+                          <ModelSelectorLogoGroup>
+                            {model.providers.map(p => (
+                              <ModelSelectorLogo key={p} provider={p} />
+                            ))}
+                          </ModelSelectorLogoGroup>
+                          {selectedModel === model.id
+                            ? <CheckIcon className="ml-auto size-4" />
+                            : <div className="ml-auto size-4" />}
+                        </ModelSelectorItem>
+                      ))}
+                    </ModelSelectorGroup>
+                  ))}
+                </ModelSelectorList>
+              </ModelSelectorContent>
+            </ModelSelector>
             <PromptInputSubmit />
           </div>
         </PromptInputFooter>
