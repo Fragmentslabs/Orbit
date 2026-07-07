@@ -74,9 +74,7 @@ export function CodeInput() {
   return (
     <div className="w-full max-w-2xl mx-auto pb-4">
       {(isNewChat || folders.length > 0) && (
-        <div className="flex flex-wrap items-center gap-2 px-3 py-1.5 mb-2 rounded-xl border-2 border-sidebar-border bg-sidebar-accent/20">
-          <FolderSelector folders={folders} onFoldersChange={setFolders} />
-        </div>
+        <FolderSelector folders={folders} onFoldersChange={setFolders} />
       )}
       <PromptInput
         multiple
