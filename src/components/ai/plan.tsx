@@ -15,7 +15,7 @@ import {
 } from "~/components/ui/card"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "~/components/ui/collapsible"
 import { cn } from "~/lib/utils"
-import { Shimmer } from "~/packages/ai/shimmer"
+import { Shimmer } from "./shimmer"
 
 interface PlanContextValue {
   isStreaming: boolean

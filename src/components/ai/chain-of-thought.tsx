@@ -204,7 +204,8 @@ ChainOfThoughtSearchResult.displayName = "ChainOfThoughtSearchResult"
 ChainOfThoughtContent.displayName = "ChainOfThoughtContent"
 ChainOfThoughtImage.displayName = "ChainOfThoughtImage"
 
-import { Image } from "~/packages/ai/image"
+// @ts-ignore
+import { Image } from "ai"
 
 const exampleImage = {
   base64:

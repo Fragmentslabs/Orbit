@@ -40,7 +40,7 @@ const models = [
   { id: "gemini-2.0-flash", name: "Gemini 2.0 Flash", chef: "Google", chefSlug: "google", providers: ["google"] },
 ]
 
-export function ChatInput() {
+export function ChatInput({ onSubmit: externalOnSubmit }: { onSubmit?: (text: string) => void } = {}) {
   const [search, setSearch] = useState(false)
   const [browser, setBrowser] = useState(false)
   const [memory, setMemory] = useState(false)
@@ -54,7 +54,7 @@ export function ChatInput() {
       <PromptInput
         multiple
         onSubmit={(message) => {
-          console.log("Chat message:", message)
+          externalOnSubmit?.(message.text)
         }}
         className="rounded-xl border-2 border-sidebar-border overflow-hidden [&>div]:!border-none [&>div]:!rounded-none [&>div]:!bg-transparent"
       >

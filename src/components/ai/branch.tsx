@@ -183,7 +183,7 @@ export const BranchPage = ({ className, ...props }: BranchPageProps) => {
   )
 }
 
-import { Message, MessageContent } from "~/packages/ai/message"
+import { Message, MessageContent } from "./message"
 
 /** Demo component for preview */
 export default function BranchDemo() {
