@@ -93,7 +93,7 @@ export const Reasoning = memo(
     return (
       <ReasoningContext.Provider value={{ isStreaming, isOpen, setIsOpen, duration }}>
         <Collapsible
-          className={cn("not-prose mb-4", className)}
+          className={cn("bg-red-300 not-prose mb-4", className)}
           onOpenChange={handleOpenChange}
           open={isOpen}
           {...props}
@@ -163,7 +163,7 @@ export const ReasoningContent = memo(({ className, children, ...props }: Reasoni
     )}
     {...props}
   >
-    <Streamdown {...props}>{children}</Streamdown>
+    <Streamdown>{children}</Streamdown>
   </CollapsibleContent>
 ))
 

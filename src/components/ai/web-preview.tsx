@@ -283,7 +283,7 @@ export const WebPreviewBody = ({ className, loading, src, ...props }: WebPreview
   )
 }
 
-export type WebPreviewConsoleProps = ComponentProps<"div"> & {
+export type WebPreviewConsoleProps = ComponentProps<typeof Collapsible> & {
   logs?: Array<{
     level: "log" | "warn" | "error"
     message: string

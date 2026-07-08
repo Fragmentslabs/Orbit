@@ -3,6 +3,7 @@
 import { useControllableState } from "@radix-ui/react-use-controllable-state"
 import {
   BrainIcon,
+  ChevronRightIcon,
   ChevronDownIcon,
   DotIcon,
   ImageIcon,
@@ -70,19 +71,21 @@ export const ChainOfThoughtHeader = memo(
     const { isOpen, setIsOpen } = useChainOfThought()
 
     return (
-      <Collapsible onOpenChange={setIsOpen} open={isOpen}>
+      <Collapsible onOpenChange={setIsOpen} open={isOpen} className={"m-0"}>
         <CollapsibleTrigger
           className={cn(
-            "flex w-full items-center gap-2 text-muted-foreground text-sm transition-colors hover:text-foreground",
+            " flex w-fit items-center gap-2 text-muted-foreground text-sm transition-colors hover:text-foreground",
             className,
           )}
           {...props}
         >
           <BrainIcon className="size-4" />
           <span className="flex-1 text-left">{children ?? "Chain of Thought"}</span>
-          <ChevronDownIcon
-            className={cn("size-4 transition-transform", isOpen ? "rotate-180" : "rotate-0")}
-          />
+          {isOpen ? (
+            <ChevronDownIcon className="size-4 transition-transform" />
+          ) : (
+            <ChevronRightIcon className="size-4 transition-transform" />
+          )}
         </CollapsibleTrigger>
       </Collapsible>
     )
@@ -149,7 +152,7 @@ export type ChainOfThoughtSearchResultProps = ComponentProps<typeof Badge>
 export const ChainOfThoughtSearchResult = memo(
   ({ className, children, ...props }: ChainOfThoughtSearchResultProps) => (
     <Badge
-      className={cn("gap-1 px-2 py-0.5 font-normal text-xs", className)}
+      className={cn("gap-1 px-2 py-0.5 font-normal text-xs ", className)}
       variant="secondary"
       {...props}
     >
@@ -168,7 +171,7 @@ export const ChainOfThoughtContent = memo(
       <Collapsible open={isOpen}>
         <CollapsibleContent
           className={cn(
-            "mt-2 space-y-3",
+            "mt-2 space-y-3 rounded-xl border border-border bg-background p-4 text-sm text-muted-foreground shadow-md transition-all data-[state=closed]:animate-out data-[state=open]:animate-in",
             "data-[state=closed]:fade-out-0 data-[state=closed]:slide-out-to-top-2 data-[state=open]:slide-in-from-top-2 text-popover-foreground outline-none data-[state=closed]:animate-out data-[state=open]:animate-in",
             className,
           )}
@@ -204,8 +207,8 @@ ChainOfThoughtSearchResult.displayName = "ChainOfThoughtSearchResult"
 ChainOfThoughtContent.displayName = "ChainOfThoughtContent"
 ChainOfThoughtImage.displayName = "ChainOfThoughtImage"
 
-// @ts-ignore
-import { Image } from "ai"
+
+import { Image } from "./image"
 
 const exampleImage = {
   base64:

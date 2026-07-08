@@ -6,6 +6,12 @@ import { promisify } from 'node:util'
 import fs from 'node:fs/promises'
 import path from 'node:path'
 import type * as NodePty from 'node-pty'
+import { listCredentialProviders, removeCredential, setCredential } from './lib/auth'
+import { getCatalog } from './lib/catalog'
+import { abortChat, runChat } from './lib/chat-engine'
+import { listKeys, readJson, removeJson, writeJson } from './lib/storage'
+import { destroyBrowserWindow } from './lib/tools'
+import type { SendMessageInput } from '../shared/chat'
 
 const execFileAsync = promisify(execFile)
 
@@ -46,6 +52,12 @@ function createWindow() {
   // Test active push message to Renderer-process.
   win.webContents.on('did-finish-load', () => {
     win?.webContents.send('main-process-message', (new Date).toLocaleString())
+  })
+
+  // Links de fontes/citações abrem no browser do sistema, não em nova janela
+  win.webContents.setWindowOpenHandler(({ url }) => {
+    if (url.startsWith('http://') || url.startsWith('https://')) void shell.openExternal(url)
+    return { action: 'deny' }
   })
 
   if (VITE_DEV_SERVER_URL) {
@@ -287,6 +299,27 @@ app.whenReady().then(() => {
   ipcMain.handle('git:showFile', async (_event, repoPath: string, hash: string, relPath: string, deleted: boolean) => {
     return getFileAtCommit(repoPath, hash, relPath, deleted)
   })
+
+  // Storage genérico (sessões, mensagens, pastas) — padrão opencode
+  ipcMain.handle('storage:read', (_event, key: string) => readJson(key))
+  ipcMain.handle('storage:write', (_event, key: string, value: unknown) => writeJson(key, value))
+  ipcMain.handle('storage:remove', (_event, key: string) => removeJson(key))
+  ipcMain.handle('storage:list', (_event, prefix: string) => listKeys(prefix))
+
+  // Catálogo de provedores/modelos (models.dev)
+  ipcMain.handle('catalog:get', () => getCatalog())
+
+  // Credenciais de provedores (as chaves nunca voltam ao renderer)
+  ipcMain.handle('auth:set', (_event, providerId: string, key: string) => setCredential(providerId, key))
+  ipcMain.handle('auth:remove', (_event, providerId: string) => removeCredential(providerId))
+  ipcMain.handle('auth:list', () => listCredentialProviders())
+
+  // Chat
+  ipcMain.handle('chat:send', (_event, input: SendMessageInput) => {
+    if (win) void runChat(win, input)
+  })
+  ipcMain.handle('chat:abort', (_event, sessionId: string) => abortChat(sessionId))
+  ipcMain.handle('chat:closeBrowser', (_event, sessionId: string) => destroyBrowserWindow(sessionId))
 
   createWindow()
 })

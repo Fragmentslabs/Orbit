@@ -1,12 +1,16 @@
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect } from "react"
 import { useWorkspace } from "@/lib/workspace-context"
-import { useChatStore } from "@/lib/chat-store"
+import type { ChatMessage, SendMessageOptions } from "@/shared/chat"
 import { ChatInput } from "@/src/components/chat-input"
 import { CodeInput } from "@/src/components/code-input"
 import { Persona, type PersonaState } from "@/src/components/ai/persona"
 import { Conversation, ConversationContent, ConversationScrollButton } from "@/src/components/ai/conversation"
-import { Message, MessageContent, MessageResponse } from "@/src/components/ai/message"
+import { Message, MessageContent } from "@/src/components/ai/message"
 import { Suggestion } from "@/src/components/ai/suggestion"
+import { ChatAssistantMessage } from "@/src/components/messages/chat-message"
+import { CodeAssistantMessage } from "@/src/components/messages/code-message"
+import { useActiveSession, useSessionStatus, useSessionStore } from "@/src/stores/session-store"
+import { useProviderStore } from "@/src/stores/provider-store"
 
 const chatSuggestions = [
   "O que você pode fazer?",
@@ -15,47 +19,45 @@ const chatSuggestions = [
   "Faça um resumo de algum tópico",
 ]
 
-function getChatContent(handleSend: (text: string) => void) {
-  return {
-    title: "Pronto para conversar",
-    subtitle: "Selecione um chat ou inicie uma nova conversa",
-    suggestions: chatSuggestions,
-    input: <ChatInputWrapper onSubmit={handleSend} />,
-  }
+const codeSuggestions = [
+  "Revise meu código atual",
+  "Explique este repositório",
+  "Gere testes para este projeto",
+  "Refatore algo no código",
+]
+
+// Referência estável para o seletor do zustand (evita loop de getSnapshot)
+const NO_MESSAGES: ChatMessage[] = []
+
+function userText(message: ChatMessage): string {
+  return message.parts
+    .filter((p): p is Extract<ChatMessage["parts"][number], { type: "text" }> => p.type === "text")
+    .map((p) => p.text)
+    .join("\n")
 }
 
-function getCodeContent(_handleSend: (text: string) => void) {
-  return {
-    title: "Pronto para programar",
-    subtitle: "Selecione um contexto de código ou inicie um novo",
-    suggestions: [
-      "Revise meu código atual",
-      "Explique este repositório",
-      "Gere testes para este projeto",
-      "Refatore algo no código",
-    ],
-    input: <CodeInput />,
-  }
-}
-
-function ChatInputWrapper({ onSubmit }: { onSubmit: (text: string) => void }) {
-  return <ChatInput onSubmit={onSubmit} />
-}
-
-function ChatMessages() {
-  const activeChat = useChatStore((s) => s.getActiveChat())
-  const messages = activeChat?.messages ?? []
+function ChatMessages({ messages, isBusy, mode }: {
+  messages: ChatMessage[]
+  isBusy: boolean
+  mode: "chat" | "code"
+}) {
+  const lastAssistantId = [...messages].reverse().find((m) => m.role === "assistant")?.id
+  const AssistantMessage = mode === "chat" ? ChatAssistantMessage : CodeAssistantMessage
 
   return (
     <Conversation className="relative flex-1">
-      <ConversationContent className="px-80">
+      <ConversationContent className="mx-auto w-full max-w-3xl">
         {messages.map((msg) => (
           <Message key={msg.id} from={msg.role}>
             <MessageContent>
               {msg.role === "assistant" ? (
-                <MessageResponse>{msg.content}</MessageResponse>
+                <AssistantMessage
+                  message={msg}
+                  isLast={msg.id === lastAssistantId}
+                  isBusy={isBusy}
+                />
               ) : (
-                <p>{msg.content}</p>
+                <p>{userText(msg)}</p>
               )}
             </MessageContent>
           </Message>
@@ -68,65 +70,51 @@ function ChatMessages() {
 
 export function ChatView() {
   const { mode } = useWorkspace()
-  const [personaState, setPersonaState] = useState<PersonaState>("idle")
-  const [hasChat, setHasChat] = useState(false)
-  const activeChat = useChatStore((s) => s.getActiveChat())
-  const createChat = useChatStore((s) => s.createChat)
-  const addMessage = useChatStore((s) => s.addMessage)
-  const isProcessing = useChatStore((s) => s.isProcessing)
-  const setProcessing = useChatStore((s) => s.setProcessing)
+  const activeSession = useActiveSession(mode)
+  const messages = useSessionStore((s) =>
+    activeSession ? s.messages[activeSession.id] ?? NO_MESSAGES : NO_MESSAGES,
+  )
+  const status = useSessionStatus(activeSession?.id)
+  const sendMessage = useSessionStore((s) => s.sendMessage)
+  const stopStreaming = useSessionStore((s) => s.stopStreaming)
+  const initializeProviders = useProviderStore((s) => s.initialize)
 
   useEffect(() => {
-    if (activeChat && activeChat.messages.length > 0) setHasChat(true)
-  }, [activeChat])
+    void initializeProviders()
+  }, [initializeProviders])
 
-  useEffect(() => {
-    if (isProcessing) {
-      setPersonaState("thinking")
-    } else if (hasChat) {
-      setPersonaState("idle")
-    }
-  }, [isProcessing, hasChat])
+  const isBusy = status === "submitted" || status === "streaming"
+  const hasChat = messages.length > 0
+  const personaState: PersonaState = isBusy ? "thinking" : "idle"
 
-  const handleSendMessage = useCallback(
-    async (text: string) => {
-      const chatId = activeChat?.id ?? createChat()
-
-      const userMsg = {
-        id: crypto.randomUUID(),
-        role: "user" as const,
-        content: text,
-        createdAt: new Date(),
-      }
-      addMessage(chatId, userMsg)
-
-      setHasChat(true)
-      setPersonaState("thinking")
-      await new Promise((r) => setTimeout(r, 100))
-
-      setProcessing(true)
-
-      const assistantMsg = {
-        id: crypto.randomUUID(),
-        role: "assistant" as const,
-        content:
-          "Esta é uma resposta de exemplo. Em breve a integração com a IA estará funcionando.",
-        createdAt: new Date(),
-      }
-      await new Promise((r) => setTimeout(r, 1500))
-      addMessage(chatId, assistantMsg)
-      setProcessing(false)
-      setPersonaState("idle")
+  const handleChatSend = useCallback(
+    (text: string, options: SendMessageOptions) => {
+      void sendMessage("chat", text, { options })
     },
-    [activeChat, createChat, addMessage, setProcessing],
+    [sendMessage],
   )
 
-  const content = mode === "chat" ? getChatContent(handleSendMessage) : getCodeContent(handleSendMessage)
+  const handleCodeSend = useCallback(
+    (text: string, options: SendMessageOptions, directory: string, extraDirectories: string[]) => {
+      void sendMessage("code", text, { options, directory, extraDirectories })
+    },
+    [sendMessage],
+  )
+
+  const handleStop = useCallback(() => {
+    if (activeSession) stopStreaming(activeSession.id)
+  }, [activeSession, stopStreaming])
 
   const handleSuggestion = useCallback(
-    (suggestion: string) => handleSendMessage(suggestion),
-    [handleSendMessage],
+    (suggestion: string) => {
+      if (mode === "chat") handleChatSend(suggestion, {})
+    },
+    [mode, handleChatSend],
   )
+
+  const emptyState = mode === "chat"
+    ? { title: "Pronto para conversar", subtitle: "Selecione um chat ou inicie uma nova conversa", suggestions: chatSuggestions }
+    : { title: "Pronto para programar", subtitle: "Selecione a pasta do projeto e descreva a tarefa", suggestions: codeSuggestions }
 
   return (
     <div className="relative flex h-full min-w-0 flex-1 flex-col overflow-hidden">
@@ -149,11 +137,11 @@ export function ChatView() {
         >
           <div className="flex flex-col items-center gap-6 pt-24">
             <div className="flex flex-col items-center gap-2">
-              <p className="text-lg font-medium text-foreground">{content.title}</p>
-              <p className="text-sm text-muted-foreground">{content.subtitle}</p>
+              <p className="text-lg font-medium text-foreground">{emptyState.title}</p>
+              <p className="text-sm text-muted-foreground">{emptyState.subtitle}</p>
             </div>
-            <div className="flex w-full max-w-md flex-wrap justify-center gap-2">
-              {content.suggestions.map((s) => (
+            <div className="grid w-full max-w-md grid-cols-2 justify-center gap-2">
+              {emptyState.suggestions.map((s) => (
                 <Suggestion key={s} onClick={handleSuggestion} suggestion={s} />
               ))}
             </div>
@@ -162,13 +150,22 @@ export function ChatView() {
 
         {hasChat && (
           <div className="absolute inset-0 flex flex-col transition-all duration-500 ease-in-out">
-            <div className="flex-1 pt-20">
-              <ChatMessages />
+            <div className="flex min-h-0 flex-1 flex-col pt-20">
+              <ChatMessages messages={messages} isBusy={isBusy} mode={mode} />
             </div>
           </div>
         )}
       </div>
-      {content.input}
+      {mode === "chat" ? (
+        <ChatInput onSubmit={handleChatSend} status={status} onStop={handleStop} />
+      ) : (
+        <CodeInput
+          onSubmit={handleCodeSend}
+          status={status}
+          onStop={handleStop}
+          hasMessages={hasChat}
+        />
+      )}
     </div>
   )
 }

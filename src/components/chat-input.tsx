@@ -1,5 +1,6 @@
 import { useState } from "react"
-import { Brain, CheckIcon, ChevronDownIcon, Globe, PlusIcon, Search } from "lucide-react"
+import { Brain, Globe, PlusIcon, Search } from "lucide-react"
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import {
   DropdownMenu,
   DropdownMenuCheckboxItem,
@@ -7,7 +8,6 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { Button } from "@/components/ui/button"
 import {
   PromptInput,
   PromptInputActionAddAttachments,
@@ -19,42 +19,37 @@ import {
   PromptInputTextarea,
   PromptInputTools,
 } from "@/src/components/ai/prompt-input"
-import {
-  ModelSelector,
-  ModelSelectorContent,
-  ModelSelectorEmpty,
-  ModelSelectorGroup,
-  ModelSelectorInput,
-  ModelSelectorItem,
-  ModelSelectorList,
-  ModelSelectorLogo,
-  ModelSelectorLogoGroup,
-  ModelSelectorName,
-  ModelSelectorTrigger,
-} from "@/src/components/ai/model-selector"
+import { ModelPicker } from "@/src/components/model-picker"
+import { useProviderStore } from "@/src/stores/provider-store"
+import type { SendMessageOptions } from "@/shared/chat"
+import type { ChatStatus } from "@/shared/chat"
 
-const models = [
-  { id: "gpt-4o", name: "GPT-4o", chef: "OpenAI", chefSlug: "openai", providers: ["openai", "azure"] },
-  { id: "gpt-4o-mini", name: "GPT-4o Mini", chef: "OpenAI", chefSlug: "openai", providers: ["openai"] },
-  { id: "claude-sonnet-4-20250514", name: "Claude 4 Sonnet", chef: "Anthropic", chefSlug: "anthropic", providers: ["anthropic"] },
-  { id: "gemini-2.0-flash", name: "Gemini 2.0 Flash", chef: "Google", chefSlug: "google", providers: ["google"] },
-]
-
-export function ChatInput({ onSubmit: externalOnSubmit }: { onSubmit?: (text: string) => void } = {}) {
+export function ChatInput({ onSubmit, status, onStop }: {
+  onSubmit: (text: string, options: SendMessageOptions) => void
+  status?: ChatStatus
+  onStop?: () => void
+}) {
   const [search, setSearch] = useState(false)
   const [browser, setBrowser] = useState(false)
-  const [memory, setMemory] = useState(false)
-  const [modelOpen, setModelOpen] = useState(false)
-  const [selectedModel, setSelectedModel] = useState("gpt-4o")
-  const selectedModelData = models.find(m => m.id === selectedModel)
-  const chefs = Array.from(new Set(models.map(m => m.chef)))
+  const [thinking, setThinking] = useState(false)
+  const selected = useProviderStore((s) => s.selectedModel)
+  const model = useProviderStore((s) =>
+    s.selectedModel ? s.catalog[s.selectedModel.providerId]?.models[s.selectedModel.modelId] : undefined,
+  )
+  const busy = status === "submitted" || status === "streaming"
 
   return (
     <div className="w-full max-w-2xl mx-auto pb-4">
       <PromptInput
         multiple
         onSubmit={(message) => {
-          externalOnSubmit?.(message.text)
+          if (busy) {
+            onStop?.()
+            return
+          }
+          const text = message.text?.trim()
+          if (!text) return
+          onSubmit(text, { research: search, browser, thinking })
         }}
         className="rounded-xl border-2 border-sidebar-border overflow-hidden [&>div]:!border-none [&>div]:!rounded-none [&>div]:!bg-transparent"
       >
@@ -75,23 +70,53 @@ export function ChatInput({ onSubmit: externalOnSubmit }: { onSubmit?: (text: st
                   checked={search}
                   onCheckedChange={(checked) => setSearch(checked)}
                 >
-                  <Search className="size-4" />
-                  Pesquisa
+                  <TooltipProvider delay={300}>
+                    <Tooltip>
+                      <TooltipTrigger
+                        render={
+                          <span className="flex flex-1 items-center gap-2" />
+                        }
+                      >
+                        <Search className="size-4" />
+                        Pesquisa
+                      </TooltipTrigger>
+                      <TooltipContent side="right" align="center" sideOffset={8}>
+                        Busca e lê páginas da web via HTTP.
+                        Rápido, mas não executa JavaScript.
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
                 </DropdownMenuCheckboxItem>
                 <DropdownMenuCheckboxItem
                   checked={browser}
                   onCheckedChange={(checked) => setBrowser(checked)}
                 >
-                  <Globe className="size-4" />
-                  Browser
+                  <TooltipProvider delay={300}>
+                    <Tooltip>
+                      <TooltipTrigger
+                        render={
+                          <span className="flex flex-1 items-center gap-2" />
+                        }
+                      >
+                        <Globe className="size-4" />
+                        Browser
+                      </TooltipTrigger>
+                      <TooltipContent side="right" align="center" sideOffset={8}>
+                        Navega em páginas como um browser real.
+                        Executa JavaScript, ideal para SPAs.
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
                 </DropdownMenuCheckboxItem>
-                <DropdownMenuCheckboxItem
-                  checked={memory}
-                  onCheckedChange={(checked) => setMemory(checked)}
-                >
-                  <Brain className="size-4" />
-                  Memória
-                </DropdownMenuCheckboxItem>
+                {model?.reasoning && (
+                  <DropdownMenuCheckboxItem
+                    checked={thinking}
+                    onCheckedChange={(checked) => setThinking(checked)}
+                  >
+                    <Brain className="size-4" />
+                    Thinking
+                  </DropdownMenuCheckboxItem>
+                )}
                 <DropdownMenuSeparator />
                 <PromptInputActionAddAttachments label="Anexar arquivos" />
               </DropdownMenuContent>
@@ -100,43 +125,12 @@ export function ChatInput({ onSubmit: externalOnSubmit }: { onSubmit?: (text: st
           <div className="flex items-center gap-1">
             {search && <Search className="size-3 text-sidebar-foreground/40" />}
             {browser && <Globe className="size-3 text-sidebar-foreground/40" />}
-            {memory && <Brain className="size-3 text-sidebar-foreground/40" />}
-            <ModelSelector onOpenChange={setModelOpen} open={modelOpen}>
-              <ModelSelectorTrigger render={<Button className="h-7 gap-1 px-1.5 text-xs" variant="ghost" />}>
-                <ModelSelectorLogo provider={selectedModelData?.chefSlug ?? "openai"} />
-                <ModelSelectorName>{selectedModelData?.name ?? "GPT-4o"}</ModelSelectorName>
-                <ChevronDownIcon className="size-3 text-muted-foreground" />
-              </ModelSelectorTrigger>
-              <ModelSelectorContent>
-                <ModelSelectorInput placeholder="Search models..." />
-                <ModelSelectorList>
-                  <ModelSelectorEmpty>No models found.</ModelSelectorEmpty>
-                  {chefs.map(chef => (
-                    <ModelSelectorGroup heading={chef} key={chef}>
-                      {models.filter(m => m.chef === chef).map(model => (
-                        <ModelSelectorItem
-                          key={model.id}
-                          onSelect={() => { setSelectedModel(model.id); setModelOpen(false) }}
-                          value={model.id}
-                        >
-                          <ModelSelectorLogo provider={model.chefSlug} />
-                          <ModelSelectorName>{model.name}</ModelSelectorName>
-                          <ModelSelectorLogoGroup>
-                            {model.providers.map(p => (
-                              <ModelSelectorLogo key={p} provider={p} />
-                            ))}
-                          </ModelSelectorLogoGroup>
-                          {selectedModel === model.id
-                            ? <CheckIcon className="ml-auto size-4" />
-                            : <div className="ml-auto size-4" />}
-                        </ModelSelectorItem>
-                      ))}
-                    </ModelSelectorGroup>
-                  ))}
-                </ModelSelectorList>
-              </ModelSelectorContent>
-            </ModelSelector>
-            <PromptInputSubmit />
+            {thinking && <Brain className="size-3 text-sidebar-foreground/40" />}
+            <ModelPicker />
+            <PromptInputSubmit
+              disabled={!selected && !busy}
+              status={busy ? (status === "submitted" ? "submitted" : "streaming") : undefined}
+            />
           </div>
         </PromptInputFooter>
       </PromptInput>

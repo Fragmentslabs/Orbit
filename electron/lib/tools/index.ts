@@ -1,0 +1,56 @@
+import type { ToolSet } from 'ai'
+import type { SendMessageInput } from '../../../shared/chat'
+import { createBrowserLinksTool, createBrowserOpenTool } from './browser'
+import type { ToolContext } from './context'
+import {
+  createEditTool,
+  createGlobTool,
+  createGrepTool,
+  createListTool,
+  createReadTool,
+  createWriteTool,
+} from './files'
+import { createBashTool } from './shell'
+import { createWebFetchTool, createWebSearchTool } from './web'
+
+export { destroyBrowserWindow } from './browser'
+export type { ToolContext } from './context'
+
+/**
+ * Monta o conjunto de ferramentas de acordo com o modo, seguindo a lógica de
+ * agentes do opencode: "plan" só permite leitura; "build" (código) tem acesso
+ * completo; no chat cada toggle controla estritamente sua capacidade —
+ * Pesquisa habilita web, Browser habilita o browser nativo.
+ */
+export function buildToolSet(input: SendMessageInput, ctx: ToolContext | null): ToolSet {
+  const tools: ToolSet = {}
+
+  if (input.mode === 'chat') {
+    if (input.options.research) {
+      tools.websearch = createWebSearchTool()
+      tools.webfetch = createWebFetchTool()
+    }
+    if (input.options.browser) {
+      tools.browser_open = createBrowserOpenTool(input.sessionId)
+      tools.browser_links = createBrowserLinksTool(input.sessionId)
+    }
+    return tools
+  }
+
+  // Modo código: web sempre disponível; escrita/shell bloqueados no plano
+  tools.websearch = createWebSearchTool()
+  tools.webfetch = createWebFetchTool()
+  if (ctx) {
+    tools.read = createReadTool(ctx)
+    tools.ls = createListTool(ctx)
+    tools.glob = createGlobTool(ctx)
+    tools.grep = createGrepTool(ctx)
+    if (!input.options.plan) {
+      tools.write = createWriteTool(ctx)
+      tools.edit = createEditTool(ctx)
+      tools.bash = createBashTool(ctx)
+    }
+  }
+
+  return tools
+}

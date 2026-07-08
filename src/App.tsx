@@ -5,6 +5,7 @@ import { TooltipProvider } from "@/components/ui/tooltip"
 import { AppSidebar } from "@/components/app-sidebar"
 import { ThemeProvider } from "@/components/theme-provider"
 import { WorkspaceProvider, useWorkspace } from "@/lib/workspace-context"
+import { useActiveSession } from "@/src/stores/session-store"
 import { ChatHeader } from "@/src/components/chat-header"
 import { ChatView } from "@/src/components/chat-view"
 import { RightPanel } from "@/src/components/right-panel"
@@ -36,6 +37,7 @@ function HoverEdge({ onShow }: { onShow: () => void }) {
 function Layout() {
   const { open, setOpen } = useSidebar()
   const { mode: workspaceMode } = useWorkspace()
+  const activeSession = useActiveSession(workspaceMode)
   const [mode, setMode] = useState<SidebarMode>(loadMode)
   const [rightPanelOpen, setRightPanelOpen] = useState(false)
   const hideTimer = useRef<ReturnType<typeof setTimeout>>()
@@ -95,7 +97,7 @@ function Layout() {
         <Panel className="min-w-0" defaultSize={rightPanelOpen ? 65 : 100} id="main" minSize={30} order={1}>
             <main className="flex h-full min-w-0 flex-col">
               <ChatHeader
-                title={workspaceMode === "chat" ? "Nova conversa" : "Novo código"}
+                title={activeSession?.title ?? (workspaceMode === "chat" ? "Nova conversa" : "Novo código")}
                 rightPanelOpen={rightPanelOpen}
                 onToggleSidebar={handleToggleSidebar}
                 onToggleRightPanel={workspaceMode === "code" ? () => setRightPanelOpen(v => !v) : undefined}

@@ -1,6 +1,26 @@
-import { useEffect, useLayoutEffect, useRef, useState } from "react"
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react"
 import { createPortal } from "react-dom"
-import { ChevronDown, Ellipsis, Folder, MessageSquare, Pin, Plus, Terminal, Trash2, User, Archive, Pencil, Settings, LogOut, Sun, Moon, Monitor } from "lucide-react"
+import {
+  Archive,
+  ArchiveRestore,
+  ChevronDown,
+  Ellipsis,
+  Folder,
+  FolderPlus,
+  LogOut,
+  MessageSquare,
+  Monitor,
+  Moon,
+  Pencil,
+  Pin,
+  PinOff,
+  Plus,
+  Settings,
+  Sun,
+  Terminal,
+  Trash2,
+  User,
+} from "lucide-react"
 
 import {
   Sidebar,
@@ -24,6 +44,15 @@ import { useWorkspace, WorkspaceMode } from "@/lib/workspace-context"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
+import { ConfirmDialog } from "@/components/ui/alert-dialog"
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
+import { Input } from "@/components/ui/input"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -36,97 +65,21 @@ import {
   DropdownMenuSubContent,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import type { FolderInfo, SessionInfo } from "@/shared/chat"
+import { useSessionStore } from "@/src/stores/session-store"
+import { SettingsDialog } from "@/src/components/settings-dialog"
 
-const workspaces: Record<WorkspaceMode, {
-  pinned: { id: string; title: string }[]
-  pinnedFolders: { id: string; name: string; chats: { id: string; title: string }[] }[]
-  folders: { id: string; name: string; chats: { id: string; title: string }[] }[]
-  recent: { id: string; title: string }[]
-}> = {
-  chat: {
-    pinned: [
-      { id: "chat-pinned-1", title: "Setup inicial do projeto" },
-      { id: "chat-pinned-2", title: "Review de código - Sprint 5" },
-    ],
-    pinnedFolders: [
-      {
-        id: "chat-folder-pinned-1",
-        name: "Design System",
-        chats: [
-          { id: "chat-pc1", title: "Definir paleta de cores" },
-          { id: "chat-pc2", title: "Componentes base" },
-        ],
-      },
-    ],
-    folders: [
-      {
-        id: "chat-folder-1",
-        name: "Projeto Alpha",
-        chats: [
-          { id: "chat-c1", title: "Implementação de autenticação" },
-          { id: "chat-c2", title: "Refatorar component Button" },
-          { id: "chat-c3", title: "API de usuários - revisão" },
-        ],
-      },
-      {
-        id: "chat-folder-2",
-        name: "Infraestrutura",
-        chats: [
-          { id: "chat-c4", title: "Configurar Docker Compose" },
-          { id: "chat-c5", title: "Pipeline CI/CD" },
-        ],
-      },
-    ],
-    recent: [
-      { id: "chat-recent-1", title: "Schema do banco de dados" },
-      { id: "chat-recent-2", title: "Configurar ambiente de dev" },
-    ],
-  },
-  code: {
-    pinned: [
-      { id: "code-pinned-1", title: "Gerar hook useDebounce" },
-      { id: "code-pinned-2", title: "Refatorar API service layer" },
-    ],
-    pinnedFolders: [
-      {
-        id: "code-folder-pinned-1",
-        name: "Hooks reutilizáveis",
-        chats: [
-          { id: "code-pc1", title: "useDebounce" },
-          { id: "code-pc2", title: "useLocalStorage" },
-        ],
-      },
-    ],
-    folders: [
-      {
-        id: "code-folder-1",
-        name: "Componentes",
-        chats: [
-          { id: "code-c1", title: "Criar componente DataTable" },
-          { id: "code-c2", title: "Migrar Button para variantes" },
-          { id: "code-c3", title: "Implementar virtual scroll" },
-        ],
-      },
-      {
-        id: "code-folder-2",
-        name: "Utils",
-        chats: [
-          { id: "code-c4", title: "Função de formatação de data" },
-          { id: "code-c5", title: "Validação de CPF/CNPJ" },
-        ],
-      },
-    ],
-    recent: [
-      { id: "code-recent-1", title: "Script de migração BD" },
-      { id: "code-recent-2", title: "Otimizar consultas N+1" },
-    ],
-  },
-}
+type MenuItem = { icon: React.ReactNode; label: string; onSelect: () => void }
 
 function NewChatButton() {
   const { mode } = useWorkspace()
+  const selectSession = useSessionStore((s) => s.selectSession)
   return (
-    <Button variant="outline" className="w-full justify-start gap-2 text-sm">
+    <Button
+      variant="outline"
+      className="w-full justify-start gap-2 text-sm"
+      onClick={() => void selectSession(mode, null)}
+    >
       <Plus className="size-4" />
       {mode === "chat" ? "Novo Chat" : "Nova sessão"}
     </Button>
@@ -152,22 +105,10 @@ function ModeTabs() {
   )
 }
 
-function getDefaultRowItems(pinned?: boolean): { icon: React.ReactNode; label: string }[] {
-  const items: { icon: React.ReactNode; label: string }[] = [
-    { icon: <Pin className="size-4" />, label: pinned ? "Desafixar" : "Fixar" },
-    { icon: <Pencil className="size-4" />, label: "Renomear" },
-    { icon: <Archive className="size-4" />, label: "Arquivar" },
-    { icon: <Trash2 className="size-4" />, label: "Deletar" },
-  ]
-  if (!pinned) {
-    items.splice(1, 0, { icon: <Folder className="size-4" />, label: "Adicionar a pasta" })
-  }
-  return items
-}
-
-function AccordionGroup({ label, defaultExpanded = true, children }: {
+function AccordionGroup({ label, defaultExpanded = true, action, children }: {
   label: string
   defaultExpanded?: boolean
+  action?: React.ReactNode
   children: React.ReactNode
 }) {
   const [expanded, setExpanded] = useState(defaultExpanded)
@@ -179,6 +120,7 @@ function AccordionGroup({ label, defaultExpanded = true, children }: {
         onClick={() => setExpanded((prev) => !prev)}
       >
         <span className="flex-1 truncate">{label}</span>
+        {action}
         <ChevronDown className={cn("size-3 shrink-0 transition-transform", !expanded && "-rotate-90")} />
       </SidebarGroupLabel>
       {expanded && <SidebarGroupContent>{children}</SidebarGroupContent>}
@@ -187,7 +129,7 @@ function AccordionGroup({ label, defaultExpanded = true, children }: {
 }
 
 function EllipsisMenu({ items, groupClass = "group-hover/menu-item:opacity-100", buttonClassName }: {
-  items: { icon: React.ReactNode; label: string }[]
+  items: MenuItem[]
   groupClass?: string
   buttonClassName?: string
 }) {
@@ -249,7 +191,10 @@ function EllipsisMenu({ items, groupClass = "group-hover/menu-item:opacity-100",
             <div
               key={i}
               className="flex min-h-7 cursor-default items-center gap-2 rounded-md px-2 py-1 text-xs outline-hidden select-none hover:bg-foreground/10"
-              onClick={() => setMenuOpen(false)}
+              onClick={() => {
+                setMenuOpen(false)
+                item.onSelect()
+              }}
             >
               {item.icon}
               {item.label}
@@ -262,52 +207,227 @@ function EllipsisMenu({ items, groupClass = "group-hover/menu-item:opacity-100",
   )
 }
 
-function ChatRow({ chat, menuItems, button: Button, buttonClassName, actionButtonClassName, pinned }: {
-  chat: { id: string; title: string }
-  menuItems?: { icon: React.ReactNode; label: string }[]
+function PromptDialog({ open, onOpenChange, title, initialValue = "", placeholder, onSubmit }: {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  title: string
+  initialValue?: string
+  placeholder?: string
+  onSubmit: (value: string) => void
+}) {
+  const [value, setValue] = useState(initialValue)
+
+  useEffect(() => {
+    if (open) setValue(initialValue)
+  }, [open, initialValue])
+
+  const submit = () => {
+    const trimmed = value.trim()
+    if (trimmed) onSubmit(trimmed)
+    onOpenChange(false)
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent showCloseButton={false}>
+        <DialogHeader>
+          <DialogTitle>{title}</DialogTitle>
+        </DialogHeader>
+        <Input
+          autoFocus
+          value={value}
+          placeholder={placeholder}
+          onChange={(e) => setValue(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") submit()
+          }}
+        />
+        <DialogFooter>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button>
+          <Button onClick={submit}>Salvar</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+function MoveToFolderDialog({ open, onOpenChange, session }: {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  session: SessionInfo
+}) {
+  const folders = useSessionStore((s) => s.folders).filter((f) => f.mode === session.mode)
+  const moveToFolder = useSessionStore((s) => s.moveToFolder)
+  const createFolder = useSessionStore((s) => s.createFolder)
+  const [newName, setNewName] = useState("")
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent showCloseButton={false}>
+        <DialogHeader>
+          <DialogTitle>Adicionar a pasta</DialogTitle>
+        </DialogHeader>
+        <div className="flex flex-col gap-1">
+          {folders.map((folder) => (
+            <Button
+              key={folder.id}
+              variant={session.folderId === folder.id ? "secondary" : "ghost"}
+              className="justify-start gap-2"
+              onClick={() => {
+                moveToFolder(session.id, folder.id)
+                onOpenChange(false)
+              }}
+            >
+              <Folder className="size-4" />
+              {folder.name}
+            </Button>
+          ))}
+          {session.folderId && (
+            <Button
+              variant="ghost"
+              className="justify-start gap-2 text-muted-foreground"
+              onClick={() => {
+                moveToFolder(session.id, null)
+                onOpenChange(false)
+              }}
+            >
+              <Trash2 className="size-4" />
+              Remover da pasta atual
+            </Button>
+          )}
+        </div>
+        <div className="flex gap-2">
+          <Input
+            value={newName}
+            placeholder="Nova pasta…"
+            onChange={(e) => setNewName(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && newName.trim()) {
+                const folder = createFolder(session.mode, newName.trim())
+                moveToFolder(session.id, folder.id)
+                onOpenChange(false)
+              }
+            }}
+          />
+          <Button
+            variant="outline"
+            disabled={!newName.trim()}
+            onClick={() => {
+              const folder = createFolder(session.mode, newName.trim())
+              moveToFolder(session.id, folder.id)
+              onOpenChange(false)
+            }}
+          >
+            Criar
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+function SessionRow({ session, button: ButtonComponent, buttonClassName, actionButtonClassName }: {
+  session: SessionInfo
   button: React.ElementType
   buttonClassName?: string
   actionButtonClassName?: string
-  pinned?: boolean
 }) {
+  const { mode } = useWorkspace()
+  const selectSession = useSessionStore((s) => s.selectSession)
+  const activeId = useSessionStore((s) => s.activeIds[mode])
+  const togglePin = useSessionStore((s) => s.togglePin)
+  const toggleArchive = useSessionStore((s) => s.toggleArchive)
+  const deleteSession = useSessionStore((s) => s.deleteSession)
+  const renameSession = useSessionStore((s) => s.renameSession)
+
+  const [confirmDelete, setConfirmDelete] = useState(false)
+  const [renaming, setRenaming] = useState(false)
+  const [movingToFolder, setMovingToFolder] = useState(false)
+
+  const menuItems: MenuItem[] = [
+    {
+      icon: session.pinned ? <PinOff className="size-4" /> : <Pin className="size-4" />,
+      label: session.pinned ? "Desafixar" : "Fixar",
+      onSelect: () => togglePin(session.id),
+    },
+    {
+      icon: <Folder className="size-4" />,
+      label: "Adicionar a pasta",
+      onSelect: () => setMovingToFolder(true),
+    },
+    { icon: <Pencil className="size-4" />, label: "Renomear", onSelect: () => setRenaming(true) },
+    {
+      icon: session.archived ? <ArchiveRestore className="size-4" /> : <Archive className="size-4" />,
+      label: session.archived ? "Desarquivar" : "Arquivar",
+      onSelect: () => toggleArchive(session.id),
+    },
+    { icon: <Trash2 className="size-4" />, label: "Deletar", onSelect: () => setConfirmDelete(true) },
+  ]
+
   return (
     <div className="group/menu-row relative min-w-0">
-      <Button className={cn(
-        "group-hover/menu-row:bg-sidebar-accent group-hover/menu-row:text-sidebar-accent-foreground",
-        "text-xs",
-        pinned ? "group-hover/menu-row:pr-10" : "group-hover/menu-row:pr-8",
-        buttonClassName,
-      )}>
+      <ButtonComponent
+        isActive={activeId === session.id}
+        onClick={() => void selectSession(session.mode, session.id)}
+        className={cn(
+          "group-hover/menu-row:bg-sidebar-accent group-hover/menu-row:text-sidebar-accent-foreground",
+          "text-xs",
+          session.pinned ? "group-hover/menu-row:pr-10" : "group-hover/menu-row:pr-8",
+          buttonClassName,
+        )}
+      >
         <div className="flex min-w-0 flex-1 items-center gap-2 truncate">
           <MessageSquare className="size-4 shrink-0" />
-          <span className="truncate">{chat.title}</span>
+          <span className="truncate">{session.title}</span>
         </div>
-        {pinned && <Pin className="!size-3 shrink-0 text-sidebar-foreground/40" />}
-      </Button>
+        {session.pinned && <Pin className="!size-3 shrink-0 text-sidebar-foreground/40" />}
+      </ButtonComponent>
       <EllipsisMenu
         groupClass="group-hover/menu-row:opacity-100"
         buttonClassName={cn("w-0 overflow-hidden group-hover/menu-row:w-5", actionButtonClassName)}
-        items={menuItems ?? getDefaultRowItems(pinned)}
+        items={menuItems}
       />
+      <ConfirmDialog
+        open={confirmDelete}
+        onOpenChange={setConfirmDelete}
+        title="Excluir conversa?"
+        description={`"${session.title}" e todas as suas mensagens serão excluídas permanentemente.`}
+        confirmLabel="Excluir"
+        destructive
+        onConfirm={() => void deleteSession(session.id)}
+      />
+      <PromptDialog
+        open={renaming}
+        onOpenChange={setRenaming}
+        title="Renomear conversa"
+        initialValue={session.title}
+        onSubmit={(title) => renameSession(session.id, title)}
+      />
+      {movingToFolder && (
+        <MoveToFolderDialog open={movingToFolder} onOpenChange={setMovingToFolder} session={session} />
+      )}
     </div>
   )
 }
 
-function ChatItem({ chat, menuItems, pinned }: { chat: { id: string; title: string }; menuItems?: { icon: React.ReactNode; label: string }[]; pinned?: boolean }) {
+function SessionItem({ session }: { session: SessionInfo }) {
   return (
     <SidebarMenuItem>
-      <ChatRow
-        button={SidebarMenuButton}
-        chat={chat}
-        menuItems={menuItems}
-        pinned={pinned}
-      />
+      <SessionRow button={SidebarMenuButton} session={session} />
     </SidebarMenuItem>
   )
 }
 
-function FolderItem({ folder, pinned }: { folder: { id: string; name: string; chats: { id: string; title: string }[] }; pinned?: boolean }) {
+function FolderItem({ folder, sessions }: { folder: FolderInfo; sessions: SessionInfo[] }) {
   const [expanded, setExpanded] = useState(true)
+  const { mode } = useWorkspace()
+  const selectSession = useSessionStore((s) => s.selectSession)
+  const renameFolder = useSessionStore((s) => s.renameFolder)
+  const toggleFolderPin = useSessionStore((s) => s.toggleFolderPin)
+  const deleteFolder = useSessionStore((s) => s.deleteFolder)
+
+  const [confirmDelete, setConfirmDelete] = useState(false)
+  const [renaming, setRenaming] = useState(false)
 
   return (
     <SidebarMenuItem>
@@ -316,7 +436,7 @@ function FolderItem({ folder, pinned }: { folder: { id: string; name: string; ch
           className={cn(
             "group-hover/menu-row:bg-sidebar-accent group-hover/menu-row:text-sidebar-accent-foreground",
             "text-xs",
-            pinned ? "group-hover/menu-row:pr-14" : "group-hover/menu-row:pr-12",
+            folder.pinned ? "group-hover/menu-row:pr-14" : "group-hover/menu-row:pr-12",
           )}
           onClick={() => setExpanded((prev) => !prev)}
         >
@@ -325,11 +445,18 @@ function FolderItem({ folder, pinned }: { folder: { id: string; name: string; ch
             <span className="truncate">{folder.name}</span>
             <ChevronDown className={cn("size-3 shrink-0 transition-transform", !expanded && "-rotate-90")} />
           </div>
-          {pinned && <Pin className="!size-3 shrink-0 text-sidebar-foreground/40" />}
+          {folder.pinned && <Pin className="!size-3 shrink-0 text-sidebar-foreground/40" />}
         </SidebarMenuButton>
 
         <button
-          onClick={(e) => e.stopPropagation()}
+          onClick={(e) => {
+            e.stopPropagation()
+            // Novo chat dentro da pasta: limpa a seleção e pré-atribui a pasta
+            void useSessionStore
+              .getState()
+              .createSession(mode, { folderId: folder.id })
+              .then((session) => selectSession(mode, session.id))
+          }}
           className="absolute right-7 top-1.5 flex h-5 w-0 items-center justify-center overflow-hidden rounded-[calc(var(--radius-sm)-2px)] p-0 text-sidebar-foreground transition-all duration-200 group-hover/menu-row:w-5 group-hover/menu-row:bg-sidebar-accent group-hover/menu-row:text-sidebar-accent-foreground [&>svg]:size-4 [&>svg]:shrink-0"
         >
           <Plus className="size-4 shrink-0" />
@@ -340,69 +467,137 @@ function FolderItem({ folder, pinned }: { folder: { id: string; name: string; ch
           groupClass="group-hover/menu-row:opacity-100"
           buttonClassName="w-0 overflow-hidden group-hover/menu-row:w-5"
           items={[
-            { icon: <Pencil className="size-4" />, label: "Renomear" },
-            { icon: <Pin className="size-4" />, label: pinned ? "Desafixar" : "Fixar" },
-            { icon: <Archive className="size-4" />, label: "Arquivar" },
-            { icon: <Trash2 className="size-4" />, label: "Remover" },
+            { icon: <Pencil className="size-4" />, label: "Renomear", onSelect: () => setRenaming(true) },
+            {
+              icon: folder.pinned ? <PinOff className="size-4" /> : <Pin className="size-4" />,
+              label: folder.pinned ? "Desafixar" : "Fixar",
+              onSelect: () => toggleFolderPin(folder.id),
+            },
+            { icon: <Trash2 className="size-4" />, label: "Remover", onSelect: () => setConfirmDelete(true) },
           ]}
         />
       </div>
 
-      {expanded && (
+      {expanded && sessions.length > 0 && (
         <SidebarMenuSub className="mr-0">
-          {folder.chats.map((chat) => (
-            <SidebarMenuSubItem key={chat.id}>
-              <ChatRow
+          {sessions.map((session) => (
+            <SidebarMenuSubItem key={session.id}>
+              <SessionRow
                 button={SidebarMenuSubButton}
                 actionButtonClassName="top-1"
-                chat={chat}
-                menuItems={[
-                  { icon: <Pin className="size-4" />, label: "Fixar" },
-                  { icon: <Pencil className="size-4" />, label: "Renomear" },
-                  { icon: <Archive className="size-4" />, label: "Arquivar" },
-                  { icon: <Trash2 className="size-4" />, label: "Deletar" },
-                ]}
+                session={session}
               />
             </SidebarMenuSubItem>
           ))}
         </SidebarMenuSub>
       )}
+
+      <ConfirmDialog
+        open={confirmDelete}
+        onOpenChange={setConfirmDelete}
+        title="Remover pasta?"
+        description={`As conversas de "${folder.name}" não serão excluídas — voltarão para a lista principal.`}
+        confirmLabel="Remover"
+        destructive
+        onConfirm={() => deleteFolder(folder.id)}
+      />
+      <PromptDialog
+        open={renaming}
+        onOpenChange={setRenaming}
+        title="Renomear pasta"
+        initialValue={folder.name}
+        onSubmit={(name) => renameFolder(folder.id, name)}
+      />
     </SidebarMenuItem>
   )
 }
 
 function ChatHistory() {
   const { mode } = useWorkspace()
-  const data = workspaces[mode]
+  const sessions = useSessionStore((s) => s.sessions)
+  const folders = useSessionStore((s) => s.folders)
+  const createFolder = useSessionStore((s) => s.createFolder)
+  const [creatingFolder, setCreatingFolder] = useState(false)
+
+  const modeSessions = useMemo(
+    () => sessions.filter((s) => s.mode === mode),
+    [sessions, mode],
+  )
+  const active = modeSessions.filter((s) => !s.archived)
+  const archived = modeSessions.filter((s) => s.archived)
+  const modeFolders = folders.filter((f) => f.mode === mode)
+  const sortedFolders = [...modeFolders.filter((f) => f.pinned), ...modeFolders.filter((f) => !f.pinned)]
+  const rootSessions = active.filter((s) => !s.folderId || !modeFolders.some((f) => f.id === s.folderId))
+  const pinned = rootSessions.filter((s) => s.pinned)
+  const recent = rootSessions.filter((s) => !s.pinned)
 
   return (
     <>
-      <AccordionGroup label="Pastas">
+      <AccordionGroup
+        label="Pastas"
+        action={
+          <button
+            onClick={(e) => {
+              e.stopPropagation()
+              setCreatingFolder(true)
+            }}
+            className="flex size-4 items-center justify-center rounded hover:bg-sidebar-accent"
+            title="Nova pasta"
+          >
+            <FolderPlus className="size-3" />
+          </button>
+        }
+      >
         <SidebarMenu>
-          {data.pinnedFolders.map((folder) => (
-            <FolderItem key={folder.id} folder={folder} pinned />
+          {sortedFolders.map((folder) => (
+            <FolderItem
+              key={folder.id}
+              folder={folder}
+              sessions={active.filter((s) => s.folderId === folder.id)}
+            />
           ))}
-          {data.folders.map((folder) => (
-            <FolderItem key={folder.id} folder={folder} />
-          ))}
+          {sortedFolders.length === 0 && (
+            <div className="px-3 py-1 text-xs text-sidebar-foreground/50">Nenhuma pasta</div>
+          )}
         </SidebarMenu>
       </AccordionGroup>
 
       <AccordionGroup label="Chats">
         <SidebarMenu>
-          {data.pinned.map((chat) => (
-            <ChatItem key={chat.id} chat={chat} pinned />
+          {pinned.map((session) => (
+            <SessionItem key={session.id} session={session} />
           ))}
-          {data.recent.map((chat) => (
-            <ChatItem key={chat.id} chat={chat} />
+          {recent.map((session) => (
+            <SessionItem key={session.id} session={session} />
           ))}
+          {pinned.length === 0 && recent.length === 0 && (
+            <div className="px-3 py-1 text-xs text-sidebar-foreground/50">Nenhuma conversa ainda</div>
+          )}
         </SidebarMenu>
       </AccordionGroup>
+
+      {archived.length > 0 && (
+        <AccordionGroup label="Arquivados" defaultExpanded={false}>
+          <SidebarMenu>
+            {archived.map((session) => (
+              <SessionItem key={session.id} session={session} />
+            ))}
+          </SidebarMenu>
+        </AccordionGroup>
+      )}
+
+      <PromptDialog
+        open={creatingFolder}
+        onOpenChange={setCreatingFolder}
+        title="Nova pasta"
+        placeholder="Nome da pasta"
+        onSubmit={(name) => createFolder(mode, name)}
+      />
     </>
   )
 }
 
-function AccountDropdown() {
+function AccountDropdown({ onOpenSettings }: { onOpenSettings: () => void }) {
   const { theme, setTheme } = useTheme()
   const [themeOpen, setThemeOpen] = useState(false)
   const themeTimeoutRef = useRef<ReturnType<typeof setTimeout>>()
@@ -421,11 +616,11 @@ function AccountDropdown() {
       <DropdownMenuTrigger className="flex w-full items-center gap-2 rounded-md p-2 text-left text-xs hover:bg-sidebar-accent hover:text-sidebar-accent-foreground">
         <Avatar size="sm">
           <AvatarImage src="" />
-          <AvatarFallback>JD</AvatarFallback>
+          <AvatarFallback>OR</AvatarFallback>
         </Avatar>
         <div className="flex flex-1 flex-col truncate">
-          <span className="truncate font-medium">João Desenvolvedor</span>
-          <span className="truncate text-sidebar-foreground/60">joao@email.com</span>
+          <span className="truncate font-medium">Orbit</span>
+          <span className="truncate text-sidebar-foreground/60">Assistente local</span>
         </div>
       </DropdownMenuTrigger>
       <DropdownMenuContent
@@ -440,7 +635,7 @@ function AccountDropdown() {
             <User className="size-4" />
             Perfil
           </DropdownMenuItem>
-          <DropdownMenuItem>
+          <DropdownMenuItem onClick={onOpenSettings}>
             <Settings className="size-4" />
             Configurações
           </DropdownMenuItem>
@@ -484,15 +679,14 @@ function AccountDropdown() {
   )
 }
 
-function AccountSection() {
-  return (
-    <div className="flex items-center px-3 py-2">
-      <AccountDropdown />
-    </div>
-  )
-}
-
 export function AppSidebar() {
+  const initialize = useSessionStore((s) => s.initialize)
+  const [settingsOpen, setSettingsOpen] = useState(false)
+
+  useEffect(() => {
+    void initialize()
+  }, [initialize])
+
   return (
     <Sidebar variant="floating" collapsible="offcanvas">
       <SidebarHeader>
@@ -509,8 +703,17 @@ export function AppSidebar() {
       </SidebarContent>
       <SidebarFooter className="p-0">
         <SidebarSeparator className="mx-3" />
-        <AccountSection />
+        <AccountSection onOpenSettings={() => setSettingsOpen(true)} />
       </SidebarFooter>
+      <SettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} />
     </Sidebar>
+  )
+}
+
+function AccountSection({ onOpenSettings }: { onOpenSettings: () => void }) {
+  return (
+    <div className="flex items-center px-3 py-2">
+      <AccountDropdown onOpenSettings={onOpenSettings} />
+    </div>
   )
 }

@@ -27,7 +27,7 @@ export const InlineCitationText = ({ className, ...props }: InlineCitationTextPr
 export type InlineCitationCardProps = ComponentProps<typeof HoverCard>
 
 export const InlineCitationCard = (props: InlineCitationCardProps) => (
-  <HoverCard closeDelay={0} openDelay={0} {...props} />
+  <HoverCard {...props} />
 )
 
 export type InlineCitationCardTriggerProps = ComponentProps<typeof Badge> & {
@@ -48,7 +48,7 @@ export const InlineCitationCardTrigger = ({
           )}</HoverCardTrigger>
 )
 
-export type InlineCitationCardBodyProps = ComponentProps<"div">
+export type InlineCitationCardBodyProps = ComponentProps<typeof HoverCardContent>
 
 export const InlineCitationCardBody = ({ className, ...props }: InlineCitationCardBodyProps) => (
   <HoverCardContent className={cn("relative w-80 p-0", className)} {...props} />
