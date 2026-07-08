@@ -52,7 +52,7 @@ function ChatMessages() {
 
   return (
     <Conversation className="relative flex-1">
-      <ConversationContent>
+      <ConversationContent className="px-80">
         {messages.map((msg) => (
           <Message key={msg.id} from={msg.role}>
             <MessageContent>
@@ -74,7 +74,6 @@ export function ChatView() {
   const { mode } = useWorkspace()
   const [personaState, setPersonaState] = useState<PersonaState>("idle")
   const [personaStage, setPersonaStage] = useState<"large" | "hiding" | "small" | "hidden">("large")
-  const content = mode === "chat" ? getChatContent(handleSendMessage) : getCodeContent(handleSendMessage)
   const activeChat = useChatStore((s) => s.getActiveChat())
   const createChat = useChatStore((s) => s.createChat)
   const addMessage = useChatStore((s) => s.addMessage)
@@ -132,6 +131,8 @@ export function ChatView() {
     [activeChat, createChat, addMessage, setProcessing, runPersonaSequence],
   )
 
+  const content = mode === "chat" ? getChatContent(handleSendMessage) : getCodeContent(handleSendMessage)
+
   const handleSuggestion = useCallback(
     (suggestion: string) => {
       handleSendMessage(suggestion)
@@ -170,10 +171,10 @@ export function ChatView() {
   }
 
   return (
-    <div className="flex h-full min-w-0 flex-1 flex-col">
+    <div className="relative flex h-full min-w-0 flex-1 flex-col">
       <ChatMessages />
       {personaStage === "small" && (
-        <div className="fixed bottom-24 right-6 z-50">
+        <div className="absolute bottom-1 right-1 z-50">
           <Persona state={personaState} className="!size-16" />
         </div>
       )}
