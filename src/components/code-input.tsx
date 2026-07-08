@@ -1,8 +1,10 @@
 import { useState } from "react"
-import { CheckIcon, ChevronDownIcon, PlusIcon } from "lucide-react"
+import { CheckIcon, ChevronDownIcon, FileText, PlusIcon } from "lucide-react"
 import {
   DropdownMenu,
+  DropdownMenuCheckboxItem,
   DropdownMenuContent,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { Button } from "@/components/ui/button"
@@ -48,6 +50,7 @@ const models = [
 ]
 
 export function CodeInput() {
+  const [plain, setPlain] = useState(false)
   const [modelOpen, setModelOpen] = useState(false)
   const [selectedModel, setSelectedModel] = useState("gpt-4o")
   const { folders, setFolders } = useWorkspace()
@@ -91,11 +94,20 @@ export function CodeInput() {
                   <PlusIcon className="size-4" />
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="start" className="min-w-40">
+                  <DropdownMenuCheckboxItem
+                    checked={plain}
+                    onCheckedChange={(checked) => setPlain(checked)}
+                  >
+                    <FileText className="size-4" />
+                    Modo Plano
+                  </DropdownMenuCheckboxItem>
+                  <DropdownMenuSeparator />
                   <PromptInputActionAddAttachments label="Anexar arquivos" />
                 </DropdownMenuContent>
               </DropdownMenu>
             </PromptInputTools>
             <div className="flex items-center gap-1">
+              {plain && <FileText className="size-3 text-sidebar-foreground/40" />}
               <ModelSelector onOpenChange={setModelOpen} open={modelOpen}>
                 <ModelSelectorTrigger render={<Button className="h-7 gap-1 px-1.5 text-xs" variant="ghost" />}>
                   <ModelSelectorLogo provider={selectedModelData?.chefSlug ?? "openai"} />

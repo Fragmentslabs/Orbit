@@ -486,7 +486,7 @@ function AccountDropdown() {
 
 function AccountSection() {
   return (
-    <div className="flex items-center p-2">
+    <div className="flex items-center px-3 py-2">
       <AccountDropdown />
     </div>
   )
@@ -507,7 +507,7 @@ export function AppSidebar() {
           <ChatHistory />
         </div>
       </SidebarContent>
-      <SidebarFooter>
+      <SidebarFooter className="p-0">
         <SidebarSeparator className="mx-3" />
         <AccountSection />
       </SidebarFooter>
