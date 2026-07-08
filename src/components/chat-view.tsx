@@ -45,7 +45,7 @@ function ChatMessages({ messages, isBusy, mode }: {
   const AssistantMessage = mode === "chat" ? ChatAssistantMessage : CodeAssistantMessage
 
   return (
-    <Conversation className="relative flex-1">
+    <Conversation className="relative flex-1 -mt-10">
       <ConversationContent className="mx-auto w-full max-w-3xl">
         {messages.map((msg) => (
           <Message key={msg.id} from={msg.role}>
@@ -117,12 +117,12 @@ export function ChatView() {
     : { title: "Pronto para programar", subtitle: "Selecione a pasta do projeto e descreva a tarefa", suggestions: codeSuggestions }
 
   return (
-    <div className="relative flex h-full min-w-0 flex-1 flex-col overflow-hidden">
+    <div className="relative flex h-full min-w-0 flex-1 flex-col">
       <div className="relative flex-1">
         <div
           className="absolute left-1/2 z-40 -translate-x-1/2 transition-all duration-700 ease-in-out"
           style={{
-            top: hasChat ? "1rem" : "33%",
+            top: hasChat ? "-1.7rem" : "33%",
             width: hasChat ? "4rem" : "8rem",
             height: hasChat ? "4rem" : "8rem",
           }}
@@ -150,7 +150,8 @@ export function ChatView() {
 
         {hasChat && (
           <div className="absolute inset-0 flex flex-col transition-all duration-500 ease-in-out">
-            <div className="flex min-h-0 flex-1 flex-col pt-20">
+            <div className="flex min-h-0 flex-1 flex-col pt-6">
+              <div className="pointer-events-none sticky top-0 z-10 h-12 bg-linear-to-b from-background  to-transparent" />
               <ChatMessages messages={messages} isBusy={isBusy} mode={mode} />
             </div>
           </div>
