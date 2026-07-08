@@ -9,6 +9,7 @@ import {
 import { ChatView } from "@/src/components/chat-view"
 import { TerminalTab } from "@/src/components/terminal-tab"
 import { BrowserTab } from "@/src/components/browser-tab"
+import { FoldersTab } from "@/src/components/folders-tab"
 import { cn } from "@/lib/utils"
 
 type TabType = "chat" | "terminal" | "folders" | "browser"
@@ -48,8 +49,8 @@ function TabContent({ type }: { type: TabType }) {
       )
     case "folders":
       return (
-        <div className="flex flex-1 items-center justify-center text-sm text-muted-foreground">
-          Pastas
+        <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
+          <FoldersTab />
         </div>
       )
     case "browser":
@@ -114,7 +115,7 @@ export function RightPanel() {
   const activeTab = tabs.find(t => t.id === activeTabId)
 
   return (
-    <div className="flex h-full flex-col rounded-lg shadow-sm ring-1 ring-sidebar-border bg-sidebar overflow-hidden">
+    <div className="flex h-full min-w-0 flex-col rounded-lg shadow-sm ring-1 ring-sidebar-border bg-sidebar overflow-hidden">
       {tabs.length > 0 && (
         <div className="flex items-center gap-0.5 px-2 pt-2 overflow-x-auto">
           {tabs.map((tab) => {
@@ -157,7 +158,7 @@ export function RightPanel() {
         </div>
       )}
 
-      <div className="flex flex-1 flex-col overflow-hidden">
+      <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
         {activeTab ? (
           <TabContent type={activeTab.type} />
         ) : (

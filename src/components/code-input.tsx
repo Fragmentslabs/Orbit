@@ -32,16 +32,9 @@ import {
   ModelSelectorTrigger,
 } from "@/src/components/ai/model-selector"
 import { FolderSelector } from "@/src/components/folder-selector"
+import { useWorkspace } from "@/lib/workspace-context"
 
 const RECENT_FOLDERS_KEY = "orbit-recent-folders"
-
-function loadLastFolders(): string[] {
-  try {
-    const stored = localStorage.getItem(RECENT_FOLDERS_KEY)
-    if (stored) return JSON.parse(stored)
-  } catch {}
-  return []
-}
 
 function saveRecentFolders(folders: string[]) {
   localStorage.setItem(RECENT_FOLDERS_KEY, JSON.stringify(folders))
@@ -57,7 +50,7 @@ const models = [
 export function CodeInput() {
   const [modelOpen, setModelOpen] = useState(false)
   const [selectedModel, setSelectedModel] = useState("gpt-4o")
-  const [folders, setFolders] = useState<string[]>(loadLastFolders)
+  const { folders, setFolders } = useWorkspace()
   const [submitted, setSubmitted] = useState(false)
   const selectedModelData = models.find(m => m.id === selectedModel)
   const chefs = Array.from(new Set(models.map(m => m.chef)))

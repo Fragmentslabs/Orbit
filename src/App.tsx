@@ -23,20 +23,12 @@ function loadMode(): SidebarMode {
   return "hover"
 }
 
-function HoverEdge() {
-  const { setOpen } = useSidebar()
-  const showTimer = useRef<ReturnType<typeof setTimeout>>()
-
-  const handleMouseEnter = useCallback(() => {
-    clearTimeout(showTimer.current)
-    showTimer.current = setTimeout(() => setOpen(true), SIDEBAR_SHOW_DELAY)
-  }, [setOpen])
-
+function HoverEdge({ onShow }: { onShow: () => void }) {
   return (
     <div
       className="absolute left-0 top-0 z-50 h-full"
       style={{ width: HOVER_ZONE_WIDTH }}
-      onMouseEnter={handleMouseEnter}
+      onMouseEnter={onShow}
     />
   )
 }
@@ -44,19 +36,29 @@ function HoverEdge() {
 function Layout() {
   const { open, setOpen } = useSidebar()
   const { mode: workspaceMode } = useWorkspace()
-  const [mode] = useState<SidebarMode>(loadMode)
+  const [mode, setMode] = useState<SidebarMode>(loadMode)
   const [rightPanelOpen, setRightPanelOpen] = useState(false)
   const hideTimer = useRef<ReturnType<typeof setTimeout>>()
+  const showTimer = useRef<ReturnType<typeof setTimeout>>()
 
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY, mode)
   }, [mode])
 
+  // Restore the open state on mount only, based on the persisted mode.
   useEffect(() => {
-    if (mode === "pinned") {
-      setOpen(true)
-    }
-  }, [mode, setOpen])
+    if (mode === "pinned") setOpen(true)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  useEffect(() => {
+    if (workspaceMode !== "code") setRightPanelOpen(false)
+  }, [workspaceMode])
+
+  const handleHoverShow = useCallback(() => {
+    clearTimeout(showTimer.current)
+    showTimer.current = setTimeout(() => setOpen(true), SIDEBAR_SHOW_DELAY)
+  }, [setOpen])
 
   const handleSidebarMouseEnter = useCallback(() => {
     clearTimeout(hideTimer.current)
@@ -69,28 +71,36 @@ function Layout() {
   }, [mode, setOpen])
 
   const handleToggleSidebar = useCallback(() => {
-    setOpen(!open)
+    clearTimeout(hideTimer.current)
+    clearTimeout(showTimer.current)
+    if (open) {
+      setMode("hover")
+      setOpen(false)
+    } else {
+      setMode("pinned")
+      setOpen(true)
+    }
   }, [open, setOpen])
 
   return (
-    <div className="relative flex flex-1">
-      {!open && mode === "hover" && <HoverEdge />}
+    <div className="relative flex min-w-0 flex-1">
+      {!open && mode === "hover" && <HoverEdge onShow={handleHoverShow} />}
       <div
         onMouseEnter={handleSidebarMouseEnter}
         onMouseLeave={handleSidebarMouseLeave}
       >
         <AppSidebar />
       </div>
-      <PanelGroup direction="horizontal" className="flex-1">
-        <Panel defaultSize={rightPanelOpen ? 65 : 100} minSize={30}>
-            <main className="flex h-full flex-col">
+      <PanelGroup direction="horizontal" className="min-w-0 flex-1">
+        <Panel className="min-w-0" defaultSize={rightPanelOpen ? 65 : 100} id="main" minSize={30} order={1}>
+            <main className="flex h-full min-w-0 flex-col">
               <ChatHeader
                 title={workspaceMode === "chat" ? "Nova conversa" : "Novo código"}
                 rightPanelOpen={rightPanelOpen}
                 onToggleSidebar={handleToggleSidebar}
-                onToggleRightPanel={() => setRightPanelOpen(v => !v)}
+                onToggleRightPanel={workspaceMode === "code" ? () => setRightPanelOpen(v => !v) : undefined}
               />
-              <div className="flex flex-1 flex-col overflow-hidden p-4">
+              <div className="flex min-w-0 flex-1 flex-col overflow-hidden p-4">
                 <ChatView />
               </div>
             </main>
@@ -100,8 +110,8 @@ function Layout() {
             <PanelResizeHandle className="group relative flex items-center justify-center w-2">
               <div className="h-8 w-0.5 rounded-full bg-transparent group-hover:bg-border group-data-[resize-handle-active]:bg-border transition-colors" />
             </PanelResizeHandle>
-            <Panel defaultSize={35} minSize={25} maxSize={80}>
-              <div className="flex h-full flex-col pt-2 pr-2 pb-2">
+            <Panel className="min-w-0" defaultSize={35} id="right-panel" maxSize={80} minSize={30} order={2}>
+              <div className="flex h-full min-w-0 flex-col pt-2 pr-2 pb-2">
                 <RightPanel />
               </div>
             </Panel>
@@ -119,7 +129,7 @@ function App() {
     <ThemeProvider defaultTheme="system" storageKey="vite-ui-theme">
       <TooltipProvider>
         <WorkspaceProvider>
-          <SidebarProvider open={open} onOpenChange={setOpen}>
+          <SidebarProvider className="h-svh overflow-hidden" open={open} onOpenChange={setOpen}>
             <Layout />
           </SidebarProvider>
         </WorkspaceProvider>

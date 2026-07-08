@@ -1,8 +1,13 @@
-import { app, BrowserWindow, ipcMain, dialog } from 'electron'
+import { app, BrowserWindow, ipcMain, dialog, shell } from 'electron'
 import { createRequire } from 'node:module'
 import { fileURLToPath } from 'node:url'
+import { execFile } from 'node:child_process'
+import { promisify } from 'node:util'
+import fs from 'node:fs/promises'
 import path from 'node:path'
 import type * as NodePty from 'node-pty'
+
+const execFileAsync = promisify(execFile)
 
 const _require = createRequire(import.meta.url)
 const nodePty = _require('node-pty') as typeof NodePty
@@ -73,9 +78,9 @@ const terminals = new Map<string, NodePty.IPty>()
 
 function createTerminal(id: string, cols = 80, rows = 24) {
   const isWin = process.platform === 'win32'
-  const shell = isWin ? 'powershell.exe' : (process.env.SHELL || '/bin/bash')
+  const shellCmd = isWin ? 'powershell.exe' : (process.env.SHELL || '/bin/bash')
 
-  const ptyProcess = nodePty.spawn(shell, [], {
+  const ptyProcess = nodePty.spawn(shellCmd, [], {
     name: 'xterm-256color',
     cols,
     rows,
@@ -93,6 +98,139 @@ function createTerminal(id: string, cols = 80, rows = 24) {
   })
 
   return ptyProcess
+}
+
+const IGNORED_DIR_NAMES = new Set(['node_modules', '.git'])
+
+interface DirEntryInfo {
+  name: string
+  path: string
+  isDirectory: boolean
+}
+
+async function listDirectory(dirPath: string): Promise<DirEntryInfo[]> {
+  const entries = await fs.readdir(dirPath, { withFileTypes: true })
+  const result: DirEntryInfo[] = entries
+    .filter(e => !(e.name.startsWith('.') || IGNORED_DIR_NAMES.has(e.name)))
+    .map(e => ({
+      name: e.name,
+      path: path.join(dirPath, e.name),
+      isDirectory: e.isDirectory(),
+    }))
+  result.sort((a, b) => {
+    if (a.isDirectory !== b.isDirectory) return a.isDirectory ? -1 : 1
+    return a.name.localeCompare(b.name)
+  })
+  return result
+}
+
+const MAX_FILE_SIZE = 2 * 1024 * 1024 // 2MB
+
+async function readTextFile(filePath: string): Promise<{ content: string } | { error: string }> {
+  try {
+    const stat = await fs.stat(filePath)
+    if (stat.size > MAX_FILE_SIZE) {
+      return { error: `Arquivo muito grande (${(stat.size / 1024 / 1024).toFixed(1)}MB)` }
+    }
+    const buffer = await fs.readFile(filePath)
+    if (buffer.subarray(0, 8000).includes(0)) {
+      return { error: 'Arquivo binário' }
+    }
+    return { content: buffer.toString('utf8') }
+  } catch (err) {
+    return { error: (err as Error).message }
+  }
+}
+
+interface CommitFileEntry {
+  status: 'added' | 'modified' | 'deleted' | 'renamed'
+  path: string
+}
+
+interface CommitEntry {
+  hash: string
+  author: string
+  date: string
+  message: string
+  body: string
+  files: CommitFileEntry[]
+}
+
+const STATUS_MAP: Record<string, CommitFileEntry['status']> = {
+  A: 'added',
+  M: 'modified',
+  D: 'deleted',
+  R: 'renamed',
+}
+
+const FIELD_SEP = '\x1f'
+const RECORD_SEP = '\x1e'
+
+async function getGitLog(repoPath: string): Promise<{ ok: true; commits: CommitEntry[] } | { ok: false; error: string }> {
+  try {
+    const [{ stdout: metaOut }, { stdout: filesOut }] = await Promise.all([
+      execFileAsync(
+        'git',
+        ['log', '-n', '30', `--pretty=format:%H${FIELD_SEP}%an${FIELD_SEP}%aI${FIELD_SEP}%s${FIELD_SEP}%b${RECORD_SEP}`],
+        { cwd: repoPath, maxBuffer: 10 * 1024 * 1024 },
+      ),
+      execFileAsync(
+        'git',
+        ['log', '-n', '30', '--name-status', '--pretty=format:COMMIT|%H'],
+        { cwd: repoPath, maxBuffer: 10 * 1024 * 1024 },
+      ),
+    ])
+
+    const filesByHash = new Map<string, CommitFileEntry[]>()
+    let currentHash: string | null = null
+    for (const rawLine of filesOut.split('\n')) {
+      const line = rawLine.trimEnd()
+      if (!line) continue
+      const commitMatch = line.match(/^COMMIT\|([0-9a-f]+)$/)
+      if (commitMatch) {
+        currentHash = commitMatch[1]
+        filesByHash.set(currentHash, [])
+        continue
+      }
+      const fileMatch = line.match(/^([AMDR])\d*\t(.+)$/)
+      if (fileMatch && currentHash) {
+        const parts = fileMatch[2].split('\t')
+        filesByHash.get(currentHash)!.push({ status: STATUS_MAP[fileMatch[1]] ?? 'modified', path: parts[parts.length - 1] })
+      }
+    }
+
+    const commits: CommitEntry[] = metaOut
+      .split(RECORD_SEP)
+      .map(rec => rec.replace(/^\n+/, '').trim())
+      .filter(Boolean)
+      .map(rec => {
+        const [hash, author, date, subject, body = ''] = rec.split(FIELD_SEP)
+        return { hash, author, date, message: subject, body: body.trim(), files: filesByHash.get(hash) ?? [] }
+      })
+
+    return { ok: true, commits }
+  } catch (err) {
+    return { ok: false, error: (err as Error).message }
+  }
+}
+
+async function getFileAtCommit(
+  repoPath: string,
+  hash: string,
+  relPath: string,
+  deleted: boolean,
+): Promise<{ content: string } | { error: string }> {
+  try {
+    const ref = deleted ? `${hash}^:${relPath}` : `${hash}:${relPath}`
+    const { stdout } = await execFileAsync('git', ['show', ref], {
+      cwd: repoPath,
+      maxBuffer: 10 * 1024 * 1024,
+      encoding: 'utf8',
+    })
+    return { content: stdout }
+  } catch (err) {
+    return { error: (err as Error).message }
+  }
 }
 
 app.whenReady().then(() => {
@@ -124,6 +262,30 @@ app.whenReady().then(() => {
       proc.kill()
       terminals.delete(id)
     }
+  })
+
+  ipcMain.handle('fs:readdir', async (_event, dirPath: string) => {
+    try {
+      return { ok: true, entries: await listDirectory(dirPath) }
+    } catch (err) {
+      return { ok: false, error: (err as Error).message }
+    }
+  })
+
+  ipcMain.handle('fs:readFile', async (_event, filePath: string) => {
+    return readTextFile(filePath)
+  })
+
+  ipcMain.handle('shell:showItemInFolder', (_event, filePath: string) => {
+    shell.showItemInFolder(filePath)
+  })
+
+  ipcMain.handle('git:log', async (_event, repoPath: string) => {
+    return getGitLog(repoPath)
+  })
+
+  ipcMain.handle('git:showFile', async (_event, repoPath: string, hash: string, relPath: string, deleted: boolean) => {
+    return getFileAtCommit(repoPath, hash, relPath, deleted)
   })
 
   createWindow()
