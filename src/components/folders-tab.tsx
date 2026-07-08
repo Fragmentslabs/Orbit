@@ -3,15 +3,23 @@ import {
   CheckIcon,
   ChevronUpIcon,
   CopyIcon,
+  Ellipsis,
   FolderGit2Icon,
   FolderOpenIcon,
   FolderTreeIcon,
   HistoryIcon,
   FolderIcon,
+  PanelRightCloseIcon,
 } from "lucide-react";
 import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import {
   HoverCard,
   HoverCardContent,
@@ -262,6 +270,7 @@ export function FoldersTab() {
   );
   const [copied, setCopied] = useState(false);
   const copyTimeoutRef = useRef<number>();
+  const [fileBrowserOpen, setFileBrowserOpen] = useState(true);
 
   const [commits, setCommits] = useState<CommitEntry[] | null>(null);
   const [commitsError, setCommitsError] = useState<string | null>(null);
@@ -372,6 +381,11 @@ export function FoldersTab() {
     copyTimeoutRef.current = window.setTimeout(() => setCopied(false), 2000);
   }, [fileContent]);
 
+  const handleCopyPath = useCallback(async () => {
+    if (!viewedFile) return;
+    await navigator.clipboard.writeText(viewedFile.path);
+  }, [viewedFile]);
+
   const handleReveal = useCallback(() => {
     if (viewedFile?.kind !== "live") return;
     window.ipcRenderer
@@ -422,11 +436,11 @@ export function FoldersTab() {
         minSize={25}
         order={1}
       >
-        <Artifact className="h-full min-w-0 rounded-none border-0 bg-code-viewer">
-          {viewedFile ? (
-            <>
-              <ArtifactHeader className="min-w-0 bg-code-viewer">
-                <div className="min-w-0">
+        <Artifact className="h-full min-w-0 rounded-none border-0 bg-sidebar mt-2">
+          <ArtifactHeader className="min-w-0 bg-sidebar">
+            <div className="min-w-0">
+              {viewedFile ? (
+                <>
                   {viewedFile.kind === "commit" && (
                     <ArtifactTitle className="flex items-center gap-1.5 truncate">
                       <HistoryIcon className="size-3.5 shrink-0 text-muted-foreground" />
@@ -441,217 +455,246 @@ export function FoldersTab() {
                       </span>
                     ))}
                   </ArtifactDescription>
+                </>
+              ) : (
+                <ArtifactTitle className="flex items-center gap-1.5 truncate">
+                  <FolderTreeIcon className="size-3.5 shrink-0 text-muted-foreground" />
+                  Explorador de Arquivos
+                </ArtifactTitle>
+              )}
+            </div>
+            <ArtifactActions>
+              <ArtifactAction
+                icon={PanelRightCloseIcon}
+                onClick={() => setFileBrowserOpen((v) => !v)}
+              />
+              {viewedFile && (
+                <DropdownMenu>
+                  <DropdownMenuTrigger className="flex size-7 items-center justify-center rounded-md text-sidebar-foreground/50 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground">
+                    <Ellipsis className="size-4" />
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="min-w-40">
+                    <DropdownMenuItem onClick={handleCopyPath}>
+                      <CopyIcon className="size-4" />
+                      Copiar path
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={handleCopy}>
+                      {copied ? <CheckIcon className="size-4" /> : <CopyIcon className="size-4" />}
+                      Copiar conteúdo
+                    </DropdownMenuItem>
+                    {viewedFile.kind === "live" && (
+                      <DropdownMenuItem onClick={handleReveal}>
+                        <FolderOpenIcon className="size-4" />
+                        Mostrar na pasta
+                      </DropdownMenuItem>
+                    )}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              )}
+            </ArtifactActions>
+          </ArtifactHeader>
+          {viewedFile ? (
+            <ArtifactContent className="min-h-0 min-w-0 flex-1 overflow-auto  p-0">
+              {fileLoading ? (
+                <div className="p-4 text-sm text-muted-foreground">
+                  Carregando...
                 </div>
-                <ArtifactActions>
-                  <ArtifactAction
-                    icon={copied ? CheckIcon : CopyIcon}
-                    onClick={handleCopy}
-                    tooltip="Copiar"
-                  />
-                  {viewedFile.kind === "live" && (
-                    <ArtifactAction
-                      icon={FolderOpenIcon}
-                      onClick={handleReveal}
-                      tooltip="Abrir no explorador"
-                    />
-                  )}
-                </ArtifactActions>
-              </ArtifactHeader>
-              <ArtifactContent className="min-h-0 min-w-0 flex-1 overflow-auto p-0">
-                {fileLoading ? (
-                  <div className="p-4 text-sm text-muted-foreground">
-                    Carregando...
-                  </div>
-                ) : fileError ? (
-                  <div className="p-4 text-sm text-muted-foreground">
-                    {fileError}
-                  </div>
-                ) : fileContent != null ? (
-                  <CodeView content={fileContent} highlighted={highlighted} />
-                ) : null}
-              </ArtifactContent>
-            </>
+              ) : fileError ? (
+                <div className="p-4 text-sm text-muted-foreground">
+                  {fileError}
+                </div>
+              ) : fileContent != null ? (
+                <CodeView content={fileContent} highlighted={highlighted} />
+              ) : null}
+            </ArtifactContent>
           ) : (
-            <div className="flex h-full w-full flex-1 items-center justify-center text-center text-sm text-muted-foreground">
-              Selecione um arquivo para visualizar
+            <div className="flex min-h-0 min-w-0 flex-1 flex-col items-center justify-center gap-4 p-6 text-center">
+              <FolderTreeIcon className="size-16 text-muted-foreground/20" />
+              <p className="text-sm text-muted-foreground">
+                Selecione um arquivo no explorador ao lado
+              </p>
             </div>
           )}
         </Artifact>
       </Panel>
-      <PanelResizeHandle className="group relative flex w-2 items-center justify-center">
-        <div className="h-8 w-0.5 rounded-full bg-transparent transition-colors group-hover:bg-border group-data-[resize-handle-active]:bg-border" />
-      </PanelResizeHandle>
-      <Panel
-        className="min-w-0"
-        defaultSize={40}
-        id="file-browser"
-        minSize={15}
-        order={2}
-        style={{ minWidth: FILE_PANEL_MIN_PX }}
-      >
-        <div className="flex h-full min-h-0 min-w-0 flex-col">
-          <Tabs
-            className="flex min-h-0 min-w-0 flex-1 flex-col "
-            onValueChange={(v) => setViewMode(v as "files" | "commits")}
-            value={viewMode}
-          >
-            <div className="shrink-0 pr-2 pl-1 pt-2">
-              <TabsList className="w-full">
-                <TabsTrigger className="flex-1 gap-1.5" value="files">
-                  <FolderTreeIcon className="size-3.5" />
-                  Arquivos
-                </TabsTrigger>
-                <TabsTrigger className="flex-1 gap-1.5" value="commits">
-                  <FolderGit2Icon className="size-3.5" />
-                  Commits
-                </TabsTrigger>
-              </TabsList>
-            </div>
-            <TabsContent
-              className="min-h-0 min-w-0 flex-1 overflow-hidden"
-              value="files"
+      {fileBrowserOpen && (
+        <PanelResizeHandle className="group relative flex w-0.5 items-center justify-center ">
+          <div className="h-8 w-1 rounded-full bg-transparent transition-colors group-hover:bg-border group-data-[resize-handle-active]:bg-border" />
+        </PanelResizeHandle>
+      )}
+      {fileBrowserOpen && (
+        <Panel
+          className="min-w-0 pb-2"
+          defaultSize={40}
+          id="file-browser"
+          minSize={15}
+          order={2}
+          style={{ minWidth: FILE_PANEL_MIN_PX }}
+        >
+          <div className="flex h-full min-h-0 min-w-0 flex-col bg-code-viewer rounded-lg m-1">
+            <Tabs
+              className="flex min-h-0 min-w-0 flex-1 flex-col"
+              onValueChange={(v) => setViewMode(v as "files" | "commits")}
+              value={viewMode}
             >
-              <ScrollArea className="h-full">
-                <FileTree
-                  className="rounded-none border-0 bg-transparent mr-2 "
-                  expanded={expandedPaths}
-                  onExpandedChange={handleExpandedChange}
-                  onSelect={handleSelect}
-                  selectedPath={
-                    viewedFile?.kind === "live" ? viewedFile.path : undefined
-                  }
-                >
-                  {folders.map((folderPath) => (
-                    <FileTreeFolder
-                      key={folderPath}
-                      name={getBaseName(folderPath)}
-                      path={folderPath}
-                    >
-                      {expandedPaths.has(folderPath) &&
-                        renderEntries(
-                          dirCache[folderPath],
-                          dirCache,
-                          expandedPaths,
-                        )}
-                    </FileTreeFolder>
-                  ))}
-                </FileTree>
-              </ScrollArea>
-            </TabsContent>
-            <TabsContent
-              className="min-h-0 min-w-0 flex-1 overflow-hidden"
-              value="commits"
-            >
-              <ScrollArea className="h-full">
-                <div className="flex flex-col gap-2 p-2 text-xs">
-                  {commitsLoading && (
-                    <div className="p-4 text-center text-muted-foreground">
-                      Carregando commits...
-                    </div>
-                  )}
-                  {!commitsLoading && commitsError && (
-                    <div className="p-4 text-center text-muted-foreground">
-                      Não foi possível ler o histórico git desta pasta.
-                    </div>
-                  )}
-                  {!commitsLoading &&
-                    !commitsError &&
-                    commits?.length === 0 && (
+              <div className="shrink-0 px-3 pt-4 ">
+                <TabsList className="w-full">
+                  <TabsTrigger className="flex-1 gap-1.5" value="files">
+                    <FolderTreeIcon className="size-3.5" />
+                    Arquivos
+                  </TabsTrigger>
+                  <TabsTrigger className="flex-1 gap-1.5" value="commits">
+                    <FolderGit2Icon className="size-3.5" />
+                    Commits
+                  </TabsTrigger>
+                </TabsList>
+              </div>
+              <TabsContent
+                className="min-h-0 min-w-0 flex-1 overflow-hidden"
+                value="files"
+              >
+                <ScrollArea className="h-full">
+                  <FileTree
+                    className="rounded-none border-0 bg-transparent mr-2 "
+                    expanded={expandedPaths}
+                    onExpandedChange={handleExpandedChange}
+                    onSelect={handleSelect}
+                    selectedPath={
+                      viewedFile?.kind === "live" ? viewedFile.path : undefined
+                    }
+                  >
+                    {folders.map((folderPath) => (
+                      <FileTreeFolder
+                        key={folderPath}
+                        name={getBaseName(folderPath)}
+                        path={folderPath}
+                      >
+                        {expandedPaths.has(folderPath) &&
+                          renderEntries(
+                            dirCache[folderPath],
+                            dirCache,
+                            expandedPaths,
+                          )}
+                      </FileTreeFolder>
+                    ))}
+                  </FileTree>
+                </ScrollArea>
+              </TabsContent>
+              <TabsContent
+                className="min-h-0 min-w-0 flex-1 overflow-hidden"
+                value="commits"
+              >
+                <ScrollArea className="h-full">
+                  <div className="flex flex-col gap-2 p-2 text-xs">
+                    {commitsLoading && (
                       <div className="p-4 text-center text-muted-foreground">
-                        Nenhum commit encontrado.
+                        Carregando commits...
                       </div>
                     )}
-                  {commits?.map((commit) => (
-                    <Commit key={commit.hash}>
-                      <CommitHeader className="p-2">
-                        <CommitInfo className="min-w-0 gap-1">
-                          <HoverCard>
-                            <HoverCardTrigger
-                              delay={300}
-                              render={
-                                <CommitMessage className="line-clamp-2 cursor-default break-words text-xs leading-snug font-medium">
-                                  {commit.message}
-                                </CommitMessage>
-                              }
-                            />
-                            <HoverCardContent
-                              align="start"
-                              className="w-64 space-y-1.5"
-                              side="right"
-                            >
-                              <p className="font-medium leading-snug break-words">
-                                {commit.message}
-                              </p>
-                              {commit.body && (
-                                <p className="whitespace-pre-line break-words text-muted-foreground text-[11px] leading-relaxed">
-                                  {commit.body}
-                                </p>
-                              )}
-                              <div className="flex items-center gap-1.5 pt-1 text-[10px] text-muted-foreground">
-                                <CommitHash className="shrink-0 text-[10px]">
-                                  {commit.hash.slice(0, 7)}
-                                </CommitHash>
-                                <CommitSeparator className="shrink-0" />
-                                <span className="truncate">
-                                  {commit.author}
-                                </span>
-                                <CommitSeparator className="shrink-0" />
-                                <CommitTimestamp
-                                  className="shrink-0 text-[10px]"
-                                  date={new Date(commit.date)}
-                                />
-                              </div>
-                            </HoverCardContent>
-                          </HoverCard>
-                          <CommitMetadata className="min-w-0 text-[10px]">
-                            <CommitHash className="shrink-0 text-[10px]">
-                              {commit.hash.slice(0, 7)}
-                            </CommitHash>
-                            <CommitSeparator className="shrink-0" />
-                            <span className="truncate">{commit.author}</span>
-                            <CommitSeparator className="shrink-0" />
-                            <CommitTimestamp
-                              className="shrink-0 text-[10px]"
-                              date={new Date(commit.date)}
-                            />
-                          </CommitMetadata>
-                        </CommitInfo>
-                      </CommitHeader>
-                      {commit.files.length > 0 && (
-                        <CommitContent className="p-2">
-                          <CommitFiles>
-                            {commit.files.map((f) => (
-                              <CommitFile
-                                key={f.path}
-                                className="cursor-pointer text-[11px]"
-                                onClick={() =>
-                                  openCommitFile(
-                                    folders[0],
-                                    commit.hash,
-                                    f.path,
-                                    f.status === "deleted",
-                                  )
-                                }
-                              >
-                                <CommitFileInfo>
-                                  <CommitFileStatus status={f.status} />
-                                  <CommitFileIcon />
-                                  <CommitFilePath>{f.path}</CommitFilePath>
-                                </CommitFileInfo>
-                              </CommitFile>
-                            ))}
-                          </CommitFiles>
-                        </CommitContent>
+                    {!commitsLoading && commitsError && (
+                      <div className="p-4 text-center text-muted-foreground">
+                        Não foi possível ler o histórico git desta pasta.
+                      </div>
+                    )}
+                    {!commitsLoading &&
+                      !commitsError &&
+                      commits?.length === 0 && (
+                        <div className="p-4 text-center text-muted-foreground">
+                          Nenhum commit encontrado.
+                        </div>
                       )}
-                    </Commit>
-                  ))}
-                </div>
-              </ScrollArea>
-            </TabsContent>
-          </Tabs>
-          <FolderQuickSwitch folders={folders} onFoldersChange={setFolders} />
-        </div>
-      </Panel>
+                    {commits?.map((commit) => (
+                      <Commit key={commit.hash}>
+                        <CommitHeader className="p-2">
+                          <CommitInfo className="min-w-0 gap-1">
+                            <HoverCard>
+                              <HoverCardTrigger
+                                delay={300}
+                                render={
+                                  <CommitMessage className="line-clamp-2 cursor-default break-words text-xs leading-snug font-medium">
+                                    {commit.message}
+                                  </CommitMessage>
+                                }
+                              />
+                              <HoverCardContent
+                                align="start"
+                                className="w-64 space-y-1.5"
+                                side="right"
+                              >
+                                <p className="font-medium leading-snug break-words">
+                                  {commit.message}
+                                </p>
+                                {commit.body && (
+                                  <p className="whitespace-pre-line break-words text-muted-foreground text-[11px] leading-relaxed">
+                                    {commit.body}
+                                  </p>
+                                )}
+                                <div className="flex items-center gap-1.5 pt-1 text-[10px] text-muted-foreground">
+                                  <CommitHash className="shrink-0 text-[10px]">
+                                    {commit.hash.slice(0, 7)}
+                                  </CommitHash>
+                                  <CommitSeparator className="shrink-0" />
+                                  <span className="truncate">
+                                    {commit.author}
+                                  </span>
+                                  <CommitSeparator className="shrink-0" />
+                                  <CommitTimestamp
+                                    className="shrink-0 text-[10px]"
+                                    date={new Date(commit.date)}
+                                  />
+                                </div>
+                              </HoverCardContent>
+                            </HoverCard>
+                            <CommitMetadata className="min-w-0 text-[10px]">
+                              <CommitHash className="shrink-0 text-[10px]">
+                                {commit.hash.slice(0, 7)}
+                              </CommitHash>
+                              <CommitSeparator className="shrink-0" />
+                              <span className="truncate">{commit.author}</span>
+                              <CommitSeparator className="shrink-0" />
+                              <CommitTimestamp
+                                className="shrink-0 text-[10px]"
+                                date={new Date(commit.date)}
+                              />
+                            </CommitMetadata>
+                          </CommitInfo>
+                        </CommitHeader>
+                        {commit.files.length > 0 && (
+                          <CommitContent className="p-2">
+                            <CommitFiles>
+                              {commit.files.map((f) => (
+                                <CommitFile
+                                  key={f.path}
+                                  className="cursor-pointer text-[11px]"
+                                  onClick={() =>
+                                    openCommitFile(
+                                      folders[0],
+                                      commit.hash,
+                                      f.path,
+                                      f.status === "deleted",
+                                    )
+                                  }
+                                >
+                                  <CommitFileInfo>
+                                    <CommitFileStatus status={f.status} />
+                                    <CommitFileIcon />
+                                    <CommitFilePath>{f.path}</CommitFilePath>
+                                  </CommitFileInfo>
+                                </CommitFile>
+                              ))}
+                            </CommitFiles>
+                          </CommitContent>
+                        )}
+                      </Commit>
+                    ))}
+                  </div>
+                </ScrollArea>
+              </TabsContent>
+            </Tabs>
+            <FolderQuickSwitch folders={folders} onFoldersChange={setFolders} />
+          </div>
+        </Panel>
+      )}
     </PanelGroup>
   );
 }
