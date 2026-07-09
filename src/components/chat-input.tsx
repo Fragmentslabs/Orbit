@@ -1,5 +1,5 @@
 import { useState } from "react"
-import { AlignLeft, Bot, Brain, Globe, Network, PlusIcon, Search } from "lucide-react"
+import { AlignLeft, Bot, Brain, BrainCircuit, Globe, Network, PlusIcon, Search } from "lucide-react"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -22,16 +22,19 @@ import { ModelPicker } from "@/src/components/model-picker"
 import { ModeToggle } from "@/src/components/mode-toggle"
 import { OrchestrationConfigDialog } from "@/src/components/orchestration-config-dialog"
 import { ReasoningPicker } from "@/src/components/reasoning-picker"
+import { useBrainEnabled, useBrainPrefs } from "@/src/stores/brain-prefs"
 import { useProviderStore } from "@/src/stores/provider-store"
 import { useReasoningPrefs } from "@/src/stores/reasoning-prefs"
 import { useSimpleMode } from "@/src/stores/simple-mode"
 import type { SendMessageOptions } from "@/shared/chat"
 import type { ChatStatus } from "@/shared/chat"
 
-export function ChatInput({ onSubmit, status, onStop }: {
+export function ChatInput({ onSubmit, status, onStop, sessionId }: {
   onSubmit: (text: string, options: SendMessageOptions) => void
   status?: ChatStatus
   onStop?: () => void
+  /** Sessão ativa — o toggle Brain é por chat (undefined = chat novo) */
+  sessionId?: string
 }) {
   const [search, setSearch] = useState(false)
   const [browser, setBrowser] = useState(false)
@@ -40,6 +43,8 @@ export function ChatInput({ onSubmit, status, onStop }: {
   const [configOpen, setConfigOpen] = useState(false)
   const simple = useSimpleMode((s) => s.simple)
   const setSimple = useSimpleMode((s) => s.setSimple)
+  const brain = useBrainEnabled(sessionId)
+  const setBrainEnabled = useBrainPrefs((s) => s.setEnabled)
   const selected = useProviderStore((s) => s.selectedModel)
   const model = useProviderStore((s) =>
     s.selectedModel ? s.catalog[s.selectedModel.providerId]?.models[s.selectedModel.modelId] : undefined,
@@ -63,6 +68,7 @@ export function ChatInput({ onSubmit, status, onStop }: {
             research: search,
             browser,
             simple,
+            brain,
             reasoning: { enabled: thinking, variantId },
             subagents,
             orchestrate: orchestra ? {} : undefined,
@@ -128,6 +134,13 @@ export function ChatInput({ onSubmit, status, onStop }: {
               description="Respostas diretas em texto puro: sem formatação, citações ou blocos de ferramentas."
               active={simple}
               onToggle={() => setSimple(!simple)}
+            />
+            <ModeToggle
+              icon={BrainCircuit}
+              label="Memória"
+              description="Memória persistente entre conversas: o Orbit lembra fatos e preferências. Desative apenas neste chat."
+              active={brain}
+              onToggle={() => setBrainEnabled(sessionId, !brain)}
             />
           </PromptInputTools>
           <div className="flex items-center gap-1">

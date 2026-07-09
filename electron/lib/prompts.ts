@@ -1,4 +1,6 @@
 import type { SendMessageInput } from '../../shared/chat'
+import type { Memory } from '../../shared/memory'
+import { loadPromptContext } from './memory/service'
 
 /**
  * Prompts de sistema por modo, adaptados dos agentes do opencode
@@ -66,7 +68,130 @@ const SIMPLE_INSTRUCTION = `MODO SIMPLES ATIVO. A interface exibirá sua respost
 - Não use citações numeradas nem estruturas de relatório.
 - Use as ferramentas disponíveis apenas quando estritamente necessário para responder; na dúvida, responda diretamente sem ferramentas.`
 
-export function buildSystemPrompt(input: SendMessageInput): string {
+const BRAIN_CHAT_PROMPT = `MODO BRAIN ATIVO. Você tem ferramentas de memória (memory_save / memory_search / memory_link / memory_open).
+
+FILOSOFIA: Salvar memória é caro. NÃO SALVAR é o default. Só salve informação genuinamente
+duradoura e útil para conversas futuras. Em dúvida, NÃO salve.
+
+O QUE SALVAR — kind="general" (vale em TODOS os modos, inclusive código):
+- Preferências de trabalho duradouras: "prefiro commits atômicos", "responda em português"
+- Fatos pessoais estáveis: nome, profissão, cidade, família
+- Decisões que cruzam projetos: "não uso GraphQL"
+→ weight 0.7-1.0
+
+O QUE SALVAR — kind="core" (só chat, permanente):
+- Detalhes pessoais que só afetam conversas: "toca violão", "é vegano"
+→ weight 0.7-1.0
+
+O QUE SALVAR — kind="seasonal" (só chat, expira, follow-up futuro):
+- Atividades recentes: "fez bolo", "mudou de emprego" → weight 0.1-0.4
+- Recorrências que valem follow-up: "perguntou 3x sobre sono" → weight 0.4-0.85
+
+O QUE NÃO SALVAR JAMAIS:
+- Cumprimentos, confirmações ("ok", "entendi")
+- A própria resposta que você acabou de dar
+- Preferências momentâneas ("hoje quero respostas curtas")
+- Detalhes operacionais sem peso ("reiniciou o computador")
+- Informação sensível sem consentimento explícito do usuário
+
+ANTES de memory_save:
+1. Já existe algo equivalente? → use memory_link, NÃO crie nova.
+2. Ainda vai importar amanhã? Se não: seasonal com weight baixo — ou não salve.
+3. É preferência de trabalho que vale também no código? → kind="general".
+4. Está salvando só para demonstrar atenção? NÃO salve.
+
+memory_search (USO ATIVO):
+- Use sempre que o usuário referenciar algo passado de forma vaga ("lembra de...",
+  "aquele projeto...", "como ficou...") — busque por PERTINÊNCIA, não por palavra-gatilho.
+- Use quando perceber que um tema já foi discutido e o contexto economizaria repetição.
+- NÃO use em cumprimentos ou perguntas triviais.
+
+memory_link: conecte quando uma memória expande/corrige/relaciona outra
+(ex.: "começou dieta" → link com "médico recomendou low-carb").`
+
+const BRAIN_CODE_PROMPT = `MODO BRAIN ATIVO (CÓDIGO). Você tem memory_save / memory_search / memory_open,
+isoladas por PROJETO (pasta de trabalho ativa).
+
+Memórias de código são sobre COMO TRABALHAR neste código — sobrevivem entre sessões
+para você não reanalisar o projeto todo a cada chat novo.
+
+DOIS TIPOS:
+1. kind="general" (vale em TODOS os projetos e no chat): estilo global de trabalho
+   ("commits atômicos", "não explique código após editar"). weight 0.7+.
+2. kind="project" (só ESTE projeto, category OBRIGATÓRIA):
+   - preference  → como trabalhar aqui ("estilos com Tailwind")
+   - convention  → padrões observados ("usa zustand", "sem semicolons")
+   - structure   → mapa arquitetural ("entrypoint em src/main.tsx")
+   - decision    → decisões técnicas e o porquê ("sem GraphQL porque X")
+   - context     → estado/objetivo atual (EXPIRA, weight <= 0.3) ("migrando Vite 4→5")
+
+DOCUMENTO ANEXADO (campo document):
+- Para contexto EXTENSO (mapa arquitetural completo, schema, fluxo multi-arquivo),
+  passe um markdown em document — o text continua sendo um resumo de 1-2 frases.
+- Memórias simples NÃO precisam de documento — não crie doc para uma frase.
+- Ao encontrar uma memória com doc anexado, use memory_open para ler o conteúdo completo.
+- Se o doc ficou desatualizado, re-salve com o mesmo teor de text (funde) e novo document.
+
+FILOSOFIA: salve MENOS no código que no chat. Prefira decision e convention — não mudam.
+
+O QUE NÃO SALVAR JAMAIS:
+- Correções pontuais ("corrigi typo na linha 42")
+- Erros temporários ("faltava node_modules")
+- Conteúdo de arquivo do projeto (use read; doc de memória é para SÍNTESE sua, não cópia)
+- Nada que não importe na próxima sessão nesta pasta
+
+ANTES de memory_save:
+1. Estilo global? → general. Deste projeto? → project + category correta.
+2. category=context → weight <= 0.3 (vai expirar).
+3. Equivalente já existe? Não crie duplicata — re-salve só se for ATUALIZAR o doc.
+
+memory_search: use ao iniciar tarefa NÃO-trivial para carregar decisões/convenções
+deste projeto — substitui reanalisar o código e economiza tokens. Não use em tarefas triviais.`
+
+function memoryLines(memories: Memory[]): string {
+  return memories
+    .map((m) => {
+      const category = m.kind === 'project' && m.category ? `[${m.category}] ` : ''
+      const doc = m.hasDoc ? ` (doc anexado — memory_open ${m.id})` : ''
+      return `- ${category}${m.text}${doc}`
+    })
+    .join('\n')
+}
+
+/** Bloco de memórias injetado silenciosamente quando o Brain está ativo. */
+async function buildBrainBlock(input: SendMessageInput): Promise<string[]> {
+  const parts: string[] = []
+  try {
+    if (input.mode === 'chat') {
+      parts.push(BRAIN_CHAT_PROMPT)
+      const ctx = await loadPromptContext('chat')
+      if (ctx.core.length) parts.push(`Fatos permanentes sobre o usuário:\n${memoryLines(ctx.core)}`)
+      if (ctx.general.length) {
+        parts.push(`Preferências gerais do usuário (valem em todos os modos):\n${memoryLines(ctx.general)}`)
+      }
+      if (ctx.seasonal.length) {
+        parts.push(
+          `Memórias sazonais recentes (use como contexto tácito, NÃO repita textualmente):\n${memoryLines(ctx.seasonal)}`,
+        )
+      }
+    } else {
+      parts.push(BRAIN_CODE_PROMPT)
+      const ctx = await loadPromptContext('code', input.directory)
+      if (ctx.project.length) {
+        parts.push(`Memórias do projeto "${ctx.projectName ?? 'atual'}":\n${memoryLines(ctx.project)}`)
+      }
+      if (ctx.general.length) {
+        parts.push(`Preferências gerais de trabalho do usuário:\n${memoryLines(ctx.general)}`)
+      }
+    }
+  } catch (err) {
+    // memória é contexto auxiliar — nunca derruba o chat
+    console.error('[memory] falha ao carregar contexto para o prompt:', err)
+  }
+  return parts
+}
+
+export async function buildSystemPrompt(input: SendMessageInput): Promise<string> {
   const parts: string[] = []
 
   if (input.mode === 'code') {
@@ -89,6 +214,10 @@ export function buildSystemPrompt(input: SendMessageInput): string {
         'Você também tem browser_open e browser_links para navegar em páginas com JavaScript como um browser real.',
       )
     }
+  }
+
+  if (input.options.brain && input.orchestrationRole !== 'worker') {
+    parts.push(...(await buildBrainBlock(input)))
   }
 
   if (input.orchestrationRole === 'worker') parts.push(WORKER_PROMPT)

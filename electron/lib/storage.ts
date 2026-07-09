@@ -44,6 +44,40 @@ export async function removeJson(key: string): Promise<void> {
   await fs.rm(fileFor(key), { force: true })
 }
 
+/**
+ * Variante para arquivos de texto cru (`.md`) — mesma validação de chave e
+ * escrita atômica dos JSON. Usada pelos documentos anexados de memória,
+ * que ficam legíveis/editáveis fora do app.
+ */
+function textFileFor(key: string) {
+  const segments = key.split('/')
+  for (const segment of segments) {
+    if (!KEY_SEGMENT.test(segment)) throw new Error(`Chave de storage inválida: ${key}`)
+  }
+  return path.join(storageDir(), ...segments) + '.md'
+}
+
+export async function readText(key: string): Promise<string | null> {
+  try {
+    return await fs.readFile(textFileFor(key), 'utf8')
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === 'ENOENT') return null
+    throw err
+  }
+}
+
+export async function writeText(key: string, content: string): Promise<void> {
+  const file = textFileFor(key)
+  await fs.mkdir(path.dirname(file), { recursive: true })
+  const tmp = `${file}.${Date.now()}.tmp`
+  await fs.writeFile(tmp, content, 'utf8')
+  await fs.rename(tmp, file)
+}
+
+export async function removeText(key: string): Promise<void> {
+  await fs.rm(textFileFor(key), { force: true })
+}
+
 /** Lista as chaves existentes sob um prefixo (ex.: "session/"). */
 export async function listKeys(prefix: string): Promise<string[]> {
   const base = storageDir()

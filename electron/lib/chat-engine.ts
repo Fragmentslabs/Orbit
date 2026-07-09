@@ -142,7 +142,7 @@ export async function runChat(win: BrowserWindow, input: SendMessageInput): Prom
 
     const result = streamText({
       model,
-      system: buildSystemPrompt(input),
+      system: await buildSystemPrompt(input),
       messages: toModelMessages(history.slice(0, -1)),
       tools: supportsTools ? buildToolSet(input, toolContext) : undefined,
       stopWhen: stepCountIs(MAX_STEPS),

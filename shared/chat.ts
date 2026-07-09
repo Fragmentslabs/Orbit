@@ -116,6 +116,8 @@ export interface SendMessageOptions {
   reasoning?: ReasoningConfig
   /** Modo subagents: expõe a tool subagent (workers efêmeros em background) */
   subagents?: boolean
+  /** Modo Brain: memória persistente (ferramentas memory_* + injeção no prompt) */
+  brain?: boolean
   /** Modo Orchestra: divide em plano de tarefas + workers em sessões filhas */
   orchestrate?: { plan?: OrchestrationPlan }
 }
@@ -215,4 +217,7 @@ export const StorageKeys = {
   messages: (sessionId: string) => `messages/${sessionId}`,
   folders: "folders",
   orchestration: (orchestratorSessionId: string) => `orchestration/${orchestratorSessionId}`,
+  memory: (id: string) => `memory/items/${id}`,
+  memoryItemsPrefix: "memory/items/",
+  memoryIndex: "memory/_index",
 } as const

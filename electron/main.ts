@@ -10,10 +10,13 @@ import { listCredentialProviders, removeCredential, setCredential } from './lib/
 import { getCatalog } from './lib/catalog'
 import { abortChat, runChat } from './lib/chat-engine'
 import { abortOrchestration, approvePlan, rejectPlan, runOrchestration } from './lib/orchestrator'
+import { setupMemoryScheduler } from './lib/memory/scheduler'
+import * as memoryService from './lib/memory/service'
 import { listKeys, readJson, removeJson, writeJson } from './lib/storage'
 import { destroyBrowserWindow } from './lib/tools'
 import type { SendMessageInput, SessionInfo } from '../shared/chat'
 import { StorageKeys } from '../shared/chat'
+import type { Memory, MemoryEvent } from '../shared/memory'
 
 const execFileAsync = promisify(execFile)
 
@@ -338,6 +341,24 @@ app.whenReady().then(() => {
     if (win) void rejectPlan(win, sessionId)
   })
   ipcMain.handle('chat:closeBrowser', (_event, sessionId: string) => destroyBrowserWindow(sessionId))
+
+  // Memória Brain — a UI fala com o service; mutações chegam de volta via memory:event
+  ipcMain.handle('memory:list', () => memoryService.list())
+  ipcMain.handle('memory:get', (_event, id: string) => memoryService.getFull(id))
+  ipcMain.handle('memory:update', (_event, id: string, patch: Partial<Pick<Memory, 'text' | 'tags' | 'weight'>>) =>
+    memoryService.update(id, patch),
+  )
+  ipcMain.handle('memory:delete', (_event, id: string) => memoryService.remove(id))
+  ipcMain.handle('memory:promote', (_event, id: string) => memoryService.promote(id))
+  ipcMain.handle('memory:link', (_event, sourceId: string, targetId: string) =>
+    memoryService.link(sourceId, targetId),
+  )
+  memoryService.memoryEvents.on('event', (event: MemoryEvent) => {
+    for (const w of BrowserWindow.getAllWindows()) {
+      if (!w.isDestroyed()) w.webContents.send('memory:event', event)
+    }
+  })
+  setupMemoryScheduler()
 
   createWindow()
 })

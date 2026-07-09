@@ -4,6 +4,7 @@ import {
   Archive,
   ArchiveRestore,
   Bot,
+  BrainCircuit,
   ChevronDown,
   Ellipsis,
   Folder,
@@ -73,16 +74,37 @@ import { SettingsDialog } from "@/src/components/settings-dialog"
 type MenuItem = { icon: React.ReactNode; label: string; onSelect: () => void }
 
 function NewChatButton() {
-  const { mode } = useWorkspace()
+  const { mode, setView } = useWorkspace()
   const selectSession = useSessionStore((s) => s.selectSession)
   return (
     <Button
       variant="outline"
       className="w-full justify-start gap-2 text-sm"
-      onClick={() => void selectSession(mode, null)}
+      onClick={() => {
+        setView("chat")
+        void selectSession(mode, null)
+      }}
     >
       <Plus className="size-4" />
       {mode === "chat" ? "Novo Chat" : "Nova sessão"}
+    </Button>
+  )
+}
+
+function MemoriesButton() {
+  const { view, setView } = useWorkspace()
+  const active = view === "memories"
+  return (
+    <Button
+      variant="ghost"
+      className={cn(
+        "w-full justify-start gap-2 text-sm",
+        active && "bg-sidebar-accent text-sidebar-accent-foreground",
+      )}
+      onClick={() => setView(active ? "chat" : "memories")}
+    >
+      <BrainCircuit className="size-4" />
+      Memórias
     </Button>
   )
 }
@@ -339,7 +361,7 @@ function SessionRow({ session, button: ButtonComponent, buttonClassName, actionB
   /** Nó extra dentro do botão (ex: chevron de expandir do orquestrador) */
   trailing?: React.ReactNode
 }) {
-  const { mode, setMode } = useWorkspace()
+  const { mode, setMode, setView } = useWorkspace()
   const selectSession = useSessionStore((s) => s.selectSession)
   const activeId = useSessionStore((s) => s.activeIds[mode])
   const togglePin = useSessionStore((s) => s.togglePin)
@@ -379,6 +401,7 @@ function SessionRow({ session, button: ButtonComponent, buttonClassName, actionB
           // Workers podem ter modo diferente do workspace atual (ex: worker code
           // de um orquestrador chat) — acompanha o modo da sessão
           if (session.mode !== mode) setMode(session.mode)
+          setView("chat")
           void selectSession(session.mode, session.id)
         }}
         className={cn(
@@ -763,6 +786,9 @@ export function AppSidebar() {
         <div className="flex min-w-0 flex-col overflow-x-hidden">
           <div className="px-3 py-2">
             <NewChatButton />
+          </div>
+          <div className="px-3 pb-2">
+            <MemoriesButton />
           </div>
           <SidebarSeparator className="mx-3" />
           <ChatHistory />

@@ -16,6 +16,7 @@ import { AssistantMessageActions, CopyAction, MessageTimestamp } from "@/src/com
 import { Actions } from "@/src/components/ai/actions"
 import { messageText } from "@/src/lib/message-utils"
 import { useActiveSession, useSessionStatus, useSessionStore } from "@/src/stores/session-store"
+import { brainEnabledFor } from "@/src/stores/brain-prefs"
 import { useProviderStore } from "@/src/stores/provider-store"
 import { useSimpleMode } from "@/src/stores/simple-mode"
 
@@ -203,9 +204,11 @@ export function ChatView({ sessionId }: { sessionId?: string } = {}) {
 
   const handleSuggestion = useCallback(
     (suggestion: string) => {
-      if (viewMode === "chat") handleChatSend(suggestion, { simple: simpleMode })
+      if (viewMode === "chat") {
+        handleChatSend(suggestion, { simple: simpleMode, brain: brainEnabledFor(session?.id) })
+      }
     },
-    [viewMode, handleChatSend, simpleMode],
+    [viewMode, handleChatSend, simpleMode, session?.id],
   )
 
   const emptyState = viewMode === "chat"
@@ -294,13 +297,14 @@ export function ChatView({ sessionId }: { sessionId?: string } = {}) {
         </div>
       )}
       {viewMode === "chat" ? (
-        <ChatInput onSubmit={handleChatSend} status={status} onStop={handleStop} />
+        <ChatInput onSubmit={handleChatSend} status={status} onStop={handleStop} sessionId={session?.id} />
       ) : (
         <CodeInput
           onSubmit={handleCodeSend}
           status={status}
           onStop={handleStop}
           hasMessages={hasChat}
+          sessionId={session?.id}
         />
       )}
     </div>

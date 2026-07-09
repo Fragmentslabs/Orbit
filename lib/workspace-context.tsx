@@ -2,6 +2,8 @@ import { createContext, useContext, useState } from "react"
 
 export type WorkspaceMode = "chat" | "code"
 
+export type WorkspaceView = "chat" | "memories"
+
 const RECENT_FOLDERS_KEY = "orbit-recent-folders"
 
 function loadInitialFolders(): string[] {
@@ -15,6 +17,8 @@ function loadInitialFolders(): string[] {
 type WorkspaceContextType = {
   mode: WorkspaceMode
   setMode: (mode: WorkspaceMode) => void
+  view: WorkspaceView
+  setView: (view: WorkspaceView) => void
   folders: string[]
   setFolders: (folders: string[]) => void
 }
@@ -22,11 +26,18 @@ type WorkspaceContextType = {
 const WorkspaceContext = createContext<WorkspaceContextType | null>(null)
 
 export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
-  const [mode, setMode] = useState<WorkspaceMode>("chat")
+  const [mode, setModeState] = useState<WorkspaceMode>("chat")
+  const [view, setView] = useState<WorkspaceView>("chat")
   const [folders, setFolders] = useState<string[]>(loadInitialFolders)
 
+  // Trocar de modo sempre volta para a view de chat
+  const setMode = (next: WorkspaceMode) => {
+    setModeState(next)
+    setView("chat")
+  }
+
   return (
-    <WorkspaceContext.Provider value={{ mode, setMode, folders, setFolders }}>
+    <WorkspaceContext.Provider value={{ mode, setMode, view, setView, folders, setFolders }}>
       {children}
     </WorkspaceContext.Provider>
   )

@@ -3,6 +3,7 @@ import type {
   ChatEvent,
   SendMessageInput,
 } from "@/shared/chat"
+import type { Memory, MemoryEvent } from "@/shared/memory"
 
 /** Wrapper tipado sobre a bridge IPC exposta pelo preload. */
 
@@ -33,5 +34,21 @@ export const chatApi = {
   onEvent: (listener: (event: ChatEvent) => void) => {
     const wrapper = window.ipcRenderer.on("chat:event", (event) => listener(event as ChatEvent))
     return () => window.ipcRenderer.off("chat:event", wrapper)
+  },
+}
+
+export const memoryApi = {
+  list: () => window.ipcRenderer.invoke("memory:list") as Promise<Memory[]>,
+  get: (id: string) =>
+    window.ipcRenderer.invoke("memory:get", id) as Promise<{ memory: Memory; document: string | null } | null>,
+  update: (id: string, patch: Partial<Pick<Memory, "text" | "tags" | "weight">>) =>
+    window.ipcRenderer.invoke("memory:update", id, patch) as Promise<Memory | null>,
+  delete: (id: string) => window.ipcRenderer.invoke("memory:delete", id) as Promise<void>,
+  promote: (id: string) => window.ipcRenderer.invoke("memory:promote", id) as Promise<Memory | null>,
+  link: (sourceId: string, targetId: string) =>
+    window.ipcRenderer.invoke("memory:link", sourceId, targetId) as Promise<boolean>,
+  onEvent: (listener: (event: MemoryEvent) => void) => {
+    const wrapper = window.ipcRenderer.on("memory:event", (event) => listener(event as MemoryEvent))
+    return () => window.ipcRenderer.off("memory:event", wrapper)
   },
 }

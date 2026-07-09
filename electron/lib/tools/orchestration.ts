@@ -62,7 +62,7 @@ export function createSubagentTool(input: SendMessageInput, ctx: ToolContext | n
 
       const result = await generateText({
         model,
-        system: buildSystemPrompt(workerInput),
+        system: await buildSystemPrompt(workerInput),
         prompt: task,
         tools: Object.keys(tools).length > 0 ? tools : undefined,
         stopWhen: stepCountIs(SUBAGENT_MAX_STEPS),

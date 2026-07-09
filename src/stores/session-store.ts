@@ -12,6 +12,7 @@ import type {
 } from "@/shared/chat"
 import { StorageKeys } from "@/shared/chat"
 import { chatApi, storage } from "@/src/lib/ipc"
+import { useBrainPrefs } from "@/src/stores/brain-prefs"
 import { useProviderStore } from "@/src/stores/provider-store"
 
 /**
@@ -175,6 +176,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     await storage.remove(StorageKeys.session(id))
     await storage.remove(StorageKeys.messages(id))
     void chatApi.closeBrowser(id)
+    useBrainPrefs.getState().setEnabled(id, true) // limpa o override do Brain
     set((state) => {
       const messages = { ...state.messages }
       delete messages[id]
@@ -241,6 +243,8 @@ export const useSessionStore = create<SessionState>((set, get) => ({
         extraDirectories: config.extraDirectories,
       })
       sessionId = session.id
+      // O toggle Brain do chat novo (rascunho) passa a valer para esta sessão
+      useBrainPrefs.getState().adopt(sessionId)
     } else if (mode === "code" && config.directory && session.directory !== config.directory) {
       set((state) =>
         updateSessionIn(state, session!.id, {

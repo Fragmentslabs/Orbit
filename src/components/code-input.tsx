@@ -1,5 +1,5 @@
 import { useState } from "react"
-import { AlignLeft, Bot, Brain, FileText, Network, PlusIcon, Search } from "lucide-react"
+import { AlignLeft, Bot, Brain, BrainCircuit, FileText, Network, PlusIcon, Search } from "lucide-react"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -25,6 +25,7 @@ import { OrchestrationConfigDialog } from "@/src/components/orchestration-config
 import { ReasoningPicker } from "@/src/components/reasoning-picker"
 import { FolderSelector } from "@/src/components/folder-selector"
 import { useWorkspace } from "@/lib/workspace-context"
+import { useBrainEnabled, useBrainPrefs } from "@/src/stores/brain-prefs"
 import { useProviderStore } from "@/src/stores/provider-store"
 import { useReasoningPrefs } from "@/src/stores/reasoning-prefs"
 import { useSimpleMode } from "@/src/stores/simple-mode"
@@ -36,11 +37,13 @@ function saveRecentFolders(folders: string[]) {
   localStorage.setItem(RECENT_FOLDERS_KEY, JSON.stringify(folders))
 }
 
-export function CodeInput({ onSubmit, status, onStop, hasMessages }: {
+export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId }: {
   onSubmit: (text: string, options: SendMessageOptions, directory: string, extraDirectories: string[]) => void
   status?: ChatStatus
   onStop?: () => void
   hasMessages?: boolean
+  /** Sessão ativa — o toggle Brain é por chat (undefined = chat novo) */
+  sessionId?: string
 }) {
   const [plan, setPlan] = useState(false)
   const [search, setSearch] = useState(false)
@@ -49,6 +52,8 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages }: {
   const [configOpen, setConfigOpen] = useState(false)
   const simple = useSimpleMode((s) => s.simple)
   const setSimple = useSimpleMode((s) => s.setSimple)
+  const brain = useBrainEnabled(sessionId)
+  const setBrainEnabled = useBrainPrefs((s) => s.setEnabled)
   const { folders, setFolders } = useWorkspace()
   const selected = useProviderStore((s) => s.selectedModel)
   const model = useProviderStore((s) =>
@@ -73,6 +78,7 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages }: {
         plan,
         research: search,
         simple,
+        brain,
         reasoning: { enabled: thinking, variantId },
         subagents,
         orchestrate: orchestra ? {} : undefined,
@@ -156,6 +162,13 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages }: {
                 description="Respostas diretas em texto puro: sem formatação nem blocos de ferramentas."
                 active={simple}
                 onToggle={() => setSimple(!simple)}
+              />
+              <ModeToggle
+                icon={BrainCircuit}
+                label="Memória"
+                description="Memória do projeto entre sessões: decisões, convenções e estrutura. Desative apenas neste chat."
+                active={brain}
+                onToggle={() => setBrainEnabled(sessionId, !brain)}
               />
             </PromptInputTools>
             <div className="flex items-center gap-1">

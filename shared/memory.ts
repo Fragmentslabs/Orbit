@@ -1,0 +1,132 @@
+/**
+ * Tipos e funções puras do sistema de memória "Brain", compartilhados entre
+ * main e renderer. A busca é léxica (sem embeddings) — as mesmas funções de
+ * tokenização/score rodam no service (main) e na busca local da MemoriesView.
+ */
+
+export type MemoryKind = "core" | "seasonal" | "project" | "general"
+
+export type MemoryScope = "chat" | "code" | "any"
+
+export type ProjectCategory = "preference" | "convention" | "structure" | "context" | "decision"
+
+/**
+ * O scope é derivado do kind — não é armazenado, para não existirem
+ * combinações inválidas (ex.: core com scope code).
+ */
+export function scopeOf(kind: MemoryKind): MemoryScope {
+  if (kind === "project") return "code"
+  if (kind === "general") return "any"
+  return "chat"
+}
+
+export interface Memory {
+  id: string
+  kind: MemoryKind
+  /** Resumo curto — é o que entra no system prompt e na busca */
+  text: string
+  tags: string[]
+  /** Importância 0..1 (o agente decide, nunca o usuário) */
+  weight: number
+  hits: number
+  lastHitAt?: number
+  /** Backlinks bidirecionais (estilo Obsidian) */
+  relatedIds: string[]
+  /** Existe um documento markdown anexado em memory/docs/<id>.md */
+  hasDoc?: boolean
+  sessionId?: string
+  messageId?: string
+  createdAt: number
+  /** null/undefined = nunca expira */
+  expiresAt?: number | null
+  /** id da memória que originou esta via promoção */
+  promotedFrom?: string
+  // Somente quando kind === "project":
+  projectId?: string
+  projectName?: string
+  directory?: string
+  category?: ProjectCategory
+}
+
+export interface MemoryEvent {
+  action: "created" | "updated" | "removed" | "promoted"
+  memory: Memory
+}
+
+// ---------------------------------------------------------------------------
+// Busca léxica (funções puras)
+// ---------------------------------------------------------------------------
+
+const STOPWORDS = new Set([
+  // pt (sem acentos — os textos são normalizados antes)
+  "de", "da", "do", "das", "dos", "a", "o", "as", "os", "um", "uma", "uns", "umas",
+  "e", "ou", "que", "em", "no", "na", "nos", "nas", "para", "por", "com", "sem",
+  "se", "ao", "aos", "e", "sao", "foi", "ser", "tem", "mais", "menos", "muito",
+  "como", "mas", "meu", "minha", "seu", "sua", "ele", "ela", "eu", "voce",
+  "isso", "isto", "esse", "essa", "este", "esta", "ja", "nao", "sim", "quando",
+  "onde", "qual", "quais", "tambem", "sobre", "entre", "ate", "depois", "antes",
+  // en
+  "the", "an", "and", "or", "of", "to", "in", "on", "at", "for", "with",
+  "without", "is", "are", "was", "were", "be", "been", "has", "have", "had",
+  "do", "does", "did", "not", "no", "yes", "it", "this", "that", "these",
+  "those", "you", "he", "she", "we", "they", "my", "your", "his", "her",
+  "their", "our", "as", "by", "from", "but", "if", "so", "than", "then",
+  "when", "where", "which", "what", "who", "how", "about", "into", "over",
+  "after", "before", "between", "more", "most", "less", "very", "can", "will",
+  "just", "also",
+])
+
+/** lowercase, sem acentos, espaços colapsados — base do hash de dedup e da busca */
+export function normalizeText(text: string): string {
+  return text
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .replace(/\s+/g, " ")
+    .trim()
+}
+
+export function tokenize(text: string): string[] {
+  return normalizeText(text)
+    .split(/[^a-z0-9]+/)
+    .filter((t) => t.length >= 2 && !STOPWORDS.has(t))
+}
+
+/** Similaridade de Jaccard entre dois conjuntos de tags (normalizadas) */
+export function jaccard(a: string[], b: string[]): number {
+  const setA = new Set(a.map(normalizeText))
+  const setB = new Set(b.map(normalizeText))
+  if (setA.size === 0 && setB.size === 0) return 0
+  let intersection = 0
+  for (const t of setA) if (setB.has(t)) intersection++
+  const union = setA.size + setB.size - intersection
+  return union === 0 ? 0 : intersection / union
+}
+
+/**
+ * Score léxico: tag exata ×3, token no texto ×1, + 0.5×weight + boost de hits.
+ * Retorna 0 quando nenhum token da consulta bate (memória irrelevante).
+ */
+export function scoreMemory(memory: Pick<Memory, "text" | "tags" | "weight" | "hits">, queryTokens: string[]): number {
+  if (queryTokens.length === 0) return 0
+  const text = normalizeText(memory.text)
+  const tags = new Set(memory.tags.map(normalizeText))
+  let matches = 0
+  for (const token of queryTokens) {
+    if (tags.has(token)) matches += 3
+    else if (text.includes(token)) matches += 1
+  }
+  if (matches === 0) return 0
+  return matches + 0.5 * memory.weight + Math.min(memory.hits / 10, 0.3)
+}
+
+/** Ordena um conjunto de memórias por relevância à consulta e recorta o limite. */
+export function searchMemories<T extends Memory>(pool: T[], query: string, limit = 8): T[] {
+  const tokens = tokenize(query)
+  return pool
+    .map((memory) => ({ memory, score: scoreMemory(memory, tokens) }))
+    .filter((entry) => entry.score > 0)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, limit)
+    .map((entry) => entry.memory)
+}

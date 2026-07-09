@@ -8,6 +8,7 @@ import { WorkspaceProvider, useWorkspace } from "@/lib/workspace-context"
 import { useActiveSession } from "@/src/stores/session-store"
 import { ChatHeader } from "@/src/components/chat-header"
 import { ChatView } from "@/src/components/chat-view"
+import { MemoriesView } from "@/src/components/memories/memories-view"
 import { RightPanel } from "@/src/components/right-panel"
 import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels"
 
@@ -36,7 +37,7 @@ function HoverEdge({ onShow }: { onShow: () => void }) {
 
 function Layout() {
   const { open, setOpen } = useSidebar()
-  const { mode: workspaceMode } = useWorkspace()
+  const { mode: workspaceMode, view } = useWorkspace()
   const activeSession = useActiveSession(workspaceMode)
   const [mode, setMode] = useState<SidebarMode>(loadMode)
   const [rightPanelOpen, setRightPanelOpen] = useState(false)
@@ -97,13 +98,17 @@ function Layout() {
         <Panel className="min-w-0" defaultSize={rightPanelOpen ? 65 : 100} id="main" minSize={30} order={1}>
             <main className="flex h-full min-w-0 flex-col">
               <ChatHeader
-                title={activeSession?.title ?? (workspaceMode === "chat" ? "Nova conversa" : "Novo código")}
+                title={
+                  view === "memories"
+                    ? "Memórias"
+                    : activeSession?.title ?? (workspaceMode === "chat" ? "Nova conversa" : "Novo código")
+                }
                 rightPanelOpen={rightPanelOpen}
                 onToggleSidebar={handleToggleSidebar}
                 onToggleRightPanel={workspaceMode === "code" ? () => setRightPanelOpen(v => !v) : undefined}
               />
               <div className="flex min-w-0 flex-1 flex-col overflow-hidden p-4" style={{ '--panel-bg': 'var(--background)' } as React.CSSProperties}>
-                <ChatView />
+                {view === "memories" ? <MemoriesView /> : <ChatView />}
               </div>
             </main>
         </Panel>

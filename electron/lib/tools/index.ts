@@ -10,6 +10,7 @@ import {
   createReadTool,
   createWriteTool,
 } from './files'
+import { createChatMemoryTools, createCodeMemoryTools } from './memory'
 import { createSubagentTool } from './orchestration'
 import { createBashTool } from './shell'
 import { createWebFetchTool, createWebSearchTool } from './web'
@@ -27,6 +28,8 @@ export function buildToolSet(input: SendMessageInput, ctx: ToolContext | null): 
   const tools: ToolSet = {}
   // Regra de ouro: workers nunca delegam (sem recursão de subagents/orchestra)
   const allowDelegation = input.options.subagents === true && input.orchestrationRole !== 'worker'
+  // Brain: memória persistente — workers também ficam de fora
+  const allowBrain = input.options.brain === true && input.orchestrationRole !== 'worker'
 
   if (input.mode === 'chat') {
     if (input.options.research) {
@@ -37,6 +40,7 @@ export function buildToolSet(input: SendMessageInput, ctx: ToolContext | null): 
       tools.browser_open = createBrowserOpenTool(input.sessionId)
       tools.browser_links = createBrowserLinksTool(input.sessionId)
     }
+    if (allowBrain) Object.assign(tools, createChatMemoryTools(input))
     if (allowDelegation) tools.subagent = createSubagentTool(input, ctx)
     return tools
   }
@@ -57,6 +61,7 @@ export function buildToolSet(input: SendMessageInput, ctx: ToolContext | null): 
       tools.bash = createBashTool(ctx)
     }
   }
+  if (allowBrain && ctx) Object.assign(tools, createCodeMemoryTools(input, ctx))
   if (allowDelegation) tools.subagent = createSubagentTool(input, ctx)
 
   return tools
