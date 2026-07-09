@@ -5,6 +5,7 @@ import type {
   ChatMessage,
   ChatStatus,
   FolderInfo,
+  OrchestrationPlan,
   SendMessageOptions,
   SessionInfo,
   SessionMode,
@@ -23,6 +24,8 @@ export interface SendConfig {
   options: SendMessageOptions
   directory?: string
   extraDirectories?: string[]
+  /** Envia para uma sessão específica (ex: worker no painel direito) em vez da ativa */
+  sessionId?: string
 }
 
 interface SessionState {
@@ -33,8 +36,13 @@ interface SessionState {
   status: Record<string, ChatStatus>
   errors: Record<string, string | undefined>
   activeIds: Record<SessionMode, string | null>
+  /** Planos de orquestração por sessão orquestradora */
+  orchestration: Record<string, OrchestrationPlan>
 
   initialize: () => Promise<void>
+  ensureMessages: (sessionId: string) => Promise<void>
+  approvePlan: (sessionId: string, planId: string, taskIds?: string[]) => void
+  rejectPlan: (sessionId: string) => void
   createSession: (mode: SessionMode, partial?: Partial<SessionInfo>) => Promise<SessionInfo>
   selectSession: (mode: SessionMode, id: string | null) => Promise<void>
   renameSession: (id: string, title: string) => void
@@ -78,6 +86,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
   status: {},
   errors: {},
   activeIds: { chat: null, code: null },
+  orchestration: {},
 
   initialize: async () => {
     if (get().initialized) return
@@ -119,10 +128,33 @@ export const useSessionStore = create<SessionState>((set, get) => ({
 
   selectSession: async (mode, id) => {
     set((state) => ({ activeIds: { ...state.activeIds, [mode]: id } }))
-    if (id && get().messages[id] === undefined) {
-      const messages = (await storage.read<ChatMessage[]>(StorageKeys.messages(id))) ?? []
-      set((state) => ({ messages: { ...state.messages, [id]: messages } }))
+    if (id) {
+      await get().ensureMessages(id)
+      // Carrega o plano de orquestração persistido (se houver)
+      if (get().orchestration[id] === undefined) {
+        const plan = await storage.read<OrchestrationPlan>(StorageKeys.orchestration(id))
+        if (plan) set((state) => ({ orchestration: { ...state.orchestration, [id]: plan } }))
+      }
     }
+  },
+
+  ensureMessages: async (sessionId) => {
+    if (get().messages[sessionId] !== undefined) return
+    const messages = (await storage.read<ChatMessage[]>(StorageKeys.messages(sessionId))) ?? []
+    set((state) => ({ messages: { ...state.messages, [sessionId]: messages } }))
+  },
+
+  approvePlan: (sessionId, planId, taskIds) => {
+    set((state) => {
+      const plan = state.orchestration[sessionId]
+      if (!plan || plan.id !== planId) return state
+      return { orchestration: { ...state.orchestration, [sessionId]: { ...plan, status: "approved" } } }
+    })
+    void chatApi.approvePlan(sessionId, planId, taskIds)
+  },
+
+  rejectPlan: (sessionId) => {
+    void chatApi.rejectPlan(sessionId)
   },
 
   renameSession: (id, title) => set((state) => updateSessionIn(state, id, { title })),
@@ -201,7 +233,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       throw new Error("Nenhum modelo selecionado. Configure um provedor em Configurações.")
     }
 
-    let sessionId = get().activeIds[mode]
+    let sessionId = config.sessionId ?? get().activeIds[mode]
     let session = get().sessions.find((s) => s.id === sessionId)
     if (!session) {
       session = await get().createSession(mode, {
@@ -223,15 +255,23 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       errors: { ...state.errors, [sessionId!]: undefined },
     }))
 
+    // Modo de delegação (subagents/orchestra) leva o modelo worker configurado
+    const needsWorker = config.options.subagents || config.options.orchestrate
+    const workerModel =
+      needsWorker && provider.workerModel
+        ? { ...provider.workerModel, reasoning: provider.workerReasoning ?? undefined }
+        : undefined
+
     await chatApi.send({
       sessionId: sessionId!,
       text,
       providerId: selected.providerId,
       modelId: selected.modelId,
-      mode,
+      mode: session.mode ?? mode,
       options: config.options,
       directory: config.directory ?? session.directory,
       extraDirectories: config.extraDirectories ?? session.extraDirectories,
+      workerModel,
     })
   },
 
@@ -299,6 +339,29 @@ function applyChatEvent(event: ChatEvent, set: Setter, get: () => SessionState) 
       set((state) => {
         const sessions = state.sessions.map((s) => (s.id === sessionId ? { ...s, title: event.title } : s))
         return { sessions }
+      })
+      break
+
+    case "orchestration:plan":
+      set((state) => ({ orchestration: { ...state.orchestration, [sessionId]: event.plan } }))
+      break
+
+    case "session":
+      // Session criada/atualizada pelo main (workers da orquestração)
+      set((state) => {
+        const exists = state.sessions.some((s) => s.id === event.session.id)
+        const sessions = exists
+          ? state.sessions.map((s) => (s.id === event.session.id ? event.session : s))
+          : [event.session, ...state.sessions]
+        // Workers nascem vazios e o main emite "session" antes de iniciar o
+        // runChat deles: inicializar o buffer aqui garante que os primeiros
+        // events de message/part não sejam perdidos nem sobrescritos por um
+        // ensureMessages tardio (que vira no-op com a chave já definida).
+        const messages =
+          state.messages[event.session.id] === undefined
+            ? { ...state.messages, [event.session.id]: [] }
+            : state.messages
+        return { sessions, messages }
       })
       break
   }

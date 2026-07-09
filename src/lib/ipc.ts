@@ -26,6 +26,9 @@ export const authApi = {
 export const chatApi = {
   send: (input: SendMessageInput) => window.ipcRenderer.invoke("chat:send", input),
   abort: (sessionId: string) => window.ipcRenderer.invoke("chat:abort", sessionId),
+  approvePlan: (sessionId: string, planId: string, taskIds?: string[]) =>
+    window.ipcRenderer.invoke("chat:approvePlan", sessionId, planId, taskIds),
+  rejectPlan: (sessionId: string) => window.ipcRenderer.invoke("chat:rejectPlan", sessionId),
   closeBrowser: (sessionId: string) => window.ipcRenderer.invoke("chat:closeBrowser", sessionId),
   onEvent: (listener: (event: ChatEvent) => void) => {
     const wrapper = window.ipcRenderer.on("chat:event", (event) => listener(event as ChatEvent))

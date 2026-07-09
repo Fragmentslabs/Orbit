@@ -1,5 +1,5 @@
 import { create } from "zustand"
-import type { Catalog, CatalogModel } from "@/shared/chat"
+import type { Catalog, CatalogModel, ReasoningConfig } from "@/shared/chat"
 import { authApi, catalogApi } from "@/src/lib/ipc"
 
 /**
@@ -8,19 +8,25 @@ import { authApi, catalogApi } from "@/src/lib/ipc"
  */
 
 const SELECTED_MODEL_KEY = "orbit-selected-model"
+const WORKER_MODEL_KEY = "orbit-worker-model"
+const WORKER_REASONING_KEY = "orbit-worker-reasoning"
 
 export interface SelectedModel {
   providerId: string
   modelId: string
 }
 
-function loadSelectedModel(): SelectedModel | null {
+function loadJson<T>(key: string): T | null {
   try {
-    const raw = localStorage.getItem(SELECTED_MODEL_KEY)
-    return raw ? (JSON.parse(raw) as SelectedModel) : null
+    const raw = localStorage.getItem(key)
+    return raw ? (JSON.parse(raw) as T) : null
   } catch {
     return null
   }
+}
+
+function loadSelectedModel(): SelectedModel | null {
+  return loadJson<SelectedModel>(SELECTED_MODEL_KEY)
 }
 
 interface ProviderState {
@@ -28,12 +34,17 @@ interface ProviderState {
   /** IDs de provedores com chave configurada */
   connectedProviders: string[]
   selectedModel: SelectedModel | null
+  /** Modelo dos workers (subagents/orchestra) */
+  workerModel: SelectedModel | null
+  workerReasoning: ReasoningConfig | null
   loading: boolean
 
   initialize: () => Promise<void>
   setApiKey: (providerId: string, key: string) => Promise<void>
   removeApiKey: (providerId: string) => Promise<void>
   selectModel: (providerId: string, modelId: string) => void
+  setWorkerModel: (model: SelectedModel | null) => void
+  setWorkerReasoning: (reasoning: ReasoningConfig | null) => void
   getModel: (providerId: string, modelId: string) => CatalogModel | undefined
 }
 
@@ -41,11 +52,26 @@ export const useProviderStore = create<ProviderState>((set, get) => ({
   catalog: {},
   connectedProviders: [],
   selectedModel: loadSelectedModel(),
+  workerModel: loadJson<SelectedModel>(WORKER_MODEL_KEY),
+  workerReasoning: loadJson<ReasoningConfig>(WORKER_REASONING_KEY),
   loading: true,
 
   initialize: async () => {
     const [catalog, connectedProviders] = await Promise.all([catalogApi.get(), authApi.list()])
     set({ catalog, connectedProviders, loading: false })
+
+    // Valida o modelo worker persistido: provider ainda conectado, modelo no
+    // catálogo e reasoning suportado — senão limpa em vez de falhar no envio
+    const { workerModel, workerReasoning } = get()
+    if (workerModel) {
+      const workerCatalogModel = catalog[workerModel.providerId]?.models[workerModel.modelId]
+      if (!workerCatalogModel || !connectedProviders.includes(workerModel.providerId)) {
+        get().setWorkerModel(null)
+        get().setWorkerReasoning(null)
+      } else if (workerReasoning && !workerCatalogModel.reasoning) {
+        get().setWorkerReasoning(null)
+      }
+    }
 
     // Garante uma seleção válida: mantém a atual se possível, senão escolhe
     // o primeiro modelo de um provedor conectado.
@@ -80,6 +106,18 @@ export const useProviderStore = create<ProviderState>((set, get) => ({
     const selected = { providerId, modelId }
     localStorage.setItem(SELECTED_MODEL_KEY, JSON.stringify(selected))
     set({ selectedModel: selected })
+  },
+
+  setWorkerModel: (model) => {
+    if (model) localStorage.setItem(WORKER_MODEL_KEY, JSON.stringify(model))
+    else localStorage.removeItem(WORKER_MODEL_KEY)
+    set({ workerModel: model })
+  },
+
+  setWorkerReasoning: (reasoning) => {
+    if (reasoning) localStorage.setItem(WORKER_REASONING_KEY, JSON.stringify(reasoning))
+    else localStorage.removeItem(WORKER_REASONING_KEY)
+    set({ workerReasoning: reasoning })
   },
 
   getModel: (providerId, modelId) => get().catalog[providerId]?.models[modelId],

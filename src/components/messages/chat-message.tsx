@@ -11,6 +11,7 @@ import {
   ChainOfThoughtStep,
 } from "@/src/components/ai/chain-of-thought"
 import { Shimmer } from "@/src/components/ai/shimmer"
+import { SubAgentCard } from "@/src/components/ai/sub-agent-card"
 import { Source, Sources, SourcesContent, SourcesTrigger } from "@/src/components/ai/sources"
 import {
   AssistantMarkdown,
@@ -143,6 +144,8 @@ export function ChatAssistantMessage({ message, isLast, isBusy }: {
           </AssistantMarkdown>
         ) : segment.part.type === "reasoning" ? (
           <ReasoningPartView key={segment.id} part={segment.part} />
+        ) : segment.part.tool === "subagent" ? (
+          <SubAgentCard key={segment.id} part={segment.part} />
         ) : (
           <GenericToolView key={segment.id} part={segment.part} label={segment.part.tool} />
         ),

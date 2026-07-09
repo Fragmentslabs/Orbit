@@ -1,0 +1,123 @@
+import { generateText, stepCountIs, tool } from 'ai'
+import { z } from 'zod'
+import type { OrchestrationTask, SendMessageInput, SessionMode } from '../../../shared/chat'
+import { buildSystemPrompt } from '../prompts'
+import { resolveModel } from '../providers'
+import { buildProviderOptions } from '../reasoning'
+import type { ToolContext } from './context'
+import { buildToolSet } from './index'
+
+/**
+ * Ferramentas de delegação:
+ * - subagent: worker efêmero em background (modo Subagents) — roda uma geração
+ *   isolada com o modelo worker e devolve o texto como tool-result.
+ * - create_task: registra tarefas do plano (usada apenas pelo OrchestratorEngine
+ *   na fase de planejamento do modo Orchestra).
+ */
+
+const SUBAGENT_MAX_STEPS = 25
+
+function newTaskId() {
+  return `task_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`
+}
+
+export function createSubagentTool(input: SendMessageInput, ctx: ToolContext | null) {
+  return tool({
+    description:
+      'Delega uma subtarefa a um worker que roda em segundo plano e retorna o resultado como texto. Use para trabalho paralelo ou isolado: pesquisas, análises de arquivos, tarefas focadas. O worker não vê esta conversa — inclua todo o contexto necessário no task.',
+    inputSchema: z.object({
+      task: z.string().describe('Descrição autocontida da tarefa, com todo o contexto necessário'),
+      research: z.boolean().optional().describe('Libera busca web (websearch/webfetch)'),
+      browser: z.boolean().optional().describe('Libera navegação com JavaScript (browser)'),
+      code: z.boolean().optional().describe('Modo código: acesso aos arquivos da pasta de trabalho'),
+    }),
+    execute: async ({ task, research, browser, code }) => {
+      const worker = input.workerModel ?? { providerId: input.providerId, modelId: input.modelId }
+      const codeUnavailable = code === true && !input.directory
+      const workerInput: SendMessageInput = {
+        // ID sintético: isola o browser nativo do worker do da sessão principal
+        sessionId: `${input.sessionId}-sub-${newTaskId()}`,
+        text: task,
+        providerId: worker.providerId,
+        modelId: worker.modelId,
+        mode: code && input.directory ? 'code' : 'chat',
+        options: {
+          research,
+          browser,
+          simple: true,
+          reasoning: worker.reasoning,
+        },
+        directory: input.directory,
+        extraDirectories: input.extraDirectories,
+        orchestrationRole: 'worker',
+      }
+
+      const workerCtx: ToolContext | null =
+        workerInput.mode === 'code' && ctx
+          ? { ...ctx, sessionId: workerInput.sessionId }
+          : null
+
+      const model = await resolveModel(worker.providerId, worker.modelId)
+      const tools = buildToolSet(workerInput, workerCtx)
+
+      const result = await generateText({
+        model,
+        system: buildSystemPrompt(workerInput),
+        prompt: task,
+        tools: Object.keys(tools).length > 0 ? tools : undefined,
+        stopWhen: stepCountIs(SUBAGENT_MAX_STEPS),
+        abortSignal: ctx?.abort,
+        providerOptions: await buildProviderOptions(workerInput),
+      })
+      const notice = codeUnavailable
+        ? '[Aviso: não há pasta de trabalho nesta conversa — o subagente rodou em modo chat, sem acesso a arquivos.]\n\n'
+        : ''
+      return notice + (result.text || '(o subagente não retornou texto)')
+    },
+  })
+}
+
+export interface CreateTaskArgs {
+  title: string
+  prompt: string
+  mode?: SessionMode
+  research?: boolean
+  browser?: boolean
+  readonly?: boolean
+}
+
+/** Tool de planejamento do orquestrador: cada chamada vira uma OrchestrationTask. */
+export function createTaskTool(
+  register: (task: OrchestrationTask) => boolean,
+  opts: { allowCode: boolean },
+) {
+  return tool({
+    description:
+      'Registra uma subtarefa no plano de orquestração. Cada tarefa será executada por um worker independente, em paralelo, sem acesso a esta conversa.',
+    inputSchema: z.object({
+      title: z.string().describe('Título curto da tarefa (aparece na UI)'),
+      prompt: z.string().describe('Prompt autocontido para o worker, com todo o contexto necessário'),
+      mode: z.enum(['chat', 'code']).optional().describe('"code" para mexer em arquivos/comandos; padrão "chat"'),
+      research: z.boolean().optional().describe('Libera busca web para o worker'),
+      browser: z.boolean().optional().describe('Libera browser com JavaScript para o worker'),
+      readonly: z.boolean().optional().describe('Worker de código só-leitura (não edita nem executa)'),
+    }),
+    execute: async ({ title, prompt, mode, research, browser, readonly: readOnly }: CreateTaskArgs) => {
+      // Sem pasta de trabalho não existe worker de código — degrada para chat
+      // avisando o modelo, em vez de falhar silenciosamente na execução
+      const codeUnavailable = mode === 'code' && !opts.allowCode
+      const accepted = register({
+        id: newTaskId(),
+        title,
+        prompt,
+        mode: codeUnavailable ? 'chat' : (mode ?? 'chat'),
+        options: { research, browser, plan: readOnly, simple: true },
+        status: 'idle',
+      })
+      if (!accepted) return 'Limite de tarefas do plano atingido — não registre mais tarefas.'
+      return codeUnavailable
+        ? `Tarefa "${title}" registrada em modo chat: não há pasta de trabalho nesta conversa, então tarefas "code" não estão disponíveis.`
+        : `Tarefa "${title}" registrada no plano.`
+    },
+  })
+}

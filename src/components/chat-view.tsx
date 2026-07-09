@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react"
+import { ChevronRight } from "lucide-react"
 import { useWorkspace } from "@/lib/workspace-context"
 import type { ChatMessage, SendMessageOptions } from "@/shared/chat"
 import { ChatInput } from "@/src/components/chat-input"
@@ -9,11 +10,14 @@ import { Message, MessageContent } from "@/src/components/ai/message"
 import { Suggestion } from "@/src/components/ai/suggestion"
 import { ChatAssistantMessage } from "@/src/components/messages/chat-message"
 import { CodeAssistantMessage } from "@/src/components/messages/code-message"
+import { SimpleAssistantMessage } from "@/src/components/messages/simple-message"
+import { OrchestrationPlanCard } from "@/src/components/orchestration-plan-card"
 import { AssistantMessageActions, CopyAction, MessageTimestamp } from "@/src/components/messages/shared"
 import { Actions } from "@/src/components/ai/actions"
 import { messageText } from "@/src/lib/message-utils"
 import { useActiveSession, useSessionStatus, useSessionStore } from "@/src/stores/session-store"
 import { useProviderStore } from "@/src/stores/provider-store"
+import { useSimpleMode } from "@/src/stores/simple-mode"
 
 const chatSuggestions = [
   "O que você pode fazer?",
@@ -63,11 +67,15 @@ function ChatMessages({ messages, isBusy, mode }: {
               ) : (
                 <>
                   <MessageContent>
-                    <AssistantMessage
-                      message={msg}
-                      isLast={isLast}
-                      isBusy={isBusy}
-                    />
+                    {msg.simple ? (
+                      <SimpleAssistantMessage message={msg} isLast={isLast} isBusy={isBusy} />
+                    ) : (
+                      <AssistantMessage
+                        message={msg}
+                        isLast={isLast}
+                        isBusy={isBusy}
+                      />
+                    )}
                   </MessageContent>
                   {finished && !waiting && <AssistantMessageActions message={msg} />}
                 </>
@@ -81,20 +89,36 @@ function ChatMessages({ messages, isBusy, mode }: {
   )
 }
 
-export function ChatView() {
-  const { mode } = useWorkspace()
+export function ChatView({ sessionId }: { sessionId?: string } = {}) {
+  const { mode, setMode } = useWorkspace()
   const activeSession = useActiveSession(mode)
-  const messages = useSessionStore((s) =>
-    activeSession ? s.messages[activeSession.id] ?? NO_MESSAGES : NO_MESSAGES,
+  const explicitSession = useSessionStore((s) =>
+    sessionId ? s.sessions.find((x) => x.id === sessionId) : undefined,
   )
-  const status = useSessionStatus(activeSession?.id)
+  const session = sessionId ? explicitSession : activeSession
+  const viewMode = session?.mode ?? mode
+  const messages = useSessionStore((s) =>
+    session ? s.messages[session.id] ?? NO_MESSAGES : NO_MESSAGES,
+  )
+  const status = useSessionStatus(session?.id)
+  const plan = useSessionStore((s) => (session ? s.orchestration[session.id] : undefined))
+  const parentSession = useSessionStore((s) =>
+    session?.parentId ? s.sessions.find((x) => x.id === session.parentId) : undefined,
+  )
   const sendMessage = useSessionStore((s) => s.sendMessage)
   const stopStreaming = useSessionStore((s) => s.stopStreaming)
+  const selectSession = useSessionStore((s) => s.selectSession)
   const initializeProviders = useProviderStore((s) => s.initialize)
+  const simpleMode = useSimpleMode((s) => s.simple)
 
   useEffect(() => {
     void initializeProviders()
   }, [initializeProviders])
+
+  // View com sessão explícita (worker no painel direito): carrega o histórico
+  useEffect(() => {
+    if (sessionId) void useSessionStore.getState().ensureMessages(sessionId)
+  }, [sessionId])
 
   const isBusy = status === "submitted" || status === "streaming"
   const hasChat = messages.length > 0
@@ -161,39 +185,59 @@ export function ChatView() {
 
   const handleChatSend = useCallback(
     (text: string, options: SendMessageOptions) => {
-      void sendMessage("chat", text, { options })
+      void sendMessage("chat", text, { options, sessionId })
     },
-    [sendMessage],
+    [sendMessage, sessionId],
   )
 
   const handleCodeSend = useCallback(
     (text: string, options: SendMessageOptions, directory: string, extraDirectories: string[]) => {
-      void sendMessage("code", text, { options, directory, extraDirectories })
+      void sendMessage("code", text, { options, directory, extraDirectories, sessionId })
     },
-    [sendMessage],
+    [sendMessage, sessionId],
   )
 
   const handleStop = useCallback(() => {
-    if (activeSession) stopStreaming(activeSession.id)
-  }, [activeSession, stopStreaming])
+    if (session) stopStreaming(session.id)
+  }, [session, stopStreaming])
 
   const handleSuggestion = useCallback(
     (suggestion: string) => {
-      if (mode === "chat") handleChatSend(suggestion, {})
+      if (viewMode === "chat") handleChatSend(suggestion, { simple: simpleMode })
     },
-    [mode, handleChatSend],
+    [viewMode, handleChatSend, simpleMode],
   )
 
-  const emptyState = mode === "chat"
+  const emptyState = viewMode === "chat"
     ? { title: "Pronto para conversar", subtitle: "Selecione um chat ou inicie uma nova conversa", suggestions: chatSuggestions }
     : { title: "Pronto para programar", subtitle: "Selecione a pasta do projeto e descreva a tarefa", suggestions: codeSuggestions }
 
   return (
     <div className="relative flex h-full min-w-0 flex-1 flex-col">
+      {/* Breadcrumb de chat orquestrado: pai > worker */}
+      {session?.parentId && (
+        <div className="z-30 flex items-center gap-1 px-4 pt-2 text-xs text-muted-foreground">
+          <button
+            type="button"
+            className="max-w-48 truncate transition-colors hover:text-foreground"
+            onClick={() => {
+              // Acompanha o modo do pai para a sidebar destacar a sessão certa
+              const targetMode = parentSession?.mode ?? viewMode
+              if (targetMode !== mode) setMode(targetMode)
+              void selectSession(targetMode, session.parentId!)
+            }}
+          >
+            {parentSession?.title ?? "Chat principal"}
+          </button>
+          <ChevronRight className="size-3 shrink-0" />
+          <span className="max-w-64 truncate text-foreground">{session.title}</span>
+        </div>
+      )}
       <div className="relative flex-1">
+        {/* Persona oculta em modo simples — o shimmer da mensagem já indica atividade */}
         <div
           className={`absolute left-1/2 z-40 -translate-x-1/2 transition-all duration-500 ease-in-out ${
-            topVisible ? "opacity-100" : "opacity-0"
+            topVisible && !simpleMode ? "opacity-100" : "opacity-0"
           }`}
           style={{
             top: "-1.7rem",
@@ -239,11 +283,17 @@ export function ChatView() {
         >
           <div className="flex min-h-0 flex-1 flex-col pt-6">
             <div className="pointer-events-none sticky top-0 z-10 h-12 bg-linear-to-b to-transparent" style={{ backgroundImage: 'linear-gradient(to bottom, var(--panel-bg, var(--background)), transparent)' }} />
-            <ChatMessages messages={messages} isBusy={isBusy} mode={mode} />
+            <ChatMessages messages={messages} isBusy={isBusy} mode={viewMode} />
           </div>
         </div>
       </div>
-      {mode === "chat" ? (
+      {/* Plano de orquestração proposto/em execução, inline acima do input */}
+      {session && plan && (plan.status === "proposed" || plan.status === "approved" || plan.status === "running") && (
+        <div className="mx-auto w-full max-w-2xl pb-2">
+          <OrchestrationPlanCard sessionId={session.id} plan={plan} />
+        </div>
+      )}
+      {viewMode === "chat" ? (
         <ChatInput onSubmit={handleChatSend} status={status} onStop={handleStop} />
       ) : (
         <CodeInput

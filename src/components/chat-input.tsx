@@ -1,8 +1,9 @@
 import { useState } from "react"
-import { Brain, Globe, PlusIcon, Search } from "lucide-react"
+import { AlignLeft, Bot, Brain, Globe, Network, PlusIcon, Search } from "lucide-react"
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import {
@@ -16,11 +17,14 @@ import {
   PromptInputTextarea,
   PromptInputTools,
 } from "@/src/components/ai/prompt-input"
+import { DelegationMenuItems } from "@/src/components/delegation-menu"
 import { ModelPicker } from "@/src/components/model-picker"
 import { ModeToggle } from "@/src/components/mode-toggle"
+import { OrchestrationConfigDialog } from "@/src/components/orchestration-config-dialog"
 import { ReasoningPicker } from "@/src/components/reasoning-picker"
 import { useProviderStore } from "@/src/stores/provider-store"
 import { useReasoningPrefs } from "@/src/stores/reasoning-prefs"
+import { useSimpleMode } from "@/src/stores/simple-mode"
 import type { SendMessageOptions } from "@/shared/chat"
 import type { ChatStatus } from "@/shared/chat"
 
@@ -31,6 +35,11 @@ export function ChatInput({ onSubmit, status, onStop }: {
 }) {
   const [search, setSearch] = useState(false)
   const [browser, setBrowser] = useState(false)
+  const [subagents, setSubagents] = useState(false)
+  const [orchestra, setOrchestra] = useState(false)
+  const [configOpen, setConfigOpen] = useState(false)
+  const simple = useSimpleMode((s) => s.simple)
+  const setSimple = useSimpleMode((s) => s.setSimple)
   const selected = useProviderStore((s) => s.selectedModel)
   const model = useProviderStore((s) =>
     s.selectedModel ? s.catalog[s.selectedModel.providerId]?.models[s.selectedModel.modelId] : undefined,
@@ -53,7 +62,10 @@ export function ChatInput({ onSubmit, status, onStop }: {
           onSubmit(text, {
             research: search,
             browser,
+            simple,
             reasoning: { enabled: thinking, variantId },
+            subagents,
+            orchestrate: orchestra ? {} : undefined,
           })
         }}
         className="rounded-xl border-2 border-sidebar-border overflow-hidden [&>div]:!border-none [&>div]:!rounded-none [&>div]:!bg-transparent"
@@ -70,7 +82,15 @@ export function ChatInput({ onSubmit, status, onStop }: {
               <DropdownMenuTrigger className="flex size-7 items-center justify-center rounded-md hover:bg-muted hover:text-foreground aria-expanded:bg-muted aria-expanded:text-foreground">
                 <PlusIcon className="size-4" />
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="start" className="min-w-40">
+              <DropdownMenuContent align="start" className="min-w-48">
+                <DelegationMenuItems
+                  subagents={subagents}
+                  orchestra={orchestra}
+                  onSubagentsChange={setSubagents}
+                  onOrchestraChange={setOrchestra}
+                  onOpenConfig={() => setConfigOpen(true)}
+                />
+                <DropdownMenuSeparator />
                 <PromptInputActionAddAttachments label="Anexar arquivos" />
               </DropdownMenuContent>
             </DropdownMenu>
@@ -102,8 +122,17 @@ export function ChatInput({ onSubmit, status, onStop }: {
                 disabled={model.reasoningAlwaysOn}
               />
             )}
+            <ModeToggle
+              icon={AlignLeft}
+              label="Simples"
+              description="Respostas diretas em texto puro: sem formatação, citações ou blocos de ferramentas."
+              active={simple}
+              onToggle={() => setSimple(!simple)}
+            />
           </PromptInputTools>
           <div className="flex items-center gap-1">
+            {subagents && <Bot className="size-3 text-sidebar-foreground/40" />}
+            {orchestra && <Network className="size-3 text-sidebar-foreground/40" />}
             {thinking && model?.variants && model.variants.length > 0 && (
               <ReasoningPicker
                 variants={model.variants}
@@ -119,6 +148,7 @@ export function ChatInput({ onSubmit, status, onStop }: {
           </div>
         </PromptInputFooter>
       </PromptInput>
+      <OrchestrationConfigDialog open={configOpen} onOpenChange={setConfigOpen} />
     </div>
   )
 }

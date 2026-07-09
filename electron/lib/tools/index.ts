@@ -10,6 +10,7 @@ import {
   createReadTool,
   createWriteTool,
 } from './files'
+import { createSubagentTool } from './orchestration'
 import { createBashTool } from './shell'
 import { createWebFetchTool, createWebSearchTool } from './web'
 
@@ -24,6 +25,8 @@ export type { ToolContext } from './context'
  */
 export function buildToolSet(input: SendMessageInput, ctx: ToolContext | null): ToolSet {
   const tools: ToolSet = {}
+  // Regra de ouro: workers nunca delegam (sem recursão de subagents/orchestra)
+  const allowDelegation = input.options.subagents === true && input.orchestrationRole !== 'worker'
 
   if (input.mode === 'chat') {
     if (input.options.research) {
@@ -34,6 +37,7 @@ export function buildToolSet(input: SendMessageInput, ctx: ToolContext | null): 
       tools.browser_open = createBrowserOpenTool(input.sessionId)
       tools.browser_links = createBrowserLinksTool(input.sessionId)
     }
+    if (allowDelegation) tools.subagent = createSubagentTool(input, ctx)
     return tools
   }
 
@@ -53,6 +57,7 @@ export function buildToolSet(input: SendMessageInput, ctx: ToolContext | null): 
       tools.bash = createBashTool(ctx)
     }
   }
+  if (allowDelegation) tools.subagent = createSubagentTool(input, ctx)
 
   return tools
 }

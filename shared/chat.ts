@@ -8,6 +8,14 @@ export type SessionMode = "chat" | "code"
 
 export type ChatStatus = "idle" | "submitted" | "streaming" | "error"
 
+export interface SessionOrchestration {
+  role: "orchestrator" | "worker"
+  /** Só em workers: sessão do orquestrador que criou este worker */
+  parentSessionId?: string
+  /** Descrição da tarefa delegada (workers) */
+  task?: string
+}
+
 export interface SessionInfo {
   id: string
   title: string
@@ -19,6 +27,10 @@ export interface SessionInfo {
   directory?: string
   /** Pastas adicionais anexadas (modo código) */
   extraDirectories?: string[]
+  /** Papel na orquestração (orquestrador ou worker) */
+  orchestration?: SessionOrchestration
+  /** Sessão-pai na árvore da sidebar (atalho de orchestration.parentSessionId) */
+  parentId?: string
   createdAt: number
   updatedAt: number
 }
@@ -71,6 +83,8 @@ export interface ChatMessage {
   providerId?: string
   modelId?: string
   error?: string
+  /** Gerada em modo simples: renderizar como texto puro, sem markdown/tool views */
+  simple?: boolean
 }
 
 export interface ModelVariant {
@@ -96,7 +110,37 @@ export interface SendMessageOptions {
   browser?: boolean
   /** Modo plano: apenas ferramentas de leitura, saída em formato de plano */
   plan?: boolean
+  /** Modo simples: respostas diretas em texto puro, sem formatação */
+  simple?: boolean
   /** Configuração de reasoning/thinking do modelo quando suportado */
+  reasoning?: ReasoningConfig
+  /** Modo subagents: expõe a tool subagent (workers efêmeros em background) */
+  subagents?: boolean
+  /** Modo Orchestra: divide em plano de tarefas + workers em sessões filhas */
+  orchestrate?: { plan?: OrchestrationPlan }
+}
+
+export interface OrchestrationTask {
+  id: string
+  title: string
+  /** Prompt autocontido enviado ao worker */
+  prompt: string
+  mode: SessionMode
+  options: SendMessageOptions
+  /** Sessão filha criada na execução */
+  workerSessionId?: string
+  status: ChatStatus
+}
+
+export interface OrchestrationPlan {
+  id: string
+  tasks: OrchestrationTask[]
+  status: "proposed" | "approved" | "running" | "done" | "rejected"
+}
+
+export interface WorkerModelConfig {
+  providerId: string
+  modelId: string
   reasoning?: ReasoningConfig
 }
 
@@ -109,6 +153,10 @@ export interface SendMessageInput {
   options: SendMessageOptions
   directory?: string
   extraDirectories?: string[]
+  /** Modelo dos workers (subagents/orchestra), vindo do modal de configuração */
+  workerModel?: WorkerModelConfig
+  /** Preenchido pelo main process em execuções de worker — nunca pelo renderer */
+  orchestrationRole?: "orchestrator" | "worker"
 }
 
 export type ChatEvent =
@@ -124,6 +172,9 @@ export type ChatEvent =
       delta: string
     }
   | { type: "title"; sessionId: string; title: string }
+  | { type: "orchestration:plan"; sessionId: string; plan: OrchestrationPlan }
+  /** Session criada/atualizada pelo main process (workers da orquestração) */
+  | { type: "session"; sessionId: string; session: SessionInfo }
 
 /** Modelo do catálogo models.dev (mesmo formato usado pelo opencode) */
 export interface CatalogModel {
@@ -163,4 +214,5 @@ export const StorageKeys = {
   sessionPrefix: "session/",
   messages: (sessionId: string) => `messages/${sessionId}`,
   folders: "folders",
+  orchestration: (orchestratorSessionId: string) => `orchestration/${orchestratorSessionId}`,
 } as const

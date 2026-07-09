@@ -3,6 +3,7 @@ import { createPortal } from "react-dom"
 import {
   Archive,
   ArchiveRestore,
+  Bot,
   ChevronDown,
   Ellipsis,
   Folder,
@@ -326,13 +327,19 @@ function MoveToFolderDialog({ open, onOpenChange, session }: {
   )
 }
 
-function SessionRow({ session, button: ButtonComponent, buttonClassName, actionButtonClassName }: {
+function SessionRow({ session, button: ButtonComponent, buttonClassName, actionButtonClassName, icon: Icon = MessageSquare, statusDot, trailing }: {
   session: SessionInfo
   button: React.ElementType
   buttonClassName?: string
   actionButtonClassName?: string
+  /** Ícone à esquerda (padrão: balão de chat; workers usam Bot/Terminal) */
+  icon?: React.ElementType
+  /** Status da sessão exibido como dot (workers da orquestração) */
+  statusDot?: string
+  /** Nó extra dentro do botão (ex: chevron de expandir do orquestrador) */
+  trailing?: React.ReactNode
 }) {
-  const { mode } = useWorkspace()
+  const { mode, setMode } = useWorkspace()
   const selectSession = useSessionStore((s) => s.selectSession)
   const activeId = useSessionStore((s) => s.activeIds[mode])
   const togglePin = useSessionStore((s) => s.togglePin)
@@ -368,7 +375,12 @@ function SessionRow({ session, button: ButtonComponent, buttonClassName, actionB
     <div className="group/menu-row relative min-w-0">
       <ButtonComponent
         isActive={activeId === session.id}
-        onClick={() => void selectSession(session.mode, session.id)}
+        onClick={() => {
+          // Workers podem ter modo diferente do workspace atual (ex: worker code
+          // de um orquestrador chat) — acompanha o modo da sessão
+          if (session.mode !== mode) setMode(session.mode)
+          void selectSession(session.mode, session.id)
+        }}
         className={cn(
           "group-hover/menu-row:bg-sidebar-accent group-hover/menu-row:text-sidebar-accent-foreground",
           "text-xs",
@@ -377,8 +389,15 @@ function SessionRow({ session, button: ButtonComponent, buttonClassName, actionB
         )}
       >
         <div className="flex min-w-0 flex-1 items-center gap-2 truncate">
-          <MessageSquare className="size-4 shrink-0" />
+          <Icon className="size-4 shrink-0" />
           <span className="truncate">{session.title}</span>
+          {(statusDot === "submitted" || statusDot === "streaming") && (
+            <span className="size-1.5 shrink-0 animate-pulse rounded-full bg-emerald-500" />
+          )}
+          {statusDot === "error" && (
+            <span className="size-1.5 shrink-0 rounded-full bg-destructive" />
+          )}
+          {trailing}
         </div>
         {session.pinned && <Pin className="!size-3 shrink-0 text-sidebar-foreground/40" />}
       </ButtonComponent>
@@ -410,10 +429,50 @@ function SessionRow({ session, button: ButtonComponent, buttonClassName, actionB
   )
 }
 
-function SessionItem({ session }: { session: SessionInfo }) {
+function SessionItem({ session, childSessions = [] }: {
+  session: SessionInfo
+  childSessions?: SessionInfo[]
+}) {
+  const [expanded, setExpanded] = useState(true)
+  const statusMap = useSessionStore((s) => s.status)
+  const hasChildren = childSessions.length > 0
+
   return (
     <SidebarMenuItem>
-      <SessionRow button={SidebarMenuButton} session={session} />
+      <SessionRow
+        button={SidebarMenuButton}
+        session={session}
+        trailing={
+          hasChildren ? (
+            <span
+              role="button"
+              tabIndex={0}
+              className="flex size-4 shrink-0 items-center justify-center rounded hover:bg-sidebar-foreground/10"
+              onClick={(e) => {
+                e.stopPropagation()
+                setExpanded((prev) => !prev)
+              }}
+            >
+              <ChevronDown className={cn("size-3 transition-transform", !expanded && "-rotate-90")} />
+            </span>
+          ) : undefined
+        }
+      />
+      {hasChildren && expanded && (
+        <SidebarMenuSub className="mr-0">
+          {childSessions.map((child) => (
+            <SidebarMenuSubItem key={child.id}>
+              <SessionRow
+                button={SidebarMenuSubButton}
+                actionButtonClassName="top-1"
+                session={child}
+                icon={child.mode === "code" ? Terminal : Bot}
+                statusDot={statusMap[child.id]}
+              />
+            </SidebarMenuSubItem>
+          ))}
+        </SidebarMenuSub>
+      )}
     </SidebarMenuItem>
   )
 }
@@ -523,8 +582,16 @@ function ChatHistory() {
     () => sessions.filter((s) => s.mode === mode),
     [sessions, mode],
   )
-  const active = modeSessions.filter((s) => !s.archived)
-  const archived = modeSessions.filter((s) => s.archived)
+  // Workers ficam agrupados sob o orquestrador (independente do modo do worker)
+  const childrenByParent = useMemo(() => {
+    const map: Record<string, SessionInfo[]> = {}
+    for (const s of sessions) {
+      if (s.parentId && !s.archived) (map[s.parentId] ??= []).push(s)
+    }
+    return map
+  }, [sessions])
+  const active = modeSessions.filter((s) => !s.archived && !s.parentId)
+  const archived = modeSessions.filter((s) => s.archived && !s.parentId)
   const modeFolders = folders.filter((f) => f.mode === mode)
   const sortedFolders = [...modeFolders.filter((f) => f.pinned), ...modeFolders.filter((f) => !f.pinned)]
   const rootSessions = active.filter((s) => !s.folderId || !modeFolders.some((f) => f.id === s.folderId))
@@ -565,10 +632,10 @@ function ChatHistory() {
       <AccordionGroup label="Chats">
         <SidebarMenu>
           {pinned.map((session) => (
-            <SessionItem key={session.id} session={session} />
+            <SessionItem key={session.id} session={session} childSessions={childrenByParent[session.id]} />
           ))}
           {recent.map((session) => (
-            <SessionItem key={session.id} session={session} />
+            <SessionItem key={session.id} session={session} childSessions={childrenByParent[session.id]} />
           ))}
           {pinned.length === 0 && recent.length === 0 && (
             <div className="px-3 py-1 text-xs text-sidebar-foreground/50">Nenhuma conversa ainda</div>

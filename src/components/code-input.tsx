@@ -1,8 +1,9 @@
 import { useState } from "react"
-import { Brain, FileText, PlusIcon, Search } from "lucide-react"
+import { AlignLeft, Bot, Brain, FileText, Network, PlusIcon, Search } from "lucide-react"
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import {
@@ -17,13 +18,16 @@ import {
   PromptInputTextarea,
   PromptInputTools,
 } from "@/src/components/ai/prompt-input"
+import { DelegationMenuItems } from "@/src/components/delegation-menu"
 import { ModelPicker } from "@/src/components/model-picker"
 import { ModeToggle } from "@/src/components/mode-toggle"
+import { OrchestrationConfigDialog } from "@/src/components/orchestration-config-dialog"
 import { ReasoningPicker } from "@/src/components/reasoning-picker"
 import { FolderSelector } from "@/src/components/folder-selector"
 import { useWorkspace } from "@/lib/workspace-context"
 import { useProviderStore } from "@/src/stores/provider-store"
 import { useReasoningPrefs } from "@/src/stores/reasoning-prefs"
+import { useSimpleMode } from "@/src/stores/simple-mode"
 import type { ChatStatus, SendMessageOptions } from "@/shared/chat"
 
 const RECENT_FOLDERS_KEY = "orbit-recent-folders"
@@ -40,6 +44,11 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages }: {
 }) {
   const [plan, setPlan] = useState(false)
   const [search, setSearch] = useState(false)
+  const [subagents, setSubagents] = useState(false)
+  const [orchestra, setOrchestra] = useState(false)
+  const [configOpen, setConfigOpen] = useState(false)
+  const simple = useSimpleMode((s) => s.simple)
+  const setSimple = useSimpleMode((s) => s.setSimple)
   const { folders, setFolders } = useWorkspace()
   const selected = useProviderStore((s) => s.selectedModel)
   const model = useProviderStore((s) =>
@@ -60,7 +69,14 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages }: {
     const [directory, ...extraDirectories] = folders
     onSubmit(
       text,
-      { plan, research: search, reasoning: { enabled: thinking, variantId } },
+      {
+        plan,
+        research: search,
+        simple,
+        reasoning: { enabled: thinking, variantId },
+        subagents,
+        orchestrate: orchestra ? {} : undefined,
+      },
       directory,
       extraDirectories,
     )
@@ -94,7 +110,15 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages }: {
                 <DropdownMenuTrigger className="flex size-7 items-center justify-center rounded-md hover:bg-muted hover:text-foreground aria-expanded:bg-muted aria-expanded:text-foreground">
                   <PlusIcon className="size-4" />
                 </DropdownMenuTrigger>
-                <DropdownMenuContent align="start" className="min-w-40">
+                <DropdownMenuContent align="start" className="min-w-48">
+                  <DelegationMenuItems
+                    subagents={subagents}
+                    orchestra={orchestra}
+                    onSubagentsChange={setSubagents}
+                    onOrchestraChange={setOrchestra}
+                    onOpenConfig={() => setConfigOpen(true)}
+                  />
+                  <DropdownMenuSeparator />
                   <PromptInputActionAddAttachments label="Anexar arquivos" />
                 </DropdownMenuContent>
               </DropdownMenu>
@@ -126,8 +150,17 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages }: {
                   disabled={model.reasoningAlwaysOn}
                 />
               )}
+              <ModeToggle
+                icon={AlignLeft}
+                label="Simples"
+                description="Respostas diretas em texto puro: sem formatação nem blocos de ferramentas."
+                active={simple}
+                onToggle={() => setSimple(!simple)}
+              />
             </PromptInputTools>
             <div className="flex items-center gap-1">
+              {subagents && <Bot className="size-3 text-sidebar-foreground/40" />}
+              {orchestra && <Network className="size-3 text-sidebar-foreground/40" />}
               {thinking && model?.variants && model.variants.length > 0 && (
                 <ReasoningPicker
                   variants={model.variants}
@@ -143,6 +176,7 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages }: {
             </div>
           </PromptInputFooter>
         </PromptInput>
+        <OrchestrationConfigDialog open={configOpen} onOpenChange={setConfigOpen} />
       </div>
     </PromptInputProvider>
   )

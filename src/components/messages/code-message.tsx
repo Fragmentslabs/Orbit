@@ -9,6 +9,7 @@ import {
   type TestSummary,
 } from "@/src/lib/message-utils"
 import { Shimmer } from "@/src/components/ai/shimmer"
+import { SubAgentCard } from "@/src/components/ai/sub-agent-card"
 import { Source, Sources, SourcesContent, SourcesTrigger } from "@/src/components/ai/sources"
 import { Task, TaskContent, TaskItem, TaskItemFile, TaskTrigger } from "@/src/components/ai/task"
 import {
@@ -154,7 +155,8 @@ type Segment =
 function segmentParts(parts: MessagePart[]): Segment[] {
   const segments: Segment[] = []
   for (const part of parts) {
-    if (part.type === "tool") {
+    // Subagentes têm card próprio — ficam fora do agrupamento de Task
+    if (part.type === "tool" && part.tool !== "subagent") {
       const last = segments[segments.length - 1]
       if (last?.kind === "task") last.parts.push(part)
       else segments.push({ kind: "task", id: part.id, parts: [part] })
@@ -194,6 +196,8 @@ export function CodeAssistantMessage({ message, isLast, isBusy }: {
           </AssistantMarkdown>
         ) : segment.part.type === "reasoning" ? (
           <ReasoningPartView key={segment.id} part={segment.part} />
+        ) : segment.part.type === "tool" && segment.part.tool === "subagent" ? (
+          <SubAgentCard key={segment.id} part={segment.part} />
         ) : null,
       )}
       {message.error && <MessageError error={message.error} />}

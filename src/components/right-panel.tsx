@@ -1,5 +1,5 @@
-import { useCallback, useState } from "react"
-import { Globe, Folder, MessageSquare, Terminal, X, PlusIcon } from "lucide-react"
+import { useCallback, useEffect, useMemo, useState } from "react"
+import { Globe, Folder, MessageSquare, Terminal, X, PlusIcon, Bot, LoaderIcon, XCircleIcon } from "lucide-react"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -10,6 +10,8 @@ import { ChatView } from "@/src/components/chat-view"
 import { TerminalTab } from "@/src/components/terminal-tab"
 import { BrowserTab } from "@/src/components/browser-tab"
 import { FoldersTab } from "@/src/components/folders-tab"
+import { useWorkspace } from "@/lib/workspace-context"
+import { useSessionStore } from "@/src/stores/session-store"
 import { cn } from "@/lib/utils"
 
 type TabType = "chat" | "terminal" | "folders" | "browser"
@@ -18,6 +20,8 @@ interface PanelTab {
   id: string
   type: TabType
   title: string
+  /** Tab de chat apontando para uma session específica (workers da orquestração) */
+  sessionId?: string
 }
 
 interface TabMeta {
@@ -33,12 +37,12 @@ const tabMeta: Record<TabType, TabMeta> = {
   browser: { icon: Globe, label: "Browser", description: "Pesquise e visualize páginas web" },
 }
 
-function TabContent({ type }: { type: TabType }) {
-  switch (type) {
+function TabContent({ tab }: { tab: PanelTab }) {
+  switch (tab.type) {
     case "chat":
       return (
         <div className="flex flex-1 flex-col overflow-hidden p-4" style={{ '--panel-bg': 'var(--sidebar)' } as React.CSSProperties}>
-          <ChatView />
+          <ChatView sessionId={tab.sessionId} />
         </div>
       )
     case "terminal":
@@ -62,9 +66,29 @@ function TabContent({ type }: { type: TabType }) {
   }
 }
 
-function SelectorScreen({ onSelect }: { onSelect: (type: TabType) => void }) {
+function WorkerStatusIcon({ status }: { status: string }) {
+  if (status === "submitted" || status === "streaming") {
+    return <LoaderIcon className="size-3 shrink-0 animate-spin text-muted-foreground" />
+  }
+  if (status === "error") return <XCircleIcon className="size-3 shrink-0 text-destructive" />
+  return <span className="size-1.5 shrink-0 rounded-full bg-emerald-500" />
+}
+
+function SelectorScreen({ onSelect, onOpenWorker }: {
+  onSelect: (type: TabType) => void
+  onOpenWorker: (sessionId: string, title: string) => void
+}) {
+  const { mode } = useWorkspace()
+  const activeId = useSessionStore((s) => s.activeIds[mode])
+  const sessions = useSessionStore((s) => s.sessions)
+  const statusMap = useSessionStore((s) => s.status)
+  const workers = useMemo(
+    () => sessions.filter((s) => s.parentId === activeId),
+    [sessions, activeId],
+  )
+
   return (
-    <div className="flex flex-1 flex-col items-center justify-center p-6 gap-4">
+    <div className="flex flex-1 flex-col items-center justify-center gap-4 p-6">
       <p className="text-sm font-medium text-foreground">O que deseja abrir?</p>
       <div className="grid grid-cols-2 gap-3 w-full max-w-xs">
         {(Object.entries(tabMeta) as [TabType, TabMeta][]).map(([type, { icon: Icon, label, description }]) => (
@@ -79,6 +103,27 @@ function SelectorScreen({ onSelect }: { onSelect: (type: TabType) => void }) {
           </button>
         ))}
       </div>
+
+      {workers.length > 0 && (
+        <div className="mt-2 flex w-full max-w-xs flex-col gap-1">
+          <p className="px-1 text-[11px] font-medium text-muted-foreground">Workers da conversa ativa</p>
+          {workers.map((worker) => (
+            <button
+              key={worker.id}
+              onClick={() => onOpenWorker(worker.id, worker.title)}
+              className="flex items-center gap-2 rounded-md border border-sidebar-border bg-sidebar-accent/20 px-2.5 py-1.5 text-left text-xs transition-colors hover:bg-sidebar-accent"
+            >
+              {worker.mode === "code" ? (
+                <Terminal className="size-3.5 shrink-0 text-muted-foreground" />
+              ) : (
+                <Bot className="size-3.5 shrink-0 text-muted-foreground" />
+              )}
+              <span className="min-w-0 flex-1 truncate">{worker.title}</span>
+              <WorkerStatusIcon status={statusMap[worker.id] ?? "idle"} />
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   )
 }
@@ -88,16 +133,50 @@ let tabCounter = 0
 export function RightPanel() {
   const [tabs, setTabs] = useState<PanelTab[]>([])
   const [activeTabId, setActiveTabId] = useState<string | null>(null)
+  const { mode } = useWorkspace()
+  const activeSessionId = useSessionStore((s) => s.activeIds[mode])
+  const sessions = useSessionStore((s) => s.sessions)
+  const statusMap = useSessionStore((s) => s.status)
 
-  const addTab = useCallback((type: TabType) => {
+  const addTab = useCallback((type: TabType, sessionId?: string, title?: string) => {
+    if (sessionId) {
+      // Tab de session específica: reusa se já aberta
+      const id = `chat-${sessionId}`
+      setTabs((prev) =>
+        prev.some((t) => t.id === id)
+          ? prev
+          : [...prev, { id, type: "chat", title: title ?? "Chat", sessionId }],
+      )
+      setActiveTabId(id)
+      return
+    }
     const meta = tabMeta[type]
     tabCounter++
     const id = `${type}-${tabCounter}`
-    const title = `${meta.label} ${tabCounter > 1 ? tabCounter : ""}`.trim()
-    const newTab: PanelTab = { id, type, title }
-    setTabs(prev => [...prev, newTab])
+    const tabTitle = `${meta.label} ${tabCounter > 1 ? tabCounter : ""}`.trim()
+    setTabs((prev) => [...prev, { id, type, title: tabTitle }])
     setActiveTabId(id)
   }, [])
+
+  // Workers da orquestração em execução abrem tabs automaticamente
+  useEffect(() => {
+    if (!activeSessionId) return
+    for (const session of sessions) {
+      const status = statusMap[session.id]
+      if (
+        session.parentId === activeSessionId &&
+        (status === "submitted" || status === "streaming")
+      ) {
+        const id = `chat-${session.id}`
+        setTabs((prev) =>
+          prev.some((t) => t.id === id)
+            ? prev
+            : [...prev, { id, type: "chat", title: session.title, sessionId: session.id }],
+        )
+        setActiveTabId((current) => current ?? id)
+      }
+    }
+  }, [sessions, statusMap, activeSessionId])
 
   const removeTab = useCallback((id: string) => {
     setTabs(prev => {
@@ -120,6 +199,7 @@ export function RightPanel() {
         <div className="flex items-center gap-0.5 px-2 pt-2 overflow-x-auto">
           {tabs.map((tab) => {
             const { icon: Icon } = tabMeta[tab.type]
+            const TabIcon = tab.sessionId ? Bot : Icon
             return (
               <div
                 key={tab.id}
@@ -131,7 +211,7 @@ export function RightPanel() {
                 )}
                 onClick={() => setActiveTabId(tab.id)}
               >
-                <Icon className="size-3.5 shrink-0" />
+                <TabIcon className="size-3.5 shrink-0" />
                 <span className="truncate max-w-24">{tab.title}</span>
                 <button
                   onClick={(e) => { e.stopPropagation(); removeTab(tab.id) }}
@@ -160,9 +240,12 @@ export function RightPanel() {
 
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
         {activeTab ? (
-          <TabContent type={activeTab.type} />
+          <TabContent tab={activeTab} />
         ) : (
-          <SelectorScreen onSelect={addTab} />
+          <SelectorScreen
+            onSelect={addTab}
+            onOpenWorker={(sessionId, title) => addTab("chat", sessionId, title)}
+          />
         )}
       </div>
     </div>

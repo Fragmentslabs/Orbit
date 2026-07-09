@@ -45,7 +45,7 @@ function partText(parts: MessagePart[], type: 'text'): string {
 }
 
 /** Converte o histórico persistido em mensagens para o modelo (somente texto). */
-function toModelMessages(history: ChatMessage[]): ModelMessage[] {
+export function toModelMessages(history: ChatMessage[]): ModelMessage[] {
   const result: ModelMessage[] = []
   for (const message of history) {
     const text = partText(message.parts, 'text')
@@ -112,6 +112,7 @@ export async function runChat(win: BrowserWindow, input: SendMessageInput): Prom
     createdAt: Date.now(),
     providerId: input.providerId,
     modelId: input.modelId,
+    simple: input.options.simple || undefined,
   }
   history.push(assistantMessage)
   await saveMessages(sessionId, history)
@@ -281,7 +282,8 @@ export async function runChat(win: BrowserWindow, input: SendMessageInput): Prom
     emit(win, { type: 'message', sessionId, message: assistantMessage })
     emit(win, { type: 'status', sessionId, status: 'idle' })
 
-    if (isFirstExchange) void generateTitle(input, win)
+    // Workers já nascem com título (task.title) — não sobrescrever
+    if (isFirstExchange && input.orchestrationRole !== 'worker') void generateTitle(input, win)
   } catch (err) {
     const aborted = controller.signal.aborted
     const message = err instanceof Error ? err.message : String(err)

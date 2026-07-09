@@ -9,9 +9,11 @@ import type * as NodePty from 'node-pty'
 import { listCredentialProviders, removeCredential, setCredential } from './lib/auth'
 import { getCatalog } from './lib/catalog'
 import { abortChat, runChat } from './lib/chat-engine'
+import { abortOrchestration, approvePlan, rejectPlan, runOrchestration } from './lib/orchestrator'
 import { listKeys, readJson, removeJson, writeJson } from './lib/storage'
 import { destroyBrowserWindow } from './lib/tools'
-import type { SendMessageInput } from '../shared/chat'
+import type { SendMessageInput, SessionInfo } from '../shared/chat'
+import { StorageKeys } from '../shared/chat'
 
 const execFileAsync = promisify(execFile)
 
@@ -315,10 +317,26 @@ app.whenReady().then(() => {
   ipcMain.handle('auth:list', () => listCredentialProviders())
 
   // Chat
-  ipcMain.handle('chat:send', (_event, input: SendMessageInput) => {
-    if (win) void runChat(win, input)
+  ipcMain.handle('chat:send', async (_event, input: SendMessageInput) => {
+    if (!win) return
+    // Regra de ouro: workers não orquestram nem delegam (sem recursão)
+    const session = await readJson<SessionInfo>(StorageKeys.session(input.sessionId))
+    if (session?.orchestration?.role === 'worker') {
+      input = { ...input, options: { ...input.options, orchestrate: undefined, subagents: false } }
+    }
+    if (input.options.orchestrate) void runOrchestration(win, input)
+    else void runChat(win, input)
   })
-  ipcMain.handle('chat:abort', (_event, sessionId: string) => abortChat(sessionId))
+  ipcMain.handle('chat:abort', (_event, sessionId: string) => {
+    abortChat(sessionId)
+    abortOrchestration(sessionId)
+  })
+  ipcMain.handle('chat:approvePlan', (_event, sessionId: string, planId: string, taskIds?: string[]) => {
+    if (win) void approvePlan(win, sessionId, planId, taskIds)
+  })
+  ipcMain.handle('chat:rejectPlan', (_event, sessionId: string) => {
+    if (win) void rejectPlan(win, sessionId)
+  })
   ipcMain.handle('chat:closeBrowser', (_event, sessionId: string) => destroyBrowserWindow(sessionId))
 
   createWindow()
