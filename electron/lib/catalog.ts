@@ -1,6 +1,7 @@
 import fs from 'node:fs/promises'
 import path from 'node:path'
 import type { Catalog, CatalogProvider } from '../../shared/chat'
+import { generateVariants, isAlwaysOnModel, toModelInput, variantLabel } from './reasoning/variants'
 import { dataDir } from './storage'
 
 /**
@@ -25,6 +26,27 @@ async function readCache(): Promise<{ catalog: Catalog; fetchedAt: number } | nu
   }
 }
 
+/**
+ * Enriquece cada modelo com metadados de reasoning (variants disponíveis e
+ * flag de "sempre pensa") para o renderer montar a UI sem conhecer payloads.
+ */
+function enrichCatalog(catalog: Catalog): Catalog {
+  for (const providerId in catalog) {
+    const provider = catalog[providerId]
+    for (const modelId in provider.models) {
+      const model = provider.models[modelId]
+      if (!model.reasoning) continue
+      const input = toModelInput(providerId, provider.npm, model)
+      model.reasoningAlwaysOn = isAlwaysOnModel(input.modelId, input.apiId) || undefined
+      model.variants = Object.keys(generateVariants(input)).map((id) => ({
+        id,
+        label: variantLabel(id),
+      }))
+    }
+  }
+  return catalog
+}
+
 async function fetchCatalog(): Promise<Catalog | null> {
   try {
     const res = await fetch(MODELS_DEV_URL, {
@@ -35,7 +57,7 @@ async function fetchCatalog(): Promise<Catalog | null> {
     const catalog = (await res.json()) as Catalog
     await fs.mkdir(dataDir(), { recursive: true })
     await fs.writeFile(cacheFile(), JSON.stringify({ catalog, fetchedAt: Date.now() }), 'utf8')
-    return catalog
+    return enrichCatalog(catalog)
   } catch {
     return null
   }
@@ -46,7 +68,7 @@ export async function getCatalog(): Promise<Catalog> {
 
   const cache = await readCache()
   if (cache) {
-    cached = cache.catalog
+    cached = enrichCatalog(cache.catalog)
     if (Date.now() - cache.fetchedAt > REFRESH_INTERVAL) {
       void fetchCatalog().then((fresh) => {
         if (fresh) cached = fresh

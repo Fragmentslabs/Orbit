@@ -37,9 +37,11 @@ export function buildToolSet(input: SendMessageInput, ctx: ToolContext | null): 
     return tools
   }
 
-  // Modo código: web sempre disponível; escrita/shell bloqueados no plano
-  tools.websearch = createWebSearchTool()
-  tools.webfetch = createWebFetchTool()
+  // Modo código: web somente com o toggle de pesquisa; escrita/shell bloqueados no plano
+  if (input.options.research) {
+    tools.websearch = createWebSearchTool()
+    tools.webfetch = createWebFetchTool()
+  }
   if (ctx) {
     tools.read = createReadTool(ctx)
     tools.ls = createListTool(ctx)

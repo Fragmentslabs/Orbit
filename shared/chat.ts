@@ -73,6 +73,22 @@ export interface ChatMessage {
   error?: string
 }
 
+export interface ModelVariant {
+  /** ID único usado na comunicação (ex: "high", "max", "medium") */
+  id: string
+  /** Label de exibição no dropdown */
+  label: string
+  /** Descrição curta para tooltip (opcional) */
+  description?: string
+}
+
+export interface ReasoningConfig {
+  /** Toggle on/off do thinking */
+  enabled: boolean
+  /** ID da variant selecionada — undefined usa o baseline do modelo */
+  variantId?: string
+}
+
 export interface SendMessageOptions {
   /** Modo pesquisa aprofundada (prompt de deep research + ferramentas web) */
   research?: boolean
@@ -80,8 +96,8 @@ export interface SendMessageOptions {
   browser?: boolean
   /** Modo plano: apenas ferramentas de leitura, saída em formato de plano */
   plan?: boolean
-  /** Solicita reasoning/thinking do modelo quando suportado */
-  thinking?: boolean
+  /** Configuração de reasoning/thinking do modelo quando suportado */
+  reasoning?: ReasoningConfig
 }
 
 export interface SendMessageInput {
@@ -114,6 +130,10 @@ export interface CatalogModel {
   id: string
   name: string
   reasoning: boolean
+  /** Modelo sempre pensa (não há controle de nível) — ex: DeepSeek R1 */
+  reasoningAlwaysOn?: boolean
+  /** Níveis de reasoning disponíveis (metadados gerados no main process) */
+  variants?: ModelVariant[]
   tool_call: boolean
   attachment: boolean
   release_date?: string

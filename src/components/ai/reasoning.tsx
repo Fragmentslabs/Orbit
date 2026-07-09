@@ -35,7 +35,6 @@ export type ReasoningProps = ComponentProps<typeof Collapsible> & {
 }
 
 const AUTO_CLOSE_DELAY = 1000
-const MS_IN_S = 1000
 
 export const Reasoning = memo(
   ({
@@ -44,7 +43,7 @@ export const Reasoning = memo(
     open,
     defaultOpen = true,
     onOpenChange,
-    duration: durationProp,
+    duration,
     children,
     ...props
   }: ReasoningProps) => {
@@ -53,25 +52,8 @@ export const Reasoning = memo(
       defaultProp: defaultOpen,
       onChange: onOpenChange,
     })
-    const [duration, setDuration] = useControllableState({
-      prop: durationProp,
-      defaultProp: undefined,
-    })
 
     const [hasAutoClosed, setHasAutoClosed] = useState(false)
-    const [startTime, setStartTime] = useState<number | null>(null)
-
-    // Track duration when streaming starts and ends
-    useEffect(() => {
-      if (isStreaming) {
-        if (startTime === null) {
-          setStartTime(Date.now())
-        }
-      } else if (startTime !== null) {
-        setDuration(Math.ceil((Date.now() - startTime) / MS_IN_S))
-        setStartTime(null)
-      }
-    }, [isStreaming, startTime, setDuration])
 
     // Auto-open when streaming starts, auto-close when streaming ends (once only)
     useEffect(() => {
@@ -93,7 +75,7 @@ export const Reasoning = memo(
     return (
       <ReasoningContext.Provider value={{ isStreaming, isOpen, setIsOpen, duration }}>
         <Collapsible
-          className={cn("bg-red-300 not-prose mb-4", className)}
+          className={cn("not-prose mb-4", className)}
           onOpenChange={handleOpenChange}
           open={isOpen}
           {...props}

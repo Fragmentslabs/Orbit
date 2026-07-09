@@ -53,6 +53,11 @@ export function buildSystemPrompt(input: SendMessageInput): string {
 
   if (input.mode === 'code') {
     parts.push(input.options.plan ? PLAN_PROMPT : CODE_PROMPT)
+    if (input.options.research) {
+      parts.push(
+        `Você tem websearch e webfetch para buscar documentação e referências online. ${CITATION_INSTRUCTION}`,
+      )
+    }
     if (input.directory) {
       const extra = input.extraDirectories?.length
         ? `\nPastas adicionais anexadas: ${input.extraDirectories.join(', ')}`

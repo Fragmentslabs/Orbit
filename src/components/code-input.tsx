@@ -1,10 +1,8 @@
 import { useState } from "react"
-import { Brain, FileText, PlusIcon } from "lucide-react"
+import { Brain, FileText, PlusIcon, Search } from "lucide-react"
 import {
   DropdownMenu,
-  DropdownMenuCheckboxItem,
   DropdownMenuContent,
-  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import {
@@ -20,9 +18,12 @@ import {
   PromptInputTools,
 } from "@/src/components/ai/prompt-input"
 import { ModelPicker } from "@/src/components/model-picker"
+import { ModeToggle } from "@/src/components/mode-toggle"
+import { ReasoningPicker } from "@/src/components/reasoning-picker"
 import { FolderSelector } from "@/src/components/folder-selector"
 import { useWorkspace } from "@/lib/workspace-context"
 import { useProviderStore } from "@/src/stores/provider-store"
+import { useReasoningPrefs } from "@/src/stores/reasoning-prefs"
 import type { ChatStatus, SendMessageOptions } from "@/shared/chat"
 
 const RECENT_FOLDERS_KEY = "orbit-recent-folders"
@@ -38,12 +39,14 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages }: {
   hasMessages?: boolean
 }) {
   const [plan, setPlan] = useState(false)
-  const [thinking, setThinking] = useState(false)
+  const [search, setSearch] = useState(false)
   const { folders, setFolders } = useWorkspace()
   const selected = useProviderStore((s) => s.selectedModel)
   const model = useProviderStore((s) =>
     s.selectedModel ? s.catalog[s.selectedModel.providerId]?.models[s.selectedModel.modelId] : undefined,
   )
+  const { enabled, variantId, update } = useReasoningPrefs(selected?.providerId, selected?.modelId)
+  const thinking = enabled || !!model?.reasoningAlwaysOn
   const busy = status === "submitted" || status === "streaming"
 
   const handleSubmit = (message: { text?: string }) => {
@@ -55,7 +58,12 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages }: {
     if (!text || folders.length === 0) return
     saveRecentFolders(folders)
     const [directory, ...extraDirectories] = folders
-    onSubmit(text, { plan, thinking }, directory, extraDirectories)
+    onSubmit(
+      text,
+      { plan, research: search, reasoning: { enabled: thinking, variantId } },
+      directory,
+      extraDirectories,
+    )
   }
 
   return (
@@ -87,30 +95,46 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages }: {
                   <PlusIcon className="size-4" />
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="start" className="min-w-40">
-                  <DropdownMenuCheckboxItem
-                    checked={plan}
-                    onCheckedChange={(checked) => setPlan(checked)}
-                  >
-                    <FileText className="size-4" />
-                    Modo Plano
-                  </DropdownMenuCheckboxItem>
-                  {model?.reasoning && (
-                    <DropdownMenuCheckboxItem
-                      checked={thinking}
-                      onCheckedChange={(checked) => setThinking(checked)}
-                    >
-                      <Brain className="size-4" />
-                      Thinking
-                    </DropdownMenuCheckboxItem>
-                  )}
-                  <DropdownMenuSeparator />
                   <PromptInputActionAddAttachments label="Anexar arquivos" />
                 </DropdownMenuContent>
               </DropdownMenu>
+              <ModeToggle
+                icon={Search}
+                label="Pesquisa"
+                description="Libera websearch e webfetch para consultar documentação online."
+                active={search}
+                onToggle={() => setSearch((v) => !v)}
+              />
+              <ModeToggle
+                icon={FileText}
+                label="Modo Plano"
+                description="Somente leitura. Produz um plano de implementação sem editar arquivos."
+                active={plan}
+                onToggle={() => setPlan((v) => !v)}
+              />
+              {model?.reasoning && (
+                <ModeToggle
+                  icon={Brain}
+                  label="Thinking"
+                  description={
+                    model.reasoningAlwaysOn
+                      ? "Este modelo sempre usa raciocínio extendido."
+                      : "Ativa raciocínio extendido do modelo. Custa mais tokens e tempo."
+                  }
+                  active={thinking}
+                  onToggle={() => update({ enabled: !enabled, variantId })}
+                  disabled={model.reasoningAlwaysOn}
+                />
+              )}
             </PromptInputTools>
             <div className="flex items-center gap-1">
-              {plan && <FileText className="size-3 text-sidebar-foreground/40" />}
-              {thinking && <Brain className="size-3 text-sidebar-foreground/40" />}
+              {thinking && model?.variants && model.variants.length > 0 && (
+                <ReasoningPicker
+                  variants={model.variants}
+                  selected={variantId}
+                  onSelect={(id) => update({ enabled: true, variantId: id })}
+                />
+              )}
               <ModelPicker />
               <PromptInputSubmit
                 disabled={(!selected || folders.length === 0) && !busy}

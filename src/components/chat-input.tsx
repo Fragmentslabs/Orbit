@@ -1,11 +1,8 @@
 import { useState } from "react"
 import { Brain, Globe, PlusIcon, Search } from "lucide-react"
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import {
   DropdownMenu,
-  DropdownMenuCheckboxItem,
   DropdownMenuContent,
-  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import {
@@ -20,7 +17,10 @@ import {
   PromptInputTools,
 } from "@/src/components/ai/prompt-input"
 import { ModelPicker } from "@/src/components/model-picker"
+import { ModeToggle } from "@/src/components/mode-toggle"
+import { ReasoningPicker } from "@/src/components/reasoning-picker"
 import { useProviderStore } from "@/src/stores/provider-store"
+import { useReasoningPrefs } from "@/src/stores/reasoning-prefs"
 import type { SendMessageOptions } from "@/shared/chat"
 import type { ChatStatus } from "@/shared/chat"
 
@@ -31,11 +31,12 @@ export function ChatInput({ onSubmit, status, onStop }: {
 }) {
   const [search, setSearch] = useState(false)
   const [browser, setBrowser] = useState(false)
-  const [thinking, setThinking] = useState(false)
   const selected = useProviderStore((s) => s.selectedModel)
   const model = useProviderStore((s) =>
     s.selectedModel ? s.catalog[s.selectedModel.providerId]?.models[s.selectedModel.modelId] : undefined,
   )
+  const { enabled, variantId, update } = useReasoningPrefs(selected?.providerId, selected?.modelId)
+  const thinking = enabled || !!model?.reasoningAlwaysOn
   const busy = status === "submitted" || status === "streaming"
 
   return (
@@ -49,7 +50,11 @@ export function ChatInput({ onSubmit, status, onStop }: {
           }
           const text = message.text?.trim()
           if (!text) return
-          onSubmit(text, { research: search, browser, thinking })
+          onSubmit(text, {
+            research: search,
+            browser,
+            reasoning: { enabled: thinking, variantId },
+          })
         }}
         className="rounded-xl border-2 border-sidebar-border overflow-hidden [&>div]:!border-none [&>div]:!rounded-none [&>div]:!bg-transparent"
       >
@@ -66,66 +71,46 @@ export function ChatInput({ onSubmit, status, onStop }: {
                 <PlusIcon className="size-4" />
               </DropdownMenuTrigger>
               <DropdownMenuContent align="start" className="min-w-40">
-                <DropdownMenuCheckboxItem
-                  checked={search}
-                  onCheckedChange={(checked) => setSearch(checked)}
-                >
-                  <TooltipProvider delay={300}>
-                    <Tooltip>
-                      <TooltipTrigger
-                        render={
-                          <span className="flex flex-1 items-center gap-2" />
-                        }
-                      >
-                        <Search className="size-4" />
-                        Pesquisa
-                      </TooltipTrigger>
-                      <TooltipContent side="right" align="center" sideOffset={8}>
-                        Busca e lê páginas da web via HTTP.
-                        Rápido, mas não executa JavaScript.
-                      </TooltipContent>
-                    </Tooltip>
-                  </TooltipProvider>
-                </DropdownMenuCheckboxItem>
-                <DropdownMenuCheckboxItem
-                  checked={browser}
-                  onCheckedChange={(checked) => setBrowser(checked)}
-                >
-                  <TooltipProvider delay={300}>
-                    <Tooltip>
-                      <TooltipTrigger
-                        render={
-                          <span className="flex flex-1 items-center gap-2" />
-                        }
-                      >
-                        <Globe className="size-4" />
-                        Browser
-                      </TooltipTrigger>
-                      <TooltipContent side="right" align="center" sideOffset={8}>
-                        Navega em páginas como um browser real.
-                        Executa JavaScript, ideal para SPAs.
-                      </TooltipContent>
-                    </Tooltip>
-                  </TooltipProvider>
-                </DropdownMenuCheckboxItem>
-                {model?.reasoning && (
-                  <DropdownMenuCheckboxItem
-                    checked={thinking}
-                    onCheckedChange={(checked) => setThinking(checked)}
-                  >
-                    <Brain className="size-4" />
-                    Thinking
-                  </DropdownMenuCheckboxItem>
-                )}
-                <DropdownMenuSeparator />
                 <PromptInputActionAddAttachments label="Anexar arquivos" />
               </DropdownMenuContent>
             </DropdownMenu>
+            <ModeToggle
+              icon={Search}
+              label="Pesquisa"
+              description="Busca e lê páginas da web via HTTP. Rápido, mas não executa JavaScript."
+              active={search}
+              onToggle={() => setSearch((v) => !v)}
+            />
+            <ModeToggle
+              icon={Globe}
+              label="Browser"
+              description="Navega em páginas como um browser real. Executa JavaScript, ideal para SPAs."
+              active={browser}
+              onToggle={() => setBrowser((v) => !v)}
+            />
+            {model?.reasoning && (
+              <ModeToggle
+                icon={Brain}
+                label="Thinking"
+                description={
+                  model.reasoningAlwaysOn
+                    ? "Este modelo sempre usa raciocínio extendido."
+                    : "Ativa raciocínio extendido do modelo. Custa mais tokens e tempo."
+                }
+                active={thinking}
+                onToggle={() => update({ enabled: !enabled, variantId })}
+                disabled={model.reasoningAlwaysOn}
+              />
+            )}
           </PromptInputTools>
           <div className="flex items-center gap-1">
-            {search && <Search className="size-3 text-sidebar-foreground/40" />}
-            {browser && <Globe className="size-3 text-sidebar-foreground/40" />}
-            {thinking && <Brain className="size-3 text-sidebar-foreground/40" />}
+            {thinking && model?.variants && model.variants.length > 0 && (
+              <ReasoningPicker
+                variants={model.variants}
+                selected={variantId}
+                onSelect={(id) => update({ enabled: true, variantId: id })}
+              />
+            )}
             <ModelPicker />
             <PromptInputSubmit
               disabled={!selected && !busy}

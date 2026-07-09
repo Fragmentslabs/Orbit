@@ -1,4 +1,4 @@
-import { generateText, stepCountIs, streamText, type JSONValue, type ModelMessage } from 'ai'
+import { generateText, stepCountIs, streamText, type ModelMessage } from 'ai'
 import type { BrowserWindow } from 'electron'
 import type {
   ChatEvent,
@@ -11,6 +11,7 @@ import type {
 import { StorageKeys } from '../../shared/chat'
 import { getProvider } from './catalog'
 import { buildSystemPrompt } from './prompts'
+import { buildProviderOptions } from './reasoning'
 import { resolveModel } from './providers'
 import { readJson, writeJson } from './storage'
 import { buildToolSet, type ToolContext } from './tools'
@@ -52,26 +53,6 @@ function toModelMessages(history: ChatMessage[]): ModelMessage[] {
     result.push({ role: message.role, content: text })
   }
   return result
-}
-
-async function buildProviderOptions(
-  input: SendMessageInput,
-): Promise<Record<string, Record<string, JSONValue>> | undefined> {
-  if (!input.options.thinking) return undefined
-  const provider = await getProvider(input.providerId)
-  const model = provider?.models[input.modelId]
-  if (!model?.reasoning) return undefined
-
-  switch (provider?.npm) {
-    case '@ai-sdk/anthropic':
-      return { anthropic: { thinking: { type: 'enabled', budgetTokens: 12_000 } } }
-    case '@ai-sdk/google':
-      return { google: { thinkingConfig: { includeThoughts: true } } }
-    case '@ai-sdk/openai':
-      return { openai: { reasoningEffort: 'medium', reasoningSummary: 'auto' } }
-    default:
-      return undefined
-  }
 }
 
 async function generateTitle(input: SendMessageInput, win: BrowserWindow) {
