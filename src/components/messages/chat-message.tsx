@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react"
-import { ChevronDownIcon, GlobeIcon, LinkIcon, SearchIcon, XCircleIcon } from "lucide-react"
+import { GlobeIcon, LinkIcon, SearchIcon, XCircleIcon } from "lucide-react"
 import type { ChatMessage, MessagePart, ToolPart } from "@/shared/chat"
 import { extractSources, hostnameOf, parseSearchResults, WEB_TOOLS } from "@/src/lib/message-utils"
 import {
@@ -14,7 +14,6 @@ import { Shimmer } from "@/src/components/ai/shimmer"
 import { Source, Sources, SourcesContent, SourcesTrigger } from "@/src/components/ai/sources"
 import {
   AssistantMarkdown,
-  CopyMessageAction,
   GenericToolView,
   MessageError,
   ReasoningPartView,
@@ -125,14 +124,23 @@ export function ChatAssistantMessage({ message, isLast, isBusy }: {
   const sources = useMemo(() => (finished ? extractSources(message) : []), [finished, message])
   const waiting = isLast && isBusy && message.parts.length === 0
 
+  // Texto seguido de ferramentas é narração intermediária ("pensando alto"),
+  // não a resposta final — renderiza em cor apagada.
+  const lastToolIndex = segments.reduce(
+    (last, segment, i) => (segment.kind === "research" ? i : last),
+    -1,
+  )
+
   return (
     <div className="flex w-full flex-col gap-1">
       {waiting && <Shimmer className="text-sm">Pensando…</Shimmer>}
-      {segments.map((segment) =>
+      {segments.map((segment, index) =>
         segment.kind === "research" ? (
           <ResearchBlock key={segment.id} parts={segment.parts} />
         ) : segment.part.type === "text" ? (
-          <AssistantMarkdown key={segment.id}>{segment.part.text}</AssistantMarkdown>
+          <AssistantMarkdown key={segment.id} muted={index < lastToolIndex}>
+            {segment.part.text}
+          </AssistantMarkdown>
         ) : segment.part.type === "reasoning" ? (
           <ReasoningPartView key={segment.id} part={segment.part} />
         ) : (
@@ -150,7 +158,6 @@ export function ChatAssistantMessage({ message, isLast, isBusy }: {
           </SourcesContent>
         </Sources>
       )}
-      {finished && !waiting && <CopyMessageAction message={message} />}
     </div>
   )
 }

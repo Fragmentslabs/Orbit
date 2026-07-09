@@ -62,9 +62,20 @@ const MarkdownLink: Components["a"] = ({ href, children, ...props }) => {
 
 const markdownComponents: Components = { a: MarkdownLink }
 
-/** Markdown do assistente com suporte a citações inline. */
-export function AssistantMarkdown({ children }: { children: string }) {
-  return <MessageResponse components={markdownComponents}>{children}</MessageResponse>
+/**
+ * Markdown do assistente com suporte a citações inline. `muted` marca a
+ * narração intermediária (texto que o modelo escreve entre ferramentas,
+ * "pensando alto") para não se confundir com a resposta final.
+ */
+export function AssistantMarkdown({ children, muted = false }: {
+  children: string
+  muted?: boolean
+}) {
+  return (
+    <div className={cn(muted ? "text-sm text-muted-foreground [&_*]:text-muted-foreground" : "text-foreground")}>
+      <MessageResponse components={markdownComponents}>{children}</MessageResponse>
+    </div>
+  )
 }
 
 export function ReasoningPartView({ part }: { part: ReasoningPart }) {
@@ -131,22 +142,55 @@ export function MessageError({ error }: { error: string }) {
   )
 }
 
-export function CopyMessageAction({ message }: { message: ChatMessage }) {
+function formatTime(timestamp: number): string {
+  return new Date(timestamp).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })
+}
+
+export function MessageTimestamp({ timestamp }: { timestamp: number }) {
+  return (
+    <span className="select-none px-1 text-[11px] tabular-nums text-muted-foreground/70">
+      {formatTime(timestamp)}
+    </span>
+  )
+}
+
+export function CopyAction({ text }: { text: string }) {
   const [copied, setCopied] = useState(false)
 
   return (
-    <Actions className="mt-1">
-      <Action
-        tooltip="Copiar"
-        label="Copiar"
-        onClick={() => {
-          void navigator.clipboard.writeText(messageText(message))
-          setCopied(true)
-          setTimeout(() => setCopied(false), 1500)
-        }}
-      >
-        {copied ? <CheckIcon className="size-3.5" /> : <CopyIcon className="size-3.5" />}
-      </Action>
+    <Action
+      tooltip="Copiar"
+      label="Copiar"
+      onClick={() => {
+        void navigator.clipboard.writeText(text)
+        setCopied(true)
+        setTimeout(() => setCopied(false), 1500)
+      }}
+    >
+      {copied ? <CheckIcon className="size-3.5" /> : <CopyIcon className="size-3.5" />}
+    </Action>
+  )
+}
+
+/** Barra de ações do assistente: copiar + horário da resposta. */
+export function AssistantMessageActions({ message }: { message: ChatMessage }) {
+  return (
+    <Actions className="mt-1 items-center">
+      <CopyAction text={messageText(message)} />
+      <MessageTimestamp timestamp={message.createdAt} />
     </Actions>
+  )
+}
+
+/** Mensagem do usuário: texto + ações (copiar + horário de envio). */
+export function UserMessageBody({ message }: { message: ChatMessage }) {
+  return (
+    <div className="group/user-msg flex flex-col gap-0.5">
+      <p className="whitespace-pre-wrap">{messageText(message)}</p>
+      <Actions className="-mb-1 items-center justify-end opacity-0 transition-opacity group-hover/user-msg:opacity-100">
+        <MessageTimestamp timestamp={message.createdAt} />
+        <CopyAction text={messageText(message)} />
+      </Actions>
+    </div>
   )
 }

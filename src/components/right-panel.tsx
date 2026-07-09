@@ -37,7 +37,7 @@ function TabContent({ type }: { type: TabType }) {
   switch (type) {
     case "chat":
       return (
-        <div className="flex flex-1 flex-col overflow-hidden p-4">
+        <div className="flex flex-1 flex-col overflow-hidden p-4" style={{ '--panel-bg': 'var(--sidebar)' } as React.CSSProperties}>
           <ChatView />
         </div>
       )

@@ -102,7 +102,7 @@ function Layout() {
                 onToggleSidebar={handleToggleSidebar}
                 onToggleRightPanel={workspaceMode === "code" ? () => setRightPanelOpen(v => !v) : undefined}
               />
-              <div className="flex min-w-0 flex-1 flex-col overflow-hidden p-4">
+              <div className="flex min-w-0 flex-1 flex-col overflow-hidden p-4" style={{ '--panel-bg': 'var(--background)' } as React.CSSProperties}>
                 <ChatView />
               </div>
             </main>

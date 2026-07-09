@@ -1,4 +1,4 @@
-import { Fragment, useMemo, useState } from "react"
+import { Fragment, useEffect, useMemo, useState } from "react"
 import { ChevronDownIcon } from "lucide-react"
 import { cn } from "@/lib/utils"
 import type { ChatMessage, MessagePart, ToolPart } from "@/shared/chat"
@@ -19,7 +19,6 @@ import {
 } from "@/src/components/ai/test-results"
 import {
   AssistantMarkdown,
-  CopyMessageAction,
   MessageError,
   ReasoningPartView,
 } from "@/src/components/messages/shared"
@@ -110,6 +109,12 @@ function TestResultsBlock({ summary }: { summary: TestSummary }) {
 function TaskGroup({ parts }: { parts: ToolPart[] }) {
   const working = parts.some((p) => p.state === "running")
   const errors = parts.filter((p) => p.state === "error").length
+  const [open, setOpen] = useState(false)
+
+  // Abre automaticamente enquanto trabalha; fica fechado por padrão ao concluir
+  useEffect(() => {
+    if (working) setOpen(true)
+  }, [working])
 
   const title = working
     ? "Trabalhando…"
@@ -118,11 +123,13 @@ function TaskGroup({ parts }: { parts: ToolPart[] }) {
       : `${parts.length} ${parts.length === 1 ? "ação executada" : "ações executadas"}`
 
   return (
-    <Task defaultOpen className="not-prose my-2 w-full">
+    <Task open={open} onOpenChange={setOpen} className="not-prose my-2 w-full">
       <TaskTrigger title={title}>
         <div className="flex w-full cursor-pointer items-center gap-2 text-muted-foreground text-sm transition-colors hover:text-foreground">
           {working ? <Shimmer>{title}</Shimmer> : <p className="text-sm">{title}</p>}
-          <ChevronDownIcon className="size-4 transition-transform group-data-[state=open]:rotate-180" />
+          <ChevronDownIcon
+            className={cn("size-4 transition-transform", open ? "rotate-0" : "-rotate-90")}
+          />
         </div>
       </TaskTrigger>
       <TaskContent>
@@ -168,14 +175,23 @@ export function CodeAssistantMessage({ message, isLast, isBusy }: {
   const sources = useMemo(() => (finished ? extractSources(message) : []), [finished, message])
   const waiting = isLast && isBusy && message.parts.length === 0
 
+  // Texto seguido de ações é narração intermediária do agente, não a
+  // resposta final — renderiza em cor apagada.
+  const lastTaskIndex = segments.reduce(
+    (last, segment, i) => (segment.kind === "task" ? i : last),
+    -1,
+  )
+
   return (
     <div className="flex w-full flex-col gap-1">
       {waiting && <Shimmer className="text-sm">Analisando…</Shimmer>}
-      {segments.map((segment) =>
+      {segments.map((segment, index) =>
         segment.kind === "task" ? (
           <TaskGroup key={segment.id} parts={segment.parts} />
         ) : segment.part.type === "text" ? (
-          <AssistantMarkdown key={segment.id}>{segment.part.text}</AssistantMarkdown>
+          <AssistantMarkdown key={segment.id} muted={index < lastTaskIndex}>
+            {segment.part.text}
+          </AssistantMarkdown>
         ) : segment.part.type === "reasoning" ? (
           <ReasoningPartView key={segment.id} part={segment.part} />
         ) : null,
@@ -196,7 +212,6 @@ export function CodeAssistantMessage({ message, isLast, isBusy }: {
           </SourcesContent>
         </Sources>
       )}
-      {finished && !waiting && <CopyMessageAction message={message} />}
     </div>
   )
 }
