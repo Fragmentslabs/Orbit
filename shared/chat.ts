@@ -75,6 +75,16 @@ export interface ToolPart {
 
 export type MessagePart = TextPart | ReasoningPart | ToolPart
 
+export interface TokenUsage {
+  input: number
+  output: number
+  reasoning: number
+  cacheRead: number
+  cacheWrite: number
+  /** USD, calculado com os preços do catálogo (quando disponíveis) */
+  cost?: number
+}
+
 export interface ChatMessage {
   id: string
   role: "user" | "assistant"
@@ -85,6 +95,10 @@ export interface ChatMessage {
   error?: string
   /** Gerada em modo simples: renderizar como texto puro, sem markdown/tool views */
   simple?: boolean
+  /** Tokens consumidos na geração desta mensagem (assistant) */
+  tokens?: TokenUsage
+  /** Mensagem sintética de compactação: resumo do histórico anterior */
+  summary?: boolean
 }
 
 export interface ModelVariant {
@@ -101,6 +115,32 @@ export interface ReasoningConfig {
   enabled: boolean
   /** ID da variant selecionada — undefined usa o baseline do modelo */
   variantId?: string
+}
+
+export type PermissionMode = "ask" | "approve" | "full"
+
+/** Ação sensível que uma ferramenta quer executar (bash, write, edit) */
+export interface PermissionClaim {
+  tool: string
+  /** Título curto exibido na UI (ex: "bash: git push --force") */
+  title: string
+  detail?: string
+  /** Ação crítica (nível deny) — a UI destaca o aviso */
+  critical?: boolean
+}
+
+/** Pergunta estruturada da tool question */
+export interface Question {
+  id: string
+  text: string
+  options?: string[]
+  multi?: boolean
+}
+
+/** Origem de um pedido vindo de worker (exibido no chat do orquestrador) */
+export interface AskOrigin {
+  workerSessionId: string
+  workerTitle: string
 }
 
 export interface SendMessageOptions {
@@ -120,6 +160,8 @@ export interface SendMessageOptions {
   brain?: boolean
   /** Modo Orchestra: divide em plano de tarefas + workers em sessões filhas */
   orchestrate?: { plan?: OrchestrationPlan }
+  /** Modo de permissões (code-mode e workers): default efetivo "ask" */
+  permissionMode?: PermissionMode
 }
 
 export interface OrchestrationTask {
@@ -138,6 +180,8 @@ export interface OrchestrationPlan {
   id: string
   tasks: OrchestrationTask[]
   status: "proposed" | "approved" | "running" | "done" | "rejected"
+  /** Tokens/custo acumulados: planejamento + workers + síntese */
+  usage?: TokenUsage
 }
 
 export interface WorkerModelConfig {
@@ -159,11 +203,17 @@ export interface SendMessageInput {
   workerModel?: WorkerModelConfig
   /** Preenchido pelo main process em execuções de worker — nunca pelo renderer */
   orchestrationRole?: "orchestrator" | "worker"
+  /** Sessão do orquestrador que criou este worker (preenchido pelo main) */
+  parentSessionId?: string
+  /** Título curto da tarefa do worker, para badges de origem (preenchido pelo main) */
+  workerTitle?: string
 }
 
 export type ChatEvent =
   | { type: "status"; sessionId: string; status: ChatStatus; error?: string }
   | { type: "message"; sessionId: string; message: ChatMessage }
+  /** Substituição completa do histórico (ex: compactação insere resumo no meio) */
+  | { type: "messages"; sessionId: string; messages: ChatMessage[] }
   | { type: "part"; sessionId: string; messageId: string; part: MessagePart }
   | {
       type: "part-delta"
@@ -177,6 +227,12 @@ export type ChatEvent =
   | { type: "orchestration:plan"; sessionId: string; plan: OrchestrationPlan }
   /** Session criada/atualizada pelo main process (workers da orquestração) */
   | { type: "session"; sessionId: string; session: SessionInfo }
+  /** Pedido de permissão aguardando resposta (card inline; origin = veio de worker) */
+  | { type: "permission"; sessionId: string; requestId: string; claim: PermissionClaim; origin?: AskOrigin }
+  /** Perguntas da tool question aguardando resposta */
+  | { type: "question"; sessionId: string; requestId: string; questions: Question[]; origin?: AskOrigin }
+  /** Pedido resolvido/cancelado — remove o card da UI */
+  | { type: "ask:done"; sessionId: string; requestId: string }
 
 /** Modelo do catálogo models.dev (mesmo formato usado pelo opencode) */
 export interface CatalogModel {

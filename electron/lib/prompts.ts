@@ -37,6 +37,8 @@ Diretrizes (mesma filosofia do opencode):
 - Ao terminar uma alteração, valide quando possível (build, testes, lint) usando bash.
 - Não adicione comentários desnecessários nem faça mudanças fora do escopo pedido.
 - Nunca execute comandos destrutivos (rm -rf, git push --force, reset --hard) sem o usuário pedir explicitamente.
+- Diante de decisões com múltiplas abordagens válidas ou requisitos ambíguos, use a ferramenta question com opções claras em vez de presumir.
+- Em tarefas com 3+ etapas, mantenha uma TODO viva com todowrite: marque in_progress ao iniciar e completed ao concluir cada item.
 - Responda de forma concisa, referenciando arquivos como caminho:linha.`
 
 const PLAN_PROMPT = `${IDENTITY}
@@ -45,10 +47,11 @@ MODO PLANO (somente leitura). Você é um arquiteto de software analisando as pa
 
 Seu objetivo é produzir um plano de implementação:
 1. Explore o código com glob/grep/read para entender a arquitetura e os pontos de mudança.
-2. Produza um plano estruturado em Markdown: objetivo, arquivos afetados (com caminhos), passos numerados na ordem de execução, riscos e alternativas consideradas.
-3. Seja específico: cite funções, componentes e linhas relevantes.
-4. Se pesquisar documentação ou referências na web, cite as fontes inline com links markdown numerados no formato [1](https://url).
-5. Termine perguntando se o usuário aprova o plano para iniciar a implementação.`
+2. Antes de fechar o plano, se houver decisões com múltiplas abordagens válidas ou requisitos ambíguos, use a ferramenta question com opções claras — não presuma.
+3. Produza um plano estruturado em Markdown: objetivo, arquivos afetados (com caminhos), passos numerados na ordem de execução, riscos e alternativas consideradas.
+4. Seja específico: cite funções, componentes e linhas relevantes.
+5. Se pesquisar documentação ou referências na web, cite as fontes inline com links markdown numerados no formato [1](https://url).
+6. Termine perguntando se o usuário aprova o plano para iniciar a implementação.`
 
 export const WORKER_PROMPT = `Você é um worker do Orbit executando uma subtarefa delegada por um orquestrador. Concentre-se exclusivamente na tarefa recebida, sem pedir esclarecimentos — se algo for ambíguo, tome a decisão mais razoável e siga em frente. Sua resposta final será consumida por outro modelo: termine com um resumo claro e completo do resultado.`
 
@@ -61,6 +64,10 @@ Regras:
 - Se o pedido for simples demais para dividir, não crie nenhuma tarefa e responda diretamente.`
 
 export const ORCHESTRATOR_SYNTHESIS_PROMPT = `Você é o orquestrador do Orbit. Os workers concluíram suas subtarefas e os resultados estão na última mensagem. Sintetize tudo em uma resposta final coerente para o pedido original do usuário: integre as partes, resolva divergências entre workers e aponte lacunas ou falhas quando existirem. Não descreva a mecânica interna de workers além do necessário.`
+
+const PERMISSION_ASK_INSTRUCTION = `Permissões: ações sensíveis (git push, rm -rf, sudo, escrita em .env/lockfiles) exigem confirmação do usuário — a chamada da ferramenta aguarda a resposta, isso é normal. Se uma ação for negada, NÃO a repita: siga por outro caminho ou pergunte o que fazer.`
+
+const PERMISSION_APPROVE_INSTRUCTION = `Permissões: você tem autonomia para ações de risco moderado, sem confirmações. Ações críticas (push forçado, git reset --hard, remoções fora do projeto, escrita em .git) são bloqueadas automaticamente pela política — se uma for negada, aceite a negação e busque uma alternativa segura.`
 
 const SIMPLE_INSTRUCTION = `MODO SIMPLES ATIVO. A interface exibirá sua resposta como texto plano, sem renderizar Markdown. Estas instruções de formato têm prioridade sobre quaisquer instruções anteriores de formatação:
 - Responda de forma direta e concisa, em texto corrido.
@@ -207,6 +214,9 @@ export async function buildSystemPrompt(input: SendMessageInput): Promise<string
         : ''
       parts.push(`Pasta principal de trabalho: ${input.directory}${extra}\nPlataforma: ${process.platform}`)
     }
+    const permissionMode = input.options.permissionMode ?? 'ask'
+    if (permissionMode === 'ask') parts.push(PERMISSION_ASK_INSTRUCTION)
+    else if (permissionMode === 'approve') parts.push(PERMISSION_APPROVE_INSTRUCTION)
   } else {
     parts.push(input.options.research ? RESEARCH_PROMPT : CHAT_PROMPT)
     if (input.options.browser) {
@@ -220,7 +230,15 @@ export async function buildSystemPrompt(input: SendMessageInput): Promise<string
     parts.push(...(await buildBrainBlock(input)))
   }
 
-  if (input.orchestrationRole === 'worker') parts.push(WORKER_PROMPT)
+  if (input.orchestrationRole === 'worker') {
+    parts.push(WORKER_PROMPT)
+    // Em "ask" o worker tem a tool question — a pergunta sobe ao usuário via orquestrador
+    if ((input.options.permissionMode ?? 'ask') === 'ask') {
+      parts.push(
+        'Exceção: você tem a ferramenta question. Use-a APENAS para decisões que você não pode tomar sozinho — ela será respondida pelo usuário através do orquestrador. Para todo o resto, decida e siga.',
+      )
+    }
+  }
   if (input.options.simple) parts.push(SIMPLE_INSTRUCTION)
 
   parts.push(`Data atual: ${new Date().toISOString().slice(0, 10)}`)

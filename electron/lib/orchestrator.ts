@@ -10,12 +10,14 @@ import type {
   TextPart,
 } from '../../shared/chat'
 import { StorageKeys } from '../../shared/chat'
+import { getProvider } from './catalog'
 import { abortChat, runChat, toModelMessages } from './chat-engine'
 import { ORCHESTRATOR_PLAN_PROMPT, ORCHESTRATOR_SYNTHESIS_PROMPT } from './prompts'
 import { resolveModel } from './providers'
 import { buildProviderOptions } from './reasoning'
 import { readJson, writeJson } from './storage'
 import { createTaskTool } from './tools/orchestration'
+import { addTokenUsage, toTokenUsage } from './usage'
 
 /**
  * OrchestratorEngine (modo Orchestra), em três fases:
@@ -67,6 +69,8 @@ export function abortOrchestration(sessionId: string) {
   controllers.get(sessionId)?.abort()
   // Abort transitivo: workers da fase 2 têm seus próprios controllers no chat-engine
   for (const workerId of activeWorkers.get(sessionId) ?? []) abortChat(workerId)
+  // Plano pendente de aprovação deixa de ser executável (ex: sessão deletada)
+  pending.delete(sessionId)
 }
 
 /** Fase 1 — planejamento. Substitui runChat quando options.orchestrate está ativo. */
@@ -142,7 +146,13 @@ export async function runOrchestration(win: BrowserWindow, input: SendMessageInp
       return
     }
 
-    const plan: OrchestrationPlan = { id: newId('plan'), tasks, status: 'proposed' }
+    const provider = await getProvider(input.providerId)
+    const plan: OrchestrationPlan = {
+      id: newId('plan'),
+      tasks,
+      status: 'proposed',
+      usage: toTokenUsage(result.usage, provider?.models[input.modelId]?.cost),
+    }
     pending.set(sessionId, { input, plan, assistantMessageId: assistantMessage.id })
     await persistPlan(win, sessionId, plan)
     emit(win, { type: 'message', sessionId, message: assistantMessage })
@@ -202,7 +212,10 @@ export async function approvePlan(
       emit(win, { type: 'session', sessionId, session: next })
     }
 
-    // Cria as sessions filhas dos workers
+    // Cria as sessions filhas dos workers. Registra cada worker em activeWorkers
+    // JÁ NA CRIAÇÃO — um abort nesta janela precisa alcançá-los (antes o registro
+    // só acontecia depois de criar todas as sessions e persistir o plano).
+    activeWorkers.set(sessionId, [])
     const now = Date.now()
     for (const task of selected) {
       const worker: SessionInfo = {
@@ -222,6 +235,7 @@ export async function approvePlan(
       await writeJson(StorageKeys.session(worker.id), worker)
       task.workerSessionId = worker.id
       task.status = 'submitted'
+      activeWorkers.get(sessionId)?.push(worker.id)
       emit(win, { type: 'session', sessionId: worker.id, session: worker })
     }
 
@@ -230,7 +244,6 @@ export async function approvePlan(
     emit(win, { type: 'status', sessionId, status: 'streaming' })
 
     // Fase 2: workers em paralelo, cada um emitindo ChatEvents no próprio sessionId
-    activeWorkers.set(sessionId, selected.map((t) => t.workerSessionId!))
     const workerModel = input.workerModel
     const results = await Promise.all(
       selected.map(async (task) => {
@@ -246,10 +259,14 @@ export async function approvePlan(
             reasoning: workerModel?.reasoning,
             subagents: false,
             orchestrate: undefined,
+            // Gatekeeping: worker herda o modo de permissões do orquestrador
+            permissionMode: input.options.permissionMode,
           },
           directory: input.directory,
           extraDirectories: input.extraDirectories,
           orchestrationRole: 'worker',
+          parentSessionId: sessionId,
+          workerTitle: task.title,
         }
         await runChat(win, workerInput)
 
@@ -264,10 +281,13 @@ export async function approvePlan(
         return {
           task,
           text: text || (last?.error ? `O worker falhou: ${last.error}` : '(o worker não retornou texto)'),
+          tokens: last?.tokens,
         }
       }),
     )
     activeWorkers.delete(sessionId)
+    // Acumula o custo dos workers no plano (planejamento já está em plan.usage)
+    plan.usage = results.reduce((acc, r) => (r.tokens ? addTokenUsage(acc, r.tokens) : acc), plan.usage)
     await persistPlan(win, sessionId, plan)
 
     // Abort durante a fase 2: workers já pararam, não faz sentido sintetizar
@@ -327,6 +347,11 @@ export async function approvePlan(
     }
     part.state = 'done'
     if (started) emit(win, { type: 'part', sessionId, messageId: synthesisMessage.id, part })
+
+    // Usage da síntese: registrado na própria mensagem e somado ao plano
+    const provider = await getProvider(input.providerId)
+    synthesisMessage.tokens = toTokenUsage(await stream.usage, provider?.models[input.modelId]?.cost)
+    plan.usage = addTokenUsage(plan.usage, synthesisMessage.tokens)
     await saveMessages(sessionId, history)
 
     const session = await readJson<SessionInfo>(StorageKeys.session(sessionId))

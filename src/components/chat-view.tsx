@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react"
 import { ChevronRight } from "lucide-react"
 import { useWorkspace } from "@/lib/workspace-context"
 import type { ChatMessage, SendMessageOptions } from "@/shared/chat"
+import { AskCard } from "@/src/components/ask-card"
 import { ChatInput } from "@/src/components/chat-input"
 import { CodeInput } from "@/src/components/code-input"
 import { Persona, type PersonaState } from "@/src/components/ai/persona"
@@ -11,6 +12,7 @@ import { Suggestion } from "@/src/components/ai/suggestion"
 import { ChatAssistantMessage } from "@/src/components/messages/chat-message"
 import { CodeAssistantMessage } from "@/src/components/messages/code-message"
 import { SimpleAssistantMessage } from "@/src/components/messages/simple-message"
+import { SummaryCard } from "@/src/components/messages/summary-card"
 import { OrchestrationPlanCard } from "@/src/components/orchestration-plan-card"
 import { AssistantMessageActions, CopyAction, MessageTimestamp } from "@/src/components/messages/shared"
 import { Actions } from "@/src/components/ai/actions"
@@ -34,21 +36,25 @@ const codeSuggestions = [
   "Refatore algo no código",
 ]
 
-// Referência estável para o seletor do zustand (evita loop de getSnapshot)
+// Referências estáveis para seletores do zustand (evita loop de getSnapshot)
 const NO_MESSAGES: ChatMessage[] = []
+const NO_ASKS: never[] = []
 
 function ChatMessages({ messages, isBusy, mode }: {
   messages: ChatMessage[]
   isBusy: boolean
   mode: "chat" | "code"
 }) {
-  const lastAssistantId = [...messages].reverse().find((m) => m.role === "assistant")?.id
+  const lastAssistantId = [...messages].reverse().find((m) => m.role === "assistant" && !m.summary)?.id
   const AssistantMessage = mode === "chat" ? ChatAssistantMessage : CodeAssistantMessage
 
   return (
     <Conversation className="relative flex-1 -mt-10">
       <ConversationContent className="mx-auto w-full max-w-3xl">
         {messages.map((msg) => {
+          // Mensagem sintética de compactação: card colapsável, sem persona/ações
+          if (msg.summary) return <SummaryCard key={msg.id} message={msg} />
+
           const isLast = msg.id === lastAssistantId
           const finished = msg.role !== "assistant" || !(isLast && isBusy)
           const waiting = msg.role === "assistant" && isLast && isBusy && msg.parts.length === 0
@@ -103,6 +109,7 @@ export function ChatView({ sessionId }: { sessionId?: string } = {}) {
   )
   const status = useSessionStatus(session?.id)
   const plan = useSessionStore((s) => (session ? s.orchestration[session.id] : undefined))
+  const pendingAsks = useSessionStore((s) => (session ? s.pendingAsks[session.id] ?? NO_ASKS : NO_ASKS))
   const parentSession = useSessionStore((s) =>
     session?.parentId ? s.sessions.find((x) => x.id === session.parentId) : undefined,
   )
@@ -294,6 +301,14 @@ export function ChatView({ sessionId }: { sessionId?: string } = {}) {
       {session && plan && (plan.status === "proposed" || plan.status === "approved" || plan.status === "running") && (
         <div className="mx-auto w-full max-w-2xl pb-2">
           <OrchestrationPlanCard sessionId={session.id} plan={plan} />
+        </div>
+      )}
+      {/* Pedidos aguardando resposta (permissão / question), inline acima do input */}
+      {pendingAsks.length > 0 && (
+        <div className="mx-auto flex w-full max-w-2xl flex-col gap-2 pb-2">
+          {pendingAsks.map((ask) => (
+            <AskCard key={ask.requestId} ask={ask} />
+          ))}
         </div>
       )}
       {viewMode === "chat" ? (

@@ -9,6 +9,7 @@ import type * as NodePty from 'node-pty'
 import { listCredentialProviders, removeCredential, setCredential } from './lib/auth'
 import { getCatalog } from './lib/catalog'
 import { abortChat, runChat } from './lib/chat-engine'
+import { reply as askReply, rejectSession as rejectSessionAsks } from './lib/ask-broker'
 import { abortOrchestration, approvePlan, rejectPlan, runOrchestration } from './lib/orchestrator'
 import { setupMemoryScheduler } from './lib/memory/scheduler'
 import * as memoryService from './lib/memory/service'
@@ -333,7 +334,9 @@ app.whenReady().then(() => {
   ipcMain.handle('chat:abort', (_event, sessionId: string) => {
     abortChat(sessionId)
     abortOrchestration(sessionId)
+    rejectSessionAsks(sessionId)
   })
+  ipcMain.handle('chat:askReply', (_event, requestId: string, value: unknown) => askReply(requestId, value))
   ipcMain.handle('chat:approvePlan', (_event, sessionId: string, planId: string, taskIds?: string[]) => {
     if (win) void approvePlan(win, sessionId, planId, taskIds)
   })

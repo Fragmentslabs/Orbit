@@ -12,7 +12,9 @@ import {
 } from './files'
 import { createChatMemoryTools, createCodeMemoryTools } from './memory'
 import { createSubagentTool } from './orchestration'
+import { createQuestionTool } from './question'
 import { createBashTool } from './shell'
+import { createTodoTool } from './todo'
 import { createWebFetchTool, createWebSearchTool } from './web'
 
 export { destroyBrowserWindow } from './browser'
@@ -30,6 +32,10 @@ export function buildToolSet(input: SendMessageInput, ctx: ToolContext | null): 
   const allowDelegation = input.options.subagents === true && input.orchestrationRole !== 'worker'
   // Brain: memória persistente — workers também ficam de fora
   const allowBrain = input.options.brain === true && input.orchestrationRole !== 'worker'
+  // question: sessão principal sempre; workers só quando o pai não está em "full"
+  // (em "ask" a pergunta sobe ao usuário; em "approve" é auto-respondida)
+  const allowQuestion =
+    input.orchestrationRole !== 'worker' || (input.options.permissionMode ?? 'ask') !== 'full'
 
   if (input.mode === 'chat') {
     if (input.options.research) {
@@ -41,6 +47,7 @@ export function buildToolSet(input: SendMessageInput, ctx: ToolContext | null): 
       tools.browser_links = createBrowserLinksTool(input.sessionId)
     }
     if (allowBrain) Object.assign(tools, createChatMemoryTools(input))
+    if (allowQuestion) tools.question = createQuestionTool(input, ctx?.abort)
     if (allowDelegation) tools.subagent = createSubagentTool(input, ctx)
     return tools
   }
@@ -55,6 +62,7 @@ export function buildToolSet(input: SendMessageInput, ctx: ToolContext | null): 
     tools.ls = createListTool(ctx)
     tools.glob = createGlobTool(ctx)
     tools.grep = createGrepTool(ctx)
+    tools.todowrite = createTodoTool()
     if (!input.options.plan) {
       tools.write = createWriteTool(ctx)
       tools.edit = createEditTool(ctx)
@@ -62,6 +70,7 @@ export function buildToolSet(input: SendMessageInput, ctx: ToolContext | null): 
     }
   }
   if (allowBrain && ctx) Object.assign(tools, createCodeMemoryTools(input, ctx))
+  if (allowQuestion) tools.question = createQuestionTool(input, ctx?.abort)
   if (allowDelegation) tools.subagent = createSubagentTool(input, ctx)
 
   return tools

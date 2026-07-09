@@ -1,6 +1,7 @@
 import { generateText, stepCountIs, tool } from 'ai'
 import { z } from 'zod'
 import type { OrchestrationTask, SendMessageInput, SessionMode } from '../../../shared/chat'
+import { createToolApproval } from '../permission'
 import { buildSystemPrompt } from '../prompts'
 import { resolveModel } from '../providers'
 import { buildProviderOptions } from '../reasoning'
@@ -46,10 +47,14 @@ export function createSubagentTool(input: SendMessageInput, ctx: ToolContext | n
           browser,
           simple: true,
           reasoning: worker.reasoning,
+          // Gatekeeping: worker herda o modo de permissões do pai
+          permissionMode: input.options.permissionMode,
         },
         directory: input.directory,
         extraDirectories: input.extraDirectories,
         orchestrationRole: 'worker',
+        parentSessionId: input.sessionId,
+        workerTitle: task.slice(0, 60),
       }
 
       const workerCtx: ToolContext | null =
@@ -65,6 +70,7 @@ export function createSubagentTool(input: SendMessageInput, ctx: ToolContext | n
         system: await buildSystemPrompt(workerInput),
         prompt: task,
         tools: Object.keys(tools).length > 0 ? tools : undefined,
+        toolApproval: createToolApproval(workerInput, workerCtx, ctx?.abort),
         stopWhen: stepCountIs(SUBAGENT_MAX_STEPS),
         abortSignal: ctx?.abort,
         providerOptions: await buildProviderOptions(workerInput),

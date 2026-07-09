@@ -15,6 +15,7 @@ import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import type { OrchestrationPlan, OrchestrationTask } from "@/shared/chat"
 import { Shimmer } from "@/src/components/ai/shimmer"
+import { formatCost, formatTokens } from "@/src/lib/format"
 import { useSessionStore } from "@/src/stores/session-store"
 
 /**
@@ -124,6 +125,12 @@ export function OrchestrationPlanCard({ sessionId, plan }: {
           </div>
         ))}
       </div>
+      {plan.usage && (plan.status === "running" || plan.status === "approved" || plan.status === "done") && (
+        <p className="mt-2 text-[11px] tabular-nums text-muted-foreground">
+          Custo desta orchestra: {plan.usage.cost !== undefined ? formatCost(plan.usage.cost) : "—"} (
+          {formatTokens(plan.usage.input + plan.usage.output)} tokens)
+        </p>
+      )}
       {proposed && (
         <div className="mt-3 flex items-center justify-end gap-2">
           <Button variant="ghost" size="sm" className="text-xs" onClick={() => rejectPlan(sessionId)}>

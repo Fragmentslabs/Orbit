@@ -1,11 +1,14 @@
 import { nanoid } from "nanoid"
 import { create } from "zustand"
 import type {
+  AskOrigin,
   ChatEvent,
   ChatMessage,
   ChatStatus,
   FolderInfo,
   OrchestrationPlan,
+  PermissionClaim,
+  Question,
   SendMessageOptions,
   SessionInfo,
   SessionMode,
@@ -20,6 +23,15 @@ import { useProviderStore } from "@/src/stores/provider-store"
  * localmente (via storage do main process), mensagens compostas por parts e
  * status de streaming por sessão dirigindo a UI (persona em "thinking" etc).
  */
+
+/** Pedido pendente (permissão ou question) exibido como card acima do input */
+export interface PendingAskUI {
+  requestId: string
+  kind: "permission" | "question"
+  claim?: PermissionClaim
+  questions?: Question[]
+  origin?: AskOrigin
+}
 
 export interface SendConfig {
   options: SendMessageOptions
@@ -39,6 +51,8 @@ interface SessionState {
   activeIds: Record<SessionMode, string | null>
   /** Planos de orquestração por sessão orquestradora */
   orchestration: Record<string, OrchestrationPlan>
+  /** Pedidos de permissão/question aguardando resposta, por sessão */
+  pendingAsks: Record<string, PendingAskUI[]>
 
   initialize: () => Promise<void>
   ensureMessages: (sessionId: string) => Promise<void>
@@ -88,6 +102,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
   errors: {},
   activeIds: { chat: null, code: null },
   orchestration: {},
+  pendingAsks: {},
 
   initialize: async () => {
     if (get().initialized) return
@@ -173,18 +188,27 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     }),
 
   deleteSession: async (id) => {
-    await storage.remove(StorageKeys.session(id))
-    await storage.remove(StorageKeys.messages(id))
-    void chatApi.closeBrowser(id)
-    useBrainPrefs.getState().setEnabled(id, true) // limpa o override do Brain
+    // Cascata: deletar um orquestrador aborta e remove seus workers filhos.
+    // O abort do próprio id também é necessário — deletar sessão streamando
+    // deixava o stream rodando órfão no main.
+    const ids = [id, ...get().sessions.filter((s) => s.parentId === id).map((s) => s.id)]
+    for (const sid of ids) {
+      void chatApi.abort(sid)
+      await storage.remove(StorageKeys.session(sid))
+      await storage.remove(StorageKeys.messages(sid))
+      void chatApi.closeBrowser(sid)
+      useBrainPrefs.getState().setEnabled(sid, true) // limpa o override do Brain
+    }
+    const idSet = new Set(ids)
     set((state) => {
       const messages = { ...state.messages }
-      delete messages[id]
+      for (const sid of ids) delete messages[sid]
       const activeIds = { ...state.activeIds }
       for (const mode of ["chat", "code"] as SessionMode[]) {
-        if (activeIds[mode] === id) activeIds[mode] = null
+        const active = activeIds[mode]
+        if (active && idSet.has(active)) activeIds[mode] = null
       }
-      return { sessions: state.sessions.filter((s) => s.id !== id), messages, activeIds }
+      return { sessions: state.sessions.filter((s) => !idSet.has(s.id)), messages, activeIds }
     })
   },
 
@@ -339,6 +363,11 @@ function applyChatEvent(event: ChatEvent, set: Setter, get: () => SessionState) 
       })
       break
 
+    case "messages":
+      // Substituição completa (ex: compactação inseriu um resumo no meio)
+      set((state) => ({ messages: { ...state.messages, [sessionId]: event.messages } }))
+      break
+
     case "title":
       set((state) => {
         const sessions = state.sessions.map((s) => (s.id === sessionId ? { ...s, title: event.title } : s))
@@ -366,6 +395,33 @@ function applyChatEvent(event: ChatEvent, set: Setter, get: () => SessionState) 
             ? { ...state.messages, [event.session.id]: [] }
             : state.messages
         return { sessions, messages }
+      })
+      break
+
+    case "permission":
+    case "question": {
+      const ask: PendingAskUI =
+        event.type === "permission"
+          ? { requestId: event.requestId, kind: "permission", claim: event.claim, origin: event.origin }
+          : { requestId: event.requestId, kind: "question", questions: event.questions, origin: event.origin }
+      set((state) => {
+        const current = state.pendingAsks[sessionId] ?? []
+        if (current.some((a) => a.requestId === ask.requestId)) return state
+        return { pendingAsks: { ...state.pendingAsks, [sessionId]: [...current, ask] } }
+      })
+      break
+    }
+
+    case "ask:done":
+      set((state) => {
+        const current = state.pendingAsks[sessionId]
+        if (!current?.some((a) => a.requestId === event.requestId)) return state
+        return {
+          pendingAsks: {
+            ...state.pendingAsks,
+            [sessionId]: current.filter((a) => a.requestId !== event.requestId),
+          },
+        }
       })
       break
   }

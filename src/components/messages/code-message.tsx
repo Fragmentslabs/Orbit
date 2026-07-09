@@ -10,6 +10,7 @@ import {
 } from "@/src/lib/message-utils"
 import { Shimmer } from "@/src/components/ai/shimmer"
 import { SubAgentCard } from "@/src/components/ai/sub-agent-card"
+import { TodoList } from "@/src/components/ai/todo-list"
 import { Source, Sources, SourcesContent, SourcesTrigger } from "@/src/components/ai/sources"
 import { Task, TaskContent, TaskItem, TaskItemFile, TaskTrigger } from "@/src/components/ai/task"
 import {
@@ -155,8 +156,8 @@ type Segment =
 function segmentParts(parts: MessagePart[]): Segment[] {
   const segments: Segment[] = []
   for (const part of parts) {
-    // Subagentes têm card próprio — ficam fora do agrupamento de Task
-    if (part.type === "tool" && part.tool !== "subagent") {
+    // Subagentes e a TODO viva têm cards próprios — fora do agrupamento de Task
+    if (part.type === "tool" && part.tool !== "subagent" && part.tool !== "todowrite") {
       const last = segments[segments.length - 1]
       if (last?.kind === "task") last.parts.push(part)
       else segments.push({ kind: "task", id: part.id, parts: [part] })
@@ -184,6 +185,11 @@ export function CodeAssistantMessage({ message, isLast, isBusy }: {
     -1,
   )
 
+  // Só a última todowrite é a checklist viva; anteriores viram uma linha
+  const lastTodoId = [...message.parts]
+    .reverse()
+    .find((p) => p.type === "tool" && p.tool === "todowrite")?.id
+
   return (
     <div className="flex w-full flex-col gap-1">
       {waiting && <Shimmer className="text-sm">Analisando…</Shimmer>}
@@ -198,6 +204,8 @@ export function CodeAssistantMessage({ message, isLast, isBusy }: {
           <ReasoningPartView key={segment.id} part={segment.part} />
         ) : segment.part.type === "tool" && segment.part.tool === "subagent" ? (
           <SubAgentCard key={segment.id} part={segment.part} />
+        ) : segment.part.type === "tool" && segment.part.tool === "todowrite" ? (
+          <TodoList key={segment.id} part={segment.part} stale={segment.part.id !== lastTodoId} />
         ) : null,
       )}
       {message.error && <MessageError error={message.error} />}

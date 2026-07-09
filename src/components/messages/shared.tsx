@@ -21,6 +21,7 @@ import {
   InlineCitationSource,
 } from "@/src/components/ai/inline-citation"
 import { MessageResponse } from "@/src/components/ai/message"
+import { MessageUsage } from "@/src/components/messages/message-usage"
 import { Reasoning, ReasoningContent, ReasoningTrigger } from "@/src/components/ai/reasoning"
 import { Shimmer } from "@/src/components/ai/shimmer"
 
@@ -172,12 +173,13 @@ export function CopyAction({ text }: { text: string }) {
   )
 }
 
-/** Barra de ações do assistente: copiar + horário da resposta. */
+/** Barra de ações do assistente: copiar + horário + tokens/custo da resposta. */
 export function AssistantMessageActions({ message }: { message: ChatMessage }) {
   return (
     <Actions className="mt-1 items-center">
       <CopyAction text={messageText(message)} />
       <MessageTimestamp timestamp={message.createdAt} />
+      {message.tokens && <MessageUsage tokens={message.tokens} />}
     </Actions>
   )
 }

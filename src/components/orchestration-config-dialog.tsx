@@ -64,6 +64,10 @@ export function OrchestrationConfigDialog({ open, onOpenChange }: {
         </DialogHeader>
 
         <div className="flex flex-col gap-4">
+          <div className="rounded-md border border-amber-500/30 bg-amber-500/10 p-2 text-xs text-amber-600 dark:text-amber-400">
+            <strong>Atenção:</strong> workers rodam em paralelo e consomem tokens sem limite por
+            padrão — prefira um modelo econômico e acompanhe o custo exibido em cada execução.
+          </div>
           <div className="flex flex-col gap-1.5">
             <p className="text-xs font-medium text-muted-foreground">Modelo do worker</p>
             <Select

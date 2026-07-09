@@ -31,6 +31,8 @@ export const chatApi = {
     window.ipcRenderer.invoke("chat:approvePlan", sessionId, planId, taskIds),
   rejectPlan: (sessionId: string) => window.ipcRenderer.invoke("chat:rejectPlan", sessionId),
   closeBrowser: (sessionId: string) => window.ipcRenderer.invoke("chat:closeBrowser", sessionId),
+  askReply: (requestId: string, value: unknown) =>
+    window.ipcRenderer.invoke("chat:askReply", requestId, value) as Promise<boolean>,
   onEvent: (listener: (event: ChatEvent) => void) => {
     const wrapper = window.ipcRenderer.on("chat:event", (event) => listener(event as ChatEvent))
     return () => window.ipcRenderer.off("chat:event", wrapper)

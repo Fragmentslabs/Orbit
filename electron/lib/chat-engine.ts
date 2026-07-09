@@ -10,11 +10,14 @@ import type {
 } from '../../shared/chat'
 import { StorageKeys } from '../../shared/chat'
 import { getProvider } from './catalog'
+import { compactHistory, findLastSummaryIndex, shouldCompact } from './compaction'
+import { createToolApproval, takeDenialReason } from './permission'
 import { buildSystemPrompt } from './prompts'
 import { buildProviderOptions } from './reasoning'
 import { resolveModel } from './providers'
 import { readJson, writeJson } from './storage'
 import { buildToolSet, type ToolContext } from './tools'
+import { toTokenUsage } from './usage'
 
 /**
  * Motor de chat portado do processador de sessões do opencode: converte o
@@ -44,10 +47,16 @@ function partText(parts: MessagePart[], type: 'text'): string {
     .join('\n')
 }
 
-/** Converte o histórico persistido em mensagens para o modelo (somente texto). */
+/**
+ * Converte o histórico persistido em mensagens para o modelo (somente texto).
+ * Havendo compactação, corta no último resumo: envia resumo + mensagens
+ * posteriores; o histórico completo continua no storage e na UI.
+ */
 export function toModelMessages(history: ChatMessage[]): ModelMessage[] {
+  const lastSummary = findLastSummaryIndex(history)
+  const window = lastSummary >= 0 ? history.slice(lastSummary) : history
   const result: ModelMessage[] = []
-  for (const message of history) {
+  for (const message of window) {
     const text = partText(message.parts, 'text')
     if (!text.trim()) continue
     result.push({ role: message.role, content: text })
@@ -130,6 +139,22 @@ export async function runChat(win: BrowserWindow, input: SendMessageInput): Prom
     const provider = await getProvider(input.providerId)
     const supportsTools = provider?.models[input.modelId]?.tool_call !== false
 
+    // Compactação automática: os tokens reais da última resposta indicam que o
+    // contexto está perto do limite → resume o trecho antigo uma única vez
+    const lastTokens = [...history].reverse().find((m) => m.role === 'assistant' && m.tokens)?.tokens
+    if (shouldCompact(lastTokens, provider?.models[input.modelId])) {
+      try {
+        const summary = await compactHistory(history, model)
+        if (summary) {
+          await saveMessages(sessionId, history)
+          emit(win, { type: 'messages', sessionId, messages: history })
+        }
+      } catch (err) {
+        // compactação é otimização — nunca derruba o turno
+        console.error('[compaction] falhou:', err)
+      }
+    }
+
     const toolContext: ToolContext | null =
       input.mode === 'code' && input.directory
         ? {
@@ -145,6 +170,7 @@ export async function runChat(win: BrowserWindow, input: SendMessageInput): Prom
       system: await buildSystemPrompt(input),
       messages: toModelMessages(history.slice(0, -1)),
       tools: supportsTools ? buildToolSet(input, toolContext) : undefined,
+      toolApproval: supportsTools ? createToolApproval(input, toolContext, controller.signal) : undefined,
       stopWhen: stepCountIs(MAX_STEPS),
       abortSignal: controller.signal,
       providerOptions: await buildProviderOptions(input),
@@ -241,6 +267,21 @@ export async function runChat(win: BrowserWindow, input: SendMessageInput): Prom
           })
           break
         }
+        case 'tool-output-denied': {
+          // Execução negada pelo gate de permissões (política ou usuário)
+          const existing = assistantMessage.parts.find((p) => p.id === part.toolCallId) as
+            | ToolPart
+            | undefined
+          upsertPart({
+            id: part.toolCallId,
+            type: 'tool',
+            tool: part.toolName,
+            state: 'error',
+            input: existing?.input,
+            error: takeDenialReason(part.toolCallId) ?? 'Ação negada pela política de permissões.',
+          })
+          break
+        }
         case 'tool-error': {
           const existing = assistantMessage.parts.find((p) => p.id === part.toolCallId) as
             | ToolPart
@@ -255,6 +296,13 @@ export async function runChat(win: BrowserWindow, input: SendMessageInput): Prom
           })
           break
         }
+        case 'finish':
+          // Usage agregado da geração (todos os steps) + custo via catálogo
+          assistantMessage.tokens = toTokenUsage(
+            part.totalUsage,
+            provider?.models[input.modelId]?.cost,
+          )
+          break
         case 'error':
           throw part.error instanceof Error ? part.error : new Error(String(part.error))
         default:

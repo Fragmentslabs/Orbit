@@ -22,10 +22,12 @@ import { DelegationMenuItems } from "@/src/components/delegation-menu"
 import { ModelPicker } from "@/src/components/model-picker"
 import { ModeToggle } from "@/src/components/mode-toggle"
 import { OrchestrationConfigDialog } from "@/src/components/orchestration-config-dialog"
+import { PermissionModePicker } from "@/src/components/permission-mode-picker"
 import { ReasoningPicker } from "@/src/components/reasoning-picker"
 import { FolderSelector } from "@/src/components/folder-selector"
 import { useWorkspace } from "@/lib/workspace-context"
 import { useBrainEnabled, useBrainPrefs } from "@/src/stores/brain-prefs"
+import { usePermissionPrefs } from "@/src/stores/permission-prefs"
 import { useProviderStore } from "@/src/stores/provider-store"
 import { useReasoningPrefs } from "@/src/stores/reasoning-prefs"
 import { useSimpleMode } from "@/src/stores/simple-mode"
@@ -54,6 +56,7 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId }: 
   const setSimple = useSimpleMode((s) => s.setSimple)
   const brain = useBrainEnabled(sessionId)
   const setBrainEnabled = useBrainPrefs((s) => s.setEnabled)
+  const permissionMode = usePermissionPrefs((s) => s.mode)
   const { folders, setFolders } = useWorkspace()
   const selected = useProviderStore((s) => s.selectedModel)
   const model = useProviderStore((s) =>
@@ -79,6 +82,7 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId }: 
         research: search,
         simple,
         brain,
+        permissionMode,
         reasoning: { enabled: thinking, variantId },
         subagents,
         orchestrate: orchestra ? {} : undefined,
@@ -181,6 +185,7 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId }: 
                   onSelect={(id) => update({ enabled: true, variantId: id })}
                 />
               )}
+              <PermissionModePicker />
               <ModelPicker />
               <PromptInputSubmit
                 disabled={(!selected || folders.length === 0) && !busy}
