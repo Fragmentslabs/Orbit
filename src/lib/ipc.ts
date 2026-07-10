@@ -6,6 +6,7 @@ import type {
 import type { McpConfig, McpServerStatus } from "@/shared/mcp"
 import type { Memory, MemoryEvent } from "@/shared/memory"
 import type { Skill, SkillProposal } from "@/shared/skills"
+import type { AnalyticsSummary, AnalyticsRange } from "@/shared/analytics"
 
 /** Wrapper tipado sobre a bridge IPC exposta pelo preload. */
 
@@ -69,6 +70,11 @@ export const mcpApi = {
     window.ipcRenderer.invoke("mcp:save", config) as Promise<McpServerStatus[]>,
   reconnect: (name?: string) =>
     window.ipcRenderer.invoke("mcp:reconnect", name) as Promise<McpServerStatus[]>,
+}
+
+export const analyticsApi = {
+  summary: (range: AnalyticsRange) =>
+    window.ipcRenderer.invoke("analytics:summary", range) as Promise<AnalyticsSummary>,
 }
 
 export const memoryApi = {

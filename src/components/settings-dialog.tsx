@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react"
-import { KeyRound, Puzzle, Shield, Trash2, Check } from "lucide-react"
+import { BarChart3, KeyRound, Puzzle, Shield, Trash2, Check } from "lucide-react"
 import {
   Dialog,
   DialogContent,
@@ -13,6 +13,7 @@ import { Input } from "@/components/ui/input"
 import { ModelSelectorLogo } from "@/src/components/ai/model-selector"
 import { AutonomyPanel } from "@/src/components/autonomy-panel"
 import { McpSkillsPanel } from "@/src/components/mcp-skills-panel"
+import { AnalyticsPanel } from "@/src/components/analytics-panel"
 import { useProviderStore } from "@/src/stores/provider-store"
 import { cn } from "@/lib/utils"
 
@@ -32,6 +33,7 @@ const TABS: TabDef[] = [
   { id: "providers", label: "Provedores", icon: KeyRound, description: "Chaves de API dos provedores de IA." },
   { id: "autonomy", label: "Autonomia", icon: Shield, description: "Permissões e decisões por modo." },
   { id: "mcp-skills", label: "MCP & Skills", icon: Puzzle, description: "Servidores MCP e skills do usuário." },
+  { id: "analytics", label: "Uso", icon: BarChart3, description: "Estatísticas de uso e consumo de tokens." },
 ]
 
 function ProviderRow({ providerId }: { providerId: string }) {
@@ -202,7 +204,7 @@ export function SettingsDialog({ open, onOpenChange, initialTab = "providers" }:
               <p className="text-[11px] text-muted-foreground">{active.description}</p>
             </div>
             <div className="h-[520px]">
-              {tab === "providers" ? <ProvidersTab /> : tab === "autonomy" ? <AutonomyPanel /> : <McpSkillsPanel />}
+              {tab === "providers" ? <ProvidersTab /> : tab === "autonomy" ? <AutonomyPanel /> : tab === "mcp-skills" ? <McpSkillsPanel /> : <AnalyticsPanel />}
             </div>
           </div>
         </div>

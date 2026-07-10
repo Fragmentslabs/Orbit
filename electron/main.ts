@@ -17,6 +17,7 @@ import * as memoryService from './lib/memory/service'
 import { globalSkillsDir, loadSkills, notifySkillsChanged, setupSkillsWatcher } from './lib/skills'
 import { importSkillSelection } from './lib/skills/import'
 import { sanitizeSlug, serializeSkill } from './lib/skills/parser'
+import { computeAnalytics } from './lib/analytics'
 import { approvePendingSkill, discardPendingSkill, listPendingSkills } from './lib/skills/pending'
 import { listKeys, readJson, removeJson, writeJson } from './lib/storage'
 import { destroyBrowserWindow } from './lib/tools'
@@ -432,6 +433,9 @@ app.whenReady().then(() => {
       if (!w.isDestroyed()) w.webContents.send('skills:changed')
     }
   })
+
+  // Analytics: resumo de uso
+  ipcMain.handle('analytics:summary', (_event, range: 'total' | '30d' | '7d' | 'today') => computeAnalytics(range))
 
   // MCP: config + status + reconexão (as tools entram via buildToolSet)
   ipcMain.handle('mcp:config', () => readMcpConfig())
