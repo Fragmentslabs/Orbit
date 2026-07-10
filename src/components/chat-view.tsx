@@ -3,6 +3,7 @@ import { ChevronRight } from "lucide-react"
 import { useWorkspace } from "@/lib/workspace-context"
 import type { ChatMessage, SendMessageOptions } from "@/shared/chat"
 import { AskCard } from "@/src/components/ask-card"
+import { AskCardBatch } from "@/src/components/ask-card-batch"
 import { ChatInput } from "@/src/components/chat-input"
 import { CodeInput } from "@/src/components/code-input"
 import { Persona, type PersonaState } from "@/src/components/ai/persona"
@@ -303,11 +304,20 @@ export function ChatView({ sessionId }: { sessionId?: string } = {}) {
           <OrchestrationPlanCard sessionId={session.id} plan={plan} />
         </div>
       )}
-      {/* Pedidos aguardando resposta (permissão / question), inline acima do input */}
+      {/* Pedidos aguardando resposta (permissão / question), inline acima do input.
+          Itens com batchId (workers em lote) agrupam num card único de submit único. */}
       {pendingAsks.length > 0 && (
         <div className="mx-auto flex w-full max-w-2xl flex-col gap-2 pb-2">
-          {pendingAsks.map((ask) => (
-            <AskCard key={ask.requestId} ask={ask} />
+          {pendingAsks
+            .filter((a) => !a.batchId)
+            .map((ask) => (
+              <AskCard key={ask.requestId} ask={ask} />
+            ))}
+          {[...new Set(pendingAsks.map((a) => a.batchId).filter(Boolean))].map((batchId) => (
+            <AskCardBatch
+              key={batchId}
+              items={pendingAsks.filter((a) => a.batchId === batchId)}
+            />
           ))}
         </div>
       )}

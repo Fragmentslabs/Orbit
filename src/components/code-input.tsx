@@ -29,6 +29,7 @@ import { useWorkspace } from "@/lib/workspace-context"
 import { useBrainEnabled, useBrainPrefs } from "@/src/stores/brain-prefs"
 import { usePermissionPrefs } from "@/src/stores/permission-prefs"
 import { useProviderStore } from "@/src/stores/provider-store"
+import { useSettingsUi } from "@/src/stores/settings-ui"
 import { useReasoningPrefs } from "@/src/stores/reasoning-prefs"
 import { useSimpleMode } from "@/src/stores/simple-mode"
 import type { ChatStatus, SendMessageOptions } from "@/shared/chat"
@@ -185,7 +186,7 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId }: 
                   onSelect={(id) => update({ enabled: true, variantId: id })}
                 />
               )}
-              <PermissionModePicker />
+              <PermissionModePicker onOpenSettings={(tab) => useSettingsUi.getState().openSettings(tab)} />
               <ModelPicker />
               <PromptInputSubmit
                 disabled={(!selected || folders.length === 0) && !busy}

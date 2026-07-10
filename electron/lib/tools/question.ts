@@ -1,16 +1,19 @@
 import { generateText, tool } from 'ai'
 import { z } from 'zod'
 import type { Question, SendMessageInput } from '../../../shared/chat'
-import { ask, newRequestId } from '../ask-broker'
+import { DEFAULT_PERMISSION_THRESHOLDS } from '../../../shared/chat'
+import { newRequestId } from '../ask-broker'
+import { dispatchAsk } from '../ask-dispatch'
 import { broadcastChatEvent } from '../broadcast'
 import { resolveModel } from '../providers'
 
 /**
  * Tool question: perguntas estruturadas ao usuário (card inline via AskBroker).
- * Gatekeeping de workers:
- * - pai em "ask": a pergunta sobe para o chat do orquestrador com badge de origem.
- * - pai em "approve": o modelo responde autonomamente no lugar do usuário.
- * - pai em "full": a tool nem é exposta ao worker (ver tools/index.ts).
+ * Autonomia por thresholds (decisionsAuto do modo ativo):
+ * - full: sempre auto-responde (decisionsAuto high por default).
+ * - approve + decisionsAuto=high: auto-responde também na sessão principal.
+ * - workers: pai em ask → sobe ao chat do orquestrador (com batching);
+ *   pai em approve → auto; pai em full → tool nem é exposta (tools/index.ts).
  */
 
 interface QuestionReply {
@@ -43,6 +46,12 @@ async function autoAnswer(input: SendMessageInput, questions: Omit<Question, 'id
 export function createQuestionTool(input: SendMessageInput, signal?: AbortSignal) {
   const isWorker = input.orchestrationRole === 'worker'
   const permissionMode = input.options.permissionMode ?? 'ask'
+  const decisionsAuto = (
+    input.permissionThresholds?.[permissionMode] ?? DEFAULT_PERMISSION_THRESHOLDS[permissionMode]
+  ).decisionsAuto
+  const autoRespond =
+    permissionMode === 'full' ||
+    (permissionMode === 'approve' && (decisionsAuto === 'high' || isWorker))
 
   return tool({
     description:
@@ -60,23 +69,25 @@ export function createQuestionTool(input: SendMessageInput, signal?: AbortSignal
         .max(4),
     }),
     execute: async ({ questions }) => {
-      if (isWorker && permissionMode === 'approve') return autoAnswer(input, questions)
+      if (autoRespond) return autoAnswer(input, questions)
 
       const withIds: Question[] = questions.map((q, i) => ({ id: `q${i}`, ...q }))
       const requestId = newRequestId()
       const target = isWorker && input.parentSessionId ? input.parentSessionId : input.sessionId
-      broadcastChatEvent({
-        type: 'question',
-        sessionId: target,
-        requestId,
-        questions: withIds,
-        origin:
-          target !== input.sessionId
-            ? { workerSessionId: input.sessionId, workerTitle: input.workerTitle ?? 'worker' }
-            : undefined,
-      })
       try {
-        const reply = await ask<QuestionReply>(target, requestId, signal)
+        const reply = await dispatchAsk<QuestionReply>(
+          target,
+          {
+            requestId,
+            kind: 'question',
+            questions: withIds,
+            origin:
+              target !== input.sessionId
+                ? { workerSessionId: input.sessionId, workerTitle: input.workerTitle ?? 'worker' }
+                : undefined,
+          },
+          signal,
+        )
         if (reply?.rejected || !reply?.answers) return DISMISSED
         return questions
           .map((q, i) => `${i + 1}. ${q.text}\n   → ${reply.answers?.[i] || '(sem resposta)'}`)

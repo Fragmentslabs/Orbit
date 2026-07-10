@@ -62,7 +62,7 @@ function PermissionBody({ ask, submitted, onReply }: {
   )
 }
 
-function QuestionItem({ question, selected, free, onToggle, onFree }: {
+export function QuestionItem({ question, selected, free, onToggle, onFree }: {
   question: Question
   selected: Set<string>
   free: string

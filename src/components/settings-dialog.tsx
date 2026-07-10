@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react"
-import { Check, KeyRound, Trash2 } from "lucide-react"
+import { KeyRound, Shield, Trash2, Check } from "lucide-react"
 import {
   Dialog,
   DialogContent,
@@ -11,10 +11,26 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { ModelSelectorLogo } from "@/src/components/ai/model-selector"
+import { AutonomyPanel } from "@/src/components/autonomy-panel"
 import { useProviderStore } from "@/src/stores/provider-store"
+import { cn } from "@/lib/utils"
 
 /** Provedores em destaque, mostrados primeiro (mesma curadoria do opencode). */
 const FEATURED_PROVIDERS = ["anthropic", "openai", "google", "openrouter", "xai", "deepseek", "groq", "mistral"]
+
+import type { SettingsTab } from "@/src/stores/settings-ui"
+
+interface TabDef {
+  id: SettingsTab
+  label: string
+  icon: typeof Shield
+  description: string
+}
+
+const TABS: TabDef[] = [
+  { id: "providers", label: "Provedores", icon: KeyRound, description: "Chaves de API dos provedores de IA." },
+  { id: "autonomy", label: "Autonomia", icon: Shield, description: "Permissões e decisões por modo." },
+]
 
 function ProviderRow({ providerId }: { providerId: string }) {
   const provider = useProviderStore((s) => s.catalog[providerId])
@@ -88,10 +104,7 @@ function ProviderRow({ providerId }: { providerId: string }) {
   )
 }
 
-export function SettingsDialog({ open, onOpenChange }: {
-  open: boolean
-  onOpenChange: (open: boolean) => void
-}) {
+function ProvidersTab() {
   const catalog = useProviderStore((s) => s.catalog)
   const connectedProviders = useProviderStore((s) => s.connectedProviders)
   const [query, setQuery] = useState("")
@@ -110,27 +123,86 @@ export function SettingsDialog({ open, onOpenChange }: {
   }, [catalog, query, connectedProviders])
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-lg">
-        <DialogHeader>
-          <DialogTitle>Provedores de IA</DialogTitle>
-          <DialogDescription>
-            Adicione chaves de API para habilitar provedores. As chaves ficam salvas apenas neste
-            computador. Pesquise para ver todos os {Object.keys(catalog).length} provedores do catálogo.
-          </DialogDescription>
-        </DialogHeader>
-        <Input
-          value={query}
-          placeholder="Pesquisar provedor…"
-          onChange={(e) => setQuery(e.target.value)}
-        />
-        <div className="flex max-h-96 flex-col gap-2 overflow-y-auto pr-1">
-          {providerIds.map((id) => (
-            <ProviderRow key={id} providerId={id} />
-          ))}
-          {providerIds.length === 0 && (
-            <p className="py-4 text-center text-xs text-muted-foreground">Nenhum provedor encontrado</p>
-          )}
+    <div className="flex h-full flex-col gap-3 overflow-y-auto pr-1">
+      <div>
+        <p className="text-sm font-semibold">Provedores de IA</p>
+        <p className="mt-0.5 text-xs text-muted-foreground">
+          Adicione chaves de API para habilitar provedores. As chaves ficam salvas apenas neste
+          computador. Pesquise para ver todos os {Object.keys(catalog).length} provedores do catálogo.
+        </p>
+      </div>
+      <Input value={query} placeholder="Pesquisar provedor…" onChange={(e) => setQuery(e.target.value)} />
+      <div className="flex flex-col gap-2">
+        {providerIds.map((id) => (
+          <ProviderRow key={id} providerId={id} />
+        ))}
+        {providerIds.length === 0 && (
+          <p className="py-4 text-center text-xs text-muted-foreground">Nenhum provedor encontrado</p>
+        )}
+      </div>
+    </div>
+  )
+}
+
+interface SettingsDialogProps {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  /** Aba ativa inicial — útil para abrir direto em "autonomy" via atalho inline. */
+  initialTab?: SettingsTab
+}
+
+export function SettingsDialog({ open, onOpenChange, initialTab = "providers" }: SettingsDialogProps) {
+  const [tab, setTab] = useState<SettingsTab>(initialTab)
+  const active = TABS.find((t) => t.id === tab) ?? TABS[0]
+
+  return (
+    <Dialog open={open} onOpenChange={(next) => {
+      if (next) setTab(initialTab)
+      onOpenChange(next)
+    }}>
+      <DialogContent className="max-w-4xl p-0 gap-0 overflow-hidden" showCloseButton>
+        <div className="flex flex-row h-[600px]">
+          {/* Sidebar de abas */}
+          <nav className="w-48 shrink-0 border-r bg-muted/30 p-2">
+            <DialogHeader className="px-2 py-2 text-left">
+              <DialogTitle className="text-sm">Configurações</DialogTitle>
+              <DialogDescription className="text-[11px] sr-only">
+                Configurações do Orbit
+              </DialogDescription>
+            </DialogHeader>
+            <ul className="mt-1 flex flex-col gap-0.5">
+              {TABS.map(({ id, label, icon: Icon, description }) => (
+                <li key={id}>
+                  <button
+                    type="button"
+                    onClick={() => setTab(id)}
+                    title={description}
+                    className={cn(
+                      "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs transition-colors",
+                      tab === id
+                        ? "bg-background text-foreground shadow-sm"
+                        : "text-muted-foreground hover:bg-background/50 hover:text-foreground",
+                    )}
+                  >
+                    <Icon className="size-3.5 shrink-0" />
+                    {label}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </nav>
+
+          {/* Área direita: conteúdo ativo */}
+          <div className="flex-1 min-w-0 p-4">
+            <div className="mb-3 flex items-center gap-2 border-b pb-2">
+              <active.icon className="size-4 text-muted-foreground" />
+              <p className="text-sm font-medium">{active.label}</p>
+              <p className="text-[11px] text-muted-foreground">{active.description}</p>
+            </div>
+            <div className="h-[520px]">
+              {tab === "providers" ? <ProvidersTab /> : <AutonomyPanel />}
+            </div>
+          </div>
         </div>
       </DialogContent>
     </Dialog>

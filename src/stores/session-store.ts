@@ -1,14 +1,12 @@
 import { nanoid } from "nanoid"
 import { create } from "zustand"
 import type {
-  AskOrigin,
+  AskItem,
   ChatEvent,
   ChatMessage,
   ChatStatus,
   FolderInfo,
   OrchestrationPlan,
-  PermissionClaim,
-  Question,
   SendMessageOptions,
   SessionInfo,
   SessionMode,
@@ -16,6 +14,7 @@ import type {
 import { StorageKeys } from "@/shared/chat"
 import { chatApi, storage } from "@/src/lib/ipc"
 import { useBrainPrefs } from "@/src/stores/brain-prefs"
+import { usePermissionPrefs } from "@/src/stores/permission-prefs"
 import { useProviderStore } from "@/src/stores/provider-store"
 
 /**
@@ -24,14 +23,9 @@ import { useProviderStore } from "@/src/stores/provider-store"
  * status de streaming por sessão dirigindo a UI (persona em "thinking" etc).
  */
 
-/** Pedido pendente (permissão ou question) exibido como card acima do input */
-export interface PendingAskUI {
-  requestId: string
-  kind: "permission" | "question"
-  claim?: PermissionClaim
-  questions?: Question[]
-  origin?: AskOrigin
-}
+/** Pedido pendente (permissão ou question) exibido como card acima do input.
+ * batchId agrupa pedidos de workers emitidos em lote (card único, submit único). */
+export type PendingAskUI = AskItem & { batchId?: string }
 
 export interface SendConfig {
   options: SendMessageOptions
@@ -290,6 +284,9 @@ export const useSessionStore = create<SessionState>((set, get) => ({
         ? { ...provider.workerModel, reasoning: provider.workerReasoning ?? undefined }
         : undefined
 
+    // Thresholds de permissões (Settings) — sempre enviados, mesmo para sessões comuns
+    const permissionThresholds = usePermissionPrefs.getState().thresholds
+
     await chatApi.send({
       sessionId: sessionId!,
       text,
@@ -300,6 +297,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       directory: config.directory ?? session.directory,
       extraDirectories: config.extraDirectories ?? session.extraDirectories,
       workerModel,
+      permissionThresholds,
     })
   },
 
@@ -411,6 +409,19 @@ function applyChatEvent(event: ChatEvent, set: Setter, get: () => SessionState) 
       })
       break
     }
+
+    case "ask:batch":
+      // Lote de pedidos de workers: cada item entra individualmente com o
+      // batchId — a UI agrupa num card único; ask:done remove item a item
+      set((state) => {
+        const current = state.pendingAsks[sessionId] ?? []
+        const fresh = event.items
+          .filter((item) => !current.some((a) => a.requestId === item.requestId))
+          .map((item) => ({ ...item, batchId: event.batchId }))
+        if (fresh.length === 0) return state
+        return { pendingAsks: { ...state.pendingAsks, [sessionId]: [...current, ...fresh] } }
+      })
+      break
 
     case "ask:done":
       set((state) => {

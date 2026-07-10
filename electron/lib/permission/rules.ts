@@ -1,26 +1,40 @@
 import path from 'node:path'
-import type { PermissionClaim, PermissionMode } from '../../../shared/chat'
+import type {
+  PermissionClaim,
+  PermissionMode,
+  PermissionThresholds,
+  Verdict,
+} from '../../../shared/chat'
 
 /**
- * Ruleset built-in de permissões (puro, testável). Só bash/write/edit geram
- * claims — as demais ferramentas (read/glob/grep/web/memory/...) são sempre
- * permitidas. Dois níveis:
- * - "ask"  (risco médio): pede confirmação no modo ask; auto-aprovado em approve/full.
- * - "deny" (crítico): pergunta no modo ask; NEGADO com razão em approve; livre em full.
+ * Ruleset built-in de permissões (puro, testável). Apenas bash/write/edit
+ * geram claims — as demais (read/glob/grep/web/memory/...) são sempre liberas.
+ * Quatro níveis de verdict (ordem crescente de risco):
+ * - "low"       (sem perigo): executa direto em qualquer modo.
+ * - "medium"    (risco médio): pergunta em ask; auto em approve/full.
+ * - "high"      (alto risco): pergunta em ask e approve (default high); auto em full.
+ * - "forbidden" (piso absoluto): negado sempre — mesmo full não passa. Override
+ *                apenas via config programática (~/.config/orbit/...) futura.
  */
 
-export type Verdict = 'ask' | 'deny'
+export type { Verdict } from '../../../shared/chat'
 
 export interface Assessment {
   claim: PermissionClaim
   verdict: Verdict
-  /** Identificador da regra — chave do cache de "sempre permitir" */
+  /** Identificador da regra — chave do cache de "sempre permitir". */
   ruleId: string
 }
 
 export interface WorkDirs {
   directory: string
   extraDirectories: string[]
+}
+
+const RISK_ORDER: Record<Exclude<Verdict, 'forbidden'>, number> = {
+  low: 0,
+  medium: 1,
+  high: 2,
 }
 
 const LOCKFILES = new Set(['package-lock.json', 'yarn.lock', 'pnpm-lock.yaml'])
@@ -30,14 +44,12 @@ function shorten(text: string, max = 80): string {
   return single.length > max ? `${single.slice(0, max)}…` : single
 }
 
-/** Alvos de rm -rf que apagariam além do projeto (raiz, home, o próprio diretório) */
 function isCriticalTarget(target: string, dirs: WorkDirs | null): boolean {
   const clean = target.replace(/["']/g, '')
   if (clean === '/' || clean === '~' || clean === '.' || clean === '..' || clean === '*') return true
   if (/^[A-Za-z]:[\\/]?$/.test(clean)) return true
   if (clean.startsWith('~')) return true
   if (!dirs) return path.isAbsolute(clean)
-  // Caminho resolvido fora das pastas de trabalho, ou igual à própria raiz
   const resolved = path.resolve(dirs.directory, clean)
   const roots = [dirs.directory, ...dirs.extraDirectories].map((r) => path.resolve(r))
   if (roots.some((root) => resolved === root)) return true
@@ -47,7 +59,6 @@ function isCriticalTarget(target: string, dirs: WorkDirs | null): boolean {
   })
 }
 
-/** Divide comandos compostos (a && b; c | d) em listas de tokens */
 function segments(command: string): string[][] {
   return command
     .split(/(?:\|\||&&|;|\|)/)
@@ -65,13 +76,14 @@ function assessBash(command: string, dirs: WorkDirs | null): Assessment | null {
       tool: 'bash',
       title: `bash: ${shorten(command)}`,
       detail,
-      critical: verdict === 'deny' || undefined,
+      // Apenas high/forbidden acendem o alerta crítico na UI.
+      critical: verdict === 'high' || verdict === 'forbidden' || undefined,
     },
   })
 
   for (let tokens of segments(command)) {
     if (tokens[0] === 'sudo') {
-      found.push(claim('bash:sudo', 'comando com privilégios elevados (sudo)', 'ask'))
+      found.push(claim('bash:sudo', 'comando com privilégios elevados (sudo)', 'high'))
       tokens = tokens.slice(1)
     }
     const cmd = tokens[0]
@@ -81,12 +93,12 @@ function assessBash(command: string, dirs: WorkDirs | null): Assessment | null {
       const recursiveForce = /r/i.test(flags) && flags.includes('f')
       if (recursiveForce) {
         const targets = tokens.slice(1).filter((t) => !t.startsWith('-'))
-        const critical = targets.some((t) => isCriticalTarget(t, dirs))
-        found.push(
-          critical
-            ? claim('bash:rm-rf-critical', 'remoção recursiva fora do projeto ou da raiz', 'deny')
-            : claim('bash:rm-rf', 'remoção recursiva de arquivos (rm -rf)', 'ask'),
-        )
+        if (targets.some((t) => isCriticalTarget(t, dirs))) {
+          // rm -rf fora do projeto / na raiz — piso absoluto.
+          found.push(claim('bash:rm-rf-critical', 'remoção recursiva fora do projeto ou da raiz', 'forbidden'))
+        } else {
+          found.push(claim('bash:rm-rf', 'remoção recursiva de arquivos (rm -rf) — alta destrutividade', 'high'))
+        }
       }
     }
 
@@ -96,22 +108,29 @@ function assessBash(command: string, dirs: WorkDirs | null): Assessment | null {
         const force = tokens.some((t) => t === '--force' || t === '-f')
         found.push(
           force
-            ? claim('bash:git-push-force', 'push forçado reescreve histórico remoto', 'deny')
-            : claim('bash:git-push', 'publica commits no remoto (git push)', 'ask'),
+            ? claim('bash:git-push-force', 'push forçado reescreve histórico remoto', 'high')
+            : claim('bash:git-push', 'publica commits no remoto (git push)', 'medium'),
         )
       }
       if (sub === 'reset' && tokens.includes('--hard')) {
-        found.push(claim('bash:git-reset-hard', 'descarta alterações locais (git reset --hard)', 'deny'))
+        found.push(claim('bash:git-reset-hard', 'descarta alterações locais (git reset --hard)', 'high'))
       }
     }
   }
 
   if (found.length === 0) return null
-  // O veredito mais forte vence (deny > ask)
-  return found.find((a) => a.verdict === 'deny') ?? found[0]
+  // Forbidden vence tudo; senão o verdict mais alto (maior risco).
+  return (
+    found.find((a) => a.verdict === 'forbidden') ??
+    found.reduce((acc, a) =>
+      a.verdict !== 'forbidden' && RISK_ORDER[a.verdict] > RISK_ORDER[acc.verdict as Exclude<Verdict, 'forbidden'>]
+        ? a
+        : acc,
+    )
+  )
 }
 
-function assessFileWrite(tool: string, filePath: string, dirs: WorkDirs | null): Assessment | null {
+function assessFileWrite(tool: string, filePath: string): Assessment | null {
   const normalized = filePath.replace(/\\/g, '/')
   const base = path.posix.basename(normalized.toLowerCase())
   const claim = (ruleId: string, detail: string, verdict: Verdict): Assessment => ({
@@ -121,40 +140,45 @@ function assessFileWrite(tool: string, filePath: string, dirs: WorkDirs | null):
       tool,
       title: `${tool}: ${shorten(filePath, 60)}`,
       detail,
-      critical: verdict === 'deny' || undefined,
+      critical: verdict === 'high' || verdict === 'forbidden' || undefined,
     },
   })
 
   if (/(^|\/)\.git(\/|$)/.test(normalized.toLowerCase())) {
-    return claim('file:git-dir', 'escrita dentro de .git corrompe o repositório', 'deny')
+    return claim('file:git-dir', 'escrita dentro de .git corrompe o repositório', 'forbidden')
   }
   if (/^\.env(\..+)?$/.test(base)) {
-    return claim('file:env', 'arquivo de segredos/ambiente (.env)', 'ask')
+    return claim('file:env', 'arquivo de segredos/ambiente (.env)', 'medium')
   }
   if (LOCKFILES.has(base)) {
-    return claim('file:lockfile', 'lockfile de dependências — normalmente gerado, não editado', 'ask')
+    // Editar lockfile manualmente é tranquilamente comum — sem risco real.
+    return claim('file:lockfile', 'lockfile de dependências — normalmente gerado', 'low')
   }
-  void dirs
   return null
 }
 
-/** Avalia uma chamada de ferramenta. null = sem risco, executa direto. */
 export function assess(toolName: string, input: unknown, dirs: WorkDirs | null): Assessment | null {
   const args = (input ?? {}) as Record<string, unknown>
   if (toolName === 'bash' && typeof args.command === 'string') {
     return assessBash(args.command, dirs)
   }
   if ((toolName === 'write' || toolName === 'edit') && typeof args.filePath === 'string') {
-    return assessFileWrite(toolName, args.filePath, dirs)
+    return assessFileWrite(toolName, args.filePath)
   }
   return null
 }
 
 export type Decision = 'approved' | 'denied' | 'user'
 
-/** Tabela de decisão por modo (ask pergunta sempre; approve nega críticos; full libera tudo). */
-export function decide(mode: PermissionMode, verdict: Verdict): Decision {
+/** Decisão por modo+threshold:
+ * - forbidden → sempre denied (piso absoluto, mesmo full).
+ * - verifica verdict <= terminalAuto: aprovado; senão "user" (pergunta UI).
+ * - full por padrão tem terminalAuto=high mas NÃO atingir forbidden → libera todos high.
+ */
+export function decide(mode: PermissionMode, verdict: Verdict, thresholds: PermissionThresholds): Decision {
+  if (verdict === 'forbidden') return 'denied'
   if (mode === 'full') return 'approved'
-  if (mode === 'approve') return verdict === 'deny' ? 'denied' : 'approved'
-  return 'user'
+  const autoLevel = RISK_ORDER[thresholds.terminalAuto]
+  const verdictLevel = RISK_ORDER[verdict as Exclude<Verdict, 'forbidden'>]
+  return verdictLevel <= autoLevel ? 'approved' : 'user'
 }

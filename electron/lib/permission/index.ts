@@ -1,5 +1,7 @@
-import type { PermissionMode, SendMessageInput } from '../../../shared/chat'
-import { ask, newRequestId } from '../ask-broker'
+import type { PermissionMode, PermissionThresholds, SendMessageInput } from '../../../shared/chat'
+import { DEFAULT_PERMISSION_THRESHOLDS } from '../../../shared/chat'
+import { newRequestId } from '../ask-broker'
+import { dispatchAsk } from '../ask-dispatch'
 import { broadcastChatEvent } from '../broadcast'
 import type { ToolContext } from '../tools/context'
 import { assess, decide, type WorkDirs } from './rules'
@@ -37,6 +39,8 @@ export function createToolApproval(
   signal: AbortSignal | undefined,
 ) {
   const mode: PermissionMode = input.options.permissionMode ?? 'ask'
+  const thresholds: PermissionThresholds =
+    (input.permissionThresholds?.[mode]) ?? DEFAULT_PERMISSION_THRESHOLDS[mode]
   const dirs: WorkDirs | null = ctx
     ? { directory: ctx.directory, extraDirectories: ctx.extraDirectories }
     : null
@@ -45,7 +49,7 @@ export function createToolApproval(
     const assessment = assess(toolCall.toolName, toolCall.input, dirs)
     if (!assessment) return 'not-applicable' as const
 
-    const decision = decide(mode, assessment.verdict)
+    const decision = decide(mode, assessment.verdict, thresholds)
     if (decision === 'approved') return 'approved' as const
     if (decision === 'denied') {
       const reason = `Bloqueado pela política de segurança: ${assessment.claim.detail}.`
@@ -59,17 +63,19 @@ export function createToolApproval(
     const requestId = newRequestId()
     const isWorker = input.orchestrationRole === 'worker' && !!input.parentSessionId
     const target = isWorker ? input.parentSessionId! : input.sessionId
-    broadcastChatEvent({
-      type: 'permission',
-      sessionId: target,
-      requestId,
-      claim: assessment.claim,
-      origin: isWorker
-        ? { workerSessionId: input.sessionId, workerTitle: input.workerTitle ?? 'worker' }
-        : undefined,
-    })
     try {
-      const reply = await ask<PermissionDecision>(target, requestId, signal)
+      const reply = await dispatchAsk<PermissionDecision>(
+        target,
+        {
+          requestId,
+          kind: 'permission',
+          claim: assessment.claim,
+          origin: isWorker
+            ? { workerSessionId: input.sessionId, workerTitle: input.workerTitle ?? 'worker' }
+            : undefined,
+        },
+        signal,
+      )
       if (reply === 'always') {
         const set = alwaysAllowed.get(input.sessionId) ?? new Set<string>()
         set.add(assessment.ruleId)

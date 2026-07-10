@@ -54,7 +54,8 @@ export function createSubagentTool(input: SendMessageInput, ctx: ToolContext | n
         extraDirectories: input.extraDirectories,
         orchestrationRole: 'worker',
         parentSessionId: input.sessionId,
-        workerTitle: task.slice(0, 60),
+        workerTitle: task.split('\n')[0].trim().slice(0, 60) || 'subagente',
+        permissionThresholds: input.permissionThresholds,
       }
 
       const workerCtx: ToolContext | null =

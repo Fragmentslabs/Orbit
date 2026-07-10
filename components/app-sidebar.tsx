@@ -69,6 +69,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 import type { FolderInfo, SessionInfo } from "@/shared/chat"
 import { useSessionStore } from "@/src/stores/session-store"
+import { useSettingsUi } from "@/src/stores/settings-ui"
 import { SettingsDialog } from "@/src/components/settings-dialog"
 
 type MenuItem = { icon: React.ReactNode; label: string; onSelect: () => void }
@@ -771,7 +772,10 @@ function AccountDropdown({ onOpenSettings }: { onOpenSettings: () => void }) {
 
 export function AppSidebar() {
   const initialize = useSessionStore((s) => s.initialize)
-  const [settingsOpen, setSettingsOpen] = useState(false)
+  const settingsOpen = useSettingsUi((s) => s.open)
+  const settingsTab = useSettingsUi((s) => s.tab)
+  const setSettingsOpen = useSettingsUi((s) => s.setOpen)
+  const openSettings = useSettingsUi((s) => s.openSettings)
 
   useEffect(() => {
     void initialize()
@@ -796,9 +800,9 @@ export function AppSidebar() {
       </SidebarContent>
       <SidebarFooter className="p-0">
         <SidebarSeparator className="mx-3" />
-        <AccountSection onOpenSettings={() => setSettingsOpen(true)} />
+        <AccountSection onOpenSettings={() => openSettings()} />
       </SidebarFooter>
-      <SettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} />
+      <SettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} initialTab={settingsTab} />
     </Sidebar>
   )
 }
