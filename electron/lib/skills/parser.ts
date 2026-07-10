@@ -15,10 +15,25 @@ export function parseSkill(
   if (!match) return null
 
   const fields: Record<string, string> = {}
-  for (const line of match[1].split(/\r?\n/)) {
+  const lines = match[1].split(/\r?\n/)
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i]
+    if (!line.trim() || /^\s/.test(line)) continue
     const idx = line.indexOf(':')
     if (idx <= 0) continue
-    fields[line.slice(0, idx).trim().toLowerCase()] = line.slice(idx + 1).trim()
+    const key = line.slice(0, idx).trim().toLowerCase()
+    let value = line.slice(idx + 1).trim()
+    // Blocos YAML multiline (description: > / >- / | / |-): consome as linhas
+    // indentadas seguintes — folded (>) junta com espaço, literal (|) com \n
+    if (/^[>|][+-]?$/.test(value)) {
+      const block: string[] = []
+      while (i + 1 < lines.length && (!lines[i + 1].trim() || /^\s/.test(lines[i + 1]))) {
+        i++
+        if (lines[i].trim()) block.push(lines[i].trim())
+      }
+      value = value.startsWith('>') ? block.join(' ') : block.join('\n')
+    }
+    fields[key] = value
   }
 
   const name = fields.name ? parseValue(fields.name) : ''

@@ -15,7 +15,8 @@ import { initMcp, listMcpStatus, readMcpConfig, reconnectMcp, saveMcpConfig } fr
 import { setupMemoryScheduler } from './lib/memory/scheduler'
 import * as memoryService from './lib/memory/service'
 import { globalSkillsDir, loadSkills, notifySkillsChanged, setupSkillsWatcher } from './lib/skills'
-import { parseSkill, sanitizeSlug, serializeSkill } from './lib/skills/parser'
+import { importSkillSelection } from './lib/skills/import'
+import { sanitizeSlug, serializeSkill } from './lib/skills/parser'
 import { approvePendingSkill, discardPendingSkill, listPendingSkills } from './lib/skills/pending'
 import { listKeys, readJson, removeJson, writeJson } from './lib/storage'
 import { destroyBrowserWindow } from './lib/tools'
@@ -397,7 +398,8 @@ app.whenReady().then(() => {
     await fs.rm(path.join(dir, safe), { recursive: true, force: true }).catch(() => {})
   })
 
-  // Importa .skill/.md via dialog; arquivos extras selecionados viram o bundle
+  // Importa skill via dialog: .skill/.md texto (+ extras = bundle) OU .skill
+  // zipado do Claude (SKILL.md + scripts extraídos como bundle)
   ipcMain.handle('skills:import', async () => {
     if (!win) return { imported: false }
     const result = await dialog.showOpenDialog(win, {
@@ -408,33 +410,10 @@ app.whenReady().then(() => {
         { name: 'Todos os arquivos', extensions: ['*'] },
       ],
     })
-    if (result.canceled || result.filePaths.length === 0) return { imported: false }
-    const manifestPath = result.filePaths.find((p) =>
-      ['.skill', '.md'].includes(path.extname(p).toLowerCase()),
-    )
-    if (!manifestPath) {
-      return { imported: false, error: 'Selecione um arquivo .skill ou .md (o manifesto da skill).' }
-    }
-    const raw = await fs.readFile(manifestPath, 'utf8')
-    const parsed = parseSkill(raw, 'global', manifestPath)
-    if (!parsed) {
-      return { imported: false, error: 'Arquivo sem frontmatter válido (---\\nname: …\\n---).' }
-    }
-    const dir = globalSkillsDir()
-    await fs.mkdir(dir, { recursive: true })
-    const extras = result.filePaths.filter((p) => p !== manifestPath)
-    if (extras.length === 0) {
-      await fs.writeFile(path.join(dir, `${parsed.slug}.skill`), raw, 'utf8')
-    } else {
-      // Bundle: manifesto + scripts/arquivos auxiliares selecionados juntos
-      const bundle = path.join(dir, parsed.slug)
-      await fs.mkdir(bundle, { recursive: true })
-      await fs.writeFile(path.join(bundle, 'skill.md'), raw, 'utf8')
-      for (const extra of extras) {
-        await fs.copyFile(extra, path.join(bundle, path.basename(extra)))
-      }
-    }
-    return { imported: true, slug: parsed.slug }
+    if (result.canceled) return { imported: false }
+    const outcome = await importSkillSelection(result.filePaths)
+    if (outcome.imported) notifySkillsChanged()
+    return outcome
   })
 
   // Propostas do agente (tool create_skill): staging até o card ser aprovado

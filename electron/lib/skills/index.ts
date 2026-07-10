@@ -43,7 +43,7 @@ async function listBundleFiles(dir: string, manifestPath: string): Promise<strin
  */
 async function findManifest(dir: string): Promise<string | null> {
   const base = path.basename(dir)
-  for (const candidate of ['skill.md', 'skill.skill', `${base}.skill`, `${base}.md`]) {
+  for (const candidate of ['skill.md', 'SKILL.md', 'skill.skill', `${base}.skill`, `${base}.md`]) {
     const full = path.join(dir, candidate)
     try {
       await fsp.access(full)
