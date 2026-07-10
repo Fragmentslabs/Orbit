@@ -1,14 +1,18 @@
 import { useEffect, useMemo, useState } from "react"
 import {
   Cable,
+  ChevronDown,
   ExternalLink,
+  FileUp,
   LoaderCircle,
   Pencil,
+  PenLine,
   PlusIcon,
   RefreshCw,
   Server,
   Sparkles,
   Trash2,
+  Wand2,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
@@ -18,6 +22,12 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import { Input } from "@/components/ui/input"
 import {
   Select,
@@ -27,7 +37,11 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { cn } from "@/lib/utils"
+import { useWorkspace } from "@/lib/workspace-context"
 import { mcpApi, skillsApi } from "@/src/lib/ipc"
+import { useDraftInput } from "@/src/stores/draft-input"
+import { useSessionStore } from "@/src/stores/session-store"
+import { useSettingsUi } from "@/src/stores/settings-ui"
 import { useSkillsStore } from "@/src/stores/skills-store"
 import type { McpServerConfig } from "@/shared/mcp"
 import type { Skill } from "@/shared/skills"
@@ -307,10 +321,30 @@ export function McpSkillsPanel() {
   const [mcpEdit, setMcpEdit] = useState<McpServerConfig | undefined>()
   const [skillDialogOpen, setSkillDialogOpen] = useState(false)
   const [skillEdit, setSkillEdit] = useState<Skill | undefined>()
+  const [importError, setImportError] = useState("")
+
+  const { setMode, setView } = useWorkspace()
+  const setSettingsOpen = useSettingsUi((s) => s.setOpen)
 
   useEffect(() => {
     void refresh()
   }, [refresh])
+
+  const importSkill = async () => {
+    setImportError("")
+    const result = await skillsApi.import()
+    if (result.error) setImportError(result.error)
+    if (result.imported) await refresh()
+  }
+
+  // Fecha as settings e abre um chat novo com "/create-skill " pré-preenchido
+  const askOrbitToCreate = () => {
+    useDraftInput.getState().setDraft("/create-skill ")
+    setSettingsOpen(false)
+    setMode("chat")
+    setView("chat")
+    void useSessionStore.getState().selectSession("chat", null)
+  }
 
   return (
     <div className="flex h-full flex-col gap-4 overflow-y-auto pr-1">
@@ -388,11 +422,46 @@ export function McpSkillsPanel() {
               Conhecimento curado injetado no contexto do agente. Crie ou gerencie suas skills.
             </p>
           </div>
-          <Button size="sm" className="gap-1" onClick={() => { setSkillEdit(undefined); setSkillDialogOpen(true) }}>
-            <PlusIcon className="size-3.5" />
-            Criar
-          </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger
+              className="inline-flex h-8 items-center gap-1 rounded-md bg-primary px-3 text-xs font-medium text-primary-foreground hover:bg-primary/90"
+            >
+              <PlusIcon className="size-3.5" />
+              Criar
+              <ChevronDown className="size-3" />
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="min-w-64 p-1.5">
+              <DropdownMenuItem onClick={() => { setSkillEdit(undefined); setSkillDialogOpen(true) }}>
+                <PenLine className="size-3.5" />
+                <div className="flex flex-col">
+                  <span>Criar manualmente</span>
+                  <span className="text-xs text-muted-foreground">Nome, descrição e conteúdo markdown</span>
+                </div>
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => void importSkill()}>
+                <FileUp className="size-3.5" />
+                <div className="flex flex-col">
+                  <span>Importar arquivo</span>
+                  <span className="text-xs text-muted-foreground">
+                    .skill ou .md — selecione junto os scripts da skill, se houver
+                  </span>
+                </div>
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={askOrbitToCreate}>
+                <Wand2 className="size-3.5" />
+                <div className="flex flex-col">
+                  <span>Pedir para o Orbit criar</span>
+                  <span className="text-xs text-muted-foreground">
+                    Abre um chat com /create-skill — descreva e o agente monta a skill
+                  </span>
+                </div>
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
+        {importError && (
+          <p className="mb-2 text-[11px] text-destructive">{importError}</p>
+        )}
         {skills.length === 0 ? (
           <div className="flex flex-col items-center gap-2 rounded-lg border border-dashed p-6 text-center">
             <Sparkles className="size-6 text-muted-foreground/50" />
@@ -411,6 +480,11 @@ export function McpSkillsPanel() {
                     <span className="rounded bg-muted px-1 py-0.5 text-[10px] text-muted-foreground">
                       {skill.source}
                     </span>
+                    {skill.scripts && skill.scripts.length > 0 && (
+                      <span className="rounded bg-muted px-1 py-0.5 text-[10px] text-muted-foreground">
+                        {skill.scripts.length} script{skill.scripts.length > 1 ? "s" : ""}
+                      </span>
+                    )}
                   </div>
                   {skill.description && (
                     <p className="mt-0.5 text-[11px] text-muted-foreground">{skill.description}</p>

@@ -11,6 +11,7 @@ import {
 import { Shimmer } from "@/src/components/ai/shimmer"
 import { SubAgentCard } from "@/src/components/ai/sub-agent-card"
 import { TodoList } from "@/src/components/ai/todo-list"
+import { SkillProposalCard } from "@/src/components/skill-proposal-card"
 import { Source, Sources, SourcesContent, SourcesTrigger } from "@/src/components/ai/sources"
 import { Task, TaskContent, TaskItem, TaskItemFile, TaskTrigger } from "@/src/components/ai/task"
 import {
@@ -156,8 +157,13 @@ type Segment =
 function segmentParts(parts: MessagePart[]): Segment[] {
   const segments: Segment[] = []
   for (const part of parts) {
-    // Subagentes e a TODO viva têm cards próprios — fora do agrupamento de Task
-    if (part.type === "tool" && part.tool !== "subagent" && part.tool !== "todowrite") {
+    // Subagentes, TODO viva e propostas de skill têm cards próprios — fora do Task
+    if (
+      part.type === "tool" &&
+      part.tool !== "subagent" &&
+      part.tool !== "todowrite" &&
+      part.tool !== "create_skill"
+    ) {
       const last = segments[segments.length - 1]
       if (last?.kind === "task") last.parts.push(part)
       else segments.push({ kind: "task", id: part.id, parts: [part] })
@@ -206,6 +212,8 @@ export function CodeAssistantMessage({ message, isLast, isBusy }: {
           <SubAgentCard key={segment.id} part={segment.part} />
         ) : segment.part.type === "tool" && segment.part.tool === "todowrite" ? (
           <TodoList key={segment.id} part={segment.part} stale={segment.part.id !== lastTodoId} />
+        ) : segment.part.type === "tool" && segment.part.tool === "create_skill" ? (
+          <SkillProposalCard key={segment.id} part={segment.part} />
         ) : null,
       )}
       {message.error && <MessageError error={message.error} />}

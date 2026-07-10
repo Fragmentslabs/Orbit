@@ -16,4 +16,16 @@ export interface Skill {
   content: string
   source: SkillSource
   filePath: string
+  /** Arquivos auxiliares do bundle (scripts/funções) — caminhos absolutos */
+  scripts?: string[]
+}
+
+/** Skill proposta pelo agente (create_skill) aguardando aprovação do usuário */
+export interface SkillProposal {
+  slug: string
+  name: string
+  description: string
+  content: string
+  /** Nomes relativos dos arquivos auxiliares incluídos na proposta */
+  files: string[]
 }

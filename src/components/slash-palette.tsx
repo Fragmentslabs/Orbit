@@ -85,13 +85,17 @@ function matches(command: SlashCommand, query: string): boolean {
   return query.split(" ").every((token) => haystack.includes(token))
 }
 
+/** Comandos literais enviados como texto — a paleta não abre sobre eles */
+const LITERAL_COMMANDS = ["/create-skill"]
+
 export function SlashPalette({ commands, children }: {
   commands: SlashCommand[]
   children: ReactNode
 }) {
   const controller = usePromptInputController()
   const value = controller.textInput.value
-  const open = value.startsWith("/")
+  const open =
+    value.startsWith("/") && !LITERAL_COMMANDS.some((literal) => value.startsWith(literal))
   const query = open ? normalizeText(value.slice(1)) : ""
 
   const filtered = useMemo(

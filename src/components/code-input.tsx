@@ -24,6 +24,7 @@ import { ModeToggle } from "@/src/components/mode-toggle"
 import { OrchestrationConfigDialog } from "@/src/components/orchestration-config-dialog"
 import { PermissionModePicker } from "@/src/components/permission-mode-picker"
 import { ReasoningPicker } from "@/src/components/reasoning-picker"
+import { DraftInputBridge } from "@/src/components/draft-input-bridge"
 import { SlashPalette, useReferenceCommands, type SlashCommand } from "@/src/components/slash-palette"
 import { FolderSelector } from "@/src/components/folder-selector"
 import { useWorkspace } from "@/lib/workspace-context"
@@ -135,6 +136,7 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId }: 
       permission("full", "Irrestrito", "Sem perguntas (piso de segurança mantido)"),
       ...referenceCommands,
       { id: "nova-sessao", label: "Nova sessão", description: "Começa uma sessão de código em branco", keywords: ["clear", "limpar", "novo"], group: "Ações" as const, run: toggle(() => void useSessionStore.getState().selectSession(mode, null)) },
+      { id: "create-skill", label: "Criar skill", description: "Pede ao Orbit para criar uma skill (com scripts, se precisar)", keywords: ["skill", "criar", "aprender"], group: "Ações" as const, run: ({ setText }) => setText("/create-skill ") },
       { id: "settings", label: "Configurações", description: "Abre as configurações do Orbit", keywords: ["settings", "config"], group: "Ações" as const, run: toggle(() => openSettings()) },
     ]
   }, [search, plan, thinking, simple, brain, subagents, orchestra, permissionMode, model, enabled, variantId, update, sessionId, setBrainEnabled, setSimple, setPermissionMode, referenceCommands, mode, openSettings])
@@ -142,6 +144,7 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId }: 
   return (
     <PromptInputProvider>
       <SlashPalette commands={slashCommands}>
+      <DraftInputBridge />
       <div className="w-full max-w-2xl mx-auto pb-4">
         {(!hasMessages || folders.length > 0) && (
           <div className="flex flex-wrap items-center gap-2 px-3 py-1.5">

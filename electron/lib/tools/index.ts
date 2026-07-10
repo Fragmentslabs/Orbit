@@ -42,6 +42,10 @@ export function buildToolSet(input: SendMessageInput, ctx: ToolContext | null): 
   // Tools de servidores MCP configurados: disponíveis em ambos os modos
   Object.assign(tools, getMcpTools())
 
+  // Propor skills vale nos dois modos (fluxo /create-skill inicia em chat);
+  // workers não criam skills
+  if (input.orchestrationRole !== 'worker') tools.create_skill = createSkillTool()
+
   if (input.mode === 'chat') {
     if (input.options.research) {
       tools.websearch = createWebSearchTool()
@@ -68,7 +72,6 @@ export function buildToolSet(input: SendMessageInput, ctx: ToolContext | null): 
     tools.glob = createGlobTool(ctx)
     tools.grep = createGrepTool(ctx)
     tools.todowrite = createTodoTool()
-    tools.create_skill = createSkillTool()
     if (!input.options.plan) {
       tools.write = createWriteTool(ctx)
       tools.edit = createEditTool(ctx)

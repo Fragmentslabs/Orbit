@@ -13,6 +13,7 @@ import {
 import { Shimmer } from "@/src/components/ai/shimmer"
 import { SubAgentCard } from "@/src/components/ai/sub-agent-card"
 import { Source, Sources, SourcesContent, SourcesTrigger } from "@/src/components/ai/sources"
+import { SkillProposalCard } from "@/src/components/skill-proposal-card"
 import {
   AssistantMarkdown,
   GenericToolView,
@@ -146,6 +147,8 @@ export function ChatAssistantMessage({ message, isLast, isBusy }: {
           <ReasoningPartView key={segment.id} part={segment.part} />
         ) : segment.part.tool === "subagent" ? (
           <SubAgentCard key={segment.id} part={segment.part} />
+        ) : segment.part.tool === "create_skill" ? (
+          <SkillProposalCard key={segment.id} part={segment.part} />
         ) : (
           <GenericToolView key={segment.id} part={segment.part} label={segment.part.tool} />
         ),

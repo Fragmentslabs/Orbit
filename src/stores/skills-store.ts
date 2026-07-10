@@ -1,5 +1,5 @@
 import { create } from "zustand"
-import type { Skill } from "@/shared/skills"
+import type { Skill, SkillProposal } from "@/shared/skills"
 import type { McpServerStatus } from "@/shared/mcp"
 import { mcpApi, skillsApi } from "@/src/lib/ipc"
 
@@ -12,16 +12,21 @@ import { mcpApi, skillsApi } from "@/src/lib/ipc"
 interface SkillsState {
   initialized: boolean
   skills: Skill[]
+  /** Propostas do agente (create_skill) aguardando aprovação no card */
+  pending: SkillProposal[]
   mcpServers: McpServerStatus[]
   /** Última pasta usada no refresh (para o watcher recarregar com o mesmo escopo) */
   directory?: string
   initialize: () => Promise<void>
   refresh: (directory?: string) => Promise<void>
+  approve: (slug: string) => Promise<void>
+  discard: (slug: string) => Promise<void>
 }
 
 export const useSkillsStore = create<SkillsState>((set, get) => ({
   initialized: false,
   skills: [],
+  pending: [],
   mcpServers: [],
   directory: undefined,
 
@@ -34,7 +39,19 @@ export const useSkillsStore = create<SkillsState>((set, get) => ({
 
   refresh: async (directory) => {
     const dir = directory ?? get().directory
-    const [skills, mcpServers] = await Promise.all([skillsApi.list(dir), mcpApi.status()])
-    set({ skills, mcpServers, directory: dir })
+    const [skills, pending, mcpServers] = await Promise.all([
+      skillsApi.list(dir),
+      skillsApi.pending(),
+      mcpApi.status(),
+    ])
+    set({ skills, pending, mcpServers, directory: dir })
+  },
+
+  approve: async (slug) => {
+    await skillsApi.approve(slug) // o notifySkillsChanged do main dispara o refresh
+  },
+
+  discard: async (slug) => {
+    await skillsApi.discard(slug)
   },
 }))

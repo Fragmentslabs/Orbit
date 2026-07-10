@@ -160,6 +160,13 @@ deste projeto — substitui reanalisar o código e economiza tokens. Não use em
 
 const SKILLS_INSTRUCTION = `SKILLS DO USUÁRIO. As seções abaixo são conhecimento curado pelo usuário (convenções, padrões, instruções permanentes). Aplique uma skill sempre que o assunto for pertinente — você decide contextualmente. Quando a mensagem do usuário referencia @nome-da-skill, a aplicação daquela skill é OBRIGATÓRIA.`
 
+const CREATE_SKILL_INSTRUCTION = `FLUXO /create-skill ATIVO. O usuário quer que você crie uma skill do Orbit a partir da descrição dele.
+
+1. Se a descrição for insuficiente (falta objetivo, contexto ou exemplos), use a ferramenta question com opções claras — no máximo uma rodada de perguntas.
+2. Estruture a skill: content em markdown denso e acionável (regras, passos, exemplos curtos). Se a skill precisa de automação, inclua scripts em "files" (caminhos relativos como scripts/nome.ext) e explique no content quando e como executá-los.
+3. Chame create_skill UMA vez. A proposta vira um card "Adicionar skill" na conversa — a skill só entra em uso quando o usuário aprovar.
+4. Depois, explique em 2-4 frases como a skill foi estruturada e como usá-la (@slug na paleta "/").`
+
 /** Skills (globais + do projeto) injetadas como contexto disponível. */
 async function buildSkillsBlock(input: SendMessageInput): Promise<string[]> {
   try {
@@ -169,7 +176,10 @@ async function buildSkillsBlock(input: SendMessageInput): Promise<string[]> {
       const referenced = input.text.includes(`@${skill.slug}`)
       const header = `### Skill @${skill.slug}${referenced ? ' (REFERENCIADA NESTA MENSAGEM — aplique)' : ''}`
       const description = skill.description ? `\n${skill.description}` : ''
-      return `${header}${description}\n\n${skill.content}`
+      const scripts = skill.scripts?.length
+        ? `\n\nArquivos auxiliares desta skill (execute com bash quando ela indicar):\n${skill.scripts.map((s) => `- ${s}`).join('\n')}`
+        : ''
+      return `${header}${description}\n\n${skill.content}${scripts}`
     })
     return [`${SKILLS_INSTRUCTION}\n\n${sections.join('\n\n')}`]
   } catch (err) {
@@ -266,6 +276,10 @@ export async function buildSystemPrompt(input: SendMessageInput): Promise<string
     parts.push(
       'Referências @mcp:<servidor> na mensagem indicam que você DEVE usar as ferramentas daquele servidor MCP (prefixadas com <servidor>_) para atender ao pedido.',
     )
+  }
+
+  if (input.text.trimStart().startsWith('/create-skill')) {
+    parts.push(CREATE_SKILL_INSTRUCTION)
   }
 
   if (input.orchestrationRole === 'worker') {

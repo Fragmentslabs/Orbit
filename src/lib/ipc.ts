@@ -5,7 +5,7 @@ import type {
 } from "@/shared/chat"
 import type { McpConfig, McpServerStatus } from "@/shared/mcp"
 import type { Memory, MemoryEvent } from "@/shared/memory"
-import type { Skill } from "@/shared/skills"
+import type { Skill, SkillProposal } from "@/shared/skills"
 
 /** Wrapper tipado sobre a bridge IPC exposta pelo preload. */
 
@@ -47,6 +47,15 @@ export const skillsApi = {
   create: (data: { name: string; description?: string; content: string; slug?: string; oldSlug?: string }) =>
     window.ipcRenderer.invoke("skills:create", data) as Promise<{ filePath: string }>,
   remove: (slug: string) => window.ipcRenderer.invoke("skills:remove", slug) as Promise<void>,
+  import: () =>
+    window.ipcRenderer.invoke("skills:import") as Promise<{
+      imported: boolean
+      slug?: string
+      error?: string
+    }>,
+  pending: () => window.ipcRenderer.invoke("skills:pending") as Promise<SkillProposal[]>,
+  approve: (slug: string) => window.ipcRenderer.invoke("skills:approve", slug) as Promise<boolean>,
+  discard: (slug: string) => window.ipcRenderer.invoke("skills:discard", slug) as Promise<void>,
   onChanged: (listener: () => void) => {
     const wrapper = window.ipcRenderer.on("skills:changed", () => listener())
     return () => window.ipcRenderer.off("skills:changed", wrapper)

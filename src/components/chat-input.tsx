@@ -23,6 +23,7 @@ import { ModelPicker } from "@/src/components/model-picker"
 import { ModeToggle } from "@/src/components/mode-toggle"
 import { OrchestrationConfigDialog } from "@/src/components/orchestration-config-dialog"
 import { ReasoningPicker } from "@/src/components/reasoning-picker"
+import { DraftInputBridge } from "@/src/components/draft-input-bridge"
 import { SlashPalette, useReferenceCommands, type SlashCommand } from "@/src/components/slash-palette"
 import { useWorkspace } from "@/lib/workspace-context"
 import { useBrainEnabled, useBrainPrefs } from "@/src/stores/brain-prefs"
@@ -80,6 +81,7 @@ export function ChatInput({ onSubmit, status, onStop, sessionId }: {
       { id: "orchestra", label: "Orchestra", description: "Alterna orquestração em tarefas paralelas", keywords: ["workers", "plano"], group: "Modos" as const, active: orchestra, run: toggle(() => setOrchestra((v) => !v)) },
       ...referenceCommands,
       { id: "novo-chat", label: "Nova conversa", description: "Começa um chat em branco", keywords: ["clear", "limpar", "novo"], group: "Ações" as const, run: toggle(() => void selectSession(mode, null)) },
+      { id: "create-skill", label: "Criar skill", description: "Pede ao Orbit para criar uma skill (com scripts, se precisar)", keywords: ["skill", "criar", "aprender"], group: "Ações" as const, run: ({ setText }) => setText("/create-skill ") },
       { id: "settings", label: "Configurações", description: "Abre as configurações do Orbit", keywords: ["settings", "config"], group: "Ações" as const, run: toggle(() => openSettings()) },
     ]
   }, [search, browser, thinking, simple, brain, subagents, orchestra, model, enabled, variantId, update, sessionId, setBrainEnabled, setSimple, referenceCommands, selectSession, mode, openSettings])
@@ -87,6 +89,7 @@ export function ChatInput({ onSubmit, status, onStop, sessionId }: {
   return (
     <PromptInputProvider>
     <SlashPalette commands={slashCommands}>
+    <DraftInputBridge />
     <div className="w-full max-w-2xl mx-auto pb-4">
       <PromptInput
         multiple
