@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useMemo, useState } from "react"
 import { AlignLeft, Bot, Brain, BrainCircuit, Globe, Network, PlusIcon, Search } from "lucide-react"
 import {
   DropdownMenu,
@@ -8,6 +8,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 import {
   PromptInput,
+  PromptInputProvider,
   PromptInputActionAddAttachments,
   PromptInputAttachment,
   PromptInputAttachments,
@@ -22,7 +23,11 @@ import { ModelPicker } from "@/src/components/model-picker"
 import { ModeToggle } from "@/src/components/mode-toggle"
 import { OrchestrationConfigDialog } from "@/src/components/orchestration-config-dialog"
 import { ReasoningPicker } from "@/src/components/reasoning-picker"
+import { SlashPalette, useReferenceCommands, type SlashCommand } from "@/src/components/slash-palette"
+import { useWorkspace } from "@/lib/workspace-context"
 import { useBrainEnabled, useBrainPrefs } from "@/src/stores/brain-prefs"
+import { useSessionStore } from "@/src/stores/session-store"
+import { useSettingsUi } from "@/src/stores/settings-ui"
 import { useProviderStore } from "@/src/stores/provider-store"
 import { useReasoningPrefs } from "@/src/stores/reasoning-prefs"
 import { useSimpleMode } from "@/src/stores/simple-mode"
@@ -53,7 +58,35 @@ export function ChatInput({ onSubmit, status, onStop, sessionId }: {
   const thinking = enabled || !!model?.reasoningAlwaysOn
   const busy = status === "submitted" || status === "streaming"
 
+  const { mode } = useWorkspace()
+  const selectSession = useSessionStore((s) => s.selectSession)
+  const openSettings = useSettingsUi((s) => s.openSettings)
+  const referenceCommands = useReferenceCommands()
+
+  const slashCommands = useMemo<SlashCommand[]>(() => {
+    const toggle = (fn: () => void) => ({ setText }: { setText: (t: string) => void }) => {
+      fn()
+      setText("")
+    }
+    return [
+      { id: "pesquisa", label: "Pesquisa", description: "Alterna busca web (websearch/webfetch)", keywords: ["web", "search"], group: "Modos" as const, active: search, run: toggle(() => setSearch((v) => !v)) },
+      { id: "browser", label: "Browser", description: "Alterna navegação com JavaScript", keywords: ["navegador", "web"], group: "Modos" as const, active: browser, run: toggle(() => setBrowser((v) => !v)) },
+      ...(model?.reasoning && !model.reasoningAlwaysOn
+        ? [{ id: "thinking", label: "Thinking", description: "Alterna raciocínio estendido do modelo", keywords: ["reasoning", "pensar"], group: "Modos" as const, active: thinking, run: toggle(() => update({ enabled: !enabled, variantId })) }]
+        : []),
+      { id: "simples", label: "Simples", description: "Alterna respostas em texto puro", keywords: ["texto", "plain"], group: "Modos" as const, active: simple, run: toggle(() => setSimple(!simple)) },
+      { id: "brain", label: "Memória (Brain)", description: "Alterna a memória persistente neste chat", keywords: ["memoria", "brain"], group: "Modos" as const, active: brain, run: toggle(() => setBrainEnabled(sessionId, !brain)) },
+      { id: "subagents", label: "Subagents", description: "Alterna workers em background", keywords: ["worker", "delegar"], group: "Modos" as const, active: subagents, run: toggle(() => setSubagents((v) => !v)) },
+      { id: "orchestra", label: "Orchestra", description: "Alterna orquestração em tarefas paralelas", keywords: ["workers", "plano"], group: "Modos" as const, active: orchestra, run: toggle(() => setOrchestra((v) => !v)) },
+      ...referenceCommands,
+      { id: "novo-chat", label: "Nova conversa", description: "Começa um chat em branco", keywords: ["clear", "limpar", "novo"], group: "Ações" as const, run: toggle(() => void selectSession(mode, null)) },
+      { id: "settings", label: "Configurações", description: "Abre as configurações do Orbit", keywords: ["settings", "config"], group: "Ações" as const, run: toggle(() => openSettings()) },
+    ]
+  }, [search, browser, thinking, simple, brain, subagents, orchestra, model, enabled, variantId, update, sessionId, setBrainEnabled, setSimple, referenceCommands, selectSession, mode, openSettings])
+
   return (
+    <PromptInputProvider>
+    <SlashPalette commands={slashCommands}>
     <div className="w-full max-w-2xl mx-auto pb-4">
       <PromptInput
         multiple
@@ -165,5 +198,7 @@ export function ChatInput({ onSubmit, status, onStop, sessionId }: {
       </PromptInputTools>
       <OrchestrationConfigDialog open={configOpen} onOpenChange={setConfigOpen} />
     </div>
+    </SlashPalette>
+    </PromptInputProvider>
   )
 }

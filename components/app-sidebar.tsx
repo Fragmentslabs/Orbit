@@ -13,6 +13,7 @@ import {
   MessageSquare,
   Monitor,
   Moon,
+  Puzzle,
   Pencil,
   Pin,
   PinOff,
@@ -106,6 +107,22 @@ function MemoriesButton() {
     >
       <BrainCircuit className="size-4" />
       Memórias
+    </Button>
+  )
+}
+
+function McpSkillsButton() {
+  const { mode } = useWorkspace()
+  const openSettings = useSettingsUi((s) => s.openSettings)
+  if (mode !== "code") return null
+  return (
+    <Button
+      variant="ghost"
+      className="w-full justify-start gap-2 text-sm"
+      onClick={() => openSettings("mcp-skills")}
+    >
+      <Puzzle className="size-4" />
+      MCP & Skills
     </Button>
   )
 }
@@ -791,8 +808,9 @@ export function AppSidebar() {
           <div className="px-3 py-2">
             <NewChatButton />
           </div>
-          <div className="px-3 pb-2">
+          <div className="space-y-1 px-3 pb-2">
             <MemoriesButton />
+            <McpSkillsButton />
           </div>
           <SidebarSeparator className="mx-3" />
           <ChatHistory />

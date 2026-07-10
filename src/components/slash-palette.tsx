@@ -1,0 +1,195 @@
+import { useEffect, useMemo, useState, type KeyboardEvent, type ReactNode } from "react"
+import { BrainCircuit, Layers, Sparkles, Wrench } from "lucide-react"
+import { cn } from "@/lib/utils"
+import { normalizeText } from "@/shared/memory"
+import { usePromptInputController } from "@/src/components/ai/prompt-input"
+import { useSkillsStore } from "@/src/stores/skills-store"
+
+/**
+ * Paleta "/" dos inputs: abre quando o texto começa com "/", filtra conforme
+ * digita e navega por teclado. A captura de teclas usa onKeyDownCapture no
+ * wrapper — roda ANTES do handler interno do PromptInputTextarea, então o
+ * Enter-para-enviar continua intacto quando a paleta está fechada.
+ *
+ * Comandos: modos do input (toggles), skills (@nome), servidores MCP
+ * (@mcp:nome), busca explícita na memória (@memoria) e ações (nova conversa,
+ * settings). Selecionar uma referência substitui o texto; modos limpam o "/".
+ */
+
+export interface SlashCommand {
+  id: string
+  label: string
+  description?: string
+  keywords?: string[]
+  group: "Modos" | "Skills" | "MCP" | "Memória" | "Ações"
+  /** Estado atual do toggle (bolinha à direita) */
+  active?: boolean
+  run: (ctx: { setText: (text: string) => void }) => void
+}
+
+const GROUP_ICON: Record<SlashCommand["group"], typeof Sparkles> = {
+  Modos: Wrench,
+  Skills: Sparkles,
+  MCP: Layers,
+  Memória: BrainCircuit,
+  Ações: Wrench,
+}
+
+/** Skills + MCP + memória como comandos de referência (@...) — comum aos dois inputs. */
+export function useReferenceCommands(): SlashCommand[] {
+  const skills = useSkillsStore((s) => s.skills)
+  const mcpServers = useSkillsStore((s) => s.mcpServers)
+  const initialize = useSkillsStore((s) => s.initialize)
+
+  useEffect(() => {
+    void initialize()
+  }, [initialize])
+
+  return useMemo<SlashCommand[]>(
+    () => [
+      {
+        id: "memoria-busca",
+        label: "Buscar na memória",
+        description: "Ordena que o agente consulte a memória (Brain) antes de responder",
+        keywords: ["lembrar", "memoria", "brain", "recall"],
+        group: "Memória",
+        run: ({ setText }) => setText("@memoria "),
+      },
+      ...skills.map<SlashCommand>((skill) => ({
+        id: `skill-${skill.slug}`,
+        label: `@${skill.slug}`,
+        description: skill.description || "Skill do usuário",
+        keywords: [skill.slug, skill.name],
+        group: "Skills",
+        run: ({ setText }) => setText(`@${skill.slug} `),
+      })),
+      ...mcpServers
+        .filter((s) => s.state === "connected")
+        .map<SlashCommand>((server) => ({
+          id: `mcp-${server.config.name}`,
+          label: `@mcp:${server.config.name}`,
+          description: `Usar as ferramentas deste servidor MCP (${server.toolNames.length} tools)`,
+          group: "MCP",
+          run: ({ setText }) => setText(`@mcp:${server.config.name} `),
+        })),
+    ],
+    [skills, mcpServers],
+  )
+}
+
+function matches(command: SlashCommand, query: string): boolean {
+  if (!query) return true
+  const haystack = normalizeText(
+    [command.label, command.description ?? "", ...(command.keywords ?? [])].join(" "),
+  )
+  return query.split(" ").every((token) => haystack.includes(token))
+}
+
+export function SlashPalette({ commands, children }: {
+  commands: SlashCommand[]
+  children: ReactNode
+}) {
+  const controller = usePromptInputController()
+  const value = controller.textInput.value
+  const open = value.startsWith("/")
+  const query = open ? normalizeText(value.slice(1)) : ""
+
+  const filtered = useMemo(
+    () => (open ? commands.filter((c) => matches(c, query)).slice(0, 12) : []),
+    [commands, open, query],
+  )
+  const [highlight, setHighlight] = useState(0)
+
+  useEffect(() => {
+    setHighlight(0)
+  }, [query, open])
+
+  const select = (command: SlashCommand) => {
+    command.run({ setText: controller.textInput.setInput })
+  }
+
+  const handleKeyDownCapture = (e: KeyboardEvent<HTMLDivElement>) => {
+    if (!open || filtered.length === 0) return
+    if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+      e.preventDefault()
+      e.stopPropagation()
+      setHighlight((h) => {
+        const delta = e.key === "ArrowDown" ? 1 : -1
+        return (h + delta + filtered.length) % filtered.length
+      })
+    } else if (e.key === "Enter" || e.key === "Tab") {
+      e.preventDefault()
+      e.stopPropagation()
+      select(filtered[Math.min(highlight, filtered.length - 1)])
+    } else if (e.key === "Escape") {
+      e.preventDefault()
+      e.stopPropagation()
+      controller.textInput.clear()
+    }
+  }
+
+  // Agrupa preservando a ordem de inserção dos comandos
+  const groups = useMemo(() => {
+    const map = new Map<SlashCommand["group"], SlashCommand[]>()
+    for (const command of filtered) {
+      const bucket = map.get(command.group) ?? []
+      bucket.push(command)
+      map.set(command.group, bucket)
+    }
+    return [...map.entries()]
+  }, [filtered])
+
+  return (
+    <div className="relative" onKeyDownCapture={handleKeyDownCapture}>
+      {open && filtered.length > 0 && (
+        <div className="absolute bottom-full left-0 right-0 z-50 mb-2 max-h-80 overflow-y-auto rounded-xl border-2 border-sidebar-border bg-popover p-1.5 text-popover-foreground shadow-lg">
+          {groups.map(([group, items]) => {
+            const Icon = GROUP_ICON[group]
+            return (
+              <div key={group}>
+                <p className="flex items-center gap-1 px-2 pb-0.5 pt-1.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                  <Icon className="size-3" /> {group}
+                </p>
+                {items.map((command) => {
+                  const index = filtered.indexOf(command)
+                  return (
+                    <button
+                      key={command.id}
+                      type="button"
+                      className={cn(
+                        "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm",
+                        index === highlight && "bg-accent text-accent-foreground",
+                      )}
+                      onMouseEnter={() => setHighlight(index)}
+                      onMouseDown={(e) => {
+                        // mousedown para não roubar o foco do textarea
+                        e.preventDefault()
+                        select(command)
+                      }}
+                    >
+                      <span className="shrink-0 font-medium">{command.label}</span>
+                      {command.description && (
+                        <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground">
+                          {command.description}
+                        </span>
+                      )}
+                      {command.active !== undefined && (
+                        <span
+                          className={cn(
+                            "size-1.5 shrink-0 rounded-full",
+                            command.active ? "bg-emerald-500" : "bg-muted-foreground/30",
+                          )}
+                        />
+                      )}
+                    </button>
+                  )
+                })}
+              </div>
+            )
+          })}
+        </div>
+      )}
+      {children}
+    </div>
+  )
+}

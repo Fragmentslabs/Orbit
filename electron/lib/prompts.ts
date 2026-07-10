@@ -1,6 +1,7 @@
 import type { SendMessageInput } from '../../shared/chat'
 import type { Memory } from '../../shared/memory'
 import { loadPromptContext } from './memory/service'
+import { loadSkills } from './skills'
 
 /**
  * Prompts de sistema por modo, adaptados dos agentes do opencode
@@ -157,6 +158,26 @@ ANTES de memory_save:
 memory_search: use ao iniciar tarefa NÃO-trivial para carregar decisões/convenções
 deste projeto — substitui reanalisar o código e economiza tokens. Não use em tarefas triviais.`
 
+const SKILLS_INSTRUCTION = `SKILLS DO USUÁRIO. As seções abaixo são conhecimento curado pelo usuário (convenções, padrões, instruções permanentes). Aplique uma skill sempre que o assunto for pertinente — você decide contextualmente. Quando a mensagem do usuário referencia @nome-da-skill, a aplicação daquela skill é OBRIGATÓRIA.`
+
+/** Skills (globais + do projeto) injetadas como contexto disponível. */
+async function buildSkillsBlock(input: SendMessageInput): Promise<string[]> {
+  try {
+    const skills = await loadSkills(input.mode === 'code' ? input.directory : undefined)
+    if (skills.length === 0) return []
+    const sections = skills.map((skill) => {
+      const referenced = input.text.includes(`@${skill.slug}`)
+      const header = `### Skill @${skill.slug}${referenced ? ' (REFERENCIADA NESTA MENSAGEM — aplique)' : ''}`
+      const description = skill.description ? `\n${skill.description}` : ''
+      return `${header}${description}\n\n${skill.content}`
+    })
+    return [`${SKILLS_INSTRUCTION}\n\n${sections.join('\n\n')}`]
+  } catch (err) {
+    console.error('[skills] falha ao carregar para o prompt:', err)
+    return []
+  }
+}
+
 function memoryLines(memories: Memory[]): string {
   return memories
     .map((m) => {
@@ -229,8 +250,22 @@ export async function buildSystemPrompt(input: SendMessageInput): Promise<string
     }
   }
 
+  parts.push(...(await buildSkillsBlock(input)))
+
   if (input.options.brain && input.orchestrationRole !== 'worker') {
     parts.push(...(await buildBrainBlock(input)))
+    // Marcador explícito da paleta "/": busca na memória vira ordem, não opção
+    if (input.text.includes('@memoria')) {
+      parts.push(
+        'A mensagem contém @memoria: o usuário ORDENOU consultar a memória. Execute memory_search sobre o tema da mensagem ANTES de responder e use o que encontrar.',
+      )
+    }
+  }
+
+  if (input.text.includes('@mcp:')) {
+    parts.push(
+      'Referências @mcp:<servidor> na mensagem indicam que você DEVE usar as ferramentas daquele servidor MCP (prefixadas com <servidor>_) para atender ao pedido.',
+    )
   }
 
   if (input.orchestrationRole === 'worker') {

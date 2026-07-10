@@ -11,8 +11,11 @@ import { getCatalog } from './lib/catalog'
 import { abortChat, runChat } from './lib/chat-engine'
 import { reply as askReply, rejectSession as rejectSessionAsks } from './lib/ask-broker'
 import { abortOrchestration, approvePlan, rejectPlan, runOrchestration } from './lib/orchestrator'
+import { initMcp, listMcpStatus, readMcpConfig, reconnectMcp, saveMcpConfig } from './lib/mcp'
 import { setupMemoryScheduler } from './lib/memory/scheduler'
 import * as memoryService from './lib/memory/service'
+import { globalSkillsDir, loadSkills, setupSkillsWatcher } from './lib/skills'
+import { sanitizeSlug, serializeSkill } from './lib/skills/parser'
 import { listKeys, readJson, removeJson, writeJson } from './lib/storage'
 import { destroyBrowserWindow } from './lib/tools'
 import type { SendMessageInput, SessionInfo } from '../shared/chat'
@@ -362,6 +365,44 @@ app.whenReady().then(() => {
     }
   })
   setupMemoryScheduler()
+
+  // Skills: lista, cria, watcher da pasta global avisa o renderer
+  ipcMain.handle('skills:list', (_event, directory?: string) => loadSkills(directory))
+  ipcMain.handle('skills:create', async (_event, { name, description, content, slug, oldSlug }) => {
+    const safeSlug = slug ? sanitizeSlug(slug) : sanitizeSlug(name)
+    if (!safeSlug) return { error: 'Slug inválido — use apenas letras minúsculas, números e underscores' }
+    const dir = globalSkillsDir()
+    await fs.mkdir(dir, { recursive: true })
+    const filePath = path.join(dir, `${safeSlug}.skill`)
+    // Se o slug mudou na edição, remove o arquivo antigo
+    if (oldSlug && oldSlug !== safeSlug) {
+      const oldPath = path.join(dir, `${oldSlug}.skill`)
+      await fs.unlink(oldPath).catch(() => {})
+    }
+    await fs.writeFile(
+      filePath,
+      serializeSkill({ name, description: description ?? '', slug: safeSlug, content }),
+      'utf8',
+    )
+    return { filePath }
+  })
+  ipcMain.handle('skills:remove', async (_event, slug: string) => {
+    const dir = globalSkillsDir()
+    const filePath = path.join(dir, `${slug}.skill`)
+    await fs.unlink(filePath).catch(() => {})
+  })
+  setupSkillsWatcher(() => {
+    for (const w of BrowserWindow.getAllWindows()) {
+      if (!w.isDestroyed()) w.webContents.send('skills:changed')
+    }
+  })
+
+  // MCP: config + status + reconexão (as tools entram via buildToolSet)
+  ipcMain.handle('mcp:config', () => readMcpConfig())
+  ipcMain.handle('mcp:status', () => listMcpStatus())
+  ipcMain.handle('mcp:save', (_event, config) => saveMcpConfig(config))
+  ipcMain.handle('mcp:reconnect', (_event, name?: string) => reconnectMcp(name))
+  void initMcp()
 
   createWindow()
 })

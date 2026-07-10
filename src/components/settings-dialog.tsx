@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react"
-import { KeyRound, Shield, Trash2, Check } from "lucide-react"
+import { KeyRound, Puzzle, Shield, Trash2, Check } from "lucide-react"
 import {
   Dialog,
   DialogContent,
@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { ModelSelectorLogo } from "@/src/components/ai/model-selector"
 import { AutonomyPanel } from "@/src/components/autonomy-panel"
+import { McpSkillsPanel } from "@/src/components/mcp-skills-panel"
 import { useProviderStore } from "@/src/stores/provider-store"
 import { cn } from "@/lib/utils"
 
@@ -30,6 +31,7 @@ interface TabDef {
 const TABS: TabDef[] = [
   { id: "providers", label: "Provedores", icon: KeyRound, description: "Chaves de API dos provedores de IA." },
   { id: "autonomy", label: "Autonomia", icon: Shield, description: "Permissões e decisões por modo." },
+  { id: "mcp-skills", label: "MCP & Skills", icon: Puzzle, description: "Servidores MCP e skills do usuário." },
 ]
 
 function ProviderRow({ providerId }: { providerId: string }) {
@@ -200,7 +202,7 @@ export function SettingsDialog({ open, onOpenChange, initialTab = "providers" }:
               <p className="text-[11px] text-muted-foreground">{active.description}</p>
             </div>
             <div className="h-[520px]">
-              {tab === "providers" ? <ProvidersTab /> : <AutonomyPanel />}
+              {tab === "providers" ? <ProvidersTab /> : tab === "autonomy" ? <AutonomyPanel /> : <McpSkillsPanel />}
             </div>
           </div>
         </div>

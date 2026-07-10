@@ -3,7 +3,9 @@ import type {
   ChatEvent,
   SendMessageInput,
 } from "@/shared/chat"
+import type { McpConfig, McpServerStatus } from "@/shared/mcp"
 import type { Memory, MemoryEvent } from "@/shared/memory"
+import type { Skill } from "@/shared/skills"
 
 /** Wrapper tipado sobre a bridge IPC exposta pelo preload. */
 
@@ -37,6 +39,27 @@ export const chatApi = {
     const wrapper = window.ipcRenderer.on("chat:event", (event) => listener(event as ChatEvent))
     return () => window.ipcRenderer.off("chat:event", wrapper)
   },
+}
+
+export const skillsApi = {
+  list: (directory?: string) =>
+    window.ipcRenderer.invoke("skills:list", directory) as Promise<Skill[]>,
+  create: (data: { name: string; description?: string; content: string; slug?: string; oldSlug?: string }) =>
+    window.ipcRenderer.invoke("skills:create", data) as Promise<{ filePath: string }>,
+  remove: (slug: string) => window.ipcRenderer.invoke("skills:remove", slug) as Promise<void>,
+  onChanged: (listener: () => void) => {
+    const wrapper = window.ipcRenderer.on("skills:changed", () => listener())
+    return () => window.ipcRenderer.off("skills:changed", wrapper)
+  },
+}
+
+export const mcpApi = {
+  config: () => window.ipcRenderer.invoke("mcp:config") as Promise<McpConfig>,
+  status: () => window.ipcRenderer.invoke("mcp:status") as Promise<McpServerStatus[]>,
+  save: (config: McpConfig) =>
+    window.ipcRenderer.invoke("mcp:save", config) as Promise<McpServerStatus[]>,
+  reconnect: (name?: string) =>
+    window.ipcRenderer.invoke("mcp:reconnect", name) as Promise<McpServerStatus[]>,
 }
 
 export const memoryApi = {

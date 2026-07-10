@@ -1,5 +1,6 @@
 import type { ToolSet } from 'ai'
 import type { SendMessageInput } from '../../../shared/chat'
+import { getMcpTools } from '../mcp'
 import { createBrowserLinksTool, createBrowserOpenTool } from './browser'
 import type { ToolContext } from './context'
 import {
@@ -10,6 +11,7 @@ import {
   createReadTool,
   createWriteTool,
 } from './files'
+import { createSkillTool } from './create-skill'
 import { createChatMemoryTools, createCodeMemoryTools } from './memory'
 import { createSubagentTool } from './orchestration'
 import { createQuestionTool } from './question'
@@ -37,6 +39,9 @@ export function buildToolSet(input: SendMessageInput, ctx: ToolContext | null): 
   const allowQuestion =
     input.orchestrationRole !== 'worker' || (input.options.permissionMode ?? 'ask') !== 'full'
 
+  // Tools de servidores MCP configurados: disponíveis em ambos os modos
+  Object.assign(tools, getMcpTools())
+
   if (input.mode === 'chat') {
     if (input.options.research) {
       tools.websearch = createWebSearchTool()
@@ -63,6 +68,7 @@ export function buildToolSet(input: SendMessageInput, ctx: ToolContext | null): 
     tools.glob = createGlobTool(ctx)
     tools.grep = createGrepTool(ctx)
     tools.todowrite = createTodoTool()
+    tools.create_skill = createSkillTool()
     if (!input.options.plan) {
       tools.write = createWriteTool(ctx)
       tools.edit = createEditTool(ctx)

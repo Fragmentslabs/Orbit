@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { AlignLeft, Bot, Brain, BrainCircuit, FileText, Network, PlusIcon, Search } from "lucide-react"
 import {
   DropdownMenu,
@@ -24,6 +24,7 @@ import { ModeToggle } from "@/src/components/mode-toggle"
 import { OrchestrationConfigDialog } from "@/src/components/orchestration-config-dialog"
 import { PermissionModePicker } from "@/src/components/permission-mode-picker"
 import { ReasoningPicker } from "@/src/components/reasoning-picker"
+import { SlashPalette, useReferenceCommands, type SlashCommand } from "@/src/components/slash-palette"
 import { FolderSelector } from "@/src/components/folder-selector"
 import { useWorkspace } from "@/lib/workspace-context"
 import { useBrainEnabled, useBrainPrefs } from "@/src/stores/brain-prefs"
@@ -31,8 +32,10 @@ import { usePermissionPrefs } from "@/src/stores/permission-prefs"
 import { useProviderStore } from "@/src/stores/provider-store"
 import { useSettingsUi } from "@/src/stores/settings-ui"
 import { useReasoningPrefs } from "@/src/stores/reasoning-prefs"
+import { useSessionStore } from "@/src/stores/session-store"
 import { useSimpleMode } from "@/src/stores/simple-mode"
-import type { ChatStatus, SendMessageOptions } from "@/shared/chat"
+import { useSkillsStore } from "@/src/stores/skills-store"
+import type { ChatStatus, PermissionMode, SendMessageOptions } from "@/shared/chat"
 
 const RECENT_FOLDERS_KEY = "orbit-recent-folders"
 
@@ -58,7 +61,13 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId }: 
   const brain = useBrainEnabled(sessionId)
   const setBrainEnabled = useBrainPrefs((s) => s.setEnabled)
   const permissionMode = usePermissionPrefs((s) => s.mode)
+  const setPermissionMode = usePermissionPrefs((s) => s.setMode)
   const { folders, setFolders } = useWorkspace()
+
+  // Skills de projeto (.orbit/skills) acompanham a pasta principal ativa
+  useEffect(() => {
+    void useSkillsStore.getState().refresh(folders[0])
+  }, [folders])
   const selected = useProviderStore((s) => s.selectedModel)
   const model = useProviderStore((s) =>
     s.selectedModel ? s.catalog[s.selectedModel.providerId]?.models[s.selectedModel.modelId] : undefined,
@@ -93,8 +102,46 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId }: 
     )
   }
 
+  const { mode } = useWorkspace()
+  const openSettings = useSettingsUi((s) => s.openSettings)
+  const referenceCommands = useReferenceCommands()
+
+  const slashCommands = useMemo<SlashCommand[]>(() => {
+    const toggle = (fn: () => void) => ({ setText }: { setText: (t: string) => void }) => {
+      fn()
+      setText("")
+    }
+    const permission = (id: PermissionMode, label: string, description: string): SlashCommand => ({
+      id: `perm-${id}`,
+      label: `Permissões: ${label}`,
+      description,
+      keywords: ["permissao", "autonomia", id],
+      group: "Modos",
+      active: permissionMode === id,
+      run: toggle(() => setPermissionMode(id)),
+    })
+    return [
+      { id: "pesquisa", label: "Pesquisa", description: "Alterna busca web para documentação", keywords: ["web", "search"], group: "Modos" as const, active: search, run: toggle(() => setSearch((v) => !v)) },
+      { id: "plano", label: "Modo Plano", description: "Alterna modo somente leitura (plano de implementação)", keywords: ["plan", "leitura"], group: "Modos" as const, active: plan, run: toggle(() => setPlan((v) => !v)) },
+      ...(model?.reasoning && !model.reasoningAlwaysOn
+        ? [{ id: "thinking", label: "Thinking", description: "Alterna raciocínio estendido do modelo", keywords: ["reasoning", "pensar"], group: "Modos" as const, active: thinking, run: toggle(() => update({ enabled: !enabled, variantId })) }]
+        : []),
+      { id: "simples", label: "Simples", description: "Alterna respostas em texto puro", keywords: ["texto", "plain"], group: "Modos" as const, active: simple, run: toggle(() => setSimple(!simple)) },
+      { id: "brain", label: "Memória (Brain)", description: "Alterna a memória do projeto neste chat", keywords: ["memoria", "brain"], group: "Modos" as const, active: brain, run: toggle(() => setBrainEnabled(sessionId, !brain)) },
+      { id: "subagents", label: "Subagents", description: "Alterna workers em background", keywords: ["worker", "delegar"], group: "Modos" as const, active: subagents, run: toggle(() => setSubagents((v) => !v)) },
+      { id: "orchestra", label: "Orchestra", description: "Alterna orquestração em tarefas paralelas", keywords: ["workers", "plano"], group: "Modos" as const, active: orchestra, run: toggle(() => setOrchestra((v) => !v)) },
+      permission("ask", "Perguntar", "Confirma ações sensíveis antes de executar"),
+      permission("approve", "Autonomia", "Executa sozinho; ações críticas pedem confirmação"),
+      permission("full", "Irrestrito", "Sem perguntas (piso de segurança mantido)"),
+      ...referenceCommands,
+      { id: "nova-sessao", label: "Nova sessão", description: "Começa uma sessão de código em branco", keywords: ["clear", "limpar", "novo"], group: "Ações" as const, run: toggle(() => void useSessionStore.getState().selectSession(mode, null)) },
+      { id: "settings", label: "Configurações", description: "Abre as configurações do Orbit", keywords: ["settings", "config"], group: "Ações" as const, run: toggle(() => openSettings()) },
+    ]
+  }, [search, plan, thinking, simple, brain, subagents, orchestra, permissionMode, model, enabled, variantId, update, sessionId, setBrainEnabled, setSimple, setPermissionMode, referenceCommands, mode, openSettings])
+
   return (
     <PromptInputProvider>
+      <SlashPalette commands={slashCommands}>
       <div className="w-full max-w-2xl mx-auto pb-4">
         {(!hasMessages || folders.length > 0) && (
           <div className="flex flex-wrap items-center gap-2 px-3 py-1.5">
@@ -199,6 +246,7 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId }: 
         </PromptInputTools>
         <OrchestrationConfigDialog open={configOpen} onOpenChange={setConfigOpen} />
       </div>
+      </SlashPalette>
     </PromptInputProvider>
   )
 }
