@@ -160,7 +160,7 @@ export function SettingsDialog({ open, onOpenChange, initialTab = "providers" }:
       if (next) setTab(initialTab)
       onOpenChange(next)
     }}>
-      <DialogContent className="max-w-4xl p-0 gap-0 overflow-hidden" showCloseButton>
+      <DialogContent className="max-w-sm sm:max-w-4xl p-0 gap-0 overflow-hidden" showCloseButton>
         <div className="flex flex-row h-[600px]">
           {/* Sidebar de abas */}
           <nav className="w-48 shrink-0 border-r bg-muted/30 p-2">

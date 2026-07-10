@@ -47,10 +47,10 @@ export function PermissionModePicker({ onOpenSettings }: Props) {
           <Icon className="size-3 text-foreground" />
           <SelectValue />
         </SelectTrigger>
-        <SelectContent side="top" sideOffset={4} align="start" alignItemWithTrigger={false}>
+        <SelectContent side="top" sideOffset={4} align="start" alignItemWithTrigger={false} className="min-w-64 p-1.5">
           {MODES.map((m) => (
             <SelectItem key={m.id} value={m.id}>
-              <div className="flex flex-col">
+              <div className="flex flex-col whitespace-normal">
                 <span>{m.label}</span>
                 <span className="text-xs text-muted-foreground">{m.description}</span>
               </div>

@@ -4,20 +4,12 @@ import { SegmentedControl } from "@/components/ui/segmented-control"
 import { usePermissionPrefs } from "@/src/stores/permission-prefs"
 import type { PermissionMode, PermissionThresholds, RiskLevel, SensitivityLevel } from "@/shared/chat"
 
-/**
- * Painel "Autonomia & Permissões" da SettingsDialog. Três cards de modo,
- * cada um com dois controles: terminalAuto (risco máximo auto) e decisionsAuto
- * (sensibilidade para decidir verbalmente — tool question). Defaults alinhados
- * à spec: ask=medium/medium, approve=high/medium, full=high/high.
- *
- * Piso de segurança (forbidden: escrita em .git/, rm -rf fora do projeto) é
- * hardcoded — não exposto na UI. Override só via config programática futura.
- */
+/** Painel "Autonomia & Permissões" da SettingsDialog. */
 
-const MODE_META: Record<PermissionMode, { title: string; tone: string; description: string }> = {
-  ask: { title: "Modo Perguntar", tone: "text-amber-500", description: "Máxima colaboração. Confirma cada ação sensível e cada decisão importante." },
-  approve: { title: "Modo Approve", tone: "text-sky-500", description: "Autonomia operacional: executa comandos de risco médio; pergunta nos altos risco e nas decisões estruturais." },
-  full: { title: "Modo Full", tone: "text-destructive", description: "Máxima autonomia: executa e decide tudo dentro do piso absoluto de segurança (escrita em .git/, rm -rf fora do projeto) — sempre bloqueado." },
+const MODE_META: Record<PermissionMode, { title: string; description: string }> = {
+  ask: { title: "Modo Perguntar", description: "Máxima colaboração. Confirma cada ação sensível e cada decisão importante." },
+  approve: { title: "Modo Approve", description: "Autonomia operacional: executa comandos de risco médio; pergunta nos altos risco e nas decisões estruturais." },
+  full: { title: "Modo Full", description: "Máxima autonomia: executa e decide tudo dentro do piso absoluto de segurança (escrita em .git/, rm -rf fora do projeto) — sempre bloqueado." },
 }
 
 const TERMINAL_OPTIONS: { value: RiskLevel; label: string; hint: string }[] = [
@@ -32,22 +24,22 @@ const DECISIONS_OPTIONS: { value: SensitivityLevel; label: string; hint: string 
   { value: "high", label: "Alta", hint: "Decide tudo sozinho — nunca pergunta" },
 ]
 
-function ModeCard({ mode }: { mode: PermissionMode }) {
+function ModeSection({ mode }: { mode: PermissionMode }) {
   const thresholds = usePermissionPrefs((s) => s.thresholds[mode])
   const setThreshold = usePermissionPrefs((s) => s.setThreshold)
   const meta = MODE_META[mode]
   const t: PermissionThresholds = thresholds
 
   return (
-    <div className="rounded-lg border p-3">
-      <div className="mb-2 flex items-baseline gap-2">
-        <span className={`text-sm font-semibold ${meta.tone}`}>{meta.title}</span>
+    <div>
+      <div className="mb-1 flex items-baseline gap-2">
+        <span className="text-sm font-semibold">{meta.title}</span>
       </div>
       <p className="mb-3 text-[11px] leading-tight text-muted-foreground">{meta.description}</p>
 
-      <div className="flex flex-col gap-3">
-        <div>
-          <p className="mb-1 text-xs font-medium">Risco máximo no terminal (auto)</p>
+      <div className="flex gap-4">
+        <div className="flex-1">
+          <p className="mb-1 text-xs font-medium">Risco máximo no terminal</p>
           <SegmentedControl<RiskLevel>
             options={TERMINAL_OPTIONS}
             value={t.terminalAuto}
@@ -58,8 +50,8 @@ function ModeCard({ mode }: { mode: PermissionMode }) {
             {TERMINAL_OPTIONS.find((o) => o.value === t.terminalAuto)?.hint}
           </p>
         </div>
-        <div>
-          <p className="mb-1 text-xs font-medium">Sensibilidade para decisões estruturais</p>
+        <div className="flex-1">
+          <p className="mb-1 text-xs font-medium">Sensibilidade para decisões</p>
           <SegmentedControl<SensitivityLevel>
             options={DECISIONS_OPTIONS}
             value={t.decisionsAuto}
@@ -90,10 +82,10 @@ export function AutonomyPanel() {
         </p>
       </div>
 
-      <div className="grid flex-1 grid-cols-1 gap-3 md:grid-cols-3">
-        <ModeCard mode="ask" />
-        <ModeCard mode="approve" />
-        <ModeCard mode="full" />
+      <div className="flex flex-col gap-6">
+        <ModeSection mode="ask" />
+        <ModeSection mode="approve" />
+        <ModeSection mode="full" />
       </div>
 
       <div className="flex justify-end">

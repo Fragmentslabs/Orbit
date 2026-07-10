@@ -116,12 +116,12 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId }: 
             />
           </PromptInputBody>
           <PromptInputFooter>
-            <PromptInputTools>
+            <div className="flex items-center gap-1">
               <DropdownMenu>
                 <DropdownMenuTrigger className="flex size-7 items-center justify-center rounded-md hover:bg-muted hover:text-foreground aria-expanded:bg-muted aria-expanded:text-foreground">
                   <PlusIcon className="size-4" />
                 </DropdownMenuTrigger>
-                <DropdownMenuContent align="start" className="min-w-48">
+                <DropdownMenuContent align="start" className="min-w-56 p-1.5">
                   <DelegationMenuItems
                     subagents={subagents}
                     orchestra={orchestra}
@@ -133,49 +133,8 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId }: 
                   <PromptInputActionAddAttachments label="Anexar arquivos" />
                 </DropdownMenuContent>
               </DropdownMenu>
-              <ModeToggle
-                icon={Search}
-                label="Pesquisa"
-                description="Libera websearch e webfetch para consultar documentação online."
-                active={search}
-                onToggle={() => setSearch((v) => !v)}
-              />
-              <ModeToggle
-                icon={FileText}
-                label="Modo Plano"
-                description="Somente leitura. Produz um plano de implementação sem editar arquivos."
-                active={plan}
-                onToggle={() => setPlan((v) => !v)}
-              />
-              {model?.reasoning && (
-                <ModeToggle
-                  icon={Brain}
-                  label="Thinking"
-                  description={
-                    model.reasoningAlwaysOn
-                      ? "Este modelo sempre usa raciocínio extendido."
-                      : "Ativa raciocínio extendido do modelo. Custa mais tokens e tempo."
-                  }
-                  active={thinking}
-                  onToggle={() => update({ enabled: !enabled, variantId })}
-                  disabled={model.reasoningAlwaysOn}
-                />
-              )}
-              <ModeToggle
-                icon={AlignLeft}
-                label="Simples"
-                description="Respostas diretas em texto puro: sem formatação nem blocos de ferramentas."
-                active={simple}
-                onToggle={() => setSimple(!simple)}
-              />
-              <ModeToggle
-                icon={BrainCircuit}
-                label="Memória"
-                description="Memória do projeto entre sessões: decisões, convenções e estrutura. Desative apenas neste chat."
-                active={brain}
-                onToggle={() => setBrainEnabled(sessionId, !brain)}
-              />
-            </PromptInputTools>
+              <PermissionModePicker onOpenSettings={(tab) => useSettingsUi.getState().openSettings(tab)} />
+            </div>
             <div className="flex items-center gap-1">
               {subagents && <Bot className="size-3 text-sidebar-foreground/40" />}
               {orchestra && <Network className="size-3 text-sidebar-foreground/40" />}
@@ -186,7 +145,6 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId }: 
                   onSelect={(id) => update({ enabled: true, variantId: id })}
                 />
               )}
-              <PermissionModePicker onOpenSettings={(tab) => useSettingsUi.getState().openSettings(tab)} />
               <ModelPicker />
               <PromptInputSubmit
                 disabled={(!selected || folders.length === 0) && !busy}
@@ -195,6 +153,50 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId }: 
             </div>
           </PromptInputFooter>
         </PromptInput>
+        <PromptInputTools>
+          <ModeToggle
+            icon={Search}
+            label="Pesquisa"
+            description="Libera websearch e webfetch para consultar documentação online."
+            active={search}
+            onToggle={() => setSearch((v) => !v)}
+          />
+          <ModeToggle
+            icon={FileText}
+            label="Modo Plano"
+            description="Somente leitura. Produz um plano de implementação sem editar arquivos."
+            active={plan}
+            onToggle={() => setPlan((v) => !v)}
+          />
+          {model?.reasoning && (
+            <ModeToggle
+              icon={Brain}
+              label="Thinking"
+              description={
+                model.reasoningAlwaysOn
+                  ? "Este modelo sempre usa raciocínio extendido."
+                  : "Ativa raciocínio extendido do modelo. Custa mais tokens e tempo."
+              }
+              active={thinking}
+              onToggle={() => update({ enabled: !enabled, variantId })}
+              disabled={model.reasoningAlwaysOn}
+            />
+          )}
+          <ModeToggle
+            icon={AlignLeft}
+            label="Simples"
+            description="Respostas diretas em texto puro: sem formatação nem blocos de ferramentas."
+            active={simple}
+            onToggle={() => setSimple(!simple)}
+          />
+          <ModeToggle
+            icon={BrainCircuit}
+            label="Memória"
+            description="Memória do projeto entre sessões: decisões, convenções e estrutura. Desative apenas neste chat."
+            active={brain}
+            onToggle={() => setBrainEnabled(sessionId, !brain)}
+          />
+        </PromptInputTools>
         <OrchestrationConfigDialog open={configOpen} onOpenChange={setConfigOpen} />
       </div>
     </PromptInputProvider>
