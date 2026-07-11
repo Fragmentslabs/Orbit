@@ -6,6 +6,17 @@ export type WorkspaceView = "chat" | "memories"
 
 const RECENT_FOLDERS_KEY = "orbit-recent-folders"
 
+function loadDefaultMode(): WorkspaceMode {
+  try {
+    const raw = localStorage.getItem("orbit-default-mode")
+    if (raw) {
+      const parsed = JSON.parse(raw) as WorkspaceMode
+      if (parsed === "chat" || parsed === "code") return parsed
+    }
+  } catch {}
+  return "chat"
+}
+
 function loadInitialFolders(): string[] {
   try {
     const stored = localStorage.getItem(RECENT_FOLDERS_KEY)
@@ -26,7 +37,7 @@ type WorkspaceContextType = {
 const WorkspaceContext = createContext<WorkspaceContextType | null>(null)
 
 export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
-  const [mode, setModeState] = useState<WorkspaceMode>("chat")
+  const [mode, setModeState] = useState<WorkspaceMode>(loadDefaultMode)
   const [view, setView] = useState<WorkspaceView>("chat")
   const [folders, setFolders] = useState<string[]>(loadInitialFolders)
 

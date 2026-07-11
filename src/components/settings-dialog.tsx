@@ -11,7 +11,7 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { ModelSelectorLogo } from "@/src/components/ai/model-selector"
-import { AutonomyPanel } from "@/src/components/autonomy-panel"
+import { PreferencesPanel } from "@/src/components/preferences-panel"
 import { McpSkillsPanel } from "@/src/components/mcp-skills-panel"
 import { AnalyticsPanel } from "@/src/components/analytics-panel"
 import { useProviderStore } from "@/src/stores/provider-store"
@@ -31,7 +31,7 @@ interface TabDef {
 
 const TABS: TabDef[] = [
   { id: "providers", label: "Provedores", icon: KeyRound, description: "Chaves de API dos provedores de IA." },
-  { id: "autonomy", label: "Autonomia", icon: Shield, description: "Permissões e decisões por modo." },
+  { id: "autonomy", label: "Preferências", icon: Shield, description: "Preferências gerais, modelos padrão e permissões." },
   { id: "mcp-skills", label: "Ferramentas", icon: Puzzle, description: "Servidores MCP e skills do usuário." },
   { id: "analytics", label: "Uso e Limites", icon: BarChart3, description: "Estatísticas de uso e consumo de tokens." },
 ]
@@ -206,7 +206,7 @@ export function SettingsDialog({ open, onOpenChange, initialTab = "providers" }:
               <p className="text-[11px] text-muted-foreground">{active.description}</p>
             </div>
             <div className="h-[520px] min-w-0">
-              {tab === "providers" ? <ProvidersTab /> : tab === "autonomy" ? <AutonomyPanel /> : tab === "mcp-skills" ? <McpSkillsPanel /> : <AnalyticsPanel />}
+              {tab === "providers" ? <ProvidersTab /> : tab === "autonomy" ? <PreferencesPanel /> : tab === "mcp-skills" ? <McpSkillsPanel /> : <AnalyticsPanel />}
             </div>
           </div>
         </div>
