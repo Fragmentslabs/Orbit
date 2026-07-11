@@ -8,6 +8,7 @@ import path from 'node:path'
 import type * as NodePty from 'node-pty'
 import { listCredentialProviders, removeCredential, setCredential } from './lib/auth'
 import { getCatalog } from './lib/catalog'
+import { getModelsSnapshot, invalidateModelsSnapshot } from './lib/models'
 import { abortChat, runChat } from './lib/chat-engine'
 import { reply as askReply, rejectSession as rejectSessionAsks } from './lib/ask-broker'
 import { abortOrchestration, approvePlan, rejectPlan, runOrchestration } from './lib/orchestrator'
@@ -322,6 +323,13 @@ app.whenReady().then(() => {
 
   // Catálogo de provedores/modelos (models.dev)
   ipcMain.handle('catalog:get', () => getCatalog())
+
+  // Catálogo unificado da aba Models (OpenRouter + Artificial Analysis)
+  ipcMain.handle('models:list', () => getModelsSnapshot())
+  ipcMain.handle('models:refresh', () => {
+    invalidateModelsSnapshot()
+    return getModelsSnapshot(true)
+  })
 
   // Credenciais de provedores (as chaves nunca voltam ao renderer)
   ipcMain.handle('auth:set', (_event, providerId: string, key: string) => setCredential(providerId, key))

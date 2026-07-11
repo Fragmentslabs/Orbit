@@ -4,6 +4,7 @@ import type {
   SendMessageInput,
 } from "@/shared/chat"
 import type { McpConfig, McpServerStatus } from "@/shared/mcp"
+import type { ModelsSnapshot } from "@/shared/models"
 import type { Memory, MemoryEvent } from "@/shared/memory"
 import type { Skill, SkillProposal } from "@/shared/skills"
 import type { AnalyticsSummary, AnalyticsRange } from "@/shared/analytics"
@@ -20,6 +21,11 @@ export const storage = {
 
 export const catalogApi = {
   get: () => window.ipcRenderer.invoke("catalog:get") as Promise<Catalog>,
+}
+
+export const modelsApi = {
+  list: () => window.ipcRenderer.invoke("models:list") as Promise<ModelsSnapshot>,
+  refresh: () => window.ipcRenderer.invoke("models:refresh") as Promise<ModelsSnapshot>,
 }
 
 export const authApi = {

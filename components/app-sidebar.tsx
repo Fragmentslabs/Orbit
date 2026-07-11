@@ -5,6 +5,7 @@ import {
   ArchiveRestore,
   BarChart3,
   Bot,
+  Boxes,
   BrainCircuit,
   ChevronDown,
   Ellipsis,
@@ -109,6 +110,24 @@ function MemoriesButton() {
     >
       <BrainCircuit className="size-4" />
       Memórias
+    </Button>
+  )
+}
+
+function ModelsButton() {
+  const { view, setView } = useWorkspace()
+  const active = view === "models"
+  return (
+    <Button
+      variant="ghost"
+      className={cn(
+        "w-full justify-start gap-2 text-sm",
+        active && "bg-sidebar-accent text-sidebar-accent-foreground",
+      )}
+      onClick={() => setView(active ? "chat" : "models")}
+    >
+      <Boxes className="size-4" />
+      Models
     </Button>
   )
 }
@@ -829,6 +848,7 @@ export function AppSidebar() {
           </div>
           <div className="space-y-1 px-3 pb-2">
             <MemoriesButton />
+            <ModelsButton />
             <UsageButton />
             <McpSkillsButton />
           </div>

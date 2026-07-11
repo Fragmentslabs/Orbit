@@ -2,7 +2,7 @@ import { createContext, useContext, useState } from "react"
 
 export type WorkspaceMode = "chat" | "code"
 
-export type WorkspaceView = "chat" | "memories"
+export type WorkspaceView = "chat" | "memories" | "models"
 
 const RECENT_FOLDERS_KEY = "orbit-recent-folders"
 

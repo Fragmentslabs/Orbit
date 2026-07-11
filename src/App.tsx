@@ -11,6 +11,7 @@ import { useActiveSession } from "@/src/stores/session-store"
 import { ChatHeader } from "@/src/components/chat-header"
 import { ChatView } from "@/src/components/chat-view"
 import { MemoriesView } from "@/src/components/memories/memories-view"
+import { ModelsView } from "@/src/components/models/models-view"
 import { RightPanel } from "@/src/components/right-panel"
 import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels"
 
@@ -109,14 +110,16 @@ function Layout() {
                 title={
                   view === "memories"
                     ? "Memórias"
-                    : activeSession?.title ?? (workspaceMode === "chat" ? "Nova conversa" : "Novo código")
+                    : view === "models"
+                      ? "Models"
+                      : activeSession?.title ?? (workspaceMode === "chat" ? "Nova conversa" : "Novo código")
                 }
                 rightPanelOpen={rightPanelOpen}
                 onToggleSidebar={handleToggleSidebar}
                 onToggleRightPanel={workspaceMode === "code" ? () => setRightPanelOpen(!rightPanelOpen) : undefined}
               />
               <div className="flex min-w-0 flex-1 flex-col overflow-hidden p-4" style={{ '--panel-bg': 'var(--background)' } as React.CSSProperties}>
-                {view === "memories" ? <MemoriesView /> : <ChatView />}
+                {view === "memories" ? <MemoriesView /> : view === "models" ? <ModelsView /> : <ChatView />}
               </div>
             </main>
         </Panel>
