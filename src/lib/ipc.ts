@@ -77,6 +77,18 @@ export const analyticsApi = {
     window.ipcRenderer.invoke("analytics:summary", range) as Promise<AnalyticsSummary>,
 }
 
+export const panelApi = {
+  /** Registra (ou limpa, com null) o webContents do <webview> do painel */
+  register: (webContentsId: number | null) =>
+    window.ipcRenderer.send("panel:register", webContentsId),
+  onEvent: (listener: (event: { type: "open"; url?: string }) => void) => {
+    const wrapper = window.ipcRenderer.on("panel:event", (event) =>
+      listener(event as { type: "open"; url?: string }),
+    )
+    return () => window.ipcRenderer.off("panel:event", wrapper)
+  },
+}
+
 export const memoryApi = {
   list: () => window.ipcRenderer.invoke("memory:list") as Promise<Memory[]>,
   get: (id: string) =>

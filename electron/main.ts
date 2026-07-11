@@ -12,6 +12,7 @@ import { abortChat, runChat } from './lib/chat-engine'
 import { reply as askReply, rejectSession as rejectSessionAsks } from './lib/ask-broker'
 import { abortOrchestration, approvePlan, rejectPlan, runOrchestration } from './lib/orchestrator'
 import { initMcp, listMcpStatus, readMcpConfig, reconnectMcp, saveMcpConfig } from './lib/mcp'
+import { registerPanelWebContents } from './lib/panel-browser'
 import { setupMemoryScheduler } from './lib/memory/scheduler'
 import * as memoryService from './lib/memory/service'
 import { globalSkillsDir, loadSkills, notifySkillsChanged, setupSkillsWatcher } from './lib/skills'
@@ -350,6 +351,9 @@ app.whenReady().then(() => {
     if (win) void rejectPlan(win, sessionId)
   })
   ipcMain.handle('chat:closeBrowser', (_event, sessionId: string) => destroyBrowserWindow(sessionId))
+
+  // Browser do painel direito: o renderer registra o webContents do <webview>
+  ipcMain.on('panel:register', (_event, id: number | null) => registerPanelWebContents(id))
 
   // Memória Brain — a UI fala com o service; mutações chegam de volta via memory:event
   ipcMain.handle('memory:list', () => memoryService.list())

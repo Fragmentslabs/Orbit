@@ -31,7 +31,7 @@ export interface WebPreviewContextValue {
 
 const WebPreviewContext = createContext<WebPreviewContextValue | null>(null)
 
-const useWebPreview = () => {
+export const useWebPreview = () => {
   const context = useContext(WebPreviewContext)
   if (!context) {
     throw new Error("WebPreview components must be used within a WebPreview")
@@ -230,9 +230,11 @@ export const WebPreviewUrl = ({ value, onChange, onKeyDown, ...props }: WebPrevi
 
 export type WebPreviewBodyProps = ComponentProps<"iframe"> & {
   loading?: ReactNode
+  /** Recebe o elemento <webview> montado (controle programático do painel) */
+  onWebviewRef?: (el: HTMLElement | null) => void
 }
 
-export const WebPreviewBody = ({ className, loading, src, ...props }: WebPreviewBodyProps) => {
+export const WebPreviewBody = ({ className, loading, src, onWebviewRef, ...props }: WebPreviewBodyProps) => {
   const { url, refreshKey, setUrl } = useWebPreview()
   const [localUrl, setLocalUrl] = useState("")
 
@@ -273,6 +275,7 @@ export const WebPreviewBody = ({ className, loading, src, ...props }: WebPreview
       {/* @ts-ignore webview is an electron specific tag */}
       <webview
         key={refreshKey}
+        ref={onWebviewRef as never}
         className={cn("size-full bg-white", className)}
         src={(src ?? url) || undefined}
         title="Preview"

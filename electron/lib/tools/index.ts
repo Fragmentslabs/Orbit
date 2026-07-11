@@ -14,6 +14,7 @@ import {
 import { createSkillTool } from './create-skill'
 import { createChatMemoryTools, createCodeMemoryTools } from './memory'
 import { createSubagentTool } from './orchestration'
+import { createPanelBrowserTools } from './panel-browser'
 import { createQuestionTool } from './question'
 import { createBashTool } from './shell'
 import { createTodoTool } from './todo'
@@ -77,6 +78,11 @@ export function buildToolSet(input: SendMessageInput, ctx: ToolContext | null): 
       tools.edit = createEditTool(ctx)
       tools.bash = createBashTool(ctx)
     }
+  }
+  // Browser do painel direito: teste de apps web + modo documentação.
+  // Workers ficam de fora — o painel é um recurso único e visível.
+  if (ctx && input.orchestrationRole !== 'worker') {
+    Object.assign(tools, createPanelBrowserTools(ctx))
   }
   if (allowBrain && ctx) Object.assign(tools, createCodeMemoryTools(input, ctx))
   if (allowQuestion) tools.question = createQuestionTool(input, ctx?.abort)

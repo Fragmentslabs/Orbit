@@ -11,6 +11,7 @@ import { TerminalTab } from "@/src/components/terminal-tab"
 import { BrowserTab } from "@/src/components/browser-tab"
 import { FoldersTab } from "@/src/components/folders-tab"
 import { useWorkspace } from "@/lib/workspace-context"
+import { usePanelStore } from "@/src/stores/panel-store"
 import { useSessionStore } from "@/src/stores/session-store"
 import { cn } from "@/lib/utils"
 
@@ -157,6 +158,17 @@ export function RightPanel() {
     setTabs((prev) => [...prev, { id, type, title: tabTitle }])
     setActiveTabId(id)
   }, [])
+
+  // Agente pediu o browser (tools panel_*): garante/ativa a aba Browser
+  const browserRequestId = usePanelStore((s) => s.browserRequestId)
+  useEffect(() => {
+    if (browserRequestId === 0) return
+    const id = "browser-agent"
+    setTabs((prev) =>
+      prev.some((t) => t.id === id) ? prev : [...prev, { id, type: "browser", title: "Browser" }],
+    )
+    setActiveTabId(id)
+  }, [browserRequestId])
 
   // Workers da orquestração em execução abrem tabs automaticamente
   useEffect(() => {

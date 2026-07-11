@@ -86,7 +86,7 @@ function matches(command: SlashCommand, query: string): boolean {
 }
 
 /** Comandos literais enviados como texto — a paleta não abre sobre eles */
-const LITERAL_COMMANDS = ["/create-skill"]
+const LITERAL_COMMANDS = ["/create-skill", "/document"]
 
 export function SlashPalette({ commands, children }: {
   commands: SlashCommand[]

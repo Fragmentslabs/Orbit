@@ -40,6 +40,7 @@ Diretrizes (mesma filosofia do opencode):
 - Nunca execute comandos destrutivos (rm -rf, git push --force, reset --hard) sem o usuário pedir explicitamente.
 - Diante de decisões com múltiplas abordagens válidas ou requisitos ambíguos, use a ferramenta question com opções claras em vez de presumir.
 - Em tarefas com 3+ etapas, mantenha uma TODO viva com todowrite: marque in_progress ao iniciar e completed ao concluir cada item.
+- Para testar aplicações web use as ferramentas panel_* (browser no painel do Orbit, abre sozinho): panel_navigate → panel_read (refs) → panel_click/panel_type → panel_screenshot (você VÊ a imagem).
 - Responda de forma concisa, referenciando arquivos como caminho:linha.`
 
 const PLAN_PROMPT = `${IDENTITY}
@@ -167,6 +168,18 @@ const CREATE_SKILL_INSTRUCTION = `FLUXO /create-skill ATIVO. O usuário quer que
 3. Chame create_skill UMA vez. A proposta vira um card "Adicionar skill" na conversa — a skill só entra em uso quando o usuário aprovar.
 4. Depois, explique em 2-4 frases como a skill foi estruturada e como usá-la (@slug na paleta "/").`
 
+const DOCUMENT_INSTRUCTION = `MODO DOCUMENTAÇÃO ATIVO (/document). Você vai navegar pela aplicação web com as ferramentas panel_* e produzir documentação em docs/ na pasta de trabalho.
+
+1. Se a URL base ou o escopo (quais páginas) não estiverem claros, pergunte com question — uma rodada só.
+2. Monte a TODO (todowrite) com as páginas a documentar e mantenha-a atualizada.
+3. Para cada página:
+   - panel_navigate na rota → panel_read para mapear conteúdo e funções.
+   - panel_screenshot com savePath docs/<slug-da-pagina>/tela.png (a foto principal).
+   - Interaja (panel_click/panel_type) para capturar estados derivados — modais, abas, formulários preenchidos — cada um com seu screenshot (docs/<slug>/modal-<nome>.png etc). Verifique cada screenshot que você recebe.
+4. Investigue o código do projeto (grep/read) para levantar as APIs que a página consome (método + endpoint) e as regras de negócio.
+5. Escreva docs/<slug-da-pagina>/README.md com: título e rota; visão geral; funções/ações disponíveis; regras de negócio; APIs consumidas; e as imagens referenciadas com links relativos (![Tela](tela.png), ![Modal X](modal-x.png)).
+6. Ao final, crie/atualize docs/README.md com o índice de todas as páginas documentadas.`
+
 /** Skills (globais + do projeto) injetadas como contexto disponível. */
 async function buildSkillsBlock(input: SendMessageInput): Promise<string[]> {
   try {
@@ -280,6 +293,9 @@ export async function buildSystemPrompt(input: SendMessageInput): Promise<string
 
   if (input.text.trimStart().startsWith('/create-skill')) {
     parts.push(CREATE_SKILL_INSTRUCTION)
+  }
+  if (input.mode === 'code' && input.text.trimStart().startsWith('/document')) {
+    parts.push(DOCUMENT_INSTRUCTION)
   }
 
   if (input.orchestrationRole === 'worker') {

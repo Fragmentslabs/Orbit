@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react"
-import { AlignLeft, Bot, Brain, BrainCircuit, FileText, Network, PlusIcon, Search } from "lucide-react"
+import { AlignLeft, Bot, Brain, BrainCircuit, FileText, MousePointerClick, Network, PlusIcon, Search, X } from "lucide-react"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -33,6 +33,7 @@ import { usePermissionPrefs } from "@/src/stores/permission-prefs"
 import { useProviderStore } from "@/src/stores/provider-store"
 import { useSettingsUi } from "@/src/stores/settings-ui"
 import { useReasoningPrefs } from "@/src/stores/reasoning-prefs"
+import { usePanelStore } from "@/src/stores/panel-store"
 import { useSessionStore } from "@/src/stores/session-store"
 import { useSimpleMode } from "@/src/stores/simple-mode"
 import { useSkillsStore } from "@/src/stores/skills-store"
@@ -82,10 +83,21 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId }: 
       onStop?.()
       return
     }
-    const text = message.text?.trim()
+    let text = message.text?.trim()
     if (!text || folders.length === 0) return
     saveRecentFolders(folders)
     const [directory, ...extraDirectories] = folders
+    // Elementos selecionados no browser do painel viram anexos da mensagem
+    const selections = usePanelStore.getState().selections
+    if (selections.length > 0) {
+      text += `\n\n${selections
+        .map(
+          (sel) =>
+            `[Elemento selecionado no browser do painel — <${sel.tag}> em ${sel.url}]\nselector: ${sel.selector}\ntexto: ${sel.text || "(sem texto)"}\nhtml: ${sel.html}`,
+        )
+        .join("\n\n")}`
+      usePanelStore.getState().clearSelections()
+    }
     onSubmit(
       text,
       {
@@ -106,6 +118,8 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId }: 
   const { mode } = useWorkspace()
   const openSettings = useSettingsUi((s) => s.openSettings)
   const referenceCommands = useReferenceCommands()
+  const selections = usePanelStore((s) => s.selections)
+  const removeSelection = usePanelStore((s) => s.removeSelection)
 
   const slashCommands = useMemo<SlashCommand[]>(() => {
     const toggle = (fn: () => void) => ({ setText }: { setText: (t: string) => void }) => {
@@ -137,6 +151,7 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId }: 
       ...referenceCommands,
       { id: "nova-sessao", label: "Nova sessão", description: "Começa uma sessão de código em branco", keywords: ["clear", "limpar", "novo"], group: "Ações" as const, run: toggle(() => void useSessionStore.getState().selectSession(mode, null)) },
       { id: "create-skill", label: "Criar skill", description: "Pede ao Orbit para criar uma skill (com scripts, se precisar)", keywords: ["skill", "criar", "aprender"], group: "Ações" as const, run: ({ setText }) => setText("/create-skill ") },
+      { id: "document", label: "Documentar aplicação", description: "Navega pelo app no painel, tira screenshots e documenta em docs/", keywords: ["docs", "documentacao", "screenshot"], group: "Ações" as const, run: ({ setText }) => setText("/document ") },
       { id: "settings", label: "Configurações", description: "Abre as configurações do Orbit", keywords: ["settings", "config"], group: "Ações" as const, run: toggle(() => openSettings()) },
     ]
   }, [search, plan, thinking, simple, brain, subagents, orchestra, permissionMode, model, enabled, variantId, update, sessionId, setBrainEnabled, setSimple, setPermissionMode, referenceCommands, mode, openSettings])
@@ -152,6 +167,28 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId }: 
             <PromptInputAttachments className="!p-0 !m-0 !w-auto">
               {(attachment) => <PromptInputAttachment data={attachment} />}
             </PromptInputAttachments>
+          </div>
+        )}
+        {/* Elementos selecionados no browser do painel (modo seleção) */}
+        {selections.length > 0 && (
+          <div className="flex flex-wrap items-center gap-1.5 px-3 pb-1.5">
+            {selections.map((sel) => (
+              <span
+                key={sel.id}
+                title={`${sel.selector}\n"${sel.text}"`}
+                className="flex items-center gap-1 rounded-md border border-emerald-500/30 bg-emerald-500/10 px-1.5 py-0.5 text-[11px] text-emerald-600 dark:text-emerald-400"
+              >
+                <MousePointerClick className="size-3" />
+                {"<"}{sel.tag}{">"} {sel.text ? `"${sel.text.slice(0, 24)}${sel.text.length > 24 ? "…" : ""}"` : "selecionado"}
+                <button
+                  type="button"
+                  onClick={() => removeSelection(sel.id)}
+                  className="ml-0.5 rounded-sm hover:bg-emerald-500/20"
+                >
+                  <X className="size-3" />
+                </button>
+              </span>
+            ))}
           </div>
         )}
         <PromptInput

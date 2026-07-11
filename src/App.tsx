@@ -5,6 +5,8 @@ import { TooltipProvider } from "@/components/ui/tooltip"
 import { AppSidebar } from "@/components/app-sidebar"
 import { ThemeProvider } from "@/components/theme-provider"
 import { WorkspaceProvider, useWorkspace } from "@/lib/workspace-context"
+import { panelApi } from "@/src/lib/ipc"
+import { usePanelStore } from "@/src/stores/panel-store"
 import { useActiveSession } from "@/src/stores/session-store"
 import { ChatHeader } from "@/src/components/chat-header"
 import { ChatView } from "@/src/components/chat-view"
@@ -40,9 +42,15 @@ function Layout() {
   const { mode: workspaceMode, view } = useWorkspace()
   const activeSession = useActiveSession(workspaceMode)
   const [mode, setMode] = useState<SidebarMode>(loadMode)
-  const [rightPanelOpen, setRightPanelOpen] = useState(false)
+  const rightPanelOpen = usePanelStore((s) => s.rightPanelOpen)
+  const setRightPanelOpen = usePanelStore((s) => s.setRightPanelOpen)
   const hideTimer = useRef<ReturnType<typeof setTimeout>>()
   const showTimer = useRef<ReturnType<typeof setTimeout>>()
+
+  // Eventos do main (tools panel_*): abre o painel/aba Browser automaticamente
+  useEffect(() => {
+    return panelApi.onEvent((event) => usePanelStore.getState().applyEvent(event))
+  }, [])
 
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY, mode)
@@ -105,7 +113,7 @@ function Layout() {
                 }
                 rightPanelOpen={rightPanelOpen}
                 onToggleSidebar={handleToggleSidebar}
-                onToggleRightPanel={workspaceMode === "code" ? () => setRightPanelOpen(v => !v) : undefined}
+                onToggleRightPanel={workspaceMode === "code" ? () => setRightPanelOpen(!rightPanelOpen) : undefined}
               />
               <div className="flex min-w-0 flex-1 flex-col overflow-hidden p-4" style={{ '--panel-bg': 'var(--background)' } as React.CSSProperties}>
                 {view === "memories" ? <MemoriesView /> : <ChatView />}
