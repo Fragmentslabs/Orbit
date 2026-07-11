@@ -2,6 +2,7 @@ import { tool, type ToolSet } from 'ai'
 import fsp from 'node:fs/promises'
 import path from 'node:path'
 import { z } from 'zod'
+import { saveMedia } from '../media'
 import {
   panelClick,
   panelNavigate,
@@ -10,6 +11,8 @@ import {
   panelType,
 } from '../panel-browser'
 import { resolveSafePath, type ToolContext } from './context'
+
+const IMAGE_EXTENSIONS = new Set(['png', 'jpg', 'jpeg', 'webp', 'gif'])
 
 /**
  * Ferramentas do browser do painel direito (modo código). O painel abre
@@ -96,6 +99,39 @@ export function createPanelBrowserTools(ctx: ToolContext): ToolSet {
             { type: 'text', text: String(output) },
             { type: 'file', data: { type: 'data', data: base64 }, mediaType: 'image/png' },
           ],
+        }
+      },
+    }),
+    show_image: tool({
+      description:
+        'Inclui uma imagem NA SUA RESPOSTA, visível para o usuário no chat. Use fromPanel para anexar um print atual do browser do painel, ou path para uma imagem da pasta de trabalho (ex: docs/login/tela.png). A imagem aparece no ponto da resposta em que a tool foi chamada — não a descreva em excesso depois.',
+      inputSchema: z.object({
+        fromPanel: z.boolean().optional().describe('Captura o browser do painel agora e anexa'),
+        path: z
+          .string()
+          .optional()
+          .describe('Caminho relativo de uma imagem existente na pasta de trabalho (png/jpg/webp/gif)'),
+        alt: z.string().optional().describe('Legenda curta exibida sob a imagem'),
+      }),
+      execute: async ({ fromPanel, path: imagePath, alt }) => {
+        let buffer: Buffer
+        let ext = 'png'
+        if (fromPanel) {
+          buffer = await panelScreenshot()
+        } else if (imagePath) {
+          ext = path.extname(imagePath).slice(1).toLowerCase()
+          if (!IMAGE_EXTENSIONS.has(ext)) {
+            return `Extensão não suportada (${ext || 'sem extensão'}) — use png/jpg/webp/gif.`
+          }
+          buffer = await fsp.readFile(resolveSafePath(ctx, imagePath))
+        } else {
+          return 'Informe fromPanel ou path.'
+        }
+        const mediaUrl = await saveMedia(buffer, ext)
+        return {
+          mediaUrl,
+          alt: alt ?? '',
+          message: 'Imagem anexada à resposta — o usuário já a vê no chat.',
         }
       },
     }),

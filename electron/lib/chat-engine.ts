@@ -265,6 +265,18 @@ export async function runChat(win: BrowserWindow, input: SendMessageInput): Prom
             input: existing?.input,
             output: typeof part.output === 'string' ? part.output : JSON.stringify(part.output, null, 2),
           })
+          // show_image: a imagem vira parte da resposta (renderizada pelo ai/image)
+          if (part.toolName === 'show_image') {
+            const output = part.output as { mediaUrl?: string; alt?: string } | string
+            if (typeof output === 'object' && output?.mediaUrl) {
+              upsertPart({
+                id: `${part.toolCallId}-img`,
+                type: 'image',
+                src: output.mediaUrl,
+                alt: output.alt || undefined,
+              })
+            }
+          }
           break
         }
         case 'tool-output-denied': {

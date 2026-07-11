@@ -8,6 +8,7 @@ import {
   parseTestSummary,
   type TestSummary,
 } from "@/src/lib/message-utils"
+import { ImagePartView } from "@/src/components/ai/image"
 import { Shimmer } from "@/src/components/ai/shimmer"
 import { SubAgentCard } from "@/src/components/ai/sub-agent-card"
 import { TodoList } from "@/src/components/ai/todo-list"
@@ -157,12 +158,13 @@ type Segment =
 function segmentParts(parts: MessagePart[]): Segment[] {
   const segments: Segment[] = []
   for (const part of parts) {
-    // Subagentes, TODO viva e propostas de skill têm cards próprios — fora do Task
+    // Subagentes, TODO viva, propostas de skill e show_image têm render próprio
     if (
       part.type === "tool" &&
       part.tool !== "subagent" &&
       part.tool !== "todowrite" &&
-      part.tool !== "create_skill"
+      part.tool !== "create_skill" &&
+      part.tool !== "show_image"
     ) {
       const last = segments[segments.length - 1]
       if (last?.kind === "task") last.parts.push(part)
@@ -214,6 +216,8 @@ export function CodeAssistantMessage({ message, isLast, isBusy }: {
           <TodoList key={segment.id} part={segment.part} stale={segment.part.id !== lastTodoId} />
         ) : segment.part.type === "tool" && segment.part.tool === "create_skill" ? (
           <SkillProposalCard key={segment.id} part={segment.part} />
+        ) : segment.part.type === "image" ? (
+          <ImagePartView key={segment.id} part={segment.part} />
         ) : null,
       )}
       {message.error && <MessageError error={message.error} />}

@@ -41,6 +41,7 @@ Diretrizes (mesma filosofia do opencode):
 - Diante de decisões com múltiplas abordagens válidas ou requisitos ambíguos, use a ferramenta question com opções claras em vez de presumir.
 - Em tarefas com 3+ etapas, mantenha uma TODO viva com todowrite: marque in_progress ao iniciar e completed ao concluir cada item.
 - Para testar aplicações web use as ferramentas panel_* (browser no painel do Orbit, abre sozinho): panel_navigate → panel_read (refs) → panel_click/panel_type → panel_screenshot (você VÊ a imagem).
+- Para MOSTRAR uma imagem ao usuário na sua resposta (print do painel ou arquivo do projeto), use show_image — a imagem aparece no chat; não a descreva em excesso depois.
 - Responda de forma concisa, referenciando arquivos como caminho:linha.`
 
 const PLAN_PROMPT = `${IDENTITY}
@@ -178,7 +179,8 @@ const DOCUMENT_INSTRUCTION = `MODO DOCUMENTAÇÃO ATIVO (/document). Você vai n
    - Interaja (panel_click/panel_type) para capturar estados derivados — modais, abas, formulários preenchidos — cada um com seu screenshot (docs/<slug>/modal-<nome>.png etc). Verifique cada screenshot que você recebe.
 4. Investigue o código do projeto (grep/read) para levantar as APIs que a página consome (método + endpoint) e as regras de negócio.
 5. Escreva docs/<slug-da-pagina>/README.md com: título e rota; visão geral; funções/ações disponíveis; regras de negócio; APIs consumidas; e as imagens referenciadas com links relativos (![Tela](tela.png), ![Modal X](modal-x.png)).
-6. Ao final, crie/atualize docs/README.md com o índice de todas as páginas documentadas.`
+6. Ao concluir cada página, mostre o screenshot principal na conversa com show_image({ path }).
+7. Ao final, crie/atualize docs/README.md com o índice de todas as páginas documentadas.`
 
 /** Skills (globais + do projeto) injetadas como contexto disponível. */
 async function buildSkillsBlock(input: SendMessageInput): Promise<string[]> {

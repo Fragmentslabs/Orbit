@@ -249,10 +249,8 @@ export default function ChainOfThoughtDemo() {
           <ChainOfThoughtImage caption="Classic chocolate chip cookies fresh from the oven.">
             <Image
               alt="Chocolate chip cookies"
-              base64={exampleImage.base64}
               className="aspect-square h-[150px] border"
-              mediaType={exampleImage.mediaType}
-              uint8Array={exampleImage.uint8Array}
+              src={`data:${exampleImage.mediaType};base64,${exampleImage.base64}`}
             />
           </ChainOfThoughtImage>
         </ChainOfThoughtStep>

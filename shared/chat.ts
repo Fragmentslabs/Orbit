@@ -73,7 +73,16 @@ export interface ToolPart {
   error?: string
 }
 
-export type MessagePart = TextPart | ReasoningPart | ToolPart
+/** Imagem que o assistente inclui na resposta (tool show_image) */
+export interface ImagePart {
+  id: string
+  type: "image"
+  /** URL orbit-media:// servida pelo protocolo do main (arquivo em orbit-data/media) */
+  src: string
+  alt?: string
+}
+
+export type MessagePart = TextPart | ReasoningPart | ToolPart | ImagePart
 
 export interface TokenUsage {
   input: number

@@ -12,6 +12,7 @@ import { abortChat, runChat } from './lib/chat-engine'
 import { reply as askReply, rejectSession as rejectSessionAsks } from './lib/ask-broker'
 import { abortOrchestration, approvePlan, rejectPlan, runOrchestration } from './lib/orchestrator'
 import { initMcp, listMcpStatus, readMcpConfig, reconnectMcp, saveMcpConfig } from './lib/mcp'
+import { registerMediaProtocol } from './lib/media'
 import { registerPanelWebContents } from './lib/panel-browser'
 import { setupMemoryScheduler } from './lib/memory/scheduler'
 import * as memoryService from './lib/memory/service'
@@ -354,6 +355,9 @@ app.whenReady().then(() => {
 
   // Browser do painel direito: o renderer registra o webContents do <webview>
   ipcMain.on('panel:register', (_event, id: number | null) => registerPanelWebContents(id))
+
+  // Imagens das respostas do assistente (orbit-media://)
+  registerMediaProtocol()
 
   // Memória Brain — a UI fala com o service; mutações chegam de volta via memory:event
   ipcMain.handle('memory:list', () => memoryService.list())
