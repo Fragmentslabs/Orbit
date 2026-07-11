@@ -33,7 +33,7 @@ export function buildToolSet(input: SendMessageInput, ctx: ToolContext | null): 
   const tools: ToolSet = {}
   // Regra de ouro: workers nunca delegam (sem recursão de subagents/orchestra)
   const allowDelegation = input.options.subagents === true && input.orchestrationRole !== 'worker'
-  // Brain: memória persistente — workers também ficam de fora
+  // Brain: ferramentas de memória — workers também ficam de fora
   const allowBrain = input.options.brain === true && input.orchestrationRole !== 'worker'
   // question: sessão principal sempre; workers só quando o pai não está em "full"
   // (em "ask" a pergunta sobe ao usuário; em "approve" é auto-respondida)

@@ -19,6 +19,9 @@ import { useProviderStore } from "@/src/stores/provider-store"
 import { usePermissionPrefs } from "@/src/stores/permission-prefs"
 import { useModelModePrefs } from "@/src/stores/model-mode-prefs"
 import type { DefaultModel, ActiveModeDefaults } from "@/src/stores/model-mode-prefs"
+import type { BrainContextMode } from "@/src/stores/brain-prefs"
+import { useBrainPrefs, useChatContext, useCodeContext } from "@/src/stores/brain-prefs"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import type { PermissionMode, PermissionThresholds, RiskLevel, SensitivityLevel } from "@/shared/chat"
 
 const MAX_MODELS_PER_PROVIDER = 40
@@ -220,6 +223,55 @@ function ModeSection({ mode }: { mode: PermissionMode }) {
   )
 }
 
+const CONTEXT_OPTIONS: { value: BrainContextMode; label: string }[] = [
+  { value: "off", label: "Desligado" },
+  { value: "all", label: "Ligado em todos chats" },
+  { value: "memory", label: "Ligado em chats com modo memória ligado" },
+]
+
+function ContextSelect({ value, onChange }: {
+  value: BrainContextMode
+  onChange: (v: BrainContextMode) => void
+}) {
+  return (
+    <Select value={value} onValueChange={(v) => v && onChange(v as BrainContextMode)}>
+      <SelectTrigger className="min-w-48">
+        <SelectValue>
+          {(v) => CONTEXT_OPTIONS.find((o) => o.value === v)?.label ?? v}
+        </SelectValue>
+      </SelectTrigger>
+      <SelectContent>
+        {CONTEXT_OPTIONS.map((opt) => (
+          <SelectItem key={opt.value} value={opt.value}>
+            {opt.label}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  )
+}
+
+function MemoriaSection({ isCode }: { isCode: boolean }) {
+  const context = isCode ? useCodeContext() : useChatContext()
+  const setter = isCode
+    ? useBrainPrefs((s) => s.setCodeContext)
+    : useBrainPrefs((s) => s.setChatContext)
+
+  const description = isCode
+    ? "Memórias de projetos em pastas anteriores são injetadas automaticamente no prompt."
+    : "Memórias relevantes são automaticamente injetadas no prompt para dar contexto ao agente."
+
+  return (
+    <div className="border-t pt-3">
+      <div className="mb-3 flex items-center justify-between">
+        <p className="text-xs font-semibold text-muted-foreground">Memória</p>
+        <ContextSelect value={context} onChange={setter} />
+      </div>
+      <p className="text-[11px] leading-tight text-muted-foreground">{description}</p>
+    </div>
+  )
+}
+
 function ChatPrefs() {
   const { chatModel, setChatModel, chatActiveModes, setChatActiveMode } = useModelModePrefs()
 
@@ -227,6 +279,7 @@ function ChatPrefs() {
     <div className="flex flex-col gap-4">
       <ModelField label="Modelo padrão" value={chatModel} onChange={setChatModel} />
       <ActiveModesSection modes={chatActiveModes} onChange={setChatActiveMode} isCode={false} />
+      <MemoriaSection isCode={false} />
     </div>
   )
 }
@@ -241,6 +294,7 @@ function CodePrefs() {
       <ModelField label="Modelo de subagentes" value={subagentModel} onChange={setSubagentModel} />
       <ModelField label="Modelo de orquestra" value={orchestraModel} onChange={setOrchestraModel} />
       <ActiveModesSection modes={codeActiveModes} onChange={setCodeActiveMode} isCode={true} />
+      <MemoriaSection isCode={true} />
 
       <div className="border-t pt-3">
         <p className="mb-3 text-xs font-semibold text-muted-foreground">Autonomia & Permissões</p>

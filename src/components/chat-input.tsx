@@ -27,7 +27,7 @@ import { QueueIndicator } from "@/src/components/queue-indicator"
 import { SendButtonGroup } from "@/src/components/send-button-group"
 import { SlashPalette, useReferenceCommands, type SlashCommand } from "@/src/components/slash-palette"
 import { useWorkspace } from "@/lib/workspace-context"
-import { useBrainEnabled, useBrainPrefs } from "@/src/stores/brain-prefs"
+import { useBrainEnabled, useBrainPrefs, useChatContext } from "@/src/stores/brain-prefs"
 import { useMessageQueueStore } from "@/src/stores/message-queue-store"
 import { usePanelStore } from "@/src/stores/panel-store"
 import { useSessionStore } from "@/src/stores/session-store"
@@ -54,6 +54,7 @@ export function ChatInput({ onSubmit, status, onStop, sessionId }: {
   const setSimple = useSimpleMode((s) => s.setSimple)
   const brain = useBrainEnabled(sessionId)
   const setBrainEnabled = useBrainPrefs((s) => s.setEnabled)
+  const brainContext = useChatContext()
   const selected = useProviderStore((s) => s.selectedModel)
   const model = useProviderStore((s) =>
     s.selectedModel ? s.catalog[s.selectedModel.providerId]?.models[s.selectedModel.modelId] : undefined,
@@ -77,10 +78,11 @@ export function ChatInput({ onSubmit, status, onStop, sessionId }: {
     browser,
     simple,
     brain,
+    brainContext: brainContext === "all" ? true : brainContext === "memory" ? brain : false,
     reasoning: { enabled: thinking, variantId },
     subagents,
     orchestrate: orchestra ? {} : undefined,
-  }), [search, browser, simple, brain, thinking, variantId, subagents, orchestra])
+  }), [search, browser, simple, brain, brainContext, thinking, variantId, subagents, orchestra])
 
   const slashCommands = useMemo<SlashCommand[]>(() => {
     const toggle = (fn: () => void) => ({ setText }: { setText: (t: string) => void }) => {

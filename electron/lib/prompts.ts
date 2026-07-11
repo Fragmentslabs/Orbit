@@ -285,14 +285,15 @@ export async function buildSystemPrompt(input: SendMessageInput): Promise<string
 
   parts.push(...(await buildSkillsBlock(input)))
 
-  if (input.options.brain && input.orchestrationRole !== 'worker') {
+  // Contexto automático: injeta memórias no prompt
+  if (input.options.brainContext && input.orchestrationRole !== 'worker') {
     parts.push(...(await buildBrainBlock(input)))
-    // Marcador explícito da paleta "/": busca na memória vira ordem, não opção
-    if (input.text.includes('@memoria')) {
-      parts.push(
-        'A mensagem contém @memoria: o usuário ORDENOU consultar a memória. Execute memory_search sobre o tema da mensagem ANTES de responder e use o que encontrar.',
-      )
-    }
+  }
+  // @memoria: busca explícita (depende das ferramentas de memória via brain)
+  if (input.options.brain && input.text.includes('@memoria')) {
+    parts.push(
+      'A mensagem contém @memoria: o usuário ORDENOU consultar a memória. Execute memory_search sobre o tema da mensagem ANTES de responder e use o que encontrar.',
+    )
   }
 
   if (input.text.includes('@mcp:')) {

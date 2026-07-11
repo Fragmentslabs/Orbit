@@ -29,7 +29,7 @@ import { SendButtonGroup } from "@/src/components/send-button-group"
 import { SlashPalette, useReferenceCommands, type SlashCommand } from "@/src/components/slash-palette"
 import { FolderSelector } from "@/src/components/folder-selector"
 import { useWorkspace } from "@/lib/workspace-context"
-import { useBrainEnabled, useBrainPrefs } from "@/src/stores/brain-prefs"
+import { useBrainEnabled, useBrainPrefs, useCodeContext } from "@/src/stores/brain-prefs"
 import { useMessageQueueStore } from "@/src/stores/message-queue-store"
 import { usePanelStore } from "@/src/stores/panel-store"
 import { usePermissionPrefs } from "@/src/stores/permission-prefs"
@@ -64,6 +64,7 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId }: 
   const setSimple = useSimpleMode((s) => s.setSimple)
   const brain = useBrainEnabled(sessionId)
   const setBrainEnabled = useBrainPrefs((s) => s.setEnabled)
+  const brainContext = useCodeContext()
   const permissionMode = usePermissionPrefs((s) => s.mode)
   const setPermissionMode = usePermissionPrefs((s) => s.setMode)
   const { folders, setFolders } = useWorkspace()
@@ -128,11 +129,12 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId }: 
     research: search,
     simple,
     brain,
+    brainContext: brainContext === "all" ? true : brainContext === "memory" ? brain : false,
     permissionMode,
     reasoning: { enabled: thinking, variantId },
     subagents,
     orchestrate: orchestra ? {} : undefined,
-  }), [plan, search, simple, brain, permissionMode, thinking, variantId, subagents, orchestra])
+  }), [plan, search, simple, brain, brainContext, permissionMode, thinking, variantId, subagents, orchestra])
 
   /** Retorna diretório + extra do state atual */
   const getDirs = useCallback(() => {

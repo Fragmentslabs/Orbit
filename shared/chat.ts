@@ -207,8 +207,10 @@ export interface SendMessageOptions {
   reasoning?: ReasoningConfig
   /** Modo subagents: expõe a tool subagent (workers efêmeros em background) */
   subagents?: boolean
-  /** Modo Brain: memória persistente (ferramentas memory_* + injeção no prompt) */
+  /** Modo Brain: memória persistente (ferramentas memory_* ) */
   brain?: boolean
+  /** Injeta memórias relevantes automaticamente no prompt */
+  brainContext?: boolean
   /** Modo Orchestra: divide em plano de tarefas + workers em sessões filhas */
   orchestrate?: { plan?: OrchestrationPlan }
   /** Modo de permissões (code-mode e workers): default efetivo "ask" */
