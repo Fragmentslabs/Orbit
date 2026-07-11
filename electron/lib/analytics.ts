@@ -69,14 +69,16 @@ export async function computeAnalytics(range: AnalyticsRange): Promise<Analytics
 
       let entry = dayMap.get(day)
       if (!entry) {
-        entry = { date: day, totalTokens: 0, totalHours: 0, totalMessages: 0, byModel: [] }
+        entry = { date: day, totalTokens: 0, totalHours: 0, totalMessages: 0, totalCost: 0, byModel: [] }
         dayMap.set(day, entry)
       }
 
       for (const msg of msgs) {
         if (msg.role !== 'assistant') continue
         const tokens = sumTokens(msg.tokens)
+        const cost = msg.tokens?.cost ?? 0
         entry.totalTokens += tokens
+        entry.totalCost += cost
         totalTokensVal += tokens
         entry.totalMessages++
         totalMessages++
@@ -84,19 +86,21 @@ export async function computeAnalytics(range: AnalyticsRange): Promise<Analytics
         const modelKey = `${msg.providerId ?? 'unknown'}::${msg.modelId ?? 'unknown'}`
         let mb = entry.byModel.find((m) => `${m.providerId}::${m.modelId}` === modelKey)
         if (!mb) {
-          mb = { providerId: msg.providerId ?? 'unknown', modelId: msg.modelId ?? 'unknown', tokens: 0, hours: 0, messages: 0 }
+          mb = { providerId: msg.providerId ?? 'unknown', modelId: msg.modelId ?? 'unknown', tokens: 0, hours: 0, messages: 0, cost: 0 }
           entry.byModel.push(mb)
         }
         mb.tokens += tokens
         mb.messages++
+        mb.cost += cost
 
         let mt = modelTotals.get(modelKey)
         if (!mt) {
-          mt = { providerId: msg.providerId ?? 'unknown', modelId: msg.modelId ?? 'unknown', tokens: 0, hours: 0, messages: 0 }
+          mt = { providerId: msg.providerId ?? 'unknown', modelId: msg.modelId ?? 'unknown', tokens: 0, hours: 0, messages: 0, cost: 0 }
           modelTotals.set(modelKey, mt)
         }
         mt.tokens += tokens
         mt.messages++
+        mt.cost += cost
       }
 
       // Distribute day hours proportionally to message count among models
@@ -141,12 +145,8 @@ export async function computeAnalytics(range: AnalyticsRange): Promise<Analytics
   }
   const peakHour = hourCounts.indexOf(Math.max(...hourCounts))
 
-  // Favorite model
-  const favoriteModel = byModel.length > 0
-    ? { providerId: byModel[0].providerId, modelId: byModel[0].modelId, messages: byModel[0].messages }
-    : { providerId: 'unknown', modelId: 'unknown', messages: 0 }
-
   const totalHours = days.reduce((s, d) => s + d.totalHours, 0)
+  const totalCost = days.reduce((s, d) => s + d.totalCost, 0)
 
   return {
     days,
@@ -155,11 +155,11 @@ export async function computeAnalytics(range: AnalyticsRange): Promise<Analytics
     totalMessages,
     totalTokens: totalTokensVal,
     totalHours,
+    totalCost,
     activeDays,
     currentStreak,
     longestStreak,
     peakHour,
-    favoriteModel,
   }
 }
 

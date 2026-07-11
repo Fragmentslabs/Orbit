@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { BarChart3, KeyRound, Puzzle, Shield, Trash2, Check } from "lucide-react"
 import {
   Dialog,
@@ -32,8 +32,8 @@ interface TabDef {
 const TABS: TabDef[] = [
   { id: "providers", label: "Provedores", icon: KeyRound, description: "Chaves de API dos provedores de IA." },
   { id: "autonomy", label: "Autonomia", icon: Shield, description: "Permissões e decisões por modo." },
-  { id: "mcp-skills", label: "MCP & Skills", icon: Puzzle, description: "Servidores MCP e skills do usuário." },
-  { id: "analytics", label: "Uso", icon: BarChart3, description: "Estatísticas de uso e consumo de tokens." },
+  { id: "mcp-skills", label: "Ferramentas", icon: Puzzle, description: "Servidores MCP e skills do usuário." },
+  { id: "analytics", label: "Uso e Limites", icon: BarChart3, description: "Estatísticas de uso e consumo de tokens." },
 ]
 
 function ProviderRow({ providerId }: { providerId: string }) {
@@ -157,13 +157,15 @@ interface SettingsDialogProps {
 
 export function SettingsDialog({ open, onOpenChange, initialTab = "providers" }: SettingsDialogProps) {
   const [tab, setTab] = useState<SettingsTab>(initialTab)
+
+  useEffect(() => {
+    if (open) setTab(initialTab)
+  }, [initialTab, open])
+
   const active = TABS.find((t) => t.id === tab) ?? TABS[0]
 
   return (
-    <Dialog open={open} onOpenChange={(next) => {
-      if (next) setTab(initialTab)
-      onOpenChange(next)
-    }}>
+    <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-sm sm:max-w-4xl p-0 gap-0 overflow-hidden" showCloseButton>
         <div className="flex flex-row h-[600px]">
           {/* Sidebar de abas */}
@@ -203,7 +205,7 @@ export function SettingsDialog({ open, onOpenChange, initialTab = "providers" }:
               <p className="text-sm font-medium">{active.label}</p>
               <p className="text-[11px] text-muted-foreground">{active.description}</p>
             </div>
-            <div className="h-[520px]">
+            <div className="h-[520px] min-w-0">
               {tab === "providers" ? <ProvidersTab /> : tab === "autonomy" ? <AutonomyPanel /> : tab === "mcp-skills" ? <McpSkillsPanel /> : <AnalyticsPanel />}
             </div>
           </div>

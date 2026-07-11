@@ -18,6 +18,7 @@ interface SegmentedControlProps<T extends string> {
   value: T
   onChange: (value: T) => void
   className?: string
+  size?: "xs" | "sm" | "default"
 }
 
 export function SegmentedControl<T extends string>({
@@ -25,6 +26,7 @@ export function SegmentedControl<T extends string>({
   value,
   onChange,
   className,
+  size = "default",
 }: SegmentedControlProps<T>) {
   return (
     <div className={cn("inline-flex rounded-md border bg-muted/40 p-0.5", className)}>
@@ -37,7 +39,10 @@ export function SegmentedControl<T extends string>({
             title={opt.hint}
             onClick={() => onChange(opt.value)}
             className={cn(
-              "flex-1 rounded-[5px] px-2.5 py-1 text-xs font-medium transition-colors",
+              "flex-1 rounded-[5px] font-medium transition-colors",
+              size === "xs" ? "px-1 py-px text-[9px] leading-tight"
+              : size === "sm" ? "px-1.5 py-0.5 text-[10px]"
+              : "px-2.5 py-1 text-xs",
               active
                 ? "bg-background text-foreground shadow-sm"
                 : "text-muted-foreground hover:text-foreground",

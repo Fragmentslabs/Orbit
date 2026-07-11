@@ -3,6 +3,7 @@ import { createPortal } from "react-dom"
 import {
   Archive,
   ArchiveRestore,
+  BarChart3,
   Bot,
   BrainCircuit,
   ChevronDown,
@@ -122,7 +123,21 @@ function McpSkillsButton() {
       onClick={() => openSettings("mcp-skills")}
     >
       <Puzzle className="size-4" />
-      MCP & Skills
+      Ferramentas
+    </Button>
+  )
+}
+
+function UsageButton() {
+  const openSettings = useSettingsUi((s) => s.openSettings)
+  return (
+    <Button
+      variant="ghost"
+      className="w-full justify-start gap-2 text-sm"
+      onClick={() => openSettings("analytics")}
+    >
+      <BarChart3 className="size-4" />
+      Uso e Limites
     </Button>
   )
 }
@@ -810,6 +825,7 @@ export function AppSidebar() {
           </div>
           <div className="space-y-1 px-3 pb-2">
             <MemoriesButton />
+            <UsageButton />
             <McpSkillsButton />
           </div>
           <SidebarSeparator className="mx-3" />

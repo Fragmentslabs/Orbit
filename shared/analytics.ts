@@ -4,6 +4,7 @@ export interface ModelDayBreakdown {
   tokens: number
   hours: number
   messages: number
+  cost: number
 }
 
 export interface AnalyticsDay {
@@ -11,6 +12,7 @@ export interface AnalyticsDay {
   totalTokens: number
   totalHours: number
   totalMessages: number
+  totalCost: number
   byModel: ModelDayBreakdown[]
 }
 
@@ -21,11 +23,11 @@ export interface AnalyticsSummary {
   totalMessages: number
   totalTokens: number
   totalHours: number
+  totalCost: number
   activeDays: number
   currentStreak: number
   longestStreak: number
   peakHour: number
-  favoriteModel: { providerId: string; modelId: string; messages: number }
 }
 
 export type AnalyticsRange = 'total' | '30d' | '7d' | 'today'

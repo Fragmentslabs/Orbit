@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react";
 import {
   BarChart,
   Bar,
@@ -7,41 +7,55 @@ import {
   Tooltip,
   ResponsiveContainer,
   Cell,
-} from "recharts"
-import { CalendarDays, Clock, GanttChartSquare, Hash, MessageSquare, Sparkles, Timer, TrendingUp, Zap } from "lucide-react"
-import { Button } from "@/components/ui/button"
-import { SegmentedControl } from "@/components/ui/segmented-control"
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
-import { Input } from "@/components/ui/input"
-import { cn } from "@/lib/utils"
-import { formatTokens } from "@/src/lib/format"
-import { useAnalyticsStore } from "@/src/stores/analytics-store"
-import { ModelSelectorLogo } from "@/src/components/ai/model-selector"
-import { ActivityHeatmap } from "@/src/components/activity-heatmap"
-import type { AnalyticsRange, AnalyticsSummary } from "@/shared/analytics"
+} from "recharts";
+import { Clock, Hash, Zap } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { SegmentedControl } from "@/components/ui/segmented-control";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { cn } from "@/lib/utils";
+import { formatCost, formatTokens } from "@/src/lib/format";
+import { useAnalyticsStore } from "@/src/stores/analytics-store";
+import { ModelSelectorLogo } from "@/src/components/ai/model-selector";
+import { ActivityHeatmap } from "@/src/components/activity-heatmap";
+import type { AnalyticsRange, AnalyticsSummary } from "@/shared/analytics";
 
 const RANGE_LABELS: Record<AnalyticsRange, string> = {
   total: "Total",
-  "30d": "30 dias",
-  "7d": "7 dias",
+  "30d": "30d",
+  "7d": "7d",
   today: "Hoje",
-}
+};
 
-const RANGE_ORDER: AnalyticsRange[] = ["total", "30d", "7d", "today"]
+const RANGE_ORDER: AnalyticsRange[] = ["total", "30d", "7d", "today"];
 
 function ModelBarChart({ data }: { data: AnalyticsSummary }) {
-  const [hoveredModel, setHoveredModel] = useState<string | null>(null)
   const [chartMode, setChartMode] = useState<"tokens" | "hours">("tokens")
 
   const chartData = useMemo(() => {
-    return data.byModel.map((m) => ({
-      key: `${m.providerId}/${m.modelId}`,
-      label: m.modelId,
-      providerId: m.providerId,
-      value: chartMode === "tokens" ? m.tokens : Math.round(m.hours * 100) / 100,
-      tokens: m.tokens,
-      hours: Math.round(m.hours * 100) / 100,
-    }))
+    const vals = data.byModel.map((m) =>
+      chartMode === "tokens" ? m.tokens : m.hours,
+    )
+    const maxVal = Math.max(...vals, 1)
+    return data.byModel.map((m) => {
+      const raw = chartMode === "tokens" ? m.tokens : m.hours
+      return {
+        key: `${m.providerId}/${m.modelId}`,
+        label: m.modelId,
+        providerId: m.providerId,
+        value: chartMode === "tokens" ? raw : Math.round(raw * 100) / 100,
+        tokens: m.tokens,
+        hours: Math.round(m.hours * 100) / 100,
+        cost: m.cost,
+        opacity: 0.25 + (raw / maxVal) * 0.7,
+      }
+    })
   }, [data, chartMode])
 
   if (chartData.length === 0) {
@@ -49,18 +63,20 @@ function ModelBarChart({ data }: { data: AnalyticsSummary }) {
       <div className="flex items-center justify-center rounded-lg border border-dashed p-8 text-xs text-muted-foreground">
         Nenhum dado de uso disponível.
       </div>
-    )
+    );
   }
 
   return (
     <div>
-      <div className="mb-3 flex items-center justify-between">
-        <p className="text-xs font-medium text-muted-foreground">Uso por modelo</p>
+      <div className="mb-2 flex items-center justify-between">
+        <p className="text-xs font-medium text-muted-foreground">
+          Uso por modelo
+        </p>
         <div className="flex gap-1">
           <button
             type="button"
             className={cn(
-              "rounded px-2 py-0.5 text-[11px] transition-colors",
+              "rounded px-1.5 py-0.5 text-[10px] transition-colors",
               chartMode === "tokens"
                 ? "bg-primary/10 text-primary"
                 : "text-muted-foreground hover:text-foreground",
@@ -72,7 +88,7 @@ function ModelBarChart({ data }: { data: AnalyticsSummary }) {
           <button
             type="button"
             className={cn(
-              "rounded px-2 py-0.5 text-[11px] transition-colors",
+              "rounded px-1.5 py-0.5 text-[10px] transition-colors",
               chartMode === "hours"
                 ? "bg-primary/10 text-primary"
                 : "text-muted-foreground hover:text-foreground",
@@ -83,11 +99,10 @@ function ModelBarChart({ data }: { data: AnalyticsSummary }) {
           </button>
         </div>
       </div>
-      <ResponsiveContainer width="100%" height={200}>
+      <ResponsiveContainer width="100%" height={180}>
         <BarChart
           data={chartData}
           margin={{ top: 5, right: 5, left: -10, bottom: 5 }}
-          onMouseLeave={() => setHoveredModel(null)}
         >
           <XAxis
             dataKey="label"
@@ -99,125 +114,134 @@ function ModelBarChart({ data }: { data: AnalyticsSummary }) {
             tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }}
             axisLine={false}
             tickLine={false}
-            width={50}
-            tickFormatter={(v) => (chartMode === "tokens" ? formatTokens(v) : `${v}h`)}
+            width={45}
+            tickFormatter={(v) =>
+              chartMode === "tokens" ? formatTokens(v) : `${v}h`
+            }
           />
           <Tooltip
             cursor={{ fill: "hsl(var(--muted))", opacity: 0.3 }}
             content={({ active, payload }) => {
-              if (!active || !payload?.[0]) return null
-              const d = payload[0].payload as typeof chartData[number]
+              if (!active || !payload?.[0]) return null;
+              const d = payload[0].payload as (typeof chartData)[number];
+              const val = chartMode === "tokens"
+                ? formatTokens(d.value)
+                : `${d.value}h`
               return (
-                <div className="rounded-lg border bg-popover px-3 py-2 text-xs shadow-md">
-                  <p className="mb-1 flex items-center gap-1 font-medium">
-                    <ModelSelectorLogo provider={d.providerId} className="size-3" />
+                <div className="w-max min-w-[200px] rounded-lg border bg-popover px-3 py-2 text-xs shadow-md">
+                  <p className="mb-1 flex items-center gap-1.5 font-medium">
+                    <ModelSelectorLogo
+                      provider={d.providerId}
+                      className="size-3.5"
+                    />
                     {d.label}
                   </p>
-                  <p className="text-muted-foreground">
-                    {formatTokens(d.tokens)} tokens · {d.hours}h
-                  </p>
+                  <div className="flex items-center justify-between gap-4 text-muted-foreground">
+                    <span>{chartMode === "tokens" ? "Tokens" : "Horas"}:</span>
+                    <span className="font-medium text-foreground">{val}</span>
+                  </div>
+                  <div className="flex items-center justify-between gap-4 text-muted-foreground">
+                    <span>Tokens totais:</span>
+                    <span className="tabular-nums">{formatTokens(d.tokens)}</span>
+                  </div>
+                  <div className="flex items-center justify-between gap-4 text-muted-foreground">
+                    <span>Horas:</span>
+                    <span className="tabular-nums">{d.hours}h</span>
+                  </div>
+                  <div className="flex items-center justify-between gap-4 text-muted-foreground">
+                    <span>Custo:</span>
+                    <span className="tabular-nums">{d.cost > 0 ? formatCost(d.cost) : "—"}</span>
+                  </div>
                 </div>
-              )
+              );
             }}
           />
           <Bar
             dataKey="value"
             radius={[4, 4, 0, 0]}
-            maxBarSize={40}
-            onMouseEnter={(d) => setHoveredModel(typeof d.key === "string" ? d.key : null)}
+            maxBarSize={36}
           >
             {chartData.map((entry) => (
               <Cell
                 key={entry.key}
-                fill={
-                  hoveredModel === null || hoveredModel === entry.key
-                    ? "hsl(var(--primary))"
-                    : "hsl(var(--primary) / 0.25)"
-                }
+                fill={`oklch(from var(--primary) l c h / ${entry.opacity})`}
               />
             ))}
           </Bar>
         </BarChart>
       </ResponsiveContainer>
 
-      {/* Legend */}
-      <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1">
+      <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1">
         {chartData.map((entry) => (
           <div
             key={entry.key}
-            className={cn(
-              "flex items-center gap-1 text-[11px] transition-opacity",
-              hoveredModel === null || hoveredModel === entry.key
-                ? "opacity-100"
-                : "opacity-25",
-            )}
-            onMouseEnter={() => setHoveredModel(entry.key)}
-            onMouseLeave={() => setHoveredModel(null)}
+            className="flex items-center gap-1 text-[10px]"
           >
-            <ModelSelectorLogo provider={entry.providerId} className="size-3" />
+            <ModelSelectorLogo
+              provider={entry.providerId}
+              className="size-2.5"
+            />
             <span className="font-medium">{entry.label}</span>
             <span className="text-muted-foreground">
-              {chartMode === "tokens" ? formatTokens(entry.tokens) : `${entry.hours}h`}
+              {chartMode === "tokens"
+                ? formatTokens(entry.tokens)
+                : `${entry.hours}h`}
             </span>
           </div>
         ))}
       </div>
     </div>
-  )
+  );
 }
 
 function StatsGrid({ data }: { data: AnalyticsSummary }) {
   const stats = useMemo(
     () => [
-      { label: "Sessões", value: data.totalSessions, icon: GanttChartSquare },
-      { label: "Mensagens", value: data.totalMessages, icon: MessageSquare },
-      { label: "Dias ativos", value: data.activeDays, icon: CalendarDays },
-      { label: "Sequência atual", value: `${data.currentStreak} dias`, icon: Timer },
-      { label: "Maior sequência", value: `${data.longestStreak} dias`, icon: TrendingUp },
-      { label: "Horário de pico", value: `${String(data.peakHour).padStart(2, "0")}h`, icon: Clock },
+      { label: "Sessões", value: data.totalSessions },
+      { label: "Mensagens", value: data.totalMessages },
+      { label: "Dias ativos", value: data.activeDays },
+      { label: "Sequência atual", value: `${data.currentStreak} dias` },
+      { label: "Maior sequência", value: `${data.longestStreak} dias` },
       {
-        label: "Favorito",
-        value: data.favoriteModel.modelId,
-        icon: Sparkles,
-        extra: data.favoriteModel.providerId !== "unknown" ? (
-          <ModelSelectorLogo provider={data.favoriteModel.providerId} className="size-3" />
-        ) : null,
+        label: "Horário de pico",
+        value: `${String(data.peakHour).padStart(2, "0")}h`,
       },
     ],
     [data],
-  )
+  );
 
   return (
-    <div className="mt-1 grid grid-cols-4 gap-2">
-      {stats.map((s) => {
-        const Icon = s.icon
-        return (
-          <div key={s.label} className="flex items-center gap-2 rounded-lg border p-2.5">
-            <div className="flex size-7 shrink-0 items-center justify-center rounded-md bg-muted">
-              <Icon className="size-3.5 text-muted-foreground" />
-            </div>
-            <div className="min-w-0">
-              <p className="text-[10px] text-muted-foreground">{s.label}</p>
-              <p className="flex items-center gap-1 truncate text-sm font-medium tabular-nums">
-                {s.extra}
-                {s.value}
-              </p>
-            </div>
+    <div className="grid grid-cols-2 gap-1.5">
+      {stats.map((s) => (
+        <div
+          key={s.label}
+          className="flex items-center gap-2 rounded-lg border px-2.5 py-2"
+        >
+          <div className="min-w-0">
+            <p className="text-[10px] text-muted-foreground">{s.label}</p>
+            <p className="truncate text-xs font-medium tabular-nums">
+              {s.value}
+            </p>
           </div>
-        )
-      })}
+        </div>
+      ))}
     </div>
-  )
+  );
 }
 
-function LimitsDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (v: boolean) => void }) {
-  const [tokenLimit, setTokenLimit] = useState("")
-  const [costLimit, setCostLimit] = useState("")
+function LimitsDialog({
+  open,
+  onOpenChange,
+}: {
+  open: boolean;
+  onOpenChange: (v: boolean) => void;
+}) {
+  const [tokenLimit, setTokenLimit] = useState("");
+  const [costLimit, setCostLimit] = useState("");
 
   const save = async () => {
-    console.log("[limits] salvar:", { tokenLimit, costLimit })
-    onOpenChange(false)
-  }
+    onOpenChange(false);
+  };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -225,8 +249,7 @@ function LimitsDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (v:
         <DialogHeader>
           <DialogTitle>Limites de uso</DialogTitle>
           <DialogDescription>
-            Defina limites mensais para controlar o consumo. Ainda sem enforcement — apenas
-            monitoramento.
+            Defina limites mensais para controlar o consumo.
           </DialogDescription>
         </DialogHeader>
         <div className="flex flex-col gap-3">
@@ -240,7 +263,9 @@ function LimitsDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (v:
             />
           </div>
           <div>
-            <p className="mb-1 text-xs font-medium">Limite mensal de gasto (USD)</p>
+            <p className="mb-1 text-xs font-medium">
+              Limite mensal de gasto (USD)
+            </p>
             <Input
               type="number"
               step="0.01"
@@ -251,40 +276,50 @@ function LimitsDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (v:
           </div>
         </div>
         <div className="flex justify-end gap-2 pt-2">
-          <Button variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>
+            Cancelar
+          </Button>
           <Button onClick={() => void save()}>Salvar</Button>
         </div>
       </DialogContent>
     </Dialog>
-  )
+  );
 }
 
 export function AnalyticsPanel() {
-  const { data, range, loading, load, setRange } = useAnalyticsStore()
-  const [limitsOpen, setLimitsOpen] = useState(false)
+  const { data, range, loading, load, setRange } = useAnalyticsStore();
+  const [limitsOpen, setLimitsOpen] = useState(false);
 
   useEffect(() => {
-    void load()
-  }, [load])
+    void load();
+  }, [load]);
 
   return (
-    <div className="flex h-full flex-col gap-4 overflow-y-auto pr-1">
-      {/* Top bar */}
-      <div className="flex items-center justify-between">
-        <p className="text-sm font-semibold">Uso do Orbit</p>
-        <Button size="sm" variant="outline" className="gap-1" onClick={() => setLimitsOpen(true)}>
-          <Zap className="size-3.5" />
-          Adicionar limites
+    <div className="flex h-full min-w-0 flex-col gap-3 overflow-y-auto overflow-x-hidden pr-1">
+      {/* Top bar: title (left) ─ toggle (center, separated) ─ limits (right) */}
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-sm font-semibold shrink-0">Uso do Orbit</p>
+        <div className="flex gap-2">
+          <SegmentedControl
+          options={RANGE_ORDER.map((r) => ({
+            value: r,
+            label: RANGE_LABELS[r],
+          }))}
+          value={range}
+          onChange={(v) => setRange(v as AnalyticsRange)}
+          size="xs"
+        />
+        <Button
+          size="sm"
+          variant="outline"
+          className="gap-1 shrink-0 h-7 px-2"
+          onClick={() => setLimitsOpen(true)}
+        >
+          <Zap className="size-3" />
+          <span className="text-[11px]">Limites</span>
         </Button>
+        </div>
       </div>
-
-      {/* Range toggle */}
-      <SegmentedControl
-        options={RANGE_ORDER.map((r) => ({ value: r, label: RANGE_LABELS[r] }))}
-        value={range}
-        onChange={(v) => setRange(v as AnalyticsRange)}
-        className="self-start"
-      />
 
       {loading && !data ? (
         <div className="flex items-center justify-center py-8 text-xs text-muted-foreground">
@@ -292,40 +327,49 @@ export function AnalyticsPanel() {
         </div>
       ) : data ? (
         <>
-          {/* Summary heatmap + chart side by side */}
-          <div className="flex flex-col gap-4">
-            <div className="rounded-lg border p-3">
-              <p className="mb-2 flex items-center gap-1 text-xs font-medium text-muted-foreground">
-                <Hash className="size-3.5" />
-                Atividade diária
-              </p>
+          <div className="w-full flex justify-between">
+            {/* Stats grid (left side) */}
+            <StatsGrid data={data} />
+
+            <div className="flex flex-col gap-4">
+              {/* Heatmap (full width, no card wrapper) */}
               <ActivityHeatmap days={data.days} />
-            </div>
-            <div className="rounded-lg border p-3">
-              <ModelBarChart data={data} />
+
+              {/* Totals */}
+              <div className="flex justify-end gap-3 text-xs">
+                <div className="flex items-center gap-1.5 rounded-lg border px-3 py-1.5">
+                  <Hash className="size-3.5 text-muted-foreground" />
+                  <span className="text-muted-foreground">Tokens:</span>
+                  <span className="font-medium tabular-nums">
+                    {formatTokens(data.totalTokens)}
+                  </span>
+                </div>
+                <div className="flex items-center gap-1.5 rounded-lg border px-3 py-1.5">
+                  <Clock className="size-3.5 text-muted-foreground" />
+                  <span className="text-muted-foreground">Horas:</span>
+                  <span className="font-medium tabular-nums">
+                    {data.totalHours.toFixed(1)}h
+                  </span>
+                </div>
+                <div className="flex items-center gap-1.5 rounded-lg border px-3 py-1.5">
+                  <span className="font-medium tabular-nums">
+                    {formatCost(data.totalCost)}
+                  </span>
+                  <span className="text-muted-foreground">gasto</span>
+                </div>
+              </div>
             </div>
           </div>
-
-          {/* Stats */}
-          <StatsGrid data={data} />
-
-          {/* Tokens/hora totals */}
-          <div className="flex gap-4 text-xs">
-            <div className="flex items-center gap-1.5 rounded-lg border px-3 py-2">
-              <Hash className="size-3.5 text-muted-foreground" />
-              <span className="text-muted-foreground">Total de tokens:</span>
-              <span className="font-medium tabular-nums">{formatTokens(data.totalTokens)}</span>
-            </div>
-            <div className="flex items-center gap-1.5 rounded-lg border px-3 py-2">
-              <Clock className="size-3.5 text-muted-foreground" />
-              <span className="text-muted-foreground">Horas:</span>
-              <span className="font-medium tabular-nums">{data.totalHours.toFixed(1)}h</span>
-            </div>
+          
+          {/* Full-width bar chart */}
+          <div className="rounded-lg border p-3">
+            <ModelBarChart data={data} />
           </div>
+
         </>
       ) : null}
 
       <LimitsDialog open={limitsOpen} onOpenChange={setLimitsOpen} />
     </div>
-  )
+  );
 }

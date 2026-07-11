@@ -1,29 +1,16 @@
 import { useMemo, useState } from "react"
+import { createPortal } from "react-dom"
 import { cn } from "@/lib/utils"
 import type { AnalyticsDay } from "@/shared/analytics"
 import { ModelSelectorLogo } from "@/src/components/ai/model-selector"
-import { formatTokens } from "@/src/lib/format"
+import { formatCost, formatTokens } from "@/src/lib/format"
 
 interface HeatmapProps {
   days: AnalyticsDay[]
   className?: string
 }
 
-function getMaxActivity(days: AnalyticsDay[]): number {
-  return Math.max(
-    1,
-    ...days.map((d) => d.totalTokens + d.totalMessages * 100),
-  )
-}
-
-function opacityFor(day: AnalyticsDay, max: number): number {
-  if (!day || day.totalMessages === 0) return 0
-  const score = day.totalTokens + day.totalMessages * 100
-  const raw = score / max
-  return 0.08 + raw * 0.87
-}
-
-const DAY_LABELS = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"]
+const TOTAL_WEEKS = 30
 
 export function ActivityHeatmap({ days, className }: HeatmapProps) {
   const [tooltip, setTooltip] = useState<{
@@ -32,112 +19,132 @@ export function ActivityHeatmap({ days, className }: HeatmapProps) {
     y: number
   } | null>(null)
 
-  const dayMap = useMemo(() => {
-    const m = new Map<string, AnalyticsDay>()
-    for (const d of days) m.set(d.date, d)
-    return m
-  }, [days])
+  const { weeks, maxScore } = useMemo(() => {
+    const dayMap = new Map<string, AnalyticsDay>()
+    for (const d of days) dayMap.set(d.date, d)
 
-  const maxActivity = useMemo(() => getMaxActivity(days), [days])
+    const today = new Date()
+    const monday = new Date(today)
+    monday.setDate(monday.getDate() - ((today.getDay() + 6) % 7))
 
-  // Generate weeks grid: last 365 days
-  const weeks = useMemo(() => {
-    const grid: { date: string; day: AnalyticsDay | null; dayOfWeek: number }[][] = []
-    const start = new Date()
-    start.setDate(start.getDate() - 364)
-    start.setHours(0, 0, 0, 0)
+    const start = new Date(monday)
+    start.setDate(start.getDate() - (TOTAL_WEEKS - 1) * 7)
 
-    // Start from the most recent Sunday (or today)
-    const end = new Date()
+    let mx = 1
+    const weekData: { date: string; day: AnalyticsDay | null }[][] = []
     const current = new Date(start)
 
-    // Go back to first day of the week (Sunday)
-    const dayOfWeek = current.getDay()
-    current.setDate(current.getDate() - dayOfWeek)
-
-    while (current <= end) {
-      const week: { date: string; day: AnalyticsDay | null; dayOfWeek: number }[] = []
+    for (let w = 0; w < TOTAL_WEEKS; w++) {
+      const week: { date: string; day: AnalyticsDay | null }[] = []
       for (let d = 0; d < 7; d++) {
-        const dateStr = formatDate(current)
-        const day = dayMap.get(dateStr) ?? null
-        week.push({ date: dateStr, day, dayOfWeek: d })
+        const ds = `${current.getFullYear()}-${String(current.getMonth() + 1).padStart(2, "0")}-${String(current.getDate()).padStart(2, "0")}`
+        week.push({ date: ds, day: dayMap.get(ds) ?? null })
+        if (dayMap.get(ds)) {
+          const day = dayMap.get(ds)!
+          const s = day.totalTokens + day.totalMessages * 50
+          if (s > mx) mx = s
+        }
         current.setDate(current.getDate() + 1)
       }
-      grid.push(week)
+      weekData.push(week)
     }
-    return grid
-  }, [dayMap])
+    return { weeks: weekData, maxScore: mx }
+  }, [days])
+
+  const level = (day: AnalyticsDay | null): number => {
+    if (!day || day.totalMessages === 0) return 0
+    const score = day.totalTokens + day.totalMessages * 50
+    const ratio = score / maxScore
+    if (ratio <= 0.25) return 1
+    if (ratio <= 0.5) return 2
+    if (ratio <= 0.75) return 3
+    return 4
+  }
+
+  const OPACITIES = ["0.18", "0.38", "0.62", "0.92"]
 
   return (
-    <div className={cn("relative", className)}>
-      <div className="flex gap-1">
-        {/* Day labels */}
-        <div className="flex flex-col gap-[3px] pt-5">
-          {DAY_LABELS.map((label, i) => (
-            <span key={label} className="flex h-3 items-center text-[9px] text-muted-foreground/70">
-              {i % 2 === 0 ? label : ""}
-            </span>
-          ))}
-        </div>
-
-        {/* Weeks grid */}
-        <div className="flex gap-[3px] overflow-x-auto">
+    <div className={cn("w-fit ", className)}>
+      <div className="flex justify-center gap-px">
+        <div className="flex gap-px">
           {weeks.map((week, wi) => (
-            <div key={wi} className="flex flex-col gap-[3px]">
-              {week.map((cell) => (
-                <div
-                  key={cell.date}
-                  className="relative h-3 w-3 rounded-[3px]"
-                  style={{
-                    backgroundColor: cell.day
-                      ? `hsl(var(--primary) / ${opacityFor(cell.day, maxActivity)})`
-                      : "hsl(var(--muted))",
-                  }}
-                  onMouseEnter={(e) => {
-                    if (cell.day) {
-                      const rect = e.currentTarget.getBoundingClientRect()
-                      setTooltip({ day: cell.day, x: rect.left, y: rect.top })
-                    }
-                  }}
-                  onMouseLeave={() => setTooltip(null)}
-                />
-              ))}
+            <div key={wi} className="flex flex-col gap-px">
+              {week.map((cell) => {
+                const lvl = level(cell.day)
+                return (
+                  <div
+                    key={cell.date}
+                    className="relative size-3 rounded-[1.5px]"
+                    style={{
+                      backgroundColor:
+                        lvl === 0
+                          ? "oklch(from var(--muted-foreground) l c h / 0.12)"
+                          : `oklch(from var(--primary) l c h / ${OPACITIES[lvl - 1]})`,
+                    }}
+                    onMouseEnter={(e) => {
+                      if (cell.day && cell.day.totalMessages > 0) {
+                        const rect = e.currentTarget.getBoundingClientRect()
+                        setTooltip({ day: cell.day, x: rect.left, y: rect.top })
+                      }
+                    }}
+                    onFocus={() => {}}
+                    onMouseLeave={() => setTooltip(null)}
+                  />
+                )
+              })}
             </div>
           ))}
         </div>
       </div>
 
-      {/* Tooltip */}
-      {tooltip && (
+      {/* Legend */}
+      <div className="mt-1 flex items-center justify-center gap-4 text-[9px] text-muted-foreground">
+        <div className="flex items-center gap-1">
+          <span>Menos</span>
+          {[0, 1, 2, 3].map((i) => (
+            <div
+              key={i}
+              className="size-3 rounded-[1.5px]"
+              style={{ backgroundColor: `oklch(from var(--primary) l c h / ${OPACITIES[i]})` }}
+            />
+          ))}
+          <span>Mais</span>
+        </div>
+        <div className="flex items-center gap-1">
+          <div className="size-3 rounded-[1.5px]" style={{ backgroundColor: "oklch(from var(--muted-foreground) l c h / 0.12)" }} />
+          <span>Sem atividade</span>
+        </div>
+      </div>
+
+      {/* Tooltip — portaled to body to escape dialog's transform */}
+      {tooltip && createPortal(
         <div
-          className="pointer-events-none fixed z-50 rounded-lg border bg-popover px-3 py-2 text-xs shadow-md"
-          style={{ left: tooltip.x - 120, top: tooltip.y - 140 }}
+          className="pointer-events-none fixed z-[999] w-max min-w-[240px] rounded-lg border bg-popover px-3 py-2 text-xs shadow-md"
+          style={{ left: tooltip.x - 120, top: tooltip.y - 150 }}
         >
-          <p className="mb-1 font-medium">{formatDateLabel(tooltip.day.date)}</p>
+          <p className="mb-1 font-medium">
+            {new Date(tooltip.day.date + "T12:00:00").toLocaleDateString("pt-BR", {
+              weekday: "short",
+              day: "numeric",
+              month: "short",
+              year: "numeric",
+            })}
+          </p>
           {tooltip.day.byModel.map((m) => (
             <p key={`${m.providerId}/${m.modelId}`} className="flex items-center gap-1 text-muted-foreground">
-              <ModelSelectorLogo provider={m.providerId} className="size-3" />
+              <ModelSelectorLogo provider={m.providerId} className="size-2.5" />
               {m.modelId}
               <span className="ml-auto tabular-nums">
-                {formatTokens(m.tokens)} tokens · {m.hours.toFixed(1)}h
+                {formatTokens(m.tokens)} tok · {m.hours.toFixed(1)}h · {formatCost(m.cost)}
               </span>
             </p>
           ))}
           <div className="mt-1 border-t pt-1 font-medium tabular-nums text-foreground">
-            Total: {formatTokens(tooltip.day.totalTokens)} tokens ·{" "}
-            {tooltip.day.totalHours.toFixed(1)}h
+            Total: {formatTokens(tooltip.day.totalTokens)} tok · {tooltip.day.totalHours.toFixed(1)}h · {formatCost(tooltip.day.totalCost)}
           </div>
-        </div>
+        </div>,
+        document.body,
       )}
     </div>
   )
-}
-
-function formatDate(d: Date): string {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`
-}
-
-function formatDateLabel(dateStr: string): string {
-  const d = new Date(dateStr + "T12:00:00")
-  return d.toLocaleDateString("pt-BR", { weekday: "short", day: "numeric", month: "short", year: "numeric" })
 }
