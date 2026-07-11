@@ -176,10 +176,11 @@ function segmentParts(parts: MessagePart[]): Segment[] {
   return segments
 }
 
-export function CodeAssistantMessage({ message, isLast, isBusy }: {
+export function CodeAssistantMessage({ message, isLast, isBusy, onRetry }: {
   message: ChatMessage
   isLast: boolean
   isBusy: boolean
+  onRetry?: () => void
 }) {
   const segments = useMemo(() => segmentParts(message.parts), [message.parts])
   const finished = !(isLast && isBusy)
@@ -220,7 +221,7 @@ export function CodeAssistantMessage({ message, isLast, isBusy }: {
           <ImagePartView key={segment.id} part={segment.part} />
         ) : null,
       )}
-      {message.error && <MessageError error={message.error} />}
+      {message.error && <MessageError error={message.error} onRetry={onRetry} />}
       {finished && sources.length > 0 && (
         <Sources className="mt-2">
           <SourcesTrigger count={sources.length}>

@@ -335,7 +335,11 @@ export interface QueuedMessage {
   /** Timestamp MS para envio agendado; undefined = envia assim que possível */
   scheduledAt?: number
   createdAt: number
+  /** Número de tentativas já realizadas */
+  retryCount?: number
 }
+
+export const MAX_QUEUE_RETRIES = 3
 
 export const StorageKeys = {
   session: (id: string) => `session/${id}`,

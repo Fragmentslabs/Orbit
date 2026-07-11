@@ -1,7 +1,7 @@
 import { create } from "zustand"
 import { storage } from "@/src/lib/ipc"
 import type { QueuedMessage, SessionMode, SendMessageOptions } from "@/shared/chat"
-import { StorageKeys } from "@/shared/chat"
+import { MAX_QUEUE_RETRIES, StorageKeys } from "@/shared/chat"
 import { useSessionStore } from "@/src/stores/session-store"
 
 const QUEUE_STORAGE_KEY = StorageKeys.queuedMessages
@@ -9,6 +9,8 @@ const QUEUE_STORAGE_KEY = StorageKeys.queuedMessages
 interface MessageQueueState {
   queues: Record<string, QueuedMessage[]>
   initialized: boolean
+  /** Última mensagem da fila que foi desenfileirada e aguarda resultado do envio */
+  _pendingQueueSend: Record<string, QueuedMessage | undefined>
 
   initialize: () => Promise<void>
   enqueue: (sessionId: string, msg: QueuedMessage) => void
@@ -18,7 +20,7 @@ interface MessageQueueState {
   hasPending: (sessionId: string) => boolean
   /** Retorna o número de mensagens na fila (não agendadas) */
   queueSize: (sessionId: string) => number
-  /** Processa a fila: se session idle, envia a próxima mensagem */
+  /** Processa a fila: se session idle/error, envia a próxima mensagem */
   processQueue: (sessionId: string) => void
   /** Enfileira para envio imediato assim que o agente ficar idle */
   enqueueForSend: (
@@ -37,12 +39,11 @@ interface MessageQueueState {
     scheduledAt: number,
     extra?: { directory?: string; extraDirectories?: string[] },
   ) => void
-  /** Handler chamado pelo session-store quando status → idle */
+  /** Handler chamado pelo session-store quando status → idle ou error */
   onSessionIdle: (sessionId: string) => void
 }
 
 function persist(queues: Record<string, QueuedMessage[]>) {
-  // Só persiste mensagens agendadas (com scheduledAt) para não poluir
   const scheduled: Record<string, QueuedMessage[]> = {}
   for (const [sid, msgs] of Object.entries(queues)) {
     const sched = msgs.filter((m) => m.scheduledAt)
@@ -54,6 +55,7 @@ function persist(queues: Record<string, QueuedMessage[]>) {
 export const useMessageQueueStore = create<MessageQueueState>((set, get) => ({
   queues: {},
   initialized: false,
+  _pendingQueueSend: {},
 
   initialize: async () => {
     const data = await storage.read<Record<string, QueuedMessage[]>>(QUEUE_STORAGE_KEY)
@@ -108,7 +110,6 @@ export const useMessageQueueStore = create<MessageQueueState>((set, get) => ({
   hasPending: (sessionId) => {
     const current = get().queues[sessionId]
     if (!current || current.length === 0) return false
-    // Se houver alguma não-agendada (envio imediato) ou agendada já vencida
     return current.some((m) => !m.scheduledAt || m.scheduledAt <= Date.now())
   },
 
@@ -123,18 +124,19 @@ export const useMessageQueueStore = create<MessageQueueState>((set, get) => ({
     const current = state.queues[sessionId]
     if (!current || current.length === 0) return
 
-    // Pula mensagens agendadas cujo horário ainda não chegou
     const next = current[0]
     if (next.scheduledAt && next.scheduledAt > Date.now()) return
 
-    // Verifica se a sessão está idle
     const sessionState = useSessionStore.getState()
     const status = sessionState.status[sessionId]
-    if (status && status !== "idle") return
+    // Processa quando idle ou error (error permite retry ou skip)
+    if (status && status !== "idle" && status !== "error") return
 
-    // Dequeue e envia
     const msg = get().dequeue(sessionId)
     if (!msg) return
+
+    // Salva a mensagem que está sendo enviada para possível retry
+    set((s) => ({ _pendingQueueSend: { ...s._pendingQueueSend, [sessionId]: msg } }))
 
     void sessionState.sendMessage(msg.mode, msg.text, {
       options: msg.options,
@@ -174,12 +176,29 @@ export const useMessageQueueStore = create<MessageQueueState>((set, get) => ({
   },
 
   onSessionIdle: (sessionId) => {
-    // Tenta processar a fila para esta sessão
+    const sessionState = useSessionStore.getState()
+    const status = sessionState.status[sessionId]
+
+    // Se a última mensagem da fila falhou, tenta retry ou pula
+    if (status === "error") {
+      const pending = get()._pendingQueueSend[sessionId]
+      if (pending) {
+        if ((pending.retryCount ?? 0) < MAX_QUEUE_RETRIES) {
+          // Re-enfileira com contador incrementado
+          get().enqueue(sessionId, { ...pending, retryCount: (pending.retryCount ?? 0) + 1 })
+        }
+        set((s) => {
+          const next = { ...s._pendingQueueSend }
+          delete next[sessionId]
+          return { _pendingQueueSend: next }
+        })
+      }
+    }
+
     get().processQueue(sessionId)
   },
 }))
 
-// Scheduler global: a cada 15s verifica filas por mensagens agendadas vencidas
 let schedulerTimer: ReturnType<typeof setInterval> | null = null
 
 export function startMessageScheduler() {

@@ -19,7 +19,7 @@ import { PlanReviewCard } from "@/src/components/plan-review-card"
 import { AssistantMessageActions, CopyAction, MessageTimestamp } from "@/src/components/messages/shared"
 import { Actions } from "@/src/components/ai/actions"
 import { messageText } from "@/src/lib/message-utils"
-import { useActiveSession, useSessionStatus, useSessionStore } from "@/src/stores/session-store"
+import { useActiveSession, useSessionStatus, useSessionStore, type SendConfig } from "@/src/stores/session-store"
 import { brainEnabledFor } from "@/src/stores/brain-prefs"
 import { useProviderStore } from "@/src/stores/provider-store"
 import { useSimpleMode } from "@/src/stores/simple-mode"
@@ -42,19 +42,75 @@ const codeSuggestions = [
 const NO_MESSAGES: ChatMessage[] = []
 const NO_ASKS: never[] = []
 
-function ChatMessages({ messages, isBusy, mode }: {
+function MessageItem({ msg, isLast, waiting, finished, isBusy, mode, sessionId, sendMessage, messages, index }: {
+  msg: ChatMessage
+  isLast: boolean
+  waiting: boolean
+  finished: boolean
+  isBusy: boolean
+  mode: "chat" | "code"
+  sessionId?: string
+  sendMessage: (mode: "chat" | "code", text: string, config: SendConfig) => Promise<void>
+  messages: ChatMessage[]
+  index: number
+}) {
+  const AssistantMessage = mode === "chat" ? ChatAssistantMessage : CodeAssistantMessage
+
+  const handleRetry = useCallback(() => {
+    const prevUser = [...messages].slice(0, index).reverse().find((m) => m.role === "user")
+    if (prevUser && sessionId) {
+      void sendMessage(mode, messageText(prevUser), { options: {}, sessionId })
+    }
+  }, [messages, index, mode, sessionId, sendMessage])
+
+  if (msg.role === "user") {
+    return (
+      <Message from="user">
+        <div className="group/user-msg flex flex-col">
+          <MessageContent>
+            <p className="whitespace-pre-wrap">{messageText(msg)}</p>
+          </MessageContent>
+          <Actions className="-mb-1 items-center justify-end opacity-0 transition-opacity group-hover/user-msg:opacity-100">
+            <MessageTimestamp timestamp={msg.createdAt} />
+            <CopyAction text={messageText(msg)} />
+          </Actions>
+        </div>
+      </Message>
+    )
+  }
+
+  return (
+    <Message from="assistant">
+      <MessageContent>
+        {msg.simple ? (
+          <SimpleAssistantMessage message={msg} isLast={isLast} isBusy={isBusy} onRetry={handleRetry} />
+        ) : (
+          <AssistantMessage
+            message={msg}
+            isLast={isLast}
+            isBusy={isBusy}
+            onRetry={handleRetry}
+          />
+        )}
+      </MessageContent>
+      {finished && !waiting && <AssistantMessageActions message={msg} />}
+    </Message>
+  )
+}
+
+function ChatMessages({ messages, isBusy, mode, sessionId, sendMessage }: {
   messages: ChatMessage[]
   isBusy: boolean
   mode: "chat" | "code"
+  sessionId?: string
+  sendMessage: (mode: "chat" | "code", text: string, config: SendConfig) => Promise<void>
 }) {
   const lastAssistantId = [...messages].reverse().find((m) => m.role === "assistant" && !m.summary)?.id
-  const AssistantMessage = mode === "chat" ? ChatAssistantMessage : CodeAssistantMessage
 
   return (
     <Conversation className="relative flex-1 -mt-10">
       <ConversationContent className="mx-auto w-full max-w-3xl">
-        {messages.map((msg) => {
-          // Mensagem sintética de compactação: card colapsável, sem persona/ações
+        {messages.map((msg, index) => {
           if (msg.summary) return <SummaryCard key={msg.id} message={msg} />
 
           const isLast = msg.id === lastAssistantId
@@ -62,34 +118,19 @@ function ChatMessages({ messages, isBusy, mode }: {
           const waiting = msg.role === "assistant" && isLast && isBusy && msg.parts.length === 0
 
           return (
-            <Message key={msg.id} from={msg.role}>
-              {msg.role === "user" ? (
-                <div className="group/user-msg flex flex-col">
-                  <MessageContent>
-                    <p className="whitespace-pre-wrap">{messageText(msg)}</p>
-                  </MessageContent>
-                  <Actions className="-mb-1 items-center justify-end opacity-0 transition-opacity group-hover/user-msg:opacity-100">
-                    <MessageTimestamp timestamp={msg.createdAt} />
-                    <CopyAction text={messageText(msg)} />
-                  </Actions>
-                </div>
-              ) : (
-                <>
-                  <MessageContent>
-                    {msg.simple ? (
-                      <SimpleAssistantMessage message={msg} isLast={isLast} isBusy={isBusy} />
-                    ) : (
-                      <AssistantMessage
-                        message={msg}
-                        isLast={isLast}
-                        isBusy={isBusy}
-                      />
-                    )}
-                  </MessageContent>
-                  {finished && !waiting && <AssistantMessageActions message={msg} />}
-                </>
-              )}
-            </Message>
+            <MessageItem
+              key={msg.id}
+              msg={msg}
+              isLast={isLast}
+              waiting={waiting}
+              finished={finished}
+              isBusy={isBusy}
+              mode={mode}
+              sessionId={sessionId}
+              sendMessage={sendMessage}
+              messages={messages}
+              index={index}
+            />
           )
         })}
       </ConversationContent>
@@ -296,7 +337,7 @@ export function ChatView({ sessionId }: { sessionId?: string } = {}) {
         >
           <div className="flex min-h-0 flex-1 flex-col pt-6">
             <div className="pointer-events-none sticky top-0 z-10 h-12 bg-linear-to-b to-transparent" style={{ backgroundImage: 'linear-gradient(to bottom, var(--panel-bg, var(--background)), transparent)' }} />
-            <ChatMessages messages={messages} isBusy={isBusy} mode={viewMode} />
+            <ChatMessages messages={messages} isBusy={isBusy} mode={viewMode} sessionId={session?.id} sendMessage={sendMessage} />
           </div>
         </div>
       </div>

@@ -4,6 +4,7 @@ import {
   ChevronDownIcon,
   CopyIcon,
   LoaderIcon,
+  RotateCwIcon,
   TerminalIcon,
   XCircleIcon,
 } from "lucide-react"
@@ -135,10 +136,20 @@ export function GenericToolView({ part, label, subtitle }: {
   )
 }
 
-export function MessageError({ error }: { error: string }) {
+export function MessageError({ error, onRetry }: { error: string; onRetry?: () => void }) {
   return (
-    <div className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive">
-      {error}
+    <div className="flex items-center justify-between gap-2 rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+      <span className="flex-1">{error}</span>
+      {onRetry && (
+        <button
+          type="button"
+          onClick={onRetry}
+          className="flex shrink-0 items-center gap-1 rounded-md px-1.5 py-1 font-medium text-destructive hover:bg-destructive/20"
+        >
+          <RotateCwIcon className="size-3.5" />
+          Retry
+        </button>
+      )}
     </div>
   )
 }

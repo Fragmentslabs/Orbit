@@ -8,10 +8,11 @@ import { MessageError } from "@/src/components/messages/shared"
  * sem markdown, citações, reasoning ou tool views — enquanto o modelo trabalha
  * sem texto visível (pensando ou rodando ferramentas), só um shimmer.
  */
-export function SimpleAssistantMessage({ message, isLast, isBusy }: {
+export function SimpleAssistantMessage({ message, isLast, isBusy, onRetry }: {
   message: ChatMessage
   isLast: boolean
   isBusy: boolean
+  onRetry?: () => void
 }) {
   const text = useMemo(
     () =>
@@ -28,7 +29,7 @@ export function SimpleAssistantMessage({ message, isLast, isBusy }: {
     <div className="flex w-full flex-col gap-1">
       {!text && working && <Shimmer className="text-sm">Pensando…</Shimmer>}
       {text && <p className="whitespace-pre-wrap text-foreground">{text}</p>}
-      {message.error && <MessageError error={message.error} />}
+      {message.error && <MessageError error={message.error} onRetry={onRetry} />}
     </div>
   )
 }

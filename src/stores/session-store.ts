@@ -488,7 +488,7 @@ function applyChatEvent(event: ChatEvent, set: Setter, get: () => SessionState) 
       break
   }
 
-  // Quando o streaming termina, verifica se havia um plano pendente
+  // Quando o streaming termina ou dá erro, verifica planos e processa fila
   if (event.type === "status" && event.status === "idle") {
     const state = get()
     const sessions = [...state.sessions].sort((a, b) => b.updatedAt - a.updatedAt)
@@ -509,8 +509,10 @@ function applyChatEvent(event: ChatEvent, set: Setter, get: () => SessionState) 
     patch._planReviewOutbox = cleanOutbox
 
     set(() => patch)
+  }
 
-    // Processa a fila de mensagens (queue e agendadas) para esta sessão
+  // Processa a fila tanto em idle quanto em erro (para retry/skip)
+  if (event.type === "status" && (event.status === "idle" || event.status === "error")) {
     useMessageQueueStore.getState().onSessionIdle(sessionId)
   }
 }
