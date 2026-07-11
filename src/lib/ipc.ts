@@ -7,6 +7,7 @@ import type { McpConfig, McpServerStatus } from "@/shared/mcp"
 import type { Memory, MemoryEvent } from "@/shared/memory"
 import type { Skill, SkillProposal } from "@/shared/skills"
 import type { AnalyticsSummary, AnalyticsRange } from "@/shared/analytics"
+import type { PanelEvent } from "@/src/stores/panel-store"
 
 /** Wrapper tipado sobre a bridge IPC exposta pelo preload. */
 
@@ -81,10 +82,8 @@ export const panelApi = {
   /** Registra (ou limpa, com null) o webContents do <webview> do painel */
   register: (webContentsId: number | null) =>
     window.ipcRenderer.send("panel:register", webContentsId),
-  onEvent: (listener: (event: { type: "open"; url?: string }) => void) => {
-    const wrapper = window.ipcRenderer.on("panel:event", (event) =>
-      listener(event as { type: "open"; url?: string }),
-    )
+  onEvent: (listener: (event: PanelEvent) => void) => {
+    const wrapper = window.ipcRenderer.on("panel:event", (event) => listener(event as PanelEvent))
     return () => window.ipcRenderer.off("panel:event", wrapper)
   },
 }

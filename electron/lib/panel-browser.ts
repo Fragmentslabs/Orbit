@@ -23,15 +23,21 @@ function getWc(): WebContents | null {
   return wc && !wc.isDestroyed() ? wc : null
 }
 
-export interface PanelEvent {
-  type: 'open'
-  url?: string
-}
+export type PanelEvent =
+  | { type: 'open'; url?: string }
+  | { type: 'resize'; width: number | null; height: number | null; label: string }
+  | { type: 'fullscreen'; on: boolean }
+  | { type: 'activity'; label: string }
 
 function broadcastPanelEvent(event: PanelEvent): void {
   for (const win of BrowserWindow.getAllWindows()) {
     if (!win.isDestroyed()) win.webContents.send('panel:event', event)
   }
+}
+
+/** Anuncia à UI o que o agente está fazendo no browser (feed de atividade). */
+function activity(label: string): void {
+  broadcastPanelEvent({ type: 'activity', label })
 }
 
 function delay(ms: number): Promise<void> {
@@ -58,8 +64,30 @@ async function waitForLoad(wc: WebContents): Promise<void> {
   await delay(400) // deixa SPAs hidratarem
 }
 
+/** Redimensiona o viewport do browser (responsividade). null = preenche o painel. */
+export async function panelResize(
+  width: number | null,
+  height: number | null,
+  label: string,
+): Promise<string> {
+  await ensurePanelBrowser()
+  activity(`Redimensionando para ${label}`)
+  broadcastPanelEvent({ type: 'resize', width, height, label })
+  await delay(700) // deixa o layout refluir na nova largura
+  return width
+    ? `Viewport ajustado para ${label} (${width}×${height}px). Use panel_screenshot para ver o resultado.`
+    : `Viewport ajustado para ${label} (preenche o painel).`
+}
+
+/** Liga/desliga a tela cheia do browser do painel. */
+export async function panelFullscreen(on: boolean): Promise<void> {
+  broadcastPanelEvent({ type: 'fullscreen', on })
+  await delay(350)
+}
+
 export async function panelNavigate(url: string): Promise<{ title: string; url: string }> {
   const wc = await ensurePanelBrowser(url)
+  activity(`Navegando para ${url}`)
   try {
     await Promise.race([wc.loadURL(url), delay(LOAD_TIMEOUT_MS)])
   } catch (err) {
@@ -108,6 +136,7 @@ const READ_SCRIPT = `(() => {
 
 export async function panelRead(): Promise<string> {
   const wc = await ensurePanelBrowser()
+  activity('Lendo a página')
   const result = (await wc.executeJavaScript(READ_SCRIPT)) as {
     title: string
     url: string
@@ -132,6 +161,7 @@ function findScript(ref?: number, selector?: string): string {
 
 export async function panelClick(ref?: number, selector?: string): Promise<string> {
   const wc = await ensurePanelBrowser()
+  activity(`Clicando em ${ref != null ? `ref ${ref}` : selector}`)
   const outcome = (await wc.executeJavaScript(`(() => {
     const el = ${findScript(ref, selector)}
     if (!el) return null
@@ -151,6 +181,7 @@ export async function panelType(
   pressEnter?: boolean,
 ): Promise<string> {
   const wc = await ensurePanelBrowser()
+  activity('Digitando…')
   const outcome = (await wc.executeJavaScript(`(() => {
     const el = ${findScript(ref, selector)}
     if (!el) return null
@@ -174,11 +205,26 @@ export async function panelType(
   return `Texto digitado${pressEnter ? ' e enviado' : ''}. Agora em: ${wc.getTitle()} — ${wc.getURL()}`
 }
 
-/** Screenshot do viewport, reduzido para ≤1024px de largura (economia de tokens). */
-export async function panelScreenshot(): Promise<Buffer> {
+/**
+ * Screenshot do viewport, reduzido para ≤1024px de largura (economia de tokens).
+ * Com fullscreen, entra em tela cheia para capturar a tela toda e volta à visão
+ * lateral logo depois (o print sai maior e a UI retorna ao normal).
+ */
+export async function panelScreenshot(fullscreen = false): Promise<Buffer> {
   const wc = await ensurePanelBrowser()
-  const image = await wc.capturePage()
-  const { width } = image.getSize()
-  const resized = width > 1024 ? image.resize({ width: 1024 }) : image
-  return resized.toPNG()
+  activity('Capturando a tela')
+  if (!fullscreen) {
+    const image = await wc.capturePage()
+    const { width } = image.getSize()
+    return (width > 1024 ? image.resize({ width: 1024 }) : image).toPNG()
+  }
+  await panelFullscreen(true)
+  try {
+    await delay(300)
+    const image = await wc.capturePage()
+    const { width } = image.getSize()
+    return (width > 1440 ? image.resize({ width: 1440 }) : image).toPNG()
+  } finally {
+    await panelFullscreen(false)
+  }
 }

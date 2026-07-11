@@ -7,12 +7,21 @@ import {
   panelClick,
   panelNavigate,
   panelRead,
+  panelResize,
   panelScreenshot,
   panelType,
 } from '../panel-browser'
 import { resolveSafePath, type ToolContext } from './context'
 
 const IMAGE_EXTENSIONS = new Set(['png', 'jpg', 'jpeg', 'webp', 'gif'])
+
+/** Presets de viewport para teste de responsividade. */
+const VIEWPORT_PRESETS: Record<string, { width: number | null; height: number | null; label: string }> = {
+  mobile: { width: 390, height: 844, label: 'mobile (390×844)' },
+  tablet: { width: 834, height: 1112, label: 'tablet (834×1112)' },
+  desktop: { width: 1440, height: 900, label: 'desktop (1440×900)' },
+  fit: { width: null, height: null, label: 'ajustado ao painel' },
+}
 
 /**
  * Ferramentas do browser do painel direito (modo código). O painel abre
@@ -68,17 +77,35 @@ export function createPanelBrowserTools(ctx: ToolContext): ToolSet {
         return panelType(text, ref, selector, pressEnter)
       },
     }),
+    panel_resize: tool({
+      description:
+        'Redimensiona o viewport do browser do painel para testar responsividade. Use um preset (mobile/tablet/desktop/fit) ou width/height custom. Depois use panel_screenshot para ver o resultado.',
+      inputSchema: z.object({
+        preset: z.enum(['mobile', 'tablet', 'desktop', 'fit']).optional(),
+        width: z.number().int().min(280).max(3840).optional().describe('Largura custom em px'),
+        height: z.number().int().min(400).max(2160).optional().describe('Altura custom em px'),
+      }),
+      execute: async ({ preset, width, height }) => {
+        if (width && height) return panelResize(width, height, `${width}×${height}`)
+        const chosen = VIEWPORT_PRESETS[preset ?? 'fit']
+        return panelResize(chosen.width, chosen.height, chosen.label)
+      },
+    }),
     panel_screenshot: tool({
       description:
-        'Tira um screenshot da página do painel e o VÊ como imagem. Com savePath, também salva o PNG na pasta de trabalho (ex: docs/login/tela.png) — use no modo documentação.',
+        'Tira um screenshot da página do painel e o VÊ como imagem. Com savePath, também salva o PNG na pasta de trabalho (ex: docs/login/tela.png) — use no modo documentação. Com fullscreen, expande para tela cheia, captura a tela toda e volta à visão lateral.',
       inputSchema: z.object({
         savePath: z
           .string()
           .optional()
           .describe('Caminho relativo à pasta de trabalho para salvar o PNG (opcional)'),
+        fullscreen: z
+          .boolean()
+          .optional()
+          .describe('Captura em tela cheia (print maior) e retorna à visão lateral'),
       }),
-      execute: async ({ savePath }, { toolCallId }) => {
-        const png = await panelScreenshot()
+      execute: async ({ savePath, fullscreen }, { toolCallId }) => {
+        const png = await panelScreenshot(fullscreen === true)
         screenshotStash.set(toolCallId, png.toString('base64'))
         let saved = ''
         if (savePath) {

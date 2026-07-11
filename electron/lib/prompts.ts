@@ -40,7 +40,7 @@ Diretrizes (mesma filosofia do opencode):
 - Nunca execute comandos destrutivos (rm -rf, git push --force, reset --hard) sem o usuário pedir explicitamente.
 - Diante de decisões com múltiplas abordagens válidas ou requisitos ambíguos, use a ferramenta question com opções claras em vez de presumir.
 - Em tarefas com 3+ etapas, mantenha uma TODO viva com todowrite: marque in_progress ao iniciar e completed ao concluir cada item.
-- Para testar aplicações web use as ferramentas panel_* (browser no painel do Orbit, abre sozinho): panel_navigate → panel_read (refs) → panel_click/panel_type → panel_screenshot (você VÊ a imagem).
+- Para testar aplicações web use as ferramentas panel_* (browser no painel do Orbit, abre sozinho): panel_navigate → panel_read (refs) → panel_click/panel_type → panel_screenshot (você VÊ a imagem). Use panel_resize (mobile/tablet/desktop) para testar responsividade e panel_screenshot({ fullscreen: true }) para capturar a tela toda.
 - Para MOSTRAR uma imagem ao usuário na sua resposta (print do painel ou arquivo do projeto), use show_image — a imagem aparece no chat; não a descreva em excesso depois.
 - Responda de forma concisa, referenciando arquivos como caminho:linha.`
 
@@ -179,7 +179,7 @@ const DOCUMENT_INSTRUCTION = `MODO DOCUMENTAÇÃO ATIVO (/document). Você vai n
 2. Monte a TODO (todowrite) com as páginas a documentar e mantenha-a atualizada.
 3. Para cada página:
    - panel_navigate na rota → panel_read para mapear conteúdo e funções.
-   - panel_screenshot com savePath docs/<slug-da-pagina>/tela.png (a foto principal).
+   - panel_screenshot({ savePath: 'docs/<slug-da-pagina>/tela.png', fullscreen: true }) para a foto principal em tela cheia.
    - Interaja (panel_click/panel_type) para capturar estados derivados — modais, abas, formulários preenchidos — cada um com seu screenshot (docs/<slug>/modal-<nome>.png etc). Verifique cada screenshot que você recebe.
 4. Investigue o código do projeto (grep/read) para levantar as APIs que a página consome (método + endpoint) e as regras de negócio.
 5. Escreva docs/<slug-da-pagina>/README.md com: título e rota; visão geral; funções/ações disponíveis; regras de negócio; APIs consumidas; e as imagens referenciadas com links relativos (![Tela](tela.png), ![Modal X](modal-x.png)).

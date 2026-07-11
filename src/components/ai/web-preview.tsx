@@ -232,9 +232,18 @@ export type WebPreviewBodyProps = ComponentProps<"iframe"> & {
   loading?: ReactNode
   /** Recebe o elemento <webview> montado (controle programático do painel) */
   onWebviewRef?: (el: HTMLElement | null) => void
+  /** Dimensões fixas do viewport (responsividade). Ausente = preenche o container. */
+  viewport?: { width: number; height: number } | null
 }
 
-export const WebPreviewBody = ({ className, loading, src, onWebviewRef, ...props }: WebPreviewBodyProps) => {
+export const WebPreviewBody = ({
+  className,
+  loading,
+  src,
+  onWebviewRef,
+  viewport,
+  ...props
+}: WebPreviewBodyProps) => {
   const { url, refreshKey, setUrl } = useWebPreview()
   const [localUrl, setLocalUrl] = useState("")
 
@@ -271,12 +280,18 @@ export const WebPreviewBody = ({ className, loading, src, onWebviewRef, ...props
   }
 
   return (
-    <div className="flex-1">
+    <div
+      className={cn(
+        "flex-1 overflow-auto",
+        viewport && "flex items-start justify-center bg-muted/40 p-3",
+      )}
+    >
       {/* @ts-ignore webview is an electron specific tag */}
       <webview
         key={refreshKey}
         ref={onWebviewRef as never}
-        className={cn("size-full bg-white", className)}
+        className={cn("bg-white", viewport ? "shrink-0 rounded-md border shadow-sm" : "size-full", className)}
+        style={viewport ? { width: viewport.width, height: viewport.height } : undefined}
         src={(src ?? url) || undefined}
         title="Preview"
         {...(props as any)}
