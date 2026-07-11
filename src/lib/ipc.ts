@@ -12,6 +12,20 @@ import type { PanelEvent } from "@/src/stores/panel-store"
 
 /** Wrapper tipado sobre a bridge IPC exposta pelo preload. */
 
+export const windowApi = {
+  platform: window.platform,
+  minimize: () => window.ipcRenderer?.invoke("window:minimize"),
+  maximize: () => window.ipcRenderer?.invoke("window:maximize"),
+  close: () => window.ipcRenderer?.invoke("window:close"),
+  isMaximized: () => (window.ipcRenderer?.invoke("window:isMaximized") ?? Promise.resolve(false)) as Promise<boolean>,
+  toggleFullscreen: () => window.ipcRenderer?.invoke("window:toggleFullscreen"),
+  onMaximizedChange: (listener: (maximized: boolean) => void) => {
+    if (!window.ipcRenderer) return () => {}
+    const wrapper = window.ipcRenderer.on("window:maximized-change", (maximized) => listener(maximized as boolean))
+    return () => window.ipcRenderer.off("window:maximized-change", wrapper)
+  },
+}
+
 export const storage = {
   read: <T>(key: string) => window.ipcRenderer.invoke("storage:read", key) as Promise<T | null>,
   write: (key: string, value: unknown) => window.ipcRenderer.invoke("storage:write", key, value),
