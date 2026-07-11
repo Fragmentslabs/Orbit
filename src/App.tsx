@@ -13,6 +13,7 @@ import { ChatView } from "@/src/components/chat-view"
 import { MemoriesView } from "@/src/components/memories/memories-view"
 import { ModelsView } from "@/src/components/models/models-view"
 import { RightPanel } from "@/src/components/right-panel"
+import { TitleBar } from "@/src/components/titlebar"
 import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels"
 
 const HOVER_ZONE_WIDTH = 6
@@ -147,9 +148,12 @@ function App() {
     <ThemeProvider defaultTheme="system" storageKey="vite-ui-theme">
       <TooltipProvider>
         <WorkspaceProvider>
-          <SidebarProvider className="h-svh overflow-hidden" open={open} onOpenChange={setOpen}>
-            <Layout />
-          </SidebarProvider>
+          <div className="flex h-svh flex-col overflow-hidden">
+            <TitleBar />
+            <SidebarProvider className="min-h-0 flex-1 overflow-hidden" open={open} onOpenChange={setOpen}>
+              <Layout />
+            </SidebarProvider>
+          </div>
         </WorkspaceProvider>
       </TooltipProvider>
     </ThemeProvider>

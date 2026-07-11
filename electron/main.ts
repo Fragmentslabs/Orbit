@@ -58,11 +58,23 @@ let win: BrowserWindow | null
 function createWindow() {
   win = new BrowserWindow({
     icon: path.join(process.env.VITE_PUBLIC, 'electron-vite.svg'),
+    minWidth: 720,
+    minHeight: 480,
+    backgroundColor: '#00000000',
+    ...(process.platform === 'darwin'
+      ? { titleBarStyle: 'hiddenInset' as const }
+      : { frame: false }),
     webPreferences: {
       preload: path.join(__dirname, 'preload.mjs'),
       webviewTag: true,
     },
   })
+
+  // Frame customizado: some o menu nativo (Alt ainda o invocaria em win/linux)
+  win.setMenuBarVisibility(false)
+
+  win.on('maximize', () => win?.webContents.send('window:maximized-change', true))
+  win.on('unmaximize', () => win?.webContents.send('window:maximized-change', false))
 
   // Test active push message to Renderer-process.
   win.webContents.on('did-finish-load', () => {
@@ -261,6 +273,17 @@ async function getFileAtCommit(
 }
 
 app.whenReady().then(() => {
+  // Controles da titlebar customizada (frame: false em win/linux)
+  ipcMain.handle('window:minimize', () => win?.minimize())
+  ipcMain.handle('window:maximize', () => {
+    if (!win) return
+    if (win.isMaximized()) win.unmaximize()
+    else win.maximize()
+  })
+  ipcMain.handle('window:close', () => win?.close())
+  ipcMain.handle('window:isMaximized', () => win?.isMaximized() ?? false)
+  ipcMain.handle('window:toggleFullscreen', () => win?.setFullScreen(!win.isFullScreen()))
+
   ipcMain.handle('select-folder', async () => {
     const result = await dialog.showOpenDialog(win!, {
       properties: ['openDirectory'],

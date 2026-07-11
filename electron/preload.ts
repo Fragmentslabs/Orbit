@@ -1,6 +1,8 @@
 import { ipcRenderer, contextBridge } from 'electron'
 import type { IpcRendererEvent } from 'electron'
 
+contextBridge.exposeInMainWorld('platform', process.platform)
+
 contextBridge.exposeInMainWorld('ipcRenderer', {
   on(channel: string, listener: (...args: unknown[]) => void) {
     const wrapper = (_event: IpcRendererEvent, ...args: unknown[]) => listener(...args)

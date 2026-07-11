@@ -23,6 +23,7 @@ declare namespace NodeJS {
 
 // Used in Renderer process, expose in `preload.ts`
 interface Window {
+  platform: NodeJS.Platform
   ipcRenderer: {
     /** Returns the wrapper function — pass it to `off()` to remove this specific listener. */
     on(channel: string, listener: (...args: unknown[]) => void): (...args: unknown[]) => void
