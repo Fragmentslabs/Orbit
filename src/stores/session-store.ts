@@ -15,6 +15,7 @@ import type {
 import { StorageKeys } from "@/shared/chat"
 import { chatApi, storage } from "@/src/lib/ipc"
 import { useBrainPrefs } from "@/src/stores/brain-prefs"
+import { useMessageQueueStore } from "@/src/stores/message-queue-store"
 import { usePermissionPrefs } from "@/src/stores/permission-prefs"
 import { useProviderStore } from "@/src/stores/provider-store"
 
@@ -59,7 +60,7 @@ interface SessionState {
   rejectPlan: (sessionId: string) => void
   acceptPlanReview: (sessionId: string, permissionMode: "ask" | "approve" | "full") => void
   rejectPlanReview: (sessionId: string) => void
-  createSession: (mode: SessionMode, partial?: Partial<SessionInfo>) => Promise<SessionInfo>
+  createSession: (mode: SessionMode, partial?: Partial<SessionInfo> & { setActive?: boolean }) => Promise<SessionInfo>
   selectSession: (mode: SessionMode, id: string | null) => Promise<void>
   renameSession: (id: string, title: string) => void
   togglePin: (id: string) => void
@@ -125,6 +126,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
 
   createSession: async (mode, partial) => {
     const now = Date.now()
+    const { setActive = true, ...rest } = partial ?? {}
     const session: SessionInfo = {
       id: nanoid(),
       title: mode === "chat" ? "Nova conversa" : "Nova sessão de código",
@@ -134,12 +136,12 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       folderId: null,
       createdAt: now,
       updatedAt: now,
-      ...partial,
+      ...rest,
     }
     await storage.write(StorageKeys.session(session.id), session)
     set((state) => ({
       sessions: [session, ...state.sessions],
-      activeIds: { ...state.activeIds, [mode]: session.id },
+      activeIds: setActive ? { ...state.activeIds, [mode]: session.id } : state.activeIds,
       messages: { ...state.messages, [session.id]: [] },
     }))
     return session
@@ -507,6 +509,9 @@ function applyChatEvent(event: ChatEvent, set: Setter, get: () => SessionState) 
     patch._planReviewOutbox = cleanOutbox
 
     set(() => patch)
+
+    // Processa a fila de mensagens (queue e agendadas) para esta sessão
+    useMessageQueueStore.getState().onSessionIdle(sessionId)
   }
 }
 

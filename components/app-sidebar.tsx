@@ -70,6 +70,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import type { FolderInfo, SessionInfo } from "@/shared/chat"
+import { useMessageQueueStore, startMessageScheduler } from "@/src/stores/message-queue-store"
 import { useSessionStore } from "@/src/stores/session-store"
 import { useSettingsUi } from "@/src/stores/settings-ui"
 import { SettingsDialog } from "@/src/components/settings-dialog"
@@ -804,6 +805,7 @@ function AccountDropdown({ onOpenSettings }: { onOpenSettings: () => void }) {
 
 export function AppSidebar() {
   const initialize = useSessionStore((s) => s.initialize)
+  const initQueue = useMessageQueueStore((s) => s.initialize)
   const settingsOpen = useSettingsUi((s) => s.open)
   const settingsTab = useSettingsUi((s) => s.tab)
   const setSettingsOpen = useSettingsUi((s) => s.setOpen)
@@ -811,7 +813,9 @@ export function AppSidebar() {
 
   useEffect(() => {
     void initialize()
-  }, [initialize])
+    void initQueue()
+    startMessageScheduler()
+  }, [initialize, initQueue])
 
   return (
     <Sidebar variant="floating" collapsible="offcanvas">

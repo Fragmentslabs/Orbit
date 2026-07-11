@@ -323,6 +323,20 @@ export interface ProviderCredential {
 }
 
 /** Chaves usadas no storage genérico (main process) */
+/** Mensagem enfileirada para envio posterior (fila ou agendada) */
+export interface QueuedMessage {
+  id: string
+  text: string
+  options: SendMessageOptions
+  mode: SessionMode
+  sessionId?: string
+  directory?: string
+  extraDirectories?: string[]
+  /** Timestamp MS para envio agendado; undefined = envia assim que possível */
+  scheduledAt?: number
+  createdAt: number
+}
+
 export const StorageKeys = {
   session: (id: string) => `session/${id}`,
   sessionPrefix: "session/",
@@ -333,4 +347,5 @@ export const StorageKeys = {
   memory: (id: string) => `memory/items/${id}`,
   memoryItemsPrefix: "memory/items/",
   memoryIndex: "memory/_index",
+  queuedMessages: "message-queue",
 } as const

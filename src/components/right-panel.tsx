@@ -170,6 +170,22 @@ export function RightPanel() {
     setActiveTabId(id)
   }, [browserRequestId])
 
+  // "Enviar para chat lateral" vindo do input: abre aba de chat
+  const pendingChatTab = usePanelStore((s) => s.pendingChatTab)
+  const pendingChatTabSession = usePanelStore((s) => s.pendingChatTabSession)
+  const pendingChatTabTitle = usePanelStore((s) => s.pendingChatTabTitle)
+  useEffect(() => {
+    if (pendingChatTab > 0 && pendingChatTabSession) {
+      const id = `chat-${pendingChatTabSession}`
+      setTabs((prev) =>
+        prev.some((t) => t.id === id)
+          ? prev
+          : [...prev, { id, type: "chat", title: pendingChatTabTitle ?? "Chat", sessionId: pendingChatTabSession }],
+      )
+      setActiveTabId(id)
+    }
+  }, [pendingChatTab, pendingChatTabSession, pendingChatTabTitle])
+
   // Workers da orquestração em execução abrem tabs automaticamente
   useEffect(() => {
     if (!activeSessionId) return

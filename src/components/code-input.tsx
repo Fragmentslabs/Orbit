@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 import { AlignLeft, Bot, Brain, BrainCircuit, FileText, MousePointerClick, Network, PlusIcon, Search, X } from "lucide-react"
 import {
   DropdownMenu,
@@ -14,7 +14,6 @@ import {
   PromptInputAttachments,
   PromptInputBody,
   PromptInputFooter,
-  PromptInputSubmit,
   PromptInputTextarea,
   PromptInputTools,
 } from "@/src/components/ai/prompt-input"
@@ -25,15 +24,18 @@ import { OrchestrationConfigDialog } from "@/src/components/orchestration-config
 import { PermissionModePicker } from "@/src/components/permission-mode-picker"
 import { ReasoningPicker } from "@/src/components/reasoning-picker"
 import { DraftInputBridge } from "@/src/components/draft-input-bridge"
+import { QueueIndicator } from "@/src/components/queue-indicator"
+import { SendButtonGroup } from "@/src/components/send-button-group"
 import { SlashPalette, useReferenceCommands, type SlashCommand } from "@/src/components/slash-palette"
 import { FolderSelector } from "@/src/components/folder-selector"
 import { useWorkspace } from "@/lib/workspace-context"
 import { useBrainEnabled, useBrainPrefs } from "@/src/stores/brain-prefs"
+import { useMessageQueueStore } from "@/src/stores/message-queue-store"
+import { usePanelStore } from "@/src/stores/panel-store"
 import { usePermissionPrefs } from "@/src/stores/permission-prefs"
 import { useProviderStore } from "@/src/stores/provider-store"
 import { useSettingsUi } from "@/src/stores/settings-ui"
 import { useReasoningPrefs } from "@/src/stores/reasoning-prefs"
-import { usePanelStore } from "@/src/stores/panel-store"
 import { useSessionStore } from "@/src/stores/session-store"
 import { useSimpleMode } from "@/src/stores/simple-mode"
 import { useSkillsStore } from "@/src/stores/skills-store"
@@ -80,7 +82,13 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId }: 
 
   const handleSubmit = (message: { text?: string }) => {
     if (busy) {
-      onStop?.()
+      const text = message.text?.trim()
+      if (!text) {
+        onStop?.()
+      } else if (sessionId && folders.length > 0) {
+        const { directory, extraDirectories } = getDirs()
+        enqueueForSend(sessionId, text, buildOptions(), mode, { directory, extraDirectories })
+      }
       return
     }
     let text = message.text?.trim()
@@ -100,16 +108,7 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId }: 
     }
     onSubmit(
       text,
-      {
-        plan,
-        research: search,
-        simple,
-        brain,
-        permissionMode,
-        reasoning: { enabled: thinking, variantId },
-        subagents,
-        orchestrate: orchestra ? {} : undefined,
-      },
+      buildOptions(),
       directory,
       extraDirectories,
     )
@@ -117,7 +116,29 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId }: 
 
   const { mode } = useWorkspace()
   const openSettings = useSettingsUi((s) => s.openSettings)
+  const enqueueForSend = useMessageQueueStore((s) => s.enqueueForSend)
+  const enqueueScheduled = useMessageQueueStore((s) => s.enqueueScheduled)
+  const sendMessage = useSessionStore((s) => s.sendMessage)
+  const createSession = useSessionStore((s) => s.createSession)
+  const openChatTab = usePanelStore((s) => s.openChatTab)
   const referenceCommands = useReferenceCommands()
+
+  const buildOptions = useCallback((): SendMessageOptions => ({
+    plan,
+    research: search,
+    simple,
+    brain,
+    permissionMode,
+    reasoning: { enabled: thinking, variantId },
+    subagents,
+    orchestrate: orchestra ? {} : undefined,
+  }), [plan, search, simple, brain, permissionMode, thinking, variantId, subagents, orchestra])
+
+  /** Retorna diretório + extra do state atual */
+  const getDirs = useCallback(() => {
+    const [directory, ...extraDirectories] = folders
+    return { directory, extraDirectories }
+  }, [folders])
   const selections = usePanelStore((s) => s.selections)
   const removeSelection = usePanelStore((s) => s.removeSelection)
 
@@ -191,10 +212,11 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId }: 
             ))}
           </div>
         )}
+        <QueueIndicator sessionId={sessionId} />
         <PromptInput
           multiple
           onSubmit={handleSubmit}
-          className="rounded-xl border-2 border-sidebar-border overflow-hidden [&>div]:!border-none [&>div]:!rounded-none [&>div]:!bg-transparent"
+          className="rounded-xl border-2 border-sidebar-border [&>div]:!border-none [&>div]:!rounded-none [&>div]:!bg-transparent"
         >
           <PromptInputBody>
             <PromptInputTextarea
@@ -233,9 +255,32 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId }: 
                 />
               )}
               <ModelPicker />
-              <PromptInputSubmit
+              <SendButtonGroup
+                busy={busy}
                 disabled={(!selected || folders.length === 0) && !busy}
-                status={busy ? (status === "submitted" ? "submitted" : "streaming") : undefined}
+                onStop={() => onStop?.()}
+                onQueue={(text) => {
+                  if (!sessionId) return
+                  const { directory, extraDirectories } = getDirs()
+                  enqueueForSend(sessionId, text, buildOptions(), mode, { directory, extraDirectories })
+                }}
+                onStopAndSend={(text) => {
+                  onStop?.()
+                  if (!sessionId) return
+                  const { directory, extraDirectories } = getDirs()
+                  enqueueForSend(sessionId, text, buildOptions(), mode, { directory, extraDirectories })
+                }}
+                onSchedule={(text, timestamp) => {
+                  if (!sessionId) return
+                  const { directory, extraDirectories } = getDirs()
+                  enqueueScheduled(sessionId, text, buildOptions(), mode, timestamp, { directory, extraDirectories })
+                }}
+                onSendToSidePanel={async (text) => {
+                  const { directory, extraDirectories } = getDirs()
+                  const newSession = await createSession(mode, { setActive: false, directory, extraDirectories })
+                  await sendMessage(mode, text, { options: buildOptions(), sessionId: newSession.id, directory, extraDirectories })
+                  openChatTab(newSession.id, newSession.title)
+                }}
               />
             </div>
           </PromptInputFooter>

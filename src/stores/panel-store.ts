@@ -31,6 +31,12 @@ interface PanelState {
   clearSelections: () => void
   /** Aplica um panel:event vindo do main */
   applyEvent: (event: { type: "open"; url?: string }) => void
+  /** Abre uma aba de chat no painel direito (ex: "enviar para chat lateral") */
+  openChatTab: (sessionId: string, title: string) => void
+  /** Consumido pelo RightPanel; incrementa a cada solicitação */
+  pendingChatTab: number
+  pendingChatTabSession?: string
+  pendingChatTabTitle?: string
 }
 
 export const usePanelStore = create<PanelState>((set) => ({
@@ -61,4 +67,14 @@ export const usePanelStore = create<PanelState>((set) => ({
       }))
     }
   },
+  openChatTab: (sessionId, title) =>
+    set((state) => ({
+      rightPanelOpen: true,
+      pendingChatTab: state.pendingChatTab + 1,
+      pendingChatTabSession: sessionId,
+      pendingChatTabTitle: title,
+    })),
+  pendingChatTab: 0,
+  pendingChatTabSession: undefined,
+  pendingChatTabTitle: undefined,
 }))

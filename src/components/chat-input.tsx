@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react"
+import { useCallback, useMemo, useState } from "react"
 import { AlignLeft, Bot, Brain, BrainCircuit, Globe, Network, PlusIcon, Search } from "lucide-react"
 import {
   DropdownMenu,
@@ -14,7 +14,6 @@ import {
   PromptInputAttachments,
   PromptInputBody,
   PromptInputFooter,
-  PromptInputSubmit,
   PromptInputTextarea,
   PromptInputTools,
 } from "@/src/components/ai/prompt-input"
@@ -24,9 +23,13 @@ import { ModeToggle } from "@/src/components/mode-toggle"
 import { OrchestrationConfigDialog } from "@/src/components/orchestration-config-dialog"
 import { ReasoningPicker } from "@/src/components/reasoning-picker"
 import { DraftInputBridge } from "@/src/components/draft-input-bridge"
+import { QueueIndicator } from "@/src/components/queue-indicator"
+import { SendButtonGroup } from "@/src/components/send-button-group"
 import { SlashPalette, useReferenceCommands, type SlashCommand } from "@/src/components/slash-palette"
 import { useWorkspace } from "@/lib/workspace-context"
 import { useBrainEnabled, useBrainPrefs } from "@/src/stores/brain-prefs"
+import { useMessageQueueStore } from "@/src/stores/message-queue-store"
+import { usePanelStore } from "@/src/stores/panel-store"
 import { useSessionStore } from "@/src/stores/session-store"
 import { useSettingsUi } from "@/src/stores/settings-ui"
 import { useProviderStore } from "@/src/stores/provider-store"
@@ -62,7 +65,22 @@ export function ChatInput({ onSubmit, status, onStop, sessionId }: {
   const { mode } = useWorkspace()
   const selectSession = useSessionStore((s) => s.selectSession)
   const openSettings = useSettingsUi((s) => s.openSettings)
+  const enqueueForSend = useMessageQueueStore((s) => s.enqueueForSend)
+  const enqueueScheduled = useMessageQueueStore((s) => s.enqueueScheduled)
+  const sendMessage = useSessionStore((s) => s.sendMessage)
+  const createSession = useSessionStore((s) => s.createSession)
+  const openChatTab = usePanelStore((s) => s.openChatTab)
   const referenceCommands = useReferenceCommands()
+
+  const buildOptions = useCallback((): SendMessageOptions => ({
+    research: search,
+    browser,
+    simple,
+    brain,
+    reasoning: { enabled: thinking, variantId },
+    subagents,
+    orchestrate: orchestra ? {} : undefined,
+  }), [search, browser, simple, brain, thinking, variantId, subagents, orchestra])
 
   const slashCommands = useMemo<SlashCommand[]>(() => {
     const toggle = (fn: () => void) => ({ setText }: { setText: (t: string) => void }) => {
@@ -91,26 +109,25 @@ export function ChatInput({ onSubmit, status, onStop, sessionId }: {
     <SlashPalette commands={slashCommands}>
     <DraftInputBridge />
     <div className="w-full max-w-2xl mx-auto pb-4">
+      <QueueIndicator sessionId={sessionId} />
       <PromptInput
         multiple
         onSubmit={(message) => {
+          // Enter pressionado durante execução: fila ou stop
           if (busy) {
-            onStop?.()
+            const text = message.text?.trim()
+            if (!text) {
+              onStop?.()
+            } else if (sessionId) {
+              enqueueForSend(sessionId, text, buildOptions(), mode)
+            }
             return
           }
           const text = message.text?.trim()
           if (!text) return
-          onSubmit(text, {
-            research: search,
-            browser,
-            simple,
-            brain,
-            reasoning: { enabled: thinking, variantId },
-            subagents,
-            orchestrate: orchestra ? {} : undefined,
-          })
+          onSubmit(text, buildOptions())
         }}
-        className="rounded-xl border-2 border-sidebar-border overflow-hidden [&>div]:!border-none [&>div]:!rounded-none [&>div]:!bg-transparent"
+        className="rounded-xl border-2 border-sidebar-border [&>div]:!border-none [&>div]:!rounded-none [&>div]:!bg-transparent"
       >
         <PromptInputAttachments className="!px-3 !py-1.5">
           {(attachment) => <PromptInputAttachment data={attachment} />}
@@ -148,9 +165,25 @@ export function ChatInput({ onSubmit, status, onStop, sessionId }: {
               />
             )}
             <ModelPicker />
-            <PromptInputSubmit
+            <SendButtonGroup
+              busy={busy}
               disabled={!selected && !busy}
-              status={busy ? (status === "submitted" ? "submitted" : "streaming") : undefined}
+              onStop={() => onStop?.()}
+              onQueue={(text) => {
+                if (sessionId) enqueueForSend(sessionId, text, buildOptions(), mode)
+              }}
+              onStopAndSend={(text) => {
+                onStop?.()
+                if (sessionId) enqueueForSend(sessionId, text, buildOptions(), mode)
+              }}
+              onSchedule={(text, timestamp) => {
+                if (sessionId) enqueueScheduled(sessionId, text, buildOptions(), mode, timestamp)
+              }}
+              onSendToSidePanel={async (text) => {
+                const newSession = await createSession(mode, { setActive: false })
+                await sendMessage(mode, text, { options: buildOptions(), sessionId: newSession.id })
+                openChatTab(newSession.id, newSession.title)
+              }}
             />
           </div>
         </PromptInputFooter>
