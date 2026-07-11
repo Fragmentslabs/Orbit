@@ -15,6 +15,7 @@ import { CodeAssistantMessage } from "@/src/components/messages/code-message"
 import { SimpleAssistantMessage } from "@/src/components/messages/simple-message"
 import { SummaryCard } from "@/src/components/messages/summary-card"
 import { OrchestrationPlanCard } from "@/src/components/orchestration-plan-card"
+import { PlanReviewCard } from "@/src/components/plan-review-card"
 import { AssistantMessageActions, CopyAction, MessageTimestamp } from "@/src/components/messages/shared"
 import { Actions } from "@/src/components/ai/actions"
 import { messageText } from "@/src/lib/message-utils"
@@ -110,6 +111,7 @@ export function ChatView({ sessionId }: { sessionId?: string } = {}) {
   )
   const status = useSessionStatus(session?.id)
   const plan = useSessionStore((s) => (session ? s.orchestration[session.id] : undefined))
+  const planReview = useSessionStore((s) => (session ? s.planReviews[session.id] : undefined))
   const pendingAsks = useSessionStore((s) => (session ? s.pendingAsks[session.id] ?? NO_ASKS : NO_ASKS))
   const parentSession = useSessionStore((s) =>
     session?.parentId ? s.sessions.find((x) => x.id === session.parentId) : undefined,
@@ -302,6 +304,12 @@ export function ChatView({ sessionId }: { sessionId?: string } = {}) {
       {session && plan && (plan.status === "proposed" || plan.status === "approved" || plan.status === "running") && (
         <div className="mx-auto w-full max-w-2xl pb-2">
           <OrchestrationPlanCard sessionId={session.id} plan={plan} />
+        </div>
+      )}
+      {/* Plano de implementação (modo plano) proposto, inline acima do input */}
+      {session && planReview && planReview.status === "proposed" && (
+        <div className="mx-auto w-full max-w-2xl pb-2">
+          <PlanReviewCard sessionId={session.id} review={planReview} />
         </div>
       )}
       {/* Pedidos aguardando resposta (permissão / question), inline acima do input.

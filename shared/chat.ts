@@ -186,6 +186,12 @@ export interface AskItem {
   origin?: AskOrigin
 }
 
+export interface PlanReview {
+  status: "proposed" | "implementing" | "rejected"
+  messageId: string
+  permissionMode?: PermissionMode
+}
+
 export interface SendMessageOptions {
   /** Modo pesquisa aprofundada (prompt de deep research + ferramentas web) */
   research?: boolean
@@ -193,6 +199,8 @@ export interface SendMessageOptions {
   browser?: boolean
   /** Modo plano: apenas ferramentas de leitura, saída em formato de plano */
   plan?: boolean
+  /** Ao aceitar um plano: sinaliza para o backend usar o prompt de implementação */
+  planReview?: PlanReview
   /** Modo simples: respostas diretas em texto puro, sem formatação */
   simple?: boolean
   /** Configuração de reasoning/thinking do modelo quando suportado */
@@ -270,6 +278,7 @@ export type ChatEvent =
     }
   | { type: "title"; sessionId: string; title: string }
   | { type: "orchestration:plan"; sessionId: string; plan: OrchestrationPlan }
+  | { type: "plan:review"; sessionId: string; review: PlanReview }
   /** Session criada/atualizada pelo main process (workers da orquestração) */
   | { type: "session"; sessionId: string; session: SessionInfo }
   /** Pedido de permissão aguardando resposta (card inline; origin = veio de worker) */
@@ -320,6 +329,7 @@ export const StorageKeys = {
   messages: (sessionId: string) => `messages/${sessionId}`,
   folders: "folders",
   orchestration: (orchestratorSessionId: string) => `orchestration/${orchestratorSessionId}`,
+  planReview: (sessionId: string) => `plan-review/${sessionId}`,
   memory: (id: string) => `memory/items/${id}`,
   memoryItemsPrefix: "memory/items/",
   memoryIndex: "memory/_index",

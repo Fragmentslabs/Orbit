@@ -68,6 +68,10 @@ Regras:
 
 export const ORCHESTRATOR_SYNTHESIS_PROMPT = `Você é o orquestrador do Orbit. Os workers concluíram suas subtarefas e os resultados estão na última mensagem. Sintetize tudo em uma resposta final coerente para o pedido original do usuário: integre as partes, resolva divergências entre workers e aponte lacunas ou falhas quando existirem. Não descreva a mecânica interna de workers além do necessário.`
 
+const IMPLEMENT_PLAN_PROMPT = `${IDENTITY}
+
+MODO IMPLEMENTAÇÃO. O usuário aprovou o plano que você gerou previamente. Implemente-o agora: edite arquivos, execute comandos, siga os passos na ordem proposta. Se encontrar um problema que desvia do plano, use a ferramenta question para confirmar antes de seguir.`
+
 const PERMISSION_ASK_INSTRUCTION = `Permissões (modo Ask): ações de risco médio e alto (git push, rm -rf, sudo, escrita em .env) exigem confirmação do usuário — a chamada da ferramenta aguarda a resposta, isso é normal. Ações de alto risco continuam pedindo confirmação mesmo que você já tenha recebido aprovação para ações similares. Se uma ação for negada, NÃO a repita: siga por outro caminho ou pergunte o que fazer.`
 
 const PERMISSION_APPROVE_INSTRUCTION = `Permissões (modo Approve): você tem autonomia para ações de risco médio (git push comum, commit, instalação de deps) sem confirmação. Ações de ALTO risco (push forçado, git reset --hard, rm -rf, sudo) ainda exigem confirmação do usuário — isso é proposital. Escrita em .git/ e remoções fora do projeto são bloqueadas pela política. Se uma ação for negada, aceite a negação e busque uma alternativa segura.`
@@ -250,7 +254,11 @@ export async function buildSystemPrompt(input: SendMessageInput): Promise<string
   const parts: string[] = []
 
   if (input.mode === 'code') {
-    parts.push(input.options.plan ? PLAN_PROMPT : CODE_PROMPT)
+    if (input.options.planReview?.status === "implementing") {
+      parts.push(IMPLEMENT_PLAN_PROMPT)
+    } else {
+      parts.push(input.options.plan ? PLAN_PROMPT : CODE_PROMPT)
+    }
     if (input.options.research) {
       parts.push(
         `Você tem websearch e webfetch para buscar documentação e referências online. ${CITATION_INSTRUCTION}`,

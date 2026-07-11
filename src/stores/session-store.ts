@@ -7,6 +7,7 @@ import type {
   ChatStatus,
   FolderInfo,
   OrchestrationPlan,
+  PlanReview,
   SendMessageOptions,
   SessionInfo,
   SessionMode,
@@ -45,6 +46,10 @@ interface SessionState {
   activeIds: Record<SessionMode, string | null>
   /** Planos de orquestração por sessão orquestradora */
   orchestration: Record<string, OrchestrationPlan>
+  /** Revisão de planos (modo plano): propostos ou em implementação */
+  planReviews: Record<string, PlanReview>
+  /** Sessões que enviaram mensagem em plan mode e aguardam o fim do streaming para criar a review */
+  _planReviewOutbox: Record<string, true>
   /** Pedidos de permissão/question aguardando resposta, por sessão */
   pendingAsks: Record<string, PendingAskUI[]>
 
@@ -52,6 +57,8 @@ interface SessionState {
   ensureMessages: (sessionId: string) => Promise<void>
   approvePlan: (sessionId: string, planId: string, taskIds?: string[]) => void
   rejectPlan: (sessionId: string) => void
+  acceptPlanReview: (sessionId: string, permissionMode: "ask" | "approve" | "full") => void
+  rejectPlanReview: (sessionId: string) => void
   createSession: (mode: SessionMode, partial?: Partial<SessionInfo>) => Promise<SessionInfo>
   selectSession: (mode: SessionMode, id: string | null) => Promise<void>
   renameSession: (id: string, title: string) => void
@@ -96,6 +103,8 @@ export const useSessionStore = create<SessionState>((set, get) => ({
   errors: {},
   activeIds: { chat: null, code: null },
   orchestration: {},
+  planReviews: {},
+  _planReviewOutbox: {},
   pendingAsks: {},
 
   initialize: async () => {
@@ -145,6 +154,10 @@ export const useSessionStore = create<SessionState>((set, get) => ({
         const plan = await storage.read<OrchestrationPlan>(StorageKeys.orchestration(id))
         if (plan) set((state) => ({ orchestration: { ...state.orchestration, [id]: plan } }))
       }
+      if (get().planReviews[id] === undefined) {
+        const review = await storage.read<PlanReview>(StorageKeys.planReview(id))
+        if (review) set((state) => ({ planReviews: { ...state.planReviews, [id]: review } }))
+      }
     }
   },
 
@@ -165,6 +178,29 @@ export const useSessionStore = create<SessionState>((set, get) => ({
 
   rejectPlan: (sessionId) => {
     void chatApi.rejectPlan(sessionId)
+  },
+
+  acceptPlanReview: (sessionId, permissionMode) => {
+    const review = get().planReviews[sessionId]
+    if (!review || review.status !== "proposed") return
+    const updated: PlanReview = { ...review, status: "implementing", permissionMode }
+    set((state) => ({ planReviews: { ...state.planReviews, [sessionId]: updated } }))
+    void storage.write(StorageKeys.planReview(sessionId), updated)
+    // Envia uma nova mensagem pedindo implementação com o modo escolhido
+    const session = get().sessions.find((s) => s.id === sessionId)
+    const mode = session?.mode ?? "code"
+    void get().sendMessage(mode, "Implemente o plano acima.", {
+      options: { planReview: { status: "implementing", messageId: review.messageId, permissionMode }, permissionMode },
+      sessionId,
+    })
+  },
+
+  rejectPlanReview: (sessionId) => {
+    const review = get().planReviews[sessionId]
+    if (!review || review.status !== "proposed") return
+    const updated: PlanReview = { ...review, status: "rejected" }
+    set((state) => ({ planReviews: { ...state.planReviews, [sessionId]: updated } }))
+    void storage.write(StorageKeys.planReview(sessionId), updated)
   },
 
   renameSession: (id, title) => set((state) => updateSessionIn(state, id, { title })),
@@ -192,6 +228,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       await storage.remove(StorageKeys.messages(sid))
       void chatApi.closeBrowser(sid)
       useBrainPrefs.getState().setEnabled(sid, true) // limpa o override do Brain
+      void storage.remove(StorageKeys.planReview(sid))
     }
     const idSet = new Set(ids)
     set((state) => {
@@ -202,7 +239,9 @@ export const useSessionStore = create<SessionState>((set, get) => ({
         const active = activeIds[mode]
         if (active && idSet.has(active)) activeIds[mode] = null
       }
-      return { sessions: state.sessions.filter((s) => !idSet.has(s.id)), messages, activeIds }
+      const planReviews = { ...state.planReviews }
+      for (const sid of ids) delete planReviews[sid]
+      return { sessions: state.sessions.filter((s) => !idSet.has(s.id)), messages, activeIds, planReviews }
     })
   },
 
@@ -276,6 +315,11 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       status: { ...state.status, [sessionId!]: "submitted" },
       errors: { ...state.errors, [sessionId!]: undefined },
     }))
+
+    // Se está enviando em plan mode, marca para criar a review quando o streaming terminar
+    if (config.options.plan) {
+      set((state) => ({ _planReviewOutbox: { ...state._planReviewOutbox, [sessionId!]: true } }))
+    }
 
     // Modo de delegação (subagents/orchestra) leva o modelo worker configurado
     const needsWorker = config.options.subagents || config.options.orchestrate
@@ -377,6 +421,11 @@ function applyChatEvent(event: ChatEvent, set: Setter, get: () => SessionState) 
       set((state) => ({ orchestration: { ...state.orchestration, [sessionId]: event.plan } }))
       break
 
+    case "plan:review":
+      set((state) => ({ planReviews: { ...state.planReviews, [sessionId]: event.review } }))
+      void storage.write(StorageKeys.planReview(sessionId), event.review)
+      break
+
     case "session":
       // Session criada/atualizada pelo main (workers da orquestração)
       set((state) => {
@@ -437,11 +486,27 @@ function applyChatEvent(event: ChatEvent, set: Setter, get: () => SessionState) 
       break
   }
 
-  // Reordena sessões por atividade quando uma resposta termina
+  // Quando o streaming termina, verifica se havia um plano pendente
   if (event.type === "status" && event.status === "idle") {
     const state = get()
     const sessions = [...state.sessions].sort((a, b) => b.updatedAt - a.updatedAt)
-    set(() => ({ sessions }))
+    const patch: Partial<SessionState> = { sessions }
+
+    // Cria PlanReview se estava em plan mode
+    if (state._planReviewOutbox[sessionId] && !state.planReviews[sessionId]) {
+      const msgs = state.messages[sessionId] ?? []
+      const lastAssistant = [...msgs].reverse().find((m) => m.role === "assistant")
+      if (lastAssistant) {
+        const review: PlanReview = { status: "proposed", messageId: lastAssistant.id }
+        patch.planReviews = { ...state.planReviews, [sessionId]: review }
+        void storage.write(StorageKeys.planReview(sessionId), review)
+      }
+    }
+    const cleanOutbox = { ...state._planReviewOutbox }
+    delete cleanOutbox[sessionId]
+    patch._planReviewOutbox = cleanOutbox
+
+    set(() => patch)
   }
 }
 
