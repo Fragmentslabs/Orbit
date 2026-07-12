@@ -6,7 +6,7 @@ import type {
 } from "@/shared/chat"
 import type { McpConfig, McpServerStatus } from "@/shared/mcp"
 import type { ModelsSnapshot } from "@/shared/models"
-import type { Memory, MemoryEvent } from "@/shared/memory"
+import type { InitEvent, InitStatus, Memory, MemoryEvent } from "@/shared/memory"
 import type { Skill, SkillProposal } from "@/shared/skills"
 import type { AnalyticsSummary, AnalyticsRange } from "@/shared/analytics"
 import type { PanelEvent } from "@/src/stores/panel-store"
@@ -116,8 +116,34 @@ export const panelApi = {
   },
 }
 
+export const initApi = {
+  run: (input: {
+    directory: string
+    providerId: string
+    modelId: string
+    workerProviderId?: string
+    workerModelId?: string
+    force?: boolean
+  }) => window.ipcRenderer.invoke("init:run", input),
+  status: (directory: string) =>
+    window.ipcRenderer.invoke("init:status", directory) as Promise<InitStatus>,
+  onEvent: (listener: (event: InitEvent) => void) => {
+    const wrapper = window.ipcRenderer.on("init:event", (event) => listener(event as InitEvent))
+    return () => window.ipcRenderer.off("init:event", wrapper)
+  },
+}
+
 export const memoryApi = {
   list: () => window.ipcRenderer.invoke("memory:list") as Promise<Memory[]>,
+  create: (input: {
+    text: string
+    kind: Memory["kind"]
+    tags?: string[]
+    document?: string
+    directory?: string
+    relatedId?: string
+  }) =>
+    window.ipcRenderer.invoke("memory:create", input) as Promise<{ id: string; merged: boolean; text: string }>,
   get: (id: string) =>
     window.ipcRenderer.invoke("memory:get", id) as Promise<{ memory: Memory; document: string | null } | null>,
   update: (id: string, patch: Partial<Pick<Memory, "text" | "tags" | "weight">>) =>

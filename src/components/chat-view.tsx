@@ -16,6 +16,7 @@ import { SimpleAssistantMessage } from "@/src/components/messages/simple-message
 import { SummaryCard } from "@/src/components/messages/summary-card"
 import { OrchestrationPlanCard } from "@/src/components/orchestration-plan-card"
 import { PlanReviewCard } from "@/src/components/plan-review-card"
+import { InitProjectCard } from "@/src/components/init-project-card"
 import { RevertBar } from "@/src/components/revert-bar"
 import { AssistantMessageActions, CopyAction, MessageTimestamp } from "@/src/components/messages/shared"
 import { Actions } from "@/src/components/ai/actions"
@@ -152,7 +153,7 @@ function ChatMessages({ messages, isBusy, mode, sessionId, sendMessage }: {
 }
 
 export function ChatView({ sessionId }: { sessionId?: string } = {}) {
-  const { mode, setMode } = useWorkspace()
+  const { mode, setMode, folders } = useWorkspace()
   const activeSession = useActiveSession(mode)
   const explicitSession = useSessionStore((s) =>
     sessionId ? s.sessions.find((x) => x.id === sessionId) : undefined,
@@ -186,6 +187,8 @@ export function ChatView({ sessionId }: { sessionId?: string } = {}) {
 
   const isBusy = status === "submitted" || status === "streaming"
   const hasChat = messages.length > 0
+  // Pasta alvo do card de init: a da sessão ou a selecionada no FolderSelector
+  const initDirectory = session?.directory ?? (viewMode === "code" ? folders[0] : undefined)
 
   const prevHasChat = useRef(hasChat)
   const isBusyRef = useRef(isBusy)
@@ -353,6 +356,12 @@ export function ChatView({ sessionId }: { sessionId?: string } = {}) {
           </div>
         </div>
       </div>
+      {/* Projeto novo no modo código: card oferece o /init automático */}
+      {viewMode === "code" && initDirectory && (
+        <div className="mx-auto w-full max-w-2xl pb-2">
+          <InitProjectCard directory={initDirectory} sessionId={session?.id} />
+        </div>
+      )}
       {/* Revert ativo: barra com alterações desfeitas + botão de desfazer */}
       {session?.revert && (
         <div className="mx-auto w-full max-w-2xl pb-2">

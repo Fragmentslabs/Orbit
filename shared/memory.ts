@@ -11,6 +11,32 @@ export type MemoryScope = "chat" | "code" | "any"
 export type ProjectCategory = "preference" | "convention" | "structure" | "context" | "decision"
 
 /**
+ * Áreas de conhecimento de um projeto (geradas pelo /init). "overview" é o
+ * node central do grafo de memórias; as demais áreas são satélites ligadas a
+ * ele via relatedIds. Memórias avulsas podem ou não ter área.
+ */
+export type ProjectArea =
+  | "overview"
+  | "business"
+  | "design"
+  | "architecture"
+  | "preferences"
+  | "infrastructure"
+  | "security"
+  | "development"
+
+export const PROJECT_AREAS: Record<ProjectArea, { label: string; description: string }> = {
+  overview: { label: "Contexto do Projeto", description: "Propósito, stack, estrutura geral, links úteis" },
+  business: { label: "Regras de Negócio", description: "Lógica central, fluxos, entidades, regras críticas" },
+  design: { label: "Design System", description: "Componentes UI, padrões visuais, acessibilidade" },
+  architecture: { label: "Arquitetura", description: "Módulos, comunicação entre serviços, dados" },
+  preferences: { label: "Preferências", description: "Estilo de código, convenções de nomeação, branching" },
+  infrastructure: { label: "Infraestrutura", description: "Deploy, variáveis de ambiente, CI/CD, containers" },
+  security: { label: "Segurança", description: "Autenticação, autorização, dados sensíveis" },
+  development: { label: "Desenvolvimento", description: "Scripts, comandos, setup local" },
+}
+
+/**
  * O scope é derivado do kind — não é armazenado, para não existirem
  * combinações inválidas (ex.: core com scope code).
  */
@@ -46,11 +72,37 @@ export interface Memory {
   projectName?: string
   directory?: string
   category?: ProjectCategory
+  /** Área de conhecimento (gerada pelo /init) — base do grafo de memórias */
+  area?: ProjectArea
 }
 
 export interface MemoryEvent {
   action: "created" | "updated" | "removed" | "promoted"
   memory: Memory
+}
+
+// ---------------------------------------------------------------------------
+// /init — análise inicial do projeto
+// ---------------------------------------------------------------------------
+
+export interface InitStatus {
+  directory: string
+  /** Já existem memórias de projeto (área overview) para esta pasta */
+  initialized: boolean
+  /** Um init está rodando agora para esta pasta */
+  running: boolean
+}
+
+export type InitStage = "scanning" | "exploring" | "generating" | "saving" | "done" | "error"
+
+export interface InitEvent {
+  directory: string
+  stage: InitStage
+  /** Progresso dos subagents na fase exploring: workers concluídos/total */
+  progress?: { done: number; total: number; area?: ProjectArea }
+  /** Preenchido em done: áreas geradas */
+  areas?: ProjectArea[]
+  error?: string
 }
 
 // ---------------------------------------------------------------------------

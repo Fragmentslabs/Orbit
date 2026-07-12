@@ -25,7 +25,8 @@ import { ReasoningPicker } from "@/src/components/reasoning-picker"
 import { DraftInputBridge } from "@/src/components/draft-input-bridge"
 import { QueueIndicator } from "@/src/components/queue-indicator"
 import { SendButtonGroup } from "@/src/components/send-button-group"
-import { SlashPalette, useReferenceCommands, type SlashCommand } from "@/src/components/slash-palette"
+import { SlashPalette } from "@/src/components/slash-palette"
+import { useReferenceCommands, useSlashActionCommands, type SlashCommand } from "@/src/lib/slash-commands"
 import { useWorkspace } from "@/lib/workspace-context"
 import { useBrainEnabled, useBrainPrefs, useChatContext } from "@/src/stores/brain-prefs"
 import { useMessageQueueStore } from "@/src/stores/message-queue-store"
@@ -37,6 +38,7 @@ import { useReasoningPrefs } from "@/src/stores/reasoning-prefs"
 import { useSimpleMode } from "@/src/stores/simple-mode"
 import type { ChatStatus, FilePart, SendMessageOptions } from "@/shared/chat"
 import { toFileParts } from "@/src/lib/message-utils"
+import { resolveSlashAction } from "@/src/lib/slash-actions"
 
 export function ChatInput({ onSubmit, status, onStop, sessionId }: {
   onSubmit: (text: string, options: SendMessageOptions, files?: FilePart[]) => void
@@ -72,6 +74,7 @@ export function ChatInput({ onSubmit, status, onStop, sessionId }: {
   const createSession = useSessionStore((s) => s.createSession)
   const openChatTab = usePanelStore((s) => s.openChatTab)
   const referenceCommands = useReferenceCommands()
+  const actionCommands = useSlashActionCommands("chat")
 
   const buildOptions = useCallback((): SendMessageOptions => ({
     research: search,
@@ -99,12 +102,13 @@ export function ChatInput({ onSubmit, status, onStop, sessionId }: {
       { id: "brain", label: "Memória (Brain)", description: "Alterna a memória persistente neste chat", keywords: ["memoria", "brain"], group: "Modos" as const, active: brain, run: toggle(() => setBrainEnabled(sessionId, !brain)) },
       { id: "subagents", label: "Subagents", description: "Alterna workers em background", keywords: ["worker", "delegar"], group: "Modos" as const, active: subagents, run: toggle(() => setSubagents((v) => !v)) },
       { id: "orchestra", label: "Orchestra", description: "Alterna orquestração em tarefas paralelas", keywords: ["workers", "plano"], group: "Modos" as const, active: orchestra, run: toggle(() => setOrchestra((v) => !v)) },
+      ...actionCommands,
       ...referenceCommands,
       { id: "novo-chat", label: "Nova conversa", description: "Começa um chat em branco", keywords: ["clear", "limpar", "novo"], group: "Ações" as const, run: toggle(() => void selectSession(mode, null)) },
-      { id: "create-skill", label: "Criar skill", description: "Pede ao Orbit para criar uma skill (com scripts, se precisar)", keywords: ["skill", "criar", "aprender"], group: "Ações" as const, run: ({ setText }) => setText("/create-skill ") },
+      { id: "create-skill", label: "Criar skill", description: "Pede ao Orbit para criar uma skill (com scripts, se precisar)", keywords: ["skill", "criar", "aprender"], group: "Skills" as const, run: ({ setText }) => setText("/create-skill ") },
       { id: "settings", label: "Configurações", description: "Abre as configurações do Orbit", keywords: ["settings", "config"], group: "Ações" as const, run: toggle(() => openSettings()) },
     ]
-  }, [search, browser, thinking, simple, brain, subagents, orchestra, model, enabled, variantId, update, sessionId, setBrainEnabled, setSimple, referenceCommands, selectSession, mode, openSettings])
+  }, [search, browser, thinking, simple, brain, subagents, orchestra, model, enabled, variantId, update, sessionId, setBrainEnabled, setSimple, actionCommands, referenceCommands, selectSession, mode, openSettings])
 
   return (
     <PromptInputProvider>
@@ -116,19 +120,24 @@ export function ChatInput({ onSubmit, status, onStop, sessionId }: {
         multiple
         onSubmit={(message) => {
           const files = toFileParts(message.files ?? [])
+          // Comandos "/" viram o prompt do pipeline correspondente
+          const resolveText = (raw: string) => {
+            const resolved = resolveSlashAction(raw, "chat")
+            return resolved?.prompt ?? raw
+          }
           // Enter pressionado durante execução: fila ou stop
           if (busy) {
             const text = message.text?.trim()
             if (!text) {
               onStop?.()
             } else if (sessionId) {
-              enqueueForSend(sessionId, text, buildOptions(), mode, { files })
+              enqueueForSend(sessionId, resolveText(text), buildOptions(), mode, { files })
             }
             return
           }
           const text = message.text?.trim()
           if (!text) return
-          onSubmit(text, buildOptions(), files.length > 0 ? files : undefined)
+          onSubmit(resolveText(text), buildOptions(), files.length > 0 ? files : undefined)
         }}
         className="rounded-xl border-2 border-sidebar-border [&>div]:!border-none [&>div]:!rounded-none [&>div]:!bg-transparent"
       >
