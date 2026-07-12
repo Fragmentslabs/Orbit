@@ -18,6 +18,8 @@ import { buildProviderOptions } from './reasoning'
 import { resolveModel } from './providers'
 import { cleanupRevert } from './session/revert'
 import { capture, diff } from './snapshot'
+import { runProjectInit } from './project-init'
+import { PROJECT_AREAS, type ProjectArea } from '../../shared/memory'
 import { readJson, writeJson } from './storage'
 import { buildToolSet, type ToolContext } from './tools'
 import { toTokenUsage } from './usage'
@@ -225,6 +227,49 @@ export async function runChat(win: BrowserWindow, input: SendMessageInput): Prom
         assistantMessage.snapshot = { start: await capture(toolContext.directory) }
       } catch (err) {
         console.error('[snapshot] captura inicial falhou:', err)
+      }
+    }
+
+    // initMode: executa o pipeline de análise de projeto em vez de gerar texto
+    if (input.options.initMode && toolContext) {
+      try {
+        const progressPart = (text: string) => {
+          const part: MessagePart = { id: newId('prt'), type: 'text', text, state: 'done' }
+          upsertPart(part)
+        }
+        progressPart('Escaneando estrutura do projeto…')
+        await saveMessages(sessionId, history)
+
+        const areas = await runProjectInit({
+          directory: toolContext.directory,
+          providerId: input.providerId,
+          modelId: input.modelId,
+          workerProviderId: input.workerModel?.providerId,
+          workerModelId: input.workerModel?.modelId,
+          force: input.text.includes('--force'),
+          onProgress: (p) => {
+            if (p.stage === 'exploring') {
+              progressPart(`Analisando ${p.label.toLowerCase()} (${p.done}/${p.total})…`)
+            }
+          },
+        })
+        const areaNames = areas.map((a) => PROJECT_AREAS[a as ProjectArea]?.label ?? a)
+        const areaText = areaNames.length > 0
+          ? `## Análise concluída\n\nMemórias criadas: ${areaNames.join(', ')}.`
+          : '## Análise concluída\n\nNenhuma memória foi gerada.'
+        progressPart(areaText)
+        await saveMessages(sessionId, history)
+        emit(win, { type: 'message', sessionId, message: assistantMessage })
+        emit(win, { type: 'status', sessionId, status: 'idle' })
+        return
+      } catch (err) {
+        const errText = `## Análise falhou\n\n${err instanceof Error ? err.message : String(err)}`
+        const errPart: MessagePart = { id: newId('prt'), type: 'text', text: errText, state: 'done' }
+        upsertPart(errPart)
+        await saveMessages(sessionId, history)
+        emit(win, { type: 'message', sessionId, message: assistantMessage })
+        emit(win, { type: 'status', sessionId, status: 'idle' })
+        return
       }
     }
 

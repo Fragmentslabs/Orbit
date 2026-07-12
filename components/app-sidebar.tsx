@@ -403,7 +403,7 @@ function PromptDialog({ open, onOpenChange, title, initialValue = "", placeholde
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent showCloseButton={false}>
+      <DialogContent className="sm:max-w-sm" showCloseButton={false}>
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
         </DialogHeader>
@@ -437,7 +437,7 @@ function MoveToFolderDialog({ open, onOpenChange, session }: {
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent showCloseButton={false}>
+      <DialogContent className="sm:max-w-sm" showCloseButton={false}>
         <DialogHeader>
           <DialogTitle>Adicionar a pasta</DialogTitle>
         </DialogHeader>

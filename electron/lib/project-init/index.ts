@@ -1,6 +1,6 @@
 import { generateText, stepCountIs, type LanguageModel, type ToolSet } from 'ai'
 import { BrowserWindow } from 'electron'
-import type { InitEvent, InitStatus, Memory, ProjectArea, ProjectCategory } from '../../../shared/memory'
+import type { InitEvent, InitStage, Memory, ProjectArea, ProjectCategory } from '../../../shared/memory'
 import { PROJECT_AREAS } from '../../../shared/memory'
 import { projectIdOf } from '../memory/domain'
 import * as memoryService from '../memory/service'
@@ -10,11 +10,10 @@ import type { ToolContext } from '../tools/context'
 import { describeScan, scanProject, type ProjectScan } from './scanner'
 
 /**
- * Pipeline do /init (orquestrado): scanner determinístico → subagents em
- * paralelo (um por área, com ferramentas read-only) exploram o código → o
- * agente principal revisa os levantamentos, corrige e divide nas memórias
- * finais por área — ligadas ao node central (overview) via relatedIds.
- * É isso que popula o grafo de memórias: root = projeto, satélites = áreas.
+ * Pipeline do /init: scanner → overview → subagents por área (paralelo).
+ * Cada subagent salva a memória da sua área assim que termina — não há um
+ * passo "revisor" único que pode falhar e perder todo o progresso.
+ * Se um subagent falha, os demais continuam normalmente.
  */
 
 const running = new Set<string>()
@@ -22,14 +21,13 @@ const WORKER_CONCURRENCY = 3
 const WORKER_MAX_STEPS = 12
 const WORKER_TIMEOUT_MS = 4 * 60 * 1000
 
-function emit(event: InitEvent) {
+function emit(stage: InitStage, data: Partial<InitEvent>) {
+  const event: InitEvent = { directory: '', stage, ...data } as InitEvent
   for (const win of BrowserWindow.getAllWindows()) {
     if (!win.isDestroyed()) win.webContents.send('init:event', event)
   }
 }
 
-/** Área → categoria do sistema de memória (define TTL/prioridade no prompt).
- * Nenhuma usa "context" — memórias de init não devem expirar em 30d. */
 const AREA_CATEGORY: Record<ProjectArea, ProjectCategory> = {
   overview: 'structure',
   business: 'decision',
@@ -41,8 +39,6 @@ const AREA_CATEGORY: Record<ProjectArea, ProjectCategory> = {
   development: 'convention',
 }
 
-/** Missão de investigação de cada subagent (a área overview é sintetizada
- * pelo revisor a partir de tudo — não tem worker próprio). */
 const AREA_MISSIONS: Record<Exclude<ProjectArea, 'overview'>, string> = {
   business:
     'Regras de negócio: identifique as entidades centrais, fluxos principais e regras críticas. Procure modelos/schemas, validações, máquinas de estado e serviços de domínio. Cite arquivos.',
@@ -60,7 +56,6 @@ const AREA_MISSIONS: Record<Exclude<ProjectArea, 'overview'>, string> = {
     'Desenvolvimento local: setup, scripts (dev/build/test/lint), pré-requisitos, como rodar e testar. Liste os comandos exatos.',
 }
 
-/** Decide quais áreas investigar com base em evidências do scan. */
 export function planAreas(scan: ProjectScan): Exclude<ProjectArea, 'overview'>[] {
   const areas: Exclude<ProjectArea, 'overview'>[] = ['architecture', 'business', 'development', 'preferences']
   if (scan.ui.length > 0) areas.push('design')
@@ -81,19 +76,53 @@ function readOnlyTools(directory: string, abort: AbortSignal): ToolSet {
   }
 }
 
-interface AreaFindings {
-  area: Exclude<ProjectArea, 'overview'>
-  findings: string
-  failed?: boolean
+interface ParsedFindings {
+  summary: string
+  tags: string[]
+  document: string
 }
 
-/** Subagent de uma área: explora o repositório com tools read-only. */
+function parseSubagentOutput(text: string): ParsedFindings {
+  const tagsMatch = text.match(/^TAGS:\s*(.+)$/im)
+  const tags = tagsMatch
+    ? tagsMatch[1].split(/[,;]\s*/).map((t) => t.trim().toLowerCase()).filter(Boolean)
+    : []
+  const cleaned = text.replace(/^TAGS:.*$/im, '').trim()
+  const paragraphs = cleaned.split(/\n\n+/).filter(Boolean)
+  const summary = paragraphs[0]?.trim().slice(0, 500) ?? cleaned.slice(0, 500)
+  return { summary, tags, document: cleaned }
+}
+
+async function generateOverview(
+  model: LanguageModel,
+  scan: ProjectScan,
+  scanDescription: string,
+): Promise<ParsedFindings> {
+  const { text } = await generateText({
+    model,
+    system: 'Você é um analista de projetos. Gere uma visão geral concisa em markdown com base nos dados do scan.',
+    prompt: `Com base no scan abaixo, escreva uma visão geral do projeto em markdown:\n\n${scanDescription}`,
+  })
+  const cleaned = text.trim()
+  return {
+    summary: cleaned.split('\n\n')[0]?.trim() ?? cleaned.slice(0, 500),
+    tags: ['overview', scan.name.toLowerCase()],
+    document: cleaned,
+  }
+}
+
+interface AreaResult {
+  area: Exclude<ProjectArea, 'overview'>
+  parsed: ParsedFindings | null
+  failed: boolean
+}
+
 async function exploreArea(
   model: LanguageModel,
   scanDescription: string,
   directory: string,
   area: Exclude<ProjectArea, 'overview'>,
-): Promise<AreaFindings> {
+): Promise<AreaResult> {
   const controller = new AbortController()
   const timeout = setTimeout(() => controller.abort(), WORKER_TIMEOUT_MS)
   try {
@@ -109,11 +138,11 @@ ${scanDescription}`,
       stopWhen: stepCountIs(WORKER_MAX_STEPS),
       abortSignal: controller.signal,
     })
-    return { area, findings: text }
+    return { area, parsed: parseSubagentOutput(text), failed: false }
   } catch (err) {
     return {
       area,
-      findings: `(exploração falhou: ${err instanceof Error ? err.message : String(err)})`,
+      parsed: null,
       failed: true,
     }
   } finally {
@@ -121,182 +150,121 @@ ${scanDescription}`,
   }
 }
 
-/** Executa os subagents com limite de concorrência, emitindo progresso. */
-async function exploreAll(
-  model: LanguageModel,
-  scanDescription: string,
-  directory: string,
-  areas: Exclude<ProjectArea, 'overview'>[],
-): Promise<AreaFindings[]> {
-  const results: AreaFindings[] = []
-  let done = 0
-  const queue = [...areas]
-  const workers = Array.from({ length: Math.min(WORKER_CONCURRENCY, queue.length) }, async () => {
-    while (queue.length > 0) {
-      const area = queue.shift()!
-      const result = await exploreArea(model, scanDescription, directory, area)
-      results.push(result)
-      done += 1
-      emit({ directory, stage: 'exploring', progress: { done, total: areas.length, area } })
-    }
-  })
-  await Promise.all(workers)
-  return results
-}
-
-interface GeneratedArea {
-  area: ProjectArea
-  /** Resumo curto (2-4 frases) — vira o texto da memória (entra no prompt) */
-  summary: string
-  tags: string[]
-  /** Documento markdown completo da área */
-  document: string
-}
-
-function buildReviewerPrompt(scanDescription: string, findings: AreaFindings[]): string {
-  const areaList = Object.entries(PROJECT_AREAS)
-    .map(([id, meta]) => `- "${id}" (${meta.label}): ${meta.description}`)
-    .join('\n')
-  const reports = findings
-    .map((f) => `### Levantamento — ${PROJECT_AREAS[f.area].label} (${f.area})${f.failed ? ' [FALHOU]' : ''}\n${f.findings}`)
-    .join('\n\n')
-  return `Você é o agente principal do onboarding do Orbit. Subagents investigaram o projeto por área; seu papel é REVISAR e MELHORAR os levantamentos (remover especulação, resolver contradições com o scan, condensar) e dividi-los em memórias finais por área.
-
-Áreas possíveis:
-${areaList}
-
-Regras:
-- Gere SEMPRE "overview" (síntese: sobre o que é o projeto, stack e tecnologias, estrutura geral) a partir do conjunto.
-- Para cada levantamento aproveitável, gere a memória da área correspondente. Descarte áreas cujo levantamento falhou ou não trouxe evidência real.
-- "summary": 2-4 frases objetivas — é o que entra no contexto do agente.
-- "document": markdown estruturado e revisado (caminhos de arquivos, comandos, convenções) — pode reorganizar e corrigir o texto do subagent.
-- "tags": 3-6 palavras-chave em minúsculas para busca.
-- Escreva em português. Baseie-se apenas em evidências.
-
-Responda APENAS com JSON válido, sem cercas de código, no formato:
-[{"area": "overview", "summary": "...", "tags": ["..."], "document": "..."}]
-
-## Scan automático
-${scanDescription}
-
-## Levantamentos dos subagents
-${reports}`
-}
-
-function parseGenerated(raw: string): GeneratedArea[] {
-  const text = raw.trim().replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/, '')
-  const start = text.indexOf('[')
-  const end = text.lastIndexOf(']')
-  if (start < 0 || end <= start) throw new Error('Resposta do revisor não contém JSON')
-  const parsed = JSON.parse(text.slice(start, end + 1)) as GeneratedArea[]
-  const valid = new Set(Object.keys(PROJECT_AREAS))
-  return parsed.filter(
-    (a) => a && valid.has(a.area) && typeof a.summary === 'string' && a.summary.trim().length > 0,
-  )
-}
-
-export interface RunInitInput {
-  directory: string
-  providerId: string
-  modelId: string
-  /** Modelo dos subagents de exploração (default: o principal) */
-  workerProviderId?: string
-  workerModelId?: string
-  /** true: sobrescreve também o resumo de áreas existentes (edições manuais) */
-  force?: boolean
-}
-
 async function findAreaMemory(projectId: string, area: ProjectArea): Promise<Memory | undefined> {
   const all = await memoryService.list()
   return all.find((m) => m.kind === 'project' && m.projectId === projectId && m.area === area)
 }
 
-/**
- * Salva/atualiza a memória de uma área. Merge do re-init: o documento é
- * sempre atualizado com o novo levantamento; o resumo (texto) só é
- * sobrescrito com force — preservando edições manuais do usuário.
- */
 async function saveAreaMemory(
-  input: RunInitInput,
-  generated: GeneratedArea,
+  directory: string,
+  area: ProjectArea,
+  parsed: ParsedFindings,
   rootId: string | undefined,
+  force?: boolean,
 ): Promise<string> {
-  const projectId = projectIdOf(input.directory)
-  const existing = await findAreaMemory(projectId, generated.area)
-  const tags = [...new Set([generated.area, ...generated.tags])]
+  const projectId = projectIdOf(directory)
+  const existing = await findAreaMemory(projectId, area)
+  const tags = [...new Set([area, ...parsed.tags])]
 
   if (existing) {
     await memoryService.update(existing.id, {
-      text: input.force ? generated.summary : existing.text,
+      text: force ? parsed.summary : existing.text,
       tags: [...new Set([...existing.tags, ...tags])],
     })
-    await memoryService.setDocument(existing.id, generated.document)
+    await memoryService.setDocument(existing.id, parsed.document)
     if (rootId) await memoryService.link(existing.id, rootId)
     return existing.id
   }
 
   const saved = await memoryService.save({
     kind: 'project',
-    directory: input.directory,
-    text: generated.summary,
+    directory,
+    text: parsed.summary,
     tags,
-    weight: generated.area === 'overview' ? 0.9 : 0.7,
-    category: AREA_CATEGORY[generated.area],
-    area: generated.area,
-    document: generated.document,
+    weight: area === 'overview' ? 0.9 : 0.7,
+    category: AREA_CATEGORY[area],
+    area,
+    document: parsed.document,
     relatedId: rootId,
   })
   return saved.id
 }
 
-export async function runProjectInit(input: RunInitInput): Promise<void> {
-  const { directory } = input
-  if (running.has(directory)) return
+export interface RunInitInput {
+  directory: string
+  providerId: string
+  modelId: string
+  workerProviderId?: string
+  workerModelId?: string
+  force?: boolean
+  /** Chamado a cada progresso para atualizar a UI em tempo real */
+  onProgress?: (event: { area: ProjectArea; done: number; total: number; stage: string; label: string }) => void
+}
+
+function progressLabel(area: ProjectArea): string {
+  return PROJECT_AREAS[area]?.label ?? area
+}
+
+export async function runProjectInit(input: RunInitInput): Promise<string[]> {
+  const { directory, force, onProgress } = input
+  if (running.has(directory)) return []
   running.add(directory)
 
+  const areas: ProjectArea[] = []
+
   try {
-    emit({ directory, stage: 'scanning' })
+    // Fase 1: Scanner determinístico
+    emit('scanning', { directory })
     const scan = await scanProject(directory)
     const scanDescription = describeScan(scan)
+    const areaList = planAreas(scan)
+    const totalAreas = 1 + areaList.length // overview + subagents
+    const prog = (stage: string, area: ProjectArea, done: number) =>
+      onProgress?.({ stage, area, label: progressLabel(area), done, total: totalAreas })
 
-    // Subagents por área, em paralelo (tools read-only, modelo worker)
-    const areas = planAreas(scan)
-    emit({ directory, stage: 'exploring', progress: { done: 0, total: areas.length } })
+    // Fase 2: Overview (única chamada LLM necessária)
+    prog('overview', 'overview', 0)
+    const model = await resolveModel(input.providerId, input.modelId)
+    const overviewResult = await generateOverview(model, scan, scanDescription)
+    const overviewId = await saveAreaMemory(directory, 'overview', overviewResult, undefined, force)
+    areas.push('overview')
+
+    // Fase 3: Subagents — cada um salva sua área assim que termina
     const workerModel = await resolveModel(
       input.workerProviderId ?? input.providerId,
       input.workerModelId ?? input.modelId,
     )
-    const findings = await exploreAll(workerModel, scanDescription, directory, areas)
 
-    // Agente principal: revisa, melhora e divide em memórias por área
-    emit({ directory, stage: 'generating' })
-    const model = await resolveModel(input.providerId, input.modelId)
-    const { text } = await generateText({
-      model,
-      prompt: buildReviewerPrompt(scanDescription, findings),
+    let completed = 0
+    const queue = [...areaList]
+    const workers = Array.from({ length: Math.min(WORKER_CONCURRENCY, queue.length) }, async () => {
+      while (queue.length > 0) {
+        const area = queue.shift()!
+        const result = await exploreArea(workerModel, scanDescription, directory, area)
+        completed++
+        prog('exploring', area, completed)
+
+        if (!result.failed && result.parsed) {
+          await saveAreaMemory(directory, area, result.parsed, overviewId, force)
+          areas.push(area)
+        }
+        // Se falhou, apenas não salva — não bloqueia as demais áreas
+      }
     })
-    const generated = parseGenerated(text)
-    if (generated.length === 0) throw new Error('O revisor não produziu nenhuma área válida')
 
-    emit({ directory, stage: 'saving' })
-    // Root primeiro — as demais áreas nascem ligadas a ele (arestas do grafo)
-    const overview = generated.find((a) => a.area === 'overview') ?? generated[0]
-    const rootId = await saveAreaMemory(input, overview, undefined)
-    for (const area of generated) {
-      if (area === overview) continue
-      await saveAreaMemory(input, area, rootId)
-    }
-
-    emit({ directory, stage: 'done', areas: generated.map((a) => a.area) })
+    await Promise.all(workers)
+    prog('done', 'overview', totalAreas)
+    emit('done', { directory, areas })
+    return areas
   } catch (err) {
-    emit({ directory, stage: 'error', error: err instanceof Error ? err.message : String(err) })
+    emit('error', { directory, error: err instanceof Error ? err.message : String(err) })
+    return areas
   } finally {
     running.delete(directory)
   }
 }
 
-/** Estado consultado pelo card automático: projeto já inicializado? rodando? */
-export async function getInitStatus(directory: string): Promise<InitStatus> {
+export async function getInitStatus(directory: string): Promise<{ directory: string; initialized: boolean; running: boolean }> {
   const projectId = projectIdOf(directory)
   const overview = await findAreaMemory(projectId, 'overview')
   return {

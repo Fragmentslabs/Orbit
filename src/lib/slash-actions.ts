@@ -153,8 +153,16 @@ ${target(input, "(cole o log de erro ou stack trace)")}
   {
     id: "init",
     command: "/init",
-    description: "Analisa o projeto e gera memórias por área (stack, arquitetura, design…)",
+    description: "Analisa o projeto e gera/complementa memórias por área (stack, arquitetura, design…)",
     keywords: ["init", "analisar projeto", "scan", "onboarding"],
+    modes: ["code"],
+    kind: "init",
+  },
+  {
+    id: "init-force",
+    command: "/init-force",
+    description: "Reanalisa o projeto do zero e sobrescreve as memórias existentes",
+    keywords: ["init-force", "force", "reanalisar", "sobrescrever"],
     modes: ["code"],
     kind: "init",
   },
