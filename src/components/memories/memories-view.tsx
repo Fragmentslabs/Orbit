@@ -14,13 +14,13 @@ import type { Memory, MemoryKind } from "@/shared/memory"
 import { searchMemories } from "@/shared/memory"
 import { useMemoryStore } from "@/src/stores/memory-store"
 import { MemoryCard } from "./memory-card"
-import { MemoryTree } from "./memory-tree"
+import { MemoryGraph } from "./memory-graph"
 import { lastActivity } from "./meta"
 
 /**
- * View de Memórias: lista de cards ou árvore de conexões (SVG), com filtro
- * automático pelo modo do workspace — chat mostra core+seasonal+general,
- * código mostra project+general (com seletor de projeto).
+ * View de Memórias: lista de cards ou grafo de conexões (SVG com zoom/pan),
+ * com filtro automático pelo modo do workspace — chat mostra
+ * core+seasonal+general, código mostra project+general (seletor de projeto).
  */
 
 const ALL_PROJECTS = "__all__"
@@ -31,7 +31,7 @@ export function MemoriesView() {
   const index = useMemoryStore((s) => s.index)
   const [query, setQuery] = useState("")
   const [projectFilter, setProjectFilter] = useState(ALL_PROJECTS)
-  const [tab, setTab] = useState<"list" | "tree">("list")
+  const [tab, setTab] = useState<"list" | "graph">("list")
   const [selectedId, setSelectedId] = useState<string | null>(null)
 
   useEffect(() => {
@@ -48,9 +48,10 @@ export function MemoriesView() {
 
   const kinds: MemoryKind[] = mode === "chat" ? ["core", "seasonal", "general"] : ["project", "general"]
 
-  const filtered = useMemo(() => {
+  // Pool visível (modo + projeto, sem a busca) — o grafo destaca em vez de esconder
+  const pool = useMemo(() => {
     const now = Date.now()
-    let pool = index.filter((m) => {
+    return index.filter((m) => {
       if (!kinds.includes(m.kind)) return false
       if (m.expiresAt != null && m.expiresAt < now) return false
       if (
@@ -62,11 +63,20 @@ export function MemoriesView() {
       }
       return true
     })
-    if (query.trim()) pool = searchMemories(pool, query, 50)
-    else pool = [...pool].sort((a, b) => lastActivity(b) - lastActivity(a))
-    return pool
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [index, mode, query, projectFilter])
+  }, [index, mode, projectFilter])
+
+  const filtered = useMemo(() => {
+    if (query.trim()) return searchMemories(pool, query, 50)
+    return [...pool].sort((a, b) => lastActivity(b) - lastActivity(a))
+  }, [pool, query])
+
+  // Pasta do projeto em foco — arquivos soltos no grafo viram memórias dele
+  const projectDirectory = useMemo(() => {
+    const focusId = projectFilter !== ALL_PROJECTS ? projectFilter : projects.length === 1 ? projects[0].id : null
+    if (!focusId) return undefined
+    return pool.find((m) => m.projectId === focusId && m.directory)?.directory
+  }, [pool, projectFilter, projects])
 
   const byId = useMemo(() => new Map(index.map((m) => [m.id, m])), [index])
   const relatedOf = (memory: Memory) =>
@@ -97,19 +107,19 @@ export function MemoriesView() {
             </SelectContent>
           </Select>
         )}
-        <Tabs value={tab} onValueChange={(v) => setTab(v as "list" | "tree")}>
+        <Tabs value={tab} onValueChange={(v) => setTab(v as "list" | "graph")}>
           <TabsList>
             <TabsTrigger value="list" className="gap-1.5">
               <List className="size-3.5" /> Lista
             </TabsTrigger>
-            <TabsTrigger value="tree" className="gap-1.5">
-              <Network className="size-3.5" /> Árvore
+            <TabsTrigger value="graph" className="gap-1.5">
+              <Network className="size-3.5" /> Grafo
             </TabsTrigger>
           </TabsList>
         </Tabs>
       </div>
 
-      {filtered.length === 0 ? (
+      {(tab === "graph" ? pool : filtered).length === 0 ? (
         <div className="flex flex-1 items-center justify-center">
           <div className="flex flex-col items-center gap-1 text-center">
             <p className="text-sm font-medium">Nenhuma memória {query ? "encontrada" : "ainda"}</p>
@@ -132,18 +142,20 @@ export function MemoriesView() {
                 related={relatedOf(memory)}
                 onSelectRelated={(id) => {
                   setSelectedId(id)
-                  setTab("tree")
+                  setTab("graph")
                 }}
               />
             ))}
           </div>
         </div>
       ) : (
-        <MemoryTree
-          memories={filtered}
+        <MemoryGraph
+          pool={pool}
           allById={byId}
+          query={query}
           selectedId={selectedId}
           onSelect={setSelectedId}
+          projectDirectory={projectDirectory}
         />
       )}
     </div>

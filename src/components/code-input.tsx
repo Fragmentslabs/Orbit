@@ -26,7 +26,8 @@ import { ReasoningPicker } from "@/src/components/reasoning-picker"
 import { DraftInputBridge } from "@/src/components/draft-input-bridge"
 import { QueueIndicator } from "@/src/components/queue-indicator"
 import { SendButtonGroup } from "@/src/components/send-button-group"
-import { SlashPalette, useReferenceCommands, type SlashCommand } from "@/src/components/slash-palette"
+import { SlashPalette } from "@/src/components/slash-palette"
+import { useReferenceCommands, useSlashActionCommands, type SlashCommand } from "@/src/lib/slash-commands"
 import { FolderSelector } from "@/src/components/folder-selector"
 import { useWorkspace } from "@/lib/workspace-context"
 import { useBrainEnabled, useBrainPrefs, useCodeContext } from "@/src/stores/brain-prefs"
@@ -41,6 +42,8 @@ import { useSimpleMode } from "@/src/stores/simple-mode"
 import { useSkillsStore } from "@/src/stores/skills-store"
 import type { ChatStatus, FilePart, PermissionMode, SendMessageOptions } from "@/shared/chat"
 import { toFileParts } from "@/src/lib/message-utils"
+import { resolveSlashAction } from "@/src/lib/slash-actions"
+import { useInitStore } from "@/src/stores/init-store"
 
 const RECENT_FOLDERS_KEY = "orbit-recent-folders"
 
@@ -84,18 +87,30 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId }: 
 
   const handleSubmit = (message: { text?: string; files?: { mediaType?: string; filename?: string; url?: string }[] }) => {
     const files = toFileParts(message.files ?? [])
+    // Comandos "/" viram pipeline; /init roda o scanner de projeto direto
+    const resolved = message.text ? resolveSlashAction(message.text, "code") : null
+    if (resolved?.action.kind === "init" && !busy) {
+      const dir = folders[0]
+      if (dir) void useInitStore.getState().run(dir, resolved.input.includes("--force"))
+      return
+    }
+    const resolveText = (raw: string) => {
+      const r = resolveSlashAction(raw, "code")
+      return r?.prompt ?? raw
+    }
     if (busy) {
       const text = message.text?.trim()
       if (!text) {
         onStop?.()
       } else if (sessionId && folders.length > 0) {
         const { directory, extraDirectories } = getDirs()
-        enqueueForSend(sessionId, text, buildOptions(), mode, { directory, extraDirectories, files })
+        enqueueForSend(sessionId, resolveText(text), buildOptions(), mode, { directory, extraDirectories, files })
       }
       return
     }
     let text = message.text?.trim()
     if (!text || folders.length === 0) return
+    text = resolveText(text)
     saveRecentFolders(folders)
     const [directory, ...extraDirectories] = folders
     // Elementos selecionados no browser do painel viram anexos da mensagem
@@ -126,6 +141,7 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId }: 
   const createSession = useSessionStore((s) => s.createSession)
   const openChatTab = usePanelStore((s) => s.openChatTab)
   const referenceCommands = useReferenceCommands()
+  const actionCommands = useSlashActionCommands("code")
 
   const buildOptions = useCallback((): SendMessageOptions => ({
     plan,
@@ -174,13 +190,14 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId }: 
       permission("ask", "Perguntar", "Confirma ações sensíveis antes de executar"),
       permission("approve", "Autonomia", "Executa sozinho; ações críticas pedem confirmação"),
       permission("full", "Irrestrito", "Sem perguntas (piso de segurança mantido)"),
+      ...actionCommands,
       ...referenceCommands,
       { id: "nova-sessao", label: "Nova sessão", description: "Começa uma sessão de código em branco", keywords: ["clear", "limpar", "novo"], group: "Ações" as const, run: toggle(() => void useSessionStore.getState().selectSession(mode, null)) },
-      { id: "create-skill", label: "Criar skill", description: "Pede ao Orbit para criar uma skill (com scripts, se precisar)", keywords: ["skill", "criar", "aprender"], group: "Ações" as const, run: ({ setText }) => setText("/create-skill ") },
+      { id: "create-skill", label: "Criar skill", description: "Pede ao Orbit para criar uma skill (com scripts, se precisar)", keywords: ["skill", "criar", "aprender"], group: "Skills" as const, run: ({ setText }) => setText("/create-skill ") },
       { id: "document", label: "Documentar aplicação", description: "Navega pelo app no painel, tira screenshots e documenta em docs/", keywords: ["docs", "documentacao", "screenshot"], group: "Ações" as const, run: ({ setText }) => setText("/document ") },
       { id: "settings", label: "Configurações", description: "Abre as configurações do Orbit", keywords: ["settings", "config"], group: "Ações" as const, run: toggle(() => openSettings()) },
     ]
-  }, [search, plan, thinking, simple, brain, subagents, orchestra, permissionMode, model, enabled, variantId, update, sessionId, setBrainEnabled, setSimple, setPermissionMode, referenceCommands, mode, openSettings])
+  }, [search, plan, thinking, simple, brain, subagents, orchestra, permissionMode, model, enabled, variantId, update, sessionId, setBrainEnabled, setSimple, setPermissionMode, actionCommands, referenceCommands, mode, openSettings])
 
   return (
     <PromptInputProvider>

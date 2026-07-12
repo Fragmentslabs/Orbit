@@ -1,6 +1,6 @@
 import { EventEmitter } from 'node:events'
 import path from 'node:path'
-import type { Memory, MemoryEvent, MemoryKind, ProjectCategory } from '../../../shared/memory'
+import type { Memory, MemoryEvent, MemoryKind, ProjectArea, ProjectCategory } from '../../../shared/memory'
 import { jaccard, searchMemories } from '../../../shared/memory'
 import {
   defaultWeight,
@@ -55,6 +55,8 @@ export interface SaveMemoryInput {
   /** Markdown anexado (memory/docs/<id>.md) — para contexto extenso */
   document?: string
   category?: ProjectCategory
+  /** Área de conhecimento (memórias geradas pelo /init) */
+  area?: ProjectArea
   /** Obrigatório quando kind === "project" — o projectId deriva daqui */
   directory?: string
   sessionId?: string
@@ -130,6 +132,7 @@ export async function save(input: SaveMemoryInput): Promise<SaveMemoryResult> {
     projectName,
     directory: input.kind === 'project' ? input.directory : undefined,
     category: input.kind === 'project' ? input.category : undefined,
+    area: input.kind === 'project' ? input.area : undefined,
   }
   if (input.document) {
     await repo.writeDoc(memory.id, input.document)
@@ -150,6 +153,9 @@ export interface SearchMemoryInput {
   limit?: number
 }
 
+/** Quantos vizinhos de grafo entram por cima do resultado léxico */
+const GRAPH_EXPANSION_LIMIT = 4
+
 export async function search(input: SearchMemoryInput): Promise<Memory[]> {
   const now = Date.now()
   const pool = (await alive()).filter((m) => {
@@ -160,9 +166,27 @@ export async function search(input: SearchMemoryInput): Promise<Memory[]> {
   })
   const results = searchMemories(pool, input.query, input.limit ?? 8)
 
+  // Navegação do grafo: memórias ligadas (relatedIds) aos melhores resultados
+  // entram no retorno — ex: a busca acha o node "Design System" e traz junto
+  // as memórias de botões/tokens ligadas a ele, sem depender de tokens léxicos.
+  const poolById = new Map(pool.map((m) => [m.id, m]))
+  const included = new Set(results.map((m) => m.id))
+  const expanded: Memory[] = []
+  for (const memory of results) {
+    if (expanded.length >= GRAPH_EXPANSION_LIMIT) break
+    for (const relatedId of memory.relatedIds) {
+      if (included.has(relatedId)) continue
+      const neighbor = poolById.get(relatedId)
+      if (!neighbor) continue
+      included.add(relatedId)
+      expanded.push(neighbor)
+      if (expanded.length >= GRAPH_EXPANSION_LIMIT) break
+    }
+  }
+
   // Cada retorno conta como uso: incrementa hits e estende a expiração
   const updated: Memory[] = []
-  for (const memory of results) {
+  for (const memory of [...results, ...expanded]) {
     const next: Memory = {
       ...memory,
       hits: memory.hits + 1,
@@ -181,6 +205,17 @@ export async function getFull(id: string): Promise<{ memory: Memory; document: s
   if (!memory) return null
   const document = memory.hasDoc ? await repo.readDoc(id) : null
   return { memory, document }
+}
+
+/** Substitui o documento markdown anexado (usado pelo re-init com merge). */
+export async function setDocument(id: string, document: string): Promise<Memory | null> {
+  const memory = await repo.get(id)
+  if (!memory) return null
+  await repo.writeDoc(id, document)
+  const next: Memory = { ...memory, hasDoc: true }
+  await repo.put(next)
+  emit('updated', next)
+  return next
 }
 
 export async function link(sourceId: string, targetId: string): Promise<boolean> {
@@ -283,11 +318,15 @@ export async function loadPromptContext(
   }
 
   const projectId = directory ? projectIdOf(directory) : undefined
+  // O node central do grafo (área overview) entra sempre primeiro — é o mapa
+  // que orienta o agente a buscar as áreas satélite conforme a tarefa
+  const areaRank = (m: Memory) => (m.area === 'overview' ? -1 : 0)
   const project = projectId
     ? pool
         .filter((m) => m.kind === 'project' && m.projectId === projectId)
         .sort(
           (a, b) =>
+            areaRank(a) - areaRank(b) ||
             CATEGORY_PRIORITY[a.category ?? 'context'] - CATEGORY_PRIORITY[b.category ?? 'context'] ||
             b.weight - a.weight,
         )

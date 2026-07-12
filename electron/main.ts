@@ -10,6 +10,7 @@ import { listCredentialProviders, removeCredential, setCredential } from './lib/
 import { getCatalog } from './lib/catalog'
 import { getModelsSnapshot, invalidateModelsSnapshot } from './lib/models'
 import { revert as revertSession, unrevert as unrevertSession } from './lib/session/revert'
+import { getInitStatus, runProjectInit, type RunInitInput } from './lib/project-init'
 import { abortChat, runChat } from './lib/chat-engine'
 import { reply as askReply, rejectSession as rejectSessionAsks } from './lib/ask-broker'
 import { abortOrchestration, approvePlan, rejectPlan, runOrchestration } from './lib/orchestrator'
@@ -360,6 +361,12 @@ app.whenReady().then(() => {
     revertSession(sessionId, messageId))
   ipcMain.handle('session:unrevert', (_event, sessionId: string) => unrevertSession(sessionId))
 
+  // /init — análise do projeto e geração de memórias por área
+  ipcMain.handle('init:run', (_event, input: RunInitInput) => {
+    void runProjectInit(input)
+  })
+  ipcMain.handle('init:status', (_event, directory: string) => getInitStatus(directory))
+
   // Credenciais de provedores (as chaves nunca voltam ao renderer)
   ipcMain.handle('auth:set', (_event, providerId: string, key: string) => setCredential(providerId, key))
   ipcMain.handle('auth:remove', (_event, providerId: string) => removeCredential(providerId))
@@ -399,6 +406,9 @@ app.whenReady().then(() => {
   // Memória Brain — a UI fala com o service; mutações chegam de volta via memory:event
   ipcMain.handle('memory:list', () => memoryService.list())
   ipcMain.handle('memory:get', (_event, id: string) => memoryService.getFull(id))
+  // Criação manual (drop de arquivo no grafo de memórias)
+  ipcMain.handle('memory:create', (_event, input: memoryService.SaveMemoryInput) =>
+    memoryService.save(input))
   ipcMain.handle('memory:update', (_event, id: string, patch: Partial<Pick<Memory, 'text' | 'tags' | 'weight'>>) =>
     memoryService.update(id, patch),
   )

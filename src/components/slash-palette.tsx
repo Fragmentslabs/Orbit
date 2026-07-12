@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState, type KeyboardEvent, type ReactNode } from "react"
-import { BrainCircuit, Layers, Sparkles, Wrench } from "lucide-react"
+import { BrainCircuit, Layers, Sparkles, Wrench, Zap } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { normalizeText } from "@/shared/memory"
+import { SLASH_ACTION_COMMANDS } from "@/src/lib/slash-actions"
+import type { SlashCommand } from "@/src/lib/slash-commands"
 import { usePromptInputController } from "@/src/components/ai/prompt-input"
-import { useSkillsStore } from "@/src/stores/skills-store"
 
 /**
  * Paleta "/" dos inputs: abre quando o texto começa com "/", filtra conforme
@@ -16,66 +17,18 @@ import { useSkillsStore } from "@/src/stores/skills-store"
  * settings). Selecionar uma referência substitui o texto; modos limpam o "/".
  */
 
-export interface SlashCommand {
-  id: string
-  label: string
-  description?: string
-  keywords?: string[]
-  group: "Modos" | "Skills" | "MCP" | "Memória" | "Ações"
-  /** Estado atual do toggle (bolinha à direita) */
-  active?: boolean
-  run: (ctx: { setText: (text: string) => void }) => void
-}
+export type { SlashCommand } from "@/src/lib/slash-commands"
 
 const GROUP_ICON: Record<SlashCommand["group"], typeof Sparkles> = {
   Modos: Wrench,
   Skills: Sparkles,
   MCP: Layers,
   Memória: BrainCircuit,
-  Ações: Wrench,
+  Ações: Zap,
 }
 
-/** Skills + MCP + memória como comandos de referência (@...) — comum aos dois inputs. */
-export function useReferenceCommands(): SlashCommand[] {
-  const skills = useSkillsStore((s) => s.skills)
-  const mcpServers = useSkillsStore((s) => s.mcpServers)
-  const initialize = useSkillsStore((s) => s.initialize)
-
-  useEffect(() => {
-    void initialize()
-  }, [initialize])
-
-  return useMemo<SlashCommand[]>(
-    () => [
-      {
-        id: "memoria-busca",
-        label: "Buscar na memória",
-        description: "Ordena que o agente consulte a memória (Brain) antes de responder",
-        keywords: ["lembrar", "memoria", "brain", "recall"],
-        group: "Memória",
-        run: ({ setText }) => setText("@memoria "),
-      },
-      ...skills.map<SlashCommand>((skill) => ({
-        id: `skill-${skill.slug}`,
-        label: `@${skill.slug}`,
-        description: skill.description || "Skill do usuário",
-        keywords: [skill.slug, skill.name],
-        group: "Skills",
-        run: ({ setText }) => setText(`@${skill.slug} `),
-      })),
-      ...mcpServers
-        .filter((s) => s.state === "connected")
-        .map<SlashCommand>((server) => ({
-          id: `mcp-${server.config.name}`,
-          label: `@mcp:${server.config.name}`,
-          description: `Usar as ferramentas deste servidor MCP (${server.toolNames.length} tools)`,
-          group: "MCP",
-          run: ({ setText }) => setText(`@mcp:${server.config.name} `),
-        })),
-    ],
-    [skills, mcpServers],
-  )
-}
+/** Ordem de exibição das seções: ações primeiro, modos por último (já têm chips na UI) */
+const GROUP_ORDER: SlashCommand["group"][] = ["Ações", "Skills", "MCP", "Memória", "Modos"]
 
 function matches(command: SlashCommand, query: string): boolean {
   if (!query) return true
@@ -85,8 +38,10 @@ function matches(command: SlashCommand, query: string): boolean {
   return query.split(" ").every((token) => haystack.includes(token))
 }
 
-/** Comandos literais enviados como texto — a paleta não abre sobre eles */
-const LITERAL_COMMANDS = ["/create-skill", "/document"]
+/** Comandos literais enviados como texto — a paleta não abre sobre eles.
+ * Inclui as ações "/" (resolvidas no submit dos inputs): depois de selecionar
+ * "/code-review " a paleta fecha e o usuário completa/envia. */
+const LITERAL_COMMANDS = ["/create-skill", "/document", ...SLASH_ACTION_COMMANDS.map((c) => c + " ")]
 
 export function SlashPalette({ commands, children }: {
   commands: SlashCommand[]
@@ -98,8 +53,16 @@ export function SlashPalette({ commands, children }: {
     value.startsWith("/") && !LITERAL_COMMANDS.some((literal) => value.startsWith(literal))
   const query = open ? normalizeText(value.slice(1)) : ""
 
+  // Ordena por seção (Ações primeiro) antes do recorte — sort estável mantém
+  // a ordem de inserção dentro de cada grupo e o highlight segue a exibição
   const filtered = useMemo(
-    () => (open ? commands.filter((c) => matches(c, query)).slice(0, 12) : []),
+    () =>
+      open
+        ? commands
+            .filter((c) => matches(c, query))
+            .sort((a, b) => GROUP_ORDER.indexOf(a.group) - GROUP_ORDER.indexOf(b.group))
+            .slice(0, 12)
+        : [],
     [commands, open, query],
   )
   const [highlight, setHighlight] = useState(0)
@@ -132,7 +95,7 @@ export function SlashPalette({ commands, children }: {
     }
   }
 
-  // Agrupa preservando a ordem de inserção dos comandos
+  // Agrupa preservando a ordem de `filtered` (já ordenado por seção)
   const groups = useMemo(() => {
     const map = new Map<SlashCommand["group"], SlashCommand[]>()
     for (const command of filtered) {
