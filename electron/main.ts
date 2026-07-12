@@ -9,6 +9,7 @@ import type * as NodePty from 'node-pty'
 import { listCredentialProviders, removeCredential, setCredential } from './lib/auth'
 import { getCatalog } from './lib/catalog'
 import { getModelsSnapshot, invalidateModelsSnapshot } from './lib/models'
+import { revert as revertSession, unrevert as unrevertSession } from './lib/session/revert'
 import { abortChat, runChat } from './lib/chat-engine'
 import { reply as askReply, rejectSession as rejectSessionAsks } from './lib/ask-broker'
 import { abortOrchestration, approvePlan, rejectPlan, runOrchestration } from './lib/orchestrator'
@@ -353,6 +354,11 @@ app.whenReady().then(() => {
     invalidateModelsSnapshot()
     return getModelsSnapshot(true)
   })
+
+  // Revert per-message (snapshots git do modo código)
+  ipcMain.handle('session:revert', (_event, sessionId: string, messageId: string) =>
+    revertSession(sessionId, messageId))
+  ipcMain.handle('session:unrevert', (_event, sessionId: string) => unrevertSession(sessionId))
 
   // Credenciais de provedores (as chaves nunca voltam ao renderer)
   ipcMain.handle('auth:set', (_event, providerId: string, key: string) => setCredential(providerId, key))

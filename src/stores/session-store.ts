@@ -5,6 +5,7 @@ import type {
   ChatEvent,
   ChatMessage,
   ChatStatus,
+  FilePart,
   FolderInfo,
   OrchestrationPlan,
   PlanReview,
@@ -13,7 +14,7 @@ import type {
   SessionMode,
 } from "@/shared/chat"
 import { StorageKeys } from "@/shared/chat"
-import { chatApi, storage } from "@/src/lib/ipc"
+import { chatApi, sessionApi, storage } from "@/src/lib/ipc"
 import { useBrainPrefs } from "@/src/stores/brain-prefs"
 import { useMessageQueueStore } from "@/src/stores/message-queue-store"
 import { usePermissionPrefs } from "@/src/stores/permission-prefs"
@@ -35,6 +36,8 @@ export interface SendConfig {
   extraDirectories?: string[]
   /** Envia para uma sessão específica (ex: worker no painel direito) em vez da ativa */
   sessionId?: string
+  /** Arquivos anexados à mensagem (data URLs) */
+  files?: FilePart[]
 }
 
 interface SessionState {
@@ -68,6 +71,12 @@ interface SessionState {
   deleteSession: (id: string) => Promise<void>
   deleteSessions: (ids: string[]) => Promise<void>
   moveToFolder: (id: string, folderId: string | null) => void
+  /** Duplica a sessão (até messageId, se informado) com novos IDs */
+  forkSession: (id: string, messageId?: string) => Promise<SessionInfo | null>
+  /** Restaura o filesystem para antes da mensagem (modo código) */
+  revertToMessage: (sessionId: string, messageId: string) => Promise<void>
+  /** Desfaz um revert ativo */
+  unrevert: (sessionId: string) => Promise<void>
 
   createFolder: (mode: SessionMode, name: string) => FolderInfo
   renameFolder: (id: string, name: string) => void
@@ -250,6 +259,55 @@ export const useSessionStore = create<SessionState>((set, get) => ({
 
   moveToFolder: (id, folderId) => set((state) => updateSessionIn(state, id, { folderId })),
 
+  forkSession: async (id, messageId) => {
+    const source = get().sessions.find((s) => s.id === id)
+    if (!source) return null
+    await get().ensureMessages(id)
+    let msgs = get().messages[id] ?? []
+    if (messageId) {
+      const idx = msgs.findIndex((m) => m.id === messageId)
+      if (idx >= 0) msgs = msgs.slice(0, idx + 1)
+    }
+
+    // Título "Original (fork #n)": n = maior contador existente do mesmo original + 1
+    const baseTitle = source.title.replace(/ \(fork #\d+\)$/, "")
+    const escaped = baseTitle.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+    const counter = new RegExp(`^${escaped} \\(fork #(\\d+)\\)$`)
+    const maxFork = get().sessions.reduce((max, s) => {
+      const match = counter.exec(s.title)
+      return match ? Math.max(max, Number(match[1])) : max
+    }, 0)
+
+    const now = Date.now()
+    const fork: SessionInfo = {
+      ...source,
+      id: nanoid(),
+      title: `${baseTitle} (fork #${maxFork + 1})`,
+      pinned: false,
+      createdAt: now,
+      updatedAt: now,
+    }
+    // Fork é uma sessão independente: não herda vínculos de orquestração nem revert
+    delete fork.parentId
+    delete fork.orchestration
+    delete fork.revert
+
+    // Novos IDs de mensagens e parts (evita colisão de eventos entre sessões)
+    const cloned = msgs.map((m) => ({
+      ...m,
+      id: nanoid(),
+      parts: m.parts.map((p) => ({ ...p, id: nanoid() })),
+    }))
+
+    await storage.write(StorageKeys.session(fork.id), fork)
+    await storage.write(StorageKeys.messages(fork.id), cloned)
+    set((state) => ({
+      sessions: [fork, ...state.sessions],
+      messages: { ...state.messages, [fork.id]: cloned },
+    }))
+    return fork
+  },
+
   deleteSessions: async (ids) => {
     const idSet = new Set<string>()
     for (const id of ids) {
@@ -368,6 +426,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     await chatApi.send({
       sessionId: sessionId!,
       text,
+      files: config.files,
       providerId: selected.providerId,
       modelId: selected.modelId,
       mode: session.mode ?? mode,
@@ -381,6 +440,18 @@ export const useSessionStore = create<SessionState>((set, get) => ({
 
   stopStreaming: (sessionId) => {
     void chatApi.abort(sessionId)
+  },
+
+  // O main persiste e emite o evento "session" com o estado atualizado —
+  // aqui só espelha imediatamente para a barra de revert aparecer sem delay
+  revertToMessage: async (sessionId, messageId) => {
+    const revert = await sessionApi.revert(sessionId, messageId)
+    if (revert) set((state) => updateSessionIn(state, sessionId, { revert }))
+  },
+
+  unrevert: async (sessionId) => {
+    const done = await sessionApi.unrevert(sessionId)
+    if (done) set((state) => updateSessionIn(state, sessionId, { revert: undefined }))
   },
 }))
 

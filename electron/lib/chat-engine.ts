@@ -1,8 +1,9 @@
-import { generateText, stepCountIs, streamText, type ModelMessage } from 'ai'
+import { generateText, stepCountIs, streamText, type ModelMessage, type UserContent } from 'ai'
 import type { BrowserWindow } from 'electron'
 import type {
   ChatEvent,
   ChatMessage,
+  FilePart,
   MessagePart,
   SendMessageInput,
   SessionInfo,
@@ -15,6 +16,8 @@ import { createToolApproval, takeDenialReason } from './permission'
 import { buildSystemPrompt } from './prompts'
 import { buildProviderOptions } from './reasoning'
 import { resolveModel } from './providers'
+import { cleanupRevert } from './session/revert'
+import { capture, diff } from './snapshot'
 import { readJson, writeJson } from './storage'
 import { buildToolSet, type ToolContext } from './tools'
 import { toTokenUsage } from './usage'
@@ -47,10 +50,41 @@ function partText(parts: MessagePart[], type: 'text'): string {
     .join('\n')
 }
 
+/** Decodifica o payload de um data URL como texto UTF-8. */
+function decodeDataUrlText(url: string): string | null {
+  const match = /^data:([^;,]*)(;base64)?,([\s\S]*)$/.exec(url)
+  if (!match) return null
+  try {
+    return match[2] ? Buffer.from(match[3], 'base64').toString('utf8') : decodeURIComponent(match[3])
+  } catch {
+    return null
+  }
+}
+
+const TEXT_MIME = /^(text\/|application\/(json|xml|javascript|typescript|yaml|toml|x-sh|sql))/
+
+/** Converte um anexo (FilePart) em conteúdo de modelo: imagem/PDF nativos,
+ * arquivos de texto viram texto inline; o resto vira só uma nota. */
+function fileToModelContent(file: FilePart): Exclude<UserContent, string>[number] {
+  if (file.mime.startsWith('image/')) {
+    return { type: 'image', image: file.url, mediaType: file.mime }
+  }
+  if (file.mime === 'application/pdf') {
+    return { type: 'file', data: file.url, mediaType: file.mime, filename: file.filename }
+  }
+  if (TEXT_MIME.test(file.mime)) {
+    const text = decodeDataUrlText(file.url)
+    if (text != null) {
+      return { type: 'text', text: `[Arquivo anexado: ${file.filename ?? 'sem nome'}]\n\n${text}` }
+    }
+  }
+  return { type: 'text', text: `[Arquivo anexado não suportado: ${file.filename ?? file.mime}]` }
+}
+
 /**
- * Converte o histórico persistido em mensagens para o modelo (somente texto).
- * Havendo compactação, corta no último resumo: envia resumo + mensagens
- * posteriores; o histórico completo continua no storage e na UI.
+ * Converte o histórico persistido em mensagens para o modelo (texto +
+ * anexos do usuário). Havendo compactação, corta no último resumo: envia
+ * resumo + mensagens posteriores; o histórico completo continua no storage.
  */
 export function toModelMessages(history: ChatMessage[]): ModelMessage[] {
   const lastSummary = findLastSummaryIndex(history)
@@ -58,6 +92,13 @@ export function toModelMessages(history: ChatMessage[]): ModelMessage[] {
   const result: ModelMessage[] = []
   for (const message of window) {
     const text = partText(message.parts, 'text')
+    const files = message.parts.filter((p): p is FilePart => p.type === 'file')
+    if (message.role === 'user' && files.length > 0) {
+      const content: UserContent = files.map(fileToModelContent)
+      if (text.trim()) content.push({ type: 'text', text })
+      result.push({ role: 'user', content })
+      continue
+    }
     if (!text.trim()) continue
     result.push({ role: message.role, content: text })
   }
@@ -102,13 +143,26 @@ export async function runChat(win: BrowserWindow, input: SendMessageInput): Prom
 
   emit(win, { type: 'status', sessionId, status: 'submitted' })
 
+  // Revert ativo: nova mensagem consolida o revert — descarta as mensagens
+  // posteriores ao ponto revertido antes de carregar o histórico
+  if (input.mode === 'code' && input.directory) {
+    try {
+      await cleanupRevert(sessionId)
+    } catch (err) {
+      console.error('[revert] cleanup falhou:', err)
+    }
+  }
+
   const history = await loadMessages(sessionId)
   const isFirstExchange = history.length === 0
 
   const userMessage: ChatMessage = {
     id: newId('msg'),
     role: 'user',
-    parts: [{ id: newId('prt'), type: 'text', text: input.text, state: 'done' }],
+    parts: [
+      ...(input.files ?? []),
+      { id: newId('prt'), type: 'text', text: input.text, state: 'done' },
+    ],
     createdAt: Date.now(),
   }
   history.push(userMessage)
@@ -164,6 +218,29 @@ export async function runChat(win: BrowserWindow, input: SendMessageInput): Prom
             abort: controller.signal,
           }
         : null
+
+    // Snapshot start: estado do filesystem antes do stream (revert per-message)
+    if (toolContext) {
+      try {
+        assistantMessage.snapshot = { start: await capture(toolContext.directory) }
+      } catch (err) {
+        console.error('[snapshot] captura inicial falhou:', err)
+      }
+    }
+
+    // Snapshot end: estado após todas as tools + lista de arquivos alterados
+    const captureEndSnapshot = async (): Promise<{ end: string; files: string[] } | undefined> => {
+      const start = assistantMessage.snapshot?.start
+      if (!toolContext || !start) return
+      try {
+        const end = await capture(toolContext.directory)
+        if (end === start) return
+        const changes = await diff(toolContext.directory, start, end)
+        return { end, files: changes.files }
+      } catch (err) {
+        console.error('[snapshot] captura final falhou:', err)
+      }
+    }
 
     const result = streamText({
       model,
@@ -334,7 +411,14 @@ export async function runChat(win: BrowserWindow, input: SendMessageInput): Prom
         part.state = 'done'
       }
     }
+    // Persiste a mensagem primeiro para que o usuário a veja o quanto antes
     await saveMessages(sessionId, history)
+    // Captura snapshot final (git diff) e salva de novo se houver mudanças
+    const endSnapshot = await captureEndSnapshot()
+    if (endSnapshot) {
+      assistantMessage.snapshot = { ...assistantMessage.snapshot!, ...endSnapshot }
+      await saveMessages(sessionId, history)
+    }
 
     const session = await readJson<SessionInfo>(StorageKeys.session(sessionId))
     if (session) await writeJson(StorageKeys.session(sessionId), { ...session, updatedAt: Date.now() })

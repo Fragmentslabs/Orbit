@@ -1,4 +1,4 @@
-import type { ChatMessage, MessagePart, ToolPart } from "@/shared/chat"
+import type { ChatMessage, FilePart, MessagePart, ToolPart } from "@/shared/chat"
 
 /** Ferramentas que tocam a web — alimentam chain-of-thought e fontes. */
 export const WEB_TOOLS = new Set(["websearch", "webfetch", "browser_open", "browser_links"])
@@ -13,6 +13,19 @@ export function messageText(message: ChatMessage): string {
     .filter((p): p is Extract<MessagePart, { type: "text" }> => p.type === "text")
     .map((p) => p.text)
     .join("\n")
+}
+
+/** Converte anexos do PromptInput (FileUIPart, url já em data URL) em FileParts */
+export function toFileParts(files: { mediaType?: string; filename?: string; url?: string }[]): FilePart[] {
+  return files
+    .filter((f): f is { mediaType?: string; filename?: string; url: string } => Boolean(f.url))
+    .map((f) => ({
+      id: `file_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`,
+      type: "file" as const,
+      mime: f.mediaType ?? "application/octet-stream",
+      filename: f.filename,
+      url: f.url,
+    }))
 }
 
 export function hostnameOf(url: string): string {

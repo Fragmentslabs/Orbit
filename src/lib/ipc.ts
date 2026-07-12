@@ -2,6 +2,7 @@ import type {
   Catalog,
   ChatEvent,
   SendMessageInput,
+  SessionRevert,
 } from "@/shared/chat"
 import type { McpConfig, McpServerStatus } from "@/shared/mcp"
 import type { ModelsSnapshot } from "@/shared/models"
@@ -46,6 +47,13 @@ export const authApi = {
   set: (providerId: string, key: string) => window.ipcRenderer.invoke("auth:set", providerId, key),
   remove: (providerId: string) => window.ipcRenderer.invoke("auth:remove", providerId),
   list: () => window.ipcRenderer.invoke("auth:list") as Promise<string[]>,
+}
+
+export const sessionApi = {
+  revert: (sessionId: string, messageId: string) =>
+    window.ipcRenderer.invoke("session:revert", sessionId, messageId) as Promise<SessionRevert | null>,
+  unrevert: (sessionId: string) =>
+    window.ipcRenderer.invoke("session:unrevert", sessionId) as Promise<boolean>,
 }
 
 export const chatApi = {

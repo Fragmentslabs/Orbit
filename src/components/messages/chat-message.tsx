@@ -149,7 +149,7 @@ export function ChatAssistantMessage({ message, isLast, isBusy, onRetry }: {
           <ReasoningPartView key={segment.id} part={segment.part} />
         ) : segment.part.type === "image" ? (
           <ImagePartView key={segment.id} part={segment.part} />
-        ) : segment.part.tool === "subagent" ? (
+        ) : segment.part.type === "file" ? null : segment.part.tool === "subagent" ? (
           <SubAgentCard key={segment.id} part={segment.part} />
         ) : segment.part.tool === "create_skill" ? (
           <SkillProposalCard key={segment.id} part={segment.part} />

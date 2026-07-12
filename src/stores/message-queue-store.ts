@@ -1,6 +1,6 @@
 import { create } from "zustand"
 import { storage } from "@/src/lib/ipc"
-import type { QueuedMessage, SessionMode, SendMessageOptions } from "@/shared/chat"
+import type { FilePart, QueuedMessage, SessionMode, SendMessageOptions } from "@/shared/chat"
 import { MAX_QUEUE_RETRIES, StorageKeys } from "@/shared/chat"
 import { useSessionStore } from "@/src/stores/session-store"
 
@@ -28,7 +28,7 @@ interface MessageQueueState {
     text: string,
     options: SendMessageOptions,
     mode: SessionMode,
-    extra?: { directory?: string; extraDirectories?: string[] },
+    extra?: { directory?: string; extraDirectories?: string[]; files?: FilePart[] },
   ) => void
   /** Enfileira para envio agendado */
   enqueueScheduled: (
@@ -37,7 +37,7 @@ interface MessageQueueState {
     options: SendMessageOptions,
     mode: SessionMode,
     scheduledAt: number,
-    extra?: { directory?: string; extraDirectories?: string[] },
+    extra?: { directory?: string; extraDirectories?: string[]; files?: FilePart[] },
   ) => void
   /** Handler chamado pelo session-store quando status → idle ou error */
   onSessionIdle: (sessionId: string) => void
@@ -143,6 +143,7 @@ export const useMessageQueueStore = create<MessageQueueState>((set, get) => ({
       sessionId: msg.sessionId ?? sessionId,
       directory: msg.directory,
       extraDirectories: msg.extraDirectories,
+      files: msg.files,
     })
   },
 
@@ -150,6 +151,7 @@ export const useMessageQueueStore = create<MessageQueueState>((set, get) => ({
     const msg: QueuedMessage = {
       id: `q_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`,
       text,
+      files: extra?.files?.length ? extra.files : undefined,
       options,
       mode,
       sessionId,
@@ -164,6 +166,7 @@ export const useMessageQueueStore = create<MessageQueueState>((set, get) => ({
     const msg: QueuedMessage = {
       id: `q_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`,
       text,
+      files: extra?.files?.length ? extra.files : undefined,
       options,
       mode,
       sessionId,
