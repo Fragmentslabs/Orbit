@@ -57,7 +57,7 @@ export function AAKeyButton() {
         Sem dados de velocidade — conectar Artificial Analysis
       </Button>
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent showCloseButton={false}>
+        <DialogContent className="sm:max-w-sm" showCloseButton={false}>
           <DialogHeader>
             <DialogTitle>Conectar Artificial Analysis</DialogTitle>
             <DialogDescription>

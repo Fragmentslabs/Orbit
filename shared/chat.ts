@@ -253,6 +253,8 @@ export interface SendMessageOptions {
   orchestrate?: { plan?: OrchestrationPlan }
   /** Modo de permissões (code-mode e workers): default efetivo "ask" */
   permissionMode?: PermissionMode
+  /** /init: executa o pipeline de análise de projeto em vez de gerar texto */
+  initMode?: boolean
 }
 
 export interface OrchestrationTask {

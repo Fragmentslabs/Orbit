@@ -58,7 +58,7 @@ export function OrchestrationConfigDialog({ open, onOpenChange }: {
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent showCloseButton={false}>
+      <DialogContent className="sm:max-w-sm" showCloseButton={false}>
         <DialogHeader>
           <DialogTitle>Configurar workers</DialogTitle>
         </DialogHeader>

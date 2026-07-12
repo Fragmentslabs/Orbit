@@ -43,7 +43,6 @@ import { useSkillsStore } from "@/src/stores/skills-store"
 import type { ChatStatus, FilePart, PermissionMode, SendMessageOptions } from "@/shared/chat"
 import { toFileParts } from "@/src/lib/message-utils"
 import { resolveSlashAction } from "@/src/lib/slash-actions"
-import { useInitStore } from "@/src/stores/init-store"
 
 const RECENT_FOLDERS_KEY = "orbit-recent-folders"
 
@@ -84,55 +83,6 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId }: 
   const { enabled, variantId, update } = useReasoningPrefs(selected?.providerId, selected?.modelId)
   const thinking = enabled || !!model?.reasoningAlwaysOn
   const busy = status === "submitted" || status === "streaming"
-
-  const handleSubmit = (message: { text?: string; files?: { mediaType?: string; filename?: string; url?: string }[] }) => {
-    const files = toFileParts(message.files ?? [])
-    // Comandos "/" viram pipeline; /init roda o scanner de projeto direto
-    const resolved = message.text ? resolveSlashAction(message.text, "code") : null
-    if (resolved?.action.kind === "init" && !busy) {
-      const dir = folders[0]
-      if (dir) void useInitStore.getState().run(dir, resolved.input.includes("--force"))
-      return
-    }
-    const resolveText = (raw: string) => {
-      const r = resolveSlashAction(raw, "code")
-      return r?.prompt ?? raw
-    }
-    if (busy) {
-      const text = message.text?.trim()
-      if (!text) {
-        onStop?.()
-      } else if (sessionId && folders.length > 0) {
-        const { directory, extraDirectories } = getDirs()
-        enqueueForSend(sessionId, resolveText(text), buildOptions(), mode, { directory, extraDirectories, files })
-      }
-      return
-    }
-    let text = message.text?.trim()
-    if (!text || folders.length === 0) return
-    text = resolveText(text)
-    saveRecentFolders(folders)
-    const [directory, ...extraDirectories] = folders
-    // Elementos selecionados no browser do painel viram anexos da mensagem
-    const selections = usePanelStore.getState().selections
-    if (selections.length > 0) {
-      text += `\n\n${selections
-        .map(
-          (sel) =>
-            `[Elemento selecionado no browser do painel — <${sel.tag}> em ${sel.url}]\nselector: ${sel.selector}\ntexto: ${sel.text || "(sem texto)"}\nhtml: ${sel.html}`,
-        )
-        .join("\n\n")}`
-      usePanelStore.getState().clearSelections()
-    }
-    onSubmit(
-      text,
-      buildOptions(),
-      directory,
-      extraDirectories,
-      files.length > 0 ? files : undefined,
-    )
-  }
-
   const { mode } = useWorkspace()
   const openSettings = useSettingsUi((s) => s.openSettings)
   const enqueueForSend = useMessageQueueStore((s) => s.enqueueForSend)
@@ -155,13 +105,65 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId }: 
     orchestrate: orchestra ? {} : undefined,
   }), [plan, search, simple, brain, brainContext, permissionMode, thinking, variantId, subagents, orchestra])
 
-  /** Retorna diretório + extra do state atual */
   const getDirs = useCallback(() => {
     const [directory, ...extraDirectories] = folders
     return { directory, extraDirectories }
   }, [folders])
   const selections = usePanelStore((s) => s.selections)
   const removeSelection = usePanelStore((s) => s.removeSelection)
+
+  const handleSubmit = (message: { text?: string; files?: { mediaType?: string; filename?: string; url?: string }[] }) => {
+    const files = toFileParts(message.files ?? [])
+    const resolved = message.text ? resolveSlashAction(message.text, "code") : null
+    if (resolved?.action.kind === "init" && !busy) {
+      const dir = folders[0]
+      if (dir) {
+        const force = resolved.input.includes("--force") || resolved.action.command === "/init-force"
+        createSession("code", { directory: dir, extraDirectories: folders.slice(1) }).then((session) => {
+          const text = force ? "/init --force" : "/init"
+          sendMessage("code", text, { options: { initMode: true }, sessionId: session.id, directory: dir, extraDirectories: folders.slice(1) })
+          openChatTab(session.id, session.title)
+        })
+      }
+      return
+    }
+    const resolveText = (raw: string) => {
+      const r = resolveSlashAction(raw, "code")
+      return r?.prompt ?? raw
+    }
+    if (busy) {
+      const text = message.text?.trim()
+      if (!text) {
+        onStop?.()
+      } else if (sessionId && folders.length > 0) {
+        const { directory, extraDirectories } = getDirs()
+        enqueueForSend(sessionId, resolveText(text), buildOptions(), mode, { directory, extraDirectories, files })
+      }
+      return
+    }
+    let text = message.text?.trim()
+    if (!text || folders.length === 0) return
+    text = resolveText(text)
+    saveRecentFolders(folders)
+    const [directory, ...extraDirectories] = folders
+    const currentSelections = selections
+    if (currentSelections.length > 0) {
+      text += `\n\n${currentSelections
+        .map(
+          (sel) =>
+            `[Elemento selecionado no browser do painel — <${sel.tag}> em ${sel.url}]\nselector: ${sel.selector}\ntexto: ${sel.text || "(sem texto)"}\nhtml: ${sel.html}`,
+        )
+        .join("\n\n")}`
+      usePanelStore.getState().clearSelections()
+    }
+    onSubmit(
+      text,
+      buildOptions(),
+      directory,
+      extraDirectories,
+      files.length > 0 ? files : undefined,
+    )
+  }
 
   const slashCommands = useMemo<SlashCommand[]>(() => {
     const toggle = (fn: () => void) => ({ setText }: { setText: (t: string) => void }) => {

@@ -105,15 +105,17 @@ function DocDialog({ memory, open, onOpenChange }: {
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl">
+      <DialogContent style={{ maxWidth: "56rem" }}>
         <DialogHeader>
           <DialogTitle className="pr-6 text-sm font-medium">{memory.text}</DialogTitle>
         </DialogHeader>
-        <ScrollArea className="max-h-[60vh] pr-3">
+        <ScrollArea className="max-h-[60vh] w-full overflow-x-auto pr-3">
           {doc === null ? (
             <p className="text-sm text-muted-foreground">Carregando documento…</p>
           ) : (
-            <AssistantMarkdown>{doc}</AssistantMarkdown>
+            <div className="w-full break-words">
+              <AssistantMarkdown>{doc}</AssistantMarkdown>
+            </div>
           )}
         </ScrollArea>
       </DialogContent>
