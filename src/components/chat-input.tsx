@@ -35,11 +35,11 @@ import { useSettingsUi } from "@/src/stores/settings-ui"
 import { useProviderStore } from "@/src/stores/provider-store"
 import { useReasoningPrefs } from "@/src/stores/reasoning-prefs"
 import { useSimpleMode } from "@/src/stores/simple-mode"
-import type { SendMessageOptions } from "@/shared/chat"
-import type { ChatStatus } from "@/shared/chat"
+import type { ChatStatus, FilePart, SendMessageOptions } from "@/shared/chat"
+import { toFileParts } from "@/src/lib/message-utils"
 
 export function ChatInput({ onSubmit, status, onStop, sessionId }: {
-  onSubmit: (text: string, options: SendMessageOptions) => void
+  onSubmit: (text: string, options: SendMessageOptions, files?: FilePart[]) => void
   status?: ChatStatus
   onStop?: () => void
   /** Sessão ativa — o toggle Brain é por chat (undefined = chat novo) */
@@ -115,19 +115,20 @@ export function ChatInput({ onSubmit, status, onStop, sessionId }: {
       <PromptInput
         multiple
         onSubmit={(message) => {
+          const files = toFileParts(message.files ?? [])
           // Enter pressionado durante execução: fila ou stop
           if (busy) {
             const text = message.text?.trim()
             if (!text) {
               onStop?.()
             } else if (sessionId) {
-              enqueueForSend(sessionId, text, buildOptions(), mode)
+              enqueueForSend(sessionId, text, buildOptions(), mode, { files })
             }
             return
           }
           const text = message.text?.trim()
           if (!text) return
-          onSubmit(text, buildOptions())
+          onSubmit(text, buildOptions(), files.length > 0 ? files : undefined)
         }}
         className="rounded-xl border-2 border-sidebar-border [&>div]:!border-none [&>div]:!rounded-none [&>div]:!bg-transparent"
       >

@@ -13,6 +13,7 @@ import {
   Ellipsis,
   Folder,
   FolderPlus,
+  GitFork,
   LogOut,
   MessageSquare,
   Monitor,
@@ -518,6 +519,7 @@ function SessionRow({ session, button: ButtonComponent, buttonClassName, actionB
   const toggleArchive = useSessionStore((s) => s.toggleArchive)
   const deleteSession = useSessionStore((s) => s.deleteSession)
   const renameSession = useSessionStore((s) => s.renameSession)
+  const forkSession = useSessionStore((s) => s.forkSession)
   const { selectionMode, selectedIds, toggle, enterSelectionMode } = useSelection()
 
   const isSelected = selectedIds.has(session.id)
@@ -538,6 +540,18 @@ function SessionRow({ session, button: ButtonComponent, buttonClassName, actionB
       onSelect: () => setMovingToFolder(true),
     },
     { icon: <Pencil className="size-4" />, label: "Renomear", onSelect: () => setRenaming(true) },
+    {
+      icon: <GitFork className="size-4" />,
+      label: "Fork",
+      onSelect: () => {
+        void forkSession(session.id).then((fork) => {
+          if (!fork) return
+          if (fork.mode !== mode) setMode(fork.mode)
+          setView("chat")
+          void selectSession(fork.mode, fork.id)
+        })
+      },
+    },
     {
       icon: session.archived ? <ArchiveRestore className="size-4" /> : <Archive className="size-4" />,
       label: session.archived ? "Desarquivar" : "Arquivar",

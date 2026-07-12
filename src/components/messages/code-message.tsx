@@ -211,7 +211,7 @@ export function CodeAssistantMessage({ message, isLast, isBusy, onRetry }: {
           </AssistantMarkdown>
         ) : segment.part.type === "reasoning" ? (
           <ReasoningPartView key={segment.id} part={segment.part} />
-        ) : segment.part.type === "tool" && segment.part.tool === "subagent" ? (
+        ) : segment.part.type === "file" ? null : segment.part.type === "tool" && segment.part.tool === "subagent" ? (
           <SubAgentCard key={segment.id} part={segment.part} />
         ) : segment.part.type === "tool" && segment.part.tool === "todowrite" ? (
           <TodoList key={segment.id} part={segment.part} stale={segment.part.id !== lastTodoId} />

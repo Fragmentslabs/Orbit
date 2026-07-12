@@ -1,14 +1,14 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 import { ChevronRight } from "lucide-react"
 import { useWorkspace } from "@/lib/workspace-context"
-import type { ChatMessage, SendMessageOptions } from "@/shared/chat"
+import type { ChatMessage, FilePart, SendMessageOptions } from "@/shared/chat"
 import { AskCard } from "@/src/components/ask-card"
 import { AskCardBatch } from "@/src/components/ask-card-batch"
 import { ChatInput } from "@/src/components/chat-input"
 import { CodeInput } from "@/src/components/code-input"
 import { Persona, type PersonaState } from "@/src/components/ai/persona"
 import { Conversation, ConversationContent, ConversationScrollButton } from "@/src/components/ai/conversation"
-import { Message, MessageContent } from "@/src/components/ai/message"
+import { Message, MessageAttachment, MessageAttachments, MessageContent } from "@/src/components/ai/message"
 import { Suggestion } from "@/src/components/ai/suggestion"
 import { ChatAssistantMessage } from "@/src/components/messages/chat-message"
 import { CodeAssistantMessage } from "@/src/components/messages/code-message"
@@ -16,6 +16,7 @@ import { SimpleAssistantMessage } from "@/src/components/messages/simple-message
 import { SummaryCard } from "@/src/components/messages/summary-card"
 import { OrchestrationPlanCard } from "@/src/components/orchestration-plan-card"
 import { PlanReviewCard } from "@/src/components/plan-review-card"
+import { RevertBar } from "@/src/components/revert-bar"
 import { AssistantMessageActions, CopyAction, MessageTimestamp } from "@/src/components/messages/shared"
 import { Actions } from "@/src/components/ai/actions"
 import { messageText } from "@/src/lib/message-utils"
@@ -64,9 +65,20 @@ function MessageItem({ msg, isLast, waiting, finished, isBusy, mode, sessionId, 
   }, [messages, index, mode, sessionId, sendMessage])
 
   if (msg.role === "user") {
+    const files = msg.parts.filter((p): p is FilePart => p.type === "file")
     return (
       <Message from="user">
         <div className="group/user-msg flex flex-col">
+          {files.length > 0 && (
+            <MessageAttachments className="mb-1">
+              {files.map((file) => (
+                <MessageAttachment
+                  key={file.id}
+                  data={{ type: "file", mediaType: file.mime, filename: file.filename, url: file.url }}
+                />
+              ))}
+            </MessageAttachments>
+          )}
           <MessageContent>
             <p className="whitespace-pre-wrap">{messageText(msg)}</p>
           </MessageContent>
@@ -93,7 +105,7 @@ function MessageItem({ msg, isLast, waiting, finished, isBusy, mode, sessionId, 
           />
         )}
       </MessageContent>
-      {finished && !waiting && <AssistantMessageActions message={msg} />}
+      {finished && !waiting && <AssistantMessageActions message={msg} sessionId={sessionId} />}
     </Message>
   )
 }
@@ -236,15 +248,15 @@ export function ChatView({ sessionId }: { sessionId?: string } = {}) {
   const topPersonaState = displayTopState
 
   const handleChatSend = useCallback(
-    (text: string, options: SendMessageOptions) => {
-      void sendMessage("chat", text, { options, sessionId })
+    (text: string, options: SendMessageOptions, files?: FilePart[]) => {
+      void sendMessage("chat", text, { options, sessionId, files })
     },
     [sendMessage, sessionId],
   )
 
   const handleCodeSend = useCallback(
-    (text: string, options: SendMessageOptions, directory: string, extraDirectories: string[]) => {
-      void sendMessage("code", text, { options, directory, extraDirectories, sessionId })
+    (text: string, options: SendMessageOptions, directory: string, extraDirectories: string[], files?: FilePart[]) => {
+      void sendMessage("code", text, { options, directory, extraDirectories, sessionId, files })
     },
     [sendMessage, sessionId],
   )
@@ -341,6 +353,12 @@ export function ChatView({ sessionId }: { sessionId?: string } = {}) {
           </div>
         </div>
       </div>
+      {/* Revert ativo: barra com alterações desfeitas + botão de desfazer */}
+      {session?.revert && (
+        <div className="mx-auto w-full max-w-2xl pb-2">
+          <RevertBar session={session} />
+        </div>
+      )}
       {/* Plano de orquestração proposto/em execução, inline acima do input */}
       {session && plan && (plan.status === "proposed" || plan.status === "approved" || plan.status === "running") && (
         <div className="mx-auto w-full max-w-2xl pb-2">

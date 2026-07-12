@@ -6,6 +6,7 @@ import {
   LoaderIcon,
   RotateCwIcon,
   TerminalIcon,
+  Undo2Icon,
   XCircleIcon,
 } from "lucide-react"
 import type { Components } from "streamdown"
@@ -13,6 +14,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { cn } from "@/lib/utils"
 import type { ChatMessage, ReasoningPart, ToolPart } from "@/shared/chat"
 import { hostnameOf, messageText } from "@/src/lib/message-utils"
+import { useSessionStore } from "@/src/stores/session-store"
 import { Actions, Action } from "@/src/components/ai/actions"
 import {
   InlineCitation,
@@ -184,11 +186,29 @@ export function CopyAction({ text }: { text: string }) {
   )
 }
 
-/** Barra de ações do assistente: copiar + horário + tokens/custo da resposta. */
-export function AssistantMessageActions({ message }: { message: ChatMessage }) {
+/** Barra de ações do assistente: copiar + revert + horário + tokens/custo. */
+export function AssistantMessageActions({ message, sessionId }: {
+  message: ChatMessage
+  sessionId?: string
+}) {
+  const revertToMessage = useSessionStore((s) => s.revertToMessage)
+  const activeRevert = useSessionStore((s) =>
+    sessionId ? s.sessions.find((x) => x.id === sessionId)?.revert : undefined,
+  )
+  const canRevert = Boolean(sessionId && message.snapshot?.start && !activeRevert)
+
   return (
     <Actions className="mt-1 items-center">
       <CopyAction text={messageText(message)} />
+      {canRevert && (
+        <Action
+          tooltip="Reverter até aqui"
+          label="Reverter até aqui"
+          onClick={() => void revertToMessage(sessionId!, message.id)}
+        >
+          <Undo2Icon className="size-3.5" />
+        </Action>
+      )}
       <MessageTimestamp timestamp={message.createdAt} />
       {message.tokens && <MessageUsage tokens={message.tokens} />}
     </Actions>

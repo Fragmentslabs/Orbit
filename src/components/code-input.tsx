@@ -39,7 +39,8 @@ import { useReasoningPrefs } from "@/src/stores/reasoning-prefs"
 import { useSessionStore } from "@/src/stores/session-store"
 import { useSimpleMode } from "@/src/stores/simple-mode"
 import { useSkillsStore } from "@/src/stores/skills-store"
-import type { ChatStatus, PermissionMode, SendMessageOptions } from "@/shared/chat"
+import type { ChatStatus, FilePart, PermissionMode, SendMessageOptions } from "@/shared/chat"
+import { toFileParts } from "@/src/lib/message-utils"
 
 const RECENT_FOLDERS_KEY = "orbit-recent-folders"
 
@@ -48,7 +49,7 @@ function saveRecentFolders(folders: string[]) {
 }
 
 export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId }: {
-  onSubmit: (text: string, options: SendMessageOptions, directory: string, extraDirectories: string[]) => void
+  onSubmit: (text: string, options: SendMessageOptions, directory: string, extraDirectories: string[], files?: FilePart[]) => void
   status?: ChatStatus
   onStop?: () => void
   hasMessages?: boolean
@@ -81,14 +82,15 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId }: 
   const thinking = enabled || !!model?.reasoningAlwaysOn
   const busy = status === "submitted" || status === "streaming"
 
-  const handleSubmit = (message: { text?: string }) => {
+  const handleSubmit = (message: { text?: string; files?: { mediaType?: string; filename?: string; url?: string }[] }) => {
+    const files = toFileParts(message.files ?? [])
     if (busy) {
       const text = message.text?.trim()
       if (!text) {
         onStop?.()
       } else if (sessionId && folders.length > 0) {
         const { directory, extraDirectories } = getDirs()
-        enqueueForSend(sessionId, text, buildOptions(), mode, { directory, extraDirectories })
+        enqueueForSend(sessionId, text, buildOptions(), mode, { directory, extraDirectories, files })
       }
       return
     }
@@ -112,6 +114,7 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId }: 
       buildOptions(),
       directory,
       extraDirectories,
+      files.length > 0 ? files : undefined,
     )
   }
 

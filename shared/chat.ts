@@ -16,6 +16,18 @@ export interface SessionOrchestration {
   task?: string
 }
 
+/** Estado de revert ativo numa sessão (modo código): filesystem restaurado
+ * para antes de `messageId`; `snapshot` guarda o estado anterior p/ desfazer. */
+export interface SessionRevert {
+  messageId: string
+  /** Tree hash capturado antes do restore — permite unrevert */
+  snapshot?: string
+  /** Arquivos afetados pelo revert */
+  files?: string[]
+  /** Diff unificado das mudanças revertidas */
+  diff?: string
+}
+
 export interface SessionInfo {
   id: string
   title: string
@@ -31,6 +43,8 @@ export interface SessionInfo {
   orchestration?: SessionOrchestration
   /** Sessão-pai na árvore da sidebar (atalho de orchestration.parentSessionId) */
   parentId?: string
+  /** Revert ativo (modo código) — limpo ao desfazer ou enviar nova mensagem */
+  revert?: SessionRevert
   createdAt: number
   updatedAt: number
 }
@@ -82,7 +96,18 @@ export interface ImagePart {
   alt?: string
 }
 
-export type MessagePart = TextPart | ReasoningPart | ToolPart | ImagePart
+/** Arquivo anexado pelo usuário à mensagem (data URL vinda do input) */
+export interface FilePart {
+  id: string
+  type: "file"
+  /** MIME type (image/png, text/plain, application/pdf…) */
+  mime: string
+  filename?: string
+  /** Data URL com o conteúdo do arquivo */
+  url: string
+}
+
+export type MessagePart = TextPart | ReasoningPart | ToolPart | ImagePart | FilePart
 
 export interface TokenUsage {
   input: number
@@ -92,6 +117,17 @@ export interface TokenUsage {
   cacheWrite: number
   /** USD, calculado com os preços do catálogo (quando disponíveis) */
   cost?: number
+}
+
+/** Snapshots do filesystem capturados em volta de uma resposta do assistente
+ * (modo código): permitem revert per-message. */
+export interface AssistantSnapshot {
+  /** Tree hash antes do stream começar */
+  start?: string
+  /** Tree hash depois de todas as tools executarem */
+  end?: string
+  /** Arquivos alterados entre start e end */
+  files?: string[]
 }
 
 export interface ChatMessage {
@@ -108,6 +144,8 @@ export interface ChatMessage {
   tokens?: TokenUsage
   /** Mensagem sintética de compactação: resumo do histórico anterior */
   summary?: boolean
+  /** Snapshots start/end do filesystem (assistant, modo código) */
+  snapshot?: AssistantSnapshot
 }
 
 export interface ModelVariant {
@@ -246,6 +284,8 @@ export interface WorkerModelConfig {
 export interface SendMessageInput {
   sessionId: string
   text: string
+  /** Arquivos anexados à mensagem do usuário */
+  files?: FilePart[]
   providerId: string
   modelId: string
   mode: SessionMode
@@ -329,6 +369,8 @@ export interface ProviderCredential {
 export interface QueuedMessage {
   id: string
   text: string
+  /** Arquivos anexados (data URLs) */
+  files?: FilePart[]
   options: SendMessageOptions
   mode: SessionMode
   sessionId?: string
