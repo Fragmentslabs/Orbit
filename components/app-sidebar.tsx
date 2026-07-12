@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react"
+import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react"
 import { createPortal } from "react-dom"
 import {
   Archive,
@@ -7,6 +7,8 @@ import {
   Bot,
   Boxes,
   BrainCircuit,
+  Check,
+  CheckSquare,
   ChevronDown,
   Ellipsis,
   Folder,
@@ -21,10 +23,12 @@ import {
   PinOff,
   Plus,
   Settings,
+  Square,
   Sun,
   Terminal,
   Trash2,
   User,
+  X,
 } from "lucide-react"
 
 import {
@@ -77,6 +81,99 @@ import { useSettingsUi } from "@/src/stores/settings-ui"
 import { SettingsDialog } from "@/src/components/settings-dialog"
 
 type MenuItem = { icon: React.ReactNode; label: string; onSelect: () => void }
+
+/** Modo de seleção em lote — ativado pela opção "Selecionar" do menu de ações.
+ *  Disponibiliza toggle de ids (chats e pastas) e fica/levanta contexto via hook. */
+interface SelectionContextValue {
+  selectionMode: boolean
+  selectedIds: Set<string>
+  selectedFolderIds: Set<string>
+  toggle: (id: string) => void
+  toggleFolder: (id: string) => void
+  enterSelectionMode: (initialId?: string, initialFolderId?: string) => void
+  exitSelectionMode: () => void
+  clearSelection: () => void
+}
+const SelectionContext = createContext<SelectionContextValue>({
+  selectionMode: false,
+  selectedIds: new Set<string>(),
+  selectedFolderIds: new Set<string>(),
+  toggle: () => {},
+  toggleFolder: () => {},
+  enterSelectionMode: () => {},
+  exitSelectionMode: () => {},
+  clearSelection: () => {},
+})
+const useSelection = () => useContext(SelectionContext)
+
+function SelectionProvider({ children }: { children: React.ReactNode }) {
+  const [selectionMode, setSelectionMode] = useState(false)
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+  const [selectedFolderIds, setSelectedFolderIds] = useState<Set<string>>(new Set())
+
+  const toggle = useCallback((id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }, [])
+
+  const toggleFolder = useCallback((id: string) => {
+    setSelectedFolderIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }, [])
+
+  const enterSelectionMode = useCallback((initialId?: string, initialFolderId?: string) => {
+    setSelectionMode(true)
+    if (initialId) {
+      setSelectedIds(new Set([initialId]))
+    }
+    if (initialFolderId) {
+      setSelectedFolderIds(new Set([initialFolderId]))
+    }
+  }, [])
+
+  const exitSelectionMode = useCallback(() => {
+    setSelectionMode(false)
+    setSelectedIds(new Set())
+    setSelectedFolderIds(new Set())
+  }, [])
+
+  const clearSelection = useCallback(() => {
+    setSelectedIds(new Set())
+    setSelectedFolderIds(new Set())
+  }, [])
+
+  // Auto-exit selection mode when nothing is selected
+  useEffect(() => {
+    if (selectionMode && selectedIds.size === 0 && selectedFolderIds.size === 0) {
+      setSelectionMode(false)
+    }
+  }, [selectedIds.size, selectedFolderIds.size, selectionMode])
+
+  return (
+    <SelectionContext.Provider
+      value={{
+        selectionMode,
+        selectedIds,
+        selectedFolderIds,
+        toggle,
+        toggleFolder,
+        enterSelectionMode,
+        exitSelectionMode,
+        clearSelection,
+      }}
+    >
+      {children}
+    </SelectionContext.Provider>
+  )
+}
 
 function NewChatButton() {
   const { mode, setView } = useWorkspace()
@@ -421,6 +518,9 @@ function SessionRow({ session, button: ButtonComponent, buttonClassName, actionB
   const toggleArchive = useSessionStore((s) => s.toggleArchive)
   const deleteSession = useSessionStore((s) => s.deleteSession)
   const renameSession = useSessionStore((s) => s.renameSession)
+  const { selectionMode, selectedIds, toggle, enterSelectionMode } = useSelection()
+
+  const isSelected = selectedIds.has(session.id)
 
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [renaming, setRenaming] = useState(false)
@@ -444,19 +544,24 @@ function SessionRow({ session, button: ButtonComponent, buttonClassName, actionB
       onSelect: () => toggleArchive(session.id),
     },
     { icon: <Trash2 className="size-4" />, label: "Deletar", onSelect: () => setConfirmDelete(true) },
+    { icon: <CheckSquare className="size-4" />, label: "Selecionar", onSelect: () => enterSelectionMode(session.id) },
   ]
+
+  const handleClick = () => {
+    if (selectionMode) {
+      toggle(session.id)
+    } else {
+      if (session.mode !== mode) setMode(session.mode)
+      setView("chat")
+      void selectSession(session.mode, session.id)
+    }
+  }
 
   return (
     <div className="group/menu-row relative min-w-0">
       <ButtonComponent
         isActive={activeId === session.id}
-        onClick={() => {
-          // Workers podem ter modo diferente do workspace atual (ex: worker code
-          // de um orquestrador chat) — acompanha o modo da sessão
-          if (session.mode !== mode) setMode(session.mode)
-          setView("chat")
-          void selectSession(session.mode, session.id)
-        }}
+        onClick={handleClick}
         className={cn(
           "group-hover/menu-row:bg-sidebar-accent group-hover/menu-row:text-sidebar-accent-foreground",
           "text-xs",
@@ -465,7 +570,20 @@ function SessionRow({ session, button: ButtonComponent, buttonClassName, actionB
         )}
       >
         <div className="flex min-w-0 flex-1 items-center gap-2 truncate">
-          <Icon className="size-4 shrink-0" />
+          {selectionMode ? (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation()
+                toggle(session.id)
+              }}
+              className="flex size-4 shrink-0 items-center justify-center rounded border border-sidebar-border bg-background hover:bg-sidebar-accent transition-colors"
+            >
+              {isSelected && <Check className="size-3 text-primary" />}
+            </button>
+          ) : (
+            <Icon className="size-4 shrink-0" />
+          )}
           <span className="truncate">{session.title}</span>
           {(statusDot === "submitted" || statusDot === "streaming") && (
             <span className="size-1.5 shrink-0 animate-pulse rounded-full bg-emerald-500" />
@@ -560,9 +678,21 @@ function FolderItem({ folder, sessions }: { folder: FolderInfo; sessions: Sessio
   const renameFolder = useSessionStore((s) => s.renameFolder)
   const toggleFolderPin = useSessionStore((s) => s.toggleFolderPin)
   const deleteFolder = useSessionStore((s) => s.deleteFolder)
+  const { selectionMode, selectedFolderIds, toggleFolder, enterSelectionMode } = useSelection()
 
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [renaming, setRenaming] = useState(false)
+
+  const isSelected = selectedFolderIds.has(folder.id)
+
+  const handleClick = (e: React.MouseEvent) => {
+    if (selectionMode) {
+      e.stopPropagation()
+      toggleFolder(folder.id)
+    } else {
+      setExpanded((prev) => !prev)
+    }
+  }
 
   return (
     <SidebarMenuItem>
@@ -573,30 +703,45 @@ function FolderItem({ folder, sessions }: { folder: FolderInfo; sessions: Sessio
             "text-xs",
             folder.pinned ? "group-hover/menu-row:pr-14" : "group-hover/menu-row:pr-12",
           )}
-          onClick={() => setExpanded((prev) => !prev)}
+          onClick={handleClick}
         >
-          <Folder className="size-4 shrink-0" />
+          {selectionMode ? (
+            <button
+              onClick={(e) => {
+                e.stopPropagation()
+                toggleFolder(folder.id)
+              }}
+              className="flex size-4 items-center justify-center rounded border border-sidebar-border bg-background shrink-0 hover:bg-sidebar-accent transition-colors"
+              aria-label={isSelected ? "Desmarcar" : "Marcar"}
+            >
+              {isSelected ? <Check className="size-3 text-primary" /> : <Square className="size-3 text-sidebar-foreground/40" />}
+            </button>
+          ) : (
+            <Folder className="size-4 shrink-0" />
+          )}
           <div className="flex min-w-0 flex-1 items-center gap-1 overflow-hidden">
             <span className="truncate">{folder.name}</span>
-            <ChevronDown className={cn("size-3 shrink-0 transition-transform", !expanded && "-rotate-90")} />
+            {!selectionMode && <ChevronDown className={cn("size-3 shrink-0 transition-transform", !expanded && "-rotate-90")} />}
           </div>
           {folder.pinned && <Pin className="!size-3 shrink-0 text-sidebar-foreground/40" />}
         </SidebarMenuButton>
 
-        <button
-          onClick={(e) => {
-            e.stopPropagation()
-            // Novo chat dentro da pasta: limpa a seleção e pré-atribui a pasta
-            void useSessionStore
-              .getState()
-              .createSession(mode, { folderId: folder.id })
-              .then((session) => selectSession(mode, session.id))
-          }}
-          className="absolute right-7 top-1.5 flex h-5 w-0 items-center justify-center overflow-hidden rounded-[calc(var(--radius-sm)-2px)] p-0 text-sidebar-foreground transition-all duration-200 group-hover/menu-row:w-5 group-hover/menu-row:bg-sidebar-accent group-hover/menu-row:text-sidebar-accent-foreground [&>svg]:size-4 [&>svg]:shrink-0"
-        >
-          <Plus className="size-4 shrink-0" />
-          <span className="sr-only">Adicionar</span>
-        </button>
+        {!selectionMode && (
+          <button
+            onClick={(e) => {
+              e.stopPropagation()
+              // Novo chat dentro da pasta: limpa a seleção e pré-atribui a pasta
+              void useSessionStore
+                .getState()
+                .createSession(mode, { folderId: folder.id })
+                .then((session) => selectSession(mode, session.id))
+            }}
+            className="absolute right-7 top-1.5 flex h-5 w-0 items-center justify-center overflow-hidden rounded-[calc(var(--radius-sm)-2px)] p-0 text-sidebar-foreground transition-all duration-200 group-hover/menu-row:w-5 group-hover/menu-row:bg-sidebar-accent group-hover/menu-row:text-sidebar-accent-foreground [&>svg]:size-4 [&>svg]:shrink-0"
+          >
+            <Plus className="size-4 shrink-0" />
+            <span className="sr-only">Adicionar</span>
+          </button>
+        )}
 
         <EllipsisMenu
           groupClass="group-hover/menu-row:opacity-100"
@@ -609,7 +754,10 @@ function FolderItem({ folder, sessions }: { folder: FolderInfo; sessions: Sessio
               onSelect: () => toggleFolderPin(folder.id),
             },
             { icon: <Trash2 className="size-4" />, label: "Remover", onSelect: () => setConfirmDelete(true) },
-          ]}
+            selectionMode
+              ? null
+              : { icon: <CheckSquare className="size-4" />, label: "Selecionar", onSelect: () => enterSelectionMode(undefined, folder.id) },
+          ].filter(Boolean) as MenuItem[]}
         />
       </div>
 
@@ -653,6 +801,23 @@ function ChatHistory() {
   const folders = useSessionStore((s) => s.folders)
   const createFolder = useSessionStore((s) => s.createFolder)
   const [creatingFolder, setCreatingFolder] = useState(false)
+  const { selectionMode, selectedIds, selectedFolderIds, exitSelectionMode } = useSelection()
+  const deleteSessions = useSessionStore((s) => s.deleteSessions)
+  const deleteFolder = useSessionStore((s) => s.deleteFolder)
+
+  const totalSelected = selectedIds.size + selectedFolderIds.size
+
+  const handleBulkDelete = async () => {
+    if (selectedIds.size > 0) {
+      await deleteSessions(Array.from(selectedIds))
+    }
+    if (selectedFolderIds.size > 0) {
+      for (const id of selectedFolderIds) {
+        deleteFolder(id)
+      }
+    }
+    exitSelectionMode()
+  }
 
   const modeSessions = useMemo(
     () => sessions.filter((s) => s.mode === mode),
@@ -676,19 +841,42 @@ function ChatHistory() {
 
   return (
     <>
+      {selectionMode && totalSelected > 0 && (
+        <div className="flex items-center justify-between gap-2 px-3 pb-1 pt-2">
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={exitSelectionMode}
+              className="flex size-4 items-center justify-center rounded hover:bg-sidebar-foreground/10 transition-colors"
+              aria-label="Sair do modo seleção"
+            >
+              <X className="size-3" />
+            </button>
+            <span className="text-xs font-medium text-sidebar-foreground">
+              {totalSelected} selecionado{totalSelected !== 1 ? "s" : ""}
+            </span>
+          </div>
+          <Button variant="ghost" size="icon-sm" onClick={handleBulkDelete} className="text-red-500 hover:text-red-400 hover:bg-red-500/10" aria-label="Excluir selecionados">
+            <Trash2 className="size-4" />
+          </Button>
+        </div>
+      )}
+
       <AccordionGroup
         label="Pastas"
         action={
-          <button
-            onClick={(e) => {
-              e.stopPropagation()
-              setCreatingFolder(true)
-            }}
-            className="flex size-4 items-center justify-center rounded hover:bg-sidebar-accent"
-            title="Nova pasta"
-          >
-            <FolderPlus className="size-3" />
-          </button>
+          !selectionMode && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation()
+                setCreatingFolder(true)
+              }}
+              className="flex size-4 items-center justify-center rounded hover:bg-sidebar-accent"
+              title="Nova pasta"
+            >
+              <FolderPlus className="size-3" />
+            </button>
+          )
         }
       >
         <SidebarMenu>
@@ -837,31 +1025,33 @@ export function AppSidebar() {
   }, [initialize, initQueue])
 
   return (
-    <Sidebar variant="floating" collapsible="offcanvas">
-      <SidebarHeader>
-        <ModeTabs />
-      </SidebarHeader>
-      <SidebarContent>
-        <div className="flex min-w-0 flex-col overflow-x-hidden">
-          <div className="px-3 py-2">
-            <NewChatButton />
+    <SelectionProvider>
+      <Sidebar variant="floating" collapsible="offcanvas">
+        <SidebarHeader>
+          <ModeTabs />
+        </SidebarHeader>
+        <SidebarContent>
+          <div className="flex min-w-0 flex-col overflow-x-hidden">
+            <div className="px-3 py-2">
+              <NewChatButton />
+            </div>
+            <div className="space-y-1 px-3 pb-2">
+              <MemoriesButton />
+              <ModelsButton />
+              <UsageButton />
+              <McpSkillsButton />
+            </div>
+            <SidebarSeparator className="mx-3" />
+            <ChatHistory />
           </div>
-          <div className="space-y-1 px-3 pb-2">
-            <MemoriesButton />
-            <ModelsButton />
-            <UsageButton />
-            <McpSkillsButton />
-          </div>
+        </SidebarContent>
+        <SidebarFooter className="p-0">
           <SidebarSeparator className="mx-3" />
-          <ChatHistory />
-        </div>
-      </SidebarContent>
-      <SidebarFooter className="p-0">
-        <SidebarSeparator className="mx-3" />
-        <AccountSection onOpenSettings={() => openSettings()} />
-      </SidebarFooter>
-      <SettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} initialTab={settingsTab} />
-    </Sidebar>
+          <AccountSection onOpenSettings={() => openSettings()} />
+        </SidebarFooter>
+        <SettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} initialTab={settingsTab} />
+      </Sidebar>
+    </SelectionProvider>
   )
 }
 

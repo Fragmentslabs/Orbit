@@ -66,6 +66,7 @@ interface SessionState {
   togglePin: (id: string) => void
   toggleArchive: (id: string) => void
   deleteSession: (id: string) => Promise<void>
+  deleteSessions: (ids: string[]) => Promise<void>
   moveToFolder: (id: string, folderId: string | null) => void
 
   createFolder: (mode: SessionMode, name: string) => FolderInfo
@@ -248,6 +249,37 @@ export const useSessionStore = create<SessionState>((set, get) => ({
   },
 
   moveToFolder: (id, folderId) => set((state) => updateSessionIn(state, id, { folderId })),
+
+  deleteSessions: async (ids) => {
+    const idSet = new Set<string>()
+    for (const id of ids) {
+      idSet.add(id)
+      // Inclui workers filhos em cascata
+      for (const s of get().sessions) {
+        if (s.parentId === id) idSet.add(s.id)
+      }
+    }
+    for (const sid of idSet) {
+      void chatApi.abort(sid)
+      await storage.remove(StorageKeys.session(sid))
+      await storage.remove(StorageKeys.messages(sid))
+      void chatApi.closeBrowser(sid)
+      useBrainPrefs.getState().setEnabled(sid, true)
+      void storage.remove(StorageKeys.planReview(sid))
+    }
+    set((state) => {
+      const messages = { ...state.messages }
+      for (const sid of idSet) delete messages[sid]
+      const activeIds = { ...state.activeIds }
+      for (const mode of ["chat", "code"] as SessionMode[]) {
+        const active = activeIds[mode]
+        if (active && idSet.has(active)) activeIds[mode] = null
+      }
+      const planReviews = { ...state.planReviews }
+      for (const sid of idSet) delete planReviews[sid]
+      return { sessions: state.sessions.filter((s) => !idSet.has(s.id)), messages, activeIds, planReviews }
+    })
+  },
 
   createFolder: (mode, name) => {
     const folder: FolderInfo = { id: nanoid(), name, mode, pinned: false, createdAt: Date.now() }
