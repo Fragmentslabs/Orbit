@@ -16,6 +16,7 @@ import { createChatMemoryTools, createCodeMemoryTools, createGraphTool } from '.
 import { createSubagentTool } from './orchestration'
 import { createPanelBrowserTools } from './panel-browser'
 import { createQuestionTool } from './question'
+import { createBackgroundTools } from './background'
 import { createBashTool } from './shell'
 import { createTodoTool } from './todo'
 import { createWebFetchTool, createWebSearchTool } from './web'
@@ -77,6 +78,7 @@ export function buildToolSet(input: SendMessageInput, ctx: ToolContext | null): 
       tools.write = createWriteTool(ctx)
       tools.edit = createEditTool(ctx)
       tools.bash = createBashTool(ctx)
+      Object.assign(tools, createBackgroundTools(ctx))
     }
   }
   // Browser do painel direito: teste de apps web + modo documentação.

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
-import { FileCode, Globe, Folder, MessageSquare, Terminal, X, PlusIcon, Bot, LoaderIcon, XCircleIcon } from "lucide-react"
+import { FileCode, Globe, Folder, MessageSquare, Terminal, X, PlusIcon, Bot, LoaderIcon, XCircleIcon, Trash2 } from "lucide-react"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -14,6 +14,7 @@ import { DiffTab } from "@/src/components/diff-tab"
 import { useWorkspace } from "@/lib/workspace-context"
 import { usePanelStore } from "@/src/stores/panel-store"
 import { useSessionStore } from "@/src/stores/session-store"
+import { useProcessStore } from "@/src/stores/process-store"
 import { cn } from "@/lib/utils"
 
 type TabType = "chat" | "terminal" | "folders" | "browser" | "diff"
@@ -93,50 +94,98 @@ function SelectorScreen({ onSelect, onOpenWorker }: {
   const activeId = useSessionStore((s) => s.activeIds[mode])
   const sessions = useSessionStore((s) => s.sessions)
   const statusMap = useSessionStore((s) => s.status)
+
+  const processes = useProcessStore((s) => s.processes)
+  const fetchProcesses = useProcessStore((s) => s.fetch)
+  const killProcess = useProcessStore((s) => s.kill)
+
   const workers = useMemo(
     () => sessions.filter((s) => s.parentId === activeId),
     [sessions, activeId],
   )
 
+  useEffect(() => {
+    fetchProcesses()
+    const interval = setInterval(() => fetchProcesses(), 3_000)
+    return () => clearInterval(interval)
+  }, [fetchProcesses])
+
   return (
-    <div className="flex flex-1 flex-col items-center justify-center gap-4 p-6">
-      <p className="text-sm font-medium text-foreground">O que deseja abrir?</p>
-      <div className="grid grid-cols-2 gap-3 w-full max-w-xs">
-        {(Object.entries(tabMeta) as [TabType, TabMeta][]).map(([type, { icon: Icon, label, description }]) => (
-          <button
-            key={type}
-            onClick={() => onSelect(type)}
-            className="flex flex-col items-center gap-2 rounded-lg border border-sidebar-border bg-sidebar-accent/30 p-4 text-center transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
-          >
-            <Icon className="size-6 shrink-0" />
-            <span className="text-xs font-medium">{label}</span>
-            <span className="text-[10px] leading-tight text-muted-foreground line-clamp-2">{description}</span>
-          </button>
-        ))}
+    <div className="flex flex-1 flex-col overflow-hidden">
+      <div className="flex flex-1 flex-col items-center justify-center gap-4 p-6">
+        <p className="text-sm font-medium text-foreground">O que deseja abrir?</p>
+        <div className="grid grid-cols-2 gap-3 w-full max-w-xs">
+          {(Object.entries(tabMeta) as [TabType, TabMeta][]).map(([type, { icon: Icon, label, description }]) => (
+            <button
+              key={type}
+              onClick={() => onSelect(type)}
+              className="flex flex-col items-center gap-2 rounded-lg border border-sidebar-border bg-sidebar-accent/30 p-4 text-center transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+            >
+              <Icon className="size-6 shrink-0" />
+              <span className="text-xs font-medium">{label}</span>
+              <span className="text-[10px] leading-tight text-muted-foreground line-clamp-2">{description}</span>
+            </button>
+          ))}
+        </div>
+
+        {workers.length > 0 && (
+          <div className="mt-2 flex w-full max-w-xs flex-col gap-1">
+            <p className="px-1 text-[11px] font-medium text-muted-foreground">Workers da conversa ativa</p>
+            {workers.map((worker) => (
+              <button
+                key={worker.id}
+                onClick={() => onOpenWorker(worker.id, worker.title)}
+                className="flex items-center gap-2 rounded-md border border-sidebar-border bg-sidebar-accent/20 px-2.5 py-1.5 text-left text-xs transition-colors hover:bg-sidebar-accent"
+              >
+                {worker.mode === "code" ? (
+                  <Terminal className="size-3.5 shrink-0 text-muted-foreground" />
+                ) : (
+                  <Bot className="size-3.5 shrink-0 text-muted-foreground" />
+                )}
+                <span className="min-w-0 flex-1 truncate">{worker.title}</span>
+                <WorkerStatusIcon status={statusMap[worker.id] ?? "idle"} />
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
-      {workers.length > 0 && (
-        <div className="mt-2 flex w-full max-w-xs flex-col gap-1">
-          <p className="px-1 text-[11px] font-medium text-muted-foreground">Workers da conversa ativa</p>
-          {workers.map((worker) => (
-            <button
-              key={worker.id}
-              onClick={() => onOpenWorker(worker.id, worker.title)}
-              className="flex items-center gap-2 rounded-md border border-sidebar-border bg-sidebar-accent/20 px-2.5 py-1.5 text-left text-xs transition-colors hover:bg-sidebar-accent"
-            >
-              {worker.mode === "code" ? (
-                <Terminal className="size-3.5 shrink-0 text-muted-foreground" />
+      {processes.length > 0 && (
+        <div className="flex items-center gap-2 border-t border-sidebar-border px-3 py-2 text-xs text-sidebar-foreground/70">
+          {processes.map((p) => (
+            <div key={p.pid} className="flex items-center gap-1.5 rounded-md bg-sidebar-accent/50 px-2 py-1">
+              {p.status === "running" ? (
+                <span className="size-1.5 rounded-full bg-emerald-500 shrink-0" />
               ) : (
-                <Bot className="size-3.5 shrink-0 text-muted-foreground" />
+                <span className="size-1.5 rounded-full bg-muted-foreground/50 shrink-0" />
               )}
-              <span className="min-w-0 flex-1 truncate">{worker.title}</span>
-              <WorkerStatusIcon status={statusMap[worker.id] ?? "idle"} />
-            </button>
+              <span className="font-medium">{p.label}</span>
+              <span className="text-[10px]">PID {p.pid}</span>
+              <span className="text-[10px]">{formatUptime(p.startTime)}</span>
+              {p.status !== "running" && (
+                <span className="text-[10px] text-muted-foreground">({p.status})</span>
+              )}
+              <button
+                onClick={() => void killProcess(p.pid)}
+                className="ml-0.5 flex size-3.5 items-center justify-center rounded-sm text-sidebar-foreground/50 hover:text-destructive"
+              >
+                <Trash2 className="size-3" />
+              </button>
+            </div>
           ))}
         </div>
       )}
     </div>
   )
+}
+
+function formatUptime(startTime: number): string {
+  const seconds = Math.floor((Date.now() - startTime) / 1000)
+  if (seconds < 60) return `${seconds}s`
+  const minutes = Math.floor(seconds / 60)
+  if (minutes < 60) return `${minutes}m ${seconds % 60}s`
+  const hours = Math.floor(minutes / 60)
+  return `${hours}h ${minutes % 60}m`
 }
 
 let tabCounter = 0

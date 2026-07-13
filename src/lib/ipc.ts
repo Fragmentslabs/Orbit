@@ -69,6 +69,21 @@ export const customProvidersApi = {
   detect: () => window.ipcRenderer.invoke("custom-providers:detect") as Promise<DetectResult[]>,
 }
 
+export interface ProcessInfo {
+  pid: number
+  label: string
+  command: string
+  cwd: string
+  startTime: number
+  status: "running" | "exited" | "killed"
+  exitCode?: number
+}
+
+export const processApi = {
+  list: () => window.ipcRenderer.invoke("process:list") as Promise<ProcessInfo[]>,
+  kill: (pid: number) => window.ipcRenderer.invoke("process:kill", pid) as Promise<boolean>,
+}
+
 export const sessionApi = {
   revert: (sessionId: string, messageId: string) =>
     window.ipcRenderer.invoke("session:revert", sessionId, messageId) as Promise<SessionRevert | null>,

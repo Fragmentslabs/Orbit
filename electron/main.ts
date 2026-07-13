@@ -10,6 +10,7 @@ import { listCredentialProviders, removeCredential, setCredential } from './lib/
 import { getCatalog, ensureCustomProvidersSeeded } from './lib/catalog'
 import { addCustomProvider, listCustomProviders, removeCustomProvider, updateCustomProvider } from './lib/custom-providers'
 import { detectLocal } from './lib/detect-local'
+import { killAll as killAllProcesses, listProcesses, killProcess } from './lib/process-manager'
 import { getModelsSnapshot, invalidateModelsSnapshot } from './lib/models'
 import { revert as revertSession, unrevert as unrevertSession } from './lib/session/revert'
 import { getInitStatus, runProjectInit, type RunInitInput } from './lib/project-init'
@@ -774,6 +775,12 @@ app.whenReady().then(() => {
   ipcMain.handle('mcp:save', (_event, config) => saveMcpConfig(config))
   ipcMain.handle('mcp:reconnect', (_event, name?: string) => reconnectMcp(name))
   void initMcp()
+
+  // Processos em background
+  ipcMain.handle('process:list', () => listProcesses())
+  ipcMain.handle('process:kill', (_event, pid: number) => killProcess(pid))
+
+  app.on('before-quit', () => killAllProcesses())
 
   // Provedores locais pré-cadastrados (Ollama, LM Studio)
   void ensureCustomProvidersSeeded()
