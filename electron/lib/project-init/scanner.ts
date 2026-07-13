@@ -176,31 +176,31 @@ export async function scanProject(directory: string): Promise<ProjectScan> {
     }
   }
 
-  for (const signal of FILE_SIGNALS) {
-    if (await readIfExists(directory, signal.file)) push(signal.kind, signal.label)
-  }
-
-  // CI/CD
-  try {
-    const workflows = await fs.readdir(path.join(directory, '.github', 'workflows'))
-    if (workflows.length > 0) push('infra', 'GitHub Actions')
-  } catch {
-    // sem workflows
-  }
-
-  // .env.example com segredos/keys é sinal de superfície de segurança
-  const envExample = await readIfExists(directory, '.env.example')
-  if (envExample && /secret|token|key|auth|password/i.test(envExample)) {
-    push('security', 'Variáveis sensíveis (.env)')
-  }
-
-  const readme = await readIfExists(directory, 'README.md')
-  if (readme) scan.readmeExcerpt = readme.slice(0, MAX_EXCERPT)
-
-  for (const file of EXCERPT_FILES) {
-    const content = await readIfExists(directory, file)
-    if (content) scan.configExcerpts.push({ file, content: content.slice(0, MAX_EXCERPT) })
-  }
+  await Promise.all([
+    Promise.all(
+      FILE_SIGNALS.map(async (signal) => {
+        if (await readIfExists(directory, signal.file)) push(signal.kind, signal.label)
+      }),
+    ),
+    (async () => {
+      const workflowsDir = await fs.readdir(path.join(directory, '.github', 'workflows')).catch(() => [] as string[])
+      if (workflowsDir.length > 0) push('infra', 'GitHub Actions')
+    })(),
+    (async () => {
+      const envExample = await readIfExists(directory, '.env.example')
+      if (envExample && /secret|token|key|auth|password/i.test(envExample)) {
+        push('security', 'Variáveis sensíveis (.env)')
+      }
+    })(),
+    (async () => {
+      const readme = await readIfExists(directory, 'README.md')
+      if (readme) scan.readmeExcerpt = readme.slice(0, MAX_EXCERPT)
+    })(),
+    ...EXCERPT_FILES.map(async (file) => {
+      const content = await readIfExists(directory, file)
+      if (content) scan.configExcerpts.push({ file, content: content.slice(0, MAX_EXCERPT) })
+    }),
+  ])
 
   return scan
 }

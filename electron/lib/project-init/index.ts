@@ -194,7 +194,8 @@ function parseRefineJson(raw: string): RefineOutput | null {
 }
 
 /** Revisão de um levantamento pelo agente principal: condensa, remove
- * especulação e aponta complementos para áreas já consolidadas. */
+ * especulação e aponta complementos para áreas já consolidadas.
+ * Faz até 3 tentativas com backoff (1s, 2s) se o JSON vier inválido. */
 async function refineFindings(
   model: LanguageModel,
   area: ProjectArea,
@@ -205,11 +206,9 @@ async function refineFindings(
     .filter(([a]) => a !== area)
     .map(([a, summary]) => `- "${a}" (${PROJECT_AREAS[a].label}): ${summary}`)
     .join('\n')
-  const { text } = await generateText({
-    model,
-    system:
-      'Você é o agente principal do onboarding do Orbit. Revise o levantamento de um subagent: remova especulação, corrija exageros, condense e estruture. Responda APENAS com JSON válido.',
-    prompt: `Área: "${area}" (${PROJECT_AREAS[area].label})
+  const system =
+    'Você é o agente principal do onboarding do Orbit. Revise o levantamento de um subagent: remova especulação, corrija exageros, condense e estruture. Responda APENAS com JSON válido.'
+  const prompt = `Área: "${area}" (${PROJECT_AREAS[area].label})
 
 Levantamento do subagent:
 ${raw}
@@ -224,9 +223,23 @@ Responda com JSON:
   "document": "markdown revisado e estruturado da área (caminhos reais, comandos)",
   "complements": [{"area": "id-de-area-ja-consolidada", "addition": "trecho markdown que enriquece aquele doc"}]
 }
-"complements" só quando este levantamento traz algo que pertence a outra área já consolidada (senão []).`,
-  })
-  return parseRefineJson(text) ?? { ...fallbackParse(raw), complements: [] }
+"complements" só quando este levantamento traz algo que pertence a outra área já consolidada (senão []).`
+
+  let lastError: unknown
+  for (let attempt = 0; attempt < 3; attempt++) {
+    if (attempt > 0) await new Promise((r) => setTimeout(r, attempt * 1000))
+    try {
+      const { text } = await generateText({ model, system, prompt })
+      const parsed = parseRefineJson(text)
+      if (parsed) return parsed
+      lastError = new Error('JSON inválido')
+    } catch (err) {
+      lastError = err
+    }
+  }
+
+  console.warn(`[refineFindings] falhou após 3 tentativas: ${lastError}`)
+  return { ...fallbackParse(raw), complements: [] }
 }
 
 async function findAreaMemory(projectId: string, area: ProjectArea): Promise<Memory | undefined> {

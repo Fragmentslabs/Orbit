@@ -147,8 +147,10 @@ ${target(input, "(cole o log de erro ou stack trace)")}
     description: "Busca textual nas memórias (Brain) antes de responder",
     keywords: ["lembrar", "memoria", "brain", "recall", "buscar"],
     modes: ["chat", "code"],
-    kind: "insert",
-    insertText: "@memoria ",
+    kind: "pipeline",
+    buildPrompt: (input) => `Busque nas memórias do projeto (Brain) o que for relevante para: ${target(input, "liste todas as memórias disponíveis e seus resumos")}
+
+Use as memórias encontradas para responder com detalhes, citando as fontes. Se a busca não encontrar nada relevante, informe o usuário e sugira criar uma memória sobre o assunto.`,
   },
   {
     id: "init",

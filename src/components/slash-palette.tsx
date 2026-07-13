@@ -53,15 +53,12 @@ export function SlashPalette({ commands, children }: {
     value.startsWith("/") && !LITERAL_COMMANDS.some((literal) => value.startsWith(literal))
   const query = open ? normalizeText(value.slice(1)) : ""
 
-  // Ordena por seção (Ações primeiro) antes do recorte — sort estável mantém
-  // a ordem de inserção dentro de cada grupo e o highlight segue a exibição
   const filtered = useMemo(
     () =>
       open
         ? commands
             .filter((c) => matches(c, query))
             .sort((a, b) => GROUP_ORDER.indexOf(a.group) - GROUP_ORDER.indexOf(b.group))
-            .slice(0, 12)
         : [],
     [commands, open, query],
   )
