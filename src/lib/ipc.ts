@@ -140,6 +140,19 @@ export const fsApi = {
     window.ipcRenderer.invoke("fs:readFileAsDataUrl", filePath) as Promise<{ dataUrl: string } | { error: string }>,
 }
 
+export interface SearchHit {
+  sessionId: string
+  sessionTitle: string
+  mode: string
+  updatedAt: number
+  snippet: string
+}
+
+export const searchApi = {
+  sessions: (query: string) =>
+    window.ipcRenderer.invoke("search:sessions", query) as Promise<SearchHit[]>,
+}
+
 export const memoryApi = {
   list: () => window.ipcRenderer.invoke("memory:list") as Promise<Memory[]>,
   create: (input: {

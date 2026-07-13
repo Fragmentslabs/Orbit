@@ -16,6 +16,7 @@ import {
   Redo2,
   RefreshCw,
   Scissors,
+  Search,
   Undo2,
   X,
   ClipboardPaste,
@@ -194,7 +195,7 @@ function HamburgerMenu() {
   )
 }
 
-export function TitleBar() {
+export function TitleBar({ onSearchOpen }: { onSearchOpen?: () => void }) {
   const isMac = windowApi.platform === "darwin"
 
   return (
@@ -202,8 +203,16 @@ export function TitleBar() {
       className="flex h-8 shrink-0 select-none items-center justify-between border-b border-border/50 bg-sidebar"
       style={dragStyle}
     >
-      <div className="flex h-full items-center gap-2 pl-1.5" style={noDragStyle}>
+      <div className="flex h-full items-center gap-1 pl-1.5" style={noDragStyle}>
         <HamburgerMenu />
+        <button
+          type="button"
+          aria-label="Buscar conversas"
+          onClick={onSearchOpen}
+          className="inline-flex size-6 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+        >
+          <Search className="size-3.5" />
+        </button>
         <span className="text-[11px] font-medium tracking-wide text-muted-foreground">Orbit</span>
       </div>
       <div className="flex h-full items-center pr-1.5" style={noDragStyle}>

@@ -26,7 +26,7 @@ import { computeAnalytics } from './lib/analytics'
 import { approvePendingSkill, discardPendingSkill, listPendingSkills } from './lib/skills/pending'
 import { listKeys, readJson, removeJson, writeJson } from './lib/storage'
 import { destroyBrowserWindow } from './lib/tools'
-import type { SendMessageInput, SessionInfo } from '../shared/chat'
+import type { ChatMessage, SendMessageInput, SessionInfo } from '../shared/chat'
 import { StorageKeys } from '../shared/chat'
 import type { Memory, MemoryEvent } from '../shared/memory'
 
@@ -437,6 +437,69 @@ app.whenReady().then(() => {
   ipcMain.handle('storage:write', (_event, key: string, value: unknown) => writeJson(key, value))
   ipcMain.handle('storage:remove', (_event, key: string) => removeJson(key))
   ipcMain.handle('storage:list', (_event, prefix: string) => listKeys(prefix))
+
+  /**
+   * Busca textual entre todas as sessões (título + mensagens).
+   * Retorna hits planos ordenados por recência da sessão.
+   */
+  ipcMain.handle('search:sessions', async (_event, query: string) => {
+    if (!query?.trim()) return []
+    const q = query.toLowerCase().trim()
+
+    const keys = await listKeys('session/')
+    const all: SessionInfo[] = (
+      await Promise.all(keys.map((k) => readJson<SessionInfo>(k)))
+    ).filter((s): s is SessionInfo => s !== null)
+    all.sort((a, b) => b.updatedAt - a.updatedAt)
+
+    type Hit = { sessionId: string; sessionTitle: string; mode: string; updatedAt: number; snippet: string }
+
+    const results: Hit[] = []
+
+    for (const info of all.slice(0, 40)) {
+      const hits: string[] = []
+
+      // Título
+      if (info.title.toLowerCase().includes(q)) {
+        hits.push(info.title)
+      }
+
+      // Mensagens (só carrega se título não já casou)
+      if (hits.length < 5) {
+        const msgsKey = StorageKeys.messages(info.id)
+        const msgs = (await readJson<ChatMessage[]>(msgsKey)) ?? []
+        for (const msg of msgs) {
+          for (const part of msg.parts) {
+            if (part.type === 'text' && part.text.toLowerCase().includes(q)) {
+              const idx = part.text.toLowerCase().indexOf(q)
+              const start = Math.max(0, idx - 40)
+              const end = Math.min(part.text.length, idx + q.length + 40)
+              let snippet = part.text.slice(start, end)
+              if (start > 0) snippet = '…' + snippet
+              if (end < part.text.length) snippet += '…'
+              hits.push(snippet)
+              if (hits.length >= 5) break
+            }
+          }
+          if (hits.length >= 5) break
+        }
+      }
+
+      for (const snippet of hits.slice(0, 5)) {
+        results.push({
+          sessionId: info.id,
+          sessionTitle: info.title,
+          mode: info.mode,
+          updatedAt: info.updatedAt,
+          snippet,
+        })
+      }
+
+      if (results.length >= 50) break
+    }
+
+    return results
+  })
 
   // Catálogo de provedores/modelos (models.dev)
   ipcMain.handle('catalog:get', () => getCatalog())

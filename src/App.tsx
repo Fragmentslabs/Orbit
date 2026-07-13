@@ -14,6 +14,7 @@ import { MemoriesView } from "@/src/components/memories/memories-view"
 import { ModelsView } from "@/src/components/models/models-view"
 import { RightPanel } from "@/src/components/right-panel"
 import { TitleBar } from "@/src/components/titlebar"
+import { ChatSearch } from "@/src/components/chat-search"
 import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels"
 
 const HOVER_ZONE_WIDTH = 6
@@ -143,13 +144,27 @@ function Layout() {
 
 function App() {
   const [open, setOpen] = useState(false)
+  const [searchOpen, setSearchOpen] = useState(false)
+
+  // Ctrl+Space abre a busca global
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.code === "Space" && (e.ctrlKey || e.metaKey)) {
+        e.preventDefault()
+        setSearchOpen((v) => !v)
+      }
+    }
+    window.addEventListener("keydown", onKey)
+    return () => window.removeEventListener("keydown", onKey)
+  }, [])
 
   return (
     <ThemeProvider defaultTheme="system" storageKey="vite-ui-theme">
       <TooltipProvider>
         <WorkspaceProvider>
           <div className="flex h-svh flex-col overflow-hidden">
-            <TitleBar />
+            <TitleBar onSearchOpen={() => setSearchOpen(true)} />
+            <ChatSearch open={searchOpen} onOpenChange={setSearchOpen} />
             <SidebarProvider className="min-h-0 flex-1 overflow-hidden" open={open} onOpenChange={setOpen}>
               <Layout />
             </SidebarProvider>
