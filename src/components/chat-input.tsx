@@ -24,6 +24,7 @@ import { OrchestrationConfigDialog } from "@/src/components/orchestration-config
 import { ReasoningPicker } from "@/src/components/reasoning-picker"
 import { DraftInputBridge } from "@/src/components/draft-input-bridge"
 import { QueueIndicator } from "@/src/components/queue-indicator"
+import { ContextMeter } from "@/src/components/context-meter"
 import { SendButtonGroup } from "@/src/components/send-button-group"
 import { SlashPalette } from "@/src/components/slash-palette"
 import { useReferenceCommands, useSlashActionCommands, type SlashCommand } from "@/src/lib/slash-commands"
@@ -200,6 +201,7 @@ export function ChatInput({ onSubmit, status, onStop, sessionId }: {
         </PromptInputFooter>
       </PromptInput>
       <PromptInputTools>
+        <div className="flex items-center gap-1">
         <ModeToggle
           icon={Search}
           label="Pesquisa"
@@ -242,6 +244,10 @@ export function ChatInput({ onSubmit, status, onStop, sessionId }: {
           active={brain}
           onToggle={() => setBrainEnabled(sessionId, !brain)}
         />
+      </div>
+        <div className="ml-auto">
+          <ContextMeter sessionId={sessionId} />
+        </div>
       </PromptInputTools>
       <OrchestrationConfigDialog open={configOpen} onOpenChange={setConfigOpen} />
     </div>
