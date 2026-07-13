@@ -117,14 +117,36 @@ function FileDiffSection({ file }: { file: FileDiff }) {
   )
 }
 
+/** Última mensagem de assistente com snapshot (qualquer sessão code) */
+function useLastCodeMessage(): { sessionId: string; message: ChatMessage } | null {
+  const sessions = useSessionStore((s) => s.sessions)
+  const allMessages = useSessionStore((s) => s.messages)
+  return useMemo(() => {
+    const codeSessions = sessions
+      .filter((s) => s.mode === "code")
+      .sort((a, b) => b.updatedAt - a.updatedAt)
+    for (const session of codeSessions) {
+      const msgs = allMessages[session.id]
+      if (!msgs) continue
+      const found = [...msgs].reverse().find((m) => m.role === "assistant" && m.snapshot?.patch)
+      if (found) return { sessionId: session.id, message: found }
+    }
+    return null
+  }, [sessions, allMessages])
+}
+
 export function DiffTab({ sessionId, messageId }: {
-  sessionId: string
-  messageId: string
+  sessionId?: string
+  messageId?: string
 }) {
-  const messages = useSessionStore((s) => s.messages[sessionId])
+  const auto = useLastCodeMessage()
+  const resolvedSessionId = sessionId ?? auto?.sessionId ?? ""
+  const resolvedMessageId = messageId ?? auto?.message.id ?? ""
+
+  const messages = useSessionStore((s) => s.messages[resolvedSessionId])
   const message: ChatMessage | undefined = useMemo(
-    () => messages?.find((m) => m.id === messageId),
-    [messages, messageId],
+    () => messages?.find((m) => m.id === resolvedMessageId),
+    [messages, resolvedMessageId],
   )
 
   const files = useMemo(() => {
@@ -135,7 +157,7 @@ export function DiffTab({ sessionId, messageId }: {
   if (!message) {
     return (
       <div className="flex h-full items-center justify-center text-xs text-muted-foreground">
-        Mensagem não encontrada
+        Nenhuma alteração encontrada
       </div>
     )
   }
@@ -148,13 +170,18 @@ export function DiffTab({ sessionId, messageId }: {
     )
   }
 
+  const isAuto = !sessionId
+  const session = useSessionStore((s) => s.sessions.find((s) => s.id === resolvedSessionId))
   const totalAdded = files.reduce((s, f) => s + f.added, 0)
   const totalRemoved = files.reduce((s, f) => s + f.removed, 0)
 
   return (
     <div className="flex h-full flex-col overflow-hidden">
       <div className="mb-3 flex items-center gap-3 text-xs text-muted-foreground">
-        <span className="font-medium text-foreground">{message.snapshot!.files?.length ?? files.length} arquivo{(message.snapshot!.files?.length ?? files.length) !== 1 ? "s" : ""}</span>
+        {isAuto && session && (
+          <span className="truncate font-medium text-foreground">{session.title}</span>
+        )}
+        <span>{message.snapshot!.files?.length ?? files.length} arquivo{(message.snapshot!.files?.length ?? files.length) !== 1 ? "s" : ""}</span>
         {totalAdded > 0 && <span className="text-emerald-500">+{totalAdded}</span>}
         {totalRemoved > 0 && <span className="text-red-500">-{totalRemoved}</span>}
       </div>
