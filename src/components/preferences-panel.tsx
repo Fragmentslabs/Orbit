@@ -50,10 +50,12 @@ function ModelField({
   label,
   value,
   onChange,
+  nullLabel,
 }: {
   label: string
   value: DefaultModel | null
   onChange: (v: DefaultModel | null) => void
+  nullLabel?: string
 }) {
   const [open, setOpen] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
@@ -86,13 +88,23 @@ function ModelField({
               <ModelSelectorName>{selectedModel?.name ?? value.modelId}</ModelSelectorName>
             </>
           ) : (
-            <span className="text-muted-foreground">Nenhum</span>
+            <span className="text-muted-foreground">{nullLabel ?? "Nenhum"}</span>
           )}
           <ChevronDownIcon className="size-3 text-muted-foreground" />
         </ModelSelectorTrigger>
         <ModelSelectorContent>
           <ModelSelectorInput placeholder="Pesquisar modelos…" />
           <ModelSelectorList>
+            {nullLabel && (
+              <ModelSelectorItem
+                onSelect={() => { onChange(null); setOpen(false) }}
+                value={nullLabel}
+                className="flex justify-between"
+              >
+                <span className="text-muted-foreground">{nullLabel}</span>
+                {!value ? <CheckIcon className="size-4" /> : <div className="size-4" />}
+              </ModelSelectorItem>
+            )}
             <ModelSelectorEmpty>Nenhum modelo encontrado.</ModelSelectorEmpty>
             {groups.map(({ provider, models }) => (
               <ModelSelectorGroup heading={provider.name} key={provider.id}>
@@ -287,11 +299,12 @@ function ChatPrefs() {
 function CodePrefs() {
   const resetThresholds = usePermissionPrefs((s) => s.resetThresholds)
   const { codeModel, setCodeModel, subagentModel, setSubagentModel, orchestraModel, setOrchestraModel, codeActiveModes, setCodeActiveMode } = useModelModePrefs()
+  const setWorkerModel = useProviderStore((s) => s.setWorkerModel)
 
   return (
     <div className="flex flex-col gap-4">
       <ModelField label="Modelo padrão" value={codeModel} onChange={setCodeModel} />
-      <ModelField label="Modelo de subagentes" value={subagentModel} onChange={setSubagentModel} />
+      <ModelField label="Modelo de subagentes" value={subagentModel} nullLabel="Mesmo que padrão" onChange={(m) => { setSubagentModel(m); setWorkerModel(m ?? codeModel) }} />
       <ModelField label="Modelo de orquestra" value={orchestraModel} onChange={setOrchestraModel} />
       <ActiveModesSection modes={codeActiveModes} onChange={setCodeActiveMode} isCode={true} />
       <MemoriaSection isCode={true} />

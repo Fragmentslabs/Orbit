@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
-import { Crosshair, Link2 } from "lucide-react"
+import { Crosshair, FileUp, Link2 } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
@@ -493,8 +493,9 @@ export function MemoryGraph({ pool, allById, query, selectedId, onSelect, projec
             </g>
           </svg>
           {dropActive && (
-            <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-background/60 text-sm">
-              Solte o arquivo para criar uma memória
+            <div className="pointer-events-none absolute inset-0 z-10 flex flex-col items-center justify-center gap-2 bg-background/70 text-sm">
+              <FileUp className="size-8 text-primary" />
+              <span className="font-medium">Solte o arquivo para criar memória</span>
             </div>
           )}
         </div>
