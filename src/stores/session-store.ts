@@ -499,7 +499,7 @@ function applyChatEvent(event: ChatEvent, set: Setter, get: () => SessionState) 
           if (message.id !== event.messageId) return message
           const parts = message.parts.map((part) => {
             if (part.id !== event.partId) return part
-            if (part.type === "text" || part.type === "reasoning") {
+            if (part.type === "text" || part.type === "reasoning" || part.type === "agent") {
               return { ...part, text: part.text + event.delta }
             }
             return part

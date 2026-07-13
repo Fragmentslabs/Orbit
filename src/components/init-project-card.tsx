@@ -38,6 +38,7 @@ export function InitProjectCard({ directory, sessionId }: {
   if (dismissed || hasPreviousChat || initialized !== false) return null
 
   const handleAnalyze = async () => {
+    dismiss(directory)
     const session = await createSession("code", { directory })
     await sendMessage("code", "/init", { options: { initMode: true }, sessionId: session.id, directory })
     selectSession("code", session.id)

@@ -363,7 +363,9 @@ app.whenReady().then(() => {
 
   // /init — análise do projeto e geração de memórias por área
   ipcMain.handle('init:run', (_event, input: RunInitInput) => {
-    void runProjectInit(input)
+    // runProjectInit lança em falha; o erro já sai via init:event — só evita
+    // rejection não tratada quando disparado por IPC (sem sessão de chat)
+    void runProjectInit(input).catch(() => {})
   })
   ipcMain.handle('init:status', (_event, directory: string) => getInitStatus(directory))
 
