@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react"
-import { BarChart3, KeyRound, Puzzle, Shield, Trash2, Check } from "lucide-react"
+import { BarChart3, Database, KeyRound, Puzzle, Shield, Trash2, Check } from "lucide-react"
 import {
   Dialog,
   DialogContent,
@@ -14,6 +14,7 @@ import { ModelSelectorLogo } from "@/src/components/ai/model-selector"
 import { PreferencesPanel } from "@/src/components/preferences-panel"
 import { McpSkillsPanel } from "@/src/components/mcp-skills-panel"
 import { AnalyticsPanel } from "@/src/components/analytics-panel"
+import { DataPanel } from "@/src/components/data-panel"
 import { useProviderStore } from "@/src/stores/provider-store"
 import { cn } from "@/lib/utils"
 
@@ -34,6 +35,7 @@ const TABS: TabDef[] = [
   { id: "autonomy", label: "Preferências", icon: Shield, description: "Preferências gerais, modelos padrão e permissões." },
   { id: "mcp-skills", label: "Ferramentas", icon: Puzzle, description: "Servidores MCP e skills do usuário." },
   { id: "analytics", label: "Uso e Limites", icon: BarChart3, description: "Estatísticas de uso e consumo de tokens." },
+  { id: "data", label: "Dados", icon: Database, description: "Exportar e importar seus dados." },
 ]
 
 function ProviderRow({ providerId }: { providerId: string }) {
@@ -206,7 +208,7 @@ export function SettingsDialog({ open, onOpenChange, initialTab = "providers" }:
               <p className="text-[11px] text-muted-foreground">{active.description}</p>
             </div>
             <div className="h-[520px] min-w-0">
-              {tab === "providers" ? <ProvidersTab /> : tab === "autonomy" ? <PreferencesPanel /> : tab === "mcp-skills" ? <McpSkillsPanel /> : <AnalyticsPanel />}
+              {tab === "providers" ? <ProvidersTab /> : tab === "autonomy" ? <PreferencesPanel /> : tab === "mcp-skills" ? <McpSkillsPanel /> : tab === "analytics" ? <AnalyticsPanel /> : <DataPanel />}
             </div>
           </div>
         </div>
