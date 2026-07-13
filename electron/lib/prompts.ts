@@ -125,7 +125,7 @@ memory_search (USO ATIVO):
 memory_link: conecte quando uma memória expande/corrige/relaciona outra
 (ex.: "começou dieta" → link com "médico recomendou low-carb").`
 
-const BRAIN_CODE_PROMPT = `MODO BRAIN ATIVO (CÓDIGO). Você tem memory_save / memory_search / memory_open,
+const BRAIN_CODE_PROMPT = `MODO BRAIN ATIVO (CÓDIGO). Você tem memory_save / memory_search / memory_open / memory_graph,
 isoladas por PROJETO (pasta de trabalho ativa).
 
 Memórias de código são sobre COMO TRABALHAR neste código — sobrevivem entre sessões
@@ -161,8 +161,9 @@ ANTES de memory_save:
 2. category=context → weight <= 0.3 (vai expirar).
 3. Equivalente já existe? Não crie duplicata — re-salve só se for ATUALIZAR o doc.
 
-memory_search: use ao iniciar tarefa NÃO-trivial para carregar decisões/convenções
-deste projeto — substitui reanalisar o código e economiza tokens. Não use em tarefas triviais.`
+memory_graph: busque contexto arquitetural e decisões do projeto. Prefira memory_graph
+a memory_search no início de tarefas — ele retorna nós + conexões do grafo de uma vez.
+memory_search: busca textual simples quando você já sabe o que procura.`
 
 const SKILLS_INSTRUCTION = `SKILLS DO USUÁRIO. As seções abaixo são conhecimento curado pelo usuário (convenções, padrões, instruções permanentes). Aplique uma skill sempre que o assunto for pertinente — você decide contextualmente. Quando a mensagem do usuário referencia @nome-da-skill, a aplicação daquela skill é OBRIGATÓRIA.`
 
@@ -236,8 +237,12 @@ async function buildBrainBlock(input: SendMessageInput): Promise<string[]> {
     } else {
       parts.push(BRAIN_CODE_PROMPT)
       const ctx = await loadPromptContext('code', input.directory)
-      if (ctx.project.length) {
-        parts.push(`Memórias do projeto "${ctx.projectName ?? 'atual'}":\n${memoryLines(ctx.project)}`)
+      // Apenas o node overview é injetado automaticamente — o agente usa
+      // memory_graph para buscar o restante do grafo sob demanda
+      const overview = ctx.project.find((m) => m.area === 'overview')
+      if (overview) {
+        const doc = overview.hasDoc ? ' (doc — use memory_open para ler o mapa completo)' : ''
+        parts.push(`Visão geral do projeto "${ctx.projectName ?? 'atual'}":\n- ${overview.text}${doc}`)
       }
       if (ctx.general.length) {
         parts.push(`Preferências gerais de trabalho do usuário:\n${memoryLines(ctx.general)}`)

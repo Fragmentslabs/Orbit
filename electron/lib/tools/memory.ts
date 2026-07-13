@@ -106,6 +106,43 @@ export function createChatMemoryTools(input: SendMessageInput): ToolSet {
   }
 }
 
+export function createGraphTool(_input: SendMessageInput, ctx: ToolContext) {
+  return tool({
+    description:
+      'Busca no grafo de memórias do projeto atual. Retorna nós cujo texto ou tags correspondem à consulta, com suas conexões (relatedIds). Use quando precisar de contexto arquitetural, decisões ou convenções específicas — substitui reanalisar o código.',
+    inputSchema: z.object({
+      query: z.string().describe('Termos da busca — palavras-chave do que precisa encontrar'),
+      limit: z.number().int().min(1).max(30).optional().describe('Máximo de nós (padrão: 10)'),
+    }),
+    execute: async ({ query, limit }) => {
+      const results = await memory.search({
+        query,
+        kinds: ['project'],
+        projectId: projectIdOf(ctx.directory),
+        limit,
+      })
+      if (results.length === 0) return 'Nenhuma memória encontrada para esta consulta.'
+      const lines: string[] = []
+      for (const m of results) {
+        const area = m.area ? ` [${m.area}]` : ''
+        const category = m.category ? `[${m.category}]` : ''
+        const doc = m.hasDoc ? ' (doc — use memory_open)' : ''
+        const tags = m.tags.length ? ` tags: ${m.tags.join(', ')}` : ''
+        lines.push(`#${m.id}${area} ${category} ${m.text}${doc}${tags}`)
+        if (m.relatedIds.length) {
+          const related = (await Promise.all(
+            m.relatedIds.map((id) => memory.getFull(id)),
+          )).filter(Boolean)
+          for (const r of related) {
+            lines.push(`  ↳ #${r!.memory.id} [${r!.memory.area ?? r!.memory.category ?? ''}] ${r!.memory.text}`)
+          }
+        }
+      }
+      return lines.join('\n')
+    },
+  })
+}
+
 export function createCodeMemoryTools(input: SendMessageInput, ctx: ToolContext): ToolSet {
   return {
     memory_save: tool({
