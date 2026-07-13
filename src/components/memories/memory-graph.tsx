@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
-import { Crosshair, FileUp, Link2 } from "lucide-react"
+import { BrainCircuit, Briefcase, Crosshair, FileUp, Layers, Link2, Palette, Server, Shield, SlidersHorizontal, Terminal } from "lucide-react"
+import type { LucideIcon } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
@@ -7,7 +8,7 @@ import type { Memory } from "@/shared/memory"
 import { jaccard, normalizeText, PROJECT_AREAS } from "@/shared/memory"
 import { memoryApi } from "@/src/lib/ipc"
 import { MemoryCard } from "./memory-card"
-import { KIND_COLOR, KIND_LABEL, lastActivity } from "./meta"
+import { AREA_ICON, KIND_COLOR, KIND_LABEL, lastActivity } from "./meta"
 
 /**
  * Grafo de memórias (fase 3): projeto no centro (área overview), áreas de
@@ -20,6 +21,10 @@ import { KIND_COLOR, KIND_LABEL, lastActivity } from "./meta"
  * - Arestas explícitas (relatedIds) sólidas; relações inferidas por tags, tracejadas
  * - Arrastar um arquivo de texto para o grafo cria um node de memória
  */
+
+const ICON_MAP: Record<string, LucideIcon> = {
+  BrainCircuit, Briefcase, Palette, Layers, SlidersHorizontal, Server, Shield, Terminal,
+}
 
 const LEVEL_RADIUS = 150
 const CLUSTER_PAD = 90
@@ -477,16 +482,42 @@ export function MemoryGraph({ pool, allById, query, selectedId, onSelect, projec
                         opacity={isSelected || isLinkSource ? 0.9 : 0.5}
                       />
                     )}
-                    <circle r={node.r} fill={color} fillOpacity={node.isRoot ? 0.4 : 0.22} stroke={color} strokeWidth={node.isRoot ? 2 : 1.2} />
-                    <text
-                      y={node.r + 12}
-                      textAnchor="middle"
-                      fontSize={node.isRoot ? 12 : memory.area ? 11 : 10}
-                      fontWeight={node.isRoot || memory.area ? 600 : 400}
-                      className="fill-foreground select-none"
-                    >
-                      {nodeLabel(memory, node.isRoot)}
-                    </text>
+                    {node.isRoot ? (
+                      <>
+                        <rect x={-80} y={-18} width={160} height={36} rx={18}
+                          fill={color} fillOpacity={0.15} stroke={color} strokeWidth={2} />
+                        <foreignObject x={-80} y={-18} width={160} height={36}>
+                          <div className="flex h-full items-center justify-center gap-2 px-3 text-sm font-semibold text-foreground select-none">
+                            <BrainCircuit className="size-5 shrink-0" />
+                            {memory.projectName ?? memory.text}
+                          </div>
+                        </foreignObject>
+                      </>
+                    ) : memory.area ? (
+                      <>
+                        <circle r={node.r} fill={color} fillOpacity={0.12} stroke={color} strokeWidth={1.2} />
+                        <foreignObject x={-node.r} y={-node.r} width={node.r * 2} height={node.r * 2}>
+                          <div className="flex h-full items-center justify-center text-foreground/70 select-none">
+                            {(() => {
+                              const Icon = ICON_MAP[AREA_ICON[memory.area!]]
+                              return Icon ? <Icon className="size-[55%]" /> : null
+                            })()}
+                          </div>
+                        </foreignObject>
+                        <text y={node.r + 12} textAnchor="middle" fontSize={11} fontWeight={600}
+                          className="fill-foreground select-none">
+                          {nodeLabel(memory, false)}
+                        </text>
+                      </>
+                    ) : (
+                      <>
+                        <circle r={node.r} fill={color} fillOpacity={0.22} stroke={color} strokeWidth={1.2} />
+                        <text y={node.r + 12} textAnchor="middle" fontSize={10} fontWeight={400}
+                          className="fill-foreground select-none">
+                          {nodeLabel(memory, false)}
+                        </text>
+                      </>
+                    )}
                   </g>
                 )
               })}

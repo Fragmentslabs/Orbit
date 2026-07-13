@@ -1,4 +1,4 @@
-import type { Memory, MemoryKind, ProjectCategory } from "@/shared/memory"
+import type { Memory, MemoryKind, ProjectArea, ProjectCategory } from "@/shared/memory"
 
 /** Rótulos e cores por tipo de memória, compartilhados entre lista e árvore. */
 
@@ -31,6 +31,18 @@ export const CATEGORY_LABEL: Record<ProjectCategory, string> = {
   structure: "estrutura",
   decision: "decisão",
   context: "contexto",
+}
+
+/** Ícone Lucide por área de conhecimento (usado no grafo de memórias). */
+export const AREA_ICON: Record<ProjectArea, string> = {
+  overview: "BrainCircuit",
+  business: "Briefcase",
+  design: "Palette",
+  architecture: "Layers",
+  preferences: "SlidersHorizontal",
+  infrastructure: "Server",
+  security: "Shield",
+  development: "Terminal",
 }
 
 export function canPromote(memory: Memory): boolean {
