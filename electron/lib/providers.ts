@@ -2,6 +2,10 @@ import { createAnthropic } from '@ai-sdk/anthropic'
 import { createGoogleGenerativeAI } from '@ai-sdk/google'
 import { createOpenAI } from '@ai-sdk/openai'
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible'
+import { createVertex } from '@ai-sdk/google-vertex'
+import { createAmazonBedrock } from '@ai-sdk/amazon-bedrock'
+import { createAzure } from '@ai-sdk/azure'
+import { createCohere } from '@ai-sdk/cohere'
 import type { LanguageModel } from 'ai'
 import { resolveApiKey } from './auth'
 import { getProvider } from './catalog'
@@ -21,6 +25,10 @@ const BUNDLED_SDKS: Record<string, unknown> = {
   '@ai-sdk/anthropic': createAnthropic,
   '@ai-sdk/openai': createOpenAI,
   '@ai-sdk/google': createGoogleGenerativeAI,
+  '@ai-sdk/google-vertex': createVertex,
+  '@ai-sdk/amazon-bedrock': createAmazonBedrock,
+  '@ai-sdk/azure': createAzure,
+  '@ai-sdk/cohere': createCohere,
   '@ai-sdk/openai-compatible': createOpenAICompatible,
 }
 
@@ -30,6 +38,16 @@ export async function resolveModel(providerId: string, modelId: string): Promise
   const provider = await getProvider(providerId)
   if (!provider) throw new ProviderResolutionError(`Provedor desconhecido: ${providerId}`)
 
+  const npm = provider.npm ?? '@ai-sdk/openai-compatible'
+
+  // SDKs que usam auth própria do ambiente (gcloud ADC, AWS credentials, etc.)
+  if (npm === '@ai-sdk/google-vertex' || npm === '@ai-sdk/amazon-bedrock') {
+    const factory = BUNDLED_SDKS[npm]
+    if (!factory) throw new ProviderResolutionError(`SDK não encontrado: ${npm}`)
+    const sdk = (factory as () => ReturnType<typeof createVertex>)()
+    return sdk(modelId)
+  }
+
   const apiKey = await resolveApiKey(providerId, [...provider.env])
   if (!apiKey) {
     throw new ProviderResolutionError(
@@ -37,7 +55,6 @@ export async function resolveModel(providerId: string, modelId: string): Promise
     )
   }
 
-  const npm = provider.npm ?? '@ai-sdk/openai-compatible'
   const factory = BUNDLED_SDKS[npm]
 
   if (factory && npm !== '@ai-sdk/openai-compatible') {

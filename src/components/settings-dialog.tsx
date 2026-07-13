@@ -18,9 +18,6 @@ import { DataPanel } from "@/src/components/data-panel"
 import { useProviderStore } from "@/src/stores/provider-store"
 import { cn } from "@/lib/utils"
 
-/** Provedores em destaque, mostrados primeiro (mesma curadoria do opencode). */
-const FEATURED_PROVIDERS = ["anthropic", "openai", "google", "openrouter", "xai", "deepseek", "groq", "mistral"]
-
 import type { SettingsTab } from "@/src/stores/settings-ui"
 
 interface TabDef {
@@ -119,13 +116,16 @@ function ProvidersTab() {
     const all = Object.keys(catalog)
     if (query.trim()) {
       const q = query.trim().toLowerCase()
-      return all
-        .filter((id) => id.toLowerCase().includes(q) || catalog[id].name.toLowerCase().includes(q))
-        .slice(0, 30)
+      return all.filter((id) => id.toLowerCase().includes(q) || catalog[id].name.toLowerCase().includes(q))
     }
-    const featured = FEATURED_PROVIDERS.filter((id) => all.includes(id))
-    const connectedExtra = connectedProviders.filter((id) => !featured.includes(id) && all.includes(id))
-    return [...connectedExtra, ...featured]
+    // Conectados primeiro, depois ordem alfabética
+    const sorted = [...all].sort((a, b) => {
+      const aCon = connectedProviders.includes(a) ? 0 : 1
+      const bCon = connectedProviders.includes(b) ? 0 : 1
+      if (aCon !== bCon) return aCon - bCon
+      return a.localeCompare(b)
+    })
+    return sorted
   }, [catalog, query, connectedProviders])
 
   return (
@@ -134,7 +134,7 @@ function ProvidersTab() {
         <p className="text-sm font-semibold">Provedores de IA</p>
         <p className="mt-0.5 text-xs text-muted-foreground">
           Adicione chaves de API para habilitar provedores. As chaves ficam salvas apenas neste
-          computador. Pesquise para ver todos os {Object.keys(catalog).length} provedores do catálogo.
+          computador. {Object.keys(catalog).length} provedores disponíveis no catálogo.
         </p>
       </div>
       <Input value={query} placeholder="Pesquisar provedor…" onChange={(e) => setQuery(e.target.value)} />
