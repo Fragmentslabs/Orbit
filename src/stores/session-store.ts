@@ -17,6 +17,7 @@ import { StorageKeys } from "@/shared/chat"
 import { chatApi, sessionApi, storage } from "@/src/lib/ipc"
 import { useBrainPrefs } from "@/src/stores/brain-prefs"
 import { useMessageQueueStore } from "@/src/stores/message-queue-store"
+import { useModelModePrefs } from "@/src/stores/model-mode-prefs"
 import { usePermissionPrefs } from "@/src/stores/permission-prefs"
 import { useProviderStore } from "@/src/stores/provider-store"
 
@@ -413,11 +414,12 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       set((state) => ({ _planReviewOutbox: { ...state._planReviewOutbox, [sessionId!]: true } }))
     }
 
-    // Modo de delegação (subagents/orchestra) leva o modelo worker configurado
-    const needsWorker = config.options.subagents || config.options.orchestrate
+    // Subagents, orquestra e /init usam o modelo worker configurado
+    const needsWorker = config.options.subagents || config.options.orchestrate || config.options.initMode
+    const worker = provider.workerModel ?? useModelModePrefs.getState().codeModel
     const workerModel =
-      needsWorker && provider.workerModel
-        ? { ...provider.workerModel, reasoning: provider.workerReasoning ?? undefined }
+      needsWorker && worker
+        ? { ...worker, reasoning: provider.workerReasoning ?? undefined }
         : undefined
 
     // Thresholds de permissões (Settings) — sempre enviados, mesmo para sessões comuns

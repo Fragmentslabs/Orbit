@@ -293,6 +293,9 @@ export interface RunInitInput {
   workerProviderId?: string
   workerModelId?: string
   force?: boolean
+  /** Workers paralelos por análise (1-6, padrão 3). Mais workers = mais
+   * rapidez, mas mais tokens simultâneos. */
+  concurrency?: number
   hooks?: InitHooks
 }
 
@@ -386,7 +389,8 @@ export async function runProjectInit(input: RunInitInput): Promise<string[]> {
       }))
 
     const queue = [...areaList]
-    const workers = Array.from({ length: Math.min(WORKER_CONCURRENCY, queue.length) }, async () => {
+    const maxWorkers = Math.max(1, Math.min(input.concurrency ?? WORKER_CONCURRENCY, 6, queue.length))
+    const workers = Array.from({ length: maxWorkers }, async () => {
       while (queue.length > 0) {
         const area = queue.shift()!
         const result = await exploreArea(workerModel, scanDescription, directory, area, hooks)

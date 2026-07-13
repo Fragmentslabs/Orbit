@@ -2,6 +2,7 @@ import { create } from "zustand"
 
 import type { InitStage, ProjectArea } from "@/shared/memory"
 import { initApi } from "@/src/lib/ipc"
+import { useModelModePrefs } from "@/src/stores/model-mode-prefs"
 import { useProviderStore } from "@/src/stores/provider-store"
 
 /**
@@ -10,15 +11,32 @@ import { useProviderStore } from "@/src/stores/provider-store"
  */
 
 const DISMISSED_KEY = "orbit-init-dismissed"
+const DISMISSED_TTL_MS = 30 * 24 * 60 * 60 * 1000 // 30 dias
 
 function loadDismissed(): string[] {
   try {
     const raw = localStorage.getItem(DISMISSED_KEY)
-    if (raw) return JSON.parse(raw)
+    if (!raw) return []
+    const stored: Record<string, number> = JSON.parse(raw)
+    const now = Date.now()
+    const valid = Object.entries(stored)
+      .filter(([, ts]) => now - ts < DISMISSED_TTL_MS)
+      .map(([dir]) => dir)
+    if (valid.length !== Object.keys(stored).length) {
+      localStorage.setItem(DISMISSED_KEY, JSON.stringify(
+        Object.fromEntries(valid.map((d) => [d, stored[d]])),
+      ))
+    }
+    return valid
   } catch {
-    // valor corrompido — recomeça vazio
+    return []
   }
-  return []
+}
+
+function saveDismissed(dirs: string[]) {
+  localStorage.setItem(DISMISSED_KEY, JSON.stringify(
+    Object.fromEntries(dirs.map((d) => [d, Date.now()])),
+  ))
 }
 
 export interface InitProgress {
@@ -75,8 +93,11 @@ export const useInitStore = create<InitState>((set, get) => ({
       return
     }
     set((state) => ({ progress: { ...state.progress, [directory]: { stage: "scanning" } } }))
-    // Subagents de exploração usam o modelo worker configurado (se houver)
-    const worker = useProviderStore.getState().workerModel
+    let worker = useProviderStore.getState().workerModel
+    if (!worker) {
+      const codeModel = useModelModePrefs.getState().codeModel
+      if (codeModel) worker = codeModel
+    }
     await initApi.run({
       directory,
       providerId: selected.providerId,
@@ -90,7 +111,7 @@ export const useInitStore = create<InitState>((set, get) => ({
   dismiss: (directory) => {
     set((state) => {
       const dismissed = [...new Set([...state.dismissed, directory])]
-      localStorage.setItem(DISMISSED_KEY, JSON.stringify(dismissed))
+      saveDismissed(dismissed)
       return { dismissed }
     })
   },
