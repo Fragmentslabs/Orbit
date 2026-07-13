@@ -2,6 +2,8 @@ import { generateText, stepCountIs, streamText, type LanguageModel, type ToolSet
 import { BrowserWindow } from 'electron'
 import type { InitEvent, InitStage, Memory, ProjectArea, ProjectCategory } from '../../../shared/memory'
 import { PROJECT_AREAS } from '../../../shared/memory'
+import fs from 'node:fs/promises'
+import path from 'node:path'
 import { projectIdOf } from '../memory/domain'
 import * as memoryService from '../memory/service'
 import { resolveModel } from '../providers'
@@ -413,6 +415,40 @@ export async function runProjectInit(input: RunInitInput): Promise<string[]> {
     })
     await Promise.all(workers)
     await refineChain
+
+    // Importa regras de AGENTS.md e CLAUDE.md como memórias de preferência
+    let rulesImported = 0
+    for (const rulesFile of ['AGENTS.md', 'CLAUDE.md']) {
+      try {
+        const raw = await fs.readFile(path.join(directory, rulesFile), 'utf8')
+        const sections = raw
+          .split(/^#{2,4}\s+/m)
+          .map((s) => s.trim())
+          .filter((s) => s.length > 20)
+        for (const section of sections) {
+          const lines = section.split('\n')
+          const title = lines[0].trim()
+          const body = lines.slice(1).join('\n').trim()
+          const text = body.length > 0 ? `${title}: ${body.slice(0, 200)}` : title.slice(0, 200)
+          await memoryService.save({
+            kind: 'project',
+            directory,
+            text,
+            tags: ['rule', ...title.toLowerCase().split(/[\s,]+/)],
+            weight: 0.8,
+            category: 'preference',
+            document: section,
+            relatedId: rootId,
+          })
+          rulesImported++
+        }
+      } catch {
+        // Arquivo não encontrado — segue
+      }
+    }
+    if (rulesImported > 0) {
+      main(`✓ **${rulesImported} regras** importadas de AGENTS.md/CLAUDE.md como memórias de preferência.\n`)
+    }
 
     main(`\nAnálise concluída: ${done.length} memórias no grafo do projeto.`)
     emit('done', { directory, areas: done })
