@@ -90,6 +90,7 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId }: 
   const sendMessage = useSessionStore((s) => s.sendMessage)
   const createSession = useSessionStore((s) => s.createSession)
   const openChatTab = usePanelStore((s) => s.openChatTab)
+  const sessionDir = useSessionStore((s) => sessionId ? s.sessions.find(x => x.id === sessionId)?.directory : undefined)
   const referenceCommands = useReferenceCommands()
   const actionCommands = useSlashActionCommands("code")
 
@@ -203,7 +204,7 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId }: 
 
   return (
     <PromptInputProvider>
-      <FilePalette directory={folders[0]}>
+      <FilePalette directory={sessionDir ?? folders[0]}>
       <SlashPalette commands={slashCommands}>
       <DraftInputBridge />
       <div className="w-full max-w-2xl mx-auto pb-4">
