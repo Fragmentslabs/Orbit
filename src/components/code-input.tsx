@@ -70,7 +70,7 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId }: 
   const brainContext = useCodeContext()
   const permissionMode = usePermissionPrefs((s) => s.mode)
   const setPermissionMode = usePermissionPrefs((s) => s.setMode)
-  const { folders, setFolders } = useWorkspace()
+  const { folders, setFolders, mode } = useWorkspace()
 
   // Skills de projeto (.orbit/skills) acompanham a pasta principal ativa
   useEffect(() => {
@@ -83,7 +83,6 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId }: 
   const { enabled, variantId, update } = useReasoningPrefs(selected?.providerId, selected?.modelId)
   const thinking = enabled || !!model?.reasoningAlwaysOn
   const busy = status === "submitted" || status === "streaming"
-  const { mode } = useWorkspace()
   const openSettings = useSettingsUi((s) => s.openSettings)
   const enqueueForSend = useMessageQueueStore((s) => s.enqueueForSend)
   const enqueueScheduled = useMessageQueueStore((s) => s.enqueueScheduled)
