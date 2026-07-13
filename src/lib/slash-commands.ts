@@ -21,8 +21,8 @@ export interface SlashCommand {
   run: (ctx: { setText: (text: string) => void }) => void
 }
 
-/** Skills + MCP como comandos de referência (@...) — comum aos dois inputs. */
-export function useReferenceCommands(): SlashCommand[] {
+/** Skills + MCP como comandos de referência (@...). Restrito a código. */
+export function useReferenceCommands(mode?: SessionMode): SlashCommand[] {
   const skills = useSkillsStore((s) => s.skills)
   const mcpServers = useSkillsStore((s) => s.mcpServers)
   const initialize = useSkillsStore((s) => s.initialize)
@@ -32,26 +32,29 @@ export function useReferenceCommands(): SlashCommand[] {
   }, [initialize])
 
   return useMemo<SlashCommand[]>(
-    () => [
-      ...skills.map<SlashCommand>((skill) => ({
-        id: `skill-${skill.slug}`,
-        label: `@${skill.slug}`,
-        description: skill.description || "Skill do usuário",
-        keywords: [skill.slug, skill.name],
-        group: "Skills",
-        run: ({ setText }) => setText(`@${skill.slug} `),
-      })),
-      ...mcpServers
-        .filter((s) => s.state === "connected")
-        .map<SlashCommand>((server) => ({
-          id: `mcp-${server.config.name}`,
-          label: `@mcp:${server.config.name}`,
-          description: `Usar as ferramentas deste servidor MCP (${server.toolNames.length} tools)`,
-          group: "MCP",
-          run: ({ setText }) => setText(`@mcp:${server.config.name} `),
+    () => {
+      if (mode && mode !== "code") return []
+      return [
+        ...skills.map<SlashCommand>((skill) => ({
+          id: `skill-${skill.slug}`,
+          label: `@${skill.slug}`,
+          description: skill.description || "Skill do usuário",
+          keywords: [skill.slug, skill.name],
+          group: "Skills",
+          run: ({ setText }) => setText(`@${skill.slug} `),
         })),
-    ],
-    [skills, mcpServers],
+        ...mcpServers
+          .filter((s) => s.state === "connected")
+          .map<SlashCommand>((server) => ({
+            id: `mcp-${server.config.name}`,
+            label: `@mcp:${server.config.name}`,
+            description: `Usar as ferramentas deste servidor MCP (${server.toolNames.length} tools)`,
+            group: "MCP",
+            run: ({ setText }) => setText(`@mcp:${server.config.name} `),
+          })),
+      ]
+    },
+    [skills, mcpServers, mode],
   )
 }
 

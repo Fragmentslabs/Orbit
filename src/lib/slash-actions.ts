@@ -130,7 +130,7 @@ Estruture a explicação em: o que faz (visão geral) → como funciona (passo a
     command: "/debug",
     description: "Analisa log de erro / stack trace → causa raiz → sugere ou aplica correção",
     keywords: ["debug", "erro", "stack", "trace", "bug"],
-    modes: ["chat", "code"],
+    modes: ["code"],
     kind: "pipeline",
     buildPrompt: (input) => `Depure este problema seguindo o pipeline:
 

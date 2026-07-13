@@ -26,7 +26,6 @@ import { DraftInputBridge } from "@/src/components/draft-input-bridge"
 import { QueueIndicator } from "@/src/components/queue-indicator"
 import { SendButtonGroup } from "@/src/components/send-button-group"
 import { SlashPalette } from "@/src/components/slash-palette"
-import { FilePalette } from "@/src/components/file-palette"
 import { useReferenceCommands, useSlashActionCommands, type SlashCommand } from "@/src/lib/slash-commands"
 import { useWorkspace } from "@/lib/workspace-context"
 import { useBrainEnabled, useBrainPrefs, useChatContext } from "@/src/stores/brain-prefs"
@@ -66,7 +65,7 @@ export function ChatInput({ onSubmit, status, onStop, sessionId }: {
   const thinking = enabled || !!model?.reasoningAlwaysOn
   const busy = status === "submitted" || status === "streaming"
 
-  const { mode, folders } = useWorkspace()
+  const { mode } = useWorkspace()
   const selectSession = useSessionStore((s) => s.selectSession)
   const openSettings = useSettingsUi((s) => s.openSettings)
   const enqueueForSend = useMessageQueueStore((s) => s.enqueueForSend)
@@ -74,7 +73,7 @@ export function ChatInput({ onSubmit, status, onStop, sessionId }: {
   const sendMessage = useSessionStore((s) => s.sendMessage)
   const createSession = useSessionStore((s) => s.createSession)
   const openChatTab = usePanelStore((s) => s.openChatTab)
-  const referenceCommands = useReferenceCommands()
+  const referenceCommands = useReferenceCommands("chat")
   const actionCommands = useSlashActionCommands("chat")
 
   const buildOptions = useCallback((): SendMessageOptions => ({
@@ -106,14 +105,12 @@ export function ChatInput({ onSubmit, status, onStop, sessionId }: {
       ...actionCommands,
       ...referenceCommands,
       { id: "novo-chat", label: "Nova conversa", description: "Começa um chat em branco", keywords: ["clear", "limpar", "novo"], group: "Ações" as const, run: toggle(() => void selectSession(mode, null)) },
-      { id: "create-skill", label: "Criar skill", description: "Pede ao Orbit para criar uma skill (com scripts, se precisar)", keywords: ["skill", "criar", "aprender"], group: "Skills" as const, run: ({ setText }) => setText("/create-skill ") },
       { id: "settings", label: "Configurações", description: "Abre as configurações do Orbit", keywords: ["settings", "config"], group: "Ações" as const, run: toggle(() => openSettings()) },
     ]
   }, [search, browser, thinking, simple, brain, subagents, orchestra, model, enabled, variantId, update, sessionId, setBrainEnabled, setSimple, actionCommands, referenceCommands, selectSession, mode, openSettings])
 
   return (
     <PromptInputProvider>
-    <FilePalette directory={folders[0]}>
     <SlashPalette commands={slashCommands}>
     <DraftInputBridge />
     <div className="w-full max-w-2xl mx-auto pb-4">
@@ -249,7 +246,6 @@ export function ChatInput({ onSubmit, status, onStop, sessionId }: {
       <OrchestrationConfigDialog open={configOpen} onOpenChange={setConfigOpen} />
     </div>
     </SlashPalette>
-    </FilePalette>
     </PromptInputProvider>
   )
 }
