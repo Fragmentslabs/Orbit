@@ -206,19 +206,38 @@ function layoutGraph(pool: Memory[]): { nodes: GraphNode[]; edges: GraphEdge[] }
       })
     }
   }
+  // Índice de tags: cada tag → nodes que a possuem (evita O(n²) pairwise)
+  const tagIndex = new Map<string, string[]>()
+  for (const node of nodes) {
+    for (const tag of node.memory.tags) {
+      const key = normalizeText(tag)
+      if (!tagIndex.has(key)) tagIndex.set(key, [])
+      tagIndex.get(key)!.push(node.memory.id)
+    }
+  }
+
+  // Só compara pares que compartilham pelo menos uma tag
   let inferredCount = 0
-  const list = [...nodes]
-  outer: for (let i = 0; i < list.length; i++) {
-    for (let j = i + 1; j < list.length; j++) {
-      if (inferredCount >= MAX_INFERRED_EDGES) break outer
-      const a = list[i].memory
-      const b = list[j].memory
-      if (a.tags.length === 0 || b.tags.length === 0) continue
-      const key = [a.id, b.id].sort().join(":")
-      if (seen.has(key)) continue
-      if (jaccard(a.tags, b.tags) >= INFERRED_JACCARD) {
-        seen.add(key)
-        edges.push({ from: a.id, to: b.id, inferred: true, hits: 0 })
+  const compared = new Set<string>()
+  outer: for (const node of nodes) {
+    if (inferredCount >= MAX_INFERRED_EDGES) break
+    const candidates = new Set<string>()
+    for (const tag of node.memory.tags) {
+      const key = normalizeText(tag)
+      for (const id of tagIndex.get(key) ?? []) {
+        if (id !== node.memory.id) candidates.add(id)
+      }
+    }
+    for (const candId of candidates) {
+      if (inferredCount >= MAX_INFERRED_EDGES) break
+      const pairKey = [node.memory.id, candId].sort().join(":")
+      if (seen.has(pairKey) || compared.has(pairKey)) continue
+      compared.add(pairKey)
+      const b = present.get(candId)?.memory
+      if (!b || b.tags.length === 0) continue
+      if (jaccard(node.memory.tags, b.tags) >= INFERRED_JACCARD) {
+        seen.add(pairKey)
+        edges.push({ from: node.memory.id, to: candId, inferred: true, hits: 0 })
         inferredCount++
       }
     }

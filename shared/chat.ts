@@ -107,7 +107,20 @@ export interface FilePart {
   url: string
 }
 
-export type MessagePart = TextPart | ReasoningPart | ToolPart | ImagePart | FilePart
+/** Agente do pipeline /init exibido como acordeon (estilo thinking): o
+ * principal narra a revisão; cada worker mostra sua exploração em streaming. */
+export interface AgentPart {
+  id: string
+  type: "agent"
+  /** Rótulo exibido (ex: "Design System", "Agente principal") */
+  label: string
+  role: "main" | "worker"
+  text: string
+  state: "running" | "done" | "error"
+  durationMs?: number
+}
+
+export type MessagePart = TextPart | ReasoningPart | ToolPart | ImagePart | FilePart | AgentPart
 
 export interface TokenUsage {
   input: number
@@ -317,7 +330,7 @@ export type ChatEvent =
       sessionId: string
       messageId: string
       partId: string
-      kind: "text" | "reasoning"
+      kind: "text" | "reasoning" | "agent"
       delta: string
     }
   | { type: "title"; sessionId: string; title: string }

@@ -1,10 +1,12 @@
 import { isValidElement, useState, type ReactNode } from "react"
 import {
+  BotIcon,
   CheckIcon,
   ChevronDownIcon,
   CopyIcon,
   LoaderIcon,
   RotateCwIcon,
+  SparklesIcon,
   TerminalIcon,
   Undo2Icon,
   XCircleIcon,
@@ -12,7 +14,7 @@ import {
 import type { Components } from "streamdown"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import { cn } from "@/lib/utils"
-import type { ChatMessage, ReasoningPart, ToolPart } from "@/shared/chat"
+import type { AgentPart, ChatMessage, ReasoningPart, ToolPart } from "@/shared/chat"
 import { hostnameOf, messageText } from "@/src/lib/message-utils"
 import { useSessionStore } from "@/src/stores/session-store"
 import { Actions, Action } from "@/src/components/ai/actions"
@@ -25,7 +27,7 @@ import {
 } from "@/src/components/ai/inline-citation"
 import { MessageResponse } from "@/src/components/ai/message"
 import { MessageUsage } from "@/src/components/messages/message-usage"
-import { Reasoning, ReasoningContent, ReasoningTrigger } from "@/src/components/ai/reasoning"
+import { Reasoning, ReasoningContent, ReasoningTrigger, useReasoning } from "@/src/components/ai/reasoning"
 import { Shimmer } from "@/src/components/ai/shimmer"
 
 /** Peças de mensagem compartilhadas entre os modos chat e código. */
@@ -92,6 +94,55 @@ export function ReasoningPartView({ part }: { part: ReasoningPart }) {
     >
       <ReasoningTrigger />
       <ReasoningContent>{part.text}</ReasoningContent>
+    </Reasoning>
+  )
+}
+
+/** Cabeçalho do acordeon de agente: ícone por papel + label + estado.
+ * Componente interno para ler isOpen do contexto do Reasoning (chevron). */
+function AgentTriggerBody({ part }: { part: AgentPart }) {
+  const { isOpen } = useReasoning()
+  const Icon = part.role === "main" ? SparklesIcon : BotIcon
+  const seconds = part.durationMs ? Math.max(1, Math.round(part.durationMs / 1000)) : undefined
+  return (
+    <>
+      <Icon className="size-4 shrink-0" />
+      {part.state === "running" ? (
+        <Shimmer duration={1}>
+          {part.role === "main" ? part.label : `Explorando ${part.label}…`}
+        </Shimmer>
+      ) : (
+        <p className={cn(part.state === "error" && "text-destructive")}>
+          {part.label}
+          {part.state === "error"
+            ? " · falhou"
+            : seconds !== undefined
+              ? ` · ${seconds}s`
+              : ""}
+        </p>
+      )}
+      <ChevronDownIcon
+        className={cn("size-4 shrink-0 transition-transform", isOpen ? "rotate-180" : "rotate-0")}
+      />
+    </>
+  )
+}
+
+/** Acordeon de agente do /init (estilo thinking): auto-abre enquanto o
+ * agente trabalha (streaming do que ele está fazendo) e fecha ao concluir. */
+export function AgentPartView({ part }: { part: AgentPart }) {
+  return (
+    <Reasoning
+      isStreaming={part.state === "running"}
+      duration={part.durationMs ? Math.max(1, Math.round(part.durationMs / 1000)) : undefined}
+      className="w-full !mb-1"
+    >
+      <ReasoningTrigger>
+        <AgentTriggerBody part={part} />
+      </ReasoningTrigger>
+      <ReasoningContent className="!mt-2 max-h-72 overflow-y-auto rounded-lg border bg-muted/30 p-3 text-xs">
+        {part.text || "…"}
+      </ReasoningContent>
     </Reasoning>
   )
 }

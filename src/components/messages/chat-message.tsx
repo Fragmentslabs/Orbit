@@ -16,6 +16,7 @@ import { ImagePartView } from "@/src/components/ai/image"
 import { Source, Sources, SourcesContent, SourcesTrigger } from "@/src/components/ai/sources"
 import { SkillProposalCard } from "@/src/components/skill-proposal-card"
 import {
+  AgentPartView,
   AssistantMarkdown,
   GenericToolView,
   MessageError,
@@ -149,6 +150,8 @@ export function ChatAssistantMessage({ message, isLast, isBusy, onRetry }: {
           <ReasoningPartView key={segment.id} part={segment.part} />
         ) : segment.part.type === "image" ? (
           <ImagePartView key={segment.id} part={segment.part} />
+        ) : segment.part.type === "agent" ? (
+          <AgentPartView key={segment.id} part={segment.part} />
         ) : segment.part.type === "file" ? null : segment.part.tool === "subagent" ? (
           <SubAgentCard key={segment.id} part={segment.part} />
         ) : segment.part.tool === "create_skill" ? (

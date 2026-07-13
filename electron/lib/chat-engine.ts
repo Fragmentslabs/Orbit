@@ -1,6 +1,7 @@
 import { generateText, stepCountIs, streamText, type ModelMessage, type UserContent } from 'ai'
 import type { BrowserWindow } from 'electron'
 import type {
+  AgentPart,
   ChatEvent,
   ChatMessage,
   FilePart,
@@ -18,7 +19,7 @@ import { buildProviderOptions } from './reasoning'
 import { resolveModel } from './providers'
 import { cleanupRevert } from './session/revert'
 import { capture, diff } from './snapshot'
-import { runProjectInit } from './project-init'
+import { runProjectInit, type InitHooks } from './project-init'
 import { PROJECT_AREAS, type ProjectArea } from '../../shared/memory'
 import { readJson, writeJson } from './storage'
 import { buildToolSet, type ToolContext } from './tools'
@@ -230,16 +231,69 @@ export async function runChat(win: BrowserWindow, input: SendMessageInput): Prom
       }
     }
 
-    // initMode: executa o pipeline de análise de projeto em vez de gerar texto
+    // initMode: pipeline de análise de projeto renderizado como acordeons —
+    // o agente principal (narração da revisão) em cima e um acordeon por
+    // subagent streamando a exploração; no fim todos fecham e fica o resumo
     if (input.options.initMode && toolContext) {
-      try {
-        const progressPart = (text: string) => {
-          const part: MessagePart = { id: newId('prt'), type: 'text', text, state: 'done' }
-          upsertPart(part)
-        }
-        progressPart('Escaneando estrutura do projeto…')
-        await saveMessages(sessionId, history)
+      emit(win, { type: 'status', sessionId, status: 'streaming' })
 
+      const startedAt = new Map<string, number>()
+      const agentParts = new Map<string, AgentPart>()
+
+      const mainPart: AgentPart = {
+        id: newId('prt'),
+        type: 'agent',
+        role: 'main',
+        label: 'Agente principal',
+        text: '',
+        state: 'running',
+      }
+      const mainStart = Date.now()
+      upsertPart(mainPart)
+
+      const appendAgent = (part: AgentPart, delta: string) => {
+        part.text += delta
+        emit(win, {
+          type: 'part-delta',
+          sessionId,
+          messageId: assistantMessage.id,
+          partId: part.id,
+          kind: 'agent',
+          delta,
+        })
+      }
+
+      const hooks: InitHooks = {
+        onMainDelta: (delta) => appendAgent(mainPart, delta),
+        onAgentStart: (area, label) => {
+          const part: AgentPart = {
+            id: newId('prt'),
+            type: 'agent',
+            role: 'worker',
+            label,
+            text: '',
+            state: 'running',
+          }
+          agentParts.set(area, part)
+          startedAt.set(area, Date.now())
+          upsertPart(part)
+        },
+        onAgentDelta: (area, delta) => {
+          const part = agentParts.get(area)
+          if (part) appendAgent(part, delta)
+        },
+        onAgentDone: (area, ok) => {
+          const part = agentParts.get(area)
+          if (!part) return
+          part.state = ok ? 'done' : 'error'
+          part.durationMs = Date.now() - (startedAt.get(area) ?? Date.now())
+          upsertPart(part)
+          // Persistência incremental: cada área concluída não se perde num crash
+          void saveMessages(sessionId, history)
+        },
+      }
+
+      try {
         const areas = await runProjectInit({
           directory: toolContext.directory,
           providerId: input.providerId,
@@ -247,30 +301,39 @@ export async function runChat(win: BrowserWindow, input: SendMessageInput): Prom
           workerProviderId: input.workerModel?.providerId,
           workerModelId: input.workerModel?.modelId,
           force: input.text.includes('--force'),
-          onProgress: (p) => {
-            if (p.stage === 'exploring') {
-              progressPart(`Analisando ${p.label.toLowerCase()} (${p.done}/${p.total})…`)
-            }
-          },
+          hooks,
         })
+        mainPart.state = 'done'
+        mainPart.durationMs = Date.now() - mainStart
+        upsertPart(mainPart)
+
         const areaNames = areas.map((a) => PROJECT_AREAS[a as ProjectArea]?.label ?? a)
-        const areaText = areaNames.length > 0
-          ? `## Análise concluída\n\nMemórias criadas: ${areaNames.join(', ')}.`
-          : '## Análise concluída\n\nNenhuma memória foi gerada.'
-        progressPart(areaText)
-        await saveMessages(sessionId, history)
-        emit(win, { type: 'message', sessionId, message: assistantMessage })
-        emit(win, { type: 'status', sessionId, status: 'idle' })
-        return
+        const summary =
+          areaNames.length > 0
+            ? `## Projeto analisado\n\nCriei ${areaNames.length} memórias por área — **${areaNames.join(', ')}** — ligadas ao node central no grafo (aba Memórias). Elas entram no meu contexto conforme a tarefa: mudanças de UI puxam Design System, deploy puxa Infraestrutura, e assim por diante.`
+            : '## Análise concluída\n\nNenhuma memória foi gerada — o projeto pode estar vazio ou inacessível.'
+        upsertPart({ id: newId('prt'), type: 'text', text: summary, state: 'done' })
       } catch (err) {
-        const errText = `## Análise falhou\n\n${err instanceof Error ? err.message : String(err)}`
-        const errPart: MessagePart = { id: newId('prt'), type: 'text', text: errText, state: 'done' }
-        upsertPart(errPart)
-        await saveMessages(sessionId, history)
-        emit(win, { type: 'message', sessionId, message: assistantMessage })
-        emit(win, { type: 'status', sessionId, status: 'idle' })
-        return
+        mainPart.state = 'error'
+        mainPart.durationMs = Date.now() - mainStart
+        upsertPart(mainPart)
+        for (const part of agentParts.values()) {
+          if (part.state === 'running') {
+            part.state = 'error'
+            upsertPart(part)
+          }
+        }
+        upsertPart({
+          id: newId('prt'),
+          type: 'text',
+          text: `## Análise falhou\n\n${err instanceof Error ? err.message : String(err)}`,
+          state: 'done',
+        })
       }
+      await saveMessages(sessionId, history)
+      emit(win, { type: 'message', sessionId, message: assistantMessage })
+      emit(win, { type: 'status', sessionId, status: 'idle' })
+      return
     }
 
     // Snapshot end: estado após todas as tools + lista de arquivos alterados

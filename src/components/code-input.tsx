@@ -112,7 +112,7 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId }: 
   const selections = usePanelStore((s) => s.selections)
   const removeSelection = usePanelStore((s) => s.removeSelection)
 
-  const handleSubmit = (message: { text?: string; files?: { mediaType?: string; filename?: string; url?: string }[] }) => {
+  const handleSubmit = useCallback((message: { text?: string; files?: { mediaType?: string; filename?: string; url?: string }[] }) => {
     const files = toFileParts(message.files ?? [])
     const resolved = message.text ? resolveSlashAction(message.text, "code") : null
     if (resolved?.action.kind === "init" && !busy) {
@@ -163,7 +163,7 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId }: 
       extraDirectories,
       files.length > 0 ? files : undefined,
     )
-  }
+  }, [busy, folders, sessionId, onStop, selections, getDirs, buildOptions, onSubmit, mode, enqueueForSend, openChatTab, sendMessage, createSession])
 
   const slashCommands = useMemo<SlashCommand[]>(() => {
     const toggle = (fn: () => void) => ({ setText }: { setText: (t: string) => void }) => {
