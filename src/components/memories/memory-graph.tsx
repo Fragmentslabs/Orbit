@@ -472,7 +472,7 @@ export function MemoryGraph({ pool, allById, query, selectedId, onSelect, projec
                       {`[${KIND_LABEL[memory.kind]}${memory.area ? ` · ${PROJECT_AREAS[memory.area]?.label}` : ""}] ${memory.text}\npeso ${memory.weight.toFixed(2)} · ${memory.hits} usos${stale ? "\n(sem uso há mais de 30 dias)" : ""}`}
                     </title>
                     {/* Anel de destaque: recente, selecionado ou origem do link */}
-                    {(recent || isSelected || isLinkSource) && (
+                    {!node.isRoot && (recent || isSelected || isLinkSource) && (
                       <circle
                         r={node.r + 4}
                         fill="none"
@@ -485,11 +485,13 @@ export function MemoryGraph({ pool, allById, query, selectedId, onSelect, projec
                     {node.isRoot ? (
                       <>
                         <rect x={-80} y={-18} width={160} height={36} rx={18}
-                          fill={color} fillOpacity={0.15} stroke={color} strokeWidth={2} />
+                          fill={color} fillOpacity={0.15}
+                          stroke={isSelected || isLinkSource ? "var(--primary)" : color}
+                          strokeWidth={isSelected || isLinkSource ? 2.5 : 2} />
                         <foreignObject x={-80} y={-18} width={160} height={36}>
                           <div className="flex h-full items-center justify-center gap-2 px-3 text-sm font-semibold text-foreground select-none">
                             <BrainCircuit className="size-5 shrink-0" />
-                            {memory.projectName ?? memory.text}
+                            <span className="truncate">{memory.projectName ?? memory.text}</span>
                           </div>
                         </foreignObject>
                       </>
