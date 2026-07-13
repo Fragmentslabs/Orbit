@@ -153,6 +153,17 @@ export const searchApi = {
     window.ipcRenderer.invoke("search:sessions", query) as Promise<SearchHit[]>,
 }
 
+export const dataApi = {
+  export: (includeAuth: boolean, localStorage: Record<string, string>) =>
+    window.ipcRenderer.invoke("export:data", includeAuth, localStorage) as Promise<
+      { cancelled: boolean; filePath?: string }
+    >,
+  import: () =>
+    window.ipcRenderer.invoke("import:data") as Promise<
+      { cancelled: boolean; error?: string; localStorage?: Record<string, string> }
+    >,
+}
+
 export const memoryApi = {
   list: () => window.ipcRenderer.invoke("memory:list") as Promise<Memory[]>,
   create: (input: {

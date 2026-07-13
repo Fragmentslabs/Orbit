@@ -86,7 +86,10 @@ export async function listKeys(prefix: string): Promise<string[]> {
     const entries = await fs.readdir(dir, { withFileTypes: true })
     return entries
       .filter((e) => e.isFile() && e.name.endsWith('.json'))
-      .map((e) => `${prefix.replace(/\/?$/, '/')}${e.name.slice(0, -'.json'.length)}`)
+      .map((e) => {
+        const suffix = e.name.slice(0, -'.json'.length)
+        return prefix ? `${prefix.replace(/\/?$/, '/')}${suffix}` : suffix
+      })
   } catch (err) {
     if ((err as NodeJS.ErrnoException).code === 'ENOENT') return []
     throw err

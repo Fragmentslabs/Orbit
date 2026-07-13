@@ -24,7 +24,7 @@ import { importSkillSelection } from './lib/skills/import'
 import { sanitizeSlug, serializeSkill } from './lib/skills/parser'
 import { computeAnalytics } from './lib/analytics'
 import { approvePendingSkill, discardPendingSkill, listPendingSkills } from './lib/skills/pending'
-import { listKeys, readJson, removeJson, writeJson } from './lib/storage'
+import { dataDir, listKeys, readJson, removeJson, writeJson } from './lib/storage'
 import { destroyBrowserWindow } from './lib/tools'
 import type { ChatMessage, SendMessageInput, SessionInfo } from '../shared/chat'
 import { StorageKeys } from '../shared/chat'
@@ -34,6 +34,7 @@ const execFileAsync = promisify(execFile)
 
 const _require = createRequire(import.meta.url)
 const nodePty = _require('node-pty') as typeof NodePty
+const JSZip = _require('jszip') as typeof import('jszip')
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
@@ -644,6 +645,122 @@ app.whenReady().then(() => {
     for (const w of BrowserWindow.getAllWindows()) {
       if (!w.isDestroyed()) w.webContents.send('skills:changed')
     }
+  })
+
+  // Export/Import de dados
+  ipcMain.handle('export:data', async (_event, includeAuth: boolean, localStorage: Record<string, string>) => {
+    if (!win) return { cancelled: true }
+    const dir = dataDir()
+    const zip = new JSZip()
+
+    // Manifest
+    zip.file('manifest.json', JSON.stringify({ version: 1, exportedAt: new Date().toISOString() }, null, 2))
+
+    // Storage keys
+    const storageKeys = await listKeys('')
+    for (const key of storageKeys) {
+      const data = await readJson<unknown>(key)
+      if (data !== null) zip.file(`storage/${key}.json`, JSON.stringify(data, null, 2))
+    }
+
+    // Auth (chaves de API — opcional)
+    if (includeAuth) {
+      const authPath = path.join(dir, 'auth.json')
+      try {
+        const authData = await fs.readFile(authPath, 'utf8')
+        zip.file('auth.json', authData)
+      } catch { /* auth.json may not exist */ }
+    }
+
+    // MCP config
+    const mcpPath = path.join(dir, 'mcp-config.json')
+    try {
+      const mcpData = await fs.readFile(mcpPath, 'utf8')
+      zip.file('mcp-config.json', mcpData)
+    } catch { /* mcp-config may not exist */ }
+
+    // Skills
+    const skillsDir = globalSkillsDir()
+    try {
+      const skills = await fs.readdir(skillsDir)
+      for (const file of skills) {
+        const fullPath = path.join(skillsDir, file)
+        const stat = await fs.stat(fullPath)
+        if (stat.isDirectory()) continue // ignore skill bundles
+        zip.file(`skills/${file}`, await fs.readFile(fullPath, 'utf8'))
+      }
+    } catch { /* skills dir may not exist */ }
+
+    // Media
+    const mediaDir = path.join(dir, 'media')
+    try {
+      const mediaFiles = await fs.readdir(mediaDir)
+      for (const file of mediaFiles) {
+        const fullPath = path.join(mediaDir, file)
+        const buffer = await fs.readFile(fullPath)
+        zip.file(`media/${file}`, buffer)
+      }
+    } catch { /* media dir may not exist */ }
+
+    // UI state (localStorage) sent from renderer
+    if (Object.keys(localStorage).length > 0) {
+      zip.file('localStorage.json', JSON.stringify(localStorage, null, 2))
+    }
+
+    const buffer = await zip.generateAsync({ type: 'nodebuffer' })
+
+    const result = await dialog.showSaveDialog(win, {
+      title: 'Exportar dados do Orbit',
+      defaultPath: `orbit-backup-${new Date().toISOString().slice(0, 10)}.zip`,
+      filters: [{ name: 'Arquivo ZIP', extensions: ['zip'] }],
+    })
+    if (result.canceled || !result.filePath) return { cancelled: true }
+    await fs.writeFile(result.filePath, buffer)
+    return { cancelled: false, filePath: result.filePath }
+  })
+
+  ipcMain.handle('import:data', async () => {
+    if (!win) return { cancelled: true, error: 'No window' }
+    const result = await dialog.showOpenDialog(win, {
+      title: 'Importar dados do Orbit',
+      properties: ['openFile'],
+      filters: [{ name: 'Arquivo ZIP', extensions: ['zip'] }],
+    })
+    if (result.canceled || result.filePaths.length === 0) return { cancelled: true }
+
+    const zipPath = result.filePaths[0]
+    const buffer = await fs.readFile(zipPath)
+    const zip = await JSZip.loadAsync(buffer)
+
+    // Validate manifest — exigimos ao menos um arquivo storage/
+    const hasStorage = Object.keys(zip.files).some((f) => f.startsWith('storage/'))
+    if (!hasStorage) return { cancelled: true, error: 'Arquivo ZIP inválido: nenhum dado de storage encontrado.' }
+
+    const dir = dataDir()
+
+    // Write all files back
+    for (const [relativePath, file] of Object.entries(zip.files)) {
+      if (file.dir) continue
+      if (relativePath === 'auth.json') continue // auth only restored via export opt-in
+      const targetPath = path.join(dir, relativePath)
+      await fs.mkdir(path.dirname(targetPath), { recursive: true })
+      const content = await file.async('nodebuffer')
+      await fs.writeFile(targetPath, content)
+    }
+
+    // Collect localStorage from the zip (if present)
+    const localState: Record<string, string> = {}
+    const lsFile = zip.files['localStorage.json']
+    if (lsFile && !lsFile.dir) {
+      const parsed = JSON.parse(await lsFile.async('text'))
+      if (typeof parsed === 'object' && parsed !== null) {
+        for (const [k, v] of Object.entries(parsed)) {
+          if (typeof v === 'string') localState[k] = v
+        }
+      }
+    }
+
+    return { cancelled: false, localStorage: localState }
   })
 
   // Analytics: resumo de uso
