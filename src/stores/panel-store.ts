@@ -67,6 +67,13 @@ interface PanelState {
   pendingChatTab: number
   pendingChatTabSession?: string
   pendingChatTabTitle?: string
+
+  /** Abre uma aba Diff no painel direito para ver o diff de uma mensagem */
+  openDiff: (sessionId: string, messageId: string, title: string) => void
+  pendingDiff: number
+  pendingDiffSessionId?: string
+  pendingDiffMessageId?: string
+  pendingDiffTitle?: string
 }
 
 // Auto-desliga o indicador "agente usando" após um período sem atividade
@@ -154,5 +161,18 @@ export const usePanelStore = create<PanelState>((set) => {
     pendingChatTab: 0,
     pendingChatTabSession: undefined,
     pendingChatTabTitle: undefined,
+
+    openDiff: (sessionId, messageId, title) =>
+      set((state) => ({
+        rightPanelOpen: true,
+        pendingDiff: state.pendingDiff + 1,
+        pendingDiffSessionId: sessionId,
+        pendingDiffMessageId: messageId,
+        pendingDiffTitle: title,
+      })),
+    pendingDiff: 0,
+    pendingDiffSessionId: undefined,
+    pendingDiffMessageId: undefined,
+    pendingDiffTitle: undefined,
   }
 })

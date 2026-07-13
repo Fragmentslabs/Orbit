@@ -1,7 +1,8 @@
-import { Fragment, useEffect, useMemo, useState } from "react"
+import { Fragment, useCallback, useEffect, useMemo, useState } from "react"
 import { ChevronDownIcon } from "lucide-react"
 import { cn } from "@/lib/utils"
 import type { ChatMessage, MessagePart, ToolPart } from "@/shared/chat"
+import { usePanelStore } from "@/src/stores/panel-store"
 import {
   extractSources,
   isTestCommand,
@@ -111,7 +112,12 @@ function TestResultsBlock({ summary }: { summary: TestSummary }) {
   )
 }
 
-function TaskGroup({ parts }: { parts: ToolPart[] }) {
+function TaskGroup({ parts, snapshot, sessionId, messageId }: {
+  parts: ToolPart[]
+  snapshot?: { patch?: string; files?: string[] }
+  sessionId?: string
+  messageId?: string
+}) {
   const working = parts.some((p) => p.state === "running")
   const errors = parts.filter((p) => p.state === "error").length
   const [open, setOpen] = useState(false)
@@ -120,6 +126,28 @@ function TaskGroup({ parts }: { parts: ToolPart[] }) {
   useEffect(() => {
     if (working) setOpen(true)
   }, [working])
+
+  // Conta +/- do snapshot se disponível
+  const diffCounts = useMemo(() => {
+    if (!snapshot?.patch) return null
+    let added = 0
+    let removed = 0
+    for (const line of snapshot.patch.split("\n")) {
+      if (line.startsWith("+") && !line.startsWith("+++")) added++
+      else if (line.startsWith("-") && !line.startsWith("---")) removed++
+    }
+    return { added, removed }
+  }, [snapshot?.patch])
+
+  const hasFileOps = parts.some((p) => p.tool === "write" || p.tool === "edit")
+  const showBadge = !working && diffCounts && hasFileOps && sessionId && messageId
+
+  const handleOpenDiff = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation()
+    if (sessionId && messageId) {
+      usePanelStore.getState().openDiff(sessionId, messageId, "Diff")
+    }
+  }, [sessionId, messageId])
 
   const title = working
     ? "Trabalhando…"
@@ -132,6 +160,16 @@ function TaskGroup({ parts }: { parts: ToolPart[] }) {
       <TaskTrigger title={title}>
         <div className="flex w-full cursor-pointer items-center gap-2 text-muted-foreground text-sm transition-colors hover:text-foreground">
           {working ? <Shimmer>{title}</Shimmer> : <p className="text-sm">{title}</p>}
+          {showBadge && (
+            <button
+              type="button"
+              onClick={handleOpenDiff}
+              className="ml-auto flex items-center gap-1 rounded-md border border-border/50 px-1.5 py-0.5 font-mono text-[11px] leading-none transition-colors hover:bg-accent"
+            >
+              {diffCounts!.added > 0 && <span className="text-emerald-600 dark:text-emerald-400">+{diffCounts!.added}</span>}
+              {diffCounts!.removed > 0 && <span className="text-red-600 dark:text-red-400">-{diffCounts!.removed}</span>}
+            </button>
+          )}
           <ChevronDownIcon
             className={cn("size-4 transition-transform", open ? "rotate-0" : "-rotate-90")}
           />
@@ -177,8 +215,9 @@ function segmentParts(parts: MessagePart[]): Segment[] {
   return segments
 }
 
-export function CodeAssistantMessage({ message, isLast, isBusy, onRetry }: {
+export function CodeAssistantMessage({ message, sessionId, isLast, isBusy, onRetry }: {
   message: ChatMessage
+  sessionId?: string
   isLast: boolean
   isBusy: boolean
   onRetry?: () => void
@@ -205,7 +244,13 @@ export function CodeAssistantMessage({ message, isLast, isBusy, onRetry }: {
       {waiting && <Shimmer className="text-sm">Analisando…</Shimmer>}
       {segments.map((segment, index) =>
         segment.kind === "task" ? (
-          <TaskGroup key={segment.id} parts={segment.parts} />
+          <TaskGroup
+            key={segment.id}
+            parts={segment.parts}
+            snapshot={message.snapshot}
+            sessionId={sessionId}
+            messageId={message.id}
+          />
         ) : segment.part.type === "text" ? (
           <AssistantMarkdown key={segment.id} muted={index < lastTaskIndex}>
             {segment.part.text}

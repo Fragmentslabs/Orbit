@@ -141,6 +141,8 @@ export interface AssistantSnapshot {
   end?: string
   /** Arquivos alterados entre start e end */
   files?: string[]
+  /** Diff unificado entre start e end (truncado em ~200kB) */
+  patch?: string
 }
 
 export interface ChatMessage {
