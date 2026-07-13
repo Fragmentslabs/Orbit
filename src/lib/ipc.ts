@@ -133,6 +133,13 @@ export const initApi = {
   },
 }
 
+export const fsApi = {
+  listFilesRecursive: (dirPath: string) =>
+    window.ipcRenderer.invoke("fs:listFilesRecursive", dirPath) as Promise<{ ok: true; files: string[] } | { ok: false; error: string }>,
+  readFileAsDataUrl: (filePath: string) =>
+    window.ipcRenderer.invoke("fs:readFileAsDataUrl", filePath) as Promise<{ dataUrl: string } | { error: string }>,
+}
+
 export const memoryApi = {
   list: () => window.ipcRenderer.invoke("memory:list") as Promise<Memory[]>,
   create: (input: {

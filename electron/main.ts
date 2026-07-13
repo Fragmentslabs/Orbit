@@ -183,6 +183,71 @@ async function readTextFile(filePath: string): Promise<{ content: string } | { e
   }
 }
 
+async function listFilesRecursive(dirPath: string, prefix = ''): Promise<string[]> {
+  const entries = await fs.readdir(dirPath, { withFileTypes: true })
+  const results: string[] = []
+  for (const entry of entries) {
+    if (entry.name.startsWith('.') || IGNORED_DIR_NAMES.has(entry.name)) continue
+    const fullPath = path.join(dirPath, entry.name)
+    const relPath = prefix ? `${prefix}/${entry.name}` : entry.name
+    if (entry.isDirectory()) {
+      results.push(...await listFilesRecursive(fullPath, relPath))
+    } else {
+      results.push(relPath)
+    }
+  }
+  return results
+}
+
+const MIME_MAP: Record<string, string> = {
+  '.txt': 'text/plain',
+  '.md': 'text/markdown',
+  '.ts': 'text/typescript',
+  '.tsx': 'text/typescript',
+  '.js': 'text/javascript',
+  '.jsx': 'text/javascript',
+  '.mjs': 'text/javascript',
+  '.cjs': 'text/javascript',
+  '.json': 'application/json',
+  '.html': 'text/html',
+  '.htm': 'text/html',
+  '.css': 'text/css',
+  '.scss': 'text/x-scss',
+  '.sass': 'text/x-sass',
+  '.less': 'text/x-less',
+  '.py': 'text/x-python',
+  '.rs': 'text/x-rust',
+  '.go': 'text/x-go',
+  '.yaml': 'text/yaml',
+  '.yml': 'text/yaml',
+  '.toml': 'text/toml',
+  '.xml': 'text/xml',
+  '.svg': 'image/svg+xml',
+  '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.gif': 'image/gif',
+  '.webp': 'image/webp',
+  '.ico': 'image/x-icon',
+  '.pdf': 'application/pdf',
+  '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  '.csv': 'text/csv',
+  '.env': 'text/plain',
+  '.sh': 'text/x-shellscript',
+  '.bat': 'text/x-bat',
+  '.ps1': 'text/x-powershell',
+  '.sql': 'text/x-sql',
+  '.graphql': 'text/graphql',
+  '.prisma': 'text/x-prisma',
+  '.vue': 'text/x-vue',
+  '.svelte': 'text/x-svelte',
+  '.astro': 'text/x-astro',
+  '.lock': 'text/plain',
+  '.log': 'text/plain',
+  '.diff': 'text/x-diff',
+  '.patch': 'text/x-diff',
+}
+
 interface CommitFileEntry {
   status: 'added' | 'modified' | 'deleted' | 'renamed'
   path: string
@@ -326,6 +391,33 @@ app.whenReady().then(() => {
 
   ipcMain.handle('fs:readFile', async (_event, filePath: string) => {
     return readTextFile(filePath)
+  })
+
+  ipcMain.handle('fs:listFilesRecursive', async (_event, dirPath: string) => {
+    try {
+      const files = await listFilesRecursive(dirPath)
+      return { ok: true, files }
+    } catch (err) {
+      return { ok: false, error: (err as Error).message }
+    }
+  })
+
+  const MAX_FILE_SIZE_MB = 10
+  const MAX_BINARY_SIZE = MAX_FILE_SIZE_MB * 1024 * 1024
+
+  ipcMain.handle('fs:readFileAsDataUrl', async (_event, filePath: string) => {
+    try {
+      const stat = await fs.stat(filePath)
+      if (stat.size > MAX_BINARY_SIZE) {
+        return { error: `Arquivo muito grande (${(stat.size / 1024 / 1024).toFixed(1)}MB, max ${MAX_FILE_SIZE_MB}MB)` }
+      }
+      const buffer = await fs.readFile(filePath)
+      const ext = path.extname(filePath).toLowerCase()
+      const mime = MIME_MAP[ext] ?? 'application/octet-stream'
+      return { dataUrl: `data:${mime};base64,${buffer.toString('base64')}` }
+    } catch (err) {
+      return { error: (err as Error).message }
+    }
   })
 
   ipcMain.handle('shell:showItemInFolder', (_event, filePath: string) => {

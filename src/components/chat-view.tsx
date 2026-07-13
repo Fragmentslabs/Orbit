@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react"
-import { ChevronRight } from "lucide-react"
+import { ChevronRight, PaperclipIcon } from "lucide-react"
 import { useWorkspace } from "@/lib/workspace-context"
 import type { ChatMessage, FilePart, SendMessageOptions } from "@/shared/chat"
 import { AskCard } from "@/src/components/ask-card"
@@ -72,12 +72,22 @@ function MessageItem({ msg, isLast, waiting, finished, isBusy, mode, sessionId, 
         <div className="group/user-msg flex flex-col">
           {files.length > 0 && (
             <MessageAttachments className="mb-1">
-              {files.map((file) => (
-                <MessageAttachment
-                  key={file.id}
-                  data={{ type: "file", mediaType: file.mime, filename: file.filename, url: file.url }}
-                />
-              ))}
+              {files.map((file) =>
+                file.mime.startsWith("image/") ? (
+                  <MessageAttachment
+                    key={file.id}
+                    data={{ type: "file", mediaType: file.mime, filename: file.filename, url: file.url }}
+                  />
+                ) : (
+                  <div
+                    key={file.id}
+                    className="flex h-7 cursor-default select-none items-center gap-1.5 rounded-md border border-border px-1.5 text-sm"
+                  >
+                    <PaperclipIcon className="size-3 text-muted-foreground" />
+                    <span className="truncate">{file.filename ?? "Arquivo"}</span>
+                  </div>
+                ),
+              )}
             </MessageAttachments>
           )}
           <MessageContent>
