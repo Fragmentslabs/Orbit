@@ -26,6 +26,7 @@ import { DraftInputBridge } from "@/src/components/draft-input-bridge"
 import { QueueIndicator } from "@/src/components/queue-indicator"
 import { SendButtonGroup } from "@/src/components/send-button-group"
 import { SlashPalette } from "@/src/components/slash-palette"
+import { FilePalette } from "@/src/components/file-palette"
 import { useReferenceCommands, useSlashActionCommands, type SlashCommand } from "@/src/lib/slash-commands"
 import { useWorkspace } from "@/lib/workspace-context"
 import { useBrainEnabled, useBrainPrefs, useChatContext } from "@/src/stores/brain-prefs"
@@ -65,7 +66,7 @@ export function ChatInput({ onSubmit, status, onStop, sessionId }: {
   const thinking = enabled || !!model?.reasoningAlwaysOn
   const busy = status === "submitted" || status === "streaming"
 
-  const { mode } = useWorkspace()
+  const { mode, folders } = useWorkspace()
   const selectSession = useSessionStore((s) => s.selectSession)
   const openSettings = useSettingsUi((s) => s.openSettings)
   const enqueueForSend = useMessageQueueStore((s) => s.enqueueForSend)
@@ -112,6 +113,7 @@ export function ChatInput({ onSubmit, status, onStop, sessionId }: {
 
   return (
     <PromptInputProvider>
+    <FilePalette directory={folders[0]}>
     <SlashPalette commands={slashCommands}>
     <DraftInputBridge />
     <div className="w-full max-w-2xl mx-auto pb-4">
@@ -247,6 +249,7 @@ export function ChatInput({ onSubmit, status, onStop, sessionId }: {
       <OrchestrationConfigDialog open={configOpen} onOpenChange={setConfigOpen} />
     </div>
     </SlashPalette>
+    </FilePalette>
     </PromptInputProvider>
   )
 }

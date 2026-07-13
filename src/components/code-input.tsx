@@ -27,6 +27,7 @@ import { DraftInputBridge } from "@/src/components/draft-input-bridge"
 import { QueueIndicator } from "@/src/components/queue-indicator"
 import { SendButtonGroup } from "@/src/components/send-button-group"
 import { SlashPalette } from "@/src/components/slash-palette"
+import { FilePalette } from "@/src/components/file-palette"
 import { useReferenceCommands, useSlashActionCommands, type SlashCommand } from "@/src/lib/slash-commands"
 import { FolderSelector } from "@/src/components/folder-selector"
 import { useWorkspace } from "@/lib/workspace-context"
@@ -202,6 +203,7 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId }: 
 
   return (
     <PromptInputProvider>
+      <FilePalette directory={folders[0]}>
       <SlashPalette commands={slashCommands}>
       <DraftInputBridge />
       <div className="w-full max-w-2xl mx-auto pb-4">
@@ -355,6 +357,7 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId }: 
         <OrchestrationConfigDialog open={configOpen} onOpenChange={setConfigOpen} />
       </div>
       </SlashPalette>
+      </FilePalette>
     </PromptInputProvider>
   )
 }
