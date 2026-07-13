@@ -25,6 +25,7 @@ import { PermissionModePicker } from "@/src/components/permission-mode-picker"
 import { ReasoningPicker } from "@/src/components/reasoning-picker"
 import { DraftInputBridge } from "@/src/components/draft-input-bridge"
 import { QueueIndicator } from "@/src/components/queue-indicator"
+import { ContextMeter } from "@/src/components/context-meter"
 import { SendButtonGroup } from "@/src/components/send-button-group"
 import { SlashPalette } from "@/src/components/slash-palette"
 import { FilePalette } from "@/src/components/file-palette"
@@ -311,14 +312,15 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId }: 
             </div>
           </PromptInputFooter>
         </PromptInput>
-        <PromptInputTools>
-          <ModeToggle
-            icon={Search}
-            label="Pesquisa"
-            description="Libera websearch e webfetch para consultar documentação online."
-            active={search}
-            onToggle={() => setSearch((v) => !v)}
-          />
+      <PromptInputTools>
+        <div className="flex items-center gap-1">
+        <ModeToggle
+          icon={Search}
+          label="Pesquisa"
+          description="Libera websearch e webfetch para consultar documentação online."
+          active={search}
+          onToggle={() => setSearch((v) => !v)}
+        />
           <ModeToggle
             icon={FileText}
             label="Modo Plano"
@@ -354,7 +356,11 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId }: 
             active={brain}
             onToggle={() => setBrainEnabled(sessionId, !brain)}
           />
-        </PromptInputTools>
+        </div>
+        <div className="ml-auto">
+          <ContextMeter sessionId={sessionId} />
+        </div>
+      </PromptInputTools>
         <OrchestrationConfigDialog open={configOpen} onOpenChange={setConfigOpen} />
       </div>
       </SlashPalette>
