@@ -7,7 +7,9 @@ import fs from 'node:fs/promises'
 import path from 'node:path'
 import type * as NodePty from 'node-pty'
 import { listCredentialProviders, removeCredential, setCredential } from './lib/auth'
-import { getCatalog } from './lib/catalog'
+import { getCatalog, ensureCustomProvidersSeeded } from './lib/catalog'
+import { addCustomProvider, listCustomProviders, removeCustomProvider, updateCustomProvider } from './lib/custom-providers'
+import { detectLocal } from './lib/detect-local'
 import { getModelsSnapshot, invalidateModelsSnapshot } from './lib/models'
 import { revert as revertSession, unrevert as unrevertSession } from './lib/session/revert'
 import { getInitStatus, runProjectInit, type RunInitInput } from './lib/project-init'
@@ -772,6 +774,18 @@ app.whenReady().then(() => {
   ipcMain.handle('mcp:save', (_event, config) => saveMcpConfig(config))
   ipcMain.handle('mcp:reconnect', (_event, name?: string) => reconnectMcp(name))
   void initMcp()
+
+  // Provedores locais pré-cadastrados (Ollama, LM Studio)
+  void ensureCustomProvidersSeeded()
+
+  // Custom providers (locais / user-defined)
+  ipcMain.handle('custom-providers:list', () => listCustomProviders())
+  ipcMain.handle('custom-providers:add', (_event, id: string, name: string, baseURL: string, apiKey?: string) =>
+    addCustomProvider(id, name, baseURL, apiKey))
+  ipcMain.handle('custom-providers:remove', (_event, id: string) => removeCustomProvider(id))
+  ipcMain.handle('custom-providers:update', (_event, id: string, patch: { name?: string; baseURL?: string; apiKey?: string }) =>
+    updateCustomProvider(id, patch))
+  ipcMain.handle('custom-providers:detect', () => detectLocal())
 
   createWindow()
 })

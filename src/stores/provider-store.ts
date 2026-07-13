@@ -1,11 +1,6 @@
 import { create } from "zustand"
-import type { Catalog, CatalogModel, ReasoningConfig } from "@/shared/chat"
-import { authApi, catalogApi } from "@/src/lib/ipc"
-
-/**
- * Store de provedores/modelos: catálogo do models.dev + provedores
- * configurados (com chave de API) + modelo selecionado por modo.
- */
+import type { Catalog, CatalogModel, CatalogProvider, ReasoningConfig } from "@/shared/chat"
+import { authApi, catalogApi, customProvidersApi } from "@/src/lib/ipc"
 
 const SELECTED_MODEL_KEY = "orbit-selected-model"
 const WORKER_MODEL_KEY = "orbit-worker-model"
@@ -31,10 +26,9 @@ function loadSelectedModel(): SelectedModel | null {
 
 interface ProviderState {
   catalog: Catalog
-  /** IDs de provedores com chave configurada */
+  customProviders: CatalogProvider[]
   connectedProviders: string[]
   selectedModel: SelectedModel | null
-  /** Modelo dos workers (subagents/orchestra) */
   workerModel: SelectedModel | null
   workerReasoning: ReasoningConfig | null
   loading: boolean
@@ -46,10 +40,22 @@ interface ProviderState {
   setWorkerModel: (model: SelectedModel | null) => void
   setWorkerReasoning: (reasoning: ReasoningConfig | null) => void
   getModel: (providerId: string, modelId: string) => CatalogModel | undefined
+  addCustomProvider: (id: string, name: string, baseURL: string, apiKey?: string) => Promise<void>
+  removeCustomProvider: (id: string) => Promise<void>
+  refreshCustomProviders: () => Promise<void>
+}
+
+function mergeIntoCatalog(catalog: Catalog, custom: CatalogProvider[]): Catalog {
+  const merged = { ...catalog }
+  for (const provider of custom) {
+    merged[provider.id] = provider
+  }
+  return merged
 }
 
 export const useProviderStore = create<ProviderState>((set, get) => ({
   catalog: {},
+  customProviders: [],
   connectedProviders: [],
   selectedModel: loadSelectedModel(),
   workerModel: loadJson<SelectedModel>(WORKER_MODEL_KEY),
@@ -57,14 +63,17 @@ export const useProviderStore = create<ProviderState>((set, get) => ({
   loading: true,
 
   initialize: async () => {
-    const [catalog, connectedProviders] = await Promise.all([catalogApi.get(), authApi.list()])
-    set({ catalog, connectedProviders, loading: false })
+    const [catalog, connectedProviders, customProviders] = await Promise.all([
+      catalogApi.get(),
+      authApi.list(),
+      customProvidersApi.list(),
+    ])
+    const merged = mergeIntoCatalog(catalog, customProviders)
+    set({ catalog: merged, customProviders, connectedProviders, loading: false })
 
-    // Valida o modelo worker persistido: provider ainda conectado, modelo no
-    // catálogo e reasoning suportado — senão limpa em vez de falhar no envio
     const { workerModel, workerReasoning } = get()
     if (workerModel) {
-      const workerCatalogModel = catalog[workerModel.providerId]?.models[workerModel.modelId]
+      const workerCatalogModel = merged[workerModel.providerId]?.models[workerModel.modelId]
       if (!workerCatalogModel || !connectedProviders.includes(workerModel.providerId)) {
         get().setWorkerModel(null)
         get().setWorkerReasoning(null)
@@ -73,15 +82,13 @@ export const useProviderStore = create<ProviderState>((set, get) => ({
       }
     }
 
-    // Garante uma seleção válida: mantém a atual se possível, senão escolhe
-    // o primeiro modelo de um provedor conectado.
     const { selectedModel } = get()
     const isValid =
       selectedModel &&
-      catalog[selectedModel.providerId]?.models[selectedModel.modelId] !== undefined
+      merged[selectedModel.providerId]?.models[selectedModel.modelId] !== undefined
     if (!isValid) {
-      const providerId = connectedProviders.find((id) => catalog[id])
-      const modelId = providerId ? Object.keys(catalog[providerId].models)[0] : undefined
+      const providerId = connectedProviders.find((id) => merged[id])
+      const modelId = providerId ? Object.keys(merged[providerId].models)[0] : undefined
       if (providerId && modelId) get().selectModel(providerId, modelId)
     }
   },
@@ -121,4 +128,43 @@ export const useProviderStore = create<ProviderState>((set, get) => ({
   },
 
   getModel: (providerId, modelId) => get().catalog[providerId]?.models[modelId],
+
+  addCustomProvider: async (id, name, baseURL, apiKey) => {
+    const provider = await customProvidersApi.add(id, name, baseURL, apiKey)
+    set((state) => {
+      const custom = [...state.customProviders, provider]
+      return {
+        customProviders: custom,
+        catalog: { ...state.catalog, [provider.id]: provider },
+        connectedProviders: apiKey
+          ? state.connectedProviders.includes(provider.id)
+            ? state.connectedProviders
+            : [...state.connectedProviders, provider.id]
+          : state.connectedProviders,
+      }
+    })
+  },
+
+  removeCustomProvider: async (id) => {
+    await customProvidersApi.remove(id)
+    set((state) => {
+      const providerId = `custom:${id}`
+      const custom = state.customProviders.filter((p) => p.id !== providerId)
+      const catalog = { ...state.catalog }
+      delete catalog[providerId]
+      return {
+        customProviders: custom,
+        catalog,
+        connectedProviders: state.connectedProviders.filter((p) => p !== providerId),
+      }
+    })
+  },
+
+  refreshCustomProviders: async () => {
+    const custom = await customProvidersApi.list()
+    set((state) => ({
+      customProviders: custom,
+      catalog: mergeIntoCatalog(state.catalog, custom),
+    }))
+  },
 }))

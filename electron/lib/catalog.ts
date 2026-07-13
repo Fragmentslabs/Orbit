@@ -3,6 +3,7 @@ import path from 'node:path'
 import type { Catalog, CatalogProvider } from '../../shared/chat'
 import { generateVariants, isAlwaysOnModel, toModelInput, variantLabel } from './reasoning/variants'
 import { dataDir } from './storage'
+import { listCustomProviders, seedCustomProviders } from './custom-providers'
 
 /**
  * Catálogo de provedores/modelos vindo do models.dev — a mesma fonte usada
@@ -85,7 +86,20 @@ export async function getCatalog(): Promise<Catalog> {
   return {}
 }
 
-export async function getProvider(providerId: string): Promise<CatalogProvider | undefined> {
+export async function getMergedCatalog(): Promise<Catalog> {
   const catalog = await getCatalog()
+  const custom = await listCustomProviders()
+  for (const provider of custom) {
+    catalog[provider.id] = provider
+  }
+  return catalog
+}
+
+export async function getProvider(providerId: string): Promise<CatalogProvider | undefined> {
+  const catalog = await getMergedCatalog()
   return catalog[providerId]
+}
+
+export async function ensureCustomProvidersSeeded(): Promise<void> {
+  await seedCustomProviders()
 }

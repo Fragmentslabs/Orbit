@@ -1,5 +1,6 @@
 import type {
   Catalog,
+  CatalogProvider,
   ChatEvent,
   SendMessageInput,
   SessionRevert,
@@ -47,6 +48,25 @@ export const authApi = {
   set: (providerId: string, key: string) => window.ipcRenderer.invoke("auth:set", providerId, key),
   remove: (providerId: string) => window.ipcRenderer.invoke("auth:remove", providerId),
   list: () => window.ipcRenderer.invoke("auth:list") as Promise<string[]>,
+}
+
+export interface DetectResult {
+  providerId: string
+  name: string
+  baseURL: string
+  detected: boolean
+  models: string[]
+  error?: string
+}
+
+export const customProvidersApi = {
+  list: () => window.ipcRenderer.invoke("custom-providers:list") as Promise<CatalogProvider[]>,
+  add: (id: string, name: string, baseURL: string, apiKey?: string) =>
+    window.ipcRenderer.invoke("custom-providers:add", id, name, baseURL, apiKey) as Promise<CatalogProvider>,
+  remove: (id: string) => window.ipcRenderer.invoke("custom-providers:remove", id) as Promise<void>,
+  update: (id: string, patch: { name?: string; baseURL?: string; apiKey?: string }) =>
+    window.ipcRenderer.invoke("custom-providers:update", id, patch) as Promise<CatalogProvider>,
+  detect: () => window.ipcRenderer.invoke("custom-providers:detect") as Promise<DetectResult[]>,
 }
 
 export const sessionApi = {

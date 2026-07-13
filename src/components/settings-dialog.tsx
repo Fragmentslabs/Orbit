@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react"
-import { BarChart3, Database, KeyRound, Puzzle, Shield, Trash2, Check } from "lucide-react"
+import { BarChart3, Database, KeyRound, Puzzle, Shield, Trash2, Check, Plus, Wifi, WifiOff, RefreshCw, Server, X } from "lucide-react"
 import {
   Dialog,
   DialogContent,
@@ -16,9 +16,11 @@ import { McpSkillsPanel } from "@/src/components/mcp-skills-panel"
 import { AnalyticsPanel } from "@/src/components/analytics-panel"
 import { DataPanel } from "@/src/components/data-panel"
 import { useProviderStore } from "@/src/stores/provider-store"
+import { customProvidersApi } from "@/src/lib/ipc"
 import { cn } from "@/lib/utils"
 
 import type { SettingsTab } from "@/src/stores/settings-ui"
+import type { DetectResult } from "@/src/lib/ipc"
 
 interface TabDef {
   id: SettingsTab
@@ -107,18 +109,148 @@ function ProviderRow({ providerId }: { providerId: string }) {
   )
 }
 
+function CustomProviderCard({
+  provider,
+  onRemove,
+}: {
+  provider: { id: string; name: string; api?: string }
+  onRemove: () => void
+}) {
+  const connected = useProviderStore((s) => s.connectedProviders.includes(provider.id))
+
+  return (
+    <div className="flex flex-col gap-2 rounded-lg border p-3">
+      <div className="flex items-center gap-2">
+        <Server className="size-4 shrink-0 text-muted-foreground" />
+        <span className="flex-1 truncate text-sm font-medium">{provider.name}</span>
+        {connected ? (
+          <Badge variant="secondary" className="gap-1 text-[10px]">
+            <Wifi className="size-3" />
+            Conectado
+          </Badge>
+        ) : (
+          <Badge variant="outline" className="gap-1 text-[10px] text-muted-foreground">
+            <WifiOff className="size-3" />
+            Não conectado
+          </Badge>
+        )}
+        <Button size="icon-sm" variant="ghost" title="Remover" onClick={onRemove}>
+          <Trash2 className="size-3.5" />
+        </Button>
+      </div>
+      {provider.api && (
+        <p className="truncate text-[11px] text-muted-foreground">{provider.api}</p>
+      )}
+    </div>
+  )
+}
+
+function AddCustomProviderDialog({
+  open,
+  onOpenChange,
+}: {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+}) {
+  const addCustomProvider = useProviderStore((s) => s.addCustomProvider)
+  const [id, setId] = useState("")
+  const [name, setName] = useState("")
+  const [baseURL, setBaseURL] = useState("http://localhost:11434/v1")
+  const [apiKey, setApiKey] = useState("")
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState("")
+
+  const handleSave = async () => {
+    if (!id.trim() || !name.trim() || !baseURL.trim()) return
+    setSaving(true)
+    setError("")
+    try {
+      await addCustomProvider(id.trim(), name.trim(), baseURL.trim(), apiKey.trim() || undefined)
+      onOpenChange(false)
+      setId("")
+      setName("")
+      setBaseURL("http://localhost:11434/v1")
+      setApiKey("")
+    } catch (err) {
+      setError((err as Error).message)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle className="text-sm">Adicionar provedor local</DialogTitle>
+          <DialogDescription className="text-xs">
+            Configure um servidor local compatível com OpenAI (Ollama, LM Studio, etc.).
+          </DialogDescription>
+        </DialogHeader>
+        <div className="flex flex-col gap-3">
+          <div className="flex gap-2">
+            <div className="flex-1">
+              <label className="text-xs text-muted-foreground">ID</label>
+              <Input
+                value={id}
+                placeholder="ollama-local"
+                onChange={(e) => setId(e.target.value.replace(/[^a-zA-Z0-9_-]/g, ""))}
+              />
+            </div>
+            <div className="flex-[2]">
+              <label className="text-xs text-muted-foreground">Nome</label>
+              <Input value={name} placeholder="Meu Ollama" onChange={(e) => setName(e.target.value)} />
+            </div>
+          </div>
+          <div>
+            <label className="text-xs text-muted-foreground">Base URL</label>
+            <Input value={baseURL} placeholder="http://localhost:11434/v1" onChange={(e) => setBaseURL(e.target.value)} />
+          </div>
+          <div>
+            <label className="text-xs text-muted-foreground">
+              Chave de API <span className="text-muted-foreground/50">(opcional)</span>
+            </label>
+            <Input
+              type="password"
+              value={apiKey}
+              placeholder="Deixe em branco se não exigir"
+              onChange={(e) => setApiKey(e.target.value)}
+            />
+          </div>
+          {error && <p className="text-xs text-destructive">{error}</p>}
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" size="sm" onClick={() => onOpenChange(false)}>
+              Cancelar
+            </Button>
+            <Button size="sm" disabled={!id.trim() || !name.trim() || !baseURL.trim() || saving} onClick={() => void handleSave()}>
+              Adicionar
+            </Button>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
 function ProvidersTab() {
   const catalog = useProviderStore((s) => s.catalog)
+  const customProviders = useProviderStore((s) => s.customProviders)
   const connectedProviders = useProviderStore((s) => s.connectedProviders)
+  const removeCustomProvider = useProviderStore((s) => s.removeCustomProvider)
+
   const [query, setQuery] = useState("")
+  const [addDialogOpen, setAddDialogOpen] = useState(false)
+  const [detecting, setDetecting] = useState(false)
+  const [detectResults, setDetectResults] = useState<DetectResult[] | null>(null)
+
+  const customIds = useMemo(() => new Set(customProviders.map((p) => p.id)), [customProviders])
 
   const providerIds = useMemo(() => {
-    const all = Object.keys(catalog)
+    const all = Object.keys(catalog).filter((id) => !customIds.has(id))
     if (query.trim()) {
       const q = query.trim().toLowerCase()
       return all.filter((id) => id.toLowerCase().includes(q) || catalog[id].name.toLowerCase().includes(q))
     }
-    // Conectados primeiro, depois ordem alfabética
     const sorted = [...all].sort((a, b) => {
       const aCon = connectedProviders.includes(a) ? 0 : 1
       const bCon = connectedProviders.includes(b) ? 0 : 1
@@ -126,7 +258,17 @@ function ProvidersTab() {
       return a.localeCompare(b)
     })
     return sorted
-  }, [catalog, query, connectedProviders])
+  }, [catalog, query, connectedProviders, customIds])
+
+  const handleDetect = async () => {
+    setDetecting(true)
+    try {
+      const results = await customProvidersApi.detect()
+      setDetectResults(results)
+    } finally {
+      setDetecting(false)
+    }
+  }
 
   return (
     <div className="flex h-full flex-col gap-3 overflow-y-auto pr-1">
@@ -134,11 +276,75 @@ function ProvidersTab() {
         <p className="text-sm font-semibold">Provedores de IA</p>
         <p className="mt-0.5 text-xs text-muted-foreground">
           Adicione chaves de API para habilitar provedores. As chaves ficam salvas apenas neste
-          computador. {Object.keys(catalog).length} provedores disponíveis no catálogo.
+          computador.
         </p>
       </div>
-      <Input value={query} placeholder="Pesquisar provedor…" onChange={(e) => setQuery(e.target.value)} />
+
+      {/* Provedores locais / customizados */}
+      <div className="flex items-center gap-2">
+        <Server className="size-3.5 text-muted-foreground" />
+        <p className="text-xs font-medium text-muted-foreground">Provedores Locais</p>
+        <div className="flex-1" />
+        <Button size="icon-sm" variant="ghost" title="Detectar servidores locais"
+          disabled={detecting} onClick={() => void handleDetect()}>
+          <RefreshCw className={cn("size-3", detecting && "animate-spin")} />
+        </Button>
+        <Button size="sm" variant="outline" className="gap-1 h-7 text-xs" onClick={() => setAddDialogOpen(true)}>
+          <Plus className="size-3" />
+          Adicionar
+        </Button>
+      </div>
+
+      {detectResults && detectResults.length > 0 && (
+        <div className="flex flex-col gap-1.5 rounded-lg border bg-muted/20 p-2">
+          {detectResults.map((r) => (
+            <div key={r.providerId} className="flex items-center gap-2 text-xs">
+              {r.detected ? (
+                <Badge variant="secondary" className="gap-1 text-[10px]">
+                  <Wifi className="size-2.5" />
+                  Online
+                </Badge>
+              ) : (
+                <Badge variant="outline" className="gap-1 text-[10px] text-muted-foreground">
+                  <WifiOff className="size-2.5" />
+                  Offline
+                </Badge>
+              )}
+              <span className="font-medium">{r.name}</span>
+              {r.detected && r.models.length > 0 && (
+                <span className="text-muted-foreground">({r.models.length} modelos)</span>
+              )}
+              <span className="text-muted-foreground">{r.baseURL}</span>
+              <button className="ml-auto text-muted-foreground hover:text-foreground" onClick={() => setDetectResults(null)}>
+                <X className="size-3" />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
       <div className="flex flex-col gap-2">
+        {customProviders.map((p) => (
+          <CustomProviderCard
+            key={p.id}
+            provider={p}
+            onRemove={() => {
+              const id = p.id.replace(/^custom:/, "")
+              void removeCustomProvider(id)
+            }}
+          />
+        ))}
+        {customProviders.length === 0 && (
+          <p className="py-2 text-center text-xs text-muted-foreground">
+            Nenhum provedor local configurado. Adicione um ou use "Detectar".
+          </p>
+        )}
+      </div>
+
+      {/* Provedores da nuvem (catálogo models.dev) */}
+      <div className="flex flex-col gap-2 border-t pt-3">
+        <p className="text-xs font-medium text-muted-foreground">Provedores da Nuvem</p>
+        <Input value={query} placeholder="Pesquisar provedor…" onChange={(e) => setQuery(e.target.value)} />
         {providerIds.map((id) => (
           <ProviderRow key={id} providerId={id} />
         ))}
@@ -146,6 +352,8 @@ function ProvidersTab() {
           <p className="py-4 text-center text-xs text-muted-foreground">Nenhum provedor encontrado</p>
         )}
       </div>
+
+      <AddCustomProviderDialog open={addDialogOpen} onOpenChange={setAddDialogOpen} />
     </div>
   )
 }
@@ -153,7 +361,6 @@ function ProvidersTab() {
 interface SettingsDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
-  /** Aba ativa inicial — útil para abrir direto em "autonomy" via atalho inline. */
   initialTab?: SettingsTab
 }
 
@@ -170,7 +377,6 @@ export function SettingsDialog({ open, onOpenChange, initialTab = "providers" }:
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-sm sm:max-w-4xl p-0 gap-0 overflow-hidden" showCloseButton>
         <div className="flex flex-row h-[600px]">
-          {/* Sidebar de abas */}
           <nav className="w-48 shrink-0 border-r bg-muted/30 p-2">
             <DialogHeader className="px-2 py-2 text-left">
               <DialogTitle className="text-sm">Configurações</DialogTitle>
@@ -200,7 +406,6 @@ export function SettingsDialog({ open, onOpenChange, initialTab = "providers" }:
             </ul>
           </nav>
 
-          {/* Área direita: conteúdo ativo */}
           <div className="flex-1 min-w-0 p-4">
             <div className="mb-3 flex items-center gap-2 border-b pb-2">
               <active.icon className="size-4 text-muted-foreground" />
