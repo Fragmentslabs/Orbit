@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react"
-import { BarChart3, Database, KeyRound, Puzzle, Shield, Trash2, Check, Plus, Wifi, WifiOff, RefreshCw, Server, X } from "lucide-react"
+import { BarChart3, Database, KeyRound, Puzzle, Shield, Trash2, Check, Plus, Wifi, WifiOff, RefreshCw, Server, X, Pencil } from "lucide-react"
 import {
   Dialog,
   DialogContent,
@@ -111,9 +111,11 @@ function ProviderRow({ providerId }: { providerId: string }) {
 
 function CustomProviderCard({
   provider,
+  onEdit,
   onRemove,
 }: {
   provider: { id: string; name: string; api?: string }
+  onEdit: () => void
   onRemove: () => void
 }) {
   const connected = useProviderStore((s) => s.connectedProviders.includes(provider.id))
@@ -134,6 +136,9 @@ function CustomProviderCard({
             Não conectado
           </Badge>
         )}
+        <Button size="icon-sm" variant="ghost" title="Editar" onClick={onEdit}>
+          <Pencil className="size-3.5" />
+        </Button>
         <Button size="icon-sm" variant="ghost" title="Remover" onClick={onRemove}>
           <Trash2 className="size-3.5" />
         </Button>
@@ -145,32 +150,59 @@ function CustomProviderCard({
   )
 }
 
-function AddCustomProviderDialog({
+function CustomProviderDialog({
   open,
   onOpenChange,
+  editProvider,
 }: {
   open: boolean
   onOpenChange: (open: boolean) => void
+  editProvider?: { id: string; name: string; api?: string }
 }) {
   const addCustomProvider = useProviderStore((s) => s.addCustomProvider)
-  const [id, setId] = useState("")
-  const [name, setName] = useState("")
-  const [baseURL, setBaseURL] = useState("http://localhost:11434/v1")
+  const updateCustomProvider = useProviderStore((s) => s.updateCustomProvider)
+
+  const isEdit = !!editProvider
+  const rawId = editProvider ? editProvider.id.replace(/^custom:/, "") : ""
+
+  const [id, setId] = useState(rawId)
+  const [name, setName] = useState(editProvider?.name ?? "")
+  const [baseURL, setBaseURL] = useState(editProvider?.api ?? "http://localhost:11434/v1")
   const [apiKey, setApiKey] = useState("")
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState("")
+
+  useEffect(() => {
+    if (open && editProvider) {
+      setId(editProvider.id.replace(/^custom:/, ""))
+      setName(editProvider.name)
+      setBaseURL(editProvider.api ?? "http://localhost:11434/v1")
+      setApiKey("")
+      setError("")
+    } else if (open) {
+      setId("")
+      setName("")
+      setBaseURL("http://localhost:11434/v1")
+      setApiKey("")
+      setError("")
+    }
+  }, [open, editProvider])
 
   const handleSave = async () => {
     if (!id.trim() || !name.trim() || !baseURL.trim()) return
     setSaving(true)
     setError("")
     try {
-      await addCustomProvider(id.trim(), name.trim(), baseURL.trim(), apiKey.trim() || undefined)
+      if (isEdit) {
+        await updateCustomProvider(rawId, {
+          name: name.trim(),
+          baseURL: baseURL.trim(),
+          ...(apiKey.trim() ? { apiKey: apiKey.trim() } : {}),
+        })
+      } else {
+        await addCustomProvider(id.trim(), name.trim(), baseURL.trim(), apiKey.trim() || undefined)
+      }
       onOpenChange(false)
-      setId("")
-      setName("")
-      setBaseURL("http://localhost:11434/v1")
-      setApiKey("")
     } catch (err) {
       setError((err as Error).message)
     } finally {
@@ -182,7 +214,7 @@ function AddCustomProviderDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle className="text-sm">Adicionar provedor local</DialogTitle>
+          <DialogTitle className="text-sm">{isEdit ? "Editar provedor local" : "Adicionar provedor local"}</DialogTitle>
           <DialogDescription className="text-xs">
             Configure um servidor local compatível com OpenAI (Ollama, LM Studio, etc.).
           </DialogDescription>
@@ -194,6 +226,7 @@ function AddCustomProviderDialog({
               <Input
                 value={id}
                 placeholder="ollama-local"
+                disabled={isEdit}
                 onChange={(e) => setId(e.target.value.replace(/[^a-zA-Z0-9_-]/g, ""))}
               />
             </div>
@@ -213,7 +246,7 @@ function AddCustomProviderDialog({
             <Input
               type="password"
               value={apiKey}
-              placeholder="Deixe em branco se não exigir"
+              placeholder="Deixe em branco para manter a atual"
               onChange={(e) => setApiKey(e.target.value)}
             />
           </div>
@@ -223,7 +256,7 @@ function AddCustomProviderDialog({
               Cancelar
             </Button>
             <Button size="sm" disabled={!id.trim() || !name.trim() || !baseURL.trim() || saving} onClick={() => void handleSave()}>
-              Adicionar
+              {isEdit ? "Salvar" : "Adicionar"}
             </Button>
           </div>
         </div>
@@ -239,7 +272,8 @@ function ProvidersTab() {
   const removeCustomProvider = useProviderStore((s) => s.removeCustomProvider)
 
   const [query, setQuery] = useState("")
-  const [addDialogOpen, setAddDialogOpen] = useState(false)
+  const [dialogOpen, setDialogOpen] = useState(false)
+  const [editProvider, setEditProvider] = useState<{ id: string; name: string; api?: string } | undefined>(undefined)
   const [detecting, setDetecting] = useState(false)
   const [detectResults, setDetectResults] = useState<DetectResult[] | null>(null)
 
@@ -289,7 +323,7 @@ function ProvidersTab() {
           disabled={detecting} onClick={() => void handleDetect()}>
           <RefreshCw className={cn("size-3", detecting && "animate-spin")} />
         </Button>
-        <Button size="sm" variant="outline" className="gap-1 h-7 text-xs" onClick={() => setAddDialogOpen(true)}>
+        <Button size="sm" variant="outline" className="gap-1 h-7 text-xs" onClick={() => { setEditProvider(undefined); setDialogOpen(true) }}>
           <Plus className="size-3" />
           Adicionar
         </Button>
@@ -328,6 +362,10 @@ function ProvidersTab() {
           <CustomProviderCard
             key={p.id}
             provider={p}
+            onEdit={() => {
+              setEditProvider(p)
+              setDialogOpen(true)
+            }}
             onRemove={() => {
               const id = p.id.replace(/^custom:/, "")
               void removeCustomProvider(id)
@@ -353,7 +391,7 @@ function ProvidersTab() {
         )}
       </div>
 
-      <AddCustomProviderDialog open={addDialogOpen} onOpenChange={setAddDialogOpen} />
+      <CustomProviderDialog open={dialogOpen} onOpenChange={setDialogOpen} editProvider={editProvider} />
     </div>
   )
 }
