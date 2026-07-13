@@ -41,6 +41,7 @@ interface ProviderState {
   setWorkerReasoning: (reasoning: ReasoningConfig | null) => void
   getModel: (providerId: string, modelId: string) => CatalogModel | undefined
   addCustomProvider: (id: string, name: string, baseURL: string, apiKey?: string) => Promise<void>
+  updateCustomProvider: (id: string, patch: { name?: string; baseURL?: string; apiKey?: string }) => Promise<void>
   removeCustomProvider: (id: string) => Promise<void>
   refreshCustomProviders: () => Promise<void>
 }
@@ -143,6 +144,14 @@ export const useProviderStore = create<ProviderState>((set, get) => ({
           : state.connectedProviders,
       }
     })
+  },
+
+  updateCustomProvider: async (id, patch) => {
+    const provider = await customProvidersApi.update(id, patch)
+    set((state) => ({
+      customProviders: state.customProviders.map((p) => (p.id === provider.id ? provider : p)),
+      catalog: { ...state.catalog, [provider.id]: provider },
+    }))
   },
 
   removeCustomProvider: async (id) => {
