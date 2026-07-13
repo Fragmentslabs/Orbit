@@ -49,7 +49,7 @@ export async function resolveModel(providerId: string, modelId: string): Promise
   }
 
   const apiKey = await resolveApiKey(providerId, [...provider.env])
-  if (!apiKey) {
+  if (!apiKey && provider.env.length > 0) {
     throw new ProviderResolutionError(
       `Nenhuma chave de API configurada para ${provider.name}. Adicione uma em Configurações.`,
     )
