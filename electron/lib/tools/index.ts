@@ -12,7 +12,7 @@ import {
   createWriteTool,
 } from './files'
 import { createSkillTool } from './create-skill'
-import { createChatMemoryTools, createCodeMemoryTools } from './memory'
+import { createChatMemoryTools, createCodeMemoryTools, createGraphTool } from './memory'
 import { createSubagentTool } from './orchestration'
 import { createPanelBrowserTools } from './panel-browser'
 import { createQuestionTool } from './question'
@@ -84,7 +84,10 @@ export function buildToolSet(input: SendMessageInput, ctx: ToolContext | null): 
   if (ctx && input.orchestrationRole !== 'worker') {
     Object.assign(tools, createPanelBrowserTools(ctx))
   }
-  if (allowBrain && ctx) Object.assign(tools, createCodeMemoryTools(input, ctx))
+  if (allowBrain && ctx) {
+    Object.assign(tools, createCodeMemoryTools(input, ctx))
+    tools.memory_graph = createGraphTool(input, ctx)
+  }
   if (allowQuestion) tools.question = createQuestionTool(input, ctx?.abort)
   if (allowDelegation) tools.subagent = createSubagentTool(input, ctx)
 
