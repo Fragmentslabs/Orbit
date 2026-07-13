@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
-import { Globe, Folder, MessageSquare, Terminal, X, PlusIcon, Bot, LoaderIcon, XCircleIcon } from "lucide-react"
+import { FileCode, Globe, Folder, MessageSquare, Terminal, X, PlusIcon, Bot, LoaderIcon, XCircleIcon } from "lucide-react"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -10,12 +10,13 @@ import { ChatView } from "@/src/components/chat-view"
 import { TerminalTab } from "@/src/components/terminal-tab"
 import { BrowserTab } from "@/src/components/browser-tab"
 import { FoldersTab } from "@/src/components/folders-tab"
+import { DiffTab } from "@/src/components/diff-tab"
 import { useWorkspace } from "@/lib/workspace-context"
 import { usePanelStore } from "@/src/stores/panel-store"
 import { useSessionStore } from "@/src/stores/session-store"
 import { cn } from "@/lib/utils"
 
-type TabType = "chat" | "terminal" | "folders" | "browser"
+type TabType = "chat" | "terminal" | "folders" | "browser" | "diff"
 
 interface PanelTab {
   id: string
@@ -23,6 +24,8 @@ interface PanelTab {
   title: string
   /** Tab de chat apontando para uma session específica (workers da orquestração) */
   sessionId?: string
+  /** ID da mensagem do assistente (diff) */
+  messageId?: string
 }
 
 interface TabMeta {
@@ -36,6 +39,7 @@ const tabMeta: Record<TabType, TabMeta> = {
   terminal: { icon: Terminal, label: "Terminal", description: "Execute comandos e scripts" },
   folders: { icon: Folder, label: "Pastas", description: "Navegue pelos arquivos do projeto" },
   browser: { icon: Globe, label: "Browser", description: "Pesquise e visualize páginas web" },
+  diff: { icon: FileCode, label: "Diff", description: "Alterações das ferramentas" },
 }
 
 function TabContent({ tab }: { tab: PanelTab }) {
@@ -62,6 +66,12 @@ function TabContent({ tab }: { tab: PanelTab }) {
       return (
         <div className="flex flex-1 flex-col overflow-hidden">
           <BrowserTab />
+        </div>
+      )
+    case "diff":
+      return (
+        <div className="flex flex-1 flex-col overflow-hidden p-4">
+          <DiffTab sessionId={tab.sessionId!} messageId={tab.messageId!} />
         </div>
       )
   }
@@ -186,6 +196,23 @@ export function RightPanel() {
     }
   }, [pendingChatTab, pendingChatTabSession, pendingChatTabTitle])
 
+  // Diff solicitado pelo chat: abre aba Diff
+  const pendingDiff = usePanelStore((s) => s.pendingDiff)
+  const pendingDiffSessionId = usePanelStore((s) => s.pendingDiffSessionId)
+  const pendingDiffMessageId = usePanelStore((s) => s.pendingDiffMessageId)
+  const pendingDiffTitle = usePanelStore((s) => s.pendingDiffTitle)
+  useEffect(() => {
+    if (pendingDiff > 0 && pendingDiffSessionId && pendingDiffMessageId) {
+      const id = `diff-${pendingDiffSessionId}-${pendingDiffMessageId}`
+      setTabs((prev) =>
+        prev.some((t) => t.id === id)
+          ? prev
+          : [...prev, { id, type: "diff", title: pendingDiffTitle ?? "Diff", sessionId: pendingDiffSessionId, messageId: pendingDiffMessageId }],
+      )
+      setActiveTabId(id)
+    }
+  }, [pendingDiff, pendingDiffSessionId, pendingDiffMessageId, pendingDiffTitle])
+
   // Workers da orquestração em execução abrem tabs automaticamente
   useEffect(() => {
     if (!activeSessionId) return
@@ -227,7 +254,7 @@ export function RightPanel() {
         <div className="flex items-center gap-0.5 px-2 pt-2 overflow-x-auto">
           {tabs.map((tab) => {
             const { icon: Icon } = tabMeta[tab.type]
-            const TabIcon = tab.sessionId ? Bot : Icon
+            const TabIcon = tab.type === "chat" && tab.sessionId ? Bot : Icon
             return (
               <div
                 key={tab.id}

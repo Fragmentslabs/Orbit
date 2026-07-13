@@ -336,15 +336,15 @@ export async function runChat(win: BrowserWindow, input: SendMessageInput): Prom
       return
     }
 
-    // Snapshot end: estado após todas as tools + lista de arquivos alterados
-    const captureEndSnapshot = async (): Promise<{ end: string; files: string[] } | undefined> => {
+    // Snapshot end: estado após todas as tools + lista de arquivos alterados + diff
+    const captureEndSnapshot = async (): Promise<{ end: string; files: string[]; patch: string } | undefined> => {
       const start = assistantMessage.snapshot?.start
       if (!toolContext || !start) return
       try {
         const end = await capture(toolContext.directory)
         if (end === start) return
         const changes = await diff(toolContext.directory, start, end)
-        return { end, files: changes.files }
+        return { end, files: changes.files, patch: changes.patch }
       } catch (err) {
         console.error('[snapshot] captura final falhou:', err)
       }

@@ -110,6 +110,7 @@ function MessageItem({ msg, isLast, waiting, finished, isBusy, mode, sessionId, 
         ) : (
           <AssistantMessage
             message={msg}
+            sessionId={sessionId}
             isLast={isLast}
             isBusy={isBusy}
             onRetry={handleRetry}
