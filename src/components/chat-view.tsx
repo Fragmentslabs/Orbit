@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { ChevronRight, PaperclipIcon } from "lucide-react"
+import { UserMessageNav } from "@/src/components/user-message-nav"
 import { useWorkspace } from "@/lib/workspace-context"
 import type { ChatMessage, FilePart, SendMessageOptions } from "@/shared/chat"
 import { AskCard } from "@/src/components/ask-card"
@@ -68,7 +69,7 @@ function MessageItem({ msg, isLast, waiting, finished, isBusy, mode, sessionId, 
   if (msg.role === "user") {
     const files = msg.parts.filter((p): p is FilePart => p.type === "file")
     return (
-      <Message from="user">
+      <Message from="user" data-user-msg-id={msg.id}>
         <div className="group/user-msg flex flex-col">
           {files.length > 0 && (
             <MessageAttachments className="mb-1">
@@ -131,6 +132,62 @@ function ChatMessages({ messages, isBusy, mode, sessionId, sendMessage }: {
 }) {
   const lastAssistantId = [...messages].reverse().find((m) => m.role === "assistant" && !m.summary)?.id
 
+  const userMsgItems = useMemo(
+    () =>
+      messages
+        .filter((m) => m.role === "user")
+        .map((m) => ({ id: m.id, text: messageText(m) })),
+    [messages],
+  )
+
+  const [activeUserMsgId, setActiveUserMsgId] = useState<string | null>(null)
+  const observerRef = useRef<IntersectionObserver | null>(null)
+  const ratioMapRef = useRef<Map<string, number>>(new Map())
+
+  useEffect(() => {
+    const ids = userMsgItems.map((i) => i.id)
+    const key = ids.join(",")
+    if (!key) return
+
+    const ratioMap = ratioMapRef.current
+    ratioMap.clear()
+
+    if (observerRef.current) observerRef.current.disconnect()
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          const id = entry.target.getAttribute("data-user-msg-id")
+          if (id) ratioMap.set(id, entry.intersectionRatio)
+        }
+        let maxId: string | null = null
+        let maxRatio = 0
+        for (const [id, ratio] of ratioMap) {
+          if (ratio > maxRatio) {
+            maxRatio = ratio
+            maxId = id
+          }
+        }
+        setActiveUserMsgId(maxId)
+      },
+      { threshold: [0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1] },
+    )
+
+    observerRef.current = observer
+
+    const els = document.querySelectorAll<HTMLElement>("[data-user-msg-id]")
+    for (const el of els) observer.observe(el)
+
+    return () => observer.disconnect()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [userMsgItems.map((i) => i.id).join(",")])
+
+  const handleNavSelect = useCallback((id: string) => {
+    document
+      .querySelector<HTMLElement>(`[data-user-msg-id="${id}"]`)
+      ?.scrollIntoView({ behavior: "smooth", block: "center" })
+  }, [])
+
   return (
     <Conversation className="relative flex-1 -mt-10">
       <ConversationContent className="mx-auto w-full max-w-3xl">
@@ -159,6 +216,7 @@ function ChatMessages({ messages, isBusy, mode, sessionId, sendMessage }: {
         })}
       </ConversationContent>
       <ConversationScrollButton />
+      <UserMessageNav items={userMsgItems} activeId={activeUserMsgId} onSelect={handleNavSelect} />
     </Conversation>
   )
 }
