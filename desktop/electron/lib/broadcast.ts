@@ -1,5 +1,5 @@
 import { BrowserWindow } from 'electron'
-import type { ChatEvent } from '../../shared/chat'
+import type { ChatEvent } from '@shared/chat'
 import { forwardChatEvent } from './companion-server'
 
 /**

@@ -1,0 +1,18 @@
+{
+  "name": "@orbit/mobile",
+  "version": "0.1.0",
+  "private": true,
+  "main": "index.ts",
+  "scripts": {
+    "dev": "expo start",
+    "web": "expo start --web",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint . --ext ts,tsx"
+  },
+  "dependencies": {
+    "@orbit/shared": "0.1.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.2.2"
+  }
+}

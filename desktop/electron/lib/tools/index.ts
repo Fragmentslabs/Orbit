@@ -1,5 +1,5 @@
 import type { ToolSet } from 'ai'
-import type { SendMessageInput } from '../../../shared/chat'
+import type { SendMessageInput } from '@shared/chat'
 import { getMcpTools } from '../mcp'
 import { createBrowserLinksTool, createBrowserOpenTool } from './browser'
 import type { ToolContext } from './context'

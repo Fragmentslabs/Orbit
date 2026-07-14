@@ -7,11 +7,25 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
+# Root
 node_modules
 dist
 dist-electron
 dist-ssr
 *.local
+
+# Desktop
+desktop/node_modules
+desktop/dist
+desktop/dist-electron
+
+# Mobile
+mobile/node_modules
+mobile/.expo
+mobile/dist
+
+# Shared
+shared/node_modules
 
 # Editor directories and files
 .vscode/*

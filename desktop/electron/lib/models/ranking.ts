@@ -1,5 +1,5 @@
-import type { Catalog } from '../../../shared/chat'
-import type { ModelBenchmarks, ModelScores, OrbitModel, PriceTier, SpeedTier } from '../../../shared/models'
+import type { Catalog } from '@shared/chat'
+import type { ModelBenchmarks, ModelScores, OrbitModel, PriceTier, SpeedTier } from '@shared/models'
 import type { AAModel } from './artificial-analysis'
 import type { OpenRouterModel } from './openrouter'
 

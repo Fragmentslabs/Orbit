@@ -1,5 +1,5 @@
 import type { JSONValue } from 'ai'
-import type { SendMessageInput } from '../../../shared/chat'
+import type { SendMessageInput } from '@shared/chat'
 import { getProvider } from '../catalog'
 import { mergeOptions } from './merge'
 import { buildBaseOptions } from './options'

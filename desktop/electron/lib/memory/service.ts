@@ -1,7 +1,7 @@
 import { EventEmitter } from 'node:events'
 import path from 'node:path'
-import type { Memory, MemoryEvent, MemoryKind, ProjectArea, ProjectCategory } from '../../../shared/memory'
-import { jaccard, searchMemories } from '../../../shared/memory'
+import type { Memory, MemoryEvent, MemoryKind, ProjectArea, ProjectCategory } from '@shared/memory'
+import { jaccard, searchMemories } from '@shared/memory'
 import {
   defaultWeight,
   extendedExpiry,

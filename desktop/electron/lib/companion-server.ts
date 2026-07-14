@@ -25,9 +25,9 @@ import type {
   AuthErrorResponse,
   ApiResponse,
   StatusUpdate,
-} from '../../shared/companion'
-import type { ChatEvent, SessionInfo, ChatMessage, SendMessageInput } from '../../shared/chat'
-import { StorageKeys } from '../../shared/chat'
+} from '@shared/companion'
+import type { ChatEvent, SessionInfo, ChatMessage, SendMessageInput } from '@shared/chat'
+import { StorageKeys } from '@shared/chat'
 import { readJson, listKeys } from './storage'
 import { listCredentialProviders } from './auth'
 import { reply as askReply } from './ask-broker'

@@ -1,6 +1,6 @@
 import fs from 'node:fs/promises'
 import path from 'node:path'
-import type { CatalogProvider } from '../../shared/chat'
+import type { CatalogProvider } from '@shared/chat'
 import { dataDir } from './storage'
 
 export interface CustomProviderEntry {

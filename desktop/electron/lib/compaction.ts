@@ -1,5 +1,5 @@
 import { generateText, type LanguageModel } from 'ai'
-import type { CatalogModel, ChatMessage, TokenUsage } from '../../shared/chat'
+import type { CatalogModel, ChatMessage, TokenUsage } from '@shared/chat'
 
 /**
  * Compactação automática de contexto. O histórico enviado ao modelo é só texto

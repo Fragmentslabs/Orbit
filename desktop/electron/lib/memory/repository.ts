@@ -1,5 +1,5 @@
-import type { Memory } from '../../../shared/memory'
-import { StorageKeys } from '../../../shared/chat'
+import type { Memory } from '@shared/memory'
+import { StorageKeys } from '@shared/chat'
 import { listKeys, readJson, removeJson, removeText, readText, writeJson, writeText } from '../storage'
 
 /**

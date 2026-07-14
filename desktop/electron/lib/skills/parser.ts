@@ -1,4 +1,4 @@
-import type { Skill, SkillSource } from '../../../shared/skills'
+import type { Skill, SkillSource } from '@shared/skills'
 
 const FRONTMATTER = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?/
 

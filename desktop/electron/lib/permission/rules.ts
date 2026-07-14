@@ -4,7 +4,7 @@ import type {
   PermissionMode,
   PermissionThresholds,
   Verdict,
-} from '../../../shared/chat'
+} from '@shared/chat'
 
 /**
  * Ruleset built-in de permissões (puro, testável). Apenas bash/write/edit
@@ -17,7 +17,7 @@ import type {
  *                apenas via config programática (~/.config/orbit/...) futura.
  */
 
-export type { Verdict } from '../../../shared/chat'
+export type { Verdict } from '@shared/chat'
 
 export interface Assessment {
   claim: PermissionClaim

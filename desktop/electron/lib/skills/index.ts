@@ -2,7 +2,7 @@ import { app, BrowserWindow } from 'electron'
 import fs from 'node:fs'
 import fsp from 'node:fs/promises'
 import path from 'node:path'
-import type { Skill, SkillSource } from '../../../shared/skills'
+import type { Skill, SkillSource } from '@shared/skills'
 import { parseSkill } from './parser'
 
 /**

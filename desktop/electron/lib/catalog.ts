@@ -1,6 +1,6 @@
 import fs from 'node:fs/promises'
 import path from 'node:path'
-import type { Catalog, CatalogProvider } from '../../shared/chat'
+import type { Catalog, CatalogProvider } from '@shared/chat'
 import { generateVariants, isAlwaysOnModel, toModelInput, variantLabel } from './reasoning/variants'
 import { dataDir } from './storage'
 import { listCustomProviders, seedCustomProviders } from './custom-providers'

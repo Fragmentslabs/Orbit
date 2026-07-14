@@ -1,4 +1,4 @@
-import type { AskItem } from '../../shared/chat'
+import type { AskItem } from '@shared/chat'
 import { ask, newRequestId } from './ask-broker'
 import { broadcastChatEvent } from './broadcast'
 

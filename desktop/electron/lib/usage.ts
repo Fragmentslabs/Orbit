@@ -1,5 +1,5 @@
 import type { LanguageModelUsage } from 'ai'
-import type { TokenUsage } from '../../shared/chat'
+import type { TokenUsage } from '@shared/chat'
 
 /**
  * Conversão do usage aninhado do ai-sdk v7 para o TokenUsage persistido nas

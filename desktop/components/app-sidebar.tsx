@@ -75,7 +75,7 @@ import {
   DropdownMenuSubContent,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import type { FolderInfo, SessionInfo } from "@/shared/chat"
+import type { FolderInfo, SessionInfo } from "@shared/chat"
 import { useMessageQueueStore, startMessageScheduler } from "@/src/stores/message-queue-store"
 import { useSessionStore } from "@/src/stores/session-store"
 import { useSettingsUi } from "@/src/stores/settings-ui"
