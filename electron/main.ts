@@ -20,7 +20,7 @@ import { abortOrchestration, approvePlan, rejectPlan, runOrchestration } from '.
 import { initMcp, listMcpStatus, readMcpConfig, reconnectMcp, saveMcpConfig } from './lib/mcp'
 import { savePlanFile, deletePlanFile, readPlanFile } from './lib/plan-file'
 import { registerMediaProtocol } from './lib/media'
-import { startCompanionServer, forwardChatEvent, notifyCompanionAsk, notifyCompanionMessage, getCompanionStatus } from './lib/companion-server'
+import { startCompanionServer, getCompanionStatus } from './lib/companion-server'
 import { registerPanelWebContents } from './lib/panel-browser'
 import { setupMemoryScheduler } from './lib/memory/scheduler'
 import * as memoryService from './lib/memory/service'
