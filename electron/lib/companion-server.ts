@@ -12,7 +12,7 @@
  */
 
 import { WebSocketServer, WebSocket } from 'ws'
-import type { Server } from 'http'
+import type { IncomingMessage, Server } from 'http'
 import { createServer } from 'http'
 import { app, BrowserWindow } from 'electron'
 import crypto from 'node:crypto'
@@ -366,7 +366,7 @@ export function startCompanionServer(): { port: number; ip: string; pin: string 
 
   regeneratePin()
 
-  wss.on('connection', (ws, req) => {
+  wss.on('connection', (ws: WebSocket, _req: IncomingMessage) => {
     const client: ConnectedClient = {
       ws,
       authenticated: false,
@@ -377,7 +377,7 @@ export function startCompanionServer(): { port: number; ip: string; pin: string 
 
     console.log(`[Companion] New connection from ${getIp(ws)}`)
 
-    ws.on('message', (data) => {
+    ws.on('message', (data: Buffer) => {
       try {
         const msg = JSON.parse(data.toString()) as WsMessage
         if (msg.payload && typeof (msg.payload as any).type === 'string') {
@@ -393,7 +393,7 @@ export function startCompanionServer(): { port: number; ip: string; pin: string 
       console.log(`[Companion] Client disconnected: ${client.deviceName}`)
     })
 
-    ws.on('error', (err) => {
+    ws.on('error', (err: Error) => {
       console.error('[Companion] WebSocket error:', err)
       clients.delete(client)
     })
