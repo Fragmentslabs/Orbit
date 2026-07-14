@@ -97,9 +97,11 @@ export function MemoriesView() {
         {mode === "code" && projects.length > 1 && (
           <Select value={projectFilter} onValueChange={(v) => setProjectFilter(v ?? ALL_PROJECTS)}>
             <SelectTrigger className="w-44">
-              <SelectValue />
+              <SelectValue>
+                {projectFilter === ALL_PROJECTS ? "Todos" : projects.find((p) => p.id === projectFilter)?.name}
+              </SelectValue>
             </SelectTrigger>
-            <SelectContent>
+            <SelectContent alignItemWithTrigger={false}>
               <SelectItem value={ALL_PROJECTS}>Todos os projetos</SelectItem>
               {projects.map((p) => (
                 <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>

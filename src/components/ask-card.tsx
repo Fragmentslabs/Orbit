@@ -1,5 +1,5 @@
 import { useState } from "react"
-import { Bot, HelpCircle, ShieldAlert, TriangleAlert } from "lucide-react"
+import { Bot, ChevronLeft, ChevronRight, HelpCircle, ShieldAlert, TriangleAlert } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -103,6 +103,7 @@ function QuestionBody({ ask, submitted, onReply }: {
   onReply: (value: unknown) => void
 }) {
   const questions = ask.questions ?? []
+  const [currentIndex, setCurrentIndex] = useState(0)
   const [selected, setSelected] = useState<Record<string, Set<string>>>({})
   const [free, setFree] = useState<Record<string, string>>({})
 
@@ -113,32 +114,56 @@ function QuestionBody({ ask, submitted, onReply }: {
     return picks.join(", ")
   }
   const allAnswered = questions.every((q) => answerOf(q).length > 0)
+  const current = questions[currentIndex]
 
   return (
     <>
       <div className="flex items-start gap-2">
         <HelpCircle className="mt-0.5 size-4 shrink-0 text-primary" />
         <div className="flex min-w-0 flex-1 flex-col gap-3">
-          {questions.map((q) => (
+          <div className="flex items-center justify-between">
+            <span className="text-xs text-muted-foreground">
+              Pergunta {currentIndex + 1} de {questions.length}
+            </span>
+            <div className="flex items-center gap-1">
+              <button
+                type="button"
+                className="inline-flex size-5 items-center justify-center rounded text-muted-foreground hover:text-foreground disabled:opacity-30"
+                disabled={currentIndex === 0}
+                onClick={() => setCurrentIndex((i) => Math.max(0, i - 1))}
+              >
+                <ChevronLeft className="size-3.5" />
+              </button>
+              <button
+                type="button"
+                className="inline-flex size-5 items-center justify-center rounded text-muted-foreground hover:text-foreground disabled:opacity-30"
+                disabled={currentIndex >= questions.length - 1}
+                onClick={() => setCurrentIndex((i) => Math.min(questions.length - 1, i + 1))}
+              >
+                <ChevronRight className="size-3.5" />
+              </button>
+            </div>
+          </div>
+          {current && (
             <QuestionItem
-              key={q.id}
-              question={q}
-              selected={selected[q.id] ?? new Set()}
-              free={free[q.id] ?? ""}
+              key={current.id}
+              question={current}
+              selected={selected[current.id] ?? new Set()}
+              free={free[current.id] ?? ""}
               onToggle={(option) =>
                 setSelected((prev) => {
-                  const next = new Set(prev[q.id] ?? [])
+                  const next = new Set(prev[current.id] ?? [])
                   if (next.has(option)) next.delete(option)
                   else {
-                    if (!q.multi) next.clear()
+                    if (!current.multi) next.clear()
                     next.add(option)
                   }
-                  return { ...prev, [q.id]: next }
+                  return { ...prev, [current.id]: next }
                 })
               }
-              onFree={(text) => setFree((prev) => ({ ...prev, [q.id]: text }))}
+              onFree={(text) => setFree((prev) => ({ ...prev, [current.id]: text }))}
             />
-          ))}
+          )}
         </div>
         {ask.origin && <OriginBadge workerTitle={ask.origin.workerTitle} />}
       </div>
