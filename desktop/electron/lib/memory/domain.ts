@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto'
 import path from 'node:path'
-import type { Memory, MemoryKind, ProjectCategory } from '../../../shared/memory'
-import { normalizeText } from '../../../shared/memory'
+import type { Memory, MemoryKind, ProjectCategory } from '@shared/memory'
+import { normalizeText } from '@shared/memory'
 
 /**
  * Regras puras do sistema de memória (zero I/O): identificação de projeto,

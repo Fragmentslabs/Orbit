@@ -1,4 +1,4 @@
-import type { ModelsSnapshot } from '../../../shared/models'
+import type { ModelsSnapshot } from '@shared/models'
 import { getCatalog } from '../catalog'
 import { getAAModels, hasAAKey } from './artificial-analysis'
 import { getOpenRouterModels } from './openrouter'

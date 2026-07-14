@@ -1,5 +1,5 @@
-import type { PermissionMode, PermissionThresholds, SendMessageInput } from '../../../shared/chat'
-import { DEFAULT_PERMISSION_THRESHOLDS } from '../../../shared/chat'
+import type { PermissionMode, PermissionThresholds, SendMessageInput } from '@shared/chat'
+import { DEFAULT_PERMISSION_THRESHOLDS } from '@shared/chat'
 import { newRequestId } from '../ask-broker'
 import { dispatchAsk } from '../ask-dispatch'
 import { broadcastChatEvent } from '../broadcast'

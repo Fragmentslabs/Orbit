@@ -1,0 +1,19 @@
+# Expo
+.expo/
+dist/
+web-build/
+expo-env.d.ts
+
+# Metro
+.metro-health-check*
+
+# Dependencies
+node_modules/
+
+# OS
+.DS_Store
+*.pem
+
+# Environment
+.env
+.env.local

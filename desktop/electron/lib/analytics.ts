@@ -1,6 +1,6 @@
-import type { ChatMessage, SessionInfo, TokenUsage } from '../../shared/chat'
-import { StorageKeys } from '../../shared/chat'
-import type { AnalyticsDay, AnalyticsRange, AnalyticsSummary, ModelDayBreakdown } from '../../shared/analytics'
+import type { ChatMessage, SessionInfo, TokenUsage } from '@shared/chat'
+import { StorageKeys } from '@shared/chat'
+import type { AnalyticsDay, AnalyticsRange, AnalyticsSummary, ModelDayBreakdown } from '@shared/analytics'
 import { listKeys, readJson } from './storage'
 
 function computeRange(range: AnalyticsRange): { since: number } {

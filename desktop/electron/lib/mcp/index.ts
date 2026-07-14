@@ -4,7 +4,7 @@ import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/
 import { jsonSchema, tool, type ToolSet } from 'ai'
 import fsp from 'node:fs/promises'
 import path from 'node:path'
-import type { McpConfig, McpServerConfig, McpServerStatus } from '../../../shared/mcp'
+import type { McpConfig, McpServerConfig, McpServerStatus } from '@shared/mcp'
 import { dataDir } from '../storage'
 
 /**

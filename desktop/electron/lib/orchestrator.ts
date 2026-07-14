@@ -8,8 +8,8 @@ import type {
   SendMessageInput,
   SessionInfo,
   TextPart,
-} from '../../shared/chat'
-import { StorageKeys } from '../../shared/chat'
+} from '@shared/chat'
+import { StorageKeys } from '@shared/chat'
 import { getProvider } from './catalog'
 import { abortChat, runChat, toModelMessages } from './chat-engine'
 import { ORCHESTRATOR_PLAN_PROMPT, ORCHESTRATOR_SYNTHESIS_PROMPT } from './prompts'

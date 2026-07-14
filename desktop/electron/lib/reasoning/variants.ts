@@ -1,4 +1,4 @@
-import type { CatalogModel } from '../../../shared/chat'
+import type { CatalogModel } from '@shared/chat'
 import type { ModelInput, VariantMap } from './types'
 
 /** Converte um modelo do catálogo models.dev no input interno do módulo. */

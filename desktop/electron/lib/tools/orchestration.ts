@@ -1,6 +1,6 @@
 import { generateText, stepCountIs, tool } from 'ai'
 import { z } from 'zod'
-import type { OrchestrationTask, SendMessageInput, SessionMode } from '../../../shared/chat'
+import type { OrchestrationTask, SendMessageInput, SessionMode } from '@shared/chat'
 import { createToolApproval } from '../permission'
 import { buildSystemPrompt } from '../prompts'
 import { resolveModel } from '../providers'

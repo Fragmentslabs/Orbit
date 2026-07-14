@@ -31,9 +31,9 @@ import { computeAnalytics } from './lib/analytics'
 import { approvePendingSkill, discardPendingSkill, listPendingSkills } from './lib/skills/pending'
 import { dataDir, listKeys, readJson, removeJson, writeJson } from './lib/storage'
 import { destroyBrowserWindow } from './lib/tools'
-import type { ChatMessage, SendMessageInput, SessionInfo } from '../shared/chat'
-import { StorageKeys } from '../shared/chat'
-import type { Memory, MemoryEvent } from '../shared/memory'
+import type { ChatMessage, SendMessageInput, SessionInfo } from '@shared/chat'
+import { StorageKeys } from '@shared/chat'
+import type { Memory, MemoryEvent } from '@shared/memory'
 
 const execFileAsync = promisify(execFile)
 

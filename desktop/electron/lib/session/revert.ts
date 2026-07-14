@@ -1,5 +1,5 @@
-import type { ChatMessage, SessionInfo, SessionRevert } from '../../../shared/chat'
-import { StorageKeys } from '../../../shared/chat'
+import type { ChatMessage, SessionInfo, SessionRevert } from '@shared/chat'
+import { StorageKeys } from '@shared/chat'
 import { broadcastChatEvent } from '../broadcast'
 import { capture, diff, restore } from '../snapshot'
 import { readJson, writeJson } from '../storage'

@@ -1,7 +1,7 @@
 import { app } from 'electron'
 import fsp from 'node:fs/promises'
 import path from 'node:path'
-import type { SkillProposal } from '../../../shared/skills'
+import type { SkillProposal } from '@shared/skills'
 import { globalSkillsDir } from './index'
 import { parseSkill, sanitizeSlug, serializeSkill } from './parser'
 
