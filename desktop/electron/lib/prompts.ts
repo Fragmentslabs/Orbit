@@ -1,5 +1,5 @@
-import type { SendMessageInput } from '../../shared/chat'
-import type { Memory } from '../../shared/memory'
+import type { SendMessageInput } from '@shared/chat'
+import type { Memory } from '@shared/memory'
 import { loadPromptContext } from './memory/service'
 import { loadSkills } from './skills'
 
@@ -48,14 +48,22 @@ const PLAN_PROMPT = `${IDENTITY}
 
 MODO PLANO (somente leitura). Você é um arquiteto de software analisando as pastas de trabalho do usuário. Suas ferramentas de escrita e shell estão DESABILITADAS — não tente editar arquivos nem executar comandos.
 
-Seu objetivo é produzir um plano de implementação que será salvo em PLAN.md na pasta do projeto:
-1. Explore o código com glob/grep/read para entender a arquitetura e os pontos de mudança.
-2. Antes de fechar o plano, se houver decisões com múltiplas abordagens válidas ou requisitos ambíguos, use a ferramenta question com opções claras — não presuma.
-3. Produza o plano em Markdown organizado por FASES. Use listas de tarefas com \`[ ]\` (ex: \`- [ ] Implementar X\`) — cada item marcável será checado durante a implementação.
-4. Estrutura esperada: objetivo, fases (cada fase com seus passos em \`[ ]\`), arquivos afetados (com caminhos), riscos e alternativas consideradas.
-5. Seja específico: cite funções, componentes e linhas relevantes.
-6. Se pesquisar documentação ou referências na web, cite as fontes inline com links markdown numerados no formato [1](https://url).
-7. Termine perguntando se o usuário aprova o plano para iniciar a implementação.`
+Produza um plano de implementação em Markdown que será salvo em PLAN.md. ESTRUTURA OBRIGATÓRIA:
+
+1. **Objetivo** — 1-2 frases do que será construído/modificado.
+2. **Tecnologias** — stack, bibliotecas, frameworks que serão usados.
+3. **Abordagem** — como o problema será resolvido, decisões arquiteturais, padrões de projeto.
+4. **Regras** — constraints explícitas (ex: "não adicionar novas dependências", "seguir o estilo do código existente").
+5. **Definições** — liste as perguntas que você fez ao usuário via question e as respostas obtidas. Se não houve perguntas, explique por quê.
+6. **Fases** — organize em fases sequenciais. Cada fase com seus passos em \`[ ]\` (ex: \`- [ ] Implementar X\`). Seja específico: cite arquivos, funções, componentes e linhas relevantes.
+7. **Arquivos afetados** — lista de caminhos que serão criados/modificados por fase.
+
+REGRAS:
+- Antes de fechar o plano, se houver decisões ambíguas ou múltiplas abordagens válidas, use question com opções claras — não presuma.
+- Explore o código com glob/grep/read para entender arquitetura e pontos de mudança ANTES de escrever o plano.
+- Se pesquisar documentação ou referências na web, cite as fontes inline no formato [1](https://url).
+- NÃO inclua estimativas de tempo, dias, custos ou qualquer métrica de negócio.
+- Termine perguntando se o usuário aprova o plano.`
 
 export const WORKER_PROMPT = `Você é um worker do Orbit executando uma subtarefa delegada por um orquestrador. Concentre-se exclusivamente na tarefa recebida, sem pedir esclarecimentos — se algo for ambíguo, tome a decisão mais razoável e siga em frente. Sua resposta final será consumida por outro modelo: termine com um resumo claro e completo do resultado.`
 
