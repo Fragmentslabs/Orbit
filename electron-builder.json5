@@ -6,7 +6,7 @@
   "asarUnpack": [
     "**/node_modules/node-pty/**"
   ],
-  "productName": "YourAppName",
+  "productName": "Orbit",
   "directories": {
     "output": "release/${version}"
   },
