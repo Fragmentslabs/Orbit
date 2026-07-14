@@ -32,6 +32,8 @@ interface ProviderState {
   workerModel: SelectedModel | null
   workerReasoning: ReasoningConfig | null
   loading: boolean
+  /** Mensagem de erro da última inicialização */
+  error: string | null
 
   initialize: () => Promise<void>
   setApiKey: (providerId: string, key: string) => Promise<void>
@@ -62,35 +64,41 @@ export const useProviderStore = create<ProviderState>((set, get) => ({
   workerModel: loadJson<SelectedModel>(WORKER_MODEL_KEY),
   workerReasoning: loadJson<ReasoningConfig>(WORKER_REASONING_KEY),
   loading: true,
+  error: null,
 
   initialize: async () => {
-    const [catalog, connectedProviders, customProviders] = await Promise.all([
-      catalogApi.get(),
-      authApi.list(),
-      customProvidersApi.list(),
-    ])
-    const merged = mergeIntoCatalog(catalog, customProviders)
-    set({ catalog: merged, customProviders, connectedProviders, loading: false })
+    try {
+      const [catalog, connectedProviders, customProviders] = await Promise.all([
+        catalogApi.get(),
+        authApi.list(),
+        customProvidersApi.list(),
+      ])
+      const merged = mergeIntoCatalog(catalog, customProviders)
+      set({ catalog: merged, customProviders, connectedProviders, loading: false, error: null })
 
-    const { workerModel, workerReasoning } = get()
-    if (workerModel) {
-      const workerCatalogModel = merged[workerModel.providerId]?.models[workerModel.modelId]
-      if (!workerCatalogModel || !connectedProviders.includes(workerModel.providerId)) {
-        get().setWorkerModel(null)
-        get().setWorkerReasoning(null)
-      } else if (workerReasoning && !workerCatalogModel.reasoning) {
-        get().setWorkerReasoning(null)
+      const { workerModel, workerReasoning } = get()
+      if (workerModel) {
+        const workerCatalogModel = merged[workerModel.providerId]?.models[workerModel.modelId]
+        if (!workerCatalogModel || !connectedProviders.includes(workerModel.providerId)) {
+          get().setWorkerModel(null)
+          get().setWorkerReasoning(null)
+        } else if (workerReasoning && !workerCatalogModel.reasoning) {
+          get().setWorkerReasoning(null)
+        }
       }
-    }
 
-    const { selectedModel } = get()
-    const isValid =
-      selectedModel &&
-      merged[selectedModel.providerId]?.models[selectedModel.modelId] !== undefined
-    if (!isValid) {
-      const providerId = connectedProviders.find((id) => merged[id])
-      const modelId = providerId ? Object.keys(merged[providerId].models)[0] : undefined
-      if (providerId && modelId) get().selectModel(providerId, modelId)
+      const { selectedModel } = get()
+      const isValid =
+        selectedModel &&
+        merged[selectedModel.providerId]?.models[selectedModel.modelId] !== undefined
+      if (!isValid) {
+        const providerId = connectedProviders.find((id) => merged[id])
+        const modelId = providerId ? Object.keys(merged[providerId].models)[0] : undefined
+        if (providerId && modelId) get().selectModel(providerId, modelId)
+      }
+    } catch (err) {
+      console.error("[provider-store] initialize failed:", err)
+      set({ loading: false, error: "Falha ao carregar provedores. Verifique sua conexão e tente novamente." })
     }
   },
 
@@ -108,6 +116,11 @@ export const useProviderStore = create<ProviderState>((set, get) => ({
     set((state) => ({
       connectedProviders: state.connectedProviders.filter((id) => id !== providerId),
     }))
+    const { selectedModel } = get()
+    if (selectedModel?.providerId === providerId) {
+      localStorage.removeItem(SELECTED_MODEL_KEY)
+      set({ selectedModel: null })
+    }
   },
 
   selectModel: (providerId, modelId) => {
@@ -156,8 +169,8 @@ export const useProviderStore = create<ProviderState>((set, get) => ({
 
   removeCustomProvider: async (id) => {
     await customProvidersApi.remove(id)
+    const providerId = `custom:${id}`
     set((state) => {
-      const providerId = `custom:${id}`
       const custom = state.customProviders.filter((p) => p.id !== providerId)
       const catalog = { ...state.catalog }
       delete catalog[providerId]
@@ -167,6 +180,11 @@ export const useProviderStore = create<ProviderState>((set, get) => ({
         connectedProviders: state.connectedProviders.filter((p) => p !== providerId),
       }
     })
+    const { selectedModel } = get()
+    if (selectedModel?.providerId === providerId) {
+      localStorage.removeItem(SELECTED_MODEL_KEY)
+      set({ selectedModel: null })
+    }
   },
 
   refreshCustomProviders: async () => {

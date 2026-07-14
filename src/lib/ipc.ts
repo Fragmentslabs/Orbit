@@ -97,6 +97,12 @@ export const chatApi = {
   approvePlan: (sessionId: string, planId: string, taskIds?: string[]) =>
     window.ipcRenderer.invoke("chat:approvePlan", sessionId, planId, taskIds),
   rejectPlan: (sessionId: string) => window.ipcRenderer.invoke("chat:rejectPlan", sessionId),
+  savePlanFile: (directory: string, content: string) =>
+    window.ipcRenderer.invoke("plan:saveFile", directory, content),
+  deletePlanFile: (directory: string) =>
+    window.ipcRenderer.invoke("plan:deleteFile", directory),
+  readPlanFile: (directory: string) =>
+    window.ipcRenderer.invoke("plan:readFile", directory) as Promise<string | null>,
   closeBrowser: (sessionId: string) => window.ipcRenderer.invoke("chat:closeBrowser", sessionId),
   askReply: (requestId: string, value: unknown) =>
     window.ipcRenderer.invoke("chat:askReply", requestId, value) as Promise<boolean>,

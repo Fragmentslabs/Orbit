@@ -18,6 +18,7 @@ import { abortChat, runChat } from './lib/chat-engine'
 import { reply as askReply, rejectSession as rejectSessionAsks } from './lib/ask-broker'
 import { abortOrchestration, approvePlan, rejectPlan, runOrchestration } from './lib/orchestrator'
 import { initMcp, listMcpStatus, readMcpConfig, reconnectMcp, saveMcpConfig } from './lib/mcp'
+import { savePlanFile, deletePlanFile, readPlanFile } from './lib/plan-file'
 import { registerMediaProtocol } from './lib/media'
 import { startCompanionServer, forwardChatEvent, notifyCompanionAsk, notifyCompanionMessage, getCompanionStatus } from './lib/companion-server'
 import { registerPanelWebContents } from './lib/panel-browser'
@@ -558,6 +559,15 @@ app.whenReady().then(() => {
     if (win) void rejectPlan(win, sessionId)
   })
   ipcMain.handle('chat:closeBrowser', (_event, sessionId: string) => destroyBrowserWindow(sessionId))
+  ipcMain.handle('plan:saveFile', async (_event, directory: string, content: string) => {
+    await savePlanFile(directory, content)
+  })
+  ipcMain.handle('plan:deleteFile', async (_event, directory: string) => {
+    await deletePlanFile(directory)
+  })
+  ipcMain.handle('plan:readFile', async (_event, directory: string) => {
+    return await readPlanFile(directory)
+  })
 
   // Browser do painel direito: o renderer registra o webContents do <webview>
   ipcMain.on('panel:register', (_event, id: number | null) => registerPanelWebContents(id))
