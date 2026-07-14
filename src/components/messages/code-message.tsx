@@ -1,4 +1,4 @@
-import { Fragment, useCallback, useEffect, useMemo, useState } from "react"
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { ChevronDownIcon } from "lucide-react"
 import { cn } from "@/lib/utils"
 import type { ChatMessage, MessagePart, ToolPart } from "@/shared/chat"
@@ -112,6 +112,8 @@ function TestResultsBlock({ summary }: { summary: TestSummary }) {
   )
 }
 
+const MAX_VISIBLE = 5
+
 function TaskGroup({ parts, snapshot, sessionId, messageId }: {
   parts: ToolPart[]
   snapshot?: { patch?: string; files?: string[] }
@@ -121,11 +123,29 @@ function TaskGroup({ parts, snapshot, sessionId, messageId }: {
   const working = parts.some((p) => p.state === "running")
   const errors = parts.filter((p) => p.state === "error").length
   const [open, setOpen] = useState(false)
+  const [showAll, setShowAll] = useState(false)
+  const prevWorking = useRef(working)
 
-  // Abre automaticamente enquanto trabalha; fica fechado por padrão ao concluir
+  // Abre automaticamente enquanto trabalha
   useEffect(() => {
     if (working) setOpen(true)
   }, [working])
+
+  // Auto-collapse 1s após o streaming terminar
+  useEffect(() => {
+    if (prevWorking.current && !working) {
+      const timer = setTimeout(() => setOpen(false), 1000)
+      return () => clearTimeout(timer)
+    }
+    prevWorking.current = working
+  }, [working])
+
+  // Tools visíveis: as MAX_VISIBLE últimas (ou todas se showAll)
+  const visibleParts = showAll ? parts : parts.slice(-MAX_VISIBLE)
+  const hiddenCount = parts.length - MAX_VISIBLE
+
+  // Reseta showAll quando o grupo muda (nova mensagem)
+  useEffect(() => { setShowAll(false) }, [parts.length])
 
   // Conta +/- do snapshot se disponível
   const diffCounts = useMemo(() => {
@@ -176,7 +196,7 @@ function TaskGroup({ parts, snapshot, sessionId, messageId }: {
         </div>
       </TaskTrigger>
       <TaskContent>
-        {parts.map((part) => {
+        {visibleParts.map((part) => {
           const summary = testSummaryOf(part)
           return (
             <Fragment key={part.id}>
@@ -185,6 +205,15 @@ function TaskGroup({ parts, snapshot, sessionId, messageId }: {
             </Fragment>
           )
         })}
+        {hiddenCount > 0 && !showAll && (
+          <button
+            type="button"
+            onClick={() => setShowAll(true)}
+            className="text-xs text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+          >
+            +{hiddenCount} {hiddenCount === 1 ? "ação oculta" : "ações ocultas"} — mostrar todas
+          </button>
+        )}
       </TaskContent>
     </Task>
   )
