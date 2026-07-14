@@ -139,7 +139,7 @@ export function ChatInput({ onSubmit, status, onStop, sessionId }: {
           if (!text) return
           onSubmit(resolveText(text), buildOptions(), files.length > 0 ? files : undefined)
         }}
-        className="rounded-xl border-2 border-sidebar-border [&>div]:!border-none [&>div]:!rounded-none [&>div]:!bg-transparent"
+        className="rounded-xl border-2 border-sidebar-border [&>div]:!rounded-[calc(var(--radius-xl)-2px)] [&>div]:!border-none [&>div]:!bg-transparent"
       >
         <PromptInputAttachments className="!px-3 !py-1.5">
           {(attachment) => <PromptInputAttachment data={attachment} />}
@@ -201,7 +201,7 @@ export function ChatInput({ onSubmit, status, onStop, sessionId }: {
         </PromptInputFooter>
       </PromptInput>
       <PromptInputTools>
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-1 mt-2">
         <ModeToggle
           icon={Search}
           label="Pesquisa"
@@ -245,7 +245,7 @@ export function ChatInput({ onSubmit, status, onStop, sessionId }: {
           onToggle={() => setBrainEnabled(sessionId, !brain)}
         />
       </div>
-        <div className="ml-auto">
+        <div className="ml-auto mt-2">
           <ContextMeter sessionId={sessionId} />
         </div>
       </PromptInputTools>
