@@ -19,6 +19,7 @@ import { reply as askReply, rejectSession as rejectSessionAsks } from './lib/ask
 import { abortOrchestration, approvePlan, rejectPlan, runOrchestration } from './lib/orchestrator'
 import { initMcp, listMcpStatus, readMcpConfig, reconnectMcp, saveMcpConfig } from './lib/mcp'
 import { registerMediaProtocol } from './lib/media'
+import { startCompanionServer, forwardChatEvent, notifyCompanionAsk, notifyCompanionMessage, getCompanionStatus } from './lib/companion-server'
 import { registerPanelWebContents } from './lib/panel-browser'
 import { setupMemoryScheduler } from './lib/memory/scheduler'
 import * as memoryService from './lib/memory/service'
@@ -63,7 +64,7 @@ let win: BrowserWindow | null
 
 function createWindow() {
   win = new BrowserWindow({
-    icon: path.join(process.env.VITE_PUBLIC, 'electron-vite.svg'),
+    icon: path.join(process.env.VITE_PUBLIC, 'logo.png'),
     minWidth: 720,
     minHeight: 480,
     backgroundColor: '#00000000',
@@ -784,6 +785,11 @@ app.whenReady().then(() => {
 
   // Provedores locais pré-cadastrados (Ollama, LM Studio)
   void ensureCustomProvidersSeeded()
+
+  // Companion Server (WebSocket para controle remoto via celular)
+  const companion = startCompanionServer()
+  ipcMain.handle('companion:status', () => getCompanionStatus())
+  ipcMain.handle('companion:pin', () => companion.pin)
 
   // Custom providers (locais / user-defined)
   ipcMain.handle('custom-providers:list', () => listCustomProviders())
