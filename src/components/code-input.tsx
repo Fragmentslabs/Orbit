@@ -243,7 +243,7 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId }: 
         <PromptInput
           multiple
           onSubmit={handleSubmit}
-          className="rounded-xl border-2 border-sidebar-border [&>div]:!border-none [&>div]:!rounded-none [&>div]:!bg-transparent"
+          className="rounded-xl border-2 border-sidebar-border [&>div]:!rounded-[calc(var(--radius-xl)-2px)] [&>div]:!border-none [&>div]:!bg-transparent"
         >
           <PromptInputBody>
             <PromptInputTextarea

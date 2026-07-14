@@ -32,6 +32,9 @@ const getCurrentTheme = (): "light" | "dark" => {
     if (document.documentElement.classList.contains("dark")) {
       return "dark"
     }
+    if (document.documentElement.classList.contains("light")) {
+      return "light"
+    }
     if (window.matchMedia?.("(prefers-color-scheme: dark)").matches) {
       return "dark"
     }
@@ -139,8 +142,8 @@ export const Persona: FC<PersonaProps> = memo(
       if (!viewModelInstanceColor) {
         return
       }
-      const [r, g, b] = theme === "dark" ? [255, 255, 255] : [0, 0, 0]
-      viewModelInstanceColor.setRgb(r, g, b)
+      const [r, g, b] = theme === "dark" ? [255, 255, 255] : [60, 65, 85]
+      viewModelInstanceColor.setRgba(r, g, b, 255)
     }, [viewModelInstanceColor, theme])
 
     const listeningInput = useStateMachineInput(rive, stateMachine, "listening")
@@ -164,7 +167,17 @@ export const Persona: FC<PersonaProps> = memo(
     }, [state, listeningInput, thinkingInput, speakingInput, asleepInput])
 
     return (
-      <RiveComponent className={cn("size-32 shrink-0", className)} />
+      <div
+        className={cn("size-32 shrink-0", className)}
+        style={{
+          filter:
+            theme === "light"
+              ? "invert(1) contrast(0) brightness(0.30)"
+              : "none",
+        }}
+      >
+        <RiveComponent key={theme} className="size-full" />
+      </div>
     )
   },
 )

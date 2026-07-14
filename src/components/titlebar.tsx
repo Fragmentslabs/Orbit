@@ -213,7 +213,7 @@ export function TitleBar({ onSearchOpen }: { onSearchOpen?: () => void }) {
         >
           <Search className="size-3.5" />
         </button>
-        <span className="text-[11px] font-medium tracking-wide text-muted-foreground">Orbit</span>
+        <span className="mt-0.5 text-[11px] font-medium  text-muted-foreground">Orbit</span>
       </div>
       <div className="flex h-full items-center pr-1.5" style={noDragStyle}>
         {!isMac && <WindowControls />}
