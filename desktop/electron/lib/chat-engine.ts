@@ -9,8 +9,8 @@ import type {
   SendMessageInput,
   SessionInfo,
   ToolPart,
-} from '../../shared/chat'
-import { StorageKeys } from '../../shared/chat'
+} from '@shared/chat'
+import { StorageKeys } from '@shared/chat'
 import { getProvider } from './catalog'
 import { compactHistory, findLastSummaryIndex, shouldCompact } from './compaction'
 import { createToolApproval, takeDenialReason } from './permission'
@@ -20,7 +20,7 @@ import { resolveModel } from './providers'
 import { cleanupRevert } from './session/revert'
 import { capture, diff } from './snapshot'
 import { runProjectInit, type InitHooks } from './project-init'
-import { PROJECT_AREAS, type ProjectArea } from '../../shared/memory'
+import { PROJECT_AREAS, type ProjectArea } from '@shared/memory'
 import { readJson, writeJson } from './storage'
 import { buildToolSet, type ToolContext } from './tools'
 import { toTokenUsage } from './usage'
@@ -203,6 +203,12 @@ export async function runChat(win: BrowserWindow, input: SendMessageInput): Prom
       try {
         const summary = await compactHistory(history, model)
         if (summary) {
+          // Zera .tokens das mensagens após o sumário — os tokens antigos
+          // refletiam o contexto cheio (pré-compactação) e inflariam o meter
+          const lastSummary = findLastSummaryIndex(history)
+          for (let i = lastSummary + 1; i < history.length; i++) {
+            history[i].tokens = undefined
+          }
           await saveMessages(sessionId, history)
           emit(win, { type: 'messages', sessionId, messages: history })
         }
