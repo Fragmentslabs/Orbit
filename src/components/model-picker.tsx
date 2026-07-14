@@ -28,6 +28,8 @@ export function ModelPicker() {
   const catalog = useProviderStore((s) => s.catalog)
   const connectedProviders = useProviderStore((s) => s.connectedProviders)
   const selected = useProviderStore((s) => s.selectedModel)
+  const loading = useProviderStore((s) => s.loading)
+  const error = useProviderStore((s) => s.error)
   const selectModel = useProviderStore((s) => s.selectModel)
 
   const groups = useMemo(
@@ -50,7 +52,9 @@ export function ModelPicker() {
       <ModelSelector onOpenChange={setOpen} open={open}>
         <ModelSelectorTrigger render={<Button className="h-7 gap-1 px-1.5 text-xs" variant="ghost" />}>
           <ModelSelectorLogo provider={selected?.providerId ?? "openai"} />
-          <ModelSelectorName>{selectedModel?.name ?? "Selecionar modelo"}</ModelSelectorName>
+          <ModelSelectorName>
+            {loading ? "Carregando..." : selectedModel?.name ?? (error ? "Erro" : "Selecionar modelo")}
+          </ModelSelectorName>
           <ChevronDownIcon className="size-3 text-muted-foreground" />
         </ModelSelectorTrigger>
         <ModelSelectorContent>

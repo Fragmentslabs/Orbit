@@ -12,6 +12,7 @@ import type {
   SendMessageOptions,
   SessionInfo,
   SessionMode,
+  TextPart,
 } from "@/shared/chat"
 import { StorageKeys } from "@/shared/chat"
 import { chatApi, sessionApi, storage } from "@/src/lib/ipc"
@@ -214,6 +215,10 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     const updated: PlanReview = { ...review, status: "rejected" }
     set((state) => ({ planReviews: { ...state.planReviews, [sessionId]: updated } }))
     void storage.write(StorageKeys.planReview(sessionId), updated)
+    const session = get().sessions.find((s) => s.id === sessionId)
+    if (session?.directory) {
+      void chatApi.deletePlanFile(session.directory)
+    }
   },
 
   renameSession: (id, title) => set((state) => updateSessionIn(state, id, { title })),
@@ -593,6 +598,13 @@ function applyChatEvent(event: ChatEvent, set: Setter, get: () => SessionState) 
       break
   }
 
+  function extractMessageText(msg: ChatMessage): string {
+    return msg.parts
+      .filter((p): p is TextPart => p.type === "text")
+      .map((p) => p.text)
+      .join("\n")
+  }
+
   // Quando o streaming termina ou dá erro, verifica planos e processa fila
   if (event.type === "status" && event.status === "idle") {
     const state = get()
@@ -607,6 +619,14 @@ function applyChatEvent(event: ChatEvent, set: Setter, get: () => SessionState) 
         const review: PlanReview = { status: "proposed", messageId: lastAssistant.id }
         patch.planReviews = { ...state.planReviews, [sessionId]: review }
         void storage.write(StorageKeys.planReview(sessionId), review)
+        // Salva PLAN.md no diretório da sessão
+        const session = state.sessions.find((s) => s.id === sessionId)
+        if (session?.directory) {
+          const planText = extractMessageText(lastAssistant)
+          if (planText) {
+            void chatApi.savePlanFile(session.directory, planText)
+          }
+        }
       }
     }
     const cleanOutbox = { ...state._planReviewOutbox }

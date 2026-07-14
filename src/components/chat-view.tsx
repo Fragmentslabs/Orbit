@@ -17,6 +17,7 @@ import { SimpleAssistantMessage } from "@/src/components/messages/simple-message
 import { SummaryCard } from "@/src/components/messages/summary-card"
 import { OrchestrationPlanCard } from "@/src/components/orchestration-plan-card"
 import { PlanReviewCard } from "@/src/components/plan-review-card"
+import { PlanViewer } from "@/src/components/plan-viewer"
 import { InitProjectCard } from "@/src/components/init-project-card"
 import { RevertBar } from "@/src/components/revert-bar"
 import { AssistantMessageActions, CopyAction, MessageTimestamp } from "@/src/components/messages/shared"
@@ -123,12 +124,13 @@ function MessageItem({ msg, isLast, waiting, finished, isBusy, mode, sessionId, 
   )
 }
 
-function ChatMessages({ messages, isBusy, mode, sessionId, sendMessage }: {
+function ChatMessages({ messages, isBusy, mode, sessionId, sendMessage, planIds }: {
   messages: ChatMessage[]
   isBusy: boolean
   mode: "chat" | "code"
   sessionId?: string
   sendMessage: (mode: "chat" | "code", text: string, config: SendConfig) => Promise<void>
+  planIds?: Set<string>
 }) {
   const lastAssistantId = [...messages].reverse().find((m) => m.role === "assistant" && !m.summary)?.id
 
@@ -216,7 +218,7 @@ function ChatMessages({ messages, isBusy, mode, sessionId, sendMessage }: {
         })}
       </ConversationContent>
       <ConversationScrollButton />
-      <UserMessageNav items={userMsgItems} activeId={activeUserMsgId} onSelect={handleNavSelect} />
+      <UserMessageNav items={userMsgItems} activeId={activeUserMsgId} onSelect={handleNavSelect} planIds={planIds} />
     </Conversation>
   )
 }
@@ -236,6 +238,15 @@ export function ChatView({ sessionId }: { sessionId?: string } = {}) {
   const plan = useSessionStore((s) => (session ? s.orchestration[session.id] : undefined))
   const planReview = useSessionStore((s) => (session ? s.planReviews[session.id] : undefined))
   const pendingAsks = useSessionStore((s) => (session ? s.pendingAsks[session.id] ?? NO_ASKS : NO_ASKS))
+  // IDs de mensagens de usuário que geraram planos — computado do review + mensagens
+  const planMsgIds = useMemo(() => {
+    const ids = new Set<string>()
+    if (!planReview || !session) return ids
+    if (planReview.status !== "proposed" && planReview.status !== "implementing") return ids
+    const idx = messages.findIndex((m) => m.id === planReview.messageId)
+    if (idx > 0 && messages[idx - 1].role === "user") ids.add(messages[idx - 1].id)
+    return ids
+  }, [planReview, messages, session])
   const parentSession = useSessionStore((s) =>
     session?.parentId ? s.sessions.find((x) => x.id === session.parentId) : undefined,
   )
@@ -421,7 +432,7 @@ export function ChatView({ sessionId }: { sessionId?: string } = {}) {
         >
           <div className="flex min-h-0 flex-1 flex-col pt-6">
             <div className="pointer-events-none sticky top-0 z-10 h-12 bg-linear-to-b to-transparent" style={{ backgroundImage: 'linear-gradient(to bottom, var(--panel-bg, var(--background)), transparent)' }} />
-            <ChatMessages messages={messages} isBusy={isBusy} mode={viewMode} sessionId={session?.id} sendMessage={sendMessage} />
+            <ChatMessages messages={messages} isBusy={isBusy} mode={viewMode} sessionId={session?.id} sendMessage={sendMessage} planIds={planMsgIds} />
           </div>
         </div>
       </div>
@@ -447,6 +458,12 @@ export function ChatView({ sessionId }: { sessionId?: string } = {}) {
       {session && planReview && planReview.status === "proposed" && (
         <div className="mx-auto w-full max-w-2xl pb-2">
           <PlanReviewCard sessionId={session.id} review={planReview} />
+        </div>
+      )}
+      {/* PlanViewer inline enquanto o plano está em implementação */}
+      {session && planReview && planReview.status === "implementing" && (
+        <div className="mx-auto w-full max-w-2xl pb-2">
+          <PlanViewer sessionId={session.id} />
         </div>
       )}
       {/* Pedidos aguardando resposta (permissão / question), inline acima do input.
