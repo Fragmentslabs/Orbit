@@ -1,8 +1,10 @@
 {
   "files": [],
   "references": [
-    { "path": "shared" },
-    { "path": "desktop" },
-    { "path": "mobile" }
+    { "path": "packages/shared" },
+    { "path": "packages/protocol" },
+    { "path": "packages/sdk" },
+    { "path": "apps/desktop" },
+    { "path": "apps/mobile" }
   ]
 }

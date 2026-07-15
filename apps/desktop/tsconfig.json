@@ -19,9 +19,9 @@
     "paths": {
       "@/*": ["./*"],
       "~/*": ["./*"],
-      "@shared/*": ["../shared/src/*"],
-      "@orbit/shared": ["../shared/src/index.ts"],
-      "@orbit/shared/*": ["../shared/src/*"]
+      "@shared/*": ["../../packages/shared/src/*"],
+      "@orbit/shared": ["../../packages/shared/src/index.ts"],
+      "@orbit/shared/*": ["../../packages/shared/src/*"]
     },
     "strict": true,
     "noUnusedLocals": true,

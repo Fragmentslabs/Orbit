@@ -172,11 +172,11 @@ export const Persona: FC<PersonaProps> = memo(
         style={{
           filter:
             theme === "light"
-              ? "invert(1) contrast(0) brightness(0.30)"
-              : "none",
+              ? "invert(1) brightness(0.85)"
+              : "drop-shadow(0 0 18px rgba(255,255,255,0.7)) brightness(1.4)",
         }}
       >
-        <RiveComponent key={theme} className="size-full" />
+        <RiveComponent className="size-full" />
       </div>
     )
   },

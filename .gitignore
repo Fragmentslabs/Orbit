@@ -14,18 +14,14 @@ dist-electron
 dist-ssr
 *.local
 
-# Desktop
-desktop/node_modules
-desktop/dist
-desktop/dist-electron
+# Apps
+apps/*/node_modules
+apps/*/dist
+apps/*/dist-electron
+apps/*/.expo
 
-# Mobile
-mobile/node_modules
-mobile/.expo
-mobile/dist
-
-# Shared
-shared/node_modules
+# Packages
+packages/*/node_modules
 
 # Editor directories and files
 .vscode/*
