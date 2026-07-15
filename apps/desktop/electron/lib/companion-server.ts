@@ -47,6 +47,7 @@ const PORT = 3847
 const PIN_LENGTH = 6
 const MAX_PIN_ATTEMPTS = 5
 const PIN_WINDOW_MS = 60_000 // 1 minuto
+const PIN_TTL_MS = 300_000 // PIN válido por 5 minutos
 
 interface ConnectedClient {
   ws: WebSocket
@@ -89,11 +90,15 @@ function validatePin(pin: string, clientIp: string): boolean {
   recentAttempts.push(now)
   pinAttempts.set(clientIp, recentAttempts)
 
-  return pin === currentPin && (now - pinCreatedAt) < 300_000 // PIN válido por 5 min
+  return pin === currentPin && (now - pinCreatedAt) < PIN_TTL_MS
 }
 
+/**
+ * PIN atual — regenerado automaticamente ao expirar, para que a UI
+ * (modal "Conectar App") nunca exiba um PIN que o validatePin rejeitaria.
+ */
 export function getCurrentPin(): string {
-  if (!currentPin) regeneratePin()
+  if (!currentPin || Date.now() - pinCreatedAt >= PIN_TTL_MS) regeneratePin()
   return currentPin
 }
 
@@ -131,6 +136,12 @@ function sendResponse(ws: WebSocket, requestId: string, ok: boolean, data?: unkn
 
 async function handleRequest(client: ConnectedClient, requestId: string, req: CompanionRequest) {
   const { ws } = client
+
+  // Heartbeat — responde pong para o client medir latência
+  if ((req as { type: string }).type === 'ping') {
+    send(ws, { type: 'pong' } as unknown as CompanionEvent)
+    return
+  }
 
   // Auth é o único request permitido sem autenticação
   if (req.type === 'auth') {
@@ -439,7 +450,7 @@ export function getCompanionStatus() {
     httpPort: COMPANION_HTTP_PORT,
     httpRunning: isCompanionHttpRunning(),
     ip: getLocalIp(),
-    pin: currentPin,
+    pin: wss ? getCurrentPin() : currentPin,
     connectedClients: [...clients].filter(c => c.authenticated).map(c => ({
       deviceName: c.deviceName,
       connectedAt: c.connectedAt,
