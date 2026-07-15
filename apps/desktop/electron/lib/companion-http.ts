@@ -12,6 +12,7 @@
  */
 
 import { createServer, type IncomingMessage, type ServerResponse, type Server } from 'http'
+import { hostname } from 'node:os'
 import { app, BrowserWindow } from 'electron'
 import { readJson, writeJson, listKeys } from './storage'
 import { getCatalog } from './catalog'
@@ -239,6 +240,18 @@ function createRouter(validatePin: (pin: string, ip: string) => boolean) {
         'Access-Control-Max-Age': '86400',
       })
       res.end()
+      return
+    }
+
+    // Discovery — endpoint público (sem auth) para o app mobile detectar
+    // um Orbit Desktop na rede. Expõe apenas metadados inofensivos.
+    if (req.method === 'GET' && (req.url === '/api/ping' || req.url?.startsWith('/api/ping?'))) {
+      jsonResponse(res, 200, {
+        app: 'orbit',
+        name: hostname(),
+        version: app.getVersion(),
+        wsPort: 3847,
+      })
       return
     }
 

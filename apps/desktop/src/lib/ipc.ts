@@ -205,6 +205,20 @@ export const dataApi = {
     >,
 }
 
+export interface CompanionStatus {
+  running: boolean
+  port: number
+  httpPort: number
+  httpRunning: boolean
+  ip: string
+  pin: string | null
+  connectedClients: { deviceName: string; connectedAt: number }[]
+}
+
+export const companionApi = {
+  status: () => window.ipcRenderer.invoke("companion:status") as Promise<CompanionStatus>,
+}
+
 export const memoryApi = {
   list: () => window.ipcRenderer.invoke("memory:list") as Promise<Memory[]>,
   create: (input: {
