@@ -6,11 +6,11 @@ export default function AppLayout() {
     <Tabs
       screenOptions={{
         headerShown: false,
-        tabBarActiveTintColor: 'hsl(45, 78%, 58%)',
-        tabBarInactiveTintColor: 'hsl(240, 5%, 65%)',
+        tabBarActiveTintColor: 'hsl(var(--primary))',
+        tabBarInactiveTintColor: 'hsl(var(--muted-foreground))',
         tabBarStyle: {
-          backgroundColor: 'hsl(240, 6%, 10%)',
-          borderTopColor: 'hsl(240, 5%, 18%)',
+          backgroundColor: 'hsl(var(--background))',
+          borderTopColor: 'hsl(var(--border))',
         },
       }}
     >

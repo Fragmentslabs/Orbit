@@ -7,6 +7,7 @@ import { useSessionStore } from '~/stores/session-store'
 import { useChatStore } from '~/stores/chat-store'
 import { AppHeader } from '~/components/layout/AppHeader'
 import { EmptyState } from '~/components/layout/EmptyState'
+import { ResponsiveContainer } from '~/components/layout/ResponsiveContainer'
 import { Badge } from '~/components/ui/badge'
 import { cn } from '~/lib/utils'
 
@@ -56,7 +57,8 @@ export default function SessionsScreen() {
       <Pressable
         onPress={() => handleSelectSession(item.id)}
         className={cn(
-          'flex-row items-center gap-3 px-4 py-3 mx-4 mb-2 rounded-lg border',
+          'flex-row items-center gap-3 px-4 py-3 rounded-lg border',
+          'md:mx-0 mx-4 mb-2',
           isActive
             ? 'bg-accent border-primary/30'
             : 'bg-card border-border',
@@ -103,28 +105,30 @@ export default function SessionsScreen() {
     <SafeAreaView className="flex-1 bg-background" edges={['top']}>
       <AppHeader title="Sessões" />
 
-      {sessions.length === 0 ? (
-        <EmptyState
-          icon={Search}
-          title="Nenhuma sessão"
-          description="As sessões do desktop aparecerão aqui."
-          action={
-            <Pressable onPress={fetchSessions} className="px-4 py-2 rounded-lg bg-primary">
-              <Text className="text-sm text-primary-foreground">Carregar sessões</Text>
-            </Pressable>
-          }
-        />
-      ) : (
-        <FlatList
-          data={sessions}
-          keyExtractor={(item) => item.id}
-          renderItem={renderSession}
-          contentContainerStyle={{ paddingVertical: 8 }}
-          refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
-          }
-        />
-      )}
+      <ResponsiveContainer maxWidth="max-w-4xl" className="flex-1">
+        {sessions.length === 0 ? (
+          <EmptyState
+            icon={Search}
+            title="Nenhuma sessão"
+            description="As sessões do desktop aparecerão aqui."
+            action={
+              <Pressable onPress={fetchSessions} className="px-4 py-2 rounded-lg bg-primary">
+                <Text className="text-sm text-primary-foreground">Carregar sessões</Text>
+              </Pressable>
+            }
+          />
+        ) : (
+          <FlatList
+            data={sessions}
+            keyExtractor={(item) => item.id}
+            renderItem={renderSession}
+            contentContainerStyle={{ paddingVertical: 8 }}
+            refreshControl={
+              <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+            }
+          />
+        )}
+      </ResponsiveContainer>
     </SafeAreaView>
   )
 }

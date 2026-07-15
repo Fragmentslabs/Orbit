@@ -15,6 +15,7 @@ import {
 import { useConnectionStore } from '~/stores/connection-store'
 import { useSettingsStore } from '~/stores/settings-store'
 import { AppHeader } from '~/components/layout/AppHeader'
+import { ResponsiveContainer } from '~/components/layout/ResponsiveContainer'
 import { ConnectionStatus } from '~/components/connection/ConnectionStatus'
 import { Badge } from '~/components/ui/badge'
 import { cn } from '~/lib/utils'
@@ -120,62 +121,64 @@ export default function SettingsScreen() {
       />
 
       <ScrollView className="flex-1">
-        {/* Connection Section */}
-        <Text className="px-4 pt-4 pb-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-          Conexão
-        </Text>
-        <View className="mx-4 rounded-lg border border-border bg-card overflow-hidden">
-          <SettingsRow
-            icon={Wifi}
-            label="Status"
-            value={connection.status === 'connected' ? 'Conectado' : 'Desconectado'}
-          />
-          <SettingsRow
-            icon={Monitor}
-            label="Desktop"
-            value={config?.deviceName ?? config?.host ?? '—'}
-          />
-          <SettingsRow
-            icon={LogOut}
-            label="Desconectar"
-            destructive
-            onPress={handleDisconnect}
-          />
-        </View>
+        <ResponsiveContainer maxWidth="max-w-2xl">
+          {/* Connection Section */}
+          <Text className="px-4 pt-4 pb-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+            Conexão
+          </Text>
+          <View className="mx-4 rounded-lg border border-border bg-card overflow-hidden">
+            <SettingsRow
+              icon={Wifi}
+              label="Status"
+              value={connection.status === 'connected' ? 'Conectado' : 'Desconectado'}
+            />
+            <SettingsRow
+              icon={Monitor}
+              label="Desktop"
+              value={config?.deviceName ?? config?.host ?? '—'}
+            />
+            <SettingsRow
+              icon={LogOut}
+              label="Desconectar"
+              destructive
+              onPress={handleDisconnect}
+            />
+          </View>
 
-        {/* Model Section */}
-        <Text className="px-4 pt-6 pb-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-          Modelo
-        </Text>
-        <View className="mx-4 rounded-lg border border-border bg-card overflow-hidden">
-          <SettingsRow
-            icon={Cpu}
-            label="Modelo ativo"
-            value={modelLabel}
-          />
-        </View>
+          {/* Model Section */}
+          <Text className="px-4 pt-6 pb-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+            Modelo
+          </Text>
+          <View className="mx-4 rounded-lg border border-border bg-card overflow-hidden">
+            <SettingsRow
+              icon={Cpu}
+              label="Modelo ativo"
+              value={modelLabel}
+            />
+          </View>
 
-        {/* Preferences Section */}
-        <Text className="px-4 pt-6 pb-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-          Preferências
-        </Text>
-        <View className="mx-4 rounded-lg border border-border bg-card overflow-hidden">
-          <SettingsRow
-            icon={Shield}
-            label="Modo de permissão"
-            value={permissionMode}
-          />
-          <SettingsRow
-            icon={Brain}
-            label="Raciocínio"
-            value={prefs?.reasoning ? 'Ativado' : 'Desativado'}
-          />
-        </View>
+          {/* Preferences Section */}
+          <Text className="px-4 pt-6 pb-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+            Preferências
+          </Text>
+          <View className="mx-4 rounded-lg border border-border bg-card overflow-hidden">
+            <SettingsRow
+              icon={Shield}
+              label="Modo de permissão"
+              value={permissionMode}
+            />
+            <SettingsRow
+              icon={Brain}
+              label="Raciocínio"
+              value={prefs?.reasoning ? 'Ativado' : 'Desativado'}
+            />
+          </View>
 
-        {/* App Info */}
-        <View className="items-center py-8">
-          <Text className="text-xs text-muted-foreground">Orbit Mobile v1.0.0</Text>
-        </View>
+          {/* App Info */}
+          <View className="items-center py-8">
+            <Text className="text-xs text-muted-foreground">Orbit Mobile v1.0.0</Text>
+          </View>
+        </ResponsiveContainer>
       </ScrollView>
     </SafeAreaView>
   )
