@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import * as SecureStore from 'expo-secure-store'
+import { Storage } from '~/lib/storage'
 import {
   CompanionWebSocket,
   CompanionHttp,
@@ -103,19 +103,19 @@ export const useConnectionStore = create<ConnectionStore>((set, get) => ({
   // ─── Persistence ────────────────────────────────────────────────────────
 
   saveConfig: async (config) => {
-    await SecureStore.setItemAsync(STORAGE_KEY_HOST, config.host)
-    await SecureStore.setItemAsync(STORAGE_KEY_PORT, String(config.port))
-    await SecureStore.setItemAsync(STORAGE_KEY_PIN, config.pin)
+    await Storage.setItem(STORAGE_KEY_HOST, config.host)
+    await Storage.setItem(STORAGE_KEY_PORT, String(config.port))
+    await Storage.setItem(STORAGE_KEY_PIN, config.pin)
     if (config.deviceName) {
-      await SecureStore.setItemAsync(STORAGE_KEY_DEVICE, config.deviceName)
+      await Storage.setItem(STORAGE_KEY_DEVICE, config.deviceName)
     }
   },
 
   loadConfig: async () => {
-    const host = await SecureStore.getItemAsync(STORAGE_KEY_HOST)
-    const port = await SecureStore.getItemAsync(STORAGE_KEY_PORT)
-    const pin = await SecureStore.getItemAsync(STORAGE_KEY_PIN)
-    const deviceName = await SecureStore.getItemAsync(STORAGE_KEY_DEVICE)
+    const host = await Storage.getItem(STORAGE_KEY_HOST)
+    const port = await Storage.getItem(STORAGE_KEY_PORT)
+    const pin = await Storage.getItem(STORAGE_KEY_PIN)
+    const deviceName = await Storage.getItem(STORAGE_KEY_DEVICE)
 
     if (!host || !port || !pin) return null
 
@@ -128,9 +128,9 @@ export const useConnectionStore = create<ConnectionStore>((set, get) => ({
   },
 
   clearSavedConfig: async () => {
-    await SecureStore.deleteItemAsync(STORAGE_KEY_HOST)
-    await SecureStore.deleteItemAsync(STORAGE_KEY_PORT)
-    await SecureStore.deleteItemAsync(STORAGE_KEY_PIN)
-    await SecureStore.deleteItemAsync(STORAGE_KEY_DEVICE)
+    await Storage.removeItem(STORAGE_KEY_HOST)
+    await Storage.removeItem(STORAGE_KEY_PORT)
+    await Storage.removeItem(STORAGE_KEY_PIN)
+    await Storage.removeItem(STORAGE_KEY_DEVICE)
   },
 }))
