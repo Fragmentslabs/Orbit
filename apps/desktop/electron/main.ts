@@ -805,7 +805,7 @@ app.whenReady().then(() => {
   // Companion preferences (sincronização renderer ↔ HTTP server)
   ipcMain.handle('companion:getPreferences', () => readStorageJson('companion/preferences'))
   ipcMain.handle('companion:setPreferences', (_event, prefs: Record<string, unknown>) =>
-    import('./lib/storage').then(m => m.writeJson('companion/preferences', prefs)))
+    writeJson('companion/preferences', prefs))
 
   // Custom providers (locais / user-defined)
   ipcMain.handle('custom-providers:list', () => listCustomProviders())
