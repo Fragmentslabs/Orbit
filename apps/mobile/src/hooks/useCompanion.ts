@@ -1,6 +1,7 @@
 import { useEffect } from 'react'
 import type { ChatEventMessage, PendingAskNotification } from '@orbit/shared'
 import { useConnectionStore } from '../stores/connection-store'
+import { useRecentConnectionsStore } from '~/stores/recent-connections-store'
 import { useSessionStore } from '../stores/session-store'
 import { useChatStore } from '../stores/chat-store'
 import { useSettingsStore } from '../stores/settings-store'
@@ -27,9 +28,11 @@ export function useCompanion() {
       }
     })
 
-    // Cleanup: desconecta ao desmontar
+    // Cleanup: fecha o socket sem apagar a config salva — em dev o React
+    // desmonta/remonta o root (double-invoke), e disconnect() aqui apagava
+    // as credenciais e matava a reconexão automática.
     return () => {
-      conn.disconnect()
+      conn.shutdown()
     }
   }, [])
 
@@ -40,9 +43,19 @@ export function useCompanion() {
 
     const unsub = conn.onConnectionChange((state) => {
       if (state.status === 'connected') {
+        // Save to recent connections
+        const config = useConnectionStore.getState().config
+        if (config) {
+          void useRecentConnectionsStore.getState().addRecent(config)
+        }
+        // Fetch initial data
         void useSessionStore.getState().fetchSessions()
         void useSettingsStore.getState().fetchSelectedModel()
         void useSettingsStore.getState().fetchPreferences()
+      } else if (state.status === 'disconnected' && state.error === 'invalid_pin') {
+        // PIN expirou (TTL de 5 min no desktop) — esquece a config salva para
+        // não ficar preso num loop de auto-reconexão que sempre falha
+        void useConnectionStore.getState().clearSavedConfig()
       }
     })
 
