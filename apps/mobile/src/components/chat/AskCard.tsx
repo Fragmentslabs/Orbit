@@ -31,12 +31,11 @@ export function AskCard({ ask, onReply }: AskCardProps) {
         </Text>
       ))}
 
-      {/* Permission claim info */}
-      {ask.claim && (
+      {ask.claim ? (
         <Text className="text-xs text-muted-foreground mb-2" numberOfLines={2}>
           {ask.claim.detail ?? ask.claim.title}
         </Text>
-      )}
+      ) : null}
 
       {/* Quick actions */}
       <View className="flex-row gap-2 mt-2">

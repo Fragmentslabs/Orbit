@@ -7,7 +7,7 @@
     "apps/*"
   ],
   "devDependencies": {
-    "@types/react": "^19.2.2"
+    "@types/react": "^18.3.31"
   },
   "scripts": {
     "desktop:dev": "npm run dev --workspace=@orbit/desktop",

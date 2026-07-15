@@ -16,18 +16,18 @@ export function AppHeader({ title, rightAction, className }: AppHeaderProps) {
     <View className={cn('bg-background', className)}>
       <View className="flex-row items-center justify-between px-4 py-3 border-b border-border">
         <View className="flex-1">
-          {title && (
+          {title ? (
             <Text className="text-lg font-bold text-foreground">
               {title}
             </Text>
-          )}
+          ) : null}
           <ConnectionStatus state={connection} detailed />
         </View>
-        {rightAction && (
+        {rightAction ? (
           <View className="ml-4">
             {rightAction}
           </View>
-        )}
+        ) : null}
       </View>
     </View>
   )
