@@ -1,3 +1,4 @@
+import { useRef, useEffect } from 'react'
 import { View, FlatList } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { MessageCircle } from 'lucide-react-native'
@@ -18,11 +19,18 @@ export default function ChatScreen() {
   const abortChat = useSessionStore((s) => s.abortChat)
   const pendingAsks = useChatStore((s) => s.pendingAsks)
   const replyToAsk = useChatStore((s) => s.replyToAsk)
+  const listRef = useRef<FlatList>(null)
 
   const activeMessages = activeSessionId ? messages[activeSessionId] ?? [] : []
   const activeStatus = activeSessionId ? status[activeSessionId] : undefined
   const activeAsks = activeSessionId ? pendingAsks[activeSessionId] ?? [] : []
   const isStreaming = activeStatus === 'streaming' || activeStatus === 'submitted'
+
+  useEffect(() => {
+    if (activeMessages.length > 0) {
+      setTimeout(() => listRef.current?.scrollToEnd({ animated: true }), 100)
+    }
+  }, [activeMessages.length])
 
   if (!activeSessionId) {
     return (
@@ -52,11 +60,12 @@ export default function ChatScreen() {
 
       {/* Messages */}
       <FlatList
+        ref={listRef}
         data={activeMessages}
         keyExtractor={(item) => item.id}
         renderItem={({ item }) => <MessageBubble message={item} />}
         contentContainerStyle={{ paddingVertical: 8 }}
-        inverted={false}
+        onContentSizeChange={() => listRef.current?.scrollToEnd({ animated: true })}
       />
 
       {/* Streaming indicator */}
