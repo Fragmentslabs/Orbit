@@ -24,6 +24,7 @@ import {
   PinOff,
   Plus,
   Settings,
+  Smartphone,
   Square,
   Sun,
   Terminal,
@@ -80,6 +81,7 @@ import { useMessageQueueStore, startMessageScheduler } from "@/src/stores/messag
 import { useSessionStore } from "@/src/stores/session-store"
 import { useSettingsUi } from "@/src/stores/settings-ui"
 import { SettingsDialog } from "@/src/components/settings-dialog"
+import { ConnectAppDialog } from "@/components/connect-app-dialog"
 
 type MenuItem = { icon: React.ReactNode; label: string; onSelect: () => void }
 
@@ -1060,7 +1062,6 @@ export function AppSidebar() {
           </div>
         </SidebarContent>
         <SidebarFooter className="p-0">
-          <SidebarSeparator className="mx-3" />
           <AccountSection onOpenSettings={() => openSettings()} />
         </SidebarFooter>
         <SettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} initialTab={settingsTab} />
@@ -1070,9 +1071,23 @@ export function AppSidebar() {
 }
 
 function AccountSection({ onOpenSettings }: { onOpenSettings: () => void }) {
+  const [connectOpen, setConnectOpen] = useState(false)
+
   return (
-    <div className="flex items-center px-3 py-2">
-      <AccountDropdown onOpenSettings={onOpenSettings} />
-    </div>
+    <>
+      <ConnectAppDialog open={connectOpen} onOpenChange={setConnectOpen} />
+      <div className="flex flex-col gap-1 px-3 py-2">
+        <Button
+          variant="ghost"
+          onClick={() => setConnectOpen(true)}
+          className="w-full justify-start gap-2 text-xs font-normal text-muted-foreground hover:text-foreground rounded-sm p-2"
+        >
+          <Smartphone className="size-4" />
+          Conectar App
+        </Button>
+        <SidebarSeparator className="my-1" />
+        <AccountDropdown onOpenSettings={onOpenSettings} />
+      </div>
+    </>
   )
 }
