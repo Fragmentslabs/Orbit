@@ -105,7 +105,7 @@ export function SendButtonGroup({
           >
             <SelectTrigger
               size="sm"
-              className="rounded-l-none border-0 h-7 gap-0 px-1.5 bg-primary text-primary-foreground hover:bg-primary/90 shadow"
+              className="rounded-l-none border-0 h-7 gap-0 px-1.5 bg-primary text-primary-foreground hover:bg-primary/90 shadow dark:bg-primary dark:text-primary-foreground dark:hover:bg-primary/90"
               aria-label="Mais opções"
             >
               <SelectValue />
@@ -156,7 +156,7 @@ export function SendButtonGroup({
         >
           <SelectTrigger
             size="sm"
-            className="rounded-l-none border-0 h-7 gap-0 px-1.5 bg-primary text-primary-foreground hover:bg-primary/90 shadow"
+            className="rounded-l-none border-0 h-7 gap-0 px-1.5 bg-primary text-primary-foreground hover:bg-primary/90 shadow dark:bg-primary dark:text-primary-foreground dark:hover:bg-primary/90"
             disabled={!text}
             aria-label="Mais opções"
           >
