@@ -36,7 +36,7 @@ export function PinInput({ onComplete, disabled, error, className }: PinInputPro
       }
 
       const pin = next.join('')
-      if (pin.length === PIN_LENGTH && !pin.includes('')) {
+      if (pin.length === PIN_LENGTH) {
         onComplete(pin)
       }
     },
