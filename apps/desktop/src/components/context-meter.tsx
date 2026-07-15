@@ -86,7 +86,7 @@ export function ContextMeter({ sessionId }: { sessionId?: string }) {
         }
       />
       <TooltipContent side="top" align="center" sideOffset={6} className="w-auto min-w-48 bg-popover text-popover-foreground">
-        <div className="space-y-2 text-xs">
+        <div className="space-y-2 text-xs w-full">
           {limit ? (
             <>
               <div className="flex items-center justify-between">
