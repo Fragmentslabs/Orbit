@@ -1,6 +1,7 @@
 // @see - https://www.electron.build/configuration/configuration
 {
   "$schema": "https://raw.githubusercontent.com/electron-userland/electron-builder/master/packages/app-builder-lib/scheme.json",
+  "electronVersion": "30.0.1",
   "appId": "YourAppID",
   "asar": true,
   "asarUnpack": [
