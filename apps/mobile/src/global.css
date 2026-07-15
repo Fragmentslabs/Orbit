@@ -3,113 +3,56 @@
 @tailwind utilities;
 
 /* ============================================
-   Orbit Mobile Theme - CSS Variables
+   Orbit Mobile Theme — tokens portados do
+   desktop (apps/desktop/src/index.css, oklch→hsl)
    ============================================ */
 
 :root {
-  /* Light Theme (Default) */
+  /* Light */
   --background: 0 0% 100%;
-  --foreground: 240 6% 10%;
+  --foreground: 240 11% 4%;
   --card: 0 0% 100%;
-  --card-foreground: 240 6% 10%;
+  --card-foreground: 240 11% 4%;
   --popover: 0 0% 100%;
-  --popover-foreground: 240 6% 10%;
-  --primary: 43 86% 62%;
-  --primary-foreground: 30 30% 20%;
-  --secondary: 240 5% 96%;
-  --secondary-foreground: 240 6% 15%;
-  --muted: 240 5% 96%;
+  --popover-foreground: 240 11% 4%;
+  --primary: 47 100% 50%;
+  --primary-foreground: 30 83% 25%;
+  --secondary: 240 4% 96%;
+  --secondary-foreground: 240 6% 10%;
+  --muted: 240 4% 96%;
   --muted-foreground: 240 4% 46%;
-  --accent: 240 5% 96%;
-  --accent-foreground: 240 6% 15%;
-  --destructive: 0 84% 60%;
+  --accent: 240 4% 96%;
+  --accent-foreground: 240 6% 10%;
+  --destructive: 357 100% 45%;
   --destructive-foreground: 0 0% 98%;
   --border: 240 6% 90%;
   --input: 240 6% 90%;
-  --ring: 240 5% 65%;
+  --ring: 240 6% 64%;
+  --sidebar: 0 0% 98%;
   --radius: 0.875rem;
-  
-  /* Additional theme colors */
-  --chart-1: 43 86% 62%;
-  --chart-2: 240 5% 65%;
-  --chart-3: 0 84% 60%;
-  --chart-4: 240 4% 46%;
-  --chart-5: 240 5% 96%;
 }
 
-.dark {
-  /* Dark Theme */
-  --background: 240 6% 10%;
+/* NativeWind aplica variáveis de tema dark via seletor .dark:root
+   (classe no html na web; colorScheme.set("dark") no nativo) */
+.dark:root {
+  --background: 240 11% 4%;
   --foreground: 0 0% 98%;
-  --card: 240 6% 14%;
+  --card: 240 6% 10%;
   --card-foreground: 0 0% 98%;
-  --popover: 240 6% 14%;
+  --popover: 240 6% 10%;
   --popover-foreground: 0 0% 98%;
-  --primary: 45 78% 58%;
-  --primary-foreground: 30 30% 20%;
-  --secondary: 240 5% 18%;
+  --primary: 44 100% 47%;
+  --primary-foreground: 30 83% 25%;
+  --secondary: 240 4% 16%;
   --secondary-foreground: 0 0% 98%;
-  --muted: 240 5% 18%;
-  --muted-foreground: 240 5% 65%;
-  --accent: 240 5% 18%;
+  --muted: 240 4% 16%;
+  --muted-foreground: 240 6% 64%;
+  --accent: 240 4% 16%;
   --accent-foreground: 0 0% 98%;
-  --destructive: 0 62% 50%;
+  --destructive: 359 100% 70%;
   --destructive-foreground: 0 0% 98%;
-  --border: 240 5% 18%;
-  --input: 240 5% 18%;
-  --ring: 240 4% 55%;
-  
-  /* Additional theme colors (dark) */
-  --chart-1: 45 78% 58%;
-  --chart-2: 240 4% 55%;
-  --chart-3: 0 62% 50%;
-  --chart-4: 240 5% 65%;
-  --chart-5: 240 5% 18%;
-}
-
-/* ============================================
-   Base Styles
-   ============================================ */
-
-@layer base {
-  * {
-    @apply border-border;
-  }
-  
-  body {
-    @apply bg-background text-foreground;
-  }
-  
-
-}
-
-/* ============================================
-   Utility Classes
-   ============================================ */
-
-@layer utilities {
-  /* Text truncation */
-  .text-truncate {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-  
-  /* Flex utilities */
-  .flex-center {
-    @apply items-center justify-center;
-  }
-  
-  .flex-between {
-    @apply items-center justify-between;
-  }
-  
-  /* Shadow utilities */
-  .shadow-card {
-    @apply shadow-md;
-  }
-  
-  .shadow-elevated {
-    @apply shadow-lg;
-  }
+  --border: 240 4% 13%;
+  --input: 240 3% 16%;
+  --ring: 240 4% 46%;
+  --sidebar: 240 6% 10%;
 }
