@@ -107,9 +107,9 @@ export function PinInput({ onComplete, disabled, error, className }: PinInputPro
           />
         ))}
       </View>
-      {error && (
+      {error ? (
         <Text className="mt-2 text-xs text-destructive">{error}</Text>
-      )}
+      ) : null}
     </View>
   )
 }

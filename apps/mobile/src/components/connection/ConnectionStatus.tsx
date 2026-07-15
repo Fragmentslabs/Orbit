@@ -40,11 +40,11 @@ export function ConnectionStatus({ state, detailed, className }: ConnectionStatu
 
       {detailed && state.status === 'connected' && (
         <>
-          {state.deviceName && (
+          {state.deviceName ? (
             <Text className="text-xs text-muted-foreground">
               {state.deviceName}
             </Text>
-          )}
+          ) : null}
           {state.latency != null && (
             <Text className="text-xs text-muted-foreground">
               {state.latency}ms
@@ -53,11 +53,11 @@ export function ConnectionStatus({ state, detailed, className }: ConnectionStatu
         </>
       )}
 
-      {detailed && state.error && (
+      {detailed && state.error ? (
         <Text className="text-xs text-destructive" numberOfLines={1}>
           {state.error}
         </Text>
-      )}
+      ) : null}
     </View>
   )
 }
