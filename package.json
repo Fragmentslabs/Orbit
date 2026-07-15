@@ -6,11 +6,14 @@
     "packages/*",
     "apps/*"
   ],
+  "devDependencies": {
+    "@types/react": "^19.2.2"
+  },
   "scripts": {
     "desktop:dev": "npm run dev --workspace=@orbit/desktop",
     "desktop:build": "npm run build --workspace=@orbit/desktop",
-    "mobile:dev": "npm run start --workspace=mobile",
-    "mobile:web": "npm run web --workspace=mobile",
+    "mobile:dev": "npm run start --workspace=@orbit/mobile",
+    "mobile:web": "npm run web --workspace=@orbit/mobile",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "lint": "npm run lint --workspaces --if-present"
   }

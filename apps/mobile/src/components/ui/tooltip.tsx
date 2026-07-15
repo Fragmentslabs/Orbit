@@ -3,8 +3,8 @@ import { cn } from "~/lib/utils";
 
 function Tooltip({
   ...props
-}: React.ComponentPropsWithoutRef<typeof TooltipPrimitive.Provider>) {
-  return <TooltipPrimitive.Provider delayDuration={300} {...props} />;
+}: React.ComponentPropsWithoutRef<typeof TooltipPrimitive.Root>) {
+  return <TooltipPrimitive.Root delayDuration={300} {...props} />;
 }
 
 function TooltipTrigger({
