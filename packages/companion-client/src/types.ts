@@ -24,4 +24,6 @@ export interface ConnectionState {
   lastActivity?: number
   /** Latência estimada em ms. */
   latency?: number
+  /** Tentativas de reconexão desde o último connect(). */
+  reconnectAttempt?: number
 }

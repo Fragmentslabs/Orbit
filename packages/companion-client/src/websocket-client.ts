@@ -27,6 +27,7 @@ type StateChangeHandler = (state: ConnectionState) => void
 const HEARTBEAT_INTERVAL = 30_000
 const RECONNECT_BASE_DELAY = 1_000
 const RECONNECT_MAX_DELAY = 30_000
+const RECONNECT_MAX_ATTEMPTS = 5
 const REQUEST_TIMEOUT = 15_000
 
 // ─── CompanionWebSocket ──────────────────────────────────────────────────────
@@ -55,6 +56,7 @@ export class CompanionWebSocket {
     this.config = config
     this.shouldReconnect = true
     this.reconnectAttempt = 0
+    this.setState({ reconnectAttempt: 0 })
     this.open()
   }
 
@@ -274,11 +276,21 @@ export class CompanionWebSocket {
   private scheduleReconnect(): void {
     if (this.reconnectTimer) return
 
+    if (this.reconnectAttempt >= RECONNECT_MAX_ATTEMPTS) {
+      this.shouldReconnect = false
+      this.setState({
+        status: 'disconnected',
+        error: `Falha na conexão após ${RECONNECT_MAX_ATTEMPTS} tentativas. Verifique se o Orbit Desktop está rodando.`,
+      })
+      return
+    }
+
     const delay = Math.min(
       RECONNECT_BASE_DELAY * Math.pow(2, this.reconnectAttempt),
       RECONNECT_MAX_DELAY,
     )
     this.reconnectAttempt++
+    this.setState({ reconnectAttempt: this.reconnectAttempt })
 
     this.reconnectTimer = setTimeout(() => {
       this.reconnectTimer = null
