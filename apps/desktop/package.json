@@ -2,6 +2,8 @@
   "name": "@orbit/desktop",
   "private": true,
   "version": "0.1.0",
+  "description": "Orbit - AI-powered coding assistant",
+  "author": "Orbit",
   "type": "module",
   "scripts": {
     "dev": "vite",
