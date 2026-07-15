@@ -1,6 +1,6 @@
 import { View, Pressable, type PressableProps } from "react-native";
 import * as DialogPrimitive from "@rn-primitives/dialog";
-import { cssInterop } from "nativewind/macro";
+import { cssInterop } from "nativewind";
 import { cn } from "~/lib/utils";
 
 cssInterop(DialogPrimitive.Overlay, { className: "style" });

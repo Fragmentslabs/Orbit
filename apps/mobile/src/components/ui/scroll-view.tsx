@@ -1,10 +1,10 @@
 import * as React from "react";
-import { ScrollView, type ScrollViewProps } from "react-native";
+import { ScrollView as RNScrollView, type ScrollViewProps } from "react-native";
 import { cn } from "~/lib/utils";
 
-const ScrollView = React.forwardRef<ScrollView, ScrollViewProps>(
+const ScrollView = React.forwardRef<RNScrollView, ScrollViewProps>(
   ({ className, ...props }, ref) => (
-    <ScrollView
+    <RNScrollView
       ref={ref}
       className={cn("", className)}
       showsVerticalScrollIndicator={false}
