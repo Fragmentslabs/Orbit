@@ -13,11 +13,10 @@
 
 import { createServer, type IncomingMessage, type ServerResponse, type Server } from 'http'
 import { app, BrowserWindow } from 'electron'
-import { readJson, writeJson } from './storage'
+import { readJson, writeJson, listKeys } from './storage'
 import { getCatalog } from './catalog'
-import { listKeys } from './storage'
 
-const HTTP_PORT = 3848
+export const HTTP_PORT = 3848
 
 let httpServer: Server | null = null
 

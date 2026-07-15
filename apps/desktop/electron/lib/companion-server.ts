@@ -40,6 +40,7 @@ import {
   startCompanionHttpServer,
   stopCompanionHttpServer,
   isCompanionHttpRunning,
+  HTTP_PORT as COMPANION_HTTP_PORT,
 } from './companion-http'
 
 const PORT = 3847
@@ -364,7 +365,7 @@ export function notifyCompanionMessage(
 // ─── Server Lifecycle ────────────────────────────────────────────────────────
 
 export function startCompanionServer(): { port: number; ip: string; pin: string; httpPort: number } {
-  if (wss) return { port: PORT, ip: getLocalIp(), pin: currentPin, httpPort: 3848 }
+  if (wss) return { port: PORT, ip: getLocalIp(), pin: currentPin, httpPort: COMPANION_HTTP_PORT }
 
   server = createServer()
   wss = new WebSocketServer({ server })
@@ -410,10 +411,10 @@ export function startCompanionServer(): { port: number; ip: string; pin: string;
   server.listen(PORT, '0.0.0.0')
 
   console.log(`[Companion] Server started on ${getLocalIp()}:${PORT}`)
-  console.log(`[Companion] HTTP API on ${getLocalIp()}:3848`)
+  console.log(`[Companion] HTTP API on ${getLocalIp()}:${COMPANION_HTTP_PORT}`)
   console.log(`[Companion] Pairing PIN: ${currentPin}`)
 
-  return { port: PORT, ip: getLocalIp(), pin: currentPin, httpPort: 3848 }
+  return { port: PORT, ip: getLocalIp(), pin: currentPin, httpPort: COMPANION_HTTP_PORT }
 }
 
 export function stopCompanionServer(): void {
@@ -435,7 +436,7 @@ export function getCompanionStatus() {
   return {
     running: wss !== null,
     port: PORT,
-    httpPort: 3848,
+    httpPort: COMPANION_HTTP_PORT,
     httpRunning: isCompanionHttpRunning(),
     ip: getLocalIp(),
     pin: currentPin,
