@@ -7,9 +7,6 @@
     "isolatedModules": true,
     "noEmit": true,
     "strict": true,
-    "declaration": true,
-    "declarationMap": true,
-    "composite": true,
     "rootDir": "src"
   },
   "include": ["src"]

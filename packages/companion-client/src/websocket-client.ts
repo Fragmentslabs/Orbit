@@ -196,6 +196,13 @@ export class CompanionWebSocket {
       return
     }
 
+    // Heartbeat pong — atualiza latência
+    if ((payload as { type: string }).type === 'pong') {
+      const now = Date.now()
+      this.setState({ lastActivity: now, latency: now - this.lastPing })
+      return
+    }
+
     // API responses (correlated)
     if (payload.type === 'api:response') {
       const apiRes = payload as ApiResponse
@@ -252,10 +259,7 @@ export class CompanionWebSocket {
     this.heartbeatTimer = setInterval(() => {
       if (this.ws?.readyState === WebSocket.OPEN) {
         this.lastPing = Date.now()
-        // Send a lightweight status request as heartbeat
-        const id = newMessageId()
-        const msg: WsMessage = { id, payload: { type: 'status:get' } }
-        this.ws.send(JSON.stringify(msg))
+        this.ws.send(JSON.stringify({ id: '', payload: { type: 'ping' } }))
       }
     }, HEARTBEAT_INTERVAL)
   }
@@ -310,8 +314,8 @@ export class CompanionWebSocket {
     }
   }
 
-  private setState(next: ConnectionState): void {
-    this.state = { ...this.state, ...next }
+  private setState(next: Partial<ConnectionState>): void {
+    this.state = { ...this.state, ...next } as ConnectionState
     for (const handler of this.stateHandlers) {
       try {
         handler(this.state)
