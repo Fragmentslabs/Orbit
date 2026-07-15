@@ -36,6 +36,11 @@ import { abortOrchestration } from './orchestrator'
 import { getCatalog } from './catalog'
 import { getModelsSnapshot } from './models'
 import { computeAnalytics } from './analytics'
+import {
+  startCompanionHttpServer,
+  stopCompanionHttpServer,
+  isCompanionHttpRunning,
+} from './companion-http'
 
 const PORT = 3847
 const PIN_LENGTH = 6
@@ -358,13 +363,16 @@ export function notifyCompanionMessage(
 
 // ─── Server Lifecycle ────────────────────────────────────────────────────────
 
-export function startCompanionServer(): { port: number; ip: string; pin: string } {
-  if (wss) return { port: PORT, ip: getLocalIp(), pin: currentPin }
+export function startCompanionServer(): { port: number; ip: string; pin: string; httpPort: number } {
+  if (wss) return { port: PORT, ip: getLocalIp(), pin: currentPin, httpPort: 3848 }
 
   server = createServer()
   wss = new WebSocketServer({ server })
 
   regeneratePin()
+
+  // Iniciar servidor HTTP REST junto com o WS
+  startCompanionHttpServer(validatePin)
 
   wss.on('connection', (ws: WebSocket, _req: IncomingMessage) => {
     const client: ConnectedClient = {
@@ -402,12 +410,17 @@ export function startCompanionServer(): { port: number; ip: string; pin: string 
   server.listen(PORT, '0.0.0.0')
 
   console.log(`[Companion] Server started on ${getLocalIp()}:${PORT}`)
+  console.log(`[Companion] HTTP API on ${getLocalIp()}:3848`)
   console.log(`[Companion] Pairing PIN: ${currentPin}`)
 
-  return { port: PORT, ip: getLocalIp(), pin: currentPin }
+  return { port: PORT, ip: getLocalIp(), pin: currentPin, httpPort: 3848 }
 }
 
 export function stopCompanionServer(): void {
+  // Parar servidor HTTP
+  stopCompanionHttpServer()
+
+  // Parar servidor WS
   for (const client of clients) {
     client.ws.close()
   }
@@ -422,6 +435,8 @@ export function getCompanionStatus() {
   return {
     running: wss !== null,
     port: PORT,
+    httpPort: 3848,
+    httpRunning: isCompanionHttpRunning(),
     ip: getLocalIp(),
     pin: currentPin,
     connectedClients: [...clients].filter(c => c.authenticated).map(c => ({
