@@ -1,11 +1,32 @@
 import { tool } from 'ai'
-import { spawn } from 'node:child_process'
+import { spawn, execSync } from 'node:child_process'
 import { z } from 'zod'
 import type { ToolContext } from './context'
 
 const DEFAULT_TIMEOUT = 2 * 60 * 1000
 const MAX_TIMEOUT = 10 * 60 * 1000
 const MAX_OUTPUT = 30_000
+const SIGKILL_GRACE = 200
+
+function killTree(pid: number): void {
+  const isWin = process.platform === 'win32'
+  if (isWin) {
+    try {
+      execSync(`taskkill /pid ${pid} /T /F`, { stdio: 'ignore' })
+    } catch {
+      // process may have already exited
+    }
+    return
+  }
+  try {
+    process.kill(-pid, 'SIGTERM')
+    setTimeout(() => {
+      try { process.kill(-pid, 'SIGKILL') } catch {}
+    }, SIGKILL_GRACE)
+  } catch {
+    try { process.kill(pid, 'SIGTERM') } catch {}
+  }
+}
 
 function runShell(command: string, cwd: string, timeout: number, abort: AbortSignal) {
   return new Promise<{ output: string; exitCode: number | null }>((resolve, reject) => {
@@ -21,8 +42,11 @@ function runShell(command: string, cwd: string, timeout: number, abort: AbortSig
     child.stdout.on('data', append)
     child.stderr.on('data', append)
 
-    const timer = setTimeout(() => child.kill(), timeout)
-    const onAbort = () => child.kill()
+    const pid = child.pid
+    const kill = () => { if (pid != null) killTree(pid) }
+
+    const timer = setTimeout(() => kill(), timeout)
+    const onAbort = () => kill()
     abort.addEventListener('abort', onAbort)
 
     child.on('error', (err) => {
