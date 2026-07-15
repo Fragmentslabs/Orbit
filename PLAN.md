@@ -157,18 +157,18 @@ apps/mobile/src/app/index.tsx         (LIMPO —removido template)
 
 ---
 
-### Fase 2: Pacote Compartilhado — @orbit/companion-client
+### Fase 2: Pacote Compartilhado — @orbit/companion-client ✅
 
 > Criar o cliente de comunicação que encapsula WebSocket + HTTP, reutilizando tipos de `@orbit/shared`.
 
-- [ ] Criar `packages/companion-client/package.json`:
+- [x] Criar `packages/companion-client/package.json`:
   - name: `@orbit/companion-client`
   - dependencies: `@orbit/shared`
-- [ ] Criar `packages/companion-client/src/index.ts` — exportar tudo
-- [ ] Criar `packages/companion-client/src/types.ts`:
+- [x] Criar `packages/companion-client/src/index.ts` — exportar tudo
+- [x] Criar `packages/companion-client/src/types.ts`:
   - `ConnectionConfig { host: string, port: number, pin: string }`
   - `ConnectionState { status: 'disconnected'|'connecting'|'authenticating'|'connected', error?: string }`
-- [ ] Criar `packages/companion-client/src/websocket-client.ts`:
+- [x] Criar `packages/companion-client/src/websocket-client.ts`:
   - Classe `CompanionWebSocket`:
     - `connect(config: ConnectionConfig)` — abre WS para `ws://{host}:{port}`
     - `send(payload: CompanionRequest): Promise<ApiResponse>` — envia com correlação de ID
@@ -177,18 +177,18 @@ apps/mobile/src/app/index.tsx         (LIMPO —removido template)
     - Reconexão automática com backoff exponencial
     - Heartbeat/ping a cada 30s
     - Queue de requests durante desconexão
-- [ ] Criar `packages/companion-client/src/http-client.ts`:
+- [x] Criar `packages/companion-client/src/http-client.ts`:
   - Classe `CompanionHttp`:
     - `getPreferences()` → `GET http://{host}:3848/api/preferences`
     - `updatePreferences(patch)` → `PATCH http://{host}:3848/api/preferences`
     - `getSelectedModel()` → `GET http://{host}:3848/api/models/selected`
     - `selectModel(providerId, modelId)` → `PUT http://{host}:3848/api/models/selected`
     - Headers: `Authorization: Bearer {pin}`
-- [ ] Criar `packages/companion-client/src/qr-code.ts`:
+- [x] Criar `packages/companion-client/src/qr-code.ts`:
   - Função `generateConnectionPayload(host, port, pin)` → string para QR code
   - Função `parseConnectionPayload(data)` → `ConnectionConfig | null`
-- [ ] Atualizar `packages/companion-client/tsconfig.json`
-- [ ] Adicionar workspace no `package.json` raiz (já coberto por `packages/*`)
+- [x] Atualizar `packages/companion-client/tsconfig.json`
+- [x] Adicionar workspace no `package.json` raiz (já coberto por `packages/*`)
 
 **Arquivos afetados:**
 ```

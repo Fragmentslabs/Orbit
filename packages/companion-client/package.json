@@ -1,0 +1,23 @@
+{
+  "name": "@orbit/companion-client",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./websocket": "./src/websocket-client.ts",
+    "./http": "./src/http-client.ts",
+    "./qr": "./src/qr-code.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@orbit/shared": "0.1.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.2.2"
+  }
+}
