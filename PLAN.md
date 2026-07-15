@@ -430,22 +430,22 @@ apps/mobile/package.json                       (adicionar expo-notifications)
 
 ---
 
-### Fase 9: Tema + Responsividade
+### Fase 9: Tema + Responsividade ✅
 
 > Garantir dark mode, tema consistente e responsividade web.
 
-- [ ] Criar `apps/mobile/src/lib/theme.ts`:
+- [x] Criar `apps/mobile/src/lib/theme.ts`:
   - Definir CSS variables do tema (light/dark) baseado no desktop
   - Cores: primary, secondary, muted, destructive, etc.
   - Integrar com NativeWind `dark:` classes
-- [ ] Atualizar `apps/mobile/tailwind.config.js`:
+- [x] Atualizar `apps/mobile/tailwind.config.js`:
   - Adicionar `darkMode: 'class'`
   - Estender theme com CSS variables do Orbit
-- [ ] Criar `apps/mobile/src/components/layout/ResponsiveContainer.tsx`:
+- [x] Criar `apps/mobile/src/components/layout/ResponsiveContainer.tsx`:
   - Container que adapta layout para mobile (full-width) vs web (max-width centrado)
   - Breakpoints: mobile (<768px), tablet (768-1024px), desktop (>1024px)
-- [ ] Testar e ajustar todas as telas para web:
-  - `apps/mobile/src/app/(app)/chat.tsx` — layout adaptativo
+- [x] Testar e ajustar todas as telas para web:
+  - `apps/mobile/src/app/(app)/index.tsx` — layout adaptativo
   - `apps/mobile/src/app/(app)/sessions.tsx` — grid vs list
   - `apps/mobile/src/app/(app)/settings.tsx` — sidebar vs full-width
 
