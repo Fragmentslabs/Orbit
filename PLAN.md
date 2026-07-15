@@ -232,27 +232,27 @@ apps/desktop/electron/lib/companion-server.ts    (MODIFICADO — integrar HTTP s
 
 ---
 
-### Fase 4: Stores Zustand no Mobile
+### Fase 4: Stores Zustand no Mobile ✅
 
 > Criar os stores de estado do mobile, espelhando a arquitetura do desktop mas simplificada para companion.
 
-- [ ] Criar `apps/mobile/src/stores/connection-store.ts`:
+- [x] Criar `apps/mobile/src/stores/connection-store.ts`:
   - Estado: `ConnectionState`, `config: ConnectionConfig | null`, `serverVersion: string`
   - Ações: `connect()`, `disconnect()`, `setPin()`, `saveConfig()`, `loadConfig()`
   - Persistência: `expo-secure-store` para PIN e config (ou AsyncStorage)
--- [ ] Criar `apps/mobile/src/stores/session-store.ts`:
+- [x] Criar `apps/mobile/src/stores/session-store.ts`:
   - Estado: `sessions: SessionInfo[]`, `activeSessionId: string | null`, `messages: Record<string, ChatMessage[]>`, `status: Record<string, ChatStatus>`
   - Ações: `fetchSessions()`, `selectSession()`, `fetchMessages()`, `sendMessage()`, `abortChat()`
   - Conecta via `CompanionWebSocket` para requests `sessions:list`, `messages:get`, `messages:send`, `chat:abort`
-- [ ] Criar `apps/mobile/src/stores/chat-store.ts`:
+- [x] Criar `apps/mobile/src/stores/chat-store.ts`:
   - Estado: `streamingMessages`, `pendingAsks: PendingAskUI[]`
   - Ações: `applyChatEvent()`, `replyToAsk()`
   - Conecta via WebSocket events: `chat:event`, `notify:pending-ask`, `notify:new-message`
-- [ ] Criar `apps/mobile/src/stores/settings-store.ts`:
+- [x] Criar `apps/mobile/src/stores/settings-store.ts`:
   - Estado: `selectedModel`, `catalog`, `preferences`
   - Ações: `fetchCatalog()`, `selectModel()`, `fetchPreferences()`, `updatePreferences()`
   - Conecta via HTTP REST (companion-http) para operações simples
-- [ ] Criar `apps/mobile/src/hooks/useCompanion.ts`:
+- [x] Criar `apps/mobile/src/hooks/useCompanion.ts`:
   - Hook que orquestra conexão WS + HTTP
   - Inicializa stores, configura event listeners
   - Reconexão automática
@@ -264,6 +264,7 @@ apps/mobile/src/stores/session-store.ts       (CRIADO)
 apps/mobile/src/stores/chat-store.ts          (CRIADO)
 apps/mobile/src/stores/settings-store.ts      (CRIADO)
 apps/mobile/src/hooks/useCompanion.ts         (CRIADO)
+apps/mobile/src/app/_layout.tsx               (MODIFICADO — adicionar useCompanion)
 ```
 
 ---
