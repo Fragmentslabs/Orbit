@@ -2,7 +2,7 @@ import { useState, useCallback, useEffect } from 'react'
 import { View, Text, ScrollView, KeyboardAvoidingView, Platform } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { QrCode, Keyboard, Wifi, Loader2 } from 'lucide-react-native'
-import { parseConnectionPayload, isValidPin, type ConnectionConfig } from '@orbit/companion-client'
+import type { ConnectionConfig } from '@orbit/companion-client'
 import { useConnectionStore } from '~/stores/connection-store'
 import { cn } from '~/lib/utils'
 import { Button } from '~/components/ui/button'
@@ -145,7 +145,7 @@ export default function ConnectionScreen() {
                       placeholder="192.168.1.100"
                       value={ip}
                       onChangeText={setIp}
-                      keyboardType="decimal-pad"
+                      keyboardType="numbers-and-punctuation"
                       autoCapitalize="none"
                       autoCorrect={false}
                     />
@@ -321,7 +321,7 @@ export default function ConnectionScreen() {
             {/* Dica Tailscale */}
             <View className="rounded-lg bg-muted/50 p-4">
               <Text className="text-center text-xs leading-5 text-muted-foreground">
-                💡 <Text className="font-semibold">Dica:</Text> Use{' '}
+                <Text className="font-semibold">Dica:</Text> Use{' '}
                 <Text className="font-semibold">Tailscale</Text> para acessar
                 seu desktop de qualquer lugar, sem configuração de rede.
               </Text>
