@@ -319,36 +319,37 @@ apps/mobile/src/app/index.tsx                           (REMOVIDO — substituí
 
 ---
 
-### Fase 6: Layout Principal + Navegação
+### Fase 6: Layout Principal + Navegação ✅
 
 > Estrutura de navegação do app conectado.
 
-- [ ] Criar `apps/mobile/src/app/(app)/_layout.tsx`:
+- [x] Criar `apps/mobile/src/app/(app)/_layout.tsx`:
   - Bottom tabs: Chat, Sessões, Configurações
   - Header com `ConnectionStatus` + nome do desktop
-- [ ] Criar `apps/mobile/src/app/(app)/chat.tsx`:
+- [x] Criar `apps/mobile/src/app/(app)/index.tsx` (chat screen):
   - Tela principal de conversa
   - Lista de mensagens com scroll
   - Input de mensagem na parte inferior
   - Indicador de streaming
   - Botão de abortar
-- [ ] Criar `apps/mobile/src/app/(app)/sessions.tsx`:
+  - AskCard para perguntas/permissões pendentes
+- [x] Criar `apps/mobile/src/app/(app)/sessions.tsx`:
   - Lista de sessões do desktop
   - Pull-to-refresh
   - Indicador de sessão ativa/streaming
-  - Swipe para deletar
-- [ ] Criar `apps/mobile/src/app/(app)/settings.tsx`:
+  - Badge de pending asks
+- [x] Criar `apps/mobile/src/app/(app)/settings.tsx`:
   - Configurações gerais:
-    - Seleção de modelo/provider
-    - Preferências (permission mode, reasoning, etc.)
-    - Info de conexão
-    - Botão desconectar
-- [ ] Criar `apps/mobile/src/components/layout/AppHeader.tsx`:
+    - Info de conexão + botão desconectar
+    - Modelo ativo
+    - Preferências (permission mode, reasoning)
+    - Botão refresh
+- [x] Criar `apps/mobile/src/components/layout/AppHeader.tsx`:
   - Header customizado com status de conexão
-  - Nome do desktop conectado
-  - Botão de configurações
-- [ ] Criar `apps/mobile/src/components/layout/EmptyState.tsx`:
+  - Prop `rightAction` para botões customizados
+- [x] Criar `apps/mobile/src/components/layout/EmptyState.tsx`:
   - Componente reutilizável para estados vazios
+  - Ícone, título, descrição, action
 
 **Arquivos afetados:**
 ```
@@ -362,32 +363,31 @@ apps/mobile/src/components/layout/EmptyState.tsx (CRIADO)
 
 ---
 
-### Fase 7: Componentes de Chat
+### Fase 7: Componentes de Chat ✅
 
 > Componentes específicos do chat — recriados do desktop com NativeWind + Reusables.
 
-- [ ] Criar `apps/mobile/src/components/chat/MessageBubble.tsx`:
+- [x] Criar `apps/mobile/src/components/chat/MessageBubble.tsx`:
   - Bolha de mensagem (user vs assistant)
-  - Suporte a parts: text, reasoning, tool, image
+  - Suporte a parts: text, reasoning, tool, agent
   - Streaming: cursor pulsante no final do texto
-- [ ] Criar `apps/mobile/src/components/chat/StreamingIndicator.tsx`:
+- [x] Criar `apps/mobile/src/components/chat/StreamingIndicator.tsx`:
   - Indicador visual de "digitando..." / streaming
-  - Animated dots ou shimmer
-- [ ] Criar `apps/mobile/src/components/chat/ChatInput.tsx`:
-  - TextInput expansível (auto-grow)
+  - Animated dots com opacidade
+- [x] Criar `apps/mobile/src/components/chat/ChatInput.tsx`:
+  - TextInput multiline
   - Botão de enviar (só aparece com texto)
   - Botão de abortar (quando streamando)
-  - Keyboard avoiding view
+  - Max height com scroll
 - [ ] Criar `apps/mobile/src/components/chat/MessageList.tsx`:
-  - FlatList/FlashList de mensagens
+  - FlatList/FlashList de mensagens (implementado inline no index.tsx)
   - Auto-scroll para baixo em nova mensagem
   - Pull-to-refresh para carregar histórico
   - Separator entre mensagens
-- [ ] Criar `apps/mobile/src/components/chat/AskCard.tsx`:
+- [x] Criar `apps/mobile/src/components/chat/AskCard.tsx`:
   - Card para perguntas/permissões pendentes
   - Exibe título, descrição, opções
-  - Botões de aprovar/rejeitar/ responder
-  - Notificação push quando chega
+  - Botões de aprovar/rejeitar/responder
 
 **Arquivos afetados:**
 ```
