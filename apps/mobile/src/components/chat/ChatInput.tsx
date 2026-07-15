@@ -19,7 +19,6 @@ export function ChatInput({ onSend, onAbort, isStreaming, disabled }: ChatInputP
     if (!trimmed || isStreaming || disabled) return
     onSend(trimmed)
     setText('')
-    inputRef.current?.clear()
   }, [text, isStreaming, disabled, onSend])
 
   return (

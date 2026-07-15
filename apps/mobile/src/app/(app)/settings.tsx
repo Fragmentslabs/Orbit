@@ -19,6 +19,15 @@ import { ConnectionStatus } from '~/components/connection/ConnectionStatus'
 import { Badge } from '~/components/ui/badge'
 import { cn } from '~/lib/utils'
 
+interface CompanionPreferences {
+  brain: boolean
+  brainContext: boolean
+  permissionMode: 'ask' | 'approve' | 'full'
+  reasoning: boolean
+  reasoningLevel: 'off' | 'low' | 'medium' | 'high'
+  simple: boolean
+}
+
 function SettingsRow({
   icon: Icon,
   label,
@@ -93,7 +102,8 @@ export default function SettingsScreen() {
     ? `${selectedModel.providerId}/${selectedModel.modelId}`
     : 'Não definido'
 
-  const permissionMode = (preferences as any)?.permissionMode ?? 'prompt'
+  const prefs = preferences as CompanionPreferences | null
+  const permissionMode = prefs?.permissionMode ?? 'ask'
 
   return (
     <SafeAreaView className="flex-1 bg-background" edges={['top']}>
@@ -158,7 +168,7 @@ export default function SettingsScreen() {
           <SettingsRow
             icon={Brain}
             label="Raciocínio"
-            value={(preferences as any)?.reasoning ? 'Ativado' : 'Desativado'}
+            value={prefs?.reasoning ? 'Ativado' : 'Desativado'}
           />
         </View>
 

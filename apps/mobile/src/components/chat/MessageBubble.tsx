@@ -9,7 +9,7 @@ interface MessageBubbleProps {
 function TextPartView({ part }: { part: TextPart }) {
   if (!part.text) return null
   return (
-    <Text className="text-sm text-foreground leading-relaxed whitespace-pre-wrap">
+    <Text className="text-sm text-foreground leading-relaxed">
       {part.text}
     </Text>
   )
