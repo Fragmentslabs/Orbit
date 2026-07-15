@@ -61,7 +61,7 @@ export const useConnectionStore = create<ConnectionStore>((set, get) => ({
   desktopActiveSessions: 0,
 
   connect: (config) => {
-    set({ config })
+    set({ config, connection: { status: 'connecting' } })
 
     // Cria/ atualiza o HTTP client
     const http = new CompanionHttp(config)
