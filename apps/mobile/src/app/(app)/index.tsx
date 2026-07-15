@@ -6,10 +6,12 @@ import { useSessionStore } from '~/stores/session-store'
 import { useChatStore } from '~/stores/chat-store'
 import { AppHeader } from '~/components/layout/AppHeader'
 import { EmptyState } from '~/components/layout/EmptyState'
+import { ResponsiveContainer } from '~/components/layout/ResponsiveContainer'
 import { MessageBubble } from '~/components/chat/MessageBubble'
 import { ChatInput } from '~/components/chat/ChatInput'
 import { StreamingIndicator } from '~/components/chat/StreamingIndicator'
 import { AskCard } from '~/components/chat/AskCard'
+import { cn } from '~/lib/utils'
 
 export default function ChatScreen() {
   const activeSessionId = useSessionStore((s) => s.activeSessionId)
@@ -36,11 +38,13 @@ export default function ChatScreen() {
     return (
       <SafeAreaView className="flex-1 bg-background">
         <AppHeader title="Chat" />
-        <EmptyState
-          icon={MessageCircle}
-          title="Nenhuma sessão selecionada"
-          description="Selecione uma sessão na aba Sessões para iniciar uma conversa."
-        />
+        <ResponsiveContainer>
+          <EmptyState
+            icon={MessageCircle}
+            title="Nenhuma sessão selecionada"
+            description="Selecione uma sessão na aba Sessões para iniciar uma conversa."
+          />
+        </ResponsiveContainer>
       </SafeAreaView>
     )
   }
@@ -49,38 +53,52 @@ export default function ChatScreen() {
     <SafeAreaView className="flex-1 bg-background" edges={['top']}>
       <AppHeader title="Chat" />
 
-      {/* Pending asks */}
-      {activeAsks.map((ask) => (
-        <AskCard
-          key={ask.requestId}
-          ask={ask}
-          onReply={(value) => replyToAsk(ask.requestId, value)}
-        />
-      ))}
+      <ResponsiveContainer
+        maxWidth="max-w-3xl"
+        mobilePadding={false}
+        className="flex-1"
+      >
+        <View className="flex-1">
+          {/* Pending asks */}
+          {activeAsks.map((ask) => (
+            <AskCard
+              key={ask.requestId}
+              ask={ask}
+              onReply={(value) => replyToAsk(ask.requestId, value)}
+            />
+          ))}
 
-      {/* Messages */}
-      <FlatList
-        ref={listRef}
-        data={activeMessages}
-        keyExtractor={(item) => item.id}
-        renderItem={({ item }) => <MessageBubble message={item} />}
-        contentContainerStyle={{ paddingVertical: 8 }}
-        onContentSizeChange={() => listRef.current?.scrollToEnd({ animated: true })}
-      />
+          {/* Messages */}
+          <FlatList
+            ref={listRef}
+            data={activeMessages}
+            keyExtractor={(item) => item.id}
+            renderItem={({ item }) => (
+              <View className={cn('px-4', 'md:px-6')}>
+                <MessageBubble message={item} />
+              </View>
+            )}
+            contentContainerStyle={{ paddingVertical: 8 }}
+            onContentSizeChange={() => listRef.current?.scrollToEnd({ animated: true })}
+          />
 
-      {/* Streaming indicator */}
-      {isStreaming && (
-        <View className="px-4 py-2">
-          <StreamingIndicator />
+          {/* Streaming indicator */}
+          {isStreaming && (
+            <View className="px-4 md:px-6 py-2">
+              <StreamingIndicator />
+            </View>
+          )}
+
+          {/* Input */}
+          <View className="px-4 md:px-6 pb-4">
+            <ChatInput
+              onSend={sendMessage}
+              onAbort={() => activeSessionId && abortChat(activeSessionId)}
+              isStreaming={isStreaming}
+            />
+          </View>
         </View>
-      )}
-
-      {/* Input */}
-      <ChatInput
-        onSend={sendMessage}
-        onAbort={() => activeSessionId && abortChat(activeSessionId)}
-        isStreaming={isStreaming}
-      />
+      </ResponsiveContainer>
     </SafeAreaView>
   )
 }
