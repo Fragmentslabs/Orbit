@@ -269,34 +269,40 @@ apps/mobile/src/app/_layout.tsx               (MODIFICADO — adicionar useCompa
 
 ---
 
-### Fase 5: Tela de Conexão (QR Code + PIN)
+### Fase 5: Tela de Conexão (QR Code + PIN) ✅
 
 > Tela inicial do app — pareamento com o desktop.
 
-- [ ] Criar `apps/mobile/src/components/connection/QRScanner.tsx`:
+- [x] Criar `apps/mobile/src/components/connection/QRScanner.tsx`:
   - Câmera para escanear QR code do desktop
-  - Usa `expo-camera` para scan
+  - Usa `expo-camera` (CameraView + onBarcodeScanned)
   - Decodifica payload → `ConnectionConfig`
-- [ ] Criar `apps/mobile/src/components/connection/PinInput.tsx`:
-  - Input de 6 dígitos para PIN manual
+  - Overlay de scan com moldura visual
+- [x] Criar `apps/mobile/src/components/connection/PinInput.tsx`:
+  - Input de 6 dígitos para PIN manual (estilo OTP)
   - Auto-submit quando completo
-  - Estilo: 6 caixas separadas (estilo OTP)
-- [ ] Criar `apps/mobile/src/components/connection/ConnectionStatus.tsx`:
+  - Suporte a paste de PIN completo
+  - Backspace navega entre campos
+- [x] Criar `apps/mobile/src/components/connection/ConnectionStatus.tsx`:
   - Badge indicando status: desconectado/conectando/conectado
-  - Indicador de ping/latência
-  - Botão de desconectar
-- [ ] Criar `apps/mobile/src/app/(connection)/index.tsx`:
-  - Tela de conexão com 3 opções:
-    1. Escanear QR Code (botão grande)
-    2. Inserir PIN manualmente
-    3. Inserir IP:Porta manualmente (para Tailscale/outras redes)
-  - Mostrar dica sobre Tailscale quando offline
-- [ ] Criar `apps/mobile/src/app/(connection)/_layout.tsx`:
-  - Stack layout para fluxo de conexão
-- [ ] Atualizar `apps/mobile/src/app/_layout.tsx`:
+  - Indicador de latência e nome do device
+  - Animação de spin durante conexão
+- [x] Criar `apps/mobile/src/app/(connection)/index.tsx`:
+  - Tela de conexão com 3 modos:
+    1. Menu principal com opções (QR Code + IP manual)
+    2. Scanner de QR Code (tela dedicada)
+    3. Entrada manual de IP:Porta → PIN entry
+  - Tela de PIN com feedback de status
+  - Auto-reconnect loading quando config salva existe
+  - Dica sobre Tailscale
+- [x] Criar `apps/mobile/src/app/(connection)/_layout.tsx`:
+  - Stack layout sem header para fluxo de conexão
+- [x] Criar `apps/mobile/src/app/(app)/_layout.tsx` + `index.tsx`:
+  - Placeholder para app conectado (Fase 6 expande)
+- [x] Atualizar `apps/mobile/src/app/_layout.tsx`:
   - Redirecionar para `/(connection)` se não conectado
   - Redirecionar para `/(app)` se conectado
-  - Envolver com `ConnectionProvider`
+  - Splash screen ocultado após routing
 
 **Arquivos afetados:**
 ```
@@ -305,8 +311,10 @@ apps/mobile/src/components/connection/PinInput.tsx      (CRIADO)
 apps/mobile/src/components/connection/ConnectionStatus.tsx (CRIADO)
 apps/mobile/src/app/(connection)/index.tsx              (CRIADO)
 apps/mobile/src/app/(connection)/_layout.tsx            (CRIADO)
+apps/mobile/src/app/(app)/index.tsx                     (CRIADO — placeholder)
+apps/mobile/src/app/(app)/_layout.tsx                   (CRIADO — placeholder)
 apps/mobile/src/app/_layout.tsx                         (MODIFICADO — routing lógico)
-apps/mobile/package.json                               (adicionar expo-camera)
+apps/mobile/src/app/index.tsx                           (REMOVIDO — substituído por groups)
 ```
 
 ---
@@ -515,6 +523,7 @@ apps/mobile/src/lib/theme.ts
 apps/mobile/src/app/(connection)/_layout.tsx
 apps/mobile/src/app/(connection)/index.tsx
 apps/mobile/src/app/(app)/_layout.tsx
+apps/mobile/src/app/(app)/index.tsx            (placeholder — expandido na Fase 6)
 apps/mobile/src/app/(app)/chat.tsx
 apps/mobile/src/app/(app)/sessions.tsx
 apps/mobile/src/app/(app)/settings.tsx
