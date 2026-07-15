@@ -7,6 +7,7 @@ import { DarkTheme, DefaultTheme, ThemeProvider } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import { useColorScheme } from "react-native";
 import { useCompanion } from "../hooks/useCompanion";
+import { useNotifications } from "../hooks/useNotifications";
 import { useConnectionStore } from "../stores/connection-store";
 
 SplashScreen.preventAutoHideAsync();
@@ -18,6 +19,9 @@ export default function RootLayout() {
 
   // Inicializa o companion (auto-reconnect + event wiring)
   useCompanion();
+
+  // Configura notificações locais reativas aos eventos WS
+  useNotifications();
 
   // ─── Routing lógico baseado no estado de conexão ──────────────────────
   useEffect(() => {
