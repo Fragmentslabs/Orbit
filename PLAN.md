@@ -400,21 +400,25 @@ apps/mobile/src/components/chat/AskCard.tsx             (CRIADO)
 
 ---
 
-### Fase 8: Notificações + Push
+### Fase 8: Notificações + Push ✅
 
 > Notificações locais quando o agente termina ou há pergunta pendente.
 
-- [ ] Instalar `expo-notifications`
-- [ ] Criar `apps/mobile/src/lib/notifications.ts`:
-  - `registerForPushNotifications()` — permissão + token
+- [x] Instalar `expo-notifications`
+- [x] Criar `apps/mobile/src/lib/notifications.ts`:
+  - `configureNotifications()` — handler de exibição em foreground
+  - `requestNotificationPermission()` — permissão
   - `scheduleLocalNotification(title, body, data)` — notificação local
-  - Listener para notificações recebidas (app aberto)
-- [ ] Integrar no `chat-store.ts`:
-  - Quando `notify:pending-ask` → notificação local "Pergunta pendente"
-  - Quando `notify:new-message` → notificação local "Nova mensagem de {sessionTitle}"
-  - Quando `chat:event` status=error → notificação de erro
-- [ ] Criar `apps/mobile/src/hooks/useNotifications.ts`:
+  - `setBadgeCount()` / `clearBadge()` — badge iOS
+  - Listeners para recebido + tocado
+- [x] Integrar no `useNotifications` hook (via WS events, não no store):
+  - `notify:pending-ask` → notificação "❓ Pergunta pendente"
+  - `notify:new-message` → notificação "💬 Nova mensagem" (se sessão inativa)
+  - `chat:event` status=error → notificação "⚠️ Erro no chat"
+  - Tocar na notificação → navega para a sessão
+- [x] Criar `apps/mobile/src/hooks/useNotifications.ts`:
   - Hook que configura listeners e integra com stores
+- [x] Integrar no `_layout.tsx` ao lado de `useCompanion`
 
 **Arquivos afetados:**
 ```
