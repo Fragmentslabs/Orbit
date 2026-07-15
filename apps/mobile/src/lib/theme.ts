@@ -105,9 +105,9 @@ export function hslToRgba(hsl: string, alpha = 1): string {
  * @param theme - Theme object
  * @param key - Color key
  */
-export function getThemeColor<T extends Theme>(
-  theme: T,
-  key: keyof T
+export function getThemeColor(
+  theme: Theme,
+  key: keyof Theme
 ): string {
   return theme[key]
 }
@@ -197,8 +197,10 @@ export function generateCSSVariables(theme: Theme): Record<string, string> {
  * Uses React Native's Appearance API or falls back to light
  */
 export function getSystemColorScheme(): 'light' | 'dark' {
-  if (typeof window !== 'undefined' && window.matchMedia) {
-    return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
+  try {
+    const { Appearance } = require('react-native')
+    return Appearance.getColorScheme() ?? 'light'
+  } catch {
+    return 'light'
   }
-  return 'light'
 }
