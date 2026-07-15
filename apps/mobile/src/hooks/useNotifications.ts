@@ -1,5 +1,5 @@
 import { useEffect } from 'react'
-import type { ChatEventMessage, PendingAskNotification } from '@orbit/shared'
+import type { ChatEventMessage, PendingAskNotification, NewMessageNotification, ChatStatus } from '@orbit/shared'
 import { useConnectionStore } from '../stores/connection-store'
 import { useSessionStore } from '../stores/session-store'
 import {
@@ -43,7 +43,7 @@ export function useNotifications() {
       const sessionTitle = session?.title ?? 'Sessão'
 
       void scheduleLocalNotification({
-        title: '❓ Pergunta pendente',
+        title: 'Pergunta pendente',
         body: `${sessionTitle}: ${ask.title}`,
         data: { type: 'pending-ask', sessionId: ask.sessionId },
       })
@@ -51,20 +51,17 @@ export function useNotifications() {
 
     // notify:new-message → notificação de nova mensagem (se não estiver na sessão ativa)
     const unsubMsg = conn.onEvent('notify:new-message', (event) => {
-      const msg = event as { sessionId?: string; title?: string }
+      const msg = event as NewMessageNotification
       if (!msg.sessionId) return
 
       const activeSessionId = useSessionStore.getState().activeSessionId
-      // Só notifica se a mensagem é de outra sessão
       if (msg.sessionId === activeSessionId) return
 
-      const sessions = useSessionStore.getState().sessions
-      const session = sessions.find((s) => s.id === msg.sessionId)
-      const sessionTitle = msg.title ?? session?.title ?? 'Sessão'
+      const body = msg.messagePreview || msg.sessionTitle || 'Nova mensagem'
 
       void scheduleLocalNotification({
-        title: '💬 Nova mensagem',
-        body: sessionTitle,
+        title: 'Nova mensagem',
+        body,
         data: { type: 'new-message', sessionId: msg.sessionId },
       })
     })
@@ -72,17 +69,12 @@ export function useNotifications() {
     // chat:event com status=error → notificação de erro
     const unsubChat = conn.onEvent('chat:event', (event) => {
       const msg = event as ChatEventMessage
-      const chatEvent = msg.event
-      if (
-        chatEvent &&
-        typeof chatEvent === 'object' &&
-        'status' in chatEvent &&
-        (chatEvent as any).status === 'error'
-      ) {
+      const chatEvent = msg.event as { type: string; sessionId: string; status: ChatStatus; error?: string } | null
+      if (chatEvent?.type === 'status' && chatEvent.status === 'error') {
         void scheduleLocalNotification({
-          title: '⚠️ Erro no chat',
-          body: (chatEvent as any).error ?? 'Ocorreu um erro durante o chat.',
-          data: { type: 'chat-error', sessionId: (chatEvent as any).sessionId },
+          title: 'Erro no chat',
+          body: chatEvent.error ?? 'Ocorreu um erro durante o chat.',
+          data: { type: 'chat-error', sessionId: chatEvent.sessionId },
         })
       }
     })
@@ -97,16 +89,14 @@ export function useNotifications() {
   // ─── Handle notificação tocada ──────────────────────────────────────────
 
   useEffect(() => {
+    const { router } = require('expo-router')
+
     const unsub = addNotificationResponseListener((response) => {
       const data = response.notification.request.content.data as Record<string, string>
 
-      if (data.type === 'pending-ask' && data.sessionId) {
-        // Navega para a sessão (o app router vai resolver)
+      if (data.sessionId) {
         useSessionStore.getState().selectSession(data.sessionId)
-      } else if (data.type === 'new-message' && data.sessionId) {
-        useSessionStore.getState().selectSession(data.sessionId)
-      } else if (data.type === 'chat-error' && data.sessionId) {
-        useSessionStore.getState().selectSession(data.sessionId)
+        router.replace('/(app)')
       }
     })
 
