@@ -19,12 +19,12 @@ export function EmptyState({ icon: Icon, title, description, action, className }
       <Text className="text-base font-semibold text-foreground text-center">
         {title}
       </Text>
-      {description && (
+      {description ? (
         <Text className="text-sm text-muted-foreground text-center leading-relaxed">
           {description}
         </Text>
-      )}
-      {action && <View className="mt-2">{action}</View>}
+      ) : null}
+      {action ? <View className="mt-2">{action}</View> : null}
     </View>
   )
 }

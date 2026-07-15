@@ -1,10 +1,21 @@
-import * as Notifications from 'expo-notifications'
 import { Platform } from 'react-native'
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let Notifications: any = null
+
+try {
+  if (Platform.OS !== 'web') {
+    Notifications = require('expo-notifications')
+  }
+} catch {
+  Notifications = null
+}
 
 // ─── Notification Handler ────────────────────────────────────────────────────
 
 /** Configura como notificações são exibidas quando o app está em foreground. */
 export function configureNotifications() {
+  if (!Notifications) return
   Notifications.setNotificationHandler({
     handleNotification: async () => ({
       shouldShowAlert: true,
@@ -20,6 +31,7 @@ export function configureNotifications() {
 
 /** Solicita permissão para notificações. Retorna true se concedido. */
 export async function requestNotificationPermission(): Promise<boolean> {
+  if (!Notifications) return false
   const { status: existing } = await Notifications.getPermissionsAsync()
 
   if (existing === 'granted') return true
@@ -44,6 +56,7 @@ export interface NotificationPayload {
 export async function scheduleLocalNotification(
   payload: NotificationPayload
 ): Promise<string | null> {
+  if (!Notifications) return null
   const hasPermission = await requestNotificationPermission()
   if (!hasPermission) return null
 
@@ -64,6 +77,7 @@ export async function scheduleLocalNotification(
 
 /** Atualiza o badge count (iOS). No Android, badges são gerenciados pelo canal. */
 export async function setBadgeCount(count: number) {
+  if (!Notifications) return
   if (Platform.OS === 'ios') {
     await Notifications.setBadgeCountAsync(count)
   }
@@ -71,6 +85,7 @@ export async function setBadgeCount(count: number) {
 
 /** Limpa o badge. */
 export async function clearBadge() {
+  if (!Notifications) return
   if (Platform.OS === 'ios') {
     await Notifications.setBadgeCountAsync(0)
   }
@@ -78,7 +93,7 @@ export async function clearBadge() {
 
 // ─── Listeners ───────────────────────────────────────────────────────────────
 
-export type NotificationListener = (notification: Notifications.Notification) => void
+export type NotificationListener = (notification: unknown) => void
 
 /**
  * Registra listener para notificações recebidas (app em foreground).
@@ -87,7 +102,8 @@ export type NotificationListener = (notification: Notifications.Notification) =>
 export function addNotificationReceivedListener(
   handler: NotificationListener
 ): () => void {
-  const subscription = Notifications.addNotificationReceivedListener(handler)
+  if (!Notifications) return () => {}
+  const subscription = Notifications.addNotificationReceivedListener(handler as any)
   return () => subscription.remove()
 }
 
@@ -96,8 +112,9 @@ export function addNotificationReceivedListener(
  * Retorna uma função de cleanup.
  */
 export function addNotificationResponseListener(
-  handler: (response: Notifications.NotificationResponse) => void
+  handler: (response: { notification: { request: { content: { data: unknown } } } }) => void
 ): () => void {
-  const subscription = Notifications.addNotificationResponseReceivedListener(handler)
+  if (!Notifications) return () => {}
+  const subscription = Notifications.addNotificationResponseReceivedListener(handler as any)
   return () => subscription.remove()
 }

@@ -68,6 +68,9 @@ module.exports = [
       'valid-typeof': 'error',
       'import/first': 'warn',
       'import/default': 'off',
+      // Falsos positivos com Flow (react-native) e CJS (@rn-primitives);
+      // o tsc já valida membros de namespace de verdade
+      'import/namespace': 'off',
       'no-var': 'error',
     },
   },

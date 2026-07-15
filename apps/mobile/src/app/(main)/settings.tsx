@@ -11,13 +11,13 @@ import {
   Monitor,
   ChevronRight,
   RefreshCw,
+  ArrowLeft,
+  Palette,
 } from 'lucide-react-native'
 import { useConnectionStore } from '~/stores/connection-store'
 import { useSettingsStore } from '~/stores/settings-store'
-import { AppHeader } from '~/components/layout/AppHeader'
+
 import { ResponsiveContainer } from '~/components/layout/ResponsiveContainer'
-import { ConnectionStatus } from '~/components/connection/ConnectionStatus'
-import { Badge } from '~/components/ui/badge'
 import { cn } from '~/lib/utils'
 
 interface CompanionPreferences {
@@ -35,12 +35,14 @@ function SettingsRow({
   value,
   onPress,
   destructive,
+  rightArrow,
 }: {
   icon: typeof Cpu
   label: string
   value?: string
   onPress?: () => void
   destructive?: boolean
+  rightArrow?: boolean
 }) {
   return (
     <Pressable
@@ -57,12 +59,14 @@ function SettingsRow({
           {label}
         </Text>
       </View>
-      {value && (
+      {value ? (
         <Text className="text-xs text-muted-foreground mr-1" numberOfLines={1}>
           {value}
         </Text>
-      )}
-      {onPress && <ChevronRight size={14} className="text-muted-foreground" />}
+      ) : null}
+      {(onPress || rightArrow) ? (
+        <ChevronRight size={14} className="text-muted-foreground" />
+      ) : null}
     </Pressable>
   )
 }
@@ -79,6 +83,7 @@ export default function SettingsScreen() {
   const fetchPreferences = useSettingsStore((s) => s.fetchPreferences)
   const fetchSelectedModel = useSettingsStore((s) => s.fetchSelectedModel)
   const loading = useSettingsStore((s) => s.loading)
+
   const [refreshing, setRefreshing] = useState(false)
 
   useEffect(() => {
@@ -108,17 +113,20 @@ export default function SettingsScreen() {
 
   return (
     <SafeAreaView className="flex-1 bg-background" edges={['top']}>
-      <AppHeader
-        title="Configurações"
-        rightAction={
-          <Pressable onPress={handleRefresh} disabled={loading}>
-            <RefreshCw
-              size={18}
-              className={cn('text-muted-foreground', loading && 'animate-spin')}
-            />
-          </Pressable>
-        }
-      />
+      <View className="flex-row items-center px-4 py-3 border-b border-border">
+        <Pressable onPress={() => router.back()} className="p-1 -ml-1">
+          <ArrowLeft size={22} className="text-foreground" />
+        </Pressable>
+        <Text className="flex-1 text-base font-semibold text-foreground text-center mr-6">
+          Configurações
+        </Text>
+        <Pressable onPress={handleRefresh} disabled={loading} className="p-1">
+          <RefreshCw
+            size={18}
+            className={cn('text-muted-foreground', loading && 'animate-spin')}
+          />
+        </Pressable>
+      </View>
 
       <ScrollView className="flex-1">
         <ResponsiveContainer maxWidth="max-w-2xl">
@@ -171,6 +179,19 @@ export default function SettingsScreen() {
               icon={Brain}
               label="Raciocínio"
               value={prefs?.reasoning ? 'Ativado' : 'Desativado'}
+            />
+          </View>
+
+          {/* Appearance Section */}
+          <Text className="px-4 pt-6 pb-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+            Aparência
+          </Text>
+          <View className="mx-4 rounded-lg border border-border bg-card overflow-hidden">
+            <SettingsRow
+              icon={Palette}
+              label="Tema"
+              onPress={() => router.push('/(main)/theme')}
+              rightArrow
             />
           </View>
 

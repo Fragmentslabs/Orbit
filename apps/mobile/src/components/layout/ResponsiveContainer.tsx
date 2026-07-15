@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect } from 'react'
 import { View, useWindowDimensions } from 'react-native'
 import { cn } from '~/lib/utils'
 import { getBreakpoint, type Breakpoint } from '~/lib/theme'
@@ -36,15 +36,12 @@ export function ResponsiveContainer({
   onBreakpointChange,
 }: ResponsiveContainerProps) {
   const { width } = useWindowDimensions()
-  const [breakpoint, setBreakpoint] = useState<Breakpoint>(getBreakpoint(width))
+  // Derivado direto da largura — não precisa de estado próprio
+  const breakpoint = getBreakpoint(width)
 
   useEffect(() => {
-    const newBreakpoint = getBreakpoint(width)
-    if (newBreakpoint !== breakpoint) {
-      setBreakpoint(newBreakpoint)
-      onBreakpointChange?.(newBreakpoint)
-    }
-  }, [width, breakpoint, onBreakpointChange])
+    onBreakpointChange?.(breakpoint)
+  }, [breakpoint, onBreakpointChange])
 
   return (
     <View
