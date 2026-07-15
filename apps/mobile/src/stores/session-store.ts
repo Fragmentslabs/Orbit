@@ -20,9 +20,6 @@ interface SessionState {
   status: Record<string, ChatStatus>
   /** Erros por sessão. */
   errors: Record<string, string | undefined>
-  /** Sessões carregadas (evita refetch). */
-  _loaded: boolean
-
   /** Busca lista de sessões via WS. */
   fetchSessions: () => Promise<void>
   /** Seleciona sessão e carrega mensagens. */
@@ -45,7 +42,6 @@ export const useSessionStore = create<SessionState>((set, get) => ({
   messages: {},
   status: {},
   errors: {},
-  _loaded: false,
 
   fetchSessions: async () => {
     const { wsClient } = useConnectionStore.getState()
@@ -55,7 +51,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
         const sessions = res.data as SessionInfo[]
         // Ordena por updatedAt desc (mais recente primeiro)
         sessions.sort((a, b) => b.updatedAt - a.updatedAt)
-        set({ sessions, _loaded: true })
+        set({ sessions })
       }
     } catch {
       // Silently fail — will retry on reconnect
@@ -70,9 +66,6 @@ export const useSessionStore = create<SessionState>((set, get) => ({
   },
 
   fetchMessages: async (sessionId) => {
-    // Se já temos mensagens em memória, não refaz fetch
-    if (get().messages[sessionId] !== undefined) return
-
     const { wsClient } = useConnectionStore.getState()
     try {
       const res = await wsClient.send({

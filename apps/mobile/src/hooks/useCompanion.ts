@@ -1,5 +1,5 @@
-import { useEffect, useRef } from 'react'
-import type { CompanionEvent, ChatEventMessage, PendingAskNotification } from '@orbit/shared'
+import { useEffect } from 'react'
+import type { ChatEventMessage, PendingAskNotification } from '@orbit/shared'
 import { useConnectionStore } from '../stores/connection-store'
 import { useSessionStore } from '../stores/session-store'
 import { useChatStore } from '../stores/chat-store'
@@ -15,8 +15,6 @@ import { useSettingsStore } from '../stores/settings-store'
  *  3. Faz fetch inicial de sessões/settings ao conectar
  */
 export function useCompanion() {
-  const initialFetchDone = useRef(false)
-
   // ─── Conexão automática ao montar ──────────────────────────────────────
 
   useEffect(() => {
@@ -42,15 +40,9 @@ export function useCompanion() {
 
     const unsub = conn.onConnectionChange((state) => {
       if (state.status === 'connected') {
-        // Reconectou — faz fetch inicial (uma única vez, ou a cada reconexão)
-        initialFetchDone.current = true
         void useSessionStore.getState().fetchSessions()
         void useSettingsStore.getState().fetchSelectedModel()
         void useSettingsStore.getState().fetchPreferences()
-      }
-
-      if (state.status === 'disconnected') {
-        initialFetchDone.current = false
       }
     })
 
@@ -64,7 +56,8 @@ export function useCompanion() {
 
     // chat:event → session store
     const unsubChat = conn.onEvent('chat:event', (event) => {
-      const chatEvent = (event as ChatEventMessage).event
+      const msg = event as ChatEventMessage
+      const chatEvent = msg.event
       if (chatEvent && typeof chatEvent === 'object' && 'sessionId' in chatEvent) {
         useSessionStore.getState().applyChatEvent(chatEvent as any)
       }
@@ -78,10 +71,8 @@ export function useCompanion() {
         kind: ask.kind,
         title: ask.title,
         questions: ask.questions as any,
-      } as any)
+      })
     })
-
-    // notify:new-message → pode ser usado para notificações push (fase 8)
 
     return () => {
       unsubChat()

@@ -5,7 +5,9 @@ import { useConnectionStore } from './connection-store'
 // ─── Types ──────────────────────────────────────────────────────────────────
 
 /** Pedido pendente exibido como card no chat. */
-export type PendingAsk = AskItem
+export interface PendingAsk extends AskItem {
+  title: string
+}
 
 interface ChatState {
   /** Pedidos de permissão/question pendentes, por sessão. */
