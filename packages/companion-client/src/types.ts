@@ -3,10 +3,8 @@
  * Re-exporta tipos de @orbit/shared e adiciona configurações de conexão.
  */
 
-export type { ConnectionConfig, ConnectionState }
-
 /** Configuração necessária para conectar ao desktop. */
-interface ConnectionConfig {
+export interface ConnectionConfig {
   host: string
   port: number
   pin: string
@@ -15,7 +13,7 @@ interface ConnectionConfig {
 }
 
 /** Estado da conexão WebSocket. */
-interface ConnectionState {
+export interface ConnectionState {
   status: 'disconnected' | 'connecting' | 'authenticating' | 'connected'
   error?: string
   /** Versão do servidor reportada no handshake. */
