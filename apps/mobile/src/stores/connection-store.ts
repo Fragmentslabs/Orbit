@@ -1,0 +1,136 @@
+import { create } from 'zustand'
+import * as SecureStore from 'expo-secure-store'
+import {
+  CompanionWebSocket,
+  CompanionHttp,
+  type ConnectionConfig,
+  type ConnectionState,
+} from '@orbit/companion-client'
+
+// ─── SecureStore Keys ───────────────────────────────────────────────────────
+
+const STORAGE_KEY_HOST = 'orbit_conn_host'
+const STORAGE_KEY_PORT = 'orbit_conn_port'
+const STORAGE_KEY_PIN = 'orbit_conn_pin'
+const STORAGE_KEY_DEVICE = 'orbit_conn_device'
+
+// ─── Store ──────────────────────────────────────────────────────────────────
+
+interface ConnectionStore {
+  /** Estado da conexão WebSocket. */
+  connection: ConnectionState
+  /** Configuração atual (host/port/pin). */
+  config: ConnectionConfig | null
+  /** Instância do cliente WebSocket (singleton). */
+  wsClient: CompanionWebSocket
+  /** Instância do cliente HTTP (singleton). */
+  http: CompanionHttp | null
+  /** Uptime do desktop em segundos. */
+  desktopUptime: number
+  /** Número de sessões ativas no desktop. */
+  desktopActiveSessions: number
+
+  /** Conecta ao desktop com a config fornecida. */
+  connect: (config: ConnectionConfig) => void
+  /** Desconecta e limpa estado. */
+  disconnect: () => void
+  /** Atualiza config (reconecta). */
+  updateConfig: (config: ConnectionConfig) => void
+  /** Salva config no SecureStore para reconexão futura. */
+  saveConfig: (config: ConnectionConfig) => Promise<void>
+  /** Carrega config do SecureStore. Retorna null se não houver. */
+  loadConfig: () => Promise<ConnectionConfig | null>
+  /** Limpa config salva. */
+  clearSavedConfig: () => Promise<void>
+  /** Registra handler para mudança de estado WS. */
+  onConnectionChange: (handler: (state: ConnectionState) => void) => () => void
+  /** Registra handler para eventos WS. */
+  onEvent: (eventType: string, handler: (event: any) => void) => () => void
+}
+
+// ─── Singleton Instances ────────────────────────────────────────────────────
+
+const wsClient = new CompanionWebSocket()
+
+export const useConnectionStore = create<ConnectionStore>((set, get) => ({
+  connection: { status: 'disconnected' },
+  config: null,
+  wsClient,
+  http: null,
+  desktopUptime: 0,
+  desktopActiveSessions: 0,
+
+  connect: (config) => {
+    set({ config })
+
+    // Cria/ atualiza o HTTP client
+    const http = new CompanionHttp(config)
+    set({ http })
+
+    // Conecta o WS — o handshake + auth são tratados internamente
+    wsClient.connect(config)
+
+    // Salva config para reconexão futura
+    void get().saveConfig(config)
+  },
+
+  disconnect: () => {
+    wsClient.disconnect()
+    set({
+      connection: { status: 'disconnected' },
+      http: null,
+      desktopUptime: 0,
+      desktopActiveSessions: 0,
+    })
+  },
+
+  updateConfig: (config) => {
+    get().disconnect()
+    get().connect(config)
+  },
+
+  onConnectionChange: (handler) => {
+    return wsClient.onStateChange((state) => {
+      set({ connection: state })
+      handler(state)
+    })
+  },
+
+  onEvent: (eventType, handler) => {
+    return wsClient.subscribe(eventType, handler)
+  },
+
+  // ─── Persistence ────────────────────────────────────────────────────────
+
+  saveConfig: async (config) => {
+    await SecureStore.setItemAsync(STORAGE_KEY_HOST, config.host)
+    await SecureStore.setItemAsync(STORAGE_KEY_PORT, String(config.port))
+    await SecureStore.setItemAsync(STORAGE_KEY_PIN, config.pin)
+    if (config.deviceName) {
+      await SecureStore.setItemAsync(STORAGE_KEY_DEVICE, config.deviceName)
+    }
+  },
+
+  loadConfig: async () => {
+    const host = await SecureStore.getItemAsync(STORAGE_KEY_HOST)
+    const port = await SecureStore.getItemAsync(STORAGE_KEY_PORT)
+    const pin = await SecureStore.getItemAsync(STORAGE_KEY_PIN)
+    const deviceName = await SecureStore.getItemAsync(STORAGE_KEY_DEVICE)
+
+    if (!host || !port || !pin) return null
+
+    return {
+      host,
+      port: Number(port),
+      pin,
+      deviceName: deviceName ?? undefined,
+    }
+  },
+
+  clearSavedConfig: async () => {
+    await SecureStore.deleteItemAsync(STORAGE_KEY_HOST)
+    await SecureStore.deleteItemAsync(STORAGE_KEY_PORT)
+    await SecureStore.deleteItemAsync(STORAGE_KEY_PIN)
+    await SecureStore.deleteItemAsync(STORAGE_KEY_DEVICE)
+  },
+}))
