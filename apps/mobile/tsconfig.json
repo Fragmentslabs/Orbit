@@ -12,8 +12,8 @@
     "baseUrl": ".",
     "paths": {
       "@/*": ["./*"],
-      "@orbit/shared": ["../shared/src/index.ts"],
-      "@orbit/shared/*": ["../shared/src/*"]
+      "@orbit/shared": ["../../packages/shared/src/index.ts"],
+      "@orbit/shared/*": ["../../packages/shared/src/*"]
     }
   },
   "include": ["**/*.ts", "**/*.tsx"],

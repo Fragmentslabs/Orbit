@@ -3,15 +3,14 @@
   "private": true,
   "version": "0.1.0",
   "workspaces": [
-    "shared",
-    "desktop",
-    "mobile"
+    "packages/*",
+    "apps/*"
   ],
   "scripts": {
-    "desktop:dev": "npm run dev --workspace=desktop",
-    "desktop:build": "npm run build --workspace=desktop",
-    "mobile:dev": "npm run dev --workspace=mobile",
-    "mobile:web": "npm run web --workspace=mobile",
+    "desktop:dev": "npm run dev --workspace=@orbit/desktop",
+    "desktop:build": "npm run build --workspace=@orbit/desktop",
+    "mobile:dev": "npm run dev --workspace=@orbit/mobile",
+    "mobile:web": "npm run web --workspace=@orbit/mobile",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "lint": "npm run lint --workspaces --if-present"
   }
