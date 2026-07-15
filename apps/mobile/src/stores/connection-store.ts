@@ -32,8 +32,10 @@ interface ConnectionStore {
 
   /** Conecta ao desktop com a config fornecida. */
   connect: (config: ConnectionConfig) => void
-  /** Desconecta e limpa estado. */
+  /** Desconecta e limpa estado (ação explícita do usuário — esquece a config salva). */
   disconnect: () => void
+  /** Fecha o socket sem esquecer a config salva (cleanup de unmount/dev reload). */
+  shutdown: () => void
   /** Atualiza config (reconecta). */
   updateConfig: (config: ConnectionConfig) => void
   /** Salva config no SecureStore para reconexão futura. */
@@ -76,12 +78,23 @@ export const useConnectionStore = create<ConnectionStore>((set, get) => ({
 
   disconnect: () => {
     wsClient.disconnect()
+    // Clear saved config so auto-reconnect doesn't kick in next time
+    void get().clearSavedConfig()
     set({
+      config: null,
       connection: { status: 'disconnected' },
       http: null,
       desktopUptime: 0,
       desktopActiveSessions: 0,
     })
+  },
+
+  shutdown: () => {
+    // Apenas fecha o socket — mantém a config salva para reconexão automática.
+    // Necessário porque o cleanup do useEffect roda em dev (double-invoke /
+    // fast refresh) e não pode apagar as credenciais.
+    wsClient.disconnect()
+    set({ connection: { status: 'disconnected' } })
   },
 
   updateConfig: (config) => {
