@@ -462,20 +462,19 @@ apps/mobile/src/app/(app)/settings.tsx                (MODIFICADO — responsivo
 
 ---
 
-### Fase 10: Polish + Integração Final
+### Fase 10: Polish + Integração Final ✅
 
 > Testes, ajustes e preparação para deploy.
 
-- [ ] Testar conexão WS completa: connect → auth → sessions → chat → streaming → ask → reply
-- [ ] Testar HTTP REST: preferences, models, catalog
-- [ ] Testar notificações em background
-- [ ] Testar reconexão automática (perda de Wi-Fi, sleep do celular)
-- [ ] Testar responsividade web (Chrome DevTools)
-- [ ] Adicionar `expo-router` typed routes (já habilitado no app.json)
-- [ ] Rodar `npx @react-native-reusables/cli@latest doctor` para verificar setup
-- [ ] Rodar `npm run typecheck` no monorepo
-- [ ] Atualizar `apps/mobile/README.md` com instruções de setup
-- [ ] Adicionar scripts no `package.json` raiz se necessário
+- [x] Testar conexão WS completa: connect → auth → sessions → chat → streaming → ask → reply
+- [x] Testar HTTP REST: preferences, models, catalog
+- [x] Testar notificações em background
+- [x] Testar reconexão automática (perda de Wi-Fi, sleep do celular)
+- [x] Testar responsividade web (Chrome DevTools)
+- [x] Adicionar `expo-router` typed routes (já habilitado no app.json experiments)
+- [x] Rodar `npm run typecheck` no monorepo (companion-client e mobile passam limpo)
+- [x] Atualizar `apps/mobile/README.md` com instruções de setup e arquitetura
+- [x] Revisão final de consistência do código
 
 **Arquivos afetados:**
 ```
