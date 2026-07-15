@@ -204,11 +204,11 @@ apps/mobile/package.json                         (adicionar dep @orbit/companion
 
 ---
 
-### Fase 3: Endpoints HTTP no Desktop
+### Fase 3: Endpoints HTTP no Desktop ✅
 
 > Adicionar servidor HTTP REST no desktop para operações de preferências (além do WebSocket).
 
-- [ ] Criar `apps/desktop/electron/lib/companion-http.ts`:
+- [x] Criar `apps/desktop/electron/lib/companion-http.ts`:
   - Servidor HTTP na porta 3848 (0.0.0.0)
   - Auth via header `Authorization: Bearer {pin}` (reutilizar `validatePin`)
   - Endpoints:
@@ -219,10 +219,10 @@ apps/mobile/package.json                         (adicionar dep @orbit/companion
     - `GET /api/catalog` → catálogo completo
     - `GET /api/status` → status geral (online, sessões, uptime)
   - CORS habilitado para desenvolvimento local
-- [ ] Integrar `companion-http.ts` no `companion-server.ts`:
+- [x] Integrar `companion-http.ts` no `companion-server.ts`:
   - Iniciar HTTP server junto com o WS server em `startCompanionServer()`
   - Parar em `stopCompanionServer()`
-- [ ] Atualizar `getCompanionStatus()` para incluir porta HTTP
+- [x] Atualizar `getCompanionStatus()` para incluir porta HTTP
 
 **Arquivos afetados:**
 ```

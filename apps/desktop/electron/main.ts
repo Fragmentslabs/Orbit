@@ -21,6 +21,7 @@ import { initMcp, listMcpStatus, readMcpConfig, reconnectMcp, saveMcpConfig } fr
 import { savePlanFile, deletePlanFile, readPlanFile } from './lib/plan-file'
 import { registerMediaProtocol } from './lib/media'
 import { startCompanionServer, getCompanionStatus } from './lib/companion-server'
+import { readJson as readStorageJson } from './lib/storage'
 import { registerPanelWebContents } from './lib/panel-browser'
 import { setupMemoryScheduler } from './lib/memory/scheduler'
 import * as memoryService from './lib/memory/service'
@@ -800,6 +801,11 @@ app.whenReady().then(() => {
   const companion = startCompanionServer()
   ipcMain.handle('companion:status', () => getCompanionStatus())
   ipcMain.handle('companion:pin', () => companion.pin)
+
+  // Companion preferences (sincronização renderer ↔ HTTP server)
+  ipcMain.handle('companion:getPreferences', () => readStorageJson('companion/preferences'))
+  ipcMain.handle('companion:setPreferences', (_event, prefs: Record<string, unknown>) =>
+    import('./lib/storage').then(m => m.writeJson('companion/preferences', prefs)))
 
   // Custom providers (locais / user-defined)
   ipcMain.handle('custom-providers:list', () => listCustomProviders())
