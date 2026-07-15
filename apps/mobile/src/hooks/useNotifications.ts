@@ -96,7 +96,7 @@ export function useNotifications() {
 
       if (data.sessionId) {
         useSessionStore.getState().selectSession(data.sessionId)
-        router.replace('/(app)')
+        router.replace({ pathname: '/(main)/chat/[id]', params: { id: data.sessionId } })
       }
     })
 

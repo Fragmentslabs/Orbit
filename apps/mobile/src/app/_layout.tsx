@@ -1,19 +1,43 @@
 import "../global.css";
+import "../lib/icon-interop";
 
 import { useEffect } from "react"
-import { Stack, useRouter } from "expo-router"
+import { DarkTheme, Stack, ThemeProvider, useRouter } from "expo-router"
 import { PortalHost } from "@rn-primitives/portal";
-import { DarkTheme, DefaultTheme, ThemeProvider } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
-import { useColorScheme } from "react-native";
+import { Platform } from "react-native";
+import { StatusBar } from "expo-status-bar";
+import { colorScheme } from "nativewind";
 import { useCompanion } from "../hooks/useCompanion";
 import { useNotifications } from "../hooks/useNotifications";
 import { useConnectionStore } from "../stores/connection-store";
 
 SplashScreen.preventAutoHideAsync();
 
+// Orbit é dark por padrão (mesmo design system do desktop).
+// No web o set() só pode rodar no browser — durante o SSR do Expo Router
+// (render em Node) não há document e a chamada lança erro.
+if (Platform.OS !== "web") {
+  colorScheme.set("dark");
+} else if (typeof document !== "undefined") {
+  colorScheme.set("dark");
+  document.documentElement.classList.add("dark");
+}
+
+// Tema de navegação alinhado aos tokens (background/card/border do global.css)
+const OrbitDarkTheme: typeof DarkTheme = {
+  ...DarkTheme,
+  colors: {
+    ...DarkTheme.colors,
+    background: "hsl(240, 11%, 4%)",
+    card: "hsl(240, 6%, 10%)",
+    border: "hsl(240, 4%, 13%)",
+    text: "hsl(0, 0%, 98%)",
+    primary: "hsl(44, 100%, 47%)",
+  },
+};
+
 export default function RootLayout() {
-  const colorScheme = useColorScheme();
   const router = useRouter();
   const connection = useConnectionStore((s) => s.connection);
 
@@ -26,7 +50,7 @@ export default function RootLayout() {
   // ─── Routing lógico baseado no estado de conexão ──────────────────────
   useEffect(() => {
     if (connection.status === "connected") {
-      router.replace("/(app)");
+      router.replace("/(main)");
     } else if (
       connection.status === "disconnected" ||
       connection.status === "connecting" ||
@@ -42,10 +66,11 @@ export default function RootLayout() {
   }, []);
 
   return (
-    <ThemeProvider value={colorScheme === "dark" ? DarkTheme : DefaultTheme}>
+    <ThemeProvider value={OrbitDarkTheme}>
+      <StatusBar style="light" />
       <Stack screenOptions={{ headerShown: false }}>
         <Stack.Screen name="(connection)" />
-        <Stack.Screen name="(app)" />
+        <Stack.Screen name="(main)" />
       </Stack>
       <PortalHost />
     </ThemeProvider>
