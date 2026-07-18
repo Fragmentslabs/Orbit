@@ -12,6 +12,7 @@ import {
 const STORAGE_KEY_HOST = 'orbit_conn_host'
 const STORAGE_KEY_PORT = 'orbit_conn_port'
 const STORAGE_KEY_PIN = 'orbit_conn_pin'
+const STORAGE_KEY_TOKEN = 'orbit_conn_token'
 const STORAGE_KEY_DEVICE = 'orbit_conn_device'
 
 // ─── Store ──────────────────────────────────────────────────────────────────
@@ -119,6 +120,9 @@ export const useConnectionStore = create<ConnectionStore>((set, get) => ({
     await Storage.setItem(STORAGE_KEY_HOST, config.host)
     await Storage.setItem(STORAGE_KEY_PORT, String(config.port))
     await Storage.setItem(STORAGE_KEY_PIN, config.pin)
+    if (config.token) {
+      await Storage.setItem(STORAGE_KEY_TOKEN, config.token)
+    }
     if (config.deviceName) {
       await Storage.setItem(STORAGE_KEY_DEVICE, config.deviceName)
     }
@@ -128,14 +132,18 @@ export const useConnectionStore = create<ConnectionStore>((set, get) => ({
     const host = await Storage.getItem(STORAGE_KEY_HOST)
     const port = await Storage.getItem(STORAGE_KEY_PORT)
     const pin = await Storage.getItem(STORAGE_KEY_PIN)
+    const token = await Storage.getItem(STORAGE_KEY_TOKEN)
     const deviceName = await Storage.getItem(STORAGE_KEY_DEVICE)
 
-    if (!host || !port || !pin) return null
+    // Com token persistente o PIN é dispensável (ele expira em 5 min de
+    // qualquer forma — só serviu para o primeiro pareamento).
+    if (!host || !port || (!pin && !token)) return null
 
     return {
       host,
       port: Number(port),
-      pin,
+      pin: pin ?? '',
+      token: token ?? undefined,
       deviceName: deviceName ?? undefined,
     }
   },
@@ -144,6 +152,7 @@ export const useConnectionStore = create<ConnectionStore>((set, get) => ({
     await Storage.removeItem(STORAGE_KEY_HOST)
     await Storage.removeItem(STORAGE_KEY_PORT)
     await Storage.removeItem(STORAGE_KEY_PIN)
+    await Storage.removeItem(STORAGE_KEY_TOKEN)
     await Storage.removeItem(STORAGE_KEY_DEVICE)
   },
 }))

@@ -1,7 +1,7 @@
 // Learn more https://docs.expo.dev/guides/customizing-metro
 const path = require("path");
 const { getDefaultConfig } = require("expo/metro-config");
-const { withNativeWind } = require("nativewind/metro");
+const { withNativewind } = require("nativewind/metro");
 
 /** @type {import('expo/metro-config').MetroConfig} */
 const config = getDefaultConfig(__dirname);
@@ -13,7 +13,24 @@ config.resolver.nodeModulesPaths = [
   path.resolve(workspaceRoot, "node_modules"),
 ];
 
-module.exports = withNativeWind(config, {
-  input: "./src/global.css",
-  inlineRem: 16,
-});
+// Apply withNativewind FIRST so its CSS resolution chain is established,
+// then layer our custom lucide redirect on top.
+const nativeWindConfig = withNativewind(config);
+
+// Redireciona os imports de `lucide-react-native` do app para o wrapper que
+// aplica `className` aos ícones via styled() (o resolver do react-native-css
+// não cobre o lucide). O próprio wrapper importa o lucide real — por isso
+// pulamos o redirect quando a origem é o próprio arquivo.
+const lucideStyled = path.resolve(__dirname, "src/lib/lucide-styled.js");
+const originalResolveRequest = nativeWindConfig.resolver.resolveRequest;
+nativeWindConfig.resolver.resolveRequest = (context, moduleName, platform) => {
+  if (
+    moduleName === "lucide-react-native" &&
+    context.originModulePath !== lucideStyled
+  ) {
+    return (originalResolveRequest ?? context.resolveRequest)(context, lucideStyled, platform);
+  }
+  return (originalResolveRequest ?? context.resolveRequest)(context, moduleName, platform);
+};
+
+module.exports = nativeWindConfig;

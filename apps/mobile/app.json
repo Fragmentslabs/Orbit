@@ -9,7 +9,13 @@
     "userInterfaceStyle": "dark",
     "backgroundColor": "#09090c",
     "ios": {
-      "icon": "./assets/expo.icon"
+      "icon": "./assets/expo.icon",
+      "infoPlist": {
+        "NSAppTransportSecurity": {
+          "NSAllowsLocalNetworking": true
+        },
+        "NSLocalNetworkUsageDescription": "O Orbit precisa acessar dispositivos na mesma rede Wi-Fi para conectar ao Orbit Desktop."
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -36,7 +42,29 @@
           "imageWidth": 76
         }
       ],
-      "expo-secure-store"
+      "expo-secure-store",
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "O Orbit precisa de acesso à câmera para escanear o QR code de conexão."
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "O Orbit precisa acessar suas fotos para anexar imagens ao chat.",
+          "cameraPermission": "O Orbit precisa de acesso à câmera para tirar fotos e anexar ao chat."
+        }
+      ],
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "usesCleartextTraffic": true
+          }
+        }
+      ],
+      "expo-sharing"
     ],
     "experiments": {
       "typedRoutes": true

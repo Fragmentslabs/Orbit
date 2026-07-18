@@ -1,14 +1,14 @@
-import { View, Text } from 'react-native'
+import { View, Text, StyleSheet } from 'react-native'
 import { Wifi, WifiOff, Loader2 } from 'lucide-react-native'
 import type { ConnectionState } from '@orbit/companion-client'
-import { cn } from '~/lib/utils'
 import { Badge } from '~/components/ui/badge'
+import { Spin } from '~/components/ui/spin'
+import { getThemeTokens } from '~/lib/theme-tokens'
+import { useThemeStore } from '~/stores/theme-store'
 
 interface ConnectionStatusProps {
   state: ConnectionState
-  /** Mostrar detalhes (latência, device name). */
   detailed?: boolean
-  className?: string
 }
 
 const STATUS_CONFIG: Record<ConnectionState['status'], { label: string; variant: 'default' | 'secondary' | 'destructive'; Icon: typeof Wifi }> = {
@@ -18,46 +18,44 @@ const STATUS_CONFIG: Record<ConnectionState['status'], { label: string; variant:
   connected: { label: 'Conectado', variant: 'default', Icon: Wifi },
 }
 
-export function ConnectionStatus({ state, detailed, className }: ConnectionStatusProps) {
+export function ConnectionStatus({ state, detailed }: ConnectionStatusProps) {
+  const tokens = getThemeTokens(useThemeStore((s) => s.resolved))
   const config = STATUS_CONFIG[state.status]
   const { Icon } = config
+  // Na tela de conexão o "Desconectado" é redundante (a tela inteira já diz
+  // isso) — só mostra o badge quando há algo relevante a informar.
+  const showBadge = state.status !== 'disconnected'
 
   return (
-    <View className={cn('flex-row items-center gap-2', className)}>
-      <Badge variant={config.variant}>
-        <View className="flex-row items-center gap-1.5">
-          <Icon
-            size={12}
-            className={cn(
-              state.status === 'connecting' || state.status === 'authenticating'
-                ? 'animate-spin'
-                : undefined,
-            )}
-          />
-          <Text>{config.label}</Text>
-        </View>
-      </Badge>
+    <View style={s.row}>
+      {showBadge && (
+        <Badge variant={config.variant}>
+          <View style={s.badgeInner}>
+            <Spin active={state.status === 'connecting' || state.status === 'authenticating'}>
+              <Icon size={12} />
+            </Spin>
+            <Text>{config.label}</Text>
+          </View>
+        </Badge>
+      )}
 
       {detailed && state.status === 'connected' && (
         <>
-          {state.deviceName ? (
-            <Text className="text-xs text-muted-foreground">
-              {state.deviceName}
-            </Text>
-          ) : null}
-          {state.latency != null && (
-            <Text className="text-xs text-muted-foreground">
-              {state.latency}ms
-            </Text>
-          )}
+          {state.deviceName ? <Text style={[s.detail, { color: tokens.mutedForeground }]}>{state.deviceName}</Text> : null}
+          {state.latency != null ? <Text style={[s.detail, { color: tokens.mutedForeground }]}>{state.latency}ms</Text> : null}
         </>
       )}
 
       {detailed && state.error ? (
-        <Text className="text-xs text-destructive" numberOfLines={1}>
-          {state.error}
-        </Text>
+        <Text style={[s.error, { color: '#ff3344' }]} numberOfLines={1}>{state.error}</Text>
       ) : null}
     </View>
   )
 }
+
+const s = StyleSheet.create({
+  row: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  badgeInner: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  detail: { fontSize: 12 },
+  error: { fontSize: 12 },
+})

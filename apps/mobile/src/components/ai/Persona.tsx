@@ -7,6 +7,7 @@
  */
 import { memo, useEffect, useRef } from 'react'
 import type { ComponentType, FC } from 'react'
+import { View } from 'react-native'
 import Constants, { ExecutionEnvironment } from 'expo-constants'
 import { PersonaFallback } from './PersonaFallback'
 import {
@@ -69,10 +70,15 @@ const RivePersona: FC<Required<PersonaProps>> = ({ state, size }) => {
 }
 
 export const Persona: FC<PersonaProps> = memo(({ state = 'idle', size = 128 }) => {
-  if (riveModule) {
-    return <RivePersona state={state} size={size} />
-  }
-  return <PersonaFallback state={state} size={size} />
+  return (
+    // width/height + overflow:hidden travam o tamanho de verdade — a view
+    // nativa do Rive (rive-react-native, usada fora do Expo Go) já apareceu
+    // ignorando o `style` de tamanho e "explodindo" pro espaço disponível
+    // do pai (visto no header do chat, onde o Persona é pequeno).
+    <View style={{ width: size, height: size, overflow: 'hidden' }}>
+      {riveModule ? <RivePersona state={state} size={size} /> : <PersonaFallback state={state} size={size} />}
+    </View>
+  )
 })
 
 Persona.displayName = 'Persona'

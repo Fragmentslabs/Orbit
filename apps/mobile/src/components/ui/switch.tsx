@@ -1,10 +1,6 @@
 import { Platform } from "react-native";
 import * as SwitchPrimitive from "@rn-primitives/switch";
-import { cssInterop } from "nativewind";
 import { cn } from "~/lib/utils";
-
-cssInterop(SwitchPrimitive.Root, { className: "style" });
-cssInterop(SwitchPrimitive.Thumb, { className: "style" });
 
 function Switch({
   className,

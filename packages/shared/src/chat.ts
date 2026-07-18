@@ -348,6 +348,10 @@ export type ChatEvent =
   | { type: "ask:batch"; sessionId: string; batchId: string; items: AskItem[] }
   /** Pedido resolvido/cancelado — remove o card da UI */
   | { type: "ask:done"; sessionId: string; requestId: string }
+  /** Sessão excluída (desktop ou companion) — remove da UI em todos os clientes */
+  | { type: "session:deleted"; sessionId: string }
+  /** Lista de pastas mudou (criada/renomeada/fixada/removida) — substituição completa */
+  | { type: "folders"; folders: FolderInfo[] }
 
 /** Modelo do catálogo models.dev (mesmo formato usado pelo opencode) */
 export interface CatalogModel {

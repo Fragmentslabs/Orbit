@@ -1,20 +1,8 @@
 import { Platform, View } from "react-native";
 import * as SelectPrimitive from "@rn-primitives/select";
-import * as DialogPrimitive from "@rn-primitives/dialog";
-import { cssInterop } from "nativewind";
 import { cn } from "~/lib/utils";
 import { Text } from "react-native";
 import type * as React from "react";
-
-cssInterop(SelectPrimitive.Root, { className: "style" });
-cssInterop(SelectPrimitive.Trigger, { className: "style" });
-cssInterop(SelectPrimitive.Value, { className: "style" });
-cssInterop(SelectPrimitive.Content, { className: "style" });
-cssInterop(SelectPrimitive.Item, { className: "style" });
-cssInterop(SelectPrimitive.ItemText, { className: "style" });
-cssInterop(SelectPrimitive.ItemIndicator, { className: "style" });
-cssInterop(DialogPrimitive.Overlay, { className: "style" });
-cssInterop(DialogPrimitive.Content, { className: "style" });
 
 const Select = SelectPrimitive.Root;
 const SelectGroup = SelectPrimitive.Group;
