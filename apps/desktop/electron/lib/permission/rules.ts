@@ -1,62 +1,25 @@
 import path from 'node:path'
-import type {
-  PermissionClaim,
-  PermissionMode,
-  PermissionThresholds,
-  Verdict,
-} from '@shared/chat'
-
-/**
- * Ruleset built-in de permissões (puro, testável). Apenas bash/write/edit
- * geram claims — as demais (read/glob/grep/web/memory/...) são sempre liberas.
- * Quatro níveis de verdict (ordem crescente de risco):
- * - "low"       (sem perigo): executa direto em qualquer modo.
- * - "medium"    (risco médio): pergunta em ask; auto em approve/full.
- * - "high"      (alto risco): pergunta em ask e approve (default high); auto em full.
- * - "forbidden" (piso absoluto): negado sempre — mesmo full não passa. Override
- *                apenas via config programática (~/.config/orbit/...) futura.
- */
-
-export type { Verdict } from '@shared/chat'
+import type { PermissionClaim } from '@shared/chat'
 
 export interface Assessment {
   claim: PermissionClaim
-  verdict: Verdict
-  /** Identificador da regra — chave do cache de "sempre permitir". */
   ruleId: string
 }
-
-export interface WorkDirs {
-  directory: string
-  extraDirectories: string[]
-}
-
-const RISK_ORDER: Record<Exclude<Verdict, 'forbidden'>, number> = {
-  low: 0,
-  medium: 1,
-  high: 2,
-}
-
-const LOCKFILES = new Set(['package-lock.json', 'yarn.lock', 'pnpm-lock.yaml'])
 
 function shorten(text: string, max = 80): string {
   const single = text.replace(/\s+/g, ' ').trim()
   return single.length > max ? `${single.slice(0, max)}…` : single
 }
 
-function isCriticalTarget(target: string, dirs: WorkDirs | null): boolean {
+function isCriticalTarget(target: string, dir: string): boolean {
   const clean = target.replace(/["']/g, '')
   if (clean === '/' || clean === '~' || clean === '.' || clean === '..' || clean === '*') return true
   if (/^[A-Za-z]:[\\/]?$/.test(clean)) return true
   if (clean.startsWith('~')) return true
-  if (!dirs) return path.isAbsolute(clean)
-  const resolved = path.resolve(dirs.directory, clean)
-  const roots = [dirs.directory, ...dirs.extraDirectories].map((r) => path.resolve(r))
-  if (roots.some((root) => resolved === root)) return true
-  return !roots.some((root) => {
-    const rel = path.relative(root, resolved)
-    return rel === '' || (!rel.startsWith('..') && !path.isAbsolute(rel))
-  })
+  if (path.isAbsolute(clean)) return true
+  const resolved = path.resolve(dir, clean)
+  const rel = path.relative(dir, resolved)
+  return rel === '' || (!rel.startsWith('..') && !path.isAbsolute(rel))
 }
 
 function segments(command: string): string[][] {
@@ -67,23 +30,16 @@ function segments(command: string): string[][] {
     .map((s) => s.split(/\s+/))
 }
 
-function assessBash(command: string, dirs: WorkDirs | null): Assessment | null {
+function assessBash(command: string, dir: string | null): Assessment | null {
   const found: Assessment[] = []
-  const claim = (ruleId: string, detail: string, verdict: Verdict): Assessment => ({
+  const claim = (ruleId: string, detail: string): Assessment => ({
     ruleId,
-    verdict,
-    claim: {
-      tool: 'bash',
-      title: `bash: ${shorten(command)}`,
-      detail,
-      // Apenas high/forbidden acendem o alerta crítico na UI.
-      critical: verdict === 'high' || verdict === 'forbidden' || undefined,
-    },
+    claim: { tool: 'bash', title: `bash: ${shorten(command)}`, detail },
   })
 
   for (let tokens of segments(command)) {
     if (tokens[0] === 'sudo') {
-      found.push(claim('bash:sudo', 'comando com privilégios elevados (sudo)', 'high'))
+      found.push(claim('bash:sudo', 'comando com privilégios elevados (sudo)'))
       tokens = tokens.slice(1)
     }
     const cmd = tokens[0]
@@ -93,11 +49,10 @@ function assessBash(command: string, dirs: WorkDirs | null): Assessment | null {
       const recursiveForce = /r/i.test(flags) && flags.includes('f')
       if (recursiveForce) {
         const targets = tokens.slice(1).filter((t) => !t.startsWith('-'))
-        if (targets.some((t) => isCriticalTarget(t, dirs))) {
-          // rm -rf fora do projeto / na raiz — piso absoluto.
-          found.push(claim('bash:rm-rf-critical', 'remoção recursiva fora do projeto ou da raiz', 'forbidden'))
+        if (targets.some((t) => isCriticalTarget(t, dir ?? ''))) {
+          found.push(claim('bash:rm-rf-critical', 'remoção recursiva fora do projeto ou da raiz'))
         } else {
-          found.push(claim('bash:rm-rf', 'remoção recursiva de arquivos (rm -rf) — alta destrutividade', 'high'))
+          found.push(claim('bash:rm-rf', 'remoção recursiva de arquivos (rm -rf)'))
         }
       }
     }
@@ -108,77 +63,93 @@ function assessBash(command: string, dirs: WorkDirs | null): Assessment | null {
         const force = tokens.some((t) => t === '--force' || t === '-f')
         found.push(
           force
-            ? claim('bash:git-push-force', 'push forçado reescreve histórico remoto', 'high')
-            : claim('bash:git-push', 'publica commits no remoto (git push)', 'medium'),
+            ? claim('bash:git-push-force', 'push forçado reescreve histórico remoto')
+            : claim('bash:git-push', 'publica commits no remoto (git push)'),
         )
       }
       if (sub === 'reset' && tokens.includes('--hard')) {
-        found.push(claim('bash:git-reset-hard', 'descarta alterações locais (git reset --hard)', 'high'))
+        found.push(claim('bash:git-reset-hard', 'descarta alterações locais (git reset --hard)'))
+      }
+    }
+
+    if (cmd.startsWith('npx') || cmd.startsWith('npm') || cmd.startsWith('pnpm') || cmd.startsWith('yarn') || cmd.startsWith('bun')) {
+      const install = tokens.some((t) => t === 'install' || t === 'add' || t === 'remove' || t === 'link')
+      if (install) {
+        found.push(claim('bash:package-install', 'instalação/remoção de dependências'))
       }
     }
   }
 
   if (found.length === 0) return null
-  // Forbidden vence tudo; senão o verdict mais alto (maior risco).
-  return (
-    found.find((a) => a.verdict === 'forbidden') ??
-    found.reduce((acc, a) =>
-      a.verdict !== 'forbidden' && RISK_ORDER[a.verdict] > RISK_ORDER[acc.verdict as Exclude<Verdict, 'forbidden'>]
-        ? a
-        : acc,
-    )
-  )
+  return found[found.length - 1]
 }
 
 function assessFileWrite(tool: string, filePath: string): Assessment | null {
   const normalized = filePath.replace(/\\/g, '/')
   const base = path.posix.basename(normalized.toLowerCase())
-  const claim = (ruleId: string, detail: string, verdict: Verdict): Assessment => ({
+
+  const claim = (ruleId: string, detail: string): Assessment => ({
     ruleId,
-    verdict,
-    claim: {
-      tool,
-      title: `${tool}: ${shorten(filePath, 60)}`,
-      detail,
-      critical: verdict === 'high' || verdict === 'forbidden' || undefined,
-    },
+    claim: { tool, title: `${tool}: ${shorten(filePath, 60)}`, detail },
   })
 
   if (/(^|\/)\.git(\/|$)/.test(normalized.toLowerCase())) {
-    return claim('file:git-dir', 'escrita dentro de .git corrompe o repositório', 'forbidden')
+    return claim('file:git-dir', 'escrita dentro de .git corrompe o repositório')
   }
   if (/^\.env(\..+)?$/.test(base)) {
-    return claim('file:env', 'arquivo de segredos/ambiente (.env)', 'medium')
+    return claim('file:env', 'arquivo de segredos/ambiente (.env)')
   }
+  const LOCKFILES = new Set(['package-lock.json', 'yarn.lock', 'pnpm-lock.yaml'])
   if (LOCKFILES.has(base)) {
-    // Editar lockfile manualmente é tranquilamente comum — sem risco real.
-    return claim('file:lockfile', 'lockfile de dependências — normalmente gerado', 'low')
+    return claim('file:lockfile', 'lockfile de dependências')
   }
   return null
 }
 
-export function assess(toolName: string, input: unknown, dirs: WorkDirs | null): Assessment | null {
+export function assess(toolName: string, input: unknown, dir: string | null): Assessment | null {
   const args = (input ?? {}) as Record<string, unknown>
   if (toolName === 'bash' && typeof args.command === 'string') {
-    return assessBash(args.command, dirs)
+    return assessBash(args.command, dir)
   }
   if ((toolName === 'write' || toolName === 'edit') && typeof args.filePath === 'string') {
     return assessFileWrite(toolName, args.filePath)
   }
+  if (toolName.includes('_')) {
+    const serverName = toolName.split('_')[0]
+    return {
+      ruleId: `mcp:${serverName}`,
+      claim: {
+        tool: toolName,
+        title: `MCP: ${toolName}`,
+        detail: `Ferramenta do servidor MCP "${serverName}"`,
+      },
+    }
+  }
   return null
 }
 
-export type Decision = 'approved' | 'denied' | 'user'
+export function isForbidden(toolName: string, input: unknown, dir: string | null): boolean {
+  const args = (input ?? {}) as Record<string, unknown>
 
-/** Decisão por modo+threshold:
- * - forbidden → sempre denied (piso absoluto, mesmo full).
- * - verifica verdict <= terminalAuto: aprovado; senão "user" (pergunta UI).
- * - full por padrão tem terminalAuto=high mas NÃO atingir forbidden → libera todos high.
- */
-export function decide(mode: PermissionMode, verdict: Verdict, thresholds: PermissionThresholds): Decision {
-  if (verdict === 'forbidden') return 'denied'
-  if (mode === 'full') return 'approved'
-  const autoLevel = RISK_ORDER[thresholds.terminalAuto]
-  const verdictLevel = RISK_ORDER[verdict as Exclude<Verdict, 'forbidden'>]
-  return verdictLevel <= autoLevel ? 'approved' : 'user'
+  if (toolName === 'bash' && typeof args.command === 'string') {
+    const command = args.command
+    for (const tokens of segments(command)) {
+      const cmd = tokens[0]
+      if (cmd === 'rm') {
+        const flags = tokens.filter((t) => t.startsWith('-')).join('')
+        const recursiveForce = /r/i.test(flags) && flags.includes('f')
+        if (recursiveForce) {
+          const targets = tokens.slice(1).filter((t) => !t.startsWith('-'))
+          if (targets.some((t) => isCriticalTarget(t, dir ?? ''))) return true
+        }
+      }
+    }
+  }
+
+  if ((toolName === 'write' || toolName === 'edit') && typeof args.filePath === 'string') {
+    const normalized = args.filePath.replace(/\\/g, '/')
+    if (/(^|\/)\.git(\/|$)/.test(normalized.toLowerCase())) return true
+  }
+
+  return false
 }

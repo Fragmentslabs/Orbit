@@ -1,20 +1,10 @@
 import { generateText, tool } from 'ai'
 import { z } from 'zod'
 import type { Question, SendMessageInput } from '@shared/chat'
-import { DEFAULT_PERMISSION_THRESHOLDS } from '@shared/chat'
 import { newRequestId } from '../ask-broker'
 import { dispatchAsk } from '../ask-dispatch'
 import { broadcastChatEvent } from '../broadcast'
 import { resolveModel } from '../providers'
-
-/**
- * Tool question: perguntas estruturadas ao usuário (card inline via AskBroker).
- * Autonomia por thresholds (decisionsAuto do modo ativo):
- * - full: sempre auto-responde (decisionsAuto high por default).
- * - approve + decisionsAuto=high: auto-responde também na sessão principal.
- * - workers: pai em ask → sobe ao chat do orquestrador (com batching);
- *   pai em approve → auto; pai em full → tool nem é exposta (tools/index.ts).
- */
 
 interface QuestionReply {
   answers?: string[]
@@ -46,12 +36,7 @@ async function autoAnswer(input: SendMessageInput, questions: Omit<Question, 'id
 export function createQuestionTool(input: SendMessageInput, signal?: AbortSignal) {
   const isWorker = input.orchestrationRole === 'worker'
   const permissionMode = input.options.permissionMode ?? 'ask'
-  const decisionsAuto = (
-    input.permissionThresholds?.[permissionMode] ?? DEFAULT_PERMISSION_THRESHOLDS[permissionMode]
-  ).decisionsAuto
-  const autoRespond =
-    permissionMode === 'full' ||
-    (permissionMode === 'approve' && (decisionsAuto === 'high' || isWorker))
+  const autoRespond = permissionMode === 'full' || (permissionMode === 'approve' && isWorker)
 
   return tool({
     description:

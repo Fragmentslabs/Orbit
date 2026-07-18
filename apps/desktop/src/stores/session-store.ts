@@ -19,7 +19,6 @@ import { chatApi, sessionApi, storage } from "@/src/lib/ipc"
 import { useBrainPrefs } from "@/src/stores/brain-prefs"
 import { useMessageQueueStore } from "@/src/stores/message-queue-store"
 import { useModelModePrefs } from "@/src/stores/model-mode-prefs"
-import { usePermissionPrefs } from "@/src/stores/permission-prefs"
 import { useProviderStore } from "@/src/stores/provider-store"
 
 /**
@@ -427,9 +426,6 @@ export const useSessionStore = create<SessionState>((set, get) => ({
         ? { ...worker, reasoning: provider.workerReasoning ?? undefined }
         : undefined
 
-    // Thresholds de permissões (Settings) — sempre enviados, mesmo para sessões comuns
-    const permissionThresholds = usePermissionPrefs.getState().thresholds
-
     await chatApi.send({
       sessionId: sessionId!,
       text,
@@ -441,7 +437,6 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       directory: config.directory ?? session.directory,
       extraDirectories: config.extraDirectories ?? session.extraDirectories,
       workerModel,
-      permissionThresholds,
     })
   },
 

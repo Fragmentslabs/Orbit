@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react"
-import { BrainIcon, CheckIcon, ChevronDownIcon, RotateCcwIcon, SettingsIcon } from "lucide-react"
+import { BrainIcon, CheckIcon, ChevronDownIcon, SettingsIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
   ModelSelector,
@@ -16,35 +16,15 @@ import {
 import { SegmentedControl } from "@/components/ui/segmented-control"
 import { SettingsDialog } from "@/src/components/settings-dialog"
 import { useProviderStore } from "@/src/stores/provider-store"
-import { usePermissionPrefs } from "@/src/stores/permission-prefs"
 import { useModelModePrefs } from "@/src/stores/model-mode-prefs"
 import type { DefaultModel, ActiveModeDefaults } from "@/src/stores/model-mode-prefs"
 import type { BrainContextMode } from "@/src/stores/brain-prefs"
 import { useBrainPrefs, useChatContext, useCodeContext } from "@/src/stores/brain-prefs"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import type { PermissionMode, PermissionThresholds, RiskLevel, SensitivityLevel } from "@shared/chat"
 
 const MAX_MODELS_PER_PROVIDER = 40
 
 type PrefsTab = "chat" | "code"
-
-const MODE_META: Record<PermissionMode, { title: string; description: string }> = {
-  ask: { title: "Modo Perguntar", description: "Máxima colaboração. Confirma cada ação sensível e cada decisão importante." },
-  approve: { title: "Modo Approve", description: "Autonomia operacional: executa comandos de risco médio; pergunta nos altos risco e nas decisões estruturais." },
-  full: { title: "Modo Full", description: "Máxima autonomia: executa e decide tudo dentro do piso absoluto de segurança (escrita em .git/, rm -rf fora do projeto) — sempre bloqueado." },
-}
-
-const TERMINAL_OPTIONS: { value: RiskLevel; label: string; hint: string }[] = [
-  { value: "low", label: "Baixo", hint: "Pergunta para tudo que não for trivial (sem risco)" },
-  { value: "medium", label: "Médio", hint: "Pergunta para risco médio (git push, .env) e alto (push --force, sudo)" },
-  { value: "high", label: "Alto", hint: "Só pergunta para alto risco (sudo, rm -rf, push --force). Libera médio." },
-]
-
-const DECISIONS_OPTIONS: { value: SensitivityLevel; label: string; hint: string }[] = [
-  { value: "low", label: "Baixa", hint: "Pergunta em toda decisão estrutural de produto/arquitetura" },
-  { value: "medium", label: "Média", hint: "Decide escolhas básicas; pergunta decisões estruturais (DB, framework)" },
-  { value: "high", label: "Alta", hint: "Decide tudo sozinho — nunca pergunta" },
-]
 
 function ModelField({
   label,
@@ -192,53 +172,10 @@ function ActiveModesSection({
   )
 }
 
-function ModeSection({ mode }: { mode: PermissionMode }) {
-  const thresholds = usePermissionPrefs((s) => s.thresholds[mode])
-  const setThreshold = usePermissionPrefs((s) => s.setThreshold)
-  const meta = MODE_META[mode]
-  const t: PermissionThresholds = thresholds
-
-  return (
-    <div>
-      <div className="mb-1 flex items-baseline gap-2">
-        <span className="text-sm font-semibold">{meta.title}</span>
-      </div>
-      <p className="mb-3 text-[11px] leading-tight text-muted-foreground">{meta.description}</p>
-
-      <div className="flex gap-4">
-        <div className="flex-1">
-          <p className="mb-1 text-xs font-medium">Risco máximo no terminal</p>
-          <SegmentedControl<RiskLevel>
-            options={TERMINAL_OPTIONS}
-            value={t.terminalAuto}
-            onChange={(v) => setThreshold(mode, "terminalAuto", v)}
-            className="w-full"
-          />
-          <p className="mt-1 text-[10px] text-muted-foreground">
-            {TERMINAL_OPTIONS.find((o) => o.value === t.terminalAuto)?.hint}
-          </p>
-        </div>
-        <div className="flex-1">
-          <p className="mb-1 text-xs font-medium">Sensibilidade para decisões</p>
-          <SegmentedControl<SensitivityLevel>
-            options={DECISIONS_OPTIONS}
-            value={t.decisionsAuto}
-            onChange={(v) => setThreshold(mode, "decisionsAuto", v)}
-            className="w-full"
-          />
-          <p className="mt-1 text-[10px] text-muted-foreground">
-            {DECISIONS_OPTIONS.find((o) => o.value === t.decisionsAuto)?.hint}
-          </p>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-const CONTEXT_OPTIONS: { value: BrainContextMode; label: string }[] = [
-  { value: "off", label: "Desligado" },
-  { value: "all", label: "Ligado em todos chats" },
-  { value: "memory", label: "Ligado em chats com modo memória ligado" },
+const CONTEXT_OPTIONS: { value: BrainContextMode; label: string; hint: string }[] = [
+  { value: "off", label: "Nunca", hint: "Memórias não são injetadas no prompt" },
+  { value: "all", label: "Sempre", hint: "Memórias são injetadas em toda conversa" },
+  { value: "memory", label: "Só quando ativo", hint: "Injeta apenas com o toggle Memória ativado" },
 ]
 
 function ContextSelect({ value, onChange }: {
@@ -270,13 +207,13 @@ function MemoriaSection({ isCode }: { isCode: boolean }) {
     : useBrainPrefs((s) => s.setChatContext)
 
   const description = isCode
-    ? "Memórias de projetos em pastas anteriores são injetadas automaticamente no prompt."
-    : "Memórias relevantes são automaticamente injetadas no prompt para dar contexto ao agente."
+    ? "Memórias de projeto (decisões, convenções, estrutura) são injetadas no prompt automaticamente. O agente busca o restante sob demanda com a ferramenta memory_graph."
+    : "Fatos permanentes, preferências e memórias sazonais são injetados no prompt pra respostas mais personalizadas e naturais."
 
   return (
     <div className="border-t pt-3">
       <div className="mb-3 flex items-center justify-between">
-        <p className="text-xs font-semibold text-muted-foreground">Memória</p>
+        <p className="text-xs font-semibold text-muted-foreground">Injeção de contexto</p>
         <ContextSelect value={context} onChange={setter} />
       </div>
       <p className="text-[11px] leading-tight text-muted-foreground">{description}</p>
@@ -297,7 +234,6 @@ function ChatPrefs() {
 }
 
 function CodePrefs() {
-  const resetThresholds = usePermissionPrefs((s) => s.resetThresholds)
   const { codeModel, setCodeModel, subagentModel, setSubagentModel, orchestraModel, setOrchestraModel, codeActiveModes, setCodeActiveMode } = useModelModePrefs()
   const setWorkerModel = useProviderStore((s) => s.setWorkerModel)
 
@@ -308,21 +244,6 @@ function CodePrefs() {
       <ModelField label="Modelo de orquestra" value={orchestraModel} onChange={setOrchestraModel} />
       <ActiveModesSection modes={codeActiveModes} onChange={setCodeActiveMode} isCode={true} />
       <MemoriaSection isCode={true} />
-
-      <div className="border-t pt-3">
-        <p className="mb-3 text-xs font-semibold text-muted-foreground">Autonomia & Permissões</p>
-        <div className="flex flex-col gap-6">
-          <ModeSection mode="ask" />
-          <ModeSection mode="approve" />
-          <ModeSection mode="full" />
-        </div>
-        <div className="mt-3 flex justify-end">
-          <Button variant="ghost" size="sm" className="gap-1.5 text-xs text-muted-foreground" onClick={resetThresholds}>
-            <RotateCcwIcon className="size-3" />
-            Restaurar padrões
-          </Button>
-        </div>
-      </div>
     </div>
   )
 }
@@ -335,7 +256,7 @@ export function PreferencesPanel() {
       <div>
         <p className="text-sm font-semibold">Preferências</p>
         <p className="mt-0.5 text-xs text-muted-foreground">
-          Configure modelos padrão, modos ativos e permissões para cada modo.
+          Configure modelos padrão e modos ativos para cada modo.
         </p>
       </div>
 

@@ -10,7 +10,6 @@ import {
 import { InputGroupButton } from "@/components/ui/input-group";
 import { usePromptInputController } from "@/src/components/ai/prompt-input";
 import { ScheduleMessageDialog } from "@/src/components/schedule-message-dialog";
-import { Button } from "@/components/ui/button";
 
 interface SendButtonGroupProps {
   busy: boolean;

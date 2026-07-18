@@ -1,26 +1,20 @@
 import { useState } from "react"
-import { Bot, HelpCircle, Layers, ShieldAlert, TriangleAlert } from "lucide-react"
+import { Bot, ChevronDown, HelpCircle, Layers, ShieldAlert, TriangleAlert } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { SegmentedControl } from "@/components/ui/segmented-control"
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { cn } from "@/lib/utils"
 import type { Question } from "@shared/chat"
 import { chatApi } from "@/src/lib/ipc"
 import { QuestionItem } from "@/src/components/ask-card"
 import type { PendingAskUI } from "@/src/stores/session-store"
 
-/**
- * Card em lote: pedidos de vários workers agrupados pela janela de batching do
- * main (ask-dispatch). Um submit único responde todos — permissões via
- * segmented (Permitir/Sempre/Negar, default Permitir) e questions via opções.
- */
+type PermissionDecision = "allow" | "always_chat" | "always" | "deny"
 
-type PermissionDecision = "allow" | "always" | "deny"
-
-const PERMISSION_OPTIONS: { value: PermissionDecision; label: string }[] = [
-  { value: "allow", label: "Permitir" },
+const PERMIT_OPTIONS: { value: PermissionDecision; label: string }[] = [
+  { value: "allow", label: "Uma vez" },
+  { value: "always_chat", label: "Sempre neste chat" },
   { value: "always", label: "Sempre" },
-  { value: "deny", label: "Negar" },
 ]
 
 function BatchPermissionBlock({ item, choice, onChoice }: {
@@ -29,6 +23,7 @@ function BatchPermissionBlock({ item, choice, onChoice }: {
   onChoice: (value: PermissionDecision) => void
 }) {
   const claim = item.claim!
+  const [, setOpen] = useState(false)
   return (
     <div className="flex flex-col gap-1.5">
       <div className="flex items-start gap-2">
@@ -45,11 +40,19 @@ function BatchPermissionBlock({ item, choice, onChoice }: {
             </p>
           )}
         </div>
-        <SegmentedControl<PermissionDecision>
-          options={PERMISSION_OPTIONS}
-          value={choice}
-          onChange={onChoice}
-        />
+        <DropdownMenu onOpenChange={setOpen}>
+          <DropdownMenuTrigger render={<Button size="sm" variant="outline" className="gap-1 text-xs h-7" />}>
+            {PERMIT_OPTIONS.find((o) => o.value === choice)?.label ?? "Permitir"}
+            <ChevronDown className="size-3" />
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            {PERMIT_OPTIONS.map((opt) => (
+              <DropdownMenuItem key={opt.value} onClick={() => onChoice(opt.value)}>
+                {opt.label}
+              </DropdownMenuItem>
+            ))}
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
     </div>
   )
