@@ -188,7 +188,7 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId }: 
         ? [{ id: "thinking", label: "Thinking", description: "Alterna raciocínio estendido do modelo", keywords: ["reasoning", "pensar"], group: "Modos" as const, active: thinking, run: toggle(() => update({ enabled: !enabled, variantId })) }]
         : []),
       { id: "simples", label: "Simples", description: "Alterna respostas em texto puro", keywords: ["texto", "plain"], group: "Modos" as const, active: simple, run: toggle(() => setSimple(!simple)) },
-      { id: "brain", label: "Memória (Brain)", description: "Alterna a memória do projeto neste chat", keywords: ["memoria", "brain"], group: "Modos" as const, active: brain, run: toggle(() => setBrainEnabled(sessionId, !brain)) },
+      { id: "brain", label: "Memória (Brain)", description: "Orbit lembra decisões e convenções do projeto entre sessões", keywords: ["memoria", "brain"], group: "Modos" as const, active: brain, run: toggle(() => setBrainEnabled(sessionId, !brain)) },
       { id: "subagents", label: "Subagents", description: "Alterna workers em background", keywords: ["worker", "delegar"], group: "Modos" as const, active: subagents, run: toggle(() => setSubagents((v) => !v)) },
       { id: "orchestra", label: "Orchestra", description: "Alterna orquestração em tarefas paralelas", keywords: ["workers", "plano"], group: "Modos" as const, active: orchestra, run: toggle(() => setOrchestra((v) => !v)) },
       permission("ask", "Perguntar", "Confirma ações sensíveis antes de executar"),
@@ -269,7 +269,7 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId }: 
                   <PromptInputActionAddAttachments label="Anexar arquivos" />
                 </DropdownMenuContent>
               </DropdownMenu>
-              <PermissionModePicker onOpenSettings={(tab) => useSettingsUi.getState().openSettings(tab)} />
+              <PermissionModePicker />
             </div>
             <div className="flex items-center gap-1">
               {subagents && <Bot className="size-3 text-sidebar-foreground/40" />}
@@ -352,7 +352,7 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId }: 
           <ModeToggle
             icon={BrainCircuit}
             label="Memória"
-            description="Memória do projeto entre sessões: decisões, convenções e estrutura. Desative apenas neste chat."
+            description="Orbit lembra decisões, convenções e estrutura do projeto entre sessões. Desative apenas neste chat se preferir uma interação sem contexto."
             active={brain}
             onToggle={() => setBrainEnabled(sessionId, !brain)}
           />
