@@ -7,7 +7,11 @@
 export interface ConnectionConfig {
   host: string
   port: number
+  /** PIN de pareamento — necessário apenas no primeiro pareamento. */
   pin: string
+  /** Token persistente emitido pelo desktop no primeiro pareamento —
+   *  quando presente, autentica sem PIN. */
+  token?: string
   /** Nome do device (para exibição no desktop). */
   deviceName?: string
 }
@@ -20,6 +24,9 @@ export interface ConnectionState {
   serverVersion?: string
   /** Nome do desktop conectado. */
   deviceName?: string
+  /** Token persistente emitido/confirmado pelo desktop no auth:ok —
+   *  o app deve salvar e reutilizar nas próximas conexões. */
+  deviceToken?: string
   /** Timestamp da última atividade (heartbeat). */
   lastActivity?: number
   /** Latência estimada em ms. */

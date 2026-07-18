@@ -2,9 +2,11 @@
  * Helpers para geração e parsing de QR codes de conexão.
  *
  * Formato do payload (JSON stringificado):
- * { "h": host, "p": port, "v": 1 }
+ * { "h": host, "p": port, "v": 1, "pin"?: pin }
  *
- * O PIN NÃO vai no QR code (digitado separadamente por segurança).
+ * O PIN é opcional no payload: o QR code já é exibido lado a lado com o PIN
+ * em texto claro no desktop, então incluí-lo permite conectar com um único
+ * scan sem abrir mão de segurança adicional (quem vê o QR já vê o PIN).
  */
 
 import type { ConnectionConfig } from './types'
@@ -18,24 +20,25 @@ export interface QrPayload {
   p: number
   /** Versão do protocolo. */
   v: number
+  /** PIN de pareamento (opcional — mesmo exibido em texto ao lado do QR). */
+  pin?: string
 }
 
 // ─── Functions ───────────────────────────────────────────────────────────────
 
 /**
  * Gera o payload para exibir como QR code.
- * O PIN deve ser informado pelo usuário separadamente.
  */
-export function generateConnectionPayload(host: string, port: number): string {
-  const payload: QrPayload = { h: host, p: port, v: 1 }
+export function generateConnectionPayload(host: string, port: number, pin?: string): string {
+  const payload: QrPayload = { h: host, p: port, v: 1, ...(pin ? { pin } : {}) }
   return JSON.stringify(payload)
 }
 
 /**
  * Faz parse de um payload escaneado de QR code.
- * Retorna a configuração (sem PIN) ou null se inválido.
+ * Retorna a configuração (com PIN se presente no payload) ou null se inválido.
  */
-export function parseConnectionPayload(data: string): Omit<ConnectionConfig, 'pin'> | null {
+export function parseConnectionPayload(data: string): Omit<ConnectionConfig, 'pin'> & { pin?: string } | null {
   try {
     const parsed = JSON.parse(data) as QrPayload
 
@@ -46,7 +49,11 @@ export function parseConnectionPayload(data: string): Omit<ConnectionConfig, 'pi
       typeof parsed.p === 'number' &&
       parsed.v === 1
     ) {
-      return { host: parsed.h, port: parsed.p }
+      return {
+        host: parsed.h,
+        port: parsed.p,
+        ...(typeof parsed.pin === 'string' ? { pin: parsed.pin } : {}),
+      }
     }
 
     return null

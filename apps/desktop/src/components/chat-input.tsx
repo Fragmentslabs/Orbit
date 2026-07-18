@@ -179,7 +179,7 @@ export function ChatInput({ onSubmit, status, onStop, sessionId }: {
             <ModelPicker />
             <SendButtonGroup
               busy={busy}
-              disabled={!selected && !busy}
+              disabled={false}
               onStop={() => onStop?.()}
               onQueue={(text) => {
                 if (sessionId) enqueueForSend(sessionId, text, buildOptions(), mode)

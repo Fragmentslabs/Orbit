@@ -465,7 +465,8 @@ export const useSessionStore = create<SessionState>((set, get) => ({
 type Setter = (fn: (state: SessionState) => Partial<SessionState>) => void
 
 function applyChatEvent(event: ChatEvent, set: Setter, get: () => SessionState) {
-  const { sessionId } = event
+  // "folders" é o único evento sem sessionId (substituição completa da lista)
+  const sessionId = "sessionId" in event ? event.sessionId : ""
   switch (event.type) {
     case "status":
       set((state) => ({
@@ -555,6 +556,25 @@ function applyChatEvent(event: ChatEvent, set: Setter, get: () => SessionState) 
             : state.messages
         return { sessions, messages }
       })
+      break
+
+    case "session:deleted":
+      set((state) => {
+        const sessions = state.sessions.filter((s) => s.id !== sessionId)
+        const messages = { ...state.messages }
+        delete messages[sessionId]
+        const activeIds = { ...state.activeIds }
+        for (const mode of ["chat", "code"] as SessionMode[]) {
+          if (activeIds[mode] === sessionId) activeIds[mode] = null
+        }
+        const planReviews = { ...state.planReviews }
+        delete planReviews[sessionId]
+        return { sessions, messages, activeIds, planReviews }
+      })
+      break
+
+    case "folders":
+      set(() => ({ folders: event.folders }))
       break
 
     case "permission":

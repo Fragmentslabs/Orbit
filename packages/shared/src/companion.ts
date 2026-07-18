@@ -4,6 +4,8 @@
  * e o handshake de autenticação.
  */
 
+import type { SendMessageOptions, SessionMode, FilePart, WorkerModelConfig } from './chat'
+
 // ─── Handshake ───────────────────────────────────────────────────────────────
 
 /** PIN gerado no desktop para pareamento (6 dígitos). */
@@ -16,7 +18,11 @@ export type AuthRejectReason = 'invalid_pin' | 'already_paired' | 'rate_limited'
 
 export interface AuthRequest {
   type: 'auth'
-  pin: PairingPin
+  /** PIN de pareamento — obrigatório apenas no primeiro pareamento. */
+  pin?: PairingPin
+  /** Token de dispositivo persistente, emitido no auth:ok do primeiro
+   *  pareamento. Permite reconectar sem PIN (que expira em 5 min). */
+  token?: string
   deviceName?: string
 }
 
@@ -36,6 +42,22 @@ export interface SendMessageRequest {
   text: string
   providerId?: string
   modelId?: string
+  /** Modos do input (pesquisa, browser, thinking, simples, brain…). */
+  options?: SendMessageOptions
+  /** Arquivos anexados à mensagem do usuário */
+  files?: FilePart[]
+  /** Modelo dos workers (subagentes/orquestração), configurado no app. */
+  workerModel?: WorkerModelConfig
+  /** Pasta principal (modo código) — persiste na sessão ao enviar. */
+  directory?: string
+  /** Pastas adicionais (modo código). */
+  extraDirectories?: string[]
+}
+
+export interface CreateSessionRequest {
+  type: 'sessions:create'
+  mode: SessionMode
+  title?: string
 }
 
 export interface AbortRequest {
@@ -72,11 +94,118 @@ export interface GetStatusRequest {
   type: 'status:get'
 }
 
+export interface RenameSessionRequest {
+  type: 'sessions:rename'
+  sessionId: string
+  title: string
+}
+
+export interface PinSessionRequest {
+  type: 'sessions:pin'
+  sessionId: string
+  pinned: boolean
+}
+
+export interface ArchiveSessionRequest {
+  type: 'sessions:archive'
+  sessionId: string
+  archived: boolean
+}
+
+export interface DeleteSessionRequest {
+  type: 'sessions:delete'
+  sessionId: string
+}
+
+export interface ForkSessionRequest {
+  type: 'sessions:fork'
+  sessionId: string
+  messageId?: string
+}
+
+export interface MoveSessionToFolderRequest {
+  type: 'sessions:move-folder'
+  sessionId: string
+  folderId: string | null
+}
+
+export interface ListFoldersRequest {
+  type: 'folders:list'
+}
+
+export interface CreateFolderRequest {
+  type: 'folders:create'
+  mode: SessionMode
+  name: string
+}
+
+export interface RenameFolderRequest {
+  type: 'folders:rename'
+  folderId: string
+  name: string
+}
+
+export interface PinFolderRequest {
+  type: 'folders:pin'
+  folderId: string
+  pinned: boolean
+}
+
+export interface DeleteFolderRequest {
+  type: 'folders:delete'
+  folderId: string
+}
+
+// ─── Memórias (Brain) ────────────────────────────────────────────────────────
+
+export interface ListMemoriesRequest {
+  type: 'memory:list'
+}
+
+export interface UpdateMemoryRequest {
+  type: 'memory:update'
+  id: string
+  patch: { text?: string; tags?: string[]; weight?: number }
+}
+
+export interface DeleteMemoryRequest {
+  type: 'memory:delete'
+  id: string
+}
+
+export interface PromoteMemoryRequest {
+  type: 'memory:promote'
+  id: string
+}
+
+/** Busca o documento .md anexado de uma memória (hasDoc). */
+export interface GetMemoryDocRequest {
+  type: 'memory:doc'
+  id: string
+}
+
+/** Lista subdiretórios de um caminho do DESKTOP (seletor de pastas do app). */
+export interface ListDirsRequest {
+  type: 'fs:list-dirs'
+  /** Caminho absoluto no desktop — ausente = home do usuário. */
+  path?: string
+}
+
+export interface ListDirsResponse {
+  /** Caminho listado (resolvido). */
+  path: string
+  /** Diretório pai, ou null se já é a raiz. */
+  parent: string | null
+  /** Subdiretórios visíveis (sem ocultos). */
+  dirs: { name: string; path: string }[]
+}
+
 export type CompanionRequest =
   | AuthRequest
   | ListSessionsRequest
   | GetMessagesRequest
   | SendMessageRequest
+  | CreateSessionRequest
   | AbortRequest
   | ApproveAskRequest
   | GetModelsRequest
@@ -84,6 +213,23 @@ export type CompanionRequest =
   | GetCatalogRequest
   | GetAnalyticsRequest
   | GetStatusRequest
+  | RenameSessionRequest
+  | PinSessionRequest
+  | ArchiveSessionRequest
+  | DeleteSessionRequest
+  | ForkSessionRequest
+  | MoveSessionToFolderRequest
+  | ListFoldersRequest
+  | CreateFolderRequest
+  | RenameFolderRequest
+  | PinFolderRequest
+  | DeleteFolderRequest
+  | ListDirsRequest
+  | ListMemoriesRequest
+  | UpdateMemoryRequest
+  | DeleteMemoryRequest
+  | PromoteMemoryRequest
+  | GetMemoryDocRequest
 
 // ─── Server → Client (Responses + Events) ────────────────────────────────────
 
@@ -91,6 +237,9 @@ export interface AuthOkResponse {
   type: 'auth:ok'
   deviceName: string
   serverVersion: string
+  /** Token persistente do dispositivo — o app guarda e usa nas próximas
+   *  conexões no lugar do PIN. */
+  deviceToken?: string
 }
 
 export interface AuthErrorResponse {

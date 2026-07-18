@@ -37,12 +37,19 @@ export function ConnectAppDialog({ open, onOpenChange }: Props) {
     if (!open) return
     fetchStatus()
     pollingRef.current = setInterval(fetchStatus, 3000)
-    return () => clearInterval(pollingRef.current)
+    // Modo de pareamento: enquanto o modal está aberto, o PIN atual fica
+    // disponível via /api/ping para o app conectar com um toque ao achar
+    // o desktop na rede (o PIN já é exibido em texto aqui mesmo).
+    void companionApi.setPairingMode(true)
+    return () => {
+      clearInterval(pollingRef.current)
+      void companionApi.setPairingMode(false)
+    }
   }, [open])
 
   useEffect(() => {
     if (!status?.running || !status.ip) return
-    const payload = JSON.stringify({ h: status.ip, p: status.port, v: 1 })
+    const payload = JSON.stringify({ h: status.ip, p: status.port, v: 1, pin: status.pin ?? undefined })
     QRCode.toDataURL(payload, {
       width: 256,
       margin: 2,

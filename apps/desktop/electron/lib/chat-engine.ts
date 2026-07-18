@@ -24,6 +24,7 @@ import { PROJECT_AREAS, type ProjectArea } from '@shared/memory'
 import { readJson, writeJson } from './storage'
 import { buildToolSet, type ToolContext } from './tools'
 import { toTokenUsage } from './usage'
+import { forwardChatEvent } from './companion-server'
 
 /**
  * Motor de chat portado do processador de sessões do opencode: converte o
@@ -132,6 +133,7 @@ async function generateTitle(input: SendMessageInput, win: BrowserWindow) {
 
 function emit(win: BrowserWindow, event: ChatEvent) {
   if (!win.isDestroyed()) win.webContents.send('chat:event', event)
+  forwardChatEvent(event)
 }
 
 export function abortChat(sessionId: string) {

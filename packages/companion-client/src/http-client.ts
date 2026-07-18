@@ -56,6 +56,10 @@ export class CompanionHttp {
     return this.get('/api/catalog')
   }
 
+  async getConnectedProviders(): Promise<HttpResult<string[]>> {
+    return this.get('/api/providers/connected')
+  }
+
   // ─── Status ──────────────────────────────────────────────────────────────
 
   async getStatus(): Promise<HttpResult<{ online: boolean; activeSessions: number; pendingAsks: number; uptime: number }>> {
