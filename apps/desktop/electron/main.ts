@@ -20,7 +20,7 @@ import { abortOrchestration, approvePlan, rejectPlan, runOrchestration } from '.
 import { initMcp, listMcpStatus, readMcpConfig, reconnectMcp, saveMcpConfig } from './lib/mcp'
 import { savePlanFile, deletePlanFile, readPlanFile } from './lib/plan-file'
 import { registerMediaProtocol } from './lib/media'
-import { startCompanionServer, getCompanionStatus } from './lib/companion-server'
+import { startCompanionServer, getCompanionStatus, setPairingMode } from './lib/companion-server'
 import { readJson as readStorageJson } from './lib/storage'
 import { registerPanelWebContents } from './lib/panel-browser'
 import { setupMemoryScheduler } from './lib/memory/scheduler'
@@ -801,6 +801,7 @@ app.whenReady().then(() => {
   const companion = startCompanionServer()
   ipcMain.handle('companion:status', () => getCompanionStatus())
   ipcMain.handle('companion:pin', () => companion.pin)
+  ipcMain.handle('companion:setPairingMode', (_event, active: boolean) => setPairingMode(!!active))
 
   // Companion preferences (sincronização renderer ↔ HTTP server)
   ipcMain.handle('companion:getPreferences', () => readStorageJson('companion/preferences'))

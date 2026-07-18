@@ -284,7 +284,7 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId }: 
               <ModelPicker />
               <SendButtonGroup
                 busy={busy}
-                disabled={(!selected || folders.length === 0) && !busy}
+                disabled={false}
                 onStop={() => onStop?.()}
                 onQueue={(text) => {
                   if (!sessionId) return

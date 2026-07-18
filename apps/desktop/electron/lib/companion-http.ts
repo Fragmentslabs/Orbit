@@ -16,6 +16,7 @@ import { hostname } from 'node:os'
 import { app, BrowserWindow } from 'electron'
 import { readJson, writeJson, listKeys } from './storage'
 import { getCatalog } from './catalog'
+import { listCredentialProviders } from './auth'
 
 export const HTTP_PORT = 3848
 
@@ -195,6 +196,11 @@ async function handleGetCatalog(_req: IncomingMessage, res: ServerResponse) {
   jsonResponse(res, 200, catalog)
 }
 
+async function handleGetConnectedProviders(_req: IncomingMessage, res: ServerResponse) {
+  const providers = await listCredentialProviders()
+  jsonResponse(res, 200, providers)
+}
+
 async function handleGetStatus(_req: IncomingMessage, res: ServerResponse) {
   const keys = await listKeys('session/')
   const status = {
@@ -217,7 +223,10 @@ function routeKey(method: string, url: string): string {
 
 type Handler = (req: IncomingMessage, res: ServerResponse) => Promise<void>
 
-function createRouter(validatePin: (pin: string, ip: string) => boolean) {
+function createRouter(
+  validatePin: (pin: string, ip: string) => boolean,
+  getPairingPin: () => string | null,
+) {
   const routes = new Map<string, Handler>()
 
   // GET endpoints
@@ -225,6 +234,7 @@ function createRouter(validatePin: (pin: string, ip: string) => boolean) {
   routes.set('GET /api/models/selected', handleGetSelectedModel)
   routes.set('GET /api/catalog', handleGetCatalog)
   routes.set('GET /api/status', handleGetStatus)
+  routes.set('GET /api/providers/connected', handleGetConnectedProviders)
 
   // Mutation endpoints
   routes.set('PATCH /api/preferences', handlePatchPreferences)
@@ -246,11 +256,13 @@ function createRouter(validatePin: (pin: string, ip: string) => boolean) {
     // Discovery — endpoint público (sem auth) para o app mobile detectar
     // um Orbit Desktop na rede. Expõe apenas metadados inofensivos.
     if (req.method === 'GET' && (req.url === '/api/ping' || req.url?.startsWith('/api/ping?'))) {
+      const pairingPin = getPairingPin()
       jsonResponse(res, 200, {
         app: 'orbit',
         name: hostname(),
         version: app.getVersion(),
         wsPort: 3847,
+        ...(pairingPin ? { pin: pairingPin } : {}),
       })
       return
     }
@@ -282,10 +294,11 @@ function createRouter(validatePin: (pin: string, ip: string) => boolean) {
 
 export function startCompanionHttpServer(
   validatePin: (pin: string, ip: string) => boolean,
+  getPairingPin: () => string | null,
 ): { port: number } | null {
   if (httpServer) return { port: HTTP_PORT }
 
-  const handler = createRouter(validatePin)
+  const handler = createRouter(validatePin, getPairingPin)
   httpServer = createServer(handler)
 
   httpServer.on('error', (err: Error) => {

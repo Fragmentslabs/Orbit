@@ -217,6 +217,8 @@ export interface CompanionStatus {
 
 export const companionApi = {
   status: () => window.ipcRenderer.invoke("companion:status") as Promise<CompanionStatus>,
+  setPairingMode: (active: boolean) =>
+    window.ipcRenderer.invoke("companion:setPairingMode", active) as Promise<void>,
 }
 
 export const memoryApi = {

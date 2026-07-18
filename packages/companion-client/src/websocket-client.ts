@@ -154,7 +154,8 @@ export class CompanionWebSocket {
     this.setState({ status: 'authenticating' })
     const authRequest: AuthRequest = {
       type: 'auth',
-      pin: this.config.pin,
+      pin: this.config.pin || undefined,
+      token: this.config.token,
       deviceName: this.config.deviceName,
     }
 
@@ -178,10 +179,15 @@ export class CompanionWebSocket {
     // Auth responses
     if (payload.type === 'auth:ok') {
       const ok = payload as AuthOkResponse
+      // Guarda o token na config atual — reconexões (backoff) já usam token
+      if (ok.deviceToken && this.config) {
+        this.config = { ...this.config, token: ok.deviceToken }
+      }
       this.setState({
         status: 'connected',
         serverVersion: ok.serverVersion,
         deviceName: ok.deviceName,
+        deviceToken: ok.deviceToken,
       })
       this.startHeartbeat()
       this.flushQueue()
