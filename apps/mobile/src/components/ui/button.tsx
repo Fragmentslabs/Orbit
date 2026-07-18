@@ -1,82 +1,82 @@
-import { cva, type VariantProps } from "class-variance-authority";
-import { Text, Pressable } from "react-native";
-import { cn } from "~/lib/utils";
+import { Text, Pressable, StyleSheet } from "react-native";
+import { getThemeTokens } from '~/lib/theme-tokens';
+import { useThemeStore } from '~/stores/theme-store';
 
-const buttonVariants = cva(
-  "flex-row items-center justify-center gap-2 rounded-md native:h-12 native:px-5 h-10 px-4",
-  {
-    variants: {
-      variant: {
-        default: "bg-primary active:opacity-90",
-        destructive: "bg-destructive active:opacity-90",
-        outline: "border border-border bg-transparent active:bg-accent",
-        secondary: "bg-secondary active:opacity-80",
-        ghost: "active:bg-accent",
-        link: "",
-      },
-      size: {
-        default: "",
-        sm: "h-9 px-3 native:h-10",
-        lg: "h-11 px-8 native:h-12",
-        icon: "h-10 w-10 native:h-12 native:w-12",
-      },
-    },
-    defaultVariants: {
-      variant: "default",
-      size: "default",
-    },
-  }
-);
+type ButtonVariant = 'default' | 'destructive' | 'outline' | 'secondary' | 'ghost' | 'link';
+type ButtonSize = 'default' | 'sm' | 'lg' | 'icon';
 
-const buttonTextVariants = cva("native:text-base text-sm font-medium text-primary-foreground", {
-  variants: {
-    variant: {
-      default: "text-primary-foreground",
-      destructive: "text-destructive-foreground",
-      outline: "text-foreground",
-      secondary: "text-secondary-foreground",
-      ghost: "text-foreground",
-      link: "text-primary underline",
-    },
-    size: {
-      default: "",
-      sm: "text-sm native:text-base",
-      lg: "text-base native:text-lg",
-      icon: "",
-    },
-  },
-  defaultVariants: {
-    variant: "default",
-    size: "default",
-  },
-});
+type ButtonProps = React.ComponentPropsWithoutRef<typeof Pressable> & {
+  variant?: ButtonVariant;
+  size?: ButtonSize;
+};
 
-type ButtonProps = React.ComponentPropsWithoutRef<typeof Pressable> &
-  VariantProps<typeof buttonVariants> & {
-    textClass?: string;
+function Button({ variant = 'default', size = 'default', style, disabled, children, ...rest }: ButtonProps) {
+  const tokens = getThemeTokens(useThemeStore((s) => s.resolved));
+
+  const VARIANT_BG: Record<ButtonVariant, string> = {
+    default: tokens.primary,
+    destructive: '#ff3344',
+    outline: 'transparent',
+    secondary: tokens.muted,
+    ghost: 'transparent',
+    link: 'transparent',
   };
 
-function Button({ variant, size, className, textClass, ...props }: ButtonProps) {
+  const VARIANT_TEXT: Record<ButtonVariant, string> = {
+    default: tokens.primaryForeground,
+    destructive: tokens.foreground,
+    outline: tokens.foreground,
+    secondary: tokens.foreground,
+    ghost: tokens.foreground,
+    link: tokens.primary,
+  };
+
+  const bgColor = VARIANT_BG[variant];
+  const textColor = VARIANT_TEXT[variant];
+  const isOutline = variant === 'outline';
+
   return (
     <Pressable
-      className={cn(buttonVariants({ variant, size, className }))}
-      {...props}
+      style={[
+        s.base,
+        { backgroundColor: bgColor },
+        isOutline && { borderWidth: 1, borderColor: tokens.border },
+        SIZE_MAP[size],
+        disabled && s.disabled,
+        style as any,
+      ]}
+      disabled={disabled}
+      {...rest}
     >
-      {(state) => (
-        <Text
-          className={cn(
-            buttonTextVariants({ variant, size }),
-            props.disabled && "opacity-50",
-            textClass
-          )}
-        >
-          {typeof props.children === "function"
-            ? props.children(state)
-            : props.children}
+      {(pressState) => (
+        <Text style={[s.text, { color: textColor }, disabled && s.textDisabled]}>
+          {typeof children === "function" ? children(pressState) : children}
         </Text>
       )}
     </Pressable>
   );
 }
 
-export { Button, buttonVariants, buttonTextVariants };
+const SIZE_MAP: Record<ButtonSize, object> = {
+  default: {},
+  sm: { height: 36, paddingHorizontal: 12 },
+  lg: { height: 44, paddingHorizontal: 32 },
+  icon: { height: 40, width: 40, paddingHorizontal: 0 },
+};
+
+const s = StyleSheet.create({
+  base: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    borderRadius: 6,
+    height: 40,
+    paddingHorizontal: 16,
+  },
+  disabled: { opacity: 0.5 },
+  text: { fontSize: 14, fontWeight: '500' },
+  textDisabled: {},
+});
+
+export { Button };

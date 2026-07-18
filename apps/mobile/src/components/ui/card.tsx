@@ -1,46 +1,50 @@
-import { Text, View, type TextProps, type ViewProps } from "react-native";
-import { cn } from "~/lib/utils";
+import { Text, View, StyleSheet, type TextProps, type ViewProps } from "react-native";
+import { getThemeTokens } from '~/lib/theme-tokens';
+import { useThemeStore } from '~/stores/theme-store';
 
-const Card = ({ className, ...props }: ViewProps) => (
-  <View
-    className={cn(
-      "rounded-xl border border-border bg-card p-5 shadow-sm",
-      className
-    )}
-    {...props}
-  />
+const Card = ({ style, ...props }: ViewProps) => {
+  const tokens = getThemeTokens(useThemeStore((s) => s.resolved));
+
+  return (
+    <View style={[s.card, { borderColor: tokens.border, backgroundColor: tokens.muted }, style]} {...props} />
+  );
+};
+
+const CardHeader = ({ style, ...props }: ViewProps) => (
+  <View style={[s.header, style]} {...props} />
 );
 
-const CardHeader = ({ className, ...props }: ViewProps) => (
-  <View className={cn("flex flex-col gap-1.5", className)} {...props} />
+const CardTitle = ({ style, ...props }: TextProps) => {
+  const tokens = getThemeTokens(useThemeStore((s) => s.resolved));
+
+  return (
+    <Text style={[s.title, { color: tokens.foreground }, style]} {...props} />
+  );
+};
+
+const CardDescription = ({ style, ...props }: TextProps) => {
+  const tokens = getThemeTokens(useThemeStore((s) => s.resolved));
+
+  return (
+    <Text style={[s.desc, { color: tokens.mutedForeground }, style]} {...props} />
+  );
+};
+
+const CardContent = ({ style, ...props }: ViewProps) => (
+  <View style={[s.content, style]} {...props} />
 );
 
-const CardTitle = ({ className, ...props }: TextProps) => (
-  <Text
-    className={cn(
-      "text-lg font-semibold leading-none tracking-tight text-card-foreground",
-      className
-    )}
-    {...props}
-  />
+const CardFooter = ({ style, ...props }: ViewProps) => (
+  <View style={[s.footer, style]} {...props} />
 );
 
-const CardDescription = ({ className, ...props }: TextProps) => (
-  <Text
-    className={cn("text-sm text-muted-foreground", className)}
-    {...props}
-  />
-);
-
-const CardContent = ({ className, ...props }: ViewProps) => (
-  <View className={cn("pt-0", className)} {...props} />
-);
-
-const CardFooter = ({ className, ...props }: ViewProps) => (
-  <View
-    className={cn("flex flex-row items-center pt-0", className)}
-    {...props}
-  />
-);
+const s = StyleSheet.create({
+  card: { borderRadius: 12, borderWidth: 1, padding: 20 },
+  header: { flexDirection: 'column', gap: 6 },
+  title: { fontSize: 18, fontWeight: '600', lineHeight: 22 },
+  desc: { fontSize: 14 },
+  content: {},
+  footer: { flexDirection: 'row', alignItems: 'center' },
+});
 
 export { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter };

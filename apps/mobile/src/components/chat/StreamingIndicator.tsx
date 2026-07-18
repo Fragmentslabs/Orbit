@@ -1,12 +1,59 @@
-import { View } from 'react-native'
-import { cn } from '~/lib/utils'
+import { useEffect, useState } from 'react'
+import { Animated, Easing, View, type ViewProps } from 'react-native'
+import { getThemeTokens } from '~/lib/theme-tokens'
+import { useThemeStore } from '~/stores/theme-store'
 
-export function StreamingIndicator({ className }: { className?: string }) {
+/**
+ * Indicador de resposta em andamento — texto "Pensando" com shimmer,
+ * no mesmo espírito do desktop (lá é um gradiente animado sobre o texto;
+ * aqui aproximamos com uma onda de opacidade por caractere, que o RN
+ * consegue animar sem depender de masked-view/linear-gradient).
+ */
+export function StreamingIndicator({ style }: { style?: ViewProps['style'] }) {
+  const tokens = getThemeTokens(useThemeStore((s) => s.resolved))
+  const [progress] = useState(() => new Animated.Value(0))
+
+  useEffect(() => {
+    const loop = Animated.loop(
+      Animated.timing(progress, {
+        toValue: 1,
+        duration: 1400,
+        easing: Easing.inOut(Easing.ease),
+        useNativeDriver: true,
+      }),
+    )
+    loop.start()
+    return () => loop.stop()
+  }, [progress])
+
+  const chars = 'Pensando…'.split('')
+
   return (
-    <View className={cn('flex-row items-center gap-1', className)}>
-      <View className="h-1.5 w-1.5 rounded-full bg-primary animate-pulse" />
-      <View className="h-1.5 w-1.5 rounded-full bg-primary animate-pulse opacity-70" />
-      <View className="h-1.5 w-1.5 rounded-full bg-primary animate-pulse opacity-40" />
+    <View style={[{ flexDirection: 'row', alignItems: 'center' }, style]}>
+      {chars.map((char, i) => {
+        // Cada caractere brilha um pouco depois do anterior — efeito de
+        // varredura da esquerda pra direita, reiniciando a cada ciclo.
+        // (i+1)/(n+1) mantém center em (0,1) e o inputRange estritamente
+        // crescente — center=0 geraria [0,0,…], que o interpolate rejeita.
+        const center = (i + 1) / (chars.length + 1)
+        const opacity = progress.interpolate({
+          inputRange: [
+            Math.max(0, center - 0.25),
+            center,
+            Math.min(1, center + 0.25),
+          ],
+          outputRange: [0.35, 1, 0.35],
+          extrapolate: 'clamp',
+        })
+        return (
+          <Animated.Text
+            key={i}
+            style={{ fontSize: 14, fontWeight: '500', color: tokens.mutedForeground, opacity }}
+          >
+            {char}
+          </Animated.Text>
+        )
+      })}
     </View>
   )
 }

@@ -21,6 +21,10 @@ export function useCompanion() {
   useEffect(() => {
     const conn = useConnectionStore.getState()
 
+    // Cache do catálogo de modelos: pinta a UI instantaneamente mesmo antes
+    // de conectar, enquanto o fetchCatalog() real (pós-conexão) atualiza.
+    void useSettingsStore.getState().hydrateCatalogCache()
+
     // Tenta carregar config salva e reconectar
     void conn.loadConfig().then((saved) => {
       if (saved) {
@@ -43,15 +47,26 @@ export function useCompanion() {
 
     const unsub = conn.onConnectionChange((state) => {
       if (state.status === 'connected') {
-        // Save to recent connections
-        const config = useConnectionStore.getState().config
+        // Persiste o token de dispositivo emitido pelo desktop — é ele que
+        // permite reconectar depois sem PIN (o PIN expira em 5 min).
+        const store = useConnectionStore.getState()
+        const config = store.config
+          ? { ...store.config, token: state.deviceToken ?? store.config.token }
+          : null
         if (config) {
+          if (config !== store.config) {
+            useConnectionStore.setState({ config })
+          }
+          void store.saveConfig(config)
           void useRecentConnectionsStore.getState().addRecent(config)
         }
         // Fetch initial data
         void useSessionStore.getState().fetchSessions()
+        void useSessionStore.getState().fetchFolders()
         void useSettingsStore.getState().fetchSelectedModel()
         void useSettingsStore.getState().fetchPreferences()
+        void useSettingsStore.getState().fetchCatalog()
+        void useSettingsStore.getState().fetchConnectedProviders()
       } else if (state.status === 'disconnected' && state.error === 'invalid_pin') {
         // PIN expirou (TTL de 5 min no desktop) — esquece a config salva para
         // não ficar preso num loop de auto-reconexão que sempre falha
@@ -71,7 +86,8 @@ export function useCompanion() {
     const unsubChat = conn.onEvent('chat:event', (event) => {
       const msg = event as ChatEventMessage
       const chatEvent = msg.event
-      if (chatEvent && typeof chatEvent === 'object' && 'sessionId' in chatEvent) {
+      // "folders" é o único evento sem sessionId (substituição completa da lista)
+      if (chatEvent && typeof chatEvent === 'object' && ('sessionId' in chatEvent || 'folders' in chatEvent)) {
         useSessionStore.getState().applyChatEvent(chatEvent as any)
       }
     })

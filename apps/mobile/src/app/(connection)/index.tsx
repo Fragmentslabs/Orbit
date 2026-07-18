@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react'
+import { useState, useCallback, useEffect, useRef } from 'react'
 import {
   View,
   Text,
@@ -7,10 +7,12 @@ import {
   Platform,
   Pressable,
   useWindowDimensions,
+  StyleSheet,
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { ArrowRight, History, Loader2, Monitor, ScanLine, X } from 'lucide-react-native'
 import type { ConnectionConfig } from '@orbit/companion-client'
+import * as Device from 'expo-device'
 import { useConnectionStore } from '~/stores/connection-store'
 import { useRecentConnectionsStore, type RecentConnection } from '~/stores/recent-connections-store'
 import { useDesktopDiscovery } from '~/hooks/useDesktopDiscovery'
@@ -20,19 +22,23 @@ import { ConnectionStatus } from '~/components/connection/ConnectionStatus'
 import { QRScannerWrapper } from '~/components/connection/QRScannerWrapper'
 import { UrlAccordion } from '~/components/connection/UrlAccordion'
 import { Persona, type PersonaState } from '~/components/ai/Persona'
+import { Spin } from '~/components/ui/spin'
+import { getThemeTokens } from '~/lib/theme-tokens'
+import { useThemeStore } from '~/stores/theme-store'
 
 const canUseCamera = Platform.OS === 'ios' || Platform.OS === 'android'
 
 export default function ConnectionScreen() {
-  const { connection, config: savedConfig, disconnect } = useConnectionStore()
+  const { connection, config: savedConfig, disconnect, connect } = useConnectionStore()
   const { recent, loadRecent, removeRecent } = useRecentConnectionsStore()
   const { status: discoveryStatus, found } = useDesktopDiscovery()
   const [showQr, setShowQr] = useState(false)
   const [prefill, setPrefill] = useState<{ host: string; port: number } | undefined>(undefined)
   const { width } = useWindowDimensions()
   const isWide = width >= 768
+  const tokens = getThemeTokens(useThemeStore((s) => s.resolved))
 
-  const isAutoReconnecting = !!savedConfig && connection.status !== 'disconnected'
+  const isAutoReconnecting = !!savedConfig && connection.status !== 'disconnected' && !connection.error
 
   const personaState: PersonaState =
     connection.status === 'connected'
@@ -45,30 +51,69 @@ export default function ConnectionScreen() {
 
   useEffect(() => { loadRecent() }, [loadRecent])
 
-  const handleQrScanned = useCallback((config: Omit<ConnectionConfig, 'pin'>) => {
-    setPrefill({ host: config.host, port: config.port })
+  const [reconnectDismissed, setReconnectDismissed] = useState(false)
+  const reconnectTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  useEffect(() => {
+    if (isAutoReconnecting && !reconnectDismissed) {
+      reconnectTimer.current = setTimeout(() => {
+        setReconnectDismissed(true)
+      }, 8000)
+    }
+    return () => {
+      if (reconnectTimer.current) clearTimeout(reconnectTimer.current)
+    }
+  }, [isAutoReconnecting, reconnectDismissed])
+
+  const handleCancelReconnect = useCallback(() => {
+    if (reconnectTimer.current) clearTimeout(reconnectTimer.current)
+    setReconnectDismissed(true)
+    disconnect()
+  }, [disconnect])
+
+  const findSavedToken = useCallback(
+    (host: string) => recent.find((rc) => rc.host === host)?.token,
+    [recent],
+  )
+
+  const handleQrScanned = useCallback((config: Omit<ConnectionConfig, 'pin'> & { pin?: string }) => {
     setShowQr(false)
-  }, [])
+    const token = findSavedToken(config.host)
+    if (config.pin || token) {
+      connect({
+        host: config.host,
+        port: config.port,
+        pin: config.pin ?? '',
+        token,
+        deviceName: Device.deviceName ?? `Orbit ${Platform.OS}`,
+      })
+      return
+    }
+    setPrefill({ host: config.host, port: config.port })
+  }, [connect, findSavedToken])
 
-  const handlePrefill = useCallback((host: string, port: number) => {
+  const handlePrefill = useCallback((host: string, port: number, auth?: { pin?: string; token?: string }) => {
+    const token = auth?.token ?? findSavedToken(host)
+    if (auth?.pin || token) {
+      connect({ host, port, pin: auth?.pin ?? '', token, deviceName: Device.deviceName ?? `Orbit ${Platform.OS}` })
+      return
+    }
     setPrefill({ host, port })
-  }, [])
+  }, [connect, findSavedToken])
 
-  // ─── Reconectando (config salva) ───────────────────────────────────────
-
-  if (isAutoReconnecting) {
+  if (isAutoReconnecting && !reconnectDismissed) {
     return (
-      <SafeAreaView className="flex-1 bg-background">
-        <View className="flex-1 items-center justify-center gap-5 px-6">
+      <SafeAreaView style={[s.container, { backgroundColor: tokens.background }]}>
+        <View style={s.reconnecting}>
           <Persona state="listening" size={120} />
-          <View className="items-center gap-1">
-            <Text className="text-lg font-semibold text-foreground">Reconectando</Text>
-            <Text className="text-sm text-muted-foreground">
+          <View style={s.reconnectingText}>
+            <Text style={[s.title, { color: tokens.foreground }]}>Reconectando</Text>
+            <Text style={[s.mutedFg, { color: tokens.mutedForeground }]}>
               {savedConfig?.host}:{savedConfig?.port}
             </Text>
           </View>
           <ConnectionStatus state={connection} />
-          <Button variant="outline" onPress={disconnect}>
+          <Button variant="outline" onPress={handleCancelReconnect}>
             Cancelar
           </Button>
         </View>
@@ -76,14 +121,12 @@ export default function ConnectionScreen() {
     )
   }
 
-  // ─── Blocos reutilizados entre os layouts ──────────────────────────────
-
   const header = (
-    <View className={isWide ? 'items-start gap-4' : 'items-center gap-4'}>
+    <View style={isWide ? s.headerWide : s.headerCenter}>
       <Persona state={personaState} size={isWide ? 160 : 140} />
-      <View className={isWide ? 'gap-1' : 'items-center gap-1'}>
-        <Text className="text-2xl font-bold text-foreground">Orbit</Text>
-        <Text className={`text-sm text-muted-foreground ${isWide ? '' : 'text-center'}`}>
+      <View style={isWide ? { gap: 4 } : { alignItems: 'center', gap: 4 }}>
+        <Text style={[s.titleLarge, { color: tokens.foreground }]}>Orbit</Text>
+        <Text style={[s.subtitle, { color: tokens.mutedForeground }, !isWide && { textAlign: 'center' }]}>
           Conecte-se ao Orbit Desktop para{'\n'}acompanhar e controlar suas sessões
         </Text>
       </View>
@@ -93,61 +136,53 @@ export default function ConnectionScreen() {
   const facilitator =
     discoveryStatus === 'found' && found ? (
       <Pressable
-        onPress={() => handlePrefill(found.host, found.wsPort)}
-        className="w-full flex-row items-center gap-3 rounded-xl border border-primary/30 bg-primary/10 px-4 py-3.5 active:bg-primary/15"
+        onPress={() => handlePrefill(found.host, found.wsPort, { pin: found.pin })}
+        style={[s.facilitatorCard, { borderColor: 'rgba(245,166,35,0.3)', backgroundColor: 'rgba(245,166,35,0.1)' }]}
       >
-        <View className="h-10 w-10 items-center justify-center rounded-md bg-primary/15">
-          <Monitor size={18} className="text-primary" />
+        <View style={[s.facilitatorIcon, { backgroundColor: 'rgba(245,166,35,0.15)' }]}>
+          <Monitor size={18} color={tokens.primary} />
         </View>
-        <View className="flex-1">
-          <Text className="text-sm font-semibold text-foreground">
+        <View style={{ flex: 1 }}>
+          <Text style={[s.fgSemibold, { color: tokens.foreground }]}>
             Desktop encontrado{found.name ? ` — ${found.name}` : ''}
           </Text>
-          <Text className="text-xs text-muted-foreground">
-            {found.host}:{found.wsPort} · toque para conectar
-          </Text>
+          <Text style={[s.mutedFg, { color: tokens.mutedForeground }]}>{found.host}:{found.wsPort} · toque para conectar</Text>
         </View>
-        <ArrowRight size={16} className="text-primary" />
+        <ArrowRight size={16} color={tokens.primary} />
       </Pressable>
     ) : discoveryStatus === 'checking' ? (
-      <View className="w-full flex-row items-center justify-center gap-2 py-2">
-        <Loader2 size={12} className="animate-spin text-muted-foreground" />
-        <Text className="text-xs text-muted-foreground">Procurando Orbit Desktop na rede…</Text>
+      <View style={s.checkingRow}>
+        <Spin><Loader2 size={12} color={tokens.mutedForeground} /></Spin>
+        <Text style={[s.mutedFg, { color: tokens.mutedForeground }]}>Procurando Orbit Desktop na rede…</Text>
       </View>
     ) : null
 
   const recents =
     recent.length > 0 ? (
-      <View className="w-full gap-2">
-        <View className="flex-row items-center gap-2 px-1">
-          <History size={13} className="text-muted-foreground" />
-          <Text className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-            Recentes
-          </Text>
+      <View style={{ gap: 8 }}>
+        <View style={s.recentsHeader}>
+          <History size={13} color={tokens.mutedForeground} />
+          <Text style={[s.recentsTitle, { color: tokens.mutedForeground }]}>Recentes</Text>
         </View>
         {recent.map((rc: RecentConnection) => (
           <Pressable
             key={`${rc.host}:${rc.port}`}
-            onPress={() => handlePrefill(rc.host, rc.port)}
-            className="flex-row items-center gap-3 rounded-xl border border-border bg-card px-4 py-3 active:bg-accent"
+            onPress={() => handlePrefill(rc.host, rc.port, { token: rc.token, pin: rc.pin })}
+            style={[s.recentCard, { borderColor: '#1f2128', backgroundColor: '#111318' }]}
           >
-            <View className="h-9 w-9 items-center justify-center rounded-md bg-secondary">
-              <Monitor size={16} className="text-muted-foreground" />
+            <View style={[s.recentIcon, { backgroundColor: '#1a1c22' }]}>
+              <Monitor size={16} color={tokens.mutedForeground} />
             </View>
-            <View className="flex-1">
-              <Text className="text-sm font-medium text-foreground">
-                {rc.deviceName ?? rc.host}
-              </Text>
-              <Text className="text-xs text-muted-foreground">
-                {rc.host}:{rc.port}
-              </Text>
+            <View style={{ flex: 1 }}>
+              <Text style={[s.fg, { color: tokens.foreground }]}>{rc.deviceName ?? rc.host}</Text>
+              <Text style={[s.mutedFg, { color: tokens.mutedForeground }]}>{rc.host}:{rc.port}</Text>
             </View>
             <Pressable
               onPress={() => void removeRecent(rc.host, rc.port)}
               hitSlop={8}
-              className="h-7 w-7 items-center justify-center rounded-md active:bg-muted"
+              style={s.removeBtn}
             >
-              <X size={14} className="text-muted-foreground" />
+              <X size={14} color={tokens.mutedForeground} />
             </Pressable>
           </Pressable>
         ))}
@@ -156,36 +191,31 @@ export default function ConnectionScreen() {
 
   const qrButton = canUseCamera ? (
     showQr ? (
-      <Card className="overflow-hidden p-3">
-        <View className="mb-2 flex-row items-center justify-between">
-          <Text className="text-sm font-medium text-foreground">Escanear QR Code</Text>
-          <Button variant="ghost" size="sm" onPress={() => setShowQr(false)}>
-            Cancelar
-          </Button>
+      <Card style={{ overflow: 'hidden', padding: 12 }}>
+        <View style={s.qrHeader}>
+          <Text style={[s.fg, { color: tokens.foreground }]}>Escanear QR Code</Text>
+          <Button variant="ghost" size="sm" onPress={() => setShowQr(false)}>Cancelar</Button>
         </View>
-        <View className="h-64 overflow-hidden rounded-lg bg-black">
+        <View style={[s.qrCamera, { backgroundColor: '#000' }]}>
           <QRScannerWrapper onScanned={handleQrScanned} />
         </View>
       </Card>
     ) : (
-      <Button onPress={() => setShowQr(true)} size="lg" className="w-full flex-row gap-2">
-        <ScanLine size={18} className="text-primary-foreground" />
-        Escanear QR Code
+      <Button onPress={() => setShowQr(true)} size="lg">
+        <ScanLine size={18} color="#4a2e0a" /> Escanear QR Code
       </Button>
     )
   ) : null
 
-  const manualConnect = (
-    <UrlAccordion prefill={prefill} defaultExpanded={isWide} />
-  )
+  const manualConnect = <UrlAccordion prefill={prefill} defaultExpanded={isWide} />
 
   const statusAndHint = (
     <>
       <ConnectionStatus state={connection} detailed />
-      <View className="rounded-xl bg-muted/50 px-4 py-3">
-        <Text className="text-xs leading-5 text-muted-foreground">
-          <Text className="font-semibold">Dica:</Text> use{' '}
-          <Text className="font-semibold">Tailscale</Text> para acessar seu desktop de
+      <View style={[s.tipBox, { backgroundColor: 'rgba(26,28,34,0.5)' }]}>
+        <Text style={[s.tipText, { color: tokens.mutedForeground }]}>
+          <Text style={{ fontWeight: '600' }}>Dica:</Text> use{' '}
+          <Text style={{ fontWeight: '600' }}>Tailscale</Text> para acessar seu desktop de
           qualquer lugar, sem configurar a rede.
         </Text>
       </View>
@@ -193,26 +223,26 @@ export default function ConnectionScreen() {
   )
 
   return (
-    <SafeAreaView className="flex-1 bg-background" edges={['top']}>
+    <SafeAreaView style={[s.container, { backgroundColor: tokens.background }]} edges={['top']}>
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        className="flex-1"
+        style={{ flex: 1 }}
       >
         <ScrollView
-          className="flex-1"
+          style={{ flex: 1 }}
           contentContainerStyle={{ flexGrow: 1, paddingBottom: 40 }}
           keyboardShouldPersistTaps="handled"
+          automaticallyAdjustKeyboardInsets
         >
           {isWide ? (
-            // ─── Web / telas largas: duas colunas centralizadas ─────────
-            <View className="flex-1 justify-center px-8 lg:px-16">
-              <View className="mx-auto w-full max-w-4xl flex-row gap-12">
-                <View className="flex-1 gap-6">
+            <View style={s.wideContainer}>
+              <View style={s.wideRow}>
+                <View style={s.wideCol}>
                   {header}
                   {facilitator}
                   {recents}
                 </View>
-                <View className="flex-1 gap-4">
+                <View style={s.wideCol}>
                   {manualConnect}
                   {qrButton}
                   {statusAndHint}
@@ -220,8 +250,7 @@ export default function ConnectionScreen() {
               </View>
             </View>
           ) : (
-            // ─── Mobile: coluna única, persona no centro ────────────────
-            <View className="flex-1 gap-6 px-5 pt-10">
+            <View style={s.mobileContainer}>
               {header}
               {facilitator}
               {qrButton}
@@ -235,3 +264,41 @@ export default function ConnectionScreen() {
     </SafeAreaView>
   )
 }
+
+const s = StyleSheet.create({
+  container: { flex: 1 },
+  reconnecting: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 20, paddingHorizontal: 24 },
+  reconnectingText: { alignItems: 'center', gap: 4 },
+  title: { fontSize: 18, fontWeight: '600' },
+  titleLarge: { fontSize: 24, fontWeight: 'bold' },
+
+  headerWide: { alignItems: 'flex-start', gap: 16 },
+  headerCenter: { alignItems: 'center', gap: 16 },
+  subtitle: { fontSize: 14, lineHeight: 20 },
+
+  facilitatorCard: { width: '100%', flexDirection: 'row', alignItems: 'center', gap: 12, borderRadius: 12, borderWidth: 1, paddingHorizontal: 16, paddingVertical: 14 },
+  facilitatorIcon: { width: 40, height: 40, borderRadius: 6, alignItems: 'center', justifyContent: 'center' },
+
+  checkingRow: { width: '100%', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 8 },
+
+  recentsHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 4 },
+  recentsTitle: { fontSize: 12, fontWeight: '500', textTransform: 'uppercase', letterSpacing: 0.5 },
+  recentCard: { flexDirection: 'row', alignItems: 'center', gap: 12, borderRadius: 12, borderWidth: 1, paddingHorizontal: 16, paddingVertical: 12 },
+  recentIcon: { width: 36, height: 36, borderRadius: 6, alignItems: 'center', justifyContent: 'center' },
+  removeBtn: { width: 28, height: 28, borderRadius: 6, alignItems: 'center', justifyContent: 'center' },
+
+  qrHeader: { marginBottom: 8, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  qrCamera: { height: 256, overflow: 'hidden', borderRadius: 8 },
+
+  tipBox: { borderRadius: 12, paddingHorizontal: 16, paddingVertical: 12 },
+  tipText: { fontSize: 12, lineHeight: 20 },
+
+  fg: { fontSize: 14, fontWeight: '500' },
+  fgSemibold: { fontSize: 14, fontWeight: '600' },
+  mutedFg: { fontSize: 12 },
+
+  wideContainer: { flex: 1, justifyContent: 'center', paddingHorizontal: 32 },
+  wideRow: { maxWidth: 896, alignSelf: 'center', width: '100%', flexDirection: 'row', gap: 48 },
+  wideCol: { flex: 1, gap: 24 },
+  mobileContainer: { flex: 1, gap: 24, paddingHorizontal: 20, paddingTop: 40 },
+})

@@ -1,30 +1,22 @@
 import "../global.css";
-import "../lib/icon-interop";
 
-import { useEffect } from "react"
-import { DarkTheme, Stack, ThemeProvider, useRouter } from "expo-router"
+import { useEffect, useMemo } from "react"
+import { Appearance, useColorScheme } from "react-native"
+import { DarkTheme, DefaultTheme, Stack, ThemeProvider, useRouter } from "expo-router"
+import { GestureHandlerRootView } from "react-native-gesture-handler";
+import { KeyboardProvider } from "react-native-keyboard-controller";
 import { PortalHost } from "@rn-primitives/portal";
 import * as SplashScreen from "expo-splash-screen";
-import { Platform } from "react-native";
 import { StatusBar } from "expo-status-bar";
-import { colorScheme } from "nativewind";
 import { useCompanion } from "../hooks/useCompanion";
 import { useNotifications } from "../hooks/useNotifications";
 import { useConnectionStore } from "../stores/connection-store";
+import { useThemeStore, hydrateThemePreference } from "../stores/theme-store";
 
 SplashScreen.preventAutoHideAsync();
 
-// Orbit é dark por padrão (mesmo design system do desktop).
-// No web o set() só pode rodar no browser — durante o SSR do Expo Router
-// (render em Node) não há document e a chamada lança erro.
-if (Platform.OS !== "web") {
-  colorScheme.set("dark");
-} else if (typeof document !== "undefined") {
-  colorScheme.set("dark");
-  document.documentElement.classList.add("dark");
-}
+// ─── Navigation themes ─────────────────────────────────────────────────────
 
-// Tema de navegação alinhado aos tokens (background/card/border do global.css)
 const OrbitDarkTheme: typeof DarkTheme = {
   ...DarkTheme,
   colors: {
@@ -37,9 +29,52 @@ const OrbitDarkTheme: typeof DarkTheme = {
   },
 };
 
+const OrbitLightTheme: typeof DefaultTheme = {
+  ...DefaultTheme,
+  colors: {
+    ...DefaultTheme.colors,
+    background: "hsl(0, 0%, 100%)",
+    card: "hsl(0, 0%, 100%)",
+    border: "hsl(240, 4%, 90%)",
+    text: "hsl(240, 10%, 4%)",
+    primary: "hsl(44, 100%, 70%)",
+  },
+};
+
 export default function RootLayout() {
   const router = useRouter();
   const connection = useConnectionStore((s) => s.connection);
+  const systemScheme = useColorScheme();
+  const systemIsDark = systemScheme !== "light";
+  const resolved = useThemeStore((s) => s.resolved);
+  const setPreference = useThemeStore((s) => s.setPreference);
+
+  // Hidrata tema persistido ao montar
+  useEffect(() => {
+    hydrateThemePreference().then((pref) => {
+      setPreference(pref, systemIsDark);
+      Appearance.setColorScheme(pref === "system" ? (systemIsDark ? "dark" : "light") : pref);
+    });
+  }, []);
+
+  // Sincroniza mudanças do theme-store com o Appearance API (NativeWind v5)
+  useEffect(() => {
+    Appearance.setColorScheme(resolved);
+  }, [resolved]);
+
+  // Sincroniza mudança de scheme do SO quando preference é "system"
+  useEffect(() => {
+    const pref = useThemeStore.getState().preference;
+    if (pref === "system") {
+      setPreference("system", systemIsDark);
+      Appearance.setColorScheme(systemIsDark ? "dark" : "light");
+    }
+  }, [systemIsDark]);
+
+  const navTheme = useMemo(
+    () => (resolved === "dark" ? OrbitDarkTheme : OrbitLightTheme),
+    [resolved],
+  );
 
   // Inicializa o companion (auto-reconnect + event wiring)
   useCompanion();
@@ -51,28 +86,27 @@ export default function RootLayout() {
   useEffect(() => {
     if (connection.status === "connected") {
       router.replace("/(main)");
-    } else if (
-      connection.status === "disconnected" ||
-      connection.status === "connecting" ||
-      connection.status === "authenticating"
-    ) {
+    } else if (connection.status === "disconnected" && connection.error) {
       router.replace("/(connection)");
     }
-  }, [connection.status, router]);
+  }, [connection.status, connection.error, router]);
 
-  // Esconde splash screen quando o routing está pronto
   useEffect(() => {
     SplashScreen.hideAsync();
   }, []);
 
   return (
-    <ThemeProvider value={OrbitDarkTheme}>
-      <StatusBar style="light" />
-      <Stack screenOptions={{ headerShown: false }}>
-        <Stack.Screen name="(connection)" />
-        <Stack.Screen name="(main)" />
-      </Stack>
-      <PortalHost />
-    </ThemeProvider>
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <KeyboardProvider>
+        <ThemeProvider value={navTheme}>
+          <StatusBar style={resolved === "dark" ? "light" : "dark"} />
+          <Stack screenOptions={{ headerShown: false }}>
+            <Stack.Screen name="(connection)" />
+            <Stack.Screen name="(main)" />
+          </Stack>
+          <PortalHost />
+        </ThemeProvider>
+      </KeyboardProvider>
+    </GestureHandlerRootView>
   );
 }

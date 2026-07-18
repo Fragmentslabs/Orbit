@@ -1,6 +1,12 @@
 import { create } from 'zustand'
-import type { Catalog, CatalogModel } from '@orbit/shared'
+import type { Catalog, CatalogModel, WorkerModelConfig } from '@orbit/shared'
+import { Storage } from '~/lib/storage'
 import { useConnectionStore } from './connection-store'
+
+const CATALOG_CACHE_KEY = 'orbit_catalog_cache'
+const PROVIDERS_CACHE_KEY = 'orbit_providers_cache'
+const SELECTED_MODEL_CACHE_KEY = 'orbit_selected_model_cache'
+const WORKER_MODEL_KEY = 'orbit_worker_model'
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -15,6 +21,8 @@ interface SettingsState {
   selectedModel: SelectedModel | null
   /** Catálogo de modelos do desktop. */
   catalog: Catalog | null
+  /** Provedores conectados no desktop. */
+  connectedProviders: string[]
   /** Preferências do desktop. */
   preferences: Record<string, unknown> | null
   /** Loading state. */
@@ -26,10 +34,20 @@ interface SettingsState {
   selectModel: (providerId: string, modelId: string) => Promise<void>
   /** Busca catálogo via HTTP. */
   fetchCatalog: () => Promise<void>
+  /** Busca provedores conectados via HTTP. */
+  fetchConnectedProviders: () => Promise<void>
   /** Busca preferências via HTTP. */
   fetchPreferences: () => Promise<void>
   /** Atualiza preferências via HTTP. */
   updatePreferences: (patch: Record<string, unknown>) => Promise<void>
+  /** Carrega o catálogo em cache (se houver) — pinta a UI instantaneamente
+   *  enquanto o fetchCatalog() real roda por baixo. */
+  hydrateCatalogCache: () => Promise<void>
+
+  /** Modelo dos workers (subagentes/orquestração) — configurado no app. */
+  workerModel: WorkerModelConfig | null
+  /** Define (ou limpa) o modelo dos workers. */
+  setWorkerModel: (model: WorkerModelConfig | null) => Promise<void>
 
   /** Retorna modelo como lista plana (catálogo). */
   getModelList: () => CatalogModel[]
@@ -40,8 +58,10 @@ interface SettingsState {
 export const useSettingsStore = create<SettingsState>((set, get) => ({
   selectedModel: null,
   catalog: null,
+  connectedProviders: [],
   preferences: null,
   loading: false,
+  workerModel: null,
 
   fetchSelectedModel: async () => {
     const { http } = useConnectionStore.getState()
@@ -50,6 +70,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
     const res = await http.getSelectedModel()
     if (res.ok && res.data) {
       set({ selectedModel: res.data as SelectedModel })
+      void Storage.setItem(SELECTED_MODEL_CACHE_KEY, JSON.stringify(res.data))
     }
   },
 
@@ -72,9 +93,61 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
       const res = await http.getCatalog()
       if (res.ok && res.data) {
         set({ catalog: res.data as Catalog })
+        void Storage.setItem(CATALOG_CACHE_KEY, JSON.stringify(res.data))
       }
     } finally {
       set({ loading: false })
+    }
+  },
+
+  hydrateCatalogCache: async () => {
+    try {
+      // Catálogo + provedores conectados + modelo selecionado: sem os três o
+      // picker cacheado abre vazio (o filtro exige provider conectado).
+      const [rawCatalog, rawProviders, rawSelected] = await Promise.all([
+        Storage.getItem(CATALOG_CACHE_KEY),
+        Storage.getItem(PROVIDERS_CACHE_KEY),
+        Storage.getItem(SELECTED_MODEL_CACHE_KEY),
+      ])
+      if (rawCatalog && !get().catalog) {
+        set({ catalog: JSON.parse(rawCatalog) as Catalog })
+      }
+      if (rawProviders && get().connectedProviders.length === 0) {
+        set({ connectedProviders: JSON.parse(rawProviders) as string[] })
+      }
+      if (rawSelected && !get().selectedModel) {
+        set({ selectedModel: JSON.parse(rawSelected) as SelectedModel })
+      }
+      const rawWorker = await Storage.getItem(WORKER_MODEL_KEY)
+      if (rawWorker && !get().workerModel) {
+        set({ workerModel: JSON.parse(rawWorker) as WorkerModelConfig })
+      }
+    } catch {
+      // Cache corrompido ou ausente — ignora, os fetches reais resolvem
+    }
+  },
+
+  setWorkerModel: async (model) => {
+    set({ workerModel: model })
+    if (model) {
+      await Storage.setItem(WORKER_MODEL_KEY, JSON.stringify(model))
+    } else {
+      await Storage.removeItem(WORKER_MODEL_KEY)
+    }
+  },
+
+  fetchConnectedProviders: async () => {
+    const { http } = useConnectionStore.getState()
+    if (!http) return
+
+    try {
+      const res = await http.getConnectedProviders()
+      if (res.ok && res.data) {
+        set({ connectedProviders: res.data as string[] })
+        void Storage.setItem(PROVIDERS_CACHE_KEY, JSON.stringify(res.data))
+      }
+    } catch {
+      // Silently fail
     }
   },
 

@@ -1,11 +1,6 @@
 import { View, Text, type TextProps } from "react-native";
 import * as TabsPrimitive from "@rn-primitives/tabs";
-import { cssInterop } from "nativewind";
 import { cn } from "~/lib/utils";
-
-cssInterop(TabsPrimitive.List, { className: "style" });
-cssInterop(TabsPrimitive.Trigger, { className: "style" });
-cssInterop(TabsPrimitive.Content, { className: "style" });
 
 function Tabs({
   ...props

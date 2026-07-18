@@ -1,58 +1,122 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss/theme.css" layer(theme);
+@import "tailwindcss/preflight.css" layer(base);
+@import "tailwindcss/utilities.css";
+
+@import "nativewind/theme";
+@import "tw-animate-css";
 
 /* ============================================
-   Orbit Mobile Theme — tokens portados do
-   desktop (apps/desktop/src/index.css, oklch→hsl)
+   Orbit Mobile Theme — NativeWind v5 / Tailwind v4
+   Tema dinâmico via CSS variables + @theme inline.
+
+   @theme inline mapeia utilidades (--color-*) para
+   variáveis CSS (--*). Os valores das variáveis são
+   definidos em :root (light) e @media (prefers-color-scheme: dark).
+   NativeWind v5 usa Appearance.setColorScheme() para alternar.
    ============================================ */
 
-:root {
-  /* Light */
-  --background: 0 0% 100%;
-  --foreground: 240 11% 4%;
-  --card: 0 0% 100%;
-  --card-foreground: 240 11% 4%;
-  --popover: 0 0% 100%;
-  --popover-foreground: 240 11% 4%;
-  --primary: 47 100% 50%;
-  --primary-foreground: 30 83% 25%;
-  --secondary: 240 4% 96%;
-  --secondary-foreground: 240 6% 10%;
-  --muted: 240 4% 96%;
-  --muted-foreground: 240 4% 46%;
-  --accent: 240 4% 96%;
-  --accent-foreground: 240 6% 10%;
-  --destructive: 357 100% 45%;
-  --destructive-foreground: 0 0% 98%;
-  --border: 240 6% 90%;
-  --input: 240 6% 90%;
-  --ring: 240 6% 64%;
-  --sidebar: 0 0% 98%;
-  --radius: 0.875rem;
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+
+  --color-border: var(--border-color);
+  --color-input: var(--input-color);
+  --color-ring: var(--ring-color);
+  --color-sidebar: var(--sidebar-color);
+
+  /* Escala de radius (base 0.875rem) */
+  --radius-sm: calc(0.875rem * 0.6);
+  --radius-md: calc(0.875rem * 0.8);
+  --radius-lg: 0.875rem;
+  --radius-xl: calc(0.875rem * 1.4);
+  --radius-2xl: calc(0.875rem * 1.8);
+  --radius-3xl: calc(0.875rem * 2.2);
+
+  /* Breakpoint extra */
+  --breakpoint-xs: 475px;
 }
 
-/* NativeWind aplica variáveis de tema dark via seletor .dark:root
-   (classe no html na web; colorScheme.set("dark") no nativo) */
-.dark:root {
-  --background: 240 11% 4%;
-  --foreground: 0 0% 98%;
-  --card: 240 6% 10%;
-  --card-foreground: 0 0% 98%;
-  --popover: 240 6% 10%;
-  --popover-foreground: 0 0% 98%;
-  --primary: 44 100% 47%;
-  --primary-foreground: 30 83% 25%;
-  --secondary: 240 4% 16%;
-  --secondary-foreground: 0 0% 98%;
-  --muted: 240 4% 16%;
-  --muted-foreground: 240 6% 64%;
-  --accent: 240 4% 16%;
-  --accent-foreground: 0 0% 98%;
-  --destructive: 359 100% 70%;
-  --destructive-foreground: 0 0% 98%;
-  --border: 240 4% 13%;
-  --input: 240 3% 16%;
-  --ring: 240 4% 46%;
-  --sidebar: 240 6% 10%;
+/* ── Light theme (default) ────────────────────── */
+:root {
+  --background: hsl(0 0% 100%);
+  --foreground: hsl(240 10% 4%);
+
+  --card: hsl(0 0% 100%);
+  --card-foreground: hsl(240 10% 4%);
+
+  --popover: hsl(0 0% 100%);
+  --popover-foreground: hsl(240 10% 4%);
+
+  --primary: hsl(44 100% 70%);
+  --primary-foreground: hsl(30 83% 25%);
+
+  --secondary: hsl(240 2% 96%);
+  --secondary-foreground: hsl(240 10% 4%);
+
+  --muted: hsl(240 2% 96%);
+  --muted-foreground: hsl(240 4% 55%);
+
+  --accent: hsl(240 2% 96%);
+  --accent-foreground: hsl(240 10% 4%);
+
+  --destructive: hsl(10 80% 50%);
+  --destructive-foreground: hsl(0 0% 100%);
+
+  --border-color: hsl(240 4% 90%);
+  --input-color: hsl(240 4% 90%);
+  --ring-color: hsl(240 4% 65%);
+  --sidebar-color: hsl(0 0% 98%);
+}
+
+/* ── Dark theme ───────────────────────────────── */
+@media (prefers-color-scheme: dark) {
+  --background: hsl(240 11% 4%);
+  --foreground: hsl(0 0% 98%);
+
+  --card: hsl(240 6% 10%);
+  --card-foreground: hsl(0 0% 98%);
+
+  --popover: hsl(240 6% 10%);
+  --popover-foreground: hsl(0 0% 98%);
+
+  --primary: hsl(44 100% 47%);
+  --primary-foreground: hsl(30 83% 25%);
+
+  --secondary: hsl(240 4% 16%);
+  --secondary-foreground: hsl(0 0% 98%);
+
+  --muted: hsl(240 4% 16%);
+  --muted-foreground: hsl(240 6% 64%);
+
+  --accent: hsl(240 4% 16%);
+  --accent-foreground: hsl(0 0% 98%);
+
+  --destructive: hsl(359 100% 70%);
+  --destructive-foreground: hsl(0 0% 98%);
+
+  --border-color: hsl(240 4% 13%);
+  --input-color: hsl(240 3% 16%);
+  --ring-color: hsl(240 4% 46%);
+  --sidebar-color: hsl(240 6% 10%);
 }

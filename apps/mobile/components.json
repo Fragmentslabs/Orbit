@@ -8,7 +8,7 @@
     "hooks": "@/hooks"
   },
   "tailwind": {
-    "config": "tailwind.config.js",
+    "config": "",
     "css": "src/global.css"
   }
 }

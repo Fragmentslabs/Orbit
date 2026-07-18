@@ -6,8 +6,10 @@ const STORAGE_KEY = 'orbit_recent_connections'
 const MAX_RECENT = 5
 
 /**
- * Conexão recente — sem PIN: o PIN do desktop expira em 5 minutos,
- * então guardamos apenas o endereço para pré-preencher o formulário.
+ * Conexão recente. Guarda o PIN da última conexão bem-sucedida para permitir
+ * reconectar com um toque — o PIN do desktop expira em 5 min, então se
+ * estiver desatualizado a conexão simplesmente falha com 'invalid_pin' e o
+ * usuário cai no fluxo manual normalmente (mesmo tratamento de erro já existente).
  */
 export interface RecentConnection {
   host: string
@@ -16,6 +18,10 @@ export interface RecentConnection {
   deviceName?: string
   /** Última conexão bem-sucedida (epoch ms). */
   lastConnectedAt?: number
+  /** PIN usado na última conexão bem-sucedida (expira em 5 min no desktop). */
+  pin?: string
+  /** Token persistente do pareamento — reconecta sem PIN. */
+  token?: string
 }
 
 interface RecentConnectionsStore {
@@ -34,8 +40,7 @@ export const useRecentConnectionsStore = create<RecentConnectionsStore>((set, ge
       const raw = await Storage.getItem(STORAGE_KEY)
       if (raw) {
         const parsed = JSON.parse(raw) as RecentConnection[]
-        // Migração: entradas antigas podiam conter o PIN — descarta
-        set({ recent: parsed.map(({ host, port, deviceName, lastConnectedAt }) => ({ host, port, deviceName, lastConnectedAt })) })
+        set({ recent: parsed })
       }
     } catch { }
   },
@@ -49,6 +54,8 @@ export const useRecentConnectionsStore = create<RecentConnectionsStore>((set, ge
       port: config.port,
       deviceName: deviceName ?? config.deviceName,
       lastConnectedAt: Date.now(),
+      pin: config.pin,
+      token: config.token,
     }
     const next = [entry, ...filtered].slice(0, MAX_RECENT)
     set({ recent: next })

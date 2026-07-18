@@ -1,14 +1,14 @@
 import React, { Suspense, useState, useEffect, useCallback } from 'react'
-import { View, Text, Platform } from 'react-native'
+import { View, Text, Platform, StyleSheet } from 'react-native'
 import type { ConnectionConfig } from '@orbit/companion-client'
-import { cn } from '~/lib/utils'
-import { Button } from '~/components/ui/button'
+import { Spin } from '~/components/ui/spin'
 import { Loader2 } from 'lucide-react-native'
+import { getThemeTokens } from '~/lib/theme-tokens'
+import { useThemeStore } from '~/stores/theme-store'
 
 interface Props {
-  onScanned: (config: Omit<ConnectionConfig, 'pin'>) => void
+  onScanned: (config: Omit<ConnectionConfig, 'pin'> & { pin?: string }) => void
   disabled?: boolean
-  className?: string
 }
 
 const canUseCamera = Platform.OS === 'ios' || Platform.OS === 'android'
@@ -23,11 +23,13 @@ try {
   QRScannerInner = null
 }
 
-export function QRScannerWrapper({ onScanned, disabled, className }: Props) {
+export function QRScannerWrapper({ onScanned, disabled }: Props) {
+  const tokens = getThemeTokens(useThemeStore((s) => s.resolved))
+
   if (!canUseCamera || !QRScannerInner) {
     return (
-      <View className={cn('flex-1 items-center justify-center gap-4 p-6', className)}>
-        <Text className="text-center text-sm text-muted-foreground">
+      <View style={s.fallback}>
+        <Text style={[s.fallbackText, { color: tokens.mutedForeground }]}>
           QR Code disponível apenas em dispositivos móveis com câmera.
         </Text>
       </View>
@@ -37,12 +39,18 @@ export function QRScannerWrapper({ onScanned, disabled, className }: Props) {
   return (
     <Suspense
       fallback={
-        <View className={cn('flex-1 items-center justify-center', className)}>
-          <Loader2 size={24} className="animate-spin text-muted-foreground" />
+        <View style={s.loading}>
+          <Spin><Loader2 size={24} color={tokens.mutedForeground} /></Spin>
         </View>
       }
     >
-      <QRScannerInner onScanned={onScanned} disabled={disabled} className={className} />
+      <QRScannerInner onScanned={onScanned} disabled={disabled} />
     </Suspense>
   )
 }
+
+const s = StyleSheet.create({
+  fallback: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 16, padding: 24 },
+  fallbackText: { textAlign: 'center', fontSize: 14 },
+  loading: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+})

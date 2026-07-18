@@ -20,6 +20,12 @@ export interface DiscoveredDesktop {
   wsPort: number
   /** Hostname da máquina rodando o Orbit Desktop. */
   name?: string
+  /**
+   * PIN atual — só vem preenchido se o desktop estiver em "modo de
+   * pareamento" (modal "Conectar App" aberto). Permite conectar com um
+   * toque; se ausente, a UI cai de volta para o fluxo manual com PIN.
+   */
+  pin?: string
 }
 
 async function probe(host: string): Promise<DiscoveredDesktop | null> {
@@ -29,9 +35,9 @@ async function probe(host: string): Promise<DiscoveredDesktop | null> {
     const res = await fetch(`http://${host}:${HTTP_PORT}/api/ping`, { signal: controller.signal })
     clearTimeout(timeout)
     if (!res.ok) return null
-    const data = (await res.json()) as { app?: string; name?: string; wsPort?: number }
+    const data = (await res.json()) as { app?: string; name?: string; wsPort?: number; pin?: string }
     if (data.app !== 'orbit') return null
-    return { host, wsPort: data.wsPort ?? 3847, name: data.name }
+    return { host, wsPort: data.wsPort ?? 3847, name: data.name, pin: data.pin }
   } catch {
     return null
   }

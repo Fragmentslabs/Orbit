@@ -1,26 +1,24 @@
 import { useState, useCallback } from 'react'
-import { View, Text, Pressable } from 'react-native'
+import { View, Text, Pressable, StyleSheet } from 'react-native'
 import { CameraView, useCameraPermissions } from 'expo-camera'
 import { parseConnectionPayload, type ConnectionConfig } from '@orbit/companion-client'
-import { cn } from '~/lib/utils'
 import { Button } from '~/components/ui/button'
+import { getThemeTokens } from '~/lib/theme-tokens'
+import { useThemeStore } from '~/stores/theme-store'
 
 interface QRScannerProps {
-  /** Callback quando QR code é escaneado com sucesso. Retorna config (sem PIN). */
-  onScanned: (config: Omit<ConnectionConfig, 'pin'>) => void
-  /** Desabilita o scan (enquanto processa). */
+  onScanned: (config: Omit<ConnectionConfig, 'pin'> & { pin?: string }) => void
   disabled?: boolean
-  className?: string
 }
 
-export function QRScanner({ onScanned, disabled, className }: QRScannerProps) {
+export function QRScanner({ onScanned, disabled }: QRScannerProps) {
+  const tokens = getThemeTokens(useThemeStore((s) => s.resolved))
   const [permission, requestPermission] = useCameraPermissions()
   const [scanned, setScanned] = useState(false)
 
   const handleBarcodeScanned = useCallback(
     ({ data }: { data: string }) => {
       if (scanned || disabled) return
-
       const config = parseConnectionPayload(data)
       if (config) {
         setScanned(true)
@@ -30,63 +28,67 @@ export function QRScanner({ onScanned, disabled, className }: QRScannerProps) {
     [scanned, disabled, onScanned],
   )
 
-  // Permissão não determinada — mostra request
   if (!permission) {
     return (
-      <View className={cn('flex-1 items-center justify-center gap-4', className)}>
-        <Text className="text-muted-foreground">Preparando câmera...</Text>
+      <View style={s.center}>
+        <Text style={[s.mutedFg, { color: tokens.mutedForeground }]}>Preparando câmera...</Text>
       </View>
     )
   }
 
-  // Permissão negada — mostra botão para abrir configurações
   if (!permission.granted) {
     return (
-      <View className={cn('flex-1 items-center justify-center gap-4 p-6', className)}>
-        <Text className="text-center text-lg font-semibold text-foreground">
-          Permissão de câmera necessária
-        </Text>
-        <Text className="text-center text-sm text-muted-foreground">
+      <View style={[s.center, { padding: 24 }]}>
+        <Text style={[s.permTitle, { color: tokens.foreground }]}>Permissão de câmera necessária</Text>
+        <Text style={[s.permDesc, { color: tokens.mutedForeground }]}>
           O Orbit precisa de acesso à câmera para escanear o QR code de conexão.
         </Text>
-        <Button onPress={requestPermission}>
-          Conceder Permissão
-        </Button>
+        <Button onPress={requestPermission}>Conceder Permissão</Button>
       </View>
     )
   }
 
-  // Câmera ativa — scan de QR code
   return (
-    <View className={cn('overflow-hidden rounded-xl', className)}>
+    <View style={s.scannerContainer}>
       <CameraView
         style={{ flex: 1, minHeight: 300 }}
         barcodeScannerSettings={{ barcodeTypes: ['qr'] }}
         onBarcodeScanned={scanned ? undefined : handleBarcodeScanned}
       >
-        {/* Overlay de scan */}
-        <View className="flex-1 items-center justify-center">
-          {/* Moldura de scan */}
-          <View className="h-56 w-56 rounded-2xl border-2 border-white/60" />
-
+        <View style={s.overlay}>
+          <View style={s.scanFrame} />
           {scanned && (
-            <View className="absolute bottom-8 rounded-full bg-black/60 px-4 py-2">
-              <Text className="text-sm text-white">QR code detectado!</Text>
+            <View style={s.scannedBadge}>
+              <Text style={s.scannedText}>QR code detectado!</Text>
             </View>
           )}
         </View>
       </CameraView>
 
       {scanned && (
-        <View className="absolute inset-0 items-center justify-center bg-black/30">
-          <Pressable
-            className="rounded-full bg-primary px-6 py-3"
-            onPress={() => setScanned(false)}
-          >
-            <Text className="font-medium text-primary-foreground">Escanar novamente</Text>
+        <View style={s.rescanOverlay}>
+          <Pressable style={[s.rescanBtn, { backgroundColor: tokens.primary }]} onPress={() => setScanned(false)}>
+            <Text style={[s.rescanText, { color: tokens.primaryForeground }]}>Escanar novamente</Text>
           </Pressable>
         </View>
       )}
     </View>
   )
 }
+
+const s = StyleSheet.create({
+  center: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 16 },
+  mutedFg: {},
+  permTitle: { textAlign: 'center', fontSize: 18, fontWeight: '600' },
+  permDesc: { textAlign: 'center', fontSize: 14 },
+
+  scannerContainer: { overflow: 'hidden', borderRadius: 12 },
+  overlay: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  scanFrame: { width: 224, height: 224, borderRadius: 16, borderWidth: 2, borderColor: 'rgba(255,255,255,0.6)' },
+  scannedBadge: { position: 'absolute', bottom: 32, borderRadius: 9999, backgroundColor: 'rgba(0,0,0,0.6)', paddingHorizontal: 16, paddingVertical: 8 },
+  scannedText: { fontSize: 14, color: '#fff' },
+
+  rescanOverlay: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(0,0,0,0.3)' },
+  rescanBtn: { borderRadius: 9999, paddingHorizontal: 24, paddingVertical: 12 },
+  rescanText: { fontWeight: '500' },
+})

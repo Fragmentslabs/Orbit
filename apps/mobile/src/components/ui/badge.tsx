@@ -1,51 +1,28 @@
-import { cva, type VariantProps } from "class-variance-authority";
-import { Text } from "react-native";
-import { cn } from "~/lib/utils";
+import { Text, StyleSheet, type TextProps } from "react-native";
+import { getThemeTokens } from '~/lib/theme-tokens';
+import { useThemeStore } from '~/stores/theme-store';
 
-const badgeVariants = cva(
-  "flex-row items-center rounded-full border px-2.5 py-0.5 native:py-1",
-  {
-    variants: {
-      variant: {
-        default: "border-transparent bg-primary",
-        secondary: "border-transparent bg-secondary",
-        destructive: "border-transparent bg-destructive",
-        outline: "",
-      },
-    },
-    defaultVariants: {
-      variant: "default",
-    },
-  }
-);
+type BadgeProps = TextProps & {
+  variant?: 'default' | 'secondary' | 'destructive' | 'outline';
+};
 
-const badgeTextVariants = cva(
-  "text-xs native:text-sm font-semibold",
-  {
-    variants: {
-      variant: {
-        default: "text-primary-foreground",
-        secondary: "text-secondary-foreground",
-        destructive: "text-destructive-foreground",
-        outline: "text-foreground",
-      },
-    },
-    defaultVariants: {
-      variant: "default",
-    },
-  }
-);
+function Badge({ variant = 'default', style, ...props }: BadgeProps) {
+  const tokens = getThemeTokens(useThemeStore((s) => s.resolved));
 
-type BadgeProps = React.ComponentPropsWithoutRef<typeof Text> &
-  VariantProps<typeof badgeVariants>;
+  const variantStyles: Record<typeof variant, object> = {
+    default: { borderColor: 'transparent', backgroundColor: tokens.primary, color: tokens.primaryForeground },
+    secondary: { borderColor: 'transparent', backgroundColor: tokens.muted, color: tokens.foreground },
+    destructive: { borderColor: 'transparent', backgroundColor: '#ff3344', color: tokens.foreground },
+    outline: { backgroundColor: 'transparent', color: tokens.foreground },
+  };
 
-function Badge({ variant, className, ...props }: BadgeProps) {
   return (
-    <Text
-      className={cn(badgeVariants({ variant }), badgeTextVariants({ variant }), className)}
-      {...props}
-    />
+    <Text style={[s.base, variantStyles[variant], style]} {...props} />
   );
 }
 
-export { Badge, badgeVariants };
+const s = StyleSheet.create({
+  base: { flexDirection: 'row', alignItems: 'center', borderRadius: 9999, borderWidth: 1, paddingHorizontal: 10, paddingVertical: 2, fontSize: 12, fontWeight: '600' },
+});
+
+export { Badge };

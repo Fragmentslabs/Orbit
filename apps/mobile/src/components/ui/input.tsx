@@ -1,22 +1,29 @@
-import { TextInput, type TextInputProps } from "react-native";
-import { cn } from "~/lib/utils";
+import { TextInput, StyleSheet, type TextInputProps } from "react-native";
+import { getThemeTokens } from '~/lib/theme-tokens';
+import { useThemeStore } from '~/stores/theme-store';
 
-const Input = ({ className, ...props }: TextInputProps) => {
+const Input = ({ style, ...props }: TextInputProps) => {
+  const tokens = getThemeTokens(useThemeStore((s) => s.resolved));
+
   return (
     <TextInput
-      className={cn(
-        "flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground",
-        "web:ring-offset-background",
-        "file:border-0 file:bg-transparent file:font-medium",
-        "placeholder:text-muted-foreground",
-        "disabled:cursor-not-allowed disabled:opacity-50",
-        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-        className
-      )}
-      placeholderTextColor="hsl(var(--muted-foreground))"
+      style={[s.input, { borderColor: tokens.muted, backgroundColor: tokens.background, color: tokens.foreground }, style]}
+      placeholderTextColor={tokens.mutedForeground}
       {...props}
     />
   );
 };
+
+const s = StyleSheet.create({
+  input: {
+    height: 40,
+    width: '100%',
+    borderWidth: 1,
+    borderRadius: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    fontSize: 14,
+  },
+});
 
 export { Input };

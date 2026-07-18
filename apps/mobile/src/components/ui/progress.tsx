@@ -1,10 +1,6 @@
 import { View } from "react-native";
 import * as ProgressPrimitive from "@rn-primitives/progress";
-import { cssInterop } from "nativewind";
 import { cn } from "~/lib/utils";
-
-cssInterop(ProgressPrimitive.Root, { className: "style" });
-cssInterop(ProgressPrimitive.Indicator, { className: "style" });
 
 function Progress({
   className,

@@ -1,7 +1,10 @@
 import { TextInput, type TextInputProps } from "react-native";
 import { cn } from "~/lib/utils";
+import { getThemeTokens } from '~/lib/theme-tokens';
+import { useThemeStore } from '~/stores/theme-store';
 
 const Textarea = ({ className, ...props }: TextInputProps) => {
+  const tokens = getThemeTokens(useThemeStore((s) => s.resolved));
   return (
     <TextInput
       multiline
@@ -13,7 +16,7 @@ const Textarea = ({ className, ...props }: TextInputProps) => {
         "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
         className
       )}
-      placeholderTextColor="hsl(var(--muted-foreground))"
+      placeholderTextColor={tokens.mutedForeground}
       textAlignVertical="top"
       {...props}
     />
