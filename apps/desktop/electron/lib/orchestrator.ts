@@ -267,7 +267,6 @@ export async function approvePlan(
           orchestrationRole: 'worker',
           parentSessionId: sessionId,
           workerTitle: task.title,
-          permissionThresholds: input.permissionThresholds,
         }
         await runChat(win, workerInput)
 

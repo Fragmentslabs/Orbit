@@ -1,24 +1,10 @@
-import type { PermissionMode, PermissionThresholds, SendMessageInput } from '@shared/chat'
-import { DEFAULT_PERMISSION_THRESHOLDS } from '@shared/chat'
+import type { PermissionDecision, PermissionMode } from '@shared/chat'
 import { newRequestId } from '../ask-broker'
 import { dispatchAsk } from '../ask-dispatch'
 import { broadcastChatEvent } from '../broadcast'
-import type { ToolContext } from '../tools/context'
-import { assess, decide, type WorkDirs } from './rules'
+import { assess, isForbidden } from './rules'
+import { checkTrust, addTrust } from './trust-rules'
 
-/**
- * Gate de permissões plugado na opção `toolApproval` do streamText/generateText
- * (ai-sdk v7): a função é async — quando o veredito exige confirmação, o card
- * aparece na UI e o stream fica aguardando a resposta, sem pausa/retomada.
- * Workers emitem o pedido no chat do orquestrador (gatekeeping).
- */
-
-export type PermissionDecision = 'allow' | 'always' | 'deny'
-
-/** "Sempre permitir" por sessão: ruleIds aprovados de forma permanente na sessão */
-const alwaysAllowed = new Map<string, Set<string>>()
-
-/** Razões de negação por toolCallId — consumidas pelo case tool-output-denied */
 export const denialReasons = new Map<string, string>()
 
 export function takeDenialReason(toolCallId: string): string | undefined {
@@ -33,36 +19,42 @@ interface ApprovalToolCall {
   input: unknown
 }
 
+const sessionTrust = new Map<string, Set<string>>()
+
+export function clearSessionTrust(sessionId: string): void {
+  sessionTrust.delete(sessionId)
+}
+
 export function createToolApproval(
-  input: SendMessageInput,
-  ctx: ToolContext | null,
-  signal: AbortSignal | undefined,
+  mode: PermissionMode,
+  sessionId: string,
+  dir: string | null,
+  signal?: AbortSignal,
+  parentSessionId?: string,
+  workerTitle?: string,
 ) {
-  const mode: PermissionMode = input.options.permissionMode ?? 'ask'
-  const thresholds: PermissionThresholds =
-    (input.permissionThresholds?.[mode]) ?? DEFAULT_PERMISSION_THRESHOLDS[mode]
-  const dirs: WorkDirs | null = ctx
-    ? { directory: ctx.directory, extraDirectories: ctx.extraDirectories }
-    : null
-
   return async ({ toolCall }: { toolCall: ApprovalToolCall }) => {
-    const assessment = assess(toolCall.toolName, toolCall.input, dirs)
-    if (!assessment) return 'not-applicable' as const
-
-    const decision = decide(mode, assessment.verdict, thresholds)
-    if (decision === 'approved') return 'approved' as const
-    if (decision === 'denied') {
-      const reason = `Bloqueado pela política de segurança: ${assessment.claim.detail}.`
-      denialReasons.set(toolCall.toolCallId, reason)
-      return { type: 'denied' as const, reason: `${reason} Busque uma alternativa segura e siga.` }
+    if (isForbidden(toolCall.toolName, toolCall.input, dir)) {
+      denialReasons.set(toolCall.toolCallId, 'Ação bloqueada pela política de segurança.')
+      return { type: 'denied' as const, reason: 'Esta ação é bloqueada pela política de segurança. Busque uma alternativa segura.' }
     }
 
-    // decision === 'user': confirma com o usuário (no chat do pai, se worker)
-    if (alwaysAllowed.get(input.sessionId)?.has(assessment.ruleId)) return 'approved' as const
+    const assessment = assess(toolCall.toolName, toolCall.input, dir)
+    if (!assessment) return 'approved' as const
+
+    if (mode === 'full') return 'approved' as const
+
+    const ruleId = assessment.ruleId
+
+    if (checkTrust(ruleId)) return 'approved' as const
+
+    const targetSession = sessionTrust.get(sessionId)
+    if (targetSession?.has(ruleId)) return 'approved' as const
 
     const requestId = newRequestId()
-    const isWorker = input.orchestrationRole === 'worker' && !!input.parentSessionId
-    const target = isWorker ? input.parentSessionId! : input.sessionId
+    const isWorker = !!parentSessionId
+    const target = isWorker ? parentSessionId! : sessionId
+
     try {
       const reply = await dispatchAsk<PermissionDecision>(
         target,
@@ -71,25 +63,35 @@ export function createToolApproval(
           kind: 'permission',
           claim: assessment.claim,
           origin: isWorker
-            ? { workerSessionId: input.sessionId, workerTitle: input.workerTitle ?? 'worker' }
+            ? { workerSessionId: sessionId, workerTitle: workerTitle ?? 'worker' }
             : undefined,
         },
         signal,
       )
-      if (reply === 'always') {
-        const set = alwaysAllowed.get(input.sessionId) ?? new Set<string>()
-        set.add(assessment.ruleId)
-        alwaysAllowed.set(input.sessionId, set)
+
+      if (reply === 'always_chat') {
+        const set = sessionTrust.get(sessionId) ?? new Set<string>()
+        set.add(ruleId)
+        sessionTrust.set(sessionId, set)
         return 'approved' as const
       }
+
+      if (reply === 'always') {
+        await addTrust(ruleId)
+        const set = sessionTrust.get(sessionId) ?? new Set<string>()
+        set.add(ruleId)
+        sessionTrust.set(sessionId, set)
+        return 'approved' as const
+      }
+
       if (reply === 'allow') return 'approved' as const
+
       denialReasons.set(toolCall.toolCallId, 'Negado pelo usuário.')
       return {
         type: 'denied' as const,
         reason: 'O usuário negou esta ação. Não a repita — siga por outro caminho ou pergunte.',
       }
     } catch {
-      // Abort da sessão / pedido rejeitado
       denialReasons.set(toolCall.toolCallId, 'Pedido de permissão cancelado.')
       return { type: 'denied' as const, reason: 'O pedido de permissão foi cancelado.' }
     } finally {

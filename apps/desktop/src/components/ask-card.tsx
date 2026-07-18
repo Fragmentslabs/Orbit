@@ -1,19 +1,13 @@
 import { useState } from "react"
-import { Bot, ChevronLeft, ChevronRight, HelpCircle, ShieldAlert, TriangleAlert } from "lucide-react"
+import { Bot, ChevronLeft, ChevronRight, ChevronDown, HelpCircle, ShieldAlert, TriangleAlert } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Input } from "@/components/ui/input"
 import { cn } from "@/lib/utils"
 import type { Question } from "@shared/chat"
 import { chatApi } from "@/src/lib/ipc"
 import type { PendingAskUI } from "@/src/stores/session-store"
-
-/**
- * Card inline (acima do input) para pedidos que o agente aguarda:
- * - permissão: ação sensível do gate de permissões → Permitir / Sempre / Negar
- * - question: perguntas estruturadas da tool question → opções + texto livre
- * O card some quando o main emite ask:done (após a resposta chegar ao broker).
- */
 
 function OriginBadge({ workerTitle }: { workerTitle: string }) {
   return (
@@ -29,6 +23,7 @@ function PermissionBody({ ask, submitted, onReply }: {
   onReply: (value: unknown) => void
 }) {
   const claim = ask.claim!
+  const [open, setOpen] = useState(false)
   return (
     <>
       <div className="flex items-start gap-2">
@@ -51,12 +46,23 @@ function PermissionBody({ ask, submitted, onReply }: {
         <Button size="sm" variant="outline" disabled={submitted} onClick={() => onReply("deny")}>
           Negar
         </Button>
-        <Button size="sm" variant="outline" disabled={submitted} onClick={() => onReply("always")}>
-          Sempre permitir
-        </Button>
-        <Button size="sm" disabled={submitted} onClick={() => onReply("allow")}>
-          Permitir
-        </Button>
+        <DropdownMenu open={open} onOpenChange={setOpen}>
+          <DropdownMenuTrigger render={<Button size="sm" disabled={submitted} />}>
+            Permitir
+            <ChevronDown className="ml-1 size-3" />
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem onClick={() => { setOpen(false); onReply("allow") }}>
+              Uma vez
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => { setOpen(false); onReply("always_chat") }}>
+              Sempre neste chat
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => { setOpen(false); onReply("always") }}>
+              Sempre
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
     </>
   )

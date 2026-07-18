@@ -18,6 +18,8 @@ import { abortChat, runChat } from './lib/chat-engine'
 import { reply as askReply, rejectSession as rejectSessionAsks } from './lib/ask-broker'
 import { abortOrchestration, approvePlan, rejectPlan, runOrchestration } from './lib/orchestrator'
 import { initMcp, listMcpStatus, readMcpConfig, reconnectMcp, saveMcpConfig } from './lib/mcp'
+import { loadTrustRules } from './lib/permission/trust-rules'
+import { clearSessionTrust } from './lib/permission'
 import { savePlanFile, deletePlanFile, readPlanFile } from './lib/plan-file'
 import { registerMediaProtocol } from './lib/media'
 import { startCompanionServer, getCompanionStatus, setPairingMode } from './lib/companion-server'
@@ -551,6 +553,7 @@ app.whenReady().then(() => {
     abortChat(sessionId)
     abortOrchestration(sessionId)
     rejectSessionAsks(sessionId)
+    clearSessionTrust(sessionId)
   })
   ipcMain.handle('chat:askReply', (_event, requestId: string, value: unknown) => askReply(requestId, value))
   ipcMain.handle('chat:approvePlan', (_event, sessionId: string, planId: string, taskIds?: string[]) => {
@@ -787,6 +790,7 @@ app.whenReady().then(() => {
   ipcMain.handle('mcp:save', (_event, config) => saveMcpConfig(config))
   ipcMain.handle('mcp:reconnect', (_event, name?: string) => reconnectMcp(name))
   void initMcp()
+  void loadTrustRules()
 
   // Processos em background
   ipcMain.handle('process:list', () => listProcesses())

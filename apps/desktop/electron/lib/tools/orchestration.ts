@@ -55,7 +55,6 @@ export function createSubagentTool(input: SendMessageInput, ctx: ToolContext | n
         orchestrationRole: 'worker',
         parentSessionId: input.sessionId,
         workerTitle: task.split('\n')[0].trim().slice(0, 60) || 'subagente',
-        permissionThresholds: input.permissionThresholds,
       }
 
       const workerCtx: ToolContext | null =
@@ -65,13 +64,21 @@ export function createSubagentTool(input: SendMessageInput, ctx: ToolContext | n
 
       const model = await resolveModel(worker.providerId, worker.modelId)
       const tools = buildToolSet(workerInput, workerCtx)
+      const toolApproval = createToolApproval(
+        workerInput.options.permissionMode ?? 'ask',
+        workerInput.sessionId,
+        ctx?.directory ?? null,
+        ctx?.abort,
+        workerInput.parentSessionId,
+        workerInput.workerTitle,
+      )
 
       const result = await generateText({
         model,
         system: await buildSystemPrompt(workerInput),
         prompt: task,
         tools: Object.keys(tools).length > 0 ? tools : undefined,
-        toolApproval: createToolApproval(workerInput, workerCtx, ctx?.abort),
+        toolApproval,
         stopWhen: stepCountIs(SUBAGENT_MAX_STEPS),
         abortSignal: ctx?.abort,
         providerOptions: await buildProviderOptions(workerInput),

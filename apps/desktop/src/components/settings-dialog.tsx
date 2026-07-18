@@ -31,7 +31,7 @@ interface TabDef {
 
 const TABS: TabDef[] = [
   { id: "providers", label: "Provedores", icon: KeyRound, description: "Chaves de API dos provedores de IA." },
-  { id: "autonomy", label: "Preferências", icon: Shield, description: "Preferências gerais, modelos padrão e permissões." },
+  { id: "autonomy", label: "Preferências", icon: Shield, description: "Modelos padrão, modos ativos e memória." },
   { id: "mcp-skills", label: "Ferramentas", icon: Puzzle, description: "Servidores MCP e skills do usuário." },
   { id: "analytics", label: "Uso e Limites", icon: BarChart3, description: "Estatísticas de uso e consumo de tokens." },
   { id: "data", label: "Dados", icon: Database, description: "Exportar e importar seus dados." },
