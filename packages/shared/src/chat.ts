@@ -180,33 +180,9 @@ export interface ReasoningConfig {
 }
 
 export type PermissionMode = "ask" | "approve" | "full"
+export type PermissionDecision = "allow" | "always_chat" | "always" | "deny"
 
-/** Nível de risco de uma ação — ordem crescente: low < medium < high. "forbidden" é piso absoluto (mesmo full não passa). */
-export type RiskLevel = "low" | "medium" | "high"
-export type Verdict = RiskLevel | "forbidden"
-
-/** Sensibilidade de decisões estruturais — controla autonomia do modelo em responder tool question.
- * low = pergunta cada decisão; medium = decide coisas básicas, pergunta estruturais; high = decide tudo sozinho. */
-export type SensitivityLevel = "low" | "medium" | "high"
-
-/** Thresholds parametrizáveis por modo: terminal (execução de ações) + decisions (tool question). */
-export interface PermissionThresholds {
-  /** Risco máximo que o agente executa sem perguntar. */
-  terminalAuto: RiskLevel
-  /** Sensibilidade máxima para o agente decidir sozinho uma tool question. */
-  decisionsAuto: SensitivityLevel
-}
-
-export type PermissionThresholdsByMode = Record<PermissionMode, PermissionThresholds>
-
-/** Defaults alinhados à spec: ask=max collaboration, approve=autonomia operacional, full=irrestrito. */
-export const DEFAULT_PERMISSION_THRESHOLDS: PermissionThresholdsByMode = {
-  ask: { terminalAuto: "medium", decisionsAuto: "medium" },
-  approve: { terminalAuto: "high", decisionsAuto: "medium" },
-  full: { terminalAuto: "high", decisionsAuto: "high" },
-}
-
-/** Ação sensível que uma ferramenta quer executar (bash, write, edit) */
+/** Ação sensível que uma ferramenta quer executar (bash, write, edit, MCP) */
 export interface PermissionClaim {
   tool: string
   /** Título curto exibido na UI (ex: "bash: git push --force") */
@@ -317,8 +293,8 @@ export interface SendMessageInput {
   parentSessionId?: string
   /** Título curto da tarefa do worker, para badges de origem (preenchido pelo main) */
   workerTitle?: string
-  /** Thresholds de permissões por modo (vindo das Settings; default = DEFAULT_PERMISSION_THRESHOLDS) */
-  permissionThresholds?: PermissionThresholdsByMode
+  /** True na primeira troca da sessão (sem histórico prévio). Controla injeção de conteúdo de memória. */
+  isFirstExchange?: boolean
 }
 
 export type ChatEvent =

@@ -235,28 +235,33 @@ async function buildBrainBlock(input: SendMessageInput): Promise<string[]> {
   try {
     if (input.mode === 'chat') {
       parts.push(BRAIN_CHAT_PROMPT)
-      const ctx = await loadPromptContext('chat')
-      if (ctx.core.length) parts.push(`Fatos permanentes sobre o usuário:\n${memoryLines(ctx.core)}`)
-      if (ctx.general.length) {
-        parts.push(`Preferências gerais do usuário (valem em todos os modos):\n${memoryLines(ctx.general)}`)
-      }
-      if (ctx.seasonal.length) {
-        parts.push(
-          `Memórias sazonais recentes (use como contexto tácito, NÃO repita textualmente):\n${memoryLines(ctx.seasonal)}`,
-        )
+      // Conteúdo real das memórias só na primeira troca — depois o histórico já tem contexto
+      if (input.isFirstExchange !== false) {
+        const ctx = await loadPromptContext('chat')
+        if (ctx.core.length) parts.push(`Fatos permanentes sobre o usuário:\n${memoryLines(ctx.core)}`)
+        if (ctx.general.length) {
+          parts.push(`Preferências gerais do usuário (valem em todos os modos):\n${memoryLines(ctx.general)}`)
+        }
+        if (ctx.seasonal.length) {
+          parts.push(
+            `Memórias sazonais recentes (use como contexto tácito, NÃO repita textualmente):\n${memoryLines(ctx.seasonal)}`,
+          )
+        }
       }
     } else {
       parts.push(BRAIN_CODE_PROMPT)
-      const ctx = await loadPromptContext('code', input.directory)
-      // Apenas o node overview é injetado automaticamente — o agente usa
-      // memory_graph para buscar o restante do grafo sob demanda
-      const overview = ctx.project.find((m) => m.area === 'overview')
-      if (overview) {
-        const doc = overview.hasDoc ? ' (doc — use memory_open para ler o mapa completo)' : ''
-        parts.push(`Visão geral do projeto "${ctx.projectName ?? 'atual'}":\n- ${overview.text}${doc}`)
-      }
-      if (ctx.general.length) {
-        parts.push(`Preferências gerais de trabalho do usuário:\n${memoryLines(ctx.general)}`)
+      if (input.isFirstExchange !== false) {
+        const ctx = await loadPromptContext('code', input.directory)
+        // Apenas o node overview é injetado automaticamente — o agente usa
+        // memory_graph para buscar o restante do grafo sob demanda
+        const overview = ctx.project.find((m) => m.area === 'overview')
+        if (overview) {
+          const doc = overview.hasDoc ? ' (doc — use memory_open para ler o mapa completo)' : ''
+          parts.push(`Visão geral do projeto "${ctx.projectName ?? 'atual'}":\n- ${overview.text}${doc}`)
+        }
+        if (ctx.general.length) {
+          parts.push(`Preferências gerais de trabalho do usuário:\n${memoryLines(ctx.general)}`)
+        }
       }
     }
   } catch (err) {

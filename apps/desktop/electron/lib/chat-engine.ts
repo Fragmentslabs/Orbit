@@ -6,6 +6,7 @@ import type {
   ChatMessage,
   FilePart,
   MessagePart,
+  PermissionMode,
   SendMessageInput,
   SessionInfo,
   ToolPart,
@@ -358,12 +359,27 @@ export async function runChat(win: BrowserWindow, input: SendMessageInput): Prom
       }
     }
 
+    const mode: PermissionMode = input.options.permissionMode ?? 'ask'
+    const toolApproval = supportsTools
+      ? createToolApproval(
+          mode,
+          input.sessionId,
+          toolContext?.directory ?? null,
+          controller.signal,
+          input.parentSessionId,
+          input.workerTitle,
+        )
+      : undefined
+
+    // Só injeta conteúdo de memória na primeira troca da sessão
+    input.isFirstExchange = isFirstExchange
+
     const result = streamText({
       model,
       system: await buildSystemPrompt(input),
       messages: toModelMessages(history.slice(0, -1)),
       tools: supportsTools ? buildToolSet(input, toolContext) : undefined,
-      toolApproval: supportsTools ? createToolApproval(input, toolContext, controller.signal) : undefined,
+      toolApproval,
       stopWhen: stepCountIs(MAX_STEPS),
       abortSignal: controller.signal,
       providerOptions: await buildProviderOptions(input),

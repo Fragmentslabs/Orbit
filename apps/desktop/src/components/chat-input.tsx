@@ -100,7 +100,7 @@ export function ChatInput({ onSubmit, status, onStop, sessionId }: {
         ? [{ id: "thinking", label: "Thinking", description: "Alterna raciocínio estendido do modelo", keywords: ["reasoning", "pensar"], group: "Modos" as const, active: thinking, run: toggle(() => update({ enabled: !enabled, variantId })) }]
         : []),
       { id: "simples", label: "Simples", description: "Alterna respostas em texto puro", keywords: ["texto", "plain"], group: "Modos" as const, active: simple, run: toggle(() => setSimple(!simple)) },
-      { id: "brain", label: "Memória (Brain)", description: "Alterna a memória persistente neste chat", keywords: ["memoria", "brain"], group: "Modos" as const, active: brain, run: toggle(() => setBrainEnabled(sessionId, !brain)) },
+      { id: "brain", label: "Memória (Brain)", description: "Orbit lembra fatos e preferências entre conversas", keywords: ["memoria", "brain"], group: "Modos" as const, active: brain, run: toggle(() => setBrainEnabled(sessionId, !brain)) },
       { id: "subagents", label: "Subagents", description: "Alterna workers em background", keywords: ["worker", "delegar"], group: "Modos" as const, active: subagents, run: toggle(() => setSubagents((v) => !v)) },
       { id: "orchestra", label: "Orchestra", description: "Alterna orquestração em tarefas paralelas", keywords: ["workers", "plano"], group: "Modos" as const, active: orchestra, run: toggle(() => setOrchestra((v) => !v)) },
       ...actionCommands,
@@ -240,7 +240,7 @@ export function ChatInput({ onSubmit, status, onStop, sessionId }: {
         <ModeToggle
           icon={BrainCircuit}
           label="Memória"
-          description="Memória persistente entre conversas: o Orbit lembra fatos e preferências. Desative apenas neste chat."
+          description="Orbit lembra fatos e preferências suas entre conversas. Desative apenas neste chat se preferir uma interação sem contexto."
           active={brain}
           onToggle={() => setBrainEnabled(sessionId, !brain)}
         />
