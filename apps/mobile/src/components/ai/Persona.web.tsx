@@ -10,43 +10,17 @@ import {
   useViewModelInstance,
   useViewModelInstanceColor,
 } from '@rive-app/react-webgl2'
-import { memo, useEffect, useState } from 'react'
+import { memo, useEffect } from 'react'
 import type { FC } from 'react'
 import {
   PERSONA_RIVE_URL,
   PERSONA_STATE_MACHINE,
   type PersonaProps,
 } from './persona-types'
-
-const getCurrentTheme = (): 'light' | 'dark' => {
-  if (typeof document !== 'undefined') {
-    if (document.documentElement.classList.contains('dark')) return 'dark'
-    if (document.documentElement.classList.contains('light')) return 'light'
-    if (typeof window !== 'undefined' && window.matchMedia?.('(prefers-color-scheme: dark)').matches) {
-      return 'dark'
-    }
-  }
-  // Mobile é dark por padrão
-  return 'dark'
-}
-
-function useTheme() {
-  const [theme, setTheme] = useState<'light' | 'dark'>(getCurrentTheme)
-
-  useEffect(() => {
-    const observer = new MutationObserver(() => setTheme(getCurrentTheme()))
-    observer.observe(document.documentElement, {
-      attributes: true,
-      attributeFilter: ['class'],
-    })
-    return () => observer.disconnect()
-  }, [])
-
-  return theme
-}
+import { useThemeStore } from '~/stores/theme-store'
 
 export const Persona: FC<PersonaProps> = memo(({ state = 'idle', size = 128 }) => {
-  const theme = useTheme()
+  const theme = useThemeStore((s) => s.resolved)
 
   const { rive, RiveComponent } = useRive({
     src: PERSONA_RIVE_URL,
