@@ -197,11 +197,6 @@ export function ChatScreen({ sessionId }: ChatScreenProps) {
           onDelete={handleDelete}
         />
 
-        {/* Ask cards */}
-        {activeAsks.map((ask) => (
-          <AskCard key={ask.requestId} ask={ask} onReply={(value) => replyToAsk(ask.requestId, value)} />
-        ))}
-
         <View style={{ flex: 1 }}>
           {/* Centro: persona grande + título — some assim que a conversa começa */}
           <Animated.View
@@ -245,6 +240,11 @@ export function ChatScreen({ sessionId }: ChatScreenProps) {
             <FolderSelector folders={folders} onFoldersChange={setFolders} />
           </View>
         )}
+
+        {/* Ask cards — acima do input */}
+        {activeAsks.map((ask) => (
+          <AskCard key={ask.requestId} ask={ask} onReply={(value) => replyToAsk(ask.requestId, value)} />
+        ))}
 
         <ChatInput onSend={handleSend} onAbort={handleAbort} isStreaming={isStreaming} sessionId={sessionId} />
       </KeyboardAvoidingView>

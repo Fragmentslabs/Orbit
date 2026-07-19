@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { View, Text, Pressable, TextInput, Platform } from 'react-native'
-import { ShieldAlert, HelpCircle, TriangleAlert, User } from 'lucide-react-native'
+import { ShieldAlert, HelpCircle, TriangleAlert, User, ChevronDown, ChevronUp } from 'lucide-react-native'
 import type { PendingAsk } from '~/stores/chat-store'
 import { getThemeTokens } from '~/lib/theme-tokens'
 import { useThemeStore } from '~/stores/theme-store'
@@ -10,13 +10,39 @@ interface AskCardProps {
   onReply: (value: unknown) => void
 }
 
+function btnMuted(tokens: Record<string, string>) {
+  return {
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: tokens.border,
+    backgroundColor: tokens.muted,
+    alignItems: 'center' as const,
+    flex: 1,
+  }
+}
+
+function btnPrimary(tokens: Record<string, string>) {
+  return {
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: tokens.primary,
+    backgroundColor: tokens.primary,
+    alignItems: 'center' as const,
+    flex: 1,
+  }
+}
+
 export function AskCard({ ask, onReply }: AskCardProps) {
   const tokens = getThemeTokens(useThemeStore((s) => s.resolved))
   const [submitted, setSubmitted] = useState(false)
+  const [showMore, setShowMore] = useState(false)
   const [questionIndex, setQuestionIndex] = useState(0)
   const [selectedOptions, setSelectedOptions] = useState<Record<string, string[]>>({})
   const [textAnswers, setTextAnswers] = useState<Record<string, string>>({})
-  const isPermission = ask.kind === 'permission'
 
   const reply = (value: unknown) => {
     if (submitted) return
@@ -24,28 +50,28 @@ export function AskCard({ ask, onReply }: AskCardProps) {
     onReply(value)
   }
 
+  const cardBg = {
+    marginHorizontal: 16,
+    marginVertical: 4,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: tokens.border,
+    backgroundColor: tokens.card,
+    padding: 12,
+  }
+
   // ─── Permissions ──────────────────────────────────────────────────────
 
-  if (isPermission && ask.claim) {
+  if (ask.kind === 'permission' && ask.claim) {
     const critical = ask.claim.critical
     return (
-      <View
-        style={{
-          marginHorizontal: 16,
-          marginVertical: 8,
-          borderRadius: 12,
-          borderWidth: 1,
-          borderColor: critical ? 'rgba(239,68,68,0.3)' : 'rgba(245,158,11,0.3)',
-          backgroundColor: critical ? 'rgba(239,68,68,0.05)' : 'rgba(245,158,11,0.05)',
-          padding: 12,
-        }}
-      >
+      <View style={cardBg}>
         {/* Header */}
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 }}>
           {critical ? (
             <TriangleAlert size={16} color="#ef4444" />
           ) : (
-            <ShieldAlert size={16} color="#f59e0b" />
+            <ShieldAlert size={16} color={tokens.mutedForeground} />
           )}
           <Text
             style={{
@@ -53,130 +79,111 @@ export function AskCard({ ask, onReply }: AskCardProps) {
               fontWeight: '700',
               textTransform: 'uppercase',
               letterSpacing: 0.5,
-              color: critical ? '#ef4444' : '#f59e0b',
+              color: tokens.foreground,
             }}
           >
-            {critical ? 'Operação crítica' : 'Permissão necessária'}
+            Permissão necessária
           </Text>
+          {ask.origin && (
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginLeft: 'auto' }}>
+              <User size={11} color={tokens.mutedForeground} />
+              <Text style={{ fontSize: 10, color: tokens.mutedForeground }}>
+                {ask.origin.workerTitle}
+              </Text>
+            </View>
+          )}
         </View>
 
-        {/* Origin badge */}
-        {ask.origin && (
-          <View
-            style={{
-              flexDirection: 'row',
-              alignItems: 'center',
-              gap: 4,
-              marginBottom: 6,
-            }}
-          >
-            <User size={11} color={tokens.mutedForeground} />
-            <Text style={{ fontSize: 10, color: tokens.mutedForeground }}>
-              worker: {ask.origin.workerTitle}
-            </Text>
-          </View>
-        )}
-
-        {/* Claim */}
+        {/* Claim title */}
         <Text
           style={{
             fontSize: 12,
             fontWeight: '600',
             fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
             color: tokens.foreground,
-            marginBottom: ask.claim.detail ? 4 : 8,
+            marginBottom: ask.claim.detail ? 4 : 10,
           }}
         >
           {ask.claim.title}
         </Text>
+
+        {/* Claim detail */}
         {ask.claim.detail && (
           <Text
             style={{
               fontSize: 11,
-              color: tokens.mutedForeground,
+              color: critical ? '#ef4444' : tokens.mutedForeground,
               lineHeight: 16,
-              marginBottom: 8,
+              marginBottom: 10,
             }}
           >
-            {ask.claim.detail}
+            {critical ? 'Ação crítica: ' : ''}{ask.claim.detail}
           </Text>
         )}
 
-        {/* Actions */}
-        <View style={{ flexDirection: 'row', gap: 8 }}>
+        {/* Actions row: Negar | Uma vez */}
+        <View style={{ flexDirection: 'row', gap: 8, marginBottom: showMore ? 6 : 0 }}>
           <Pressable
             onPress={() => reply('deny')}
             disabled={submitted}
-            style={{
-              flex: 1,
-              paddingVertical: 10,
-              borderRadius: 8,
-              borderWidth: 1,
-              borderColor: critical ? 'rgba(239,68,68,0.3)' : 'rgba(239,68,68,0.2)',
-              backgroundColor: critical ? 'rgba(239,68,68,0.1)' : 'rgba(239,68,68,0.06)',
-              alignItems: 'center',
-              opacity: submitted ? 0.4 : 1,
-            }}
+            style={{ ...btnMuted(tokens), opacity: submitted ? 0.4 : 1 }}
           >
-            <Text style={{ fontSize: 12, fontWeight: '600', color: '#ef4444' }}>Negar</Text>
+            <Text style={{ fontSize: 12, fontWeight: '600', color: tokens.foreground }}>Negar</Text>
           </Pressable>
-
           <Pressable
             onPress={() => reply('allow')}
             disabled={submitted}
-            style={{
-              flex: 1,
-              paddingVertical: 10,
-              borderRadius: 8,
-              borderWidth: 1,
-              borderColor: 'rgba(34,197,94,0.3)',
-              backgroundColor: 'rgba(34,197,94,0.1)',
-              alignItems: 'center',
-              opacity: submitted ? 0.4 : 1,
-            }}
+            style={{ ...btnPrimary(tokens), opacity: submitted ? 0.4 : 1 }}
           >
-            <Text style={{ fontSize: 12, fontWeight: '600', color: '#22c55e' }}>Uma vez</Text>
+            <Text style={{ fontSize: 12, fontWeight: '600', color: tokens.primaryForeground }}>
+              Uma vez
+            </Text>
           </Pressable>
         </View>
 
-        <View style={{ flexDirection: 'row', gap: 8, marginTop: 6 }}>
-          <Pressable
-            onPress={() => reply('always_chat')}
-            disabled={submitted}
-            style={{
-              flex: 1,
-              paddingVertical: 8,
-              borderRadius: 8,
-              borderWidth: 1,
-              borderColor: tokens.border,
-              backgroundColor: tokens.muted,
-              alignItems: 'center',
-              opacity: submitted ? 0.4 : 1,
-            }}
-          >
-            <Text style={{ fontSize: 11, fontWeight: '500', color: tokens.mutedForeground }}>
-              Sempre neste chat
-            </Text>
-          </Pressable>
-          <Pressable
-            onPress={() => reply('always')}
-            disabled={submitted}
-            style={{
-              flex: 1,
-              paddingVertical: 8,
-              borderRadius: 8,
-              borderWidth: 1,
-              borderColor: tokens.border,
-              backgroundColor: tokens.muted,
-              alignItems: 'center',
-              opacity: submitted ? 0.4 : 1,
-            }}
-          >
-            <Text style={{ fontSize: 11, fontWeight: '500', color: tokens.mutedForeground }}>
-              Sempre
-            </Text>
-          </Pressable>
-        </View>
+        {/* Accordion for more options */}
+        <Pressable
+          onPress={() => setShowMore((v) => !v)}
+          style={{
+            flexDirection: 'row',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: 4,
+            paddingVertical: 6,
+          }}
+        >
+          <Text style={{ fontSize: 11, color: tokens.mutedForeground }}>
+            {showMore ? 'Menos opções' : 'Mais opções'}
+          </Text>
+          {showMore ? (
+            <ChevronUp size={12} color={tokens.mutedForeground} />
+          ) : (
+            <ChevronDown size={12} color={tokens.mutedForeground} />
+          )}
+        </Pressable>
+
+        {showMore && (
+          <View style={{ gap: 6 }}>
+            <Pressable
+              onPress={() => reply('always_chat')}
+              disabled={submitted}
+              style={{ ...btnMuted(tokens), opacity: submitted ? 0.4 : 1 }}
+            >
+              <Text style={{ fontSize: 12, fontWeight: '600', color: tokens.foreground }}>
+                Sempre neste chat
+              </Text>
+            </Pressable>
+            <Pressable
+              onPress={() => reply('always')}
+              disabled={submitted}
+              style={{ ...btnMuted(tokens), opacity: submitted ? 0.4 : 1 }}
+            >
+              <Text style={{ fontSize: 12, fontWeight: '600', color: tokens.foreground }}>
+                Sempre
+              </Text>
+            </Pressable>
+          </View>
+        )}
       </View>
     )
   }
@@ -224,42 +231,30 @@ export function AskCard({ ask, onReply }: AskCardProps) {
     }
 
     return (
-      <View
-        style={{
-          marginHorizontal: 16,
-          marginVertical: 8,
-          borderRadius: 12,
-          borderWidth: 1,
-          borderColor: 'rgba(99,102,241,0.3)',
-          backgroundColor: 'rgba(99,102,241,0.05)',
-          padding: 12,
-        }}
-      >
+      <View style={cardBg}>
         {/* Header */}
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-          <HelpCircle size={16} color="#818cf8" />
+          <HelpCircle size={16} color={tokens.primary} />
           <Text
             style={{
               fontSize: 11,
               fontWeight: '700',
               textTransform: 'uppercase',
               letterSpacing: 0.5,
-              color: '#818cf8',
+              color: tokens.foreground,
             }}
           >
             Pergunta {questions.length > 1 ? `${questionIndex + 1}/${questions.length}` : ''}
           </Text>
+          {ask.origin && (
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginLeft: 'auto' }}>
+              <User size={11} color={tokens.mutedForeground} />
+              <Text style={{ fontSize: 10, color: tokens.mutedForeground }}>
+                {ask.origin.workerTitle}
+              </Text>
+            </View>
+          )}
         </View>
-
-        {/* Origin badge */}
-        {ask.origin && (
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginBottom: 6 }}>
-            <User size={11} color={tokens.mutedForeground} />
-            <Text style={{ fontSize: 10, color: tokens.mutedForeground }}>
-              worker: {ask.origin.workerTitle}
-            </Text>
-          </View>
-        )}
 
         {/* Navigation for multi-question */}
         {questions.length > 1 && (
@@ -316,7 +311,7 @@ export function AskCard({ ask, onReply }: AskCardProps) {
                   onPress={() => toggleOption(opt)}
                   disabled={submitted}
                   style={{
-                    paddingVertical: 8,
+                    paddingVertical: 10,
                     paddingHorizontal: 12,
                     borderRadius: 8,
                     borderWidth: 1,
@@ -343,7 +338,7 @@ export function AskCard({ ask, onReply }: AskCardProps) {
         <TextInput
           value={textAnswer}
           onChangeText={(v) => setTextAnswers((prev) => ({ ...prev, [q.id]: v }))}
-          placeholder="Digite sua resposta..."
+          placeholder="Outra resposta…"
           placeholderTextColor={tokens.mutedForeground}
           multiline
           editable={!submitted}
@@ -354,27 +349,18 @@ export function AskCard({ ask, onReply }: AskCardProps) {
             borderColor: tokens.border,
             borderRadius: 8,
             padding: 10,
-            minHeight: 60,
+            minHeight: 40,
             marginBottom: 10,
             textAlignVertical: 'top',
           }}
         />
 
-        {/* Action buttons */}
+        {/* Action buttons: Dispensar | Responder */}
         <View style={{ flexDirection: 'row', gap: 8 }}>
           <Pressable
             onPress={() => reply({ rejected: true })}
             disabled={submitted}
-            style={{
-              flex: 1,
-              paddingVertical: 10,
-              borderRadius: 8,
-              borderWidth: 1,
-              borderColor: tokens.border,
-              backgroundColor: tokens.muted,
-              alignItems: 'center',
-              opacity: submitted ? 0.4 : 1,
-            }}
+            style={{ ...btnMuted(tokens), opacity: submitted ? 0.4 : 1 }}
           >
             <Text style={{ fontSize: 12, fontWeight: '600', color: tokens.mutedForeground }}>
               Dispensar
@@ -383,18 +369,9 @@ export function AskCard({ ask, onReply }: AskCardProps) {
           <Pressable
             onPress={submitAnswers}
             disabled={submitted || !allAnswered}
-            style={{
-              flex: 1,
-              paddingVertical: 10,
-              borderRadius: 8,
-              borderWidth: 1,
-              borderColor: 'rgba(99,102,241,0.3)',
-              backgroundColor: 'rgba(99,102,241,0.1)',
-              alignItems: 'center',
-              opacity: submitted || !allAnswered ? 0.4 : 1,
-            }}
+            style={{ ...btnPrimary(tokens), opacity: submitted || !allAnswered ? 0.4 : 1 }}
           >
-            <Text style={{ fontSize: 12, fontWeight: '600', color: '#818cf8' }}>
+            <Text style={{ fontSize: 12, fontWeight: '600', color: tokens.primaryForeground }}>
               Responder
             </Text>
           </Pressable>
