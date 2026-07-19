@@ -574,13 +574,23 @@ async function handleRequest(client: ConnectedClient, requestId: string, req: Co
 
       case 'sessions:revert': {
         const revertState = await revertSession(req.sessionId, req.messageId)
-        sendResponse(ws, requestId, revertState !== null, revertState, revertState ? undefined : 'Não foi possível reverter')
+        if (revertState !== null) {
+          const messages = (await readJson<ChatMessage[]>(StorageKeys.messages(req.sessionId))) ?? []
+          sendResponse(ws, requestId, true, { revert: revertState, messages })
+        } else {
+          sendResponse(ws, requestId, false, undefined, 'Não foi possível reverter')
+        }
         break
       }
 
       case 'sessions:unrevert': {
         const done = await unrevertSession(req.sessionId)
-        sendResponse(ws, requestId, done, undefined, done ? undefined : 'Nada para desfazer')
+        if (done) {
+          const messages = (await readJson<ChatMessage[]>(StorageKeys.messages(req.sessionId))) ?? []
+          sendResponse(ws, requestId, true, { messages })
+        } else {
+          sendResponse(ws, requestId, false, undefined, 'Nada para desfazer')
+        }
         break
       }
 

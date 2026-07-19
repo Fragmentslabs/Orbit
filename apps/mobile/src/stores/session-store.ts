@@ -1,4 +1,13 @@
 import { create } from 'zustand'
+export interface RevertResponse {
+  revert: SessionRevert
+  messages: ChatMessage[]
+}
+
+export interface MessagesResponse {
+  messages: ChatMessage[]
+}
+
 import type {
   SessionInfo,
   SessionMode,
@@ -364,14 +373,13 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     try {
       const res = await wsClient.send({ type: 'sessions:revert', sessionId, messageId })
       if (res.ok && res.data) {
-        const revert = res.data as SessionRevert
+        const { revert, messages } = res.data as RevertResponse
         set((state) => ({
           sessions: state.sessions.map((s) =>
             s.id === sessionId ? { ...s, revert } : s,
           ),
+          messages: { ...state.messages, [sessionId]: messages },
         }))
-        // Recarrega as mensagens para refletir o truncamento
-        await get().fetchMessages(sessionId)
       }
     } catch {
       // Silently fail
@@ -382,14 +390,14 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     const { wsClient } = useConnectionStore.getState()
     try {
       const res = await wsClient.send({ type: 'sessions:unrevert', sessionId })
-      if (res.ok) {
+      if (res.ok && res.data) {
+        const { messages } = res.data as MessagesResponse
         set((state) => ({
           sessions: state.sessions.map((s) =>
             s.id === sessionId ? { ...s, revert: undefined } : s,
           ),
+          messages: { ...state.messages, [sessionId]: messages },
         }))
-        // Recarrega as mensagens para restaurar as descartadas
-        await get().fetchMessages(sessionId)
       }
     } catch {
       // Silently fail
