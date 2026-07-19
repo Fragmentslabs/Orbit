@@ -11,6 +11,7 @@ import {
 import type { FC } from "react"
 import { memo, useEffect, useMemo, useRef, useState } from "react"
 import { cn } from "@/lib/utils"
+import { useTheme } from "@/components/theme-provider"
 
 export type PersonaState = "idle" | "listening" | "thinking" | "speaking" | "asleep"
 
@@ -27,51 +28,20 @@ interface PersonaProps {
 
 const stateMachine = "default"
 
-const getCurrentTheme = (): "light" | "dark" => {
-  if (typeof window !== "undefined") {
-    if (document.documentElement.classList.contains("dark")) {
-      return "dark"
-    }
-    if (document.documentElement.classList.contains("light")) {
-      return "light"
-    }
-    if (window.matchMedia?.("(prefers-color-scheme: dark)").matches) {
-      return "dark"
-    }
-  }
-  return "light"
-}
-
-function useTheme() {
-  const [theme, setTheme] = useState<"light" | "dark">(getCurrentTheme)
+function useResolvedTheme(): "light" | "dark" {
+  const { theme } = useTheme()
+  const [systemDark, setSystemDark] = useState(() =>
+    window.matchMedia("(prefers-color-scheme: dark)").matches,
+  )
 
   useEffect(() => {
-    const observer = new MutationObserver(() => {
-      setTheme(getCurrentTheme())
-    })
-    observer.observe(document.documentElement, {
-      attributes: true,
-      attributeFilter: ["class"],
-    })
-
-    let mql: MediaQueryList | null = null
-    const handleMediaChange = () => {
-      setTheme(getCurrentTheme())
-    }
-    if (window.matchMedia) {
-      mql = window.matchMedia("(prefers-color-scheme: dark)")
-      mql.addEventListener("change", handleMediaChange)
-    }
-
-    return () => {
-      observer.disconnect()
-      if (mql) {
-        mql.removeEventListener("change", handleMediaChange)
-      }
-    }
+    const mql = window.matchMedia("(prefers-color-scheme: dark)")
+    const handler = (e: MediaQueryListEvent) => setSystemDark(e.matches)
+    mql.addEventListener("change", handler)
+    return () => mql.removeEventListener("change", handler)
   }, [])
 
-  return theme
+  return theme === "system" ? (systemDark ? "dark" : "light") : theme
 }
 
 export const Persona: FC<PersonaProps> = memo(
@@ -85,7 +55,7 @@ export const Persona: FC<PersonaProps> = memo(
     onStop,
     className,
   }) => {
-    const theme = useTheme()
+    const theme = useResolvedTheme()
     const source = "https://ejiidnob33g9ap1r.public.blob.vercel-storage.com/halo-2.0.riv"
 
     const callbacksRef = useRef({
