@@ -25,7 +25,7 @@ export default function MainLayout() {
             <Stack.Screen name="index" />
             <Stack.Screen name="chat/[id]" />
             <Stack.Screen name="memories" />
-            <Stack.Screen name="models" />
+
             <Stack.Screen name="usage" />
             <Stack.Screen name="tools" />
             <Stack.Screen name="settings" />

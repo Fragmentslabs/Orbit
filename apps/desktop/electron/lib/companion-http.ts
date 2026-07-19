@@ -17,6 +17,8 @@ import { app, BrowserWindow } from 'electron'
 import { readJson, writeJson, listKeys } from './storage'
 import { getCatalog } from './catalog'
 import { listCredentialProviders } from './auth'
+import { loadSkills } from './skills'
+import { listMcpStatus } from './mcp'
 
 export const HTTP_PORT = 3848
 
@@ -201,6 +203,18 @@ async function handleGetConnectedProviders(_req: IncomingMessage, res: ServerRes
   jsonResponse(res, 200, providers)
 }
 
+async function handleGetSkills(req: IncomingMessage, res: ServerResponse) {
+  const url = new URL(req.url ?? '/', `http://${req.headers.host ?? 'localhost'}`)
+  const directory = url.searchParams.get('directory') || undefined
+  const skills = await loadSkills(directory)
+  jsonResponse(res, 200, skills)
+}
+
+async function handleGetMcpStatus(_req: IncomingMessage, res: ServerResponse) {
+  const status = listMcpStatus()
+  jsonResponse(res, 200, status)
+}
+
 async function handleGetStatus(_req: IncomingMessage, res: ServerResponse) {
   const keys = await listKeys('session/')
   const status = {
@@ -235,6 +249,8 @@ function createRouter(
   routes.set('GET /api/catalog', handleGetCatalog)
   routes.set('GET /api/status', handleGetStatus)
   routes.set('GET /api/providers/connected', handleGetConnectedProviders)
+  routes.set('GET /api/skills', handleGetSkills)
+  routes.set('GET /api/mcp/status', handleGetMcpStatus)
 
   // Mutation endpoints
   routes.set('PATCH /api/preferences', handlePatchPreferences)

@@ -60,6 +60,19 @@ export class CompanionHttp {
     return this.get('/api/providers/connected')
   }
 
+  // ─── Skills ───────────────────────────────────────────────────────────────
+
+  async getSkills(directory?: string): Promise<HttpResult> {
+    const qs = directory ? `?directory=${encodeURIComponent(directory)}` : ''
+    return this.get(`/api/skills${qs}`)
+  }
+
+  // ─── MCP ──────────────────────────────────────────────────────────────────
+
+  async getMcpStatus(): Promise<HttpResult> {
+    return this.get('/api/mcp/status')
+  }
+
   // ─── Status ──────────────────────────────────────────────────────────────
 
   async getStatus(): Promise<HttpResult<{ online: boolean; activeSessions: number; pendingAsks: number; uptime: number }>> {
