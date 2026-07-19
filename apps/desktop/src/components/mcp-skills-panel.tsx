@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import {
   Cable,
   ChevronDown,
@@ -61,48 +61,68 @@ function KvEditor({ value, onChange, keyPlaceholder, valuePlaceholder }: {
   keyPlaceholder?: string
   valuePlaceholder?: string
 }) {
-  const entries = useMemo(() => Object.entries(value), [value])
+  const [items, setItems] = useState<Array<{ id: number; key: string; value: string }>>(() => [])
+  const idRef = useRef(0)
+  const valueRef = useRef(value)
 
-  const set = (key: string, newKey: string, newValue: string) => {
-    const next: Record<string, string> = {}
-    for (const [k, v] of Object.entries(value)) {
-      if (k !== key) next[k] = v
+  // Sincroniza do pai (ex: ao editar servidor existente) — só na abertura
+  useEffect(() => {
+    valueRef.current = value
+    const fromParent = Object.entries(value)
+    if (fromParent.length === 0) {
+      setItems([{ id: ++idRef.current, key: "", value: "" }])
+    } else {
+      setItems(fromParent.map(([k, v]) => ({ id: ++idRef.current, key: k, value: v })))
     }
-    if (newKey.trim()) next[newKey.trim()] = newValue
-    onChange(next)
+  }, [value])
+
+  const emit = (next: Array<{ key: string; value: string }>) => {
+    const result: Record<string, string> = {}
+    for (const { key, value } of next) {
+      if (key.trim() && value.trim()) result[key.trim()] = value
+    }
+    onChange(result)
   }
 
-  const remove = (key: string) => {
-    const next: Record<string, string> = {}
-    for (const [k, v] of Object.entries(value)) {
-      if (k !== key) next[k] = v
-    }
-    onChange(next)
+  const update = (index: number, field: "key" | "value", newVal: string) => {
+    setItems((prev) => {
+      const next = prev.map((item, i) => (i === index ? { ...item, [field]: newVal } : item))
+      emit(next)
+      return next
+    })
+  }
+
+  const remove = (index: number) => {
+    setItems((prev) => {
+      const next = prev.filter((_, i) => i !== index)
+      emit(next.length === 0 ? [{ key: "", value: "" }] : next)
+      return next.length === 0 ? [{ id: ++idRef.current, key: "", value: "" }] : prev.filter((_, i) => i !== index)
+    })
   }
 
   const add = () => {
-    onChange({ ...value, "": "" })
+    setItems((prev) => [...prev, { id: ++idRef.current, key: "", value: "" }])
   }
 
   return (
     <div className="flex flex-col gap-1">
-      {entries.map(([k, v]) => (
-        <div key={k || "__new"} className="flex items-center gap-1">
+      {items.map((item, index) => (
+        <div key={item.id} className="flex items-center gap-1">
           <Input
-            value={k}
-            onChange={(e) => set(k, e.target.value, v)}
+            value={item.key}
+            onChange={(e) => update(index, "key", e.target.value)}
             placeholder={keyPlaceholder ?? "Chave"}
             className="h-7 w-[140px] text-xs"
           />
           <Input
-            value={v}
-            onChange={(e) => set(k, k, e.target.value)}
+            value={item.value}
+            onChange={(e) => update(index, "value", e.target.value)}
             placeholder={valuePlaceholder ?? "Valor"}
             className="h-7 flex-1 text-xs"
           />
           <button
             type="button"
-            onClick={() => remove(k)}
+            onClick={() => remove(index)}
             className="flex size-6 shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-muted hover:text-foreground"
           >
             <X className="size-3" />
