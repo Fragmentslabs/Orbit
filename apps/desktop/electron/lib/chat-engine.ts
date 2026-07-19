@@ -151,12 +151,10 @@ export async function runChat(win: BrowserWindow, input: SendMessageInput): Prom
 
   // Revert ativo: nova mensagem consolida o revert — descarta as mensagens
   // posteriores ao ponto revertido antes de carregar o histórico
-  if (input.mode === 'code' && input.directory) {
-    try {
-      await cleanupRevert(sessionId)
-    } catch (err) {
-      console.error('[revert] cleanup falhou:', err)
-    }
+  try {
+    await cleanupRevert(sessionId)
+  } catch (err) {
+    console.error('[revert] cleanup falhou:', err)
   }
 
   const history = await loadMessages(sessionId)

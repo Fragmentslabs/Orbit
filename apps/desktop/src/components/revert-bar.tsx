@@ -1,5 +1,5 @@
 import { useState } from "react"
-import { ChevronDown, History, Undo2 } from "lucide-react"
+import { ChevronDown, History, Undo2, MessageSquareText } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
@@ -7,9 +7,10 @@ import type { SessionInfo } from "@shared/chat"
 import { useSessionStore } from "@/src/stores/session-store"
 
 /**
- * Barra exibida acima do input enquanto um revert está ativo: resumo das
- * alterações desfeitas + "Desfazer" (unrevert). Enviar nova mensagem
- * consolida o revert (o main descarta as mensagens posteriores).
+ * Barra exibida acima do input enquanto um revert está ativo:
+ * - Modo código: resumo dos arquivos alterados desfeitos + "Desfazer" (unrevert).
+ * - Modo chat: indica que a conversa foi truncada até o ponto revertido.
+ * Enviar nova mensagem consolida o revert.
  */
 export function RevertBar({ session }: { session: SessionInfo }) {
   const unrevert = useSessionStore((s) => s.unrevert)
@@ -17,18 +18,23 @@ export function RevertBar({ session }: { session: SessionInfo }) {
   const revert = session.revert
   if (!revert) return null
 
+  const isCode = Boolean(revert.files || revert.diff)
   const count = revert.files?.length ?? 0
-  const label =
-    count === 0
+  const label = isCode
+    ? count === 0
       ? "Arquivos revertidos"
       : count === 1
         ? "1 arquivo revertido"
         : `${count} arquivos revertidos`
+    : "Conversa revertida até este ponto"
 
   return (
     <div className="rounded-lg border bg-muted/40 text-xs">
       <div className="flex items-center gap-2 px-3 py-2">
-        <History className="size-3.5 shrink-0 text-muted-foreground" />
+        {isCode
+          ? <History className="size-3.5 shrink-0 text-muted-foreground" />
+          : <MessageSquareText className="size-3.5 shrink-0 text-muted-foreground" />
+        }
         <span className="flex-1 truncate">
           {label}
           <span className="text-muted-foreground"> — nova mensagem continua deste ponto</span>

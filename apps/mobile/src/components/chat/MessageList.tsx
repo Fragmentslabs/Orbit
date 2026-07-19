@@ -9,9 +9,10 @@ import type { ChatMessage } from '@orbit/shared'
 interface MessageListProps {
   messages: ChatMessage[]
   isStreaming?: boolean
+  onRevert?: (messageId: string) => void
 }
 
-export function MessageList({ messages, isStreaming }: MessageListProps) {
+export function MessageList({ messages, isStreaming, onRevert }: MessageListProps) {
   const listRef = useRef<FlatList<ChatMessage>>(null)
   const [isAtBottom, setIsAtBottom] = useState(true)
   const isUserScrolling = useRef(false)
@@ -61,6 +62,7 @@ export function MessageList({ messages, isStreaming }: MessageListProps) {
               message={item}
               isLast={index === messages.length - 1}
               isBusy={isStreaming}
+              onRevert={onRevert ? () => onRevert(item.id) : undefined}
             />
           </View>
         )}

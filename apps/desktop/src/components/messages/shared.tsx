@@ -246,7 +246,9 @@ export function AssistantMessageActions({ message, sessionId }: {
   const activeRevert = useSessionStore((s) =>
     sessionId ? s.sessions.find((x) => x.id === sessionId)?.revert : undefined,
   )
-  const canRevert = Boolean(sessionId && message.snapshot?.start && !activeRevert)
+  const canRevert = Boolean(sessionId && !activeRevert && (
+    message.snapshot?.start || message.role === 'assistant'
+  ))
 
   return (
     <Actions className="mt-1 items-center">

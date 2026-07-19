@@ -4,13 +4,6 @@ import { broadcastChatEvent } from '../broadcast'
 import { capture, diff, restore } from '../snapshot'
 import { readJson, writeJson } from '../storage'
 
-/**
- * Revert per-message (modo código): restaura o filesystem para o snapshot
- * `start` de uma resposta do assistente. O estado atual é capturado antes
- * (revert.snapshot) para permitir desfazer; ao enviar nova mensagem com um
- * revert ativo, as mensagens posteriores ao ponto são removidas (cleanup).
- */
-
 async function loadSession(sessionId: string): Promise<SessionInfo | null> {
   return readJson<SessionInfo>(StorageKeys.session(sessionId))
 }
@@ -23,43 +16,76 @@ async function saveSession(session: SessionInfo): Promise<void> {
 
 export async function revert(sessionId: string, messageId: string): Promise<SessionRevert | null> {
   const session = await loadSession(sessionId)
-  if (!session?.directory) return null
+  if (!session) return null
 
   const messages = (await readJson<ChatMessage[]>(StorageKeys.messages(sessionId))) ?? []
   const target = messages.find((m) => m.id === messageId)
-  const start = target?.snapshot?.start
-  if (!start) return null
+  if (!target) return null
 
-  // Estado atual vira o snapshot de unrevert; o diff lista o que foi desfeito
-  const current = await capture(session.directory)
-  await restore(session.directory, start)
-  const changes = await diff(session.directory, start, current)
+  // Modo código: revert via git snapshot do filesystem
+  if (session.directory && target.snapshot?.start) {
+    const start = target.snapshot.start
+    const current = await capture(session.directory)
+    await restore(session.directory, start)
+    const changes = await diff(session.directory, start, current)
 
-  const revertState: SessionRevert = {
-    messageId,
-    snapshot: current,
-    files: changes.files,
-    diff: changes.patch,
+    const revertState: SessionRevert = {
+      messageId,
+      snapshot: current,
+      files: changes.files,
+      diff: changes.patch,
+    }
+    await saveSession({ ...session, revert: revertState })
+    return revertState
   }
+
+  // Modo chat: truncar mensagens e guardar descartadas p/ unrevert
+  const idx = messages.findIndex((m) => m.id === messageId)
+  if (idx < 0) return null
+  const cut = idx > 0 && messages[idx - 1].role === 'user' ? idx - 1 : idx
+  const discarded = messages.slice(cut)
+  const truncated = messages.slice(0, cut)
+
+  await writeJson(StorageKeys.messages(sessionId), truncated)
+  broadcastChatEvent({ type: 'messages', sessionId, messages: truncated })
+
+  const revertState: SessionRevert = { messageId, discardedMessages: discarded }
   await saveSession({ ...session, revert: revertState })
   return revertState
 }
 
 export async function unrevert(sessionId: string): Promise<boolean> {
   const session = await loadSession(sessionId)
-  if (!session?.directory || !session.revert?.snapshot) return false
+  if (!session?.revert) return false
 
-  await restore(session.directory, session.revert.snapshot)
-  const next = { ...session }
-  delete next.revert
-  await saveSession(next)
-  return true
+  // Modo código: restore do filesystem
+  if (session.directory && session.revert.snapshot) {
+    await restore(session.directory, session.revert.snapshot)
+    const next = { ...session }
+    delete next.revert
+    await saveSession(next)
+    return true
+  }
+
+  // Modo chat: restaurar mensagens descartadas
+  if (session.revert.discardedMessages) {
+    const messages = (await readJson<ChatMessage[]>(StorageKeys.messages(sessionId))) ?? []
+    const restored = [...messages, ...session.revert.discardedMessages]
+    await writeJson(StorageKeys.messages(sessionId), restored)
+    broadcastChatEvent({ type: 'messages', sessionId, messages: restored })
+    const next = { ...session }
+    delete next.revert
+    await saveSession(next)
+    return true
+  }
+
+  return false
 }
 
 /**
  * Chamado ao enviar nova mensagem com revert ativo: descarta as mensagens a
  * partir do ponto de revert (o par user+assistant alvo) e limpa o estado.
- * O filesystem permanece no estado revertido — a nova conversa segue dali.
+ * O filesystem permanece no estado revertido (code) — a nova conversa segue dali.
  */
 export async function cleanupRevert(sessionId: string): Promise<ChatMessage[] | null> {
   const session = await loadSession(sessionId)
@@ -69,7 +95,6 @@ export async function cleanupRevert(sessionId: string): Promise<ChatMessage[] | 
   const idx = messages.findIndex((m) => m.id === session.revert!.messageId)
   let truncated = messages
   if (idx >= 0) {
-    // Inclui a mensagem do usuário imediatamente anterior (par da resposta)
     const cut = idx > 0 && messages[idx - 1].role === 'user' ? idx - 1 : idx
     truncated = messages.slice(0, cut)
     await writeJson(StorageKeys.messages(sessionId), truncated)
