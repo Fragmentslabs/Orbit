@@ -39,17 +39,10 @@ export async function revert(sessionId: string, messageId: string): Promise<Sess
     return revertState
   }
 
-  // Modo chat: truncar mensagens e guardar descartadas p/ unrevert
-  const idx = messages.findIndex((m) => m.id === messageId)
-  if (idx < 0) return null
-  const cut = idx > 0 && messages[idx - 1].role === 'user' ? idx - 1 : idx
-  const discarded = messages.slice(cut)
-  const truncated = messages.slice(0, cut)
-
-  await writeJson(StorageKeys.messages(sessionId), truncated)
-  broadcastChatEvent({ type: 'messages', sessionId, messages: truncated })
-
-  const revertState: SessionRevert = { messageId, discardedMessages: discarded }
+  // Modo chat: apenas marca o ponto de revert (sem truncar mensagens).
+  // O truncamento ocorre em cleanupRevert ao enviar nova mensagem,
+  // consistente com o comportamento do modo código.
+  const revertState: SessionRevert = { messageId }
   await saveSession({ ...session, revert: revertState })
   return revertState
 }
@@ -67,19 +60,11 @@ export async function unrevert(sessionId: string): Promise<boolean> {
     return true
   }
 
-  // Modo chat: restaurar mensagens descartadas
-  if (session.revert.discardedMessages) {
-    const messages = (await readJson<ChatMessage[]>(StorageKeys.messages(sessionId))) ?? []
-    const restored = [...messages, ...session.revert.discardedMessages]
-    await writeJson(StorageKeys.messages(sessionId), restored)
-    broadcastChatEvent({ type: 'messages', sessionId, messages: restored })
-    const next = { ...session }
-    delete next.revert
-    await saveSession(next)
-    return true
-  }
-
-  return false
+  // Modo chat: só remove o marcador de revert (mensagens nunca foram truncadas)
+  const next = { ...session }
+  delete next.revert
+  await saveSession(next)
+  return true
 }
 
 /**
