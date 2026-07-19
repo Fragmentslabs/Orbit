@@ -549,6 +549,22 @@ export const useSessionStore = create<SessionState>((set, get) => ({
         break
       }
 
+      case 'ask:batch': {
+        const { addPendingAsk } = useChatStore.getState()
+        const items = (event.items ?? []) as Array<{ requestId: string; kind: string; claim?: unknown; questions?: unknown; origin?: unknown }>
+        for (const item of items) {
+          addPendingAsk(sessionId, {
+            requestId: item.requestId,
+            kind: item.kind as 'permission' | 'question',
+            claim: item.claim as any,
+            questions: item.questions as any,
+            origin: item.origin as any,
+            batchId: event.batchId,
+          })
+        }
+        break
+      }
+
       case 'ask:done': {
         const { removePendingAsk } = useChatStore.getState()
         removePendingAsk(sessionId, event.requestId)

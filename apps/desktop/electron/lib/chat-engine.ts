@@ -363,6 +363,7 @@ export async function runChat(win: BrowserWindow, input: SendMessageInput): Prom
           mode,
           input.sessionId,
           toolContext?.directory ?? null,
+          assistantMessage.id,
           controller.signal,
           input.parentSessionId,
           input.workerTitle,

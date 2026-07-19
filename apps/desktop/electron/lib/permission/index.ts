@@ -38,6 +38,7 @@ export function createToolApproval(
   mode: PermissionMode,
   sessionId: string,
   dir: string | null,
+  assistantMessageId: string,
   signal?: AbortSignal,
   parentSessionId?: string,
   workerTitle?: string,
@@ -97,6 +98,24 @@ export function createToolApproval(
       if (reply === 'allow') return 'approved' as const
 
       denialReasons.set(toolCall.toolCallId, 'Negado pelo usuário.')
+
+      // Emite part:error diretamente para garantir que o mobile (e desktop)
+      // atualizem o tool part para error, independente do SDK emitir
+      // tool-output-denied no fullStream
+      broadcastChatEvent({
+        type: 'part',
+        sessionId: target,
+        messageId: assistantMessageId,
+        part: {
+          id: toolCall.toolCallId,
+          type: 'tool',
+          tool: toolCall.toolName,
+          state: 'error',
+          input: toolCall.input as Record<string, unknown> | undefined,
+          error: 'Negado pelo usuário.',
+        },
+      })
+
       return {
         type: 'denied' as const,
         reason: 'O usuário negou esta ação. Não a repita — siga por outro caminho ou pergunte.',
