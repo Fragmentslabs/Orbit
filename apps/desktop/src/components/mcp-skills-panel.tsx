@@ -575,7 +575,7 @@ export function McpSkillsPanel() {
                   <div className={cn("flex size-8 items-center justify-center rounded-full", active ? "bg-emerald-500/10" : "bg-muted")}>
                     <Server className={cn("size-4", active ? "text-emerald-500" : "text-muted-foreground/50")} />
                   </div>
-                  <div className="flex-1 min-w-0">
+                  <div className="flex-1 min-w-0 overflow-hidden">
                     <div className="flex items-center gap-2">
                       <span className="text-sm font-medium">{server.config.name}</span>
                       <StatusBadge state={server.state} error={server.error} />
@@ -584,12 +584,12 @@ export function McpSkillsPanel() {
                       {server.config.type === "http" ? server.config.url : `${server.config.command} ${(server.config.args ?? []).join(" ")}`}
                     </p>
                     {active && server.toolNames.length > 0 && (
-                      <details className="group mt-1 min-w-0">
+                      <details className="group mt-1">
                         <summary className="cursor-pointer text-[10px] text-muted-foreground hover:text-foreground list-none flex items-center gap-1">
                           <ChevronDown className="size-3 shrink-0 transition-transform group-open:rotate-0 -rotate-90" />
                           {server.toolNames.length} ferramenta{(server.toolNames.length ?? 0) !== 1 ? "s" : ""} disponíve{(server.toolNames.length ?? 0) !== 1 ? "is" : "l"}
                         </summary>
-                        <div className="mt-1 flex flex-col gap-0.5 min-w-0">
+                        <div className="mt-1 flex flex-col gap-0.5">
                           {server.toolNames.map((name) => (
                             <div key={name} className="truncate rounded bg-muted/50 px-2 py-1 text-[10px] font-mono text-muted-foreground">
                               {name}
@@ -683,7 +683,7 @@ export function McpSkillsPanel() {
                 <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-muted">
                   <Sparkles className="size-4 text-muted-foreground/50" />
                 </div>
-                <div className="flex-1 min-w-0">
+                <div className="flex-1 min-w-0 overflow-hidden">
                   <div className="flex items-center gap-2">
                     <span className="text-sm font-medium">@{skill.slug}</span>
                     <span className="rounded bg-muted px-1 py-0.5 text-[10px] text-muted-foreground">
