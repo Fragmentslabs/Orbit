@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback } from 'react'
+import { useState, useRef, useCallback, useEffect } from 'react'
 import { View, TextInput, Pressable, Text, ScrollView, ActivityIndicator, Platform, TouchableOpacity } from 'react-native'
 import {
   Search,
@@ -13,6 +13,7 @@ import {
   Paperclip,
   ArrowUp,
   Square,
+  Settings2,
 } from 'lucide-react-native'
 import { Image } from 'expo-image'
 import type { SendMessageOptions, FilePart } from '@orbit/shared'
@@ -23,11 +24,13 @@ import { ModelPicker } from './ModelPicker'
 import { AttachmentSheet } from './AttachmentSheet'
 import { WorkerModelModal } from './WorkerModelModal'
 import { InputAttachment } from './Attachment'
-import { PermissionModePicker } from './PermissionModePicker'
+import { ConfigSheet } from './ConfigSheet'
 import { SlashPalette } from './SlashPalette'
 import { useSlashCommands } from '~/hooks/useSlashCommands'
 import { uriToFilePart } from '~/lib/attachments'
 import { useWorkspaceStore } from '~/stores/workspace-store'
+import { useSettingsStore } from '~/stores/settings-store'
+import { useReasoningPrefs } from '~/stores/reasoning-prefs'
 import { getThemeTokens } from '~/lib/theme-tokens'
 import { useThemeStore } from '~/stores/theme-store'
 
@@ -59,11 +62,28 @@ export function PromptInput({
   const [attachments, setAttachments] = useState<FilePart[]>([])
   const [isLoadingFile, setIsLoadingFile] = useState(false)
   const [plusOpen, setPlusOpen] = useState(false)
+  const [configOpen, setConfigOpen] = useState(false)
   const [workerConfigOpen, setWorkerConfigOpen] = useState(false)
   const [isFocused, setIsFocused] = useState(false)
   const workspaceMode = useWorkspaceStore((s) => s.mode)
   const tokens = getThemeTokens(useThemeStore((s) => s.resolved))
   const [permissionMode, setPermissionMode] = useState<'ask' | 'approve' | 'full'>('ask')
+
+  const catalog = useSettingsStore((s) => s.catalog)
+  const selected = useSettingsStore((s) => s.selectedModel)
+  const model = selected && catalog
+    ? catalog[selected.providerId]?.models[selected.modelId]
+    : undefined
+  const { enabled, variantId, update, hydrate, hydrated } = useReasoningPrefs(selected?.providerId, selected?.modelId)
+  const thinking = enabled || !!model?.reasoningAlwaysOn
+  const workerModel = useSettingsStore((s) => s.workerModel)
+  const workerModelLabel = workerModel && catalog
+    ? catalog[workerModel.providerId]?.models[workerModel.modelId]?.name ?? `${workerModel.providerId}/${workerModel.modelId}`
+    : null
+
+  useEffect(() => {
+    if (!hydrated) hydrate()
+  }, [hydrated, hydrate])
 
   const slashCommands = useSlashCommands()
 
@@ -163,7 +183,7 @@ export function PromptInput({
       browser: activeModes.browser ?? false,
       simple: activeModes.simple ?? false,
       brain: activeModes.brain ?? false,
-      reasoning: activeModes.thinking ? { enabled: true } : undefined,
+      reasoning: { enabled: thinking, variantId },
       subagents,
       orchestrate: orchestra ? {} : undefined,
       permissionMode: workspaceMode === 'code' ? permissionMode : undefined,
@@ -177,12 +197,11 @@ export function PromptInput({
     setText('')
     setAttachments([])
     setPlusOpen(false)
-  }, [text, isStreaming, disabled, onSend, activeModes, subagents, orchestra, attachments, workspaceMode, permissionMode])
+  }, [text, isStreaming, disabled, onSend, activeModes, subagents, orchestra, attachments, workspaceMode, permissionMode, thinking, variantId])
 
   const modesList = [
     { id: 'research', icon: Search, label: 'Pesquisa' },
     { id: 'browser', icon: Globe, label: 'Browser' },
-    { id: 'thinking', icon: Brain, label: 'Thinking' },
     { id: 'simple', icon: AlignLeft, label: 'Simples' },
     { id: 'brain', icon: BrainCircuit, label: 'Memória' },
   ]
@@ -261,25 +280,29 @@ export function PromptInput({
         <View className="flex-row items-center justify-between pt-1.5 pb-1 mt-1"
           style={{ borderTopWidth: 1, borderTopColor: tokens.border }}
         >
-          {/* Plus action button */}
-          <TouchableOpacity
-            onPress={() => setPlusOpen(true)}
-            activeOpacity={0.7}
-            className="p-1.5 rounded-md cursor-pointer"
-          >
-            <Plus size={20} color={tokens.mutedForeground} />
-          </TouchableOpacity>
+          {/* Plus + Config actions */}
+          <View className="flex-row items-center gap-1">
+            <TouchableOpacity
+              onPress={() => setPlusOpen(true)}
+              activeOpacity={0.7}
+              className="p-1.5 rounded-md cursor-pointer"
+            >
+              <Plus size={20} color={tokens.mutedForeground} />
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={() => setConfigOpen(true)}
+              activeOpacity={0.7}
+              className="p-1.5 rounded-md cursor-pointer"
+            >
+              <Settings2 size={18} color={tokens.mutedForeground} />
+            </TouchableOpacity>
+          </View>
 
           {/* Model picker & controls */}
           <View className="flex-row items-center gap-2">
             {/* Status Indicators */}
             {subagents && <Bot size={15} color={tokens.primary} />}
             {orchestra && <Network size={15} color={tokens.primary} />}
-
-            {/* Modo de permissão (só no modo código) */}
-            {workspaceMode === 'code' && (
-              <PermissionModePicker value={permissionMode} onChange={setPermissionMode} />
-            )}
 
             {/* Model Picker */}
             <ModelPicker />
@@ -317,6 +340,24 @@ export function PromptInput({
       {/* Mode Toggles Row */}
       <View className="flex-row items-center justify-between px-1">
         <View className="flex-row items-center gap-2">
+          {/* Thinking toggle — mostrado apenas se o modelo suporta reasoning */}
+          {model?.reasoning && (
+            <Pressable
+              key="thinking"
+              onPress={() => update({ enabled: !enabled, variantId })}
+              disabled={isStreaming || model?.reasoningAlwaysOn}
+              className="p-2 rounded-md"
+              style={[
+                thinking ? { backgroundColor: tokens.muted } : { opacity: 0.4 },
+                model?.reasoningAlwaysOn && { opacity: 0.3 },
+              ]}
+            >
+              <Brain
+                size={17}
+                color={thinking ? tokens.foreground : tokens.mutedForeground}
+              />
+            </Pressable>
+          )}
           {modesList.map((mode) => {
             const isActive = activeModes[mode.id] ?? false
             const IconComponent = mode.icon
@@ -352,6 +393,28 @@ export function PromptInput({
         orchestra={orchestra}
         onConfigureWorkers={() => {
           setPlusOpen(false)
+          setWorkerConfigOpen(true)
+        }}
+      />
+
+      <ConfigSheet
+        visible={configOpen}
+        onClose={() => setConfigOpen(false)}
+        permissionMode={permissionMode}
+        onPermissionModeChange={setPermissionMode}
+        thinking={thinking}
+        onThinkingToggle={() => update({ enabled: !enabled, variantId })}
+        reasoningVariants={model?.variants ?? []}
+        reasoningSelected={variantId}
+        onReasoningSelect={(id) => update({ enabled: true, variantId: id })}
+        reasoningAlwaysOn={model?.reasoningAlwaysOn}
+        subagents={subagents}
+        onSubagentsToggle={() => setSubagents((prev) => !prev)}
+        orchestra={orchestra}
+        onOrchestraToggle={() => setOrchestra((prev) => !prev)}
+        workerModelLabel={workerModelLabel}
+        onConfigureWorkers={() => {
+          setConfigOpen(false)
           setWorkerConfigOpen(true)
         }}
       />
