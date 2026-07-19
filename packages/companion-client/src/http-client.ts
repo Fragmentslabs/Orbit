@@ -19,17 +19,23 @@ export interface HttpResult<T = unknown> {
 
 export class CompanionHttp {
   private baseUrl: string
-  private pin: string
+  private token: string
 
   constructor(config: ConnectionConfig) {
     this.baseUrl = `http://${config.host}:${config.port + 1}`
-    this.pin = config.pin
+    // Usa o token persistente quando disponível (não expira como o PIN)
+    this.token = config.token ?? config.pin
   }
 
   /** Atualiza a configuração (host/port/pin) após reconexão. */
   updateConfig(config: ConnectionConfig): void {
     this.baseUrl = `http://${config.host}:${config.port + 1}`
-    this.pin = config.pin
+    this.token = config.token ?? config.pin
+  }
+
+  /** Substitui o token usado na autenticação (ex: após WS emitir token persistente). */
+  setToken(token: string): void {
+    this.token = token
   }
 
   // ─── Preferences ─────────────────────────────────────────────────────────
@@ -92,7 +98,7 @@ export class CompanionHttp {
   ): Promise<HttpResult<T>> {
     try {
       const headers: Record<string, string> = {
-        Authorization: `Bearer ${this.pin}`,
+        Authorization: `Bearer ${this.token}`,
       }
 
       const init: RequestInit = { method, headers }

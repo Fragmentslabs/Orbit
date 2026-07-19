@@ -103,7 +103,7 @@ async function registerDevice(deviceName: string): Promise<string> {
   return token
 }
 
-async function validateDeviceToken(token: string): Promise<boolean> {
+export async function validateDeviceToken(token: string): Promise<boolean> {
   if (!token) return false
   const devices = await loadDevices()
   const device = devices.find((d) => {
@@ -794,7 +794,7 @@ export function startCompanionServer(): { port: number; ip: string; pin: string;
   regeneratePin()
 
   // Iniciar servidor HTTP REST junto com o WS
-  startCompanionHttpServer(validatePin, getPairingPin)
+  startCompanionHttpServer(validatePin, getPairingPin, validateDeviceToken)
 
   wss.on('connection', (ws: WebSocket, _req: IncomingMessage) => {
     const client: ConnectedClient = {

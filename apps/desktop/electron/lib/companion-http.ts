@@ -27,18 +27,29 @@ let httpServer: Server | null = null
 // ─── Auth ─────────────────────────────────────────────────────────────────────
 
 /**
- * Valida o header Authorization: Bearer {pin}.
- * Retorna true se o PIN for válido.
+ * Valida o header Authorization: Bearer {token/pin}.
+ * Tenta token persistente primeiro, depois PIN (5 min TTL).
  */
-function validateAuth(req: IncomingMessage, validatePin: (pin: string, ip: string) => boolean): boolean {
+function validateAuth(
+  req: IncomingMessage,
+  validatePin: (pin: string, ip: string) => boolean,
+  validateToken: (token: string) => Promise<boolean>,
+): Promise<boolean> {
   const authHeader = req.headers.authorization
-  if (!authHeader?.startsWith('Bearer ')) return false
+  if (!authHeader?.startsWith('Bearer ')) return Promise.resolve(false)
 
-  const pin = authHeader.slice(7).trim()
-  if (!pin) return false
+  const credential = authHeader.slice(7).trim()
+  if (!credential) return Promise.resolve(false)
 
   const ip = req.socket.remoteAddress ?? 'unknown'
-  return validatePin(pin, ip)
+
+  // Tenta como token persistente primeiro (64 hex chars)
+  if (credential.length === 64 && /^[a-f0-9]+$/i.test(credential)) {
+    return validateToken(credential)
+  }
+
+  // Fallback: PIN (5 min TTL)
+  return Promise.resolve(validatePin(credential, ip))
 }
 
 // ─── Response Helpers ─────────────────────────────────────────────────────────
@@ -240,6 +251,7 @@ type Handler = (req: IncomingMessage, res: ServerResponse) => Promise<void>
 function createRouter(
   validatePin: (pin: string, ip: string) => boolean,
   getPairingPin: () => string | null,
+  validateToken: (token: string) => Promise<boolean>,
 ) {
   const routes = new Map<string, Handler>()
 
@@ -283,8 +295,8 @@ function createRouter(
       return
     }
 
-    // Auth
-    if (!validateAuth(req, validatePin)) {
+    // Auth — tenta token persistente primeiro, depois PIN
+    if (!(await validateAuth(req, validatePin, validateToken))) {
       jsonResponse(res, 401, { error: 'PIN inválido ou ausente' })
       return
     }
@@ -311,10 +323,11 @@ function createRouter(
 export function startCompanionHttpServer(
   validatePin: (pin: string, ip: string) => boolean,
   getPairingPin: () => string | null,
+  validateToken: (token: string) => Promise<boolean>,
 ): { port: number } | null {
   if (httpServer) return { port: HTTP_PORT }
 
-  const handler = createRouter(validatePin, getPairingPin)
+  const handler = createRouter(validatePin, getPairingPin, validateToken)
   httpServer = createServer(handler)
 
   httpServer.on('error', (err: Error) => {
