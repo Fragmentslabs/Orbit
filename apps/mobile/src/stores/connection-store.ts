@@ -75,6 +75,14 @@ export const useConnectionStore = create<ConnectionStore>((set, get) => ({
 
     // Salva config para reconexão futura
     void get().saveConfig(config)
+
+    // Quando o WS autenticar, atualiza o token do HTTP client e salva
+    const unsub = wsClient.onStateChange((state) => {
+      if (state.status === 'connected' && state.deviceToken) {
+        http.setToken(state.deviceToken)
+        unsub()
+      }
+    })
   },
 
   disconnect: () => {
