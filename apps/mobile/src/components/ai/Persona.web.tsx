@@ -15,8 +15,7 @@ import {
 import { useThemeStore } from '~/stores/theme-store'
 
 export const Persona: FC<PersonaProps> = ({ state = 'idle', size = 128 }) => {
-  const theme = useThemeStore((s) => s.resolved)
-  const isLight = theme === 'light'
+  const isLight = useThemeStore((s) => s.resolved) === 'light'
 
   const { rive, RiveComponent } = useRive({
     src: PERSONA_RIVE_URL,

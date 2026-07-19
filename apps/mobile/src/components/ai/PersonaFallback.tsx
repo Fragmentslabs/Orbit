@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react'
-import { Animated, Easing, View } from 'react-native'
+import { Animated, Easing, View, useColorScheme } from 'react-native'
 import type { PersonaState } from './persona-types'
-import { useThemeStore } from '~/stores/theme-store'
 
 interface Props {
   state: PersonaState
@@ -9,7 +8,7 @@ interface Props {
 }
 
 export function PersonaFallback({ state, size }: Props) {
-  const isLight = useThemeStore((s) => s.resolved) === 'light'
+  const isLight = useColorScheme() === 'light'
   const [pulse] = useState(() => new Animated.Value(1))
   const [glow] = useState(() => new Animated.Value(0.4))
 
