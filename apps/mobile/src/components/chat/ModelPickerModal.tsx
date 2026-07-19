@@ -3,6 +3,9 @@ import { Modal, View, Text, TextInput, Pressable, ScrollView, Platform } from 'r
 import { X, Search, Check, Brain, RefreshCw } from 'lucide-react-native'
 import { Image } from 'expo-image'
 import { useSettingsStore } from '~/stores/settings-store'
+import { useThemeStore } from '~/stores/theme-store'
+import { getThemeTokens } from '~/lib/theme-tokens'
+import { hslToRgba } from '~/lib/theme'
 import { Spin } from '~/components/ui/spin'
 import { cn } from '~/lib/utils'
 
@@ -11,13 +14,13 @@ interface ModelPickerModalProps {
   onClose: () => void
 }
 
-function ModelRowSkeleton() {
+function ModelRowSkeleton({ tokens }: { tokens: Record<string, string> }) {
   return (
     <View className="flex-row items-center gap-3 px-4 py-3.5">
-      <View className="h-4 w-4 rounded-full bg-muted" />
+      <View className="h-4 w-4 rounded-full" style={{ backgroundColor: tokens.muted }} />
       <View className="flex-1 gap-1.5">
-        <View className="h-3 w-32 rounded bg-muted" />
-        <View className="h-2.5 w-20 rounded bg-muted/70" />
+        <View className="h-3 w-32 rounded" style={{ backgroundColor: tokens.muted }} />
+        <View className="h-2.5 w-20 rounded" style={{ backgroundColor: tokens.muted }} />
       </View>
     </View>
   )
@@ -31,9 +34,15 @@ export function ModelPickerModal({ visible, onClose }: ModelPickerModalProps) {
   const loading = useSettingsStore((s) => s.loading)
   const fetchCatalog = useSettingsStore((s) => s.fetchCatalog)
 
+  const resolved = useThemeStore((s) => s.resolved)
+  const tokens = getThemeTokens(resolved)
   const [search, setSearch] = useState('')
 
   const isWeb = Platform.OS === 'web'
+  const rowSelectedBg = hslToRgba(
+    tokens.primary.replace(/hsla?\(|\)/g, '').replace(/,/g, ''),
+    0.08,
+  )
 
   const groups = useMemo(() => {
     if (!catalog) return []
@@ -77,65 +86,69 @@ export function ModelPickerModal({ visible, onClose }: ModelPickerModalProps) {
       animationType={isWeb ? 'fade' : 'slide'}
       onRequestClose={onClose}
     >
-      <View 
+      <View
         className={cn(
-          "flex-1 bg-black/60",
+          "flex-1",
           isWeb ? "justify-center items-center p-4" : "justify-end"
         )}
+        style={{ backgroundColor: 'rgba(0,0,0,0.6)' }}
       >
         {/* Backdrop press to close */}
         <Pressable className="absolute inset-0" onPress={onClose} />
 
         {/* Modal/Drawer Container */}
-        <View 
+        <View
           className={cn(
-            "bg-background border border-border/80 shadow-2xl overflow-hidden",
-            isWeb 
-              ? "w-full max-w-md h-[550px] rounded-2xl" 
-              : "w-full h-[80%] rounded-t-3xl border-b-0"
+            "shadow-2xl overflow-hidden",
+            isWeb
+              ? "w-full max-w-md h-[550px] rounded-2xl"
+              : "w-full h-[80%] rounded-t-3xl"
           )}
+          style={{ backgroundColor: tokens.background, borderColor: tokens.border, borderWidth: isWeb ? 1 : 0 }}
         >
           {/* Mobile top handle indicator */}
           {!isWeb && (
             <View className="items-center py-2">
-              <View className="w-10 h-1.5 rounded-full bg-muted-foreground/30" />
+              <View className="w-10 h-1.5 rounded-full" style={{ backgroundColor: hslToRgba(tokens.mutedForeground.replace(/hsla?\(|\)/g, '').replace(/,/g, ''), 0.3) }} />
             </View>
           )}
 
           {/* Header */}
-          <View className="flex-row items-center justify-between px-4 py-3.5 border-b border-border/60">
-            <Text className="text-base font-semibold text-foreground">Selecionar Modelo</Text>
-            <Pressable onPress={onClose} className="p-1 rounded-md active:bg-muted">
-              <X size={20} className="text-foreground" />
+          <View className="flex-row items-center justify-between px-4 py-3.5" style={{ borderBottomWidth: 1, borderBottomColor: tokens.border }}>
+            <Text style={{ fontSize: 16, fontWeight: '600', color: tokens.foreground }}>Selecionar Modelo</Text>
+            <Pressable onPress={onClose} className="p-1 rounded-md" style={({ pressed }) => pressed ? { backgroundColor: tokens.muted } : undefined}>
+              <X size={20} color={tokens.foreground} />
             </Pressable>
           </View>
 
           {/* Search */}
           <View className="px-4 py-2 mt-1 flex-row items-center gap-2">
-            <View className="flex-1 flex-row items-center gap-2 px-3 py-1.5 rounded-lg bg-muted/60">
-              <Search size={16} className="text-muted-foreground" />
+            <View className="flex-1 flex-row items-center gap-2 px-3 py-1.5 rounded-lg" style={{ backgroundColor: tokens.muted }}>
+              <Search size={16} color={tokens.mutedForeground} />
               <TextInput
                 value={search}
                 onChangeText={setSearch}
                 placeholder="Pesquisar modelos…"
-                placeholderTextColor="hsl(240, 4%, 46%)"
-                className="flex-1 text-sm text-foreground py-0.5"
+                placeholderTextColor={tokens.mutedForeground}
+                className="flex-1 text-sm py-0.5"
+                style={{ color: tokens.foreground }}
                 autoCapitalize="none"
                 autoCorrect={false}
               />
               {search.length > 0 && (
                 <Pressable onPress={() => setSearch('')} className="p-0.5">
-                  <X size={14} className="text-muted-foreground" />
+                  <X size={14} color={tokens.mutedForeground} />
                 </Pressable>
               )}
             </View>
             <Pressable
               onPress={() => void fetchCatalog()}
               disabled={loading}
-              className="h-9 w-9 items-center justify-center rounded-lg bg-muted/60 active:bg-muted"
+              className="h-9 w-9 items-center justify-center rounded-lg"
+              style={{ backgroundColor: tokens.muted }}
             >
               <Spin active={loading}>
-                <RefreshCw size={16} className="text-muted-foreground" />
+                <RefreshCw size={16} color={tokens.mutedForeground} />
               </Spin>
             </Pressable>
           </View>
@@ -144,15 +157,15 @@ export function ModelPickerModal({ visible, onClose }: ModelPickerModalProps) {
           <ScrollView className="flex-1 px-4 mt-2" showsVerticalScrollIndicator={isWeb}>
             {groups.length === 0 && loading ? (
               <View className="gap-1">
-                <ModelRowSkeleton />
-                <ModelRowSkeleton />
-                <ModelRowSkeleton />
-                <ModelRowSkeleton />
+                <ModelRowSkeleton tokens={tokens} />
+                <ModelRowSkeleton tokens={tokens} />
+                <ModelRowSkeleton tokens={tokens} />
+                <ModelRowSkeleton tokens={tokens} />
               </View>
             ) : groups.length === 0 ? (
               <View className="py-12 items-center">
-                <Text className="text-sm text-muted-foreground mb-1 text-center font-medium">Nenhum modelo disponível.</Text>
-                <Text className="text-xs text-muted-foreground/75 text-center px-4 leading-relaxed">
+                <Text className="text-sm mb-1 text-center font-medium" style={{ color: tokens.mutedForeground }}>Nenhum modelo disponível.</Text>
+                <Text className="text-xs text-center px-4 leading-relaxed" style={{ color: tokens.mutedForeground, opacity: 0.75 }}>
                   {connectedProviders.length === 0
                     ? "Por favor, configure as credenciais de um provedor nas configurações do desktop."
                     : "Tente pesquisar por outro nome de modelo."}
@@ -162,12 +175,12 @@ export function ModelPickerModal({ visible, onClose }: ModelPickerModalProps) {
               groups.map(({ provider, models }) => (
                 <View key={provider.id} className="mb-4">
                   {/* Provider Header */}
-                  <Text className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2 mt-1 pl-1">
+                  <Text className="text-xs font-semibold uppercase tracking-wider mb-2 mt-1 pl-1" style={{ color: tokens.mutedForeground }}>
                     {provider.name}
                   </Text>
 
                   {/* Models List */}
-                  <View className="border border-border/80 rounded-xl bg-card overflow-hidden">
+                  <View className="rounded-xl overflow-hidden" style={{ backgroundColor: tokens.card, borderWidth: 1, borderColor: tokens.border }}>
                     {models.map((model, index) => {
                       const isSelected =
                         selectedModel?.providerId === provider.id &&
@@ -177,34 +190,43 @@ export function ModelPickerModal({ visible, onClose }: ModelPickerModalProps) {
                         <Pressable
                           key={model.id}
                           onPress={() => handleSelect(provider.id, model.id)}
-                          className={cn(
-                            'flex-row items-center gap-3 px-4 py-3.5',
-                            index < models.length - 1 && 'border-b border-border/80',
-                            isSelected ? 'bg-accent/40' : 'active:bg-accent/20'
-                          )}
+                          style={({ pressed }) => ({
+                            flexDirection: 'row',
+                            alignItems: 'center',
+                            gap: 12,
+                            paddingHorizontal: 14,
+                            paddingVertical: 11,
+                            backgroundColor: isSelected
+                              ? rowSelectedBg
+                              : pressed
+                                ? tokens.muted
+                                : 'transparent',
+                            borderBottomWidth: index < models.length - 1 ? 1 : 0,
+                            borderBottomColor: tokens.border,
+                          })}
                         >
                           {/* Provider Logo */}
                           <Image
                             source={`https://models.dev/logos/${provider.id}.svg`}
                             style={{ width: 16, height: 16 }}
                             contentFit="contain"
-                            className="dark:invert"
+                            className={resolved === 'dark' ? 'invert' : ''}
                           />
 
                           {/* Model Info */}
                           <View className="flex-1">
-                            <Text className="text-sm font-medium text-foreground">{model.name}</Text>
-                            <Text className="text-xs text-muted-foreground" numberOfLines={1}>
+                            <Text className="text-sm font-medium" style={{ color: tokens.foreground }}>{model.name}</Text>
+                            <Text className="text-xs" style={{ color: tokens.mutedForeground }} numberOfLines={1}>
                               {model.id}
                             </Text>
                           </View>
 
                           {/* Indicators */}
                           {model.reasoning && (
-                            <Brain size={14} className="text-muted-foreground mr-1" />
+                            <Brain size={14} color={tokens.mutedForeground} style={{ marginRight: 4 }} />
                           )}
 
-                          {isSelected && <Check size={16} className="text-primary" />}
+                          {isSelected && <Check size={16} color={tokens.primary} />}
                         </Pressable>
                       )
                     })}
