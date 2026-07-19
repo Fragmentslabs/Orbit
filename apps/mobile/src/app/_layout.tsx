@@ -12,6 +12,7 @@ import { useCompanion } from "../hooks/useCompanion";
 import { useNotifications } from "../hooks/useNotifications";
 import { useConnectionStore } from "../stores/connection-store";
 import { useThemeStore, hydrateThemePreference } from "../stores/theme-store";
+import { startMessageScheduler } from "../stores/message-queue-store";
 
 SplashScreen.preventAutoHideAsync();
 
@@ -93,6 +94,10 @@ export default function RootLayout() {
 
   useEffect(() => {
     SplashScreen.hideAsync();
+  }, []);
+
+  useEffect(() => {
+    startMessageScheduler();
   }, []);
 
   return (

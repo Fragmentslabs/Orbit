@@ -16,7 +16,7 @@ import {
   Settings2,
 } from 'lucide-react-native'
 import { Image } from 'expo-image'
-import type { SendMessageOptions, FilePart } from '@orbit/shared'
+import type { SendMessageOptions, FilePart, SessionInfo } from '@orbit/shared'
 import { resolveSlashAction } from '@orbit/shared'
 import { cn } from '~/lib/utils'
 import { ContextMeter } from './ContextMeter'
@@ -33,6 +33,10 @@ import { useSettingsStore } from '~/stores/settings-store'
 import { useReasoningPrefs } from '~/stores/reasoning-prefs'
 import { getThemeTokens } from '~/lib/theme-tokens'
 import { useThemeStore } from '~/stores/theme-store'
+import { SendButtonGroup } from './SendButtonGroup'
+import { QueueIndicator } from './QueueIndicator'
+import { ScheduleSheet } from './ScheduleSheet'
+import { useMessageQueueStore } from '~/stores/message-queue-store'
 
 interface PromptInputProps {
   onSend: (text: string, options: SendMessageOptions, files?: FilePart[]) => void
@@ -40,6 +44,8 @@ interface PromptInputProps {
   isStreaming?: boolean
   sessionId?: string
   disabled?: boolean
+  onCreateSession?: () => Promise<SessionInfo | null>
+  onNavigateToSession?: (sessionId: string) => void
 }
 
 async function fileToFilePart(asset: any): Promise<FilePart> {
@@ -52,6 +58,8 @@ export function PromptInput({
   isStreaming,
   sessionId,
   disabled,
+  onCreateSession,
+  onNavigateToSession,
 }: PromptInputProps) {
   const [text, setText] = useState('')
   const [activeModes, setActiveModes] = useState<Record<string, boolean>>({
@@ -68,6 +76,7 @@ export function PromptInput({
   const workspaceMode = useWorkspaceStore((s) => s.mode)
   const tokens = getThemeTokens(useThemeStore((s) => s.resolved))
   const [permissionMode, setPermissionMode] = useState<'ask' | 'approve' | 'full'>('ask')
+  const [scheduleSheetVisible, setScheduleSheetVisible] = useState(false)
 
   const catalog = useSettingsStore((s) => s.catalog)
   const selected = useSettingsStore((s) => s.selectedModel)
@@ -199,6 +208,67 @@ export function PromptInput({
     setPlusOpen(false)
   }, [text, isStreaming, disabled, onSend, activeModes, subagents, orchestra, attachments, workspaceMode, permissionMode, thinking, variantId])
 
+  const buildOptions = useCallback(() => {
+    return {
+      research: activeModes.research ?? false,
+      browser: activeModes.browser ?? false,
+      simple: activeModes.simple ?? false,
+      brain: activeModes.brain ?? false,
+      reasoning: { enabled: thinking, variantId },
+      subagents,
+      orchestrate: orchestra ? {} : undefined,
+      permissionMode: workspaceMode === 'code' ? permissionMode : undefined,
+    } satisfies SendMessageOptions
+  }, [activeModes, thinking, variantId, subagents, orchestra, workspaceMode, permissionMode])
+
+  const enqueueForSend = useMessageQueueStore((s) => s.enqueueForSend)
+  const enqueueScheduled = useMessageQueueStore((s) => s.enqueueScheduled)
+
+  const handleQueue = useCallback(() => {
+    const trimmed = text.trim()
+    if (!trimmed || !sessionId) return
+    const resolved = resolveSlashAction(trimmed, workspaceMode)
+    enqueueForSend(sessionId, resolved?.prompt ?? trimmed, buildOptions(), workspaceMode)
+    setText('')
+    setAttachments([])
+  }, [text, sessionId, enqueueForSend, buildOptions, workspaceMode])
+
+  const handleStopAndSend = useCallback(() => {
+    const trimmed = text.trim()
+    if (!trimmed || !sessionId) return
+    const resolved = resolveSlashAction(trimmed, workspaceMode)
+    onAbort()
+    enqueueForSend(sessionId, resolved?.prompt ?? trimmed, buildOptions(), workspaceMode)
+    setText('')
+    setAttachments([])
+  }, [text, sessionId, onAbort, enqueueForSend, buildOptions, workspaceMode])
+
+  const handleSchedule = useCallback(() => {
+    setScheduleSheetVisible(true)
+  }, [])
+
+  const handleScheduleConfirm = useCallback(
+    async (timestamp: number) => {
+      const trimmed = text.trim()
+      if (!trimmed) return
+
+      let sid = sessionId
+      if (!sid) {
+        if (!onCreateSession) return
+        const session = await onCreateSession()
+        if (!session) return
+        sid = session.id
+        onNavigateToSession?.(sid)
+      }
+
+      const resolved = resolveSlashAction(trimmed, workspaceMode)
+      enqueueScheduled(sid, resolved?.prompt ?? trimmed, buildOptions(), workspaceMode, timestamp)
+      setText('')
+      setAttachments([])
+    },
+    [text, sessionId, onCreateSession, onNavigateToSession, enqueueScheduled, buildOptions, workspaceMode],
+  )
+
   const modesList = [
     { id: 'research', icon: Search, label: 'Pesquisa' },
     { id: 'browser', icon: Globe, label: 'Browser' },
@@ -218,6 +288,13 @@ export function PromptInput({
     <View className="px-3 py-1.5 relative overflow-visible"
       style={{ backgroundColor: tokens.background, borderTopWidth: 1, borderTopColor: tokens.border }}
     >
+      {/* Queue Indicator */}
+      {sessionId && (
+        <View className="mb-1.5">
+          <QueueIndicator sessionId={sessionId} />
+        </View>
+      )}
+
       {/* Attachments & Input border box */}
       <SlashPalette value={text} setText={setText} commands={slashCommands}>
       <View
@@ -308,30 +385,16 @@ export function PromptInput({
             <ModelPicker />
 
             {/* Send/Stop Button */}
-            {isStreaming ? (
-              <Pressable
-                onPress={onAbort}
-                className="h-9 w-9 rounded-full items-center justify-center"
-                style={{ backgroundColor: tokens.primary }}
-              >
-                <Square size={13} color={tokens.primaryForeground} />
-              </Pressable>
-            ) : (
-              <Pressable
-                onPress={handleSend}
-                disabled={text.trim().length === 0 && attachments.length === 0}
-                className={cn(
-                  'h-9 w-9 rounded-full items-center justify-center',
-                  text.trim().length > 0 || attachments.length > 0 ? '' : 'opacity-40'
-                )}
-                style={{
-                  backgroundColor: text.trim().length > 0 || attachments.length > 0
-                    ? tokens.primary : tokens.muted,
-                }}
-              >
-                <ArrowUp size={18} color={tokens.primaryForeground} />
-              </Pressable>
-            )}
+            <SendButtonGroup
+              onSend={handleSend}
+              onStop={onAbort}
+              onQueue={handleQueue}
+              onStopAndSend={handleStopAndSend}
+              onSchedule={handleSchedule}
+              isStreaming={!!isStreaming}
+              hasText={text.trim().length > 0}
+              disabled={disabled}
+            />
           </View>
         </View>
       </View>
@@ -420,6 +483,11 @@ export function PromptInput({
       />
 
       <WorkerModelModal visible={workerConfigOpen} onClose={() => setWorkerConfigOpen(false)} />
+      <ScheduleSheet
+        visible={scheduleSheetVisible}
+        onClose={() => setScheduleSheetVisible(false)}
+        onConfirm={handleScheduleConfirm}
+      />
     </View>
   )
 }
