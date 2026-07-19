@@ -575,14 +575,11 @@ export function McpSkillsPanel() {
                   <div className={cn("flex size-8 items-center justify-center rounded-full", active ? "bg-emerald-500/10" : "bg-muted")}>
                     <Server className={cn("size-4", active ? "text-emerald-500" : "text-muted-foreground/50")} />
                   </div>
-                  <div className="flex-1 min-w-0 overflow-hidden">
+                  <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
                       <span className="text-sm font-medium">{server.config.name}</span>
                       <StatusBadge state={server.state} error={server.error} />
                     </div>
-                    <p className="mt-0.5 truncate text-[11px] text-muted-foreground">
-                      {server.config.type === "http" ? server.config.url : `${server.config.command} ${(server.config.args ?? []).join(" ")}`}
-                    </p>
                     {active && server.toolNames.length > 0 && (
                       <details className="group mt-1">
                         <summary className="cursor-pointer text-[10px] text-muted-foreground hover:text-foreground list-none flex items-center gap-1">
