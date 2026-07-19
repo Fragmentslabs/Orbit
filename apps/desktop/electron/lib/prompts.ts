@@ -2,6 +2,7 @@ import type { SendMessageInput } from '@shared/chat'
 import type { Memory } from '@shared/memory'
 import { loadPromptContext } from './memory/service'
 import { loadSkills } from './skills'
+import { listMcpToolDescriptions } from './mcp'
 
 /**
  * Prompts de sistema por modo, adaptados dos agentes do opencode
@@ -305,6 +306,12 @@ export async function buildSystemPrompt(input: SendMessageInput): Promise<string
   }
 
   parts.push(...(await buildSkillsBlock(input)))
+
+  // Servidores MCP disponíveis
+  const mcpBlock = listMcpToolDescriptions()
+  if (mcpBlock) {
+    parts.push(`FERRAMENTAS MCP DISPONÍVEIS. Servidores MCP conectados e suas ferramentas (use o prefixo <servidor>_ para chamá-las):\n${mcpBlock}`)
+  }
 
   // Contexto automático: injeta memórias no prompt
   if (input.options.brainContext && input.orchestrationRole !== 'worker') {

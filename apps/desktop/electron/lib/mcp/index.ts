@@ -73,10 +73,27 @@ function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise
 function buildTransport(config: McpServerConfig) {
   if (config.type === 'http') {
     if (!config.url) throw new Error('servidor http sem url')
-    return new StreamableHTTPClientTransport(new URL(config.url))
+    const headers: Record<string, string> = {}
+    if (config.headers) {
+      for (const [k, v] of Object.entries(config.headers)) {
+        if (k.trim() && v) headers[k.trim()] = v
+      }
+    }
+    return new StreamableHTTPClientTransport(new URL(config.url), { headers })
   }
   if (!config.command) throw new Error('servidor stdio sem command')
-  return new StdioClientTransport({ command: config.command, args: config.args ?? [] })
+  const env: Record<string, string> = {}
+  if (config.env) {
+    for (const [k, v] of Object.entries(config.env)) {
+      if (k.trim() && v) env[k.trim()] = v
+    }
+  }
+  return new StdioClientTransport({
+    command: config.command,
+    args: config.args ?? [],
+    env: Object.keys(env).length > 0 ? { ...process.env, ...env } : undefined,
+    cwd: config.cwd || undefined,
+  })
 }
 
 async function connect(runtime: ServerRuntime): Promise<void> {
@@ -209,4 +226,15 @@ export function listMcpServerNames(): string[] {
   return [...servers.values()]
     .filter((r) => r.config.enabled !== false && r.state === 'connected')
     .map((r) => r.config.name)
+}
+
+/** Descrição formatada dos servidores MCP conectados e suas ferramentas. */
+export function listMcpToolDescriptions(): string {
+  const lines: string[] = []
+  for (const runtime of servers.values()) {
+    if (runtime.config.enabled === false || runtime.state !== 'connected') continue
+    const names = Object.keys(runtime.tools)
+    lines.push(`- @mcp:${runtime.config.name}: ${names.join(', ')}`)
+  }
+  return lines.join('\n')
 }

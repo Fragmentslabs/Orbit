@@ -14,6 +14,12 @@ export interface McpServerConfig {
   args?: string[]
   /** default true */
   enabled?: boolean
+  /** type=stdio: variáveis de ambiente injetadas no processo filho */
+  env?: Record<string, string>
+  /** type=http: cabeçalhos HTTP customizados enviados em cada requisição */
+  headers?: Record<string, string>
+  /** type=stdio: diretório de trabalho do processo filho */
+  cwd?: string
 }
 
 export interface McpConfig {
