@@ -1,11 +1,7 @@
-/**
- * Fallback do Persona para ambientes sem o módulo nativo do Rive (Expo Go).
- * Reproduz o visual do halo do desktop: anel branco com glow pulsante
- * sobre fundo escuro.
- */
 import { useEffect, useState } from 'react'
 import { Animated, Easing, View } from 'react-native'
 import type { PersonaState } from './persona-types'
+import { useThemeStore } from '~/stores/theme-store'
 
 interface Props {
   state: PersonaState
@@ -13,6 +9,7 @@ interface Props {
 }
 
 export function PersonaFallback({ state, size }: Props) {
+  const isLight = useThemeStore((s) => s.resolved) === 'light'
   const [pulse] = useState(() => new Animated.Value(1))
   const [glow] = useState(() => new Animated.Value(0.4))
 
@@ -60,38 +57,43 @@ export function PersonaFallback({ state, size }: Props) {
   const ring = size * 0.62
   const border = Math.max(2, size * 0.02)
 
+  // Desktop light: invert(1) brightness(0.85) → mapeamos branco para cinza-azulado escuro
+  // Desktop dark: keep white with glow
+  const c = isLight ? '60,65,85' : '255,255,255'
+  const shadowC = isLight ? '#3c4155' : '#ffffff'
+  const glowBg = isLight ? `rgba(60,65,85,0.06)` : 'rgba(255,255,255,0.06)'
+  const ringMain = isLight ? `rgba(60,65,85,0.92)` : 'rgba(255,255,255,0.92)'
+  const ringInner = isLight ? `rgba(60,65,85,0.14)` : 'rgba(255,255,255,0.14)'
+
   return (
     <View style={{ width: size, height: size, alignItems: 'center', justifyContent: 'center' }}>
-      {/* Glow externo */}
       <Animated.View
         style={{
           position: 'absolute',
           width: ring * 1.35,
           height: ring * 1.35,
           borderRadius: (ring * 1.35) / 2,
-          backgroundColor: 'rgba(255,255,255,0.06)',
+          backgroundColor: glowBg,
           opacity: glow,
           transform: [{ scale: pulse }],
         }}
       />
-      {/* Anel principal — o "halo" */}
       <Animated.View
         style={{
           width: ring,
           height: ring,
           borderRadius: ring / 2,
           borderWidth: border,
-          borderColor: 'rgba(255,255,255,0.92)',
+          borderColor: ringMain,
           opacity: glow.interpolate({ inputRange: [0, 1], outputRange: [0.45, 1] }),
           transform: [{ scale: pulse }],
-          shadowColor: '#ffffff',
+          shadowColor: shadowC,
           shadowOffset: { width: 0, height: 0 },
-          shadowOpacity: 0.7,
+          shadowOpacity: isLight ? 0.3 : 0.7,
           shadowRadius: size * 0.12,
           elevation: 8,
         }}
       />
-      {/* Anel interno difuso */}
       <Animated.View
         style={{
           position: 'absolute',
@@ -99,7 +101,7 @@ export function PersonaFallback({ state, size }: Props) {
           height: ring * 0.86,
           borderRadius: (ring * 0.86) / 2,
           borderWidth: border * 2,
-          borderColor: 'rgba(255,255,255,0.14)',
+          borderColor: ringInner,
           transform: [{ scale: pulse }],
         }}
       />
