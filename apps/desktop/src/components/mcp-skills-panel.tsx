@@ -584,14 +584,14 @@ export function McpSkillsPanel() {
                       {server.config.type === "http" ? server.config.url : `${server.config.command} ${(server.config.args ?? []).join(" ")}`}
                     </p>
                     {active && server.toolNames.length > 0 && (
-                      <details className="group mt-1">
+                      <details className="group mt-1 min-w-0">
                         <summary className="cursor-pointer text-[10px] text-muted-foreground hover:text-foreground list-none flex items-center gap-1">
                           <ChevronDown className="size-3 shrink-0 transition-transform group-open:rotate-0 -rotate-90" />
                           {server.toolNames.length} ferramenta{(server.toolNames.length ?? 0) !== 1 ? "s" : ""} disponíve{(server.toolNames.length ?? 0) !== 1 ? "is" : "l"}
                         </summary>
-                        <div className="mt-1 flex flex-col gap-0.5">
+                        <div className="mt-1 flex flex-col gap-0.5 min-w-0">
                           {server.toolNames.map((name) => (
-                            <div key={name} className="rounded bg-muted/50 px-2 py-1 text-[10px] font-mono text-muted-foreground">
+                            <div key={name} className="truncate rounded bg-muted/50 px-2 py-1 text-[10px] font-mono text-muted-foreground">
                               {name}
                             </div>
                           ))}
@@ -698,11 +698,11 @@ export function McpSkillsPanel() {
                   {skill.description && (
                     <p className="mt-0.5 text-[11px] text-muted-foreground">{skill.description}</p>
                   )}
-                  <details className="mt-1">
+                  <details className="mt-1 min-w-0">
                     <summary className="cursor-pointer text-[10px] text-muted-foreground hover:text-foreground">
                       Ver conteúdo
                     </summary>
-                    <pre className="mt-1 max-h-32 overflow-y-auto rounded bg-muted p-2 text-[10px] text-muted-foreground">
+                    <pre className="mt-1 max-h-32 overflow-y-auto whitespace-pre-wrap break-all rounded bg-muted p-2 text-[10px] text-muted-foreground">
                       {skill.content}
                     </pre>
                   </details>
