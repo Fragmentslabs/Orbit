@@ -30,7 +30,7 @@ function PermissionBody({ ask, submitted, onReply }: {
         {claim.critical ? (
           <TriangleAlert className="mt-0.5 size-4 shrink-0 text-destructive" />
         ) : (
-          <ShieldAlert className="mt-0.5 size-4 shrink-0 text-amber-500" />
+          <ShieldAlert className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
         )}
         <div className="min-w-0 flex-1">
           <p className="break-all font-mono text-xs">{claim.title}</p>

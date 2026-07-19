@@ -120,8 +120,8 @@ export function assess(toolName: string, input: unknown, dir: string | null): As
       ruleId: `mcp:${serverName}`,
       claim: {
         tool: toolName,
-        title: `MCP: ${toolName}`,
-        detail: `Ferramenta do servidor MCP "${serverName}"`,
+        title: `Permissão necessária`,
+        detail: `${toolName} — ferramenta do servidor MCP "${serverName}"`,
       },
     }
   }
