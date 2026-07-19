@@ -181,6 +181,13 @@ export function ChatScreen({ sessionId }: ChatScreenProps) {
     [unrevert],
   )
 
+  const handleDismissRevert = useCallback(
+    (_sid: string) => {
+      // Apenas esconde a barra localmente — o revert permanece consolidado
+    },
+    [],
+  )
+
   const handleDelete = useCallback(async () => {
     if (!sessionId) return
     await deleteSession(sessionId)
@@ -266,7 +273,7 @@ export function ChatScreen({ sessionId }: ChatScreenProps) {
         {/* Revert ativo: barra com resumo + desfazer */}
         {session?.revert && (
           <View style={{ paddingHorizontal: 16, marginBottom: 8 }}>
-            <RevertBar session={session} onUnrevert={handleUnrevert} />
+            <RevertBar session={session} onUnrevert={handleUnrevert} onDismiss={handleDismissRevert} />
           </View>
         )}
 
