@@ -4,6 +4,7 @@ import {
   ChevronDown,
   ExternalLink,
   FileUp,
+  FileText,
   Folder,
   LoaderCircle,
   Pencil,
@@ -24,6 +25,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
+import { ScrollArea } from "@/components/ui/scroll-area"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -41,6 +43,7 @@ import {
 import { cn } from "@/lib/utils"
 import { useWorkspace } from "@/lib/workspace-context"
 import { mcpApi, skillsApi } from "@/src/lib/ipc"
+import { AssistantMarkdown } from "@/src/components/messages/shared"
 import { useDraftInput } from "@/src/stores/draft-input"
 import { useSessionStore } from "@/src/stores/session-store"
 import { useSettingsUi } from "@/src/stores/settings-ui"
@@ -521,6 +524,8 @@ export function McpSkillsPanel() {
   const [skillDialogOpen, setSkillDialogOpen] = useState(false)
   const [skillEdit, setSkillEdit] = useState<Skill | undefined>()
   const [importError, setImportError] = useState("")
+  const [viewContentSlug, setViewContent] = useState<string | null>(null)
+  const viewSkill = viewContentSlug ? skills.find((s) => s.slug === viewContentSlug) ?? null : null
 
   const { setMode, setView } = useWorkspace()
   const setSettingsOpen = useSettingsUi((s) => s.setOpen)
@@ -693,16 +698,17 @@ export function McpSkillsPanel() {
                     )}
                   </div>
                   {skill.description && (
-                    <p className="mt-0.5 text-[11px] text-muted-foreground">{skill.description}</p>
+                    <p className="mt-0.5 text-[11px] text-muted-foreground line-clamp-2">{skill.description}</p>
                   )}
-                  <details className="mt-1 min-w-0">
-                    <summary className="cursor-pointer text-[10px] text-muted-foreground hover:text-foreground">
-                      Ver conteúdo
-                    </summary>
-                    <pre className="mt-1 max-h-32 overflow-y-auto whitespace-pre-wrap break-all rounded bg-muted p-2 text-[10px] text-muted-foreground">
-                      {skill.content}
-                    </pre>
-                  </details>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="mt-1 h-auto p-0 text-[10px] text-muted-foreground hover:text-foreground"
+                    onClick={() => setViewContent(skill.slug)}
+                  >
+                    <FileText className="mr-1 size-3" />
+                    Ver conteúdo
+                  </Button>
                 </div>
                 <div className="flex items-center gap-1 self-start pt-1">
                   <Button size="icon-sm" variant="ghost" title="Editar" onClick={() => { setSkillEdit(skill); setSkillDialogOpen(true) }}>
@@ -724,6 +730,45 @@ export function McpSkillsPanel() {
       {/* Dialogs */}
       <McpServerDialog open={mcpDialogOpen} onOpenChange={setMcpDialogOpen} initial={mcpEdit} />
       <CreateSkillDialog open={skillDialogOpen} onOpenChange={setSkillDialogOpen} initial={skillEdit} />
+      <SkillContentDialog
+        skill={viewSkill}
+        open={viewContentSlug !== null}
+        onOpenChange={(o) => { if (!o) setViewContent(null) }}
+      />
     </div>
+  )
+}
+
+// ─── Skill Content Dialog ──────────────────────────────────────────────────────
+
+function SkillContentDialog({
+  skill,
+  open,
+  onOpenChange,
+}: {
+  skill: Skill | null
+  open: boolean
+  onOpenChange: (open: boolean) => void
+}) {
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent style={{ maxWidth: "56rem" }}>
+        <DialogHeader>
+          <DialogTitle className="pr-6 text-sm font-medium">@{skill?.slug}</DialogTitle>
+          <DialogDescription className="text-xs text-muted-foreground">
+            {skill?.name}{skill?.description ? ` — ${skill.description}` : ""}
+          </DialogDescription>
+        </DialogHeader>
+        <ScrollArea className="max-h-[60vh] w-full overflow-x-auto pr-3">
+          {skill?.content ? (
+            <div className="w-full break-words">
+              <AssistantMarkdown>{skill.content}</AssistantMarkdown>
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground">Nenhum conteúdo.</p>
+          )}
+        </ScrollArea>
+      </DialogContent>
+    </Dialog>
   )
 }
