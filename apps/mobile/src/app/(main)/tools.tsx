@@ -105,8 +105,8 @@ function SkillCard({ skill }: { skill: Skill }) {
   return (
     <View style={[s.skillCard, { borderColor: tokens.border, backgroundColor: tokens.card }]}>
       <View style={s.skillRow}>
-        <View style={[s.skillIconWrap, { backgroundColor: tokens.primary + '18' }]}>
-          <Sparkles size={14} color={tokens.primary} />
+        <View style={[s.skillIconWrap, { backgroundColor: tokens.muted }]}>
+          <Sparkles size={14} color={tokens.mutedForeground} />
         </View>
         <View style={{ flex: 1, gap: 2 }}>
           <Text style={[s.skillName, { color: tokens.foreground }]} numberOfLines={1}>{skill.name}</Text>
@@ -290,7 +290,7 @@ const s = StyleSheet.create({
   skillIconWrap: {
     width: 32,
     height: 32,
-    borderRadius: 8,
+    borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
   },
