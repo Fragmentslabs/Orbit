@@ -5,18 +5,21 @@ import { jsonSchema, tool, type ToolSet } from 'ai'
 import fsp from 'node:fs/promises'
 import path from 'node:path'
 import type { McpConfig, McpServerConfig, McpServerStatus } from '@shared/mcp'
+import type { PermissionMode } from '@shared/chat'
 import { dataDir } from '../storage'
 
 /**
  * Manager MCP: conecta os servidores do mcp-config.json (stdio/streamable
  * HTTP), descobre as ferramentas via tools/list e as expõe como ToolSet do
  * ai-sdk com nomes prefixados (<servidor>_<tool>). getMcpTools() é síncrono
- * (cache do manager) para encaixar no buildToolSet; servidores com erro
- * tentam reconectar de forma throttled a cada uso.
+ * (cache do manager) para encaixar no buildToolSet. Servidores com erro
+ * tentam reconectar em background com backoff exponencial.
  */
 
 const CONNECT_TIMEOUT_MS = 15_000
-const RECONNECT_THROTTLE_MS = 30_000
+const RECONNECT_BASE_MS = 15_000
+const RECONNECT_MAX_MS = 300_000 // 5 minutos
+const RECONNECT_INTERVAL_MS = 10_000 // checa a cada 10s
 
 interface ServerRuntime {
   config: McpServerConfig
@@ -25,6 +28,7 @@ interface ServerRuntime {
   state: McpServerStatus['state']
   error?: string
   lastAttempt: number
+  retryCount: number
 }
 
 const servers = new Map<string, ServerRuntime>()
@@ -128,10 +132,12 @@ async function connect(runtime: ServerRuntime): Promise<void> {
     runtime.client = client
     runtime.tools = toolSet
     runtime.state = 'connected'
+    runtime.retryCount = 0
   } catch (err) {
     runtime.client = null
     runtime.tools = {}
     runtime.state = 'error'
+    runtime.retryCount++
     runtime.error = err instanceof Error ? err.message : String(err)
   }
 }
@@ -150,6 +156,14 @@ async function disconnect(runtime: ServerRuntime): Promise<void> {
 export async function initMcp(): Promise<void> {
   const config = await readMcpConfig()
   await reconcile(config)
+  startReconnectWatcher()
+}
+
+/** Desconecta tudo e para o watcher (chamado no shutdown). */
+export async function shutdownMcp(): Promise<void> {
+  stopReconnectWatcher()
+  await Promise.all([...servers.values()].map(disconnect))
+  servers.clear()
 }
 
 /** Sincroniza runtimes com a config: remove, atualiza e conecta o necessário. */
@@ -173,6 +187,7 @@ async function reconcile(config: McpConfig): Promise<void> {
         tools: {},
         state: 'disabled',
         lastAttempt: 0,
+        retryCount: 0,
       }
       servers.set(serverConfig.name, runtime)
       if (serverConfig.enabled !== false) await connect(runtime)
@@ -213,9 +228,6 @@ export function getMcpTools(): ToolSet {
     if (runtime.config.enabled === false) continue
     if (runtime.state === 'connected') {
       Object.assign(merged, runtime.tools)
-    } else if (runtime.state === 'error' && Date.now() - runtime.lastAttempt > RECONNECT_THROTTLE_MS) {
-      // Reconexão automática em background, throttled — as tools entram no próximo turno
-      void connect(runtime)
     }
   }
   return merged
@@ -237,4 +249,44 @@ export function listMcpToolDescriptions(): string {
     lines.push(`- @mcp:${runtime.config.name}: ${names.join(', ')}`)
   }
   return lines.join('\n')
+}
+
+/** Retorna o PermissionMode override do servidor MCP para uma tool, se configurado. */
+export function getMcpPermissionMode(toolName: string): PermissionMode | undefined {
+  const idx = toolName.indexOf('_')
+  if (idx <= 0) return undefined
+  const serverName = toolName.slice(0, idx)
+  return servers.get(serverName)?.config.permissionMode
+}
+
+/* ------------------------------------------------------------------ */
+/*  Background reconnect watcher                                        */
+/* ------------------------------------------------------------------ */
+
+function nextBackoff(runtime: ServerRuntime): number {
+  if (runtime.retryCount <= 0) return RECONNECT_BASE_MS
+  const delay = RECONNECT_BASE_MS * Math.pow(2, runtime.retryCount)
+  return Math.min(delay, RECONNECT_MAX_MS)
+}
+
+let reconnectTimer: ReturnType<typeof setInterval> | null = null
+
+function startReconnectWatcher(): void {
+  if (reconnectTimer) return
+  reconnectTimer = setInterval(() => {
+    for (const runtime of servers.values()) {
+      if (runtime.config.enabled === false) continue
+      if (runtime.config.autoReconnect === false) continue
+      if (runtime.state !== 'error') continue
+      if (Date.now() - runtime.lastAttempt < nextBackoff(runtime)) continue
+      void connect(runtime)
+    }
+  }, RECONNECT_INTERVAL_MS)
+}
+
+function stopReconnectWatcher(): void {
+  if (reconnectTimer) {
+    clearInterval(reconnectTimer)
+    reconnectTimer = null
+  }
 }

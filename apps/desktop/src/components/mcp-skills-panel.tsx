@@ -138,6 +138,8 @@ function McpServerDialog({ open, onOpenChange, initial }: {
   const [env, setEnv] = useState<Record<string, string>>(initial?.env ?? {})
   const [headers, setHeaders] = useState<Record<string, string>>(initial?.headers ?? {})
   const [cwd, setCwd] = useState(initial?.cwd ?? "")
+  const [permissionMode, setPermissionMode] = useState<string>(initial?.permissionMode ?? "")
+  const [autoReconnect, setAutoReconnect] = useState(initial?.autoReconnect ?? true)
   const [saving, setSaving] = useState(false)
 
   useEffect(() => {
@@ -150,6 +152,8 @@ function McpServerDialog({ open, onOpenChange, initial }: {
       setEnv(initial?.env ?? {})
       setHeaders(initial?.headers ?? {})
       setCwd(initial?.cwd ?? "")
+      setPermissionMode(initial?.permissionMode ?? "")
+      setAutoReconnect(initial?.autoReconnect ?? true)
     }
   }, [open, initial])
 
@@ -181,6 +185,8 @@ function McpServerDialog({ open, onOpenChange, initial }: {
     }
     if (Object.keys(headersClean).length > 0) entry.headers = headersClean
     if (cwd.trim()) entry.cwd = cwd.trim()
+    if (permissionMode) entry.permissionMode = permissionMode as "ask" | "approve" | "full"
+    if (autoReconnect !== true) entry.autoReconnect = false
 
     const idx = config.servers.findIndex((s) => s.name === initial?.name)
     if (idx >= 0) {
@@ -269,6 +275,43 @@ function McpServerDialog({ open, onOpenChange, initial }: {
               </div>
             </>
           )}
+          <div className="border-t pt-3">
+            <p className="mb-2 text-xs font-medium text-muted-foreground">Opções avançadas</p>
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-xs font-medium">Modo de permissão</p>
+                <p className="text-[10px] text-muted-foreground">Override do modo global para tools deste servidor</p>
+              </div>
+              <Select value={permissionMode} onValueChange={setPermissionMode}>
+                <SelectTrigger className="w-36">
+                  <SelectValue placeholder="Herda do chat" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="">Herda do chat</SelectItem>
+                  <SelectItem value="ask">Perguntar</SelectItem>
+                  <SelectItem value="approve">Autonomia</SelectItem>
+                  <SelectItem value="full">Irrestrito</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="mt-2 flex items-center justify-between">
+              <div>
+                <p className="text-xs font-medium">Reconexão automática</p>
+                <p className="text-[10px] text-muted-foreground">Tenta reconectar com backoff exponencial em caso de erro</p>
+              </div>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={autoReconnect}
+                onClick={() => setAutoReconnect(!autoReconnect)}
+                className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${
+                  autoReconnect ? "bg-primary" : "bg-input"
+                }`}
+              >
+                <span className={`inline-block size-4 rounded-full bg-background shadow-sm ring-0 transition-transform ${autoReconnect ? "translate-x-4" : "translate-x-0"}`} />
+              </button>
+            </div>
+          </div>
         </div>
         <div className="flex justify-end gap-2 pt-2">
           <Button variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button>

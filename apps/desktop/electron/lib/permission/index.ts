@@ -2,6 +2,7 @@ import type { PermissionDecision, PermissionMode } from '@shared/chat'
 import { newRequestId } from '../ask-broker'
 import { dispatchAsk } from '../ask-dispatch'
 import { broadcastChatEvent } from '../broadcast'
+import { getMcpPermissionMode } from '../mcp'
 import { assess, isForbidden } from './rules'
 import { checkTrust, addTrust } from './trust-rules'
 
@@ -25,6 +26,14 @@ export function clearSessionTrust(sessionId: string): void {
   sessionTrust.delete(sessionId)
 }
 
+/**
+ * Resolve o modo de permissão efetivo: servidores MCP podem ter override
+ * próprio via permissionMode no config, independente do modo global.
+ */
+function effectiveMode(toolName: string, globalMode: PermissionMode): PermissionMode {
+  return getMcpPermissionMode(toolName) ?? globalMode
+}
+
 export function createToolApproval(
   mode: PermissionMode,
   sessionId: string,
@@ -42,7 +51,8 @@ export function createToolApproval(
     const assessment = assess(toolCall.toolName, toolCall.input, dir)
     if (!assessment) return 'approved' as const
 
-    if (mode === 'full') return 'approved' as const
+    const mcpMode = effectiveMode(toolCall.toolName, mode)
+    if (mcpMode === 'full') return 'approved' as const
 
     const ruleId = assessment.ruleId
 

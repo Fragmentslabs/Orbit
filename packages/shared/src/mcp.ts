@@ -20,6 +20,10 @@ export interface McpServerConfig {
   headers?: Record<string, string>
   /** type=stdio: diretório de trabalho do processo filho */
   cwd?: string
+  /** Override do modo de permissão global para ferramentas deste servidor */
+  permissionMode?: "ask" | "approve" | "full"
+  /** Reconexão automática com backoff exponencial (default true) */
+  autoReconnect?: boolean
 }
 
 export interface McpConfig {
