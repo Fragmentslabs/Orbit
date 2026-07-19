@@ -63,11 +63,14 @@ function KvEditor({ value, onChange, keyPlaceholder, valuePlaceholder }: {
 }) {
   const [items, setItems] = useState<Array<{ id: number; key: string; value: string }>>(() => [])
   const idRef = useRef(0)
-  const valueRef = useRef(value)
+  const valueJsonRef = useRef("")
 
-  // Sincroniza do pai (ex: ao editar servidor existente) — só na abertura
+  // Sincroniza do pai apenas quando o valor externo muda de verdade
+  // (não quando nós mesmos emitimos a mudança via onChange)
   useEffect(() => {
-    valueRef.current = value
+    const json = JSON.stringify(value)
+    if (json === valueJsonRef.current) return
+    valueJsonRef.current = json
     const fromParent = Object.entries(value)
     if (fromParent.length === 0) {
       setItems([{ id: ++idRef.current, key: "", value: "" }])
@@ -81,6 +84,7 @@ function KvEditor({ value, onChange, keyPlaceholder, valuePlaceholder }: {
     for (const { key, value } of next) {
       if (key.trim() && value.trim()) result[key.trim()] = value
     }
+    valueJsonRef.current = JSON.stringify(result)
     onChange(result)
   }
 
@@ -150,6 +154,7 @@ function McpServerDialog({ open, onOpenChange, initial }: {
   onOpenChange: (v: boolean) => void
   initial?: McpServerConfig
 }) {
+  const refresh = useSkillsStore((s) => s.refresh)
   const [name, setName] = useState(initial?.name ?? "")
   const [type, setType] = useState<"http" | "stdio">(initial?.type ?? "http")
   const [url, setUrl] = useState(initial?.url ?? "")
@@ -215,6 +220,7 @@ function McpServerDialog({ open, onOpenChange, initial }: {
       config.servers.push(entry)
     }
     await mcpApi.save(config)
+    await refresh()
     setSaving(false)
     onOpenChange(false)
   }
