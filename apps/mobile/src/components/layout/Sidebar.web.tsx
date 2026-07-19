@@ -4,7 +4,6 @@ import { useRouter } from 'expo-router'
 import {
   MessageSquare,
   BrainCircuit,
-  Box,
   BarChart3,
   Puzzle,
   Settings,
@@ -96,7 +95,6 @@ export function Sidebar() {
       view: 'home',
     },
     { label: 'Memórias', icon: BrainCircuit, view: 'memories' },
-    { label: 'Modelos', icon: Box, view: 'models' },
     { label: 'Uso e Limites', icon: BarChart3, view: 'usage' },
     { label: 'Ferramentas', icon: Puzzle, view: 'tools', codeOnly: true },
   ]
