@@ -1,13 +1,6 @@
-/**
- * Persona (nativo) — mesmo asset Rive do desktop via rive-react-native.
- *
- * Em Expo Go o módulo nativo do Rive não existe, então caímos no
- * PersonaFallback (halo animado com Animated API). Em dev/release builds
- * (expo run:android / eas build) o Rive real é usado.
- */
 import { memo, useEffect, useRef } from 'react'
 import type { ComponentType, FC } from 'react'
-import { View } from 'react-native'
+import { View, StyleSheet } from 'react-native'
 import Constants, { ExecutionEnvironment } from 'expo-constants'
 import { PersonaFallback } from './PersonaFallback'
 import {
@@ -16,6 +9,7 @@ import {
   type PersonaProps,
   type PersonaState,
 } from './persona-types'
+import { useThemeStore } from '~/stores/theme-store'
 
 const isExpoGo = Constants.executionEnvironment === ExecutionEnvironment.StoreClient
 
@@ -31,8 +25,6 @@ interface RiveModule {
 let riveModule: RiveModule | null = null
 if (!isExpoGo) {
   try {
-    // require dinâmico: import estático quebraria no Expo Go (módulo nativo ausente)
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     riveModule = require('rive-react-native') as RiveModule
   } catch {
     riveModule = null
@@ -70,13 +62,21 @@ const RivePersona: FC<Required<PersonaProps>> = ({ state, size }) => {
 }
 
 export const Persona: FC<PersonaProps> = memo(({ state = 'idle', size = 128 }) => {
+  const isLight = useThemeStore((s) => s.resolved) === 'light'
+
   return (
-    // width/height + overflow:hidden travam o tamanho de verdade — a view
-    // nativa do Rive (rive-react-native, usada fora do Expo Go) já apareceu
-    // ignorando o `style` de tamanho e "explodindo" pro espaço disponível
-    // do pai (visto no header do chat, onde o Persona é pequeno).
     <View style={{ width: size, height: size, overflow: 'hidden' }}>
       {riveModule ? <RivePersona state={state} size={size} /> : <PersonaFallback state={state} size={size} />}
+      {/* Light mode: overlay escuro para simular invert(1) brightness(0.85) do desktop */}
+      {isLight && riveModule && (
+        <View
+          pointerEvents="none"
+          style={{
+            ...StyleSheet.absoluteFillObject,
+            backgroundColor: 'rgba(25,28,40,0.72)',
+          }}
+        />
+      )}
     </View>
   )
 })
