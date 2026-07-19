@@ -4,6 +4,7 @@ import {
   ChevronDown,
   ExternalLink,
   FileUp,
+  Folder,
   LoaderCircle,
   Pencil,
   PenLine,
@@ -13,6 +14,7 @@ import {
   Sparkles,
   Trash2,
   Wand2,
+  X,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
@@ -50,6 +52,76 @@ import type { Skill } from "@shared/skills"
 const SLUG_REGEX = /^[a-z0-9_]+$/
 
 /* ------------------------------------------------------------------ */
+/*  Key-Value editor (env / headers)                                    */
+/* ------------------------------------------------------------------ */
+
+function KvEditor({ value, onChange, keyPlaceholder, valuePlaceholder }: {
+  value: Record<string, string>
+  onChange: (v: Record<string, string>) => void
+  keyPlaceholder?: string
+  valuePlaceholder?: string
+}) {
+  const entries = useMemo(() => Object.entries(value), [value])
+
+  const set = (key: string, newKey: string, newValue: string) => {
+    const next: Record<string, string> = {}
+    for (const [k, v] of Object.entries(value)) {
+      if (k !== key) next[k] = v
+    }
+    if (newKey.trim()) next[newKey.trim()] = newValue
+    onChange(next)
+  }
+
+  const remove = (key: string) => {
+    const next: Record<string, string> = {}
+    for (const [k, v] of Object.entries(value)) {
+      if (k !== key) next[k] = v
+    }
+    onChange(next)
+  }
+
+  const add = () => {
+    onChange({ ...value, "": "" })
+  }
+
+  return (
+    <div className="flex flex-col gap-1">
+      {entries.map(([k, v]) => (
+        <div key={k || "__new"} className="flex items-center gap-1">
+          <Input
+            value={k}
+            onChange={(e) => set(k, e.target.value, v)}
+            placeholder={keyPlaceholder ?? "Chave"}
+            className="h-7 w-[140px] text-xs"
+          />
+          <Input
+            value={v}
+            onChange={(e) => set(k, k, e.target.value)}
+            placeholder={valuePlaceholder ?? "Valor"}
+            className="h-7 flex-1 text-xs"
+          />
+          <button
+            type="button"
+            onClick={() => remove(k)}
+            className="flex size-6 shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-muted hover:text-foreground"
+          >
+            <X className="size-3" />
+          </button>
+        </div>
+      ))}
+      <button
+        type="button"
+        onClick={add}
+        className="flex h-7 items-center gap-1 rounded border border-dashed px-2 text-[11px] text-muted-foreground hover:border-solid hover:text-foreground"
+      >
+        <PlusIcon className="size-3" />
+        Adicionar
+      </button>
+    </div>
+  )
+}
+
+/* ------------------------------------------------------------------ */
 /*  Dialog: Adicionar / Editar Servidor MCP                            */
 /* ------------------------------------------------------------------ */
 
@@ -63,6 +135,9 @@ function McpServerDialog({ open, onOpenChange, initial }: {
   const [url, setUrl] = useState(initial?.url ?? "")
   const [command, setCommand] = useState(initial?.command ?? "")
   const [args, setArgs] = useState(initial?.args?.join(" ") ?? "")
+  const [env, setEnv] = useState<Record<string, string>>(initial?.env ?? {})
+  const [headers, setHeaders] = useState<Record<string, string>>(initial?.headers ?? {})
+  const [cwd, setCwd] = useState(initial?.cwd ?? "")
   const [saving, setSaving] = useState(false)
 
   useEffect(() => {
@@ -72,8 +147,18 @@ function McpServerDialog({ open, onOpenChange, initial }: {
       setUrl(initial?.url ?? "")
       setCommand(initial?.command ?? "")
       setArgs(initial?.args?.join(" ") ?? "")
+      setEnv(initial?.env ?? {})
+      setHeaders(initial?.headers ?? {})
+      setCwd(initial?.cwd ?? "")
     }
   }, [open, initial])
+
+  const pickCwd = async () => {
+    try {
+      const result = await window.ipcRenderer.invoke("select-folder")
+      if (result) setCwd(result as string)
+    } catch {}
+  }
 
   const save = async () => {
     if (!name.trim()) return
@@ -85,6 +170,18 @@ function McpServerDialog({ open, onOpenChange, initial }: {
       ...(type === "http" ? { url: url.trim() } : { command: command.trim(), args: args.trim() ? args.trim().split(/\s+/) : [] }),
       enabled: true,
     }
+    const envClean: Record<string, string> = {}
+    for (const [k, v] of Object.entries(env)) {
+      if (k.trim() && v) envClean[k.trim()] = v
+    }
+    if (Object.keys(envClean).length > 0) entry.env = envClean
+    const headersClean: Record<string, string> = {}
+    for (const [k, v] of Object.entries(headers)) {
+      if (k.trim() && v) headersClean[k.trim()] = v
+    }
+    if (Object.keys(headersClean).length > 0) entry.headers = headersClean
+    if (cwd.trim()) entry.cwd = cwd.trim()
+
     const idx = config.servers.findIndex((s) => s.name === initial?.name)
     if (idx >= 0) {
       config.servers[idx] = entry
@@ -98,7 +195,7 @@ function McpServerDialog({ open, onOpenChange, initial }: {
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-lg">
+      <DialogContent className="sm:max-w-xl max-h-[80vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>{initial ? "Editar servidor MCP" : "Adicionar servidor MCP"}</DialogTitle>
           <DialogDescription>
@@ -123,10 +220,21 @@ function McpServerDialog({ open, onOpenChange, initial }: {
             </Select>
           </div>
           {type === "http" ? (
-            <div>
-              <p className="mb-1 text-xs font-medium">URL</p>
-              <Input value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://mcp.exa.ai/mcp" />
-            </div>
+            <>
+              <div>
+                <p className="mb-1 text-xs font-medium">URL</p>
+                <Input value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://mcp.exa.ai/mcp" />
+              </div>
+              <div>
+                <p className="mb-1 text-xs font-medium">Headers (cabeçalhos HTTP)</p>
+                <KvEditor
+                  value={headers}
+                  onChange={setHeaders}
+                  keyPlaceholder="Authorization"
+                  valuePlaceholder="Bearer sk-..."
+                />
+              </div>
+            </>
           ) : (
             <>
               <div>
@@ -136,6 +244,28 @@ function McpServerDialog({ open, onOpenChange, initial }: {
               <div>
                 <p className="mb-1 text-xs font-medium">Argumentos (separados por espaço)</p>
                 <Input value={args} onChange={(e) => setArgs(e.target.value)} placeholder="-y @modelcontextprotocol/server-filesystem /caminho" />
+              </div>
+              <div>
+                <p className="mb-1 text-xs font-medium">Diretório de trabalho</p>
+                <div className="flex items-center gap-2">
+                  <Input value={cwd} onChange={(e) => setCwd(e.target.value)} placeholder="Deixe vazio para herdar do Orbit" className="flex-1" />
+                  <Button type="button" variant="outline" size="sm" className="shrink-0 gap-1" onClick={() => void pickCwd()}>
+                    <Folder className="size-3" />
+                    Selecionar
+                  </Button>
+                </div>
+              </div>
+              <div>
+                <p className="mb-1 text-xs font-medium">Variáveis de ambiente</p>
+                <KvEditor
+                  value={env}
+                  onChange={setEnv}
+                  keyPlaceholder="API_KEY"
+                  valuePlaceholder="sk-..."
+                />
+                <p className="mt-1 text-[10px] text-muted-foreground">
+                  As variáveis são mescladas com o ambiente do Orbit; valores aqui sobrescrevem.
+                </p>
               </div>
             </>
           )}
