@@ -16,6 +16,7 @@ import {
 } from 'lucide-react-native'
 import { Image } from 'expo-image'
 import type { SendMessageOptions, FilePart } from '@orbit/shared'
+import { resolveSlashAction } from '@orbit/shared'
 import { cn } from '~/lib/utils'
 import { ContextMeter } from './ContextMeter'
 import { ModelPicker } from './ModelPicker'
@@ -23,6 +24,8 @@ import { AttachmentSheet } from './AttachmentSheet'
 import { WorkerModelModal } from './WorkerModelModal'
 import { InputAttachment } from './Attachment'
 import { PermissionModePicker } from './PermissionModePicker'
+import { SlashPalette } from './SlashPalette'
+import { useSlashCommands } from '~/hooks/useSlashCommands'
 import { uriToFilePart } from '~/lib/attachments'
 import { useWorkspaceStore } from '~/stores/workspace-store'
 import { getThemeTokens } from '~/lib/theme-tokens'
@@ -61,6 +64,8 @@ export function PromptInput({
   const workspaceMode = useWorkspaceStore((s) => s.mode)
   const tokens = getThemeTokens(useThemeStore((s) => s.resolved))
   const [permissionMode, setPermissionMode] = useState<'ask' | 'approve' | 'full'>('ask')
+
+  const slashCommands = useSlashCommands()
 
   const handleKeyPress = (e: any) => {
     if (e.nativeEvent.key === 'Enter') {
@@ -164,7 +169,11 @@ export function PromptInput({
       permissionMode: workspaceMode === 'code' ? permissionMode : undefined,
     }
 
-    onSend(trimmed, options, attachments.length > 0 ? attachments : undefined)
+    // Comandos "/" viram o prompt do pipeline correspondente
+    const resolved = resolveSlashAction(trimmed, workspaceMode)
+    const finalText = resolved?.prompt ?? trimmed
+
+    onSend(finalText, options, attachments.length > 0 ? attachments : undefined)
     setText('')
     setAttachments([])
     setPlusOpen(false)
@@ -187,10 +196,11 @@ export function PromptInput({
   const sheetModes = modesList.map((mode) => ({ ...mode, active: activeModes[mode.id] ?? false }))
 
   return (
-    <View className="px-3 py-1.5 relative z-50 overflow-visible"
+    <View className="px-3 py-1.5 relative overflow-visible"
       style={{ backgroundColor: tokens.background, borderTopWidth: 1, borderTopColor: tokens.border }}
     >
       {/* Attachments & Input border box */}
+      <SlashPalette value={text} setText={setText} commands={slashCommands}>
       <View
         className="rounded-2xl overflow-hidden px-3 py-1 mb-2"
         style={{
@@ -302,6 +312,7 @@ export function PromptInput({
           </View>
         </View>
       </View>
+      </SlashPalette>
 
       {/* Mode Toggles Row */}
       <View className="flex-row items-center justify-between px-1">
