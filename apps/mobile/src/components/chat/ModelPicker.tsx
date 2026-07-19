@@ -4,11 +4,13 @@ import { ChevronDown, Brain } from 'lucide-react-native'
 import { Image } from 'expo-image'
 import { useSettingsStore } from '~/stores/settings-store'
 import { useThemeStore } from '~/stores/theme-store'
+import { getThemeTokens } from '~/lib/theme-tokens'
 import { ModelPickerModal } from './ModelPickerModal'
 
 export function ModelPicker() {
   const [modalVisible, setModalVisible] = useState(false)
   const resolved = useThemeStore((s) => s.resolved)
+  const tokens = getThemeTokens(resolved)
   const catalog = useSettingsStore((s) => s.catalog)
   const selected = useSettingsStore((s) => s.selectedModel)
 
@@ -20,7 +22,8 @@ export function ModelPicker() {
     <>
       <Pressable
         onPress={() => setModalVisible(true)}
-        className="flex-row items-center gap-1.5 rounded-md px-2 py-1.5 active:bg-muted"
+        className="flex-row items-center gap-1.5 rounded-md px-2 py-1.5"
+        style={({ pressed }) => pressed ? { backgroundColor: tokens.muted } : undefined}
       >
         {selected?.providerId ? (
           <Image

@@ -1,10 +1,9 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useCallback } from 'react'
 import { View, Text, Pressable, ActivityIndicator, Linking, ScrollView, TouchableOpacity } from 'react-native'
 import {
   ChevronDown,
   ChevronRight,
   AlertCircle,
-  CheckCircle,
   Clock,
   Globe,
   Search,
@@ -12,9 +11,6 @@ import {
   Paperclip,
   Bot,
   Terminal,
-  Copy,
-  Check,
-  RotateCcw,
 } from 'lucide-react-native'
 import { Image } from 'expo-image'
 import * as Clipboard from 'expo-clipboard'
@@ -427,24 +423,8 @@ function segmentParts(parts: MessagePart[]): Segment[] {
   return segments
 }
 
-function formatTime(ts: number): string {
-  return new Date(ts).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
-}
-
-function formatTokens(n: number): string {
-  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`
-  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`
-  return String(n)
-}
-
-function formatCost(cost: number): string {
-  if (cost >= 0.01) return `$${cost.toFixed(2)}`
-  return `$${cost.toFixed(4)}`
-}
-
 export function ChatAssistantMessage({ message, compact, isLast, isBusy, onRevert }: ChatAssistantMessageProps) {
   const isUser = message.role === 'user'
-  const [copied, setCopied] = useState(false)
   const tokens = getThemeTokens(useThemeStore((s) => s.resolved))
 
   const segments = useMemo(() => segmentParts(message.parts), [message.parts])
@@ -453,11 +433,9 @@ export function ChatAssistantMessage({ message, compact, isLast, isBusy, onRever
 
   const waiting = message.role === 'assistant' && isLast && isBusy && message.parts.length === 0
 
-  const handleCopy = async () => {
+  const handleCopy = useCallback(async () => {
     await Clipboard.setStringAsync(messageText(message))
-    setCopied(true)
-    setTimeout(() => setCopied(false), 2000)
-  }
+  }, [message])
 
   if (isUser) {
     return <UserMessage message={message} />
@@ -527,34 +505,7 @@ export function ChatAssistantMessage({ message, compact, isLast, isBusy, onRever
         </View>
       )}
 
-      {/* Render Actions (copy + revert + timestamp & token/cost summary) */}
-      <View className="mt-2.5 w-full flex-row items-center flex-wrap gap-3 pt-2 opacity-60" style={{ borderTopWidth: 1, borderTopColor: tokens.border }}>
-        <Pressable onPress={handleCopy} className="p-0.5 rounded">
-          {copied ? (
-            <CheckCircle size={13} color={tokens.primary} />
-          ) : (
-            <Copy size={13} color={tokens.mutedForeground} />
-          )}
-        </Pressable>
-
-        {onRevert && (
-          <Pressable onPress={onRevert} className="p-0.5 rounded">
-            <RotateCcw size={13} color={tokens.mutedForeground} />
-          </Pressable>
-        )}
-
-        <Text className="text-[10px] font-mono" style={{ color: tokens.mutedForeground }}>
-          {formatTime(message.createdAt)}
-        </Text>
-
-        {message.tokens && (
-          <Text className="text-[10px] font-mono" style={{ color: tokens.mutedForeground }}>
-            · {formatTokens(message.tokens.input)} in · {formatTokens(message.tokens.output)} out
-            {message.tokens.cacheRead > 0 && ` · ${formatTokens(message.tokens.cacheRead)} cache`}
-            {message.tokens.cost !== undefined && ` · ${formatCost(message.tokens.cost)}`}
-          </Text>
-        )}
-      </View>
+      <MessageActions message={message} onCopy={handleCopy} onRevert={onRevert} />
 
       {/* Sources list */}
       {finished && sources.length > 0 && <SourcesBlock sources={sources} />}

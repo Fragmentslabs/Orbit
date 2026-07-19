@@ -370,6 +370,8 @@ export const useSessionStore = create<SessionState>((set, get) => ({
             s.id === sessionId ? { ...s, revert } : s,
           ),
         }))
+        // Recarrega as mensagens para refletir o truncamento
+        await get().fetchMessages(sessionId)
       }
     } catch {
       // Silently fail
@@ -386,6 +388,8 @@ export const useSessionStore = create<SessionState>((set, get) => ({
             s.id === sessionId ? { ...s, revert: undefined } : s,
           ),
         }))
+        // Recarrega as mensagens para restaurar as descartadas
+        await get().fetchMessages(sessionId)
       }
     } catch {
       // Silently fail
