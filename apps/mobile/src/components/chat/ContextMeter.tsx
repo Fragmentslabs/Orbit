@@ -3,6 +3,7 @@ import { View, Text, Pressable } from 'react-native'
 import Svg, { Circle } from 'react-native-svg'
 import { cn } from '~/lib/utils'
 import { useSessionStore } from '~/stores/session-store'
+import { useSettingsStore } from '~/stores/settings-store'
 import type { TokenUsage } from '@orbit/shared'
 
 function sumTokens(u: TokenUsage): number {
@@ -46,11 +47,17 @@ export function ContextMeter({ sessionId }: { sessionId?: string }) {
     return { accumulated: acc, compacted: lastSummary >= 0 }
   }, [messages])
 
+  const catalog = useSettingsStore((s) => s.catalog)
+  const selected = useSettingsStore((s) => s.selectedModel)
+  const limit = selected && catalog
+    ? catalog[selected.providerId]?.models[selected.modelId]?.limit?.context
+    : undefined
+
   const used = sumTokens(accumulated)
   if (used === 0) return null
 
-  const pct = 0
-  const atLimit = false
+  const pct = limit && limit > 0 ? used / limit : 0
+  const atLimit = pct >= 1
 
   return (
     <Pressable className="flex-row items-center gap-1 rounded-md px-1.5 py-1 opacity-40 text-foreground">
