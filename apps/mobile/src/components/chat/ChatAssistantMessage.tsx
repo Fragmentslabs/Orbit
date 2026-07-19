@@ -500,7 +500,7 @@ export function ChatAssistantMessage({ message, compact, isLast, isBusy, onRever
       })}
 
       {message.error && (
-        <View className="mt-2 w-full rounded-lg px-3 py-2" style={{ borderWidth: 1, borderColor: tokens.destructive, backgroundColor: tokens.destructive + '1A' }}>
+        <View className="mt-2 w-full rounded-lg px-3 py-2" style={{ borderWidth: 1, borderColor: tokens.destructive, backgroundColor: hslToRgba(tokens.destructive.replace(/hsla?\(|\)/g, '').replace(/,/g, ''), 0.12) }}>
           <Text className="text-xs" style={{ color: tokens.destructive }}>{message.error}</Text>
         </View>
       )}
