@@ -82,7 +82,17 @@ export const Persona: FC<PersonaProps> = memo(({ state = 'idle', size = 128 }) =
   }, [state, listeningInput, thinkingInput, speakingInput, asleepInput])
 
   return (
-    <div style={{ width: size, height: size, flexShrink: 0 }}>
+    <div
+      style={{
+        width: size,
+        height: size,
+        flexShrink: 0,
+        filter:
+          theme === 'light'
+            ? 'invert(1) brightness(0.85)'
+            : 'drop-shadow(0 0 18px rgba(255,255,255,0.7)) brightness(1.4)',
+      }}
+    >
       <RiveComponent style={{ width: '100%', height: '100%' }} />
     </div>
   )

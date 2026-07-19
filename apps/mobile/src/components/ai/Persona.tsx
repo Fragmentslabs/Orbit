@@ -73,7 +73,7 @@ export const Persona: FC<PersonaProps> = memo(({ state = 'idle', size = 128 }) =
           pointerEvents="none"
           style={{
             ...StyleSheet.absoluteFillObject,
-            backgroundColor: 'rgba(25,28,40,0.72)',
+            backgroundColor: 'rgba(25,28,40,0.82)',
           }}
         />
       )}
