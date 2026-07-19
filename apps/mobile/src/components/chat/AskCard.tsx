@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { View, Text, Pressable, TextInput, Platform } from 'react-native'
-import { ShieldAlert, HelpCircle, TriangleAlert, User, ChevronDown, ChevronUp } from 'lucide-react-native'
+import { ShieldAlert, HelpCircle, TriangleAlert, User, ChevronDown } from 'lucide-react-native'
 import type { PendingAsk } from '~/stores/chat-store'
 import { getThemeTokens } from '~/lib/theme-tokens'
 import { useThemeStore } from '~/stores/theme-store'
@@ -39,7 +39,7 @@ function btnPrimary(tokens: Record<string, string>) {
 export function AskCard({ ask, onReply }: AskCardProps) {
   const tokens = getThemeTokens(useThemeStore((s) => s.resolved))
   const [submitted, setSubmitted] = useState(false)
-  const [showMore, setShowMore] = useState(false)
+  const [permitOpen, setPermitOpen] = useState(false)
   const [questionIndex, setQuestionIndex] = useState(0)
   const [selectedOptions, setSelectedOptions] = useState<Record<string, string[]>>({})
   const [textAnswers, setTextAnswers] = useState<Record<string, string>>({})
@@ -121,8 +121,8 @@ export function AskCard({ ask, onReply }: AskCardProps) {
           </Text>
         )}
 
-        {/* Actions row: Negar | Uma vez */}
-        <View style={{ flexDirection: 'row', gap: 8, marginBottom: showMore ? 6 : 0 }}>
+        {/* Actions row: Negar | Permitir */}
+        <View style={{ flexDirection: 'row', gap: 8, position: 'relative' }}>
           <Pressable
             onPress={() => reply('deny')}
             disabled={submitted}
@@ -131,56 +131,48 @@ export function AskCard({ ask, onReply }: AskCardProps) {
             <Text style={{ fontSize: 12, fontWeight: '600', color: tokens.foreground }}>Negar</Text>
           </Pressable>
           <Pressable
-            onPress={() => reply('allow')}
+            onPress={() => setPermitOpen((v) => !v)}
             disabled={submitted}
-            style={{ ...btnPrimary(tokens), opacity: submitted ? 0.4 : 1 }}
+            style={{ ...btnPrimary(tokens), opacity: submitted ? 0.4 : 1, flexDirection: 'row', gap: 4 }}
           >
             <Text style={{ fontSize: 12, fontWeight: '600', color: tokens.primaryForeground }}>
-              Uma vez
+              Permitir
             </Text>
+            <ChevronDown size={12} color={tokens.primaryForeground} />
           </Pressable>
         </View>
 
-        {/* Accordion for more options */}
-        <Pressable
-          onPress={() => setShowMore((v) => !v)}
-          style={{
-            flexDirection: 'row',
-            alignItems: 'center',
-            justifyContent: 'center',
-            gap: 4,
-            paddingVertical: 6,
-          }}
-        >
-          <Text style={{ fontSize: 11, color: tokens.mutedForeground }}>
-            {showMore ? 'Menos opções' : 'Mais opções'}
-          </Text>
-          {showMore ? (
-            <ChevronUp size={12} color={tokens.mutedForeground} />
-          ) : (
-            <ChevronDown size={12} color={tokens.mutedForeground} />
-          )}
-        </Pressable>
-
-        {showMore && (
-          <View style={{ gap: 6 }}>
+        {/* Dropdown menu */}
+        {permitOpen && !submitted && (
+          <View
+            style={{
+              marginTop: 6,
+              borderRadius: 8,
+              borderWidth: 1,
+              borderColor: tokens.border,
+              backgroundColor: tokens.card,
+              overflow: 'hidden',
+            }}
+          >
             <Pressable
-              onPress={() => reply('always_chat')}
-              disabled={submitted}
-              style={{ ...btnMuted(tokens), opacity: submitted ? 0.4 : 1 }}
+              onPress={() => { setPermitOpen(false); reply('allow') }}
+              style={{ paddingVertical: 11, paddingHorizontal: 14 }}
             >
-              <Text style={{ fontSize: 12, fontWeight: '600', color: tokens.foreground }}>
-                Sempre neste chat
-              </Text>
+              <Text style={{ fontSize: 13, color: tokens.foreground }}>Uma vez</Text>
             </Pressable>
+            <View style={{ height: 1, backgroundColor: tokens.border }} />
             <Pressable
-              onPress={() => reply('always')}
-              disabled={submitted}
-              style={{ ...btnMuted(tokens), opacity: submitted ? 0.4 : 1 }}
+              onPress={() => { setPermitOpen(false); reply('always_chat') }}
+              style={{ paddingVertical: 11, paddingHorizontal: 14 }}
             >
-              <Text style={{ fontSize: 12, fontWeight: '600', color: tokens.foreground }}>
-                Sempre
-              </Text>
+              <Text style={{ fontSize: 13, color: tokens.foreground }}>Sempre neste chat</Text>
+            </Pressable>
+            <View style={{ height: 1, backgroundColor: tokens.border }} />
+            <Pressable
+              onPress={() => { setPermitOpen(false); reply('always') }}
+              style={{ paddingVertical: 11, paddingHorizontal: 14 }}
+            >
+              <Text style={{ fontSize: 13, color: tokens.foreground }}>Sempre</Text>
             </Pressable>
           </View>
         )}
