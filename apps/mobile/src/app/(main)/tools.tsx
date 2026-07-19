@@ -4,15 +4,15 @@ import { SafeAreaView } from 'react-native-safe-area-context'
 import { useRouter } from 'expo-router'
 import {
   ArrowLeft,
-  BookOpen,
   Puzzle,
+  Server,
+  Sparkles,
+  Globe,
+  Terminal,
   Wifi,
   WifiOff,
   Loader,
   AlertCircle,
-  Server,
-  Globe,
-  Terminal,
 } from 'lucide-react-native'
 import type { Skill, McpServerStatus, McpConnectionState } from '@orbit/shared'
 import { useToolsStore } from '~/stores/tools-store'
@@ -31,20 +31,13 @@ function ConnectionDot({ state }: { state: McpConnectionState }) {
   return <View style={{ width: size, height: size, borderRadius: size / 2, backgroundColor: color }} />
 }
 
-function StateIcon({ state }: { state: McpConnectionState }) {
-  if (state === 'connected') return <Wifi size={14} color="#22c55e" />
-  if (state === 'connecting') return <Loader size={14} color="#f59e0b" />
-  if (state === 'error') return <AlertCircle size={14} color="#ef4444" />
-  return <WifiOff size={14} color="#6b7280" />
-}
-
 function McpServerCard({ server }: { server: McpServerStatus }) {
   const tokens = getThemeTokens(useThemeStore((s) => s.resolved))
 
   return (
     <View style={[s.serverCard, { borderColor: tokens.border, backgroundColor: tokens.card }]}>
       <View style={s.serverHeader}>
-        <StateIcon state={server.state} />
+        <Server size={15} color={tokens.mutedForeground} />
         <Text style={[s.serverName, { color: tokens.foreground }]} numberOfLines={1}>
           {server.config.name}
         </Text>
@@ -113,7 +106,7 @@ function SkillCard({ skill }: { skill: Skill }) {
     <View style={[s.skillCard, { borderColor: tokens.border, backgroundColor: tokens.card }]}>
       <View style={s.skillRow}>
         <View style={[s.skillIconWrap, { backgroundColor: tokens.primary + '18' }]}>
-          <BookOpen size={14} color={tokens.primary} />
+          <Sparkles size={14} color={tokens.primary} />
         </View>
         <View style={{ flex: 1, gap: 2 }}>
           <Text style={[s.skillName, { color: tokens.foreground }]} numberOfLines={1}>{skill.name}</Text>
