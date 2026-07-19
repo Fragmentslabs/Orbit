@@ -6,7 +6,7 @@ import { useConnectionStore } from './connection-store'
 
 /** Pedido pendente exibido como card no chat. */
 export interface PendingAsk extends AskItem {
-  title: string
+  title?: string
 }
 
 interface ChatState {
