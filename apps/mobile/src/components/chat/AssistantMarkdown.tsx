@@ -21,6 +21,7 @@ type Block =
   | { type: 'list'; items: InlineSegment[][] }
   | { type: 'hr' }
   | { type: 'blockquote'; segments: InlineSegment[] }
+  | { type: 'table'; headers: InlineSegment[][]; rows: InlineSegment[][][] }
 
 function parseInline(text: string): InlineSegment[] {
   const regex = /(\*\*(.+?)\*\*)|(\*(.+?)\*)|(`(.+?)`)|(\[(.+?)\]\((.+?)\))/g
@@ -107,9 +108,24 @@ function parseMarkdown(text: string): Block[] {
       continue
     }
 
+    const tableMatch = line.match(/^\|(.+)\|$/)
+    if (tableMatch && i + 1 < lines.length && /^\|[-:\s|]+\|$/.test(lines[i + 1])) {
+      const headerRow = tableMatch[1]
+      const headers = headerRow.split('|').map((h) => parseInline(h.trim()))
+      i += 2
+      const rows: InlineSegment[][][] = []
+      while (i < lines.length && lines[i].trim() !== '' && /^\|.+\|$/.test(lines[i])) {
+        const cells = lines[i].slice(1, -1).split('|').map((c) => parseInline(c.trim()))
+        rows.push(cells)
+        i++
+      }
+      blocks.push({ type: 'table', headers, rows })
+      continue
+    }
+
     const paraLines: string[] = [line]
     i++
-    while (i < lines.length && lines[i].trim() !== '' && !lines[i].match(/^(#{1,3}|```|>|---|[-*]\s)/)) {
+    while (i < lines.length && lines[i].trim() !== '' && !lines[i].match(/^(#{1,3}|```|>|---|[-*]\s|\|)/)) {
       paraLines.push(lines[i])
       i++
     }
@@ -192,6 +208,30 @@ export function AssistantMarkdown({ text }: AssistantMarkdownProps) {
                 ))}
               </View>
             )
+          case 'table':
+            return (
+              <View key={i} className="rounded-lg overflow-hidden" style={{ borderWidth: 1, borderColor: tokens.border }}>
+                <View style={{ backgroundColor: tokens.muted }}>
+                  <View className="flex-row">
+                    {block.headers.map((header, ci) => (
+                      <View key={ci} className="flex-1 px-3 py-2" style={{ borderRightWidth: ci < block.headers.length - 1 ? 1 : 0, borderColor: tokens.border }}>
+                        <InlineText segments={header} color={tokens.foreground} />
+                      </View>
+                    ))}
+                  </View>
+                </View>
+                {block.rows.map((row, ri) => (
+                  <View key={ri} className="flex-row" style={{ borderTopWidth: 1, borderColor: tokens.border }}>
+                    {row.map((cell, ci) => (
+                      <View key={ci} className="flex-1 px-3 py-2" style={{ borderRightWidth: ci < row.length - 1 ? 1 : 0, borderColor: tokens.border }}>
+                        <InlineText segments={cell} color={tokens.foreground} />
+                      </View>
+                    ))}
+                  </View>
+                ))}
+              </View>
+            )
+
           case 'blockquote':
             return (
               <View key={i} className="pl-3" style={{ borderLeftWidth: 2, borderLeftColor: tokens.mutedForeground }}>
