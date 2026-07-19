@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import type {
   SessionInfo,
   SessionMode,
+  SessionRevert,
   FolderInfo,
   ChatMessage,
   ChatStatus,
@@ -75,6 +76,10 @@ interface SessionState {
   setFolderPinned: (folderId: string, pinned: boolean) => Promise<void>
   /** Remove uma pasta (sessões voltam pra raiz). */
   deleteFolder: (folderId: string) => Promise<void>
+  /** Reverte sessão até uma mensagem específica (trunca msgs posteriores). */
+  revertToMessage: (sessionId: string, messageId: string) => Promise<void>
+  /** Desfaz o revert ativo, restaurando mensagens descartadas. */
+  unrevert: (sessionId: string) => Promise<void>
   /** Aplica evento de chat recebido via WS. */
   applyChatEvent: (event: ChatEvent) => void
 }
@@ -351,6 +356,39 @@ export const useSessionStore = create<SessionState>((set, get) => ({
         folders: res.data as FolderInfo[],
         sessions: state.sessions.map((s) => (s.folderId === folderId ? { ...s, folderId: null } : s)),
       }))
+    }
+  },
+
+  revertToMessage: async (sessionId, messageId) => {
+    const { wsClient } = useConnectionStore.getState()
+    try {
+      const res = await wsClient.send({ type: 'sessions:revert', sessionId, messageId })
+      if (res.ok && res.data) {
+        const revert = res.data as SessionRevert
+        set((state) => ({
+          sessions: state.sessions.map((s) =>
+            s.id === sessionId ? { ...s, revert } : s,
+          ),
+        }))
+      }
+    } catch {
+      // Silently fail
+    }
+  },
+
+  unrevert: async (sessionId) => {
+    const { wsClient } = useConnectionStore.getState()
+    try {
+      const res = await wsClient.send({ type: 'sessions:unrevert', sessionId })
+      if (res.ok) {
+        set((state) => ({
+          sessions: state.sessions.map((s) =>
+            s.id === sessionId ? { ...s, revert: undefined } : s,
+          ),
+        }))
+      }
+    } catch {
+      // Silently fail
     }
   },
 

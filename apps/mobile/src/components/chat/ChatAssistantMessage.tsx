@@ -14,6 +14,7 @@ import {
   Terminal,
   Copy,
   Check,
+  RotateCcw,
 } from 'lucide-react-native'
 import { Image } from 'expo-image'
 import * as Clipboard from 'expo-clipboard'
@@ -48,6 +49,7 @@ interface ChatAssistantMessageProps {
   compact?: boolean
   isLast?: boolean
   isBusy?: boolean
+  onRevert?: () => void
 }
 
 // ─── User Message Attachments & Bubble ───────────────────────────────────────
@@ -440,7 +442,7 @@ function formatCost(cost: number): string {
   return `$${cost.toFixed(4)}`
 }
 
-export function ChatAssistantMessage({ message, compact, isLast, isBusy }: ChatAssistantMessageProps) {
+export function ChatAssistantMessage({ message, compact, isLast, isBusy, onRevert }: ChatAssistantMessageProps) {
   const isUser = message.role === 'user'
   const [copied, setCopied] = useState(false)
   const tokens = getThemeTokens(useThemeStore((s) => s.resolved))
@@ -525,7 +527,7 @@ export function ChatAssistantMessage({ message, compact, isLast, isBusy }: ChatA
         </View>
       )}
 
-      {/* Render Actions (like copying) & token/cost summary */}
+      {/* Render Actions (copy + revert + timestamp & token/cost summary) */}
       <View className="mt-2.5 w-full flex-row items-center flex-wrap gap-3 pt-2 opacity-60" style={{ borderTopWidth: 1, borderTopColor: tokens.border }}>
         <Pressable onPress={handleCopy} className="p-0.5 rounded">
           {copied ? (
@@ -534,6 +536,12 @@ export function ChatAssistantMessage({ message, compact, isLast, isBusy }: ChatA
             <Copy size={13} color={tokens.mutedForeground} />
           )}
         </Pressable>
+
+        {onRevert && (
+          <Pressable onPress={onRevert} className="p-0.5 rounded">
+            <RotateCcw size={13} color={tokens.mutedForeground} />
+          </Pressable>
+        )}
 
         <Text className="text-[10px] font-mono" style={{ color: tokens.mutedForeground }}>
           {formatTime(message.createdAt)}

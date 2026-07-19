@@ -11,6 +11,7 @@ import { MessageList } from '~/components/chat/MessageList'
 import { ChatInput } from '~/components/chat/ChatInput'
 import { AskCard } from '~/components/chat/AskCard'
 import { Suggestions } from '~/components/chat/Suggestion'
+import { RevertBar } from '~/components/chat/RevertBar'
 import { ChatHeader } from '~/components/chat/ChatHeader'
 import { FolderSelector } from '~/components/chat/FolderSelector'
 import { Persona } from '~/components/ai/Persona'
@@ -54,6 +55,8 @@ export function ChatScreen({ sessionId }: ChatScreenProps) {
   const setArchived = useSessionStore((s) => s.setArchived)
   const forkSession = useSessionStore((s) => s.forkSession)
   const deleteSession = useSessionStore((s) => s.deleteSession)
+  const revertToMessage = useSessionStore((s) => s.revertToMessage)
+  const unrevert = useSessionStore((s) => s.unrevert)
   const pendingAsks = useChatStore((s) => s.pendingAsks)
   const replyToAsk = useChatStore((s) => s.replyToAsk)
 
@@ -164,6 +167,20 @@ export function ChatScreen({ sessionId }: ChatScreenProps) {
     if (fork) router.replace({ pathname: '/(main)/chat/[id]', params: { id: fork.id } })
   }, [sessionId, forkSession, router])
 
+  const handleRevert = useCallback(
+    (messageId: string) => {
+      if (sessionId) void revertToMessage(sessionId, messageId)
+    },
+    [sessionId, revertToMessage],
+  )
+
+  const handleUnrevert = useCallback(
+    (sid: string) => {
+      void unrevert(sid)
+    },
+    [unrevert],
+  )
+
   const handleDelete = useCallback(async () => {
     if (!sessionId) return
     await deleteSession(sessionId)
@@ -223,7 +240,7 @@ export function ChatScreen({ sessionId }: ChatScreenProps) {
 
           {/* Mensagens — aparece assim que a conversa começa */}
           <Animated.View pointerEvents={isEmpty ? 'none' : 'auto'} style={{ flex: 1, opacity: chatProgress }}>
-            {!isEmpty && <MessageList messages={activeMessages} isStreaming={isStreaming} />}
+            {!isEmpty && <MessageList messages={activeMessages} isStreaming={isStreaming} onRevert={handleRevert} />}
           </Animated.View>
         </View>
 
@@ -245,6 +262,13 @@ export function ChatScreen({ sessionId }: ChatScreenProps) {
         {activeAsks.map((ask) => (
           <AskCard key={ask.requestId} ask={ask} onReply={(value) => replyToAsk(ask.requestId, value)} />
         ))}
+
+        {/* Revert ativo: barra com resumo + desfazer */}
+        {session?.revert && (
+          <View style={{ paddingHorizontal: 16, marginBottom: 8 }}>
+            <RevertBar session={session} onUnrevert={handleUnrevert} />
+          </View>
+        )}
 
         <ChatInput onSend={handleSend} onAbort={handleAbort} isStreaming={isStreaming} sessionId={sessionId} />
       </KeyboardAvoidingView>

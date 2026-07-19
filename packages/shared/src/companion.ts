@@ -200,6 +200,17 @@ export interface ListDirsResponse {
   dirs: { name: string; path: string }[]
 }
 
+export interface RevertSessionRequest {
+  type: 'sessions:revert'
+  sessionId: string
+  messageId: string
+}
+
+export interface UnrevertSessionRequest {
+  type: 'sessions:unrevert'
+  sessionId: string
+}
+
 export type CompanionRequest =
   | AuthRequest
   | ListSessionsRequest
@@ -230,6 +241,8 @@ export type CompanionRequest =
   | DeleteMemoryRequest
   | PromoteMemoryRequest
   | GetMemoryDocRequest
+  | RevertSessionRequest
+  | UnrevertSessionRequest
 
 // ─── Server → Client (Responses + Events) ────────────────────────────────────
 

@@ -23,7 +23,7 @@ export function MessageActions({ message, onCopy, onRevert, compact }: MessageAc
           <Copy size={12} className="text-muted-foreground" />
         </Pressable>
       )}
-      {onRevert && message.snapshot && (
+      {onRevert && message.role === 'assistant' && (
         <Pressable onPress={onRevert} className="p-0.5">
           <RotateCcw size={12} className="text-muted-foreground" />
         </Pressable>

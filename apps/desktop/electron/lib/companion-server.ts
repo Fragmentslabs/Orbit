@@ -33,6 +33,7 @@ import { StorageKeys } from '@shared/chat'
 import { readJson, writeJson, removeJson, listKeys } from './storage'
 import { listCredentialProviders } from './auth'
 import { reply as askReply } from './ask-broker'
+import { revert as revertSession, unrevert as unrevertSession } from './session/revert'
 import { abortChat, runChat } from './chat-engine'
 import { abortOrchestration } from './orchestrator'
 import { getCatalog } from './catalog'
@@ -568,6 +569,18 @@ async function handleRequest(client: ConnectedClient, requestId: string, req: Co
         await writeJson(StorageKeys.messages(fork.id), cloned)
         broadcastSessionEvent({ type: 'session', sessionId: fork.id, session: fork })
         sendResponse(ws, requestId, true, fork)
+        break
+      }
+
+      case 'sessions:revert': {
+        const revertState = await revertSession(req.sessionId, req.messageId)
+        sendResponse(ws, requestId, revertState !== null, revertState, revertState ? undefined : 'Não foi possível reverter')
+        break
+      }
+
+      case 'sessions:unrevert': {
+        const done = await unrevertSession(req.sessionId)
+        sendResponse(ws, requestId, done, undefined, done ? undefined : 'Nada para desfazer')
         break
       }
 
