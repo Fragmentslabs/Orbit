@@ -313,7 +313,7 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId }: 
           </PromptInputFooter>
         </PromptInput>
       <PromptInputTools>
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-1 mt-2">
         <ModeToggle
           icon={Search}
           label="Pesquisa"
@@ -357,7 +357,7 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId }: 
             onToggle={() => setBrainEnabled(sessionId, !brain)}
           />
         </div>
-        <div className="ml-auto">
+        <div className="ml-auto mt-2">
           <ContextMeter sessionId={sessionId} />
         </div>
       </PromptInputTools>
