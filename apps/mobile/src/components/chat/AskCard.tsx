@@ -121,7 +121,7 @@ export function AskCard({ ask, onReply }: AskCardProps) {
           </Text>
         )}
 
-        {/* Actions row: Negar | Permitir */}
+        {/* Actions row: Negar | Uma vez [˅] */}
         <View style={{ flexDirection: 'row', gap: 8, position: 'relative' }}>
           <Pressable
             onPress={() => reply('deny')}
@@ -130,16 +130,41 @@ export function AskCard({ ask, onReply }: AskCardProps) {
           >
             <Text style={{ fontSize: 12, fontWeight: '600', color: tokens.foreground }}>Negar</Text>
           </Pressable>
-          <Pressable
-            onPress={() => setPermitOpen((v) => !v)}
-            disabled={submitted}
-            style={{ ...btnPrimary(tokens), opacity: submitted ? 0.4 : 1, flexDirection: 'row', gap: 4 }}
-          >
-            <Text style={{ fontSize: 12, fontWeight: '600', color: tokens.primaryForeground }}>
-              Permitir
-            </Text>
-            <ChevronDown size={12} color={tokens.primaryForeground} />
-          </Pressable>
+          <View style={{ flex: 1, flexDirection: 'row' }}>
+            <Pressable
+              onPress={() => reply('allow')}
+              disabled={submitted}
+              style={{
+                ...btnPrimary(tokens),
+                opacity: submitted ? 0.4 : 1,
+                borderTopRightRadius: 0,
+                borderBottomRightRadius: 0,
+              }}
+            >
+              <Text style={{ fontSize: 12, fontWeight: '600', color: tokens.primaryForeground }}>
+                Uma vez
+              </Text>
+            </Pressable>
+            <Pressable
+              onPress={() => setPermitOpen((v) => !v)}
+              disabled={submitted}
+              style={{
+                paddingVertical: 10,
+                paddingHorizontal: 10,
+                borderTopRightRadius: 8,
+                borderBottomRightRadius: 8,
+                borderWidth: 1,
+                borderLeftWidth: 0,
+                borderColor: tokens.primary,
+                backgroundColor: tokens.primary,
+                alignItems: 'center',
+                justifyContent: 'center',
+                opacity: submitted ? 0.4 : 1,
+              }}
+            >
+              <ChevronDown size={12} color={tokens.primaryForeground} />
+            </Pressable>
+          </View>
         </View>
 
         {/* Dropdown menu */}
