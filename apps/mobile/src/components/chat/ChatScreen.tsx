@@ -17,6 +17,7 @@ import { FolderSelector } from '~/components/chat/FolderSelector'
 import { Persona } from '~/components/ai/Persona'
 import { getThemeTokens } from '~/lib/theme-tokens'
 import { useThemeStore } from '~/stores/theme-store'
+import { startMessageScheduler, useMessageQueueStore } from '~/stores/message-queue-store'
 
 const DEFAULT_SUGGESTIONS = [
   'What can you help me with?',
@@ -93,6 +94,20 @@ export function ChatScreen({ sessionId }: ChatScreenProps) {
 
   useEffect(() => {
     void selectSession(sessionId ?? null)
+  }, [sessionId])
+
+  useEffect(() => {
+    startMessageScheduler()
+  }, [])
+
+  useEffect(() => {
+    if (!sessionId) return
+    return useSessionStore.subscribe((state) => {
+      const status = state.status[sessionId]
+      if (status === 'idle' || status === 'error') {
+        useMessageQueueStore.getState().onSessionIdle(sessionId)
+      }
+    })
   }, [sessionId])
 
   // Cria a sessão no primeiro envio quando ainda é um rascunho (sem id).
@@ -277,7 +292,14 @@ export function ChatScreen({ sessionId }: ChatScreenProps) {
           </View>
         )}
 
-        <ChatInput onSend={handleSend} onAbort={handleAbort} isStreaming={isStreaming} sessionId={sessionId} />
+        <ChatInput
+          onSend={handleSend}
+          onAbort={handleAbort}
+          isStreaming={isStreaming}
+          sessionId={sessionId}
+          onCreateSession={() => createSession(mode)}
+          onNavigateToSession={(sid) => router.replace({ pathname: '/(main)/chat/[id]', params: { id: sid } })}
+        />
       </KeyboardAvoidingView>
     </SafeAreaView>
   )
