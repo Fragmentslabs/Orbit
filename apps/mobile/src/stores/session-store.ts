@@ -8,9 +8,11 @@ import type {
   ChatEvent,
   SendMessageOptions,
   FilePart,
+  AskItem,
 } from '@orbit/shared'
 import { useConnectionStore } from './connection-store'
 import { useSettingsStore } from './settings-store'
+import { useChatStore } from './chat-store'
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -472,6 +474,36 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       case 'folders':
         set({ folders: event.folders })
         break
+
+      // ─── Permissões ──────────────────────────────────────────────
+
+      case 'permission': {
+        const { addPendingAsk } = useChatStore.getState()
+        addPendingAsk(sessionId, {
+          requestId: event.requestId,
+          kind: 'permission',
+          claim: event.claim,
+          origin: event.origin,
+        })
+        break
+      }
+
+      case 'question': {
+        const { addPendingAsk } = useChatStore.getState()
+        addPendingAsk(sessionId, {
+          requestId: event.requestId,
+          kind: 'question',
+          questions: event.questions,
+          origin: event.origin,
+        })
+        break
+      }
+
+      case 'ask:done': {
+        const { removePendingAsk } = useChatStore.getState()
+        removePendingAsk(sessionId, event.requestId)
+        break
+      }
     }
   },
 }))

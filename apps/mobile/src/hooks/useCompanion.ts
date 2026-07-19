@@ -1,9 +1,8 @@
 import { useEffect } from 'react'
-import type { ChatEventMessage, PendingAskNotification } from '@orbit/shared'
+import type { ChatEventMessage } from '@orbit/shared'
 import { useConnectionStore } from '../stores/connection-store'
 import { useRecentConnectionsStore } from '~/stores/recent-connections-store'
 import { useSessionStore } from '../stores/session-store'
-import { useChatStore } from '../stores/chat-store'
 import { useSettingsStore } from '../stores/settings-store'
 
 /**
@@ -92,20 +91,8 @@ export function useCompanion() {
       }
     })
 
-    // notify:pending-ask → chat store
-    const unsubAsk = conn.onEvent('notify:pending-ask', (event) => {
-      const ask = event as PendingAskNotification
-      useChatStore.getState().addPendingAsk(ask.sessionId, {
-        requestId: ask.requestId,
-        kind: ask.kind,
-        title: ask.title,
-        questions: ask.questions as any,
-      })
-    })
-
     return () => {
       unsubChat()
-      unsubAsk()
     }
   }, [])
 }
