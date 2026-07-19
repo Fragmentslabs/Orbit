@@ -16,9 +16,11 @@ export interface SessionOrchestration {
   task?: string
 }
 
-/** Estado de revert ativo numa sessão. Em modo código: filesystem restaurado
- * para antes de `messageId` com `snapshot`/`files`/`diff`. Em modo chat:
- * mensagens truncadas guardadas em `discardedMessages` p/ permitir unrevert. */
+/** Estado de revert ativo numa sessão. O comportamento é idêntico entre
+ * modo código e chat: o revert marca o ponto de retorno; o truncamento
+ * efetivo (mensagens ou filesystem) só acontece ao enviar nova mensagem
+ * via cleanupRevert. Em modo código, `snapshot`/`files`/`diff` registram
+ * o estado do filesystem para permitir unrevert. */
 export interface SessionRevert {
   messageId: string
   /** Tree hash capturado antes do restore (modo código) — permite unrevert */
@@ -27,8 +29,6 @@ export interface SessionRevert {
   files?: string[]
   /** Diff unificado das mudanças revertidas (modo código) */
   diff?: string
-  /** Mensagens descartadas no truncamento (modo chat) — permite unrevert */
-  discardedMessages?: ChatMessage[]
 }
 
 export interface SessionInfo {
