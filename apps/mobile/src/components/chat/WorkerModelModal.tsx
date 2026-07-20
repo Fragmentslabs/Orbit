@@ -3,6 +3,7 @@ import { Modal, View, Text, TextInput, Pressable, ScrollView, Switch, StyleSheet
 import { X, Search, Check, Sparkles, Brain } from 'lucide-react-native'
 import { Image } from 'expo-image'
 import { useSettingsStore } from '~/stores/settings-store'
+import { Storage } from '~/lib/storage'
 import { getThemeTokens } from '~/lib/theme-tokens'
 import { useThemeStore } from '~/stores/theme-store'
 import { hslToRgba } from '~/lib/theme'
@@ -24,13 +25,23 @@ export function WorkerModelModal({ visible, onClose }: WorkerModelModalProps) {
   const connectedProviders = useSettingsStore((s) => s.connectedProviders)
   const workerModel = useSettingsStore((s) => s.workerModel)
   const workerReasoning = useSettingsStore((s) => s.workerReasoning)
-  const setWorkerModel = useSettingsStore((s) => s.setWorkerModel)
-  const setWorkerReasoning = useSettingsStore((s) => s.setWorkerReasoning)
 
   const rowSelectedBg = hslToRgba(
     tokens.primary.replace(/hsla?\(|\)/g, '').replace(/,/g, ''),
     0.08,
   )
+
+  const toggleReasoning = (on: boolean) => {
+    const val = on ? { enabled: true } as const : null
+    useSettingsStore.setState({ workerReasoning: val })
+    Storage.setItem('orbit_worker_reasoning', JSON.stringify(val)).catch(() => {})
+  }
+
+  const selectVariant = (variantId: string) => {
+    const val = { enabled: true, variantId } as const
+    useSettingsStore.setState({ workerReasoning: val })
+    Storage.setItem('orbit_worker_reasoning', JSON.stringify(val)).catch(() => {})
+  }
 
   const [search, setSearch] = useState('')
 
@@ -80,8 +91,9 @@ export function WorkerModelModal({ visible, onClose }: WorkerModelModalProps) {
           {/* Usar o modelo do chat */}
           <Pressable
             onPress={() => {
-              void setWorkerModel(null)
-              void setWorkerReasoning(null)
+              useSettingsStore.setState({ workerModel: null, workerReasoning: null })
+              Storage.setItem('orbit_worker_model', JSON.stringify(null)).catch(() => {})
+              Storage.setItem('orbit_worker_reasoning', JSON.stringify(null)).catch(() => {})
             }}
             style={[s.sameModelRow, { borderColor: tokens.border }, !workerModel && { backgroundColor: rowSelectedBg }]}
           >
@@ -115,7 +127,7 @@ export function WorkerModelModal({ visible, onClose }: WorkerModelModalProps) {
                   </View>
                   <Switch
                     value={thinkingOn}
-                    onValueChange={(on) => setWorkerReasoning(on ? { enabled: true } : null)}
+                    onValueChange={toggleReasoning}
                     trackColor={{ false: tokens.muted, true: tokens.primary }}
                     thumbColor={tokens.foreground}
                   />
@@ -127,7 +139,7 @@ export function WorkerModelModal({ visible, onClose }: WorkerModelModalProps) {
                       return (
                         <Pressable
                           key={v.id}
-                          onPress={() => setWorkerReasoning({ enabled: true, variantId: v.id })}
+                          onPress={() => selectVariant(v.id)}
                           style={[
                             s.levelChip,
                             active
@@ -164,7 +176,8 @@ export function WorkerModelModal({ visible, onClose }: WorkerModelModalProps) {
                       <Pressable
                         key={model.id}
                         onPress={() => {
-                          void setWorkerModel({ providerId: provider.id, modelId: model.id })
+                          useSettingsStore.setState({ workerModel: { providerId: provider.id, modelId: model.id } })
+                          Storage.setItem('orbit_worker_model', JSON.stringify({ providerId: provider.id, modelId: model.id })).catch(() => {})
                         }}
                         style={[
                           s.modelRow,
