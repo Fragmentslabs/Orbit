@@ -113,7 +113,7 @@ export function ChatInput({ onSubmit, status, onStop, sessionId }: {
   return (
     <PromptInputProvider>
     <SlashPalette commands={slashCommands}>
-    <DraftInputBridge />
+    <DraftInputBridge sessionId={sessionId} />
     <div className="w-full max-w-2xl mx-auto pb-4">
       <QueueIndicator sessionId={sessionId} />
       <PromptInput
