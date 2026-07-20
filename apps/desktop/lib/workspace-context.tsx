@@ -1,4 +1,4 @@
-import { createContext, useContext, useState } from "react"
+import { createContext, useContext, useEffect, useState } from "react"
 
 export type WorkspaceMode = "chat" | "code"
 
@@ -40,6 +40,11 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
   const [mode, setModeState] = useState<WorkspaceMode>(loadDefaultMode)
   const [view, setView] = useState<WorkspaceView>("chat")
   const [folders, setFolders] = useState<string[]>(loadInitialFolders)
+
+  // Persiste pastas no localStorage sempre que mudam
+  useEffect(() => {
+    localStorage.setItem(RECENT_FOLDERS_KEY, JSON.stringify(folders))
+  }, [folders])
 
   // Trocar de modo sempre volta para a view de chat
   const setMode = (next: WorkspaceMode) => {

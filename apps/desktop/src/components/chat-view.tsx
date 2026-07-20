@@ -224,7 +224,7 @@ function ChatMessages({ messages, isBusy, mode, sessionId, sendMessage, planIds,
 }
 
 export function ChatView({ sessionId }: { sessionId?: string } = {}) {
-  const { mode, setMode, folders } = useWorkspace()
+  const { mode, setMode, folders, setFolders } = useWorkspace()
   const activeSession = useActiveSession(mode)
   const explicitSession = useSessionStore((s) =>
     sessionId ? s.sessions.find((x) => x.id === sessionId) : undefined,
@@ -264,6 +264,15 @@ export function ChatView({ sessionId }: { sessionId?: string } = {}) {
   useEffect(() => {
     if (sessionId) void useSessionStore.getState().ensureMessages(sessionId)
   }, [sessionId])
+
+  // Sincroniza pasta da sessão (ex.: vinda do mobile) com o workspace
+  const prevSessionId = useRef(session?.id)
+  useEffect(() => {
+    if (viewMode === "code" && session?.directory && session.id !== prevSessionId.current) {
+      prevSessionId.current = session.id
+      setFolders([session.directory])
+    }
+  }, [session?.id, session?.directory, viewMode, setFolders])
 
   const isBusy = status === "submitted" || status === "streaming"
   const hasChat = messages.length > 0
