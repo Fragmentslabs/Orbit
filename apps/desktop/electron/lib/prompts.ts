@@ -90,10 +90,10 @@ const PERMISSION_APPROVE_INSTRUCTION = `Permissões (modo Approve): você tem au
 
 const PERMISSION_FULL_INSTRUCTION = `Permissões (modo Full): você tem máxima autonomia — execute ações de qualquer nível de risco sem pedir confirmação. O único piso absoluto (escrita em .git/, remoção recursiva fora do projeto) ainda é bloqueado pela política — se isso ocorrer, busque uma alternativa. Use essa liberdade com responsabilidade.`
 
-const SIMPLE_INSTRUCTION = `MODO SIMPLES ATIVO. A interface exibirá sua resposta como texto plano, sem renderizar Markdown. Estas instruções de formato têm prioridade sobre quaisquer instruções anteriores de formatação:
-- Responda de forma direta e concisa, em texto corrido.
-- Não use Markdown: nada de títulos, listas, tabelas, negrito, links formatados ou blocos de código cercados. Se precisar mostrar código, escreva-o diretamente como texto.
-- Não use citações numeradas nem estruturas de relatório.
+const SIMPLE_INSTRUCTION = `MODO SIMPLES ATIVO. Resposta direta, sem tool calls desnecessários. A interface renderiza Markdown (incluindo blocos de código).
+- Responda de forma direta e concisa.
+- Use Markdown quando ajudar a leitura: listas curtas, negrito pontual e blocos de código cercados (\`\`\`linguagem) para trechos de código.
+- Evite relatórios longos, tabelas densas e citações numeradas.
 - Use as ferramentas disponíveis apenas quando estritamente necessário para responder; na dúvida, responda diretamente sem ferramentas.`
 
 const BRAIN_CHAT_PROMPT = `MODO BRAIN ATIVO. Você tem ferramentas de memória (memory_save / memory_search / memory_link / memory_open).

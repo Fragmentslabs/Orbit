@@ -13,7 +13,6 @@ import { Message, MessageAttachment, MessageAttachments, MessageContent } from "
 import { Suggestion } from "@/src/components/ai/suggestion"
 import { ChatAssistantMessage } from "@/src/components/messages/chat-message"
 import { CodeAssistantMessage } from "@/src/components/messages/code-message"
-import { SimpleAssistantMessage } from "@/src/components/messages/simple-message"
 import { SummaryCard } from "@/src/components/messages/summary-card"
 import { OrchestrationPlanCard } from "@/src/components/orchestration-plan-card"
 import { PlanReviewCard } from "@/src/components/plan-review-card"
@@ -106,17 +105,13 @@ function MessageItem({ msg, isLast, waiting, finished, isBusy, mode, sessionId, 
   return (
     <Message from="assistant">
       <MessageContent>
-        {msg.simple ? (
-          <SimpleAssistantMessage message={msg} isLast={isLast} isBusy={isBusy} onRetry={handleRetry} />
-        ) : (
-          <AssistantMessage
-            message={msg}
-            sessionId={sessionId}
-            isLast={isLast}
-            isBusy={isBusy}
-            onRetry={handleRetry}
-          />
-        )}
+        <AssistantMessage
+          message={msg}
+          sessionId={sessionId}
+          isLast={isLast}
+          isBusy={isBusy}
+          onRetry={handleRetry}
+        />
       </MessageContent>
       {finished && !waiting && <AssistantMessageActions message={msg} sessionId={sessionId} />}
     </Message>

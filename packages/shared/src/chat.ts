@@ -158,7 +158,7 @@ export interface ChatMessage {
   providerId?: string
   modelId?: string
   error?: string
-  /** Gerada em modo simples: renderizar como texto puro, sem markdown/tool views */
+  /** Gerada em modo simples: UI enxuta (sem tool/reasoning views); texto ainda com markdown */
   simple?: boolean
   /** Tokens consumidos na geração desta mensagem (assistant) */
   tokens?: TokenUsage

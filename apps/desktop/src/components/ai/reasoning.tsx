@@ -4,10 +4,13 @@ import { useControllableState } from "@radix-ui/react-use-controllable-state"
 import { BrainIcon, ChevronDownIcon } from "lucide-react"
 import type { ComponentProps, ReactNode } from "react"
 import { createContext, memo, useContext, useEffect, useState } from "react"
+import { code } from "@streamdown/code"
 import { Streamdown } from "streamdown"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "~/components/ui/collapsible"
 import { cn } from "~/lib/utils"
 import { Shimmer } from "./shimmer"
+
+const streamdownPlugins = { code }
 
 interface ReasoningContextValue {
   isStreaming: boolean
@@ -145,7 +148,9 @@ export const ReasoningContent = memo(({ className, children, ...props }: Reasoni
     )}
     {...props}
   >
-    <Streamdown>{children}</Streamdown>
+    <Streamdown plugins={streamdownPlugins} shikiTheme={["github-light", "github-dark"]}>
+      {children}
+    </Streamdown>
   </CollapsibleContent>
 ))
 

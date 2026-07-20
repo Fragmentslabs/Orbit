@@ -78,7 +78,13 @@ export function AssistantMarkdown({ children, muted = false }: {
   muted?: boolean
 }) {
   return (
-    <div className={cn(muted ? "text-sm text-muted-foreground [&_*]:text-muted-foreground" : "text-foreground")}>
+    <div
+      className={cn(
+        // Herança de cor (sem [&_*]) para o Shiki poder colorir tokens nos code blocks
+        muted ? "text-sm text-muted-foreground" : "text-foreground",
+        "[&_[data-streamdown=code-block]]:text-foreground",
+      )}
+    >
       <MessageResponse components={markdownComponents}>{children}</MessageResponse>
     </div>
   )

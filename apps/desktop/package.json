@@ -26,6 +26,7 @@
     "@modelcontextprotocol/sdk": "^1.29.0",
     "@orbit/shared": "0.1.0",
     "@rive-app/react-webgl2": "^4.29.4",
+    "@streamdown/code": "^1.1.1",
     "@tailwindcss/vite": "^4.3.2",
     "@xterm/addon-fit": "^0.10.0",
     "@xterm/xterm": "^5.5.0",
