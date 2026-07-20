@@ -137,7 +137,7 @@ export function ChatInput({ onSubmit, status, onStop, sessionId }: {
           }
           const text = message.text?.trim()
           if (!text) return
-          onSubmit(resolveText(text), buildOptions(), files.length > 0 ? files : undefined)
+          return onSubmit(resolveText(text), buildOptions(), files.length > 0 ? files : undefined)
         }}
         className="rounded-xl border-2 border-sidebar-border [&>div]:!rounded-[calc(var(--radius-xl)-2px)] [&>div]:!border-none [&>div]:!bg-transparent"
       >

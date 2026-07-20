@@ -158,7 +158,7 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId }: 
         .join("\n\n")}`
       usePanelStore.getState().clearSelections()
     }
-    onSubmit(
+    return onSubmit(
       text,
       buildOptions(),
       directory,
