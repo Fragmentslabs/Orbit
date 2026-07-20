@@ -1,5 +1,5 @@
 import { memo, useEffect, useMemo, useState } from "react"
-import { BarChart3, Database, KeyRound, Puzzle, Shield, Trash2, Check, Plus, Wifi, WifiOff, RefreshCw, Server, X, Pencil } from "lucide-react"
+import { BarChart3, BookOpen, Database, KeyRound, Puzzle, Shield, Trash2, Check, Plus, Wifi, WifiOff, RefreshCw, Server, X, Pencil } from "lucide-react"
 import {
   Dialog,
   DialogContent,
@@ -15,6 +15,7 @@ import { PreferencesPanel } from "@/src/components/preferences-panel"
 import { McpSkillsPanel } from "@/src/components/mcp-skills-panel"
 import { AnalyticsPanel } from "@/src/components/analytics-panel"
 import { DataPanel } from "@/src/components/data-panel"
+import { HowToPanel } from "@/src/components/how-to-panel"
 import { useProviderStore } from "@/src/stores/provider-store"
 import { customProvidersApi } from "@/src/lib/ipc"
 import { cn } from "@/lib/utils"
@@ -33,6 +34,7 @@ const TABS: TabDef[] = [
   { id: "providers", label: "Provedores", icon: KeyRound, description: "Chaves de API dos provedores de IA." },
   { id: "autonomy", label: "Preferências", icon: Shield, description: "Modelos padrão, modos ativos e memória." },
   { id: "mcp-skills", label: "Ferramentas", icon: Puzzle, description: "Servidores MCP e skills do usuário." },
+  { id: "howto", label: "Como Funciona", icon: BookOpen, description: "Explicação dos modos e combinações." },
   { id: "analytics", label: "Uso e Limites", icon: BarChart3, description: "Estatísticas de uso e consumo de tokens." },
   { id: "data", label: "Dados", icon: Database, description: "Exportar e importar seus dados." },
 ]
@@ -456,7 +458,7 @@ export function SettingsDialog({ open, onOpenChange, initialTab = "providers" }:
               <p className="text-[11px] text-muted-foreground">{active.description}</p>
             </div>
             <div className="h-[520px] min-w-0">
-              {tab === "providers" ? <ProvidersTab /> : tab === "autonomy" ? <PreferencesPanel /> : tab === "mcp-skills" ? <McpSkillsPanel /> : tab === "analytics" ? <AnalyticsPanel /> : <DataPanel />}
+              {tab === "providers" ? <ProvidersTab /> : tab === "autonomy" ? <PreferencesPanel /> : tab === "mcp-skills" ? <McpSkillsPanel /> : tab === "howto" ? <HowToPanel /> : tab === "analytics" ? <AnalyticsPanel /> : <DataPanel />}
             </div>
           </div>
         </div>
