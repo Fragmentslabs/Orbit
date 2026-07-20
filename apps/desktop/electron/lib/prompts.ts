@@ -42,7 +42,7 @@ Diretrizes (mesma filosofia do opencode):
 - Diante de decisões com múltiplas abordagens válidas ou requisitos ambíguos, use a ferramenta question com opções claras em vez de presumir.
 - Em tarefas com 3+ etapas, mantenha uma TODO viva com todowrite: marque in_progress ao iniciar e completed ao concluir cada item.
 - Para testar aplicações web use as ferramentas panel_* (browser no painel do Orbit, abre sozinho): panel_navigate → panel_read (refs) → panel_click/panel_type. Use panel_resize (mobile/tablet/desktop) para testar responsividade.
-- Para tirar print e MOSTRAR ao usuário no chat: chame show_image({ fromPanel: true }) — ela captura a tela do painel e já insere a imagem na sua resposta visível para o usuário. Não precisa de panel_screenshot antes. Se precisar salvar o print em arquivo ao mesmo tempo: panel_screenshot({ savePath }) + show_image({ fromPanel: true }).
+- Para tirar print e MOSTRAR ao usuário no chat: chame show_image({ fromPanel: true }) — ela captura a tela do painel e já insere a imagem na sua resposta visível para o usuário. Não precisa de panel_screenshot antes. Se precisar salvar o print em arquivo ao mesmo tempo: panel_screenshot({ savePath: 'caminho/tela.webp' }) + show_image({ fromPanel: true }).
 - panel_screenshot é uma ferramenta interna para VOCÊ enxergar o estado da página (a imagem vai pro seu contexto, não pro chat do usuário). Use com moderação — imagens grandes podem ser rejeitadas pelo provedor.
 - Responda de forma concisa, referenciando arquivos como caminho:linha.`
 
@@ -193,11 +193,11 @@ const DOCUMENT_INSTRUCTION = `MODO DOCUMENTAÇÃO ATIVO (/document). Você vai n
 2. Monte a TODO (todowrite) com as páginas a documentar e mantenha-a atualizada.
 3. Para cada página:
    - panel_navigate na rota → panel_read para mapear conteúdo e funções.
-   - panel_screenshot({ savePath: 'docs/<slug-da-pagina>/tela.png', fullscreen: true }) para a foto principal em tela cheia (você vê a imagem no contexto).
-    - Interaja (panel_click/panel_type) para capturar estados derivados — modais, abas, formulários preenchidos — cada um com seu screenshot salvando em arquivo (docs/<slug>/modal-<nome>.png etc).
-    - Para mostrar o print ao USUÁRIO no chat, use show_image({ fromPanel: true }) ou show_image({ path: 'docs/<slug>/tela.png' }).
+    - panel_screenshot({ savePath: 'docs/<slug-da-pagina>/tela.webp', fullscreen: true }) para a foto principal em tela cheia (você vê a imagem no contexto).
+    - Interaja (panel_click/panel_type) para capturar estados derivados — modais, abas, formulários preenchidos — cada um com seu screenshot salvando em arquivo (docs/<slug>/modal-<nome>.webp etc).
+    - Para mostrar o print ao USUÁRIO no chat, use show_image({ fromPanel: true }) ou show_image({ path: 'docs/<slug>/tela.webp' }).
 4. Investigue o código do projeto (grep/read) para levantar as APIs que a página consome (método + endpoint) e as regras de negócio.
-5. Escreva docs/<slug-da-pagina>/README.md com: título e rota; visão geral; funções/ações disponíveis; regras de negócio; APIs consumidas; e as imagens referenciadas com links relativos (![Tela](tela.png), ![Modal X](modal-x.png)).
+5. Escreva docs/<slug-da-pagina>/README.md com: título e rota; visão geral; funções/ações disponíveis; regras de negócio; APIs consumidas; e as imagens referenciadas com links relativos (![Tela](tela.webp), ![Modal X](modal-x.webp)).
 6. Ao concluir cada página, mostre o screenshot principal na conversa com show_image({ path }).
 7. Ao final, crie/atualize docs/README.md com o índice de todas as páginas documentadas.`
 
