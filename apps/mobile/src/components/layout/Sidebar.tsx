@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, useCallback, memo } from 'react'
 import { View, Text, Pressable, Animated, ScrollView, Alert, Dimensions } from 'react-native'
 import type { GestureResponderEvent } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
@@ -162,14 +162,15 @@ export function Sidebar() {
   const windowHeight = Dimensions.get('window').height
   const menuTop = Math.min(menuY + 8, windowHeight - 320)
 
-  const openSessionMenu = (id: string, pageY: number) => {
+  const openSessionMenu = useCallback((id: string, pageY: number) => {
     setMenuY(pageY)
     setSessionMenu(id)
-  }
-  const openFolderMenu = (id: string, pageY: number) => {
+  }, [])
+
+  const openFolderMenu = useCallback((id: string, pageY: number) => {
     setMenuY(pageY)
     setFolderMenu(id)
-  }
+  }, [])
 
   const sessionMenuTarget = sessions.find((s) => s.id === sessionMenu)
   const folderMenuTarget = folders.find((f) => f.id === folderMenu)
@@ -233,31 +234,31 @@ export function Sidebar() {
       ]
     : []
 
-  const navigate = (path: string) => {
+  const navigate = useCallback((path: string) => {
     closeSidebar()
     router.push(path as any)
-  }
+  }, [closeSidebar, router])
 
-  const handleDisconnect = async () => {
+  const handleDisconnect = useCallback(async () => {
     disconnect()
     await clearSavedConfig()
     closeSidebar()
     router.replace('/(connection)')
-  }
+  }, [disconnect, clearSavedConfig, closeSidebar, router])
 
-  const handleNewChat = () => {
+  const handleNewChat = useCallback(() => {
     closeSidebar()
     router.push('/(main)')
-  }
+  }, [closeSidebar, router])
 
-  const handleOpenSession = (id: string) => {
+  const handleOpenSession = useCallback((id: string) => {
     if (selectionMode) {
       toggleSelected(id)
       return
     }
     closeSidebar()
     router.push({ pathname: '/(main)/chat/[id]', params: { id } })
-  }
+  }, [selectionMode, toggleSelected, closeSidebar, router])
 
   const topItems: NavItem[] = [
     { label: 'Memórias', icon: BrainCircuit, view: 'memories' },
@@ -550,7 +551,7 @@ export function Sidebar() {
   )
 }
 
-function ModeTab({
+const ModeTab = memo(function ModeTab({
   icon: Icon,
   label,
   active,
@@ -582,9 +583,9 @@ function ModeTab({
       </Text>
     </Pressable>
   )
-}
+})
 
-function SidebarItem({
+const SidebarItem = memo(function SidebarItem({
   icon: Icon,
   label,
   onPress,
@@ -611,9 +612,9 @@ function SidebarItem({
       </Text>
     </Pressable>
   )
-}
+})
 
-function SessionGroup({
+const SessionGroup = memo(function SessionGroup({
   label,
   children,
   tokens,
@@ -649,17 +650,17 @@ function SessionGroup({
       {children}
     </View>
   )
-}
+})
 
-function SessionRow({
+const SessionRow = memo(function SessionRow({
   title,
   active,
   streaming,
   indented,
   selectionMode,
   selected,
-  onPress,
-  onLongPress,
+  onPress: _onPress,
+  onLongPress: _onLongPress,
   tokens,
 }: {
   title: string
@@ -674,8 +675,8 @@ function SessionRow({
 }) {
   return (
     <Pressable
-      onPress={onPress}
-      onLongPress={onLongPress}
+      onPress={_onPress}
+      onLongPress={_onLongPress}
       className={cn(
         'mx-3 mb-0.5 flex-row items-center gap-3 rounded-lg px-3 py-2.5',
         indented && 'ml-6',
@@ -702,4 +703,12 @@ function SessionRow({
       </Text>
     </Pressable>
   )
-}
+}, (prev, next) =>
+  prev.title === next.title &&
+  prev.active === next.active &&
+  prev.streaming === next.streaming &&
+  prev.indented === next.indented &&
+  prev.selectionMode === next.selectionMode &&
+  prev.selected === next.selected &&
+  prev.tokens === next.tokens
+)

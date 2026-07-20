@@ -1,4 +1,4 @@
-import { useMemo, useCallback, useState, useEffect, useRef } from 'react'
+import { useCallback, useState, useEffect, useRef } from 'react'
 import { View, Text, Animated } from 'react-native'
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller'
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
@@ -19,6 +19,7 @@ import { FolderSelector } from '~/components/chat/FolderSelector'
 import { Persona } from '~/components/ai/Persona'
 import { getThemeTokens } from '~/lib/theme-tokens'
 import { useThemeStore } from '~/stores/theme-store'
+import { useShallow } from 'zustand/react/shallow'
 import { startMessageScheduler, useMessageQueueStore } from '~/stores/message-queue-store'
 
 const DEFAULT_SUGGESTIONS = [
@@ -42,7 +43,9 @@ export function ChatScreen({ sessionId }: ChatScreenProps) {
   const mode = useWorkspaceStore((s) => s.mode)
   const tokens = getThemeTokens(useThemeStore((s) => s.resolved))
 
-  const sessions = useSessionStore((s) => s.sessions)
+  const session = useSessionStore(
+    useShallow((s) => s.sessions.find((sess) => sess.id === sessionId))
+  )
   // Seletores estreitos: assinar o mapa inteiro re-renderizava a tela toda a
   // cada delta de QUALQUER sessão (e o mapa muda de identidade em todo set).
   const activeMessages = useSessionStore((s) =>
@@ -65,7 +68,6 @@ export function ChatScreen({ sessionId }: ChatScreenProps) {
   const pendingAsks = useChatStore((s) => s.pendingAsks)
   const replyToAsk = useChatStore((s) => s.replyToAsk)
 
-  const session = useMemo(() => sessions.find((s) => s.id === sessionId), [sessions, sessionId])
   const isStreaming = activeStatus === 'streaming' || activeStatus === 'submitted'
   const activeAsks = sessionId ? pendingAsks[sessionId] ?? [] : []
   const isEmpty = activeMessages.length === 0
