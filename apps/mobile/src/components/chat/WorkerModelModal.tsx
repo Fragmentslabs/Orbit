@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
-import { Modal, View, Text, TextInput, Pressable, ScrollView, StyleSheet } from 'react-native'
-import { X, Search, Check, Sparkles, Brain, ChevronDown } from 'lucide-react-native'
+import { Modal, View, Text, TextInput, Pressable, ScrollView, Switch, StyleSheet } from 'react-native'
+import { X, Search, Check, Sparkles, Brain } from 'lucide-react-native'
 import { Image } from 'expo-image'
 import { useSettingsStore } from '~/stores/settings-store'
 import { getThemeTokens } from '~/lib/theme-tokens'
@@ -26,8 +26,6 @@ export function WorkerModelModal({ visible, onClose }: WorkerModelModalProps) {
   const workerReasoning = useSettingsStore((s) => s.workerReasoning)
   const setWorkerModel = useSettingsStore((s) => s.setWorkerModel)
   const setWorkerReasoning = useSettingsStore((s) => s.setWorkerReasoning)
-
-  const [variantPickerOpen, setVariantPickerOpen] = useState(false)
 
   const rowSelectedBg = hslToRgba(
     tokens.primary.replace(/hsla?\(|\)/g, '').replace(/,/g, ''),
@@ -107,6 +105,54 @@ export function WorkerModelModal({ visible, onClose }: WorkerModelModalProps) {
           </View>
 
           <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 24 }}>
+            {/* Thinking config — topo, acima da listagem */}
+            {workerModel && supportsReasoning && (
+              <View style={[s.thinkingCard, { borderColor: tokens.border, backgroundColor: tokens.card }]}>
+                <View style={s.thinkingRow}>
+                  <View className="flex-row items-center gap-2">
+                    <Brain size={18} color={tokens.mutedForeground} />
+                    <Text style={[s.thinkingLabel, { color: tokens.foreground }]}>Thinking no worker</Text>
+                  </View>
+                  <Switch
+                    value={thinkingOn}
+                    onValueChange={(on) => setWorkerReasoning(on ? { enabled: true } : null)}
+                    trackColor={{ false: tokens.muted, true: tokens.primary }}
+                    thumbColor={tokens.foreground}
+                  />
+                </View>
+                {thinkingOn && variants.length > 0 && (
+                  <View style={s.reasoningLevels}>
+                    {variants.map((v: ModelVariant) => {
+                      const active = v.id === (workerReasoning?.variantId ?? '')
+                      return (
+                        <Pressable
+                          key={v.id}
+                          onPress={() => setWorkerReasoning({ enabled: true, variantId: v.id })}
+                          style={[
+                            s.levelChip,
+                            active
+                              ? { backgroundColor: tokens.background, borderColor: tokens.border }
+                              : { backgroundColor: tokens.muted, borderColor: tokens.border },
+                          ]}
+                        >
+                          <Text
+                            style={[
+                              s.levelChipLabel,
+                              { color: active ? tokens.primary : tokens.mutedForeground },
+                            ]}
+                          >
+                            {v.label}
+                          </Text>
+                          {active && <Check size={14} color={tokens.primary} />}
+                        </Pressable>
+                      )
+                    })}
+                  </View>
+                )}
+              </View>
+            )}
+
+            {/* Lista de modelos */}
             {groups.map(({ provider, models }) => (
               <View key={provider.id} style={{ marginBottom: 16 }}>
                 <Text style={[s.providerLabel, { color: tokens.mutedForeground }]}>{provider.name}</Text>
@@ -119,7 +165,6 @@ export function WorkerModelModal({ visible, onClose }: WorkerModelModalProps) {
                         key={model.id}
                         onPress={() => {
                           void setWorkerModel({ providerId: provider.id, modelId: model.id })
-                          setVariantPickerOpen(false)
                         }}
                         style={[
                           s.modelRow,
@@ -143,65 +188,6 @@ export function WorkerModelModal({ visible, onClose }: WorkerModelModalProps) {
                 </View>
               </View>
             ))}
-
-            {/* Thinking config — visível apenas com modelo selecionado que suporta reasoning */}
-            {workerModel && supportsReasoning && (
-              <View style={[s.thinkingBox, { borderColor: tokens.border, backgroundColor: tokens.card }]}>
-                <View className="flex-row items-center justify-between">
-                  <Pressable
-                    onPress={() => setWorkerReasoning(thinkingOn ? null : { enabled: true })}
-                    style={[s.thinkingToggle, thinkingOn && { backgroundColor: rowSelectedBg }]}
-                  >
-                    <Brain size={16} color={thinkingOn ? tokens.primary : tokens.mutedForeground} />
-                    <Text
-                      style={{
-                        fontSize: 13,
-                        fontWeight: '500',
-                        color: thinkingOn ? tokens.foreground : tokens.mutedForeground,
-                      }}
-                    >
-                      Thinking no worker
-                    </Text>
-                  </Pressable>
-                  {thinkingOn && variants.length > 0 && (
-                    <Pressable
-                      onPress={() => setVariantPickerOpen(!variantPickerOpen)}
-                      className="flex-row items-center gap-1 rounded-md px-2 py-1"
-                      style={{ backgroundColor: tokens.muted }}
-                    >
-                      <Text style={{ fontSize: 12, color: tokens.foreground }}>
-                        {variants.find((v) => v.id === workerReasoning?.variantId)?.label ?? 'Nível'}
-                      </Text>
-                      <ChevronDown size={14} color={tokens.mutedForeground} />
-                    </Pressable>
-                  )}
-                </View>
-
-                {thinkingOn && variantPickerOpen && variants.length > 0 && (
-                  <View style={[s.variantList, { borderColor: tokens.border, backgroundColor: tokens.background }]}>
-                    {variants.map((variant: ModelVariant) => {
-                      const isActive = (workerReasoning?.variantId ?? null) === variant.id
-                      return (
-                        <Pressable
-                          key={variant.id}
-                          onPress={() => {
-                            void setWorkerReasoning({ enabled: true, variantId: variant.id })
-                            setVariantPickerOpen(false)
-                          }}
-                          style={[
-                            s.variantRow,
-                            isActive && { backgroundColor: rowSelectedBg },
-                          ]}
-                        >
-                          <Text style={{ fontSize: 13, color: tokens.foreground, flex: 1 }}>{variant.label}</Text>
-                          {isActive && <Check size={14} color={tokens.primary} />}
-                        </Pressable>
-                      )
-                    })}
-                  </View>
-                )}
-              </View>
-            )}
           </ScrollView>
         </View>
       </View>
@@ -251,30 +237,32 @@ const s = StyleSheet.create({
   modelRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 14, paddingVertical: 12 },
   modelName: { fontSize: 14, fontWeight: '500' },
   modelId: { fontSize: 11 },
-  thinkingBox: {
+  thinkingCard: {
     borderWidth: 1,
     borderRadius: 12,
     padding: 14,
-    marginTop: 4,
+    marginBottom: 12,
   },
-  thinkingToggle: {
+  thinkingRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    justifyContent: 'space-between',
+  },
+  thinkingLabel: { fontSize: 13, fontWeight: '500' },
+  reasoningLevels: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+    marginTop: 10,
+  },
+  levelChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
     borderRadius: 8,
     paddingHorizontal: 10,
-    paddingVertical: 6,
-  },
-  variantList: {
+    paddingVertical: 7,
     borderWidth: 1,
-    borderRadius: 10,
-    marginTop: 8,
-    overflow: 'hidden',
   },
-  variantRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-  },
+  levelChipLabel: { fontSize: 13, fontWeight: '500' },
 })
