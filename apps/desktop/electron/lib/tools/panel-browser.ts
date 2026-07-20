@@ -95,40 +95,40 @@ export function createPanelBrowserTools(ctx: ToolContext): ToolSet {
     }),
     panel_screenshot: tool({
       description:
-        'Tira um screenshot da página do painel e o VÊ como imagem. Com savePath, também salva o PNG na pasta de trabalho (ex: docs/login/tela.png) — use no modo documentação. Com fullscreen, expande para tela cheia, captura a tela toda e volta à visão lateral.',
+        'Tira um screenshot da página do painel e o VÊ como imagem. Com savePath, também salva o WebP na pasta de trabalho (ex: docs/login/tela.webp) — use no modo documentação. Com fullscreen, expande para tela cheia, captura a tela toda e volta à visão lateral.',
       inputSchema: z.object({
         savePath: z
           .string()
           .optional()
-          .describe('Caminho relativo à pasta de trabalho para salvar o PNG (opcional)'),
+          .describe('Caminho relativo à pasta de trabalho para salvar o WebP (opcional)'),
         fullscreen: z
           .boolean()
           .optional()
           .describe('Captura em tela cheia (print maior) e retorna à visão lateral'),
       }),
       execute: async ({ savePath, fullscreen }, { toolCallId }) => {
-        const png = await panelScreenshot(fullscreen === true)
-        screenshotStash.set(toolCallId, png.toString('base64'))
+        const webp = await panelScreenshot(fullscreen === true)
+        screenshotStash.set(toolCallId, webp.toString('base64'))
         let saved = ''
         if (savePath) {
-          const target = resolveSafePath(ctx, savePath)
+          const saveName = savePath.replace(/\.[^/.]+$/, '') + '.webp'
+          const target = resolveSafePath(ctx, saveName)
           await fsp.mkdir(path.dirname(target), { recursive: true })
-          await fsp.writeFile(target, png)
-          saved = ` Salvo em ${savePath}.`
+          await fsp.writeFile(target, webp)
+          saved = ` Salvo em ${saveName}.`
         }
-        return `Screenshot capturado (${Math.round(png.length / 1024)}KB).${saved}`
+        return `Screenshot capturado (${Math.round(webp.length / 1024)}KB).${saved}`
       },
       toModelOutput: ({ toolCallId, output }) => {
         const base64 = screenshotStash.get(toolCallId)
         screenshotStash.delete(toolCallId)
         if (!base64) return { type: 'text', value: String(output) }
-        // Limita o tamanho da imagem enviada ao modelo para evitar erro upstream
         const raw = Buffer.from(base64, 'base64')
         const value: { type: string; data?: { type: string; data: string }; mediaType?: string; text?: string }[] = [
           { type: 'text', text: String(output) },
         ]
         if (raw.length <= MAX_MODEL_IMAGE_BYTES) {
-          value.push({ type: 'file', data: { type: 'data', data: base64 }, mediaType: 'image/png' })
+          value.push({ type: 'file', data: { type: 'data', data: base64 }, mediaType: 'image/webp' })
         } else {
           value.push({
             type: 'text',
@@ -140,7 +140,7 @@ export function createPanelBrowserTools(ctx: ToolContext): ToolSet {
     }),
     show_image: tool({
       description:
-        'Inclui uma imagem NA SUA RESPOSTA, visível para o usuário no chat. Use fromPanel para anexar um print atual do browser do painel, ou path para uma imagem da pasta de trabalho (ex: docs/login/tela.png). A imagem aparece no ponto da resposta em que a tool foi chamada — não a descreva em excesso depois.',
+        'Inclui uma imagem NA SUA RESPOSTA, visível para o usuário no chat. Use fromPanel para anexar um print atual do browser do painel, ou path para uma imagem da pasta de trabalho (ex: docs/login/tela.webp). A imagem aparece no ponto da resposta em que a tool foi chamada — não a descreva em excesso depois.',
       inputSchema: z.object({
         fromPanel: z.boolean().optional().describe('Captura o browser do painel agora e anexa'),
         path: z
@@ -151,9 +151,10 @@ export function createPanelBrowserTools(ctx: ToolContext): ToolSet {
       }),
       execute: async ({ fromPanel, path: imagePath, alt }) => {
         let buffer: Buffer
-        let ext = 'png'
+        let ext: string
         if (fromPanel) {
           buffer = await panelScreenshot()
+          ext = 'webp'
         } else if (imagePath) {
           ext = path.extname(imagePath).slice(1).toLowerCase()
           if (!IMAGE_EXTENSIONS.has(ext)) {

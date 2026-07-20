@@ -1,4 +1,5 @@
 import { BrowserWindow, webContents, type WebContents } from 'electron'
+import sharp from 'sharp'
 
 /**
  * Browser do painel direito controlado pelo agente. O renderer monta um
@@ -213,17 +214,17 @@ export async function panelType(
 export async function panelScreenshot(fullscreen = false): Promise<Buffer> {
   const wc = await ensurePanelBrowser()
   activity('Capturando a tela')
-  if (!fullscreen) {
+  const capture = async (maxWidth: number) => {
     const image = await wc.capturePage()
     const { width } = image.getSize()
-    return (width > 1024 ? image.resize({ width: 1024 }) : image).toPNG()
+    const resized = width > maxWidth ? image.resize({ width: maxWidth }) : image
+    return await sharp(resized.toPNG()).webp({ quality: 80 }).toBuffer()
   }
+  if (!fullscreen) return capture(1024)
   await panelFullscreen(true)
   try {
     await delay(300)
-    const image = await wc.capturePage()
-    const { width } = image.getSize()
-    return (width > 1440 ? image.resize({ width: 1440 }) : image).toPNG()
+    return capture(1440)
   } finally {
     await panelFullscreen(false)
   }
