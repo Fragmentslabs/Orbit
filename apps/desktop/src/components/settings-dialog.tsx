@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react"
+import { memo, useEffect, useMemo, useState } from "react"
 import { BarChart3, Database, KeyRound, Puzzle, Shield, Trash2, Check, Plus, Wifi, WifiOff, RefreshCw, Server, X, Pencil } from "lucide-react"
 import {
   Dialog,
@@ -37,7 +37,7 @@ const TABS: TabDef[] = [
   { id: "data", label: "Dados", icon: Database, description: "Exportar e importar seus dados." },
 ]
 
-function ProviderRow({ providerId }: { providerId: string }) {
+const ProviderRow = memo(function ProviderRow({ providerId }: { providerId: string }) {
   const provider = useProviderStore((s) => s.catalog[providerId])
   const connected = useProviderStore((s) => s.connectedProviders.includes(providerId))
   const setApiKey = useProviderStore((s) => s.setApiKey)
@@ -107,7 +107,7 @@ function ProviderRow({ providerId }: { providerId: string }) {
       )}
     </div>
   )
-}
+})
 
 function CustomProviderCard({
   provider,
@@ -382,7 +382,12 @@ function ProvidersTab() {
       {/* Provedores da nuvem (catálogo models.dev) */}
       <div className="flex flex-col gap-2 border-t pt-3">
         <p className="text-xs font-medium text-muted-foreground">Provedores da Nuvem</p>
-        <Input value={query} placeholder="Pesquisar provedor…" onChange={(e) => setQuery(e.target.value)} />
+        <input
+          value={query}
+          placeholder="Pesquisar provedor…"
+          onChange={(e) => setQuery(e.target.value)}
+          className="h-7 w-full min-w-0 rounded-md border border-input bg-input/20 px-2 py-0.5 text-sm transition-colors outline-none file:inline-flex file:h-6 file:border-0 file:bg-transparent file:text-xs/relaxed file:font-medium file:text-foreground placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30 md:text-xs/relaxed dark:bg-input/30"
+        />
         {providerIds.map((id) => (
           <ProviderRow key={id} providerId={id} />
         ))}
