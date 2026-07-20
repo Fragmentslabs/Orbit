@@ -4,6 +4,8 @@ import { KeyboardAvoidingView } from 'react-native-keyboard-controller'
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Stack, useRouter } from 'expo-router'
 import type { SendMessageOptions, FilePart } from '@orbit/shared'
+import { PlanReviewCard } from '~/components/chat/PlanReviewCard'
+import { OrchestrationPlanCard } from '~/components/chat/OrchestrationPlanCard'
 import { useSessionStore } from '~/stores/session-store'
 import { useChatStore } from '~/stores/chat-store'
 import { useWorkspaceStore } from '~/stores/workspace-store'
@@ -49,6 +51,8 @@ export function ChatScreen({ sessionId }: ChatScreenProps) {
   const activeStatus = useSessionStore((s) => (sessionId ? s.status[sessionId] : undefined))
   const selectSession = useSessionStore((s) => s.selectSession)
   const sendMessage = useSessionStore((s) => s.sendMessage)
+  const planReview = useSessionStore((s) => (sessionId ? s.planReviews[sessionId] : undefined))
+  const orchestration = useSessionStore((s) => (sessionId ? s.orchestration[sessionId] : undefined))
   const createSession = useSessionStore((s) => s.createSession)
   const abortChat = useSessionStore((s) => s.abortChat)
   const renameSession = useSessionStore((s) => s.renameSession)
@@ -262,7 +266,18 @@ export function ChatScreen({ sessionId }: ChatScreenProps) {
 
           {/* Mensagens — aparece assim que a conversa começa */}
           <Animated.View pointerEvents={isEmpty ? 'none' : 'auto'} style={{ flex: 1, opacity: chatProgress }}>
-            {!isEmpty && <MessageList messages={activeMessages} isStreaming={isStreaming} onRevert={handleRevert} />}
+            {!isEmpty && (
+              <MessageList
+                messages={activeMessages}
+                isStreaming={isStreaming}
+                onRevert={handleRevert}
+                ListFooterComponent={
+                  planReview && (planReview.status === 'proposed' || planReview.status === 'implementing')
+                    ? <View className="px-4 pb-2"><PlanReviewCard sessionId={sessionId!} review={planReview} /></View>
+                    : undefined
+                }
+              />
+            )}
           </Animated.View>
         </View>
 
@@ -277,6 +292,13 @@ export function ChatScreen({ sessionId }: ChatScreenProps) {
         {isCode && (
           <View style={{ paddingHorizontal: 16, marginBottom: 8 }}>
             <FolderSelector folders={folders} onFoldersChange={setFolders} />
+          </View>
+        )}
+
+        {/* Orquestração — card acima do input */}
+        {sessionId && orchestration && (orchestration.status === 'proposed' || orchestration.status === 'approved' || orchestration.status === 'running') && (
+          <View style={{ paddingHorizontal: 16, marginBottom: 8 }}>
+            <OrchestrationPlanCard sessionId={sessionId} plan={orchestration} />
           </View>
         )}
 

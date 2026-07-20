@@ -36,7 +36,8 @@ import { listCredentialProviders } from './auth'
 import { reply as askReply } from './ask-broker'
 import { revert as revertSession, unrevert as unrevertSession } from './session/revert'
 import { abortChat, runChat } from './chat-engine'
-import { abortOrchestration } from './orchestrator'
+import { abortOrchestration, approvePlan, rejectPlan } from './orchestrator'
+import { readPlanFile, deletePlanFile } from './plan-file'
 import { getCatalog } from './catalog'
 import { getModelsSnapshot } from './models'
 import { computeAnalytics } from './analytics'
@@ -716,6 +717,89 @@ async function handleRequest(client: ConnectedClient, requestId: string, req: Co
 
         broadcastSessionEvent({ type: 'folders', folders: next })
         sendResponse(ws, requestId, true, next)
+        break
+      }
+
+      case 'plan:read-file': {
+        const session = await readJson<SessionInfo>(StorageKeys.session(req.sessionId))
+        if (!session?.directory) {
+          sendResponse(ws, requestId, false, undefined, 'Sessão sem diretório')
+          break
+        }
+        const content = await readPlanFile(session.directory)
+        sendResponse(ws, requestId, true, content)
+        break
+      }
+
+      case 'plan:review-accept': {
+        const win = BrowserWindow.getAllWindows()[0]
+        if (!win) {
+          sendResponse(ws, requestId, false, undefined, 'Janela principal indisponível')
+          break
+        }
+        const session = await readJson<SessionInfo>(StorageKeys.session(req.sessionId))
+        if (!session) {
+          sendResponse(ws, requestId, false, undefined, 'Sessão não encontrada')
+          break
+        }
+        // Envia uma nova mensagem de implementação (mesma lógica do desktop)
+        const input: SendMessageInput = {
+          sessionId: req.sessionId,
+          text: 'Implemente o plano acima.',
+          providerId: req.providerId ?? 'openai',
+          modelId: req.modelId ?? 'gpt-4o',
+          mode: session.mode,
+          options: {
+            planReview: { status: 'implementing', messageId: req.messageId, permissionMode: req.permissionMode },
+            permissionMode: req.permissionMode,
+          },
+          directory: session.directory,
+          extraDirectories: session.extraDirectories,
+        }
+        void runChat(win, input)
+        sendResponse(ws, requestId, true)
+        break
+      }
+
+      case 'plan:review-reject': {
+        const session = await readJson<SessionInfo>(StorageKeys.session(req.sessionId))
+        if (session?.directory) {
+          await deletePlanFile(session.directory)
+        }
+        await removeJson(StorageKeys.planReview(req.sessionId))
+        // Notifica o renderer para atualizar o estado
+        for (const win of BrowserWindow.getAllWindows()) {
+          if (!win.isDestroyed()) {
+            win.webContents.send('chat:event', {
+              type: 'plan:review',
+              sessionId: req.sessionId,
+              review: { status: 'rejected', messageId: '' },
+            })
+          }
+        }
+        sendResponse(ws, requestId, true)
+        break
+      }
+
+      case 'orchestration:approve': {
+        const win = BrowserWindow.getAllWindows()[0]
+        if (!win) {
+          sendResponse(ws, requestId, false, undefined, 'Janela principal indisponível')
+          break
+        }
+        await approvePlan(win, req.sessionId, req.planId, req.taskIds)
+        sendResponse(ws, requestId, true)
+        break
+      }
+
+      case 'orchestration:reject': {
+        const win = BrowserWindow.getAllWindows()[0]
+        if (!win) {
+          sendResponse(ws, requestId, false, undefined, 'Janela principal indisponível')
+          break
+        }
+        await rejectPlan(win, req.sessionId)
+        sendResponse(ws, requestId, true)
         break
       }
 

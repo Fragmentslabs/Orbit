@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Modal, View, Text, Pressable, Animated, Switch, StyleSheet, ScrollView, Dimensions } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
-import { Shield, ShieldCheck, ShieldOff, Brain, Check, Bot, Network, ChevronRight } from 'lucide-react-native'
+import { Shield, ShieldCheck, ShieldOff, Brain, Check, Bot, Network, FileText, ChevronRight } from 'lucide-react-native'
 import type { LucideIcon } from 'lucide-react-native'
 import type { ModelVariant } from '@orbit/shared'
 import { getThemeTokens } from '~/lib/theme-tokens'
@@ -35,6 +35,9 @@ interface Props {
   /** Orchestra */
   orchestra: boolean
   onOrchestraToggle: () => void
+  /** Modo Plano (só leitura) */
+  plan: boolean
+  onPlanToggle: () => void
   /** Label do modelo configurado nos workers (null = "usar o mesmo do chat") */
   workerModelLabel: string | null
   onConfigureWorkers: () => void
@@ -57,6 +60,8 @@ export function ConfigSheet({
   onSubagentsToggle,
   orchestra,
   onOrchestraToggle,
+  plan,
+  onPlanToggle,
   workerModelLabel,
   onConfigureWorkers,
 }: Props) {
@@ -172,6 +177,27 @@ export function ConfigSheet({
             {reasoningAlwaysOn && (
               <Text style={[s.hint, { color: tokens.mutedForeground }]}>
                 Este modelo sempre usa raciocínio extendido.
+              </Text>
+            )}
+          </View>
+
+          {/* Modo Plano */}
+          <View style={[s.card, { borderColor: tokens.border }]}>
+            <View style={s.cardRow}>
+              <View style={s.cardRowLeft}>
+                <FileText size={18} color={tokens.mutedForeground} />
+                <Text style={[s.cardLabel, { color: tokens.foreground }]}>Modo Plano</Text>
+              </View>
+              <Switch
+                value={plan}
+                onValueChange={onPlanToggle}
+                trackColor={{ false: tokens.muted, true: tokens.primary }}
+                thumbColor={tokens.foreground}
+              />
+            </View>
+            {plan && (
+              <Text style={[s.hint, { color: tokens.mutedForeground }]}>
+                Apenas ferramentas de leitura. O resultado é um plano de implementação (PLAN.md) revisável.
               </Text>
             )}
           </View>
