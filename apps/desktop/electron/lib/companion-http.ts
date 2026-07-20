@@ -13,12 +13,17 @@
 
 import { createServer, type IncomingMessage, type ServerResponse, type Server } from 'http'
 import { hostname } from 'node:os'
+import path from 'node:path'
+import fs from 'node:fs/promises'
 import { app, BrowserWindow } from 'electron'
 import { readJson, writeJson, listKeys } from './storage'
 import { getCatalog } from './catalog'
 import { listCredentialProviders } from './auth'
-import { loadSkills } from './skills'
-import { listMcpStatus } from './mcp'
+import { globalSkillsDir, loadSkills, notifySkillsChanged } from './skills'
+import { importSkillSelection } from './skills/import'
+import { sanitizeSlug, serializeSkill } from './skills/parser'
+import { approvePendingSkill, discardPendingSkill, listPendingSkills } from './skills/pending'
+import { listMcpStatus, readMcpConfig, reconnectMcp, saveMcpConfig } from './mcp'
 
 export const HTTP_PORT = 3848
 
@@ -58,7 +63,7 @@ function jsonResponse(res: ServerResponse, status: number, data: unknown) {
   res.writeHead(status, {
     'Content-Type': 'application/json',
     'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Methods': 'GET, PATCH, PUT, OPTIONS',
+    'Access-Control-Allow-Methods': 'GET, PATCH, PUT, POST, DELETE, OPTIONS',
     'Access-Control-Allow-Headers': 'Content-Type, Authorization',
   })
   res.end(JSON.stringify(data))
@@ -238,6 +243,127 @@ async function handleGetStatus(_req: IncomingMessage, res: ServerResponse) {
   jsonResponse(res, 200, status)
 }
 
+// ─── Skills Handlers ──────────────────────────────────────────────────────────
+
+async function handleCreateSkill(req: IncomingMessage, res: ServerResponse) {
+  try {
+    const body = await readBody(req)
+    if (typeof body.name !== 'string' || typeof body.content !== 'string') {
+      jsonResponse(res, 400, { error: 'name e content são obrigatórios' })
+      return
+    }
+    const safeSlug = slugify(body.slug as string | undefined) ?? sanitizeSlug(body.name)
+    if (!safeSlug) {
+      jsonResponse(res, 400, { error: 'Slug inválido — use apenas letras minúsculas, números e underscores' })
+      return
+    }
+    const dir = globalSkillsDir()
+    await fs.mkdir(dir, { recursive: true })
+    const filePath = path.join(dir, `${safeSlug}.skill`)
+    if (body.oldSlug && body.oldSlug !== safeSlug) {
+      await fs.unlink(path.join(dir, `${body.oldSlug}.skill`)).catch(() => {})
+    }
+    await fs.writeFile(filePath, serializeSkill({
+      name: body.name,
+      description: (body.description as string) ?? '',
+      slug: safeSlug,
+      content: body.content as string,
+    }), 'utf8')
+    notifySkillsChanged()
+    jsonResponse(res, 200, { filePath })
+  } catch (err) {
+    jsonResponse(res, 400, { error: (err as Error).message })
+  }
+}
+
+async function handleDeleteSkill(_req: IncomingMessage, res: ServerResponse, slug: string) {
+  const safe = sanitizeSlug(slug)
+  if (!safe) {
+    jsonResponse(res, 400, { error: 'Slug inválido' })
+    return
+  }
+  const dir = globalSkillsDir()
+  await fs.unlink(path.join(dir, `${safe}.skill`)).catch(() => {})
+  await fs.unlink(path.join(dir, `${safe}.md`)).catch(() => {})
+  await fs.rm(path.join(dir, safe), { recursive: true, force: true }).catch(() => {})
+  notifySkillsChanged()
+  jsonResponse(res, 200, { deleted: true })
+}
+
+async function handleImportSkill(req: IncomingMessage, res: ServerResponse) {
+  try {
+    const body = await readBody(req)
+    if (typeof body.content !== 'string' || typeof body.filename !== 'string') {
+      jsonResponse(res, 400, { error: 'content (base64) e filename são obrigatórios' })
+      return
+    }
+    const tmpDir = app.getPath('temp')
+    const tmpFile = path.join(tmpDir, `orbit-import-${Date.now()}-${body.filename}`)
+    const buf = Buffer.from(body.content as string, 'base64')
+    await fs.writeFile(tmpFile, buf)
+    const outcome = await importSkillSelection([tmpFile])
+    await fs.unlink(tmpFile).catch(() => {})
+    if (outcome.imported) notifySkillsChanged()
+    jsonResponse(res, 200, outcome)
+  } catch (err) {
+    jsonResponse(res, 400, { error: (err as Error).message })
+  }
+}
+
+async function handleGetPendingSkills(_req: IncomingMessage, res: ServerResponse) {
+  const pending = await listPendingSkills()
+  jsonResponse(res, 200, pending)
+}
+
+async function handleApproveSkill(_req: IncomingMessage, res: ServerResponse, slug: string) {
+  const ok = await approvePendingSkill(slug)
+  if (ok) notifySkillsChanged()
+  jsonResponse(res, 200, { approved: ok })
+}
+
+async function handleDiscardSkill(_req: IncomingMessage, res: ServerResponse, slug: string) {
+  await discardPendingSkill(slug)
+  notifySkillsChanged()
+  jsonResponse(res, 200, { discarded: true })
+}
+
+// ─── MCP Handlers ─────────────────────────────────────────────────────────────
+
+async function handleGetMcpConfig(_req: IncomingMessage, res: ServerResponse) {
+  const config = await readMcpConfig()
+  jsonResponse(res, 200, config)
+}
+
+async function handlePutMcpConfig(req: IncomingMessage, res: ServerResponse) {
+  try {
+    const config = await readBody(req)
+    const status = await saveMcpConfig(config as any)
+    jsonResponse(res, 200, status)
+  } catch (err) {
+    jsonResponse(res, 400, { error: (err as Error).message })
+  }
+}
+
+async function handleReconnectMcp(_req: IncomingMessage, res: ServerResponse, name?: string) {
+  const status = await reconnectMcp(name)
+  jsonResponse(res, 200, status)
+}
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+function slugify(slug?: string): string | undefined {
+  if (!slug) return undefined
+  return slug.replace(/[^a-z0-9_]/g, '_').replace(/_+/g, '_').replace(/^_|_$/g, '')
+}
+
+type ParamHandler = (req: IncomingMessage, res: ServerResponse, ...params: string[]) => Promise<void>
+
+interface RouteEntry {
+  pattern: RegExp
+  paramNames: string[]
+  handler: ParamHandler
+}
+
 // ─── Request Router ──────────────────────────────────────────────────────────
 
 function routeKey(method: string, url: string): string {
@@ -246,34 +372,42 @@ function routeKey(method: string, url: string): string {
   return `${method} ${path}`
 }
 
-type Handler = (req: IncomingMessage, res: ServerResponse) => Promise<void>
 
 function createRouter(
   validatePin: (pin: string, ip: string) => boolean,
   getPairingPin: () => string | null,
   validateToken: (token: string) => Promise<boolean>,
 ) {
-  const routes = new Map<string, Handler>()
+  const routes: RouteEntry[] = [
+    // GET endpoints
+    { pattern: /^GET \/api\/preferences$/, paramNames: [], handler: handleGetPreferences },
+    { pattern: /^GET \/api\/models\/selected$/, paramNames: [], handler: handleGetSelectedModel },
+    { pattern: /^GET \/api\/catalog$/, paramNames: [], handler: handleGetCatalog },
+    { pattern: /^GET \/api\/status$/, paramNames: [], handler: handleGetStatus },
+    { pattern: /^GET \/api\/providers\/connected$/, paramNames: [], handler: handleGetConnectedProviders },
+    { pattern: /^GET \/api\/skills$/, paramNames: [], handler: handleGetSkills },
+    { pattern: /^GET \/api\/skills\/pending$/, paramNames: [], handler: handleGetPendingSkills },
+    { pattern: /^GET \/api\/mcp\/status$/, paramNames: [], handler: handleGetMcpStatus },
+    { pattern: /^GET \/api\/mcp\/config$/, paramNames: [], handler: handleGetMcpConfig },
 
-  // GET endpoints
-  routes.set('GET /api/preferences', handleGetPreferences)
-  routes.set('GET /api/models/selected', handleGetSelectedModel)
-  routes.set('GET /api/catalog', handleGetCatalog)
-  routes.set('GET /api/status', handleGetStatus)
-  routes.set('GET /api/providers/connected', handleGetConnectedProviders)
-  routes.set('GET /api/skills', handleGetSkills)
-  routes.set('GET /api/mcp/status', handleGetMcpStatus)
-
-  // Mutation endpoints
-  routes.set('PATCH /api/preferences', handlePatchPreferences)
-  routes.set('PUT /api/models/selected', handlePutSelectedModel)
+    // Mutation endpoints
+    { pattern: /^PATCH \/api\/preferences$/, paramNames: [], handler: handlePatchPreferences },
+    { pattern: /^PUT \/api\/models\/selected$/, paramNames: [], handler: handlePutSelectedModel },
+    { pattern: /^POST \/api\/skills$/, paramNames: [], handler: handleCreateSkill },
+    { pattern: /^POST \/api\/skills\/import$/, paramNames: [], handler: handleImportSkill },
+    { pattern: /^DELETE \/api\/skills\/([^/]+)$/, paramNames: ['slug'], handler: handleDeleteSkill },
+    { pattern: /^POST \/api\/skills\/([^/]+)\/approve$/, paramNames: ['slug'], handler: handleApproveSkill },
+    { pattern: /^POST \/api\/skills\/([^/]+)\/discard$/, paramNames: ['slug'], handler: handleDiscardSkill },
+    { pattern: /^PUT \/api\/mcp\/config$/, paramNames: [], handler: handlePutMcpConfig },
+    { pattern: /^POST \/api\/mcp\/servers\/([^/]+)\/reconnect$/, paramNames: ['name'], handler: handleReconnectMcp },
+  ]
 
   return async (req: IncomingMessage, res: ServerResponse) => {
     // CORS preflight
     if (req.method === 'OPTIONS') {
       res.writeHead(204, {
         'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Methods': 'GET, PATCH, PUT, OPTIONS',
+        'Access-Control-Allow-Methods': 'GET, PATCH, PUT, POST, DELETE, OPTIONS',
         'Access-Control-Allow-Headers': 'Content-Type, Authorization',
         'Access-Control-Max-Age': '86400',
       })
@@ -282,7 +416,6 @@ function createRouter(
     }
 
     // Discovery — endpoint público (sem auth) para o app mobile detectar
-    // um Orbit Desktop na rede. Expõe apenas metadados inofensivos.
     if (req.method === 'GET' && (req.url === '/api/ping' || req.url?.startsWith('/api/ping?'))) {
       const pairingPin = getPairingPin()
       jsonResponse(res, 200, {
@@ -302,19 +435,25 @@ function createRouter(
     }
 
     const key = routeKey(req.method ?? 'GET', req.url ?? '/')
-    const handler = routes.get(key)
 
-    if (!handler) {
-      jsonResponse(res, 404, { error: 'Endpoint não encontrado' })
-      return
+    for (const entry of routes) {
+      const match = key.match(entry.pattern)
+      if (match) {
+        const params = entry.paramNames.reduce(
+          (acc, name, i) => ({ ...acc, [name]: match[i + 1] }),
+          {} as Record<string, string>,
+        )
+        try {
+          await entry.handler(req, res, ...Object.values(params))
+        } catch (err) {
+          console.error('[CompanionHTTP] Handler error:', err)
+          jsonResponse(res, 500, { error: 'Erro interno' })
+        }
+        return
+      }
     }
 
-    try {
-      await handler(req, res)
-    } catch (err) {
-      console.error('[CompanionHTTP] Handler error:', err)
-      jsonResponse(res, 500, { error: 'Erro interno' })
-    }
+    jsonResponse(res, 404, { error: 'Endpoint não encontrado' })
   }
 }
 
