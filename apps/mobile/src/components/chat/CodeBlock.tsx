@@ -14,9 +14,11 @@ import { useThemeStore } from '~/stores/theme-store'
 interface CodeBlockProps {
   code: string
   language?: string
+  /** Sem highlight (stream / fence incompleto) — mais barato na JS thread. */
+  streaming?: boolean
 }
 
-export function CodeBlock({ code, language }: CodeBlockProps) {
+export function CodeBlock({ code, language, streaming = false }: CodeBlockProps) {
   const resolved = useThemeStore((s) => s.resolved)
   const tokens = getThemeTokens(resolved)
   const [copied, setCopied] = useState(false)
@@ -24,8 +26,8 @@ export function CodeBlock({ code, language }: CodeBlockProps) {
   const langLabel = displayLanguage(language)
 
   const highlighted = useMemo(
-    () => highlightCode(code, language, palette),
-    [code, language, palette],
+    () => (streaming ? null : highlightCode(code, language, palette)),
+    [code, language, palette, streaming],
   )
 
   const onCopy = async () => {
@@ -71,12 +73,14 @@ export function CodeBlock({ code, language }: CodeBlockProps) {
       </View>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} bounces={false}>
         <View className="px-3 py-2.5">
-          <Text className="font-mono text-xs leading-5" selectable>
-            {highlighted.map((token, i) => (
-              <Text key={i} style={{ color: token.color ?? palette.foreground }}>
-                {token.text}
-              </Text>
-            ))}
+          <Text className="font-mono text-xs leading-5" selectable style={{ color: palette.foreground }}>
+            {highlighted
+              ? highlighted.map((token, i) => (
+                  <Text key={i} style={{ color: token.color ?? palette.foreground }}>
+                    {token.text}
+                  </Text>
+                ))
+              : code}
           </Text>
         </View>
       </ScrollView>
