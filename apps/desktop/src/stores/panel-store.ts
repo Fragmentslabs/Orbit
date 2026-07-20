@@ -68,6 +68,12 @@ interface PanelState {
   pendingChatTabSession?: string
   pendingChatTabTitle?: string
 
+  /** Abre uma aba de chat com texto pré-preenchido no input (ex: discussão de pergunta) */
+  openChatTabWithPendingInput: (sessionId: string, title: string, input: string) => void
+  /** Texto a ser inserido no input da próxima aba de chat que abrir */
+  pendingInput: string | null
+  setPendingInput: (val: string | null) => void
+
   /** Abre uma aba Diff no painel direito para ver o diff de uma mensagem */
   openDiff: (sessionId: string, messageId: string, title: string) => void
   pendingDiff: number
@@ -174,5 +180,16 @@ export const usePanelStore = create<PanelState>((set) => {
     pendingDiffSessionId: undefined,
     pendingDiffMessageId: undefined,
     pendingDiffTitle: undefined,
+
+    openChatTabWithPendingInput: (sessionId, title, input) =>
+      set((state) => ({
+        rightPanelOpen: true,
+        pendingInput: input,
+        pendingChatTab: state.pendingChatTab + 1,
+        pendingChatTabSession: sessionId,
+        pendingChatTabTitle: title,
+      })),
+    pendingInput: null,
+    setPendingInput: (val) => set({ pendingInput: val }),
   }
 })

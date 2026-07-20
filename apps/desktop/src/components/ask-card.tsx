@@ -1,5 +1,5 @@
 import { useState } from "react"
-import { Bot, ChevronLeft, ChevronRight, ChevronDown, HelpCircle, ShieldAlert, TriangleAlert } from "lucide-react"
+import { Bot, ChevronLeft, ChevronRight, ChevronDown, HelpCircle, MessageSquare, ShieldAlert, TriangleAlert } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
@@ -7,6 +7,8 @@ import { Input } from "@/components/ui/input"
 import { cn } from "@/lib/utils"
 import type { Question } from "@shared/chat"
 import { chatApi } from "@/src/lib/ipc"
+import { usePanelStore } from "@/src/stores/panel-store"
+import { useSessionStore } from "@/src/stores/session-store"
 import type { PendingAskUI } from "@/src/stores/session-store"
 
 function OriginBadge({ workerTitle }: { workerTitle: string }) {
@@ -106,6 +108,48 @@ export function QuestionItem({ question, selected, free, onToggle, onFree }: {
   )
 }
 
+function buildComparisonPrompt(questions: Question[]): string {
+  const lines = questions.map((q) => {
+    const opts = q.options?.length
+      ? `\nOpções:\n${q.options.map((o) => `  - ${o}`).join("\n")}`
+      : ""
+    return `## ${q.text}${opts}`
+  })
+  return [
+    "Preciso de ajuda para decidir entre as opções que o agente apresentou. Por favor, analise cada pergunta e suas opções abaixo, listando vantagens e desvantagens de cada alternativa, para que eu possa escolher a melhor:",
+    "",
+    ...lines,
+    "",
+    "Para cada opção, explique:\n- Vantagens\n- Desvantagens\n- Em qual cenário é mais indicada",
+  ].join("\n")
+}
+
+function DiscussInPanelButton({ questions }: { questions: Question[] }) {
+  const openChatTabWithPendingInput = usePanelStore((s) => s.openChatTabWithPendingInput)
+  const createSession = useSessionStore((s) => s.createSession)
+  const [working, setWorking] = useState(false)
+
+  return (
+    <Button
+      size="sm"
+      variant="ghost"
+      disabled={working}
+      onClick={async () => {
+        setWorking(true)
+        try {
+          const session = await createSession("chat", { setActive: false, title: "Comparar opções" })
+          openChatTabWithPendingInput(session.id, "Comparar opções", buildComparisonPrompt(questions))
+        } finally {
+          setWorking(false)
+        }
+      }}
+    >
+      <MessageSquare className="mr-1 size-3.5" />
+      Discutir no chat lateral
+    </Button>
+  )
+}
+
 function QuestionBody({ ask, submitted, onReply }: {
   ask: PendingAskUI
   submitted: boolean
@@ -176,33 +220,36 @@ function QuestionBody({ ask, submitted, onReply }: {
         </div>
         {ask.origin && <OriginBadge workerTitle={ask.origin.workerTitle} />}
       </div>
-      <div className="flex justify-end gap-2">
-        <Button
-          size="sm"
-          variant="outline"
-          disabled={submitted}
-          onClick={() => onReply({ rejected: true })}
-        >
-          Dispensar
-        </Button>
-        {currentIndex < questions.length - 1 ? (
+      <div className="flex items-center justify-between gap-2">
+        <DiscussInPanelButton questions={questions} />
+        <div className="flex items-center gap-2">
           <Button
             size="sm"
             variant="outline"
             disabled={submitted}
-            onClick={() => setCurrentIndex((i) => Math.min(questions.length - 1, i + 1))}
+            onClick={() => onReply({ rejected: true })}
           >
-            Avançar
+            Dispensar
           </Button>
-        ) : (
-          <Button
-            size="sm"
-            disabled={submitted || !allAnswered}
-            onClick={() => onReply({ answers: questions.map(answerOf) })}
-          >
-            Responder
-          </Button>
-        )}
+          {currentIndex < questions.length - 1 ? (
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={submitted}
+              onClick={() => setCurrentIndex((i) => Math.min(questions.length - 1, i + 1))}
+            >
+              Avançar
+            </Button>
+          ) : (
+            <Button
+              size="sm"
+              disabled={submitted || !allAnswered}
+              onClick={() => onReply({ answers: questions.map(answerOf) })}
+            >
+              Responder
+            </Button>
+          )}
+        </div>
       </div>
     </>
   )
