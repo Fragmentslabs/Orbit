@@ -332,14 +332,14 @@ export function ChatView({ sessionId }: { sessionId?: string } = {}) {
 
   const handleChatSend = useCallback(
     (text: string, options: SendMessageOptions, files?: FilePart[]) => {
-      void sendMessage("chat", text, { options, sessionId, files })
+      return sendMessage("chat", text, { options, sessionId, files })
     },
     [sendMessage, sessionId],
   )
 
   const handleCodeSend = useCallback(
     (text: string, options: SendMessageOptions, directory: string, extraDirectories: string[], files?: FilePart[]) => {
-      void sendMessage("code", text, { options, directory, extraDirectories, sessionId, files })
+      return sendMessage("code", text, { options, directory, extraDirectories, sessionId, files })
     },
     [sendMessage, sessionId],
   )
