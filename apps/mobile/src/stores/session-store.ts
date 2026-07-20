@@ -345,6 +345,9 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     const settings = useSettingsStore.getState()
     const selected = settings.selectedModel
     const usesWorkers = config?.options?.subagents || config?.options?.orchestrate
+    const workerModel = usesWorkers && settings.workerModel
+      ? { ...settings.workerModel, reasoning: settings.workerReasoning ?? undefined }
+      : undefined
     try {
       await wsClient.send({
         type: 'messages:send',
@@ -354,7 +357,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
         modelId: config?.modelId ?? selected?.modelId,
         options: config?.options,
         files: config?.files,
-        workerModel: usesWorkers ? settings.workerModel ?? undefined : undefined,
+        workerModel,
         directory: config?.directory,
         extraDirectories: config?.extraDirectories,
       })

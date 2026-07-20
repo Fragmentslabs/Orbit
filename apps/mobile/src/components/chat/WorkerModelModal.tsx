@@ -1,11 +1,12 @@
 import { useMemo, useState } from 'react'
 import { Modal, View, Text, TextInput, Pressable, ScrollView, StyleSheet } from 'react-native'
-import { X, Search, Check, Sparkles } from 'lucide-react-native'
+import { X, Search, Check, Sparkles, Brain, ChevronDown } from 'lucide-react-native'
 import { Image } from 'expo-image'
 import { useSettingsStore } from '~/stores/settings-store'
 import { getThemeTokens } from '~/lib/theme-tokens'
 import { useThemeStore } from '~/stores/theme-store'
 import { hslToRgba } from '~/lib/theme'
+import type { ModelVariant } from '@orbit/shared'
 
 interface WorkerModelModalProps {
   visible: boolean
@@ -22,7 +23,11 @@ export function WorkerModelModal({ visible, onClose }: WorkerModelModalProps) {
   const catalog = useSettingsStore((s) => s.catalog)
   const connectedProviders = useSettingsStore((s) => s.connectedProviders)
   const workerModel = useSettingsStore((s) => s.workerModel)
+  const workerReasoning = useSettingsStore((s) => s.workerReasoning)
   const setWorkerModel = useSettingsStore((s) => s.setWorkerModel)
+  const setWorkerReasoning = useSettingsStore((s) => s.setWorkerReasoning)
+
+  const [variantPickerOpen, setVariantPickerOpen] = useState(false)
 
   const rowSelectedBg = hslToRgba(
     tokens.primary.replace(/hsla?\(|\)/g, '').replace(/,/g, ''),
@@ -49,6 +54,13 @@ export function WorkerModelModal({ visible, onClose }: WorkerModelModalProps) {
       .filter((group) => group.models.length > 0)
   }, [catalog, search, connectedProviders])
 
+  const selectedCatalogModel = workerModel && catalog
+    ? catalog[workerModel.providerId]?.models[workerModel.modelId]
+    : undefined
+  const thinkingOn = workerReasoning?.enabled ?? false
+  const supportsReasoning = selectedCatalogModel?.reasoning && !selectedCatalogModel?.reasoningAlwaysOn
+  const variants = selectedCatalogModel?.variants ?? []
+
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
       <View style={s.backdropWrap}>
@@ -71,7 +83,7 @@ export function WorkerModelModal({ visible, onClose }: WorkerModelModalProps) {
           <Pressable
             onPress={() => {
               void setWorkerModel(null)
-              onClose()
+              void setWorkerReasoning(null)
             }}
             style={[s.sameModelRow, { borderColor: tokens.border }, !workerModel && { backgroundColor: rowSelectedBg }]}
           >
@@ -107,7 +119,7 @@ export function WorkerModelModal({ visible, onClose }: WorkerModelModalProps) {
                         key={model.id}
                         onPress={() => {
                           void setWorkerModel({ providerId: provider.id, modelId: model.id })
-                          onClose()
+                          setVariantPickerOpen(false)
                         }}
                         style={[
                           s.modelRow,
@@ -131,6 +143,65 @@ export function WorkerModelModal({ visible, onClose }: WorkerModelModalProps) {
                 </View>
               </View>
             ))}
+
+            {/* Thinking config — visível apenas com modelo selecionado que suporta reasoning */}
+            {workerModel && supportsReasoning && (
+              <View style={[s.thinkingBox, { borderColor: tokens.border, backgroundColor: tokens.card }]}>
+                <View className="flex-row items-center justify-between">
+                  <Pressable
+                    onPress={() => setWorkerReasoning(thinkingOn ? null : { enabled: true })}
+                    style={[s.thinkingToggle, thinkingOn && { backgroundColor: rowSelectedBg }]}
+                  >
+                    <Brain size={16} color={thinkingOn ? tokens.primary : tokens.mutedForeground} />
+                    <Text
+                      style={{
+                        fontSize: 13,
+                        fontWeight: '500',
+                        color: thinkingOn ? tokens.foreground : tokens.mutedForeground,
+                      }}
+                    >
+                      Thinking no worker
+                    </Text>
+                  </Pressable>
+                  {thinkingOn && variants.length > 0 && (
+                    <Pressable
+                      onPress={() => setVariantPickerOpen(!variantPickerOpen)}
+                      className="flex-row items-center gap-1 rounded-md px-2 py-1"
+                      style={{ backgroundColor: tokens.muted }}
+                    >
+                      <Text style={{ fontSize: 12, color: tokens.foreground }}>
+                        {variants.find((v) => v.id === workerReasoning?.variantId)?.label ?? 'Nível'}
+                      </Text>
+                      <ChevronDown size={14} color={tokens.mutedForeground} />
+                    </Pressable>
+                  )}
+                </View>
+
+                {thinkingOn && variantPickerOpen && variants.length > 0 && (
+                  <View style={[s.variantList, { borderColor: tokens.border, backgroundColor: tokens.background }]}>
+                    {variants.map((variant: ModelVariant) => {
+                      const isActive = (workerReasoning?.variantId ?? null) === variant.id
+                      return (
+                        <Pressable
+                          key={variant.id}
+                          onPress={() => {
+                            void setWorkerReasoning({ enabled: true, variantId: variant.id })
+                            setVariantPickerOpen(false)
+                          }}
+                          style={[
+                            s.variantRow,
+                            isActive && { backgroundColor: rowSelectedBg },
+                          ]}
+                        >
+                          <Text style={{ fontSize: 13, color: tokens.foreground, flex: 1 }}>{variant.label}</Text>
+                          {isActive && <Check size={14} color={tokens.primary} />}
+                        </Pressable>
+                      )
+                    })}
+                  </View>
+                )}
+              </View>
+            )}
           </ScrollView>
         </View>
       </View>
@@ -180,4 +251,30 @@ const s = StyleSheet.create({
   modelRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 14, paddingVertical: 12 },
   modelName: { fontSize: 14, fontWeight: '500' },
   modelId: { fontSize: 11 },
+  thinkingBox: {
+    borderWidth: 1,
+    borderRadius: 12,
+    padding: 14,
+    marginTop: 4,
+  },
+  thinkingToggle: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  variantList: {
+    borderWidth: 1,
+    borderRadius: 10,
+    marginTop: 8,
+    overflow: 'hidden',
+  },
+  variantRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
 })

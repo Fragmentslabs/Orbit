@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import type { Catalog, CatalogModel, WorkerModelConfig } from '@orbit/shared'
+import type { Catalog, CatalogModel, ReasoningConfig, WorkerModelConfig } from '@orbit/shared'
 import { Storage } from '~/lib/storage'
 import { useConnectionStore } from './connection-store'
 
@@ -7,6 +7,7 @@ const CATALOG_CACHE_KEY = 'orbit_catalog_cache'
 const PROVIDERS_CACHE_KEY = 'orbit_providers_cache'
 const SELECTED_MODEL_CACHE_KEY = 'orbit_selected_model_cache'
 const WORKER_MODEL_KEY = 'orbit_worker_model'
+const WORKER_REASONING_KEY = 'orbit_worker_reasoning'
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -49,6 +50,11 @@ interface SettingsState {
   /** Define (ou limpa) o modelo dos workers. */
   setWorkerModel: (model: WorkerModelConfig | null) => Promise<void>
 
+  /** Configuração de thinking dos workers. */
+  workerReasoning: ReasoningConfig | null
+  /** Define (ou limpa) o thinking dos workers. */
+  setWorkerReasoning: (reasoning: ReasoningConfig | null) => Promise<void>
+
   /** Retorna modelo como lista plana (catálogo). */
   getModelList: () => CatalogModel[]
 }
@@ -62,6 +68,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
   preferences: null,
   loading: false,
   workerModel: null,
+  workerReasoning: null,
 
   fetchSelectedModel: async () => {
     const { http } = useConnectionStore.getState()
@@ -122,6 +129,10 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
       if (rawWorker && !get().workerModel) {
         set({ workerModel: JSON.parse(rawWorker) as WorkerModelConfig })
       }
+      const rawReasoning = await Storage.getItem(WORKER_REASONING_KEY)
+      if (rawReasoning && !get().workerReasoning) {
+        set({ workerReasoning: JSON.parse(rawReasoning) as ReasoningConfig })
+      }
     } catch {
       // Cache corrompido ou ausente — ignora, os fetches reais resolvem
     }
@@ -133,6 +144,15 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
       await Storage.setItem(WORKER_MODEL_KEY, JSON.stringify(model))
     } else {
       await Storage.removeItem(WORKER_MODEL_KEY)
+    }
+  },
+
+  setWorkerReasoning: async (reasoning) => {
+    set({ workerReasoning: reasoning })
+    if (reasoning) {
+      await Storage.setItem(WORKER_REASONING_KEY, JSON.stringify(reasoning))
+    } else {
+      await Storage.removeItem(WORKER_REASONING_KEY)
     }
   },
 
