@@ -24,6 +24,7 @@ export default function MainLayout() {
           <Stack screenOptions={{ headerShown: false }}>
             <Stack.Screen name="index" />
             <Stack.Screen name="chat/[id]" />
+            <Stack.Screen name="search" />
             <Stack.Screen name="memories" />
 
             <Stack.Screen name="usage" />

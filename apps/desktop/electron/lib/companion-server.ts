@@ -31,6 +31,7 @@ import type {
 import type { ChatEvent, SessionInfo, FolderInfo, ChatMessage, SendMessageInput } from '@shared/chat'
 import { StorageKeys } from '@shared/chat'
 import { readJson, writeJson, removeJson, listKeys } from './storage'
+import { searchSessions } from './search-sessions'
 import { listCredentialProviders } from './auth'
 import { reply as askReply } from './ask-broker'
 import { revert as revertSession, unrevert as unrevertSession } from './session/revert'
@@ -321,6 +322,12 @@ async function handleRequest(client: ConnectedClient, requestId: string, req: Co
           orchestration: s.orchestration,
         }))
         sendResponse(ws, requestId, true, safe)
+        break
+      }
+
+      case 'sessions:search': {
+        const hits = await searchSessions(req.query ?? '')
+        sendResponse(ws, requestId, true, hits)
         break
       }
 
