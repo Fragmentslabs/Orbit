@@ -108,23 +108,28 @@ export function QuestionItem({ question, selected, free, onToggle, onFree }: {
   )
 }
 
-function buildComparisonPrompt(questions: Question[]): string {
-  const lines = questions.map((q) => {
-    const opts = q.options?.length
-      ? `\nOpções:\n${q.options.map((o) => `  - ${o}`).join("\n")}`
-      : ""
-    return `## ${q.text}${opts}`
-  })
+function buildComparisonPrompt(questions: Question[], currentIndex: number): string {
+  const current = questions[currentIndex]
+  const otherLines = questions
+    .filter((_, i) => i !== currentIndex)
+    .map((q, i) => {
+      const opts = q.options?.length ? `\nOpções:\n${q.options.map((o) => `  - ${o}`).join("\n")}` : ""
+      return `### ${i + 1}. ${q.text}${opts}`
+    })
   return [
-    "Preciso de ajuda para decidir entre as opções que o agente apresentou. Por favor, analise cada pergunta e suas opções abaixo, listando vantagens e desvantagens de cada alternativa, para que eu possa escolher a melhor:",
+    `Preciso de ajuda para decidir entre as opções da pergunta abaixo. Por favor, analise cada opção listando vantagens, desvantagens e em qual cenário é mais indicada:`,
     "",
-    ...lines,
+    `## ${current.text}`,
+    ...(current.options?.length ? [`\nOpções:\n${current.options.map((o) => `  - ${o}`).join("\n")}`] : []),
+    ...(otherLines.length > 0
+      ? ["", "---", "Contexto adicional (outras perguntas do agente):", ...otherLines]
+      : []),
     "",
     "Para cada opção, explique:\n- Vantagens\n- Desvantagens\n- Em qual cenário é mais indicada",
   ].join("\n")
 }
 
-function DiscussInPanelButton({ questions }: { questions: Question[] }) {
+function DiscussInPanelButton({ questions, currentIndex }: { questions: Question[]; currentIndex: number }) {
   const openChatTabWithPendingInput = usePanelStore((s) => s.openChatTabWithPendingInput)
   const createSession = useSessionStore((s) => s.createSession)
   const [working, setWorking] = useState(false)
@@ -138,7 +143,7 @@ function DiscussInPanelButton({ questions }: { questions: Question[] }) {
         setWorking(true)
         try {
           const session = await createSession("chat", { setActive: false, title: "Comparar opções" })
-          openChatTabWithPendingInput(session.id, "Comparar opções", buildComparisonPrompt(questions))
+          openChatTabWithPendingInput(session.id, "Comparar opções", buildComparisonPrompt(questions, currentIndex))
         } finally {
           setWorking(false)
         }
@@ -222,7 +227,7 @@ function QuestionBody({ ask, submitted, onReply }: {
       </div>
       <div className="flex items-center justify-between gap-2">
         <div className="ml-6">
-          <DiscussInPanelButton questions={questions} />
+          <DiscussInPanelButton questions={questions} currentIndex={currentIndex} />
         </div>
         <div className="flex items-center gap-2">
           <Button
