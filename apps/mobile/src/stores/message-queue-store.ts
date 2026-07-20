@@ -19,6 +19,7 @@ interface MessageQueueState {
   hasPending: (sessionId: string) => boolean
   queueSize: (sessionId: string) => number
   processQueue: (sessionId: string) => void
+  processAllQueues: () => void
   enqueueForSend: (
     sessionId: string,
     text: string,
@@ -38,12 +39,13 @@ interface MessageQueueState {
 }
 
 function persist(queues: Record<string, QueuedMessage[]>) {
-  const scheduled: Record<string, QueuedMessage[]> = {}
+  // Persiste TODAS as mensagens da fila (não só as agendadas)
+  // para que mensagens offline não se percam em reinicialização do app.
+  const all: Record<string, QueuedMessage[]> = {}
   for (const [sid, msgs] of Object.entries(queues)) {
-    const sched = msgs.filter((m) => m.scheduledAt)
-    if (sched.length > 0) scheduled[sid] = sched
+    if (msgs.length > 0) all[sid] = msgs
   }
-  void Storage.setItem(QUEUE_STORAGE_KEY, JSON.stringify(scheduled))
+  void Storage.setItem(QUEUE_STORAGE_KEY, JSON.stringify(all))
 }
 
 export const useMessageQueueStore = create<MessageQueueState>((set, get) => ({
@@ -116,6 +118,14 @@ export const useMessageQueueStore = create<MessageQueueState>((set, get) => ({
     const current = get().queues[sessionId]
     if (!current) return 0
     return current.filter((m) => !m.scheduledAt).length
+  },
+
+  /** Processa a fila de todas as sessões. */
+  processAllQueues: () => {
+    const state = get()
+    for (const sessionId of Object.keys(state.queues)) {
+      state.processQueue(sessionId)
+    }
   },
 
   processQueue: (sessionId) => {

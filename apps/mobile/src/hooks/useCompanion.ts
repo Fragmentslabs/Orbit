@@ -1,6 +1,7 @@
 import { useEffect } from 'react'
 import type { ChatEventMessage } from '@orbit/shared'
 import { useConnectionStore } from '../stores/connection-store'
+import { useMessageQueueStore } from '../stores/message-queue-store'
 import { useRecentConnectionsStore } from '~/stores/recent-connections-store'
 import { useSessionStore } from '../stores/session-store'
 import { useSettingsStore } from '../stores/settings-store'
@@ -66,6 +67,8 @@ export function useCompanion() {
         void useSettingsStore.getState().fetchPreferences()
         void useSettingsStore.getState().fetchCatalog()
         void useSettingsStore.getState().fetchConnectedProviders()
+        // Processa fila de mensagens offline
+        useMessageQueueStore.getState().processAllQueues()
       } else if (state.status === 'disconnected' && state.error === 'invalid_pin') {
         // PIN expirou (TTL de 5 min no desktop) — esquece a config salva para
         // não ficar preso num loop de auto-reconexão que sempre falha
