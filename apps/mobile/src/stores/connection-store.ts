@@ -115,9 +115,14 @@ export const useConnectionStore = create<ConnectionStore>((set, get) => ({
   },
 
   onConnectionChange: (handler) => {
+    let lastStatus = get().connection.status
     return wsClient.onStateChange((state) => {
+      const statusChanged = state.status !== lastStatus
+      lastStatus = state.status
       set({ connection: state })
-      handler(state)
+      if (statusChanged) {
+        handler(state)
+      }
     })
   },
 
