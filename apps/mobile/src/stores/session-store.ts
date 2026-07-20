@@ -20,6 +20,9 @@ import type {
   FilePart,
   AskItem,
   SearchHit,
+  PlanReview,
+  OrchestrationPlan,
+  PermissionMode,
 } from '@orbit/shared'
 import { useConnectionStore } from './connection-store'
 import { useSettingsStore } from './settings-store'
@@ -40,6 +43,12 @@ interface SessionState {
   status: Record<string, ChatStatus>
   /** Erros por sessão. */
   errors: Record<string, string | undefined>
+  /** Plan reviews (modo plano) por sessão. */
+  planReviews: Record<string, PlanReview>
+  /** Sessões que aguardam criação de PlanReview ao fim do streaming. */
+  _planReviewOutbox: Record<string, boolean>
+  /** Planos de orquestração por sessão. */
+  orchestration: Record<string, OrchestrationPlan>
   /** Busca lista de sessões via WS. */
   fetchSessions: () => Promise<void>
   /** Busca textual em títulos e mensagens (mesma lógica do desktop). */
@@ -92,6 +101,14 @@ interface SessionState {
   revertToMessage: (sessionId: string, messageId: string) => Promise<void>
   /** Desfaz o revert ativo, restaurando mensagens descartadas. */
   unrevert: (sessionId: string) => Promise<void>
+  /** Aceita plano de implementação (modo plano). */
+  acceptPlanReview: (sessionId: string, permissionMode: PermissionMode) => Promise<void>
+  /** Rejeita plano de implementação (modo plano). */
+  rejectPlanReview: (sessionId: string) => Promise<void>
+  /** Aprova plano de orquestração. */
+  approvePlan: (sessionId: string, planId: string, taskIds?: string[]) => Promise<void>
+  /** Rejeita plano de orquestração. */
+  rejectPlan: (sessionId: string) => Promise<void>
   /** Aplica evento de chat recebido via WS. */
   applyChatEvent: (event: ChatEvent) => void
 }
@@ -151,6 +168,9 @@ export const useSessionStore = create<SessionState>((set, get) => ({
   messages: {},
   status: {},
   errors: {},
+  planReviews: {},
+  _planReviewOutbox: {},
+  orchestration: {},
 
   fetchSessions: async () => {
     const { wsClient } = useConnectionStore.getState()
@@ -227,6 +247,10 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       status: { ...state.status, [sessionId]: 'submitted' },
       errors: { ...state.errors, [sessionId]: undefined },
     }))
+
+    if (config?.options?.plan) {
+      set((state) => ({ _planReviewOutbox: { ...state._planReviewOutbox, [sessionId]: true } }))
+    }
 
     const { wsClient } = useConnectionStore.getState()
     // Modelo: explícito no config, senão o selecionado no desktop
@@ -323,7 +347,13 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       set((state) => {
         const sessions = state.sessions.filter((s) => s.id !== sessionId && s.parentId !== sessionId)
         const activeSessionId = state.activeSessionId === sessionId ? null : state.activeSessionId
-        return { sessions, activeSessionId }
+        const planReviews = { ...state.planReviews }
+        delete planReviews[sessionId]
+        const orchestration = { ...state.orchestration }
+        delete orchestration[sessionId]
+        const _planReviewOutbox = { ...(state._planReviewOutbox ?? {}) }
+        delete _planReviewOutbox[sessionId]
+        return { sessions, activeSessionId, planReviews, orchestration, _planReviewOutbox }
       })
     }
   },
@@ -386,6 +416,64 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     }
   },
 
+  acceptPlanReview: async (sessionId, permissionMode) => {
+    const review = get().planReviews[sessionId]
+    if (!review || review.status !== 'proposed') return
+    const updated: PlanReview = { ...review, status: 'implementing', permissionMode }
+    set((state) => ({ planReviews: { ...state.planReviews, [sessionId]: updated } }))
+
+    const session = get().sessions.find((s) => s.id === sessionId)
+    const settings = useSettingsStore.getState()
+    const { wsClient } = useConnectionStore.getState()
+    try {
+      await wsClient.send({
+        type: 'plan:review-accept',
+        sessionId,
+        messageId: review.messageId,
+        permissionMode,
+        providerId: settings.selectedModel?.providerId,
+        modelId: settings.selectedModel?.modelId,
+      })
+    } catch {
+      // Silently fail — the desktop will handle it
+    }
+  },
+
+  rejectPlanReview: async (sessionId) => {
+    const review = get().planReviews[sessionId]
+    if (!review || review.status !== 'proposed') return
+    const updated: PlanReview = { ...review, status: 'rejected' }
+    set((state) => ({ planReviews: { ...state.planReviews, [sessionId]: updated } }))
+
+    const { wsClient } = useConnectionStore.getState()
+    try {
+      await wsClient.send({ type: 'plan:review-reject', sessionId })
+    } catch {
+      // Silently fail
+    }
+  },
+
+  approvePlan: async (sessionId, planId, taskIds) => {
+    const plan = get().orchestration[sessionId]
+    if (!plan || plan.id !== planId) return
+
+    const { wsClient } = useConnectionStore.getState()
+    try {
+      await wsClient.send({ type: 'orchestration:approve', sessionId, planId, taskIds })
+    } catch {
+      // Silently fail
+    }
+  },
+
+  rejectPlan: async (sessionId) => {
+    const { wsClient } = useConnectionStore.getState()
+    try {
+      await wsClient.send({ type: 'orchestration:reject', sessionId })
+    } catch {
+      // Silently fail
+    }
+  },
+
   revertToMessage: async (sessionId, messageId) => {
     const { wsClient } = useConnectionStore.getState()
     try {
@@ -433,10 +521,24 @@ export const useSessionStore = create<SessionState>((set, get) => ({
 
     switch (event.type) {
       case 'status':
-        set((state) => ({
-          status: { ...state.status, [sessionId]: event.status },
-          errors: { ...state.errors, [sessionId]: event.error },
-        }))
+        set((state) => {
+          const patch: Record<string, any> = {
+            status: { ...state.status, [sessionId]: event.status },
+            errors: { ...state.errors, [sessionId]: event.error },
+          }
+          // Cria PlanReview ao fim do streaming se estava em modo plano
+          if (event.status === 'idle' && state._planReviewOutbox?.[sessionId] && !state.planReviews[sessionId]) {
+            const msgs = state.messages[sessionId] ?? []
+            const lastAssistant = [...msgs].reverse().find((m) => m.role === 'assistant')
+            if (lastAssistant) {
+              patch.planReviews = { ...state.planReviews, [sessionId]: { status: 'proposed', messageId: lastAssistant.id } }
+            }
+            const cleanOutbox = { ...state._planReviewOutbox }
+            delete cleanOutbox[sessionId]
+            patch._planReviewOutbox = cleanOutbox
+          }
+          return patch
+        })
         break
 
       case 'message':
@@ -512,6 +614,18 @@ export const useSessionStore = create<SessionState>((set, get) => ({
           sessions: state.sessions.map((s) =>
             s.id === sessionId ? { ...s, title: event.title } : s,
           ),
+        }))
+        break
+
+      case 'orchestration:plan':
+        set((state) => ({
+          orchestration: { ...state.orchestration, [sessionId]: event.plan },
+        }))
+        break
+
+      case 'plan:review':
+        set((state) => ({
+          planReviews: { ...state.planReviews, [sessionId]: event.review },
         }))
         break
 

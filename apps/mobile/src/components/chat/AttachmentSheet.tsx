@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { Modal, View, Text, Pressable, Animated, Switch, StyleSheet, Dimensions } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import type { LucideIcon } from 'lucide-react-native'
-import { Camera, Image as ImageIcon, Paperclip, Settings2, Bot, Network } from 'lucide-react-native'
+import { Camera, Image as ImageIcon, Paperclip, Settings2, Bot, Network, FileText } from 'lucide-react-native'
 import { getThemeTokens } from '~/lib/theme-tokens'
 import { useThemeStore } from '~/stores/theme-store'
 
@@ -21,6 +21,7 @@ interface AttachmentSheetProps {
   onFiles: () => void
   modes: AttachmentSheetMode[]
   onToggleMode: (id: string) => void
+  plan: boolean
   subagents: boolean
   orchestra: boolean
   onConfigureWorkers: () => void
@@ -36,6 +37,7 @@ export function AttachmentSheet({
   onFiles,
   modes,
   onToggleMode,
+  plan,
   subagents,
   orchestra,
   onConfigureWorkers,
@@ -105,6 +107,15 @@ export function AttachmentSheet({
         <View style={[s.divider, { backgroundColor: tokens.border }]} />
         <View style={s.modesList}>
           <WorkerModeCard
+            icon={FileText}
+            label="Modo Plano"
+            active={plan}
+            onToggle={() => onToggleMode('plan')}
+            onConfigure={undefined as any}
+            tokens={tokens}
+            hideGear
+          />
+          <WorkerModeCard
             icon={Bot}
             label="Subagentes"
             active={subagents}
@@ -133,6 +144,7 @@ function WorkerModeCard({
   onToggle,
   onConfigure,
   tokens,
+  hideGear,
 }: {
   icon: LucideIcon
   label: string
@@ -140,6 +152,7 @@ function WorkerModeCard({
   onToggle: () => void
   onConfigure: () => void
   tokens: ReturnType<typeof getThemeTokens>
+  hideGear?: boolean
 }) {
   return (
     <Pressable onPress={onToggle} style={[s.modeCard, { backgroundColor: tokens.border }]}>
@@ -148,9 +161,11 @@ function WorkerModeCard({
         <Text style={[s.modeCardLabel, { color: tokens.foreground }]}>{label}</Text>
       </View>
       <View style={s.workerRight}>
-        <Pressable onPress={onConfigure} hitSlop={8} style={[s.gearBtn, { backgroundColor: tokens.muted }]}>
-          <Settings2 size={16} color={tokens.mutedForeground} />
-        </Pressable>
+        {!hideGear && (
+          <Pressable onPress={onConfigure} hitSlop={8} style={[s.gearBtn, { backgroundColor: tokens.muted }]}>
+            <Settings2 size={16} color={tokens.mutedForeground} />
+          </Pressable>
+        )}
         <Switch
           value={active}
           onValueChange={onToggle}

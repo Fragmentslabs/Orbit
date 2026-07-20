@@ -9,6 +9,7 @@ import {
   Plus,
   Bot,
   Network,
+  FileText,
   X,
   Paperclip,
   ArrowUp,
@@ -65,6 +66,7 @@ export function PromptInput({
   const [activeModes, setActiveModes] = useState<Record<string, boolean>>({
     brain: true,
   })
+  const [plan, setPlan] = useState(false)
   const [subagents, setSubagents] = useState(false)
   const [orchestra, setOrchestra] = useState(false)
   const [attachments, setAttachments] = useState<FilePart[]>([])
@@ -193,6 +195,7 @@ export function PromptInput({
       simple: activeModes.simple ?? false,
       brain: activeModes.brain ?? false,
       reasoning: { enabled: thinking, variantId },
+      plan: workspaceMode === 'code' ? plan : undefined,
       subagents,
       orchestrate: orchestra ? {} : undefined,
       permissionMode: workspaceMode === 'code' ? permissionMode : undefined,
@@ -206,7 +209,7 @@ export function PromptInput({
     setText('')
     setAttachments([])
     setPlusOpen(false)
-  }, [text, isStreaming, disabled, onSend, activeModes, subagents, orchestra, attachments, workspaceMode, permissionMode, thinking, variantId])
+  }, [text, isStreaming, disabled, onSend, activeModes, plan, subagents, orchestra, attachments, workspaceMode, permissionMode, thinking, variantId])
 
   const buildOptions = useCallback(() => {
     return {
@@ -215,11 +218,12 @@ export function PromptInput({
       simple: activeModes.simple ?? false,
       brain: activeModes.brain ?? false,
       reasoning: { enabled: thinking, variantId },
+      plan: workspaceMode === 'code' ? plan : undefined,
       subagents,
       orchestrate: orchestra ? {} : undefined,
       permissionMode: workspaceMode === 'code' ? permissionMode : undefined,
     } satisfies SendMessageOptions
-  }, [activeModes, thinking, variantId, subagents, orchestra, workspaceMode, permissionMode])
+  }, [activeModes, thinking, variantId, plan, subagents, orchestra, workspaceMode, permissionMode])
 
   const enqueueForSend = useMessageQueueStore((s) => s.enqueueForSend)
   const enqueueScheduled = useMessageQueueStore((s) => s.enqueueScheduled)
@@ -279,6 +283,7 @@ export function PromptInput({
   const toggleSheetMode = useCallback((id: string) => {
     if (id === 'subagents') return setSubagents((prev) => !prev)
     if (id === 'orchestra') return setOrchestra((prev) => !prev)
+    if (id === 'plan') return setPlan((prev) => !prev)
     toggleMode(id)
   }, [toggleMode])
 
@@ -378,6 +383,7 @@ export function PromptInput({
           {/* Model picker & controls */}
           <View className="flex-row items-center gap-2">
             {/* Status Indicators */}
+            {plan && <FileText size={15} color={tokens.primary} />}
             {subagents && <Bot size={15} color={tokens.primary} />}
             {orchestra && <Network size={15} color={tokens.primary} />}
 
@@ -452,6 +458,7 @@ export function PromptInput({
         onFiles={handlePickFiles}
         modes={sheetModes}
         onToggleMode={toggleSheetMode}
+        plan={plan}
         subagents={subagents}
         orchestra={orchestra}
         onConfigureWorkers={() => {
@@ -475,6 +482,8 @@ export function PromptInput({
         onSubagentsToggle={() => setSubagents((prev) => !prev)}
         orchestra={orchestra}
         onOrchestraToggle={() => setOrchestra((prev) => !prev)}
+        plan={plan}
+        onPlanToggle={() => setPlan((prev) => !prev)}
         workerModelLabel={workerModelLabel}
         onConfigureWorkers={() => {
           setConfigOpen(false)

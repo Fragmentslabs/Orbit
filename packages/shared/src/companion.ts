@@ -4,7 +4,7 @@
  * e o handshake de autenticação.
  */
 
-import type { SendMessageOptions, SessionMode, FilePart, WorkerModelConfig } from './chat'
+import type { SendMessageOptions, SessionMode, FilePart, WorkerModelConfig, PermissionMode } from './chat'
 
 // ─── Handshake ───────────────────────────────────────────────────────────────
 
@@ -216,6 +216,41 @@ export interface UnrevertSessionRequest {
   sessionId: string
 }
 
+// ─── Plan Review (Modo Plano) ─────────────────────────────────────────────────
+
+export interface ReadPlanFileRequest {
+  type: 'plan:read-file'
+  sessionId: string
+}
+
+export interface AcceptPlanReviewRequest {
+  type: 'plan:review-accept'
+  sessionId: string
+  messageId: string
+  permissionMode: PermissionMode
+  providerId?: string
+  modelId?: string
+}
+
+export interface RejectPlanReviewRequest {
+  type: 'plan:review-reject'
+  sessionId: string
+}
+
+// ─── Orchestration ────────────────────────────────────────────────────────────
+
+export interface ApproveOrchestrationRequest {
+  type: 'orchestration:approve'
+  sessionId: string
+  planId: string
+  taskIds?: string[]
+}
+
+export interface RejectOrchestrationRequest {
+  type: 'orchestration:reject'
+  sessionId: string
+}
+
 export type CompanionRequest =
   | AuthRequest
   | ListSessionsRequest
@@ -249,6 +284,11 @@ export type CompanionRequest =
   | GetMemoryDocRequest
   | RevertSessionRequest
   | UnrevertSessionRequest
+  | ReadPlanFileRequest
+  | AcceptPlanReviewRequest
+  | RejectPlanReviewRequest
+  | ApproveOrchestrationRequest
+  | RejectOrchestrationRequest
 
 // ─── Server → Client (Responses + Events) ────────────────────────────────────
 

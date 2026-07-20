@@ -631,7 +631,7 @@ function SessionGroup({
   const ActionIcon = action?.icon
   return (
     <View className="mb-2">
-      <View className="flex-row items-center justify-between px-4 pb-2">
+      <View className="flex-row items-center justify-between px-4 pb-3">
         <Text className="text-xs font-medium uppercase tracking-wide" style={{ color: tokens.mutedForeground }}>
           {label}
         </Text>

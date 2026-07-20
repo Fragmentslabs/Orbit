@@ -10,9 +10,10 @@ interface MessageListProps {
   messages: ChatMessage[]
   isStreaming?: boolean
   onRevert?: (messageId: string) => void
+  ListFooterComponent?: React.ReactElement
 }
 
-export function MessageList({ messages, isStreaming, onRevert }: MessageListProps) {
+export function MessageList({ messages, isStreaming, onRevert, ListFooterComponent }: MessageListProps) {
   const listRef = useRef<FlatList<ChatMessage>>(null)
   const [isAtBottom, setIsAtBottom] = useState(true)
   const isUserScrolling = useRef(false)
@@ -66,6 +67,7 @@ export function MessageList({ messages, isStreaming, onRevert }: MessageListProp
             />
           </View>
         )}
+        ListFooterComponent={ListFooterComponent}
         contentContainerStyle={{ paddingVertical: 8, paddingHorizontal: 16 }}
         onScroll={handleScroll}
         scrollEventThrottle={100}
