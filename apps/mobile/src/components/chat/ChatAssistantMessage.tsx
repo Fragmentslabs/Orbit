@@ -28,6 +28,7 @@ import { cn } from '~/lib/utils'
 import { AssistantMarkdown } from './AssistantMarkdown'
 import { MessageActions } from './MessageActions'
 import { MessageAttachment } from './Attachment'
+import { SkillProposalCard } from './SkillProposalCard'
 import { Shimmer } from '~/components/ai/Shimmer'
 import { SubAgentCard } from '~/components/chat/SubAgentCard'
 import {
@@ -613,6 +614,9 @@ export function ChatAssistantMessage({ message, compact, isLast, isBusy, onRever
           case 'tool':
             if (part.tool === 'subagent') {
               return <SubAgentCard key={part.id} part={part} />
+            }
+            if (part.tool === 'create_skill') {
+              return <SkillProposalCard key={part.id} part={part as ToolPart} />
             }
             // tools especiais que não entram no TaskGroup
             return <TaskGroup key={part.id} parts={[part]} />
