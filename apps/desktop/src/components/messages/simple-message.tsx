@@ -1,12 +1,12 @@
 import { useMemo } from "react"
 import type { ChatMessage } from "@shared/chat"
 import { Shimmer } from "@/src/components/ai/shimmer"
-import { MessageError } from "@/src/components/messages/shared"
+import { AssistantMarkdown, MessageError } from "@/src/components/messages/shared"
 
 /**
- * Mensagem do assistente em modo simples: apenas o texto em whitespace-pre-wrap,
- * sem markdown, citações, reasoning ou tool views — enquanto o modelo trabalha
- * sem texto visível (pensando ou rodando ferramentas), só um shimmer.
+ * Mensagem do assistente em modo simples: só o texto (com markdown/code blocks),
+ * sem reasoning nem tool views. Enquanto o modelo trabalha sem texto visível,
+ * mostra um shimmer.
  */
 export function SimpleAssistantMessage({ message, isLast, isBusy, onRetry }: {
   message: ChatMessage
@@ -14,21 +14,18 @@ export function SimpleAssistantMessage({ message, isLast, isBusy, onRetry }: {
   isBusy: boolean
   onRetry?: () => void
 }) {
-  const text = useMemo(
-    () =>
-      message.parts
-        .filter((part) => part.type === "text")
-        .map((part) => part.text)
-        .join("\n\n")
-        .trim(),
+  const textParts = useMemo(
+    () => message.parts.filter((part) => part.type === "text" && part.text.trim()),
     [message.parts],
   )
   const working = isLast && isBusy
 
   return (
     <div className="flex w-full flex-col gap-1">
-      {!text && working && <Shimmer className="text-sm">Pensando…</Shimmer>}
-      {text && <p className="whitespace-pre-wrap text-foreground">{text}</p>}
+      {textParts.length === 0 && working && <Shimmer className="text-sm">Pensando…</Shimmer>}
+      {textParts.map((part) => (
+        <AssistantMarkdown key={part.id}>{part.text}</AssistantMarkdown>
+      ))}
       {message.error && <MessageError error={message.error} onRetry={onRetry} />}
     </div>
   )

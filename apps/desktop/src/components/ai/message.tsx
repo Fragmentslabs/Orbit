@@ -1,4 +1,5 @@
 import type { FileUIPart, UIMessage } from "ai"
+import { code } from "@streamdown/code"
 import { ChevronLeftIcon, ChevronRightIcon, PaperclipIcon, XIcon } from "lucide-react"
 import type { ComponentProps, HTMLAttributes, ReactElement } from "react"
 import { createContext, memo, useContext, useEffect, useState } from "react"
@@ -7,6 +8,8 @@ import { Button } from "~/components/ui/button"
 import { ButtonGroup, ButtonGroupText } from "~/components/ui/button-group"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "~/components/ui/tooltip"
 import { cn } from "~/lib/utils"
+
+const streamdownPlugins = { code }
 
 export type MessageProps = HTMLAttributes<HTMLDivElement> & {
   from: UIMessage["role"]
@@ -259,9 +262,11 @@ export const MessageBranchPage = ({ className, ...props }: MessageBranchPageProp
 export type MessageResponseProps = ComponentProps<typeof Streamdown>
 
 export const MessageResponse = memo(
-  ({ className, ...props }: MessageResponseProps) => (
+  ({ className, plugins, shikiTheme, ...props }: MessageResponseProps) => (
     <Streamdown
       className={cn("size-full [&>*:first-child]:mt-0 [&>*:last-child]:mb-0", className)}
+      plugins={plugins ?? streamdownPlugins}
+      shikiTheme={shikiTheme ?? ["github-light", "github-dark"]}
       {...props}
     />
   ),
