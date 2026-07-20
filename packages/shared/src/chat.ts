@@ -403,6 +403,7 @@ export const StorageKeys = {
   folders: "folders",
   orchestration: (orchestratorSessionId: string) => `orchestration/${orchestratorSessionId}`,
   planReview: (sessionId: string) => `plan-review/${sessionId}`,
+  pendingAsks: (sessionId: string) => `pendingAsks/${sessionId}`,
   memory: (id: string) => `memory/items/${id}`,
   memoryItemsPrefix: "memory/items/",
   memoryIndex: "memory/_index",

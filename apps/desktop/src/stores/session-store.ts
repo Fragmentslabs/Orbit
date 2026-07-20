@@ -162,7 +162,6 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     set((state) => ({ activeIds: { ...state.activeIds, [mode]: id } }))
     if (id) {
       await get().ensureMessages(id)
-      // Carrega o plano de orquestração persistido (se houver)
       if (get().orchestration[id] === undefined) {
         const plan = await storage.read<OrchestrationPlan>(StorageKeys.orchestration(id))
         if (plan) set((state) => ({ orchestration: { ...state.orchestration, [id]: plan } }))
@@ -170,6 +169,10 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       if (get().planReviews[id] === undefined) {
         const review = await storage.read<PlanReview>(StorageKeys.planReview(id))
         if (review) set((state) => ({ planReviews: { ...state.planReviews, [id]: review } }))
+      }
+      if (get().pendingAsks[id] === undefined) {
+        const asks = await storage.read<PendingAskUI[]>(StorageKeys.pendingAsks(id))
+        if (asks) set((state) => ({ pendingAsks: { ...state.pendingAsks, [id]: asks } }))
       }
     }
   },
@@ -246,6 +249,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       void chatApi.closeBrowser(sid)
       useBrainPrefs.getState().setEnabled(sid, true) // limpa o override do Brain
       void storage.remove(StorageKeys.planReview(sid))
+      void storage.remove(StorageKeys.pendingAsks(sid))
     }
     const idSet = new Set(ids)
     set((state) => {
@@ -258,7 +262,9 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       }
       const planReviews = { ...state.planReviews }
       for (const sid of ids) delete planReviews[sid]
-      return { sessions: state.sessions.filter((s) => !idSet.has(s.id)), messages, activeIds, planReviews }
+      const pendingAsks = { ...state.pendingAsks }
+      for (const sid of ids) delete pendingAsks[sid]
+      return { sessions: state.sessions.filter((s) => !idSet.has(s.id)), messages, activeIds, planReviews, pendingAsks }
     })
   },
 
@@ -462,6 +468,11 @@ type Setter = (fn: (state: SessionState) => Partial<SessionState>) => void
 function applyChatEvent(event: ChatEvent, set: Setter, get: () => SessionState) {
   // "folders" é o único evento sem sessionId (substituição completa da lista)
   const sessionId = "sessionId" in event ? event.sessionId : ""
+
+  const persistPendingAsks = (sid: string) => {
+    void storage.write(StorageKeys.pendingAsks(sid), get().pendingAsks[sid] ?? [])
+  }
+
   switch (event.type) {
     case "status":
       set((state) => ({
@@ -583,12 +594,11 @@ function applyChatEvent(event: ChatEvent, set: Setter, get: () => SessionState) 
         if (current.some((a) => a.requestId === ask.requestId)) return state
         return { pendingAsks: { ...state.pendingAsks, [sessionId]: [...current, ask] } }
       })
+      void persistPendingAsks(sessionId)
       break
     }
 
     case "ask:batch":
-      // Lote de pedidos de workers: cada item entra individualmente com o
-      // batchId — a UI agrupa num card único; ask:done remove item a item
       set((state) => {
         const current = state.pendingAsks[sessionId] ?? []
         const fresh = event.items
@@ -597,6 +607,7 @@ function applyChatEvent(event: ChatEvent, set: Setter, get: () => SessionState) 
         if (fresh.length === 0) return state
         return { pendingAsks: { ...state.pendingAsks, [sessionId]: [...current, ...fresh] } }
       })
+      void persistPendingAsks(sessionId)
       break
 
     case "ask:done":
@@ -610,6 +621,7 @@ function applyChatEvent(event: ChatEvent, set: Setter, get: () => SessionState) 
           },
         }
       })
+      void persistPendingAsks(sessionId)
       break
   }
 
