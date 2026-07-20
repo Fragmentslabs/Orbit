@@ -1,6 +1,7 @@
 import { useEffect } from 'react'
 import type { ChatEventMessage, PendingAskNotification, NewMessageNotification, ChatStatus } from '@orbit/shared'
 import { useConnectionStore } from '../stores/connection-store'
+import { useNotificationPrefsStore } from '../stores/notification-prefs-store'
 import { useSessionStore } from '../stores/session-store'
 import {
   configureNotifications,
@@ -37,6 +38,9 @@ export function useNotifications() {
 
     // notify:pending-ask → notificação de pergunta pendente
     const unsubAsk = conn.onEvent('notify:pending-ask', (event) => {
+      const prefs = useNotificationPrefsStore.getState().prefs
+      if (!prefs.pendingAsk) return
+
       const ask = event as PendingAskNotification
       const sessions = useSessionStore.getState().sessions
       const session = sessions.find((s) => s.id === ask.sessionId)
@@ -51,6 +55,9 @@ export function useNotifications() {
 
     // notify:new-message → notificação de nova mensagem (se não estiver na sessão ativa)
     const unsubMsg = conn.onEvent('notify:new-message', (event) => {
+      const prefs = useNotificationPrefsStore.getState().prefs
+      if (!prefs.newMessage) return
+
       const msg = event as NewMessageNotification
       if (!msg.sessionId) return
 
@@ -68,6 +75,9 @@ export function useNotifications() {
 
     // chat:event com status=error → notificação de erro
     const unsubChat = conn.onEvent('chat:event', (event) => {
+      const prefs = useNotificationPrefsStore.getState().prefs
+      if (!prefs.chatError) return
+
       const msg = event as ChatEventMessage
       const chatEvent = msg.event as { type: string; sessionId: string; status: ChatStatus; error?: string } | null
       if (chatEvent?.type === 'status' && chatEvent.status === 'error') {

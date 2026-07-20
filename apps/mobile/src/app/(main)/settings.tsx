@@ -5,6 +5,8 @@ import { useRouter } from 'expo-router'
 import { Image } from 'expo-image'
 import {
   ArrowLeft,
+  Bell,
+  BellOff,
   RefreshCw,
   Wifi,
   Monitor,
@@ -14,11 +16,14 @@ import {
   Brain,
   BrainCircuit,
   AlignLeft,
+  MessageCircle,
   Puzzle,
   Palette,
+  AlertTriangle,
   ChevronRight,
 } from 'lucide-react-native'
 import { useConnectionStore } from '~/stores/connection-store'
+import { useNotificationPrefsStore } from '~/stores/notification-prefs-store'
 import { useSettingsStore } from '~/stores/settings-store'
 import { Spin } from '~/components/ui/spin'
 import { getThemeTokens, type ThemeTokens } from '~/lib/theme-tokens'
@@ -61,6 +66,9 @@ export default function SettingsScreen() {
   const fetchSelectedModel = useSettingsStore((s) => s.fetchSelectedModel)
   const fetchConnectedProviders = useSettingsStore((s) => s.fetchConnectedProviders)
   const loading = useSettingsStore((s) => s.loading)
+
+  const notificationPrefs = useNotificationPrefsStore((s) => s.prefs)
+  const setNotificationPref = useNotificationPrefsStore((s) => s.setPref)
 
   const [refreshing, setRefreshing] = useState(false)
   const tokens = getThemeTokens(useThemeStore((s) => s.resolved))
@@ -231,6 +239,34 @@ export default function SettingsScreen() {
               ))}
             </View>
           </View>
+        </View>
+
+        {/* ── Notificações ──────────────────────────────────────────── */}
+        <Text style={[s.sectionLabel, { color: tokens.mutedForeground }]}>Notificações</Text>
+        <View style={[s.card, { borderColor: tokens.border, backgroundColor: tokens.card }]}>
+          <SwitchRow
+            icon={Bell}
+            label="Perguntas do desktop"
+            description="Quando o Orbit precisar de permissão ou resposta"
+            value={notificationPrefs.pendingAsk}
+            onChange={(v) => setNotificationPref('pendingAsk', v)}
+          />
+          <RowDivider />
+          <SwitchRow
+            icon={MessageCircle}
+            label="Nova mensagem"
+            description="Quando o assistente responder (sessão inativa)"
+            value={notificationPrefs.newMessage}
+            onChange={(v) => setNotificationPref('newMessage', v)}
+          />
+          <RowDivider />
+          <SwitchRow
+            icon={AlertTriangle}
+            label="Erro no chat"
+            description="Quando ocorrer um erro durante o processamento"
+            value={notificationPrefs.chatError}
+            onChange={(v) => setNotificationPref('chatError', v)}
+          />
         </View>
 
         {/* ── Ferramentas ─────────────────────────────────────────── */}

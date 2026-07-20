@@ -11,6 +11,7 @@ import { StatusBar } from "expo-status-bar";
 import { useCompanion } from "../hooks/useCompanion";
 import { useNotifications } from "../hooks/useNotifications";
 import { useConnectionStore } from "../stores/connection-store";
+import { useNotificationPrefsStore } from "../stores/notification-prefs-store";
 import { useThemeStore, hydrateThemePreference } from "../stores/theme-store";
 import { startMessageScheduler } from "../stores/message-queue-store";
 
@@ -83,22 +84,38 @@ export default function RootLayout() {
   // Configura notificações locais reativas aos eventos WS
   useNotifications();
 
+  const loadingConfig = useConnectionStore((s) => s.loadingConfig);
+  const config = useConnectionStore((s) => s.config);
+
   // ─── Routing lógico baseado no estado de conexão ──────────────────────
   useEffect(() => {
     if (connection.status === "connected") {
       router.replace("/(main)");
-    } else if (connection.status === "disconnected" && connection.error) {
-      router.replace("/(connection)");
+    } else if (!loadingConfig && connection.status === "disconnected") {
+      // Só decide rota depois que o loadConfig() terminou
+      if (connection.error || !config) {
+        router.replace("/(connection)");
+      }
+      // Se tem config mas deu erro, a tela de conexão mostra o erro
     }
-  }, [connection.status, connection.error, router]);
+  }, [connection.status, connection.error, loadingConfig, config, router]);
 
+  // Esconde splash só depois da decisão de rota inicial
   useEffect(() => {
-    SplashScreen.hideAsync();
-  }, []);
+    if (!loadingConfig) {
+      SplashScreen.hideAsync();
+    }
+  }, [loadingConfig]);
 
   useEffect(() => {
     startMessageScheduler();
+    void useNotificationPrefsStore.getState().loadPrefs();
   }, []);
+
+  // Enquanto carrega config, não renderiza nada (splash visível)
+  if (loadingConfig && connection.status !== "connected") {
+    return null;
+  }
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>

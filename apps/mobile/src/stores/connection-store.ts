@@ -41,6 +41,8 @@ interface ConnectionStore {
   updateConfig: (config: ConnectionConfig) => void
   /** Salva config no SecureStore para reconexão futura. */
   saveConfig: (config: ConnectionConfig) => Promise<void>
+  /** true enquanto loadConfig() está rodando. */
+  loadingConfig: boolean
   /** Carrega config do SecureStore. Retorna null se não houver. */
   loadConfig: () => Promise<ConnectionConfig | null>
   /** Limpa config salva. */
@@ -58,6 +60,7 @@ const wsClient = new CompanionWebSocket()
 export const useConnectionStore = create<ConnectionStore>((set, get) => ({
   connection: { status: 'disconnected' },
   config: null,
+  loadingConfig: true,
   wsClient,
   http: null,
   desktopUptime: 0,
@@ -137,22 +140,27 @@ export const useConnectionStore = create<ConnectionStore>((set, get) => ({
   },
 
   loadConfig: async () => {
-    const host = await Storage.getItem(STORAGE_KEY_HOST)
-    const port = await Storage.getItem(STORAGE_KEY_PORT)
-    const pin = await Storage.getItem(STORAGE_KEY_PIN)
-    const token = await Storage.getItem(STORAGE_KEY_TOKEN)
-    const deviceName = await Storage.getItem(STORAGE_KEY_DEVICE)
+    set({ loadingConfig: true })
+    try {
+      const host = await Storage.getItem(STORAGE_KEY_HOST)
+      const port = await Storage.getItem(STORAGE_KEY_PORT)
+      const pin = await Storage.getItem(STORAGE_KEY_PIN)
+      const token = await Storage.getItem(STORAGE_KEY_TOKEN)
+      const deviceName = await Storage.getItem(STORAGE_KEY_DEVICE)
 
-    // Com token persistente o PIN é dispensável (ele expira em 5 min de
-    // qualquer forma — só serviu para o primeiro pareamento).
-    if (!host || !port || (!pin && !token)) return null
+      // Com token persistente o PIN é dispensável (ele expira em 5 min de
+      // qualquer forma — só serviu para o primeiro pareamento).
+      if (!host || !port || (!pin && !token)) return null
 
-    return {
-      host,
-      port: Number(port),
-      pin: pin ?? '',
-      token: token ?? undefined,
-      deviceName: deviceName ?? undefined,
+      return {
+        host,
+        port: Number(port),
+        pin: pin ?? '',
+        token: token ?? undefined,
+        deviceName: deviceName ?? undefined,
+      }
+    } finally {
+      set({ loadingConfig: false })
     }
   },
 
