@@ -6,6 +6,7 @@ import {
   Eye,
   FileCode,
   FilePlus,
+  FileText,
   FolderOpen,
   Info,
   Maximize2,
@@ -35,6 +36,7 @@ import {
 import { Button } from "@/components/ui/button"
 import { windowApi } from "@/src/lib/ipc"
 import { useWorkspace } from "@/lib/workspace-context"
+import { useSettingsUi } from "@/src/stores/settings-ui"
 
 const dragStyle: CSSProperties = { WebkitAppRegion: "drag" } as CSSProperties
 const noDragStyle: CSSProperties = { WebkitAppRegion: "no-drag" } as CSSProperties
@@ -80,6 +82,7 @@ function WindowControls() {
 function HamburgerMenu() {
   const [open, setOpen] = useState(false)
   const { setView, setMode } = useWorkspace()
+  const openSettings = useSettingsUi((s) => s.openSettings)
 
   return (
     <DropdownMenu open={open} onOpenChange={setOpen}>
@@ -180,6 +183,10 @@ function HamburgerMenu() {
             Ajuda
           </DropdownMenuSubTrigger>
           <DropdownMenuSubContent>
+            <DropdownMenuItem onClick={() => openSettings("howto")}>
+              <FileText className="size-4" />
+              Como funciona
+            </DropdownMenuItem>
             <DropdownMenuItem>
               <ExternalLink className="size-4" />
               Documentação
