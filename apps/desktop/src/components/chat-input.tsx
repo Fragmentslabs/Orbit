@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useState } from "react"
-import { AlignLeft, Bot, Brain, BrainCircuit, Globe, Network, PlusIcon, RefreshCw, Search, Settings2 } from "lucide-react"
+import { AlignLeft, Bot, Brain, BrainCircuit, Globe, Network, PlusIcon, Search } from "lucide-react"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -18,7 +18,6 @@ import {
   PromptInputTools,
 } from "@/src/components/ai/prompt-input"
 import { DelegationMenuItems } from "@/src/components/delegation-menu"
-import { LoopConfigDialog } from "@/src/components/loop-config-dialog"
 import { ModelPicker } from "@/src/components/model-picker"
 import { ModeToggle } from "@/src/components/mode-toggle"
 import { OrchestrationConfigDialog } from "@/src/components/orchestration-config-dialog"
@@ -53,9 +52,7 @@ export function ChatInput({ onSubmit, status, onStop, sessionId }: {
   const [browser, setBrowser] = useState(false)
   const [subagents, setSubagents] = useState(false)
   const [orchestra, setOrchestra] = useState(false)
-  const [loop, setLoop] = useState(false)
   const [configOpen, setConfigOpen] = useState(false)
-  const [loopConfigOpen, setLoopConfigOpen] = useState(false)
   const simple = useSimpleMode((s) => s.simple)
   const setSimple = useSimpleMode((s) => s.setSimple)
   const brain = useBrainEnabled(sessionId)
@@ -89,8 +86,7 @@ export function ChatInput({ onSubmit, status, onStop, sessionId }: {
     reasoning: { enabled: thinking, variantId },
     subagents,
     orchestrate: orchestra ? {} : undefined,
-    loop,
-  }), [search, browser, simple, brain, brainContext, thinking, variantId, subagents, orchestra, loop])
+  }), [search, browser, simple, brain, brainContext, thinking, variantId, subagents, orchestra])
 
   const slashCommands = useMemo<SlashCommand[]>(() => {
     const toggle = (fn: () => void) => ({ setText }: { setText: (t: string) => void }) => {
@@ -173,7 +169,6 @@ export function ChatInput({ onSubmit, status, onStop, sessionId }: {
           <div className="flex items-center gap-1">
             {subagents && <Bot className="size-3 text-sidebar-foreground/40" />}
             {orchestra && <Network className="size-3 text-sidebar-foreground/40" />}
-            {loop && <RefreshCw className="size-3 text-sidebar-foreground/40" />}
             {thinking && model?.variants && model.variants.length > 0 && (
               <ReasoningPicker
                 variants={model.variants}
@@ -249,30 +244,12 @@ export function ChatInput({ onSubmit, status, onStop, sessionId }: {
           active={brain}
           onToggle={() => setBrainEnabled(sessionId, !brain)}
         />
-        <ModeToggle
-          icon={RefreshCw}
-          label="Loop"
-          description="Agente revisa e itera até completar a tarefa. Configure os limites no gear."
-          active={loop}
-          onToggle={() => setLoop((v) => !v)}
-        />
-        {loop && (
-          <button
-            type="button"
-            onClick={() => setLoopConfigOpen(true)}
-            className="flex size-5 items-center justify-center rounded text-muted-foreground/50 hover:text-foreground hover:bg-muted/50"
-            title="Configurar loop"
-          >
-            <Settings2 className="size-3" />
-          </button>
-        )}
       </div>
         <div className="ml-auto mt-2">
           <ContextMeter sessionId={sessionId} />
         </div>
       </PromptInputTools>
       <OrchestrationConfigDialog open={configOpen} onOpenChange={setConfigOpen} />
-      <LoopConfigDialog open={loopConfigOpen} onOpenChange={setLoopConfigOpen} />
     </div>
     </SlashPalette>
     </PromptInputProvider>

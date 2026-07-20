@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
-import { AlignLeft, Bot, Brain, BrainCircuit, FileText, MousePointerClick, Network, PlusIcon, RefreshCw, Search, Settings2, X } from "lucide-react"
+import { AlignLeft, Bot, Brain, BrainCircuit, FileText, MousePointerClick, Network, PlusIcon, RefreshCw, Search, X } from "lucide-react"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -265,9 +265,12 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId }: 
                   <DelegationMenuItems
                     subagents={subagents}
                     orchestra={orchestra}
+                    loop={loop}
                     onSubagentsChange={setSubagents}
                     onOrchestraChange={setOrchestra}
+                    onLoopChange={setLoop}
                     onOpenConfig={() => setConfigOpen(true)}
+                    onOpenLoopConfig={() => setLoopConfigOpen(true)}
                   />
                   <DropdownMenuSeparator />
                   <PromptInputActionAddAttachments label="Anexar arquivos" />
@@ -361,23 +364,6 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId }: 
             active={brain}
             onToggle={() => setBrainEnabled(sessionId, !brain)}
           />
-          <ModeToggle
-            icon={RefreshCw}
-            label="Loop"
-            description="Agente revisa e itera até completar a tarefa. Configure os limites no gear."
-            active={loop}
-            onToggle={() => setLoop((v) => !v)}
-          />
-          {loop && (
-            <button
-              type="button"
-              onClick={() => setLoopConfigOpen(true)}
-              className="flex size-5 items-center justify-center rounded text-muted-foreground/50 hover:text-foreground hover:bg-muted/50"
-              title="Configurar loop"
-            >
-              <Settings2 className="size-3" />
-            </button>
-          )}
         </div>
         <div className="ml-auto mt-2">
           <ContextMeter sessionId={sessionId} />
