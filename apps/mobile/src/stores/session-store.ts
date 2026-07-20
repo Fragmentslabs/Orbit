@@ -24,9 +24,41 @@ import type {
   OrchestrationPlan,
   PermissionMode,
 } from '@orbit/shared'
+import { Storage } from '~/lib/storage'
 import { useConnectionStore } from './connection-store'
+import { useMessageQueueStore } from './message-queue-store'
 import { useSettingsStore } from './settings-store'
 import { useChatStore } from './chat-store'
+
+// Cache keys
+const CACHE_SESSIONS_KEY = 'orbit_cache_sessions'
+const CACHE_MESSAGES_PREFIX = 'orbit_cache_msgs_'
+const MAX_CACHED_SESSIONS = 20
+const MAX_CACHED_MESSAGES = 200
+
+async function cacheSessions(sessions: SessionInfo[]) {
+  const recent = sessions.slice(0, MAX_CACHED_SESSIONS)
+  await Storage.setItem(CACHE_SESSIONS_KEY, JSON.stringify(recent))
+}
+
+async function loadCachedSessions(): Promise<SessionInfo[]> {
+  try {
+    const raw = await Storage.getItem(CACHE_SESSIONS_KEY)
+    return raw ? JSON.parse(raw) : []
+  } catch { return [] }
+}
+
+async function cacheMessages(sessionId: string, messages: ChatMessage[]) {
+  const recent = messages.slice(-MAX_CACHED_MESSAGES)
+  await Storage.setItem(CACHE_MESSAGES_PREFIX + sessionId, JSON.stringify(recent))
+}
+
+async function loadCachedMessages(sessionId: string): Promise<ChatMessage[] | null> {
+  try {
+    const raw = await Storage.getItem(CACHE_MESSAGES_PREFIX + sessionId)
+    return raw ? JSON.parse(raw) : null
+  } catch { return null }
+}
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -114,10 +146,8 @@ interface SessionState {
 }
 
 // ─── Delta batching ─────────────────────────────────────────────────────────
-// Cada part-delta individual re-renderiza a lista de mensagens inteira
-// (incluindo o parse de markdown do bubble) — em streaming rápido isso
-// congestiona a thread JS e o texto aparece em blocos atrasados. Acumulamos
-// os deltas e aplicamos em lote a cada ~60ms.
+// Agrupa part-deltas num frame (~33ms) para o stream parecer fluido sem
+// re-render por token. Atualiza só a mensagem afetada (cópia do array).
 
 interface PendingDelta {
   sessionId: string
@@ -125,6 +155,8 @@ interface PendingDelta {
   partId: string
   text: string
 }
+
+const DELTA_FLUSH_MS = 33
 
 const deltaBuffer = new Map<string, PendingDelta>()
 let deltaFlushTimer: ReturnType<typeof setTimeout> | null = null
@@ -140,20 +172,38 @@ function flushDeltas(set: (fn: (state: SessionState) => Partial<SessionState>) =
 
   set((state) => {
     const messages = { ...state.messages }
-    for (const delta of pending) {
-      const list = messages[delta.sessionId]
+    // Agrupa por sessão para copiar cada lista uma vez
+    const bySession = new Map<string, PendingDelta[]>()
+    for (const d of pending) {
+      const list = bySession.get(d.sessionId)
+      if (list) list.push(d)
+      else bySession.set(d.sessionId, [d])
+    }
+    for (const [sessionId, deltas] of bySession) {
+      const list = messages[sessionId]
       if (!list) continue
-      messages[delta.sessionId] = list.map((message) => {
-        if (message.id !== delta.messageId) return message
-        const parts = message.parts.map((part) => {
-          if (part.id !== delta.partId) return part
-          if (part.type === 'text' || part.type === 'reasoning' || part.type === 'agent') {
-            return { ...part, text: part.text + delta.text }
+      const next = list.slice()
+      for (const delta of deltas) {
+        // Mensagem ativa costuma ser a última — busca do fim
+        let msgIdx = -1
+        for (let i = next.length - 1; i >= 0; i--) {
+          if (next[i].id === delta.messageId) {
+            msgIdx = i
+            break
           }
-          return part
-        })
-        return { ...message, parts }
-      })
+        }
+        if (msgIdx < 0) continue
+        const message = next[msgIdx]
+        const parts = message.parts.slice()
+        const partIdx = parts.findIndex((p) => p.id === delta.partId)
+        if (partIdx < 0) continue
+        const part = parts[partIdx]
+        if (part.type === 'text' || part.type === 'reasoning' || part.type === 'agent') {
+          parts[partIdx] = { ...part, text: part.text + delta.text }
+          next[msgIdx] = { ...message, parts }
+        }
+      }
+      messages[sessionId] = next
     }
     return { messages }
   })
@@ -173,7 +223,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
   orchestration: {},
 
   fetchSessions: async () => {
-    const { wsClient } = useConnectionStore.getState()
+    const { wsClient, connection } = useConnectionStore.getState()
     try {
       const res = await wsClient.send({ type: 'sessions:list' })
       if (res.ok && Array.isArray(res.data)) {
@@ -181,9 +231,12 @@ export const useSessionStore = create<SessionState>((set, get) => ({
         // Ordena por updatedAt desc (mais recente primeiro)
         sessions.sort((a, b) => b.updatedAt - a.updatedAt)
         set({ sessions })
+        void cacheSessions(sessions)
       }
     } catch {
-      // Silently fail — will retry on reconnect
+      // Fallback para cache quando offline
+      const cached = await loadCachedSessions()
+      if (cached.length > 0) set({ sessions: cached })
     }
   },
 
@@ -222,7 +275,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
   },
 
   fetchMessages: async (sessionId) => {
-    const { wsClient } = useConnectionStore.getState()
+    const { wsClient, connection } = useConnectionStore.getState()
     try {
       const res = await wsClient.send({
         type: 'messages:get',
@@ -230,18 +283,46 @@ export const useSessionStore = create<SessionState>((set, get) => ({
         limit: 200,
       })
       if (res.ok && Array.isArray(res.data)) {
+        const msgs = res.data as ChatMessage[]
         set((state) => ({
-          messages: { ...state.messages, [sessionId]: res.data as ChatMessage[] },
+          messages: { ...state.messages, [sessionId]: msgs },
         }))
+        void cacheMessages(sessionId, msgs)
       }
     } catch {
-      // Silently fail
+      // Fallback para cache quando offline
+      const cached = await loadCachedMessages(sessionId)
+      if (cached) {
+        set((state) => ({
+          messages: { ...state.messages, [sessionId]: cached },
+        }))
+      }
     }
   },
 
   sendMessage: async (text, config) => {
     const sessionId = config?.sessionId ?? get().activeSessionId
     if (!sessionId) return
+
+    const { wsClient, connection } = useConnectionStore.getState()
+    const isOnline = connection.status === 'connected'
+
+    if (!isOnline) {
+      // Offline: enfileira para enviar quando reconectar
+      const session = get().sessions.find((s) => s.id === sessionId)
+      const mode = session?.mode ?? 'chat'
+      useMessageQueueStore.getState().enqueueForSend(sessionId, text, config?.options ?? {}, mode, {
+        directory: config?.directory,
+        extraDirectories: config?.extraDirectories,
+        files: config?.files,
+      })
+      // Mostra status de erro amigável
+      set((state) => ({
+        status: { ...state.status, [sessionId]: 'error' as ChatStatus },
+        errors: { ...state.errors, [sessionId]: 'Sem conexão com o desktop. Mensagem enfileirada para envio automático.' },
+      }))
+      return
+    }
 
     set((state) => ({
       status: { ...state.status, [sessionId]: 'submitted' },
@@ -252,7 +333,6 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       set((state) => ({ _planReviewOutbox: { ...state._planReviewOutbox, [sessionId]: true } }))
     }
 
-    const { wsClient } = useConnectionStore.getState()
     // Modelo: explícito no config, senão o selecionado no desktop
     const settings = useSettingsStore.getState()
     const selected = settings.selectedModel
@@ -550,6 +630,9 @@ export const useSessionStore = create<SessionState>((set, get) => ({
               ? list.map((m, i) => (i === idx ? event.message : m))
               : [...list, event.message]
 
+          // Cache após receber mensagem completa
+          void cacheMessages(sessionId, next)
+
           // Reconciliação de status: uma mensagem do assistente com `tokens`
           // (só definidos no 'finish' do stream) ou com erro significa que a
           // geração terminou. Se o evento `status: idle` se perder, isto
@@ -582,8 +665,6 @@ export const useSessionStore = create<SessionState>((set, get) => ({
         break
 
       case 'part-delta': {
-        // Acumula no buffer — o flush em lote (60ms) evita um re-render da
-        // lista inteira por delta, que atrasava o streaming visivelmente.
         const key = `${sessionId}:${event.messageId}:${event.partId}`
         const pending = deltaBuffer.get(key)
         if (pending) {
@@ -597,7 +678,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
           })
         }
         if (!deltaFlushTimer) {
-          deltaFlushTimer = setTimeout(() => flushDeltas(set), 100)
+          deltaFlushTimer = setTimeout(() => flushDeltas(set), DELTA_FLUSH_MS)
         }
         break
       }
@@ -607,6 +688,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
         set((state) => ({
           messages: { ...state.messages, [sessionId]: event.messages },
         }))
+        void cacheMessages(sessionId, event.messages)
         break
 
       case 'title':
@@ -642,15 +724,20 @@ export const useSessionStore = create<SessionState>((set, get) => ({
             state.messages[event.session.id] === undefined
               ? { ...state.messages, [event.session.id]: [] }
               : state.messages
+          void cacheSessions(sessions)
           return { sessions, messages }
         })
         break
 
       case 'session:deleted':
-        set((state) => ({
-          sessions: state.sessions.filter((s) => s.id !== event.sessionId),
-          activeSessionId: state.activeSessionId === event.sessionId ? null : state.activeSessionId,
-        }))
+        set((state) => {
+          const sessions = state.sessions.filter((s) => s.id !== event.sessionId)
+          void cacheSessions(sessions)
+          return {
+            sessions,
+            activeSessionId: state.activeSessionId === event.sessionId ? null : state.activeSessionId,
+          }
+        })
         break
 
       case 'folders':

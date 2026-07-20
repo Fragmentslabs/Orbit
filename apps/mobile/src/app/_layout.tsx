@@ -12,6 +12,7 @@ import { useCompanion } from "../hooks/useCompanion";
 import { useNotifications } from "../hooks/useNotifications";
 import { useConnectionStore } from "../stores/connection-store";
 import { useNotificationPrefsStore } from "../stores/notification-prefs-store";
+import { useSessionStore } from "../stores/session-store";
 import { useThemeStore, hydrateThemePreference } from "../stores/theme-store";
 import { startMessageScheduler } from "../stores/message-queue-store";
 
@@ -110,6 +111,9 @@ export default function RootLayout() {
   useEffect(() => {
     startMessageScheduler();
     void useNotificationPrefsStore.getState().loadPrefs();
+    // Carrega cache de sessões para aparecerem imediatamente
+    // (o fetch real via WS acontece quando conectar)
+    void useSessionStore.getState().fetchSessions();
   }, []);
 
   // Enquanto carrega config, não renderiza nada (splash visível)
