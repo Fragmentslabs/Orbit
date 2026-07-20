@@ -38,6 +38,7 @@ import { SendButtonGroup } from './SendButtonGroup'
 import { QueueIndicator } from './QueueIndicator'
 import { ScheduleSheet } from './ScheduleSheet'
 import { useMessageQueueStore } from '~/stores/message-queue-store'
+import { useDraftInput } from '~/stores/draft-input-store'
 
 interface PromptInputProps {
   onSend: (text: string, options: SendMessageOptions, files?: FilePart[]) => void
@@ -95,6 +96,11 @@ export function PromptInput({
   useEffect(() => {
     if (!hydrated) hydrate()
   }, [hydrated, hydrate])
+
+  useEffect(() => {
+    const draft = useDraftInput.getState().consume()
+    if (draft) setText(draft)
+  }, [])
 
   const slashCommands = useSlashCommands()
 
