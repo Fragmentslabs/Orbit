@@ -1,4 +1,4 @@
-import { Bot, Network, Settings2 } from "lucide-react"
+import { Bot, Network, RefreshCw, Settings2 } from "lucide-react"
 import { DropdownMenuCheckboxItem } from "@/components/ui/dropdown-menu"
 
 /**
@@ -6,15 +6,19 @@ import { DropdownMenuCheckboxItem } from "@/components/ui/dropdown-menu"
  * Subagents (workers efêmeros em background) e Orchestra (plano + sessões
  * filhas no painel direito). Mutuamente exclusivos; a engrenagem abre o modal
  * de configuração do worker sem alternar o toggle.
+ * Loop mode (modo código): revisa e itera até completar a tarefa.
  */
-export function DelegationMenuItems({ subagents, orchestra, onSubagentsChange, onOrchestraChange, onOpenConfig }: {
+export function DelegationMenuItems({ subagents, orchestra, loop, onSubagentsChange, onOrchestraChange, onLoopChange, onOpenConfig, onOpenLoopConfig }: {
   subagents: boolean
   orchestra: boolean
+  loop?: boolean
   onSubagentsChange: (value: boolean) => void
   onOrchestraChange: (value: boolean) => void
+  onLoopChange?: (value: boolean) => void
   onOpenConfig: () => void
+  onOpenLoopConfig?: () => void
 }) {
-  const gear = (
+  const gear = (onClick: () => void) => (
     <button
       type="button"
       className="ml-auto flex size-5 items-center justify-center rounded text-muted-foreground hover:bg-foreground/10 hover:text-foreground"
@@ -22,11 +26,11 @@ export function DelegationMenuItems({ subagents, orchestra, onSubagentsChange, o
       onClick={(e) => {
         e.preventDefault()
         e.stopPropagation()
-        onOpenConfig()
+        onClick()
       }}
     >
       <Settings2 className="!size-3.5" />
-      <span className="sr-only">Configurar workers</span>
+      <span className="sr-only">Configurar</span>
     </button>
   )
 
@@ -41,7 +45,7 @@ export function DelegationMenuItems({ subagents, orchestra, onSubagentsChange, o
       >
         <Bot className="size-4" />
         <span className="flex-1">Subagents</span>
-        {gear}
+        {gear(onOpenConfig)}
       </DropdownMenuCheckboxItem>
       <DropdownMenuCheckboxItem
         checked={orchestra}
@@ -52,8 +56,18 @@ export function DelegationMenuItems({ subagents, orchestra, onSubagentsChange, o
       >
         <Network className="size-4" />
         <span className="flex-1">Orchestra</span>
-        {gear}
+        {gear(onOpenConfig)}
       </DropdownMenuCheckboxItem>
+      {onLoopChange && (
+        <DropdownMenuCheckboxItem
+          checked={loop ?? false}
+          onCheckedChange={(checked) => onLoopChange(checked)}
+        >
+          <RefreshCw className="size-4" />
+          <span className="flex-1">Loop</span>
+          {onOpenLoopConfig && gear(onOpenLoopConfig)}
+        </DropdownMenuCheckboxItem>
+      )}
     </>
   )
 }
