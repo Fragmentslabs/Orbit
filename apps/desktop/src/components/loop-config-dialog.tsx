@@ -75,17 +75,24 @@ export function LoopConfigDialog({ open, onOpenChange }: {
             </span>
           </label>
 
-          <label className="flex items-center gap-2">
-            <input
-              type="checkbox"
-              checked={config.autoReview}
-              onChange={(e) => updateConfig({ autoReview: e.target.checked })}
-              className="size-3.5"
-            />
-            <span className="text-xs font-medium">Revisão automática</span>
-            <span className="text-[10px] text-muted-foreground">
-              (se desligado, pergunta antes de cada nova iteração)
-            </span>
+          <label className="flex items-center gap-3 cursor-pointer">
+            <button
+              type="button"
+              role="switch"
+              aria-checked={config.autoReview}
+              onClick={() => updateConfig({ autoReview: !config.autoReview })}
+              className={`relative inline-flex h-5 w-9 shrink-0 rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${config.autoReview ? 'bg-primary' : 'bg-input'}`}
+            >
+              <span
+                className={`pointer-events-none block size-4 rounded-full bg-white shadow-sm ring-0 transition-transform duration-200 ease-in-out ${config.autoReview ? 'translate-x-4' : 'translate-x-0'}`}
+              />
+            </button>
+            <div className="flex flex-col">
+              <span className="text-xs font-medium">Revisão automática</span>
+              <span className="text-[10px] text-muted-foreground">
+                Se desligado, pergunta antes de cada nova iteração
+              </span>
+            </div>
           </label>
         </div>
         <DialogFooter showCloseButton>
