@@ -8,6 +8,15 @@ export type SessionMode = "chat" | "code"
 
 export type ChatStatus = "idle" | "submitted" | "streaming" | "error"
 
+/** Resultado de busca textual em sessões (título + mensagens). */
+export interface SearchHit {
+  sessionId: string
+  sessionTitle: string
+  mode: SessionMode | string
+  updatedAt: number
+  snippet: string
+}
+
 export interface SessionOrchestration {
   role: "orchestrator" | "worker"
   /** Só em workers: sessão do orquestrador que criou este worker */

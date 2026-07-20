@@ -19,6 +19,7 @@ import type {
   SendMessageOptions,
   FilePart,
   AskItem,
+  SearchHit,
 } from '@orbit/shared'
 import { useConnectionStore } from './connection-store'
 import { useSettingsStore } from './settings-store'
@@ -41,6 +42,8 @@ interface SessionState {
   errors: Record<string, string | undefined>
   /** Busca lista de sessões via WS. */
   fetchSessions: () => Promise<void>
+  /** Busca textual em títulos e mensagens (mesma lógica do desktop). */
+  searchSessions: (query: string) => Promise<SearchHit[]>
   /** Busca lista de pastas via WS. */
   fetchFolders: () => Promise<void>
   /** Seleciona sessão e carrega mensagens. */
@@ -161,6 +164,21 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       }
     } catch {
       // Silently fail — will retry on reconnect
+    }
+  },
+
+  searchSessions: async (query) => {
+    const q = query.trim()
+    if (!q) return []
+    const { wsClient } = useConnectionStore.getState()
+    try {
+      const res = await wsClient.send({ type: 'sessions:search', query: q })
+      if (res.ok && Array.isArray(res.data)) {
+        return res.data as SearchHit[]
+      }
+      return []
+    } catch {
+      return []
     }
   },
 

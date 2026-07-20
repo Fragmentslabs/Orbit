@@ -24,6 +24,7 @@ import {
   Archive,
   ArchiveRestore,
   CheckSquare,
+  Search,
 } from 'lucide-react-native'
 import { useWorkspaceStore } from '~/stores/workspace-store'
 import { useConnectionStore } from '~/stores/connection-store'
@@ -460,29 +461,40 @@ export function Sidebar() {
                 </SessionGroup>
               )}
 
-              {(recent.length > 0 || (pinned.length === 0 && folderGroups.length === 0)) && (
-                <SessionGroup label="Chats" tokens={tokens}>
-                  {recent.length === 0 ? (
-                    <Text className="px-4 py-2 text-sm" style={{ color: tokens.mutedForeground }}>
-                      Nenhuma conversa ainda
-                    </Text>
-                  ) : (
-                    recent.map((s) => (
-                      <SessionRow
-                        key={s.id}
-                        title={s.title}
-                        active={s.id === activeSessionId}
-                        streaming={status[s.id] === 'streaming' || status[s.id] === 'submitted'}
-                        selectionMode={selectionMode}
-                        selected={selectedIds.has(s.id)}
-                        onPress={() => handleOpenSession(s.id)}
-                        onLongPress={(e) => openSessionMenu(s.id, e.nativeEvent.pageY)}
-                        tokens={tokens}
-                      />
-                    ))
-                  )}
-                </SessionGroup>
-              )}
+              <SessionGroup
+                label="Chats"
+                tokens={tokens}
+                action={{
+                  icon: Search,
+                  label: 'Buscar conversas',
+                  onPress: () => {
+                    closeSidebar()
+                    router.push('/(main)/search')
+                  },
+                }}
+              >
+                {recent.length === 0 ? (
+                  <Text className="px-4 py-2 text-sm" style={{ color: tokens.mutedForeground }}>
+                    {pinned.length === 0 && folderGroups.length === 0
+                      ? 'Nenhuma conversa ainda'
+                      : 'Nenhum chat recente'}
+                  </Text>
+                ) : (
+                  recent.map((s) => (
+                    <SessionRow
+                      key={s.id}
+                      title={s.title}
+                      active={s.id === activeSessionId}
+                      streaming={status[s.id] === 'streaming' || status[s.id] === 'submitted'}
+                      selectionMode={selectionMode}
+                      selected={selectedIds.has(s.id)}
+                      onPress={() => handleOpenSession(s.id)}
+                      onLongPress={(e) => openSessionMenu(s.id, e.nativeEvent.pageY)}
+                      tokens={tokens}
+                    />
+                  ))
+                )}
+              </SessionGroup>
             </View>
           </ScrollView>
 
@@ -601,12 +613,39 @@ function SidebarItem({
   )
 }
 
-function SessionGroup({ label, children, tokens }: { label: string; children: React.ReactNode; tokens: ThemeTokens }) {
+function SessionGroup({
+  label,
+  children,
+  tokens,
+  action,
+}: {
+  label: string
+  children: React.ReactNode
+  tokens: ThemeTokens
+  action?: {
+    icon: typeof Search
+    label: string
+    onPress: () => void
+  }
+}) {
+  const ActionIcon = action?.icon
   return (
     <View className="mb-2">
-      <Text className="px-4 pb-1 text-xs font-medium uppercase tracking-wide" style={{ color: tokens.mutedForeground }}>
-        {label}
-      </Text>
+      <View className="flex-row items-center justify-between px-4 pb-2">
+        <Text className="text-xs font-medium uppercase tracking-wide" style={{ color: tokens.mutedForeground }}>
+          {label}
+        </Text>
+        {action && ActionIcon && (
+          <Pressable
+            onPress={action.onPress}
+            hitSlop={10}
+            accessibilityLabel={action.label}
+            className="h-7 w-7 items-center justify-center rounded-md active:opacity-70"
+          >
+            <ActionIcon size={16} color={tokens.mutedForeground} />
+          </Pressable>
+        )}
+      </View>
       {children}
     </View>
   )

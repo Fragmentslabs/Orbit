@@ -2,6 +2,7 @@ import type {
   Catalog,
   CatalogProvider,
   ChatEvent,
+  SearchHit,
   SendMessageInput,
   SessionRevert,
 } from "@shared/chat"
@@ -11,6 +12,8 @@ import type { InitEvent, InitStatus, Memory, MemoryEvent } from "@shared/memory"
 import type { Skill, SkillProposal } from "@shared/skills"
 import type { AnalyticsSummary, AnalyticsRange } from "@shared/analytics"
 import type { PanelEvent } from "@/src/stores/panel-store"
+
+export type { SearchHit }
 
 /** Wrapper tipado sobre a bridge IPC exposta pelo preload. */
 
@@ -179,14 +182,6 @@ export const fsApi = {
     window.ipcRenderer.invoke("fs:listFilesRecursive", dirPath) as Promise<{ ok: true; files: string[] } | { ok: false; error: string }>,
   readFileAsDataUrl: (filePath: string) =>
     window.ipcRenderer.invoke("fs:readFileAsDataUrl", filePath) as Promise<{ dataUrl: string } | { error: string }>,
-}
-
-export interface SearchHit {
-  sessionId: string
-  sessionTitle: string
-  mode: string
-  updatedAt: number
-  snippet: string
 }
 
 export const searchApi = {

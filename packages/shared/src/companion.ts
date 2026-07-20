@@ -30,6 +30,11 @@ export interface ListSessionsRequest {
   type: 'sessions:list'
 }
 
+export interface SearchSessionsRequest {
+  type: 'sessions:search'
+  query: string
+}
+
 export interface GetMessagesRequest {
   type: 'messages:get'
   sessionId: string
@@ -214,6 +219,7 @@ export interface UnrevertSessionRequest {
 export type CompanionRequest =
   | AuthRequest
   | ListSessionsRequest
+  | SearchSessionsRequest
   | GetMessagesRequest
   | SendMessageRequest
   | CreateSessionRequest
