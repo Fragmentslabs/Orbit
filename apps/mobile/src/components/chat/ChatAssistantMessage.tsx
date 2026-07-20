@@ -202,28 +202,59 @@ function ResearchStep({ part }: { part: ToolPart }) {
 function ResearchBlock({ parts }: { parts: ToolPart[] }) {
   const researching = parts.some((p) => p.state === 'running')
   const [open, setOpen] = useState(researching)
+  const tokens = getThemeTokens(useThemeStore((s) => s.resolved))
+  const hsl = (v: string) => v.replace(/hsla?\(|\)/g, '').replace(/,/g, '')
 
   return (
-    <View className="my-1.5 rounded-xl border border-border/60 bg-muted/10 overflow-hidden">
+    <View
+      style={{
+        marginVertical: 6,
+        borderRadius: 12,
+        borderWidth: 1,
+        borderColor: hslToRgba(hsl(tokens.border), 0.6),
+        backgroundColor: hslToRgba(hsl(tokens.muted), 0.15),
+        overflow: 'hidden',
+        width: '100%',
+      }}
+    >
       <TouchableOpacity
         onPress={() => setOpen((prev) => !prev)}
         activeOpacity={0.7}
-        className="flex-row items-center gap-2 px-3 py-2 bg-muted/20 cursor-pointer"
+        style={{
+          flexDirection: 'row',
+          alignItems: 'center',
+          gap: 8,
+          paddingHorizontal: 12,
+          paddingVertical: 8,
+          backgroundColor: hslToRgba(hsl(tokens.muted), 0.3),
+        }}
       >
-        <Search size={13} className="text-primary" />
-        <Text className="text-xs font-semibold text-foreground flex-1">
+        <Search size={13} color={tokens.primary} />
+        <Text
+          style={{
+            fontSize: 12,
+            fontWeight: '600',
+            color: tokens.foreground,
+            flex: 1,
+          }}
+        >
           {researching
             ? 'Pesquisando na web…'
             : `Pesquisa concluída · ${parts.length} ${parts.length === 1 ? 'etapa' : 'etapas'}`}
         </Text>
         {open ? (
-          <ChevronDown size={14} className="text-muted-foreground" />
+          <ChevronDown size={14} color={tokens.mutedForeground} />
         ) : (
-          <ChevronRight size={14} className="text-muted-foreground" />
+          <ChevronRight size={14} color={tokens.mutedForeground} />
         )}
       </TouchableOpacity>
       {open && (
-        <View className="px-3 pb-2.5">
+        <View
+          style={{
+            paddingHorizontal: 12,
+            paddingBottom: 10,
+          }}
+        >
           {parts.map((part) => (
             <ResearchStep key={part.id} part={part} />
           ))}
