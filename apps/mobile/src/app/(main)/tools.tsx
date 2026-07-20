@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { View, Text, Pressable, ScrollView, RefreshControl, StyleSheet, Alert } from 'react-native'
+import * as DocumentPicker from 'expo-document-picker'
+import * as FileSystem from 'expo-file-system/legacy'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { useRouter } from 'expo-router'
 import {
@@ -9,10 +11,6 @@ import {
   Sparkles,
   Globe,
   Terminal,
-  Wifi,
-  WifiOff,
-  Loader,
-  AlertCircle,
   Plus,
   ChevronDown,
   ChevronRight,
@@ -22,9 +20,12 @@ import {
   RefreshCw,
   FileUp,
   MessageSquare,
+  FileText,
 } from 'lucide-react-native'
-import type { Skill, McpServerStatus, McpConnectionState, McpServerConfig } from '@orbit/shared'
+import type { Skill, McpServerStatus, McpConnectionState, McpServerConfig, SkillProposal } from '@orbit/shared'
 import { useToolsStore } from '~/stores/tools-store'
+import { useSessionStore } from '~/stores/session-store'
+import { useDraftInput } from '~/stores/draft-input-store'
 import { getThemeTokens } from '~/lib/theme-tokens'
 import { useThemeStore } from '~/stores/theme-store'
 import { SkillFormModal } from '~/components/chat/SkillFormModal'
@@ -86,7 +87,6 @@ function McpServerCard({
         </View>
       </View>
 
-      {/* Tool names collapsible */}
       {server.toolNames.length > 0 && (
         <Pressable
           onPress={() => setToolsOpen((o) => !o)}
@@ -110,7 +110,6 @@ function McpServerCard({
         </View>
       )}
 
-      {/* Actions */}
       <View style={[s.actionsRow, { borderTopColor: tokens.border }]}>
         <Pressable onPress={() => onReconnect(server.config.name)} style={s.actionBtn}>
           <RefreshCw size={13} color={tokens.mutedForeground} />
@@ -186,6 +185,67 @@ function SkillCard({
   )
 }
 
+// ─── Create Skill Dropdown ────────────────────────────────────────────────────
+
+const CREATE_OPTIONS = [
+  { id: 'create', icon: FileText, label: 'Criar manualmente' },
+  { id: 'import', icon: FileUp, label: 'Importar arquivo' },
+  { id: 'ask', icon: MessageSquare, label: 'Pedir para o Orbit criar' },
+] as const
+
+function CreateSkillDropdown({
+  onCreate,
+  onImport,
+  onAskOrbit,
+}: {
+  onCreate: () => void
+  onImport: () => void
+  onAskOrbit: () => void
+}) {
+  const tokens = getThemeTokens(useThemeStore((s) => s.resolved))
+  const [open, setOpen] = useState(false)
+
+  const handleSelect = (id: string) => {
+    setOpen(false)
+    if (id === 'create') onCreate()
+    else if (id === 'import') onImport()
+    else if (id === 'ask') onAskOrbit()
+  }
+
+  return (
+    <View style={{ position: 'relative' }}>
+      <Pressable onPress={() => setOpen((o) => !o)} style={s.dropdownTrigger}>
+        <Plus size={14} color={tokens.primary} />
+        <Text style={[s.dropdownTriggerText, { color: tokens.primary }]}>Criar</Text>
+        <ChevronDown size={12} color={tokens.primary} />
+      </Pressable>
+
+      {open && (
+        <>
+          <Pressable style={StyleSheet.absoluteFill} onPress={() => setOpen(false)} />
+          <View style={[s.dropdown, { backgroundColor: tokens.card, borderColor: tokens.border }]}>
+            {CREATE_OPTIONS.map((opt) => {
+              const Icon = opt.icon
+              return (
+                <Pressable
+                  key={opt.id}
+                  onPress={() => handleSelect(opt.id)}
+                  style={[s.dropdownItem, { borderBottomColor: tokens.border }]}
+                >
+                  <Icon size={15} color={tokens.mutedForeground} />
+                  <Text style={[s.dropdownItemText, { color: tokens.foreground }]}>{opt.label}</Text>
+                </Pressable>
+              )
+            })}
+          </View>
+        </>
+      )}
+    </View>
+  )
+}
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
 function stateLabel(state: McpConnectionState): string {
   switch (state) {
     case 'connected': return 'Conectado'
@@ -213,9 +273,12 @@ function serverStateBadge(state: McpConnectionState, tokens: Record<string, stri
   }
 }
 
+// ─── Screen ───────────────────────────────────────────────────────────────────
+
 export default function ToolsScreen() {
   const router = useRouter()
   const tokens = getThemeTokens(useThemeStore((s) => s.resolved))
+  const setDraft = useDraftInput((s) => s.setDraft)
   const skills = useToolsStore((s) => s.skills)
   const mcpServers = useToolsStore((s) => s.mcpServers)
   const pending = useToolsStore((s) => s.pending)
@@ -228,12 +291,14 @@ export default function ToolsScreen() {
   const importSkill = useToolsStore((s) => s.importSkill)
   const saveMcpConfig = useToolsStore((s) => s.saveMcpConfig)
   const reconnectMcp = useToolsStore((s) => s.reconnectMcp)
+  const createSession = useSessionStore((s) => s.createSession)
 
   const [skillFormOpen, setSkillFormOpen] = useState(false)
   const [editSkill, setEditSkill] = useState<Skill | undefined>(undefined)
   const [viewSkill, setViewSkill] = useState<Skill | null>(null)
   const [mcpFormOpen, setMcpFormOpen] = useState(false)
   const [editMcp, setEditMcp] = useState<McpServerConfig | undefined>(undefined)
+  const [importing, setImporting] = useState(false)
 
   const load = useCallback(() => {
     void Promise.all([fetchSkills(), fetchMcpStatus(), fetchPending()])
@@ -264,21 +329,31 @@ export default function ToolsScreen() {
   }
 
   const handleImportSkill = async () => {
+    setImporting(true)
     try {
-      const fs = (await import('expo-file-system/legacy')).default
-      const doc = (await import('expo-document-picker')).default
-      const result = await doc.getDocumentAsync({ type: '*/*', copyToCacheDirectory: true })
+      const result = await DocumentPicker.getDocumentAsync({
+        type: ['text/plain', 'text/markdown', 'application/octet-stream'],
+        copyToCacheDirectory: true,
+      })
       if (result.canceled || !result.assets?.[0]) return
       const asset = result.assets[0]
-      const base64 = await fs.readAsStringAsync(asset.uri, { encoding: fs.EncodingType.Base64 })
+      const base64 = await FileSystem.readAsStringAsync(asset.uri, { encoding: FileSystem.EncodingType.Base64 })
       await importSkill(base64, asset.name ?? 'skill.skill')
-    } catch {
-      Alert.alert('Erro', 'Não foi possível importar a skill.')
+    } catch (err) {
+      Alert.alert('Erro', String(err))
+    } finally {
+      setImporting(false)
     }
   }
 
-  const handleAskOrbit = () => {
-    router.push('/(main)')
+  const handleAskOrbit = async () => {
+    setDraft('/create-skill ')
+    try {
+      const created = await createSession('chat')
+      if (created) router.replace(`/(main)/chat/${created.id}`)
+    } catch {
+      router.replace('/(main)')
+    }
   }
 
   const handleEditMcp = (config: McpServerConfig) => {
@@ -314,7 +389,7 @@ export default function ToolsScreen() {
         style={{ flex: 1 }}
         contentContainerStyle={{ paddingBottom: 48 }}
         refreshControl={
-          <RefreshControl refreshing={loading} onRefresh={load} tintColor={tokens.primary} />
+          <RefreshControl refreshing={loading || importing} onRefresh={load} tintColor={tokens.primary} />
         }
       >
         {isEmpty && (
@@ -372,20 +447,11 @@ export default function ToolsScreen() {
           <Text style={[s.sectionLabel, { color: tokens.mutedForeground }]}>
             Skills ({skills.length})
           </Text>
-          <View style={s.createSkillRow}>
-            <Pressable onPress={() => { setEditSkill(undefined); setSkillFormOpen(true) }} style={s.addSectionBtn}>
-              <Plus size={14} color={tokens.primary} />
-              <Text style={[s.addSectionText, { color: tokens.primary }]}>Criar</Text>
-            </Pressable>
-            <Pressable onPress={handleImportSkill} style={s.addSectionBtn}>
-              <FileUp size={14} color={tokens.primary} />
-              <Text style={[s.addSectionText, { color: tokens.primary }]}>Importar</Text>
-            </Pressable>
-            <Pressable onPress={handleAskOrbit} style={s.addSectionBtn}>
-              <MessageSquare size={14} color={tokens.primary} />
-              <Text style={[s.addSectionText, { color: tokens.primary }]}>Pedir ao Orbit</Text>
-            </Pressable>
-          </View>
+          <CreateSkillDropdown
+            onCreate={handleCreateSkill}
+            onImport={handleImportSkill}
+            onAskOrbit={handleAskOrbit}
+          />
         </View>
         {skills.length > 0 ? (
           <View style={s.section}>
@@ -419,7 +485,7 @@ export default function ToolsScreen() {
   )
 }
 
-function PendingProposalCard({ proposal }: { proposal: import('@orbit/shared').SkillProposal }) {
+function PendingProposalCard({ proposal }: { proposal: SkillProposal }) {
   const tokens = getThemeTokens(useThemeStore((s) => s.resolved))
   const approveSkill = useToolsStore((s) => s.approveSkill)
   const discardSkill = useToolsStore((s) => s.discardSkill)
@@ -480,7 +546,6 @@ const s = StyleSheet.create({
   },
   addSectionBtn: { flexDirection: 'row', alignItems: 'center', gap: 3, paddingVertical: 4, paddingHorizontal: 6 },
   addSectionText: { fontSize: 12, fontWeight: '600' },
-  createSkillRow: { flexDirection: 'row', gap: 2 },
   section: {
     marginHorizontal: 16,
     gap: 8,
@@ -490,11 +555,7 @@ const s = StyleSheet.create({
   emptyTitle: { fontSize: 16, fontWeight: '600', textAlign: 'center' },
   emptyDesc: { fontSize: 13, textAlign: 'center', lineHeight: 20 },
 
-  serverCard: {
-    borderRadius: 12,
-    borderWidth: 1,
-    overflow: 'hidden',
-  },
+  serverCard: { borderRadius: 12, borderWidth: 1, overflow: 'hidden' },
   serverHeader: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -531,18 +592,9 @@ const s = StyleSheet.create({
     borderTopWidth: 1,
   },
   toolsToggleText: { fontSize: 11, fontWeight: '500' },
-  toolsList: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    gap: 4,
-    borderTopWidth: 1,
-  },
+  toolsList: { paddingHorizontal: 12, paddingVertical: 6, gap: 4, borderTopWidth: 1 },
   toolName: { fontSize: 11, fontFamily: 'monospace', paddingVertical: 1 },
-
-  actionsRow: {
-    flexDirection: 'row',
-    borderTopWidth: 1,
-  },
+  actionsRow: { flexDirection: 'row', borderTopWidth: 1 },
   actionBtn: {
     flex: 1,
     flexDirection: 'row',
@@ -553,11 +605,7 @@ const s = StyleSheet.create({
   },
   actionLabel: { fontSize: 11, fontWeight: '600' },
 
-  skillCard: {
-    borderRadius: 12,
-    borderWidth: 1,
-    overflow: 'hidden',
-  },
+  skillCard: { borderRadius: 12, borderWidth: 1, overflow: 'hidden' },
   skillRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -565,20 +613,10 @@ const s = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 10,
   },
-  skillIconWrap: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
+  skillIconWrap: { width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center' },
   skillName: { fontSize: 13, fontWeight: '600' },
   skillDesc: { fontSize: 11, lineHeight: 16 },
-  sourceBadge: {
-    paddingHorizontal: 7,
-    paddingVertical: 3,
-    borderRadius: 6,
-  },
+  sourceBadge: { paddingHorizontal: 7, paddingVertical: 3, borderRadius: 6 },
   sourceLabel: { fontSize: 10, fontWeight: '600' },
   skillFooter: {
     flexDirection: 'row',
@@ -591,12 +629,7 @@ const s = StyleSheet.create({
   skillSlug: { fontSize: 10, fontFamily: 'monospace' },
   skillScripts: { fontSize: 10 },
 
-  pendingCard: {
-    borderRadius: 12,
-    borderWidth: 1,
-    padding: 12,
-    gap: 6,
-  },
+  pendingCard: { borderRadius: 12, borderWidth: 1, padding: 12, gap: 6 },
   pendingTitle: { fontSize: 14, fontWeight: '600' },
   pendingDesc: { fontSize: 12, lineHeight: 16 },
   pendingSlug: { fontSize: 11, fontFamily: 'monospace' },
@@ -617,4 +650,34 @@ const s = StyleSheet.create({
     alignItems: 'center',
   },
   pendingBtnText: { fontSize: 12, fontWeight: '600' },
+
+  dropdownTrigger: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+  },
+  dropdownTriggerText: { fontSize: 12, fontWeight: '600' },
+  dropdown: {
+    position: 'absolute',
+    top: 28,
+    right: 0,
+    borderRadius: 10,
+    borderWidth: 1,
+    minWidth: 200,
+    zIndex: 100,
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  dropdownItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+  },
+  dropdownItemText: { fontSize: 14, fontWeight: '500' },
 })
