@@ -1,31 +1,42 @@
 import { create } from 'zustand'
-import type { Skill } from '@orbit/shared'
-import type { McpServerStatus } from '@orbit/shared'
+import type { Skill, SkillProposal, McpServerStatus, McpConfig } from '@orbit/shared'
 import { Storage } from '~/lib/storage'
 import { useConnectionStore } from './connection-store'
 
 const SKILLS_CACHE_KEY = 'orbit_skills_cache'
 const MCP_CACHE_KEY = 'orbit_mcp_cache'
+const PENDING_CACHE_KEY = 'orbit_skills_pending_cache'
 
 interface ToolsState {
   skills: Skill[]
   mcpServers: McpServerStatus[]
+  pending: SkillProposal[]
   loading: boolean
 
   fetchSkills: (directory?: string) => Promise<void>
   fetchMcpStatus: () => Promise<void>
+  fetchPending: () => Promise<void>
   hydrateCache: () => Promise<void>
+
+  createSkill: (data: { name: string; description?: string; content: string; slug?: string }) => Promise<void>
+  removeSkill: (slug: string) => Promise<void>
+  importSkill: (content: string, filename: string) => Promise<void>
+  approveSkill: (slug: string) => Promise<void>
+  discardSkill: (slug: string) => Promise<void>
+
+  saveMcpConfig: (config: McpConfig) => Promise<void>
+  reconnectMcp: (name?: string) => Promise<void>
 }
 
-export const useToolsStore = create<ToolsState>((set) => ({
+export const useToolsStore = create<ToolsState>((set, get) => ({
   skills: [],
   mcpServers: [],
+  pending: [],
   loading: false,
 
   fetchSkills: async (directory) => {
     const { http } = useConnectionStore.getState()
     if (!http) return
-
     set({ loading: true })
     try {
       const res = await http.getSkills(directory)
@@ -42,7 +53,6 @@ export const useToolsStore = create<ToolsState>((set) => ({
   fetchMcpStatus: async () => {
     const { http } = useConnectionStore.getState()
     if (!http) return
-
     try {
       const res = await http.getMcpStatus()
       if (res.ok && res.data) {
@@ -54,19 +64,96 @@ export const useToolsStore = create<ToolsState>((set) => ({
     }
   },
 
-  hydrateCache: async () => {
+  fetchPending: async () => {
+    const { http } = useConnectionStore.getState()
+    if (!http) return
     try {
-      const [rawSkills, rawMcp] = await Promise.all([
-        Storage.getItem(SKILLS_CACHE_KEY),
-        Storage.getItem(MCP_CACHE_KEY),
-      ])
-      if (rawSkills) {
-        set({ skills: JSON.parse(rawSkills) as Skill[] })
-      }
-      if (rawMcp) {
-        set({ mcpServers: JSON.parse(rawMcp) as McpServerStatus[] })
+      const res = await http.listPendingSkills()
+      if (res.ok && res.data) {
+        const pending = res.data as SkillProposal[]
+        set({ pending })
+        void Storage.setItem(PENDING_CACHE_KEY, JSON.stringify(pending))
       }
     } catch {
+    }
+  },
+
+  hydrateCache: async () => {
+    try {
+      const [rawSkills, rawMcp, rawPending] = await Promise.all([
+        Storage.getItem(SKILLS_CACHE_KEY),
+        Storage.getItem(MCP_CACHE_KEY),
+        Storage.getItem(PENDING_CACHE_KEY),
+      ])
+      if (rawSkills) set({ skills: JSON.parse(rawSkills) as Skill[] })
+      if (rawMcp) set({ mcpServers: JSON.parse(rawMcp) as McpServerStatus[] })
+      if (rawPending) set({ pending: JSON.parse(rawPending) as SkillProposal[] })
+    } catch {
+    }
+  },
+
+  createSkill: async (data) => {
+    const { http } = useConnectionStore.getState()
+    if (!http) return
+    const res = await http.createSkill(data)
+    if (res.ok) {
+      await get().fetchSkills()
+    }
+  },
+
+  removeSkill: async (slug) => {
+    const { http } = useConnectionStore.getState()
+    if (!http) return
+    const res = await http.removeSkill(slug)
+    if (res.ok) {
+      set((s) => ({ skills: s.skills.filter((sk) => sk.slug !== slug) }))
+    }
+  },
+
+  importSkill: async (content, filename) => {
+    const { http } = useConnectionStore.getState()
+    if (!http) return
+    const res = await http.importSkill(content, filename)
+    if (res.ok && (res.data as { imported: boolean })?.imported) {
+      await get().fetchSkills()
+    }
+  },
+
+  approveSkill: async (slug) => {
+    const { http } = useConnectionStore.getState()
+    if (!http) return
+    const res = await http.approveSkill(slug)
+    if (res.ok) {
+      set((s) => ({ pending: s.pending.filter((p) => p.slug !== slug) }))
+      await get().fetchSkills()
+    }
+  },
+
+  discardSkill: async (slug) => {
+    const { http } = useConnectionStore.getState()
+    if (!http) return
+    const res = await http.discardSkill(slug)
+    if (res.ok) {
+      set((s) => ({ pending: s.pending.filter((p) => p.slug !== slug) }))
+    }
+  },
+
+  saveMcpConfig: async (config) => {
+    const { http } = useConnectionStore.getState()
+    if (!http) return
+    const res = await http.saveMcpConfig(config)
+    if (res.ok && res.data) {
+      set({ mcpServers: res.data as McpServerStatus[] })
+      void Storage.setItem(MCP_CACHE_KEY, JSON.stringify(res.data))
+    }
+  },
+
+  reconnectMcp: async (name) => {
+    const { http } = useConnectionStore.getState()
+    if (!http) return
+    const res = await http.reconnectMcp(name)
+    if (res.ok && res.data) {
+      set({ mcpServers: res.data as McpServerStatus[] })
     }
   },
 }))
