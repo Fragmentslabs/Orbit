@@ -333,7 +333,7 @@ export function AskCard({ ask, onReply }: AskCardProps) {
                     borderRadius: 8,
                     borderWidth: 1,
                     borderColor: isSelected ? tokens.primary : tokens.border,
-                    backgroundColor: isSelected ? tokens.primary + '18' : 'transparent',
+                    backgroundColor: isSelected ? tokens.muted : 'transparent',
                   }}
                 >
                   <Text
@@ -372,7 +372,7 @@ export function AskCard({ ask, onReply }: AskCardProps) {
           }}
         />
 
-        {/* Action buttons: Dispensar | Responder */}
+        {/* Action buttons: Dispensar | Avançar/Responder */}
         <View style={{ flexDirection: 'row', gap: 8 }}>
           <Pressable
             onPress={() => reply({ rejected: true })}
@@ -383,15 +383,27 @@ export function AskCard({ ask, onReply }: AskCardProps) {
               Dispensar
             </Text>
           </Pressable>
-          <Pressable
-            onPress={submitAnswers}
-            disabled={submitted || !allAnswered}
-            style={{ ...btnPrimary(tokens), opacity: submitted || !allAnswered ? 0.4 : 1 }}
-          >
-            <Text style={{ fontSize: 12, fontWeight: '600', color: tokens.primaryForeground }}>
-              Responder
-            </Text>
-          </Pressable>
+          {questionIndex < questions.length - 1 ? (
+            <Pressable
+              onPress={() => setQuestionIndex((i) => Math.min(questions.length - 1, i + 1))}
+              disabled={submitted}
+              style={{ ...btnMuted(tokens), opacity: submitted ? 0.4 : 1, flex: 1 }}
+            >
+              <Text style={{ fontSize: 12, fontWeight: '600', color: tokens.foreground }}>
+                Avançar
+              </Text>
+            </Pressable>
+          ) : (
+            <Pressable
+              onPress={submitAnswers}
+              disabled={submitted || !allAnswered}
+              style={{ ...btnPrimary(tokens), opacity: submitted || !allAnswered ? 0.4 : 1 }}
+            >
+              <Text style={{ fontSize: 12, fontWeight: '600', color: tokens.primaryForeground }}>
+                Responder
+              </Text>
+            </Pressable>
+          )}
         </View>
       </View>
     )
