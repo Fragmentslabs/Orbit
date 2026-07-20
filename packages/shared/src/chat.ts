@@ -256,6 +256,8 @@ export interface SendMessageOptions {
   brainContext?: boolean
   /** Modo Orchestra: divide em plano de tarefas + workers em sessões filhas */
   orchestrate?: { plan?: OrchestrationPlan }
+  /** Modo Loop: agente revisa e itera até completar a tarefa (max N iterações configurável) */
+  loop?: boolean
   /** Modo de permissões (code-mode e workers): default efetivo "ask" */
   permissionMode?: PermissionMode
   /** /init: executa o pipeline de análise de projeto em vez de gerar texto */
@@ -309,6 +311,8 @@ export interface SendMessageInput {
   workerTitle?: string
   /** True na primeira troca da sessão (sem histórico prévio). Controla injeção de conteúdo de memória. */
   isFirstExchange?: boolean
+  /** Configuração do modo loop (enviada do renderer) */
+  loopConfig?: { maxIterations: number; maxTokensPerIter: number; autoReview: boolean }
 }
 
 export type ChatEvent =

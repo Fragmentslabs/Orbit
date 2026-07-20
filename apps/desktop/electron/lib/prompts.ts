@@ -79,6 +79,16 @@ Regras:
 
 export const ORCHESTRATOR_SYNTHESIS_PROMPT = `Você é o orquestrador do Orbit. Os workers concluíram suas subtarefas e os resultados estão na última mensagem. Sintetize tudo em uma resposta final coerente para o pedido original do usuário: integre as partes, resolva divergências entre workers e aponte lacunas ou falhas quando existirem. Não descreva a mecânica interna de workers além do necessário.`
 
+export const REVIEW_PROMPT = `Você é um revisor crítico. Sua função é analisar se o objetivo do usuário foi completamente atingido com base no histórico da conversa e nos resultados obtidos.
+
+Regras:
+- Se o objetivo foi atingido de forma satisfatória → review_completion com status "done"
+- Se há qualquer gap, erro, funcionalidade incompleta ou teste faltando → status "needs_more"
+- Seja criterioso: é melhor revisar demais do que deixar passar
+- Para needs_more, descreva exatamente o que falta fazer no campo followUpPrompt
+- O followUpPrompt será enviado como nova instrução para o agente continuar trabalhando
+- Não seja genérico — aponte gaps específicos com detalhes acionáveis`
+
 const IMPLEMENT_PLAN_PROMPT = `${IDENTITY}
 
 MODO IMPLEMENTAÇÃO. O usuário aprovou o plano que você gerou previamente. O plano está salvo em PLAN.md na pasta de trabalho — consulte-o sempre que precisar lembrar dos passos.
