@@ -6,6 +6,7 @@ import { dataDir } from './storage'
 /**
  * Armazenamento de credenciais por provedor, no mesmo espírito do
  * `auth.json` do opencode: um arquivo JSON local com permissões restritas.
+ * Usa escrita atômica (temp → rename) para evitar corrupção em crash.
  */
 
 function authFile() {
@@ -17,14 +18,21 @@ type AuthData = Record<string, ProviderCredential>
 async function readAll(): Promise<AuthData> {
   try {
     return JSON.parse(await fs.readFile(authFile(), 'utf8'))
-  } catch {
+  } catch (err) {
+    // ENOENT = primeira execução (ainda sem chaves); outros erros = corrupção
+    if ((err as NodeJS.ErrnoException)?.code !== 'ENOENT') {
+      console.error('[auth] erro ao ler auth.json — chaves podem ter sido perdidas:', err)
+    }
     return {}
   }
 }
 
 async function writeAll(data: AuthData): Promise<void> {
   await fs.mkdir(dataDir(), { recursive: true })
-  await fs.writeFile(authFile(), JSON.stringify(data, null, 2), { encoding: 'utf8', mode: 0o600 })
+  const file = authFile()
+  const tmp = `${file}.${Date.now()}.tmp`
+  await fs.writeFile(tmp, JSON.stringify(data, null, 2), { encoding: 'utf8', mode: 0o600 })
+  await fs.rename(tmp, file)
 }
 
 export async function getCredential(providerId: string): Promise<ProviderCredential | undefined> {
