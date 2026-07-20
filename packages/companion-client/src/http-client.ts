@@ -73,10 +73,55 @@ export class CompanionHttp {
     return this.get(`/api/skills${qs}`)
   }
 
+  async createSkill(data: {
+    name: string
+    description?: string
+    content: string
+    slug?: string
+    oldSlug?: string
+  }): Promise<HttpResult<{ filePath: string }>> {
+    return this.request('POST', '/api/skills', data)
+  }
+
+  async removeSkill(slug: string): Promise<HttpResult> {
+    return this.request('DELETE', `/api/skills/${encodeURIComponent(slug)}`)
+  }
+
+  async importSkill(content: string, filename: string): Promise<HttpResult<{ imported: boolean; slug?: string; error?: string }>> {
+    return this.request('POST', '/api/skills/import', { content, filename })
+  }
+
+  async listPendingSkills(): Promise<HttpResult> {
+    return this.get('/api/skills/pending')
+  }
+
+  async approveSkill(slug: string): Promise<HttpResult<{ approved: boolean }>> {
+    return this.request('POST', `/api/skills/${encodeURIComponent(slug)}/approve`)
+  }
+
+  async discardSkill(slug: string): Promise<HttpResult> {
+    return this.request('POST', `/api/skills/${encodeURIComponent(slug)}/discard`)
+  }
+
   // ─── MCP ──────────────────────────────────────────────────────────────────
 
   async getMcpStatus(): Promise<HttpResult> {
     return this.get('/api/mcp/status')
+  }
+
+  async getMcpConfig(): Promise<HttpResult> {
+    return this.get('/api/mcp/config')
+  }
+
+  async saveMcpConfig(config: unknown): Promise<HttpResult> {
+    return this.request('PUT', '/api/mcp/config', config)
+  }
+
+  async reconnectMcp(name?: string): Promise<HttpResult> {
+    const path = name
+      ? `/api/mcp/servers/${encodeURIComponent(name)}/reconnect`
+      : '/api/mcp/servers/_all/reconnect'
+    return this.request('POST', path)
   }
 
   // ─── Status ──────────────────────────────────────────────────────────────
