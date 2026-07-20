@@ -628,6 +628,12 @@ export function ChatAssistantMessage({ message, compact, isLast, isBusy, onRever
                 />
               </View>
             )
+          case 'file':
+            return (
+              <View key={part.id} className="mt-1 w-full">
+                <MessageAttachment file={part} />
+              </View>
+            )
           default:
             return null
         }
