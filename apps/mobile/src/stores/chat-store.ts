@@ -1,6 +1,22 @@
 import { create } from 'zustand'
 import type { AskItem } from '@orbit/shared'
 import { useConnectionStore } from './connection-store'
+import { Storage } from '~/lib/storage'
+
+const CACHE_ASKS_PREFIX = 'orbit_cache_asks_'
+
+async function cacheAsks(sessionId: string, asks: PendingAsk[]) {
+  await Storage.setItem(CACHE_ASKS_PREFIX + sessionId, JSON.stringify(asks))
+}
+
+async function loadCachedAsks(sessionId: string): Promise<PendingAsk[] | null> {
+  try {
+    const raw = await Storage.getItem(CACHE_ASKS_PREFIX + sessionId)
+    return raw ? JSON.parse(raw) : null
+  } catch { return null }
+}
+
+export { loadCachedAsks, CACHE_ASKS_PREFIX }
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -20,6 +36,8 @@ interface ChatState {
   addPendingAsk: (sessionId: string, ask: PendingAsk) => void
   /** Remove um pending ask (respondido). */
   removePendingAsk: (sessionId: string, requestId: string) => void
+  /** Define os pending asks de uma sessão (usado ao carregar cache). */
+  setPendingAsks: (sessionId: string, asks: PendingAsk[]) => void
   /** Responde a um pending ask via WS. */
   replyToAsk: (requestId: string, value: unknown) => Promise<void>
   /** Retorna todos os asks de uma sessão. */
@@ -38,6 +56,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       // Deduplica por requestId
       if (current.some((a) => a.requestId === ask.requestId)) return state
       const next = [...current, ask]
+      void cacheAsks(sessionId, next)
       return {
         pendingAsks: { ...state.pendingAsks, [sessionId]: next },
         activeAskSessionId: sessionId,
@@ -53,8 +72,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
       const pendingAsks = { ...state.pendingAsks }
       if (next.length === 0) {
         delete pendingAsks[sessionId]
+        void Storage.removeItem(CACHE_ASKS_PREFIX + sessionId)
       } else {
         pendingAsks[sessionId] = next
+        void cacheAsks(sessionId, next)
       }
       // Atualiza activeAskSessionId
       const activeAskSessionId = Object.keys(pendingAsks).length > 0
@@ -62,6 +83,13 @@ export const useChatStore = create<ChatState>((set, get) => ({
         : null
       return { pendingAsks, activeAskSessionId }
     })
+  },
+
+  setPendingAsks: (sessionId, asks) => {
+    set((state) => ({
+      pendingAsks: { ...state.pendingAsks, [sessionId]: asks },
+      activeAskSessionId: state.activeAskSessionId ?? sessionId,
+    }))
   },
 
   replyToAsk: async (requestId, value) => {

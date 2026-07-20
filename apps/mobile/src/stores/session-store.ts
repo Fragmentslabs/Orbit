@@ -28,11 +28,12 @@ import { Storage } from '~/lib/storage'
 import { useConnectionStore } from './connection-store'
 import { useMessageQueueStore } from './message-queue-store'
 import { useSettingsStore } from './settings-store'
-import { useChatStore } from './chat-store'
+import { useChatStore, loadCachedAsks, CACHE_ASKS_PREFIX } from './chat-store'
 
 // Cache keys
 const CACHE_SESSIONS_KEY = 'orbit_cache_sessions'
 const CACHE_MESSAGES_PREFIX = 'orbit_cache_msgs_'
+const CACHE_ORCHESTRATION_PREFIX = 'orbit_cache_orch_'
 const MAX_CACHED_SESSIONS = 20
 const MAX_CACHED_MESSAGES = 200
 
@@ -56,6 +57,17 @@ async function cacheMessages(sessionId: string, messages: ChatMessage[]) {
 async function loadCachedMessages(sessionId: string): Promise<ChatMessage[] | null> {
   try {
     const raw = await Storage.getItem(CACHE_MESSAGES_PREFIX + sessionId)
+    return raw ? JSON.parse(raw) : null
+  } catch { return null }
+}
+
+async function cacheOrchestration(sessionId: string, plan: OrchestrationPlan) {
+  await Storage.setItem(CACHE_ORCHESTRATION_PREFIX + sessionId, JSON.stringify(plan))
+}
+
+async function loadCachedOrchestration(sessionId: string): Promise<OrchestrationPlan | null> {
+  try {
+    const raw = await Storage.getItem(CACHE_ORCHESTRATION_PREFIX + sessionId)
     return raw ? JSON.parse(raw) : null
   } catch { return null }
 }
@@ -277,6 +289,18 @@ export const useSessionStore = create<SessionState>((set, get) => ({
           messages: { ...state.messages, [id]: cached },
         }))
       }
+      // Carrega pedidos pendentes do cache
+      const asks = await loadCachedAsks(id)
+      if (asks && asks.length > 0) {
+        useChatStore.getState().setPendingAsks(id, asks)
+      }
+      // Carrega plano de orquestração do cache
+      const plan = await loadCachedOrchestration(id)
+      if (plan) {
+        set((state) => ({
+          orchestration: { ...state.orchestration, [id]: plan },
+        }))
+      }
       // Fetch da rede em background (atualiza quando chegar)
       void get().fetchMessages(id)
     }
@@ -444,8 +468,15 @@ export const useSessionStore = create<SessionState>((set, get) => ({
         delete orchestration[sessionId]
         const _planReviewOutbox = { ...(state._planReviewOutbox ?? {}) }
         delete _planReviewOutbox[sessionId]
+        // Limpa pendingAsks da memória e do cache
+        const pendingAsks = { ...useChatStore.getState().pendingAsks }
+        delete pendingAsks[sessionId]
+        useChatStore.setState({ pendingAsks, activeAskSessionId: useChatStore.getState().activeAskSessionId === sessionId ? null : useChatStore.getState().activeAskSessionId })
         return { sessions, activeSessionId, planReviews, orchestration, _planReviewOutbox }
       })
+      // Cleanup de arquivos de cache
+      void Storage.removeItem(CACHE_ASKS_PREFIX + sessionId)
+      void Storage.removeItem(CACHE_ORCHESTRATION_PREFIX + sessionId)
     }
   },
 
@@ -714,6 +745,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
         set((state) => ({
           orchestration: { ...state.orchestration, [sessionId]: event.plan },
         }))
+        void cacheOrchestration(sessionId, event.plan)
         break
 
       case 'plan:review':
