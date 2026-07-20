@@ -20,6 +20,7 @@ import { useBrainPrefs } from "@/src/stores/brain-prefs"
 import { useMessageQueueStore } from "@/src/stores/message-queue-store"
 import { useModelModePrefs } from "@/src/stores/model-mode-prefs"
 import { useProviderStore } from "@/src/stores/provider-store"
+import { useLoopConfigStore } from "@/src/stores/loop-config-store"
 
 /**
  * Store de sessões/mensagens no padrão do opencode: sessões persistidas
@@ -443,6 +444,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       directory: config.directory ?? session.directory,
       extraDirectories: config.extraDirectories ?? session.extraDirectories,
       workerModel,
+      ...(config.options.loop ? { loopConfig: useLoopConfigStore.getState().config } : {}),
     })
   },
 

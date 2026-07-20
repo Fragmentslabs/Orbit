@@ -15,6 +15,7 @@ import { getModelsSnapshot, invalidateModelsSnapshot } from './lib/models'
 import { revert as revertSession, unrevert as unrevertSession } from './lib/session/revert'
 import { getInitStatus, runProjectInit, type RunInitInput } from './lib/project-init'
 import { abortChat, runChat } from './lib/chat-engine'
+import { runChatWithLoop } from './lib/loop-engine'
 import { reply as askReply, rejectSession as rejectSessionAsks } from './lib/ask-broker'
 import { abortOrchestration, approvePlan, rejectPlan, runOrchestration } from './lib/orchestrator'
 import { initMcp, listMcpStatus, readMcpConfig, reconnectMcp, saveMcpConfig } from './lib/mcp'
@@ -490,8 +491,13 @@ app.whenReady().then(() => {
     if (session?.orchestration?.role === 'worker') {
       input = { ...input, options: { ...input.options, orchestrate: undefined, subagents: false } }
     }
-    if (input.options.orchestrate) void runOrchestration(win, input)
-    else void runChat(win, input)
+    if (input.options.loop && !input.options.orchestrate) {
+      void runChatWithLoop(win, input, input.loopConfig ?? { maxIterations: 3, maxTokensPerIter: 4000, autoReview: true })
+    } else if (input.options.orchestrate) {
+      void runOrchestration(win, input)
+    } else {
+      void runChat(win, input)
+    }
   })
   ipcMain.handle('chat:abort', (_event, sessionId: string) => {
     abortChat(sessionId)

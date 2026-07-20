@@ -18,6 +18,7 @@ import { buildProviderOptions } from './reasoning'
 import { readJson, writeJson } from './storage'
 import { createTaskTool } from './tools/orchestration'
 import { addTokenUsage, toTokenUsage } from './usage'
+import { reviewIteration, type LoopEngineConfig } from './loop-engine'
 
 /**
  * OrchestratorEngine (modo Orchestra), em três fases:
@@ -35,6 +36,7 @@ interface PendingOrchestration {
   input: SendMessageInput
   plan: OrchestrationPlan
   assistantMessageId: string
+  loopConfig?: LoopEngineConfig
 }
 
 // Planos aguardando aprovação/execução — em memória: se o app reiniciar entre
@@ -153,7 +155,7 @@ export async function runOrchestration(win: BrowserWindow, input: SendMessageInp
       status: 'proposed',
       usage: toTokenUsage(result.usage, provider?.models[input.modelId]?.cost),
     }
-    pending.set(sessionId, { input, plan, assistantMessageId: assistantMessage.id })
+    pending.set(sessionId, { input, plan, assistantMessageId: assistantMessage.id, loopConfig: input.options.loop ? input.loopConfig ?? { maxIterations: 3, maxTokensPerIter: 4000, autoReview: true } : undefined })
     await persistPlan(win, sessionId, plan)
     emit(win, { type: 'message', sessionId, message: assistantMessage })
     emit(win, { type: 'status', sessionId, status: 'idle' })
@@ -360,6 +362,71 @@ export async function approvePlan(
     plan.status = 'done'
     await persistPlan(win, sessionId, plan)
     emit(win, { type: 'message', sessionId, message: synthesisMessage })
+
+    // ─── Loop de revisão pós-síntese (modo loop ativo) ──────────────────────
+    if (entry.loopConfig) {
+      const lc = entry.loopConfig
+      let iteration = 0
+      while (iteration < lc.maxIterations) {
+        const hist = await loadMessages(sessionId)
+        const review = await reviewIteration(sessionId, input.text, hist, lc.maxTokensPerIter, input.providerId, input.modelId, controller.signal)
+        if (controller.signal.aborted || review.status === 'done') break
+
+        iteration++
+        if (iteration >= lc.maxIterations) break
+
+        // Cria workers de continuação (um worker por follow-up)
+        const contWorker: SessionInfo = {
+          id: newId('ses'),
+          title: `Continuação ${iteration}`,
+          mode: input.directory ? 'code' : 'chat',
+          pinned: false,
+          archived: false,
+          folderId: null,
+          directory: input.directory,
+          extraDirectories: input.extraDirectories,
+          orchestration: { role: 'worker', parentSessionId: sessionId, task: review.reason },
+          parentId: sessionId,
+          createdAt: Date.now(),
+          updatedAt: Date.now(),
+        }
+        await writeJson(StorageKeys.session(contWorker.id), contWorker)
+        activeWorkers.get(sessionId)?.push(contWorker.id)
+        emit(win, { type: 'session', sessionId: contWorker.id, session: contWorker })
+
+        const wm = input.workerModel
+        const contInput: SendMessageInput = {
+          sessionId: contWorker.id,
+          text: review.followUpPrompt ?? '',
+          providerId: wm?.providerId ?? input.providerId,
+          modelId: wm?.modelId ?? input.modelId,
+          mode: contWorker.mode,
+          options: { simple: true, subagents: false, orchestrate: undefined, permissionMode: input.options.permissionMode },
+          directory: input.directory,
+          extraDirectories: input.extraDirectories,
+          orchestrationRole: 'worker',
+          parentSessionId: sessionId,
+          workerTitle: contWorker.title,
+        }
+        await runChat(win, contInput)
+
+        const contMsgs = await loadMessages(contWorker.id)
+        const lastCont = [...contMsgs].reverse().find((m) => m.role === 'assistant')
+        const contText = lastCont?.parts
+          .filter((p): p is TextPart => p.type === 'text')
+          .map((p) => p.text)
+          .join('\n')
+          .trim() || '(sem retorno)'
+
+        // Append ao plano o resultado da continuação
+        const contPart: TextPart = { id: newId('prt'), type: 'text', text: `\n\n---\n### Continuação (iteração ${iteration}/${lc.maxIterations})\n\n${review.reason}\n\n${contText}`, state: 'done' }
+        synthesisMessage.parts.push(contPart)
+        emit(win, { type: 'part', sessionId, messageId: synthesisMessage.id, part: contPart })
+        await saveMessages(sessionId, hist)
+      }
+      activeWorkers.delete(sessionId)
+    }
+
     emit(win, { type: 'status', sessionId, status: 'idle' })
   } catch (err) {
     const aborted = controller.signal.aborted
