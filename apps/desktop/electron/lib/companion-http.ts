@@ -400,6 +400,7 @@ function createRouter(
     { pattern: /^POST \/api\/skills\/([^/]+)\/discard$/, paramNames: ['slug'], handler: handleDiscardSkill },
     { pattern: /^PUT \/api\/mcp\/config$/, paramNames: [], handler: handlePutMcpConfig },
     { pattern: /^POST \/api\/mcp\/servers\/([^/]+)\/reconnect$/, paramNames: ['name'], handler: handleReconnectMcp },
+    { pattern: /^POST \/api\/mcp\/servers\/reconnect$/, paramNames: [], handler: (_r, res) => handleReconnectMcp(_r, res, undefined) },
   ]
 
   return async (req: IncomingMessage, res: ServerResponse) => {

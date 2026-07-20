@@ -120,7 +120,7 @@ export class CompanionHttp {
   async reconnectMcp(name?: string): Promise<HttpResult> {
     const path = name
       ? `/api/mcp/servers/${encodeURIComponent(name)}/reconnect`
-      : '/api/mcp/servers/_all/reconnect'
+      : '/api/mcp/servers/reconnect'
     return this.request('POST', path)
   }
 
