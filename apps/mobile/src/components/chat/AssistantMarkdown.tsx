@@ -1,5 +1,6 @@
 import { useMemo } from 'react'
 import { Linking, View, Text } from 'react-native'
+import { CodeBlock } from '~/components/chat/CodeBlock'
 import { getThemeTokens } from '~/lib/theme-tokens'
 import { useThemeStore } from '~/stores/theme-store'
 
@@ -190,13 +191,7 @@ export function AssistantMarkdown({ text }: AssistantMarkdownProps) {
               />
             )
           case 'codeblock':
-            return (
-              <View key={i} className="rounded-lg px-3 py-2" style={{ backgroundColor: tokens.muted }}>
-                <Text className="text-xs font-mono leading-relaxed" style={{ color: tokens.foreground }}>
-                  {block.code}
-                </Text>
-              </View>
-            )
+            return <CodeBlock key={i} code={block.code} language={block.language} />
           case 'list':
             return (
               <View key={i} className="gap-1">
