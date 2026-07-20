@@ -7,8 +7,9 @@ import { usePanelStore } from "@/src/stores/panel-store"
  * Consome o texto pré-preenchido (useDraftInput ou pendingInput do painel)
  * e injeta no textarea. Precisa viver DENTRO do PromptInputProvider.
  * Reage mesmo com o input já montado.
+ * Se sessionId for informada, só consome pendingInput destinado a esta sessão.
  */
-export function DraftInputBridge() {
+export function DraftInputBridge({ sessionId }: { sessionId?: string }) {
   const controller = usePromptInputController()
   const draft = useDraftInput((s) => s.text)
   const pendingInput = usePanelStore((s) => s.pendingInput)
@@ -21,9 +22,10 @@ export function DraftInputBridge() {
 
   useEffect(() => {
     if (!pendingInput) return
-    controller.textInput.setInput(pendingInput)
+    if (pendingInput.sessionId !== sessionId) return
+    controller.textInput.setInput(pendingInput.text)
     usePanelStore.getState().setPendingInput(null)
-  }, [pendingInput, controller.textInput])
+  }, [pendingInput, controller.textInput, sessionId])
 
   return null
 }

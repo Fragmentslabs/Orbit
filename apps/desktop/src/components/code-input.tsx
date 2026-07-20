@@ -207,7 +207,7 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId }: 
     <PromptInputProvider>
       <FilePalette directory={sessionDir ?? folders[0]}>
       <SlashPalette commands={slashCommands}>
-      <DraftInputBridge />
+      <DraftInputBridge sessionId={sessionId} />
       <div className="w-full max-w-2xl mx-auto pb-4">
         {(!hasMessages || folders.length > 0) && (
           <div className="flex flex-wrap items-center gap-2 px-3 py-1.5">

@@ -221,7 +221,9 @@ function QuestionBody({ ask, submitted, onReply }: {
         {ask.origin && <OriginBadge workerTitle={ask.origin.workerTitle} />}
       </div>
       <div className="flex items-center justify-between gap-2">
-        <DiscussInPanelButton questions={questions} />
+        <div className="ml-6">
+          <DiscussInPanelButton questions={questions} />
+        </div>
         <div className="flex items-center gap-2">
           <Button
             size="sm"
