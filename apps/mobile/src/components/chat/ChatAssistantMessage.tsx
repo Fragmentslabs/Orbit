@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback } from 'react'
+import { useState, useMemo, useCallback, useEffect, useRef } from 'react'
 import { View, Text, Pressable, ActivityIndicator, Linking, ScrollView, TouchableOpacity } from 'react-native'
 import {
   ChevronDown,
@@ -29,6 +29,7 @@ import { AssistantMarkdown } from './AssistantMarkdown'
 import { MessageActions } from './MessageActions'
 import { MessageAttachment } from './Attachment'
 import { Shimmer } from '~/components/ai/Shimmer'
+import { SubAgentCard } from '~/components/chat/SubAgentCard'
 import {
   messageText,
   extractSources,
@@ -205,6 +206,10 @@ function ResearchBlock({ parts }: { parts: ToolPart[] }) {
   const tokens = getThemeTokens(useThemeStore((s) => s.resolved))
   const hsl = (v: string) => v.replace(/hsla?\(|\)/g, '').replace(/,/g, '')
 
+  useEffect(() => {
+    setOpen(researching)
+  }, [researching])
+
   return (
     <View
       style={{
@@ -264,13 +269,131 @@ function ResearchBlock({ parts }: { parts: ToolPart[] }) {
   )
 }
 
-// ─── Generic Tool Accordion ──────────────────────────────────────────────────
+// ─── Task group (tools limitadas, acordeon — espelho do desktop code mode) ───
 
-function GenericToolView({ part }: { part: ToolPart }) {
+const MAX_VISIBLE_TOOLS = 5
+
+const ACTION_LABELS: Record<string, string> = {
+  read: 'Lendo',
+  write: 'Escrevendo',
+  edit: 'Editando',
+  ls: 'Listando',
+  glob: 'Buscando arquivos',
+  grep: 'Procurando',
+  bash: 'Executando',
+  websearch: 'Pesquisando',
+  webfetch: 'Lendo página',
+}
+
+function toolChip(part: ToolPart): string | undefined {
+  const input = part.input ?? {}
+  const candidate = input.filePath ?? input.dirPath ?? input.pattern ?? input.query ?? input.url ?? input.command
+  if (typeof candidate !== 'string' || !candidate) return undefined
+  const isPath = typeof input.filePath === 'string' || typeof input.dirPath === 'string'
+  return isPath ? candidate.split(/[\\/]/).pop() : candidate
+}
+
+function ToolActionRow({ part }: { part: ToolPart }) {
+  const [showOutput, setShowOutput] = useState(false)
+  const tokens = getThemeTokens(useThemeStore((s) => s.resolved))
+  const label = ACTION_LABELS[part.tool] ?? part.title ?? part.tool
+  const chip = toolChip(part)
+  const detail = part.error ?? (part.tool === 'bash' ? part.output : part.output)
+
+  return (
+    <View style={{ marginTop: 6, paddingLeft: 10, borderLeftWidth: 2, borderLeftColor: tokens.border }}>
+      <Pressable
+        onPress={() => detail && setShowOutput((v) => !v)}
+        disabled={!detail}
+        style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}
+      >
+        {part.state === 'running' ? (
+          <ActivityIndicator size="small" style={{ transform: [{ scale: 0.7 }] }} color={tokens.primary} />
+        ) : part.state === 'error' ? (
+          <AlertCircle size={12} color={tokens.destructive} />
+        ) : (
+          <Terminal size={12} color={tokens.mutedForeground} />
+        )}
+        {part.state === 'running' ? (
+          <Shimmer className="text-xs font-medium">{label}</Shimmer>
+        ) : (
+          <Text
+            style={{
+              fontSize: 12,
+              color: part.state === 'error' ? tokens.destructive : tokens.foreground,
+              fontWeight: '500',
+            }}
+          >
+            {label}
+          </Text>
+        )}
+        {chip ? (
+          <View
+            style={{
+              backgroundColor: tokens.muted,
+              borderRadius: 6,
+              paddingHorizontal: 6,
+              paddingVertical: 2,
+              maxWidth: 180,
+            }}
+          >
+            <Text numberOfLines={1} style={{ fontSize: 10, fontFamily: 'monospace', color: tokens.mutedForeground }}>
+              {chip}
+            </Text>
+          </View>
+        ) : null}
+        {detail ? (
+          showOutput ? (
+            <ChevronDown size={12} color={tokens.mutedForeground} />
+          ) : (
+            <ChevronRight size={12} color={tokens.mutedForeground} />
+          )
+        ) : null}
+      </Pressable>
+      {showOutput && detail ? (
+        <ScrollView style={{ maxHeight: 160, marginTop: 6 }} nestedScrollEnabled>
+          <Text style={{ fontSize: 11, fontFamily: 'monospace', color: tokens.mutedForeground, lineHeight: 16 }}>
+            {detail}
+          </Text>
+        </ScrollView>
+      ) : null}
+    </View>
+  )
+}
+
+function TaskGroup({ parts }: { parts: ToolPart[] }) {
+  const working = parts.some((p) => p.state === 'running')
+  const errors = parts.filter((p) => p.state === 'error').length
   const [open, setOpen] = useState(false)
+  const [showAll, setShowAll] = useState(false)
+  const prevWorking = useRef(working)
   const tokens = getThemeTokens(useThemeStore((s) => s.resolved))
   const hsl = (v: string) => v.replace(/hsla?\(|\)/g, '').replace(/,/g, '')
-  const detail = part.error ?? part.output
+
+  useEffect(() => {
+    if (working) setOpen(true)
+  }, [working])
+
+  useEffect(() => {
+    if (prevWorking.current && !working) {
+      const timer = setTimeout(() => setOpen(false), 1000)
+      return () => clearTimeout(timer)
+    }
+    prevWorking.current = working
+  }, [working])
+
+  useEffect(() => {
+    setShowAll(false)
+  }, [parts.length])
+
+  const visibleParts = showAll ? parts : parts.slice(-MAX_VISIBLE_TOOLS)
+  const hiddenCount = parts.length - MAX_VISIBLE_TOOLS
+
+  const title = working
+    ? 'Trabalhando…'
+    : errors > 0
+      ? `${parts.length} ${parts.length === 1 ? 'ação' : 'ações'} · ${errors} com erro`
+      : `${parts.length} ${parts.length === 1 ? 'ação executada' : 'ações executadas'}`
 
   return (
     <View
@@ -296,52 +419,37 @@ function GenericToolView({ part }: { part: ToolPart }) {
           backgroundColor: hslToRgba(hsl(tokens.muted), 0.3),
         }}
       >
-        {part.state === 'running' ? (
+        {working ? (
           <ActivityIndicator size="small" style={{ transform: [{ scale: 0.75 }] }} color={tokens.primary} />
-        ) : part.state === 'error' ? (
-          <AlertCircle size={13} color={tokens.destructive} />
         ) : (
           <Terminal size={13} color={tokens.mutedForeground} />
         )}
-        <Text
-          style={{
-            fontSize: 12,
-            fontWeight: '600',
-            color: tokens.foreground,
-            flex: 1,
-            fontFamily: 'monospace',
-          }}
-        >
-          {part.title ?? part.tool}
-        </Text>
+        {working ? (
+          <View style={{ flex: 1 }}>
+            <Shimmer className="text-xs font-semibold">{title}</Shimmer>
+          </View>
+        ) : (
+          <Text style={{ fontSize: 12, fontWeight: '600', color: tokens.foreground, flex: 1 }}>{title}</Text>
+        )}
         {open ? (
           <ChevronDown size={14} color={tokens.mutedForeground} />
         ) : (
           <ChevronRight size={14} color={tokens.mutedForeground} />
         )}
       </TouchableOpacity>
-      {open && detail && (
-        <ScrollView
-          style={{
-            maxHeight: 200,
-            paddingHorizontal: 12,
-            paddingVertical: 8,
-            borderTopWidth: 1,
-            borderTopColor: hslToRgba(hsl(tokens.border), 0.3),
-            backgroundColor: hslToRgba(hsl(tokens.muted), 0.1),
-          }}
-        >
-          <Text
-            style={{
-              fontSize: 11,
-              fontFamily: 'monospace',
-              color: tokens.mutedForeground,
-              lineHeight: 16,
-            }}
-          >
-            {detail}
-          </Text>
-        </ScrollView>
+      {open && (
+        <View style={{ paddingHorizontal: 12, paddingBottom: 10 }}>
+          {visibleParts.map((part) => (
+            <ToolActionRow key={part.id} part={part} />
+          ))}
+          {hiddenCount > 0 && !showAll && (
+            <Pressable onPress={() => setShowAll(true)} style={{ marginTop: 8 }}>
+              <Text style={{ fontSize: 11, color: tokens.mutedForeground }}>
+                +{hiddenCount} {hiddenCount === 1 ? 'ação oculta' : 'ações ocultas'} — mostrar todas
+              </Text>
+            </Pressable>
+          )}
+        </View>
       )}
     </View>
   )
@@ -433,8 +541,11 @@ function SourcesBlock({ sources }: { sources: any[] }) {
 
 // ─── Segment Parts helper ────────────────────────────────────────────────────
 
+const SPECIAL_TOOLS = new Set(['subagent', 'todowrite', 'create_skill', 'show_image'])
+
 type Segment =
   | { kind: 'research'; id: string; parts: ToolPart[] }
+  | { kind: 'task'; id: string; parts: ToolPart[] }
   | { kind: 'part'; id: string; part: MessagePart }
 
 function segmentParts(parts: MessagePart[]): Segment[] {
@@ -442,11 +553,12 @@ function segmentParts(parts: MessagePart[]): Segment[] {
   for (const part of parts) {
     if (part.type === 'tool' && WEB_TOOLS.has(part.tool)) {
       const last = segments[segments.length - 1]
-      if (last?.kind === 'research') {
-        last.parts.push(part)
-      } else {
-        segments.push({ kind: 'research', id: part.id, parts: [part] })
-      }
+      if (last?.kind === 'research') last.parts.push(part)
+      else segments.push({ kind: 'research', id: part.id, parts: [part] })
+    } else if (part.type === 'tool' && !SPECIAL_TOOLS.has(part.tool)) {
+      const last = segments[segments.length - 1]
+      if (last?.kind === 'task') last.parts.push(part)
+      else segments.push({ kind: 'task', id: part.id, parts: [part] })
     } else {
       segments.push({ kind: 'part', id: part.id, part })
     }
@@ -472,12 +584,6 @@ export function ChatAssistantMessage({ message, compact, isLast, isBusy, onRever
     return <UserMessage message={message} />
   }
 
-  // Find index of the last research block to mute text before it (desktop style)
-  const lastToolIndex = segments.reduce(
-    (last, segment, i) => (segment.kind === 'research' ? i : last),
-    -1,
-  )
-
   return (
     <View className="self-start w-full py-2 my-1 items-start">
       {waiting && (
@@ -486,33 +592,30 @@ export function ChatAssistantMessage({ message, compact, isLast, isBusy, onRever
         </View>
       )}
 
-      {segments.map((segment, index) => {
+      {segments.map((segment) => {
         if (segment.kind === 'research') {
           return <ResearchBlock key={segment.id} parts={segment.parts} />
+        }
+        if (segment.kind === 'task') {
+          return <TaskGroup key={segment.id} parts={segment.parts} />
         }
 
         const part = segment.part
         switch (part.type) {
           case 'text':
-            // Durante o streaming renderiza texto puro — o parse de markdown
-            // a cada delta era o maior custo por frame; a formatação entra
-            // quando a parte fecha (state: done).
             return (
               <View key={part.id} className="w-full">
-                {part.state === 'streaming' ? (
-                  <Text className="text-sm leading-relaxed" style={{ color: tokens.foreground }}>
-                    {part.text}
-                    <Text style={{ color: tokens.primary }}> ▊</Text>
-                  </Text>
-                ) : (
-                  <AssistantMarkdown text={part.text} />
-                )}
+                <AssistantMarkdown text={part.text} streaming={part.state === 'streaming'} />
               </View>
             )
           case 'reasoning':
             return <ReasoningPartView key={part.id} part={part} />
           case 'tool':
-            return <GenericToolView key={part.id} part={part} />
+            if (part.tool === 'subagent') {
+              return <SubAgentCard key={part.id} part={part} />
+            }
+            // tools especiais que não entram no TaskGroup
+            return <TaskGroup key={part.id} parts={[part]} />
           case 'agent':
             return <AgentPartView key={part.id} part={part} />
           case 'image':
