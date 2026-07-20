@@ -84,8 +84,11 @@ export function QuestionItem({ question, selected, free, onToggle, onFree }: {
             <Button
               key={option}
               size="sm"
-              variant={selected.has(option) ? "secondary" : "outline"}
-              className="h-7 text-xs"
+              variant="outline"
+              className={cn(
+                "h-7 text-xs",
+                selected.has(option) && "border-primary bg-primary/10 text-primary hover:bg-primary/15",
+              )}
               onClick={() => onToggle(option)}
             >
               {option}
@@ -182,13 +185,24 @@ function QuestionBody({ ask, submitted, onReply }: {
         >
           Dispensar
         </Button>
-        <Button
-          size="sm"
-          disabled={submitted || !allAnswered}
-          onClick={() => onReply({ answers: questions.map(answerOf) })}
-        >
-          Responder
-        </Button>
+        {currentIndex < questions.length - 1 ? (
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={submitted}
+            onClick={() => setCurrentIndex((i) => Math.min(questions.length - 1, i + 1))}
+          >
+            Avançar
+          </Button>
+        ) : (
+          <Button
+            size="sm"
+            disabled={submitted || !allAnswered}
+            onClick={() => onReply({ answers: questions.map(answerOf) })}
+          >
+            Responder
+          </Button>
+        )}
       </div>
     </>
   )

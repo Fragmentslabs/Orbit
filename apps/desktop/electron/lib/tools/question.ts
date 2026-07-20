@@ -40,13 +40,13 @@ export function createQuestionTool(input: SendMessageInput, signal?: AbortSignal
 
   return tool({
     description:
-      'Faz perguntas estruturadas ao usuário. Use diante de decisões com múltiplas abordagens válidas, requisitos ambíguos ou escolhas que afetam o resultado — ofereça opções claras. NÃO use para confirmações triviais.',
+      'Faz perguntas estruturadas ao usuário. Use diante de decisões com múltiplas abordagens válidas, requisitos ambíguos ou escolhas que afetam o resultado — ofereça opções claras. NÃO use para confirmações triviais. IMPORTANTE: a pergunta (text) deve ser apenas a pergunta em si, SEM incluir exemplos ou opções — as opções devem ser fornecidas exclusivamente no campo "options".',
     inputSchema: z.object({
       questions: z
         .array(
           z.object({
-            text: z.string().describe('A pergunta, completa e específica'),
-            options: z.array(z.string()).optional().describe('Opções de resposta (2-4, curtas)'),
+            text: z.string().describe('A pergunta direta e objetiva, SEM incluir exemplos ou opções — elas vão no campo "options"'),
+            options: z.array(z.string()).optional().describe('Opções de resposta (2-4, curtas e diretas)'),
             multi: z.boolean().optional().describe('Permite selecionar múltiplas opções'),
           }),
         )
