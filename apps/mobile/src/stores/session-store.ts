@@ -270,7 +270,15 @@ export const useSessionStore = create<SessionState>((set, get) => ({
   selectSession: async (id) => {
     set({ activeSessionId: id })
     if (id) {
-      await get().fetchMessages(id)
+      // Carrega do cache primeiro (instantâneo), depois busca da rede
+      const cached = await loadCachedMessages(id)
+      if (cached) {
+        set((state) => ({
+          messages: { ...state.messages, [id]: cached },
+        }))
+      }
+      // Fetch da rede em background (atualiza quando chegar)
+      void get().fetchMessages(id)
     }
   },
 
