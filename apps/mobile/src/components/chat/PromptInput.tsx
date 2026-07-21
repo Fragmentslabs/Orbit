@@ -301,8 +301,6 @@ export function PromptInput({
     toggleMode(id)
   }, [toggleMode])
 
-  const sheetModes = modesList.filter((m) => m.id !== 'loop').map((mode) => ({ ...mode, active: activeModes[mode.id] ?? false }))
-
   return (
     <View className="px-3 py-1.5 relative overflow-visible"
       style={{ backgroundColor: tokens.background, borderTopWidth: 1, borderTopColor: tokens.border }}
@@ -471,20 +469,6 @@ export function PromptInput({
         onCamera={handleTakePhoto}
         onPhotos={handlePickPhotos}
         onFiles={handlePickFiles}
-        modes={sheetModes}
-        onToggleMode={toggleSheetMode}
-        plan={plan}
-        subagents={subagents}
-        orchestra={orchestra}
-        loop={loop}
-        onConfigureWorkers={() => {
-          setPlusOpen(false)
-          setWorkerConfigOpen(true)
-        }}
-        onConfigureLoop={() => {
-          setPlusOpen(false)
-          setLoopConfigOpen(true)
-        }}
       />
 
       <ConfigSheet
