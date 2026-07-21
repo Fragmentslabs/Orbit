@@ -482,6 +482,13 @@ export function PromptInput({
         onCamera={handleTakePhoto}
         onPhotos={handlePickPhotos}
         onFiles={handlePickFiles}
+        modes={[
+          workspaceMode === 'code' && { id: 'plan', icon: FileText, label: 'Modo Plano', active: plan, onToggle: () => setPlan((v) => !v) },
+          { id: 'subagents', icon: Bot, label: 'Subagentes', active: subagents, onToggle: () => setSubagents((v) => !v), onConfigure: () => { setPlusOpen(false); setWorkerConfigOpen(true) } },
+          { id: 'orchestra', icon: Network, label: 'Orquestração', active: orchestra, onToggle: () => setOrchestra((v) => !v), onConfigure: () => { setPlusOpen(false); setWorkerConfigOpen(true) } },
+          { id: 'loop', icon: RefreshCw, label: 'Loop', active: loop, onToggle: () => setLoop((v) => !v), onConfigure: () => { setPlusOpen(false); setLoopConfigOpen(true) } },
+        ].filter(Boolean) as any}
+        displayMode={displayMode}
       />
 
       <ConfigSheet
