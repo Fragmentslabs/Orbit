@@ -8,18 +8,6 @@ import { useAppearanceStore, type DisplayMode } from '~/stores/appearance-store'
 import { getThemeTokens } from '~/lib/theme-tokens'
 import { useThemeStore as useThemeTokensStore } from '~/stores/theme-store'
 
-const THEME_OPTIONS: { value: ThemePreference; label: string; icon: typeof Sun }[] = [
-  { value: 'light', label: 'Claro', icon: Sun },
-  { value: 'dark', label: 'Escuro', icon: Moon },
-  { value: 'system', label: 'Sistema', icon: Monitor },
-]
-
-const DISPLAY_OPTIONS: { value: DisplayMode; label: string; icon: typeof List; desc: string }[] = [
-  { value: 'toggles', label: 'Toggles', icon: List, desc: 'Modos como toggles inline. Configurações no gear.' },
-  { value: 'actions', label: 'Ações', icon: Square, desc: 'Sem toggles inline. Todos os modos no "+".' },
-  { value: 'both', label: 'Ambos', icon: Layers, desc: 'Toggles inline + modos avançados no "+".' },
-]
-
 export default function AppearanceScreen() {
   const router = useRouter()
   const systemScheme = useColorScheme()
@@ -29,6 +17,23 @@ export default function AppearanceScreen() {
   const displayMode = useAppearanceStore((s) => s.displayMode)
   const setDisplayMode = useAppearanceStore((s) => s.setDisplayMode)
   const tokens = getThemeTokens(useThemeTokensStore((s) => s.resolved))
+
+  const handleTheme = (value: ThemePreference) => {
+    setThemePref(value, systemIsDark)
+    Appearance.setColorScheme(value === 'system' ? (systemIsDark ? 'dark' : 'light') : value)
+  }
+
+  const themeChips: { value: ThemePreference; label: string; icon: typeof Sun }[] = [
+    { value: 'light', label: 'Claro', icon: Sun },
+    { value: 'dark', label: 'Escuro', icon: Moon },
+    { value: 'system', label: 'Sistema', icon: Monitor },
+  ]
+
+  const modeChips: { value: DisplayMode; label: string; icon: typeof List; hint: string }[] = [
+    { value: 'toggles', label: 'Toggles', icon: List, hint: 'Modos como toggles inline. Configurações avançadas no gear (⚙️).' },
+    { value: 'actions', label: 'Ações', icon: Square, hint: 'Sem toggles inline. Todos os modos no botão "+".' },
+    { value: 'both', label: 'Ambos', icon: Layers, hint: 'Toggles inline + modos avançados também no botão "+".' },
+  ]
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: tokens.background }} edges={['top']}>
@@ -44,45 +49,58 @@ export default function AppearanceScreen() {
         <Text style={[s.sectionTitle, { color: tokens.mutedForeground }]}>Tema</Text>
 
         <View style={[s.card, { borderColor: tokens.border, backgroundColor: tokens.card }]}>
-          {THEME_OPTIONS.map(({ value, label, icon: Icon }) => {
-            const active = themePref === value
-            return (
-              <Pressable
-                key={value}
-                onPress={() => {
-                  setThemePref(value, systemIsDark)
-                  Appearance.setColorScheme(value === 'system' ? (systemIsDark ? 'dark' : 'light') : value)
-                }}
-                style={[s.optionRow, active && { backgroundColor: tokens.primary + '18' }]}
-              >
-                <Icon size={18} color={active ? tokens.primary : tokens.mutedForeground} />
-                <Text style={[s.optionLabel, { color: tokens.foreground }]}>{label}</Text>
-                {active && <Text style={[s.check, { color: tokens.primary }]}>✓</Text>}
-              </Pressable>
-            )
-          })}
+          <View style={s.chipRow}>
+            {themeChips.map(({ value, label, icon: Icon }) => {
+              const active = themePref === value
+              return (
+                <Pressable
+                  key={value}
+                  onPress={() => handleTheme(value)}
+                  style={[
+                    s.chip,
+                    active
+                      ? { backgroundColor: tokens.background, borderColor: tokens.border }
+                      : { backgroundColor: tokens.muted, borderColor: tokens.border },
+                  ]}
+                >
+                  <Icon size={16} color={active ? tokens.primary : tokens.mutedForeground} />
+                  <Text style={[s.chipLabel, { color: active ? tokens.primary : tokens.mutedForeground }]}>
+                    {label}
+                  </Text>
+                </Pressable>
+              )
+            })}
+          </View>
         </View>
 
         <Text style={[s.sectionTitle, { color: tokens.mutedForeground, marginTop: 24 }]}>Modos de exibição</Text>
 
         <View style={[s.card, { borderColor: tokens.border, backgroundColor: tokens.card }]}>
-          {DISPLAY_OPTIONS.map(({ value, label, icon: Icon, desc }) => {
-            const active = displayMode === value
-            return (
-              <Pressable
-                key={value}
-                onPress={() => setDisplayMode(value)}
-                style={[s.optionRow, active && { backgroundColor: tokens.primary + '18' }]}
-              >
-                <Icon size={18} color={active ? tokens.primary : tokens.mutedForeground} />
-                <View style={{ flex: 1 }}>
-                  <Text style={[s.optionLabel, { color: tokens.foreground }]}>{label}</Text>
-                  <Text style={[s.optionDesc, { color: tokens.mutedForeground }]}>{desc}</Text>
-                </View>
-                {active && <Text style={[s.check, { color: tokens.primary }]}>✓</Text>}
-              </Pressable>
-            )
-          })}
+          <View style={s.chipRow}>
+            {modeChips.map(({ value, label, icon: Icon, hint }) => {
+              const active = displayMode === value
+              return (
+                <Pressable
+                  key={value}
+                  onPress={() => setDisplayMode(value)}
+                  style={[
+                    s.chip,
+                    active
+                      ? { backgroundColor: tokens.background, borderColor: tokens.border }
+                      : { backgroundColor: tokens.muted, borderColor: tokens.border },
+                  ]}
+                >
+                  <Icon size={16} color={active ? tokens.primary : tokens.mutedForeground} />
+                  <Text style={[s.chipLabel, { color: active ? tokens.primary : tokens.mutedForeground }]}>
+                    {label}
+                  </Text>
+                </Pressable>
+              )
+            })}
+          </View>
+          <Text style={[s.hint, { color: tokens.mutedForeground }]}>
+            {modeChips.find((c) => c.value === displayMode)?.hint}
+          </Text>
         </View>
       </ScrollView>
     </SafeAreaView>
@@ -94,9 +112,19 @@ const s = StyleSheet.create({
   backBtn: { padding: 6, borderRadius: 8 },
   headerTitle: { fontSize: 16, fontWeight: '600' },
   sectionTitle: { fontSize: 11, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 8 },
-  card: { borderRadius: 14, borderWidth: 1, overflow: 'hidden', marginBottom: 4 },
-  optionRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 16, paddingVertical: 14 },
-  optionLabel: { fontSize: 14, fontWeight: '500', flex: 1 },
-  optionDesc: { fontSize: 11, marginTop: 1 },
-  check: { fontSize: 16, fontWeight: '700' },
+  card: { borderRadius: 14, borderWidth: 1, padding: 14, marginBottom: 4 },
+  chipRow: { flexDirection: 'row', gap: 6 },
+  chip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    flex: 1,
+    justifyContent: 'center',
+    borderWidth: 1,
+  },
+  chipLabel: { fontSize: 12, fontWeight: '500' },
+  hint: { fontSize: 11, marginTop: 10, lineHeight: 16, opacity: 0.7 },
 })
