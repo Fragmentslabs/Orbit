@@ -7,6 +7,7 @@ import {
   ArrowLeft,
   Bell,
   BellOff,
+  BookOpen,
   RefreshCw,
   Wifi,
   Monitor,
@@ -284,6 +285,12 @@ export default function SettingsScreen() {
         <Text style={[s.sectionLabel, { color: tokens.mutedForeground }]}>Aparência</Text>
         <View style={[s.card, { borderColor: tokens.border, backgroundColor: tokens.card }]}>
           <Row icon={Palette} label="Tema" onPress={() => router.push('/(main)/theme')} chevron />
+        </View>
+
+        {/* ── Informações ──────────────────────────────────────────── */}
+        <Text style={[s.sectionLabel, { color: tokens.mutedForeground }]}>Informações</Text>
+        <View style={[s.card, { borderColor: tokens.border, backgroundColor: tokens.card }]}>
+          <Row icon={BookOpen} label="Como funciona" onPress={() => router.push('/(main)/howto')} chevron />
         </View>
 
         <View style={s.footer}>
