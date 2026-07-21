@@ -24,7 +24,7 @@ export function SimpleAssistantMessage({ message, isLast, isBusy, onRetry }: {
     <div className="flex w-full flex-col gap-1">
       {textParts.length === 0 && working && <Shimmer className="text-sm">Pensando…</Shimmer>}
       {textParts.map((part) => (
-        <AssistantMarkdown key={part.id}>{part.text}</AssistantMarkdown>
+        <AssistantMarkdown key={part.id}>{(part as { type: "text"; text: string }).text}</AssistantMarkdown>
       ))}
       {message.error && <MessageError error={message.error} onRetry={onRetry} />}
     </div>

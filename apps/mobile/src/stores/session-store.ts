@@ -26,7 +26,7 @@ import type {
 } from '@orbit/shared'
 import { Storage } from '~/lib/storage'
 import { useConnectionStore } from './connection-store'
-import { useMessageQueueStore } from './message-queue-store'
+import { useMessageQueueStore, __setSessionDeps } from './message-queue-store'
 import { useSettingsStore } from './settings-store'
 import { useChatStore, loadCachedAsks, CACHE_ASKS_PREFIX } from './chat-store'
 
@@ -837,3 +837,8 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     }
   },
 }))
+
+__setSessionDeps({
+  getStatus: (sessionId) => useSessionStore.getState().status[sessionId],
+  sendMessage: (text, config) => useSessionStore.getState().sendMessage(text, config),
+})
