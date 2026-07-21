@@ -2,7 +2,39 @@ import { create } from 'zustand'
 import type { FilePart, QueuedMessage, SessionMode, SendMessageOptions } from '@orbit/shared'
 import { MAX_QUEUE_RETRIES, StorageKeys } from '@orbit/shared'
 import { Storage } from '~/lib/storage'
-import { useSessionStore } from './session-store'
+
+// Injected deps to avoid circular import with session-store
+let _getStatus: ((sessionId: string) => string | undefined) | null = null
+let _sendMessage:
+  | ((
+      text: string,
+      config?: {
+        options?: SendMessageOptions
+        sessionId?: string
+        directory?: string
+        extraDirectories?: string[]
+        files?: FilePart[]
+      },
+    ) => Promise<void>)
+  | null = null
+
+/** Registered by session-store to break the import cycle. */
+export function __setSessionDeps(deps: {
+  getStatus: (sessionId: string) => string | undefined
+  sendMessage: (
+    text: string,
+    config?: {
+      options?: SendMessageOptions
+      sessionId?: string
+      directory?: string
+      extraDirectories?: string[]
+      files?: FilePart[]
+    },
+  ) => Promise<void>
+}) {
+  _getStatus = deps.getStatus
+  _sendMessage = deps.sendMessage
+}
 
 const QUEUE_STORAGE_KEY = StorageKeys.queuedMessages
 
@@ -136,8 +168,7 @@ export const useMessageQueueStore = create<MessageQueueState>((set, get) => ({
     const next = current[0]
     if (next.scheduledAt && next.scheduledAt > Date.now()) return
 
-    const sessionState = useSessionStore.getState()
-    const status = sessionState.status[sessionId]
+    const status = _getStatus ? _getStatus(sessionId) : undefined
     if (status && status !== 'idle' && status !== 'error') return
 
     const msg = get().dequeue(sessionId)
@@ -145,13 +176,15 @@ export const useMessageQueueStore = create<MessageQueueState>((set, get) => ({
 
     set((s) => ({ _pendingQueueSend: { ...s._pendingQueueSend, [sessionId]: msg } }))
 
-    void sessionState.sendMessage(msg.text, {
-      options: msg.options,
-      sessionId: msg.sessionId ?? sessionId,
-      directory: msg.directory,
-      extraDirectories: msg.extraDirectories,
-      files: msg.files,
-    })
+    if (_sendMessage) {
+      void _sendMessage(msg.text, {
+        options: msg.options,
+        sessionId: msg.sessionId ?? sessionId,
+        directory: msg.directory,
+        extraDirectories: msg.extraDirectories,
+        files: msg.files,
+      })
+    }
   },
 
   enqueueForSend: (sessionId, text, options, mode, extra) => {
@@ -186,8 +219,7 @@ export const useMessageQueueStore = create<MessageQueueState>((set, get) => ({
   },
 
   onSessionIdle: (sessionId) => {
-    const sessionState = useSessionStore.getState()
-    const status = sessionState.status[sessionId]
+    const status = _getStatus ? _getStatus(sessionId) : undefined
 
     if (status === 'error') {
       const pending = get()._pendingQueueSend[sessionId]

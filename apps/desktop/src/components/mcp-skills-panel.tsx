@@ -311,7 +311,7 @@ function McpServerDialog({ open, onOpenChange, initial }: {
                 <p className="text-xs font-medium">Modo de permissão</p>
                 <p className="text-[10px] text-muted-foreground">Override do modo global para tools deste servidor</p>
               </div>
-              <Select value={permissionMode} onValueChange={setPermissionMode}>
+              <Select value={permissionMode} onValueChange={(value) => setPermissionMode(value ?? '')}>
                 <SelectTrigger className="w-36">
                   <SelectValue placeholder="Herda do chat" />
                 </SelectTrigger>

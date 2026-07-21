@@ -83,7 +83,7 @@ function buildTransport(config: McpServerConfig) {
         if (k.trim() && v) headers[k.trim()] = v
       }
     }
-    return new StreamableHTTPClientTransport(new URL(config.url), { headers })
+    return new StreamableHTTPClientTransport(new URL(config.url), { requestInit: { headers } })
   }
   if (!config.command) throw new Error('servidor stdio sem command')
   const env: Record<string, string> = {}
@@ -92,10 +92,15 @@ function buildTransport(config: McpServerConfig) {
       if (k.trim() && v) env[k.trim()] = v
     }
   }
+  const merged: Record<string, string> = {}
+  if (Object.keys(env).length > 0) {
+    for (const [k, v] of Object.entries(process.env)) if (v) merged[k] = v
+    Object.assign(merged, env)
+  }
   return new StdioClientTransport({
     command: config.command,
     args: config.args ?? [],
-    env: Object.keys(env).length > 0 ? { ...process.env, ...env } : undefined,
+    env: Object.keys(merged).length > 0 ? merged : undefined,
     cwd: config.cwd || undefined,
   })
 }

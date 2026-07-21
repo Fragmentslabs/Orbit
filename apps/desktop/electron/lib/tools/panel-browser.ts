@@ -105,7 +105,7 @@ export function createPanelBrowserTools(ctx: ToolContext): ToolSet {
           .boolean()
           .optional()
           .describe('Captura em tela cheia (print maior) e retorna à visão lateral'),
-      }),
+      }) as any,
       execute: async ({ savePath, fullscreen }, { toolCallId }) => {
         const webp = await panelScreenshot(fullscreen === true)
         screenshotStash.set(toolCallId, webp.toString('base64'))
@@ -124,18 +124,18 @@ export function createPanelBrowserTools(ctx: ToolContext): ToolSet {
         screenshotStash.delete(toolCallId)
         if (!base64) return { type: 'text', value: String(output) }
         const raw = Buffer.from(base64, 'base64')
-        const value: { type: string; data?: { type: string; data: string }; mediaType?: string; text?: string }[] = [
+        const parts: ({ type: 'text'; text: string } | { type: 'image-data'; data: string; mediaType: string })[] = [
           { type: 'text', text: String(output) },
         ]
         if (raw.length <= MAX_MODEL_IMAGE_BYTES) {
-          value.push({ type: 'file', data: { type: 'data', data: base64 }, mediaType: 'image/webp' })
+          parts.push({ type: 'image-data', data: base64, mediaType: 'image/webp' })
         } else {
-          value.push({
+          parts.push({
             type: 'text',
             text: `[Screenshot omitido: ${Math.round(raw.length / 1024)}KB — excede o limite de ${Math.round(MAX_MODEL_IMAGE_BYTES / 1024)}KB. O print foi salvo em disco se savePath foi informado.]`,
           })
         }
-        return { type: 'content', value }
+        return { type: 'content', value: parts }
       },
     }),
     show_image: tool({

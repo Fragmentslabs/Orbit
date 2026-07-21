@@ -1,5 +1,15 @@
+import tailwindcss from '@tailwindcss/postcss'
+
 export default {
-  plugins: {
-    "@tailwindcss/postcss": {},
-  },
-};
+  plugins: [
+    tailwindcss(),
+    {
+      postcssPlugin: 'remove-property-atrules',
+      AtRule: {
+        property: (atRule) => {
+          atRule.remove()
+        },
+      },
+    },
+  ],
+}
