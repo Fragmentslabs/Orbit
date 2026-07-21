@@ -21,7 +21,8 @@ interface AttachmentSheetProps {
   onCamera: () => void
   onPhotos: () => void
   onFiles: () => void
-  modes?: ModeItem[]
+  simpleModes?: ModeItem[]
+  configModes?: ModeItem[]
   displayMode?: DisplayMode
 }
 
@@ -33,7 +34,8 @@ export function AttachmentSheet({
   onCamera,
   onPhotos,
   onFiles,
-  modes,
+  simpleModes,
+  configModes,
   displayMode,
 }: AttachmentSheetProps) {
   const tokens = getThemeTokens(useThemeStore((s) => s.resolved))
@@ -41,8 +43,10 @@ export function AttachmentSheet({
   const [slideAnim] = useState(() => new Animated.Value(SHEET_HEIGHT))
   const [backdropAnim] = useState(() => new Animated.Value(0))
 
-  const showModes = modes && modes.length > 0 && (displayMode === 'actions' || displayMode === 'both')
-  const sheetHeight = showModes ? 420 : 200
+  const showModes = displayMode === 'actions' || displayMode === 'both'
+  const hasSimple = showModes && simpleModes && simpleModes.length > 0
+  const hasConfig = showModes && configModes && configModes.length > 0
+  const sheetHeight = showModes ? 500 : 200
 
   useEffect(() => {
     Animated.parallel([
@@ -79,33 +83,46 @@ export function AttachmentSheet({
           <SheetAction icon={Paperclip} label="Arquivos" onPress={onFiles} tokens={tokens} />
         </View>
 
-        {showModes && modes && (
+        {hasSimple && simpleModes && (
           <View style={s.modesList}>
-            {modes.map((mode) => (
-              <View key={mode.id} style={[s.modeRow, { backgroundColor: tokens.border }]}>
-                <Pressable onPress={mode.onToggle} style={s.modeRowLeft}>
-                  <mode.icon size={18} color={tokens.mutedForeground} />
-                  <Text style={[s.modeLabel, { color: tokens.foreground }]}>{mode.label}</Text>
-                </Pressable>
-                <View style={s.modeRowRight}>
-                  {mode.onConfigure && mode.active && (
-                    <Pressable onPress={mode.onConfigure} hitSlop={8} style={[s.gearBtn, { backgroundColor: tokens.muted }]}>
-                      <Settings2 size={16} color={tokens.mutedForeground} />
-                    </Pressable>
-                  )}
-                  <Switch
-                    value={mode.active}
-                    onValueChange={mode.onToggle}
-                    trackColor={{ false: tokens.muted, true: tokens.primary }}
-                    thumbColor={tokens.foreground}
-                  />
-                </View>
-              </View>
-            ))}
+            {simpleModes.map((mode) => <ModeRow key={mode.id} mode={mode} tokens={tokens} />)}
           </View>
+        )}
+
+        {hasConfig && configModes && (
+          <>
+            <View style={[s.divider, { backgroundColor: tokens.border }]} />
+            <View style={s.modesList}>
+              {configModes.map((mode) => <ModeRow key={mode.id} mode={mode} tokens={tokens} />)}
+            </View>
+          </>
         )}
       </Animated.View>
     </Modal>
+  )
+}
+
+function ModeRow({ mode, tokens }: { mode: ModeItem; tokens: ReturnType<typeof getThemeTokens> }) {
+  return (
+    <View style={[s.modeRow, { backgroundColor: tokens.border }]}>
+      <Pressable onPress={mode.onToggle} style={s.modeRowLeft}>
+        <mode.icon size={18} color={tokens.mutedForeground} />
+        <Text style={[s.modeLabel, { color: tokens.foreground }]}>{mode.label}</Text>
+      </Pressable>
+      <View style={s.modeRowRight}>
+        {mode.onConfigure && mode.active && (
+          <Pressable onPress={mode.onConfigure} hitSlop={8} style={[s.gearBtn, { backgroundColor: tokens.muted }]}>
+            <Settings2 size={16} color={tokens.mutedForeground} />
+          </Pressable>
+        )}
+        <Switch
+          value={mode.active}
+          onValueChange={mode.onToggle}
+          trackColor={{ false: tokens.muted, true: tokens.primary }}
+          thumbColor={tokens.foreground}
+        />
+      </View>
+    </View>
   )
 }
 
@@ -157,6 +174,7 @@ const s = StyleSheet.create({
   },
   actionLabel: { fontSize: 12, fontWeight: '500' },
   modesList: { gap: 8, paddingTop: 12 },
+  divider: { height: 1, marginVertical: 8 },
   modeRow: {
     flexDirection: 'row',
     alignItems: 'center',
