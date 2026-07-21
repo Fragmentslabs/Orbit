@@ -3,6 +3,7 @@ import { View, Text, ScrollView, Pressable, Switch, StyleSheet } from 'react-nat
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { useRouter } from 'expo-router'
 import { Image } from 'expo-image'
+import { Appearance, useColorScheme } from 'react-native'
 import {
   ArrowLeft,
   Bell,
@@ -19,16 +20,21 @@ import {
   AlignLeft,
   MessageCircle,
   Puzzle,
-  Palette,
   AlertTriangle,
   ChevronRight,
+  Sun,
+  Moon,
+  List,
+  Square,
+  Layers,
 } from 'lucide-react-native'
 import { useConnectionStore } from '~/stores/connection-store'
-import { useNotificationPrefsStore } from '~/stores/notification-prefs-store'
 import { useSettingsStore } from '~/stores/settings-store'
+import { useAppearanceStore } from '~/stores/appearance-store'
+import { useThemeStore, type ThemePreference } from '~/stores/theme-store'
 import { Spin } from '~/components/ui/spin'
 import { getThemeTokens, type ThemeTokens } from '~/lib/theme-tokens'
-import { useThemeStore } from '~/stores/theme-store'
+import { useNotificationPrefsStore } from '~/stores/notification-prefs-store'
 
 interface CompanionPreferences {
   brain: boolean
@@ -70,6 +76,13 @@ export default function SettingsScreen() {
 
   const notificationPrefs = useNotificationPrefsStore((s) => s.prefs)
   const setNotificationPref = useNotificationPrefsStore((s) => s.setPref)
+
+  const systemScheme = useColorScheme()
+  const systemIsDark = systemScheme !== 'light'
+  const themePref = useThemeStore((s) => s.preference)
+  const setThemePref = useThemeStore((s) => s.setPreference)
+  const displayMode = useAppearanceStore((s) => s.displayMode)
+  const setDisplayMode = useAppearanceStore((s) => s.setDisplayMode)
 
   const [refreshing, setRefreshing] = useState(false)
   const tokens = getThemeTokens(useThemeStore((s) => s.resolved))
@@ -281,10 +294,67 @@ export default function SettingsScreen() {
           />
         </View>
 
-        {/* ── Aparência (local, não sincroniza) ───────────────────── */}
+        {/* ── Aparência ──────────────────────────────────────────── */}
         <Text style={[s.sectionLabel, { color: tokens.mutedForeground }]}>Aparência</Text>
-        <View style={[s.card, { borderColor: tokens.border, backgroundColor: tokens.card }]}>
-          <Row icon={Palette} label="Tema" onPress={() => router.push('/(main)/theme')} chevron />
+        <View style={[s.card, { borderColor: tokens.border, backgroundColor: tokens.card, padding: 16, gap: 12 }]}>
+          <Text style={[s.cardLabel, { color: tokens.foreground }]}>Tema</Text>
+          <View style={s.permissionRow}>
+            {(['light', 'dark', 'system'] as ThemePreference[]).map((value) => {
+              const active = themePref === value
+              const icons = { light: Sun, dark: Moon, system: Monitor }
+              const labels = { light: 'Claro', dark: 'Escuro', system: 'Sistema' }
+              const Icon = icons[value]
+              return (
+                <Pressable
+                  key={value}
+                  onPress={() => {
+                    setThemePref(value, systemIsDark)
+                    Appearance.setColorScheme(value === 'system' ? (systemIsDark ? 'dark' : 'light') : value)
+                  }}
+                  style={[
+                    s.permissionChip,
+                    active
+                      ? { backgroundColor: tokens.background, borderColor: tokens.border }
+                      : { backgroundColor: tokens.muted, borderColor: tokens.border },
+                  ]}
+                >
+                  <Icon size={16} color={active ? tokens.primary : tokens.mutedForeground} />
+                  <Text style={[s.permissionChipLabel, { color: active ? tokens.primary : tokens.mutedForeground }]}>
+                    {labels[value]}
+                  </Text>
+                </Pressable>
+              )
+            })}
+          </View>
+
+          <RowDivider />
+
+          <Text style={[s.cardLabel, { color: tokens.foreground }]}>Modos de exibição</Text>
+          <View style={s.permissionRow}>
+            {(['toggles', 'actions', 'both'] as const).map((value) => {
+              const active = displayMode === value
+              const icons = { toggles: List, actions: Square, both: Layers }
+              const labels = { toggles: 'Toggles', actions: 'Ações', both: 'Ambos' }
+              const Icon = icons[value]
+              return (
+                <Pressable
+                  key={value}
+                  onPress={() => setDisplayMode(value)}
+                  style={[
+                    s.permissionChip,
+                    active
+                      ? { backgroundColor: tokens.background, borderColor: tokens.border }
+                      : { backgroundColor: tokens.muted, borderColor: tokens.border },
+                  ]}
+                >
+                  <Icon size={16} color={active ? tokens.primary : tokens.mutedForeground} />
+                  <Text style={[s.permissionChipLabel, { color: active ? tokens.primary : tokens.mutedForeground }]}>
+                    {labels[value]}
+                  </Text>
+                </Pressable>
+              )
+            })}
+          </View>
         </View>
 
         {/* ── Informações ──────────────────────────────────────────── */}
@@ -390,6 +460,23 @@ const s = StyleSheet.create({
     borderWidth: 1,
     overflow: 'hidden',
   },
+  cardLabel: { fontSize: 13, fontWeight: '600' },
+  permissionRow: {
+    flexDirection: 'row',
+    gap: 6,
+  },
+  permissionChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    flex: 1,
+    justifyContent: 'center',
+    borderWidth: 1,
+  },
+  permissionChipLabel: { fontSize: 12, fontWeight: '500' },
   row: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 16, paddingVertical: 13 },
   rowDivider: { height: 1, marginLeft: 46 },
   rowLabel: { fontSize: 14 },
