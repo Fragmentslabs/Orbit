@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Modal, View, Text, Pressable, Animated, Switch, StyleSheet, ScrollView, Dimensions } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
-import { Shield, ShieldCheck, ShieldOff, Brain, Check, Bot, Network, FileText, RefreshCw, ChevronRight } from 'lucide-react-native'
+import { Shield, ShieldCheck, ShieldOff, Brain, Check, Bot, Network, FileText, RefreshCw, ChevronRight, Settings2 } from 'lucide-react-native'
 import type { LucideIcon } from 'lucide-react-native'
 import type { ModelVariant } from '@orbit/shared'
 import { getThemeTokens } from '~/lib/theme-tokens'
@@ -19,31 +19,25 @@ const PERMISSION_MODES: { id: PermissionModeValue; label: string; icon: LucideIc
 interface Props {
   visible: boolean
   onClose: () => void
-  /** Permission mode (code only) */
   permissionMode: PermissionModeValue
   onPermissionModeChange: (mode: PermissionModeValue) => void
-  /** Thinking / reasoning */
   thinking: boolean
   onThinkingToggle: () => void
   reasoningVariants: ModelVariant[]
   reasoningSelected: string | undefined
   onReasoningSelect: (variantId: string) => void
   reasoningAlwaysOn?: boolean
-  /** Subagents */
   subagents: boolean
   onSubagentsToggle: () => void
-  /** Orchestra */
   orchestra: boolean
   onOrchestraToggle: () => void
-  /** Modo Plano (só leitura) */
   plan: boolean
   onPlanToggle: () => void
-  /** Loop */
   loop: boolean
   onLoopToggle: () => void
-  /** Label do modelo configurado nos workers (null = "usar o mesmo do chat") */
   workerModelLabel: string | null
   onConfigureWorkers: () => void
+  onConfigureLoop?: () => void
 }
 
 const SHEET_HEIGHT = Math.min(Dimensions.get('window').height * 0.72, 560)
@@ -69,6 +63,7 @@ export function ConfigSheet({
   onLoopToggle,
   workerModelLabel,
   onConfigureWorkers,
+  onConfigureLoop,
 }: Props) {
   const tokens = getThemeTokens(useThemeStore((s) => s.resolved))
   const insets = useSafeAreaInsets()
@@ -264,16 +259,23 @@ export function ConfigSheet({
                 <RefreshCw size={18} color={tokens.mutedForeground} />
                 <Text style={[s.cardLabel, { color: tokens.foreground }]}>Loop</Text>
               </View>
-              <Switch
-                value={loop}
-                onValueChange={onLoopToggle}
-                trackColor={{ false: tokens.muted, true: tokens.primary }}
-                thumbColor={tokens.foreground}
-              />
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                {loop && onConfigureLoop && (
+                  <Pressable onPress={onConfigureLoop} hitSlop={8} style={[s.gearBtn, { backgroundColor: tokens.muted }]}>
+                    <Settings2 size={16} color={tokens.mutedForeground} />
+                  </Pressable>
+                )}
+                <Switch
+                  value={loop}
+                  onValueChange={onLoopToggle}
+                  trackColor={{ false: tokens.muted, true: tokens.primary }}
+                  thumbColor={tokens.foreground}
+                />
+              </View>
             </View>
             {loop && (
               <Text style={[s.hint, { color: tokens.mutedForeground }]}>
-                Agente revisa e itera até completar a tarefa. Configure os limites no desktop.
+                Agente revisa e itera até completar a tarefa.
               </Text>
             )}
           </View>
@@ -368,4 +370,11 @@ const s = StyleSheet.create({
     borderWidth: 1,
   },
   modelCardLabel: { fontSize: 13, fontWeight: '500', flex: 1 },
+  gearBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
 })

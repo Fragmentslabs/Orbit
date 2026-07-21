@@ -372,6 +372,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     const workerModel = usesWorkers && settings.workerModel
       ? { ...settings.workerModel, reasoning: settings.workerReasoning ?? undefined }
       : undefined
+    const loopConfig = config?.options?.loop ? settings.loopConfig : undefined
     try {
       await wsClient.send({
         type: 'messages:send',
@@ -382,9 +383,10 @@ export const useSessionStore = create<SessionState>((set, get) => ({
         options: config?.options,
         files: config?.files,
         workerModel,
+        loopConfig,
         directory: config?.directory,
         extraDirectories: config?.extraDirectories,
-      })
+      } as any)
     } catch (err) {
       set((state) => ({
         status: { ...state.status, [sessionId]: 'error' },

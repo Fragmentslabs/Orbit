@@ -26,6 +26,7 @@ interface AttachmentSheetProps {
   orchestra: boolean
   loop: boolean
   onConfigureWorkers: () => void
+  onConfigureLoop?: () => void
 }
 
 const SHEET_HEIGHT = Math.min(Dimensions.get('window').height * 0.72, 560)
@@ -43,6 +44,7 @@ export function AttachmentSheet({
   orchestra,
   loop,
   onConfigureWorkers,
+  onConfigureLoop,
 }: AttachmentSheetProps) {
   const tokens = getThemeTokens(useThemeStore((s) => s.resolved))
   const insets = useSafeAreaInsets()
@@ -138,9 +140,8 @@ export function AttachmentSheet({
             label="Loop"
             active={loop}
             onToggle={() => onToggleMode('loop')}
-            onConfigure={undefined as any}
+            onConfigure={onConfigureLoop ?? (() => {})}
             tokens={tokens}
-            hideGear
           />
         </View>
       </Animated.View>

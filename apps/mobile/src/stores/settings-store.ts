@@ -8,6 +8,17 @@ const PROVIDERS_CACHE_KEY = 'orbit_providers_cache'
 const SELECTED_MODEL_CACHE_KEY = 'orbit_selected_model_cache'
 const WORKER_MODEL_KEY = 'orbit_worker_model'
 const WORKER_REASONING_KEY = 'orbit_worker_reasoning'
+const LOOP_CONFIG_KEY = 'orbit_loop_config'
+
+export interface LoopConfig {
+  maxIterations: number
+  autoReview: boolean
+}
+
+const DEFAULT_LOOP_CONFIG: LoopConfig = {
+  maxIterations: 3,
+  autoReview: true,
+}
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -55,6 +66,11 @@ interface SettingsState {
   /** Define (ou limpa) o thinking dos workers. */
   setWorkerReasoning: (reasoning: ReasoningConfig | null) => Promise<void>
 
+  /** Configuração do modo loop. */
+  loopConfig: LoopConfig
+  /** Define a configuração do loop. */
+  setLoopConfig: (config: LoopConfig) => Promise<void>
+
   /** Retorna modelo como lista plana (catálogo). */
   getModelList: () => CatalogModel[]
 }
@@ -69,6 +85,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
   loading: false,
   workerModel: null,
   workerReasoning: null,
+  loopConfig: DEFAULT_LOOP_CONFIG,
 
   fetchSelectedModel: async () => {
     const { http } = useConnectionStore.getState()
@@ -156,6 +173,11 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
     }
   },
 
+  setLoopConfig: async (config) => {
+    set({ loopConfig: config })
+    await Storage.setItem(LOOP_CONFIG_KEY, JSON.stringify(config))
+  },
+
   fetchConnectedProviders: async () => {
     const { http } = useConnectionStore.getState()
     if (!http) return
@@ -207,3 +229,13 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
     return models
   },
 }))
+
+// Load persisted loop config
+Storage.getItem(LOOP_CONFIG_KEY).then((raw) => {
+  if (raw) {
+    try {
+      const parsed = JSON.parse(raw) as LoopConfig
+      useSettingsStore.setState({ loopConfig: { ...DEFAULT_LOOP_CONFIG, ...parsed } })
+    } catch { /* ignore */ }
+  }
+}).catch(() => {})

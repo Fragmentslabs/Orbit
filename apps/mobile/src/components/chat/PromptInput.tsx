@@ -25,6 +25,7 @@ import { ContextMeter } from './ContextMeter'
 import { ModelPicker } from './ModelPicker'
 import { AttachmentSheet } from './AttachmentSheet'
 import { WorkerModelModal } from './WorkerModelModal'
+import { LoopConfigModal } from './LoopConfigModal'
 import { InputAttachment } from './Attachment'
 import { ConfigSheet } from './ConfigSheet'
 import { SlashPalette } from './SlashPalette'
@@ -77,6 +78,7 @@ export function PromptInput({
   const [plusOpen, setPlusOpen] = useState(false)
   const [configOpen, setConfigOpen] = useState(false)
   const [workerConfigOpen, setWorkerConfigOpen] = useState(false)
+  const [loopConfigOpen, setLoopConfigOpen] = useState(false)
   const [isFocused, setIsFocused] = useState(false)
   const workspaceMode = useWorkspaceStore((s) => s.mode)
   const tokens = getThemeTokens(useThemeStore((s) => s.resolved))
@@ -479,6 +481,10 @@ export function PromptInput({
           setPlusOpen(false)
           setWorkerConfigOpen(true)
         }}
+        onConfigureLoop={() => {
+          setPlusOpen(false)
+          setLoopConfigOpen(true)
+        }}
       />
 
       <ConfigSheet
@@ -505,9 +511,14 @@ export function PromptInput({
           setConfigOpen(false)
           setWorkerConfigOpen(true)
         }}
+        onConfigureLoop={() => {
+          setConfigOpen(false)
+          setLoopConfigOpen(true)
+        }}
       />
 
       <WorkerModelModal visible={workerConfigOpen} onClose={() => setWorkerConfigOpen(false)} />
+      <LoopConfigModal visible={loopConfigOpen} onClose={() => setLoopConfigOpen(false)} />
       <ScheduleSheet
         visible={scheduleSheetVisible}
         onClose={() => setScheduleSheetVisible(false)}
