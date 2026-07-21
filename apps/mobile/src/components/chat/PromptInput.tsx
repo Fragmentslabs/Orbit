@@ -301,7 +301,7 @@ export function PromptInput({
     toggleMode(id)
   }, [toggleMode])
 
-  const sheetModes = modesList.map((mode) => ({ ...mode, active: activeModes[mode.id] ?? false }))
+  const sheetModes = modesList.filter((m) => m.id !== 'loop').map((mode) => ({ ...mode, active: activeModes[mode.id] ?? false }))
 
   return (
     <View className="px-3 py-1.5 relative overflow-visible"
