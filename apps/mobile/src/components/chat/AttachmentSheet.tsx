@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { Modal, View, Text, Pressable, Animated, Switch, StyleSheet, Dimensions } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import type { LucideIcon } from 'lucide-react-native'
-import { Camera, Image as ImageIcon, Paperclip, Settings2, Bot, Network, FileText } from 'lucide-react-native'
+import { Camera, Image as ImageIcon, Paperclip, Settings2, Bot, Network, FileText, RefreshCw } from 'lucide-react-native'
 import { getThemeTokens } from '~/lib/theme-tokens'
 import { useThemeStore } from '~/stores/theme-store'
 
@@ -24,6 +24,7 @@ interface AttachmentSheetProps {
   plan: boolean
   subagents: boolean
   orchestra: boolean
+  loop: boolean
   onConfigureWorkers: () => void
 }
 
@@ -40,6 +41,7 @@ export function AttachmentSheet({
   plan,
   subagents,
   orchestra,
+  loop,
   onConfigureWorkers,
 }: AttachmentSheetProps) {
   const tokens = getThemeTokens(useThemeStore((s) => s.resolved))
@@ -130,6 +132,15 @@ export function AttachmentSheet({
             onToggle={() => onToggleMode('orchestra')}
             onConfigure={onConfigureWorkers}
             tokens={tokens}
+          />
+          <WorkerModeCard
+            icon={RefreshCw}
+            label="Loop"
+            active={loop}
+            onToggle={() => onToggleMode('loop')}
+            onConfigure={undefined as any}
+            tokens={tokens}
+            hideGear
           />
         </View>
       </Animated.View>

@@ -15,6 +15,7 @@ import {
   ArrowUp,
   Square,
   Settings2,
+  RefreshCw,
 } from 'lucide-react-native'
 import { Image } from 'expo-image'
 import type { SendMessageOptions, FilePart, SessionInfo } from '@orbit/shared'
@@ -70,6 +71,7 @@ export function PromptInput({
   const [plan, setPlan] = useState(false)
   const [subagents, setSubagents] = useState(false)
   const [orchestra, setOrchestra] = useState(false)
+  const [loop, setLoop] = useState(false)
   const [attachments, setAttachments] = useState<FilePart[]>([])
   const [isLoadingFile, setIsLoadingFile] = useState(false)
   const [plusOpen, setPlusOpen] = useState(false)
@@ -204,6 +206,7 @@ export function PromptInput({
       plan: workspaceMode === 'code' ? plan : undefined,
       subagents,
       orchestrate: orchestra ? {} : undefined,
+      loop,
       permissionMode: workspaceMode === 'code' ? permissionMode : undefined,
     }
 
@@ -215,7 +218,7 @@ export function PromptInput({
     setText('')
     setAttachments([])
     setPlusOpen(false)
-  }, [text, isStreaming, disabled, onSend, activeModes, plan, subagents, orchestra, attachments, workspaceMode, permissionMode, thinking, variantId])
+  }, [text, isStreaming, disabled, onSend, activeModes, plan, subagents, orchestra, loop, attachments, workspaceMode, permissionMode, thinking, variantId])
 
   const buildOptions = useCallback(() => {
     return {
@@ -227,9 +230,10 @@ export function PromptInput({
       plan: workspaceMode === 'code' ? plan : undefined,
       subagents,
       orchestrate: orchestra ? {} : undefined,
+      loop,
       permissionMode: workspaceMode === 'code' ? permissionMode : undefined,
     } satisfies SendMessageOptions
-  }, [activeModes, thinking, variantId, plan, subagents, orchestra, workspaceMode, permissionMode])
+  }, [activeModes, thinking, variantId, plan, subagents, orchestra, loop, workspaceMode, permissionMode])
 
   const enqueueForSend = useMessageQueueStore((s) => s.enqueueForSend)
   const enqueueScheduled = useMessageQueueStore((s) => s.enqueueScheduled)
@@ -284,12 +288,14 @@ export function PromptInput({
     { id: 'browser', icon: Globe, label: 'Browser' },
     { id: 'simple', icon: AlignLeft, label: 'Simples' },
     { id: 'brain', icon: BrainCircuit, label: 'Memória' },
+    { id: 'loop', icon: RefreshCw, label: 'Loop' },
   ]
 
   const toggleSheetMode = useCallback((id: string) => {
     if (id === 'subagents') return setSubagents((prev) => !prev)
     if (id === 'orchestra') return setOrchestra((prev) => !prev)
     if (id === 'plan') return setPlan((prev) => !prev)
+    if (id === 'loop') return setLoop((prev) => !prev)
     toggleMode(id)
   }, [toggleMode])
 
@@ -392,6 +398,7 @@ export function PromptInput({
             {plan && <FileText size={15} color={tokens.primary} />}
             {subagents && <Bot size={15} color={tokens.primary} />}
             {orchestra && <Network size={15} color={tokens.primary} />}
+            {loop && <RefreshCw size={15} color={tokens.primary} />}
 
             {/* Model Picker */}
             <ModelPicker />
@@ -467,6 +474,7 @@ export function PromptInput({
         plan={plan}
         subagents={subagents}
         orchestra={orchestra}
+        loop={loop}
         onConfigureWorkers={() => {
           setPlusOpen(false)
           setWorkerConfigOpen(true)
@@ -490,6 +498,8 @@ export function PromptInput({
         onOrchestraToggle={() => setOrchestra((prev) => !prev)}
         plan={plan}
         onPlanToggle={() => setPlan((prev) => !prev)}
+        loop={loop}
+        onLoopToggle={() => setLoop((prev) => !prev)}
         workerModelLabel={workerModelLabel}
         onConfigureWorkers={() => {
           setConfigOpen(false)

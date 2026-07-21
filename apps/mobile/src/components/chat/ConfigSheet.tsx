@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Modal, View, Text, Pressable, Animated, Switch, StyleSheet, ScrollView, Dimensions } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
-import { Shield, ShieldCheck, ShieldOff, Brain, Check, Bot, Network, FileText, ChevronRight } from 'lucide-react-native'
+import { Shield, ShieldCheck, ShieldOff, Brain, Check, Bot, Network, FileText, RefreshCw, ChevronRight } from 'lucide-react-native'
 import type { LucideIcon } from 'lucide-react-native'
 import type { ModelVariant } from '@orbit/shared'
 import { getThemeTokens } from '~/lib/theme-tokens'
@@ -38,6 +38,9 @@ interface Props {
   /** Modo Plano (só leitura) */
   plan: boolean
   onPlanToggle: () => void
+  /** Loop */
+  loop: boolean
+  onLoopToggle: () => void
   /** Label do modelo configurado nos workers (null = "usar o mesmo do chat") */
   workerModelLabel: string | null
   onConfigureWorkers: () => void
@@ -62,6 +65,8 @@ export function ConfigSheet({
   onOrchestraToggle,
   plan,
   onPlanToggle,
+  loop,
+  onLoopToggle,
   workerModelLabel,
   onConfigureWorkers,
 }: Props) {
@@ -249,6 +254,27 @@ export function ConfigSheet({
                 </Text>
                 <ChevronRight size={14} color={tokens.mutedForeground} />
               </Pressable>
+            )}
+          </View>
+
+          {/* Loop */}
+          <View style={[s.card, { borderColor: tokens.border }]}>
+            <View style={s.cardRow}>
+              <View style={s.cardRowLeft}>
+                <RefreshCw size={18} color={tokens.mutedForeground} />
+                <Text style={[s.cardLabel, { color: tokens.foreground }]}>Loop</Text>
+              </View>
+              <Switch
+                value={loop}
+                onValueChange={onLoopToggle}
+                trackColor={{ false: tokens.muted, true: tokens.primary }}
+                thumbColor={tokens.foreground}
+              />
+            </View>
+            {loop && (
+              <Text style={[s.hint, { color: tokens.mutedForeground }]}>
+                Agente revisa e itera até completar a tarefa. Configure os limites no desktop.
+              </Text>
             )}
           </View>
         </ScrollView>
