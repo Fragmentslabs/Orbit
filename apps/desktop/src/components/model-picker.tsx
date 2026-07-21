@@ -25,6 +25,7 @@ const MAX_MODELS_PER_PROVIDER = 40
 export function ModelPicker() {
   const [open, setOpen] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const [skipFinalFocus, setSkipFinalFocus] = useState(false)
   const catalog = useProviderStore((s) => s.catalog)
   const connectedProviders = useProviderStore((s) => s.connectedProviders)
   const selected = useProviderStore((s) => s.selectedModel)
@@ -49,7 +50,7 @@ export function ModelPicker() {
 
   return (
     <>
-      <ModelSelector onOpenChange={setOpen} open={open}>
+      <ModelSelector open={open} onOpenChange={setOpen}>
         <ModelSelectorTrigger render={<Button className="h-7 gap-1 px-1.5 text-xs" variant="ghost" />}>
           <ModelSelectorLogo provider={selected?.providerId ?? "openai"} />
           <ModelSelectorName>
@@ -57,7 +58,7 @@ export function ModelPicker() {
           </ModelSelectorName>
           <ChevronDownIcon className="size-3 text-muted-foreground" />
         </ModelSelectorTrigger>
-        <ModelSelectorContent>
+        <ModelSelectorContent finalFocus={skipFinalFocus ? false : undefined}>
           <ModelSelectorInput placeholder="Pesquisar modelos…" />
           <ModelSelectorList>
             <ModelSelectorEmpty>Nenhum modelo encontrado.</ModelSelectorEmpty>
@@ -92,8 +93,11 @@ export function ModelPicker() {
               variant="ghost"
               className="w-full justify-start gap-2 text-xs"
               onClick={() => {
+                setSkipFinalFocus(true)
                 setOpen(false)
-                setSettingsOpen(true)
+                // Aguarda o dialog de seleção fechar completamente (animação ~100ms)
+                // para evitar conflito de foco com o input autofocus do settings.
+                setTimeout(() => setSettingsOpen(true), 120)
               }}
             >
               <SettingsIcon className="size-3.5" />
@@ -102,7 +106,7 @@ export function ModelPicker() {
           </div>
         </ModelSelectorContent>
       </ModelSelector>
-      <SettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} />
+      <SettingsDialog open={settingsOpen} onOpenChange={(next) => { setSettingsOpen(next); if (!next) setSkipFinalFocus(false) }} />
     </>
   )
 }
