@@ -39,6 +39,11 @@ export default function HowToScreen() {
   const router = useRouter()
   const tokens = getThemeTokens(useThemeStore((s) => s.resolved))
 
+  const hslToHsla = (hsl: string, alpha: number) => {
+    const m = hsl.match(/hsl\(([^)]+)\)/)
+    return m ? `hsla(${m[1]}, ${alpha})` : hsl
+  }
+
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: tokens.background }} edges={['top']}>
       {/* Header */}
@@ -99,7 +104,7 @@ export default function HowToScreen() {
         ))}
 
         {/* Tip */}
-        <View style={[s.tipBox, { borderColor: tokens.primary, backgroundColor: tokens.primary + '18' }]}>
+        <View style={[s.tipBox, { borderColor: tokens.primary, backgroundColor: hslToHsla(tokens.primary, 0.12) }]}>
           <Text style={[s.tipTitle, { color: tokens.primary }]}>Dica</Text>
           <Text style={[s.tipText, { color: tokens.mutedForeground }]}>
             Use os toggles abaixo do input para ativar/desativar modos rapidamente, ou o botão "+" para acessar configurações avançadas de Subagents, Orchestra e Loop.
