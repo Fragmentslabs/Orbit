@@ -65,16 +65,17 @@ export async function reviewIteration(
       {
         role: 'user',
         content:
-          'Com base no pedido original e no que já foi feito, analise se o objetivo foi completamente atingido. Se sim, use review_completion com status "done". Se não, use "needs_more" e descreva exatamente o que falta fazer no followUpPrompt.',
+          'Com base no pedido original e no que já foi feito, analise se o objetivo foi completamente atingido. Se sim, use review_completion com status "done". Se não, use "needs_more" e descreva exatamente o que falta no followUpPrompt. Se a abordagem atual está falhando repetidamente, use "replan" com uma nova estratégia em newApproach.',
       },
     ],
     tools: {
       review_completion: {
-        description: 'Registra se o objetivo foi atingido ou se precisa continuar.',
+        description: 'Registra se o objetivo foi atingido, precisa continuar, ou requer re-planejamento.',
         inputSchema: z.object({
-          status: z.enum(['done', 'needs_more']),
+          status: z.enum(['done', 'needs_more', 'replan']),
           reason: z.string().describe('Explicação curta da decisão'),
           followUpPrompt: z.string().optional().describe('Se needs_more, descreva exatamente o que falta. Será enviado como nova instrução.'),
+          newApproach: z.string().optional().describe('Se replan, sugira uma nova abordagem ou estratégia.'),
         }),
       },
     },
@@ -116,6 +117,26 @@ export async function runChatWithLoop(
 
     iteration++
     if (iteration >= config.maxIterations) break
+
+    // Replan: abordagem atual não resolve — reformula o prompt e reinicia
+    if (review.status === 'replan') {
+      const replanMsg: ChatMessage = {
+        id: newId('msg'),
+        role: 'user',
+        parts: [{
+          id: newId('prt'),
+          type: 'text',
+          text: `[Replan ${iteration}/${config.maxIterations}] ${review.reason}\n\nNova abordagem: ${review.newApproach ?? 'Reformule a estratégia de execução.'}`,
+          state: 'done',
+        }],
+        createdAt: Date.now(),
+      }
+      history.push(replanMsg)
+      await saveMessages(input.sessionId, history)
+      emit(win, { type: 'message', sessionId: input.sessionId, message: replanMsg })
+      currentInput = { ...currentInput, text: review.newApproach ?? review.reason }
+      continue
+    }
 
     if (!config.autoReview) {
       const msg: ChatMessage = {

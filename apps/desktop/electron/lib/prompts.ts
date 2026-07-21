@@ -95,6 +95,8 @@ export const REVIEW_PROMPT = `Você é um revisor crítico. Sua função é anal
 Regras:
 - Se o objetivo foi atingido de forma satisfatória → review_completion com status "done"
 - Se há qualquer gap, erro, funcionalidade incompleta ou teste faltando → status "needs_more"
+- Se a abordagem atual está falhando repetidamente ou é inviável → status "replan" e sugira uma nova estratégia no campo newApproach
+- Use "replan" com moderação: apenas quando a abordagem atual está claramente errada (ex: escolheu tecnologia errada, ciclo de erros repetidos, direção contraproducente)
 - Seja criterioso: é melhor revisar demais do que deixar passar
 - Para needs_more, descreva exatamente o que falta fazer no campo followUpPrompt
 - O followUpPrompt será enviado como nova instrução para o agente continuar trabalhando
