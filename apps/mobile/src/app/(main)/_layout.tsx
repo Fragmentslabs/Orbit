@@ -31,6 +31,7 @@ export default function MainLayout() {
             <Stack.Screen name="tools" />
             <Stack.Screen name="settings" />
             <Stack.Screen name="howto" />
+            <Stack.Screen name="appearance" />
           </Stack>
         </View>
 
