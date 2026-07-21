@@ -290,7 +290,6 @@ export function PromptInput({
     { id: 'browser', icon: Globe, label: 'Browser' },
     { id: 'simple', icon: AlignLeft, label: 'Simples' },
     { id: 'brain', icon: BrainCircuit, label: 'Memória' },
-    { id: 'loop', icon: RefreshCw, label: 'Loop' },
   ]
 
   const toggleSheetMode = useCallback((id: string) => {
@@ -394,12 +393,6 @@ export function PromptInput({
 
           {/* Model picker & controls */}
           <View className="flex-row items-center gap-2">
-            {/* Status Indicators */}
-            {plan && <FileText size={15} color={tokens.primary} />}
-            {subagents && <Bot size={15} color={tokens.primary} />}
-            {orchestra && <Network size={15} color={tokens.primary} />}
-            {loop && <RefreshCw size={15} color={tokens.primary} />}
-
             {/* Model Picker */}
             <ModelPicker />
 
@@ -458,6 +451,22 @@ export function PromptInput({
               </Pressable>
             )
           })}
+          {/* Advanced mode toggles — plan, subagents, orchestra, loop */}
+          {workspaceMode === 'code' && (
+            <View className="flex-row items-center gap-2" style={{ borderLeftWidth: 1, borderLeftColor: tokens.border, paddingLeft: 6 }}>
+              <AdvancedToggle icon={FileText} active={plan} onPress={() => setPlan((v) => !v)} tokens={tokens} />
+              <AdvancedToggle icon={Bot} active={subagents} onPress={() => setSubagents((v) => !v)} tokens={tokens} />
+              <AdvancedToggle icon={Network} active={orchestra} onPress={() => setOrchestra((v) => !v)} tokens={tokens} />
+              <AdvancedToggle icon={RefreshCw} active={loop} onPress={() => setLoop((v) => !v)} tokens={tokens} />
+            </View>
+          )}
+          {workspaceMode === 'chat' && (
+            <View className="flex-row items-center gap-2" style={{ borderLeftWidth: 1, borderLeftColor: tokens.border, paddingLeft: 6 }}>
+              <AdvancedToggle icon={Bot} active={subagents} onPress={() => setSubagents((v) => !v)} tokens={tokens} />
+              <AdvancedToggle icon={Network} active={orchestra} onPress={() => setOrchestra((v) => !v)} tokens={tokens} />
+              <AdvancedToggle icon={RefreshCw} active={loop} onPress={() => setLoop((v) => !v)} tokens={tokens} />
+            </View>
+          )}
         </View>
         <ContextMeter sessionId={sessionId} />
       </View>
@@ -509,5 +518,13 @@ export function PromptInput({
         onConfirm={handleScheduleConfirm}
       />
     </View>
+  )
+}
+
+function AdvancedToggle({ icon: Icon, active, onPress, tokens }: { icon: React.ComponentType<{ size?: number; color?: string }>; active: boolean; onPress: () => void; tokens: any }) {
+  return (
+    <Pressable onPress={onPress} className="p-1.5 rounded-md" style={active ? { backgroundColor: tokens.muted } : { opacity: 0.4 }}>
+      <Icon size={15} color={active ? tokens.primary : tokens.mutedForeground} />
+    </Pressable>
   )
 }
