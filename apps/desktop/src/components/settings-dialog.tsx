@@ -1,4 +1,4 @@
-import { memo, useEffect, useMemo, useState } from "react"
+import { memo, useEffect, useMemo, useRef, useState } from "react"
 import { BarChart3, BookOpen, Database, KeyRound, Puzzle, Shield, Trash2, Check, Plus, Wifi, WifiOff, RefreshCw, Server, X, Pencil } from "lucide-react"
 import {
   Dialog,
@@ -267,7 +267,7 @@ function CustomProviderDialog({
   )
 }
 
-function ProvidersTab() {
+function ProvidersTab({ searchInputRef }: { searchInputRef?: React.RefObject<HTMLInputElement> }) {
   const catalog = useProviderStore((s) => s.catalog)
   const customProviders = useProviderStore((s) => s.customProviders)
   const connectedProviders = useProviderStore((s) => s.connectedProviders)
@@ -385,6 +385,7 @@ function ProvidersTab() {
       <div className="flex flex-col gap-2 border-t pt-3">
         <p className="text-xs font-medium text-muted-foreground">Provedores da Nuvem</p>
         <input
+          ref={searchInputRef}
           value={query}
           placeholder="Pesquisar provedor…"
           onChange={(e) => setQuery(e.target.value)}
@@ -411,6 +412,7 @@ interface SettingsDialogProps {
 
 export function SettingsDialog({ open, onOpenChange, initialTab = "providers" }: SettingsDialogProps) {
   const [tab, setTab] = useState<SettingsTab>(initialTab)
+  const providerSearchRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     if (open) setTab(initialTab)
@@ -420,7 +422,11 @@ export function SettingsDialog({ open, onOpenChange, initialTab = "providers" }:
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-sm sm:max-w-4xl p-0 gap-0 overflow-hidden" showCloseButton>
+      <DialogContent
+        className="max-w-sm sm:max-w-4xl p-0 gap-0 overflow-hidden"
+        showCloseButton
+        initialFocus={tab === "providers" ? providerSearchRef : undefined}
+      >
         <div className="flex flex-row h-[600px]">
           <nav className="w-48 shrink-0 border-r bg-muted/30 p-2">
             <DialogHeader className="px-2 py-2 text-left">
@@ -458,7 +464,7 @@ export function SettingsDialog({ open, onOpenChange, initialTab = "providers" }:
               <p className="text-[11px] text-muted-foreground">{active.description}</p>
             </div>
             <div className="h-[520px] min-w-0">
-              {tab === "providers" ? <ProvidersTab /> : tab === "autonomy" ? <PreferencesPanel /> : tab === "mcp-skills" ? <McpSkillsPanel /> : tab === "howto" ? <HowToPanel /> : tab === "analytics" ? <AnalyticsPanel /> : <DataPanel />}
+              {tab === "providers" ? <ProvidersTab searchInputRef={providerSearchRef} /> : tab === "autonomy" ? <PreferencesPanel /> : tab === "mcp-skills" ? <McpSkillsPanel /> : tab === "howto" ? <HowToPanel /> : tab === "analytics" ? <AnalyticsPanel /> : <DataPanel />}
             </div>
           </div>
         </div>

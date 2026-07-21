@@ -39,6 +39,7 @@ function ModelField({
 }) {
   const [open, setOpen] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const [skipFinalFocus, setSkipFinalFocus] = useState(false)
   const catalog = useProviderStore((s) => s.catalog)
   const connectedProviders = useProviderStore((s) => s.connectedProviders)
 
@@ -60,7 +61,7 @@ function ModelField({
   return (
     <div>
       <p className="mb-1 text-xs font-medium">{label}</p>
-      <ModelSelector onOpenChange={setOpen} open={open}>
+      <ModelSelector open={open} onOpenChange={setOpen}>
         <ModelSelectorTrigger render={<Button className="h-7 gap-1 px-1.5 text-xs" variant="outline" />}>
           {value ? (
             <>
@@ -72,7 +73,7 @@ function ModelField({
           )}
           <ChevronDownIcon className="size-3 text-muted-foreground" />
         </ModelSelectorTrigger>
-        <ModelSelectorContent>
+        <ModelSelectorContent finalFocus={skipFinalFocus ? false : undefined}>
           <ModelSelectorInput placeholder="Pesquisar modelos…" />
           <ModelSelectorList>
             {nullLabel && (
@@ -116,7 +117,13 @@ function ModelField({
             <Button
               variant="ghost"
               className="w-full justify-start gap-2 text-xs"
-              onClick={() => { setOpen(false); setSettingsOpen(true) }}
+              onClick={() => {
+                setSkipFinalFocus(true)
+                setOpen(false)
+                // Aguarda o dialog de seleção fechar completamente (animação ~100ms)
+                // para evitar conflito de foco com o input autofocus do settings.
+                setTimeout(() => setSettingsOpen(true), 120)
+              }}
             >
               <SettingsIcon className="size-3.5" />
               {groups.length === 0 ? "Configurar um provedor" : "Gerenciar provedores"}
@@ -124,7 +131,7 @@ function ModelField({
           </div>
         </ModelSelectorContent>
       </ModelSelector>
-      <SettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} />
+      <SettingsDialog open={settingsOpen} onOpenChange={(next) => { setSettingsOpen(next); if (!next) setSkipFinalFocus(false) }} />
     </div>
   )
 }
