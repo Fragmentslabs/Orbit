@@ -482,12 +482,19 @@ export function PromptInput({
         onCamera={handleTakePhoto}
         onPhotos={handlePickPhotos}
         onFiles={handlePickFiles}
-        modes={[
-          workspaceMode === 'code' && { id: 'plan', icon: FileText, label: 'Modo Plano', active: plan, onToggle: () => setPlan((v) => !v) },
+        simpleModes={[
+          { id: 'research', icon: Search, label: 'Pesquisa', active: activeModes.research ?? false, onToggle: () => toggleMode('research') },
+          { id: 'browser', icon: Globe, label: 'Browser', active: activeModes.browser ?? false, onToggle: () => toggleMode('browser') },
+          { id: 'simple', icon: AlignLeft, label: 'Simples', active: activeModes.simple ?? false, onToggle: () => toggleMode('simple') },
+          { id: 'brain', icon: BrainCircuit, label: 'Memória', active: activeModes.brain ?? false, onToggle: () => toggleMode('brain') },
+          ...(model?.reasoning ? [{ id: 'thinking', icon: Brain, label: 'Thinking', active: thinking, onToggle: () => update({ enabled: !enabled, variantId }) }] : []),
+        ]}
+        configModes={[
+          ...(workspaceMode === 'code' ? [{ id: 'plan', icon: FileText, label: 'Modo Plano', active: plan, onToggle: () => setPlan((v) => !v) }] : []),
           { id: 'subagents', icon: Bot, label: 'Subagentes', active: subagents, onToggle: () => setSubagents((v) => !v), onConfigure: () => { setPlusOpen(false); setWorkerConfigOpen(true) } },
           { id: 'orchestra', icon: Network, label: 'Orquestração', active: orchestra, onToggle: () => setOrchestra((v) => !v), onConfigure: () => { setPlusOpen(false); setWorkerConfigOpen(true) } },
           { id: 'loop', icon: RefreshCw, label: 'Loop', active: loop, onToggle: () => setLoop((v) => !v), onConfigure: () => { setPlusOpen(false); setLoopConfigOpen(true) } },
-        ].filter(Boolean) as any}
+        ]}
         displayMode={displayMode}
       />
 
@@ -506,8 +513,6 @@ export function PromptInput({
         onSubagentsToggle={() => setSubagents((prev) => !prev)}
         orchestra={orchestra}
         onOrchestraToggle={() => setOrchestra((prev) => !prev)}
-        plan={plan}
-        onPlanToggle={() => setPlan((prev) => !prev)}
         loop={loop}
         onLoopToggle={() => setLoop((prev) => !prev)}
         workerModelLabel={workerModelLabel}
@@ -519,6 +524,7 @@ export function PromptInput({
           setConfigOpen(false)
           setLoopConfigOpen(true)
         }}
+        displayMode={displayMode}
       />
 
       <WorkerModelModal visible={workerConfigOpen} onClose={() => setWorkerConfigOpen(false)} />

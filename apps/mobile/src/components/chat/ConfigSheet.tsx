@@ -7,6 +7,7 @@ import type { ModelVariant } from '@orbit/shared'
 import { getThemeTokens } from '~/lib/theme-tokens'
 import { useThemeStore } from '~/stores/theme-store'
 import { hslToRgba } from '~/lib/theme'
+import type { DisplayMode } from '~/stores/appearance-store'
 
 type PermissionModeValue = 'ask' | 'approve' | 'full'
 
@@ -31,13 +32,12 @@ interface Props {
   onSubagentsToggle: () => void
   orchestra: boolean
   onOrchestraToggle: () => void
-  plan: boolean
-  onPlanToggle: () => void
   loop: boolean
   onLoopToggle: () => void
   workerModelLabel: string | null
   onConfigureWorkers: () => void
   onConfigureLoop?: () => void
+  displayMode?: DisplayMode
 }
 
 const SHEET_HEIGHT = Math.min(Dimensions.get('window').height * 0.72, 560)
@@ -57,13 +57,12 @@ export function ConfigSheet({
   onSubagentsToggle,
   orchestra,
   onOrchestraToggle,
-  plan,
-  onPlanToggle,
   loop,
   onLoopToggle,
   workerModelLabel,
   onConfigureWorkers,
   onConfigureLoop,
+  displayMode,
 }: Props) {
   const tokens = getThemeTokens(useThemeStore((s) => s.resolved))
   const insets = useSafeAreaInsets()
@@ -181,28 +180,8 @@ export function ConfigSheet({
             )}
           </View>
 
-          {/* Modo Plano */}
-          <View style={[s.card, { borderColor: tokens.border }]}>
-            <View style={s.cardRow}>
-              <View style={s.cardRowLeft}>
-                <FileText size={18} color={tokens.mutedForeground} />
-                <Text style={[s.cardLabel, { color: tokens.foreground }]}>Modo Plano</Text>
-              </View>
-              <Switch
-                value={plan}
-                onValueChange={onPlanToggle}
-                trackColor={{ false: tokens.muted, true: tokens.primary }}
-                thumbColor={tokens.foreground}
-              />
-            </View>
-            {plan && (
-              <Text style={[s.hint, { color: tokens.mutedForeground }]}>
-                Apenas ferramentas de leitura. O resultado é um plano de implementação (PLAN.md) revisável.
-              </Text>
-            )}
-          </View>
-
-          {/* Subagentes */}
+          {/* Subagentes — só no modo toggles */}
+          {displayMode === 'toggles' && (
           <View style={[s.card, { borderColor: tokens.border }]}>
             <View style={s.cardRow}>
               <View style={s.cardRowLeft}>
@@ -226,8 +205,10 @@ export function ConfigSheet({
               </Pressable>
             )}
           </View>
+          )}
 
-          {/* Orquestração */}
+          {/* Orquestração — só no modo toggles */}
+          {displayMode === 'toggles' && (
           <View style={[s.card, { borderColor: tokens.border }]}>
             <View style={s.cardRow}>
               <View style={s.cardRowLeft}>
@@ -251,8 +232,10 @@ export function ConfigSheet({
               </Pressable>
             )}
           </View>
+          )}
 
-          {/* Loop */}
+          {/* Loop — só no modo toggles */}
+          {displayMode === 'toggles' && (
           <View style={[s.card, { borderColor: tokens.border }]}>
             <View style={s.cardRow}>
               <View style={s.cardRowLeft}>
@@ -279,6 +262,7 @@ export function ConfigSheet({
               </Text>
             )}
           </View>
+          )}
         </ScrollView>
       </Animated.View>
     </Modal>
