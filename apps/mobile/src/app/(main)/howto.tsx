@@ -99,7 +99,7 @@ export default function HowToScreen() {
         ))}
 
         {/* Tip */}
-        <View style={[s.tipBox, { borderColor: tokens.primary, backgroundColor: tokens.primary + '12' }]}>
+        <View style={[s.tipBox, { borderColor: tokens.primary, backgroundColor: tokens.primary + '18' }]}>
           <Text style={[s.tipTitle, { color: tokens.primary }]}>Dica</Text>
           <Text style={[s.tipText, { color: tokens.mutedForeground }]}>
             Use os toggles abaixo do input para ativar/desativar modos rapidamente, ou o botão "+" para acessar configurações avançadas de Subagents, Orchestra e Loop.
