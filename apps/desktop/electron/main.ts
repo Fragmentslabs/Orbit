@@ -36,7 +36,7 @@ import { approvePendingSkill, discardPendingSkill, listPendingSkills } from './l
 import { dataDir, listKeys, readJson, removeJson, writeJson } from './lib/storage'
 import { searchSessions } from './lib/search-sessions'
 import { destroyBrowserWindow } from './lib/tools'
-import type { ChatMessage, SendMessageInput, SessionInfo } from '@shared/chat'
+import type { SendMessageInput, SessionInfo } from '@shared/chat'
 import { StorageKeys } from '@shared/chat'
 import type { Memory, MemoryEvent } from '@shared/memory'
 
@@ -486,15 +486,26 @@ app.whenReady().then(() => {
   // Chat
   ipcMain.handle('chat:send', async (_event, input: SendMessageInput) => {
     if (!win) return
-    // Regra de ouro: workers não orquestram nem delegam (sem recursão)
+    // Regra de ouro: workers não orquestram (sem recursão infinita).
+    // Workers podem usar subagentes (limite de profundidade gerenciado pelo subagent tool).
     const session = await readJson<SessionInfo>(StorageKeys.session(input.sessionId))
     if (session?.orchestration?.role === 'worker') {
-      input = { ...input, options: { ...input.options, orchestrate: undefined, subagents: false } }
+      input = { ...input, options: { ...input.options, orchestrate: undefined } }
     }
-    if (input.options.loop && !input.options.orchestrate) {
-      void runChatWithLoop(win, input, input.loopConfig ?? { maxIterations: 3, maxTokensPerIter: 4000, autoReview: true })
-    } else if (input.options.orchestrate) {
+    // Orquestração: desativa plano (incompatível), ativa loop e subagentes por padrão
+    if (input.options.orchestrate) {
+      input = {
+        ...input,
+        options: {
+          ...input.options,
+          plan: undefined,
+          loop: input.options.loop !== false,
+          subagents: input.options.subagents !== false,
+        },
+      }
       void runOrchestration(win, input)
+    } else if (input.options.loop) {
+      void runChatWithLoop(win, input, input.loopConfig ?? { maxIterations: 3, maxTokensPerIter: 4000, autoReview: true })
     } else {
       void runChat(win, input)
     }

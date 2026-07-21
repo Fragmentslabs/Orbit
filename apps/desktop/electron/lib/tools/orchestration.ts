@@ -68,6 +68,7 @@ export function createSubagentTool(input: SendMessageInput, ctx: ToolContext | n
         workerInput.options.permissionMode ?? 'ask',
         workerInput.sessionId,
         ctx?.directory ?? null,
+        workerInput.sessionId,
         ctx?.abort,
         workerInput.parentSessionId,
         workerInput.workerTitle,

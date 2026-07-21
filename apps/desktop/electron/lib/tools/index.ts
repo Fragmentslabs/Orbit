@@ -32,8 +32,9 @@ export type { ToolContext } from './context'
  */
 export function buildToolSet(input: SendMessageInput, ctx: ToolContext | null): ToolSet {
   const tools: ToolSet = {}
-  // Regra de ouro: workers nunca delegam (sem recursão de subagents/orchestra)
-  const allowDelegation = input.options.subagents === true && input.orchestrationRole !== 'worker'
+  // Regra de ouro: workers podem usar subagentes, mas NUNCA orquestrar (sem recursão infinita).
+  // Se orchestrate está ativo (este worker é um orquestrador), bloqueamos delegação.
+  const allowDelegation = input.options.subagents === true && !input.options.orchestrate
   // Brain: ferramentas de memória — workers também ficam de fora
   const allowBrain = input.options.brain === true && input.orchestrationRole !== 'worker'
   // question: sessão principal sempre; workers só quando o pai não está em "full"
