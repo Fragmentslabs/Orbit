@@ -1,4 +1,5 @@
 import fs from 'node:fs/promises'
+import { Dirent } from 'node:fs'
 import path from 'node:path'
 
 /**
@@ -6,6 +7,15 @@ import path from 'node:path'
  * de configuração para identificar stack, frameworks, ferramentas, testes e
  * infraestrutura — sem LLM. O resultado alimenta a geração de memórias.
  */
+
+/** Subprojeto detectado em subdiretório (monorepo, front+back, etc.) */
+export interface Subproject {
+  name: string
+  directory: string
+  stack: string[]
+  frameworks: string[]
+  scripts: Record<string, string>
+}
 
 export interface ProjectScan {
   name: string
@@ -25,6 +35,12 @@ export interface ProjectScan {
   readmeExcerpt?: string
   /** Trechos de arquivos de config relevantes para o gerador */
   configExcerpts: { file: string; content: string }[]
+  /** Subprojetos detectados em subdiretórios (monorepo, front+back, etc.) */
+  subprojects: Subproject[]
+  /** Arquivos de documentação encontrados (*.md em docs/, especificações, etc.) */
+  docs: string[]
+  /** Arquivos de schema/modelo de dados (*.sql, *.prisma, etc.) */
+  schemas: string[]
 }
 
 const IGNORED_DIRS = new Set([
@@ -136,6 +152,9 @@ export async function scanProject(directory: string): Promise<ProjectScan> {
     scripts: {},
     structure: await listStructure(directory),
     configExcerpts: [],
+    subprojects: [],
+    docs: [],
+    schemas: [],
   }
 
   const push = (kind: 'stack' | 'framework' | 'tool' | 'test' | 'infra' | 'ui' | 'security', label: string) => {
@@ -200,6 +219,71 @@ export async function scanProject(directory: string): Promise<ProjectScan> {
       const content = await readIfExists(directory, file)
       if (content) scan.configExcerpts.push({ file, content: content.slice(0, MAX_EXCERPT) })
     }),
+    // ── Scan de subprojetos em subdiretórios ──────────────────────────
+    (async () => {
+      const subdirs = await fs.readdir(directory, { withFileTypes: true }).catch(() => [] as Dirent[])
+      const projectDirs = subdirs.filter(
+        (d) => d.isDirectory() && !d.name.startsWith('.') && !IGNORED_DIRS.has(d.name),
+      )
+      for (const d of projectDirs) {
+        const subDir = path.join(directory, d.name)
+        const subPkg = await readIfExists(subDir, 'package.json')
+        const subGoMod = await readIfExists(subDir, 'go.mod')
+        const subCargo = await readIfExists(subDir, 'Cargo.toml')
+        if (subPkg || subGoMod || subCargo) {
+          const sp: Subproject = { name: d.name, directory: subDir, stack: [], frameworks: [], scripts: {} }
+          if (subPkg) {
+            sp.stack.push('Node.js')
+            try {
+              const pkg = JSON.parse(subPkg) as {
+                dependencies?: Record<string, string>
+                devDependencies?: Record<string, string>
+                scripts?: Record<string, string>
+              }
+              sp.scripts = pkg.scripts ?? {}
+              for (const dep of Object.keys({ ...pkg.dependencies, ...pkg.devDependencies })) {
+                for (const signal of DEP_SIGNALS) {
+                  if (signal.dep.test(dep)) {
+                    const bucket = signal.kind === 'stack' ? sp.stack
+                      : signal.kind === 'framework' ? sp.frameworks
+                      : null
+                    if (bucket && !bucket.includes(signal.label)) bucket.push(signal.label)
+                  }
+                }
+              }
+            } catch { /* segue */ }
+          } else if (subGoMod) {
+            sp.stack.push('Go')
+          } else if (subCargo) {
+            sp.stack.push('Rust')
+          }
+          scan.subprojects.push(sp)
+        }
+      }
+    })(),
+    // ── Coleta de documentação e schemas ────────────────────────────
+    (async () => {
+      const collectDocs = async (dir: string, prefix: string, depth: number) => {
+        if (depth > 2) return
+        const entries = await fs.readdir(dir, { withFileTypes: true }).catch(() => [] as Dirent[])
+        for (const e of entries) {
+          if (e.name.startsWith('.') || IGNORED_DIRS.has(e.name)) continue
+          const full = path.join(dir, e.name)
+          const rel = prefix ? `${prefix}/${e.name}` : e.name
+          if (e.isDirectory()) {
+            await collectDocs(full, rel, depth + 1)
+          } else {
+            const ext = path.extname(e.name).toLowerCase()
+            if (ext === '.md' || (e.name.endsWith('.md') && e.name !== 'README.md')) {
+              if (scan.docs.length < 20) scan.docs.push(rel)
+            } else if (ext === '.sql' || ext === '.prisma' || e.name.endsWith('.prisma')) {
+              if (scan.schemas.length < 10) scan.schemas.push(rel)
+            }
+          }
+        }
+      }
+      await collectDocs(directory, '', 0)
+    })(),
   ])
 
   return scan
@@ -208,6 +292,12 @@ export async function scanProject(directory: string): Promise<ProjectScan> {
 /** Resumo textual do scan — vira o prompt do gerador de memórias. */
 export function describeScan(scan: ProjectScan): string {
   const section = (title: string, body: string) => (body.trim() ? `## ${title}\n${body}\n` : '')
+  const subprojectsBlock = scan.subprojects.length > 0
+    ? scan.subprojects.map((sp) =>
+        `- **${sp.name}** (${sp.directory}): ${[...sp.stack, ...sp.frameworks].join(', ') || 'não identificado'}` +
+        (Object.keys(sp.scripts).length > 0 ? `\n  Scripts: ${Object.keys(sp.scripts).map((s) => `\`${s}\``).join(', ')}` : ''),
+      ).join('\n')
+    : ''
   return [
     `# Projeto: ${scan.name}\nDiretório: ${scan.directory}`,
     section('Stack', scan.stack.join(', ')),
@@ -217,6 +307,9 @@ export function describeScan(scan: ProjectScan): string {
     section('Infraestrutura', scan.infra.join(', ')),
     section('Scripts', Object.entries(scan.scripts).map(([k, v]) => `- ${k}: ${v}`).join('\n')),
     section('Estrutura', '```\n' + scan.structure.join('\n') + '\n```'),
+    section('Subprojetos detectados', subprojectsBlock),
+    section('Documentação encontrada', scan.docs.map((d) => `- ${d}`).join('\n')),
+    section('Schemas de banco', scan.schemas.map((s) => `- ${s}`).join('\n')),
     scan.readmeExcerpt ? section('README (trecho)', scan.readmeExcerpt) : '',
     ...scan.configExcerpts.map((c) => section(`Arquivo: ${c.file}`, '```\n' + c.content + '\n```')),
   ]

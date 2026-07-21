@@ -70,6 +70,79 @@ export function planAreas(scan: ProjectScan): Exclude<ProjectArea, 'overview'>[]
   return areas
 }
 
+interface PlannedArea {
+  area: Exclude<ProjectArea, 'overview'>
+  mission: string
+}
+
+/** Usa o LLM para decidir áreas e missões customizadas com base no scan.
+ *  O modelo tem liberdade para criar missões específicas ao projeto,
+ *  incluindo instruções para ler documentação e schemas. */
+async function planAreasWithLLM(
+  model: LanguageModel,
+  scan: ProjectScan,
+): Promise<PlannedArea[]> {
+  const scanDescription = describeScan(scan)
+  const hasDocs = scan.docs.length > 0 ? `\nDocumentação encontrada: ${scan.docs.join(', ')}` : ''
+  const hasSchemas = scan.schemas.length > 0 ? `\nSchemas de banco: ${scan.schemas.join(', ')}` : ''
+  const hasSubprojects = scan.subprojects.length > 0
+    ? `\nSubprojetos: ${scan.subprojects.map((sp) => `${sp.name} (${sp.stack.join(',')})`).join('; ')}`
+    : ''
+
+  const availableAreas = Object.entries(PROJECT_AREAS)
+    .filter(([k]) => k !== 'overview')
+    .map(([key, val]) => `- "${key}": ${val.description}`)
+    .join('\n')
+
+  const { text } = await generateText({
+    model,
+    system: `Você é um orquestrador de onboarding. Decida quais áreas investigar e defina missões customizadas para cada uma.`,
+    prompt: `Scan do projeto:\n${scanDescription}${hasDocs}${hasSchemas}${hasSubprojects}
+
+Áreas disponíveis:
+${availableAreas}
+
+Com base no scan, decida:
+1. Quais áreas são RELEVANTES (escopo mínimo 3, máximo todas as 7)
+2. Para cada área, escreva uma missão CUSTOMIZADA que:
+   - Mencione arquivos/pastas específicos encontrados no scan
+   - Inclua instrução para LER documentação (.md, specs) se houver
+   - Inclua instrução para LER schemas (.sql, .prisma) se relevante
+   - Se há subprojetos, instrua a analisar cada um separadamente
+
+IMPORTANTE: se há docs/ ou arquivos .md, a missão DEVE incluir "Leia os arquivos de documentação listados no scan como fonte primária".
+
+Responda com JSON no formato:
+[{"area": "architecture", "mission": "Analise a arquitetura: ..."}, ...]`,
+  })
+
+  try {
+    const json = text.trim().replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/, '')
+    const start = json.indexOf('[')
+    const end = json.lastIndexOf(']')
+    const parsed = JSON.parse(json.slice(start, end + 1)) as PlannedArea[]
+    // Valida que as áreas existem e as missões são strings não vazias
+    const valid = parsed.filter(
+      (p) => p.area in PROJECT_AREAS && typeof p.mission === 'string' && p.mission.trim().length > 10,
+    )
+    if (valid.length >= 3) return valid
+  } catch { /* fallback para áreas fixas */ }
+
+  // Fallback: áreas padrão com missões enriquecidas
+  const fixed = planAreas(scan)
+  return fixed.map((area) => {
+    let mission = AREA_MISSIONS[area]
+    if (scan.docs.length > 0) mission += ` Documentação disponível: ${scan.docs.join(', ')} — LEIA esses arquivos.`
+    if (scan.schemas.length > 0 && (area === 'architecture' || area === 'business')) {
+      mission += ` Schemas de banco: ${scan.schemas.join(', ')} — LEIA e mapeie.`
+    }
+    if (scan.subprojects.length > 0) {
+      mission += ` Subprojetos: ${scan.subprojects.map((sp) => sp.name).join(', ')} — analise cada um.`
+    }
+    return { area, mission }
+  })
+}
+
 function readOnlyTools(directory: string, abort: AbortSignal): ToolSet {
   const ctx: ToolContext = { sessionId: `init:${directory}`, directory, extraDirectories: [], abort }
   return {
@@ -125,6 +198,7 @@ async function exploreArea(
   scanDescription: string,
   directory: string,
   area: Exclude<ProjectArea, 'overview'>,
+  mission: string,
   hooks: InitHooks,
 ): Promise<AreaResult> {
   const controller = new AbortController()
@@ -134,9 +208,18 @@ async function exploreArea(
   try {
     const result = streamText({
       model,
-      system: `Você é um subagent de onboarding do Orbit investigando UMA área de um projeto. Use as ferramentas (read, ls, glob, grep) para VERIFICAR no código — não deduza só pelo scan. Seja econômico: poucos arquivos certos valem mais que varrer tudo. Responda em português, em markdown, citando caminhos de arquivos reais. Termine com uma linha "TAGS:" com 3-6 palavras-chave.`,
+      system: `Você é um subagent de onboarding do Orbit investigando UMA área de um projeto. Use as ferramentas (read, ls, glob, grep) para VERIFICAR no código — não deduza só pelo scan. Seja econômico: poucos arquivos certos valem mais que varrer tudo.
+
+INSTRUÇÕES IMPORTANTES:
+- Se o scan mencionar DOCUMENTAÇÃO (arquivos .md, docs/, especificações), LEIA-OS. São sua fonte primária de contexto.
+- Se houver arquivos de schema (.sql, .prisma), LEIA-OS e mapeie o modelo de dados.
+- Se o projeto tem subprojetos (front/back, monorepo), explore CADA um separadamente e relacione-os.
+- Procure ativamente por specs, planos, roadmaps — qualquer documento que descreva O QUE deve ser feito.
+- Cite SEMPRE os caminhos completos dos arquivos que encontrar.
+
+Responda em português, em markdown, citando caminhos de arquivos reais. Termine com uma linha "TAGS:" com 3-6 palavras-chave.`,
       prompt: `Área investigada: ${PROJECT_AREAS[area].label}
-Missão: ${AREA_MISSIONS[area]}
+Missão: ${mission}
 
 Contexto do scan automático (ponto de partida, não conclusão):
 ${scanDescription}`,
@@ -349,7 +432,7 @@ export async function runProjectInit(input: RunInitInput): Promise<string[]> {
     const { text: overviewText } = await generateText({
       model,
       system:
-        'Você é um analista de projetos. Gere uma visão geral concisa em markdown: sobre o que é o projeto, stack e tecnologias, estrutura geral.',
+        'Você é um analista de projetos. Gere uma visão geral concisa em markdown: sobre o que é o projeto, stack e tecnologias, estrutura geral. Se houver subprojetos ou documentação, mencione-os.',
       prompt: `Com base no scan abaixo, escreva a visão geral do projeto:\n\n${scanDescription}`,
     })
     const overview: ParsedFindings = {
@@ -362,7 +445,13 @@ export async function runProjectInit(input: RunInitInput): Promise<string[]> {
     savedSummaries.set('overview', overview.summary)
     main(`✓ **${PROJECT_AREAS.overview.label}** salvo — é o node central do grafo.\n`)
 
-    // 3. Exploração paralela + consolidação incremental. A consolidação é
+    // 3. Planejamento de áreas com LLM (autônomo, adapta-se ao projeto)
+    const plannedAreas = await planAreasWithLLM(model, scan)
+    main(
+      `Orquestrador decidiu investigar ${plannedAreas.length} áreas: ${plannedAreas.map((a) => PROJECT_AREAS[a.area].label).join(', ')}.\n\n`,
+    )
+
+    // 4. Exploração paralela + consolidação incremental. A consolidação é
     // serializada (chain) para complementos não conflitarem entre si; os
     // workers seguem explorando enquanto o principal consolida.
     const done: ProjectArea[] = ['overview']
@@ -372,7 +461,7 @@ export async function runProjectInit(input: RunInitInput): Promise<string[]> {
     const consolidate = (result: AreaResult) =>
       (refineChain = refineChain.then(async () => {
         consolidated++
-        const progress = `(${consolidated}/${areaList.length})`
+        const progress = `(${consolidated}/${plannedAreas.length})`
         if (result.failed && !result.raw.trim()) {
           main(`✗ **${PROJECT_AREAS[result.area].label}** falhou sem levantamento — pulando. ${progress}\n`)
           return
@@ -403,18 +492,104 @@ export async function runProjectInit(input: RunInitInput): Promise<string[]> {
         }
       }))
 
-    const queue = [...areaList]
+    const queue = [...plannedAreas]
     const maxWorkers = Math.max(1, Math.min(input.concurrency ?? WORKER_CONCURRENCY, 6, queue.length))
     const workers = Array.from({ length: maxWorkers }, async () => {
       while (queue.length > 0) {
-        const area = queue.shift()!
-        const result = await exploreArea(workerModel, scanDescription, directory, area, hooks)
+        const planned = queue.shift()!
+        const result = await exploreArea(workerModel, scanDescription, directory, planned.area, planned.mission, hooks)
         // Dispara a consolidação e segue para a próxima área sem esperar
         void consolidate(result)
       }
     })
     await Promise.all(workers)
     await refineChain
+
+    // 5. Criação de memórias de contexto (MVP, roadmap, referências a docs)
+    if (scan.docs.length > 0 || scan.schemas.length > 0 || scan.subprojects.length > 0) {
+      main('\nAnalisando documentação e schemas para memórias de contexto…\n')
+      const { text: ctxPlan } = await generateText({
+        model,
+        system: `Você é um analista de projetos. Com base nas áreas já consolidadas e nos arquivos encontrados, decida quais memórias de contexto criar (category: "context", weight <= 0.3). Contextos capturam: MVP features, roadmap, referências a arquivos importantes.`,
+        prompt: `Documentação encontrada: ${scan.docs.join(', ') || 'nenhuma'}
+Schemas: ${scan.schemas.join(', ') || 'nenhum'}
+Subprojetos: ${scan.subprojects.map((sp) => sp.name).join(', ') || 'nenhum'}
+
+Áreas consolidadas:
+${[...savedSummaries.entries()].map(([a, s]) => `- ${a}: ${s}`).join('\n')}
+
+Responda com JSON array de memórias de contexto a criar:
+[{"area": "overview", "text": "resumo curto (max 200 chars)", "tags": ["tag1"], "document": "markdown completo"}]
+
+IMPORTANTE:
+- Se há um arquivo de especificação (ex: docs/espec.md), crie uma memória que REFERENCIE esse arquivo
+- Se há schema.sql, crie uma memória descrevendo o modelo de dados
+- Se há subprojetos (front+back), crie uma memória de contexto geral conectando-os
+- Máximo 4 memórias de contexto.`,
+      })
+      try {
+        const json = ctxPlan.trim().replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/, '')
+        const start = json.indexOf('[')
+        const end = json.lastIndexOf(']')
+        const contexts = JSON.parse(json.slice(start, end + 1)) as { area?: ProjectArea; text: string; tags: string[]; document?: string }[]
+        let ctxCount = 0
+        for (const ctx of contexts) {
+          if (typeof ctx.text !== 'string' || ctx.text.trim().length < 10) continue
+          const memId = await memoryService.save({
+            kind: 'project',
+            directory,
+            text: ctx.text.trim().slice(0, 500),
+            tags: [...new Set([...(ctx.tags ?? []), 'context', 'auto'])],
+            weight: 0.25,
+            category: 'context',
+            area: ctx.area ?? 'overview',
+            document: ctx.document,
+            relatedId: rootId,
+          })
+          if (ctxCount === 0) savedIds.set('overview', memId.id) // overview pode ser atualizado
+          ctxCount++
+          main(`✓ Memória de contexto: ${ctx.text.trim().slice(0, 80)}…\n`)
+        }
+        if (ctxCount > 0) main(`✓ **${ctxCount} memórias de contexto** criadas.\n`)
+      } catch { /* contexto é auxiliar, não derruba o fluxo */ }
+    }
+
+    // 6. Loop de revisão: identifica gaps e cria workers adicionais se necessário
+    const MAX_LOOP = 2
+    for (let loopIter = 0; loopIter < MAX_LOOP; loopIter++) {
+      const allSaved = [...savedSummaries.entries()].map(([a, s]) => `- ${PROJECT_AREAS[a].label}: ${s}`).join('\n')
+      const { text: reviewText } = await generateText({
+        model,
+        system: `Você é um revisor de onboarding. Analise se a cobertura está completa ou se há gaps importantes.`,
+        prompt: `Áreas consolidadas:
+${allSaved}
+
+Scan original:
+${scanDescription}
+
+Há gaps importantes? Áreas não cobertas? Documentação não lida? Schemas não mapeados?
+Responda com JSON:
+{"status": "done", "reason": "..."} ou {"status": "needs_more", "gap": "descrição do gap", "area": "arquitetura", "mission": "missão para worker adicional"}`,
+      })
+      try {
+        const j = reviewText.trim().replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/, '')
+        const start = j.indexOf('{')
+        const end = j.lastIndexOf('}')
+        const review = JSON.parse(j.slice(start, end + 1)) as { status: 'done' | 'needs_more'; gap?: string; area?: ProjectArea; mission?: string }
+        if (review.status !== 'needs_more' || !review.mission || !review.area) break
+        if (!(review.area in PROJECT_AREAS) || review.area === 'overview') break
+        if (done.includes(review.area)) continue // já investigada
+        main(`\n🔁 Loop ${loopIter + 1}: gap detectado — **${review.gap}**\n`)
+        const extraResult = await exploreArea(workerModel, scanDescription, directory, review.area as Exclude<ProjectArea, 'overview'>, review.mission, hooks)
+        if (extraResult.raw.trim()) {
+          const refined = await refineFindings(model, review.area as ProjectArea, extraResult.raw, savedSummaries)
+          await saveAreaMemory(directory, review.area as ProjectArea, refined, rootId, force)
+          savedSummaries.set(review.area as ProjectArea, refined.summary)
+          done.push(review.area as ProjectArea)
+          main(`✓ **${PROJECT_AREAS[review.area as ProjectArea].label}** (extra) consolidado.\n`)
+        }
+      } catch { break }
+    }
 
     // Importa regras de AGENTS.md e CLAUDE.md como memórias de preferência
     let rulesImported = 0

@@ -16,9 +16,10 @@ import { ORCHESTRATOR_PLAN_PROMPT, ORCHESTRATOR_SYNTHESIS_PROMPT } from './promp
 import { resolveModel } from './providers'
 import { buildProviderOptions } from './reasoning'
 import { readJson, writeJson } from './storage'
-import { createTaskTool } from './tools/orchestration'
+import { createSubagentTool, createTaskTool } from './tools/orchestration'
+import type { ToolContext } from './tools/context'
 import { addTokenUsage, toTokenUsage } from './usage'
-import { reviewIteration, type LoopEngineConfig } from './loop-engine'
+import type { LoopEngineConfig } from './loop-engine'
 
 /**
  * OrchestratorEngine (modo Orchestra), em três fases:
@@ -115,6 +116,12 @@ export async function runOrchestration(win: BrowserWindow, input: SendMessageInp
       ? `\n\nContexto: o usuário está no modo código com a pasta de trabalho ${input.directory}. Tarefas "code" terão acesso a essa pasta.`
       : '\n\nContexto: modo chat, sem pasta de trabalho — prefira tarefas "chat".'
 
+    // Tool context para subagent durante planejamento (pasta de trabalho disponível)
+    const planCtx: ToolContext | null = input.directory
+      ? { sessionId: input.sessionId, directory: input.directory, extraDirectories: input.extraDirectories ?? [], abort: controller.signal }
+      : null
+    const subagentTool = createSubagentTool(input, planCtx)
+
     const result = await generateText({
       model,
       system: ORCHESTRATOR_PLAN_PROMPT + contextNote,
@@ -128,6 +135,7 @@ export async function runOrchestration(win: BrowserWindow, input: SendMessageInp
           },
           { allowCode: Boolean(input.directory) },
         ),
+        subagent: subagentTool,
       },
       stopWhen: stepCountIs(PLAN_MAX_STEPS),
       abortSignal: controller.signal,
@@ -155,7 +163,10 @@ export async function runOrchestration(win: BrowserWindow, input: SendMessageInp
       status: 'proposed',
       usage: toTokenUsage(result.usage, provider?.models[input.modelId]?.cost),
     }
-    pending.set(sessionId, { input, plan, assistantMessageId: assistantMessage.id, loopConfig: input.options.loop ? input.loopConfig ?? { maxIterations: 3, maxTokensPerIter: 4000, autoReview: true } : undefined })
+    // Loop ativado por padrão no modo orquestração (o orquestrador decide quando parar).
+    // Se o usuário explicitamente desativou loop, respeitamos.
+    const effectiveLoop = input.options.loop !== false
+    pending.set(sessionId, { input, plan, assistantMessageId: assistantMessage.id, loopConfig: effectiveLoop ? input.loopConfig ?? { maxIterations: 5, maxTokensPerIter: 8000, autoReview: true } : undefined })
     await persistPlan(win, sessionId, plan)
     emit(win, { type: 'message', sessionId, message: assistantMessage })
     emit(win, { type: 'status', sessionId, status: 'idle' })
@@ -259,7 +270,9 @@ export async function approvePlan(
             ...task.options,
             simple: task.options.simple ?? true,
             reasoning: workerModel?.reasoning,
-            subagents: false,
+            // Workers podem usar subagentes (com limite de profundidade — o subagent tool
+            // herda orchestrationRole='worker', que bloqueia sub-orquestração)
+            subagents: true,
             orchestrate: undefined,
             // Gatekeeping: worker herda o modo de permissões do orquestrador
             permissionMode: input.options.permissionMode,
@@ -363,65 +376,179 @@ export async function approvePlan(
     await persistPlan(win, sessionId, plan)
     emit(win, { type: 'message', sessionId, message: synthesisMessage })
 
-    // ─── Loop de revisão pós-síntese (modo loop ativo) ──────────────────────
+    // ─── Loop de revisão inteligente pós-síntese ──────────────────────
+    // O orquestrador é chamado a cada iteração para decidir a ação:
+    //   - "message_worker": envia follow-up a um worker existente
+    //   - "create_worker": cria novo worker (continuação, teste, etc.)
+    //   - "done": finaliza
     if (entry.loopConfig) {
       const lc = entry.loopConfig
       let iteration = 0
+      // Rastreia workers existentes para reuso
+      const workerSessions = new Map(selected.map((t) => [t.workerSessionId!, { title: t.title, taskId: t.id }]))
+
       while (iteration < lc.maxIterations) {
+        if (controller.signal.aborted) break
+
         const hist = await loadMessages(sessionId)
-        const review = await reviewIteration(sessionId, input.text, hist, lc.maxTokensPerIter, input.providerId, input.modelId, controller.signal)
-        if (controller.signal.aborted || review.status === 'done') break
+        // Coleta resultados atuais de todos os workers do plano
+        const workersStatus = await Promise.all(
+          [...workerSessions.entries()].map(async ([wsId, info]) => {
+            const msgs = await loadMessages(wsId)
+            const last = [...msgs].reverse().find((m) => m.role === 'assistant')
+            const text = last?.parts
+              .filter((p): p is TextPart => p.type === 'text')
+              .map((p) => p.text)
+              .join('\n')
+              .trim() || '(sem retorno)'
+            return { sessionId: wsId, title: info.title, text: text.slice(0, 2000), error: last?.error }
+          }),
+        )
+
+        // Orquestrador decide o que fazer
+        const workersBlock = workersStatus
+          .map((w) => `## Worker "${w.title}" (sessionId: ${w.sessionId})\n${w.error ? `**ERRO**: ${w.error}\n` : ''}${w.text}`)
+          .join('\n\n---\n\n')
+
+        const { text: decisionText } = await generateText({
+          model,
+          system: `Você é o orquestrador do Orbit em modo loop. Revise os resultados dos workers e decida a próxima ação.`,
+          messages: [
+            { role: 'user', content: `## Pedido original\n${input.text}\n\n## Resultados dos workers\n${workersBlock}\n\n## Iteração atual\n${iteration + 1}/${lc.maxIterations}` },
+            {
+              role: 'user',
+              content: `Analise se o objetivo foi atingido. Responda com JSON:
+{
+  "action": "done" | "message_worker" | "create_worker" | "create_test_worker",
+  "reason": "explicação curta",
+  "workerSessionId": "se action=message_worker, sessionId do worker a mensagem",
+  "followUpPrompt": "se action=message_worker, nova instrução para o worker existente",
+  "workerTitle": "se action=create_worker ou create_test_worker, título do novo worker",
+  "workerPrompt": "se action=create_worker ou create_test_worker, prompt do novo worker",
+  "workerMode": "chat ou code (se create_worker/create_test_worker)"
+}
+
+Regras:
+- "done": objetivo atingido, finalizar
+- "message_worker": reusar um worker existente com novas instruções (melhor que criar um novo quando o worker já tem contexto)
+- "create_worker": criar worker adicional para continuar/expandir
+- "create_test_worker": criar worker para TESTAR o que foi implementado; se encontrar erros, o loop seguinte pode delegar ao worker que implementou`,
+            },
+          ],
+          abortSignal: controller.signal,
+        })
+
+        interface LoopDecision {
+          action: 'done' | 'message_worker' | 'create_worker' | 'create_test_worker'
+          reason: string
+          workerSessionId?: string
+          followUpPrompt?: string
+          workerTitle?: string
+          workerPrompt?: string
+          workerMode?: 'chat' | 'code'
+        }
+
+        let decision: LoopDecision = { action: 'done', reason: 'Falha ao interpretar decisão.' }
+        try {
+          const j = decisionText.trim().replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/, '')
+          const start = j.indexOf('{')
+          const end = j.lastIndexOf('}')
+          decision = JSON.parse(j.slice(start, end + 1)) as LoopDecision
+        } catch { decision = { action: 'done', reason: 'Erro ao parsear JSON da decisão.' } }
+
+        if (decision.action === 'done' || !['message_worker', 'create_worker', 'create_test_worker'].includes(decision.action)) {
+          // Anexa o veredito à síntese
+          const verdictPart: TextPart = { id: newId('prt'), type: 'text', text: `\n\n---\n### Loop ${iteration + 1}: ${decision.action === 'done' ? '✓ Concluído' : 'Encerrado'}\n\n${decision.reason}`, state: 'done' }
+          synthesisMessage.parts.push(verdictPart)
+          emit(win, { type: 'part', sessionId, messageId: synthesisMessage.id, part: verdictPart })
+          break
+        }
 
         iteration++
-        if (iteration >= lc.maxIterations) break
 
-        // Cria workers de continuação (um worker por follow-up)
-        const contWorker: SessionInfo = {
-          id: newId('ses'),
-          title: `Continuação ${iteration}`,
-          mode: input.directory ? 'code' : 'chat',
-          pinned: false,
-          archived: false,
-          folderId: null,
-          directory: input.directory,
-          extraDirectories: input.extraDirectories,
-          orchestration: { role: 'worker', parentSessionId: sessionId, task: review.reason },
-          parentId: sessionId,
-          createdAt: Date.now(),
-          updatedAt: Date.now(),
+        if (decision.action === 'message_worker' && decision.workerSessionId && workerSessions.has(decision.workerSessionId)) {
+          // Reuso: envia nova instrução ao worker existente
+          const wsInfo = workerSessions.get(decision.workerSessionId)!
+          const followUp: ChatMessage = {
+            id: newId('msg'),
+            role: 'user',
+            parts: [{ id: newId('prt'), type: 'text', text: `[Loop ${iteration}/${lc.maxIterations}] ${decision.reason}\n\n${decision.followUpPrompt ?? 'Continue o trabalho.'}`, state: 'done' }],
+            createdAt: Date.now(),
+          }
+          const wsMsgs = await loadMessages(decision.workerSessionId)
+          wsMsgs.push(followUp)
+          await saveMessages(decision.workerSessionId, wsMsgs)
+          emit(win, { type: 'message', sessionId: decision.workerSessionId, message: followUp })
+
+          const reuseInput: SendMessageInput = {
+            sessionId: decision.workerSessionId,
+            text: decision.followUpPrompt ?? '',
+            providerId: input.workerModel?.providerId ?? input.providerId,
+            modelId: input.workerModel?.modelId ?? input.modelId,
+            mode: wsInfo.title.toLowerCase().includes('test') ? 'code' : (input.directory ? 'code' : 'chat'),
+            options: { simple: true, subagents: true, orchestrate: undefined, permissionMode: input.options.permissionMode },
+            directory: input.directory,
+            extraDirectories: input.extraDirectories,
+            orchestrationRole: 'worker',
+            parentSessionId: sessionId,
+            workerTitle: wsInfo.title,
+          }
+          await runChat(win, reuseInput)
+
+          // Atualiza o resultado no plano
+          const updatedMsgs = await loadMessages(decision.workerSessionId)
+          const lastUp = [...updatedMsgs].reverse().find((m) => m.role === 'assistant')
+          const upText = lastUp?.parts.filter((p): p is TextPart => p.type === 'text').map((p) => p.text).join('\n').trim() || '(sem retorno)'
+          const loopPart: TextPart = { id: newId('prt'), type: 'text', text: `\n\n---\n### Loop ${iteration}: reuso de "${wsInfo.title}"\n\n${decision.reason}\n\n${upText}`, state: 'done' }
+          synthesisMessage.parts.push(loopPart)
+          emit(win, { type: 'part', sessionId, messageId: synthesisMessage.id, part: loopPart })
+        } else if ((decision.action === 'create_worker' || decision.action === 'create_test_worker') && decision.workerTitle) {
+          const isTest = decision.action === 'create_test_worker'
+          const loopWorker: SessionInfo = {
+            id: newId('ses'),
+            title: isTest ? `🧪 ${decision.workerTitle}` : decision.workerTitle!,
+            mode: decision.workerMode === 'code' && input.directory ? 'code' : 'chat',
+            pinned: false,
+            archived: false,
+            folderId: null,
+            directory: input.directory,
+            extraDirectories: input.extraDirectories,
+            orchestration: { role: 'worker', parentSessionId: sessionId, task: decision.reason },
+            parentId: sessionId,
+            createdAt: Date.now(),
+            updatedAt: Date.now(),
+          }
+          await writeJson(StorageKeys.session(loopWorker.id), loopWorker)
+          activeWorkers.get(sessionId)?.push(loopWorker.id)
+          workerSessions.set(loopWorker.id, { title: loopWorker.title, taskId: '' })
+          emit(win, { type: 'session', sessionId: loopWorker.id, session: loopWorker })
+
+          const wm = input.workerModel
+          const lwInput: SendMessageInput = {
+            sessionId: loopWorker.id,
+            text: decision.workerPrompt ?? decision.reason,
+            providerId: wm?.providerId ?? input.providerId,
+            modelId: wm?.modelId ?? input.modelId,
+            mode: loopWorker.mode,
+            options: { simple: true, subagents: true, orchestrate: undefined, permissionMode: input.options.permissionMode },
+            directory: input.directory,
+            extraDirectories: input.extraDirectories,
+            orchestrationRole: 'worker',
+            parentSessionId: sessionId,
+            workerTitle: loopWorker.title,
+          }
+          await runChat(win, lwInput)
+
+          const lwMsgs = await loadMessages(loopWorker.id)
+          const lastLw = [...lwMsgs].reverse().find((m) => m.role === 'assistant')
+          const lwText = lastLw?.parts.filter((p): p is TextPart => p.type === 'text').map((p) => p.text).join('\n').trim() || '(sem retorno)'
+          // Se é worker de teste e encontrou erro, o orquestrador na próxima iteração pode delegar ao worker original
+          const label = isTest ? `🧪 Teste` : `Worker adicional`
+          const loopPart: TextPart = { id: newId('prt'), type: 'text', text: `\n\n---\n### ${label} (loop ${iteration}): "${loopWorker.title}"\n\n${decision.reason}\n\n${lwText}`, state: 'done' }
+          synthesisMessage.parts.push(loopPart)
+          emit(win, { type: 'part', sessionId, messageId: synthesisMessage.id, part: loopPart })
         }
-        await writeJson(StorageKeys.session(contWorker.id), contWorker)
-        activeWorkers.get(sessionId)?.push(contWorker.id)
-        emit(win, { type: 'session', sessionId: contWorker.id, session: contWorker })
 
-        const wm = input.workerModel
-        const contInput: SendMessageInput = {
-          sessionId: contWorker.id,
-          text: review.followUpPrompt ?? '',
-          providerId: wm?.providerId ?? input.providerId,
-          modelId: wm?.modelId ?? input.modelId,
-          mode: contWorker.mode,
-          options: { simple: true, subagents: false, orchestrate: undefined, permissionMode: input.options.permissionMode },
-          directory: input.directory,
-          extraDirectories: input.extraDirectories,
-          orchestrationRole: 'worker',
-          parentSessionId: sessionId,
-          workerTitle: contWorker.title,
-        }
-        await runChat(win, contInput)
-
-        const contMsgs = await loadMessages(contWorker.id)
-        const lastCont = [...contMsgs].reverse().find((m) => m.role === 'assistant')
-        const contText = lastCont?.parts
-          .filter((p): p is TextPart => p.type === 'text')
-          .map((p) => p.text)
-          .join('\n')
-          .trim() || '(sem retorno)'
-
-        // Append ao plano o resultado da continuação
-        const contPart: TextPart = { id: newId('prt'), type: 'text', text: `\n\n---\n### Continuação (iteração ${iteration}/${lc.maxIterations})\n\n${review.reason}\n\n${contText}`, state: 'done' }
-        synthesisMessage.parts.push(contPart)
-        emit(win, { type: 'part', sessionId, messageId: synthesisMessage.id, part: contPart })
         await saveMessages(sessionId, hist)
       }
       activeWorkers.delete(sessionId)

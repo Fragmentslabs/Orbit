@@ -15,9 +15,11 @@ export interface LoopEngineConfig {
 }
 
 export interface ReviewResult {
-  status: 'done' | 'needs_more'
+  status: 'done' | 'needs_more' | 'replan'
   reason: string
   followUpPrompt?: string
+  /** Se replan, sugestão de nova abordagem */
+  newApproach?: string
 }
 
 function newId(prefix: string) {
