@@ -33,6 +33,7 @@ import { useSlashCommands } from '~/hooks/useSlashCommands'
 import { uriToFilePart } from '~/lib/attachments'
 import { useWorkspaceStore } from '~/stores/workspace-store'
 import { useSettingsStore } from '~/stores/settings-store'
+import { useAppearanceStore } from '~/stores/appearance-store'
 import { useReasoningPrefs } from '~/stores/reasoning-prefs'
 import { getThemeTokens } from '~/lib/theme-tokens'
 import { useThemeStore } from '~/stores/theme-store'
@@ -96,6 +97,7 @@ export function PromptInput({
   const workerModelLabel = workerModel && catalog
     ? catalog[workerModel.providerId]?.models[workerModel.modelId]?.name ?? `${workerModel.providerId}/${workerModel.modelId}`
     : null
+  const displayMode = useAppearanceStore((s) => s.displayMode)
 
   useEffect(() => {
     if (!hydrated) hydrate()
@@ -412,7 +414,8 @@ export function PromptInput({
       </View>
       </SlashPalette>
 
-      {/* Mode Toggles Row */}
+      {/* Mode Toggles Row — oculto em modo "actions" */}
+      {displayMode !== 'actions' && (
       <View className="flex-row items-center justify-between px-1">
         <View className="flex-row items-center gap-2">
           {/* Thinking toggle — mostrado apenas se o modelo suporta reasoning */}
@@ -470,6 +473,7 @@ export function PromptInput({
         </View>
         <ContextMeter sessionId={sessionId} />
       </View>
+      )}
 
       {/* Bottom sheet */}
       <AttachmentSheet
