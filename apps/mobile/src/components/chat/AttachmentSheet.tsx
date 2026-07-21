@@ -173,7 +173,7 @@ function WorkerModeCard({
         <Text style={[s.modeCardLabel, { color: tokens.foreground }]}>{label}</Text>
       </View>
       <View style={s.workerRight}>
-        {!hideGear && (
+        {!hideGear && active && (
           <Pressable onPress={onConfigure} hitSlop={8} style={[s.gearBtn, { backgroundColor: tokens.muted }]}>
             <Settings2 size={16} color={tokens.mutedForeground} />
           </Pressable>
