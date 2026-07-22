@@ -43,6 +43,7 @@ import { useReasoningPrefs } from "@/src/stores/reasoning-prefs"
 import { useSessionStore } from "@/src/stores/session-store"
 import { useSimpleMode } from "@/src/stores/simple-mode"
 import { useSkillsStore } from "@/src/stores/skills-store"
+import { useAppearanceStore } from "@/src/stores/appearance-store"
 import type { ChatStatus, FilePart, PermissionMode, SendMessageOptions } from "@shared/chat"
 import { toFileParts } from "@/src/lib/message-utils"
 import { resolveSlashAction } from "@/src/lib/slash-actions"
@@ -95,6 +96,7 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId }: 
   const createSession = useSessionStore((s) => s.createSession)
   const openChatTab = usePanelStore((s) => s.openChatTab)
   const sessionDir = useSessionStore((s) => sessionId ? s.sessions.find(x => x.id === sessionId)?.directory : undefined)
+  const displayMode = useAppearanceStore((s) => s.displayMode)
   const referenceCommands = useReferenceCommands()
   const actionCommands = useSlashActionCommands("code")
 
@@ -319,55 +321,62 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId }: 
             </div>
           </PromptInputFooter>
         </PromptInput>
-      <PromptInputTools>
-        <div className="flex items-center gap-1 mt-2">
-        <ModeToggle
-          icon={Search}
-          label="Pesquisa"
-          description="Libera websearch e webfetch para consultar documentação online."
-          active={search}
-          onToggle={() => setSearch((v) => !v)}
-        />
+      {displayMode !== "actions" && (
+        <PromptInputTools>
+          <div className="flex items-center gap-1 mt-2">
           <ModeToggle
-            icon={FileText}
-            label="Modo Plano"
-            description="Somente leitura. Produz um plano de implementação sem editar arquivos."
-            active={plan}
-            onToggle={() => setPlan((v) => !v)}
+            icon={Search}
+            label="Pesquisa"
+            description="Libera websearch e webfetch para consultar documentação online."
+            active={search}
+            onToggle={() => setSearch((v) => !v)}
           />
-          {model?.reasoning && (
             <ModeToggle
-              icon={Brain}
-              label="Thinking"
-              description={
-                model.reasoningAlwaysOn
-                  ? "Este modelo sempre usa raciocínio extendido."
-                  : "Ativa raciocínio extendido do modelo. Custa mais tokens e tempo."
-              }
-              active={thinking}
-              onToggle={() => update({ enabled: !enabled, variantId })}
-              disabled={model.reasoningAlwaysOn}
+              icon={FileText}
+              label="Modo Plano"
+              description="Somente leitura. Produz um plano de implementação sem editar arquivos."
+              active={plan}
+              onToggle={() => setPlan((v) => !v)}
             />
-          )}
-          <ModeToggle
-            icon={AlignLeft}
-            label="Simples"
-            description="Respostas diretas em texto puro: sem formatação nem blocos de ferramentas."
-            active={simple}
-            onToggle={() => setSimple(!simple)}
-          />
-          <ModeToggle
-            icon={BrainCircuit}
-            label="Memória"
-            description="Orbit lembra decisões, convenções e estrutura do projeto entre sessões. Desative apenas neste chat se preferir uma interação sem contexto."
-            active={brain}
-            onToggle={() => setBrainEnabled(sessionId, !brain)}
-          />
-        </div>
-        <div className="ml-auto mt-2">
+            {model?.reasoning && (
+              <ModeToggle
+                icon={Brain}
+                label="Thinking"
+                description={
+                  model.reasoningAlwaysOn
+                    ? "Este modelo sempre usa raciocínio extendido."
+                    : "Ativa raciocínio extendido do modelo. Custa mais tokens e tempo."
+                }
+                active={thinking}
+                onToggle={() => update({ enabled: !enabled, variantId })}
+                disabled={model.reasoningAlwaysOn}
+              />
+            )}
+            <ModeToggle
+              icon={AlignLeft}
+              label="Simples"
+              description="Respostas diretas em texto puro: sem formatação nem blocos de ferramentas."
+              active={simple}
+              onToggle={() => setSimple(!simple)}
+            />
+            <ModeToggle
+              icon={BrainCircuit}
+              label="Memória"
+              description="Orbit lembra decisões, convenções e estrutura do projeto entre sessões. Desative apenas neste chat se preferir uma interação sem contexto."
+              active={brain}
+              onToggle={() => setBrainEnabled(sessionId, !brain)}
+            />
+          </div>
+          <div className="ml-auto mt-2">
+            <ContextMeter sessionId={sessionId} />
+          </div>
+        </PromptInputTools>
+      )}
+      {displayMode === "actions" && (
+        <div className="ml-auto mt-2 pt-2">
           <ContextMeter sessionId={sessionId} />
         </div>
-      </PromptInputTools>
+      )}
         <OrchestrationConfigDialog open={configOpen} onOpenChange={setConfigOpen} />
         <LoopConfigDialog open={loopConfigOpen} onOpenChange={setLoopConfigOpen} />
       </div>
