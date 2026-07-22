@@ -42,7 +42,7 @@ import { useProviderStore } from "@/src/stores/provider-store"
 import { useSettingsUi } from "@/src/stores/settings-ui"
 import { useReasoningPrefs } from "@/src/stores/reasoning-prefs"
 import { useSessionStore } from "@/src/stores/session-store"
-import { useSimpleMode } from "@/src/stores/simple-mode"
+import { useSimpleMode, useSimplePrefs } from "@/src/stores/simple-prefs"
 import { useSkillsStore } from "@/src/stores/skills-store"
 import { useAppearanceStore } from "@/src/stores/appearance-store"
 import type { ChatStatus, FilePart, PermissionMode, SendMessageOptions } from "@shared/chat"
@@ -70,8 +70,8 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId }: 
   const [loop, setLoop] = useState(false)
   const [configOpen, setConfigOpen] = useState(false)
   const [loopConfigOpen, setLoopConfigOpen] = useState(false)
-  const simple = useSimpleMode((s) => s.simple)
-  const setSimple = useSimpleMode((s) => s.setSimple)
+  const simple = useSimpleMode(sessionId)
+  const setSimple = useSimplePrefs((s) => s.setEnabled)
   const brain = useBrainEnabled(sessionId)
   const setBrainEnabled = useBrainPrefs((s) => s.setEnabled)
   const brainContext = useCodeContext()
@@ -125,7 +125,7 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId }: 
     { icon: Search, label: "Pesquisa", active: search, onChange: (v: boolean) => setSearch(v) },
     { icon: FileText, label: "Modo Plano", active: plan, onChange: (v: boolean) => setPlan(v) },
     ...(model?.reasoning ? [{ icon: Brain, label: "Thinking", active: thinking, onChange: (v: boolean) => update({ enabled: v, variantId }) }] : []),
-    { icon: AlignLeft, label: "Simples", active: simple, onChange: (v: boolean) => setSimple(v) },
+    { icon: AlignLeft, label: "Simples", active: simple, onChange: (v: boolean) => setSimple(sessionId, v) },
     { icon: BrainCircuit, label: "Memória", active: brain, onChange: (v: boolean) => setBrainEnabled(sessionId, v) },
   ], [search, plan, model?.reasoning, thinking, simple, brain, sessionId, variantId, update, setBrainEnabled, setSimple])
 
@@ -201,7 +201,7 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId }: 
       ...(model?.reasoning && !model.reasoningAlwaysOn
         ? [{ id: "thinking", label: "Thinking", description: "Alterna raciocínio estendido do modelo", keywords: ["reasoning", "pensar"], group: "Modos" as const, active: thinking, run: toggle(() => update({ enabled: !enabled, variantId })) }]
         : []),
-      { id: "simples", label: "Simples", description: "Alterna respostas em texto puro", keywords: ["texto", "plain"], group: "Modos" as const, active: simple, run: toggle(() => setSimple(!simple)) },
+      { id: "simples", label: "Simples", description: "Alterna respostas em texto puro", keywords: ["texto", "plain"], group: "Modos" as const, active: simple, run: toggle(() => setSimple(sessionId, !simple)) },
       { id: "brain", label: "Memória (Brain)", description: "Orbit lembra decisões e convenções do projeto entre sessões", keywords: ["memoria", "brain"], group: "Modos" as const, active: brain, run: toggle(() => setBrainEnabled(sessionId, !brain)) },
       { id: "subagents", label: "Subagents", description: "Alterna workers em background", keywords: ["worker", "delegar"], group: "Modos" as const, active: subagents, run: toggle(() => setSubagents((v) => !v)) },
       { id: "orchestra", label: "Orchestra", description: "Alterna orquestração em tarefas paralelas", keywords: ["workers", "plano"], group: "Modos" as const, active: orchestra, run: toggle(() => setOrchestra((v) => !v)) },
@@ -373,7 +373,7 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId }: 
               label="Simples"
               description="Respostas diretas em texto puro: sem formatação nem blocos de ferramentas."
               active={simple}
-              onToggle={() => setSimple(!simple)}
+              onToggle={() => setSimple(sessionId, !simple)}
             />
             <ModeToggle
               icon={BrainCircuit}

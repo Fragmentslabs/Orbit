@@ -37,7 +37,7 @@ import { useSessionStore } from "@/src/stores/session-store"
 import { useSettingsUi } from "@/src/stores/settings-ui"
 import { useProviderStore } from "@/src/stores/provider-store"
 import { useReasoningPrefs } from "@/src/stores/reasoning-prefs"
-import { useSimpleMode } from "@/src/stores/simple-mode"
+import { useSimpleMode, useSimplePrefs } from "@/src/stores/simple-prefs"
 import type { ChatStatus, FilePart, SendMessageOptions } from "@shared/chat"
 import { toFileParts } from "@/src/lib/message-utils"
 import { resolveSlashAction } from "@/src/lib/slash-actions"
@@ -55,8 +55,8 @@ export function ChatInput({ onSubmit, status, onStop, sessionId }: {
   const [subagents, setSubagents] = useState(false)
   const [orchestra, setOrchestra] = useState(false)
   const [configOpen, setConfigOpen] = useState(false)
-  const simple = useSimpleMode((s) => s.simple)
-  const setSimple = useSimpleMode((s) => s.setSimple)
+  const simple = useSimpleMode(sessionId)
+  const setSimple = useSimplePrefs((s) => s.setEnabled)
   const brain = useBrainEnabled(sessionId)
   const setBrainEnabled = useBrainPrefs((s) => s.setEnabled)
   const brainContext = useChatContext()
@@ -84,7 +84,7 @@ export function ChatInput({ onSubmit, status, onStop, sessionId }: {
     { icon: Search, label: "Pesquisa", active: search, onChange: (v: boolean) => setSearch(v) },
     { icon: Globe, label: "Browser", active: browser, onChange: (v: boolean) => setBrowser(v) },
     ...(model?.reasoning ? [{ icon: Brain, label: "Thinking", active: thinking, onChange: (v: boolean) => update({ enabled: v, variantId }) }] : []),
-    { icon: AlignLeft, label: "Simples", active: simple, onChange: (v: boolean) => setSimple(v) },
+    { icon: AlignLeft, label: "Simples", active: simple, onChange: (v: boolean) => setSimple(sessionId, v) },
     { icon: BrainCircuit, label: "Memória", active: brain, onChange: (v: boolean) => setBrainEnabled(sessionId, v) },
   ], [search, browser, model?.reasoning, thinking, simple, brain, sessionId, variantId, update, setBrainEnabled, setSimple])
 
@@ -110,7 +110,7 @@ export function ChatInput({ onSubmit, status, onStop, sessionId }: {
       ...(model?.reasoning && !model.reasoningAlwaysOn
         ? [{ id: "thinking", label: "Thinking", description: "Alterna raciocínio estendido do modelo", keywords: ["reasoning", "pensar"], group: "Modos" as const, active: thinking, run: toggle(() => update({ enabled: !enabled, variantId })) }]
         : []),
-      { id: "simples", label: "Simples", description: "Alterna respostas em texto puro", keywords: ["texto", "plain"], group: "Modos" as const, active: simple, run: toggle(() => setSimple(!simple)) },
+      { id: "simples", label: "Simples", description: "Alterna respostas em texto puro", keywords: ["texto", "plain"], group: "Modos" as const, active: simple, run: toggle(() => setSimple(sessionId, !simple)) },
       { id: "brain", label: "Memória (Brain)", description: "Orbit lembra fatos e preferências entre conversas", keywords: ["memoria", "brain"], group: "Modos" as const, active: brain, run: toggle(() => setBrainEnabled(sessionId, !brain)) },
       { id: "subagents", label: "Subagents", description: "Alterna workers em background", keywords: ["worker", "delegar"], group: "Modos" as const, active: subagents, run: toggle(() => setSubagents((v) => !v)) },
       { id: "orchestra", label: "Orchestra", description: "Alterna orquestração em tarefas paralelas", keywords: ["workers", "plano"], group: "Modos" as const, active: orchestra, run: toggle(() => setOrchestra((v) => !v)) },
@@ -254,7 +254,7 @@ export function ChatInput({ onSubmit, status, onStop, sessionId }: {
             label="Simples"
             description="Respostas diretas em texto puro: sem formatação, citações ou blocos de ferramentas."
             active={simple}
-            onToggle={() => setSimple(!simple)}
+            onToggle={() => setSimple(sessionId, !simple)}
           />
           <ModeToggle
             icon={BrainCircuit}

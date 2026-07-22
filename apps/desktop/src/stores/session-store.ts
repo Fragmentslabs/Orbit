@@ -17,6 +17,8 @@ import type {
 import { StorageKeys } from "@shared/chat"
 import { chatApi, sessionApi, storage } from "@/src/lib/ipc"
 import { useBrainPrefs } from "@/src/stores/brain-prefs"
+import { useSimplePrefs } from "@/src/stores/simple-prefs"
+import { useDraftInput } from "@/src/stores/draft-input"
 import { useMessageQueueStore } from "@/src/stores/message-queue-store"
 import { useModelModePrefs } from "@/src/stores/model-mode-prefs"
 import { useProviderStore } from "@/src/stores/provider-store"
@@ -276,6 +278,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       await storage.remove(StorageKeys.messages(sid))
       void chatApi.closeBrowser(sid)
       useBrainPrefs.getState().setEnabled(sid, true) // limpa o override do Brain
+      useSimplePrefs.getState().clear(sid)
       void storage.remove(StorageKeys.planReview(sid))
       void storage.remove(StorageKeys.pendingAsks(sid))
     }
@@ -364,6 +367,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       await storage.remove(StorageKeys.messages(sid))
       void chatApi.closeBrowser(sid)
       useBrainPrefs.getState().setEnabled(sid, true)
+      useSimplePrefs.getState().clear(sid)
       void storage.remove(StorageKeys.planReview(sid))
     }
     set((state) => {
@@ -435,6 +439,8 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       sessionId = session.id
       // O toggle Brain do chat novo (rascunho) passa a valer para esta sessão
       useBrainPrefs.getState().adopt(sessionId)
+      useSimplePrefs.getState().adopt(sessionId)
+      useDraftInput.getState().adopt(sessionId)
     } else if (mode === "code" && config.directory && session.directory !== config.directory) {
       set((state) =>
         updateSessionIn(state, session!.id, {
