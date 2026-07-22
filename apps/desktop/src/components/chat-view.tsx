@@ -16,6 +16,7 @@ import { ChatAssistantMessage } from "@/src/components/messages/chat-message"
 import { CodeAssistantMessage } from "@/src/components/messages/code-message"
 import { SummaryCard } from "@/src/components/messages/summary-card"
 import { OrchestrationPlanCard } from "@/src/components/orchestration-plan-card"
+import { TaskProgress } from "@/src/components/task-progress"
 import { PlanReviewCard } from "@/src/components/plan-review-card"
 import { InitProjectCard } from "@/src/components/init-project-card"
 import { RevertBar } from "@/src/components/revert-bar"
@@ -212,9 +213,17 @@ function ChatMessages({ messages, isBusy, mode, sessionId, sendMessage, planIds,
             />
           )
         })}
-        {planReview && (planReview.status === "proposed" || planReview.status === "implementing") && sessionId && (
+        {planReview && planReview.status === "proposed" && sessionId && (
           <div className="px-1">
             <PlanReviewCard sessionId={sessionId} review={planReview} />
+          </div>
+        )}
+        {planReview && planReview.status === "implementing" && sessionId && (
+          <div className="px-1">
+            <TaskProgress
+              tasks={[{ id: "plan", title: "Implementar plano", status: isBusy ? "streaming" : "idle" }]}
+              title="Plano"
+            />
           </div>
         )}
       </ConversationContent>
@@ -460,10 +469,20 @@ export function ChatView({ sessionId }: { sessionId?: string } = {}) {
           <RevertBar session={session} />
         </div>
       )}
-      {/* Plano de orquestração proposto/em execução, inline acima do input */}
-      {session && plan && (plan.status === "proposed" || plan.status === "approved" || plan.status === "running") && (
+      {/* Plano de orquestração proposto — aprovar/rejeitar */}
+      {session && plan && plan.status === "proposed" && (
         <div className="mx-auto w-full max-w-2xl pb-2">
           <OrchestrationPlanCard sessionId={session.id} plan={plan} />
+        </div>
+      )}
+      {/* Plano de orquestração em execução/concluído — progresso das tarefas */}
+      {session && plan && (plan.status === "approved" || plan.status === "running" || plan.status === "done") && (
+        <div className="mx-auto w-full max-w-2xl pb-2">
+          <TaskProgress
+            tasks={plan.tasks.map((t) => ({ id: t.id, title: t.title, status: t.status, mode: t.mode }))}
+            title="Orquestração"
+            defaultExpanded={plan.status !== "done"}
+          />
         </div>
       )}
       {/* Pedidos aguardando resposta (permissão / question), inline acima do input.
