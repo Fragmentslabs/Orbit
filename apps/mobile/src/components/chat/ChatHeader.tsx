@@ -54,7 +54,7 @@ export const ChatHeader = memo(function ChatHeader({
   }
 
   return (
-    <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 8, paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: tokens.border, backgroundColor: tokens.background }}>
+    <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 8, paddingVertical: personaVisible ? 8 : 2, borderBottomWidth: 1, borderBottomColor: tokens.border, backgroundColor: tokens.background }}>
       <Pressable onPress={openSidebar} style={s.iconButton}>
         <Menu size={22} color={tokens.foreground} />
       </Pressable>

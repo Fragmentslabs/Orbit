@@ -394,19 +394,18 @@ export function ChatView({ sessionId }: { sessionId?: string } = {}) {
         </div>
       )}
       <div className="relative flex-1">
-        {/* Persona oculta em modo simples — o shimmer da mensagem já indica atividade */}
-        <div
-          className={`absolute left-1/2 z-40 -translate-x-1/2 transition-all duration-500 ease-in-out ${
-            topVisible && !simpleMode && personaVisible ? "opacity-100" : "opacity-0"
-          }`}
-          style={{
-            top: "-1.7rem",
-            width: "4rem",
-            height: "4rem",
-          }}
-        >
-          <Persona state={topPersonaState} className="!size-full" />
-        </div>
+        {topVisible && !simpleMode && personaVisible && (
+          <div
+            className="absolute left-1/2 z-40 -translate-x-1/2 transition-all duration-500 ease-in-out opacity-100"
+            style={{
+              top: "-1.7rem",
+              width: "4rem",
+              height: "4rem",
+            }}
+          >
+            <Persona state={topPersonaState} className="!size-full" />
+          </div>
+        )}
 
         <div
           className={`flex h-full items-center justify-center transition-all duration-300 ease-in-out ${
@@ -443,7 +442,7 @@ export function ChatView({ sessionId }: { sessionId?: string } = {}) {
             chatVisible ? "opacity-100" : "opacity-0 pointer-events-none"
           }`}
         >
-          <div className="flex min-h-0 flex-1 flex-col pt-6">
+          <div className={`flex min-h-0 flex-1 flex-col ${topVisible && !simpleMode && personaVisible ? "pt-6" : "pt-2"}`}>
             <div className="pointer-events-none sticky top-0 z-10 h-12 bg-linear-to-b to-transparent" style={{ backgroundImage: 'linear-gradient(to bottom, var(--panel-bg, var(--background)), transparent)' }} />
             <ChatMessages messages={messages} isBusy={isBusy} mode={viewMode} sessionId={session?.id} sendMessage={sendMessage} planIds={planMsgIds} planReview={planReview} />
           </div>
