@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react"
 import { ChevronDown, FileTextIcon, RefreshCwIcon, MessageSquareText } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -131,11 +130,11 @@ export function PlanReviewCard({ sessionId, review }: { sessionId: string; revie
         </div>
         {isProposed && reviewOpen && (
           <div className="flex items-center gap-2 mt-2 pt-2 border-t border-sidebar-border">
-            <Input
+            <input
               value={reviewText}
               onChange={(e) => setReviewText(e.target.value)}
               placeholder="Escreva seu feedback para revisar o plano..."
-              className="h-8 text-xs flex-1"
+              className="h-8 flex-1 rounded-md border border-input bg-background px-2.5 py-1.5 text-xs ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               onKeyDown={(e) => { if (e.key === "Enter") handleSubmitReview() }}
             />
             <Button size="sm" className="h-8 text-xs" onClick={handleSubmitReview} disabled={!reviewText.trim()}>
