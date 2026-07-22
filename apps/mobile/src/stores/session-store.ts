@@ -93,6 +93,8 @@ interface SessionState {
   _planReviewOutbox: Record<string, boolean>
   /** Planos de orquestração por sessão. */
   orchestration: Record<string, OrchestrationPlan>
+  /** Contagem de mensagens não lidas por sessão. */
+  unreadCounts: Record<string, number>
   /** Busca lista de sessões via WS. */
   fetchSessions: () => Promise<void>
   /** Busca textual em títulos e mensagens (mesma lógica do desktop). */
@@ -233,6 +235,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
   planReviews: {},
   _planReviewOutbox: {},
   orchestration: {},
+  unreadCounts: {},
 
   fetchSessions: async () => {
     const { wsClient, connection } = useConnectionStore.getState()
@@ -280,7 +283,10 @@ export const useSessionStore = create<SessionState>((set, get) => ({
   },
 
   selectSession: async (id) => {
-    set({ activeSessionId: id })
+    set((state) => ({
+      activeSessionId: id,
+      unreadCounts: id ? { ...state.unreadCounts, [id]: 0 } : state.unreadCounts,
+    }))
     if (id) {
       // Carrega do cache primeiro (instantâneo), depois busca da rede
       const cached = await loadCachedMessages(id)
@@ -470,11 +476,13 @@ export const useSessionStore = create<SessionState>((set, get) => ({
         delete orchestration[sessionId]
         const _planReviewOutbox = { ...(state._planReviewOutbox ?? {}) }
         delete _planReviewOutbox[sessionId]
+        const unreadCounts = { ...state.unreadCounts }
+        delete unreadCounts[sessionId]
         // Limpa pendingAsks da memória e do cache
         const pendingAsks = { ...useChatStore.getState().pendingAsks }
         delete pendingAsks[sessionId]
         useChatStore.setState({ pendingAsks, activeAskSessionId: useChatStore.getState().activeAskSessionId === sessionId ? null : useChatStore.getState().activeAskSessionId })
-        return { sessions, activeSessionId, planReviews, orchestration, _planReviewOutbox }
+        return { sessions, activeSessionId, planReviews, orchestration, _planReviewOutbox, unreadCounts }
       })
       // Cleanup de arquivos de cache
       void Storage.removeItem(CACHE_ASKS_PREFIX + sessionId)
@@ -688,7 +696,15 @@ export const useSessionStore = create<SessionState>((set, get) => ({
             ? { ...state.status, [sessionId]: 'idle' as ChatStatus }
             : state.status
 
-          return { messages: { ...state.messages, [sessionId]: next }, status }
+          // Incrementa contador de não lidas se a sessão não está ativa
+          const isInbound = m.role === 'assistant'
+          const activeId = state.activeSessionId
+          const unreadCounts =
+            isInbound && sessionId !== activeId
+              ? { ...state.unreadCounts, [sessionId]: (state.unreadCounts[sessionId] ?? 0) + 1 }
+              : state.unreadCounts
+
+          return { messages: { ...state.messages, [sessionId]: next }, status, unreadCounts }
         })
         break
 
@@ -777,9 +793,12 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       case 'session:deleted':
         set((state) => {
           const sessions = state.sessions.filter((s) => s.id !== event.sessionId)
+          const unreadCounts = { ...state.unreadCounts }
+          delete unreadCounts[event.sessionId]
           void cacheSessions(sessions)
           return {
             sessions,
+            unreadCounts,
             activeSessionId: state.activeSessionId === event.sessionId ? null : state.activeSessionId,
           }
         })

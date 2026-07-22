@@ -50,6 +50,8 @@ interface SessionState {
   status: Record<string, ChatStatus>
   errors: Record<string, string | undefined>
   activeIds: Record<SessionMode, string | null>
+  /** Contagem de mensagens não lidas por sessão. */
+  unreadCounts: Record<string, number>
   /** Planos de orquestração por sessão orquestradora */
   orchestration: Record<string, OrchestrationPlan>
   /** Revisão de planos (modo plano): propostos ou em implementação */
@@ -119,6 +121,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
   planReviews: {},
   _planReviewOutbox: {},
   pendingAsks: {},
+  unreadCounts: {},
 
   initialize: async () => {
     if (get().initialized) return
@@ -160,7 +163,10 @@ export const useSessionStore = create<SessionState>((set, get) => ({
   },
 
   selectSession: async (mode, id) => {
-    set((state) => ({ activeIds: { ...state.activeIds, [mode]: id } }))
+    set((state) => ({
+      activeIds: { ...state.activeIds, [mode]: id },
+      unreadCounts: id ? { ...state.unreadCounts, [id]: 0 } : state.unreadCounts,
+    }))
     if (id) {
       await get().ensureMessages(id)
       if (get().orchestration[id] === undefined) {
@@ -265,7 +271,9 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       for (const sid of ids) delete planReviews[sid]
       const pendingAsks = { ...state.pendingAsks }
       for (const sid of ids) delete pendingAsks[sid]
-      return { sessions: state.sessions.filter((s) => !idSet.has(s.id)), messages, activeIds, planReviews, pendingAsks }
+      const unreadCounts = { ...state.unreadCounts }
+      for (const sid of ids) delete unreadCounts[sid]
+      return { sessions: state.sessions.filter((s) => !idSet.has(s.id)), messages, activeIds, planReviews, pendingAsks, unreadCounts }
     })
   },
 
@@ -488,7 +496,15 @@ function applyChatEvent(event: ChatEvent, set: Setter, get: () => SessionState) 
         const list = state.messages[sessionId] ?? []
         const idx = list.findIndex((m) => m.id === event.message.id)
         const next = idx >= 0 ? list.map((m, i) => (i === idx ? event.message : m)) : [...list, event.message]
-        return { messages: { ...state.messages, [sessionId]: next } }
+
+        const isInbound = event.message.role === "assistant"
+        const activeId = state.activeIds["chat"] ?? state.activeIds["code"] ?? null
+        const unreadCounts =
+          isInbound && sessionId !== activeId
+            ? { ...state.unreadCounts, [sessionId]: (state.unreadCounts[sessionId] ?? 0) + 1 }
+            : state.unreadCounts
+
+        return { messages: { ...state.messages, [sessionId]: next }, unreadCounts }
       })
       break
 
@@ -577,7 +593,9 @@ function applyChatEvent(event: ChatEvent, set: Setter, get: () => SessionState) 
         }
         const planReviews = { ...state.planReviews }
         delete planReviews[sessionId]
-        return { sessions, messages, activeIds, planReviews }
+        const unreadCounts = { ...state.unreadCounts }
+        delete unreadCounts[sessionId]
+        return { sessions, messages, activeIds, planReviews, unreadCounts }
       })
       break
 
