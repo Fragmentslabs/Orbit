@@ -230,11 +230,22 @@ export interface AcceptPlanReviewRequest {
   permissionMode: PermissionMode
   providerId?: string
   modelId?: string
+  orchestrate?: boolean
 }
 
 export interface RejectPlanReviewRequest {
   type: 'plan:review-reject'
   sessionId: string
+}
+
+export interface RevisePlanReviewRequest {
+  type: 'plan:review-revise'
+  sessionId: string
+  messageId: string
+  feedback: string
+  permissionMode: PermissionMode
+  providerId?: string
+  modelId?: string
 }
 
 // ─── Orchestration ────────────────────────────────────────────────────────────
@@ -287,6 +298,7 @@ export type CompanionRequest =
   | ReadPlanFileRequest
   | AcceptPlanReviewRequest
   | RejectPlanReviewRequest
+  | RevisePlanReviewRequest
   | ApproveOrchestrationRequest
   | RejectOrchestrationRequest
 

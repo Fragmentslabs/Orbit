@@ -65,8 +65,9 @@ interface SessionState {
   ensureMessages: (sessionId: string) => Promise<void>
   approvePlan: (sessionId: string, planId: string, taskIds?: string[]) => void
   rejectPlan: (sessionId: string) => void
-  acceptPlanReview: (sessionId: string, permissionMode: "ask" | "approve" | "full") => void
+  acceptPlanReview: (sessionId: string, permissionMode: "ask" | "approve" | "full", orchestrate?: boolean) => void
   rejectPlanReview: (sessionId: string) => void
+  reviewPlanReview: (sessionId: string, feedback: string) => void
   createSession: (mode: SessionMode, partial?: Partial<SessionInfo> & { setActive?: boolean }) => Promise<SessionInfo>
   selectSession: (mode: SessionMode, id: string | null) => Promise<void>
   renameSession: (id: string, title: string) => void
@@ -203,17 +204,20 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     void chatApi.rejectPlan(sessionId)
   },
 
-  acceptPlanReview: (sessionId, permissionMode) => {
+  acceptPlanReview: (sessionId, permissionMode, orchestrate) => {
     const review = get().planReviews[sessionId]
     if (!review || review.status !== "proposed") return
     const updated: PlanReview = { ...review, status: "implementing", permissionMode }
     set((state) => ({ planReviews: { ...state.planReviews, [sessionId]: updated } }))
     void storage.write(StorageKeys.planReview(sessionId), updated)
-    // Envia uma nova mensagem pedindo implementação com o modo escolhido
     const session = get().sessions.find((s) => s.id === sessionId)
     const mode = session?.mode ?? "code"
     void get().sendMessage(mode, "Implemente o plano acima.", {
-      options: { planReview: { status: "implementing", messageId: review.messageId, permissionMode }, permissionMode },
+      options: {
+        planReview: { status: "implementing", messageId: review.messageId, permissionMode },
+        permissionMode,
+        orchestrate: orchestrate ? {} : undefined,
+      },
       sessionId,
     })
   },
@@ -228,6 +232,23 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     if (session?.directory) {
       void chatApi.deletePlanFile(session.directory)
     }
+  },
+
+  reviewPlanReview: (sessionId, feedback) => {
+    const review = get().planReviews[sessionId]
+    if (!review || review.status !== "proposed") return
+    const updated: PlanReview = { ...review, status: "revising" }
+    set((state) => ({ planReviews: { ...state.planReviews, [sessionId]: updated } }))
+    void storage.write(StorageKeys.planReview(sessionId), updated)
+    const session = get().sessions.find((s) => s.id === sessionId)
+    const mode = session?.mode ?? "code"
+    void get().sendMessage(mode, feedback, {
+      options: {
+        planReview: { status: "revising", messageId: review.messageId, permissionMode: review.permissionMode ?? "ask" },
+        permissionMode: review.permissionMode ?? "ask",
+      },
+      sessionId,
+    })
   },
 
   renameSession: (id, title) => set((state) => updateSessionIn(state, id, { title })),

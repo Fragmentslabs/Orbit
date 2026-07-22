@@ -36,7 +36,7 @@ import { listCredentialProviders } from './auth'
 import { reply as askReply } from './ask-broker'
 import { revert as revertSession, unrevert as unrevertSession } from './session/revert'
 import { abortChat, runChat } from './chat-engine'
-import { abortOrchestration, approvePlan, rejectPlan } from './orchestrator'
+import { abortOrchestration, approvePlan, rejectPlan, runOrchestration } from './orchestrator'
 import { readPlanFile, deletePlanFile } from './plan-file'
 import { getCatalog } from './catalog'
 import { getModelsSnapshot } from './models'
@@ -752,11 +752,16 @@ async function handleRequest(client: ConnectedClient, requestId: string, req: Co
           options: {
             planReview: { status: 'implementing', messageId: req.messageId, permissionMode: req.permissionMode },
             permissionMode: req.permissionMode,
+            ...(req.orchestrate ? { orchestrate: {}, loop: true, subagents: true, plan: undefined } : {}),
           },
           directory: session.directory,
           extraDirectories: session.extraDirectories,
         }
-        void runChat(win, input)
+        if (req.orchestrate) {
+          void runOrchestration(win, input)
+        } else {
+          void runChat(win, input)
+        }
         sendResponse(ws, requestId, true)
         break
       }
@@ -777,6 +782,35 @@ async function handleRequest(client: ConnectedClient, requestId: string, req: Co
             })
           }
         }
+        sendResponse(ws, requestId, true)
+        break
+      }
+
+      case 'plan:review-revise': {
+        const win = BrowserWindow.getAllWindows()[0]
+        if (!win) {
+          sendResponse(ws, requestId, false, undefined, 'Janela principal indisponível')
+          break
+        }
+        const session = await readJson<SessionInfo>(StorageKeys.session(req.sessionId))
+        if (!session) {
+          sendResponse(ws, requestId, false, undefined, 'Sessão não encontrada')
+          break
+        }
+        const input: SendMessageInput = {
+          sessionId: req.sessionId,
+          text: req.feedback,
+          providerId: req.providerId ?? 'openai',
+          modelId: req.modelId ?? 'gpt-4o',
+          mode: session.mode,
+          options: {
+            planReview: { status: 'revising', messageId: req.messageId, permissionMode: req.permissionMode },
+            permissionMode: req.permissionMode,
+          },
+          directory: session.directory,
+          extraDirectories: session.extraDirectories,
+        }
+        void runChat(win, input)
         sendResponse(ws, requestId, true)
         break
       }

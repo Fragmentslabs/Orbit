@@ -230,7 +230,7 @@ export interface AskItem {
 }
 
 export interface PlanReview {
-  status: "proposed" | "implementing" | "rejected"
+  status: "proposed" | "implementing" | "rejected" | "revising"
   messageId: string
   permissionMode?: PermissionMode
 }
