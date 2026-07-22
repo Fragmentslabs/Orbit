@@ -104,9 +104,9 @@ export function PromptInput({
   }, [hydrated, hydrate])
 
   useEffect(() => {
-    const draft = useDraftInput.getState().consume()
+    const draft = useDraftInput.getState().consume(sessionId)
     if (draft) setText(draft)
-  }, [])
+  }, [sessionId])
 
   const slashCommands = useSlashCommands()
 

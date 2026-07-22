@@ -347,10 +347,13 @@ export default function ToolsScreen() {
   }
 
   const handleAskOrbit = async () => {
-    setDraft('/create-skill ')
+    setDraft(null, '/create-skill ')
     try {
       const created = await createSession('chat')
-      if (created) router.replace(`/(main)/chat/${created.id}`)
+      if (created) {
+        useDraftInput.getState().adopt(created.id)
+        router.replace(`/(main)/chat/${created.id}`)
+      }
     } catch {
       router.replace('/(main)')
     }
