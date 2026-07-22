@@ -198,7 +198,7 @@ export function RightPanel() {
   const sessions = useSessionStore((s) => s.sessions)
   const statusMap = useSessionStore((s) => s.status)
 
-  const addTab = useCallback((type: TabType, sessionId?: string, title?: string) => {
+  const addTab = useCallback(async (type: TabType, sessionId?: string, title?: string) => {
     if (sessionId) {
       // Tab de session específica: reusa se já aberta
       const id = `chat-${sessionId}`
@@ -208,6 +208,12 @@ export function RightPanel() {
           : [...prev, { id, type: "chat", title: title ?? "Chat", sessionId }],
       )
       setActiveTabId(id)
+      return
+    }
+    if (type === "chat") {
+      const session = await useSessionStore.getState().createSession("chat", { setActive: false })
+      setTabs((prev) => [...prev, { id: `chat-${session.id}`, type: "chat", title: "Chat", sessionId: session.id }])
+      setActiveTabId(`chat-${session.id}`)
       return
     }
     const meta = tabMeta[type]
@@ -242,6 +248,7 @@ export function RightPanel() {
           : [...prev, { id, type: "chat", title: pendingChatTabTitle ?? "Chat", sessionId: pendingChatTabSession }],
       )
       setActiveTabId(id)
+      usePanelStore.setState({ pendingChatTab: 0, pendingChatTabSession: undefined, pendingChatTabTitle: undefined })
     }
   }, [pendingChatTab, pendingChatTabSession, pendingChatTabTitle])
 
@@ -259,6 +266,7 @@ export function RightPanel() {
           : [...prev, { id, type: "diff", title: pendingDiffTitle ?? "Diff", sessionId: pendingDiffSessionId, messageId: pendingDiffMessageId }],
       )
       setActiveTabId(id)
+      usePanelStore.setState({ pendingDiff: 0, pendingDiffSessionId: undefined, pendingDiffMessageId: undefined, pendingDiffTitle: undefined })
     }
   }, [pendingDiff, pendingDiffSessionId, pendingDiffMessageId, pendingDiffTitle])
 
