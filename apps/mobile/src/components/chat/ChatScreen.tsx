@@ -5,6 +5,7 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Stack, useRouter } from 'expo-router'
 import type { SendMessageOptions, FilePart } from '@orbit/shared'
 import { PlanReviewCard } from '~/components/chat/PlanReviewCard'
+import { TaskProgress } from '~/components/chat/TaskProgress'
 import { OrchestrationPlanCard } from '~/components/chat/OrchestrationPlanCard'
 import { useSessionStore } from '~/stores/session-store'
 import { useChatStore } from '~/stores/chat-store'
@@ -276,9 +277,14 @@ export function ChatScreen({ sessionId }: ChatScreenProps) {
                 isStreaming={isStreaming}
                 onRevert={handleRevert}
                 ListFooterComponent={
-                  planReview && (planReview.status === 'proposed' || planReview.status === 'implementing')
+                  planReview && planReview.status === 'proposed'
                     ? <View className="px-4 pb-2"><PlanReviewCard sessionId={sessionId!} review={planReview} /></View>
-                    : undefined
+                    : planReview && planReview.status === 'implementing'
+                      ? <View className="px-4 pb-2"><TaskProgress
+                          tasks={[{ id: 'plan', title: 'Implementar plano', status: isStreaming ? 'streaming' : 'idle' }]}
+                          title="Plano"
+                        /></View>
+                      : undefined
                 }
               />
             )}
@@ -299,10 +305,20 @@ export function ChatScreen({ sessionId }: ChatScreenProps) {
           </View>
         )}
 
-        {/* Orquestração — card acima do input */}
-        {sessionId && orchestration && (orchestration.status === 'proposed' || orchestration.status === 'approved' || orchestration.status === 'running') && (
+        {/* Orquestração — card de aprovação acima do input */}
+        {sessionId && orchestration && orchestration.status === 'proposed' && (
           <View style={{ paddingHorizontal: 16, marginBottom: 8 }}>
             <OrchestrationPlanCard sessionId={sessionId} plan={orchestration} />
+          </View>
+        )}
+        {/* Orquestração — progresso das tarefas em execução/concluído */}
+        {sessionId && orchestration && (orchestration.status === 'approved' || orchestration.status === 'running' || orchestration.status === 'done') && (
+          <View style={{ paddingHorizontal: 16, marginBottom: 8 }}>
+            <TaskProgress
+              tasks={orchestration.tasks.map((t: any) => ({ id: t.id, title: t.title, status: t.status, mode: t.mode }))}
+              title="Orquestração"
+              defaultExpanded={orchestration.status !== 'done'}
+            />
           </View>
         )}
 
