@@ -25,7 +25,7 @@ import { messageText } from "@/src/lib/message-utils"
 import { useActiveSession, useSessionStatus, useSessionStore, type SendConfig } from "@/src/stores/session-store"
 import { brainEnabledFor } from "@/src/stores/brain-prefs"
 import { useProviderStore } from "@/src/stores/provider-store"
-import { useSimpleMode } from "@/src/stores/simple-mode"
+import { useSimpleMode } from "@/src/stores/simple-prefs"
 
 const chatSuggestions = [
   "O que você pode fazer?",
@@ -255,7 +255,7 @@ export function ChatView({ sessionId }: { sessionId?: string } = {}) {
   const stopStreaming = useSessionStore((s) => s.stopStreaming)
   const selectSession = useSessionStore((s) => s.selectSession)
   const initializeProviders = useProviderStore((s) => s.initialize)
-  const simpleMode = useSimpleMode((s) => s.simple)
+  const simpleMode = useSimpleMode(session?.id)
 
   useEffect(() => {
     void initializeProviders()

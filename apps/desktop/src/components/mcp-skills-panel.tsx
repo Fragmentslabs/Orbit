@@ -543,7 +543,7 @@ export function McpSkillsPanel() {
 
   // Fecha as settings e abre um chat novo com "/create-skill " pré-preenchido
   const askOrbitToCreate = () => {
-    useDraftInput.getState().setDraft("/create-skill ")
+    useDraftInput.getState().setDraft("draft", "/create-skill ")
     setSettingsOpen(false)
     setMode("chat")
     setView("chat")
