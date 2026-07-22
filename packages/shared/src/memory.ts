@@ -46,6 +46,8 @@ export function scopeOf(kind: MemoryKind): MemoryScope {
   return "chat"
 }
 
+export type RelationType = "parent" | "related"
+
 export interface Memory {
   id: string
   kind: MemoryKind
@@ -58,6 +60,12 @@ export interface Memory {
   lastHitAt?: number
   /** Backlinks bidirecionais (estilo Obsidian) */
   relatedIds: string[]
+  /**
+   * Tipo da relação por id de destino. Quando ausente, assume "related".
+   * "parent" = hierarquia explícita (nó filho deste nó).
+   * Uma memória pode ser parent de vários filhos e related a vários outros nós.
+   */
+  relationTypes?: Record<string, RelationType>
   /** Existe um documento markdown anexado em memory/docs/<id>.md */
   hasDoc?: boolean
   sessionId?: string

@@ -1,6 +1,6 @@
 import { EventEmitter } from 'node:events'
 import path from 'node:path'
-import type { Memory, MemoryEvent, MemoryKind, ProjectArea, ProjectCategory } from '@shared/memory'
+import type { Memory, MemoryEvent, MemoryKind, ProjectArea, ProjectCategory, RelationType } from '@shared/memory'
 import { jaccard, searchMemories } from '@shared/memory'
 import {
   defaultWeight,
@@ -60,7 +60,10 @@ export interface SaveMemoryInput {
   /** Obrigatório quando kind === "project" — o projectId deriva daqui */
   directory?: string
   sessionId?: string
-  relatedId?: string
+  /** Ids de memórias relacionadas (cria links) */
+  relatedIds?: string[]
+  /** Tipo da relação por id de destino. "parent" = hierarquia, "related" = conexão livre */
+  relatedTypes?: Record<string, RelationType>
 }
 
 export interface SaveMemoryResult {
@@ -111,7 +114,11 @@ export async function save(input: SaveMemoryInput): Promise<SaveMemoryResult> {
     }
     await repo.put(merged)
     emit('updated', merged)
-    if (input.relatedId) await link(merged.id, input.relatedId)
+    if (input.relatedIds) {
+      for (const relId of input.relatedIds) {
+        await link(merged.id, relId, input.relatedTypes?.[relId])
+      }
+    }
     return { id: merged.id, merged: true, text: merged.text }
   }
 
@@ -140,7 +147,11 @@ export async function save(input: SaveMemoryInput): Promise<SaveMemoryResult> {
   }
   await repo.put(memory)
   emit('created', memory)
-  if (input.relatedId) await link(memory.id, input.relatedId)
+  if (input.relatedIds) {
+    for (const relId of input.relatedIds) {
+      await link(memory.id, relId, input.relatedTypes?.[relId])
+    }
+  }
   return { id: memory.id, merged: false, text: memory.text }
 }
 
@@ -218,17 +229,29 @@ export async function setDocument(id: string, document: string): Promise<Memory 
   return next
 }
 
-export async function link(sourceId: string, targetId: string): Promise<boolean> {
+export async function link(sourceId: string, targetId: string, type?: RelationType): Promise<boolean> {
   if (sourceId === targetId) return false
   const [source, target] = await Promise.all([repo.get(sourceId), repo.get(targetId)])
   if (!source || !target) return false
-  const nextSource = { ...source, relatedIds: [...new Set([...source.relatedIds, targetId])] }
-  const nextTarget = { ...target, relatedIds: [...new Set([...target.relatedIds, sourceId])] }
+  const sourceRelationTypes = { ...(source.relationTypes ?? {}) }
+  const targetRelationTypes = { ...(target.relationTypes ?? {}) }
+  if (type === "parent") {
+    // source (filho) marca target como seu pai
+    sourceRelationTypes[targetId] = "parent"
+    // target (pai) marca source como seu filho — necessário para colapso de árvore
+    targetRelationTypes[sourceId] = "parent"
+  }
+  const nextSource = { ...source, relatedIds: [...new Set([...source.relatedIds, targetId])], relationTypes: sourceRelationTypes }
+  const nextTarget = { ...target, relatedIds: [...new Set([...target.relatedIds, sourceId])], relationTypes: targetRelationTypes }
   await repo.put(nextSource)
   await repo.put(nextTarget)
   emit('updated', nextSource)
   emit('updated', nextTarget)
   return true
+}
+
+export async function linkAsParent(parentId: string, childId: string): Promise<boolean> {
+  return link(parentId, childId, "parent")
 }
 
 /** Edição vinda da UI (texto, tags, weight). */

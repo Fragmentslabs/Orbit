@@ -126,84 +126,51 @@ const SIMPLE_INSTRUCTION = `MODO SIMPLES ATIVO. Resposta direta, sem tool calls 
 
 const BRAIN_CHAT_PROMPT = `MODO BRAIN ATIVO. Você tem ferramentas de memória (memory_save / memory_search / memory_link / memory_open).
 
-FILOSOFIA: Salvar memória é caro. NÃO SALVAR é o default. Só salve informação genuinamente
-duradoura e útil para conversas futuras. Em dúvida, NÃO salve.
+FILOSOFIA: Construa uma árvore de conhecimento do usuário ao longo do tempo.
+Salve fatos, preferências e atividades que importam — conecte-os entre si.
+Use seu julgamento: se a informação parece útil para conversas futuras, salve.
 
-O QUE SALVAR — kind="general" (vale em TODOS os modos, inclusive código):
-- Preferências de trabalho duradouras: "prefiro commits atômicos", "responda em português"
-- Fatos pessoais estáveis: nome, profissão, cidade, família
-- Decisões que cruzam projetos: "não uso GraphQL"
-→ weight 0.7-1.0
+ESTRUTURA EM ÁRVORE:
+- Memórias formam uma árvore. Use relatedIds para conectar: passe os ids dos pais/relacionados
+  ao criar uma memória. Use relatedTypes para indicar se é "parent" (hierarquia) ou "related".
+- Uma memória pode ter VÁRIOS pais (ex: "Frontend de login" é filha de "Sistema de Auth" e
+  de "Interface do Usuário"). Crie quantas conexões forem pertinentes.
+- Se uma memória nova é detalhe de outra já existente, passe o id dela em relatedIds.
+- O agente navega pelos galhos da árvore para encontrar contexto — conecte generosamente.
 
-O QUE SALVAR — kind="core" (só chat, permanente):
-- Detalhes pessoais que só afetam conversas: "toca violão", "é vegano"
-→ weight 0.7-1.0
+KINDS:
+- kind="general": vale em TODOS os modos. Preferências de trabalho, estilo, decisões cross-projeto.
+- kind="core": só chat, permanente. Fatos pessoais estáveis.
+- kind="seasonal": expira. Atividades e tópicos recentes — follow-up futuro.
 
-O QUE SALVAR — kind="seasonal" (só chat, expira, follow-up futuro):
-- Atividades recentes: "fez bolo", "mudou de emprego" → weight 0.1-0.4
-- Recorrências que valem follow-up: "perguntou 3x sobre sono" → weight 0.4-0.85
+Use weight para indicar importância (0.0-1.0). Use tags para busca futura.
+Confie no seu julgamento sobre o que salvar — errar salvando é melhor que esquecer.
 
-O QUE NÃO SALVAR JAMAIS:
-- Cumprimentos, confirmações ("ok", "entendi")
-- A própria resposta que você acabou de dar
-- Preferências momentâneas ("hoje quero respostas curtas")
-- Detalhes operacionais sem peso ("reiniciou o computador")
-- Informação sensível sem consentimento explícito do usuário
-
-ANTES de memory_save:
-1. Já existe algo equivalente? → use memory_link, NÃO crie nova.
-2. Ainda vai importar amanhã? Se não: seasonal com weight baixo — ou não salve.
-3. É preferência de trabalho que vale também no código? → kind="general".
-4. Está salvando só para demonstrar atenção? NÃO salve.
-
-memory_search (USO ATIVO):
-- Use sempre que o usuário referenciar algo passado de forma vaga ("lembra de...",
-  "aquele projeto...", "como ficou...") — busque por PERTINÊNCIA, não por palavra-gatilho.
-- Use quando perceber que um tema já foi discutido e o contexto economizaria repetição.
-- NÃO use em cumprimentos ou perguntas triviais.
-
-memory_link: conecte quando uma memória expande/corrige/relaciona outra
-(ex.: "começou dieta" → link com "médico recomendou low-carb").`
+memory_search: use sempre que o usuário referenciar algo passado.
+memory_link: conecte memórias existentes — pensando em árvore (pai-filho) ou grafo (relacionado).`
 
 const BRAIN_CODE_PROMPT = `MODO BRAIN ATIVO (CÓDIGO). Você tem memory_save / memory_search / memory_open / memory_graph,
 isoladas por PROJETO (pasta de trabalho ativa).
 
-Memórias de código são sobre COMO TRABALHAR neste código — sobrevivem entre sessões
-para você não reanalisar o projeto todo a cada chat novo.
+Memórias de código documentam COMO TRABALHAR neste código — arquitetura, decisões, convenções,
+preferências. Elas sobrevivem entre sessões para você não reanalisar o projeto toda vez.
 
-DOIS TIPOS:
-1. kind="general" (vale em TODOS os projetos e no chat): estilo global de trabalho
-   ("commits atômicos", "não explique código após editar"). weight 0.7+.
-2. kind="project" (só ESTE projeto, category OBRIGATÓRIA):
-   - preference  → como trabalhar aqui ("estilos com Tailwind")
-   - convention  → padrões observados ("usa zustand", "sem semicolons")
-   - structure   → mapa arquitetural ("entrypoint em src/main.tsx")
-   - decision    → decisões técnicas e o porquê ("sem GraphQL porque X")
-   - context     → estado/objetivo atual (EXPIRA, weight <= 0.3) ("migrando Vite 4→5")
+ESTRUTURA EM ÁRVORE:
+- O node "overview" é a raiz. As áreas (business, design, architecture etc.) são filhas diretas.
+- Ao salvar, pense onde a memória se encaixa: passe relatedIds com os ids das áreas ou memórias
+  relacionadas, e relatedTypes indicando "parent" (hierarquia) ou "related" (conexão livre).
+- Uma memória pode ter múltiplos pais. Ex: "Usamos Shadcn UI" é filha de "Design System".
+  "Tema claro/escuro" é filha de "Shadcn UI" e de "Preferências de estilo".
 
-DOCUMENTO ANEXADO (campo document):
-- Para contexto EXTENSO (mapa arquitetural completo, schema, fluxo multi-arquivo),
-  passe um markdown em document — o text continua sendo um resumo de 1-2 frases.
-- Memórias simples NÃO precisam de documento — não crie doc para uma frase.
-- Ao encontrar uma memória com doc anexado, use memory_open para ler o conteúdo completo.
-- Se o doc ficou desatualizado, re-salve com o mesmo teor de text (funde) e novo document.
+KINDS:
+1. kind="general": estilo global de trabalho ("commits atômicos", "responda em pt"). Vale em todos.
+2. kind="project" (category OBRIGATÓRIA):
+   - preference / convention / structure / decision / context
 
-FILOSOFIA: salve MENOS no código que no chat. Prefira decision e convention — não mudam.
+DOC: use document para contexto extenso (mapas, schemas). Text continua sendo o resumo curto.
 
-O QUE NÃO SALVAR JAMAIS:
-- Correções pontuais ("corrigi typo na linha 42")
-- Erros temporários ("faltava node_modules")
-- Conteúdo de arquivo do projeto (use read; doc de memória é para SÍNTESE sua, não cópia)
-- Nada que não importe na próxima sessão nesta pasta
-
-ANTES de memory_save:
-1. Estilo global? → general. Deste projeto? → project + category correta.
-2. category=context → weight <= 0.3 (vai expirar).
-3. Equivalente já existe? Não crie duplicata — re-salve só se for ATUALIZAR o doc.
-
-memory_graph: busque contexto arquitetural e decisões do projeto. Prefira memory_graph
-a memory_search no início de tarefas — ele retorna nós + conexões do grafo de uma vez.
-memory_search: busca textual simples quando você já sabe o que procura.`
+Confie no seu julgamento sobre o que salvar. Prefira criar e conectar a omitir.
+Use memory_graph para navegar o grafo do projeto. Use memory_search para busca textual.`
 
 const SKILLS_INSTRUCTION = `SKILLS DO USUÁRIO. As seções abaixo são conhecimento curado pelo usuário (convenções, padrões, instruções permanentes). Aplique uma skill sempre que o assunto for pertinente — você decide contextualmente. Quando a mensagem do usuário referencia @nome-da-skill, a aplicação daquela skill é OBRIGATÓRIA.`
 

@@ -363,7 +363,7 @@ async function saveAreaMemory(
     category: AREA_CATEGORY[area],
     area,
     document: parsed.document,
-    relatedId: rootId,
+    relatedIds: rootId ? [rootId] : undefined,
   })
   return saved.id
 }
@@ -544,7 +544,7 @@ IMPORTANTE:
             category: 'context',
             area: ctx.area ?? 'overview',
             document: ctx.document,
-            relatedId: rootId,
+            relatedIds: [rootId],
           })
           if (ctxCount === 0) savedIds.set('overview', memId.id) // overview pode ser atualizado
           ctxCount++
@@ -613,7 +613,7 @@ Responda com JSON:
             weight: 0.8,
             category: 'preference',
             document: section,
-            relatedId: rootId,
+            relatedIds: [rootId],
           })
           rulesImported++
         }
