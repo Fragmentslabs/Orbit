@@ -1,4 +1,4 @@
-import { Sun, Moon, Monitor, List, Square, Layers } from "lucide-react"
+import { Sun, Moon, Monitor, List, Square, Layers, Smile } from "lucide-react"
 import { useTheme } from "@/components/theme-provider"
 import { useAppearanceStore, type DisplayMode } from "@/src/stores/appearance-store"
 
@@ -20,6 +20,8 @@ export function AppearancePanel() {
   const { theme, setTheme } = useTheme()
   const displayMode = useAppearanceStore((s) => s.displayMode)
   const setDisplayMode = useAppearanceStore((s) => s.setDisplayMode)
+  const personaVisible = useAppearanceStore((s) => s.personaVisible)
+  const setPersonaVisible = useAppearanceStore((s) => s.setPersonaVisible)
 
   return (
     <div className="flex h-full flex-col gap-6 overflow-y-auto pr-1">
@@ -81,6 +83,29 @@ export function AppearancePanel() {
             {modeChips.find((c) => c.value === displayMode)?.hint}
           </p>
         </div>
+      </div>
+
+      <div className="border-t pt-4">
+        <p className="mb-3 text-xs font-medium text-muted-foreground">Persona</p>
+        <label className="flex cursor-pointer items-center gap-3 rounded-lg border border-input bg-background px-3 py-2.5 transition-colors hover:bg-accent/50">
+          <Smile className="size-4 text-muted-foreground" />
+          <span className="flex-1 text-sm">Mostrar persona</span>
+          <button
+            type="button"
+            role="switch"
+            aria-checked={personaVisible}
+            onClick={() => setPersonaVisible(!personaVisible)}
+            className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors ${
+              personaVisible ? "bg-primary" : "bg-input"
+            }`}
+          >
+            <span
+              className={`pointer-events-none block size-4 rounded-full bg-background shadow-sm ring-0 transition-transform ${
+                personaVisible ? "translate-x-4" : "translate-x-0"
+              }`}
+            />
+          </button>
+        </label>
       </div>
     </div>
   )

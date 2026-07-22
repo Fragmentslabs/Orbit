@@ -1,7 +1,7 @@
-import { View, Text, Pressable, ScrollView, StyleSheet } from 'react-native'
+import { View, Text, Pressable, ScrollView, StyleSheet, Switch } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { useRouter } from 'expo-router'
-import { ArrowLeft, Sun, Moon, Monitor, List, Square, Layers } from 'lucide-react-native'
+import { ArrowLeft, Sun, Moon, Monitor, List, Square, Layers, Smile } from 'lucide-react-native'
 import { Appearance, useColorScheme } from 'react-native'
 import { useThemeStore, type ThemePreference } from '~/stores/theme-store'
 import { useAppearanceStore, type DisplayMode } from '~/stores/appearance-store'
@@ -16,6 +16,8 @@ export default function AppearanceScreen() {
   const setThemePref = useThemeStore((s) => s.setPreference)
   const displayMode = useAppearanceStore((s) => s.displayMode)
   const setDisplayMode = useAppearanceStore((s) => s.setDisplayMode)
+  const personaVisible = useAppearanceStore((s) => s.personaVisible)
+  const setPersonaVisible = useAppearanceStore((s) => s.setPersonaVisible)
   const tokens = getThemeTokens(useThemeTokensStore((s) => s.resolved))
 
   const handleTheme = (value: ThemePreference) => {
@@ -101,6 +103,21 @@ export default function AppearanceScreen() {
           <Text style={[s.hint, { color: tokens.mutedForeground }]}>
             {modeChips.find((c) => c.value === displayMode)?.hint}
           </Text>
+        </View>
+
+        <Text style={[s.sectionTitle, { color: tokens.mutedForeground, marginTop: 24 }]}>Persona</Text>
+
+        <View style={[s.card, { borderColor: tokens.border, backgroundColor: tokens.card }]}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+            <Smile size={20} color={tokens.mutedForeground} />
+            <Text style={{ flex: 1, fontSize: 14, color: tokens.foreground }}>Mostrar persona</Text>
+            <Switch
+              value={personaVisible}
+              onValueChange={setPersonaVisible}
+              trackColor={{ false: tokens.muted, true: tokens.primary }}
+              thumbColor={tokens.background}
+            />
+          </View>
         </View>
       </ScrollView>
     </SafeAreaView>

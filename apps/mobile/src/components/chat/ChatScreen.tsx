@@ -9,6 +9,7 @@ import { OrchestrationPlanCard } from '~/components/chat/OrchestrationPlanCard'
 import { useSessionStore } from '~/stores/session-store'
 import { useChatStore } from '~/stores/chat-store'
 import { useWorkspaceStore } from '~/stores/workspace-store'
+import { useAppearanceStore } from '~/stores/appearance-store'
 import { MessageList } from '~/components/chat/MessageList'
 import { ChatInput } from '~/components/chat/ChatInput'
 import { AskCard } from '~/components/chat/AskCard'
@@ -216,6 +217,7 @@ export function ChatScreen({ sessionId }: ChatScreenProps) {
   }, [sessionId, deleteSession, router])
 
   const personaState = isEmpty ? 'idle' : isStreaming ? 'thinking' : 'idle'
+  const personaVisible = useAppearanceStore((s) => s.personaVisible)
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: tokens.background }} edges={['top', 'bottom']}>
@@ -259,7 +261,7 @@ export function ChatScreen({ sessionId }: ChatScreenProps) {
               transform: [{ scale: chatProgress.interpolate({ inputRange: [0, 1], outputRange: [1, 0.85] }) }],
             }}
           >
-            <Persona state="idle" size={112} />
+            {personaVisible && <Persona state="idle" size={112} />}
             <View style={{ marginTop: 16, alignItems: 'center', gap: 4 }}>
               <Text style={{ fontSize: 18, fontWeight: '600', color: tokens.foreground }}>Nova conversa</Text>
               <Text style={{ fontSize: 14, color: tokens.mutedForeground }}>Comece a conversar com o assistente.</Text>

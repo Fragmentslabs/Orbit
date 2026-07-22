@@ -8,6 +8,7 @@ import { AskCardBatch } from "@/src/components/ask-card-batch"
 import { ChatInput } from "@/src/components/chat-input"
 import { CodeInput } from "@/src/components/code-input"
 import { Persona, type PersonaState } from "@/src/components/ai/persona"
+import { useAppearanceStore } from "@/src/stores/appearance-store"
 import { Conversation, ConversationContent, ConversationScrollButton } from "@/src/components/ai/conversation"
 import { Message, MessageAttachment, MessageAttachments, MessageContent } from "@/src/components/ai/message"
 import { Suggestion } from "@/src/components/ai/suggestion"
@@ -276,6 +277,7 @@ export function ChatView({ sessionId }: { sessionId?: string } = {}) {
 
   const isBusy = status === "submitted" || status === "streaming"
   const hasChat = messages.length > 0
+  const personaVisible = useAppearanceStore((s) => s.personaVisible)
   // Pasta alvo do card de init: a da sessão ou a selecionada no FolderSelector
   const initDirectory = session?.directory ?? (viewMode === "code" ? folders[0] : undefined)
 
@@ -395,7 +397,7 @@ export function ChatView({ sessionId }: { sessionId?: string } = {}) {
         {/* Persona oculta em modo simples — o shimmer da mensagem já indica atividade */}
         <div
           className={`absolute left-1/2 z-40 -translate-x-1/2 transition-all duration-500 ease-in-out ${
-            topVisible && !simpleMode ? "opacity-100" : "opacity-0"
+            topVisible && !simpleMode && personaVisible ? "opacity-100" : "opacity-0"
           }`}
           style={{
             top: "-1.7rem",
@@ -412,16 +414,18 @@ export function ChatView({ sessionId }: { sessionId?: string } = {}) {
           }`}
         >
           <div className="flex flex-col items-center gap-6">
-            <div
-              className="flex justify-center transition-all duration-500 ease-in-out"
-              style={{
-                width: "8rem",
-                height: "8rem",
-                opacity: centerPersonaVisible ? 1 : 0,
-              }}
-            >
-              <Persona state={centerPersonaState} className="!size-full" />
-            </div>
+            {personaVisible && (
+              <div
+                className="flex justify-center transition-all duration-500 ease-in-out"
+                style={{
+                  width: "8rem",
+                  height: "8rem",
+                  opacity: centerPersonaVisible ? 1 : 0,
+                }}
+              >
+                <Persona state={centerPersonaState} className="!size-full" />
+              </div>
+            )}
             <div className="flex flex-col items-center gap-2">
               <p className="text-lg font-medium text-foreground">{emptyState.title}</p>
               <p className="text-sm text-muted-foreground">{emptyState.subtitle}</p>
