@@ -62,6 +62,7 @@ export function Sidebar() {
   const folders = useSessionStore((s) => s.folders)
   const activeSessionId = useSessionStore((s) => s.activeSessionId)
   const status = useSessionStore((s) => s.status)
+  const unreadCounts = useSessionStore((s) => s.unreadCounts)
   const renameSession = useSessionStore((s) => s.renameSession)
   const setPinned = useSessionStore((s) => s.setPinned)
   const setArchived = useSessionStore((s) => s.setArchived)
@@ -409,6 +410,7 @@ export function Sidebar() {
                       title={s.title}
                       active={s.id === activeSessionId}
                       streaming={status[s.id] === 'streaming' || status[s.id] === 'submitted'}
+                      unread={unreadCounts[s.id] > 0}
                       selectionMode={selectionMode}
                       selected={selectedIds.has(s.id)}
                       onPress={() => handleOpenSession(s.id)}
@@ -450,6 +452,7 @@ export function Sidebar() {
                           indented
                           active={s.id === activeSessionId}
                           streaming={status[s.id] === 'streaming' || status[s.id] === 'submitted'}
+                          unread={unreadCounts[s.id] > 0}
                           selectionMode={selectionMode}
                           selected={selectedIds.has(s.id)}
                           onPress={() => handleOpenSession(s.id)}
@@ -487,6 +490,7 @@ export function Sidebar() {
                       title={s.title}
                       active={s.id === activeSessionId}
                       streaming={status[s.id] === 'streaming' || status[s.id] === 'submitted'}
+                      unread={unreadCounts[s.id] > 0}
                       selectionMode={selectionMode}
                       selected={selectedIds.has(s.id)}
                       onPress={() => handleOpenSession(s.id)}
@@ -656,6 +660,7 @@ const SessionRow = memo(function SessionRow({
   title,
   active,
   streaming,
+  unread,
   indented,
   selectionMode,
   selected,
@@ -666,6 +671,7 @@ const SessionRow = memo(function SessionRow({
   title: string
   active: boolean
   streaming?: boolean
+  unread?: boolean
   indented?: boolean
   selectionMode?: boolean
   selected?: boolean
@@ -691,6 +697,10 @@ const SessionRow = memo(function SessionRow({
         )
       ) : streaming ? (
         <Spin><Loader2 size={16} color={tokens.primary} /></Spin>
+      ) : unread ? (
+        <View className="size-4 items-center justify-center">
+          <View className="size-2.5 rounded-full" style={{ backgroundColor: tokens.primary }} />
+        </View>
       ) : (
         <MessageSquare size={16} color={active ? tokens.foreground : tokens.mutedForeground} />
       )}
@@ -707,6 +717,7 @@ const SessionRow = memo(function SessionRow({
   prev.title === next.title &&
   prev.active === next.active &&
   prev.streaming === next.streaming &&
+  prev.unread === next.unread &&
   prev.indented === next.indented &&
   prev.selectionMode === next.selectionMode &&
   prev.selected === next.selected &&
