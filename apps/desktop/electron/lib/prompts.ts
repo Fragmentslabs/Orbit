@@ -108,6 +108,10 @@ MODO IMPLEMENTAÇÃO. O usuário aprovou o plano que você gerou previamente. O 
 
 Implemente o plano agora: edite arquivos, execute comandos, siga os passos na ordem proposta. À medida que concluir cada item, ATUALIZE o PLAN.md marcando \`[ ]\` como \`[x]\` (ex: \`- [x] Implementar X\`). Se encontrar um problema que desvia do plano, use a ferramenta question para confirmar antes de seguir.`
 
+const REVISE_PLAN_PROMPT = `${IDENTITY}
+
+MODO REVISÃO DE PLANO. O usuário enviou feedback sobre o plano salvo em PLAN.md. Leia o plano atual e o feedback do usuário, então EDITE o PLAN.md para refletir as mudanças solicitadas. ATUALIZE o arquivo diretamente — não crie um novo plano, não ignore o feedback. Após editar, confirme o que foi alterado.`
+
 const PERMISSION_ASK_INSTRUCTION = `Permissões (modo Ask): ações de risco médio e alto (git push, rm -rf, sudo, escrita em .env) exigem confirmação do usuário — a chamada da ferramenta aguarda a resposta, isso é normal. Ações de alto risco continuam pedindo confirmação mesmo que você já tenha recebido aprovação para ações similares. Se uma ação for negada, NÃO a repita: siga por outro caminho ou pergunte o que fazer.`
 
 const PERMISSION_APPROVE_INSTRUCTION = `Permissões (modo Approve): você tem autonomia para ações de risco médio (git push comum, commit, instalação de deps) sem confirmação. Ações de ALTO risco (push forçado, git reset --hard, rm -rf, sudo) ainda exigem confirmação do usuário — isso é proposital. Escrita em .git/ e remoções fora do projeto são bloqueadas pela política. Se uma ação for negada, aceite a negação e busque uma alternativa segura.`
@@ -301,7 +305,9 @@ export async function buildSystemPrompt(input: SendMessageInput): Promise<string
   const parts: string[] = []
 
   if (input.mode === 'code') {
-    if (input.options.planReview?.status === "implementing") {
+    if (input.options.planReview?.status === "revising") {
+      parts.push(REVISE_PLAN_PROMPT)
+    } else if (input.options.planReview?.status === "implementing") {
       parts.push(IMPLEMENT_PLAN_PROMPT)
     } else {
       parts.push(input.options.plan ? PLAN_PROMPT : CODE_PROMPT)

@@ -148,9 +148,11 @@ interface SessionState {
   /** Desfaz o revert ativo, restaurando mensagens descartadas. */
   unrevert: (sessionId: string) => Promise<void>
   /** Aceita plano de implementação (modo plano). */
-  acceptPlanReview: (sessionId: string, permissionMode: PermissionMode) => Promise<void>
+  acceptPlanReview: (sessionId: string, permissionMode: PermissionMode, orchestrate?: boolean) => Promise<void>
   /** Rejeita plano de implementação (modo plano). */
   rejectPlanReview: (sessionId: string) => Promise<void>
+  /** Envia feedback para revisar o plano (modo plano). */
+  reviewPlanReview: (sessionId: string, feedback: string) => Promise<void>
   /** Aprova plano de orquestração. */
   approvePlan: (sessionId: string, planId: string, taskIds?: string[]) => Promise<void>
   /** Rejeita plano de orquestração. */
@@ -548,7 +550,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     }
   },
 
-  acceptPlanReview: async (sessionId, permissionMode) => {
+  acceptPlanReview: async (sessionId, permissionMode, orchestrate) => {
     const review = get().planReviews[sessionId]
     if (!review || review.status !== 'proposed') return
     const updated: PlanReview = { ...review, status: 'implementing', permissionMode }
@@ -565,6 +567,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
         permissionMode,
         providerId: settings.selectedModel?.providerId,
         modelId: settings.selectedModel?.modelId,
+        orchestrate,
       })
     } catch {
       // Silently fail — the desktop will handle it
@@ -580,6 +583,29 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     const { wsClient } = useConnectionStore.getState()
     try {
       await wsClient.send({ type: 'plan:review-reject', sessionId })
+    } catch {
+      // Silently fail
+    }
+  },
+
+  reviewPlanReview: async (sessionId, feedback) => {
+    const review = get().planReviews[sessionId]
+    if (!review || review.status !== 'proposed') return
+    const updated: PlanReview = { ...review, status: 'revising' }
+    set((state) => ({ planReviews: { ...state.planReviews, [sessionId]: updated } }))
+
+    const settings = useSettingsStore.getState()
+    const { wsClient } = useConnectionStore.getState()
+    try {
+      await wsClient.send({
+        type: 'plan:review-revise',
+        sessionId,
+        messageId: review.messageId,
+        feedback,
+        permissionMode: review.permissionMode ?? 'ask',
+        providerId: settings.selectedModel?.providerId,
+        modelId: settings.selectedModel?.modelId,
+      })
     } catch {
       // Silently fail
     }
