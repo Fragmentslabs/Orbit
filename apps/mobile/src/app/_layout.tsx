@@ -14,6 +14,7 @@ import { useConnectionStore } from "../stores/connection-store";
 import { useNotificationPrefsStore } from "../stores/notification-prefs-store";
 import { useSessionStore } from "../stores/session-store";
 import { useThemeStore, hydrateThemePreference } from "../stores/theme-store";
+import { useAppearanceStore, hydratePersonaVisible } from "../stores/appearance-store";
 import { startMessageScheduler } from "../stores/message-queue-store";
 
 SplashScreen.preventAutoHideAsync();
@@ -52,11 +53,14 @@ export default function RootLayout() {
   const resolved = useThemeStore((s) => s.resolved);
   const setPreference = useThemeStore((s) => s.setPreference);
 
-  // Hidrata tema persistido ao montar
+  // Hidrata tema e persona persistidos ao montar
   useEffect(() => {
     hydrateThemePreference().then((pref) => {
       setPreference(pref, systemIsDark);
       Appearance.setColorScheme(pref === "system" ? (systemIsDark ? "dark" : "light") : pref);
+    });
+    hydratePersonaVisible().then((visible) => {
+      useAppearanceStore.getState().setPersonaVisible(visible);
     });
   }, []);
 

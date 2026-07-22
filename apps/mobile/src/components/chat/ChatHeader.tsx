@@ -4,6 +4,7 @@ import { Menu, Ellipsis, Pencil, Pin, PinOff, Archive, ArchiveRestore, GitFork, 
 import type { SessionInfo } from '@orbit/shared'
 import { Persona, type PersonaState } from '~/components/ai/Persona'
 import { useWorkspaceStore } from '~/stores/workspace-store'
+import { useAppearanceStore } from '~/stores/appearance-store'
 import { ActionMenu } from '~/components/ui/action-menu'
 import { RenamePrompt } from '~/components/ui/rename-prompt'
 import { getThemeTokens } from '~/lib/theme-tokens'
@@ -36,6 +37,7 @@ export const ChatHeader = memo(function ChatHeader({
   onDelete,
 }: ChatHeaderProps) {
   const openSidebar = useWorkspaceStore((s) => s.openSidebar)
+  const personaVisible = useAppearanceStore((s) => s.personaVisible)
   const [menuOpen, setMenuOpen] = useState(false)
   const [renaming, setRenaming] = useState(false)
   const tokens = getThemeTokens(useThemeStore((s) => s.resolved))
@@ -57,11 +59,13 @@ export const ChatHeader = memo(function ChatHeader({
         <Menu size={22} color={tokens.foreground} />
       </Pressable>
 
-      <View style={s.center}>
-        <Animated.View style={{ opacity: personaOpacity }}>
-          <Persona state={personaState} size={36} />
-        </Animated.View>
-      </View>
+      {personaVisible && (
+        <View style={s.center}>
+          <Animated.View style={{ opacity: personaOpacity }}>
+            <Persona state={personaState} size={36} />
+          </Animated.View>
+        </View>
+      )}
 
       {session ? (
         <Pressable onPress={() => setMenuOpen(true)} style={s.iconButton}>
