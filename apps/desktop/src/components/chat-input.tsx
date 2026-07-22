@@ -18,6 +18,7 @@ import {
   PromptInputTools,
 } from "@/src/components/ai/prompt-input"
 import { DelegationMenuItems } from "@/src/components/delegation-menu"
+import { ModeMenuItems, type ModeToggleDef } from "@/src/components/mode-menu-items"
 import { ModelPicker } from "@/src/components/model-picker"
 import { ModeToggle } from "@/src/components/mode-toggle"
 import { OrchestrationConfigDialog } from "@/src/components/orchestration-config-dialog"
@@ -78,6 +79,14 @@ export function ChatInput({ onSubmit, status, onStop, sessionId }: {
   const displayMode = useAppearanceStore((s) => s.displayMode)
   const referenceCommands = useReferenceCommands("chat")
   const actionCommands = useSlashActionCommands("chat")
+
+  const modeToggleItems = useMemo<ModeToggleDef[]>(() => [
+    { icon: Search, label: "Pesquisa", active: search, onChange: (v: boolean) => setSearch(v) },
+    { icon: Globe, label: "Browser", active: browser, onChange: (v: boolean) => setBrowser(v) },
+    ...(model?.reasoning ? [{ icon: Brain, label: "Thinking", active: thinking, onChange: (v: boolean) => update({ enabled: v, variantId }) }] : []),
+    { icon: AlignLeft, label: "Simples", active: simple, onChange: (v: boolean) => setSimple(v) },
+    { icon: BrainCircuit, label: "Memória", active: brain, onChange: (v: boolean) => setBrainEnabled(sessionId, v) },
+  ], [search, browser, model?.reasoning, thinking, simple, brain, sessionId, variantId, update, setBrainEnabled, setSimple])
 
   const buildOptions = useCallback((): SendMessageOptions => ({
     research: search,
@@ -156,6 +165,12 @@ export function ChatInput({ onSubmit, status, onStop, sessionId }: {
                 <PlusIcon className="size-4" />
               </DropdownMenuTrigger>
               <DropdownMenuContent align="start" className="min-w-56 p-1.5">
+                {displayMode !== "toggles" && (
+                  <>
+                    <ModeMenuItems items={modeToggleItems} />
+                    <DropdownMenuSeparator />
+                  </>
+                )}
                 <DelegationMenuItems
                   subagents={subagents}
                   orchestra={orchestra}
@@ -167,6 +182,7 @@ export function ChatInput({ onSubmit, status, onStop, sessionId }: {
                 <PromptInputActionAddAttachments label="Anexar arquivos" />
               </DropdownMenuContent>
             </DropdownMenu>
+            {displayMode === "actions" && <ContextMeter sessionId={sessionId} />}
           </div>
           <div className="flex items-center gap-1">
             {subagents && <Bot className="size-3 text-sidebar-foreground/40" />}
@@ -252,11 +268,6 @@ export function ChatInput({ onSubmit, status, onStop, sessionId }: {
             <ContextMeter sessionId={sessionId} />
           </div>
         </PromptInputTools>
-      )}
-      {displayMode === "actions" && (
-        <div className="ml-auto mt-2 pt-2">
-          <ContextMeter sessionId={sessionId} />
-        </div>
       )}
       <OrchestrationConfigDialog open={configOpen} onOpenChange={setConfigOpen} />
     </div>
