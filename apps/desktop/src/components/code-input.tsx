@@ -128,7 +128,6 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId }: 
         createSession("code", { directory: dir, extraDirectories: folders.slice(1) }).then((session) => {
           const text = force ? "/init --force" : "/init"
           sendMessage("code", text, { options: { initMode: true }, sessionId: session.id, directory: dir, extraDirectories: folders.slice(1) })
-          openChatTab(session.id, session.title)
         })
       }
       return
