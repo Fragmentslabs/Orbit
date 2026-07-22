@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
-import { BrainCircuit, Briefcase, Crosshair, FileUp, Layers, Link2, Palette, Server, Shield, SlidersHorizontal, Terminal } from "lucide-react"
+import { BrainCircuit, Briefcase, Crosshair, Eye, EyeOff, FileUp, Layers, Link2, Palette, Plus, Server, Shield, SlidersHorizontal, Terminal, ZoomIn, ZoomOut } from "lucide-react"
 import type { LucideIcon } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
@@ -9,18 +9,6 @@ import { jaccard, normalizeText, PROJECT_AREAS } from "@shared/memory"
 import { memoryApi } from "@/src/lib/ipc"
 import { MemoryCard } from "./memory-card"
 import { AREA_ICON, KIND_COLOR, KIND_LABEL, lastActivity } from "./meta"
-
-/**
- * Grafo de memórias (fase 3): projeto no centro (área overview), áreas de
- * conhecimento ao redor, memórias ligadas como filhos e avulsas na periferia.
- *
- * - Zoom (wheel) + pan (arrastar fundo); "Centralizar" reenquadra
- * - Click abre a memória no painel lateral; Ctrl+click em dois nodes cria aresta
- * - Busca da view destaca nodes que batem (demais ficam esmaecidos)
- * - Node recém-usado ganha anel; desatualizado (30d sem uso) fica opaco
- * - Arestas explícitas (relatedIds) sólidas; relações inferidas por tags, tracejadas
- * - Arrastar um arquivo de texto para o grafo cria um node de memória
- */
 
 const ICON_MAP: Record<string, LucideIcon> = {
   BrainCircuit, Briefcase, Palette, Layers, SlidersHorizontal, Server, Shield, Terminal,
@@ -34,6 +22,9 @@ const STALE_MS = 30 * 24 * 60 * 60 * 1000
 const INFERRED_JACCARD = 0.5
 const MAX_INFERRED_EDGES = 30
 const MAX_DROP_FILE_SIZE = 512 * 1024
+const ZOOM_FACTOR = 1.3
+const ZOOM_MIN = 0.15
+const ZOOM_MAX = 3
 
 interface GraphNode {
   memory: Memory
@@ -41,6 +32,8 @@ interface GraphNode {
   y: number
   r: number
   isRoot: boolean
+  hasChildren: boolean
+  collapsed: boolean
 }
 
 interface GraphEdge {
@@ -62,7 +55,6 @@ function nodeLabel(memory: Memory, isRoot: boolean): string {
   return memory.text.length > 34 ? `${memory.text.slice(0, 34)}…` : memory.text
 }
 
-/** Componentes conexos por relatedIds (dentro do pool visível). */
 function components(pool: Memory[]): Memory[][] {
   const byId = new Map(pool.map((m) => [m.id, m]))
   const seen = new Set<string>()
@@ -85,7 +77,6 @@ function components(pool: Memory[]): Memory[][] {
   return result
 }
 
-/** Layout radial de um cluster: root no centro, níveis BFS em anéis. */
 function layoutCluster(cluster: Memory[]): { nodes: GraphNode[]; radius: number } {
   const root =
     cluster.find((m) => m.area === "overview") ??
@@ -102,7 +93,6 @@ function layoutCluster(cluster: Memory[]): { nodes: GraphNode[]; radius: number 
       if (byId.has(rel) && !level.has(rel)) queue.push({ id: rel, depth: depth + 1 })
     }
   }
-  // Nós do componente inalcançáveis a partir do root (raro): último anel
   const maxKnown = Math.max(0, ...level.values())
   for (const m of cluster) if (!level.has(m.id)) level.set(m.id, maxKnown + 1)
 
@@ -118,7 +108,6 @@ function layoutCluster(cluster: Memory[]): { nodes: GraphNode[]; radius: number 
   for (const [depth, bucket] of byLevel) {
     bucket.sort((a, b) => a.createdAt - b.createdAt)
     if (depth === 0) {
-      // nível 0 costuma ser só o root; múltiplos entram num anel mínimo
       bucket.forEach((m, i) => {
         const angle = (i / bucket.length) * 2 * Math.PI
         const r = bucket.length === 1 ? 0 : 40
@@ -128,12 +117,13 @@ function layoutCluster(cluster: Memory[]): { nodes: GraphNode[]; radius: number 
           y: Math.sin(angle) * r,
           r: nodeRadius(m, m.id === root.id),
           isRoot: m.id === root.id,
+          hasChildren: false,
+          collapsed: false,
         })
       })
       continue
     }
     bucket.forEach((m, i) => {
-      // -π/2: primeiro node no topo; offset por nível evita colunas alinhadas
       const angle = -Math.PI / 2 + (i / bucket.length) * 2 * Math.PI + depth * 0.35
       nodes.push({
         memory: m,
@@ -141,6 +131,8 @@ function layoutCluster(cluster: Memory[]): { nodes: GraphNode[]; radius: number 
         y: Math.sin(angle) * depth * LEVEL_RADIUS,
         r: nodeRadius(m, false),
         isRoot: false,
+        hasChildren: false,
+        collapsed: false,
       })
     })
   }
@@ -149,15 +141,14 @@ function layoutCluster(cluster: Memory[]): { nodes: GraphNode[]; radius: number 
   return { nodes, radius: maxLevel * LEVEL_RADIUS + 60 }
 }
 
-/** Layout completo: clusters em grade, memórias avulsas num anel periférico. */
-function layoutGraph(pool: Memory[]): { nodes: GraphNode[]; edges: GraphEdge[] } {
+function layoutGraph(pool: Memory[], collapsedIds: Set<string>): { nodes: GraphNode[]; edges: GraphEdge[] } {
   const comps = components(pool)
+
   const clusters = comps.filter((c) => c.length > 1).sort((a, b) => b.length - a.length)
   const loose = comps.filter((c) => c.length === 1).map((c) => c[0])
 
   const nodes: GraphNode[] = []
 
-  // Clusters em grade (2 colunas), célula proporcional ao raio do cluster
   const laid = clusters.map(layoutCluster)
   const cols = clusters.length > 1 ? 2 : 1
   let rowY = 0
@@ -178,7 +169,6 @@ function layoutGraph(pool: Memory[]): { nodes: GraphNode[]; edges: GraphEdge[] }
     contentMaxRadius = Math.max(contentMaxRadius, Math.hypot(cx, cy) + cluster.radius)
   })
 
-  // Avulsas: anel na periferia do conteúdo (ou grade quando não há clusters)
   if (loose.length > 0) {
     const ringRadius = Math.max(contentMaxRadius + LOOSE_RING_PAD, LEVEL_RADIUS * 1.4)
     loose.forEach((m, i) => {
@@ -189,15 +179,79 @@ function layoutGraph(pool: Memory[]): { nodes: GraphNode[]; edges: GraphEdge[] }
         y: Math.sin(angle) * ringRadius,
         r: nodeRadius(m, false),
         isRoot: false,
+        hasChildren: false,
+        collapsed: false,
       })
     })
   }
 
-  // Arestas explícitas (relatedIds) + inferidas por similaridade de tags
-  const present = new Map(nodes.map((n) => [n.memory.id, n]))
+  // Compute hasChildren
+  // Se não tem relationTypes, assume que todos os relatedIds são filhos (compatibilidade com dados antigos)
+  const poolSet = new Set(pool.map((m) => m.id))
+  for (const node of nodes) {
+    const rt = node.memory.relationTypes
+    node.hasChildren = node.memory.relatedIds.some((relId) => {
+      if (!poolSet.has(relId)) return false
+      if (!rt) return true // sem relationTypes → tudo é filho em potencial
+      return rt[relId] === "parent"
+    })
+  }
+
+  // Filter collapsed nodes (and their tree descendants) from display
+  // Só desce na árvore seguindo relationTypes "parent" — não varre o grafo todo.
+  let visibleNodes: GraphNode[]
+  if (collapsedIds.size > 0) {
+    const hidden = new Set<string>()
+    const byId = new Map(nodes.map((n) => [n.memory.id, n]))
+    for (const cid of collapsedIds) {
+      // A memória em si fica visível; só os descendentes são ocultados
+      const queue: string[] = []
+      // Se não tem relationTypes, trata relatedIds como filhos diretos (1 nível, compatibilidade)
+      // Se tem, só desce onde relationTypes[rel] === "parent"
+      const startNode = byId.get(cid)
+      if (!startNode) continue
+      const startRt = startNode.memory.relationTypes
+      for (const rel of startNode.memory.relatedIds) {
+        if (!byId.has(rel) || hidden.has(rel)) continue
+        if (!startRt) {
+          // Sem relationTypes → filhos diretos, 1 nível apenas
+          hidden.add(rel)
+        } else if (startRt[rel] === "parent") {
+          hidden.add(rel)
+          queue.push(rel) // desce recursivamente
+        }
+      }
+      // BFS recursiva apenas para nós com relationTypes explícitos
+      while (queue.length) {
+        const id = queue.pop()!
+        const node = byId.get(id)
+        if (!node) continue
+        for (const rel of node.memory.relatedIds) {
+          if (node.memory.relationTypes?.[rel] !== "parent") continue
+          if (!byId.has(rel) || hidden.has(rel)) continue
+          hidden.add(rel)
+          queue.push(rel)
+        }
+      }
+    }
+    visibleNodes = nodes.filter((n) => !hidden.has(n.memory.id))
+  } else {
+    visibleNodes = nodes
+  }
+
+  // Mark collapsed state on visible nodes
+  const collapsedSet = new Set(collapsedIds)
+  for (const node of visibleNodes) {
+    if (collapsedSet.has(node.memory.id)) {
+      node.collapsed = true
+    }
+  }
+
+  // Edges — only between visible nodes
+  const present = new Map(visibleNodes.map((n) => [n.memory.id, n]))
   const edges: GraphEdge[] = []
   const seen = new Set<string>()
-  for (const node of nodes) {
+  for (const node of visibleNodes) {
     for (const rel of node.memory.relatedIds) {
       if (!present.has(rel)) continue
       const key = [node.memory.id, rel].sort().join(":")
@@ -211,9 +265,10 @@ function layoutGraph(pool: Memory[]): { nodes: GraphNode[]; edges: GraphEdge[] }
       })
     }
   }
-  // Índice de tags: cada tag → nodes que a possuem (evita O(n²) pairwise)
+
+  // Inferred edges
   const tagIndex = new Map<string, string[]>()
-  for (const node of nodes) {
+  for (const node of visibleNodes) {
     for (const tag of node.memory.tags) {
       const key = normalizeText(tag)
       if (!tagIndex.has(key)) tagIndex.set(key, [])
@@ -221,10 +276,9 @@ function layoutGraph(pool: Memory[]): { nodes: GraphNode[]; edges: GraphEdge[] }
     }
   }
 
-  // Só compara pares que compartilham pelo menos uma tag
   let inferredCount = 0
   const compared = new Set<string>()
-  outer: for (const node of nodes) {
+  for (const node of visibleNodes) {
     if (inferredCount >= MAX_INFERRED_EDGES) break
     const candidates = new Set<string>()
     for (const tag of node.memory.tags) {
@@ -248,7 +302,7 @@ function layoutGraph(pool: Memory[]): { nodes: GraphNode[]; edges: GraphEdge[] }
     }
   }
 
-  return { nodes, edges }
+  return { nodes: visibleNodes, edges }
 }
 
 interface Transform {
@@ -258,23 +312,34 @@ interface Transform {
 }
 
 export function MemoryGraph({ pool, allById, query, selectedId, onSelect, projectDirectory }: {
-  /** Memórias visíveis (filtro de modo/projeto — a busca só destaca) */
   pool: Memory[]
   allById: Map<string, Memory>
   query: string
   selectedId: string | null
   onSelect: (id: string | null) => void
-  /** Pasta do projeto em foco — arquivos soltos no grafo viram memórias dele */
   projectDirectory?: string
 }) {
   const containerRef = useRef<HTMLDivElement>(null)
   const [transform, setTransform] = useState<Transform>({ x: 0, y: 0, k: 1 })
   const [linkSource, setLinkSource] = useState<string | null>(null)
   const [dropActive, setDropActive] = useState(false)
+  const [collapsedIds, setCollapsedIds] = useState<Set<string>>(new Set())
   const drag = useRef<{ startX: number; startY: number; ox: number; oy: number; moved: boolean } | null>(null)
 
-  const { nodes, edges } = useMemo(() => layoutGraph(pool), [pool])
+  const { nodes, edges } = useMemo(() => layoutGraph(pool, collapsedIds), [pool, collapsedIds])
   const nodeById = useMemo(() => new Map(nodes.map((n) => [n.memory.id, n])), [nodes])
+
+  // Bounding box of all nodes for minimap
+  const bounds = useMemo(() => {
+    if (nodes.length === 0) return { minX: -200, minY: -200, maxX: 200, maxY: 200, width: 400, height: 400 }
+    const xs = nodes.map((n) => n.x)
+    const ys = nodes.map((n) => n.y)
+    const minX = Math.min(...xs) - 120
+    const maxX = Math.max(...xs) + 120
+    const minY = Math.min(...ys) - 120
+    const maxY = Math.max(...ys) + 120
+    return { minX, minY, maxX, maxY, width: maxX - minX, height: maxY - minY }
+  }, [nodes])
 
   const queryTokens = normalizeText(query).split(" ").filter(Boolean)
   const matchesQuery = useCallback(
@@ -283,11 +348,9 @@ export function MemoryGraph({ pool, allById, query, selectedId, onSelect, projec
       const haystack = normalizeText(`${memory.text} ${memory.tags.join(" ")}`)
       return queryTokens.every((t) => haystack.includes(t))
     },
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- tokens derivam de query
     [query],
   )
 
-  /** Reenquadra o conteúdo no container. */
   const fitView = useCallback(() => {
     const el = containerRef.current
     if (!el || nodes.length === 0) return
@@ -310,8 +373,59 @@ export function MemoryGraph({ pool, allById, query, selectedId, onSelect, projec
 
   useEffect(() => {
     fitView()
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- só no mount e quando o nº de nodes muda
   }, [nodes.length])
+
+  const zoomTo = useCallback((newK: number, centerX?: number, centerY?: number) => {
+    const el = containerRef.current
+    if (!el) return
+    const k = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, newK))
+    if (centerX != null && centerY != null) {
+      setTransform((t) => ({
+        k,
+        x: centerX - ((centerX - t.x) / t.k) * k,
+        y: centerY - ((centerY - t.y) / t.k) * k,
+      }))
+    } else {
+      setTransform((t) => {
+        const rect = el.getBoundingClientRect()
+        const cx = rect.width / 2
+        const cy = rect.height / 2
+        return {
+          k,
+          x: cx - ((cx - t.x) / t.k) * k,
+          y: cy - ((cy - t.y) / t.k) * k,
+        }
+      })
+    }
+  }, [])
+
+  const zoomIn = useCallback(() => zoomTo(transform.k * ZOOM_FACTOR), [zoomTo, transform.k])
+  const zoomOut = useCallback(() => zoomTo(transform.k / ZOOM_FACTOR), [zoomTo, transform.k])
+
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      const el = containerRef.current
+      if (!el || !el.contains(document.activeElement) && document.activeElement !== el) return
+      if (!(e.ctrlKey || e.metaKey)) return
+      switch (e.key) {
+        case "=":
+        case "+":
+          e.preventDefault()
+          zoomIn()
+          break
+        case "-":
+          e.preventDefault()
+          zoomOut()
+          break
+        case "0":
+          e.preventDefault()
+          fitView()
+          break
+      }
+    }
+    window.addEventListener("keydown", handler)
+    return () => window.removeEventListener("keydown", handler)
+  }, [zoomIn, zoomOut, fitView])
 
   const handleWheel = (e: React.WheelEvent) => {
     e.preventDefault()
@@ -321,7 +435,7 @@ export function MemoryGraph({ pool, allById, query, selectedId, onSelect, projec
     const cx = e.clientX - rect.left
     const cy = e.clientY - rect.top
     setTransform((t) => {
-      const k = Math.min(3, Math.max(0.15, t.k * Math.exp(-e.deltaY * 0.0012)))
+      const k = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, t.k * Math.exp(-e.deltaY * 0.0012)))
       return { k, x: cx - ((cx - t.x) / t.k) * k, y: cy - ((cy - t.y) / t.k) * k }
     })
   }
@@ -345,11 +459,20 @@ export function MemoryGraph({ pool, allById, query, selectedId, onSelect, projec
     drag.current = null
   }
 
+  const toggleCollapse = (e: React.MouseEvent, id: string) => {
+    e.stopPropagation()
+    setCollapsedIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
   const handleNodeClick = (e: React.MouseEvent, id: string) => {
     e.stopPropagation()
     if (drag.current?.moved) return
     if (e.ctrlKey || e.metaKey) {
-      // Ctrl+click em dois nodes cria a aresta (link bidirecional)
       if (!linkSource) {
         setLinkSource(id)
       } else if (linkSource !== id) {
@@ -369,7 +492,7 @@ export function MemoryGraph({ pool, allById, query, selectedId, onSelect, projec
     for (const file of Array.from(e.dataTransfer.files)) {
       if (file.size > MAX_DROP_FILE_SIZE) continue
       const content = await file.text()
-      if (content.includes("\0")) continue // binário
+      if (content.includes("\0")) continue
       const firstLine = content.split("\n").find((l) => l.trim()) ?? ""
       await memoryApi.create({
         kind: projectDirectory ? "project" : "general",
@@ -381,6 +504,28 @@ export function MemoryGraph({ pool, allById, query, selectedId, onSelect, projec
     }
   }
 
+  const handleMinimapClick = (e: React.MouseEvent<SVGSVGElement>) => {
+    const el = containerRef.current
+    if (!el) return
+    const svg = e.currentTarget
+    const svgRect = svg.getBoundingClientRect()
+    const px = e.clientX - svgRect.left
+    const py = e.clientY - svgRect.top
+    const mmW = 160
+    const mmH = 120
+    // Map to graph bounds
+    const gx = bounds.minX + (px / mmW) * bounds.width
+    const gy = bounds.minY + (py / mmH) * bounds.height
+    // Center view on this point
+    const cx = el.clientWidth / 2
+    const cy = el.clientHeight / 2
+    setTransform((t) => ({
+      k: t.k,
+      x: cx - gx * t.k,
+      y: cy - gy * t.k,
+    }))
+  }
+
   const selected = selectedId ? allById.get(selectedId) : undefined
   const now = Date.now()
 
@@ -388,10 +533,25 @@ export function MemoryGraph({ pool, allById, query, selectedId, onSelect, projec
     <div className="flex min-h-0 flex-1 gap-3 overflow-hidden">
       <div className="flex min-w-0 flex-1 flex-col gap-2">
         <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm" className="h-7 gap-1.5 text-xs" onClick={fitView}>
+          <Button variant="outline" size="sm" className="h-7 gap-1.5 text-xs" onClick={zoomIn} title="Ampliar (Ctrl+=)">
+            <ZoomIn className="size-3.5" />
+          </Button>
+          <span className="min-w-[3rem] text-center text-[11px] tabular-nums text-muted-foreground">
+            {Math.round(transform.k * 100)}%
+          </span>
+          <Button variant="outline" size="sm" className="h-7 gap-1.5 text-xs" onClick={zoomOut} title="Reduzir (Ctrl+-)">
+            <ZoomOut className="size-3.5" />
+          </Button>
+          <Button variant="outline" size="sm" className="h-7 gap-1.5 text-xs" onClick={fitView} title="Centralizar (Ctrl+0)">
             <Crosshair className="size-3.5" />
             Centralizar
           </Button>
+          {collapsedIds.size > 0 && (
+            <Button variant="ghost" size="sm" className="h-7 gap-1.5 text-xs" onClick={() => setCollapsedIds(new Set())}>
+              <Plus className="size-3.5" />
+              Expandir tudo
+            </Button>
+          )}
           {linkSource && (
             <span className="flex items-center gap-1 rounded-md border border-primary/40 bg-primary/10 px-2 py-0.5 text-[11px]">
               <Link2 className="size-3" />
@@ -414,10 +574,7 @@ export function MemoryGraph({ pool, allById, query, selectedId, onSelect, projec
             "relative min-h-0 flex-1 overflow-hidden rounded-lg border bg-card/50",
             dropActive && "ring-2 ring-primary/60",
           )}
-          onDragOver={(e) => {
-            e.preventDefault()
-            setDropActive(true)
-          }}
+          onDragOver={(e) => { e.preventDefault(); setDropActive(true) }}
           onDragLeave={() => setDropActive(false)}
           onDrop={(e) => void handleDrop(e)}
         >
@@ -427,11 +584,10 @@ export function MemoryGraph({ pool, allById, query, selectedId, onSelect, projec
             onPointerDown={handlePointerDown}
             onPointerMove={handlePointerMove}
             onPointerUp={handlePointerUp}
-            onClick={() => {
-              if (!drag.current?.moved) onSelect(null)
-            }}
+            onClick={() => { if (!drag.current?.moved) onSelect(null) }}
           >
-            <g transform={`translate(${transform.x}, ${transform.y}) scale(${transform.k})`}>
+            <g transform={`translate(${transform.x}, ${transform.y}) scale(${transform.k})`}
+               style={{ transition: 'transform 0.12s ease-out' }}>
               {edges.map((edge) => {
                 const a = nodeById.get(edge.from)
                 const b = nodeById.get(edge.to)
@@ -464,14 +620,13 @@ export function MemoryGraph({ pool, allById, query, selectedId, onSelect, projec
                     key={memory.id}
                     transform={`translate(${node.x}, ${node.y})`}
                     opacity={opacity}
-                    className="cursor-pointer"
+                    className="group cursor-pointer"
                     onClick={(e) => handleNodeClick(e, memory.id)}
                     onPointerDown={(e) => e.stopPropagation()}
                   >
                     <title>
-                      {`[${KIND_LABEL[memory.kind]}${memory.area ? ` · ${PROJECT_AREAS[memory.area]?.label}` : ""}] ${memory.text}\npeso ${memory.weight.toFixed(2)} · ${memory.hits} usos${stale ? "\n(sem uso há mais de 30 dias)" : ""}`}
+                      {`[${KIND_LABEL[memory.kind]}${memory.area ? ` · ${PROJECT_AREAS[memory.area]?.label}` : ""}] ${memory.text}\npeso ${memory.weight.toFixed(2)} · ${memory.hits} usos${stale ? "\n(sem uso há mais de 30 dias)" : ""}${node.collapsed ? "\n(colapsado)" : ""}`}
                     </title>
-                    {/* Anel de destaque: recente, selecionado ou origem do link */}
                     {!node.isRoot && (recent || isSelected || isLinkSource) && (
                       <circle
                         r={node.r + 4}
@@ -520,11 +675,92 @@ export function MemoryGraph({ pool, allById, query, selectedId, onSelect, projec
                         </text>
                       </>
                     )}
+                    {/* Expand / Collapse toggle — só no hover do nó */}
+                    {node.hasChildren && (
+                      <g
+                        className="cursor-pointer opacity-0 transition-opacity group-hover:opacity-100"
+                        onClick={(e) => toggleCollapse(e, memory.id)}
+                        onPointerDown={(e) => e.stopPropagation()}
+                      >
+                        <circle
+                          cx={node.r + 10}
+                          cy={-node.r - 4}
+                          r={8}
+                          fill="var(--card)"
+                          stroke="var(--border)"
+                          strokeWidth={1}
+                        />
+                        <foreignObject x={node.r + 4} y={-node.r - 11} width={14} height={14}>
+                          <div className="flex h-full items-center justify-center select-none">
+                            {node.collapsed ? (
+                              <EyeOff className="size-3 text-muted-foreground" />
+                            ) : (
+                              <Eye className="size-3 text-muted-foreground" />
+                            )}
+                          </div>
+                        </foreignObject>
+                      </g>
+                    )}
                   </g>
                 )
               })}
             </g>
           </svg>
+
+          {/* Mini-map */}
+          {nodes.length > 0 && (
+            <svg
+              className="absolute bottom-2 right-2 z-20 cursor-pointer rounded-lg border bg-card/90 shadow-sm"
+              width={160}
+              height={120}
+              viewBox="0 0 160 120"
+              onClick={handleMinimapClick}
+            >
+              <rect width={160} height={120} rx={6} fill="var(--card)" fillOpacity={0.95} />
+              {/* Node dots */}
+              {nodes.map((node) => {
+                const px = ((node.x - bounds.minX) / bounds.width) * 160
+                const py = ((node.y - bounds.minY) / bounds.height) * 120
+                return (
+                  <circle
+                    key={node.memory.id}
+                    cx={px}
+                    cy={py}
+                    r={Math.max(2, node.r * 0.12)}
+                    fill={KIND_COLOR[node.memory.kind]}
+                    opacity={0.7}
+                  />
+                )
+              })}
+              {/* Viewport indicator */}
+              {(() => {
+                const el = containerRef.current
+                if (!el) return null
+                const vw = el.clientWidth / transform.k
+                const vh = el.clientHeight / transform.k
+                const vx = (-transform.x / transform.k)
+                const vy = (-transform.y / transform.k)
+                const mmPx = (vx - bounds.minX) / bounds.width * 160
+                const mmPy = (vy - bounds.minY) / bounds.height * 120
+                const mmPw = vw / bounds.width * 160
+                const mmPh = vh / bounds.height * 120
+                return (
+                  <rect
+                    x={mmPx}
+                    y={mmPy}
+                    width={mmPw}
+                    height={mmPh}
+                    fill="none"
+                    stroke="var(--primary)"
+                    strokeWidth={1.2}
+                    rx={2}
+                    className="pointer-events-none"
+                  />
+                )
+              })()}
+            </svg>
+          )}
+
           {dropActive && (
             <div className="pointer-events-none absolute inset-0 z-10 flex flex-col items-center justify-center gap-2 bg-background/70 text-sm">
               <FileUp className="size-8 text-primary" />
