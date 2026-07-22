@@ -31,8 +31,10 @@ export function createSubagentTool(input: SendMessageInput, ctx: ToolContext | n
       research: z.boolean().optional().describe('Libera busca web (websearch/webfetch)'),
       browser: z.boolean().optional().describe('Libera navegação com JavaScript (browser)'),
       code: z.boolean().optional().describe('Modo código: acesso aos arquivos da pasta de trabalho'),
+      brain: z.boolean().optional().describe('Habilita memória persistente (ferramentas memory_*)'),
+      simple: z.boolean().optional().describe('Respostas em texto puro, sem formatação'),
     }),
-    execute: async ({ task, research, browser, code }) => {
+    execute: async ({ task, research, browser, code, brain, simple }) => {
       const worker = input.workerModel ?? { providerId: input.providerId, modelId: input.modelId }
       const codeUnavailable = code === true && !input.directory
       const workerInput: SendMessageInput = {
@@ -45,7 +47,8 @@ export function createSubagentTool(input: SendMessageInput, ctx: ToolContext | n
         options: {
           research,
           browser,
-          simple: true,
+          brain: brain ?? true,
+          simple: simple ?? true,
           reasoning: worker.reasoning,
           // Gatekeeping: worker herda o modo de permissões do pai
           permissionMode: input.options.permissionMode,
@@ -99,6 +102,8 @@ export interface CreateTaskArgs {
   research?: boolean
   browser?: boolean
   readonly?: boolean
+  brain?: boolean
+  simple?: boolean
 }
 
 /** Tool de planejamento do orquestrador: cada chamada vira uma OrchestrationTask. */
@@ -116,8 +121,10 @@ export function createTaskTool(
       research: z.boolean().optional().describe('Libera busca web para o worker'),
       browser: z.boolean().optional().describe('Libera browser com JavaScript para o worker'),
       readonly: z.boolean().optional().describe('Worker de código só-leitura (não edita nem executa)'),
+      brain: z.boolean().optional().describe('Habilita memória persistente (ferramentas memory_*)'),
+      simple: z.boolean().optional().describe('Respostas em texto puro, sem formatação'),
     }),
-    execute: async ({ title, prompt, mode, research, browser, readonly: readOnly }: CreateTaskArgs) => {
+    execute: async ({ title, prompt, mode, research, browser, readonly: readOnly, brain, simple }: CreateTaskArgs) => {
       // Sem pasta de trabalho não existe worker de código — degrada para chat
       // avisando o modelo, em vez de falhar silenciosamente na execução
       const codeUnavailable = mode === 'code' && !opts.allowCode
@@ -126,7 +133,7 @@ export function createTaskTool(
         title,
         prompt,
         mode: codeUnavailable ? 'chat' : (mode ?? 'chat'),
-        options: { research, browser, plan: readOnly, simple: true },
+        options: { research, browser, plan: readOnly, brain: brain ?? true, simple: simple ?? true },
         status: 'idle',
       })
       if (!accepted) return 'Limite de tarefas do plano atingido — não registre mais tarefas.'
