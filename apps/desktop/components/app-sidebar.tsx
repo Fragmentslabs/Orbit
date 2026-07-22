@@ -690,7 +690,60 @@ function SessionItem({ session, childSessions = [] }: {
   )
 }
 
-function FolderItem({ folder, sessions }: { folder: FolderInfo; sessions: SessionInfo[] }) {
+function SessionRowWithChildren({ session, childSessions, hasChildren }: {
+  session: SessionInfo
+  childSessions: SessionInfo[]
+  hasChildren: boolean
+}) {
+  const [childExpanded, setChildExpanded] = useState(true)
+  const statusMap = useSessionStore((s) => s.status)
+
+  return (
+    <>
+      <SessionRow
+        button={SidebarMenuSubButton}
+        actionButtonClassName="top-1"
+        session={session}
+        trailing={
+          hasChildren ? (
+            <span
+              role="button"
+              tabIndex={0}
+              className="flex size-4 shrink-0 items-center justify-center rounded hover:bg-sidebar-foreground/10"
+              onClick={(e) => {
+                e.stopPropagation()
+                setChildExpanded((prev) => !prev)
+              }}
+            >
+              <ChevronDown className={cn("size-3 transition-transform", !childExpanded && "-rotate-90")} />
+            </span>
+          ) : undefined
+        }
+      />
+      {hasChildren && childExpanded && (
+        <div className="ml-3 border-l border-sidebar-border pl-2">
+          {childSessions.map((child) => (
+            <div key={child.id} className="py-0.5">
+              <SessionRow
+                button={SidebarMenuSubButton}
+                actionButtonClassName="top-1"
+                session={child}
+                icon={child.mode === "code" ? Terminal : Bot}
+                statusDot={statusMap[child.id]}
+              />
+            </div>
+          ))}
+        </div>
+      )}
+    </>
+  )
+}
+
+function FolderItem({ folder, sessions, childrenByParent = {} }: {
+  folder: FolderInfo
+  sessions: SessionInfo[]
+  childrenByParent?: Record<string, SessionInfo[]>
+}) {
   const [expanded, setExpanded] = useState(true)
   const { mode } = useWorkspace()
   const selectSession = useSessionStore((s) => s.selectSession)
@@ -782,15 +835,19 @@ function FolderItem({ folder, sessions }: { folder: FolderInfo; sessions: Sessio
 
       {expanded && sessions.length > 0 && (
         <SidebarMenuSub className="mr-0">
-          {sessions.map((session) => (
-            <SidebarMenuSubItem key={session.id}>
-              <SessionRow
-                button={SidebarMenuSubButton}
-                actionButtonClassName="top-1"
-                session={session}
-              />
-            </SidebarMenuSubItem>
-          ))}
+          {sessions.map((session) => {
+            const childSessions = childrenByParent[session.id]
+            const hasChildren = childSessions?.length > 0
+            return (
+              <SidebarMenuSubItem key={session.id}>
+                <SessionRowWithChildren
+                  session={session}
+                  childSessions={childSessions ?? []}
+                  hasChildren={hasChildren}
+                />
+              </SidebarMenuSubItem>
+            )
+          })}
         </SidebarMenuSub>
       )}
 
@@ -904,6 +961,7 @@ function ChatHistory() {
               key={folder.id}
               folder={folder}
               sessions={active.filter((s) => s.folderId === folder.id)}
+              childrenByParent={childrenByParent}
             />
           ))}
           {sortedFolders.length === 0 && (
