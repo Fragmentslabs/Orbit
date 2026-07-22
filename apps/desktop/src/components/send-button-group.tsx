@@ -89,7 +89,7 @@ export function SendButtonGroup({
             size="sm"
             variant="default"
             type="button"
-            className="rounded-r-none h-7"
+            className="rounded-r-none h-7 border border-primary"
             onClick={() => withClear(onQueue)}
           >
             <ListPlus className="size-4 mr-1" />
