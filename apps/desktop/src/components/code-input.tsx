@@ -18,6 +18,7 @@ import {
   PromptInputTools,
 } from "@/src/components/ai/prompt-input"
 import { DelegationMenuItems } from "@/src/components/delegation-menu"
+import { ModeMenuItems, type ModeToggleDef } from "@/src/components/mode-menu-items"
 import { LoopConfigDialog } from "@/src/components/loop-config-dialog"
 import { ModelPicker } from "@/src/components/model-picker"
 import { ModeToggle } from "@/src/components/mode-toggle"
@@ -119,6 +120,14 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId }: 
   }, [folders])
   const selections = usePanelStore((s) => s.selections)
   const removeSelection = usePanelStore((s) => s.removeSelection)
+
+  const modeToggleItems = useMemo<ModeToggleDef[]>(() => [
+    { icon: Search, label: "Pesquisa", active: search, onChange: (v: boolean) => setSearch(v) },
+    { icon: FileText, label: "Modo Plano", active: plan, onChange: (v: boolean) => setPlan(v) },
+    ...(model?.reasoning ? [{ icon: Brain, label: "Thinking", active: thinking, onChange: (v: boolean) => update({ enabled: v, variantId }) }] : []),
+    { icon: AlignLeft, label: "Simples", active: simple, onChange: (v: boolean) => setSimple(v) },
+    { icon: BrainCircuit, label: "Memória", active: brain, onChange: (v: boolean) => setBrainEnabled(sessionId, v) },
+  ], [search, plan, model?.reasoning, thinking, simple, brain, sessionId, variantId, update, setBrainEnabled, setSimple])
 
   const handleSubmit = useCallback((message: { text?: string; files?: { mediaType?: string; filename?: string; url?: string }[] }) => {
     const files = toFileParts(message.files ?? [])
@@ -263,6 +272,12 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId }: 
                   <PlusIcon className="size-4" />
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="start" className="min-w-56 p-1.5">
+                  {displayMode !== "toggles" && (
+                    <>
+                      <ModeMenuItems items={modeToggleItems} />
+                      <DropdownMenuSeparator />
+                    </>
+                  )}
                   <DelegationMenuItems
                     subagents={subagents}
                     orchestra={orchestra}
@@ -278,6 +293,7 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId }: 
                 </DropdownMenuContent>
               </DropdownMenu>
               <PermissionModePicker />
+              {displayMode === "actions" && <ContextMeter sessionId={sessionId} />}
             </div>
             <div className="flex items-center gap-1">
               {subagents && <Bot className="size-3 text-sidebar-foreground/40" />}
@@ -371,11 +387,6 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId }: 
             <ContextMeter sessionId={sessionId} />
           </div>
         </PromptInputTools>
-      )}
-      {displayMode === "actions" && (
-        <div className="ml-auto mt-2 pt-2">
-          <ContextMeter sessionId={sessionId} />
-        </div>
       )}
         <OrchestrationConfigDialog open={configOpen} onOpenChange={setConfigOpen} />
         <LoopConfigDialog open={loopConfigOpen} onOpenChange={setLoopConfigOpen} />
