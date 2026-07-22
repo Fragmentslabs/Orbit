@@ -4,6 +4,8 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { useSessionStore } from "@/src/stores/session-store"
 import { useProviderStore } from "@/src/stores/provider-store"
 import { formatTokens } from "@/src/lib/format"
+import { chatApi } from "@/src/lib/ipc"
+import { Button } from "@/components/ui/button"
 import type { TokenUsage } from "@shared/chat"
 
 function sumTokens(u: TokenUsage): number {
@@ -24,29 +26,16 @@ export function ContextMeter({ sessionId }: { sessionId?: string }) {
 
   const limit = model?.limit?.context
 
-  const { accumulated, compacted } = useMemo(() => {
+  const { lastTokens, compacted } = useMemo(() => {
     let lastSummary = -1
     for (let i = 0; i < messages.length; i++) {
       if (messages[i].summary) lastSummary = i
     }
-    const slice = messages.slice(lastSummary + 1)
-    const acc: TokenUsage = slice.reduce(
-      (a, m) => {
-        if (m.role === "assistant" && m.tokens) {
-          a.input += m.tokens.input
-          a.output += m.tokens.output
-          a.reasoning += m.tokens.reasoning
-          a.cacheRead += m.tokens.cacheRead
-          a.cacheWrite += m.tokens.cacheWrite
-        }
-        return a
-      },
-      { input: 0, output: 0, reasoning: 0, cacheRead: 0, cacheWrite: 0 },
-    )
-    return { accumulated: acc, compacted: lastSummary >= 0 }
+    const found = [...messages].reverse().find((m) => m.role === "assistant" && m.tokens)?.tokens
+    return { lastTokens: found, compacted: lastSummary >= 0 }
   }, [messages])
 
-  const used = sumTokens(accumulated)
+  const used = lastTokens ? sumTokens(lastTokens) : 0
   if (used === 0 && !limit) return null
 
   const pct = limit ? Math.min(used / limit, 1) : 0
@@ -101,22 +90,24 @@ export function ContextMeter({ sessionId }: { sessionId?: string }) {
                   style={{ width: `${Math.min(pct * 100, 100)}%` }}
                 />
               </div>
-              <div className="space-y-1 text-[10px] text-muted-foreground">
-                <div className="flex justify-between">
-                  <span>Entrada</span>
-                  <span className="tabular-nums">{formatTokens(accumulated.input)}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span>Saída</span>
-                  <span className="tabular-nums">{formatTokens(accumulated.output)}</span>
-                </div>
-                {accumulated.reasoning > 0 && (
+              {lastTokens && (
+                <div className="space-y-1 text-[10px] text-muted-foreground">
                   <div className="flex justify-between">
-                    <span>Reasoning</span>
-                    <span className="tabular-nums">{formatTokens(accumulated.reasoning)}</span>
+                    <span>Entrada</span>
+                    <span className="tabular-nums">{formatTokens(lastTokens.input)}</span>
                   </div>
-                )}
-              </div>
+                  <div className="flex justify-between">
+                    <span>Saída</span>
+                    <span className="tabular-nums">{formatTokens(lastTokens.output)}</span>
+                  </div>
+                  {lastTokens.reasoning > 0 && (
+                    <div className="flex justify-between">
+                      <span>Reasoning</span>
+                      <span className="tabular-nums">{formatTokens(lastTokens.reasoning)}</span>
+                    </div>
+                  )}
+                </div>
+              )}
               {compacted && (
                 <p className="text-[10px] text-muted-foreground/60">Compactado — histórico anterior resumido</p>
               )}
@@ -124,8 +115,17 @@ export function ContextMeter({ sessionId }: { sessionId?: string }) {
                 <p className="text-[10px] text-amber-500">Próximo do limite — o histórico será compactado em breve</p>
               )}
               {!compacted && atLimit && (
-                <p className="text-[10px] text-destructive">Limite atingido — a próxima mensagem compactará o histórico</p>
+                <p className="text-[10px] text-destructive">Limite atingido — a compactação automática falhou</p>
               )}
+              <div className="pt-1 border-t border-border" />
+              <Button
+                size="sm"
+                variant="outline"
+                className="w-full text-xs h-7"
+                onClick={() => sessionId && chatApi.compact(sessionId)}
+              >
+                Compactar histórico agora
+              </Button>
             </>
           ) : (
             <>
@@ -133,22 +133,33 @@ export function ContextMeter({ sessionId }: { sessionId?: string }) {
                 <span>Contexto usado</span>
                 <span className="tabular-nums">{formatTokens(used)} tokens</span>
               </div>
-              <div className="space-y-1 text-[10px] text-muted-foreground">
-                <div className="flex justify-between">
-                  <span>Entrada</span>
-                  <span className="tabular-nums">{formatTokens(accumulated.input)}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span>Saída</span>
-                  <span className="tabular-nums">{formatTokens(accumulated.output)}</span>
-                </div>
-                {accumulated.reasoning > 0 && (
+              {lastTokens && (
+                <div className="space-y-1 text-[10px] text-muted-foreground">
                   <div className="flex justify-between">
-                    <span>Reasoning</span>
-                    <span className="tabular-nums">{formatTokens(accumulated.reasoning)}</span>
+                    <span>Entrada</span>
+                    <span className="tabular-nums">{formatTokens(lastTokens.input)}</span>
                   </div>
-                )}
-              </div>
+                  <div className="flex justify-between">
+                    <span>Saída</span>
+                    <span className="tabular-nums">{formatTokens(lastTokens.output)}</span>
+                  </div>
+                  {lastTokens.reasoning > 0 && (
+                    <div className="flex justify-between">
+                      <span>Reasoning</span>
+                      <span className="tabular-nums">{formatTokens(lastTokens.reasoning)}</span>
+                    </div>
+                  )}
+                </div>
+              )}
+              <div className="pt-1 border-t border-border" />
+              <Button
+                size="sm"
+                variant="outline"
+                className="w-full text-xs h-7"
+                onClick={() => sessionId && chatApi.compact(sessionId)}
+              >
+                Compactar histórico agora
+              </Button>
             </>
           )}
         </div>

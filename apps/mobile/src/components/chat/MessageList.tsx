@@ -2,6 +2,7 @@ import { useRef, useEffect, useCallback, useState } from 'react'
 import { View, FlatList, Pressable, Keyboard } from 'react-native'
 import { ChevronDown } from 'lucide-react-native'
 import { MessageBubble } from '~/components/chat/MessageBubble'
+import { SummaryCard } from '~/components/chat/SummaryCard'
 import { getThemeTokens } from '~/lib/theme-tokens'
 import { useThemeStore } from '~/stores/theme-store'
 import type { ChatMessage } from '@orbit/shared'
@@ -59,12 +60,16 @@ export function MessageList({ messages, isStreaming, onRevert, ListFooterCompone
         keyExtractor={(item) => item.id}
         renderItem={({ item, index }) => (
           <View className="py-1">
-            <MessageBubble
-              message={item}
-              isLast={index === messages.length - 1}
-              isBusy={isStreaming}
-              onRevert={onRevert ? () => onRevert(item.id) : undefined}
-            />
+            {item.summary ? (
+              <SummaryCard message={item} />
+            ) : (
+              <MessageBubble
+                message={item}
+                isLast={index === messages.length - 1}
+                isBusy={isStreaming}
+                onRevert={onRevert ? () => onRevert(item.id) : undefined}
+              />
+            )}
           </View>
         )}
         ListFooterComponent={ListFooterComponent}

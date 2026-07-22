@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useMemo, useCallback } from 'react'
 import { View, Text, Pressable } from 'react-native'
 import Svg, { Circle } from 'react-native-svg'
 import { cn } from '~/lib/utils'
@@ -24,27 +24,13 @@ export function ContextMeter({ sessionId }: { sessionId?: string }) {
   const messages = useSessionStore((s) =>
     sessionId ? s.messages[sessionId] ?? NO_MSGS : NO_MSGS,
   )
-
-  const { accumulated, compacted } = useMemo(() => {
+  const { lastTokens, compacted } = useMemo(() => {
     let lastSummary = -1
     for (let i = 0; i < messages.length; i++) {
       if (messages[i].summary) lastSummary = i
     }
-    const slice = messages.slice(lastSummary + 1)
-    const acc = slice.reduce(
-      (a, m) => {
-        if (m.role === 'assistant' && m.tokens) {
-          a.input += m.tokens.input
-          a.output += m.tokens.output
-          a.reasoning += m.tokens.reasoning
-          a.cacheRead += m.tokens.cacheRead
-          a.cacheWrite += m.tokens.cacheWrite
-        }
-        return a
-      },
-      { input: 0, output: 0, reasoning: 0, cacheRead: 0, cacheWrite: 0 },
-    )
-    return { accumulated: acc, compacted: lastSummary >= 0 }
+    const found = [...messages].reverse().find((m) => m.role === 'assistant' && m.tokens)?.tokens
+    return { lastTokens: found, compacted: lastSummary >= 0 }
   }, [messages])
 
   const catalog = useSettingsStore((s) => s.catalog)
@@ -53,14 +39,20 @@ export function ContextMeter({ sessionId }: { sessionId?: string }) {
     ? catalog[selected.providerId]?.models[selected.modelId]?.limit?.context
     : undefined
 
-  const used = sumTokens(accumulated)
+  const used = lastTokens ? sumTokens(lastTokens) : 0
   if (used === 0) return null
 
   const pct = limit && limit > 0 ? used / limit : 0
   const atLimit = pct >= 1
 
+  const handleCompact = useCallback(async () => {
+    if (!sessionId) return
+    const sendMsg = useSessionStore.getState().sendMessage
+    sendMsg('/compact', { sessionId })
+  }, [sessionId])
+
   return (
-    <Pressable className="flex-row items-center gap-1 rounded-md px-1.5 py-1 opacity-40 text-foreground">
+    <Pressable className="flex-row items-center gap-1 rounded-md px-1.5 py-1 opacity-40 text-foreground" onPress={handleCompact}>
       <Svg width={16} height={16} viewBox="0 0 16 16">
         <Circle
           cx="8"

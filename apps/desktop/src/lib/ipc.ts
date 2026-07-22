@@ -97,6 +97,7 @@ export const sessionApi = {
 export const chatApi = {
   send: (input: SendMessageInput) => window.ipcRenderer.invoke("chat:send", input),
   abort: (sessionId: string) => window.ipcRenderer.invoke("chat:abort", sessionId),
+  compact: (sessionId: string) => window.ipcRenderer.invoke("chat:compact", sessionId),
   approvePlan: (sessionId: string, planId: string, taskIds?: string[]) =>
     window.ipcRenderer.invoke("chat:approvePlan", sessionId, planId, taskIds),
   rejectPlan: (sessionId: string) => window.ipcRenderer.invoke("chat:rejectPlan", sessionId),

@@ -14,7 +14,7 @@ import { killAll as killAllProcesses, listProcesses, killProcess } from './lib/p
 import { getModelsSnapshot, invalidateModelsSnapshot } from './lib/models'
 import { revert as revertSession, unrevert as unrevertSession } from './lib/session/revert'
 import { getInitStatus, runProjectInit, type RunInitInput } from './lib/project-init'
-import { abortChat, runChat } from './lib/chat-engine'
+import { abortChat, compactSession, runChat } from './lib/chat-engine'
 import { runChatWithLoop } from './lib/loop-engine'
 import { reply as askReply, rejectSession as rejectSessionAsks } from './lib/ask-broker'
 import { abortOrchestration, approvePlan, rejectPlan, runOrchestration } from './lib/orchestrator'
@@ -522,6 +522,9 @@ app.whenReady().then(() => {
   })
   ipcMain.handle('chat:rejectPlan', (_event, sessionId: string) => {
     if (win) void rejectPlan(win, sessionId)
+  })
+  ipcMain.handle('chat:compact', (_event, sessionId: string) => {
+    if (win) void compactSession(win, sessionId)
   })
   ipcMain.handle('chat:closeBrowser', (_event, sessionId: string) => destroyBrowserWindow(sessionId))
   ipcMain.handle('plan:saveFile', async (_event, directory: string, content: string) => {
