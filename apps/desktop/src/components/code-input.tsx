@@ -168,7 +168,7 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId }: 
       extraDirectories,
       files.length > 0 ? files : undefined,
     )
-  }, [busy, folders, sessionId, onStop, selections, getDirs, buildOptions, onSubmit, mode, enqueueForSend, openChatTab, sendMessage, createSession])
+  }, [busy, folders, sessionId, onStop, selections, getDirs, buildOptions, onSubmit, mode, enqueueForSend, sendMessage, createSession])
 
   const slashCommands = useMemo<SlashCommand[]>(() => {
     const toggle = (fn: () => void) => ({ setText }: { setText: (t: string) => void }) => {
