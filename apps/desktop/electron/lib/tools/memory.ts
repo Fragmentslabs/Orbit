@@ -53,21 +53,23 @@ export function createChatMemoryTools(input: SendMessageInput): ToolSet {
   return {
     memory_save: tool({
       description:
-        'Salva uma memória duradoura sobre o usuário. NÃO salvar é o default — use apenas para informação genuinamente útil em conversas futuras. kind: "seasonal" (expira; atividades recentes), "core" (permanente; fatos pessoais que só afetam conversas), "general" (permanente; preferências que valem também no modo código).',
+        'Salva uma memória duradoura sobre o usuário. NÃO salvar é o default — use apenas para informação genuinamente útil. kind: "seasonal" (expira; atividades recentes), "core" (permanente; fatos pessoais), "general" (permanente; preferências que valem em todos os modos).',
       inputSchema: z.object({
         text: z.string().describe('A memória, em uma frase curta e autocontida'),
         kind: z.enum(['core', 'seasonal', 'general']).optional().describe('Padrão: seasonal'),
         weight: z.number().min(0).max(1).optional().describe('Importância 0..1'),
         tags: z.array(z.string()).optional().describe('Palavras-chave para busca futura'),
-        relatedId: z.string().optional().describe('Id de memória existente relacionada (cria o link)'),
+        relatedIds: z.array(z.string()).optional().describe('Ids de memórias relacionadas (cria links). Passe ids de pais/relacionados existentes.'),
+        relatedTypes: z.record(z.string(), z.enum(['parent', 'related'])).optional().describe('Tipo da relação por id. Ex: { "mem_abc": "parent" }. Padrão: related'),
       }),
-      execute: async ({ text, kind, weight, tags, relatedId }) => {
+      execute: async ({ text, kind, weight, tags, relatedIds, relatedTypes }) => {
         const result = await memory.save({
           text,
           kind: kind ?? 'seasonal',
           weight,
           tags,
-          relatedId,
+          relatedIds,
+          relatedTypes: relatedTypes as Record<string, 'parent' | 'related'> | undefined,
           sessionId: input.sessionId,
         })
         return saveReply(result)
@@ -92,13 +94,14 @@ export function createChatMemoryTools(input: SendMessageInput): ToolSet {
     }),
     memory_link: tool({
       description:
-        'Conecta duas memórias existentes (backlink bidirecional). Use quando uma memória expande, corrige ou se relaciona a outra.',
+        'Conecta duas memórias existentes (backlink bidirecional). Use quando uma memória expande, corrige ou se relaciona a outra. Se for relação pai-filho (hierarquia), use type="parent".',
       inputSchema: z.object({
         sourceId: z.string(),
         targetId: z.string(),
+        type: z.enum(['parent', 'related']).optional().describe('Tipo da relação. "parent" = hierarquia (source é pai de target). Padrão: related'),
       }),
-      execute: async ({ sourceId, targetId }) => {
-        const ok = await memory.link(sourceId, targetId)
+      execute: async ({ sourceId, targetId, type }) => {
+        const ok = await memory.link(sourceId, targetId, type)
         return ok ? 'Memórias conectadas.' : 'Não foi possível conectar: alguma das memórias não existe.'
       },
     }),
@@ -147,7 +150,7 @@ export function createCodeMemoryTools(input: SendMessageInput, ctx: ToolContext)
   return {
     memory_save: tool({
       description:
-        'Salva uma memória de trabalho. kind "project" (padrão): sobre ESTE projeto, category obrigatória. kind "general": estilo global de trabalho, vale em todos os projetos e no chat. Para contexto extenso (mapa arquitetural, schema), passe um markdown em `document` — o `text` continua sendo um resumo de 1-2 frases.',
+        'Salva uma memória de trabalho. kind "project" (padrão): sobre ESTE projeto, category obrigatória. kind "general": estilo global de trabalho. Para contexto extenso, passe markdown em `document`.',
       inputSchema: z.object({
         text: z.string().describe('Resumo curto e autocontido (vai ao prompt e à busca)'),
         kind: z.enum(['project', 'general']).optional().describe('Padrão: project'),
@@ -160,9 +163,11 @@ export function createCodeMemoryTools(input: SendMessageInput, ctx: ToolContext)
         document: z
           .string()
           .optional()
-          .describe('Markdown anexado para contexto extenso — não use para uma frase simples'),
+          .describe('Markdown anexado para contexto extenso'),
+        relatedIds: z.array(z.string()).optional().describe('Ids de memórias relacionadas (cria links). Conecte a área-pai, decisões relacionadas etc.'),
+        relatedTypes: z.record(z.string(), z.enum(['parent', 'related'])).optional().describe('Tipo da relação por id. Ex: { "mem_abc": "parent" }'),
       }),
-      execute: async ({ text, kind, category, weight, tags, document }) => {
+      execute: async ({ text, kind, category, weight, tags, document, relatedIds, relatedTypes }) => {
         const resolvedKind = kind ?? 'project'
         if (resolvedKind === 'project' && !category) {
           return 'Erro: memórias de projeto exigem o campo category (preference | convention | structure | decision | context).'
@@ -174,6 +179,8 @@ export function createCodeMemoryTools(input: SendMessageInput, ctx: ToolContext)
           weight,
           tags,
           document,
+          relatedIds,
+          relatedTypes: relatedTypes as Record<string, 'parent' | 'related'> | undefined,
           directory: ctx.directory,
           sessionId: input.sessionId,
         })
