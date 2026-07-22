@@ -160,6 +160,25 @@ export async function runChat(win: BrowserWindow, input: SendMessageInput): Prom
   const history = await loadMessages(sessionId)
   const isFirstExchange = history.length === 0
 
+  // Comando /compact — compacta o histórico e não gera resposta do modelo
+  if (input.text.trim() === '/compact') {
+    try {
+      const model = await resolveModel(input.providerId, input.modelId)
+      const summary = await compactHistory(history, model)
+      if (summary) {
+        const lastSummary = findLastSummaryIndex(history)
+        for (let i = lastSummary + 1; i < history.length; i++) {
+          history[i].tokens = undefined
+        }
+        await saveMessages(sessionId, history)
+        emit(win, { type: 'messages', sessionId, messages: history })
+      }
+    } catch (err) {
+      console.error('[compaction] /compact falhou:', err)
+    }
+    return
+  }
+
   const userMessage: ChatMessage = {
     id: newId('msg'),
     role: 'user',
@@ -578,5 +597,32 @@ export async function runChat(win: BrowserWindow, input: SendMessageInput): Prom
     })
   } finally {
     if (abortControllers.get(sessionId) === controller) abortControllers.delete(sessionId)
+  }
+}
+
+/** Compactação manual acionada pelo botão na UI ou pelo comando /compact. */
+export async function compactSession(
+  win: BrowserWindow,
+  sessionId: string,
+): Promise<void> {
+  const history = await loadMessages(sessionId)
+  const lastAssistant = [...history].reverse().find((m) => m.role === 'assistant' && m.providerId)
+  const providerId = lastAssistant?.providerId
+  const modelId = lastAssistant?.modelId
+  if (!providerId || !modelId) return
+
+  try {
+    const model = await resolveModel(providerId, modelId)
+    const summary = await compactHistory(history, model)
+    if (summary) {
+      const lastSummary = findLastSummaryIndex(history)
+      for (let i = lastSummary + 1; i < history.length; i++) {
+        history[i].tokens = undefined
+      }
+      await saveMessages(sessionId, history)
+      emit(win, { type: 'messages', sessionId, messages: history })
+    }
+  } catch (err) {
+    console.error('[compaction] manual falhou:', err)
   }
 }

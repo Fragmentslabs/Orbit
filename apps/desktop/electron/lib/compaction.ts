@@ -35,7 +35,7 @@ export function shouldCompact(
   lastTokens: TokenUsage | undefined,
   model: CatalogModel | undefined,
 ): boolean {
-  if (!lastTokens?.input || !model?.limit?.context) return false
+  if (lastTokens == null || !model?.limit?.context) return false
   const reserve =
     Math.min(model.limit.output || RESERVE_OUTPUT_CAP, RESERVE_OUTPUT_CAP) + RESERVE_PADDING
   return lastTokens.input + lastTokens.output >= model.limit.context - reserve
