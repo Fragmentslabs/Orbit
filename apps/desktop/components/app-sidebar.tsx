@@ -517,6 +517,7 @@ function SessionRow({ session, button: ButtonComponent, buttonClassName, actionB
   const { mode, setMode, setView } = useWorkspace()
   const selectSession = useSessionStore((s) => s.selectSession)
   const activeId = useSessionStore((s) => s.activeIds[mode])
+  const unreadCounts = useSessionStore((s) => s.unreadCounts)
   const togglePin = useSessionStore((s) => s.togglePin)
   const toggleArchive = useSessionStore((s) => s.toggleArchive)
   const deleteSession = useSessionStore((s) => s.deleteSession)
@@ -597,6 +598,8 @@ function SessionRow({ session, button: ButtonComponent, buttonClassName, actionB
             >
               {isSelected && <Check className="size-3 text-primary" />}
             </button>
+          ) : unreadCounts[session.id] > 0 && activeId !== session.id && statusDot !== "submitted" && statusDot !== "streaming" ? (
+            <span className="size-2 shrink-0 rounded-full bg-primary" />
           ) : (
             <Icon className="size-4 shrink-0" />
           )}
