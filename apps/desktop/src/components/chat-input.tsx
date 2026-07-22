@@ -24,6 +24,7 @@ import { ModeToggle } from "@/src/components/mode-toggle"
 import { OrchestrationConfigDialog } from "@/src/components/orchestration-config-dialog"
 import { ReasoningPicker } from "@/src/components/reasoning-picker"
 import { DraftInputBridge } from "@/src/components/draft-input-bridge"
+import { ChatInputDraft } from "@/src/components/chat-input-draft"
 import { QueueIndicator } from "@/src/components/queue-indicator"
 import { ContextMeter } from "@/src/components/context-meter"
 import { SendButtonGroup } from "@/src/components/send-button-group"
@@ -125,6 +126,7 @@ export function ChatInput({ onSubmit, status, onStop, sessionId }: {
     <PromptInputProvider>
     <SlashPalette commands={slashCommands}>
     <DraftInputBridge sessionId={sessionId} />
+    <ChatInputDraft sessionId={sessionId} />
     <div className="w-full max-w-2xl mx-auto pb-4">
       <QueueIndicator sessionId={sessionId} />
       <PromptInput

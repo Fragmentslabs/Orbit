@@ -42,6 +42,7 @@ import { QueueIndicator } from './QueueIndicator'
 import { ScheduleSheet } from './ScheduleSheet'
 import { useMessageQueueStore } from '~/stores/message-queue-store'
 import { useDraftInput } from '~/stores/draft-input-store'
+import { setInputDraft, getInputDraft } from '~/stores/chat-draft-store'
 
 interface PromptInputProps {
   onSend: (text: string, options: SendMessageOptions, files?: FilePart[]) => void
@@ -74,6 +75,20 @@ export function PromptInput({
   const [subagents, setSubagents] = useState(false)
   const [orchestra, setOrchestra] = useState(false)
   const [loop, setLoop] = useState(false)
+  const prevSessionIdRef = useRef(sessionId)
+  const textRef = useRef(text)
+  textRef.current = text
+
+  // Restaura texto do input ao trocar de chat (per-chat draft)
+  useEffect(() => {
+    const prev = prevSessionIdRef.current
+    if (prev !== sessionId) {
+      if (prev) setInputDraft(prev, textRef.current)
+      const saved = getInputDraft(sessionId ?? 'draft')
+      if (saved) setText(saved)
+      prevSessionIdRef.current = sessionId
+    }
+  }, [sessionId])
   const [attachments, setAttachments] = useState<FilePart[]>([])
   const [isLoadingFile, setIsLoadingFile] = useState(false)
   const [plusOpen, setPlusOpen] = useState(false)

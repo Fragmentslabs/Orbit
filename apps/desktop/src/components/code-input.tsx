@@ -26,6 +26,7 @@ import { OrchestrationConfigDialog } from "@/src/components/orchestration-config
 import { PermissionModePicker } from "@/src/components/permission-mode-picker"
 import { ReasoningPicker } from "@/src/components/reasoning-picker"
 import { DraftInputBridge } from "@/src/components/draft-input-bridge"
+import { ChatInputDraft } from "@/src/components/chat-input-draft"
 import { QueueIndicator } from "@/src/components/queue-indicator"
 import { ContextMeter } from "@/src/components/context-meter"
 import { SendButtonGroup } from "@/src/components/send-button-group"
@@ -222,6 +223,7 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId }: 
       <FilePalette directory={sessionDir ?? folders[0]}>
       <SlashPalette commands={slashCommands}>
       <DraftInputBridge sessionId={sessionId} />
+      <ChatInputDraft sessionId={sessionId} />
       <div className="w-full max-w-2xl mx-auto pb-4">
         {(!hasMessages || folders.length > 0) && (
           <div className="flex flex-wrap items-center gap-2 px-3 py-1.5">
