@@ -268,6 +268,7 @@ export async function approvePlan(
           mode: task.mode === 'code' && input.directory ? 'code' : 'chat',
           options: {
             ...task.options,
+            brain: task.options.brain ?? true,
             simple: task.options.simple ?? true,
             reasoning: workerModel?.reasoning,
             // Workers podem usar subagentes (com limite de profundidade — o subagent tool
