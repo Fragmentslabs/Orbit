@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
-import { Modal, View, Text, Pressable, Animated, Switch, StyleSheet, ScrollView, Dimensions } from 'react-native'
+import { Modal, View, Text, Pressable, Animated, Switch, StyleSheet, ScrollView, Dimensions, ActivityIndicator } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
-import { Shield, ShieldCheck, ShieldOff, Brain, Check, Bot, Network, FileText, RefreshCw, ChevronRight, Settings2 } from 'lucide-react-native'
+import { Shield, ShieldCheck, ShieldOff, Brain, Check, Bot, Network, FileText, RefreshCw, ChevronRight, Settings2, GitBranch } from 'lucide-react-native'
 import type { LucideIcon } from 'lucide-react-native'
 import type { ModelVariant } from '@orbit/shared'
 import { getThemeTokens } from '~/lib/theme-tokens'
@@ -38,6 +38,10 @@ interface Props {
   onConfigureWorkers: () => void
   onConfigureLoop?: () => void
   displayMode?: DisplayMode
+  gitBranches?: string[]
+  gitCurrent?: string
+  onGitBranchChange?: (branch: string) => void
+  gitBranchLoading?: boolean
 }
 
 const SHEET_HEIGHT = Math.min(Dimensions.get('window').height * 0.72, 560)
@@ -63,6 +67,10 @@ export function ConfigSheet({
   onConfigureWorkers,
   onConfigureLoop,
   displayMode,
+  gitBranches,
+  gitCurrent,
+  onGitBranchChange,
+  gitBranchLoading,
 }: Props) {
   const tokens = getThemeTokens(useThemeStore((s) => s.resolved))
   const insets = useSafeAreaInsets()
@@ -179,6 +187,42 @@ export function ConfigSheet({
               </Text>
             )}
           </View>
+
+          {/* Git Branches */}
+          {gitBranches && gitBranches.length > 0 && (
+            <View style={[s.card, { borderColor: tokens.border, alignItems: 'center' }]}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                <GitBranch size={18} color={tokens.mutedForeground} />
+                <Text style={[s.cardLabel, { color: tokens.foreground }]}>Branch Git</Text>
+              </View>
+              <View style={[s.permissionRow, { marginTop: 10 }]}>
+                {gitBranchLoading ? (
+                  <ActivityIndicator size="small" color={tokens.primary} />
+                ) : (
+                  gitBranches.map((branch) => {
+                    const active = branch === gitCurrent
+                    return (
+                      <Pressable
+                        key={branch}
+                        onPress={() => onGitBranchChange?.(branch)}
+                        style={[
+                          s.permissionChip,
+                          active
+                            ? { backgroundColor: tokens.background, borderColor: tokens.border }
+                            : { backgroundColor: tokens.muted, borderColor: tokens.border },
+                        ]}
+                      >
+                        <Text style={[s.permissionChipLabel, { color: active ? tokens.primary : tokens.mutedForeground }]}>
+                          {branch}
+                        </Text>
+                        {active && <Check size={14} color={tokens.primary} />}
+                      </Pressable>
+                    )
+                  })
+                )}
+              </View>
+            </View>
+          )}
 
           {/* Subagentes — só no modo toggles */}
           {displayMode === 'toggles' && (

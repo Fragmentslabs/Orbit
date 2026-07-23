@@ -15,6 +15,8 @@ import { createServer, type IncomingMessage, type ServerResponse, type Server } 
 import { hostname } from 'node:os'
 import path from 'node:path'
 import fs from 'node:fs/promises'
+import { execFile } from 'node:child_process'
+import { promisify } from 'node:util'
 import { app, BrowserWindow } from 'electron'
 import { readJson, writeJson, listKeys } from './storage'
 import { getCatalog } from './catalog'
@@ -24,6 +26,8 @@ import { importSkillSelection } from './skills/import'
 import { sanitizeSlug, serializeSkill } from './skills/parser'
 import { approvePendingSkill, discardPendingSkill, listPendingSkills } from './skills/pending'
 import { listMcpStatus, readMcpConfig, reconnectMcp, saveMcpConfig } from './mcp'
+
+const execFileAsync = promisify(execFile)
 
 export const HTTP_PORT = 3848
 
@@ -349,6 +353,38 @@ async function handleReconnectMcp(_req: IncomingMessage, res: ServerResponse, na
   jsonResponse(res, 200, status)
 }
 
+// ─── Git Handlers ─────────────────────────────────────────────────────────────
+
+async function handleGetBranches(req: IncomingMessage, res: ServerResponse) {
+  try {
+    const body = await readBody(req)
+    const repoPath = (body as any)?.repoPath
+    if (!repoPath) { jsonResponse(res, 200, { branches: [], current: '' }); return }
+    const [{ stdout: list }, { stdout: current }] = await Promise.all([
+      execFileAsync('git', ['branch', '--list', '--format=%(refname:short)'], { cwd: repoPath }),
+      execFileAsync('git', ['branch', '--show-current'], { cwd: repoPath }),
+    ])
+    const branches = list.trim().split('\n').filter(Boolean)
+    jsonResponse(res, 200, { branches, current: current.trim() })
+  } catch (err) {
+    jsonResponse(res, 200, { branches: [], current: '' })
+  }
+}
+
+async function handlePostCheckout(req: IncomingMessage, res: ServerResponse) {
+  try {
+    const body = await readBody(req)
+    const { repoPath, branch } = body as any
+    if (!repoPath || !branch) { jsonResponse(res, 400, { error: 'repoPath e branch obrigatórios' }); return }
+    await execFileAsync('git', ['checkout', branch], { cwd: repoPath })
+    jsonResponse(res, 200, { ok: true })
+  } catch (err) {
+    jsonResponse(res, 500, { error: (err as Error).message })
+  }
+}
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function slugify(slug?: string): string | undefined {
@@ -401,6 +437,8 @@ function createRouter(
     { pattern: /^PUT \/api\/mcp\/config$/, paramNames: [], handler: handlePutMcpConfig },
     { pattern: /^POST \/api\/mcp\/servers\/([^/]+)\/reconnect$/, paramNames: ['name'], handler: handleReconnectMcp },
     { pattern: /^POST \/api\/mcp\/servers\/reconnect$/, paramNames: [], handler: (_r, res) => handleReconnectMcp(_r, res, undefined) },
+    { pattern: /^POST \/api\/git\/branches$/, paramNames: [], handler: handleGetBranches },
+    { pattern: /^POST \/api\/git\/checkout$/, paramNames: [], handler: handlePostCheckout },
   ]
 
   return async (req: IncomingMessage, res: ServerResponse) => {

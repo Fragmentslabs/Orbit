@@ -124,6 +124,16 @@ export class CompanionHttp {
     return this.request('POST', path)
   }
 
+  // ─── Git Branches ────────────────────────────────────────────────────────
+
+  async getBranches(repoPath: string): Promise<HttpResult<{ branches: string[]; current: string }>> {
+    return this.request('POST', '/api/git/branches', { repoPath })
+  }
+
+  async checkoutBranch(repoPath: string, branch: string): Promise<HttpResult<{ ok: boolean }>> {
+    return this.request('POST', '/api/git/checkout', { repoPath, branch })
+  }
+
   // ─── Status ──────────────────────────────────────────────────────────────
 
   async getStatus(): Promise<HttpResult<{ online: boolean; activeSessions: number; pendingAsks: number; uptime: number }>> {
