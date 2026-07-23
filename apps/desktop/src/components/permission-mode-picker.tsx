@@ -34,7 +34,7 @@ export function PermissionModePicker() {
         title="Modo de permissões"
       >
         <Icon className="size-3 text-foreground" />
-        <SelectValue />
+        <SelectValue>{MODES.find((m) => m.id === mode)?.label}</SelectValue>
       </SelectTrigger>
       <SelectContent side="top" sideOffset={4} align="start" alignItemWithTrigger={false} className="min-w-64 p-1.5">
         {MODES.map((m) => (
