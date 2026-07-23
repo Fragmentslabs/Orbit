@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
-import { FileCode, Globe, Folder, MessageSquare, Terminal, X, PlusIcon, Bot, LoaderIcon, XCircleIcon, Trash2 } from "lucide-react"
+import { useDroppable, useDndContext } from "@dnd-kit/core"
+import { FileCode, Globe, Folder, MessageSquare, Terminal, X, PlusIcon, Bot, LoaderIcon, XCircleIcon, Trash2, GripVertical } from "lucide-react"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -7,6 +8,8 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { ChatView } from "@/src/components/chat-view"
+import { ChatInput } from "@/src/components/chat-input"
+import type { SendMessageOptions, FilePart } from "@shared/chat"
 import { TerminalTab } from "@/src/components/terminal-tab"
 import { BrowserTab } from "@/src/components/browser-tab"
 import { FoldersTab } from "@/src/components/folders-tab"
@@ -27,6 +30,8 @@ interface PanelTab {
   sessionId?: string
   /** ID da mensagem do assistente (diff) */
   messageId?: string
+  /** Tab novo ainda sem session — só cria quando enviar a primeira mensagem */
+  pending?: boolean
 }
 
 interface TabMeta {
@@ -43,9 +48,32 @@ const tabMeta: Record<TabType, TabMeta> = {
   diff: { icon: FileCode, label: "Diff", description: "Alterações das ferramentas" },
 }
 
-function TabContent({ tab }: { tab: PanelTab }) {
+function NewChatTab({ onCreated }: { onCreated: (sessionId: string) => void }) {
+  const handleSubmit = async (text: string, options: SendMessageOptions, files?: FilePart[]) => {
+    const newSession = await useSessionStore.getState().createSession("chat", { setActive: false })
+    onCreated(newSession.id)
+    await useSessionStore.getState().sendMessage("chat", text, { options, sessionId: newSession.id, files })
+  }
+
+  return (
+    <div className="flex flex-1 flex-col overflow-hidden p-4" style={{ '--panel-bg': 'var(--sidebar)' } as React.CSSProperties}>
+      <div className="flex flex-1 flex-col items-center justify-center gap-4">
+        <div className="flex flex-col items-center gap-2">
+          <p className="text-lg font-medium text-foreground">Nova conversa</p>
+          <p className="text-sm text-muted-foreground">Digite uma mensagem para começar</p>
+        </div>
+      </div>
+      <ChatInput onSubmit={handleSubmit} />
+    </div>
+  )
+}
+
+function TabContent({ tab, onUpdateTab }: { tab: PanelTab; onUpdateTab: (id: string, updates: Partial<PanelTab>) => void }) {
   switch (tab.type) {
     case "chat":
+      if (tab.pending) {
+        return <NewChatTab onCreated={(sessionId) => onUpdateTab(tab.id, { pending: false, sessionId })} />
+      }
       return (
         <div className="flex flex-1 flex-col overflow-hidden p-4" style={{ '--panel-bg': 'var(--sidebar)' } as React.CSSProperties}>
           <ChatView sessionId={tab.sessionId} />
@@ -78,6 +106,31 @@ function TabContent({ tab }: { tab: PanelTab }) {
   }
 }
 
+export function RightPanelDropZone() {
+  const { active } = useDndContext()
+  const { setNodeRef, isOver } = useDroppable({ id: "right-panel-drop-zone" })
+  const isDragging = active !== null
+
+  if (!isDragging) return null
+
+  return (
+    <div
+      ref={setNodeRef}
+      className={cn(
+        "absolute right-0 top-0 bottom-0 z-50 flex flex-col items-center justify-center transition-all duration-200 rounded-l-xl border-2 border-dashed ml-0.5",
+        isOver
+          ? "w-[30%] border-primary/50 bg-primary/10"
+          : "w-[25%] border-sidebar-border bg-sidebar/80",
+      )}
+    >
+      <div className="flex flex-col items-center gap-2 text-primary">
+        <GripVertical className="size-6" />
+        <span className="text-sm font-medium whitespace-nowrap">Solte para abrir</span>
+      </div>
+    </div>
+  )
+}
+
 function WorkerStatusIcon({ status }: { status: string }) {
   if (status === "submitted" || status === "streaming") {
     return <LoaderIcon className="size-3 shrink-0 animate-spin text-muted-foreground" />
@@ -104,6 +157,11 @@ function SelectorScreen({ onSelect, onOpenWorker }: {
     [sessions, activeId],
   )
 
+  const availableTabs = useMemo(
+    () => (Object.entries(tabMeta) as [TabType, TabMeta][]).filter(([type]) => mode !== "chat" || type === "chat"),
+    [mode],
+  )
+
   useEffect(() => {
     fetchProcesses()
     const interval = setInterval(() => fetchProcesses(), 3_000)
@@ -114,8 +172,8 @@ function SelectorScreen({ onSelect, onOpenWorker }: {
     <div className="flex flex-1 flex-col overflow-hidden">
       <div className="flex flex-1 flex-col items-center justify-center gap-4 p-6">
         <p className="text-sm font-medium text-foreground">O que deseja abrir?</p>
-        <div className="grid grid-cols-2 gap-3 w-full max-w-xs">
-          {(Object.entries(tabMeta) as [TabType, TabMeta][]).map(([type, { icon: Icon, label, description }]) => (
+        <div className={cn("grid gap-3 w-full max-w-xs", availableTabs.length === 1 ? "grid-cols-1 justify-items-center" : "grid-cols-2")}>
+          {availableTabs.map(([type, { icon: Icon, label, description }]) => (
             <button
               key={type}
               onClick={() => onSelect(type)}
@@ -198,6 +256,15 @@ export function RightPanel() {
   const sessions = useSessionStore((s) => s.sessions)
   const statusMap = useSessionStore((s) => s.status)
 
+  const { setNodeRef, isOver } = useDroppable({ id: "right-panel-drop-zone" })
+  const dndContext = useDndContext()
+  const isDragging = dndContext.active !== null
+
+  const availableTabs = useMemo(
+    () => (Object.entries(tabMeta) as [TabType, TabMeta][]).filter(([type]) => mode !== "chat" || type === "chat"),
+    [mode],
+  )
+
   const addTab = useCallback(async (type: TabType, sessionId?: string, title?: string) => {
     if (sessionId) {
       // Tab de session específica: reusa se já aberta
@@ -211,9 +278,10 @@ export function RightPanel() {
       return
     }
     if (type === "chat") {
-      const session = await useSessionStore.getState().createSession("chat", { setActive: false })
-      setTabs((prev) => [...prev, { id: `chat-${session.id}`, type: "chat", title: "Chat", sessionId: session.id }])
-      setActiveTabId(`chat-${session.id}`)
+      tabCounter++
+      const id = `chat-new-${tabCounter}`
+      setTabs((prev) => [...prev, { id, type: "chat", title: "Chat", pending: true }])
+      setActiveTabId(id)
       return
     }
     const meta = tabMeta[type]
@@ -303,10 +371,32 @@ export function RightPanel() {
     })
   }, [activeTabId])
 
+  const updateTab = useCallback((id: string, updates: Partial<PanelTab>) => {
+    setTabs((prev) => prev.map((t) => (t.id === id ? { ...t, ...updates } : t)))
+  }, [])
+
   const activeTab = tabs.find(t => t.id === activeTabId)
 
   return (
-    <div className="flex h-full min-w-0 flex-col rounded-lg shadow-sm ring-1 ring-sidebar-border bg-sidebar overflow-hidden">
+    <div
+      ref={setNodeRef}
+      className={cn(
+        "relative flex h-full min-w-0 flex-col rounded-lg shadow-sm border border-sidebar-border bg-sidebar overflow-hidden transition-shadow",
+      )}
+    >
+      {isDragging && (
+        <div className={cn(
+          "absolute inset-0 z-20 flex items-center justify-center rounded-lg transition-all pointer-events-none",
+          isOver
+            ? "bg-primary/20 border-2 border-primary/50"
+            : "bg-black/30",
+        )}>
+          <div className="flex flex-col items-center gap-2 text-primary">
+            <GripVertical className="size-6" />
+            <span className="text-sm font-medium whitespace-nowrap">Solte para abrir</span>
+          </div>
+        </div>
+      )}
       {tabs.length > 0 && (
         <div className="flex items-center gap-0.5 px-2 pt-2 overflow-x-auto">
           {tabs.map((tab) => {
@@ -339,7 +429,7 @@ export function RightPanel() {
               <PlusIcon className="size-3.5" />
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="min-w-32">
-              {(Object.entries(tabMeta) as [TabType, TabMeta][]).map(([type, { icon: Icon, label }]) => (
+              {availableTabs.map(([type, { icon: Icon, label }]) => (
                 <DropdownMenuItem key={type} onClick={() => addTab(type)}>
                   <Icon className="size-4" />
                   {label}
@@ -352,7 +442,7 @@ export function RightPanel() {
 
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
         {activeTab ? (
-          <TabContent tab={activeTab} />
+          <TabContent tab={activeTab} onUpdateTab={updateTab} />
         ) : (
           <SelectorScreen
             onSelect={addTab}

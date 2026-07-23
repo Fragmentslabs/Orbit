@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react"
+import { DndContext, PointerSensor, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core"
 
 import { SidebarProvider, useSidebar } from "@/components/ui/sidebar"
 import { TooltipProvider } from "@/components/ui/tooltip"
@@ -7,12 +8,12 @@ import { ThemeProvider } from "@/components/theme-provider"
 import { WorkspaceProvider, useWorkspace } from "@/lib/workspace-context"
 import { panelApi } from "@/src/lib/ipc"
 import { usePanelStore } from "@/src/stores/panel-store"
-import { useActiveSession } from "@/src/stores/session-store"
+import { useActiveSession, useSessionStore } from "@/src/stores/session-store"
 import { ChatHeader } from "@/src/components/chat-header"
 import { ChatView } from "@/src/components/chat-view"
 import { MemoriesView } from "@/src/components/memories/memories-view"
 import { ModelsView } from "@/src/components/models/models-view"
-import { RightPanel } from "@/src/components/right-panel"
+import { RightPanel, RightPanelDropZone } from "@/src/components/right-panel"
 import { TitleBar } from "@/src/components/titlebar"
 import { ChatSearch } from "@/src/components/chat-search"
 import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels"
@@ -49,7 +50,6 @@ function Layout() {
   const setRightPanelOpen = usePanelStore((s) => s.setRightPanelOpen)
   const hideTimer = useRef<ReturnType<typeof setTimeout>>()
   const showTimer = useRef<ReturnType<typeof setTimeout>>()
-
   // Eventos do main (tools panel_*): abre o painel/aba Browser automaticamente
   useEffect(() => {
     return panelApi.onEvent((event) => usePanelStore.getState().applyEvent(event))
@@ -66,7 +66,7 @@ function Layout() {
   }, [])
 
   useEffect(() => {
-    if (workspaceMode !== "code") setRightPanelOpen(false)
+    if (workspaceMode !== "code" && workspaceMode !== "chat") setRightPanelOpen(false)
   }, [workspaceMode])
 
   const handleHoverShow = useCallback(() => {
@@ -96,49 +96,72 @@ function Layout() {
     }
   }, [open, setOpen])
 
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
+  )
+
+  const handleDragStart = useCallback(() => {
+  }, [])
+
+  const handleDragEnd = useCallback((event: DragEndEvent) => {
+    if (event.over?.id === "right-panel-drop-zone") {
+      const data = event.active.data.current as { sessionId: string; title: string } | undefined
+      if (data?.sessionId) {
+        const sessionStore = useSessionStore.getState()
+        if (sessionStore.activeIds[workspaceMode] === data.sessionId) {
+          sessionStore.createSession(workspaceMode, { setActive: true })
+        }
+        usePanelStore.getState().openChatTab(data.sessionId, data.title)
+      }
+    }
+  }, [workspaceMode])
+
   return (
-    <div className="relative flex min-w-0 flex-1">
-      {!open && mode === "hover" && <HoverEdge onShow={handleHoverShow} />}
-      <div
-        onMouseEnter={handleSidebarMouseEnter}
-        onMouseLeave={handleSidebarMouseLeave}
-      >
-        <AppSidebar />
+    <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
+      <div className="relative flex min-w-0 flex-1">
+        {!open && mode === "hover" && <HoverEdge onShow={handleHoverShow} />}
+        <div
+          onMouseEnter={handleSidebarMouseEnter}
+          onMouseLeave={handleSidebarMouseLeave}
+        >
+          <AppSidebar />
+        </div>
+        <PanelGroup direction="horizontal" className="min-w-0 flex-1">
+          <Panel className="min-w-0" defaultSize={rightPanelOpen ? 65 : 100} id="main" minSize={30} order={1}>
+              <main className="flex h-full min-w-0 flex-col">
+                <ChatHeader
+                  title={
+                    view === "memories"
+                      ? "Memórias"
+                      : view === "models"
+                        ? "Models"
+                        : activeSession?.title ?? (workspaceMode === "chat" ? "Nova conversa" : "Novo código")
+                  }
+                  rightPanelOpen={rightPanelOpen}
+                  onToggleSidebar={handleToggleSidebar}
+                  onToggleRightPanel={workspaceMode === "code" || workspaceMode === "chat" ? () => setRightPanelOpen(!rightPanelOpen) : undefined}
+                />
+                <div className="flex min-w-0 flex-1 flex-col overflow-hidden p-4" style={{ '--panel-bg': 'var(--background)' } as React.CSSProperties}>
+                  {view === "memories" ? <MemoriesView /> : view === "models" ? <ModelsView /> : <ChatView />}
+                </div>
+              </main>
+          </Panel>
+          {rightPanelOpen && (
+            <>
+              <PanelResizeHandle className="group relative flex items-center justify-center w-2">
+                <div className="h-8 w-0.5 rounded-full bg-transparent group-hover:bg-border group-data-[resize-handle-active]:bg-border transition-colors" />
+              </PanelResizeHandle>
+              <Panel className="min-w-0" defaultSize={35} id="right-panel" maxSize={80} minSize={30} order={2}>
+                <div className="flex h-full min-w-0 flex-col pt-2 pr-2 pb-2">
+                  <RightPanel />
+                </div>
+              </Panel>
+            </>
+          )}
+        </PanelGroup>
+        {!rightPanelOpen && <RightPanelDropZone />}
       </div>
-      <PanelGroup direction="horizontal" className="min-w-0 flex-1">
-        <Panel className="min-w-0" defaultSize={rightPanelOpen ? 65 : 100} id="main" minSize={30} order={1}>
-            <main className="flex h-full min-w-0 flex-col">
-              <ChatHeader
-                title={
-                  view === "memories"
-                    ? "Memórias"
-                    : view === "models"
-                      ? "Models"
-                      : activeSession?.title ?? (workspaceMode === "chat" ? "Nova conversa" : "Novo código")
-                }
-                rightPanelOpen={rightPanelOpen}
-                onToggleSidebar={handleToggleSidebar}
-                onToggleRightPanel={workspaceMode === "code" ? () => setRightPanelOpen(!rightPanelOpen) : undefined}
-              />
-              <div className="flex min-w-0 flex-1 flex-col overflow-hidden p-4" style={{ '--panel-bg': 'var(--background)' } as React.CSSProperties}>
-                {view === "memories" ? <MemoriesView /> : view === "models" ? <ModelsView /> : <ChatView />}
-              </div>
-            </main>
-        </Panel>
-        {rightPanelOpen && (
-          <>
-            <PanelResizeHandle className="group relative flex items-center justify-center w-2">
-              <div className="h-8 w-0.5 rounded-full bg-transparent group-hover:bg-border group-data-[resize-handle-active]:bg-border transition-colors" />
-            </PanelResizeHandle>
-            <Panel className="min-w-0" defaultSize={35} id="right-panel" maxSize={80} minSize={30} order={2}>
-              <div className="flex h-full min-w-0 flex-col pt-2 pr-2 pb-2">
-                <RightPanel />
-              </div>
-            </Panel>
-          </>
-        )}
-      </PanelGroup>
-    </div>
+    </DndContext>
   )
 }
 
