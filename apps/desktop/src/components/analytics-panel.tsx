@@ -142,15 +142,15 @@ function ModelBarChart({ data }: { data: AnalyticsSummary }) {
                   </div>
                   <div className="flex items-center justify-between gap-4 text-muted-foreground">
                     <span>Tokens totais:</span>
-                    <span className="tabular-nums">{formatTokens(d.tokens)}</span>
+                    <span className="tabular-nums text-foreground">{formatTokens(d.tokens)}</span>
                   </div>
                   <div className="flex items-center justify-between gap-4 text-muted-foreground">
                     <span>Horas:</span>
-                    <span className="tabular-nums">{d.hours}h</span>
+                    <span className="tabular-nums text-foreground">{d.hours}h</span>
                   </div>
                   <div className="flex items-center justify-between gap-4 text-muted-foreground">
                     <span>Custo:</span>
-                    <span className="tabular-nums">{d.cost > 0 ? formatCost(d.cost) : "—"}</span>
+                    <span className="tabular-nums text-foreground">{d.cost > 0 ? formatCost(d.cost) : "—"}</span>
                   </div>
                 </div>
               );
@@ -181,7 +181,7 @@ function ModelBarChart({ data }: { data: AnalyticsSummary }) {
               provider={entry.providerId}
               className="size-2.5"
             />
-            <span className="font-medium">{entry.label}</span>
+            <span className="font-medium text-foreground">{entry.label}</span>
             <span className="text-muted-foreground">
               {chartMode === "tokens"
                 ? formatTokens(entry.tokens)
@@ -340,19 +340,19 @@ export function AnalyticsPanel() {
                 <div className="flex items-center gap-1.5 rounded-lg border px-3 py-1.5">
                   <Hash className="size-3.5 text-muted-foreground" />
                   <span className="text-muted-foreground">Tokens:</span>
-                  <span className="font-medium tabular-nums">
+                  <span className="font-medium tabular-nums text-foreground">
                     {formatTokens(data.totalTokens)}
                   </span>
                 </div>
                 <div className="flex items-center gap-1.5 rounded-lg border px-3 py-1.5">
                   <Clock className="size-3.5 text-muted-foreground" />
                   <span className="text-muted-foreground">Horas:</span>
-                  <span className="font-medium tabular-nums">
+                  <span className="font-medium tabular-nums text-foreground">
                     {data.totalHours.toFixed(1)}h
                   </span>
                 </div>
                 <div className="flex items-center gap-1.5 rounded-lg border px-3 py-1.5">
-                  <span className="font-medium tabular-nums">
+                  <span className="font-medium tabular-nums text-foreground">
                     {formatCost(data.totalCost)}
                   </span>
                   <span className="text-muted-foreground">gasto</span>
