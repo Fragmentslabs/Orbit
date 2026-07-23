@@ -144,7 +144,7 @@ export function MemoryCard({ memory, related, onSelectRelated }: {
   return (
     <div className="group/card flex flex-col gap-2 rounded-lg border bg-card p-3 text-card-foreground">
       <div className="flex items-start justify-between gap-2">
-        <p className="min-w-0 flex-1 text-sm leading-snug">{memory.text}</p>
+        <p className="min-w-0 flex-1 text-sm leading-snug line-clamp-2">{memory.text}</p>
         <div className="flex shrink-0 items-center gap-1 opacity-0 transition-opacity group-hover/card:opacity-100">
           {memory.hasDoc && (
             <Button variant="ghost" size="icon" className="size-6" title="Ver documento anexado" onClick={() => setDocOpen(true)}>
