@@ -30,6 +30,7 @@ import { InputAttachment } from './Attachment'
 import { ConfigSheet } from './ConfigSheet'
 import { SlashPalette } from './SlashPalette'
 import { useSlashCommands } from '~/hooks/useSlashCommands'
+import { useConnectionStore } from '~/stores/connection-store'
 import { uriToFilePart } from '~/lib/attachments'
 import { useWorkspaceStore } from '~/stores/workspace-store'
 import { useSettingsStore } from '~/stores/settings-store'
@@ -100,6 +101,34 @@ export function PromptInput({
   const tokens = getThemeTokens(useThemeStore((s) => s.resolved))
   const [permissionMode, setPermissionMode] = useState<'ask' | 'approve' | 'full'>('ask')
   const [scheduleSheetVisible, setScheduleSheetVisible] = useState(false)
+
+  const http = useConnectionStore((s) => s.http)
+  const [gitBranches, setGitBranches] = useState<string[]>([])
+  const [gitCurrent, setGitCurrent] = useState<string>('')
+  const [gitBranchLoading, setGitBranchLoading] = useState(false)
+
+  useEffect(() => {
+    if (!http) return
+    let cancelled = false
+    const fetch = async () => {
+      setGitBranchLoading(true)
+      const res = await http.getBranches('')
+      if (cancelled) return
+      setGitBranchLoading(false)
+      if (res.ok && res.data) {
+        setGitBranches(res.data.branches)
+        setGitCurrent(res.data.current)
+      }
+    }
+    fetch()
+    return () => { cancelled = true }
+  }, [http])
+
+  const handleGitBranchChange = useCallback(async (branch: string) => {
+    if (!http) return
+    setGitCurrent(branch)
+    await http.checkoutBranch('', branch)
+  }, [http])
 
   const catalog = useSettingsStore((s) => s.catalog)
   const selected = useSettingsStore((s) => s.selectedModel)
@@ -540,6 +569,10 @@ export function PromptInput({
           setLoopConfigOpen(true)
         }}
         displayMode={displayMode}
+        gitBranches={gitBranches}
+        gitCurrent={gitCurrent}
+        onGitBranchChange={handleGitBranchChange}
+        gitBranchLoading={gitBranchLoading}
       />
 
       <WorkerModelModal visible={workerConfigOpen} onClose={() => setWorkerConfigOpen(false)} />
