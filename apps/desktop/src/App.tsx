@@ -43,7 +43,7 @@ function HoverEdge({ onShow }: { onShow: () => void }) {
 
 function Layout() {
   const { open, setOpen } = useSidebar()
-  const { mode: workspaceMode, view } = useWorkspace()
+  const { mode: workspaceMode, view, folders } = useWorkspace()
   const activeSession = useActiveSession(workspaceMode)
   const [mode, setMode] = useState<SidebarMode>(loadMode)
   const rightPanelOpen = usePanelStore((s) => s.rightPanelOpen)
@@ -116,6 +116,17 @@ function Layout() {
     }
   }, [workspaceMode])
 
+  const onRequestAgentAction = useCallback((instruction: string) => {
+    const activeId = useSessionStore.getState().activeIds["code"]
+    if (!activeId) return
+    useSessionStore.getState().sendMessage("code", instruction, {
+      options: { simple: true },
+      sessionId: activeId,
+      directory: folders[0],
+      extraDirectories: folders.slice(1),
+    })
+  }, [folders])
+
   return (
     <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
       <div className="relative flex min-w-0 flex-1">
@@ -140,6 +151,9 @@ function Layout() {
                   rightPanelOpen={rightPanelOpen}
                   onToggleSidebar={handleToggleSidebar}
                   onToggleRightPanel={workspaceMode === "code" || workspaceMode === "chat" ? () => setRightPanelOpen(!rightPanelOpen) : undefined}
+                  repoPath={folders[0]}
+                  workspaceMode={workspaceMode}
+                  onRequestAgentAction={onRequestAgentAction}
                 />
                 <div className="flex min-w-0 flex-1 flex-col overflow-hidden p-4" style={{ '--panel-bg': 'var(--background)' } as React.CSSProperties}>
                   {view === "memories" ? <MemoriesView /> : view === "models" ? <ModelsView /> : <ChatView />}

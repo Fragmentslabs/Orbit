@@ -443,6 +443,38 @@ app.whenReady().then(() => {
     return getFileAtCommit(repoPath, hash, relPath, deleted)
   })
 
+  ipcMain.handle('git:branches', async (_event, repoPath: string) => {
+    try {
+      const [{ stdout: list }, { stdout: current }] = await Promise.all([
+        execFileAsync('git', ['branch', '--list', '--format=%(refname:short)'], { cwd: repoPath }),
+        execFileAsync('git', ['branch', '--show-current'], { cwd: repoPath }),
+      ])
+      const branches = list.trim().split('\n').filter(Boolean)
+      return { ok: true as const, branches, current: current.trim() }
+    } catch (err) {
+      return { ok: false as const, error: (err as Error).message }
+    }
+  })
+
+  ipcMain.handle('git:checkout', async (_event, repoPath: string, branch: string) => {
+    try {
+      await execFileAsync('git', ['checkout', branch], { cwd: repoPath })
+      return { ok: true as const }
+    } catch (err) {
+      return { ok: false as const, error: (err as Error).message }
+    }
+  })
+
+  ipcMain.handle('git:commitAll', async (_event, repoPath: string, message: string) => {
+    try {
+      await execFileAsync('git', ['add', '-A'], { cwd: repoPath })
+      await execFileAsync('git', ['commit', '-m', message], { cwd: repoPath })
+      return { ok: true as const }
+    } catch (err) {
+      return { ok: false as const, error: (err as Error).message }
+    }
+  })
+
   // Storage genérico (sessões, mensagens, pastas) — padrão opencode
   ipcMain.handle('storage:read', (_event, key: string) => readJson(key))
   ipcMain.handle('storage:write', (_event, key: string, value: unknown) => writeJson(key, value))

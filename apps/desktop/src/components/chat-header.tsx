@@ -7,6 +7,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { Button } from "@/components/ui/button"
+import { BranchSelector } from "@/src/components/branch-selector"
 
 interface ChatHeaderProps {
   title?: string
@@ -14,9 +15,12 @@ interface ChatHeaderProps {
   rightPanelOpen?: boolean
   onToggleSidebar?: () => void
   onToggleRightPanel?: () => void
+  repoPath?: string
+  workspaceMode?: 'chat' | 'code'
+  onRequestAgentAction?: (instruction: string) => void
 }
 
-export function ChatHeader({ title = "Nova conversa", hasMenu, rightPanelOpen, onToggleSidebar, onToggleRightPanel }: ChatHeaderProps) {
+export function ChatHeader({ title = "Nova conversa", hasMenu, rightPanelOpen, onToggleSidebar, onToggleRightPanel, repoPath, workspaceMode, onRequestAgentAction }: ChatHeaderProps) {
   const [menuOpen, setMenuOpen] = useState(false)
 
   return (
@@ -29,6 +33,7 @@ export function ChatHeader({ title = "Nova conversa", hasMenu, rightPanelOpen, o
       )}
       <div className="flex items-center gap-1 min-w-0 flex-1">
         <span className="truncate text-sm font-medium text-foreground">{title}</span>
+        {workspaceMode === 'code' && repoPath && <BranchSelector repoPath={repoPath} onRequestAgentAction={onRequestAgentAction} />}
         {hasMenu && (
           <DropdownMenu open={menuOpen} onOpenChange={setMenuOpen}>
             <DropdownMenuTrigger render={<Button variant="ghost" size="icon-sm" className="size-6 shrink-0" />}>

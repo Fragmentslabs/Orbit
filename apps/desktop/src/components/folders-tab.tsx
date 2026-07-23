@@ -30,6 +30,7 @@ import { useWorkspace } from "@/lib/workspace-context";
 import { useTheme } from "@/components/theme-provider";
 import { highlightLines, type HighlightedToken } from "@/lib/code-highlighter";
 import { FolderSelector } from "@/src/components/folder-selector";
+import { useBranchStore } from "@/src/stores/branch-store";
 import {
   FileTree,
   FileTreeFile,
@@ -260,6 +261,21 @@ export function FoldersTab() {
   const [dirCache, setDirCache] = useState<Record<string, DirEntryInfo[]>>({});
   const loadingRef = useRef<Set<string>>(new Set());
   const entryIsDirRef = useRef<Map<string, boolean>>(new Map());
+
+  // Recarrega diretórios quando o branch git muda
+  const currentBranch = useBranchStore((s) => (folders[0] ? s.byDir[folders[0]]?.current : undefined))
+  useEffect(() => {
+    if (!currentBranch || folders.length === 0) return
+    const f = folders[0]
+    setDirCache((prev) => {
+      if (!prev[f]) return prev
+      const next = { ...prev }
+      delete next[f]
+      return next
+    })
+    loadDir(f)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentBranch])
 
   const [viewedFile, setViewedFile] = useState<ViewedFile>();
   const [fileContent, setFileContent] = useState<string | null>(null);
