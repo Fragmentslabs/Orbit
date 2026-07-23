@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react"
 import { createPortal } from "react-dom"
+import { useDraggable } from "@dnd-kit/core"
 import {
   Archive,
   ArchiveRestore,
@@ -11,6 +12,7 @@ import {
   CheckSquare,
   ChevronDown,
   Ellipsis,
+  ExternalLink,
   Folder,
   FolderPlus,
   GitFork,
@@ -52,6 +54,7 @@ import {
 import { cn } from "@/lib/utils"
 import { useTheme } from "@/components/theme-provider"
 import { useWorkspace, WorkspaceMode } from "@/lib/workspace-context"
+import { usePanelStore } from "@/src/stores/panel-store"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
@@ -83,7 +86,7 @@ import { useSettingsUi } from "@/src/stores/settings-ui"
 import { SettingsDialog } from "@/src/components/settings-dialog"
 import { ConnectAppDialog } from "@/components/connect-app-dialog"
 
-type MenuItem = { icon: React.ReactNode; label: string; onSelect: () => void }
+type MenuItem = { icon: React.ReactNode; label: string; onSelect: () => void; separator?: boolean; destructive?: boolean }
 
 /** Modo de seleção em lote — ativado pela opção "Selecionar" do menu de ações.
  *  Disponibiliza toggle de ids (chats e pastas) e fica/levanta contexto via hook. */
@@ -364,17 +367,24 @@ function EllipsisMenu({ items, groupClass = "group-hover/menu-item:opacity-100",
           style={{ top: menuPos.top, left: menuPos.left }}
         >
           {items.map((item, i) => (
-            <div
-              key={i}
-              className="flex min-h-7 cursor-default items-center gap-2 rounded-md px-2 py-1 text-xs outline-hidden select-none hover:bg-foreground/10"
-              onClick={() => {
-                setMenuOpen(false)
-                item.onSelect()
-              }}
-            >
-              {item.icon}
-              {item.label}
-            </div>
+            item.separator ? (
+              <div key={i} className="my-1 border-t border-foreground/10" />
+            ) : (
+              <div
+                key={i}
+                className={cn(
+                  "flex min-h-7 cursor-default items-center gap-2 rounded-md px-2 py-1 text-xs outline-hidden select-none hover:bg-foreground/10",
+                  item.destructive && "text-red-500 hover:bg-red-500/10",
+                )}
+                onClick={() => {
+                  setMenuOpen(false)
+                  item.onSelect()
+                }}
+              >
+                {item.icon}
+                {item.label}
+              </div>
+            )
           ))}
         </div>,
         document.body
@@ -527,6 +537,12 @@ function SessionRow({ session, button: ButtonComponent, buttonClassName, actionB
 
   const isSelected = selectedIds.has(session.id)
 
+  const { setNodeRef, listeners, attributes, isDragging } = useDraggable({
+    id: session.id,
+    data: { sessionId: session.id, title: session.title },
+    disabled: selectionMode,
+  })
+
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [renaming, setRenaming] = useState(false)
   const [movingToFolder, setMovingToFolder] = useState(false)
@@ -556,12 +572,18 @@ function SessionRow({ session, button: ButtonComponent, buttonClassName, actionB
       },
     },
     {
+      icon: <ExternalLink className="size-4" />,
+      label: "Abrir ao lado",
+      onSelect: () => usePanelStore.getState().openChatTab(session.id, session.title),
+    },
+    {
       icon: session.archived ? <ArchiveRestore className="size-4" /> : <Archive className="size-4" />,
       label: session.archived ? "Desarquivar" : "Arquivar",
       onSelect: () => toggleArchive(session.id),
     },
-    { icon: <Trash2 className="size-4" />, label: "Deletar", onSelect: () => setConfirmDelete(true) },
     { icon: <CheckSquare className="size-4" />, label: "Selecionar", onSelect: () => enterSelectionMode(session.id) },
+    { separator: true, icon: <></>, label: "", onSelect: () => {} },
+    { icon: <Trash2 className="size-4" />, label: "Deletar", onSelect: () => setConfirmDelete(true), destructive: true },
   ]
 
   const handleClick = () => {
@@ -575,10 +597,11 @@ function SessionRow({ session, button: ButtonComponent, buttonClassName, actionB
   }
 
   return (
-    <div className="group/menu-row relative min-w-0">
+    <div ref={setNodeRef} className={cn("group/menu-row relative min-w-0", isDragging && "opacity-50")}>
       <ButtonComponent
         isActive={activeId === session.id}
         onClick={handleClick}
+        {...(!selectionMode ? { ...listeners, ...attributes } : {})}
         className={cn(
           "group-hover/menu-row:bg-sidebar-accent group-hover/menu-row:text-sidebar-accent-foreground",
           "text-xs",
@@ -594,7 +617,7 @@ function SessionRow({ session, button: ButtonComponent, buttonClassName, actionB
                 e.stopPropagation()
                 toggle(session.id)
               }}
-              className="flex size-4 shrink-0 items-center justify-center rounded border border-sidebar-border bg-background hover:bg-sidebar-accent transition-colors"
+              className="flex size-4 shrink-0 items-center justify-center rounded border border-sidebar-border hover:bg-sidebar-accent transition-colors"
             >
               {isSelected && <Check className="size-3 text-primary" />}
             </button>
@@ -808,7 +831,7 @@ function FolderItem({ folder, sessions, childrenByParent = {} }: {
                 .createSession(mode, { folderId: folder.id })
                 .then((session) => selectSession(mode, session.id))
             }}
-            className="absolute right-7 top-1.5 flex h-5 w-0 items-center justify-center overflow-hidden rounded-[calc(var(--radius-sm)-2px)] p-0 text-sidebar-foreground transition-all duration-200 group-hover/menu-row:w-5 group-hover/menu-row:bg-sidebar-accent group-hover/menu-row:text-sidebar-accent-foreground [&>svg]:size-4 [&>svg]:shrink-0"
+            className="absolute right-7 top-1.5 flex h-5 w-0 items-center justify-center overflow-hidden rounded-[calc(var(--radius-sm)-2px)] p-0 text-sidebar-foreground transition-all duration-200 group-hover/menu-row:w-5 group-hover/menu-row:text-sidebar-accent-foreground [&>svg]:size-4 [&>svg]:shrink-0"
           >
             <Plus className="size-4 shrink-0" />
             <span className="sr-only">Adicionar</span>
@@ -947,7 +970,7 @@ function ChatHistory() {
                 e.stopPropagation()
                 setCreatingFolder(true)
               }}
-              className="flex size-4 items-center justify-center rounded hover:bg-sidebar-accent"
+              className="flex size-4 items-center justify-center rounded"
               title="Nova pasta"
             >
               <FolderPlus className="size-3" />
@@ -1108,7 +1131,7 @@ export function AppSidebar() {
           <ModeTabs />
         </SidebarHeader>
         <SidebarContent>
-          <div className="flex min-w-0 flex-col overflow-x-hidden">
+          <div className="flex min-w-0 flex-col overflow-x-hidden select-none">
             <div className="px-3 py-2">
               <NewChatButton />
             </div>

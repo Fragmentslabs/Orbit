@@ -22,6 +22,7 @@
     "@ai-sdk/openai": "^4.0.8",
     "@ai-sdk/openai-compatible": "^3.0.5",
     "@base-ui/react": "^1.6.0",
+    "@dnd-kit/core": "^6.3.1",
     "@fontsource-variable/geist": "^5.2.9",
     "@modelcontextprotocol/sdk": "^1.29.0",
     "@orbit/shared": "0.1.0",

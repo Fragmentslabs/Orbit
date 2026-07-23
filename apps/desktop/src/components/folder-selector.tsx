@@ -78,7 +78,7 @@ export function FolderSelector({ folders, onFoldersChange }: FolderSelectorProps
           className="group relative flex h-8 cursor-pointer select-none items-center gap-1.5 rounded-md border border-border px-1.5 font-medium text-sm transition-all hover:bg-accent hover:text-accent-foreground dark:hover:bg-accent/50"
         >
           <div className="relative size-5 shrink-0">
-            <div className="absolute inset-0 flex size-5 items-center justify-center overflow-hidden rounded bg-background">
+            <div className="absolute inset-0 flex size-5 items-center justify-center overflow-hidden rounded">
               <Folder className="size-3 text-sidebar-foreground/60" />
             </div>
           </div>
@@ -121,7 +121,7 @@ export function FolderSelector({ folders, onFoldersChange }: FolderSelectorProps
           className="group relative flex h-8 cursor-default select-none items-center gap-1.5 rounded-md border border-border px-1.5 font-medium text-sm transition-all hover:bg-accent hover:text-accent-foreground dark:hover:bg-accent/50"
         >
           <div className="relative size-5 shrink-0">
-            <div className="absolute inset-0 flex size-5 items-center justify-center overflow-hidden rounded bg-background text-sidebar-foreground/60 transition-opacity group-hover:opacity-0">
+            <div className="absolute inset-0 flex size-5 items-center justify-center overflow-hidden rounded text-sidebar-foreground/60 transition-opacity group-hover:opacity-0">
               <Folder className="size-3" />
             </div>
             <button
@@ -141,7 +141,7 @@ export function FolderSelector({ folders, onFoldersChange }: FolderSelectorProps
           className="group relative flex h-8 cursor-pointer select-none items-center gap-1.5 rounded-md border border-border px-1.5 font-medium text-sm transition-all hover:bg-accent hover:text-accent-foreground dark:hover:bg-accent/50"
         >
           <div className="relative size-5 shrink-0">
-            <div className="absolute inset-0 flex size-5 items-center justify-center overflow-hidden rounded bg-background">
+            <div className="absolute inset-0 flex size-5 items-center justify-center overflow-hidden rounded">
               <Plus className="size-3" />
             </div>
           </div>

@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useState } from "react"
-import { AlignLeft, Bot, Brain, BrainCircuit, Globe, Network, PlusIcon, Search } from "lucide-react"
+import { AlignLeft, Brain, BrainCircuit, Globe, PlusIcon, Search } from "lucide-react"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -17,11 +17,10 @@ import {
   PromptInputTextarea,
   PromptInputTools,
 } from "@/src/components/ai/prompt-input"
-import { DelegationMenuItems } from "@/src/components/delegation-menu"
 import { ModeMenuItems, type ModeToggleDef } from "@/src/components/mode-menu-items"
 import { ModelPicker } from "@/src/components/model-picker"
 import { ModeToggle } from "@/src/components/mode-toggle"
-import { OrchestrationConfigDialog } from "@/src/components/orchestration-config-dialog"
+
 import { ReasoningPicker } from "@/src/components/reasoning-picker"
 import { DraftInputBridge } from "@/src/components/draft-input-bridge"
 import { ChatInputDraft } from "@/src/components/chat-input-draft"
@@ -53,9 +52,6 @@ export function ChatInput({ onSubmit, status, onStop, sessionId }: {
 }) {
   const [search, setSearch] = useState(false)
   const [browser, setBrowser] = useState(false)
-  const [subagents, setSubagents] = useState(false)
-  const [orchestra, setOrchestra] = useState(false)
-  const [configOpen, setConfigOpen] = useState(false)
   const simple = useSimpleMode(sessionId)
   const setSimple = useSimplePrefs((s) => s.setEnabled)
   const brain = useBrainEnabled(sessionId)
@@ -96,9 +92,7 @@ export function ChatInput({ onSubmit, status, onStop, sessionId }: {
     brain,
     brainContext: brainContext === "all" ? true : brainContext === "memory" ? brain : false,
     reasoning: { enabled: thinking, variantId },
-    subagents,
-    orchestrate: orchestra ? {} : undefined,
-  }), [search, browser, simple, brain, brainContext, thinking, variantId, subagents, orchestra])
+  }), [search, browser, simple, brain, brainContext, thinking, variantId])
 
   const slashCommands = useMemo<SlashCommand[]>(() => {
     const toggle = (fn: () => void) => ({ setText }: { setText: (t: string) => void }) => {
@@ -113,14 +107,12 @@ export function ChatInput({ onSubmit, status, onStop, sessionId }: {
         : []),
       { id: "simples", label: "Simples", description: "Alterna respostas em texto puro", keywords: ["texto", "plain"], group: "Modos" as const, active: simple, run: toggle(() => setSimple(sessionId, !simple)) },
       { id: "brain", label: "Memória (Brain)", description: "Orbit lembra fatos e preferências entre conversas", keywords: ["memoria", "brain"], group: "Modos" as const, active: brain, run: toggle(() => setBrainEnabled(sessionId, !brain)) },
-      { id: "subagents", label: "Subagents", description: "Alterna workers em background", keywords: ["worker", "delegar"], group: "Modos" as const, active: subagents, run: toggle(() => setSubagents((v) => !v)) },
-      { id: "orchestra", label: "Orchestra", description: "Alterna orquestração em tarefas paralelas", keywords: ["workers", "plano"], group: "Modos" as const, active: orchestra, run: toggle(() => setOrchestra((v) => !v)) },
       ...actionCommands,
       ...referenceCommands,
       { id: "novo-chat", label: "Nova conversa", description: "Começa um chat em branco", keywords: ["clear", "limpar", "novo"], group: "Ações" as const, run: toggle(() => void selectSession(mode, null)) },
       { id: "settings", label: "Configurações", description: "Abre as configurações do Orbit", keywords: ["settings", "config"], group: "Ações" as const, run: toggle(() => openSettings()) },
     ]
-  }, [search, browser, thinking, simple, brain, subagents, orchestra, model, enabled, variantId, update, sessionId, setBrainEnabled, setSimple, actionCommands, referenceCommands, selectSession, mode, openSettings])
+  }, [search, browser, thinking, simple, brain, model, enabled, variantId, update, sessionId, setBrainEnabled, setSimple, actionCommands, referenceCommands, selectSession, mode, openSettings])
 
   return (
     <PromptInputProvider>
@@ -173,22 +165,12 @@ export function ChatInput({ onSubmit, status, onStop, sessionId }: {
                     <DropdownMenuSeparator />
                   </>
                 )}
-                <DelegationMenuItems
-                  subagents={subagents}
-                  orchestra={orchestra}
-                  onSubagentsChange={setSubagents}
-                  onOrchestraChange={setOrchestra}
-                  onOpenConfig={() => setConfigOpen(true)}
-                />
-                <DropdownMenuSeparator />
                 <PromptInputActionAddAttachments label="Anexar arquivos" />
               </DropdownMenuContent>
             </DropdownMenu>
             {displayMode === "actions" && <ContextMeter sessionId={sessionId} />}
           </div>
           <div className="flex items-center gap-1">
-            {subagents && <Bot className="size-3 text-sidebar-foreground/40" />}
-            {orchestra && <Network className="size-3 text-sidebar-foreground/40" />}
             {thinking && model?.variants && model.variants.length > 0 && (
               <ReasoningPicker
                 variants={model.variants}
@@ -271,7 +253,6 @@ export function ChatInput({ onSubmit, status, onStop, sessionId }: {
           </div>
         </PromptInputTools>
       )}
-      <OrchestrationConfigDialog open={configOpen} onOpenChange={setConfigOpen} />
     </div>
     </SlashPalette>
     </PromptInputProvider>
