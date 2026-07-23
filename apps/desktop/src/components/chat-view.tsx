@@ -182,9 +182,9 @@ function ChatMessages({ messages, isBusy, mode, sessionId, sendMessage, planIds,
   }, [userMsgItems.map((i) => i.id).join(",")])
 
   const handleNavSelect = useCallback((id: string) => {
-    document
-      .querySelector<HTMLElement>(`[data-user-msg-id="${id}"]`)
-      ?.scrollIntoView({ behavior: "smooth", block: "center" })
+    const el = document.querySelector<HTMLElement>(`[data-user-msg-id="${id}"]`)
+    if (!el) return
+    el.scrollIntoView({ behavior: "smooth", block: "nearest" })
   }, [])
 
   return (
