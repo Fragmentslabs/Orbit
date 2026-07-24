@@ -69,6 +69,7 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId }: 
   const [subagents, setSubagents] = useState(false)
   const [orchestra, setOrchestra] = useState(false)
   const [loop, setLoop] = useState(false)
+  const { mode } = useWorkspace()
   // Orquestração é exclusiva do modo code
   useEffect(() => { if (mode === "chat") setOrchestra(false) }, [mode])
   const [configOpen, setConfigOpen] = useState(false)
@@ -80,7 +81,7 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId }: 
   const brainContext = useCodeContext()
   const permissionMode = usePermissionPrefs((s) => s.mode)
   const setPermissionMode = usePermissionPrefs((s) => s.setMode)
-  const { folders, setFolders, mode } = useWorkspace()
+  const { folders, setFolders } = useWorkspace()
 
   // Skills de projeto (.orbit/skills) acompanham a pasta principal ativa
   useEffect(() => {
