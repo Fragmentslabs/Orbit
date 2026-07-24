@@ -128,7 +128,7 @@ app.on('activate', () => {
 
 const terminals = new Map<string, NodePty.IPty>()
 
-function createTerminal(id: string, cols = 80, rows = 24) {
+function createTerminal(id: string, cols = 80, rows = 24, cwd?: string) {
   const isWin = process.platform === 'win32'
   const shellCmd = isWin ? 'powershell.exe' : (process.env.SHELL || '/bin/bash')
 
@@ -136,7 +136,7 @@ function createTerminal(id: string, cols = 80, rows = 24) {
     name: 'xterm-256color',
     cols,
     rows,
-    cwd: process.env.HOME || process.env.USERPROFILE || '/',
+    cwd: cwd ?? process.env.HOME ?? process.env.USERPROFILE ?? '/',
     env: process.env as Record<string, string>,
   })
 
@@ -370,8 +370,8 @@ app.whenReady().then(() => {
     return result.filePaths[0]
   })
 
-  ipcMain.handle('terminal:create', (_event, id: string, cols?: number, rows?: number) => {
-    const proc = createTerminal(id, cols, rows)
+  ipcMain.handle('terminal:create', (_event, id: string, cols?: number, rows?: number, cwd?: string) => {
+    const proc = createTerminal(id, cols, rows, cwd)
     terminals.set(id, proc)
     return { pid: proc.pid }
   })

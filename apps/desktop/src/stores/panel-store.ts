@@ -1,12 +1,15 @@
 import { create } from "zustand"
 
-/**
- * Estado global do painel direito + browser do agente:
- * - abertura automática quando o main pede (panel:event via tools panel_*)
- * - modo seleção: o usuário clica num elemento do webview e ele vira um
- *   badge/anexo no input do code mode (enviado junto com a mensagem)
- * - viewport (responsividade), tela cheia e feed de atividade do agente
- */
+export type TabType = "chat" | "terminal" | "folders" | "browser" | "diff"
+
+export interface PanelTab {
+  id: string
+  type: TabType
+  title: string
+  sessionId?: string
+  messageId?: string
+  pending?: boolean
+}
 
 export interface BrowserSelection {
   id: string
@@ -38,9 +41,18 @@ export type PanelEvent =
 interface PanelState {
   rightPanelOpen: boolean
   setRightPanelOpen: (open: boolean) => void
-  /** Incrementa a cada pedido do agente — right-panel garante/ativa a aba Browser */
+
+  /** Tabs por sessão de chat */
+  tabsBySession: Record<string, PanelTab[]>
+  activeTabBySession: Record<string, string | null>
+  addTab: (sessionId: string, tab: PanelTab) => void
+  removeTab: (sessionId: string, tabId: string) => void
+  setActiveTab: (sessionId: string, tabId: string | null) => void
+  setTabsForSession: (sessionId: string, tabs: PanelTab[], activeId: string | null) => void
+  getTabs: (sessionId: string) => PanelTab[]
+  getActiveTabId: (sessionId: string) => string | null
+
   browserRequestId: number
-  /** URL do pedido mais recente (src inicial do webview) */
   browserUrl?: string
   selectMode: boolean
   setSelectMode: (value: boolean) => void
@@ -48,33 +60,24 @@ interface PanelState {
   addSelection: (selection: Omit<BrowserSelection, "id">) => void
   removeSelection: (id: string) => void
   clearSelections: () => void
-  /** Viewport atual (null = preenche o painel) — controlado por agente e usuário */
   viewport: Viewport | null
   setViewport: (viewport: Viewport | null) => void
-  /** Tela cheia do browser */
   fullscreen: boolean
   setFullscreen: (value: boolean) => void
-  /** Browser sendo dirigido pelo agente agora (indicador visual) */
   agentActive: boolean
-  /** Feed do que o agente está fazendo no browser (mais recente primeiro) */
   activity: ActivityEntry[]
   pushActivity: (label: string) => void
-  /** Aplica um panel:event vindo do main */
   applyEvent: (event: PanelEvent) => void
-  /** Abre uma aba de chat no painel direito (ex: "enviar para chat lateral") */
+
   openChatTab: (sessionId: string, title: string) => void
-  /** Consumido pelo RightPanel; incrementa a cada solicitação */
   pendingChatTab: number
   pendingChatTabSession?: string
   pendingChatTabTitle?: string
 
-  /** Abre uma aba de chat com texto pré-preenchido no input (ex: discussão de pergunta) */
   openChatTabWithPendingInput: (sessionId: string, title: string, input: string) => void
-  /** Texto a ser inserido no input da aba de chat destino, scoped por sessionId */
   pendingInput: { sessionId: string; text: string } | null
   setPendingInput: (val: { sessionId: string; text: string } | null) => void
 
-  /** Abre uma aba Diff no painel direito para ver o diff de uma mensagem */
   openDiff: (sessionId: string, messageId: string, title: string) => void
   pendingDiff: number
   pendingDiffSessionId?: string
@@ -82,11 +85,15 @@ interface PanelState {
   pendingDiffTitle?: string
 }
 
-// Auto-desliga o indicador "agente usando" após um período sem atividade
 let activeTimer: ReturnType<typeof setTimeout> | null = null
 const ACTIVE_TIMEOUT_MS = 6000
 
-export const usePanelStore = create<PanelState>((set) => {
+let _nextTabId = 0
+export function nextTabId(): number {
+  return ++_nextTabId
+}
+
+export const usePanelStore = create<PanelState>((set, get) => {
   const markActive = () => {
     if (activeTimer) clearTimeout(activeTimer)
     activeTimer = setTimeout(() => set({ agentActive: false }), ACTIVE_TIMEOUT_MS)
@@ -96,6 +103,50 @@ export const usePanelStore = create<PanelState>((set) => {
   return {
     rightPanelOpen: false,
     setRightPanelOpen: (open) => set({ rightPanelOpen: open }),
+
+    tabsBySession: {},
+    activeTabBySession: {},
+
+    addTab: (sessionId, tab) =>
+      set((state) => ({
+        tabsBySession: {
+          ...state.tabsBySession,
+          [sessionId]: [...(state.tabsBySession[sessionId] ?? []), tab],
+        },
+      })),
+
+    removeTab: (sessionId, tabId) =>
+      set((state) => {
+        const tabs = state.tabsBySession[sessionId]
+        if (!tabs) return state
+        const next = tabs.filter((t) => t.id !== tabId)
+        const activeId = state.activeTabBySession[sessionId]
+        let nextActive = state.activeTabBySession
+        if (activeId === tabId || next.length === 0) {
+          const newActive = next.length > 0 ? next[Math.min(0, next.length - 1)].id : null
+          nextActive = { ...state.activeTabBySession, [sessionId]: newActive }
+        }
+        return {
+          tabsBySession: { ...state.tabsBySession, [sessionId]: next },
+          activeTabBySession: nextActive,
+        }
+      }),
+
+    setActiveTab: (sessionId, tabId) =>
+      set((state) => ({
+        activeTabBySession: { ...state.activeTabBySession, [sessionId]: tabId },
+      })),
+
+    setTabsForSession: (sessionId, tabs, activeId) =>
+      set((state) => ({
+        tabsBySession: { ...state.tabsBySession, [sessionId]: tabs },
+        activeTabBySession: { ...state.activeTabBySession, [sessionId]: activeId },
+      })),
+
+    getTabs: (sessionId) => get().tabsBySession[sessionId] ?? [],
+
+    getActiveTabId: (sessionId) => get().activeTabBySession[sessionId] ?? null,
+
     browserRequestId: 0,
     browserUrl: undefined,
     selectMode: false,
