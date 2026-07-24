@@ -743,6 +743,7 @@ async function handleRequest(client: ConnectedClient, requestId: string, req: Co
           break
         }
         // Envia uma nova mensagem de implementação (mesma lógica do desktop)
+        const canOrchestrate = req.orchestrate && session.mode === 'code'
         const input: SendMessageInput = {
           sessionId: req.sessionId,
           text: 'Implemente o plano acima.',
@@ -752,12 +753,12 @@ async function handleRequest(client: ConnectedClient, requestId: string, req: Co
           options: {
             planReview: { status: 'implementing', messageId: req.messageId, permissionMode: req.permissionMode },
             permissionMode: req.permissionMode,
-            ...(req.orchestrate ? { orchestrate: {}, loop: true, subagents: true, plan: undefined } : {}),
+            ...(canOrchestrate ? { orchestrate: {}, loop: true, subagents: true, plan: undefined } : {}),
           },
           directory: session.directory,
           extraDirectories: session.extraDirectories,
         }
-        if (req.orchestrate) {
+        if (canOrchestrate) {
           void runOrchestration(win, input)
         } else {
           void runChat(win, input)

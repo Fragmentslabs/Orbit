@@ -8,7 +8,7 @@ import { DropdownMenuCheckboxItem } from "@/components/ui/dropdown-menu"
  * de configuração do worker sem alternar o toggle.
  * Loop mode (modo código): revisa e itera até completar a tarefa.
  */
-export function DelegationMenuItems({ subagents, orchestra, loop, onSubagentsChange, onOrchestraChange, onLoopChange, onOpenConfig, onOpenLoopConfig }: {
+export function DelegationMenuItems({ subagents, orchestra, loop, onSubagentsChange, onOrchestraChange, onLoopChange, onOpenConfig, onOpenLoopConfig, mode }: {
   subagents: boolean
   orchestra: boolean
   loop?: boolean
@@ -17,6 +17,8 @@ export function DelegationMenuItems({ subagents, orchestra, loop, onSubagentsCha
   onLoopChange?: (value: boolean) => void
   onOpenConfig: () => void
   onOpenLoopConfig?: () => void
+  /** Orquestração é exclusiva do modo code */
+  mode?: "chat" | "code"
 }) {
   const gear = (onClick: () => void) => (
     <button
@@ -47,6 +49,7 @@ export function DelegationMenuItems({ subagents, orchestra, loop, onSubagentsCha
         <span className="flex-1">Subagents</span>
         {gear(onOpenConfig)}
       </DropdownMenuCheckboxItem>
+      {mode !== "chat" && (
       <DropdownMenuCheckboxItem
         checked={orchestra}
         onCheckedChange={(checked) => {
@@ -58,6 +61,7 @@ export function DelegationMenuItems({ subagents, orchestra, loop, onSubagentsCha
         <span className="flex-1">Orchestra</span>
         {gear(onOpenConfig)}
       </DropdownMenuCheckboxItem>
+      )}
       {onLoopChange && (
         <DropdownMenuCheckboxItem
           checked={loop ?? false}

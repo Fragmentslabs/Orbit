@@ -153,7 +153,7 @@ function ActiveModesSection({
     ...(isCode ? [] : [{ key: "browser" as const, label: "Browser" }]),
     ...(isCode ? [{ key: "plan" as const, label: "Modo Plano" }] : []),
     { key: "subagents", label: "Subagentes" },
-    { key: "orchestra", label: "Orquestra" },
+    ...(isCode ? [{ key: "orchestra" as const, label: "Orquestra" }] : []),
   ]
 
   return (

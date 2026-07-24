@@ -524,6 +524,10 @@ app.whenReady().then(() => {
     if (session?.orchestration?.role === 'worker') {
       input = { ...input, options: { ...input.options, orchestrate: undefined } }
     }
+    // Orquestração é exclusiva do modo code
+    if (input.options.orchestrate && input.mode !== 'code') {
+      input = { ...input, options: { ...input.options, orchestrate: undefined } }
+    }
     // Orquestração: desativa plano (incompatível), ativa loop e subagentes por padrão
     if (input.options.orchestrate) {
       input = {

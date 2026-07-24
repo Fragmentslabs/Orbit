@@ -34,6 +34,8 @@ interface Props {
   onOrchestraToggle: () => void
   loop: boolean
   onLoopToggle: () => void
+  /** Orquestração é exclusiva do modo code */
+  mode?: "chat" | "code"
   workerModelLabel: string | null
   onConfigureWorkers: () => void
   onConfigureLoop?: () => void
@@ -67,6 +69,7 @@ export function ConfigSheet({
   onConfigureWorkers,
   onConfigureLoop,
   displayMode,
+  mode,
   gitBranches,
   gitCurrent,
   onGitBranchChange,
@@ -251,8 +254,8 @@ export function ConfigSheet({
           </View>
           )}
 
-          {/* Orquestração — só no modo toggles */}
-          {displayMode === 'toggles' && (
+          {/* Orquestração — só no modo code + toggles */}
+          {displayMode === 'toggles' && mode === 'code' && (
           <View style={[s.card, { borderColor: tokens.border }]}>
             <View style={s.cardRow}>
               <View style={s.cardRowLeft}>
