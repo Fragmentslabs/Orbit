@@ -96,6 +96,49 @@ function importZip(buffer: Buffer): Promise<ImportResult> | ImportResult {
   }))
 }
 
+/** Lê um anexo de chat que pode ser uma skill (.skill texto/ZIP, ou .md com
+ * frontmatter de skill) e devolve uma descrição textual para o agente — NÃO
+ * grava nada em disco (isso só acontece via create_skill + aprovação no card).
+ * Retorna null quando o conteúdo não é uma skill válida (ex.: .md comum). */
+export function describeSkillAttachment(buffer: Buffer, filename?: string): string | null {
+  if (isZip(buffer)) {
+    let entries: Record<string, Uint8Array>
+    try {
+      entries = unzipSync(new Uint8Array(buffer))
+    } catch {
+      return null
+    }
+    const names = Object.keys(entries).filter((n) => !n.endsWith('/'))
+    const manifestName = names
+      .filter((n) => n.split('/').pop()?.toLowerCase() === 'skill.md')
+      .sort((a, b) => a.split('/').length - b.split('/').length)[0]
+    if (!manifestName) return null
+    const raw = strFromU8(entries[manifestName])
+    const parsed = parseSkill(raw, 'global', manifestName)
+    if (!parsed) return null
+    const extras = names.filter((n) => n !== manifestName)
+    return [
+      `Nome: ${parsed.name}`,
+      `Descrição: ${parsed.description}`,
+      extras.length ? `Arquivos auxiliares: ${extras.join(', ')}` : '',
+      '',
+      parsed.content,
+    ]
+      .filter(Boolean)
+      .join('\n')
+  }
+
+  let raw: string
+  try {
+    raw = buffer.toString('utf8')
+  } catch {
+    return null
+  }
+  const parsed = parseSkill(raw, 'global', filename ?? 'attachment.skill')
+  if (!parsed) return null
+  return [`Nome: ${parsed.name}`, `Descrição: ${parsed.description}`, '', parsed.content].join('\n')
+}
+
 /** Importa a seleção do dialog (arquivo zip OU manifesto texto + extras). */
 export async function importSkillSelection(filePaths: string[]): Promise<ImportResult> {
   if (filePaths.length === 0) return { imported: false }

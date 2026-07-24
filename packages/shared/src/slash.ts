@@ -66,39 +66,6 @@ export const SLASH_ACTIONS: SlashActionSpec[] = [
 4. **Perguntar** via ferramenta question quais aplicar, e aplicar as aprovadas.`,
   },
   {
-    id: "ler-pdf",
-    command: "/ler-pdf",
-    description: "Extrai o conteúdo do PDF anexado → resume ou responde perguntas",
-    keywords: ["pdf", "documento", "extrair"],
-    modes: ["chat", "code"],
-    kind: "pipeline",
-    buildPrompt: (input) => `Leia o PDF anexado a esta mensagem.
-${input.trim() ? `Tarefa: ${input.trim()}` : "Tarefa: produza um resumo estruturado — tema, pontos-chave por seção, conclusões e quaisquer dados/tabelas relevantes."}
-Se nenhum PDF estiver anexado, me avise em vez de inventar conteúdo.`,
-  },
-  {
-    id: "ler-docx",
-    command: "/ler-docx",
-    description: "Converte o DOCX anexado para texto → resume ou responde perguntas",
-    keywords: ["docx", "word", "documento"],
-    modes: ["chat", "code"],
-    kind: "pipeline",
-    buildPrompt: (input) => `Leia o arquivo DOCX anexado a esta mensagem. Se não conseguir ler o formato diretamente, use as ferramentas disponíveis para extrair o texto (em modo código, um script rápido resolve — .docx é um zip com word/document.xml).
-${input.trim() ? `Tarefa: ${input.trim()}` : "Tarefa: produza um resumo estruturado do documento."}
-Se nenhum DOCX estiver anexado, me avise.`,
-  },
-  {
-    id: "analisar-imagem",
-    command: "/analisar-imagem",
-    description: "Descreve ou extrai informações da imagem anexada",
-    keywords: ["imagem", "screenshot", "foto", "ocr"],
-    modes: ["chat", "code"],
-    kind: "pipeline",
-    buildPrompt: (input) => `Analise a imagem anexada a esta mensagem.
-${input.trim() ? `Tarefa: ${input.trim()}` : "Tarefa: descreva o conteúdo em detalhe e transcreva qualquer texto visível."}
-Se nenhuma imagem estiver anexada, me avise.`,
-  },
-  {
     id: "explicar",
     command: "/explicar",
     description: "Explica um trecho de código com o contexto do projeto",

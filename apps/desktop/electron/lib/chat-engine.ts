@@ -19,6 +19,9 @@ import { buildSystemPrompt } from './prompts'
 import { buildProviderOptions } from './reasoning'
 import { resolveModel } from './providers'
 import { extractPdfText } from './pdf'
+import { extractSpreadsheetText } from './xlsx'
+import { extractDocxText } from './docx'
+import { describeSkillAttachment } from './skills/import'
 import { cleanupRevert } from './session/revert'
 import { capture, diff } from './snapshot'
 import { runProjectInit, type InitHooks } from './project-init'
@@ -67,10 +70,31 @@ function decodeDataUrlText(url: string): string | null {
   }
 }
 
+/** Decodifica o payload de um data URL como bytes (para formatos binários: ZIP, planilhas). */
+function decodeDataUrlBytes(url: string): Buffer | null {
+  const match = /^data:([^;,]*)(;base64)?,([\s\S]*)$/.exec(url)
+  if (!match) return null
+  try {
+    return match[2] ? Buffer.from(match[3], 'base64') : Buffer.from(decodeURIComponent(match[3]), 'utf8')
+  } catch {
+    return null
+  }
+}
+
 const TEXT_MIME = /^(text\/|application\/(json|xml|javascript|typescript|yaml|toml|x-sh|sql))/
+// Fallback por extensão: navegadores às vezes reportam mime vazio ou
+// "application/octet-stream" para .md/.skill/.csv no Windows.
+const TEXT_EXT_FALLBACK = /\.(md|markdown|txt|log|csv|yaml|yml|toml|env|ini|conf|skill)$/i
+const SPREADSHEET_MIME = /^application\/(vnd\.ms-excel|vnd\.openxmlformats-officedocument\.spreadsheetml\.sheet|vnd\.oasis\.opendocument\.spreadsheet)$/
+const SPREADSHEET_EXT = /\.(xlsx?|ods)$/i
+const DOCX_MIME = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+const DOCX_EXT = /\.docx$/i
+const SKILL_LIKE_EXT = /\.(skill|md|markdown)$/i
 
 /** Converte um anexo (FilePart) em conteúdo de modelo: imagem/PDF nativos,
- * arquivos de texto viram texto inline; o resto vira só uma nota. */
+ * arquivos de texto viram texto inline; o resto vira só uma nota. Usado só
+ * para HISTÓRICO já persistido — anexos novos são pré-processados em
+ * `preprocessAttachment` antes de chegar aqui (ver runChat). */
 function fileToModelContent(file: FilePart): Exclude<UserContent, string>[number] {
   if (file.mime.startsWith('image/')) {
     return { type: 'image', image: file.url, mediaType: file.mime }
@@ -78,13 +102,78 @@ function fileToModelContent(file: FilePart): Exclude<UserContent, string>[number
   if (file.mime === 'application/pdf') {
     return { type: 'text', text: `[PDF anexado anteriormente: ${file.filename ?? 'documento'}]` }
   }
-  if (TEXT_MIME.test(file.mime)) {
+  if (TEXT_MIME.test(file.mime) || TEXT_EXT_FALLBACK.test(file.filename ?? '')) {
     const text = decodeDataUrlText(file.url)
     if (text != null) {
       return { type: 'text', text: `[Arquivo anexado: ${file.filename ?? 'sem nome'}]\n\n${text}` }
     }
   }
   return { type: 'text', text: `[Arquivo anexado não suportado: ${file.filename ?? file.mime}]` }
+}
+
+/** Pré-processa um anexo NOVO antes de persistir: PDF, planilha e skill viram
+ * texto extraído (evita data URLs enormes no histórico); imagem continua
+ * nativa (o modelo lê melhor via image part). Espelha o mesmo padrão para
+ * cada tipo — extrai, embrulha em TextPart, nunca falha o envio da mensagem. */
+async function preprocessAttachment(file: FilePart): Promise<MessagePart> {
+  const filename = file.filename ?? ''
+
+  if (file.mime === 'application/pdf') {
+    let text: string
+    try {
+      text = await extractPdfText(file.url)
+    } catch (err) {
+      text = `(erro ao extrair texto: ${err instanceof Error ? err.message : String(err)})`
+    }
+    return { id: file.id, type: 'text', text: `[PDF anexado: ${filename || 'documento'}]\n\n${text}`, state: 'done' }
+  }
+
+  if (SPREADSHEET_MIME.test(file.mime) || SPREADSHEET_EXT.test(filename)) {
+    let text: string
+    try {
+      text = await extractSpreadsheetText(file.url)
+    } catch (err) {
+      text = `(erro ao ler planilha: ${err instanceof Error ? err.message : String(err)})`
+    }
+    return { id: file.id, type: 'text', text: `[Planilha anexada: ${filename || 'arquivo'}]\n\n${text}`, state: 'done' }
+  }
+
+  if (file.mime === DOCX_MIME || DOCX_EXT.test(filename)) {
+    let text: string
+    try {
+      text = await extractDocxText(file.url)
+    } catch (err) {
+      text = `(erro ao ler documento: ${err instanceof Error ? err.message : String(err)})`
+    }
+    return { id: file.id, type: 'text', text: `[Documento anexado: ${filename || 'arquivo'}]\n\n${text}`, state: 'done' }
+  }
+
+  // Skill anexada (.skill texto/ZIP, ou .md com frontmatter de skill) — o
+  // agente lê o conteúdo e PODE propor com a tool create_skill se fizer
+  // sentido; se não for uma skill válida, cai no tratamento de texto comum.
+  if (SKILL_LIKE_EXT.test(filename)) {
+    const bytes = decodeDataUrlBytes(file.url)
+    const description = bytes ? describeSkillAttachment(bytes, filename) : null
+    if (description) {
+      return {
+        id: file.id,
+        type: 'text',
+        text:
+          `[Skill anexada: ${filename}]\n\n${description}\n\n` +
+          '(Se o usuário pedir para adicionar isso como skill, ou fizer sentido pelo contexto, use a tool create_skill com este conteúdo — não presuma sem que o pedido/contexto justifique.)',
+        state: 'done',
+      }
+    }
+  }
+
+  if (TEXT_MIME.test(file.mime) || TEXT_EXT_FALLBACK.test(filename)) {
+    const text = decodeDataUrlText(file.url)
+    if (text != null) {
+      return { id: file.id, type: 'text', text: `[Arquivo anexado: ${filename || 'sem nome'}]\n\n${text}`, state: 'done' }
+    }
+  }
+
+  return file
 }
 
 /**
@@ -180,26 +269,14 @@ export async function runChat(win: BrowserWindow, input: SendMessageInput): Prom
     return
   }
 
-  // Extrai texto de PDFs anexados antes de persistir — evita data URLs
-  // enormes no histórico que estouram o payload da API em mensagens seguintes
+  // Extrai texto de anexos (PDF, planilha, skill) antes de persistir — evita
+  // data URLs enormes no histórico e dá ao agente acesso ao conteúdo real,
+  // independente da pasta de trabalho selecionada (as tools read/glob/bash só
+  // enxergam o filesystem, nunca os anexos do chat — por isso o conteúdo
+  // precisa entrar como texto na própria mensagem).
   const processedParts: MessagePart[] = []
   for (const file of input.files ?? []) {
-    if (file.mime === 'application/pdf') {
-      let text: string
-      try {
-        text = await extractPdfText(file.url)
-      } catch (err) {
-        text = `(erro ao extrair texto: ${err instanceof Error ? err.message : String(err)})`
-      }
-      processedParts.push({
-        id: file.id,
-        type: 'text',
-        text: `[PDF anexado: ${file.filename ?? 'documento'}]\n\n${text}`,
-        state: 'done',
-      })
-    } else {
-      processedParts.push(file)
-    }
+    processedParts.push(await preprocessAttachment(file))
   }
 
   const userMessage: ChatMessage = {
