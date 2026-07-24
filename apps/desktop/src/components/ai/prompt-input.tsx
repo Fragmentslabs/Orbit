@@ -669,10 +669,11 @@ export const PromptInput = ({
           return (formData.get("message") as string) || ""
         })()
 
-    // Reset form immediately after capturing text to avoid race condition
-    // where user input during async blob conversion would be lost
-    if (!usingProvider) {
-      form.reset()
+    // Limpa o input imediatamente (síncrono) para evitar que o texto seja
+    // salvo como rascunho se o usuário trocar de chat antes da resposta
+    clear()
+    if (usingProvider) {
+      controller.textInput.clear()
     }
 
     // Convert blob URLs to data URLs asynchronously
@@ -688,37 +689,14 @@ export const PromptInput = ({
         }
         return item
       }),
-    )
-      .then((convertedFiles: FileUIPart[]) => {
-        try {
-          const result = onSubmit({ text, files: convertedFiles }, event)
-
-          // Handle both sync and async onSubmit
-          if (result instanceof Promise) {
-            result
-              .then(() => {
-                clear()
-                if (usingProvider) {
-                  controller.textInput.clear()
-                }
-              })
-              .catch(() => {
-                // Don't clear on error - user may want to retry
-              })
-          } else {
-            // Sync function completed without throwing, clear attachments
-            clear()
-            if (usingProvider) {
-              controller.textInput.clear()
-            }
-          }
-        } catch {
-          // Don't clear on error - user may want to retry
-        }
-      })
-      .catch(() => {
-        // Don't clear on error - user may want to retry
-      })
+    ).then((convertedFiles: FileUIPart[]) => {
+      // Chama o submit (async — o resultado é deliberadamente ignorado:
+      // o input já foi limpo e erros aparecem no chat via store)
+      const result = onSubmit({ text, files: convertedFiles }, event)
+      if (result instanceof Promise) {
+        result.catch(() => {})
+      }
+    })
   }
 
   // Render with or without local provider
