@@ -31,6 +31,17 @@ export const CATEGORY_LABEL: Record<ProjectCategory, string> = {
   structure: "estrutura",
   decision: "decisão",
   context: "contexto",
+  database: "banco de dados",
+  learning: "aprendizado",
+  standard: "padronização",
+}
+
+/** Ícone Lucide por categoria (usado nos badges de memórias sem área — kind
+ * "general"/"project" fora do grafo do /init, ex. aprendizados). */
+export const CATEGORY_ICON: Partial<Record<ProjectCategory, string>> = {
+  database: "Database",
+  learning: "GraduationCap",
+  standard: "BookText",
 }
 
 /** Ícone Lucide por área de conhecimento (usado no grafo de memórias). */
@@ -43,6 +54,11 @@ export const AREA_ICON: Record<ProjectArea, string> = {
   infrastructure: "Server",
   security: "Shield",
   development: "Terminal",
+  database: "Database",
+  testing: "TestTube",
+  performance: "Gauge",
+  dependencies: "Package",
+  standards: "BookText",
 }
 
 export function canPromote(memory: Memory): boolean {

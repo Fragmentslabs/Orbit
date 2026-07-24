@@ -190,7 +190,7 @@ export function MemoryCard({ memory, related, onSelectRelated }: {
         <Badge variant="secondary" className={cn("px-1.5 py-0 text-[10px]", KIND_BADGE[memory.kind])}>
           {KIND_LABEL[memory.kind]}
         </Badge>
-        {memory.kind === "project" && memory.category && (
+        {memory.category && (
           <Badge variant="outline" className="px-1.5 py-0 text-[10px]">
             {CATEGORY_LABEL[memory.category]}
           </Badge>

@@ -142,6 +142,10 @@ KINDS:
 - kind="general": vale em TODOS os modos. Preferências de trabalho, estilo, decisões cross-projeto.
 - kind="core": só chat, permanente. Fatos pessoais estáveis.
 - kind="seasonal": expira. Atividades e tópicos recentes — follow-up futuro.
+- kind="general" + category="learning": lição reutilizável em QUALQUER projeto futuro — não um
+  fato sobre o usuário, mas um "como resolver X" (ex.: "no Expo, Fast Refresh quebra com hooks
+  condicionais — mover a lógica para useEffect"). Tag com a tecnologia (ex. "expo", "prisma")
+  para reaparecer quando outro projeto usar a mesma stack.
 
 Use weight para indicar importância (0.0-1.0). Use tags para busca futura.
 Confie no seu julgamento sobre o que salvar — errar salvando é melhor que esquecer.
@@ -164,8 +168,16 @@ ESTRUTURA EM ÁRVORE:
 
 KINDS:
 1. kind="general": estilo global de trabalho ("commits atômicos", "responda em pt"). Vale em todos.
+   - category="learning" (opcional): lição reutilizável em OUTROS projetos — não um fato deste
+     projeto, mas um "como resolver X" ligado a uma tecnologia (ex.: "migrations do Prisma em
+     SQLite exigem --create-only antes de editar a migration"). Tag com a tecnologia — ela
+     reaparece automaticamente em projetos futuros que usem a mesma stack. Sempre que resolver
+     um bug não-óbvio ou workaround de framework, considere salvar isso aqui.
 2. kind="project" (category OBRIGATÓRIA):
    - preference / convention / structure / decision / context
+   - database: schemas, modelos, migrations, relacionamentos de dados
+   - standard: regra EXPLÍCITA do projeto (commit style, branching, naming) — diferente de
+     "preference", que é estilo observado/pessoal, não uma regra declarada.
 
 DOC: use document para contexto extenso (mapas, schemas). Text continua sendo o resumo curto.
 
@@ -219,7 +231,7 @@ async function buildSkillsBlock(input: SendMessageInput): Promise<string[]> {
 function memoryLines(memories: Memory[]): string {
   return memories
     .map((m) => {
-      const category = m.kind === 'project' && m.category ? `[${m.category}] ` : ''
+      const category = m.category ? `[${m.category}] ` : ''
       const doc = m.hasDoc ? ` (doc anexado — memory_open ${m.id})` : ''
       return `- ${category}${m.text}${doc}`
     })
@@ -244,6 +256,9 @@ async function buildBrainBlock(input: SendMessageInput): Promise<string[]> {
             `Memórias sazonais recentes (use como contexto tácito, NÃO repita textualmente):\n${memoryLines(ctx.seasonal)}`,
           )
         }
+        if (ctx.learning.length) {
+          parts.push(`Aprendizados registrados em outros contextos (use se pertinente):\n${memoryLines(ctx.learning)}`)
+        }
       }
     } else {
       parts.push(BRAIN_CODE_PROMPT)
@@ -258,6 +273,11 @@ async function buildBrainBlock(input: SendMessageInput): Promise<string[]> {
         }
         if (ctx.general.length) {
           parts.push(`Preferências gerais de trabalho do usuário:\n${memoryLines(ctx.general)}`)
+        }
+        if (ctx.learning.length) {
+          parts.push(
+            `Aprendizados de OUTROS projetos com stack em comum (workarounds, gotchas — reaproveite se aplicável aqui):\n${memoryLines(ctx.learning)}`,
+          )
         }
       }
     }

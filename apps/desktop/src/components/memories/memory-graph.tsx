@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
-import { BrainCircuit, Briefcase, Crosshair, Eye, EyeOff, FileUp, Layers, Link2, Palette, Plus, Server, Shield, SlidersHorizontal, Terminal, ZoomIn, ZoomOut } from "lucide-react"
+import { BookText, BrainCircuit, Briefcase, Crosshair, Database, Eye, EyeOff, FileUp, Gauge, GraduationCap, Layers, Link2, Package, Palette, Plus, Server, Shield, SlidersHorizontal, Terminal, TestTube, ZoomIn, ZoomOut } from "lucide-react"
 import type { LucideIcon } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
@@ -8,10 +8,11 @@ import type { Memory } from "@shared/memory"
 import { jaccard, normalizeText, PROJECT_AREAS } from "@shared/memory"
 import { memoryApi } from "@/src/lib/ipc"
 import { MemoryCard } from "./memory-card"
-import { AREA_ICON, KIND_COLOR, KIND_LABEL, lastActivity } from "./meta"
+import { AREA_ICON, CATEGORY_ICON, KIND_COLOR, KIND_LABEL, lastActivity } from "./meta"
 
 const ICON_MAP: Record<string, LucideIcon> = {
   BrainCircuit, Briefcase, Palette, Layers, SlidersHorizontal, Server, Shield, Terminal,
+  Database, TestTube, Gauge, Package, BookText, GraduationCap,
 }
 
 const LEVEL_RADIUS = 150
@@ -657,6 +658,22 @@ export function MemoryGraph({ pool, allById, query, selectedId, onSelect, projec
                           <div className="flex h-full items-center justify-center text-foreground/70 select-none">
                             {(() => {
                               const Icon = ICON_MAP[AREA_ICON[memory.area!]]
+                              return Icon ? <Icon className="size-[55%]" /> : null
+                            })()}
+                          </div>
+                        </foreignObject>
+                        <text y={node.r + 12} textAnchor="middle" fontSize={11} fontWeight={600}
+                          className="fill-foreground select-none">
+                          {nodeLabel(memory, false)}
+                        </text>
+                      </>
+                    ) : memory.category && CATEGORY_ICON[memory.category] ? (
+                      <>
+                        <circle r={node.r} fill={color} fillOpacity={0.12} stroke={color} strokeWidth={1.2} />
+                        <foreignObject x={-node.r} y={-node.r} width={node.r * 2} height={node.r * 2}>
+                          <div className="flex h-full items-center justify-center text-foreground/70 select-none">
+                            {(() => {
+                              const Icon = ICON_MAP[CATEGORY_ICON[memory.category!]!]
                               return Icon ? <Icon className="size-[55%]" /> : null
                             })()}
                           </div>
