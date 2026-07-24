@@ -3,7 +3,11 @@ import { Terminal } from "@xterm/xterm"
 import { FitAddon } from "@xterm/addon-fit"
 import "@xterm/xterm/css/xterm.css"
 
-export function TerminalTab() {
+interface ManagedTerminalTabProps {
+  ptyId: string
+}
+
+export function ManagedTerminalTab({ ptyId }: ManagedTerminalTabProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const termRef = useRef<Terminal | null>(null)
 
@@ -12,12 +16,8 @@ export function TerminalTab() {
   }, [])
 
   useEffect(() => {
-    // Generated fresh per effect invocation (not via useRef) so that React's
-    // StrictMode dev double-invoke (mount → cleanup → mount) can't have the
-    // first mount's delayed async "kill" race past the second mount's
-    // "create" and kill the wrong PTY under a reused id.
-    const pid = crypto.randomUUID()
     const container = containerRef.current!
+    const pid = ptyId
 
     const term = new Terminal({
       cols: 80,
@@ -62,12 +62,6 @@ export function TerminalTab() {
     term.open(container)
     termRef.current = term
 
-    // Spawn the PTY and wire data flow immediately, using xterm's default
-    // 80x24 size — this must not depend on layout timing (rAF can be
-    // paused indefinitely while the window is unfocused/hidden). The real
-    // fit-to-container size is applied right after as a refinement.
-    window.ipcRenderer.invoke("terminal:create", pid, term.cols, term.rows).catch(console.error)
-
     const onOutput = (payload: unknown) => {
       const { id, data } = payload as { id: string; data: string }
       if (id === pid) term.write(data)
@@ -90,11 +84,9 @@ export function TerminalTab() {
     })
 
     const fit = () => {
-      try { fitAddon.fit() } catch { /* container not measurable yet */ }
+      try { fitAddon.fit() } catch { }
     }
 
-    // Deferred: measuring synchronously right after open() can read stale
-    // (zero) dimensions and corrupt xterm's renderer state.
     requestAnimationFrame(() => {
       fit()
       term.focus()
@@ -108,11 +100,10 @@ export function TerminalTab() {
       resizeObserver.disconnect()
       window.ipcRenderer.off("terminal:output", removeOutput)
       window.ipcRenderer.off("terminal:exit", removeExit)
-      window.ipcRenderer.invoke("terminal:kill", pid).catch(console.error)
       term.dispose()
       termRef.current = null
     }
-  }, [])
+  }, [ptyId])
 
   return (
     <div className="flex-1 min-h-0 relative bg-sidebar" onClick={handleClick}>

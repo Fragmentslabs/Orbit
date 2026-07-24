@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo } from "react"
 import { useDroppable, useDndContext } from "@dnd-kit/core"
 import { FileCode, Globe, Folder, MessageSquare, Terminal, X, PlusIcon, Bot, LoaderIcon, XCircleIcon, Trash2, GripVertical } from "lucide-react"
 import {
@@ -10,29 +10,16 @@ import {
 import { ChatView } from "@/src/components/chat-view"
 import { ChatInput } from "@/src/components/chat-input"
 import type { SendMessageOptions, FilePart } from "@shared/chat"
-import { TerminalTab } from "@/src/components/terminal-tab"
+import { ManagedTerminalTab } from "@/src/components/terminal-tab"
 import { BrowserTab } from "@/src/components/browser-tab"
 import { FoldersTab } from "@/src/components/folders-tab"
 import { DiffTab } from "@/src/components/diff-tab"
 import { useWorkspace } from "@/lib/workspace-context"
-import { usePanelStore } from "@/src/stores/panel-store"
+import { usePanelStore, nextTabId, type TabType, type PanelTab } from "@/src/stores/panel-store"
 import { useSessionStore } from "@/src/stores/session-store"
 import { useProcessStore } from "@/src/stores/process-store"
+import { useTerminalStore } from "@/src/stores/terminal-store"
 import { cn } from "@/lib/utils"
-
-type TabType = "chat" | "terminal" | "folders" | "browser" | "diff"
-
-interface PanelTab {
-  id: string
-  type: TabType
-  title: string
-  /** Tab de chat apontando para uma session específica (workers da orquestração) */
-  sessionId?: string
-  /** ID da mensagem do assistente (diff) */
-  messageId?: string
-  /** Tab novo ainda sem session — só cria quando enviar a primeira mensagem */
-  pending?: boolean
-}
 
 interface TabMeta {
   icon: typeof MessageSquare
@@ -68,6 +55,22 @@ function NewChatTab({ onCreated }: { onCreated: (sessionId: string) => void }) {
   )
 }
 
+function TerminalTabContent({ tabId }: { tabId: string }) {
+  const terminalEntry = useTerminalStore((s) => s.entries[tabId])
+  if (!terminalEntry) {
+    return (
+      <div className="flex flex-1 items-center justify-center text-xs text-muted-foreground">
+        Terminal não encontrado
+      </div>
+    )
+  }
+  return (
+    <div className="flex flex-1 flex-col overflow-hidden">
+      <ManagedTerminalTab ptyId={terminalEntry.ptyId} />
+    </div>
+  )
+}
+
 function TabContent({ tab, onUpdateTab }: { tab: PanelTab; onUpdateTab: (id: string, updates: Partial<PanelTab>) => void }) {
   switch (tab.type) {
     case "chat":
@@ -80,11 +83,7 @@ function TabContent({ tab, onUpdateTab }: { tab: PanelTab; onUpdateTab: (id: str
         </div>
       )
     case "terminal":
-      return (
-        <div className="flex flex-1 flex-col overflow-hidden">
-          <TerminalTab />
-        </div>
-      )
+      return <TerminalTabContent tabId={tab.id} />
     case "folders":
       return (
         <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
@@ -246,16 +245,17 @@ function formatUptime(startTime: number): string {
   return `${hours}h ${minutes % 60}m`
 }
 
-let tabCounter = 0
-
 export function RightPanel() {
-  const [tabs, setTabs] = useState<PanelTab[]>([])
-  const [activeTabId, setActiveTabId] = useState<string | null>(null)
-  const { mode } = useWorkspace()
+  const { mode, folders } = useWorkspace()
   const activeSessionId = useSessionStore((s) => s.activeIds[mode])
   const sessions = useSessionStore((s) => s.sessions)
   const statusMap = useSessionStore((s) => s.status)
 
+  const tabs = usePanelStore((s) => (activeSessionId ? s.tabsBySession[activeSessionId] : undefined) ?? [])
+  const activeTabId = usePanelStore((s) => (activeSessionId ? s.activeTabBySession[activeSessionId] : undefined) ?? null)
+  const addTabToStore = usePanelStore((s) => s.addTab)
+  const removeTabFromStore = usePanelStore((s) => s.removeTab)
+  const setActiveTabInStore = usePanelStore((s) => s.setActiveTab)
   const { setNodeRef, isOver } = useDroppable({ id: "right-panel-drop-zone" })
   const dndContext = useDndContext()
   const isDragging = dndContext.active !== null
@@ -266,59 +266,87 @@ export function RightPanel() {
   )
 
   const addTab = useCallback(async (type: TabType, sessionId?: string, title?: string) => {
+    const sessionKey = activeSessionId
+    if (!sessionKey) return
+
     if (sessionId) {
-      // Tab de session específica: reusa se já aberta
       const id = `chat-${sessionId}`
-      setTabs((prev) =>
-        prev.some((t) => t.id === id)
-          ? prev
-          : [...prev, { id, type: "chat", title: title ?? "Chat", sessionId }],
-      )
-      setActiveTabId(id)
+      const exists = tabs.some((t) => t.id === id)
+      if (!exists) {
+        addTabToStore(sessionKey, { id, type: "chat", title: title ?? "Chat", sessionId })
+      }
+      setActiveTabInStore(sessionKey, id)
       return
     }
     if (type === "chat") {
-      tabCounter++
-      const id = `chat-new-${tabCounter}`
-      setTabs((prev) => [...prev, { id, type: "chat", title: "Chat", pending: true }])
-      setActiveTabId(id)
+      const id = `chat-new-${nextTabId()}`
+      addTabToStore(sessionKey, { id, type: "chat", title: "Chat", pending: true })
+      setActiveTabInStore(sessionKey, id)
+      return
+    }
+    if (type === "terminal") {
+      const nid = nextTabId()
+      const id = `terminal-${nid}`
+      const tabTitle = `Terminal ${nid > 1 ? nid : ""}`.trim()
+      const cwdFolder = folders[0]
+      await useTerminalStore.getState().createTerminal(id, cwdFolder)
+      addTabToStore(sessionKey, { id, type: "terminal", title: tabTitle })
+      setActiveTabInStore(sessionKey, id)
       return
     }
     const meta = tabMeta[type]
-    tabCounter++
-    const id = `${type}-${tabCounter}`
-    const tabTitle = `${meta.label} ${tabCounter > 1 ? tabCounter : ""}`.trim()
-    setTabs((prev) => [...prev, { id, type, title: tabTitle }])
-    setActiveTabId(id)
-  }, [])
+    const nid = nextTabId()
+    const id = `${type}-${nid}`
+    const tabTitle = `${meta.label} ${nid > 1 ? nid : ""}`.trim()
+    addTabToStore(sessionKey, { id, type, title: tabTitle })
+    setActiveTabInStore(sessionKey, id)
+  }, [activeSessionId, tabs, addTabToStore, setActiveTabInStore, folders])
+
+  const removeTab = useCallback((id: string) => {
+    if (!activeSessionId) return
+    const tab = tabs.find((t) => t.id === id)
+    if (tab?.type === "terminal") {
+      useTerminalStore.getState().killTerminal(id)
+    }
+    removeTabFromStore(activeSessionId, id)
+  }, [activeSessionId, tabs, removeTabFromStore])
+
+  const updateTab = useCallback((id: string, updates: Partial<PanelTab>) => {
+    if (!activeSessionId) return
+    usePanelStore.getState().setTabsForSession(
+      activeSessionId,
+      tabs.map((t) => (t.id === id ? { ...t, ...updates } : t)),
+      activeTabId,
+    )
+  }, [activeSessionId, tabs, activeTabId])
 
   // Agente pediu o browser (tools panel_*): garante/ativa a aba Browser
   const browserRequestId = usePanelStore((s) => s.browserRequestId)
   useEffect(() => {
-    if (browserRequestId === 0) return
+    if (browserRequestId === 0 || !activeSessionId) return
     const id = "browser-agent"
-    setTabs((prev) =>
-      prev.some((t) => t.id === id) ? prev : [...prev, { id, type: "browser", title: "Browser" }],
-    )
-    setActiveTabId(id)
-  }, [browserRequestId])
+    const exists = tabs.some((t) => t.id === id)
+    if (!exists) {
+      addTabToStore(activeSessionId, { id, type: "browser", title: "Browser" })
+    }
+    setActiveTabInStore(activeSessionId, id)
+  }, [browserRequestId, activeSessionId])
 
   // "Enviar para chat lateral" vindo do input: abre aba de chat
   const pendingChatTab = usePanelStore((s) => s.pendingChatTab)
   const pendingChatTabSession = usePanelStore((s) => s.pendingChatTabSession)
   const pendingChatTabTitle = usePanelStore((s) => s.pendingChatTabTitle)
   useEffect(() => {
-    if (pendingChatTab > 0 && pendingChatTabSession) {
+    if (pendingChatTab > 0 && pendingChatTabSession && activeSessionId) {
       const id = `chat-${pendingChatTabSession}`
-      setTabs((prev) =>
-        prev.some((t) => t.id === id)
-          ? prev
-          : [...prev, { id, type: "chat", title: pendingChatTabTitle ?? "Chat", sessionId: pendingChatTabSession }],
-      )
-      setActiveTabId(id)
+      const exists = tabs.some((t) => t.id === id)
+      if (!exists) {
+        addTabToStore(activeSessionId, { id, type: "chat", title: pendingChatTabTitle ?? "Chat", sessionId: pendingChatTabSession })
+      }
+      setActiveTabInStore(activeSessionId, id)
       usePanelStore.setState({ pendingChatTab: 0, pendingChatTabSession: undefined, pendingChatTabTitle: undefined })
     }
-  }, [pendingChatTab, pendingChatTabSession, pendingChatTabTitle])
+  }, [pendingChatTab, pendingChatTabSession, pendingChatTabTitle, activeSessionId])
 
   // Diff solicitado pelo chat: abre aba Diff
   const pendingDiff = usePanelStore((s) => s.pendingDiff)
@@ -326,17 +354,16 @@ export function RightPanel() {
   const pendingDiffMessageId = usePanelStore((s) => s.pendingDiffMessageId)
   const pendingDiffTitle = usePanelStore((s) => s.pendingDiffTitle)
   useEffect(() => {
-    if (pendingDiff > 0 && pendingDiffSessionId && pendingDiffMessageId) {
+    if (pendingDiff > 0 && pendingDiffSessionId && pendingDiffMessageId && activeSessionId) {
       const id = `diff-${pendingDiffSessionId}-${pendingDiffMessageId}`
-      setTabs((prev) =>
-        prev.some((t) => t.id === id)
-          ? prev
-          : [...prev, { id, type: "diff", title: pendingDiffTitle ?? "Diff", sessionId: pendingDiffSessionId, messageId: pendingDiffMessageId }],
-      )
-      setActiveTabId(id)
+      const exists = tabs.some((t) => t.id === id)
+      if (!exists) {
+        addTabToStore(activeSessionId, { id, type: "diff", title: pendingDiffTitle ?? "Diff", sessionId: pendingDiffSessionId, messageId: pendingDiffMessageId })
+      }
+      setActiveTabInStore(activeSessionId, id)
       usePanelStore.setState({ pendingDiff: 0, pendingDiffSessionId: undefined, pendingDiffMessageId: undefined, pendingDiffTitle: undefined })
     }
-  }, [pendingDiff, pendingDiffSessionId, pendingDiffMessageId, pendingDiffTitle])
+  }, [pendingDiff, pendingDiffSessionId, pendingDiffMessageId, pendingDiffTitle, activeSessionId])
 
   // Workers da orquestração em execução abrem tabs automaticamente
   useEffect(() => {
@@ -348,32 +375,15 @@ export function RightPanel() {
         (status === "submitted" || status === "streaming")
       ) {
         const id = `chat-${session.id}`
-        setTabs((prev) =>
-          prev.some((t) => t.id === id)
-            ? prev
-            : [...prev, { id, type: "chat", title: session.title, sessionId: session.id }],
-        )
-        setActiveTabId((current) => current ?? id)
+        const exists = tabs.some((t) => t.id === id)
+        if (!exists) {
+          addTabToStore(activeSessionId, { id, type: "chat", title: session.title, sessionId: session.id })
+        }
+        const currentActive = usePanelStore.getState().getActiveTabId(activeSessionId)
+        if (!currentActive) setActiveTabInStore(activeSessionId, id)
       }
     }
   }, [sessions, statusMap, activeSessionId])
-
-  const removeTab = useCallback((id: string) => {
-    setTabs(prev => {
-      const idx = prev.findIndex(t => t.id === id)
-      const next = prev.filter(t => t.id !== id)
-      if (next.length === 0) {
-        setActiveTabId(null)
-      } else if (activeTabId === id) {
-        setActiveTabId(next[Math.min(idx, next.length - 1)].id)
-      }
-      return next
-    })
-  }, [activeTabId])
-
-  const updateTab = useCallback((id: string, updates: Partial<PanelTab>) => {
-    setTabs((prev) => prev.map((t) => (t.id === id ? { ...t, ...updates } : t)))
-  }, [])
 
   const activeTab = tabs.find(t => t.id === activeTabId)
 
@@ -411,7 +421,7 @@ export function RightPanel() {
                     ? "bg-sidebar-accent text-sidebar-accent-foreground"
                     : "text-sidebar-foreground/50 hover:text-sidebar-foreground hover:bg-sidebar-accent/50",
                 )}
-                onClick={() => setActiveTabId(tab.id)}
+                onClick={() => activeSessionId && setActiveTabInStore(activeSessionId, tab.id)}
               >
                 <TabIcon className="size-3.5 shrink-0" />
                 <span className="truncate max-w-24">{tab.title}</span>
