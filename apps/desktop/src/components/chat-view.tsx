@@ -280,7 +280,7 @@ export function ChatView({ sessionId }: { sessionId?: string } = {}) {
   useEffect(() => {
     if (viewMode === "code" && session?.directory && session.id !== prevSessionId.current) {
       prevSessionId.current = session.id
-      setFolders([session.directory])
+      setFolders([session.directory, ...(session.extraDirectories ?? [])])
     }
   }, [session?.id, session?.directory, viewMode, setFolders])
 

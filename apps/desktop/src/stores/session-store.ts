@@ -441,13 +441,19 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       useBrainPrefs.getState().adopt(sessionId)
       useSimplePrefs.getState().adopt(sessionId)
       useDraftInput.getState().adopt(sessionId)
-    } else if (mode === "code" && config.directory && session.directory !== config.directory) {
-      set((state) =>
-        updateSessionIn(state, session!.id, {
-          directory: config.directory,
-          extraDirectories: config.extraDirectories,
-        }),
-      )
+    } else if (mode === "code") {
+      const dirChanged = config.directory && session.directory !== config.directory
+      const extraChanged =
+        config.extraDirectories &&
+        JSON.stringify(config.extraDirectories) !== JSON.stringify(session.extraDirectories ?? [])
+      if (dirChanged || extraChanged) {
+        set((state) =>
+          updateSessionIn(state, session!.id, {
+            ...(dirChanged ? { directory: config.directory } : {}),
+            extraDirectories: config.extraDirectories,
+          }),
+        )
+      }
     }
 
     set((state) => ({
