@@ -24,6 +24,7 @@ import { ModeToggle } from "@/src/components/mode-toggle"
 import { ReasoningPicker } from "@/src/components/reasoning-picker"
 import { DraftInputBridge } from "@/src/components/draft-input-bridge"
 import { ChatInputDraft } from "@/src/components/chat-input-draft"
+import { clearInputDraft } from "@/src/stores/chat-draft"
 import { QueueIndicator } from "@/src/components/queue-indicator"
 import { ContextMeter } from "@/src/components/context-meter"
 import { SendButtonGroup } from "@/src/components/send-button-group"
@@ -142,6 +143,7 @@ export function ChatInput({ onSubmit, status, onStop, sessionId }: {
           }
           const text = message.text?.trim()
           if (!text) return
+          if (sessionId) clearInputDraft(sessionId)
           return onSubmit(resolveText(text), buildOptions(), files.length > 0 ? files : undefined)
         }}
         className="rounded-xl border-2 border-sidebar-border [&>div]:!rounded-[calc(var(--radius-xl)-2px)] [&>div]:!border-none [&>div]:!bg-transparent"
