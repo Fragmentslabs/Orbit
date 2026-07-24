@@ -37,7 +37,7 @@ export function QueueIndicator({ sessionId }: QueueIndicatorProps) {
 
   return (
     <Collapsible open={open} onOpenChange={setOpen} className="w-full">
-      <CollapsibleTrigger className="group flex w-full items-center gap-2 rounded-lg border border-border bg-muted/40 px-3 py-1.5 text-left text-xs transition-colors hover:bg-muted">
+      <CollapsibleTrigger className="group flex w-full items-center gap-2 rounded-lg border border-border bg-muted/40 px-3 py-1.5 text-left text-xs transition-colors hover:bg-muted mb-1">
         <span className="flex items-center gap-1.5 text-muted-foreground">
           {queueCount > 0 && <ListPlus className="size-3.5" />}
           {scheduledCount > 0 && <CalendarIcon className="size-3.5" />}
@@ -53,7 +53,7 @@ export function QueueIndicator({ sessionId }: QueueIndicatorProps) {
         />
       </CollapsibleTrigger>
       <CollapsibleContent>
-        <div className="mt-1 flex flex-col gap-0.5">
+        <div className="mb-1 flex flex-col gap-0.5">
           {items.map((msg) => (
             <div
               key={msg.id}

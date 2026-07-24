@@ -69,6 +69,8 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId }: 
   const [subagents, setSubagents] = useState(false)
   const [orchestra, setOrchestra] = useState(false)
   const [loop, setLoop] = useState(false)
+  // Orquestração é exclusiva do modo code
+  useEffect(() => { if (mode === "chat") setOrchestra(false) }, [mode])
   const [configOpen, setConfigOpen] = useState(false)
   const [loopConfigOpen, setLoopConfigOpen] = useState(false)
   const simple = useSimpleMode(sessionId)
@@ -111,7 +113,7 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId }: 
     permissionMode,
     reasoning: { enabled: thinking, variantId },
     subagents,
-    orchestrate: orchestra ? {} : undefined,
+    orchestrate: orchestra && mode === "code" ? {} : undefined,
     loop,
   }), [plan, search, simple, brain, brainContext, permissionMode, thinking, variantId, subagents, orchestra, loop])
 
@@ -205,7 +207,7 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId }: 
       { id: "simples", label: "Simples", description: "Alterna respostas em texto puro", keywords: ["texto", "plain"], group: "Modos" as const, active: simple, run: toggle(() => setSimple(sessionId, !simple)) },
       { id: "brain", label: "Memória (Brain)", description: "Orbit lembra decisões e convenções do projeto entre sessões", keywords: ["memoria", "brain"], group: "Modos" as const, active: brain, run: toggle(() => setBrainEnabled(sessionId, !brain)) },
       { id: "subagents", label: "Subagents", description: "Alterna workers em background", keywords: ["worker", "delegar"], group: "Modos" as const, active: subagents, run: toggle(() => setSubagents((v) => !v)) },
-      { id: "orchestra", label: "Orchestra", description: "Alterna orquestração em tarefas paralelas", keywords: ["workers", "plano"], group: "Modos" as const, active: orchestra, run: toggle(() => setOrchestra((v) => !v)) },
+      ...(mode === "code" ? [{ id: "orchestra", label: "Orchestra", description: "Alterna orquestração em tarefas paralelas", keywords: ["workers", "plano"], group: "Modos" as const, active: orchestra, run: toggle(() => setOrchestra((v) => !v)) }] : []),
       permission("ask", "Perguntar", "Confirma ações sensíveis antes de executar"),
       permission("approve", "Autonomia", "Executa sozinho; ações críticas pedem confirmação"),
       permission("full", "Irrestrito", "Sem perguntas (piso de segurança mantido)"),
@@ -289,6 +291,7 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId }: 
                     onLoopChange={setLoop}
                     onOpenConfig={() => setConfigOpen(true)}
                     onOpenLoopConfig={() => setLoopConfigOpen(true)}
+                    mode={mode}
                   />
                   <DropdownMenuSeparator />
                   <PromptInputActionAddAttachments label="Anexar arquivos" />
@@ -299,7 +302,7 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId }: 
             </div>
             <div className="flex items-center gap-1">
               {subagents && <Bot className="size-3 text-sidebar-foreground/40" />}
-              {orchestra && <Network className="size-3 text-sidebar-foreground/40" />}
+              {mode === "code" && orchestra && <Network className="size-3 text-sidebar-foreground/40" />}
               {loop && <RefreshCw className="size-3 text-sidebar-foreground/40" />}
               {thinking && model?.variants && model.variants.length > 0 && (
                 <ReasoningPicker

@@ -253,7 +253,7 @@ export function PromptInput({
       reasoning: { enabled: thinking, variantId },
       plan: workspaceMode === 'code' ? plan : undefined,
       subagents,
-      orchestrate: orchestra ? {} : undefined,
+      orchestrate: orchestra && workspaceMode === 'code' ? {} : undefined,
       loop,
       permissionMode: workspaceMode === 'code' ? permissionMode : undefined,
     }
@@ -277,7 +277,7 @@ export function PromptInput({
       reasoning: { enabled: thinking, variantId },
       plan: workspaceMode === 'code' ? plan : undefined,
       subagents,
-      orchestrate: orchestra ? {} : undefined,
+      orchestrate: orchestra && workspaceMode === 'code' ? {} : undefined,
       loop,
       permissionMode: workspaceMode === 'code' ? permissionMode : undefined,
     } satisfies SendMessageOptions
@@ -510,7 +510,6 @@ export function PromptInput({
           {workspaceMode === 'chat' && (
             <View className="flex-row items-center gap-2" style={{ borderLeftWidth: 1, borderLeftColor: tokens.border, paddingLeft: 6 }}>
               <AdvancedToggle icon={Bot} active={subagents} onPress={() => setSubagents((v) => !v)} tokens={tokens} />
-              <AdvancedToggle icon={Network} active={orchestra} onPress={() => setOrchestra((v) => !v)} tokens={tokens} />
               <AdvancedToggle icon={RefreshCw} active={loop} onPress={() => setLoop((v) => !v)} tokens={tokens} />
             </View>
           )}
@@ -536,7 +535,7 @@ export function PromptInput({
         configModes={[
           ...(workspaceMode === 'code' ? [{ id: 'plan', icon: FileText, label: 'Modo Plano', active: plan, onToggle: () => setPlan((v) => !v) }] : []),
           { id: 'subagents', icon: Bot, label: 'Subagentes', active: subagents, onToggle: () => setSubagents((v) => !v), onConfigure: () => { setPlusOpen(false); setWorkerConfigOpen(true) } },
-          { id: 'orchestra', icon: Network, label: 'Orquestração', active: orchestra, onToggle: () => setOrchestra((v) => !v), onConfigure: () => { setPlusOpen(false); setWorkerConfigOpen(true) } },
+          ...(workspaceMode === 'code' ? [{ id: 'orchestra', icon: Network, label: 'Orquestração', active: orchestra, onToggle: () => setOrchestra((v) => !v), onConfigure: () => { setPlusOpen(false); setWorkerConfigOpen(true) } }] : []),
           { id: 'loop', icon: RefreshCw, label: 'Loop', active: loop, onToggle: () => setLoop((v) => !v), onConfigure: () => { setPlusOpen(false); setLoopConfigOpen(true) } },
         ]}
         displayMode={displayMode}
@@ -569,6 +568,7 @@ export function PromptInput({
           setLoopConfigOpen(true)
         }}
         displayMode={displayMode}
+        mode={workspaceMode}
         gitBranches={gitBranches}
         gitCurrent={gitCurrent}
         onGitBranchChange={handleGitBranchChange}

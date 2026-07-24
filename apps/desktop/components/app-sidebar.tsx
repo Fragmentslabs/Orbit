@@ -702,7 +702,7 @@ function SessionItem({ session, childSessions = [] }: {
                 button={SidebarMenuSubButton}
                 actionButtonClassName="top-1"
                 session={child}
-                icon={child.mode === "code" ? Terminal : Bot}
+                icon={Bot}
                 statusDot={statusMap[child.id]}
               />
             </SidebarMenuSubItem>
@@ -751,7 +751,7 @@ function SessionRowWithChildren({ session, childSessions, hasChildren }: {
                 button={SidebarMenuSubButton}
                 actionButtonClassName="top-1"
                 session={child}
-                icon={child.mode === "code" ? Terminal : Bot}
+                icon={Bot}
                 statusDot={statusMap[child.id]}
               />
             </div>

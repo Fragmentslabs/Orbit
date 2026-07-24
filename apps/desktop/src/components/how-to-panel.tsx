@@ -61,7 +61,7 @@ const MODES: ModeInfo[] = [
   {
     icon: Network,
     label: "Orchestra",
-    modes: ["Chat", "Código"],
+    modes: ["Código"],
     description: "Divide o pedido em plano de tarefas + workers persistentes.",
     detail: "O agente orquestrador planeja a tarefa (criando subtarefas com create_task), propõe o plano para sua aprovação e, após aprovado, executa cada subtarefa como uma sessão filha persistente no painel direito. Os workers rodam em paralelo com o modelo worker configurado. Resultado final é sintetizado pelo orquestrador.",
     combo: ["Loop", "Subagents"],
