@@ -18,6 +18,7 @@ import { createToolApproval, takeDenialReason } from './permission'
 import { buildSystemPrompt } from './prompts'
 import { buildProviderOptions } from './reasoning'
 import { resolveModel } from './providers'
+import { extractPdfText } from './pdf'
 import { cleanupRevert } from './session/revert'
 import { capture, diff } from './snapshot'
 import { runProjectInit, type InitHooks } from './project-init'
@@ -75,7 +76,7 @@ function fileToModelContent(file: FilePart): Exclude<UserContent, string>[number
     return { type: 'image', image: file.url, mediaType: file.mime }
   }
   if (file.mime === 'application/pdf') {
-    return { type: 'file', data: file.url, mediaType: file.mime, filename: file.filename }
+    return { type: 'text', text: `[PDF anexado anteriormente: ${file.filename ?? 'documento'}]` }
   }
   if (TEXT_MIME.test(file.mime)) {
     const text = decodeDataUrlText(file.url)
@@ -179,11 +180,33 @@ export async function runChat(win: BrowserWindow, input: SendMessageInput): Prom
     return
   }
 
+  // Extrai texto de PDFs anexados antes de persistir — evita data URLs
+  // enormes no histórico que estouram o payload da API em mensagens seguintes
+  const processedParts: MessagePart[] = []
+  for (const file of input.files ?? []) {
+    if (file.mime === 'application/pdf') {
+      let text: string
+      try {
+        text = await extractPdfText(file.url)
+      } catch (err) {
+        text = `(erro ao extrair texto: ${err instanceof Error ? err.message : String(err)})`
+      }
+      processedParts.push({
+        id: file.id,
+        type: 'text',
+        text: `[PDF anexado: ${file.filename ?? 'documento'}]\n\n${text}`,
+        state: 'done',
+      })
+    } else {
+      processedParts.push(file)
+    }
+  }
+
   const userMessage: ChatMessage = {
     id: newId('msg'),
     role: 'user',
     parts: [
-      ...(input.files ?? []),
+      ...processedParts,
       { id: newId('prt'), type: 'text', text: input.text, state: 'done' },
     ],
     createdAt: Date.now(),
