@@ -150,16 +150,18 @@ export function createCodeMemoryTools(input: SendMessageInput, ctx: ToolContext)
   return {
     memory_save: tool({
       description:
-        'Salva uma memória de trabalho. kind "project" (padrão): sobre ESTE projeto, category obrigatória. kind "general": estilo global de trabalho. Para contexto extenso, passe markdown em `document`.',
+        'Salva uma memória de trabalho. kind "project" (padrão): sobre ESTE projeto, category obrigatória. kind "general": estilo global de trabalho, ou (com category="learning") uma lição reutilizável em OUTROS projetos com a mesma stack. Para contexto extenso, passe markdown em `document`.',
       inputSchema: z.object({
         text: z.string().describe('Resumo curto e autocontido (vai ao prompt e à busca)'),
         kind: z.enum(['project', 'general']).optional().describe('Padrão: project'),
         category: z
-          .enum(['preference', 'convention', 'structure', 'decision', 'context'])
+          .enum(['preference', 'convention', 'structure', 'decision', 'context', 'database', 'standard', 'learning'])
           .optional()
-          .describe('Obrigatória quando kind=project. "context" expira (weight <= 0.3)'),
+          .describe(
+            'Obrigatória quando kind=project (preference | convention | structure | decision | context | database | standard). "context" expira (weight <= 0.3). Quando kind=general, só "learning" é aceita — marca a memória como lição reutilizável em outros projetos; tagueie com a tecnologia.',
+          ),
         weight: z.number().min(0).max(1).optional().describe('Importância 0..1'),
-        tags: z.array(z.string()).optional().describe('Palavras-chave para busca futura'),
+        tags: z.array(z.string()).optional().describe('Palavras-chave para busca futura — para category=learning, inclua o nome da tecnologia/framework'),
         document: z
           .string()
           .optional()
@@ -170,12 +172,15 @@ export function createCodeMemoryTools(input: SendMessageInput, ctx: ToolContext)
       execute: async ({ text, kind, category, weight, tags, document, relatedIds, relatedTypes }) => {
         const resolvedKind = kind ?? 'project'
         if (resolvedKind === 'project' && !category) {
-          return 'Erro: memórias de projeto exigem o campo category (preference | convention | structure | decision | context).'
+          return 'Erro: memórias de projeto exigem o campo category (preference | convention | structure | decision | context | database | standard).'
+        }
+        if (resolvedKind === 'general' && category && category !== 'learning') {
+          return 'Erro: kind=general só aceita category="learning" (ou nenhuma category).'
         }
         const result = await memory.save({
           text,
           kind: resolvedKind,
-          category: resolvedKind === 'project' ? category : undefined,
+          category,
           weight,
           tags,
           document,
@@ -189,14 +194,14 @@ export function createCodeMemoryTools(input: SendMessageInput, ctx: ToolContext)
     }),
     memory_search: tool({
       description:
-        'Busca nas memórias deste projeto + preferências gerais de trabalho. Use ao iniciar tarefa não-trivial para carregar decisões/convenções sem reanalisar o código.',
+        'Busca nas memórias deste projeto + preferências gerais de trabalho + aprendizados de outros projetos. Use ao iniciar tarefa não-trivial para carregar decisões/convenções sem reanalisar o código.',
       inputSchema: z.object({
         query: z.string().describe('Termos da busca'),
         kind: z.enum(['project', 'general']).optional().describe('Restringe a um tipo'),
         category: z
-          .enum(['preference', 'convention', 'structure', 'decision', 'context'])
+          .enum(['preference', 'convention', 'structure', 'decision', 'context', 'database', 'standard', 'learning'])
           .optional()
-          .describe('Filtra memórias de projeto por categoria'),
+          .describe('Filtra por categoria'),
         limit: z.number().int().min(1).max(20).optional().describe('Padrão: 8'),
       }),
       execute: async ({ query, kind, category, limit }) => {

@@ -8,7 +8,26 @@ export type MemoryKind = "core" | "seasonal" | "project" | "general"
 
 export type MemoryScope = "chat" | "code" | "any"
 
-export type ProjectCategory = "preference" | "convention" | "structure" | "context" | "decision"
+export type ProjectCategory =
+  | "preference"
+  | "convention"
+  | "structure"
+  | "context"
+  | "decision"
+  | "database"
+  | "learning"
+  | "standard"
+
+export const PROJECT_CATEGORY_LABEL: Record<ProjectCategory, string> = {
+  preference: "preferência",
+  convention: "convenção",
+  structure: "estrutura",
+  decision: "decisão",
+  context: "contexto",
+  database: "banco de dados",
+  learning: "aprendizado",
+  standard: "padronização",
+}
 
 /**
  * Áreas de conhecimento de um projeto (geradas pelo /init). "overview" é o
@@ -24,6 +43,11 @@ export type ProjectArea =
   | "infrastructure"
   | "security"
   | "development"
+  | "database"
+  | "testing"
+  | "performance"
+  | "dependencies"
+  | "standards"
 
 export const PROJECT_AREAS: Record<ProjectArea, { label: string; description: string }> = {
   overview: { label: "Contexto do Projeto", description: "Propósito, stack, estrutura geral, links úteis" },
@@ -34,6 +58,11 @@ export const PROJECT_AREAS: Record<ProjectArea, { label: string; description: st
   infrastructure: { label: "Infraestrutura", description: "Deploy, variáveis de ambiente, CI/CD, containers" },
   security: { label: "Segurança", description: "Autenticação, autorização, dados sensíveis" },
   development: { label: "Desenvolvimento", description: "Scripts, comandos, setup local" },
+  database: { label: "Banco de Dados", description: "Schemas, modelos, migrations, ORM, relacionamentos" },
+  testing: { label: "Testes", description: "Setup de testes, mocks, fixtures, estratégia de cobertura" },
+  performance: { label: "Performance", description: "Otimizações, caching, gargalos conhecidos" },
+  dependencies: { label: "Dependências", description: "Libs críticas, versionamento, motivos de escolha" },
+  standards: { label: "Padronização", description: "Convenções explícitas: commits, branching, naming, lint" },
 }
 
 /**
@@ -79,6 +108,13 @@ export interface Memory {
   projectId?: string
   projectName?: string
   directory?: string
+  /** Subprojeto dentro do projeto (ex.: "front", "back") — undefined = escopo raiz */
+  subproject?: string
+  /**
+   * Obrigatória quando kind === "project". Também aceita kind === "general"
+   * com valor "learning" — lição reutilizável entre projetos (ex.: workaround
+   * de framework), não presa a um projectId.
+   */
   category?: ProjectCategory
   /** Área de conhecimento (gerada pelo /init) — base do grafo de memórias */
   area?: ProjectArea

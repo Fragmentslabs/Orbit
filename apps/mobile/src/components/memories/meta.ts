@@ -1,4 +1,4 @@
-import type { Memory, MemoryKind, ProjectCategory } from '@orbit/shared'
+import type { Memory, MemoryKind, ProjectArea, ProjectCategory } from '@orbit/shared'
 
 /** Rótulos e cores por tipo de memória — espelho do meta.ts do desktop. */
 
@@ -23,6 +23,33 @@ export const CATEGORY_LABEL: Record<ProjectCategory, string> = {
   structure: 'estrutura',
   decision: 'decisão',
   context: 'contexto',
+  database: 'banco de dados',
+  learning: 'aprendizado',
+  standard: 'padronização',
+}
+
+/** Ícone Lucide por categoria (usado nos badges de memórias sem área). */
+export const CATEGORY_ICON: Partial<Record<ProjectCategory, string>> = {
+  database: 'Database',
+  learning: 'GraduationCap',
+  standard: 'BookText',
+}
+
+/** Ícone Lucide por área de conhecimento (usado no grafo de memórias). */
+export const AREA_ICON: Record<ProjectArea, string> = {
+  overview: 'BrainCircuit',
+  business: 'Briefcase',
+  design: 'Palette',
+  architecture: 'Layers',
+  preferences: 'SlidersHorizontal',
+  infrastructure: 'Server',
+  security: 'Shield',
+  development: 'Terminal',
+  database: 'Database',
+  testing: 'TestTube',
+  performance: 'Gauge',
+  dependencies: 'Package',
+  standards: 'BookText',
 }
 
 export function canPromote(memory: Memory): boolean {

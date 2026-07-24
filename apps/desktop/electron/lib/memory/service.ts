@@ -54,11 +54,14 @@ export interface SaveMemoryInput {
   tags?: string[]
   /** Markdown anexado (memory/docs/<id>.md) — para contexto extenso */
   document?: string
+  /** Obrigatória quando kind === "project". Kind "general" só aceita "learning". */
   category?: ProjectCategory
   /** Área de conhecimento (memórias geradas pelo /init) */
   area?: ProjectArea
   /** Obrigatório quando kind === "project" — o projectId deriva daqui */
   directory?: string
+  /** Subprojeto dentro do projeto (ex.: "front", "back") — só quando kind === "project" */
+  subproject?: string
   sessionId?: string
   /** Ids de memórias relacionadas (cria links) */
   relatedIds?: string[]
@@ -138,7 +141,13 @@ export async function save(input: SaveMemoryInput): Promise<SaveMemoryResult> {
     projectId,
     projectName,
     directory: input.kind === 'project' ? input.directory : undefined,
-    category: input.kind === 'project' ? input.category : undefined,
+    subproject: input.kind === 'project' ? input.subproject : undefined,
+    // "project" sempre carrega category; "general" só quando for um aprendizado
+    // reutilizável entre projetos (category === "learning").
+    category:
+      input.kind === 'project' ? input.category
+      : input.kind === 'general' && input.category === 'learning' ? 'learning'
+      : undefined,
     area: input.kind === 'project' ? input.area : undefined,
   }
   if (input.document) {
@@ -307,6 +316,8 @@ export interface PromptContext {
   core: Memory[]
   seasonal: Memory[]
   general: Memory[]
+  /** kind="general" + category="learning" — lições reutilizáveis entre projetos */
+  learning: Memory[]
   project: Memory[]
   projectName?: string
 }
@@ -315,8 +326,11 @@ const CATEGORY_PRIORITY: Record<ProjectCategory, number> = {
   decision: 0,
   convention: 1,
   preference: 2,
+  standard: 2,
+  database: 3,
   structure: 3,
   context: 4,
+  learning: 4,
 }
 
 /** Memórias injetadas silenciosamente no system prompt (~600 tokens no pior caso). */
@@ -326,7 +340,9 @@ export async function loadPromptContext(
 ): Promise<PromptContext> {
   const pool = await alive()
   const byWeight = (a: Memory, b: Memory) => b.weight - a.weight
-  const general = pool.filter((m) => m.kind === 'general').sort(byWeight).slice(0, 10)
+  const generalAll = pool.filter((m) => m.kind === 'general')
+  const learningPool = generalAll.filter((m) => m.category === 'learning')
+  const general = generalAll.filter((m) => m.category !== 'learning').sort(byWeight)
 
   if (mode === 'chat') {
     return {
@@ -335,7 +351,8 @@ export async function loadPromptContext(
         .filter((m) => m.kind === 'seasonal')
         .sort((a, b) => b.createdAt - a.createdAt)
         .slice(0, 8),
-      general,
+      general: general.slice(0, 10),
+      learning: learningPool.sort(byWeight).slice(0, 5),
       project: [],
     }
   }
@@ -355,7 +372,19 @@ export async function loadPromptContext(
         )
         .slice(0, 15)
     : []
-  return { core: [], seasonal: [], general, project, projectName: project[0]?.projectName }
+
+  // Aprendizados de OUTROS projetos com stack/tema em comum (tags cruzadas com
+  // as tags já coletadas neste projeto) sobem primeiro; os demais completam
+  // por peso — assim um "gotcha" de Expo aprendido num projeto A já entra no
+  // contexto ao abrir um projeto B que também usa Expo.
+  const projectTags = new Set(project.flatMap((m) => m.tags))
+  const learning = learningPool
+    .map((m) => ({ m, overlap: m.tags.some((t) => projectTags.has(t)) ? 1 : 0 }))
+    .sort((a, b) => b.overlap - a.overlap || b.m.weight - a.m.weight)
+    .slice(0, 5)
+    .map(({ m }) => m)
+
+  return { core: [], seasonal: [], general: general.slice(0, 8), learning, project, projectName: project[0]?.projectName }
 }
 
 /** Executado pelo scheduler: expira (com cascata do doc) e promove automaticamente. */
