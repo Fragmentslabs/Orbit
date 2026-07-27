@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react"
-import { ChevronDown, FileTextIcon, RefreshCwIcon, MessageSquareText } from "lucide-react"
+import { ChevronDown, FileTextIcon, RefreshCwIcon, MessageSquareText, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
   DropdownMenu,
@@ -35,6 +35,7 @@ export function PlanReviewCard({ sessionId, review }: { sessionId: string; revie
   const acceptPlanReview = useSessionStore((s) => s.acceptPlanReview)
   const rejectPlanReview = useSessionStore((s) => s.rejectPlanReview)
   const reviewPlanReview = useSessionStore((s) => s.reviewPlanReview)
+  const dismissPlanReview = useSessionStore((s) => s.dismissPlanReview)
   const currentMode = usePermissionPrefs((s) => s.mode)
   const otherModes = ALL_MODES.filter((m) => m.id !== currentMode)
   const session = useSessionStore((s) => s.sessions.find((x) => x.id === sessionId))
@@ -122,9 +123,18 @@ export function PlanReviewCard({ sessionId, review }: { sessionId: string; revie
                 </div>
               </>
             ) : (
-              <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={load} disabled={loading}>
-                <RefreshCwIcon className={`size-3.5 ${loading ? "animate-spin" : ""}`} />
-              </Button>
+              <>
+                <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={load} disabled={loading}>
+                  <RefreshCwIcon className={`size-3.5 ${loading ? "animate-spin" : ""}`} />
+                </Button>
+                <button
+                  type="button"
+                  onClick={() => dismissPlanReview(sessionId)}
+                  className="ml-0.5 flex size-5 items-center justify-center rounded-md text-muted-foreground/50 hover:text-foreground hover:bg-sidebar-accent"
+                >
+                  <X className="size-3" />
+                </button>
+              </>
             )}
           </div>
         </div>

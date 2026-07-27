@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { ChevronRight, PaperclipIcon } from "lucide-react"
 import { UserMessageNav } from "@/src/components/user-message-nav"
 import { useWorkspace } from "@/lib/workspace-context"
-import type { ChatMessage, FilePart, PlanReview, SendMessageOptions } from "@shared/chat"
+import type { ChatMessage, FilePart, OrchestrationPlan, PlanReview, SendMessageOptions } from "@shared/chat"
 import { AskCard } from "@/src/components/ask-card"
 import { AskCardBatch } from "@/src/components/ask-card-batch"
 import { ChatInput } from "@/src/components/chat-input"
@@ -22,7 +22,7 @@ import { InitProjectCard } from "@/src/components/init-project-card"
 import { RevertBar } from "@/src/components/revert-bar"
 import { AssistantMessageActions, CopyAction, MessageTimestamp } from "@/src/components/messages/shared"
 import { Actions } from "@/src/components/ai/actions"
-import { messageText } from "@/src/lib/message-utils"
+import { messageText, visibleMessageText } from "@/src/lib/message-utils"
 import { useActiveSession, useSessionStatus, useSessionStore, type SendConfig } from "@/src/stores/session-store"
 import { brainEnabledFor } from "@/src/stores/brain-prefs"
 import { useProviderStore } from "@/src/stores/provider-store"
@@ -93,11 +93,11 @@ function MessageItem({ msg, isLast, waiting, finished, isBusy, mode, sessionId, 
             </MessageAttachments>
           )}
           <MessageContent>
-            <p className="whitespace-pre-wrap">{messageText(msg)}</p>
+            <p className="whitespace-pre-wrap">{visibleMessageText(msg)}</p>
           </MessageContent>
           <Actions className="-mb-1 items-center justify-end opacity-0 transition-opacity group-hover/user-msg:opacity-100">
             <MessageTimestamp timestamp={msg.createdAt} />
-            <CopyAction text={messageText(msg)} />
+            <CopyAction text={visibleMessageText(msg)} />
           </Actions>
         </div>
       </Message>
@@ -120,14 +120,15 @@ function MessageItem({ msg, isLast, waiting, finished, isBusy, mode, sessionId, 
   )
 }
 
-function ChatMessages({ messages, isBusy, mode, sessionId, sendMessage, planIds, planReview }: {
+function ChatMessages({ messages, isBusy, mode, sessionId, sendMessage, planIds, planReview, plan }: {
   messages: ChatMessage[]
   isBusy: boolean
   mode: "chat" | "code"
   sessionId?: string
   sendMessage: (mode: "chat" | "code", text: string, config: SendConfig) => Promise<void>
-  planIds?: Set<string>
-  planReview?: PlanReview
+  planIds: Set<string>
+  planReview: PlanReview | undefined
+  plan?: OrchestrationPlan | undefined
 }) {
   const lastAssistantId = [...messages].reverse().find((m) => m.role === "assistant" && !m.summary)?.id
 
@@ -135,7 +136,7 @@ function ChatMessages({ messages, isBusy, mode, sessionId, sendMessage, planIds,
     () =>
       messages
         .filter((m) => m.role === "user")
-        .map((m) => ({ id: m.id, text: messageText(m) })),
+        .map((m) => ({ id: m.id, text: visibleMessageText(m) })),
     [messages],
   )
 
@@ -218,11 +219,12 @@ function ChatMessages({ messages, isBusy, mode, sessionId, sendMessage, planIds,
             <PlanReviewCard sessionId={sessionId} review={planReview} />
           </div>
         )}
-        {planReview && planReview.status === "implementing" && sessionId && (
+        {planReview && planReview.status === "implementing" && sessionId && !plan && (
           <div className="px-1">
             <TaskProgress
               tasks={[{ id: "plan", title: "Implementar plano", status: isBusy ? "streaming" : "idle" }]}
               title="Plano"
+              onDismiss={() => useSessionStore.getState().dismissPlanReview(sessionId)}
             />
           </div>
         )}
@@ -453,7 +455,7 @@ export function ChatView({ sessionId }: { sessionId?: string } = {}) {
         >
           <div className={`flex min-h-0 flex-1 flex-col ${topVisible && !simpleMode && personaVisible ? "pt-6" : "pt-2"}`}>
             <div className="pointer-events-none sticky top-0 z-10 h-12 bg-linear-to-b to-transparent" style={{ backgroundImage: 'linear-gradient(to bottom, var(--panel-bg, var(--background)), transparent)' }} />
-            <ChatMessages messages={messages} isBusy={isBusy} mode={viewMode} sessionId={session?.id} sendMessage={sendMessage} planIds={planMsgIds} planReview={planReview} />
+            <ChatMessages messages={messages} isBusy={isBusy} mode={viewMode} sessionId={session?.id} sendMessage={sendMessage} planIds={planMsgIds} planReview={planReview} plan={plan} />
           </div>
         </div>
       </div>
@@ -482,6 +484,7 @@ export function ChatView({ sessionId }: { sessionId?: string } = {}) {
             tasks={plan.tasks.map((t) => ({ id: t.id, title: t.title, status: t.status, mode: t.mode }))}
             title="Orquestração"
             defaultExpanded={plan.status !== "done"}
+            onDismiss={plan.status === "done" ? () => useSessionStore.getState().dismissOrchestration(session.id) : undefined}
           />
         </div>
       )}
