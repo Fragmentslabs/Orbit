@@ -70,6 +70,8 @@ interface SessionState {
   acceptPlanReview: (sessionId: string, permissionMode: "ask" | "approve" | "full", orchestrate?: boolean) => void
   rejectPlanReview: (sessionId: string) => void
   reviewPlanReview: (sessionId: string, feedback: string) => void
+  dismissPlanReview: (sessionId: string) => void
+  dismissOrchestration: (sessionId: string) => void
   createSession: (mode: SessionMode, partial?: Partial<SessionInfo> & { setActive?: boolean }) => Promise<SessionInfo>
   selectSession: (mode: SessionMode, id: string | null) => Promise<void>
   renameSession: (id: string, title: string) => void
@@ -206,6 +208,14 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     void chatApi.rejectPlan(sessionId)
   },
 
+  dismissOrchestration: (sessionId: string) => {
+    set((state) => {
+      const next = { ...state.orchestration }
+      delete next[sessionId]
+      return { orchestration: next }
+    })
+  },
+
   acceptPlanReview: (sessionId, permissionMode, orchestrate) => {
     const review = get().planReviews[sessionId]
     if (!review || review.status !== "proposed") return
@@ -234,6 +244,15 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     if (session?.directory) {
       void chatApi.deletePlanFile(session.directory)
     }
+  },
+
+  dismissPlanReview: (sessionId: string) => {
+    set((state) => {
+      const next = { ...state.planReviews }
+      delete next[sessionId]
+      void storage.remove(StorageKeys.planReview(sessionId))
+      return { planReviews: next }
+    })
   },
 
   reviewPlanReview: (sessionId, feedback) => {
@@ -456,10 +475,21 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       }
     }
 
-    set((state) => ({
-      status: { ...state.status, [sessionId!]: "submitted" },
-      errors: { ...state.errors, [sessionId!]: undefined },
-    }))
+    // Limpa plan review implementado/concluído e orquestração concluída
+    const planReview = get().planReviews[sessionId!]
+    const isPlanMsg = config.options.plan || config.options.planReview
+    if (!isPlanMsg && planReview && planReview.status !== "proposed") {
+      const next = { ...get().planReviews }
+      delete next[sessionId!]
+      set({ planReviews: next })
+      void storage.remove(StorageKeys.planReview(sessionId!))
+    }
+    const orch = get().orchestration[sessionId!]
+    if (orch && orch.status === "done") {
+      const next = { ...get().orchestration }
+      delete next[sessionId!]
+      set({ orchestration: next })
+    }
 
     // Se está enviando em plan mode, marca para criar a review quando o streaming terminar
     if (config.options.plan) {
