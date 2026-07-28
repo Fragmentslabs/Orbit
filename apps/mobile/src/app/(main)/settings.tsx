@@ -21,6 +21,7 @@ import {
   Puzzle,
   Palette,
   AlertTriangle,
+  Folder,
   ChevronRight,
 } from 'lucide-react-native'
 import { useConnectionStore } from '~/stores/connection-store'
@@ -67,6 +68,9 @@ export default function SettingsScreen() {
   const fetchSelectedModel = useSettingsStore((s) => s.fetchSelectedModel)
   const fetchConnectedProviders = useSettingsStore((s) => s.fetchConnectedProviders)
   const loading = useSettingsStore((s) => s.loading)
+
+  const autoCreateFolders = useSettingsStore((s) => s.autoCreateFolders)
+  const setAutoCreateFolders = useSettingsStore((s) => s.setAutoCreateFolders)
 
   const notificationPrefs = useNotificationPrefsStore((s) => s.prefs)
   const setNotificationPref = useNotificationPrefsStore((s) => s.setPref)
@@ -240,6 +244,14 @@ export default function SettingsScreen() {
               ))}
             </View>
           </View>
+          <RowDivider />
+          <SwitchRow
+            icon={Folder}
+            label="Pastas automáticas"
+            description="Agrupa novos chats de código em pastas pelo nome do diretório"
+            value={autoCreateFolders}
+            onChange={setAutoCreateFolders}
+          />
         </View>
 
         {/* ── Notificações ──────────────────────────────────────────── */}
