@@ -96,6 +96,29 @@ interface SessionState {
   stopStreaming: (sessionId: string) => void
 }
 
+const AUTO_FOLDER_MAP_KEY = "orbit-auto-folder-map"
+
+function loadAutoFolderMap(): Record<string, string> {
+  try {
+    const raw = localStorage.getItem(AUTO_FOLDER_MAP_KEY)
+    return raw ? JSON.parse(raw) : {}
+  } catch {
+    return {}
+  }
+}
+
+function persistAutoFolderMap(map: Record<string, string>) {
+  localStorage.setItem(AUTO_FOLDER_MAP_KEY, JSON.stringify(map))
+}
+
+function normalizeFolderName(directoryPath: string): string {
+  const baseName = directoryPath.replace(/\\/g, "/").split("/").filter(Boolean).pop() ?? directoryPath
+  return baseName
+    .split(/[-_]/)
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+    .join(" ")
+}
+
 function persistSession(session: SessionInfo) {
   void storage.write(StorageKeys.session(session.id), session)
 }
@@ -158,6 +181,23 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       updatedAt: now,
       ...rest,
     }
+
+    if (mode === "code" && partial?.directory && useModelModePrefs.getState().autoCreateFolders) {
+      const autoFolderMap = loadAutoFolderMap()
+      const existingFolderId = autoFolderMap[partial.directory]
+      const existingFolder = get().folders.find((f) => f.id === existingFolderId)
+
+      if (existingFolder) {
+        session.folderId = existingFolder.id
+      } else {
+        const folderName = normalizeFolderName(partial.directory)
+        const folder = get().createFolder("code", folderName)
+        autoFolderMap[partial.directory] = folder.id
+        persistAutoFolderMap(autoFolderMap)
+        session.folderId = folder.id
+      }
+    }
+
     await storage.write(StorageKeys.session(session.id), session)
     set((state) => ({
       sessions: [session, ...state.sessions],
@@ -438,6 +478,14 @@ export const useSessionStore = create<SessionState>((set, get) => ({
         persistSession(next)
         return next
       })
+      // Limpa entradas órfãs do mapa de pastas automáticas
+      const autoFolderMap = loadAutoFolderMap()
+      for (const [dir, fid] of Object.entries(autoFolderMap)) {
+        if (fid === id) {
+          delete autoFolderMap[dir]
+        }
+      }
+      persistAutoFolderMap(autoFolderMap)
       return { folders, sessions }
     }),
 

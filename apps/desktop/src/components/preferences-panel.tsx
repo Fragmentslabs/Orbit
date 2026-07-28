@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react"
-import { BrainIcon, CheckIcon, ChevronDownIcon, SettingsIcon } from "lucide-react"
+import { BrainIcon, CheckIcon, ChevronDownIcon, FolderIcon, SettingsIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
   ModelSelector,
@@ -241,7 +241,7 @@ function ChatPrefs() {
 }
 
 function CodePrefs() {
-  const { codeModel, setCodeModel, subagentModel, setSubagentModel, orchestraModel, setOrchestraModel, codeActiveModes, setCodeActiveMode } = useModelModePrefs()
+  const { codeModel, setCodeModel, subagentModel, setSubagentModel, orchestraModel, setOrchestraModel, codeActiveModes, setCodeActiveMode, autoCreateFolders, setAutoCreateFolders } = useModelModePrefs()
   const setWorkerModel = useProviderStore((s) => s.setWorkerModel)
 
   return (
@@ -251,6 +251,32 @@ function CodePrefs() {
       <ModelField label="Modelo de orquestra" value={orchestraModel} onChange={setOrchestraModel} />
       <ActiveModesSection modes={codeActiveModes} onChange={setCodeActiveMode} isCode={true} />
       <MemoriaSection isCode={true} />
+      <div className="flex items-center gap-3 rounded-lg border border-border p-3 transition-colors hover:bg-accent/50">
+        <div className="flex size-8 shrink-0 items-center justify-center rounded-md bg-primary/10">
+          <FolderIcon className="size-4 text-primary" />
+        </div>
+        <div className="flex-1 min-w-0">
+          <p className="text-xs font-medium">Pastas automáticas</p>
+          <p className="text-[11px] text-muted-foreground leading-tight">
+            Agrupa automaticamente novos chats em pastas com o nome do diretório do projeto.
+          </p>
+        </div>
+        <button
+          type="button"
+          role="switch"
+          aria-checked={autoCreateFolders}
+          onClick={() => setAutoCreateFolders(!autoCreateFolders)}
+          className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent transition-colors ${
+            autoCreateFolders ? "bg-primary" : "bg-input"
+          }`}
+        >
+          <span
+            className={`pointer-events-none block size-4 rounded-full bg-background shadow-sm ring-0 transition-transform ${
+              autoCreateFolders ? "translate-x-4" : "translate-x-0"
+            }`}
+          />
+        </button>
+      </div>
     </div>
   )
 }

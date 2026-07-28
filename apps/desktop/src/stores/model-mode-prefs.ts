@@ -9,6 +9,7 @@ const CHAT_ACTIVE_MODES_KEY = "orbit-chat-active-modes"
 const CODE_ACTIVE_MODES_KEY = "orbit-code-active-modes"
 const CHAT_PERM_MODE_KEY = "orbit-chat-perm-mode"
 const CODE_PERM_MODE_KEY = "orbit-code-perm-mode"
+const AUTO_FOLDERS_KEY = "orbit-auto-folders"
 
 export interface DefaultModel {
   providerId: string
@@ -67,6 +68,7 @@ interface ModelModePrefsState {
   codeActiveModes: ActiveModeDefaults
   chatPermissionMode: "ask" | "approve" | "full"
   codePermissionMode: "ask" | "approve" | "full"
+  autoCreateFolders: boolean
 
   setDefaultMode: (mode: "chat" | "code") => void
   setChatModel: (model: DefaultModel | null) => void
@@ -77,6 +79,7 @@ interface ModelModePrefsState {
   setCodeActiveMode: (key: keyof ActiveModeDefaults, value: boolean) => void
   setChatPermissionMode: (mode: "ask" | "approve" | "full") => void
   setCodePermissionMode: (mode: "ask" | "approve" | "full") => void
+  setAutoCreateFolders: (value: boolean) => void
 }
 
 export const useModelModePrefs = create<ModelModePrefsState>((set) => ({
@@ -89,6 +92,7 @@ export const useModelModePrefs = create<ModelModePrefsState>((set) => ({
   codeActiveModes: loadJson<ActiveModeDefaults>(CODE_ACTIVE_MODES_KEY, DEFAULT_CODE_MODES),
   chatPermissionMode: loadJson<"ask" | "approve" | "full">(CHAT_PERM_MODE_KEY, "ask"),
   codePermissionMode: loadJson<"ask" | "approve" | "full">(CODE_PERM_MODE_KEY, "approve"),
+  autoCreateFolders: loadJson<boolean>(AUTO_FOLDERS_KEY, false),
 
   setDefaultMode: (mode) => {
     localStorage.setItem(DEFAULT_MODE_KEY, JSON.stringify(mode))
@@ -135,5 +139,9 @@ export const useModelModePrefs = create<ModelModePrefsState>((set) => ({
   setCodePermissionMode: (mode) => {
     localStorage.setItem(CODE_PERM_MODE_KEY, JSON.stringify(mode))
     set({ codePermissionMode: mode })
+  },
+  setAutoCreateFolders: (value) => {
+    localStorage.setItem(AUTO_FOLDERS_KEY, JSON.stringify(value))
+    set({ autoCreateFolders: value })
   },
 }))
