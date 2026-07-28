@@ -10,6 +10,7 @@ import { OrchestrationPlanCard } from '~/components/chat/OrchestrationPlanCard'
 import { useSessionStore } from '~/stores/session-store'
 import { useChatStore } from '~/stores/chat-store'
 import { useWorkspaceStore } from '~/stores/workspace-store'
+import { useSettingsStore } from '~/stores/settings-store'
 import { useAppearanceStore } from '~/stores/appearance-store'
 import { MessageList } from '~/components/chat/MessageList'
 import { ChatInput } from '~/components/chat/ChatInput'
@@ -23,6 +24,30 @@ import { getThemeTokens } from '~/lib/theme-tokens'
 import { useThemeStore } from '~/stores/theme-store'
 import { useShallow } from 'zustand/react/shallow'
 import { startMessageScheduler, useMessageQueueStore } from '~/stores/message-queue-store'
+import { Storage } from '~/lib/storage'
+
+const AUTO_FOLDER_MAP_KEY = 'orbit_auto_folder_map'
+
+async function loadAutoFolderMap(): Promise<Record<string, string>> {
+  try {
+    const raw = await Storage.getItem(AUTO_FOLDER_MAP_KEY)
+    return raw ? (JSON.parse(raw) as Record<string, string>) : {}
+  } catch {
+    return {}
+  }
+}
+
+async function persistAutoFolderMap(map: Record<string, string>): Promise<void> {
+  await Storage.setItem(AUTO_FOLDER_MAP_KEY, JSON.stringify(map))
+}
+
+function normalizeFolderName(directoryPath: string): string {
+  const baseName = directoryPath.replace(/\\/g, '/').split('/').filter(Boolean).pop() ?? directoryPath
+  return baseName
+    .split(/[-_]/)
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+    .join(' ')
+}
 
 const DEFAULT_SUGGESTIONS = [
   'What can you help me with?',
@@ -146,6 +171,35 @@ export function ChatScreen({ sessionId }: ChatScreenProps) {
       try {
         const created = await createSession(mode)
         if (!created) return
+
+        if (isCode && folders.length > 0 && useSettingsStore.getState().autoCreateFolders) {
+          const allFolders = useSessionStore.getState().folders
+          const autoFolderMap = await loadAutoFolderMap()
+          const existingFolderId = autoFolderMap[folders[0]]
+          const existingFolder = allFolders.find((f) => f.id === existingFolderId)
+
+          if (existingFolder) {
+            await useSessionStore.getState().moveToFolder(created.id, existingFolder.id)
+          } else {
+            const folderName = normalizeFolderName(folders[0])
+            const matchingFolder = allFolders.find(
+              (f) => f.name === folderName && f.mode === 'code' && !autoFolderMap[folders[0]],
+            )
+            if (matchingFolder) {
+              autoFolderMap[folders[0]] = matchingFolder.id
+              await persistAutoFolderMap(autoFolderMap)
+              await useSessionStore.getState().moveToFolder(created.id, matchingFolder.id)
+            } else {
+              const newFolder = await useSessionStore.getState().createFolder('code', folderName)
+              if (newFolder) {
+                autoFolderMap[folders[0]] = newFolder.id
+                await persistAutoFolderMap(autoFolderMap)
+                await useSessionStore.getState().moveToFolder(created.id, newFolder.id)
+              }
+            }
+          }
+        }
+
         sendMessage(text, { options, files, sessionId: created.id, ...dirConfig })
         router.replace({ pathname: '/(main)/chat/[id]', params: { id: created.id } })
       } finally {

@@ -9,6 +9,7 @@ const SELECTED_MODEL_CACHE_KEY = 'orbit_selected_model_cache'
 const WORKER_MODEL_KEY = 'orbit_worker_model'
 const WORKER_REASONING_KEY = 'orbit_worker_reasoning'
 const LOOP_CONFIG_KEY = 'orbit_loop_config'
+const AUTO_FOLDERS_KEY = 'orbit_auto_folders'
 
 export interface LoopConfig {
   maxIterations: number
@@ -71,6 +72,11 @@ interface SettingsState {
   /** Define a configuração do loop. */
   setLoopConfig: (config: LoopConfig) => Promise<void>
 
+  /** Pastas automáticas: agrupa sessions de código por diretório. */
+  autoCreateFolders: boolean
+  /** Define o toggle de pastas automáticas. */
+  setAutoCreateFolders: (value: boolean) => Promise<void>
+
   /** Retorna modelo como lista plana (catálogo). */
   getModelList: () => CatalogModel[]
 }
@@ -86,6 +92,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
   workerModel: null,
   workerReasoning: null,
   loopConfig: DEFAULT_LOOP_CONFIG,
+  autoCreateFolders: false,
 
   fetchSelectedModel: async () => {
     const { http } = useConnectionStore.getState()
@@ -150,6 +157,10 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
       if (rawReasoning && !get().workerReasoning) {
         set({ workerReasoning: JSON.parse(rawReasoning) as ReasoningConfig })
       }
+      const rawAutoFolders = await Storage.getItem(AUTO_FOLDERS_KEY)
+      if (rawAutoFolders) {
+        set({ autoCreateFolders: JSON.parse(rawAutoFolders) as boolean })
+      }
     } catch {
       // Cache corrompido ou ausente — ignora, os fetches reais resolvem
     }
@@ -176,6 +187,15 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
   setLoopConfig: async (config) => {
     set({ loopConfig: config })
     await Storage.setItem(LOOP_CONFIG_KEY, JSON.stringify(config))
+  },
+
+  setAutoCreateFolders: async (value) => {
+    set({ autoCreateFolders: value })
+    if (value) {
+      await Storage.setItem(AUTO_FOLDERS_KEY, JSON.stringify(value))
+    } else {
+      await Storage.removeItem(AUTO_FOLDERS_KEY)
+    }
   },
 
   fetchConnectedProviders: async () => {
