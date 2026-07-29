@@ -8,6 +8,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { Button } from "@/components/ui/button"
 import { BranchSelector } from "@/src/components/branch-selector"
+import { FolderSelector } from "@/src/components/folder-selector"
 
 interface ChatHeaderProps {
   title?: string
@@ -18,9 +19,11 @@ interface ChatHeaderProps {
   repoPath?: string
   workspaceMode?: 'chat' | 'code'
   onRequestAgentAction?: (instruction: string) => void
+  folders?: string[]
+  onFoldersChange?: (folders: string[]) => void
 }
 
-export function ChatHeader({ title = "Nova conversa", hasMenu, rightPanelOpen, onToggleSidebar, onToggleRightPanel, repoPath, workspaceMode, onRequestAgentAction }: ChatHeaderProps) {
+export function ChatHeader({ title = "Nova conversa", hasMenu, rightPanelOpen, onToggleSidebar, onToggleRightPanel, repoPath, workspaceMode, onRequestAgentAction, folders, onFoldersChange }: ChatHeaderProps) {
   const [menuOpen, setMenuOpen] = useState(false)
 
   return (
@@ -34,6 +37,9 @@ export function ChatHeader({ title = "Nova conversa", hasMenu, rightPanelOpen, o
       <div className="flex items-center gap-1 min-w-0 flex-1">
         <span className="truncate text-sm font-medium text-foreground">{title}</span>
         {workspaceMode === 'code' && repoPath && <BranchSelector repoPath={repoPath} onRequestAgentAction={onRequestAgentAction} />}
+        {workspaceMode === 'code' && folders && folders.length > 0 && onFoldersChange && (
+          <FolderSelector folders={folders} onFoldersChange={onFoldersChange} compact />
+        )}
         {hasMenu && (
           <DropdownMenu open={menuOpen} onOpenChange={setMenuOpen}>
             <DropdownMenuTrigger render={<Button variant="ghost" size="icon-sm" className="size-6 shrink-0" />}>
