@@ -43,7 +43,7 @@ function HoverEdge({ onShow }: { onShow: () => void }) {
 
 function Layout() {
   const { open, setOpen } = useSidebar()
-  const { mode: workspaceMode, view, folders } = useWorkspace()
+  const { mode: workspaceMode, view, folders, setFolders } = useWorkspace()
   const activeSession = useActiveSession(workspaceMode)
   const [mode, setMode] = useState<SidebarMode>(loadMode)
   const rightPanelOpen = usePanelStore((s) => s.rightPanelOpen)
@@ -154,6 +154,8 @@ function Layout() {
                   repoPath={folders[0]}
                   workspaceMode={workspaceMode}
                   onRequestAgentAction={onRequestAgentAction}
+                  folders={workspaceMode === "code" ? folders : undefined}
+                  onFoldersChange={workspaceMode === "code" ? setFolders : undefined}
                 />
                 <div className="flex min-w-0 flex-1 flex-col overflow-hidden p-4" style={{ '--panel-bg': 'var(--background)' } as React.CSSProperties}>
                   {view === "memories" ? <MemoriesView /> : view === "models" ? <ModelsView /> : <ChatView />}

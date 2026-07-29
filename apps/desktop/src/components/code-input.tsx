@@ -228,14 +228,14 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId }: 
       <DraftInputBridge sessionId={sessionId} />
       <ChatInputDraft sessionId={sessionId} />
       <div className="w-full max-w-2xl mx-auto pb-4">
-        {(!hasMessages || folders.length > 0) && (
+        {!hasMessages && (
           <div className="flex flex-wrap items-center gap-2 px-3 py-1.5">
             <FolderSelector folders={folders} onFoldersChange={setFolders} />
-            <PromptInputAttachments className="!p-0 !m-0 !w-auto">
-              {(attachment) => <PromptInputAttachment data={attachment} />}
-            </PromptInputAttachments>
           </div>
         )}
+        <PromptInputAttachments className="!p-0 !m-0 !w-auto">
+          {(attachment) => <PromptInputAttachment data={attachment} />}
+        </PromptInputAttachments>
         {/* Elementos selecionados no browser do painel (modo seleção) */}
         {selections.length > 0 && (
           <div className="flex flex-wrap items-center gap-1.5 px-3 pb-1.5">
