@@ -172,17 +172,26 @@ function SelectorScreen({ onSelect, onOpenWorker }: {
       <div className="flex flex-1 flex-col items-center justify-center gap-4 p-6">
         <p className="text-sm font-medium text-foreground">O que deseja abrir?</p>
         <div className={cn("grid gap-3 w-full max-w-xs", availableTabs.length === 1 ? "grid-cols-1 justify-items-center" : "grid-cols-2")}>
-          {availableTabs.map(([type, { icon: Icon, label, description }]) => (
-            <button
-              key={type}
-              onClick={() => onSelect(type)}
-              className="flex flex-col items-center gap-2 rounded-lg border border-sidebar-border bg-sidebar-accent/30 p-4 text-center transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
-            >
-              <Icon className="size-6 shrink-0" />
-              <span className="text-xs font-medium">{label}</span>
-              <span className="text-[10px] leading-tight text-muted-foreground line-clamp-2">{description}</span>
-            </button>
-          ))}
+          {availableTabs.map(([type, { icon: Icon, label, description }]) => {
+            const isDisabled = !activeId && (type === "folders" || type === "diff")
+            return (
+              <button
+                key={type}
+                disabled={isDisabled}
+                onClick={() => onSelect(type)}
+                className={cn(
+                  "flex flex-col items-center gap-2 rounded-lg border border-sidebar-border bg-sidebar-accent/30 p-4 text-center transition-colors",
+                  isDisabled
+                    ? "opacity-40 cursor-not-allowed"
+                    : "hover:bg-sidebar-accent hover:text-sidebar-accent-foreground cursor-pointer",
+                )}
+              >
+                <Icon className="size-6 shrink-0" />
+                <span className="text-xs font-medium">{label}</span>
+                <span className="text-[10px] leading-tight text-muted-foreground line-clamp-2">{description}</span>
+              </button>
+            )
+          })}
         </div>
 
         {workers.length > 0 && (
@@ -251,8 +260,11 @@ export function RightPanel() {
   const sessions = useSessionStore((s) => s.sessions)
   const statusMap = useSessionStore((s) => s.status)
 
-  const tabs = usePanelStore((s) => (activeSessionId ? s.tabsBySession[activeSessionId] : undefined) ?? [])
-  const activeTabId = usePanelStore((s) => (activeSessionId ? s.activeTabBySession[activeSessionId] : undefined) ?? null)
+  const tabsBySession = usePanelStore((s) => s.tabsBySession)
+  const activeTabBySession = usePanelStore((s) => s.activeTabBySession)
+  const sessionKey = activeSessionId ?? "__orphan__"
+  const tabs = tabsBySession[sessionKey] ?? []
+  const activeTabId = activeTabBySession[sessionKey] ?? null
   const addTabToStore = usePanelStore((s) => s.addTab)
   const removeTabFromStore = usePanelStore((s) => s.removeTab)
   const setActiveTabInStore = usePanelStore((s) => s.setActiveTab)
@@ -266,8 +278,7 @@ export function RightPanel() {
   )
 
   const addTab = useCallback(async (type: TabType, sessionId?: string, title?: string) => {
-    const sessionKey = activeSessionId
-    if (!sessionKey) return
+    if ((type === "folders" || type === "diff") && !activeSessionId) return
 
     if (sessionId) {
       const id = `chat-${sessionId}`
@@ -303,18 +314,18 @@ export function RightPanel() {
   }, [activeSessionId, tabs, addTabToStore, setActiveTabInStore, folders])
 
   const removeTab = useCallback((id: string) => {
-    if (!activeSessionId) return
+    const sk = activeSessionId ?? "__orphan__"
     const tab = tabs.find((t) => t.id === id)
     if (tab?.type === "terminal") {
       useTerminalStore.getState().killTerminal(id)
     }
-    removeTabFromStore(activeSessionId, id)
+    removeTabFromStore(sk, id)
   }, [activeSessionId, tabs, removeTabFromStore])
 
   const updateTab = useCallback((id: string, updates: Partial<PanelTab>) => {
-    if (!activeSessionId) return
+    const sk = activeSessionId ?? "__orphan__"
     usePanelStore.getState().setTabsForSession(
-      activeSessionId,
+      sk,
       tabs.map((t) => (t.id === id ? { ...t, ...updates } : t)),
       activeTabId,
     )
@@ -439,12 +450,15 @@ export function RightPanel() {
               <PlusIcon className="size-3.5" />
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="min-w-32">
-              {availableTabs.map(([type, { icon: Icon, label }]) => (
-                <DropdownMenuItem key={type} onClick={() => addTab(type)}>
-                  <Icon className="size-4" />
-                  {label}
-                </DropdownMenuItem>
-              ))}
+              {availableTabs.map(([type, { icon: Icon, label }]) => {
+                const isDisabled = !activeSessionId && (type === "folders" || type === "diff")
+                return (
+                  <DropdownMenuItem key={type} disabled={isDisabled} onClick={() => addTab(type)}>
+                    <Icon className="size-4" />
+                    {label}
+                  </DropdownMenuItem>
+                )
+              })}
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
