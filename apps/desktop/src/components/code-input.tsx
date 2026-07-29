@@ -233,7 +233,7 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId }: 
             <FolderSelector folders={folders} onFoldersChange={setFolders} />
           </div>
         )}
-        <PromptInputAttachments className="!p-0 !m-0 !w-auto">
+        <PromptInputAttachments className="!w-auto !p-0 mb-2">
           {(attachment) => <PromptInputAttachment data={attachment} />}
         </PromptInputAttachments>
         {/* Elementos selecionados no browser do painel (modo seleção) */}
