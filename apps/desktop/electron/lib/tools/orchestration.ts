@@ -42,14 +42,14 @@ export function createSubagentTool(
   let calls = 0
   return tool({
     description:
-      'Delega uma subtarefa a um worker que roda em segundo plano e retorna o resultado como texto. Use para trabalho paralelo ou isolado: pesquisas, análises de arquivos, tarefas focadas. O worker não vê esta conversa — inclua todo o contexto necessário no task.',
+      'Delegates a subtask to a worker that runs in the background and returns the result as text. Use for parallel or isolated work: research, file analysis, focused tasks. The worker does not see this conversation — include all necessary context in the task.',
     inputSchema: z.object({
-      task: z.string().describe('Descrição autocontida da tarefa, com todo o contexto necessário'),
-      research: z.boolean().optional().describe('Libera busca web (websearch/webfetch)'),
-      browser: z.boolean().optional().describe('Libera navegação com JavaScript (browser)'),
-      code: z.boolean().optional().describe('Modo código: acesso aos arquivos da pasta de trabalho'),
-      brain: z.boolean().optional().describe('Habilita memória persistente (ferramentas memory_*)'),
-      simple: z.boolean().optional().describe('Respostas em texto puro, sem formatação'),
+      task: z.string().describe('Self-contained task description, with all necessary context'),
+      research: z.boolean().optional().describe('Enables web search (websearch/webfetch)'),
+      browser: z.boolean().optional().describe('Enables JavaScript browser navigation'),
+      code: z.boolean().optional().describe('Code mode: access to the working folder\'s files'),
+      brain: z.boolean().optional().describe('Enables persistent memory (memory_* tools)'),
+      simple: z.boolean().optional().describe('Plain text answers, no formatting'),
     }),
     execute: async ({ task, research, browser, code, brain, simple }) => {
       calls++
@@ -134,16 +134,16 @@ export function createTaskTool(
 ) {
   return tool({
     description:
-      'Registra uma subtarefa no plano de orquestração. Cada tarefa será executada por um worker independente, em paralelo, sem acesso a esta conversa.',
+      'Registers a subtask in the orchestration plan. Each task will be executed by an independent worker, in parallel, with no access to this conversation.',
     inputSchema: z.object({
-      title: z.string().describe('Título curto da tarefa (aparece na UI)'),
-      prompt: z.string().describe('Prompt autocontido para o worker, com todo o contexto necessário'),
-      mode: z.enum(['chat', 'code']).optional().describe('"code" para mexer em arquivos/comandos; padrão "chat"'),
-      research: z.boolean().optional().describe('Libera busca web para o worker'),
-      browser: z.boolean().optional().describe('Libera browser com JavaScript para o worker'),
-      readonly: z.boolean().optional().describe('Worker de código só-leitura (não edita nem executa)'),
-      brain: z.boolean().optional().describe('Habilita memória persistente (ferramentas memory_*)'),
-      simple: z.boolean().optional().describe('Respostas em texto puro, sem formatação'),
+      title: z.string().describe('Short task title (shown in the UI)'),
+      prompt: z.string().describe('Self-contained prompt for the worker, with all necessary context'),
+      mode: z.enum(['chat', 'code']).optional().describe('"code" to touch files/commands; default "chat"'),
+      research: z.boolean().optional().describe('Enables web search for the worker'),
+      browser: z.boolean().optional().describe('Enables JavaScript browser for the worker'),
+      readonly: z.boolean().optional().describe('Read-only code worker (doesn\'t edit or execute)'),
+      brain: z.boolean().optional().describe('Enables persistent memory (memory_* tools)'),
+      simple: z.boolean().optional().describe('Plain text answers, no formatting'),
     }),
     execute: async ({ title, prompt, mode, research, browser, readonly: readOnly, brain, simple }: CreateTaskArgs) => {
       // Sem pasta de trabalho não existe worker de código — degrada para chat

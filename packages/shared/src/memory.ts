@@ -49,20 +49,22 @@ export type ProjectArea =
   | "dependencies"
   | "standards"
 
+/** `label` is shown in the UI (Portuguese) — `description` is model-facing only
+ * (used to build the /init planning prompt), never rendered, so it's in English. */
 export const PROJECT_AREAS: Record<ProjectArea, { label: string; description: string }> = {
-  overview: { label: "Contexto do Projeto", description: "Propósito, stack, estrutura geral, links úteis" },
-  business: { label: "Regras de Negócio", description: "Lógica central, fluxos, entidades, regras críticas" },
-  design: { label: "Design System", description: "Componentes UI, padrões visuais, acessibilidade" },
-  architecture: { label: "Arquitetura", description: "Módulos, comunicação entre serviços, dados" },
-  preferences: { label: "Preferências", description: "Estilo de código, convenções de nomeação, branching" },
-  infrastructure: { label: "Infraestrutura", description: "Deploy, variáveis de ambiente, CI/CD, containers" },
-  security: { label: "Segurança", description: "Autenticação, autorização, dados sensíveis" },
-  development: { label: "Desenvolvimento", description: "Scripts, comandos, setup local" },
-  database: { label: "Banco de Dados", description: "Schemas, modelos, migrations, ORM, relacionamentos" },
-  testing: { label: "Testes", description: "Setup de testes, mocks, fixtures, estratégia de cobertura" },
-  performance: { label: "Performance", description: "Otimizações, caching, gargalos conhecidos" },
-  dependencies: { label: "Dependências", description: "Libs críticas, versionamento, motivos de escolha" },
-  standards: { label: "Padronização", description: "Convenções explícitas: commits, branching, naming, lint" },
+  overview: { label: "Contexto do Projeto", description: "Purpose, stack, general structure, useful links" },
+  business: { label: "Regras de Negócio", description: "Core logic, flows, entities, critical rules" },
+  design: { label: "Design System", description: "UI components, visual patterns, accessibility" },
+  architecture: { label: "Arquitetura", description: "Modules, service communication, data" },
+  preferences: { label: "Preferências", description: "Code style, naming conventions, branching" },
+  infrastructure: { label: "Infraestrutura", description: "Deploy, environment variables, CI/CD, containers" },
+  security: { label: "Segurança", description: "Authentication, authorization, sensitive data" },
+  development: { label: "Desenvolvimento", description: "Scripts, commands, local setup" },
+  database: { label: "Banco de Dados", description: "Schemas, models, migrations, ORM, relationships" },
+  testing: { label: "Testes", description: "Test setup, mocks, fixtures, coverage strategy" },
+  performance: { label: "Performance", description: "Optimizations, caching, known bottlenecks" },
+  dependencies: { label: "Dependências", description: "Critical libs, versioning, reasons for choices" },
+  standards: { label: "Padronização", description: "Explicit conventions: commits, branching, naming, lint" },
 }
 
 /**

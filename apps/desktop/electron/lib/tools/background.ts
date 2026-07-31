@@ -6,13 +6,13 @@ import type { ToolContext } from './context'
 export function createBackgroundTools(ctx: ToolContext) {
   const bashBackground = tool({
     description:
-      'Executa um comando em BACKGROUND na pasta de trabalho e retorna imediatamente. ' +
-      'Use para servidores de desenvolvimento (npm run dev), builds longos, watchers, etc. ' +
-      'O processo continua rodando entre chamadas de ferramenta. ' +
-      'Use bash_list para ver processos ativos e bash_kill para matar.',
+      'Runs a command in BACKGROUND in the working folder and returns immediately. ' +
+      'Use for dev servers (npm run dev), long builds, watchers, etc. ' +
+      'The process keeps running between tool calls. ' +
+      'Use bash_list to see active processes and bash_kill to kill one.',
     inputSchema: z.object({
-      label: z.string().describe('Nome amigável para identificar o processo (ex: "Dev Server")'),
-      command: z.string().describe('Comando a executar em background'),
+      label: z.string().describe('Friendly name to identify the process (e.g.: "Dev Server")'),
+      command: z.string().describe('Command to run in background'),
     }),
     execute: async ({ label, command }) => {
       const info = spawnBackground(label, command, ctx.directory)
@@ -27,8 +27,8 @@ export function createBackgroundTools(ctx: ToolContext) {
 
   const bashList = tool({
     description:
-      'Lista todos os processos em background iniciados pelo bash_background. ' +
-      'Mostra PID, label, status e tempo de atividade.',
+      'Lists all background processes started by bash_background. ' +
+      'Shows PID, label, status, and uptime.',
     inputSchema: z.object({}),
     execute: async () => {
       const procs = listProcesses()
@@ -43,9 +43,9 @@ export function createBackgroundTools(ctx: ToolContext) {
   })
 
   const bashKill = tool({
-    description: 'Mata um processo em background pelo PID.',
+    description: 'Kills a background process by PID.',
     inputSchema: z.object({
-      pid: z.number().describe('PID do processo a ser morto'),
+      pid: z.number().describe('PID of the process to kill'),
     }),
     execute: async ({ pid }) => {
       const ok = killProcess(pid)

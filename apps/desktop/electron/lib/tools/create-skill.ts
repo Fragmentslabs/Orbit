@@ -11,28 +11,28 @@ import { proposeSkill } from '../skills/pending'
 export function createSkillTool() {
   return tool({
     description:
-      'Propõe uma nova skill do Orbit: conhecimento curado em markdown, opcionalmente acompanhado de scripts/arquivos auxiliares que a skill usa. A proposta aparece como card "Adicionar skill" na conversa e só é ativada quando o usuário aprovar. Depois de chamar, explique brevemente o que a skill faz e como foi estruturada.',
+      'Proposes a new Orbit skill: curated knowledge in markdown, optionally accompanied by helper scripts/files the skill uses. The proposal appears as an "Add skill" card in the conversation and is only activated once the user approves it. After calling, briefly explain what the skill does and how it was structured.',
     inputSchema: z.object({
-      name: z.string().describe('Nome de exibição (ex: Deploy da API)'),
-      description: z.string().describe('Descrição curta do que a skill cobre'),
+      name: z.string().describe('Display name (e.g.: API Deploy)'),
+      description: z.string().describe('Short description of what the skill covers'),
       content: z
         .string()
         .describe(
-          'Conteúdo da skill em markdown. Se houver scripts, explique aqui quando e como executá-los (caminhos relativos).',
+          'Skill content in markdown. If there are scripts, explain here when and how to run them (relative paths).',
         ),
       slug: z
         .string()
         .optional()
-        .describe('Slug snake_case para referência @slug (ex: deploy_api). Se omitido, deriva do nome.'),
+        .describe('snake_case slug for @slug reference (e.g.: deploy_api). Derived from the name if omitted.'),
       files: z
         .array(
           z.object({
-            path: z.string().describe('Caminho relativo dentro da skill (ex: scripts/deploy.sh)'),
-            content: z.string().describe('Conteúdo do arquivo'),
+            path: z.string().describe('Relative path within the skill (e.g.: scripts/deploy.sh)'),
+            content: z.string().describe('File content'),
           }),
         )
         .optional()
-        .describe('Scripts/arquivos auxiliares que acompanham a skill (opcional)'),
+        .describe('Helper scripts/files that come with the skill (optional)'),
     }),
     execute: async ({ name, description, content, slug, files }) => {
       try {

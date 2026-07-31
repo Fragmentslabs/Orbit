@@ -50,29 +50,29 @@ const AREA_CATEGORY: Record<ProjectArea, ProjectCategory> = {
 
 const AREA_MISSIONS: Record<Exclude<ProjectArea, 'overview'>, string> = {
   business:
-    'Regras de negócio: identifique as entidades centrais, fluxos principais e regras críticas. Procure modelos/schemas, validações, máquinas de estado e serviços de domínio. Cite arquivos.',
+    'Business rules: identify the core entities, main flows, and critical rules. Look for models/schemas, validations, state machines, and domain services. Cite files.',
   design:
-    'Design system e UI: componentes base (pasta de ui/components), tokens/tema, padrões visuais, convenções de estilo (tailwind/css-in-js), acessibilidade. Cite os componentes canônicos que novas telas devem reutilizar.',
+    'Design system and UI: base components (ui/components folder), tokens/theme, visual patterns, style conventions (tailwind/css-in-js), accessibility. Cite the canonical components new screens should reuse.',
   architecture:
-    'Arquitetura: módulos e camadas, como se comunicam (IPC, HTTP, eventos, filas), onde ficam dados/estado, pontos de entrada. Desenhe o mapa mental do repositório com caminhos reais.',
+    'Architecture: modules and layers, how they communicate (IPC, HTTP, events, queues), where data/state lives, entry points. Draw the repository\'s mental map with real paths.',
   preferences:
-    'Preferências e convenções: estilo de código observado (naming, organização de arquivos, idioma de comentários), configs de lint/format, padrões de commit/branch se visíveis.',
+    'Preferences and conventions: observed code style (naming, file organization, comment language), lint/format configs, commit/branch patterns if visible.',
   infrastructure:
-    'Infraestrutura: build, deploy, CI/CD, containers, variáveis de ambiente necessárias. Liste os comandos e arquivos de config relevantes.',
+    'Infrastructure: build, deploy, CI/CD, containers, required environment variables. List the relevant commands and config files.',
   security:
-    'Segurança: autenticação/autorização, gestão de segredos e chaves, dados sensíveis, superfícies de risco (IPC exposto, execução de shell, inputs externos). Cite os arquivos envolvidos.',
+    'Security: authentication/authorization, secrets and key management, sensitive data, risk surfaces (exposed IPC, shell execution, external inputs). Cite the files involved.',
   development:
-    'Desenvolvimento local: setup, scripts (dev/build/test/lint), pré-requisitos, como rodar e testar. Liste os comandos exatos.',
+    'Local development: setup, scripts (dev/build/test/lint), prerequisites, how to run and test. List the exact commands.',
   database:
-    'Banco de dados: leia os arquivos de schema (.sql, .prisma, migrations/) e mapeie entidades, colunas-chave, relacionamentos e constraints. Descreva o ORM/driver usado e como rodar migrations. Cite os arquivos de schema.',
+    'Database: read the schema files (.sql, .prisma, migrations/) and map entities, key columns, relationships, and constraints. Describe the ORM/driver used and how to run migrations. Cite the schema files.',
   testing:
-    'Testes: framework usado, onde ficam os testes, convenções de mocks/fixtures, como rodar (comando exato) e o que já está coberto. Cite arquivos de exemplo.',
+    'Testing: framework used, where tests live, mock/fixture conventions, how to run them (exact command), and what\'s already covered. Cite example files.',
   performance:
-    'Performance: caching, otimizações intencionais, gargalos já documentados ou visíveis no código (queries N+1, listas sem virtualização, etc.). Só reporte o que for verificável — não especule.',
+    'Performance: caching, intentional optimizations, bottlenecks already documented or visible in the code (N+1 queries, non-virtualized lists, etc.). Only report what\'s verifiable — don\'t speculate.',
   dependencies:
-    'Dependências: bibliotecas críticas do projeto e por que foram escolhidas (se houver ADRs/comentários), versões fixadas propositalmente, dependências que exigem cuidado ao atualizar.',
+    'Dependencies: the project\'s critical libraries and why they were chosen (if there are ADRs/comments), versions pinned on purpose, dependencies that require care when updating.',
   standards:
-    'Padronização: procure regras EXPLÍCITAS do projeto — CONTRIBUTING.md, configs de commit (commitlint, husky), convenção de branch, templates de PR, regras de naming documentadas. Diferencie de estilo observado (isso é "preferences"): aqui só entra o que está declarado por escrito ou enforçado por tooling.',
+    'Standardization: look for EXPLICIT project rules — CONTRIBUTING.md, commit configs (commitlint, husky), branch convention, PR templates, documented naming rules. Distinguish from observed style (that\'s "preferences"): only include what\'s declared in writing or enforced by tooling.',
 }
 
 export function planAreas(scan: ProjectScan): Exclude<ProjectArea, 'overview'>[] {
@@ -103,39 +103,41 @@ async function planAreasWithLLM(
   opts?: { scopeLabel?: string; isRootWithSubprojects?: boolean },
 ): Promise<PlannedArea[]> {
   const scanDescription = describeScan(scan)
-  const hasDocs = scan.docs.length > 0 ? `\nDocumentação encontrada: ${scan.docs.join(', ')}` : ''
-  const hasSchemas = scan.schemas.length > 0 ? `\nSchemas de banco: ${scan.schemas.join(', ')}` : ''
+  const hasDocs = scan.docs.length > 0 ? `\nDocumentation found: ${scan.docs.join(', ')}` : ''
+  const hasSchemas = scan.schemas.length > 0 ? `\nDatabase schemas: ${scan.schemas.join(', ')}` : ''
   const hasSubprojects = scan.subprojects.length > 0
-    ? `\nSubprojetos: ${scan.subprojects.map((sp) => `${sp.name} (${sp.stack.join(',')})`).join('; ')}`
+    ? `\nSubprojects: ${scan.subprojects.map((sp) => `${sp.name} (${sp.stack.join(',')})`).join('; ')}`
     : ''
 
   const areaEntries = Object.entries(PROJECT_AREAS).filter(([k]) => k !== 'overview')
   const availableAreas = areaEntries.map(([key, val]) => `- "${key}": ${val.description}`).join('\n')
 
   const scopeInstruction = opts?.isRootWithSubprojects
-    ? `\n\nESTE É O ESCOPO RAIZ de um monorepo — cada subprojeto listado acima já será analisado SEPARADAMENTE em sua própria sub-árvore (architecture, business, design etc. de cada um). Para a raiz, foque APENAS em: infraestrutura/deploy que cobre todos os subprojetos, dependências compartilhadas entre eles, padronização/regras globais do repositório, e visão de negócio geral (só se não for específica de um único subprojeto). NÃO repita architecture/design/development por subprojeto aqui.`
+    ? `\n\nTHIS IS THE ROOT SCOPE of a monorepo — each subproject listed above will already be analyzed SEPARATELY in its own sub-tree (architecture, business, design, etc. of each one). For the root, focus ONLY on: infrastructure/deploy that covers all subprojects, dependencies shared between them, repo-wide standardization/rules, and general business vision (only if it's not specific to a single subproject). Do NOT repeat architecture/design/development per subproject here.`
     : opts?.scopeLabel
-      ? `\n\nESTE É O ESCOPO DO SUBPROJETO "${opts.scopeLabel}" — analise SOMENTE esta pasta, como se fosse um projeto independente.`
+      ? `\n\nTHIS IS THE SCOPE OF SUBPROJECT "${opts.scopeLabel}" — analyze ONLY this folder, as if it were an independent project.`
       : ''
 
   const { text } = await generateText({
     model,
-    system: `Você é um orquestrador de onboarding. Decida quais áreas investigar e defina missões customizadas para cada uma.`,
-    prompt: `Scan do projeto${opts?.scopeLabel ? ` (escopo: ${opts.scopeLabel})` : ''}:\n${scanDescription}${hasDocs}${hasSchemas}${hasSubprojects}${scopeInstruction}
+    system: `You are an onboarding orchestrator. Decide which areas to investigate and define custom missions for each one.`,
+    prompt: `Project scan${opts?.scopeLabel ? ` (scope: ${opts.scopeLabel})` : ''}:\n${scanDescription}${hasDocs}${hasSchemas}${hasSubprojects}${scopeInstruction}
 
-Áreas disponíveis:
+Available areas:
 ${availableAreas}
 
-Com base no scan, decida:
-1. Quais áreas são RELEVANTES (escopo mínimo 3, máximo todas as ${areaEntries.length} — mas só inclua "database" se houver schema real, "testing" se houver testes, "performance"/"dependencies"/"standards" só se houver sinais concretos no scan)
-2. Para cada área, escreva uma missão CUSTOMIZADA que:
-   - Mencione arquivos/pastas específicos encontrados no scan
-   - Inclua instrução para LER documentação (.md, specs) se houver
-   - Inclua instrução para LER schemas (.sql, .prisma) se relevante
+Based on the scan, decide:
+1. Which areas are RELEVANT (minimum scope 3, maximum all ${areaEntries.length} — but only include "database" if there's a real schema, "testing" if there are tests, "performance"/"dependencies"/"standards" only if there are concrete signals in the scan)
+2. For each area, write a CUSTOM mission that:
+   - Mentions specific files/folders found in the scan
+   - Includes an instruction to READ documentation (.md, specs) if any
+   - Includes an instruction to READ schemas (.sql, .prisma) if relevant
 
-IMPORTANTE: se há docs/ ou arquivos .md, a missão DEVE incluir "Leia os arquivos de documentação listados no scan como fonte primária".
+IMPORTANT: if there's a docs/ folder or .md files, the mission MUST include "Read the documentation files listed in the scan as the primary source".
 
-Responda com JSON no formato:
+Write the mission text in Portuguese (pt-BR) — it's read by another agent whose own instructions require it to respond in Portuguese.
+
+Reply with JSON in the format:
 [{"area": "architecture", "mission": "Analise a arquitetura: ..."}, ...]`,
   })
 
@@ -244,23 +246,23 @@ async function exploreArea(
   try {
     const result = streamText({
       model,
-      system: `Você é um subagent de onboarding do Orbit investigando UMA área de um projeto. Use as ferramentas (read, ls, glob, grep) para VERIFICAR no código — não deduza só pelo scan. Seja econômico: poucos arquivos certos valem mais que varrer tudo.
+      system: `You are an Orbit onboarding subagent investigating ONE area of a project. Use the tools (read, ls, glob, grep) to VERIFY the code — don't just infer from the scan. Be economical: a few right files beat scanning everything.
 
-INSTRUÇÕES IMPORTANTES:
-- Se o scan mencionar DOCUMENTAÇÃO (arquivos .md, docs/, especificações), LEIA-OS. São sua fonte primária de contexto.
-- Se houver arquivos de schema (.sql, .prisma), LEIA-OS e mapeie o modelo de dados.
-- Procure ativamente por specs, planos, roadmaps — qualquer documento que descreva O QUE deve ser feito.
-- Cite SEMPRE os caminhos completos dos arquivos que encontrar.
-- Se encontrar um WORKAROUND, gotcha ou solução não-óbvia para um problema (ex.: bug conhecido
-  do framework, configuração que quebra silenciosamente, ordem de passos não documentada),
-  destaque com uma linha começando em "APRENDIZADO:" — isso vira uma memória reutilizável em
-  outros projetos com a mesma stack. Só use para algo genuinamente não-óbvio, não para fatos comuns.
+IMPORTANT INSTRUCTIONS:
+- If the scan mentions DOCUMENTATION (.md files, docs/, specs), READ THEM. They are your primary source of context.
+- If there are schema files (.sql, .prisma), READ THEM and map the data model.
+- Actively look for specs, plans, roadmaps — any document describing WHAT should be done.
+- ALWAYS cite the full paths of the files you find.
+- If you find a WORKAROUND, gotcha, or non-obvious solution to a problem (e.g. a known framework
+  bug, a config that silently breaks, an undocumented step order), highlight it with a line
+  starting with "APRENDIZADO:" — this becomes a memory reusable in other projects with the same
+  stack. Only use it for something genuinely non-obvious, not common facts.
 
-Responda em português, em markdown, citando caminhos de arquivos reais. Termine com uma linha "TAGS:" com 3-6 palavras-chave.`,
-      prompt: `Área investigada: ${PROJECT_AREAS[area].label}
-Missão: ${mission}
+Reply in Portuguese (pt-BR), in markdown, citing real file paths. End with a "TAGS:" line with 3-6 keywords.`,
+      prompt: `Area investigated: ${PROJECT_AREAS[area].label}
+Mission: ${mission}
 
-Contexto do scan automático (ponto de partida, não conclusão):
+Automatic scan context (starting point, not a conclusion):
 ${scanDescription}`,
       tools: readOnlyTools(toolDirectory, controller.signal),
       stopWhen: stepCountIs(WORKER_MAX_STEPS),
@@ -339,25 +341,25 @@ async function refineFindings(
     .map(([a, summary]) => `- "${a}" (${PROJECT_AREAS[a].label}): ${summary}`)
     .join('\n')
   const system =
-    'Você é o agente principal do onboarding do Orbit. Revise o levantamento de um subagent: remova especulação, corrija exageros, condense e estruture. Responda APENAS com JSON válido.'
-  const prompt = `Área: "${area}" (${PROJECT_AREAS[area].label})
+    'You are Orbit onboarding\'s main agent. Review a subagent\'s findings: remove speculation, correct overstatements, condense and structure. Reply with ONLY valid JSON. Write all JSON text field values (summary, document, tags, learnings, etc.) in Portuguese (pt-BR) — they become project memory content shown to a Portuguese-speaking user.'
+  const prompt = `Area: "${area}" (${PROJECT_AREAS[area].label})
 
-Levantamento do subagent:
+Subagent's findings:
 ${raw}
 
-Áreas já consolidadas (para decidir complementos):
-${savedList || '(nenhuma ainda)'}
+Areas already consolidated (to decide complements):
+${savedList || '(none yet)'}
 
-Responda com JSON:
+Reply with JSON:
 {
-  "summary": "2-4 frases objetivas — entra no contexto do agente",
-  "tags": ["3-6 palavras-chave minúsculas"],
-  "document": "markdown revisado e estruturado da área (caminhos reais, comandos)",
-  "complements": [{"area": "id-de-area-ja-consolidada", "addition": "trecho markdown que enriquece aquele doc"}],
-  "learnings": [{"text": "lição reutilizável em OUTROS projetos, autocontida (problema + solução)", "tags": ["tecnologia"]}]
+  "summary": "2-4 objective sentences, in Portuguese — goes into the agent's context",
+  "tags": ["3-6 lowercase keywords"],
+  "document": "revised, structured markdown for the area, in Portuguese (real paths, commands)",
+  "complements": [{"area": "id-of-already-consolidated-area", "addition": "markdown snippet (in Portuguese) that enriches that doc"}],
+  "learnings": [{"text": "lesson reusable in OTHER projects, self-contained (problem + solution), in Portuguese", "tags": ["technology"]}]
 }
-"complements" só quando este levantamento traz algo que pertence a outra área já consolidada (senão []).
-"learnings" só quando o levantamento tiver linhas "APRENDIZADO:" ou um workaround/gotcha claro e reutilizável fora deste projeto (senão []). Não invente — extraia só o que está no levantamento.`
+"complements" only when these findings bring something that belongs to another already-consolidated area (else []).
+"learnings" only when the findings have "APRENDIZADO:" lines or a clear workaround/gotcha reusable outside this project (else []). Don't invent — extract only what's in the findings.`
 
   let lastError: unknown
   for (let attempt = 0; attempt < 3; attempt++) {
@@ -573,16 +575,16 @@ async function runScope(input: RunScopeInput): Promise<{ done: ProjectArea[]; su
     const allSaved = [...savedSummaries.entries()].map(([a, s]) => `- ${PROJECT_AREAS[a].label}: ${s}`).join('\n')
     const { text: reviewText } = await generateText({
       model,
-      system: `Você é um revisor de onboarding. Analise se a cobertura está completa ou se há gaps importantes.`,
-      prompt: `Áreas consolidadas${scopeLabel ? ` do subprojeto "${scopeLabel}"` : ''}:
+      system: `You are an onboarding reviewer. Analyze whether coverage is complete or if there are important gaps.`,
+      prompt: `Consolidated areas${scopeLabel ? ` for subproject "${scopeLabel}"` : ''}:
 ${allSaved}
 
-Scan original:
+Original scan:
 ${scanDescription}
 
-Há gaps importantes? Áreas não cobertas? Documentação não lida? Schemas não mapeados?
-Responda com JSON:
-{"status": "done", "reason": "..."} ou {"status": "needs_more", "gap": "descrição do gap", "area": "arquitetura", "mission": "missão para worker adicional"}`,
+Are there important gaps? Uncovered areas? Unread documentation? Unmapped schemas?
+Reply with JSON (write "reason", "gap", and "mission" text values in Portuguese — they're shown to a Portuguese-speaking user or read by an agent instructed to respond in Portuguese):
+{"status": "done", "reason": "..."} or {"status": "needs_more", "gap": "descrição do gap", "area": "arquitetura", "mission": "missão para worker adicional"}`,
     })
     try {
       const j = reviewText.trim().replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/, '')
@@ -643,8 +645,8 @@ export async function runProjectInit(input: RunInitInput): Promise<string[]> {
     const { text: overviewText } = await generateText({
       model,
       system:
-        'Você é um analista de projetos. Gere uma visão geral concisa em markdown: sobre o que é o projeto, stack e tecnologias, estrutura geral. Se houver subprojetos ou documentação, mencione-os.',
-      prompt: `Com base no scan abaixo, escreva a visão geral do projeto:\n\n${scanDescription}`,
+        'You are a project analyst. Generate a concise overview in markdown: what the project is about, stack and technologies, general structure. Mention subprojects or documentation if there are any. Write it in Portuguese (pt-BR) — it becomes project memory content shown to a Portuguese-speaking user.',
+      prompt: `Based on the scan below, write the project overview (in Portuguese):\n\n${scanDescription}`,
     })
     const overview: ParsedFindings = {
       summary: overviewText.trim().split(/\n\n+/).find(Boolean)?.trim().slice(0, 500) ?? '',
@@ -719,22 +721,22 @@ export async function runProjectInit(input: RunInitInput): Promise<string[]> {
       main('\nAnalisando documentação e schemas para memórias de contexto…\n')
       const { text: ctxPlan } = await generateText({
         model,
-        system: `Você é um analista de projetos. Com base nas áreas já consolidadas e nos arquivos encontrados, decida quais memórias de contexto criar (category: "context", weight <= 0.3). Contextos capturam: MVP features, roadmap, referências a arquivos importantes.`,
-        prompt: `Documentação encontrada: ${scan.docs.join(', ') || 'nenhuma'}
-Schemas: ${scan.schemas.join(', ') || 'nenhum'}
-Subprojetos: ${scan.subprojects.map((sp) => sp.name).join(', ') || 'nenhum'}
+        system: `You are a project analyst. Based on the already-consolidated areas and the files found, decide which context memories to create (category: "context", weight <= 0.3). Contexts capture: MVP features, roadmap, references to important files. Write all JSON text field values in Portuguese (pt-BR) — they become project memory content shown to a Portuguese-speaking user.`,
+        prompt: `Documentation found: ${scan.docs.join(', ') || 'none'}
+Schemas: ${scan.schemas.join(', ') || 'none'}
+Subprojects: ${scan.subprojects.map((sp) => sp.name).join(', ') || 'none'}
 
-Áreas consolidadas na raiz:
+Areas consolidated at the root:
 ${[...rootScope.summaries.entries()].map(([a, s]) => `- ${a}: ${s}`).join('\n')}
 
-Responda com JSON array de memórias de contexto a criar:
-[{"area": "overview", "text": "resumo curto (max 200 chars)", "tags": ["tag1"], "document": "markdown completo"}]
+Reply with a JSON array of context memories to create (text fields in Portuguese):
+[{"area": "overview", "text": "short summary (max 200 chars)", "tags": ["tag1"], "document": "full markdown"}]
 
-IMPORTANTE:
-- Se há um arquivo de especificação (ex: docs/espec.md), crie uma memória que REFERENCIE esse arquivo
-- Se há schema.sql, crie uma memória descrevendo o modelo de dados
-- Se há subprojetos (front+back), crie uma memória de contexto geral conectando-os
-- Máximo 4 memórias de contexto.`,
+IMPORTANT:
+- If there's a spec file (e.g.: docs/espec.md), create a memory that REFERENCES that file
+- If there's a schema.sql, create a memory describing the data model
+- If there are subprojects (front+back), create a general context memory connecting them
+- Maximum 4 context memories.`,
       })
       try {
         const json = ctxPlan.trim().replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/, '')

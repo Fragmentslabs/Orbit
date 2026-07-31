@@ -34,9 +34,9 @@ function searchReply(results: Memory[]): string {
 function createOpenTool() {
   return tool({
     description:
-      'Abre uma memória pelo id e retorna o texto completo, tags e o documento markdown anexado quando existir.',
+      'Opens a memory by id and returns the full text, tags, and the attached markdown document when there is one.',
     inputSchema: z.object({
-      id: z.string().describe('Id da memória (ex: mem_abc123)'),
+      id: z.string().describe('Memory id (e.g.: mem_abc123)'),
     }),
     execute: async ({ id }) => {
       const full = await memory.getFull(id)
@@ -53,14 +53,14 @@ export function createChatMemoryTools(input: SendMessageInput): ToolSet {
   return {
     memory_save: tool({
       description:
-        'Salva uma memória duradoura sobre o usuário. NÃO salvar é o default — use apenas para informação genuinamente útil. kind: "seasonal" (expira; atividades recentes), "core" (permanente; fatos pessoais), "general" (permanente; preferências que valem em todos os modos).',
+        'Saves a lasting memory about the user. NOT saving is the default — only use for genuinely useful information. kind: "seasonal" (expires; recent activities), "core" (permanent; personal facts), "general" (permanent; preferences that apply in all modes).',
       inputSchema: z.object({
-        text: z.string().describe('A memória, em uma frase curta e autocontida'),
-        kind: z.enum(['core', 'seasonal', 'general']).optional().describe('Padrão: seasonal'),
-        weight: z.number().min(0).max(1).optional().describe('Importância 0..1'),
-        tags: z.array(z.string()).optional().describe('Palavras-chave para busca futura'),
-        relatedIds: z.array(z.string()).optional().describe('Ids de memórias relacionadas (cria links). Passe ids de pais/relacionados existentes.'),
-        relatedTypes: z.record(z.string(), z.enum(['parent', 'related'])).optional().describe('Tipo da relação por id. Ex: { "mem_abc": "parent" }. Padrão: related'),
+        text: z.string().describe('The memory, as a short, self-contained sentence'),
+        kind: z.enum(['core', 'seasonal', 'general']).optional().describe('Default: seasonal'),
+        weight: z.number().min(0).max(1).optional().describe('Importance 0..1'),
+        tags: z.array(z.string()).optional().describe('Keywords for future search'),
+        relatedIds: z.array(z.string()).optional().describe('Ids of related memories (creates links). Pass ids of existing parents/related memories.'),
+        relatedTypes: z.record(z.string(), z.enum(['parent', 'related'])).optional().describe('Relationship type per id. E.g.: { "mem_abc": "parent" }. Default: related'),
       }),
       execute: async ({ text, kind, weight, tags, relatedIds, relatedTypes }) => {
         const result = await memory.save({
@@ -77,11 +77,11 @@ export function createChatMemoryTools(input: SendMessageInput): ToolSet {
     }),
     memory_search: tool({
       description:
-        'Busca nas memórias do usuário (core + seasonal + general). Use quando ele referenciar algo passado de forma vaga ou quando o contexto anterior economizaria repetição.',
+        'Searches the user\'s memories (core + seasonal + general). Use when they vaguely reference something past, or when prior context would save repetition.',
       inputSchema: z.object({
-        query: z.string().describe('Termos da busca'),
-        kind: z.enum(['core', 'seasonal', 'general']).optional().describe('Restringe a um tipo'),
-        limit: z.number().int().min(1).max(20).optional().describe('Padrão: 8'),
+        query: z.string().describe('Search terms'),
+        kind: z.enum(['core', 'seasonal', 'general']).optional().describe('Restricts to one type'),
+        limit: z.number().int().min(1).max(20).optional().describe('Default: 8'),
       }),
       execute: async ({ query, kind, limit }) => {
         const results = await memory.search({
@@ -94,11 +94,11 @@ export function createChatMemoryTools(input: SendMessageInput): ToolSet {
     }),
     memory_link: tool({
       description:
-        'Conecta duas memórias existentes (backlink bidirecional). Use quando uma memória expande, corrige ou se relaciona a outra. Se for relação pai-filho (hierarquia), use type="parent".',
+        'Connects two existing memories (bidirectional backlink). Use when one memory expands, corrects, or relates to another. For a parent-child (hierarchy) relationship, use type="parent".',
       inputSchema: z.object({
         sourceId: z.string(),
         targetId: z.string(),
-        type: z.enum(['parent', 'related']).optional().describe('Tipo da relação. "parent" = hierarquia (source é pai de target). Padrão: related'),
+        type: z.enum(['parent', 'related']).optional().describe('Relationship type. "parent" = hierarchy (source is parent of target). Default: related'),
       }),
       execute: async ({ sourceId, targetId, type }) => {
         const ok = await memory.link(sourceId, targetId, type)
@@ -112,10 +112,10 @@ export function createChatMemoryTools(input: SendMessageInput): ToolSet {
 export function createGraphTool(_input: SendMessageInput, ctx: ToolContext) {
   return tool({
     description:
-      'Busca no grafo de memórias do projeto atual. Retorna nós cujo texto ou tags correspondem à consulta, com suas conexões (relatedIds). Use quando precisar de contexto arquitetural, decisões ou convenções específicas — substitui reanalisar o código.',
+      'Searches the current project\'s memory graph. Returns nodes whose text or tags match the query, with their connections (relatedIds). Use when you need architectural context, decisions, or specific conventions — replaces re-analyzing the code.',
     inputSchema: z.object({
-      query: z.string().describe('Termos da busca — palavras-chave do que precisa encontrar'),
-      limit: z.number().int().min(1).max(30).optional().describe('Máximo de nós (padrão: 10)'),
+      query: z.string().describe('Search terms — keywords for what you need to find'),
+      limit: z.number().int().min(1).max(30).optional().describe('Max nodes (default: 10)'),
     }),
     execute: async ({ query, limit }) => {
       const results = await memory.search({
@@ -150,24 +150,24 @@ export function createCodeMemoryTools(input: SendMessageInput, ctx: ToolContext)
   return {
     memory_save: tool({
       description:
-        'Salva uma memória de trabalho. kind "project" (padrão): sobre ESTE projeto, category obrigatória. kind "general": estilo global de trabalho, ou (com category="learning") uma lição reutilizável em OUTROS projetos com a mesma stack. Para contexto extenso, passe markdown em `document`.',
+        'Saves a working memory. kind "project" (default): about THIS project, category required. kind "general": global work style, or (with category="learning") a lesson reusable in OTHER projects with the same stack. For extensive context, pass markdown in `document`.',
       inputSchema: z.object({
-        text: z.string().describe('Resumo curto e autocontido (vai ao prompt e à busca)'),
-        kind: z.enum(['project', 'general']).optional().describe('Padrão: project'),
+        text: z.string().describe('Short, self-contained summary (goes into the prompt and search)'),
+        kind: z.enum(['project', 'general']).optional().describe('Default: project'),
         category: z
           .enum(['preference', 'convention', 'structure', 'decision', 'context', 'database', 'standard', 'learning'])
           .optional()
           .describe(
-            'Obrigatória quando kind=project (preference | convention | structure | decision | context | database | standard). "context" expira (weight <= 0.3). Quando kind=general, só "learning" é aceita — marca a memória como lição reutilizável em outros projetos; tagueie com a tecnologia.',
+            'Required when kind=project (preference | convention | structure | decision | context | database | standard). "context" expires (weight <= 0.3). When kind=general, only "learning" is accepted — marks the memory as a lesson reusable in other projects; tag it with the technology.',
           ),
-        weight: z.number().min(0).max(1).optional().describe('Importância 0..1'),
-        tags: z.array(z.string()).optional().describe('Palavras-chave para busca futura — para category=learning, inclua o nome da tecnologia/framework'),
+        weight: z.number().min(0).max(1).optional().describe('Importance 0..1'),
+        tags: z.array(z.string()).optional().describe('Keywords for future search — for category=learning, include the technology/framework name'),
         document: z
           .string()
           .optional()
-          .describe('Markdown anexado para contexto extenso'),
-        relatedIds: z.array(z.string()).optional().describe('Ids de memórias relacionadas (cria links). Conecte a área-pai, decisões relacionadas etc.'),
-        relatedTypes: z.record(z.string(), z.enum(['parent', 'related'])).optional().describe('Tipo da relação por id. Ex: { "mem_abc": "parent" }'),
+          .describe('Attached markdown for extensive context'),
+        relatedIds: z.array(z.string()).optional().describe('Ids of related memories (creates links). Connect to the parent area, related decisions, etc.'),
+        relatedTypes: z.record(z.string(), z.enum(['parent', 'related'])).optional().describe('Relationship type per id. E.g.: { "mem_abc": "parent" }'),
       }),
       execute: async ({ text, kind, category, weight, tags, document, relatedIds, relatedTypes }) => {
         const resolvedKind = kind ?? 'project'
@@ -194,15 +194,15 @@ export function createCodeMemoryTools(input: SendMessageInput, ctx: ToolContext)
     }),
     memory_search: tool({
       description:
-        'Busca nas memórias deste projeto + preferências gerais de trabalho + aprendizados de outros projetos. Use ao iniciar tarefa não-trivial para carregar decisões/convenções sem reanalisar o código.',
+        'Searches this project\'s memories + general work preferences + lessons from other projects. Use when starting a non-trivial task to load decisions/conventions without re-analyzing the code.',
       inputSchema: z.object({
-        query: z.string().describe('Termos da busca'),
-        kind: z.enum(['project', 'general']).optional().describe('Restringe a um tipo'),
+        query: z.string().describe('Search terms'),
+        kind: z.enum(['project', 'general']).optional().describe('Restricts to one type'),
         category: z
           .enum(['preference', 'convention', 'structure', 'decision', 'context', 'database', 'standard', 'learning'])
           .optional()
-          .describe('Filtra por categoria'),
-        limit: z.number().int().min(1).max(20).optional().describe('Padrão: 8'),
+          .describe('Filters by category'),
+        limit: z.number().int().min(1).max(20).optional().describe('Default: 8'),
       }),
       execute: async ({ query, kind, category, limit }) => {
         const results = await memory.search({
