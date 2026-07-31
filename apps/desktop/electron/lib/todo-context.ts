@@ -22,7 +22,7 @@ function formatTodoState(message: ChatMessage): string | null {
 
   const mark = { completed: 'x', in_progress: '~', pending: ' ' } as const
   const lines = items.map((i) => `- [${mark[i.status] ?? ' '}] ${i.content}`)
-  return `[TODO desta resposta]\n${lines.join('\n')}`
+  return `[TODO for this response]\n${lines.join('\n')}`
 }
 
 /** Texto de uma mensagem pra enviar ao modelo ou resumir na compactação:
@@ -36,7 +36,7 @@ export function messageContextText(message: ChatMessage, text: string): string {
 
   if (message.truncated) {
     parts.push(
-      '[SISTEMA: esta resposta foi interrompida por atingir o limite de passos/ferramentas antes de concluir. Se a TODO acima tiver itens pendentes ou in_progress, CONTINUE a partir deles — não recrie a lista do zero.]',
+      '[SYSTEM: this response was interrupted by hitting the step/tool limit before finishing. If the TODO above has pending or in_progress items, CONTINUE from them — do not recreate the list from scratch.]',
     )
   }
 
