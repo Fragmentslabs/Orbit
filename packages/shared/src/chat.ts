@@ -144,6 +144,9 @@ export interface AgentPart {
 export type MessagePart = TextPart | ReasoningPart | ToolPart | ImagePart | FilePart | AgentPart
 
 export interface TokenUsage {
+  /** Soma de todos os steps do turno (tool loop) — reflete custo/billing, NÃO
+   * o tamanho do contexto atual (um turno com N idas-e-vindas de tool reenvia
+   * o histórico N vezes, então este valor pode ser um múltiplo do contexto real). */
   input: number
   output: number
   reasoning: number
@@ -151,6 +154,10 @@ export interface TokenUsage {
   cacheWrite: number
   /** USD, calculado com os preços do catálogo (quando disponíveis) */
   cost?: number
+  /** Usage só do ÚLTIMO step do turno — essa sim é a métrica correta de
+   * "tamanho do contexto atual", usada pelo medidor de contexto e pelo
+   * gatilho de compactação. Ausente em mensagens persistidas antes desse campo existir. */
+  lastStep?: { input: number; output: number }
 }
 
 /** Snapshots do filesystem capturados em volta de uma resposta do assistente

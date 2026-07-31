@@ -15,6 +15,12 @@ const RESERVE_PADDING = 4_000
 const TAIL_USER_MESSAGES = 2
 /** Guarda-corpo do prompt de resumo (~25k tokens) */
 const MAX_SUMMARY_INPUT_CHARS = 100_000
+/** Teto absoluto de contexto pra decidir compactar, independente do
+ * model.limit.context anunciado pelo catálogo — modelos de contexto muito
+ * grande (1M+) só disparariam a compactação relativa perto de ~1M, deixando
+ * a conversa operar rotineiramente com centenas de milhares de tokens de
+ * histórico antes de cortar qualquer coisa. */
+const ABSOLUTE_CONTEXT_CAP = 300_000
 
 export const COMPACT_PROMPT = `Você compacta o histórico de uma conversa para liberar contexto. Produza notas densas em Markdown preservando, nesta ordem de prioridade:
 1. O objetivo do usuário e o estado atual da tarefa (o que já foi feito, o que falta).
@@ -30,7 +36,12 @@ export function findLastSummaryIndex(history: ChatMessage[]): number {
   return -1
 }
 
-/** Contexto estimado pelos tokens reais da última resposta — sem tokenizer. */
+/** Contexto estimado pelos tokens reais da última resposta — sem tokenizer.
+ * Usa `lastTokens.lastStep` (usage da última chamada ao modelo) quando
+ * disponível: é o tamanho real do contexto acumulado, ao contrário de
+ * `input`/`output` (soma de todos os steps do turno, inflada por
+ * idas-e-vindas de tool). Mensagens antigas sem `lastStep` caem no fallback
+ * do total, que superestima o contexto mas nunca deixa de compactar. */
 export function shouldCompact(
   lastTokens: TokenUsage | undefined,
   model: CatalogModel | undefined,
@@ -38,7 +49,11 @@ export function shouldCompact(
   if (lastTokens == null || !model?.limit?.context) return false
   const reserve =
     Math.min(model.limit.output || RESERVE_OUTPUT_CAP, RESERVE_OUTPUT_CAP) + RESERVE_PADDING
-  return lastTokens.input + lastTokens.output >= model.limit.context - reserve
+  const effectiveContext = Math.min(model.limit.context, ABSOLUTE_CONTEXT_CAP)
+  const used = lastTokens.lastStep
+    ? lastTokens.lastStep.input + lastTokens.lastStep.output
+    : lastTokens.input + lastTokens.output
+  return used >= effectiveContext - reserve
 }
 
 function textOf(message: ChatMessage): string {
