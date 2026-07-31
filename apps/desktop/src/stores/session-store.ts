@@ -586,9 +586,81 @@ export const useSessionStore = create<SessionState>((set, get) => ({
 
 type Setter = (fn: (state: SessionState) => Partial<SessionState>) => void
 
+// ─── Batching de deltas ──────────────────────────────────────────────────────
+// Agrupa part-deltas num frame (~33ms) para o stream parecer fluido sem um
+// re-render por token (espelho do mobile). O flush aplica tudo num único set
+// copiando só a lista da sessão afetada e atualizando só a mensagem/parte
+// afetada — as demais mensagens mantêm a referência e não re-renderizam.
+
+interface PendingDelta {
+  sessionId: string
+  messageId: string
+  partId: string
+  text: string
+}
+
+const DELTA_FLUSH_MS = 33
+
+const deltaBuffer = new Map<string, PendingDelta>()
+let deltaFlushTimer: ReturnType<typeof setTimeout> | null = null
+
+function flushDeltas(set: Setter) {
+  if (deltaFlushTimer) {
+    clearTimeout(deltaFlushTimer)
+    deltaFlushTimer = null
+  }
+  if (deltaBuffer.size === 0) return
+  const pending = [...deltaBuffer.values()]
+  deltaBuffer.clear()
+
+  set((state) => {
+    const messages = { ...state.messages }
+    // Agrupa por sessão para copiar cada lista uma única vez
+    const bySession = new Map<string, PendingDelta[]>()
+    for (const d of pending) {
+      const list = bySession.get(d.sessionId)
+      if (list) list.push(d)
+      else bySession.set(d.sessionId, [d])
+    }
+    for (const [sessionId, deltas] of bySession) {
+      const list = messages[sessionId]
+      if (!list) continue
+      const next = list.slice()
+      for (const delta of deltas) {
+        // Mensagem ativa costuma ser a última — busca do fim
+        let msgIdx = -1
+        for (let i = next.length - 1; i >= 0; i--) {
+          if (next[i].id === delta.messageId) {
+            msgIdx = i
+            break
+          }
+        }
+        if (msgIdx < 0) continue
+        const message = next[msgIdx]
+        const parts = message.parts.slice()
+        const partIdx = parts.findIndex((p) => p.id === delta.partId)
+        if (partIdx < 0) continue
+        const part = parts[partIdx]
+        if (part.type === "text" || part.type === "reasoning" || part.type === "agent") {
+          parts[partIdx] = { ...part, text: part.text + delta.text }
+          next[msgIdx] = { ...message, parts }
+        }
+      }
+      messages[sessionId] = next
+    }
+    return { messages }
+  })
+}
+
 function applyChatEvent(event: ChatEvent, set: Setter, get: () => SessionState) {
   // "folders" é o único evento sem sessionId (substituição completa da lista)
   const sessionId = "sessionId" in event ? event.sessionId : ""
+
+  // Eventos que tocam as mensagens diretamente precisam ver o texto já
+  // acumulado — descarrega os deltas pendentes antes de aplicá-los.
+  if (event.type === "message" || event.type === "part" || event.type === "messages" || event.type === "status") {
+    flushDeltas(set)
+  }
 
   const persistPendingAsks = (sid: string) => {
     void storage.write(StorageKeys.pendingAsks(sid), get().pendingAsks[sid] ?? [])
@@ -635,23 +707,24 @@ function applyChatEvent(event: ChatEvent, set: Setter, get: () => SessionState) 
       })
       break
 
-    case "part-delta":
-      set((state) => {
-        const list = state.messages[sessionId] ?? []
-        const next = list.map((message) => {
-          if (message.id !== event.messageId) return message
-          const parts = message.parts.map((part) => {
-            if (part.id !== event.partId) return part
-            if (part.type === "text" || part.type === "reasoning" || part.type === "agent") {
-              return { ...part, text: part.text + event.delta }
-            }
-            return part
-          })
-          return { ...message, parts }
+    case "part-delta": {
+      const key = `${sessionId}:${event.messageId}:${event.partId}`
+      const pending = deltaBuffer.get(key)
+      if (pending) {
+        pending.text += event.delta
+      } else {
+        deltaBuffer.set(key, {
+          sessionId,
+          messageId: event.messageId,
+          partId: event.partId,
+          text: event.delta,
         })
-        return { messages: { ...state.messages, [sessionId]: next } }
-      })
+      }
+      if (!deltaFlushTimer) {
+        deltaFlushTimer = setTimeout(() => flushDeltas(set), DELTA_FLUSH_MS)
+      }
       break
+    }
 
     case "messages":
       // Substituição completa (ex: compactação inseriu um resumo no meio)

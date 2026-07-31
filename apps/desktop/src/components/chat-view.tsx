@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { ChevronRight, PaperclipIcon } from "lucide-react"
 import { UserMessageNav } from "@/src/components/user-message-nav"
 import { useWorkspace } from "@/lib/workspace-context"
@@ -46,18 +46,23 @@ const codeSuggestions = [
 const NO_MESSAGES: ChatMessage[] = []
 const NO_ASKS: never[] = []
 
-function MessageItem({ msg, isLast, waiting, finished, isBusy, mode, sessionId, sendMessage, messages, index }: {
-  msg: ChatMessage
-  isLast: boolean
-  waiting: boolean
-  finished: boolean
-  isBusy: boolean
-  mode: "chat" | "code"
-  sessionId?: string
-  sendMessage: (mode: "chat" | "code", text: string, config: SendConfig) => Promise<void>
-  messages: ChatMessage[]
-  index: number
-}) {
+// Memoizado por referência da mensagem + flags: no flush de deltas só a
+// mensagem streamando muda de referência — as demais não re-renderizam.
+// `messages`/`sendMessage` ficam fora da comparação de propósito: o retry usa
+// `slice(0, index)`, imune a mensagens novas anexadas ao final da lista.
+const MessageItem = memo(
+  function MessageItem({ msg, isLast, waiting, finished, isBusy, mode, sessionId, sendMessage, messages, index }: {
+    msg: ChatMessage
+    isLast: boolean
+    waiting: boolean
+    finished: boolean
+    isBusy: boolean
+    mode: "chat" | "code"
+    sessionId?: string
+    sendMessage: (mode: "chat" | "code", text: string, config: SendConfig) => Promise<void>
+    messages: ChatMessage[]
+    index: number
+  }) {
   const AssistantMessage = mode === "chat" ? ChatAssistantMessage : CodeAssistantMessage
 
   const handleRetry = useCallback(() => {
@@ -118,7 +123,17 @@ function MessageItem({ msg, isLast, waiting, finished, isBusy, mode, sessionId, 
       {finished && !waiting && <AssistantMessageActions message={msg} sessionId={sessionId} />}
     </Message>
   )
-}
+  },
+  (prev, next) =>
+    prev.msg === next.msg &&
+    prev.isLast === next.isLast &&
+    prev.waiting === next.waiting &&
+    prev.finished === next.finished &&
+    prev.isBusy === next.isBusy &&
+    prev.mode === next.mode &&
+    prev.sessionId === next.sessionId &&
+    prev.index === next.index,
+)
 
 function ChatMessages({ messages, isBusy, mode, sessionId, sendMessage, planIds, planReview, plan }: {
   messages: ChatMessage[]
