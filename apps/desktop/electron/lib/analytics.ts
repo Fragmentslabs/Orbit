@@ -29,6 +29,74 @@ function sumTokens(t: TokenUsage | undefined): number {
   return (t.input ?? 0) + (t.output ?? 0)
 }
 
+/** Só o texto que a pessoa digitou (ignora texto extraído de anexo) — usado
+ * pra decidir se um follow-up "parece" um teste/implementação detalhada. */
+function visibleTextLength(message: ChatMessage): number {
+  return message.parts
+    .filter((p): p is Extract<ChatMessage['parts'][number], { type: 'text' }> => p.type === 'text' && p.source !== 'attachment')
+    .reduce((sum, p) => sum + p.text.length, 0)
+}
+
+interface WorkSegment {
+  day: string
+  ms: number
+  providerId: string
+  modelId: string
+}
+
+/**
+ * Tempo trabalhado = distância entre mensagens consecutivas, com regras pra
+ * decidir se o gap entre uma resposta do Orbit e a próxima mensagem do
+ * usuário ainda conta como trabalho ou é uma pausa:
+ * - resposta do Orbit (user → assistant): sempre conta (geração ativa).
+ * - gap < 30min: conta inteiro (lendo/testando/revisando).
+ * - gap 30–60min E próxima msg > 300 chars: conta inteiro (follow-up detalhado).
+ * - gap 60–90min E próxima msg > 1000 chars: conta 50% do gap.
+ * - qualquer outro caso (gap > 90min, ou gap 30–90min sem msg longa o
+ *   suficiente): quebra — não conta.
+ */
+function computeSessionSegments(messages: ChatMessage[]): WorkSegment[] {
+  const sorted = [...messages].sort((a, b) => a.createdAt - b.createdAt)
+  const segments: WorkSegment[] = []
+
+  for (let i = 1; i < sorted.length; i++) {
+    const prev = sorted[i - 1]
+    const curr = sorted[i]
+    const gapMs = curr.createdAt - prev.createdAt
+    if (gapMs <= 0) continue
+
+    if (prev.role === 'user' && curr.role === 'assistant') {
+      segments.push({
+        day: getDateKey(prev.createdAt),
+        ms: gapMs,
+        providerId: curr.providerId ?? 'unknown',
+        modelId: curr.modelId ?? 'unknown',
+      })
+      continue
+    }
+
+    if (prev.role === 'assistant' && curr.role === 'user') {
+      const gapMin = gapMs / 60_000
+      const len = visibleTextLength(curr)
+      let countedMs = 0
+      if (gapMin < 30) countedMs = gapMs
+      else if (gapMin <= 60 && len > 300) countedMs = gapMs
+      else if (gapMin <= 90 && len > 1000) countedMs = gapMs * 0.5
+
+      if (countedMs > 0) {
+        segments.push({
+          day: getDateKey(prev.createdAt),
+          ms: countedMs,
+          providerId: prev.providerId ?? 'unknown',
+          modelId: prev.modelId ?? 'unknown',
+        })
+      }
+    }
+  }
+
+  return segments
+}
+
 export async function computeAnalytics(range: AnalyticsRange): Promise<AnalyticsSummary> {
   const { since } = computeRange(range)
 
@@ -62,10 +130,6 @@ export async function computeAnalytics(range: AnalyticsRange): Promise<Analytics
 
     for (const [day, msgs] of msgsByDay) {
       msgs.sort((a, b) => a.createdAt - b.createdAt)
-      const dayHours = Math.min(
-        (msgs[msgs.length - 1].createdAt - msgs[0].createdAt) / 3_600_000,
-        8,
-      )
 
       let entry = dayMap.get(day)
       if (!entry) {
@@ -102,18 +166,25 @@ export async function computeAnalytics(range: AnalyticsRange): Promise<Analytics
         mt.messages++
         mt.cost += cost
       }
+    }
 
-      // Distribute day hours proportionally to message count among models
-      const assistantCount = msgs.filter((m) => m.role === 'assistant').length
-      if (assistantCount > 0) {
-        entry.totalHours += dayHours
-        for (const mb of entry.byModel) {
-          const modelAssistantCount = msgs.filter(
-            (m) => m.role === 'assistant' && (m.modelId ?? 'unknown') === mb.modelId,
-          ).length
-          mb.hours += (dayHours * modelAssistantCount) / assistantCount
-        }
+    // Horas = distância entre mensagens consecutivas (geração + gaps que
+    // passam nas regras de computeSessionSegments), não mais o span
+    // primeiro-último-msg do dia. Sessões-worker da orquestração entram
+    // normalmente (não são filtradas) — cada worker conta seu próprio tempo.
+    for (const segment of computeSessionSegments(messages)) {
+      const entry = dayMap.get(segment.day)
+      if (!entry) continue // dia sem nenhuma mensagem (não deveria acontecer)
+      const hours = segment.ms / 3_600_000
+      entry.totalHours += hours
+
+      const modelKey = `${segment.providerId}::${segment.modelId}`
+      let mb = entry.byModel.find((m) => `${m.providerId}::${m.modelId}` === modelKey)
+      if (!mb) {
+        mb = { providerId: segment.providerId, modelId: segment.modelId, tokens: 0, hours: 0, messages: 0, cost: 0 }
+        entry.byModel.push(mb)
       }
+      mb.hours += hours
     }
   }
 
