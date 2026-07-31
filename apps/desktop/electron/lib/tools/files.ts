@@ -17,11 +17,11 @@ const MAX_GLOB_RESULTS = 200
 export function createReadTool(ctx: ToolContext) {
   return tool({
     description:
-      'Lê um arquivo de texto. Retorna o conteúdo com números de linha. Use offset/limit para arquivos grandes.',
+      'Reads a text file. Returns the content with line numbers. Use offset/limit for large files.',
     inputSchema: z.object({
-      filePath: z.string().describe('Caminho do arquivo (relativo à pasta de trabalho ou absoluto)'),
-      offset: z.number().optional().describe('Linha inicial (1-indexada)'),
-      limit: z.number().optional().describe('Quantidade de linhas a ler'),
+      filePath: z.string().describe('File path (relative to the working folder or absolute)'),
+      offset: z.number().optional().describe('Start line (1-indexed)'),
+      limit: z.number().optional().describe('Number of lines to read'),
     }),
     execute: async ({ filePath, offset, limit }) => {
       const file = resolveSafePath(ctx, filePath)
@@ -41,10 +41,10 @@ export function createReadTool(ctx: ToolContext) {
 
 export function createWriteTool(ctx: ToolContext) {
   return tool({
-    description: 'Cria ou sobrescreve um arquivo com o conteúdo informado.',
+    description: 'Creates or overwrites a file with the given content.',
     inputSchema: z.object({
-      filePath: z.string().describe('Caminho do arquivo'),
-      content: z.string().describe('Conteúdo completo do arquivo'),
+      filePath: z.string().describe('File path'),
+      content: z.string().describe('Full file content'),
     }),
     execute: async ({ filePath, content }) => {
       const file = resolveSafePath(ctx, filePath)
@@ -81,12 +81,12 @@ function replaceOnce(content: string, oldString: string, newString: string): str
 export function createEditTool(ctx: ToolContext) {
   return tool({
     description:
-      'Edita um arquivo substituindo oldString por newString. oldString deve ser único no arquivo (inclua contexto suficiente) ou use replaceAll.',
+      'Edits a file by replacing oldString with newString. oldString must be unique in the file (include enough context) or use replaceAll.',
     inputSchema: z.object({
-      filePath: z.string().describe('Caminho do arquivo'),
-      oldString: z.string().describe('Texto exato a substituir'),
-      newString: z.string().describe('Novo texto'),
-      replaceAll: z.boolean().optional().describe('Substituir todas as ocorrências'),
+      filePath: z.string().describe('File path'),
+      oldString: z.string().describe('Exact text to replace'),
+      newString: z.string().describe('New text'),
+      replaceAll: z.boolean().optional().describe('Replace all occurrences'),
     }),
     execute: async ({ filePath, oldString, newString, replaceAll }) => {
       const file = resolveSafePath(ctx, filePath)
@@ -113,9 +113,9 @@ export function createEditTool(ctx: ToolContext) {
 
 export function createListTool(ctx: ToolContext) {
   return tool({
-    description: 'Lista arquivos e pastas de um diretório.',
+    description: 'Lists files and folders in a directory.',
     inputSchema: z.object({
-      dirPath: z.string().optional().describe('Diretório (padrão: pasta de trabalho)'),
+      dirPath: z.string().optional().describe('Directory (default: working folder)'),
     }),
     execute: async ({ dirPath }) => {
       const dir = resolveSafePath(ctx, dirPath ?? '.')
@@ -163,10 +163,10 @@ async function* walkFiles(root: string, abort: AbortSignal): AsyncGenerator<stri
 
 export function createGlobTool(ctx: ToolContext) {
   return tool({
-    description: 'Busca arquivos por padrão glob (ex.: "**/*.ts", "src/**/*.tsx").',
+    description: 'Finds files by glob pattern (e.g.: "**/*.ts", "src/**/*.tsx").',
     inputSchema: z.object({
-      pattern: z.string().describe('Padrão glob'),
-      dirPath: z.string().optional().describe('Diretório base (padrão: pasta de trabalho)'),
+      pattern: z.string().describe('Glob pattern'),
+      dirPath: z.string().optional().describe('Base directory (default: working folder)'),
     }),
     execute: async ({ pattern, dirPath }) => {
       const base = resolveSafePath(ctx, dirPath ?? '.')
@@ -188,11 +188,11 @@ export function createGlobTool(ctx: ToolContext) {
 
 export function createGrepTool(ctx: ToolContext) {
   return tool({
-    description: 'Busca um padrão (regex) no conteúdo dos arquivos.',
+    description: 'Searches for a pattern (regex) in file contents.',
     inputSchema: z.object({
-      pattern: z.string().describe('Expressão regular'),
-      dirPath: z.string().optional().describe('Diretório base (padrão: pasta de trabalho)'),
-      include: z.string().optional().describe('Filtro glob de arquivos (ex.: "*.ts")'),
+      pattern: z.string().describe('Regular expression'),
+      dirPath: z.string().optional().describe('Base directory (default: working folder)'),
+      include: z.string().optional().describe('File glob filter (e.g.: "*.ts")'),
     }),
     execute: async ({ pattern, dirPath, include }) => {
       const base = resolveSafePath(ctx, dirPath ?? '.')

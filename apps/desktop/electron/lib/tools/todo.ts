@@ -9,12 +9,12 @@ import { z } from 'zod'
 export function createTodoTool() {
   return tool({
     description:
-      'Mantém a lista de tarefas (TODO) do trabalho atual. Reenvie a lista COMPLETA a cada chamada — marque in_progress ao iniciar um item e completed ao concluir. Use em tarefas com 3+ etapas.',
+      'Maintains the current work\'s task list (TODO). Resend the FULL list on every call — mark in_progress when starting an item and completed when finishing it. Use on tasks with 3+ steps.',
     inputSchema: z.object({
       items: z
         .array(
           z.object({
-            content: z.string().describe('Descrição curta do item'),
+            content: z.string().describe('Short item description'),
             status: z.enum(['pending', 'in_progress', 'completed']),
             priority: z.enum(['low', 'medium', 'high']).optional(),
           }),

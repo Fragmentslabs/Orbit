@@ -55,27 +55,27 @@ export async function reviewIteration(
     model,
     system: REVIEW_PROMPT,
     messages: [
-      { role: 'user', content: `## Pedido original do usuário\n\n${originalInput}` },
+      { role: 'user', content: `## User's original request\n\n${originalInput}` },
       {
         role: 'user',
-        content: `## Histórico da conversa\n\n${history
+        content: `## Conversation history\n\n${history
           .map((m) => `[${m.role}]: ${m.parts.filter((p): p is TextPart => p.type === 'text').map((p) => p.text).join('\n')}`)
           .join('\n\n')}`,
       },
       {
         role: 'user',
         content:
-          'Com base no pedido original e no que já foi feito, analise se o objetivo foi completamente atingido. Se sim, use review_completion com status "done". Se não, use "needs_more" e descreva exatamente o que falta no followUpPrompt. Se a abordagem atual está falhando repetidamente, use "replan" com uma nova estratégia em newApproach.',
+          'Based on the original request and what has been done so far, analyze whether the goal was fully achieved. If so, use review_completion with status "done". If not, use "needs_more" and describe exactly what\'s missing in followUpPrompt. If the current approach is repeatedly failing, use "replan" with a new strategy in newApproach.',
       },
     ],
     tools: {
       review_completion: {
-        description: 'Registra se o objetivo foi atingido, precisa continuar, ou requer re-planejamento.',
+        description: 'Records whether the goal was achieved, needs more work, or requires re-planning.',
         inputSchema: z.object({
           status: z.enum(['done', 'needs_more', 'replan']),
-          reason: z.string().describe('Explicação curta da decisão'),
-          followUpPrompt: z.string().optional().describe('Se needs_more, descreva exatamente o que falta. Será enviado como nova instrução.'),
-          newApproach: z.string().optional().describe('Se replan, sugira uma nova abordagem ou estratégia.'),
+          reason: z.string().describe('Short explanation of the decision'),
+          followUpPrompt: z.string().optional().describe('If needs_more, describe exactly what\'s missing. Will be sent as a new instruction.'),
+          newApproach: z.string().optional().describe('If replan, suggest a new approach or strategy.'),
         }),
       },
     },

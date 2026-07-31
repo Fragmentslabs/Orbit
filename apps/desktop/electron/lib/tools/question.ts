@@ -19,11 +19,11 @@ async function autoAnswer(input: SendMessageInput, questions: Omit<Question, 'id
     const { text } = await generateText({
       model,
       system:
-        'Você decide no lugar do usuário para desbloquear um agente worker em execução autônoma. Escolha a opção mais razoável e segura para cada pergunta. Responda em linhas numeradas, apenas as escolhas, sem explicações.',
+        'You decide on the user\'s behalf to unblock a worker agent running autonomously. Choose the most reasonable and safe option for each question. Reply with numbered lines, choices only, no explanations.',
       prompt: questions
         .map(
           (q, i) =>
-            `${i + 1}. ${q.text}${q.options?.length ? ` Opções: ${q.options.join(' | ')}` : ''}`,
+            `${i + 1}. ${q.text}${q.options?.length ? ` Options: ${q.options.join(' | ')}` : ''}`,
         )
         .join('\n'),
     })
@@ -40,14 +40,14 @@ export function createQuestionTool(input: SendMessageInput, signal?: AbortSignal
 
   return tool({
     description:
-      'Faz perguntas estruturadas ao usuário. Use diante de decisões com múltiplas abordagens válidas, requisitos ambíguos ou escolhas que afetam o resultado — ofereça opções claras. NÃO use para confirmações triviais. IMPORTANTE: a pergunta (text) deve ser apenas a pergunta em si, SEM incluir exemplos ou opções — as opções devem ser fornecidas exclusivamente no campo "options".',
+      'Asks the user structured questions. Use it when facing decisions with multiple valid approaches, ambiguous requirements, or choices that affect the outcome — offer clear options. Do NOT use it for trivial confirmations. IMPORTANT: the question (text) must be just the question itself, WITHOUT examples or options — options must be provided exclusively in the "options" field.',
     inputSchema: z.object({
       questions: z
         .array(
           z.object({
-            text: z.string().describe('A pergunta direta e objetiva, SEM incluir exemplos ou opções — elas vão no campo "options"'),
-            options: z.array(z.string()).optional().describe('Opções de resposta (2-4, curtas e diretas)'),
-            multi: z.boolean().optional().describe('Permite selecionar múltiplas opções'),
+            text: z.string().describe('The direct, objective question, WITHOUT examples or options — those go in the "options" field'),
+            options: z.array(z.string()).optional().describe('Answer options (2-4, short and direct)'),
+            multi: z.boolean().optional().describe('Allow selecting multiple options'),
           }),
         )
         .min(1)

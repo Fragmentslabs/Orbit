@@ -38,9 +38,9 @@ export function createPanelBrowserTools(ctx: ToolContext): ToolSet {
   return {
     panel_navigate: tool({
       description:
-        'Abre uma URL no browser do painel direito do Orbit (o painel abre sozinho). Use para testar aplicações web — servidores locais (http://localhost:...) incluídos.',
+        'Opens a URL in the Orbit right panel browser (the panel opens on its own). Use it to test web apps — local servers (http://localhost:...) included.',
       inputSchema: z.object({
-        url: z.string().describe('URL completa (http/https)'),
+        url: z.string().describe('Full URL (http/https)'),
       }),
       execute: async ({ url }) => {
         const result = await panelNavigate(url)
@@ -49,16 +49,16 @@ export function createPanelBrowserTools(ctx: ToolContext): ToolSet {
     }),
     panel_read: tool({
       description:
-        'Lê a página aberta no browser do painel: título, URL, texto visível e elementos interativos com refs numeradas para panel_click/panel_type.',
+        'Reads the page open in the panel browser: title, URL, visible text, and interactive elements with numbered refs for panel_click/panel_type.',
       inputSchema: z.object({}),
       execute: async () => panelRead(),
     }),
     panel_click: tool({
       description:
-        'Clica em um elemento da página do painel, por ref (do panel_read) ou seletor CSS. Refs mudam após navegação — rode panel_read de novo.',
+        'Clicks an element on the panel page, by ref (from panel_read) or CSS selector. Refs change after navigation — run panel_read again.',
       inputSchema: z.object({
-        ref: z.number().int().optional().describe('Ref numérica do panel_read'),
-        selector: z.string().optional().describe('Seletor CSS (alternativa à ref)'),
+        ref: z.number().int().optional().describe('Numeric ref from panel_read'),
+        selector: z.string().optional().describe('CSS selector (alternative to ref)'),
       }),
       execute: async ({ ref, selector }) => {
         if (ref == null && !selector) return 'Informe ref ou selector.'
@@ -67,12 +67,12 @@ export function createPanelBrowserTools(ctx: ToolContext): ToolSet {
     }),
     panel_type: tool({
       description:
-        'Digita texto em um campo da página do painel (por ref ou seletor CSS), com opção de enviar o formulário.',
+        'Types text into a field on the panel page (by ref or CSS selector), with the option to submit the form.',
       inputSchema: z.object({
-        text: z.string().describe('Texto a digitar'),
-        ref: z.number().int().optional().describe('Ref numérica do panel_read'),
-        selector: z.string().optional().describe('Seletor CSS (alternativa à ref)'),
-        pressEnter: z.boolean().optional().describe('Envia o formulário após digitar'),
+        text: z.string().describe('Text to type'),
+        ref: z.number().int().optional().describe('Numeric ref from panel_read'),
+        selector: z.string().optional().describe('CSS selector (alternative to ref)'),
+        pressEnter: z.boolean().optional().describe('Submits the form after typing'),
       }),
       execute: async ({ text, ref, selector, pressEnter }) => {
         if (ref == null && !selector) return 'Informe ref ou selector.'
@@ -81,11 +81,11 @@ export function createPanelBrowserTools(ctx: ToolContext): ToolSet {
     }),
     panel_resize: tool({
       description:
-        'Redimensiona o viewport do browser do painel para testar responsividade. Use um preset (mobile/tablet/desktop/fit) ou width/height custom. Depois use panel_screenshot para ver o resultado.',
+        'Resizes the panel browser\'s viewport to test responsiveness. Use a preset (mobile/tablet/desktop/fit) or custom width/height. Then use panel_screenshot to see the result.',
       inputSchema: z.object({
         preset: z.enum(['mobile', 'tablet', 'desktop', 'fit']).optional(),
-        width: z.number().int().min(280).max(3840).optional().describe('Largura custom em px'),
-        height: z.number().int().min(400).max(2160).optional().describe('Altura custom em px'),
+        width: z.number().int().min(280).max(3840).optional().describe('Custom width in px'),
+        height: z.number().int().min(400).max(2160).optional().describe('Custom height in px'),
       }),
       execute: async ({ preset, width, height }) => {
         if (width && height) return panelResize(width, height, `${width}×${height}`)
@@ -95,16 +95,16 @@ export function createPanelBrowserTools(ctx: ToolContext): ToolSet {
     }),
     panel_screenshot: tool({
       description:
-        'Tira um screenshot da página do painel e o VÊ como imagem. Com savePath, também salva o WebP na pasta de trabalho (ex: docs/login/tela.webp) — use no modo documentação. Com fullscreen, expande para tela cheia, captura a tela toda e volta à visão lateral.',
+        'Takes a screenshot of the panel page and SEES it as an image. With savePath, also saves the WebP to the working folder (e.g.: docs/login/screen.webp) — use in documentation mode. With fullscreen, expands to full screen, captures the whole screen, and returns to the side view.',
       inputSchema: z.object({
         savePath: z
           .string()
           .optional()
-          .describe('Caminho relativo à pasta de trabalho para salvar o WebP (opcional)'),
+          .describe('Path relative to the working folder to save the WebP (optional)'),
         fullscreen: z
           .boolean()
           .optional()
-          .describe('Captura em tela cheia (print maior) e retorna à visão lateral'),
+          .describe('Captures full screen (bigger shot) and returns to the side view'),
       }) as any,
       execute: async ({ savePath, fullscreen }, { toolCallId }) => {
         const webp = await panelScreenshot(fullscreen === true)
@@ -140,14 +140,14 @@ export function createPanelBrowserTools(ctx: ToolContext): ToolSet {
     }),
     show_image: tool({
       description:
-        'Inclui uma imagem NA SUA RESPOSTA, visível para o usuário no chat. Use fromPanel para anexar um print atual do browser do painel, ou path para uma imagem da pasta de trabalho (ex: docs/login/tela.webp). A imagem aparece no ponto da resposta em que a tool foi chamada — não a descreva em excesso depois.',
+        'Includes an image IN YOUR RESPONSE, visible to the user in the chat. Use fromPanel to attach a current screenshot of the panel browser, or path for an image in the working folder (e.g.: docs/login/screen.webp). The image appears at the point in the response where the tool was called — don\'t over-describe it afterward.',
       inputSchema: z.object({
-        fromPanel: z.boolean().optional().describe('Captura o browser do painel agora e anexa'),
+        fromPanel: z.boolean().optional().describe('Captures the panel browser now and attaches it'),
         path: z
           .string()
           .optional()
-          .describe('Caminho relativo de uma imagem existente na pasta de trabalho (png/jpg/webp/gif)'),
-        alt: z.string().optional().describe('Legenda curta exibida sob a imagem'),
+          .describe('Relative path to an existing image in the working folder (png/jpg/webp/gif)'),
+        alt: z.string().optional().describe('Short caption shown under the image'),
       }),
       execute: async ({ fromPanel, path: imagePath, alt }) => {
         let buffer: Buffer

@@ -60,9 +60,9 @@ const EXTRACT_LINKS = `
 export function createBrowserOpenTool(sessionId: string) {
   return tool({
     description:
-      'Abre uma URL em um browser real (com JavaScript) e retorna o texto renderizado da página. Prefira esta ferramenta para páginas dinâmicas.',
+      'Opens a URL in a real browser (with JavaScript) and returns the page\'s rendered text. Prefer this tool for dynamic pages.',
     inputSchema: z.object({
-      url: z.string().describe('URL para abrir'),
+      url: z.string().describe('URL to open'),
     }),
     execute: async ({ url }) => {
       const win = await Promise.race([
@@ -83,7 +83,7 @@ export function createBrowserOpenTool(sessionId: string) {
 
 export function createBrowserLinksTool(sessionId: string) {
   return tool({
-    description: 'Lista os links da página atualmente aberta no browser.',
+    description: 'Lists the links on the page currently open in the browser.',
     inputSchema: z.object({}),
     execute: async () => {
       const win = browserWindows.get(sessionId)

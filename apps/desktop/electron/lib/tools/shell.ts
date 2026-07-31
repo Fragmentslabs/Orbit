@@ -66,11 +66,11 @@ function runShell(command: string, cwd: string, timeout: number, abort: AbortSig
 export function createBashTool(ctx: ToolContext) {
   return tool({
     description:
-      'Executa um comando de shell na pasta de trabalho e retorna stdout/stderr. Use para builds, testes, git, etc.',
+      'Runs a shell command in the working folder and returns stdout/stderr. Use for builds, tests, git, etc.',
     inputSchema: z.object({
-      command: z.string().describe('Comando a executar'),
-      description: z.string().optional().describe('Descrição curta do que o comando faz'),
-      timeout: z.number().optional().describe('Timeout em milissegundos (máx. 10 minutos)'),
+      command: z.string().describe('Command to run'),
+      description: z.string().optional().describe('Short description of what the command does'),
+      timeout: z.number().optional().describe('Timeout in milliseconds (max 10 minutes)'),
     }),
     execute: async ({ command, timeout }) => {
       const ms = Math.min(timeout ?? DEFAULT_TIMEOUT, MAX_TIMEOUT)

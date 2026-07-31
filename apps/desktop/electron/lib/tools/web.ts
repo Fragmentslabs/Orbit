@@ -64,10 +64,10 @@ export async function searchWeb(query: string, numResults = 8): Promise<string> 
 export function createWebSearchTool() {
   return tool({
     description:
-      'Pesquisa na web e retorna resultados com títulos, URLs e trechos de conteúdo. Use para informações atuais.',
+      'Searches the web and returns results with titles, URLs, and content snippets. Use for current information.',
     inputSchema: z.object({
-      query: z.string().describe('Consulta de pesquisa'),
-      numResults: z.number().optional().describe('Número de resultados (padrão: 8)'),
+      query: z.string().describe('Search query'),
+      numResults: z.number().optional().describe('Number of results (default: 8)'),
     }),
     execute: async ({ query, numResults }) => searchWeb(query, numResults ?? 8),
   })
@@ -103,9 +103,9 @@ export function htmlToText(html: string): string {
 
 export function createWebFetchTool() {
   return tool({
-    description: 'Baixa o conteúdo de uma URL e retorna como texto legível.',
+    description: 'Downloads a URL\'s content and returns it as readable text.',
     inputSchema: z.object({
-      url: z.string().describe('URL http(s) para buscar'),
+      url: z.string().describe('http(s) URL to fetch'),
     }),
     execute: async ({ url }) => {
       if (!url.startsWith('http://') && !url.startsWith('https://')) {
