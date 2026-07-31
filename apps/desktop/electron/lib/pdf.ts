@@ -1,6 +1,12 @@
 import { PDFParse } from 'pdf-parse'
 
-const DATA_URL_PREFIX = /^data:application\/pdf;base64,/
+// O mime embutido na data URL vem do sniff do browser no drop/seleção do
+// arquivo (File.type) — nem sempre é "application/pdf" exato (drag-and-drop
+// nativo do Electron às vezes não popula ou popula com outro valor). A
+// detecção de que É um PDF já aconteceu antes de chamar esta função (mime OU
+// extensão .pdf), então aqui só precisamos separar o base64 do prefixo,
+// sem exigir um mime específico — mesmo padrão usado em xlsx.ts/docx.ts.
+const DATA_URL_PREFIX = /^data:[^;,]*;base64,/
 
 function dataUrlToBytes(url: string): Uint8Array {
   const match = DATA_URL_PREFIX.exec(url)

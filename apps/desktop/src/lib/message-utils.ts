@@ -8,9 +8,24 @@ export interface WebSource {
   title: string
 }
 
+/** Texto completo da mensagem (todas as text parts, incluindo o que foi
+ * extraído de anexos). Usado quando o consumidor precisa do conteúdo real —
+ * ex.: reenviar em um retry, já que o retry não reanexa o arquivo original. */
 export function messageText(message: ChatMessage): string {
   return message.parts
     .filter((p): p is Extract<MessagePart, { type: "text" }> => p.type === "text")
+    .map((p) => p.text)
+    .join("\n")
+}
+
+/** Só o que a pessoa digitou — omite as text parts com source "attachment"
+ * (texto extraído de PDF/planilha/DOCX/skill). Use para exibir a bolha do
+ * usuário, copiar a mensagem ou preview no nav: o conteúdo extraído já
+ * aparece como chip de anexo, não precisa poluir a bolha com o texto inteiro
+ * do arquivo — o modelo continua recebendo tudo via messageText/partText. */
+export function visibleMessageText(message: ChatMessage): string {
+  return message.parts
+    .filter((p): p is Extract<MessagePart, { type: "text" }> => p.type === "text" && p.source !== "attachment")
     .map((p) => p.text)
     .join("\n")
 }

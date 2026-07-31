@@ -15,7 +15,7 @@ import type { Components } from "streamdown"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import { cn } from "@/lib/utils"
 import type { AgentPart, ChatMessage, ReasoningPart, ToolPart } from "@shared/chat"
-import { hostnameOf, messageText } from "@/src/lib/message-utils"
+import { hostnameOf, messageText, visibleMessageText } from "@/src/lib/message-utils"
 import { useSessionStore } from "@/src/stores/session-store"
 import { Actions, Action } from "@/src/components/ai/actions"
 import {
@@ -278,10 +278,10 @@ export function AssistantMessageActions({ message, sessionId }: {
 export function UserMessageBody({ message }: { message: ChatMessage }) {
   return (
     <div className="group/user-msg flex flex-col gap-0.5">
-      <p className="whitespace-pre-wrap">{messageText(message)}</p>
+      <p className="whitespace-pre-wrap">{visibleMessageText(message)}</p>
       <Actions className="-mb-1 items-center justify-end opacity-0 transition-opacity group-hover/user-msg:opacity-100">
         <MessageTimestamp timestamp={message.createdAt} />
-        <CopyAction text={messageText(message)} />
+        <CopyAction text={visibleMessageText(message)} />
       </Actions>
     </div>
   )

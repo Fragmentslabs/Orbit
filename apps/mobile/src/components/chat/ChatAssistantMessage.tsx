@@ -33,6 +33,7 @@ import { Shimmer } from '~/components/ai/Shimmer'
 import { SubAgentCard } from '~/components/chat/SubAgentCard'
 import {
   messageText,
+  visibleMessageText,
   extractSources,
   WEB_TOOLS,
   parseSearchResults,
@@ -53,7 +54,7 @@ interface ChatAssistantMessageProps {
 // ─── User Message Attachments & Bubble ───────────────────────────────────────
 
 function UserMessage({ message }: { message: ChatMessage }) {
-  const text = messageText(message)
+  const text = visibleMessageText(message)
   const files = message.parts.filter((p): p is FilePart => p.type === 'file')
   const tokens = getThemeTokens(useThemeStore((s) => s.resolved))
 

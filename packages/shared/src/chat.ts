@@ -78,6 +78,13 @@ export interface TextPart {
   type: "text"
   text: string
   state: TextPartState
+  /**
+   * "attachment" = gerado por extração de anexo (PDF/planilha/DOCX/skill),
+   * não digitado pelo usuário. O modelo ainda recebe esse texto normalmente
+   * (toModelMessages/partText não filtram por origem) — só a bolha visível
+   * do chat esconde essas parts, mostrando apenas o que a pessoa escreveu.
+   */
+  source?: "attachment"
 }
 
 export interface ReasoningPart {

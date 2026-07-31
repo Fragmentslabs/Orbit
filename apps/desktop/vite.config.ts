@@ -30,7 +30,13 @@ export default defineConfig({
           },
           build: {
             rollupOptions: {
-              external: ['node-pty'],
+              // pdf-parse (via pdfjs-dist) resolve seu worker.mjs num caminho
+              // relativo ao próprio arquivo em runtime — empacotado num único
+              // bundle, esse caminho relativo passa a apontar para dentro de
+              // dist-electron/, onde o worker não existe. Externalizar deixa
+              // o require apontar pro node_modules real, preservando os
+              // caminhos relativos entre os arquivos do pacote.
+              external: ['node-pty', 'pdf-parse'],
             },
           },
         },
