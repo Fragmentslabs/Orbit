@@ -20,6 +20,7 @@ import {
   AssistantMarkdown,
   GenericToolView,
   MessageError,
+  MessageTruncated,
   ReasoningPartView,
 } from "@/src/components/messages/shared"
 
@@ -161,6 +162,7 @@ export function ChatAssistantMessage({ message, isLast, isBusy, onRetry }: {
         ),
       )}
       {message.error && <MessageError error={message.error} onRetry={onRetry} />}
+      {!message.error && message.truncated && <MessageTruncated />}
       {finished && sources.length > 0 && (
         <Sources className="mt-2">
           <SourcesTrigger count={sources.length} />

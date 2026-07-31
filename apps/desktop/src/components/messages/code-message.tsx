@@ -26,6 +26,7 @@ import {
   AgentPartView,
   AssistantMarkdown,
   MessageError,
+  MessageTruncated,
   ReasoningPartView,
 } from "@/src/components/messages/shared"
 
@@ -299,6 +300,7 @@ export function CodeAssistantMessage({ message, sessionId, isLast, isBusy, onRet
         ) : null,
       )}
       {message.error && <MessageError error={message.error} onRetry={onRetry} />}
+      {!message.error && message.truncated && <MessageTruncated />}
       {finished && sources.length > 0 && (
         <Sources className="mt-2">
           <SourcesTrigger count={sources.length}>
