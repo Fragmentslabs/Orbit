@@ -11,6 +11,13 @@ export interface ModelCost {
   output: number
 }
 
+/** Usage de um único step (ex.: evento 'finish-step' do fullStream) — usado
+ * como proxy do tamanho real do contexto atual, ao contrário do usage total
+ * do turno (soma de todos os steps, inflado por idas-e-vindas de tool). */
+export function toStepUsage(usage: LanguageModelUsage): { input: number; output: number } {
+  return { input: usage.inputTokens ?? 0, output: usage.outputTokens ?? 0 }
+}
+
 export function toTokenUsage(usage: LanguageModelUsage, cost?: ModelCost): TokenUsage {
   const input = usage.inputTokens ?? 0
   const output = usage.outputTokens ?? 0

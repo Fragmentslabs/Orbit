@@ -28,7 +28,7 @@ import { runProjectInit, type InitHooks } from './project-init'
 import { PROJECT_AREAS, type ProjectArea } from '@shared/memory'
 import { readJson, writeJson } from './storage'
 import { buildToolSet, type ToolContext } from './tools'
-import { toTokenUsage } from './usage'
+import { toStepUsage, toTokenUsage } from './usage'
 import { forwardChatEvent } from './companion-server'
 
 /**
@@ -538,6 +538,10 @@ export async function runChat(win: BrowserWindow, input: SendMessageInput): Prom
     let streaming = false
     let lastSave = Date.now()
     const reasoningStart = new Map<string, number>()
+    // Usage do último step (última chamada real ao modelo) — ao contrário do
+    // total do turno (soma de todos os steps), reflete o tamanho real do
+    // contexto no momento em que a resposta terminou.
+    let lastStepUsage: ReturnType<typeof toStepUsage> | undefined
 
     for await (const part of result.fullStream) {
       if (!streaming) {
@@ -546,6 +550,9 @@ export async function runChat(win: BrowserWindow, input: SendMessageInput): Prom
       }
 
       switch (part.type) {
+        case 'finish-step':
+          lastStepUsage = toStepUsage(part.usage)
+          break
         case 'text-start':
           upsertPart({ id: part.id, type: 'text', text: '', state: 'streaming' })
           break
@@ -665,11 +672,12 @@ export async function runChat(win: BrowserWindow, input: SendMessageInput): Prom
           break
         }
         case 'finish':
-          // Usage agregado da geração (todos os steps) + custo via catálogo
-          assistantMessage.tokens = toTokenUsage(
-            part.totalUsage,
-            provider?.models[input.modelId]?.cost,
-          )
+          // Usage agregado da geração (todos os steps) + custo via catálogo;
+          // lastStep guarda o tamanho real do contexto na última chamada.
+          assistantMessage.tokens = {
+            ...toTokenUsage(part.totalUsage, provider?.models[input.modelId]?.cost),
+            lastStep: lastStepUsage,
+          }
           break
         case 'error':
           throw part.error instanceof Error ? part.error : new Error(String(part.error))

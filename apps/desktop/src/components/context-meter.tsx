@@ -8,7 +8,12 @@ import { chatApi } from "@/src/lib/ipc"
 import { Button } from "@/components/ui/button"
 import type { TokenUsage } from "@shared/chat"
 
+// Usa o usage do último step (chamada real mais recente) quando disponível —
+// é o tamanho real do contexto atual. `input`/`output` no topo do TokenUsage
+// somam todos os steps do turno (inflado por idas-e-vindas de tool) e só
+// servem de fallback para mensagens persistidas antes desse campo existir.
 function sumTokens(u: TokenUsage): number {
+  if (u.lastStep) return (u.lastStep.input ?? 0) + (u.lastStep.output ?? 0)
   return (u.input ?? 0) + (u.output ?? 0)
 }
 
@@ -37,6 +42,11 @@ export function ContextMeter({ sessionId }: { sessionId?: string }) {
 
   const used = lastTokens ? sumTokens(lastTokens) : 0
   if (used === 0 && !limit) return null
+
+  // Idem sumTokens: prioriza o último step (contexto real atual) sobre o
+  // total do turno.
+  const displayInput = lastTokens?.lastStep?.input ?? lastTokens?.input ?? 0
+  const displayOutput = lastTokens?.lastStep?.output ?? lastTokens?.output ?? 0
 
   const pct = limit ? Math.min(used / limit, 1) : 0
   const atLimit = pct >= 1
@@ -94,11 +104,11 @@ export function ContextMeter({ sessionId }: { sessionId?: string }) {
                 <div className="space-y-1 text-[10px] text-muted-foreground">
                   <div className="flex justify-between">
                     <span>Entrada</span>
-                    <span className="tabular-nums">{formatTokens(lastTokens.input)}</span>
+                    <span className="tabular-nums">{formatTokens(displayInput)}</span>
                   </div>
                   <div className="flex justify-between">
                     <span>Saída</span>
-                    <span className="tabular-nums">{formatTokens(lastTokens.output)}</span>
+                    <span className="tabular-nums">{formatTokens(displayOutput)}</span>
                   </div>
                   {lastTokens.reasoning > 0 && (
                     <div className="flex justify-between">
@@ -137,11 +147,11 @@ export function ContextMeter({ sessionId }: { sessionId?: string }) {
                 <div className="space-y-1 text-[10px] text-muted-foreground">
                   <div className="flex justify-between">
                     <span>Entrada</span>
-                    <span className="tabular-nums">{formatTokens(lastTokens.input)}</span>
+                    <span className="tabular-nums">{formatTokens(displayInput)}</span>
                   </div>
                   <div className="flex justify-between">
                     <span>Saída</span>
-                    <span className="tabular-nums">{formatTokens(lastTokens.output)}</span>
+                    <span className="tabular-nums">{formatTokens(displayOutput)}</span>
                   </div>
                   {lastTokens.reasoning > 0 && (
                     <div className="flex justify-between">

@@ -33,6 +33,17 @@ export function MessageUsage({ tokens }: { tokens: TokenUsage }) {
           {tokens.cacheRead > 0 && <span>Cache lido: {tokens.cacheRead.toLocaleString("pt-BR")}</span>}
           {tokens.cacheWrite > 0 && <span>Cache gravado: {tokens.cacheWrite.toLocaleString("pt-BR")}</span>}
           {tokens.cost !== undefined && <span>Custo: {formatCost(tokens.cost)}</span>}
+          {tokens.lastStep && (
+            <>
+              <div className="my-0.5 border-t border-border" />
+              <span className="text-muted-foreground">
+                Contexto atual: {(tokens.lastStep.input + tokens.lastStep.output).toLocaleString("pt-BR")} tokens
+              </span>
+              <span className="text-muted-foreground/70">
+                (entrada/saída acima somam todas as chamadas de tool desta resposta — não é o tamanho do contexto)
+              </span>
+            </>
+          )}
         </div>
       </TooltipContent>
     </Tooltip>
