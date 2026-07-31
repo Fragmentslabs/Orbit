@@ -1,5 +1,6 @@
 import { generateText, type LanguageModel } from 'ai'
 import type { CatalogModel, ChatMessage, TokenUsage } from '@shared/chat'
+import { messageContextText } from './todo-context'
 
 /**
  * Compactação automática de contexto. O histórico enviado ao modelo é só texto
@@ -57,11 +58,16 @@ export function shouldCompact(
 }
 
 function textOf(message: ChatMessage): string {
-  return message.parts
+  const text = message.parts
     .filter((p): p is Extract<ChatMessage['parts'][number], { type: 'text' }> => p.type === 'text')
     .map((p) => p.text)
     .join('\n')
     .trim()
+  // Inclui o estado da TODO (se houver) no que vai pro resumo — senão essa
+  // informação nunca chega ao prompt de compactação (ToolParts são ignorados
+  // acima) e o item 1 do COMPACT_PROMPT ("o que já foi feito, o que falta")
+  // fica sem a fonte mais confiável desse estado.
+  return messageContextText(message, text)
 }
 
 /**

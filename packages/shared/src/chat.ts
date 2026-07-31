@@ -189,6 +189,10 @@ export interface ChatMessage {
   summary?: boolean
   /** Snapshots start/end do filesystem (assistant, modo código) */
   snapshot?: AssistantSnapshot
+  /** true quando a geração parou por atingir o teto de passos (MAX_STEPS) em
+   * vez de o modelo concluir naturalmente — sinaliza à UI e ao próprio
+   * modelo (no próximo turno) que o trabalho pode ter ficado incompleto. */
+  truncated?: boolean
 }
 
 export interface ModelVariant {

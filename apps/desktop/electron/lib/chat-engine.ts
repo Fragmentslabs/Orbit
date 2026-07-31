@@ -29,6 +29,7 @@ import { PROJECT_AREAS, type ProjectArea } from '@shared/memory'
 import { readJson, writeJson } from './storage'
 import { buildToolSet, type ToolContext } from './tools'
 import { toStepUsage, toTokenUsage } from './usage'
+import { messageContextText } from './todo-context'
 import { forwardChatEvent } from './companion-server'
 
 /**
@@ -212,7 +213,10 @@ export function toModelMessages(history: ChatMessage[]): ModelMessage[] {
   const window = lastSummary >= 0 ? history.slice(lastSummary) : history
   const result: ModelMessage[] = []
   for (const message of window) {
-    const text = partText(message.parts, 'text')
+    // messageContextText preserva o estado da TODO (todowrite) e o aviso de
+    // truncamento como texto — ToolParts em si nunca são reenviados ao
+    // modelo fora do streaming da própria chamada que os gerou.
+    const text = messageContextText(message, partText(message.parts, 'text'))
     // Chips sem dados (url === '') são só decoração da UI — o conteúdo real
     // já está no TextPart irmão extraído em preprocessAttachment; incluí-los
     // aqui duplicaria uma nota vazia no lugar do texto já extraído.
@@ -542,6 +546,7 @@ export async function runChat(win: BrowserWindow, input: SendMessageInput): Prom
     // total do turno (soma de todos os steps), reflete o tamanho real do
     // contexto no momento em que a resposta terminou.
     let lastStepUsage: ReturnType<typeof toStepUsage> | undefined
+    let stepCount = 0
 
     for await (const part of result.fullStream) {
       if (!streaming) {
@@ -552,6 +557,7 @@ export async function runChat(win: BrowserWindow, input: SendMessageInput): Prom
       switch (part.type) {
         case 'finish-step':
           lastStepUsage = toStepUsage(part.usage)
+          stepCount++
           break
         case 'text-start':
           upsertPart({ id: part.id, type: 'text', text: '', state: 'streaming' })
@@ -677,6 +683,14 @@ export async function runChat(win: BrowserWindow, input: SendMessageInput): Prom
           assistantMessage.tokens = {
             ...toTokenUsage(part.totalUsage, provider?.models[input.modelId]?.cost),
             lastStep: lastStepUsage,
+          }
+          // Bateu no teto de passos (MAX_STEPS) sem o modelo ter decidido
+          // parar por conta própria — a resposta pode ter ficado incompleta
+          // (ex.: TODO com itens pendentes). Sem isso, esse caso era
+          // indistinguível de uma conclusão normal tanto pra UI quanto pro
+          // modelo no próximo turno.
+          if (stepCount >= MAX_STEPS && part.finishReason !== 'stop') {
+            assistantMessage.truncated = true
           }
           break
         case 'error':

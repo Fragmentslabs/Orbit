@@ -213,6 +213,18 @@ export function MessageError({ error, onRetry }: { error: string; onRetry?: () =
   )
 }
 
+/** Resposta parou por atingir o teto de passos, não por decisão do modelo —
+ * sem isso, fica indistinguível de uma conclusão normal (ver message.truncated). */
+export function MessageTruncated() {
+  return (
+    <div className="flex items-center gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-600 dark:text-amber-400">
+      <span className="flex-1">
+        Parou por atingir o limite de passos — pode ter ficado incompleto. Peça para continuar.
+      </span>
+    </div>
+  )
+}
+
 function formatTime(timestamp: number): string {
   return new Date(timestamp).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })
 }
