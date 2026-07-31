@@ -37,8 +37,10 @@ export type TaskTriggerProps = ComponentProps<typeof CollapsibleTrigger> & {
   title: string
 }
 
+// O trigger vira <div role="button"> (nativeButton={false}) para permitir um
+// <button> real dentro dele (ex: badge de diff) sem aninhar button>button.
 export const TaskTrigger = ({ children, className, title, ...props }: TaskTriggerProps) => (
-  <CollapsibleTrigger className={cn("group", className)} {...props}>
+  <CollapsibleTrigger render={<div />} nativeButton={false} className={cn("group", className)} {...props}>
     {children ?? (
       <div className="flex w-full cursor-pointer items-center gap-2 text-muted-foreground text-sm transition-colors hover:text-foreground">
         <SearchIcon className="size-4" />
