@@ -23,12 +23,12 @@ const MAX_SUMMARY_INPUT_CHARS = 100_000
  * histórico antes de cortar qualquer coisa. */
 const ABSOLUTE_CONTEXT_CAP = 300_000
 
-export const COMPACT_PROMPT = `Você compacta o histórico de uma conversa para liberar contexto. Produza notas densas em Markdown preservando, nesta ordem de prioridade:
-1. O objetivo do usuário e o estado atual da tarefa (o que já foi feito, o que falta).
-2. Decisões tomadas e seus porquês.
-3. Arquivos, funções, comandos e valores citados (caminhos exatos).
-4. Pendências, erros em aberto e preferências expressas pelo usuário.
-Omita cumprimentos, tentativas descartadas e repetições. Responda APENAS com o resumo, sem preâmbulo.`
+export const COMPACT_PROMPT = `You compact a conversation's history to free up context. Produce dense Markdown notes preserving, in this priority order:
+1. The user's goal and the task's current state (what's been done, what's left).
+2. Decisions made and their reasoning.
+3. Files, functions, commands, and values cited (exact paths).
+4. Pending items, open errors, and preferences expressed by the user.
+Omit greetings, discarded attempts, and repetition. Reply with ONLY the summary, no preamble.`
 
 export function findLastSummaryIndex(history: ChatMessage[]): number {
   for (let i = history.length - 1; i >= 0; i--) {

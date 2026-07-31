@@ -134,8 +134,8 @@ export async function runOrchestration(win: BrowserWindow, input: SendMessageInp
 
     const tasks: OrchestrationTask[] = []
     const contextNote = input.directory
-      ? `\n\nContexto: o usuário está no modo código com a pasta de trabalho ${input.directory}. Tarefas "code" terão acesso a essa pasta.`
-      : '\n\nContexto: modo chat, sem pasta de trabalho — prefira tarefas "chat".'
+      ? `\n\nContext: the user is in code mode with working folder ${input.directory}. "code" tasks will have access to that folder.`
+      : '\n\nContext: chat mode, no working folder — prefer "chat" tasks.'
 
     // Tool context para subagent durante planejamento (pasta de trabalho disponível)
     const planCtx: ToolContext | null = input.directory
@@ -248,7 +248,7 @@ export async function runOrchestration(win: BrowserWindow, input: SendMessageInp
         {
           role: 'user',
           content:
-            'Você descreveu o plano mas não registrou nenhuma tarefa. Se o pedido precisa ser dividido, chame create_task AGORA para cada subtarefa. Se realmente não precisa de divisão, responda diretamente sem prometer um plano.',
+            'You described the plan but registered no tasks. If the request needs to be split, call create_task NOW for each subtask. If it genuinely doesn\'t need splitting, answer directly without promising a plan.',
         },
       ]
       const retry = await runPlanningPass(nudgeMessages)
@@ -440,7 +440,7 @@ export async function approvePlan(
     emit(win, { type: 'message', sessionId, message: synthesisMessage })
 
     const resultsText = results
-      .map((r) => `## ${r.task.title} [${r.task.status === 'error' ? 'FALHOU' : 'ok'}]\n\n${r.text}`)
+      .map((r) => `## ${r.task.title} [${r.task.status === 'error' ? 'FAILED' : 'ok'}]\n\n${r.text}`)
       .join('\n\n---\n\n')
 
     const model = await resolveModel(input.providerId, input.modelId)
@@ -449,7 +449,7 @@ export async function approvePlan(
       system: ORCHESTRATOR_SYNTHESIS_PROMPT,
       messages: [
         ...toModelMessages(history.slice(0, -1)),
-        { role: 'user', content: `Resultados dos workers:\n\n${resultsText}` },
+        { role: 'user', content: `Worker results:\n\n${resultsText}` },
       ],
       abortSignal: controller.signal,
       providerOptions: await buildProviderOptions(input),
@@ -513,39 +513,39 @@ export async function approvePlan(
               .filter((p): p is TextPart => p.type === 'text')
               .map((p) => p.text)
               .join('\n')
-              .trim() || '(sem retorno)'
+              .trim() || '(no output)'
             return { sessionId: wsId, title: info.title, text: text.slice(0, 2000), error: last?.error }
           }),
         )
 
         // Orquestrador decide o que fazer
         const workersBlock = workersStatus
-          .map((w) => `## Worker "${w.title}" (sessionId: ${w.sessionId})\n${w.error ? `**ERRO**: ${w.error}\n` : ''}${w.text}`)
+          .map((w) => `## Worker "${w.title}" (sessionId: ${w.sessionId})\n${w.error ? `**ERROR**: ${w.error}\n` : ''}${w.text}`)
           .join('\n\n---\n\n')
 
         const { text: decisionText } = await generateText({
           model,
-          system: `Você é o orquestrador do Orbit em modo loop. Revise os resultados dos workers e decida a próxima ação.`,
+          system: `You are the Orbit orchestrator in loop mode. Review the worker results and decide the next action.`,
           messages: [
-            { role: 'user', content: `## Pedido original\n${input.text}\n\n## Resultados dos workers\n${workersBlock}\n\n## Iteração atual\n${iteration + 1}/${lc.maxIterations}` },
+            { role: 'user', content: `## Original request\n${input.text}\n\n## Worker results\n${workersBlock}\n\n## Current iteration\n${iteration + 1}/${lc.maxIterations}` },
             {
               role: 'user',
-              content: `Analise se o objetivo foi atingido. Responda com JSON:
+              content: `Analyze whether the goal was achieved. Reply with JSON:
 {
   "action": "done" | "message_worker" | "create_worker" | "create_test_worker",
-  "reason": "explicação curta",
-  "workerSessionId": "se action=message_worker, sessionId do worker a mensagem",
-  "followUpPrompt": "se action=message_worker, nova instrução para o worker existente",
-  "workerTitle": "se action=create_worker ou create_test_worker, título do novo worker",
-  "workerPrompt": "se action=create_worker ou create_test_worker, prompt do novo worker",
-  "workerMode": "chat ou code (se create_worker/create_test_worker)"
+  "reason": "short explanation",
+  "workerSessionId": "if action=message_worker, sessionId of the worker to message",
+  "followUpPrompt": "if action=message_worker, new instruction for the existing worker",
+  "workerTitle": "if action=create_worker or create_test_worker, title of the new worker",
+  "workerPrompt": "if action=create_worker or create_test_worker, prompt for the new worker",
+  "workerMode": "chat or code (if create_worker/create_test_worker)"
 }
 
-Regras:
-- "done": objetivo atingido, finalizar
-- "message_worker": reusar um worker existente com novas instruções (melhor que criar um novo quando o worker já tem contexto)
-- "create_worker": criar worker adicional para continuar/expandir
-- "create_test_worker": criar worker para TESTAR o que foi implementado; se encontrar erros, o loop seguinte pode delegar ao worker que implementou`,
+Rules:
+- "done": goal achieved, finish
+- "message_worker": reuse an existing worker with new instructions (better than creating a new one when the worker already has context)
+- "create_worker": create an additional worker to continue/expand
+- "create_test_worker": create a worker to TEST what was implemented; if it finds errors, the next loop iteration can delegate to the worker that implemented it`,
             },
           ],
           abortSignal: controller.signal,
