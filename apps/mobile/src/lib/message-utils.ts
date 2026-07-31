@@ -19,6 +19,16 @@ export function messageText(message: ChatMessage): string {
     .join('\n')
 }
 
+/** Só o que a pessoa digitou — omite text parts com source "attachment"
+ * (texto extraído de PDF/planilha/DOCX/skill pelo desktop). Espelha
+ * apps/desktop/src/lib/message-utils.ts. */
+export function visibleMessageText(message: ChatMessage): string {
+  return message.parts
+    .filter((p): p is Extract<MessagePart, { type: 'text' }> => p.type === 'text' && p.source !== 'attachment')
+    .map((p) => p.text)
+    .join('\n')
+}
+
 export function hostnameOf(url: string): string {
   try {
     return new URL(url).hostname.replace(/^www\./, '')

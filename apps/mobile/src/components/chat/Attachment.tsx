@@ -38,6 +38,19 @@ export function MessageAttachment({ file }: { file: FilePart }) {
     )
   }
 
+  // Chip sem url (conteúdo já extraído como texto, ex.: PDF/planilha/DOCX) —
+  // não há arquivo original pra abrir, então não simula um toque que faz nada.
+  if (!file.url) {
+    return (
+      <View style={[s.fileChip, { borderColor: tokens.border, backgroundColor: tokens.card }]}>
+        <Paperclip size={13} color={tokens.mutedForeground} />
+        <Text style={[s.fileChipText, { color: tokens.foreground }]} numberOfLines={1}>
+          {file.filename ?? 'Arquivo'}
+        </Text>
+      </View>
+    )
+  }
+
   return (
     <Pressable onPress={() => void openFilePart(file)} style={[s.fileChip, { borderColor: tokens.border, backgroundColor: tokens.card }]}>
       <Paperclip size={13} color={tokens.mutedForeground} />

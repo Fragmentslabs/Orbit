@@ -81,6 +81,7 @@ function decodeDataUrlBytes(url: string): Buffer | null {
   }
 }
 
+const PDF_EXT = /\.pdf$/i
 const TEXT_MIME = /^(text\/|application\/(json|xml|javascript|typescript|yaml|toml|x-sh|sql))/
 // Fallback por extensão: navegadores às vezes reportam mime vazio ou
 // "application/octet-stream" para .md/.skill/.csv no Windows.
@@ -99,7 +100,7 @@ function fileToModelContent(file: FilePart): Exclude<UserContent, string>[number
   if (file.mime.startsWith('image/')) {
     return { type: 'image', image: file.url, mediaType: file.mime }
   }
-  if (file.mime === 'application/pdf') {
+  if (file.mime === 'application/pdf' || PDF_EXT.test(file.filename ?? '')) {
     return { type: 'text', text: `[PDF anexado anteriormente: ${file.filename ?? 'documento'}]` }
   }
   if (TEXT_MIME.test(file.mime) || TEXT_EXT_FALLBACK.test(file.filename ?? '')) {
@@ -111,21 +112,33 @@ function fileToModelContent(file: FilePart): Exclude<UserContent, string>[number
   return { type: 'text', text: `[Arquivo anexado não suportado: ${file.filename ?? file.mime}]` }
 }
 
+/** Chip de anexo sem o data URL (evita duplicar bytes grandes no histórico —
+ * o conteúdo já vai como texto no TextPart que acompanha este chip). Mantém
+ * `url` vazio de propósito: é o que `toModelMessages` usa para reconhecer e
+ * pular este FilePart ao montar o conteúdo do modelo (o texto já cobre isso). */
+function attachmentChip(file: FilePart): FilePart {
+  return { id: file.id, type: 'file', mime: file.mime, filename: file.filename, url: '' }
+}
+
 /** Pré-processa um anexo NOVO antes de persistir: PDF, planilha e skill viram
- * texto extraído (evita data URLs enormes no histórico); imagem continua
- * nativa (o modelo lê melhor via image part). Espelha o mesmo padrão para
- * cada tipo — extrai, embrulha em TextPart, nunca falha o envio da mensagem. */
-async function preprocessAttachment(file: FilePart): Promise<MessagePart> {
+ * texto extraído (evita data URLs enormes no histórico) + um chip sem dados
+ * pra UI continuar mostrando o anexo; imagem continua nativa (o modelo lê
+ * melhor via image part). Espelha o mesmo padrão para cada tipo — extrai,
+ * embrulha em TextPart, nunca falha o envio da mensagem. */
+async function preprocessAttachment(file: FilePart): Promise<MessagePart[]> {
   const filename = file.filename ?? ''
 
-  if (file.mime === 'application/pdf') {
+  if (file.mime === 'application/pdf' || PDF_EXT.test(filename)) {
     let text: string
     try {
       text = await extractPdfText(file.url)
     } catch (err) {
       text = `(erro ao extrair texto: ${err instanceof Error ? err.message : String(err)})`
     }
-    return { id: file.id, type: 'text', text: `[PDF anexado: ${filename || 'documento'}]\n\n${text}`, state: 'done' }
+    return [
+      attachmentChip(file),
+      { id: newId('prt'), type: 'text', text: `[PDF anexado: ${filename || 'documento'}]\n\n${text}`, state: 'done', source: 'attachment' },
+    ]
   }
 
   if (SPREADSHEET_MIME.test(file.mime) || SPREADSHEET_EXT.test(filename)) {
@@ -135,7 +148,10 @@ async function preprocessAttachment(file: FilePart): Promise<MessagePart> {
     } catch (err) {
       text = `(erro ao ler planilha: ${err instanceof Error ? err.message : String(err)})`
     }
-    return { id: file.id, type: 'text', text: `[Planilha anexada: ${filename || 'arquivo'}]\n\n${text}`, state: 'done' }
+    return [
+      attachmentChip(file),
+      { id: newId('prt'), type: 'text', text: `[Planilha anexada: ${filename || 'arquivo'}]\n\n${text}`, state: 'done', source: 'attachment' },
+    ]
   }
 
   if (file.mime === DOCX_MIME || DOCX_EXT.test(filename)) {
@@ -145,7 +161,10 @@ async function preprocessAttachment(file: FilePart): Promise<MessagePart> {
     } catch (err) {
       text = `(erro ao ler documento: ${err instanceof Error ? err.message : String(err)})`
     }
-    return { id: file.id, type: 'text', text: `[Documento anexado: ${filename || 'arquivo'}]\n\n${text}`, state: 'done' }
+    return [
+      attachmentChip(file),
+      { id: newId('prt'), type: 'text', text: `[Documento anexado: ${filename || 'arquivo'}]\n\n${text}`, state: 'done', source: 'attachment' },
+    ]
   }
 
   // Skill anexada (.skill texto/ZIP, ou .md com frontmatter de skill) — o
@@ -155,25 +174,32 @@ async function preprocessAttachment(file: FilePart): Promise<MessagePart> {
     const bytes = decodeDataUrlBytes(file.url)
     const description = bytes ? describeSkillAttachment(bytes, filename) : null
     if (description) {
-      return {
-        id: file.id,
-        type: 'text',
-        text:
-          `[Skill anexada: ${filename}]\n\n${description}\n\n` +
-          '(Se o usuário pedir para adicionar isso como skill, ou fizer sentido pelo contexto, use a tool create_skill com este conteúdo — não presuma sem que o pedido/contexto justifique.)',
-        state: 'done',
-      }
+      return [
+        attachmentChip(file),
+        {
+          id: newId('prt'),
+          type: 'text',
+          text:
+            `[Skill anexada: ${filename}]\n\n${description}\n\n` +
+            '(Se o usuário pedir para adicionar isso como skill, ou fizer sentido pelo contexto, use a tool create_skill com este conteúdo — não presuma sem que o pedido/contexto justifique.)',
+          state: 'done',
+          source: 'attachment',
+        },
+      ]
     }
   }
 
   if (TEXT_MIME.test(file.mime) || TEXT_EXT_FALLBACK.test(filename)) {
     const text = decodeDataUrlText(file.url)
     if (text != null) {
-      return { id: file.id, type: 'text', text: `[Arquivo anexado: ${filename || 'sem nome'}]\n\n${text}`, state: 'done' }
+      return [
+        attachmentChip(file),
+        { id: newId('prt'), type: 'text', text: `[Arquivo anexado: ${filename || 'sem nome'}]\n\n${text}`, state: 'done', source: 'attachment' },
+      ]
     }
   }
 
-  return file
+  return [file]
 }
 
 /**
@@ -187,7 +213,10 @@ export function toModelMessages(history: ChatMessage[]): ModelMessage[] {
   const result: ModelMessage[] = []
   for (const message of window) {
     const text = partText(message.parts, 'text')
-    const files = message.parts.filter((p): p is FilePart => p.type === 'file')
+    // Chips sem dados (url === '') são só decoração da UI — o conteúdo real
+    // já está no TextPart irmão extraído em preprocessAttachment; incluí-los
+    // aqui duplicaria uma nota vazia no lugar do texto já extraído.
+    const files = message.parts.filter((p): p is FilePart => p.type === 'file' && p.url !== '')
     if (message.role === 'user' && files.length > 0) {
       const content: UserContent = files.map(fileToModelContent)
       if (text.trim()) content.push({ type: 'text', text })
@@ -276,7 +305,7 @@ export async function runChat(win: BrowserWindow, input: SendMessageInput): Prom
   // precisa entrar como texto na própria mensagem).
   const processedParts: MessagePart[] = []
   for (const file of input.files ?? []) {
-    processedParts.push(await preprocessAttachment(file))
+    processedParts.push(...(await preprocessAttachment(file)))
   }
 
   const userMessage: ChatMessage = {

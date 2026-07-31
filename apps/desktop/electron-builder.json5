@@ -5,7 +5,9 @@
   "appId": "YourAppID",
   "asar": true,
   "asarUnpack": [
-    "**/node_modules/node-pty/**"
+    "**/node_modules/node-pty/**",
+    "**/node_modules/pdf-parse/**",
+    "**/node_modules/pdfjs-dist/**"
   ],
   "productName": "Orbit",
   "directories": {
@@ -15,7 +17,9 @@
   "files": [
     "dist",
     "dist-electron",
-    "node_modules/node-pty/**/*"
+    "node_modules/node-pty/**/*",
+    "node_modules/pdf-parse/**/*",
+    "node_modules/pdfjs-dist/**/*"
   ],
   "mac": {
     "target": [

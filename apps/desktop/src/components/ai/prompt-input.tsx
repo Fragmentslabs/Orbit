@@ -669,9 +669,12 @@ export const PromptInput = ({
           return (formData.get("message") as string) || ""
         })()
 
-    // Limpa o input imediatamente (síncrono) para evitar que o texto seja
-    // salvo como rascunho se o usuário trocar de chat antes da resposta
-    clear()
+    // Limpa o TEXTO imediatamente (síncrono) para evitar que seja salvo como
+    // rascunho se o usuário trocar de chat antes da resposta. Os anexos NÃO
+    // são limpos aqui: clear() revoga os blob URLs (URL.revokeObjectURL), e a
+    // conversão blob→dataURL abaixo ainda precisa lê-los via fetch — revogar
+    // antes gera uma corrida em que o fetch falha e um blob URL morto vaza
+    // para o backend (que então rejeita: "Formato de data URL inválido").
     if (usingProvider) {
       controller.textInput.clear()
     }
@@ -690,6 +693,9 @@ export const PromptInput = ({
         return item
       }),
     ).then((convertedFiles: FileUIPart[]) => {
+      // Conversão concluída — agora é seguro revogar os blob URLs e limpar os
+      // chips de anexo do input.
+      clear()
       // Chama o submit (async — o resultado é deliberadamente ignorado:
       // o input já foi limpo e erros aparecem no chat via store)
       const result = onSubmit({ text, files: convertedFiles }, event)

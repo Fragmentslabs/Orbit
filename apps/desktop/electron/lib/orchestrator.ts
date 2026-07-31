@@ -1,13 +1,15 @@
-import { generateText, stepCountIs, streamText } from 'ai'
+import { generateText, stepCountIs, streamText, type ModelMessage } from 'ai'
 import type { BrowserWindow } from 'electron'
 import type {
   ChatEvent,
   ChatMessage,
+  MessagePart,
   OrchestrationPlan,
   OrchestrationTask,
   SendMessageInput,
   SessionInfo,
   TextPart,
+  ToolPart,
 } from '@shared/chat'
 import { StorageKeys } from '@shared/chat'
 import { getProvider } from './catalog'
@@ -31,7 +33,16 @@ import type { LoopEngineConfig } from './loop-engine'
  */
 
 const MAX_TASKS = 8
-const PLAN_MAX_STEPS = 4
+// Teto de passos do planejamento. Precisa acomodar pesquisa (subagent) +
+// registro de várias tarefas (create_task) + o resumo final. Baixo demais
+// (era 4) fazia a pesquisa consumir todo o orçamento e o plano nascer vazio.
+const PLAN_MAX_STEPS = 16
+// Pesquisa de planejamento é leve: embasa a divisão, não resolve a tarefa.
+const PLAN_SUBAGENT_MAX_STEPS = 5
+// Teto DURO de chamadas de subagent durante o planejamento (o prompt já pede
+// "2-3 chamadas", mas isso é só sugestão — sem um limite de verdade em código
+// o modelo pode ignorá-lo, como aconteceu (17 chamadas para montar um plano).
+const PLAN_SUBAGENT_MAX_CALLS = 3
 
 interface PendingOrchestration {
   input: SendMessageInput
@@ -53,6 +64,16 @@ function newId(prefix: string) {
 
 function emit(win: BrowserWindow, event: ChatEvent) {
   if (!win.isDestroyed()) win.webContents.send('chat:event', event)
+}
+
+/** Insere ou atualiza uma part na mensagem e emite o evento 'part' — usado
+ * para renderizar o streaming do planejamento (texto, raciocínio, tool-calls)
+ * na mensagem do orquestrador. */
+function upsertPart(win: BrowserWindow, sessionId: string, message: ChatMessage, part: MessagePart) {
+  const idx = message.parts.findIndex((p) => p.id === part.id)
+  if (idx >= 0) message.parts[idx] = part
+  else message.parts.push(part)
+  emit(win, { type: 'part', sessionId, messageId: message.id, part })
 }
 
 async function loadMessages(sessionId: string): Promise<ChatMessage[]> {
@@ -120,33 +141,125 @@ export async function runOrchestration(win: BrowserWindow, input: SendMessageInp
     const planCtx: ToolContext | null = input.directory
       ? { sessionId: input.sessionId, directory: input.directory, extraDirectories: input.extraDirectories ?? [], abort: controller.signal }
       : null
-    const subagentTool = createSubagentTool(input, planCtx)
-
-    const result = await generateText({
-      model,
-      system: ORCHESTRATOR_PLAN_PROMPT + contextNote,
-      messages: toModelMessages(history.slice(0, -1)),
-      tools: {
-        create_task: createTaskTool(
-          (task) => {
-            if (tasks.length >= MAX_TASKS) return false
-            tasks.push(task)
-            return true
-          },
-          { allowCode: Boolean(input.directory) },
-        ),
-        subagent: subagentTool,
-      },
-      stopWhen: stepCountIs(PLAN_MAX_STEPS),
-      abortSignal: controller.signal,
-      providerOptions: await buildProviderOptions(input),
-    })
-
-    if (result.text.trim()) {
-      const part: TextPart = { id: newId('prt'), type: 'text', text: result.text.trim(), state: 'done' }
-      assistantMessage.parts.push(part)
-      emit(win, { type: 'part', sessionId, messageId: assistantMessage.id, part })
+    const subagentTool = createSubagentTool(input, planCtx, PLAN_SUBAGENT_MAX_STEPS, PLAN_SUBAGENT_MAX_CALLS)
+    const planTools = {
+      create_task: createTaskTool(
+        (task) => {
+          if (tasks.length >= MAX_TASKS) return false
+          tasks.push(task)
+          return true
+        },
+        { allowCode: Boolean(input.directory) },
+      ),
+      subagent: subagentTool,
     }
+    const baseMessages = toModelMessages(history.slice(0, -1))
+    const providerOptions = await buildProviderOptions(input)
+    const cost = (await getProvider(input.providerId))?.models[input.modelId]?.cost
+
+    // Consome o stream de uma passada de planejamento, emitindo parts (texto,
+    // raciocínio, tool-calls) para a UI mostrar o orquestrador trabalhando —
+    // pesquisando com subagent e planejando — em vez de um "Analisando" mudo.
+    const runPlanningPass = async (messages: ModelMessage[]) => {
+      const stream = streamText({
+        model,
+        system: ORCHESTRATOR_PLAN_PROMPT + contextNote,
+        messages,
+        tools: planTools,
+        stopWhen: stepCountIs(PLAN_MAX_STEPS),
+        abortSignal: controller.signal,
+        providerOptions,
+        onError: () => { /* tratado no loop do fullStream */ },
+      })
+      let text = ''
+      const reasoningStart = new Map<string, number>()
+      for await (const part of stream.fullStream) {
+        switch (part.type) {
+          case 'text-start':
+            upsertPart(win, sessionId, assistantMessage, { id: part.id, type: 'text', text: '', state: 'streaming' })
+            break
+          case 'text-delta': {
+            const existing = assistantMessage.parts.find((p) => p.id === part.id)
+            if (existing?.type === 'text') {
+              existing.text += part.text
+              text += part.text
+              emit(win, { type: 'part-delta', sessionId, messageId: assistantMessage.id, partId: part.id, kind: 'text', delta: part.text })
+            }
+            break
+          }
+          case 'text-end': {
+            const existing = assistantMessage.parts.find((p) => p.id === part.id)
+            if (existing?.type === 'text') upsertPart(win, sessionId, assistantMessage, { ...existing, state: 'done' })
+            break
+          }
+          case 'reasoning-start':
+            reasoningStart.set(part.id, Date.now())
+            upsertPart(win, sessionId, assistantMessage, { id: part.id, type: 'reasoning', text: '', state: 'streaming' })
+            break
+          case 'reasoning-delta': {
+            const existing = assistantMessage.parts.find((p) => p.id === part.id)
+            if (existing?.type === 'reasoning') {
+              existing.text += part.text
+              emit(win, { type: 'part-delta', sessionId, messageId: assistantMessage.id, partId: part.id, kind: 'reasoning', delta: part.text })
+            }
+            break
+          }
+          case 'reasoning-end': {
+            const existing = assistantMessage.parts.find((p) => p.id === part.id)
+            if (existing?.type === 'reasoning') {
+              const started = reasoningStart.get(part.id)
+              upsertPart(win, sessionId, assistantMessage, { ...existing, state: 'done', durationMs: started ? Date.now() - started : undefined })
+            }
+            break
+          }
+          case 'tool-call':
+            upsertPart(win, sessionId, assistantMessage, { id: part.toolCallId, type: 'tool', tool: part.toolName, state: 'running', input: part.input as Record<string, unknown> })
+            break
+          case 'tool-result': {
+            const existing = assistantMessage.parts.find((p) => p.id === part.toolCallId) as ToolPart | undefined
+            upsertPart(win, sessionId, assistantMessage, {
+              id: part.toolCallId,
+              type: 'tool',
+              tool: part.toolName,
+              state: 'done',
+              input: existing?.input,
+              output: typeof part.output === 'string' ? part.output : JSON.stringify(part.output, null, 2),
+            })
+            break
+          }
+          case 'error':
+            throw part.error instanceof Error ? part.error : new Error(String(part.error))
+        }
+      }
+      return { text: text.trim(), usage: await stream.usage }
+    }
+
+    const firstPass = await runPlanningPass(baseMessages)
+    let planUsage = toTokenUsage(firstPass.usage, cost)
+
+    // Rede de segurança: o orquestrador às vezes narra "vou dividir em tarefas"
+    // e para sem chamar create_task (plano vazio). Damos UMA cutucada explícita
+    // antes de desistir e tratar como resposta trivial.
+    if (tasks.length === 0 && firstPass.text) {
+      const staleTextIds = new Set(assistantMessage.parts.filter((p) => p.type === 'text').map((p) => p.id))
+      const nudgeMessages: ModelMessage[] = [
+        ...baseMessages,
+        { role: 'assistant', content: firstPass.text },
+        {
+          role: 'user',
+          content:
+            'Você descreveu o plano mas não registrou nenhuma tarefa. Se o pedido precisa ser dividido, chame create_task AGORA para cada subtarefa. Se realmente não precisa de divisão, responda diretamente sem prometer um plano.',
+        },
+      ]
+      const retry = await runPlanningPass(nudgeMessages)
+      planUsage = addTokenUsage(planUsage, toTokenUsage(retry.usage, cost))
+      // Ainda sem tarefas: a resposta final é a do retry — descarta a narração
+      // do primeiro passe pra não duplicar texto na bolha final do usuário.
+      if (tasks.length === 0) {
+        assistantMessage.parts = assistantMessage.parts.filter((p) => !staleTextIds.has(p.id))
+      }
+    }
+
     await saveMessages(sessionId, history)
 
     if (tasks.length === 0) {
@@ -156,12 +269,11 @@ export async function runOrchestration(win: BrowserWindow, input: SendMessageInp
       return
     }
 
-    const provider = await getProvider(input.providerId)
     const plan: OrchestrationPlan = {
       id: newId('plan'),
       tasks,
       status: 'proposed',
-      usage: toTokenUsage(result.usage, provider?.models[input.modelId]?.cost),
+      usage: planUsage,
     }
     // Loop ativado por padrão no modo orquestração (o orquestrador decide quando parar).
     // Se o usuário explicitamente desativou loop, respeitamos.

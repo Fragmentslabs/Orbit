@@ -22,7 +22,24 @@ function newTaskId() {
   return `task_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`
 }
 
-export function createSubagentTool(input: SendMessageInput, ctx: ToolContext | null) {
+/**
+ * `maxSteps` limita o trabalho de CADA subagente. Durante o PLANEJAMENTO da
+ * orquestração a pesquisa deve ser leve (o objetivo é embasar a divisão, não
+ * resolver a tarefa), então o orquestrador passa um teto baixo.
+ *
+ * `maxCalls` limita QUANTAS VEZES o modelo pode chamar esta tool no total —
+ * sem isso, um texto de prompt pedindo "no máximo 2-3 chamadas" é só uma
+ * sugestão que o modelo pode ignorar (era o que acontecia: 17 chamadas só
+ * para planejar). Passado o limite, a tool recusa em vez de rodar mais um
+ * subagente completo (que sozinho já custa vários passos e tokens).
+ */
+export function createSubagentTool(
+  input: SendMessageInput,
+  ctx: ToolContext | null,
+  maxSteps = SUBAGENT_MAX_STEPS,
+  maxCalls?: number,
+) {
+  let calls = 0
   return tool({
     description:
       'Delega uma subtarefa a um worker que roda em segundo plano e retorna o resultado como texto. Use para trabalho paralelo ou isolado: pesquisas, análises de arquivos, tarefas focadas. O worker não vê esta conversa — inclua todo o contexto necessário no task.',
@@ -35,6 +52,10 @@ export function createSubagentTool(input: SendMessageInput, ctx: ToolContext | n
       simple: z.boolean().optional().describe('Respostas em texto puro, sem formatação'),
     }),
     execute: async ({ task, research, browser, code, brain, simple }) => {
+      calls++
+      if (maxCalls !== undefined && calls > maxCalls) {
+        return `Limite de ${maxCalls} chamadas de subagent atingido — prossiga com o que já foi levantado (não peça mais pesquisas).`
+      }
       const worker = input.workerModel ?? { providerId: input.providerId, modelId: input.modelId }
       const codeUnavailable = code === true && !input.directory
       const workerInput: SendMessageInput = {
@@ -83,7 +104,7 @@ export function createSubagentTool(input: SendMessageInput, ctx: ToolContext | n
         prompt: task,
         tools: Object.keys(tools).length > 0 ? tools : undefined,
         toolApproval,
-        stopWhen: stepCountIs(SUBAGENT_MAX_STEPS),
+        stopWhen: stepCountIs(maxSteps),
         abortSignal: ctx?.abort,
         providerOptions: await buildProviderOptions(workerInput),
       })
