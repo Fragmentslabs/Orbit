@@ -169,6 +169,7 @@ export const initApi = {
     workerProviderId?: string
     workerModelId?: string
     force?: boolean
+    language?: string
   }) => window.ipcRenderer.invoke("init:run", input),
   status: (directory: string) =>
     window.ipcRenderer.invoke("init:status", directory) as Promise<InitStatus>,

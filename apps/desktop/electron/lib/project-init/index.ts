@@ -25,6 +25,13 @@ const WORKER_CONCURRENCY = 3
 const WORKER_MAX_STEPS = 12
 const WORKER_TIMEOUT_MS = 4 * 60 * 1000
 
+/** Nome do idioma (em inglês, ex.: "Portuguese") vindo da preferência do
+ * usuário — cai em "Portuguese" quando ausente (comportamento histórico do
+ * /init antes desse campo existir). */
+function outputLanguage(language?: string): string {
+  return language ?? 'Portuguese'
+}
+
 function emit(stage: InitStage, data: Partial<InitEvent>) {
   const event: InitEvent = { directory: '', stage, ...data } as InitEvent
   for (const win of BrowserWindow.getAllWindows()) {
@@ -100,7 +107,7 @@ interface PlannedArea {
 async function planAreasWithLLM(
   model: LanguageModel,
   scan: ProjectScan,
-  opts?: { scopeLabel?: string; isRootWithSubprojects?: boolean },
+  opts?: { scopeLabel?: string; isRootWithSubprojects?: boolean; language?: string },
 ): Promise<PlannedArea[]> {
   const scanDescription = describeScan(scan)
   const hasDocs = scan.docs.length > 0 ? `\nDocumentation found: ${scan.docs.join(', ')}` : ''
@@ -135,7 +142,7 @@ Based on the scan, decide:
 
 IMPORTANT: if there's a docs/ folder or .md files, the mission MUST include "Read the documentation files listed in the scan as the primary source".
 
-Write the mission text in Portuguese (pt-BR) — it's read by another agent whose own instructions require it to respond in Portuguese.
+Write the mission text in ${outputLanguage(opts?.language)} — it's read by another agent whose own instructions require it to respond in that language.
 
 Reply with JSON in the format:
 [{"area": "architecture", "mission": "Analise a arquitetura: ..."}, ...]`,
@@ -236,6 +243,7 @@ async function exploreArea(
   mission: string,
   hooks: InitHooks,
   scopeLabel?: string,
+  language?: string,
 ): Promise<AreaResult> {
   const controller = new AbortController()
   const timeout = setTimeout(() => controller.abort(), WORKER_TIMEOUT_MS)
@@ -258,7 +266,7 @@ IMPORTANT INSTRUCTIONS:
   starting with "APRENDIZADO:" — this becomes a memory reusable in other projects with the same
   stack. Only use it for something genuinely non-obvious, not common facts.
 
-Reply in Portuguese (pt-BR), in markdown, citing real file paths. End with a "TAGS:" line with 3-6 keywords.`,
+Reply in ${outputLanguage(language)}, in markdown, citing real file paths. End with a "TAGS:" line with 3-6 keywords.`,
       prompt: `Area investigated: ${PROJECT_AREAS[area].label}
 Mission: ${mission}
 
@@ -335,13 +343,15 @@ async function refineFindings(
   area: ProjectArea,
   raw: string,
   savedSummaries: Map<ProjectArea, string>,
+  language?: string,
 ): Promise<RefineOutput> {
   const savedList = [...savedSummaries.entries()]
     .filter(([a]) => a !== area)
     .map(([a, summary]) => `- "${a}" (${PROJECT_AREAS[a].label}): ${summary}`)
     .join('\n')
+  const lang = outputLanguage(language)
   const system =
-    'You are Orbit onboarding\'s main agent. Review a subagent\'s findings: remove speculation, correct overstatements, condense and structure. Reply with ONLY valid JSON. Write all JSON text field values (summary, document, tags, learnings, etc.) in Portuguese (pt-BR) — they become project memory content shown to a Portuguese-speaking user.'
+    `You are Orbit onboarding's main agent. Review a subagent's findings: remove speculation, correct overstatements, condense and structure. Reply with ONLY valid JSON. Write all JSON text field values (summary, document, tags, learnings, etc.) in ${lang} — they become project memory content shown to the user.`
   const prompt = `Area: "${area}" (${PROJECT_AREAS[area].label})
 
 Subagent's findings:
@@ -352,11 +362,11 @@ ${savedList || '(none yet)'}
 
 Reply with JSON:
 {
-  "summary": "2-4 objective sentences, in Portuguese — goes into the agent's context",
+  "summary": "2-4 objective sentences, in ${lang} — goes into the agent's context",
   "tags": ["3-6 lowercase keywords"],
-  "document": "revised, structured markdown for the area, in Portuguese (real paths, commands)",
-  "complements": [{"area": "id-of-already-consolidated-area", "addition": "markdown snippet (in Portuguese) that enriches that doc"}],
-  "learnings": [{"text": "lesson reusable in OTHER projects, self-contained (problem + solution), in Portuguese", "tags": ["technology"]}]
+  "document": "revised, structured markdown for the area, in ${lang} (real paths, commands)",
+  "complements": [{"area": "id-of-already-consolidated-area", "addition": "markdown snippet (in ${lang}) that enriches that doc"}],
+  "learnings": [{"text": "lesson reusable in OTHER projects, self-contained (problem + solution), in ${lang}", "tags": ["technology"]}]
 }
 "complements" only when these findings bring something that belongs to another already-consolidated area (else []).
 "learnings" only when the findings have "APRENDIZADO:" lines or a clear workaround/gotcha reusable outside this project (else []). Don't invent — extract only what's in the findings.`
@@ -471,6 +481,9 @@ export interface RunInitInput {
    * rapidez, mas mais tokens simultâneos. */
   concurrency?: number
   hooks?: InitHooks
+  /** Idioma preferido do usuário (nome em inglês, ex.: "Portuguese") — usado
+   * nos prompts internos do pipeline; cai em "Portuguese" quando ausente. */
+  language?: string
 }
 
 interface RunScopeInput {
@@ -493,19 +506,22 @@ interface RunScopeInput {
   concurrency?: number
   hooks: InitHooks
   main: (text: string) => void
+  /** Idioma preferido do usuário (nome em inglês, ex.: "Portuguese") — repassado
+   * a todos os prompts internos deste escopo. */
+  language?: string
 }
 
 /** Planeja, explora, consolida e revisa gaps para UM escopo (raiz ou um
  * subprojeto) — cada subprojeto roda isso isoladamente, gerando sua própria
  * sub-árvore de áreas conectadas ao node do subprojeto, não direto à raiz. */
 async function runScope(input: RunScopeInput): Promise<{ done: ProjectArea[]; summaries: Map<ProjectArea, string> }> {
-  const { storageDirectory, toolDirectory, scanDescription, scan, model, workerModel, rootId, subproject, scopeLabel, isRootWithSubprojects, force, hooks, main } = input
+  const { storageDirectory, toolDirectory, scanDescription, scan, model, workerModel, rootId, subproject, scopeLabel, isRootWithSubprojects, force, hooks, main, language } = input
   const savedIds = new Map<ProjectArea, string>()
   const savedSummaries = new Map<ProjectArea, string>()
   const done: ProjectArea[] = []
 
   // 1. Planejamento de áreas com LLM (autônomo, adapta-se ao escopo)
-  const plannedAreas = await planAreasWithLLM(model, scan, { scopeLabel, isRootWithSubprojects })
+  const plannedAreas = await planAreasWithLLM(model, scan, { scopeLabel, isRootWithSubprojects, language })
   if (plannedAreas.length === 0) {
     main(`${scopeLabel ? `**${scopeLabel}**: ` : ''}Nenhuma área relevante encontrada para este escopo.\n\n`)
     return { done, summaries: savedSummaries }
@@ -531,7 +547,7 @@ async function runScope(input: RunScopeInput): Promise<{ done: ProjectArea[]; su
       }
       main(`Revisando **${label}**… ${progress}\n`)
       try {
-        const refined = await refineFindings(model, result.area, result.raw, savedSummaries)
+        const refined = await refineFindings(model, result.area, result.raw, savedSummaries, language)
         const id = await saveAreaMemory(storageDirectory, result.area, refined, rootId, force, subproject)
         savedIds.set(result.area, id)
         savedSummaries.set(result.area, refined.summary)
@@ -561,7 +577,7 @@ async function runScope(input: RunScopeInput): Promise<{ done: ProjectArea[]; su
   const workers = Array.from({ length: maxWorkers }, async () => {
     while (queue.length > 0) {
       const planned = queue.shift()!
-      const result = await exploreArea(workerModel, scanDescription, toolDirectory, planned.area, planned.mission, hooks, scopeLabel)
+      const result = await exploreArea(workerModel, scanDescription, toolDirectory, planned.area, planned.mission, hooks, scopeLabel, language)
       // Dispara a consolidação e segue para a próxima área sem esperar
       void consolidate(result)
     }
@@ -583,7 +599,7 @@ Original scan:
 ${scanDescription}
 
 Are there important gaps? Uncovered areas? Unread documentation? Unmapped schemas?
-Reply with JSON (write "reason", "gap", and "mission" text values in Portuguese — they're shown to a Portuguese-speaking user or read by an agent instructed to respond in Portuguese):
+Reply with JSON (write "reason", "gap", and "mission" text values in ${outputLanguage(language)} — they're shown to the user or read by an agent instructed to respond in that language):
 {"status": "done", "reason": "..."} or {"status": "needs_more", "gap": "descrição do gap", "area": "arquitetura", "mission": "missão para worker adicional"}`,
     })
     try {
@@ -595,9 +611,9 @@ Reply with JSON (write "reason", "gap", and "mission" text values in Portuguese 
       if (!(review.area in PROJECT_AREAS) || review.area === 'overview') break
       if (done.includes(review.area)) continue // já investigada
       main(`\n🔁 Loop ${loopIter + 1}${scopeLabel ? ` (${scopeLabel})` : ''}: gap detectado — **${review.gap}**\n`)
-      const extraResult = await exploreArea(workerModel, scanDescription, toolDirectory, review.area as Exclude<ProjectArea, 'overview'>, review.mission, hooks, scopeLabel)
+      const extraResult = await exploreArea(workerModel, scanDescription, toolDirectory, review.area as Exclude<ProjectArea, 'overview'>, review.mission, hooks, scopeLabel, language)
       if (extraResult.raw.trim()) {
-        const refined = await refineFindings(model, review.area as ProjectArea, extraResult.raw, savedSummaries)
+        const refined = await refineFindings(model, review.area as ProjectArea, extraResult.raw, savedSummaries, language)
         await saveAreaMemory(storageDirectory, review.area as ProjectArea, refined, rootId, force, subproject)
         savedSummaries.set(review.area as ProjectArea, refined.summary)
         done.push(review.area as ProjectArea)
@@ -611,7 +627,7 @@ Reply with JSON (write "reason", "gap", and "mission" text values in Portuguese 
 }
 
 export async function runProjectInit(input: RunInitInput): Promise<string[]> {
-  const { directory, force } = input
+  const { directory, force, language } = input
   const hooks = input.hooks ?? {}
   if (running.has(directory)) {
     throw new Error('Já existe uma análise em andamento para esta pasta.')
@@ -645,8 +661,8 @@ export async function runProjectInit(input: RunInitInput): Promise<string[]> {
     const { text: overviewText } = await generateText({
       model,
       system:
-        'You are a project analyst. Generate a concise overview in markdown: what the project is about, stack and technologies, general structure. Mention subprojects or documentation if there are any. Write it in Portuguese (pt-BR) — it becomes project memory content shown to a Portuguese-speaking user.',
-      prompt: `Based on the scan below, write the project overview (in Portuguese):\n\n${scanDescription}`,
+        `You are a project analyst. Generate a concise overview in markdown: what the project is about, stack and technologies, general structure. Mention subprojects or documentation if there are any. Write it in ${outputLanguage(language)} — it becomes project memory content shown to the user.`,
+      prompt: `Based on the scan below, write the project overview (in ${outputLanguage(language)}):\n\n${scanDescription}`,
     })
     const overview: ParsedFindings = {
       summary: overviewText.trim().split(/\n\n+/).find(Boolean)?.trim().slice(0, 500) ?? '',
@@ -674,6 +690,7 @@ export async function runProjectInit(input: RunInitInput): Promise<string[]> {
       concurrency: input.concurrency,
       hooks,
       main,
+      language,
     })
     done.push(...rootScope.done)
 
@@ -710,6 +727,7 @@ export async function runProjectInit(input: RunInitInput): Promise<string[]> {
         concurrency: input.concurrency,
         hooks,
         main,
+        language,
       })
       done.push(...spScopeResult.done)
       main(`✓ Sub-árvore de **${sp.name}**: ${spScopeResult.done.length} área(s) mapeada(s).\n`)
@@ -721,7 +739,7 @@ export async function runProjectInit(input: RunInitInput): Promise<string[]> {
       main('\nAnalisando documentação e schemas para memórias de contexto…\n')
       const { text: ctxPlan } = await generateText({
         model,
-        system: `You are a project analyst. Based on the already-consolidated areas and the files found, decide which context memories to create (category: "context", weight <= 0.3). Contexts capture: MVP features, roadmap, references to important files. Write all JSON text field values in Portuguese (pt-BR) — they become project memory content shown to a Portuguese-speaking user.`,
+        system: `You are a project analyst. Based on the already-consolidated areas and the files found, decide which context memories to create (category: "context", weight <= 0.3). Contexts capture: MVP features, roadmap, references to important files. Write all JSON text field values in ${outputLanguage(language)} — they become project memory content shown to the user.`,
         prompt: `Documentation found: ${scan.docs.join(', ') || 'none'}
 Schemas: ${scan.schemas.join(', ') || 'none'}
 Subprojects: ${scan.subprojects.map((sp) => sp.name).join(', ') || 'none'}
@@ -729,7 +747,7 @@ Subprojects: ${scan.subprojects.map((sp) => sp.name).join(', ') || 'none'}
 Areas consolidated at the root:
 ${[...rootScope.summaries.entries()].map(([a, s]) => `- ${a}: ${s}`).join('\n')}
 
-Reply with a JSON array of context memories to create (text fields in Portuguese):
+Reply with a JSON array of context memories to create (text fields in ${outputLanguage(language)}):
 [{"area": "overview", "text": "short summary (max 200 chars)", "tags": ["tag1"], "document": "full markdown"}]
 
 IMPORTANT:

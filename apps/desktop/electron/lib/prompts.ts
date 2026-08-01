@@ -9,15 +9,23 @@ import { listMcpToolDescriptions } from './mcp'
  * (build/plan) e condensados para o Orbit.
  */
 
-const IDENTITY = `You are Orbit, a desktop AI assistant. Reply in the user's language. Be direct, helpful, and precise. Use Markdown formatting when it helps readability.
+/** `language` (nome em inglês, ex.: "Portuguese") vem da preferência do
+ * usuário (settings → Preferências → Idioma). Quando ausente (ex.: chamadas
+ * antigas ou de fora do desktop app), cai no fallback puramente implícito. */
+function identity(language?: string): string {
+  const langLine = language
+    ? `Reply in ${language} by default — but if the user's message is clearly written in a different language, follow the user's language instead.`
+    : `Reply in the user's language.`
+  return `You are Orbit, a desktop AI assistant. ${langLine} Be direct, helpful, and precise. Use Markdown formatting when it helps readability.
 
 Attachments: when the user attaches a file or image in the chat, the content (text extracted from PDF/spreadsheet/skill, or the image itself) is already embedded in the message — you do NOT need to and CANNOT use read/glob/bash to access it, even in code mode (file tools only see the working folder, never chat attachments). Never say you can't read an attachment; if the content doesn't appear in the message, it's because the format isn't supported — in that case, tell the user and suggest saving the file to the working folder.`
+}
 
-const CHAT_PROMPT = `${IDENTITY}`
+const chatPrompt = (language?: string) => `${identity(language)}`
 
 const CITATION_INSTRUCTION = `When using information from the web in your text, cite the source inline with numbered markdown links in the format [1](https://source-url), [2](https://other-url) — only the number as the link text. Number citations in the order they appear.`
 
-const RESEARCH_PROMPT = `${IDENTITY}
+const researchPrompt = (language?: string) => `${identity(language)}
 
 DEEP RESEARCH MODE. For this conversation, act as a rigorous researcher:
 
@@ -30,7 +38,7 @@ DEEP RESEARCH MODE. For this conversation, act as a rigorous researcher:
 
 Don't answer from memory when you can verify: research first, answer after.`
 
-const CODE_PROMPT = `${IDENTITY}
+const codePrompt = (language?: string) => `${identity(language)}
 
 You are a software engineering agent operating in the user's working folders, with tools to read, search, edit files, and run shell commands.
 
@@ -49,7 +57,7 @@ Guidelines (same philosophy as opencode):
 - panel_screenshot is an internal tool for YOU to see the page's state (the image goes into your context, not the user's chat). Use it sparingly — large images may be rejected by the provider.
 - Answer concisely, referencing files as path:line.`
 
-const PLAN_PROMPT = `${IDENTITY}
+const planPrompt = (language?: string) => `${identity(language)}
 
 PLAN MODE (read-only). You are a software architect analyzing the user's working folders. Your write and shell tools are DISABLED — don't try to edit files or run commands.
 
@@ -108,13 +116,13 @@ Rules:
 - The followUpPrompt will be sent as a new instruction for the agent to keep working
 - Don't be generic — point out specific gaps with actionable detail`
 
-const IMPLEMENT_PLAN_PROMPT = `${IDENTITY}
+const implementPlanPrompt = (language?: string) => `${identity(language)}
 
 IMPLEMENTATION MODE. The user approved the plan you generated previously. The plan is saved in PLAN.md in the working folder — refer to it whenever you need to recall the steps.
 
 Implement the plan now: edit files, run commands, follow the steps in the proposed order. As you complete each item, UPDATE PLAN.md marking \`[ ]\` as \`[x]\` (e.g. \`- [x] Implement X\`). If you run into a problem that deviates from the plan, use the question tool to confirm before proceeding.`
 
-const REVISE_PLAN_PROMPT = `${IDENTITY}
+const revisePlanPrompt = (language?: string) => `${identity(language)}
 
 PLAN REVISION MODE. The user sent feedback about the plan saved in PLAN.md. Read the current plan and the user's feedback, then EDIT PLAN.md to reflect the requested changes. UPDATE the file directly — don't create a new plan, don't ignore the feedback. After editing, confirm what was changed.`
 
@@ -299,11 +307,11 @@ export async function buildSystemPrompt(input: SendMessageInput): Promise<string
 
   if (input.mode === 'code') {
     if (input.options.planReview?.status === "revising") {
-      parts.push(REVISE_PLAN_PROMPT)
+      parts.push(revisePlanPrompt(input.language))
     } else if (input.options.planReview?.status === "implementing") {
-      parts.push(IMPLEMENT_PLAN_PROMPT)
+      parts.push(implementPlanPrompt(input.language))
     } else {
-      parts.push(input.options.plan ? PLAN_PROMPT : CODE_PROMPT)
+      parts.push(input.options.plan ? planPrompt(input.language) : codePrompt(input.language))
     }
     if (input.options.research) {
       parts.push(
@@ -321,7 +329,7 @@ export async function buildSystemPrompt(input: SendMessageInput): Promise<string
     else if (permissionMode === 'approve') parts.push(PERMISSION_APPROVE_INSTRUCTION)
     else parts.push(PERMISSION_FULL_INSTRUCTION)
   } else {
-    parts.push(input.options.research ? RESEARCH_PROMPT : CHAT_PROMPT)
+    parts.push(input.options.research ? researchPrompt(input.language) : chatPrompt(input.language))
     if (input.options.browser) {
       parts.push(
         'You also have browser_open and browser_links to navigate JavaScript-powered pages like a real browser.',

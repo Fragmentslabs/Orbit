@@ -79,6 +79,7 @@ export function createSubagentTool(
         orchestrationRole: 'worker',
         parentSessionId: input.sessionId,
         workerTitle: task.split('\n')[0].trim().slice(0, 60) || 'subagente',
+        language: input.language,
       }
 
       const workerCtx: ToolContext | null =

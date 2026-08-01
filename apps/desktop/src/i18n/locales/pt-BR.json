@@ -1,0 +1,62 @@
+{
+  "settings": {
+    "title": "Configurações",
+    "description": "Configurações do Orbit",
+    "tabs": {
+      "providers": { "label": "Provedores", "description": "Chaves de API dos provedores de IA." },
+      "autonomy": { "label": "Preferências", "description": "Modelos padrão, modos ativos e memória." },
+      "mcp-skills": { "label": "Ferramentas", "description": "Servidores MCP e skills do usuário." },
+      "howto": { "label": "Como Funciona", "description": "Explicação dos modos e combinações." },
+      "analytics": { "label": "Uso e Limites", "description": "Estatísticas de uso e consumo de tokens." },
+      "appearance": { "label": "Aparência", "description": "Tema e modos de exibição." },
+      "data": { "label": "Dados", "description": "Exportar e importar seus dados." }
+    }
+  },
+  "preferences": {
+    "title": "Preferências",
+    "description": "Configure modelos padrão e modos ativos para cada modo.",
+    "tabChat": "Chat",
+    "tabCode": "Código",
+    "language": {
+      "title": "Idioma",
+      "description": "Idioma da interface e das respostas do assistente."
+    },
+    "defaultModel": "Modelo padrão",
+    "subagentModel": "Modelo de subagentes",
+    "orchestraModel": "Modelo de orquestra",
+    "sameAsDefault": "Mesmo que padrão",
+    "none": "Nenhum",
+    "searchModels": "Pesquisar modelos…",
+    "noModelsFound": "Nenhum modelo encontrado.",
+    "configureProvider": "Configurar um provedor",
+    "manageProviders": "Gerenciar provedores",
+    "activeModes": "Modos ativos por padrão",
+    "modes": {
+      "simple": "Simples",
+      "brain": "Memória",
+      "thinking": "Thinking",
+      "search": "Pesquisa",
+      "browser": "Browser",
+      "plan": "Modo Plano",
+      "subagents": "Subagentes",
+      "orchestra": "Orquestra"
+    },
+    "context": {
+      "title": "Injeção de contexto",
+      "off": { "label": "Nunca", "hint": "Memórias não são injetadas no prompt" },
+      "all": { "label": "Sempre", "hint": "Memórias são injetadas em toda conversa" },
+      "memory": { "label": "Só quando ativo", "hint": "Injeta apenas com o toggle Memória ativado" },
+      "descriptionCode": "Memórias de projeto (decisões, convenções, estrutura) são injetadas no prompt automaticamente. O agente busca o restante sob demanda com a ferramenta memory_graph.",
+      "descriptionChat": "Fatos permanentes, preferências e memórias sazonais são injetados no prompt pra respostas mais personalizadas e naturais."
+    },
+    "autoFolders": {
+      "title": "Pastas automáticas",
+      "description": "Agrupa automaticamente novos chats em pastas com o nome do diretório do projeto."
+    }
+  },
+  "common": {
+    "save": "Salvar",
+    "cancel": "Cancelar",
+    "add": "Adicionar"
+  }
+}

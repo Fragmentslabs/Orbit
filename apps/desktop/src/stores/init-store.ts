@@ -4,6 +4,7 @@ import type { InitStage, ProjectArea } from "@shared/memory"
 import { initApi } from "@/src/lib/ipc"
 import { useModelModePrefs } from "@/src/stores/model-mode-prefs"
 import { useProviderStore } from "@/src/stores/provider-store"
+import { LOCALE_PROMPT_NAME, useLocaleStore } from "@/src/stores/locale-store"
 
 /**
  * Estado do /init por diretório: alimenta o card automático de projeto novo
@@ -105,6 +106,7 @@ export const useInitStore = create<InitState>((set, get) => ({
       workerProviderId: worker?.providerId,
       workerModelId: worker?.modelId,
       force,
+      language: LOCALE_PROMPT_NAME[useLocaleStore.getState().locale],
     })
   },
 
