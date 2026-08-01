@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from "react"
+import { useTranslation } from "react-i18next"
 import { FileIcon } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { normalizeText } from "@shared/memory"
@@ -16,6 +17,7 @@ export function FilePalette({ directory, children }: {
   directory?: string
   children: ReactNode
 }) {
+  const { t } = useTranslation()
   const controller = usePromptInputController()
   const attachments = usePromptInputAttachments()
   const value = controller.textInput.value
@@ -95,10 +97,10 @@ export function FilePalette({ directory, children }: {
       {open && (filtered.length > 0 || loading) && (
         <div className="absolute bottom-full left-0 right-0 z-50 mb-2 max-h-80 overflow-y-auto rounded-xl border-2 border-sidebar-border bg-popover p-1.5 text-popover-foreground shadow-lg">
           <p className="flex items-center gap-1 px-2 pb-0.5 pt-1.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
-            <FileIcon className="size-3" /> Arquivos
+            <FileIcon className="size-3" /> {t("filePalette.files")}
           </p>
           {loading && (
-            <p className="px-2 py-2 text-xs text-muted-foreground">Carregando...</p>
+            <p className="px-2 py-2 text-xs text-muted-foreground">{t("filePalette.loading")}</p>
           )}
           {!loading && filtered.map((relPath) => {
             const index = filtered.indexOf(relPath)

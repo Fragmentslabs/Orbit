@@ -1,4 +1,5 @@
 import { useMemo } from "react"
+import { useTranslation } from "react-i18next"
 import type { ChatMessage } from "@shared/chat"
 import { useSessionStore } from "@/src/stores/session-store"
 import { cn } from "@/lib/utils"
@@ -139,6 +140,7 @@ export function DiffTab({ sessionId, messageId }: {
   sessionId?: string
   messageId?: string
 }) {
+  const { t } = useTranslation()
   const auto = useLastCodeMessage()
   const resolvedSessionId = sessionId ?? auto?.sessionId ?? ""
   const resolvedMessageId = messageId ?? auto?.message.id ?? ""
@@ -157,7 +159,7 @@ export function DiffTab({ sessionId, messageId }: {
   if (!message) {
     return (
       <div className="flex h-full items-center justify-center text-xs text-muted-foreground">
-        Nenhuma alteração encontrada
+        {t("diff.noChanges")}
       </div>
     )
   }
@@ -165,7 +167,7 @@ export function DiffTab({ sessionId, messageId }: {
   if (!files || files.length === 0) {
     return (
       <div className="flex h-full items-center justify-center text-xs text-muted-foreground">
-        Nenhuma alteração nesta mensagem
+        {t("diff.noChangesInMessage")}
       </div>
     )
   }
@@ -181,7 +183,7 @@ export function DiffTab({ sessionId, messageId }: {
         {isAuto && session && (
           <span className="truncate font-medium text-foreground">{session.title}</span>
         )}
-        <span>{message.snapshot!.files?.length ?? files.length} arquivo{(message.snapshot!.files?.length ?? files.length) !== 1 ? "s" : ""}</span>
+        <span>{t("diff.filesCount", { count: message.snapshot!.files?.length ?? files.length })}</span>
         {totalAdded > 0 && <span className="text-emerald-500">+{totalAdded}</span>}
         {totalRemoved > 0 && <span className="text-red-500">-{totalRemoved}</span>}
       </div>

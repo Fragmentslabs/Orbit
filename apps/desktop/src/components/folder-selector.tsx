@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react"
+import { useTranslation } from "react-i18next"
 import { Folder, Plus, X } from "lucide-react"
 
 const RECENT_FOLDERS_KEY = "orbit-recent-folders"
@@ -27,6 +28,7 @@ interface FolderSelectorProps {
 }
 
 export function FolderSelector({ folders, onFoldersChange, compact }: FolderSelectorProps) {
+  const { t } = useTranslation()
   const [recentOpen, setRecentOpen] = useState(false)
   const recentRef = useRef<HTMLDivElement>(null)
   const [recentFolders] = useState<string[]>(loadRecentFolders)
@@ -91,7 +93,7 @@ export function FolderSelector({ folders, onFoldersChange, compact }: FolderSele
               </div>
             </div>
             <span className="flex-1 truncate">
-              {folders.length === 0 ? "Associar pasta" : getFolderName(folders[0])}
+              {folders.length === 0 ? t("folderSelector.associate") : getFolderName(folders[0])}
             </span>
           </button>
           {recentOpen && (
@@ -99,7 +101,7 @@ export function FolderSelector({ folders, onFoldersChange, compact }: FolderSele
               {recentFolders.length > 0 && (
                 <div className="mb-1 border-b border-border pb-1">
                   <p className="px-2 py-1 text-[10px] font-medium text-muted-foreground uppercase tracking-wider">
-                    Recentes
+                    {t("folderSelector.recent")}
                   </p>
                   {recentFolders.map((folder) => (
                     <button
@@ -118,7 +120,7 @@ export function FolderSelector({ folders, onFoldersChange, compact }: FolderSele
                 className="flex w-full min-h-7 items-center gap-2 rounded-md px-2 py-1 text-xs hover:bg-foreground/10"
               >
                 <Folder className="size-3.5" />
-                Nova pasta
+                {t("folderSelector.newFolder")}
               </button>
             </div>
           )}
@@ -139,7 +141,7 @@ export function FolderSelector({ folders, onFoldersChange, compact }: FolderSele
                 className="absolute inset-0 flex size-4 cursor-pointer items-center justify-center rounded p-0 opacity-0 transition-opacity group-hover:pointer-events-auto group-hover:opacity-100 hover:bg-foreground/10"
               >
                 <X className="size-2" />
-                <span className="sr-only">Remover</span>
+                <span className="sr-only">{t("folderSelector.remove")}</span>
               </button>
             </div>
             <span className="flex-1 truncate max-w-24">{getFolderName(folder)}</span>

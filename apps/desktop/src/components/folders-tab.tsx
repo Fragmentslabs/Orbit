@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import {
   CheckIcon,
   ChevronUpIcon,
@@ -142,6 +143,7 @@ function FolderQuickSwitch({
   folders: string[];
   onFoldersChange: (f: string[]) => void;
 }) {
+  const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
@@ -156,7 +158,7 @@ function FolderQuickSwitch({
   }, [open]);
 
   const primaryName =
-    folders.length === 0 ? "Sem pasta" : getBaseName(folders[0]);
+    folders.length === 0 ? t("folders.noFolder") : getBaseName(folders[0]);
 
   const handleSelectFolder = (path: string) => {
     setOpen(false);
@@ -185,7 +187,7 @@ function FolderQuickSwitch({
       {open && (
         <div className="absolute bottom-full left-2 right-2 z-50 mb-1 overflow-hidden rounded-lg border bg-popover/70 p-1 text-popover-foreground shadow-md ring-1 ring-foreground/10 backdrop-blur-2xl backdrop-saturate-150">
           <p className="px-2 py-1 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
-            Pastas associadas
+            {t("folders.associated")}
           </p>
           {folders.map((f) => (
             <button
@@ -247,6 +249,7 @@ function CodeView({
 }
 
 export function FoldersTab() {
+  const { t } = useTranslation();
   const { folders, setFolders } = useWorkspace();
   const { theme } = useTheme();
   const isDark =
@@ -436,7 +439,7 @@ export function FoldersTab() {
     return (
       <div className="flex flex-1 flex-col items-center justify-center gap-3 p-6 text-center">
         <p className="text-sm text-muted-foreground">
-          Nenhuma pasta associada a esta conversa.
+          {t("folders.empty")}
         </p>
         <FolderSelector folders={folders} onFoldersChange={setFolders} />
       </div>
@@ -475,7 +478,7 @@ export function FoldersTab() {
               ) : (
                 <ArtifactTitle className="flex items-center gap-1.5 truncate">
                   <FolderTreeIcon className="size-3.5 shrink-0 text-muted-foreground" />
-                  Explorador de Arquivos
+                  {t("folders.explorer")}
                 </ArtifactTitle>
               )}
             </div>
@@ -492,16 +495,16 @@ export function FoldersTab() {
                   <DropdownMenuContent align="end" className="min-w-40">
                     <DropdownMenuItem onClick={handleCopyPath}>
                       <CopyIcon className="size-4" />
-                      Copiar path
+                      {t("folders.copyPath")}
                     </DropdownMenuItem>
                     <DropdownMenuItem onClick={handleCopy}>
                       {copied ? <CheckIcon className="size-4" /> : <CopyIcon className="size-4" />}
-                      Copiar conteúdo
+                      {t("folders.copyContent")}
                     </DropdownMenuItem>
                     {viewedFile.kind === "live" && (
                       <DropdownMenuItem onClick={handleReveal}>
                         <FolderOpenIcon className="size-4" />
-                        Mostrar na pasta
+                        {t("folders.reveal")}
                       </DropdownMenuItem>
                     )}
                   </DropdownMenuContent>
@@ -513,7 +516,7 @@ export function FoldersTab() {
             <ArtifactContent className="min-h-0 min-w-0 flex-1 overflow-auto  p-0">
               {fileLoading ? (
                 <div className="p-4 text-sm text-muted-foreground">
-                  Carregando...
+                  {t("common.loading")}
                 </div>
               ) : fileError ? (
                 <div className="p-4 text-sm text-muted-foreground">
@@ -527,7 +530,7 @@ export function FoldersTab() {
             <div className="flex min-h-0 min-w-0 flex-1 flex-col items-center justify-center gap-4 p-6 text-center">
               <FolderTreeIcon className="size-16 text-muted-foreground/20" />
               <p className="text-sm text-muted-foreground">
-                Selecione um arquivo no explorador ao lado
+                {t("folders.selectFileHint")}
               </p>
             </div>
           )}
@@ -557,11 +560,11 @@ export function FoldersTab() {
                 <TabsList className="w-full">
                   <TabsTrigger className="flex-1 gap-1.5" value="files">
                     <FolderTreeIcon className="size-3.5" />
-                    Arquivos
+                    {t("folders.filesTab")}
                   </TabsTrigger>
                   <TabsTrigger className="flex-1 gap-1.5" value="commits">
                     <FolderGit2Icon className="size-3.5" />
-                    Commits
+                    {t("folders.commitsTab")}
                   </TabsTrigger>
                 </TabsList>
               </div>
@@ -604,19 +607,19 @@ export function FoldersTab() {
                   <div className="flex flex-col gap-2 p-2 text-xs">
                     {commitsLoading && (
                       <div className="p-4 text-center text-muted-foreground">
-                        Carregando commits...
+                        {t("folders.loadingCommits")}
                       </div>
                     )}
                     {!commitsLoading && commitsError && (
                       <div className="p-4 text-center text-muted-foreground">
-                        Não foi possível ler o histórico git desta pasta.
+                        {t("folders.gitHistoryError")}
                       </div>
                     )}
                     {!commitsLoading &&
                       !commitsError &&
                       commits?.length === 0 && (
                         <div className="p-4 text-center text-muted-foreground">
-                          Nenhum commit encontrado.
+                          {t("folders.noCommits")}
                         </div>
                       )}
                     {commits?.map((commit) => (
