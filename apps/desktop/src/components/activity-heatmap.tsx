@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react"
 import { createPortal } from "react-dom"
+import { useTranslation } from "react-i18next"
 import { cn } from "@/lib/utils"
 import type { AnalyticsDay } from "@shared/analytics"
 import { ModelSelectorLogo } from "@/src/components/ai/model-selector"
@@ -13,6 +14,7 @@ interface HeatmapProps {
 const TOTAL_WEEKS = 30
 
 export function ActivityHeatmap({ days, className }: HeatmapProps) {
+  const { t, i18n } = useTranslation()
   const [tooltip, setTooltip] = useState<{
     day: AnalyticsDay
     x: number
@@ -100,7 +102,7 @@ export function ActivityHeatmap({ days, className }: HeatmapProps) {
       {/* Legend */}
       <div className="mt-1 flex items-center justify-center gap-4 text-[9px] text-muted-foreground">
         <div className="flex items-center gap-1">
-          <span>Menos</span>
+          <span>{t("analytics.heatmap.less")}</span>
           {[0, 1, 2, 3].map((i) => (
             <div
               key={i}
@@ -108,11 +110,11 @@ export function ActivityHeatmap({ days, className }: HeatmapProps) {
               style={{ backgroundColor: `oklch(from var(--primary) l c h / ${OPACITIES[i]})` }}
             />
           ))}
-          <span>Mais</span>
+          <span>{t("analytics.heatmap.more")}</span>
         </div>
         <div className="flex items-center gap-1">
           <div className="size-3 rounded-[1.5px]" style={{ backgroundColor: "oklch(from var(--muted-foreground) l c h / 0.12)" }} />
-          <span>Sem atividade</span>
+          <span>{t("analytics.heatmap.noActivity")}</span>
         </div>
       </div>
 
@@ -123,7 +125,7 @@ export function ActivityHeatmap({ days, className }: HeatmapProps) {
           style={{ left: tooltip.x - 120, top: tooltip.y - 150 }}
         >
           <p className="mb-1 font-medium">
-            {new Date(tooltip.day.date + "T12:00:00").toLocaleDateString("pt-BR", {
+            {new Date(tooltip.day.date + "T12:00:00").toLocaleDateString(i18n.language, {
               weekday: "short",
               day: "numeric",
               month: "short",
@@ -140,7 +142,7 @@ export function ActivityHeatmap({ days, className }: HeatmapProps) {
             </p>
           ))}
           <div className="mt-1 border-t pt-1 font-medium tabular-nums text-foreground">
-            Total: {formatTokens(tooltip.day.totalTokens)} tok · {tooltip.day.totalHours.toFixed(1)}h · {formatCost(tooltip.day.totalCost)}
+            {t("analytics.heatmap.total")}: {formatTokens(tooltip.day.totalTokens)} tok · {tooltip.day.totalHours.toFixed(1)}h · {formatCost(tooltip.day.totalCost)}
           </div>
         </div>,
         document.body,

@@ -12,6 +12,46 @@
       "data": { "label": "Dados", "description": "Exportar e importar seus dados." }
     }
   },
+  "analytics": {
+    "title": "Uso do Orbit",
+    "loading": "Carregando...",
+    "noData": "Nenhum dado de uso disponível.",
+    "usageByModel": "Uso por modelo",
+    "tokens": "Tokens",
+    "hours": "Horas",
+    "totalTokens": "Tokens totais",
+    "cost": "Custo",
+    "spent": "gasto",
+    "ranges": {
+      "total": "Total",
+      "30d": "30d",
+      "7d": "7d",
+      "today": "Hoje"
+    },
+    "stats": {
+      "sessions": "Sessões",
+      "messages": "Mensagens",
+      "activeDays": "Dias ativos",
+      "currentStreak": "Sequência atual",
+      "longestStreak": "Maior sequência",
+      "peakHour": "Horário de pico",
+      "days_one": "{{count}} dia",
+      "days_other": "{{count}} dias"
+    },
+    "limits": {
+      "button": "Limites",
+      "title": "Limites de uso",
+      "description": "Defina limites mensais para controlar o consumo.",
+      "tokenLimit": "Limite mensal de tokens",
+      "costLimit": "Limite mensal de gasto (USD)"
+    },
+    "heatmap": {
+      "less": "Menos",
+      "more": "Mais",
+      "noActivity": "Sem atividade",
+      "total": "Total"
+    }
+  },
   "howto": {
     "title": "Modos e Ferramentas",
     "description": "O Orbit oferece vários modos que modificam o comportamento do agente. Ative-os antes de enviar a mensagem e combine-os para tarefas mais complexas.",

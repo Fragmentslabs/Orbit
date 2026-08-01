@@ -12,6 +12,46 @@
       "data": { "label": "Data", "description": "Export and import your data." }
     }
   },
+  "analytics": {
+    "title": "Orbit Usage",
+    "loading": "Loading...",
+    "noData": "No usage data available.",
+    "usageByModel": "Usage by model",
+    "tokens": "Tokens",
+    "hours": "Hours",
+    "totalTokens": "Total tokens",
+    "cost": "Cost",
+    "spent": "spent",
+    "ranges": {
+      "total": "Total",
+      "30d": "30d",
+      "7d": "7d",
+      "today": "Today"
+    },
+    "stats": {
+      "sessions": "Sessions",
+      "messages": "Messages",
+      "activeDays": "Active days",
+      "currentStreak": "Current streak",
+      "longestStreak": "Longest streak",
+      "peakHour": "Peak hour",
+      "days_one": "{{count}} day",
+      "days_other": "{{count}} days"
+    },
+    "limits": {
+      "button": "Limits",
+      "title": "Usage limits",
+      "description": "Set monthly limits to control usage.",
+      "tokenLimit": "Monthly token limit",
+      "costLimit": "Monthly spend limit (USD)"
+    },
+    "heatmap": {
+      "less": "Less",
+      "more": "More",
+      "noActivity": "No activity",
+      "total": "Total"
+    }
+  },
   "howto": {
     "title": "Modes and Tools",
     "description": "Orbit offers several modes that change the agent's behavior. Turn them on before sending your message and combine them for more complex tasks.",
