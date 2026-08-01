@@ -46,6 +46,7 @@ function useTabs(): TabDef[] {
 }
 
 const ProviderRow = memo(function ProviderRow({ providerId }: { providerId: string }) {
+  const { t } = useTranslation()
   const provider = useProviderStore((s) => s.catalog[providerId])
   const connected = useProviderStore((s) => s.connectedProviders.includes(providerId))
   const setApiKey = useProviderStore((s) => s.setApiKey)
@@ -74,14 +75,14 @@ const ProviderRow = memo(function ProviderRow({ providerId }: { providerId: stri
         {connected && (
           <Badge variant="secondary" className="gap-1 text-[10px]">
             <Check className="size-3" />
-            Conectado
+            {t("providers.connected")}
           </Badge>
         )}
         {connected ? (
           <Button
             size="icon-sm"
             variant="ghost"
-            title="Remover chave"
+            title={t("providers.removeKey")}
             onClick={() => void removeApiKey(providerId)}
           >
             <Trash2 className="size-3.5" />
@@ -90,7 +91,7 @@ const ProviderRow = memo(function ProviderRow({ providerId }: { providerId: stri
           !editing && (
             <Button size="sm" variant="outline" className="gap-1" onClick={() => setEditing(true)}>
               <KeyRound className="size-3.5" />
-              Adicionar chave
+              {t("providers.addKey")}
             </Button>
           )
         )}
@@ -101,7 +102,7 @@ const ProviderRow = memo(function ProviderRow({ providerId }: { providerId: stri
             autoFocus
             type="password"
             value={key}
-            placeholder={`Chave de API do ${provider.name}`}
+            placeholder={t("providers.apiKeyPlaceholder", { name: provider.name })}
             onChange={(e) => setKey(e.target.value)}
             onKeyDown={(e) => {
               if (e.key === "Enter") void save()
@@ -109,7 +110,7 @@ const ProviderRow = memo(function ProviderRow({ providerId }: { providerId: stri
             }}
           />
           <Button disabled={!key.trim() || saving} onClick={() => void save()}>
-            Salvar
+            {t("common.save")}
           </Button>
         </div>
       )}
@@ -126,6 +127,7 @@ function CustomProviderCard({
   onEdit: () => void
   onRemove: () => void
 }) {
+  const { t } = useTranslation()
   const connected = useProviderStore((s) => s.connectedProviders.includes(provider.id))
 
   return (
@@ -136,18 +138,18 @@ function CustomProviderCard({
         {connected ? (
           <Badge variant="secondary" className="gap-1 text-[10px]">
             <Wifi className="size-3" />
-            Conectado
+            {t("providers.connected")}
           </Badge>
         ) : (
           <Badge variant="outline" className="gap-1 text-[10px] text-muted-foreground">
             <WifiOff className="size-3" />
-            Não conectado
+            {t("providers.local.notConnected")}
           </Badge>
         )}
-        <Button size="icon-sm" variant="ghost" title="Editar" onClick={onEdit}>
+        <Button size="icon-sm" variant="ghost" title={t("providers.local.edit")} onClick={onEdit}>
           <Pencil className="size-3.5" />
         </Button>
-        <Button size="icon-sm" variant="ghost" title="Remover" onClick={onRemove}>
+        <Button size="icon-sm" variant="ghost" title={t("providers.local.remove")} onClick={onRemove}>
           <Trash2 className="size-3.5" />
         </Button>
       </div>
@@ -167,6 +169,7 @@ function CustomProviderDialog({
   onOpenChange: (open: boolean) => void
   editProvider?: { id: string; name: string; api?: string }
 }) {
+  const { t } = useTranslation()
   const addCustomProvider = useProviderStore((s) => s.addCustomProvider)
   const updateCustomProvider = useProviderStore((s) => s.updateCustomProvider)
 
@@ -222,15 +225,15 @@ function CustomProviderDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle className="text-sm">{isEdit ? "Editar provedor local" : "Adicionar provedor local"}</DialogTitle>
+          <DialogTitle className="text-sm">{isEdit ? t("providers.dialog.editTitle") : t("providers.dialog.addTitle")}</DialogTitle>
           <DialogDescription className="text-xs">
-            Configure um servidor local compatível com OpenAI (Ollama, LM Studio, etc.).
+            {t("providers.dialog.description")}
           </DialogDescription>
         </DialogHeader>
         <div className="flex flex-col gap-3">
           <div className="flex gap-2">
             <div className="flex-1">
-              <label className="text-xs text-muted-foreground">ID</label>
+              <label className="text-xs text-muted-foreground">{t("providers.dialog.id")}</label>
               <Input
                 value={id}
                 placeholder="ollama-local"
@@ -239,32 +242,32 @@ function CustomProviderDialog({
               />
             </div>
             <div className="flex-[2]">
-              <label className="text-xs text-muted-foreground">Nome</label>
-              <Input value={name} placeholder="Meu Ollama" onChange={(e) => setName(e.target.value)} />
+              <label className="text-xs text-muted-foreground">{t("providers.dialog.name")}</label>
+              <Input value={name} placeholder={t("providers.dialog.namePlaceholder")} onChange={(e) => setName(e.target.value)} />
             </div>
           </div>
           <div>
-            <label className="text-xs text-muted-foreground">Base URL</label>
+            <label className="text-xs text-muted-foreground">{t("providers.dialog.baseUrl")}</label>
             <Input value={baseURL} placeholder="http://localhost:11434/v1" onChange={(e) => setBaseURL(e.target.value)} />
           </div>
           <div>
             <label className="text-xs text-muted-foreground">
-              Chave de API <span className="text-muted-foreground/50">(opcional)</span>
+              {t("providers.dialog.apiKey")} <span className="text-muted-foreground/50">{t("providers.dialog.optional")}</span>
             </label>
             <Input
               type="password"
               value={apiKey}
-              placeholder="Deixe em branco para manter a atual"
+              placeholder={t("providers.dialog.apiKeyPlaceholder")}
               onChange={(e) => setApiKey(e.target.value)}
             />
           </div>
           {error && <p className="text-xs text-destructive">{error}</p>}
           <div className="flex justify-end gap-2">
             <Button variant="outline" size="sm" onClick={() => onOpenChange(false)}>
-              Cancelar
+              {t("common.cancel")}
             </Button>
             <Button size="sm" disabled={!id.trim() || !name.trim() || !baseURL.trim() || saving} onClick={() => void handleSave()}>
-              {isEdit ? "Salvar" : "Adicionar"}
+              {isEdit ? t("common.save") : t("common.add")}
             </Button>
           </div>
         </div>
@@ -274,6 +277,7 @@ function CustomProviderDialog({
 }
 
 function ProvidersTab({ searchInputRef }: { searchInputRef?: React.RefObject<HTMLInputElement> }) {
+  const { t } = useTranslation()
   const catalog = useProviderStore((s) => s.catalog)
   const customProviders = useProviderStore((s) => s.customProviders)
   const connectedProviders = useProviderStore((s) => s.connectedProviders)
@@ -315,25 +319,24 @@ function ProvidersTab({ searchInputRef }: { searchInputRef?: React.RefObject<HTM
   return (
     <div className="flex h-full flex-col gap-3 overflow-y-auto pr-1">
       <div>
-        <p className="text-sm font-semibold">Provedores de IA</p>
+        <p className="text-sm font-semibold">{t("providers.title")}</p>
         <p className="mt-0.5 text-xs text-muted-foreground">
-          Adicione chaves de API para habilitar provedores. As chaves ficam salvas apenas neste
-          computador.
+          {t("providers.description")}
         </p>
       </div>
 
       {/* Provedores locais / customizados */}
       <div className="flex items-center gap-2">
         <Server className="size-3.5 text-muted-foreground" />
-        <p className="text-xs font-medium text-muted-foreground">Provedores Locais</p>
+        <p className="text-xs font-medium text-muted-foreground">{t("providers.local.title")}</p>
         <div className="flex-1" />
-        <Button size="icon-sm" variant="ghost" title="Detectar servidores locais"
+        <Button size="icon-sm" variant="ghost" title={t("providers.local.detect")}
           disabled={detecting} onClick={() => void handleDetect()}>
           <RefreshCw className={cn("size-3", detecting && "animate-spin")} />
         </Button>
         <Button size="sm" variant="outline" className="gap-1 h-7 text-xs" onClick={() => { setEditProvider(undefined); setDialogOpen(true) }}>
           <Plus className="size-3" />
-          Adicionar
+          {t("providers.local.add")}
         </Button>
       </div>
 
@@ -344,17 +347,17 @@ function ProvidersTab({ searchInputRef }: { searchInputRef?: React.RefObject<HTM
               {r.detected ? (
                 <Badge variant="secondary" className="gap-1 text-[10px]">
                   <Wifi className="size-2.5" />
-                  Online
+                  {t("providers.detect.online")}
                 </Badge>
               ) : (
                 <Badge variant="outline" className="gap-1 text-[10px] text-muted-foreground">
                   <WifiOff className="size-2.5" />
-                  Offline
+                  {t("providers.detect.offline")}
                 </Badge>
               )}
               <span className="font-medium">{r.name}</span>
               {r.detected && r.models.length > 0 && (
-                <span className="text-muted-foreground">({r.models.length} modelos)</span>
+                <span className="text-muted-foreground">({t("providers.detect.models", { count: r.models.length })})</span>
               )}
               <span className="text-muted-foreground">{r.baseURL}</span>
               <button className="ml-auto text-muted-foreground hover:text-foreground" onClick={() => setDetectResults(null)}>
@@ -382,18 +385,18 @@ function ProvidersTab({ searchInputRef }: { searchInputRef?: React.RefObject<HTM
         ))}
         {customProviders.length === 0 && (
           <p className="py-2 text-center text-xs text-muted-foreground">
-            Nenhum provedor local configurado. Adicione um ou use "Detectar".
+            {t("providers.local.none")}
           </p>
         )}
       </div>
 
       {/* Provedores da nuvem (catálogo models.dev) */}
       <div className="flex flex-col gap-2 border-t pt-3">
-        <p className="text-xs font-medium text-muted-foreground">Provedores da Nuvem</p>
+        <p className="text-xs font-medium text-muted-foreground">{t("providers.cloud.title")}</p>
         <input
           ref={searchInputRef}
           value={query}
-          placeholder="Pesquisar provedor…"
+          placeholder={t("providers.cloud.searchPlaceholder")}
           onChange={(e) => setQuery(e.target.value)}
           className="h-7 w-full min-w-0 rounded-md border border-input bg-input/20 px-2 py-0.5 text-sm transition-colors outline-none file:inline-flex file:h-6 file:border-0 file:bg-transparent file:text-xs/relaxed file:font-medium file:text-foreground placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30 md:text-xs/relaxed dark:bg-input/30"
         />
@@ -401,7 +404,7 @@ function ProvidersTab({ searchInputRef }: { searchInputRef?: React.RefObject<HTM
           <ProviderRow key={id} providerId={id} />
         ))}
         {providerIds.length === 0 && (
-          <p className="py-4 text-center text-xs text-muted-foreground">Nenhum provedor encontrado</p>
+          <p className="py-4 text-center text-xs text-muted-foreground">{t("providers.cloud.none")}</p>
         )}
       </div>
 
