@@ -1,4 +1,5 @@
 import { useState } from "react"
+import { useTranslation } from "react-i18next"
 import {
   CheckIcon,
   CheckSquareIcon,
@@ -29,11 +30,11 @@ function TaskModeIcon({ task }: { task: OrchestrationTask }) {
   return <Icon className="size-3.5 shrink-0 text-muted-foreground" />
 }
 
-function TaskChips({ task }: { task: OrchestrationTask }) {
+function TaskChips({ task, t }: { task: OrchestrationTask; t: (key: string) => string }) {
   const chips: { icon: typeof SearchIcon; label: string }[] = []
-  if (task.options.research) chips.push({ icon: SearchIcon, label: "Pesquisa" })
-  if (task.options.browser) chips.push({ icon: GlobeIcon, label: "Browser" })
-  if (task.options.plan) chips.push({ icon: FileTextIcon, label: "Só leitura" })
+  if (task.options.research) chips.push({ icon: SearchIcon, label: t("orchestration.researchChip") })
+  if (task.options.browser) chips.push({ icon: GlobeIcon, label: t("orchestration.browserChip") })
+  if (task.options.plan) chips.push({ icon: FileTextIcon, label: t("orchestration.readOnlyChip") })
   if (chips.length === 0) return null
   return (
     <span className="flex items-center gap-1.5">
@@ -63,6 +64,7 @@ export function OrchestrationPlanCard({ sessionId, plan }: {
   sessionId: string
   plan: OrchestrationPlan
 }) {
+  const { t } = useTranslation()
   const approvePlan = useSessionStore((s) => s.approvePlan)
   const rejectPlan = useSessionStore((s) => s.rejectPlan)
   const [excluded, setExcluded] = useState<Set<string>>(new Set())
@@ -75,14 +77,14 @@ export function OrchestrationPlanCard({ sessionId, plan }: {
     <div className="rounded-xl border-2 border-sidebar-border bg-sidebar/50 p-3 text-sm">
       <div className="mb-2 flex items-center gap-2">
         {running ? (
-          <Shimmer className="font-medium">Executando workers…</Shimmer>
+          <Shimmer className="font-medium">{t("orchestration.runningWorkers")}</Shimmer>
         ) : (
           <p className="font-medium">
             {proposed
-              ? `Plano proposto · ${plan.tasks.length} ${plan.tasks.length === 1 ? "tarefa" : "tarefas"}`
+              ? t("orchestration.proposedCount", { count: plan.tasks.length })
               : plan.status === "done"
-                ? "Orquestração concluída"
-                : "Plano rejeitado"}
+                ? t("orchestration.completed")
+                : t("orchestration.rejected")}
           </p>
         )}
       </div>
@@ -121,20 +123,22 @@ export function OrchestrationPlanCard({ sessionId, plan }: {
             <span className="min-w-0 flex-1 truncate text-xs" title={task.prompt}>
               {task.title}
             </span>
-            <TaskChips task={task} />
+            <TaskChips task={task} t={t} />
           </div>
         ))}
       </div>
       {plan.usage && (plan.status === "running" || plan.status === "approved" || plan.status === "done") && (
         <p className="mt-2 text-[11px] tabular-nums text-muted-foreground">
-          Custo desta orchestra: {plan.usage.cost !== undefined ? formatCost(plan.usage.cost) : "—"} (
-          {formatTokens(plan.usage.input + plan.usage.output)} tokens)
+          {t("orchestration.cost", {
+            cost: plan.usage.cost !== undefined ? formatCost(plan.usage.cost) : "—",
+            tokens: formatTokens(plan.usage.input + plan.usage.output),
+          })}
         </p>
       )}
       {proposed && (
         <div className="mt-3 flex items-center justify-end gap-2">
           <Button variant="ghost" size="sm" className="text-xs" onClick={() => rejectPlan(sessionId)}>
-            Rejeitar
+            {t("orchestration.reject")}
           </Button>
           <Button
             size="sm"
@@ -148,7 +152,9 @@ export function OrchestrationPlanCard({ sessionId, plan }: {
               )
             }
           >
-            Aprovar e executar {selectedCount < plan.tasks.length ? `(${selectedCount})` : ""}
+            {selectedCount < plan.tasks.length
+              ? t("orchestration.approveRunWithCount", { count: selectedCount })
+              : t("orchestration.approveRun")}
           </Button>
         </div>
       )}

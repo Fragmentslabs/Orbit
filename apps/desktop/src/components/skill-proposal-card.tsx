@@ -1,4 +1,5 @@
 import { useEffect } from "react"
+import { useTranslation } from "react-i18next"
 import { Check, FileCode2, Sparkles } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -21,6 +22,7 @@ function slugOf(part: ToolPart): string | null {
 }
 
 export function SkillProposalCard({ part }: { part: ToolPart }) {
+  const { t } = useTranslation()
   const initialize = useSkillsStore((s) => s.initialize)
   const pending = useSkillsStore((s) => s.pending)
   const skills = useSkillsStore((s) => s.skills)
@@ -32,7 +34,7 @@ export function SkillProposalCard({ part }: { part: ToolPart }) {
   }, [initialize])
 
   if (part.state === "running") {
-    return <Shimmer className="text-sm">Montando a skill…</Shimmer>
+    return <Shimmer className="text-sm">{t("skillProposal.building")}</Shimmer>
   }
   if (part.state === "error") return null
 
@@ -74,20 +76,20 @@ export function SkillProposalCard({ part }: { part: ToolPart }) {
       </div>
       {installed ? (
         <p className="flex items-center gap-1.5 text-xs text-emerald-500">
-          <Check className="size-3.5" /> Skill adicionada — disponível como @{slug} na paleta "/"
+          <Check className="size-3.5" /> {t("skillProposal.installed", { slug })}
         </p>
       ) : proposal ? (
         <div className="flex justify-end gap-2">
           <Button size="sm" variant="outline" onClick={() => void discard(slug)}>
-            Dispensar
+            {t("skillProposal.discard")}
           </Button>
           <Button size="sm" className="gap-1.5" onClick={() => void approve(slug)}>
             <Sparkles className="size-3.5" />
-            Adicionar skill
+            {t("skillProposal.add")}
           </Button>
         </div>
       ) : (
-        <p className="text-xs text-muted-foreground">Proposta dispensada.</p>
+        <p className="text-xs text-muted-foreground">{t("skillProposal.discarded")}</p>
       )}
     </div>
   )

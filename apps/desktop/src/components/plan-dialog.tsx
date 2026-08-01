@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
+import { useTranslation } from "react-i18next"
 import { RefreshCwIcon } from "lucide-react"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
@@ -17,6 +18,7 @@ export function PlanDialog({
   open: boolean
   onOpenChange: (open: boolean) => void
 }) {
+  const { t } = useTranslation()
   const [content, setContent] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const session = useSessionStore((s) => s.sessions.find((x) => x.id === sessionId))
@@ -51,7 +53,7 @@ export function PlanDialog({
             PLAN.md
             {checkboxCount > 0 && (
               <span className="text-sm font-normal text-muted-foreground">
-                ({checkedCount}/{checkboxCount} concluídas)
+                {t("planDialog.doneCount", { checked: checkedCount, total: checkboxCount })}
               </span>
             )}
           </DialogTitle>
@@ -59,18 +61,18 @@ export function PlanDialog({
 
         <div className="flex-1 overflow-y-auto min-h-0 px-1">
           {loading ? (
-            <p className="text-sm text-muted-foreground animate-pulse">Carregando...</p>
+            <p className="text-sm text-muted-foreground animate-pulse">{t("planDialog.loading")}</p>
           ) : content ? (
             <MessageResponse>{content}</MessageResponse>
           ) : (
-            <p className="text-sm text-muted-foreground">PLAN.md não encontrado.</p>
+            <p className="text-sm text-muted-foreground">{t("planDialog.notFound")}</p>
           )}
         </div>
 
         <div className="flex justify-end gap-2 pt-2 border-t">
           <Button variant="outline" size="sm" onClick={load} disabled={loading}>
             <RefreshCwIcon className={`size-3.5 mr-1 ${loading ? "animate-spin" : ""}`} />
-            Recarregar
+            {t("planDialog.reload")}
           </Button>
         </div>
       </DialogContent>

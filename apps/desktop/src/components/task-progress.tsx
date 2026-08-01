@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+import { useTranslation } from "react-i18next"
 import { CheckIcon, ChevronDown, LoaderIcon, MessageSquareIcon, TerminalIcon, X, XCircleIcon } from "lucide-react"
 import { cn } from "@/lib/utils"
 
@@ -13,7 +14,7 @@ export interface TaskItem {
 
 export function TaskProgress({
   tasks,
-  title = "Tarefas",
+  title,
   defaultExpanded = true,
   onDismiss,
 }: {
@@ -22,6 +23,7 @@ export function TaskProgress({
   defaultExpanded?: boolean
   onDismiss?: () => void
 }) {
+  const { t } = useTranslation()
   const [expanded, setExpanded] = useState(defaultExpanded)
   const total = tasks.length
   const done = tasks.filter((t) => t.status === "idle").length
@@ -51,7 +53,11 @@ export function TaskProgress({
             <CheckIcon className="size-3.5 shrink-0 text-emerald-500" />
           )}
           <span className="font-medium text-foreground">
-            {running ? `${title} em andamento` : allDoneOrError && hasErrors ? `${title} com erros` : `${title} concluídas`}
+            {running
+              ? t("taskProgress.inProgress", { title: title ?? t("taskProgress.title") })
+              : allDoneOrError && hasErrors
+                ? t("taskProgress.errors", { title: title ?? t("taskProgress.title") })
+                : t("taskProgress.done", { title: title ?? t("taskProgress.title") })}
           </span>
           <span className="text-muted-foreground">
             {done}/{total}

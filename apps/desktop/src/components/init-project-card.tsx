@@ -1,4 +1,5 @@
 import { useEffect } from "react"
+import { useTranslation } from "react-i18next"
 import { FolderSearch } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
@@ -16,6 +17,7 @@ export function InitProjectCard({ directory, sessionId }: {
   directory: string
   sessionId?: string
 }) {
+  const { t } = useTranslation()
   const sessions = useSessionStore((s) => s.sessions)
   const initialized = useInitStore((s) => s.initialized[directory])
   const dismissed = useInitStore((s) => s.dismissed.includes(directory))
@@ -49,15 +51,13 @@ export function InitProjectCard({ directory, sessionId }: {
       <div className="flex items-start gap-3">
         <FolderSearch className="mt-0.5 size-5 shrink-0 text-primary" />
         <div className="min-w-0 flex-1">
-          <p className="font-medium">Projeto novo por aqui</p>
+          <p className="font-medium">{t("initProject.title")}</p>
           <p className="mt-0.5 text-xs text-muted-foreground">
-            Posso analisar a estrutura e gerar memórias por área (stack, arquitetura,
-            design, regras de negócio…) para ganhar contexto de uma vez — em vez de
-            descobrir tudo por tentativa e erro.
+            {t("initProject.description")}
           </p>
           <div className="mt-2 flex gap-2">
             <Button size="sm" className="h-7 text-xs" onClick={handleAnalyze}>
-              Analisar projeto
+              {t("initProject.analyze")}
             </Button>
             <Button
               variant="ghost"
@@ -65,7 +65,7 @@ export function InitProjectCard({ directory, sessionId }: {
               className="h-7 text-xs text-muted-foreground"
               onClick={() => dismiss(directory)}
             >
-              Agora não
+              {t("initProject.later")}
             </Button>
           </div>
         </div>

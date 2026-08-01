@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -15,6 +16,7 @@ export function LoopConfigDialog({ open, onOpenChange }: {
   open: boolean
   onOpenChange: (open: boolean) => void
 }) {
+  const { t } = useTranslation()
   const config = useLoopConfigStore((s) => s.config)
   const updateConfig = useLoopConfigStore((s) => s.updateConfig)
 
@@ -24,16 +26,15 @@ export function LoopConfigDialog({ open, onOpenChange }: {
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <RefreshCw className="size-4" />
-            Configuração do Loop
+            {t("loopConfig.title")}
           </DialogTitle>
           <DialogDescription>
-            Limites para o modo loop: o agente revisa o próprio resultado e itera
-            até completar a tarefa ou atingir o limite.
+            {t("loopConfig.description")}
           </DialogDescription>
         </DialogHeader>
         <div className="flex flex-col gap-4 py-2">
           <label className="flex flex-col gap-1">
-            <span className="text-xs font-medium">Iterações máximas</span>
+            <span className="text-xs font-medium">{t("loopConfig.maxIterations")}</span>
             <Input
               type="number"
               min={1}
@@ -42,12 +43,12 @@ export function LoopConfigDialog({ open, onOpenChange }: {
               onChange={(e) => updateConfig({ maxIterations: Math.max(1, Math.min(10, Number(e.target.value))) })}
             />
             <span className="text-[10px] text-muted-foreground">
-              Quantas vezes o agente pode revisar e refinar o resultado (1-10)
+              {t("loopConfig.maxIterationsHint")}
             </span>
           </label>
 
           <label className="flex flex-col gap-1">
-            <span className="text-xs font-medium">Tokens por revisão</span>
+            <span className="text-xs font-medium">{t("loopConfig.tokensPerIter")}</span>
             <Input
               type="number"
               min={1000}
@@ -57,12 +58,12 @@ export function LoopConfigDialog({ open, onOpenChange }: {
               onChange={(e) => updateConfig({ maxTokensPerIter: Math.max(1000, Math.min(20000, Number(e.target.value))) })}
             />
             <span className="text-[10px] text-muted-foreground">
-              Limite de tokens para cada chamada de revisão (1.000-20.000)
+              {t("loopConfig.tokensPerIterHint")}
             </span>
           </label>
 
           <label className="flex flex-col gap-1">
-            <span className="text-xs font-medium">Timeout (minutos)</span>
+            <span className="text-xs font-medium">{t("loopConfig.timeout")}</span>
             <Input
               type="number"
               min={1}
@@ -71,7 +72,7 @@ export function LoopConfigDialog({ open, onOpenChange }: {
               onChange={(e) => updateConfig({ timeoutMinutes: Math.max(1, Math.min(60, Number(e.target.value))) })}
             />
             <span className="text-[10px] text-muted-foreground">
-              Tempo máximo total do loop antes de entregar resposta parcial (1-60)
+              {t("loopConfig.timeoutHint")}
             </span>
           </label>
 
@@ -88,16 +89,16 @@ export function LoopConfigDialog({ open, onOpenChange }: {
               />
             </button>
             <div className="flex flex-col">
-              <span className="text-xs font-medium">Revisão automática</span>
+              <span className="text-xs font-medium">{t("loopConfig.autoReview")}</span>
               <span className="text-[10px] text-muted-foreground">
-                Se desligado, pergunta antes de cada nova iteração
+                {t("loopConfig.autoReviewHint")}
               </span>
             </div>
           </label>
         </div>
         <DialogFooter showCloseButton>
           <Button size="sm" onClick={() => onOpenChange(false)}>
-            Concluir
+            {t("loopConfig.done")}
           </Button>
         </DialogFooter>
       </DialogContent>

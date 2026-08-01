@@ -1,4 +1,5 @@
 import { useState } from "react"
+import { useTranslation } from "react-i18next"
 import { ChevronDown, History, Undo2, MessageSquareText, X } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
@@ -13,6 +14,7 @@ import { useSessionStore } from "@/src/stores/session-store"
  * Pode ser fechada com o X (não desfaz o revert, só esconde a barra).
  */
 export function RevertBar({ session }: { session: SessionInfo }) {
+  const { t } = useTranslation()
   const unrevert = useSessionStore((s) => s.unrevert)
   const [showDiff, setShowDiff] = useState(false)
   const [dismissed, setDismissed] = useState(false)
@@ -23,11 +25,11 @@ export function RevertBar({ session }: { session: SessionInfo }) {
   const count = revert.files?.length ?? 0
   const label = isCode
     ? count === 0
-      ? "Arquivos revertidos"
+      ? t("revert.filesRevertedNone")
       : count === 1
-        ? "1 arquivo revertido"
-        : `${count} arquivos revertidos`
-    : "Conversa revertida até este ponto"
+        ? t("revert.filesRevertedOne")
+        : t("revert.filesRevertedMany", { n: count })
+    : t("revert.conversationReverted")
 
   return (
     <div className="rounded-lg border bg-muted/40 text-xs">
@@ -38,7 +40,7 @@ export function RevertBar({ session }: { session: SessionInfo }) {
         }
         <span className="flex-1 truncate">
           {label}
-          <span className="text-muted-foreground"> — nova mensagem continua deste ponto</span>
+          <span className="text-muted-foreground"> — {t("revert.continueFromHere")}</span>
         </span>
         {revert.diff && (
           <button
@@ -46,7 +48,7 @@ export function RevertBar({ session }: { session: SessionInfo }) {
             className="flex items-center gap-1 text-muted-foreground hover:text-foreground"
             onClick={() => setShowDiff((v) => !v)}
           >
-            Diff
+            {t("revert.diff")}
             <ChevronDown className={cn("size-3 transition-transform", showDiff && "rotate-180")} />
           </button>
         )}
@@ -57,13 +59,13 @@ export function RevertBar({ session }: { session: SessionInfo }) {
           onClick={() => void unrevert(session.id)}
         >
           <Undo2 className="size-3" />
-          Desfazer
+          {t("revert.unrevert")}
         </Button>
         <button
           type="button"
           className="text-muted-foreground hover:text-foreground"
           onClick={() => setDismissed(true)}
-          title="Fechar"
+          title={t("common.close")}
         >
           <X className="size-3.5" />
         </button>

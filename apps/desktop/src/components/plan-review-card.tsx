@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react"
+import { useTranslation } from "react-i18next"
 import { ChevronDown, FileTextIcon, RefreshCwIcon, MessageSquareText, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
@@ -14,19 +15,20 @@ import { chatApi } from "@/src/lib/ipc"
 import type { PlanReview } from "@shared/chat"
 import type { PermissionMode } from "@shared/chat"
 
-const ALL_MODES: { id: PermissionMode; label: string }[] = [
-  { id: "ask", label: "Perguntas" },
-  { id: "approve", label: "Autonomia" },
-  { id: "full", label: "Irrestrito" },
+const ALL_MODES: { id: PermissionMode; labelKey: string }[] = [
+  { id: "ask", labelKey: "planReview.modeAsk" },
+  { id: "approve", labelKey: "planReview.modeApprove" },
+  { id: "full", labelKey: "planReview.modeFull" },
 ]
 
 const MODE_LABEL: Record<PermissionMode, string> = {
-  ask: "Perguntar",
-  approve: "Autonomia",
-  full: "Irrestrito",
+  ask: "planReview.modeAskShort",
+  approve: "planReview.modeApprove",
+  full: "planReview.modeFull",
 }
 
 export function PlanReviewCard({ sessionId, review }: { sessionId: string; review: PlanReview }) {
+  const { t } = useTranslation()
   const [dialogOpen, setDialogOpen] = useState(false)
   const [content, setContent] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
@@ -77,7 +79,7 @@ export function PlanReviewCard({ sessionId, review }: { sessionId: string; revie
         <div className="flex items-center gap-2">
           <FileTextIcon className="size-4 shrink-0 text-primary" />
           <span className="font-medium truncate">
-            {isProposed ? "Plano de implementação proposto" : "Implementando plano"}
+            {isProposed ? t("planReview.proposed") : t("planReview.implementing")}
           </span>
           {checkboxCount > 0 && (
             <span className="shrink-0 text-muted-foreground">
@@ -86,16 +88,16 @@ export function PlanReviewCard({ sessionId, review }: { sessionId: string; revie
           )}
           <div className="ml-auto flex items-center gap-1 shrink-0">
             <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => setDialogOpen(true)}>
-              Ver plano
+              {t("planReview.viewPlan")}
             </Button>
             {isProposed ? (
               <>
                 <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => setReviewOpen(!reviewOpen)}>
                   <MessageSquareText className="size-3.5 mr-1" />
-                  Revisar
+                  {t("planReview.review")}
                 </Button>
                 <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => rejectPlanReview(sessionId)}>
-                  Rejeitar
+                  {t("planReview.reject")}
                 </Button>
                 <div className="flex">
                   <Button
@@ -103,7 +105,7 @@ export function PlanReviewCard({ sessionId, review }: { sessionId: string; revie
                     className="h-7 rounded-r-none text-xs"
                     onClick={() => acceptPlanReview(sessionId, currentMode)}
                   >
-                    Aceitar ({MODE_LABEL[currentMode]})
+                    {t("planReview.accept", { mode: t(MODE_LABEL[currentMode]) })}
                   </Button>
                   <DropdownMenu>
                     <DropdownMenuTrigger render={<Button size="sm" className="h-7 rounded-l-none border-l border-primary-foreground/20 px-1.5">
@@ -112,11 +114,11 @@ export function PlanReviewCard({ sessionId, review }: { sessionId: string; revie
                     <DropdownMenuContent align="end" side="top">
                       {otherModes.map((m) => (
                         <DropdownMenuItem key={m.id} onClick={() => acceptPlanReview(sessionId, m.id)}>
-                          Aceitar com {m.label}
+                          {t("planReview.acceptWith", { mode: t(m.labelKey) })}
                         </DropdownMenuItem>
                       ))}
                       <DropdownMenuItem onClick={() => acceptPlanReview(sessionId, currentMode, true)}>
-                        Aceitar com Orquestração
+                        {t("planReview.acceptOrchestration")}
                       </DropdownMenuItem>
                     </DropdownMenuContent>
                   </DropdownMenu>
@@ -143,12 +145,12 @@ export function PlanReviewCard({ sessionId, review }: { sessionId: string; revie
             <input
               value={reviewText}
               onChange={(e) => setReviewText(e.target.value)}
-              placeholder="Escreva seu feedback para revisar o plano..."
+              placeholder={t("planReview.reviewPlaceholder")}
               className="h-8 flex-1 rounded-md border border-input bg-background px-2.5 py-1.5 text-xs ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               onKeyDown={(e) => { if (e.key === "Enter") handleSubmitReview() }}
             />
             <Button size="sm" className="h-8 text-xs" onClick={handleSubmitReview} disabled={!reviewText.trim()}>
-              Enviar
+              {t("planReview.send")}
             </Button>
           </div>
         )}
