@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react"
+import { useTranslation } from "react-i18next"
 import {
   ArrowLeftIcon,
   ArrowRightIcon,
@@ -110,11 +111,11 @@ const SELECT_ON = `(() => {
 
 const SELECT_OFF = `window.__orbitSelectCleanup && window.__orbitSelectCleanup()`
 
-const VIEWPORT_PRESETS: { icon: typeof MonitorIcon; label: string; viewport: Viewport | null }[] = [
-  { icon: MonitorIcon, label: "Ajustar ao painel", viewport: null },
-  { icon: SmartphoneIcon, label: "Mobile · 390×844", viewport: { width: 390, height: 844, label: "mobile" } },
-  { icon: TabletIcon, label: "Tablet · 834×1112", viewport: { width: 834, height: 1112, label: "tablet" } },
-  { icon: MonitorIcon, label: "Desktop · 1440×900", viewport: { width: 1440, height: 900, label: "desktop" } },
+const VIEWPORT_PRESETS: { icon: typeof MonitorIcon; labelKey: string; viewport: Viewport | null }[] = [
+  { icon: MonitorIcon, labelKey: "browser.viewportFit", viewport: null },
+  { icon: SmartphoneIcon, labelKey: "browser.viewportMobile", viewport: { width: 390, height: 844, label: "mobile" } },
+  { icon: TabletIcon, labelKey: "browser.viewportTablet", viewport: { width: 834, height: 1112, label: "tablet" } },
+  { icon: MonitorIcon, labelKey: "browser.viewportDesktop", viewport: { width: 1440, height: 900, label: "desktop" } },
 ]
 
 function PanelBrowserBody() {
@@ -182,9 +183,10 @@ function PanelBrowserBody() {
 function SelectModeButton() {
   const selectMode = usePanelStore((s) => s.selectMode)
   const setSelectMode = usePanelStore((s) => s.setSelectMode)
+  const { t } = useTranslation()
   return (
     <WebPreviewNavigationButton
-      tooltip={selectMode ? "Selecionando… clique em um elemento da página" : "Selecionar elemento para o agente"}
+      tooltip={selectMode ? t("browser.selecting") : t("browser.selectForAgent")}
       onClick={() => setSelectMode(!selectMode)}
       className={cn(selectMode && "bg-emerald-500/15 text-emerald-500 hover:text-emerald-400")}
     >
@@ -196,10 +198,11 @@ function SelectModeButton() {
 function ViewportButton() {
   const viewport = usePanelStore((s) => s.viewport)
   const setViewport = usePanelStore((s) => s.setViewport)
+  const { t } = useTranslation()
   return (
     <DropdownMenu>
       <DropdownMenuTrigger
-        title="Tamanho da tela (responsividade)"
+        title={t("browser.viewportTitle")}
         className={cn(
           "flex h-8 items-center gap-1 rounded-md px-2 text-xs text-muted-foreground hover:bg-muted hover:text-foreground",
           viewport && "text-foreground",
@@ -210,9 +213,9 @@ function ViewportButton() {
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="min-w-52">
         {VIEWPORT_PRESETS.map((preset) => (
-          <DropdownMenuItem key={preset.label} onClick={() => setViewport(preset.viewport)}>
+          <DropdownMenuItem key={preset.labelKey} onClick={() => setViewport(preset.viewport)}>
             <preset.icon className="size-3.5" />
-            {preset.label}
+            {t(preset.labelKey)}
           </DropdownMenuItem>
         ))}
       </DropdownMenuContent>
@@ -223,9 +226,10 @@ function ViewportButton() {
 function FullscreenButton() {
   const fullscreen = usePanelStore((s) => s.fullscreen)
   const setFullscreen = usePanelStore((s) => s.setFullscreen)
+  const { t } = useTranslation()
   return (
     <WebPreviewNavigationButton
-      tooltip={fullscreen ? "Sair da tela cheia" : "Abrir em tela cheia"}
+      tooltip={fullscreen ? t("browser.exitFullscreen") : t("browser.enterFullscreen")}
       onClick={() => setFullscreen(!fullscreen)}
     >
       {fullscreen ? <Minimize2Icon className="size-4" /> : <Maximize2Icon className="size-4" />}
@@ -237,6 +241,7 @@ function FullscreenButton() {
 function AgentIndicator() {
   const agentActive = usePanelStore((s) => s.agentActive)
   const latest = usePanelStore((s) => s.activity[0])
+  const { t } = useTranslation()
   if (!agentActive) return null
   return (
     <div className="pointer-events-none absolute left-2 top-2 z-10 flex items-center gap-1.5 rounded-full border border-emerald-500/30 bg-background/90 px-2.5 py-1 text-[11px] font-medium text-emerald-600 shadow-sm backdrop-blur dark:text-emerald-400">
@@ -244,7 +249,7 @@ function AgentIndicator() {
         <span className="absolute inline-flex size-full animate-ping rounded-full bg-emerald-500 opacity-75" />
         <span className="relative inline-flex size-2 rounded-full bg-emerald-500" />
       </span>
-      Orbit no navegador{latest ? ` · ${latest.label}` : ""}
+      {t("browser.agentInBrowser")}{latest ? ` · ${latest.label}` : ""}
     </div>
   )
 }
@@ -253,16 +258,17 @@ function AgentIndicator() {
 function ActivityFeed() {
   const agentActive = usePanelStore((s) => s.agentActive)
   const activity = usePanelStore((s) => s.activity)
+  const { t } = useTranslation()
   return (
     <div className="absolute right-3 top-3 z-10 flex max-h-[45vh] w-72 flex-col overflow-hidden rounded-xl border bg-background/95 shadow-lg backdrop-blur">
       <div className="flex items-center gap-2 border-b px-3 py-2 text-xs font-medium">
         <SparklesIcon className={cn("size-3.5", agentActive ? "text-emerald-500" : "text-muted-foreground")} />
-        {agentActive ? "Orbit está usando o navegador" : "Atividade do navegador"}
+        {agentActive ? t("browser.agentUsingBrowser") : t("browser.browserActivity")}
       </div>
       <div className="flex-1 overflow-y-auto p-1.5">
         {activity.length === 0 ? (
           <p className="px-2 py-3 text-center text-[11px] text-muted-foreground">
-            As ações do agente aparecem aqui.
+            {t("browser.emptyActivity")}
           </p>
         ) : (
           activity.map((entry, i) => (
@@ -289,6 +295,7 @@ function FullscreenComposer() {
   const activeSession = useActiveSession("code")
   const sendMessage = useSessionStore((s) => s.sendMessage)
   const permissionMode = usePermissionPrefs((s) => s.mode)
+  const { t } = useTranslation()
   const [text, setText] = useState("")
   const [sending, setSending] = useState(false)
 
@@ -324,7 +331,7 @@ function FullscreenComposer() {
             }
           }}
           rows={1}
-          placeholder={disabled ? "Selecione uma pasta no modo código para pedir à IA" : "Peça algo ao Orbit sobre esta página…"}
+          placeholder={disabled ? t("browser.composerPlaceholderNoFolder") : t("browser.composerPlaceholder")}
           disabled={disabled}
           className="max-h-32 min-h-9 flex-1 resize-none bg-transparent px-2 py-1.5 text-sm outline-none placeholder:text-muted-foreground disabled:opacity-60"
         />
