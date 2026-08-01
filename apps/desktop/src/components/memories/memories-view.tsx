@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react"
+import { useTranslation } from "react-i18next"
 import { List, Network, Search } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import {
@@ -26,6 +27,7 @@ import { lastActivity } from "./meta"
 const ALL_PROJECTS = "__all__"
 
 export function MemoriesView() {
+  const { t } = useTranslation()
   const { mode } = useWorkspace()
   const initialize = useMemoryStore((s) => s.initialize)
   const index = useMemoryStore((s) => s.index)
@@ -90,7 +92,7 @@ export function MemoriesView() {
           <Input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Buscar memórias…"
+            placeholder={t("memories.searchPlaceholder")}
             className="pl-8"
           />
         </div>
@@ -98,11 +100,11 @@ export function MemoriesView() {
           <Select value={projectFilter} onValueChange={(v) => setProjectFilter(v ?? ALL_PROJECTS)}>
             <SelectTrigger className="w-44">
               <SelectValue>
-                {projectFilter === ALL_PROJECTS ? "Todos" : projects.find((p) => p.id === projectFilter)?.name}
+                {projectFilter === ALL_PROJECTS ? t("memories.allProjects") : projects.find((p) => p.id === projectFilter)?.name}
               </SelectValue>
             </SelectTrigger>
             <SelectContent alignItemWithTrigger={false}>
-              <SelectItem value={ALL_PROJECTS}>Todos os projetos</SelectItem>
+              <SelectItem value={ALL_PROJECTS}>{t("memories.allProjectsFull")}</SelectItem>
               {projects.map((p) => (
                 <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
               ))}
@@ -112,10 +114,10 @@ export function MemoriesView() {
         <Tabs value={tab} onValueChange={(v) => setTab(v as "list" | "graph")}>
           <TabsList>
             <TabsTrigger value="list" className="gap-1.5">
-              <List className="size-3.5" /> Lista
+              <List className="size-3.5" /> {t("memories.tabList")}
             </TabsTrigger>
             <TabsTrigger value="graph" className="gap-1.5">
-              <Network className="size-3.5" /> Grafo
+              <Network className="size-3.5" /> {t("memories.tabGraph")}
             </TabsTrigger>
           </TabsList>
         </Tabs>
@@ -124,13 +126,13 @@ export function MemoriesView() {
       {(tab === "graph" ? pool : filtered).length === 0 ? (
         <div className="flex flex-1 items-center justify-center">
           <div className="flex flex-col items-center gap-1 text-center">
-            <p className="text-sm font-medium">Nenhuma memória {query ? "encontrada" : "ainda"}</p>
+            <p className="text-sm font-medium">{t(query ? "memories.emptyTitleQuery" : "memories.emptyTitleNone")}</p>
             <p className="max-w-sm text-xs text-muted-foreground">
               {query
-                ? "Tente outros termos de busca."
+                ? t("memories.emptyQuery")
                 : mode === "chat"
-                  ? "Converse com o Brain ativo e o Orbit passa a lembrar fatos e preferências automaticamente."
-                  : "Trabalhe em um projeto com o Brain ativo e o Orbit memoriza decisões, convenções e estrutura."}
+                  ? t("memories.emptyChat")
+                  : t("memories.emptyCode")}
             </p>
           </div>
         </div>

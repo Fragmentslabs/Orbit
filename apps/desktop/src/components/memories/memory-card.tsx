@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react"
+import { useTranslation } from "react-i18next"
 import { ArrowUpCircle, ExternalLink, FileText, Link2, Pencil, Trash2 } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -21,8 +22,8 @@ import { useMemoryStore } from "@/src/stores/memory-store"
 import { useSessionStore } from "@/src/stores/session-store"
 import { CATEGORY_LABEL, KIND_BADGE, KIND_LABEL, canPromote } from "./meta"
 
-function formatDate(ts: number) {
-  return new Date(ts).toLocaleDateString("pt-BR", { day: "2-digit", month: "short", year: "numeric" })
+function formatDate(ts: number, locale: string) {
+  return new Date(ts).toLocaleDateString(locale, { day: "2-digit", month: "short", year: "numeric" })
 }
 
 function EditDialog({ memory, open, onOpenChange }: {
@@ -30,6 +31,7 @@ function EditDialog({ memory, open, onOpenChange }: {
   open: boolean
   onOpenChange: (open: boolean) => void
 }) {
+  const { t } = useTranslation()
   const update = useMemoryStore((s) => s.update)
   const [text, setText] = useState(memory.text)
   const [tags, setTags] = useState(memory.tags.join(", "))
@@ -47,17 +49,17 @@ function EditDialog({ memory, open, onOpenChange }: {
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Editar memória</DialogTitle>
+          <DialogTitle>{t("memories.editTitle")}</DialogTitle>
         </DialogHeader>
         <div className="flex flex-col gap-3">
           <Textarea value={text} onChange={(e) => setText(e.target.value)} rows={3} />
           <Input
             value={tags}
             onChange={(e) => setTags(e.target.value)}
-            placeholder="tags separadas por vírgula"
+            placeholder={t("memories.tagsPlaceholder")}
           />
           <label className="flex items-center gap-3 text-xs text-muted-foreground">
-            Peso
+            {t("memories.weight")}
             <input
               type="range"
               min={0}
@@ -71,19 +73,19 @@ function EditDialog({ memory, open, onOpenChange }: {
           </label>
         </div>
         <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>{t("common.cancel")}</Button>
           <Button
             disabled={!text.trim()}
             onClick={() => {
               void update(memory.id, {
                 text: text.trim(),
-                tags: tags.split(",").map((t) => t.trim()).filter(Boolean),
+                tags: tags.split(",").map((tag) => tag.trim()).filter(Boolean),
                 weight,
               })
               onOpenChange(false)
             }}
           >
-            Salvar
+            {t("memories.save")}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -96,6 +98,7 @@ function DocDialog({ memory, open, onOpenChange }: {
   open: boolean
   onOpenChange: (open: boolean) => void
 }) {
+  const { t } = useTranslation()
   const openDoc = useMemoryStore((s) => s.openDoc)
   const [doc, setDoc] = useState<string | null>(null)
 
@@ -111,7 +114,7 @@ function DocDialog({ memory, open, onOpenChange }: {
         </DialogHeader>
         <ScrollArea className="max-h-[60vh] w-full overflow-x-auto pr-3">
           {doc === null ? (
-            <p className="text-sm text-muted-foreground">Carregando documento…</p>
+            <p className="text-sm text-muted-foreground">{t("memories.loadingDoc")}</p>
           ) : (
             <div className="w-full break-words">
               <AssistantMarkdown>{doc}</AssistantMarkdown>
@@ -129,6 +132,7 @@ export function MemoryCard({ memory, related, onSelectRelated }: {
   related: Memory[]
   onSelectRelated?: (id: string) => void
 }) {
+  const { t, i18n } = useTranslation()
   const remove = useMemoryStore((s) => s.remove)
   const promote = useMemoryStore((s) => s.promote)
   const sessions = useSessionStore((s) => s.sessions)
@@ -147,7 +151,7 @@ export function MemoryCard({ memory, related, onSelectRelated }: {
         <p className="min-w-0 flex-1 text-sm leading-snug line-clamp-2">{memory.text}</p>
         <div className="flex shrink-0 items-center gap-1 opacity-0 transition-opacity group-hover/card:opacity-100">
           {memory.hasDoc && (
-            <Button variant="ghost" size="icon" className="size-6" title="Ver documento anexado" onClick={() => setDocOpen(true)}>
+            <Button variant="ghost" size="icon" className="size-6" title={t("memories.viewDoc")} onClick={() => setDocOpen(true)}>
               <FileText className="size-3.5" />
             </Button>
           )}
@@ -156,7 +160,7 @@ export function MemoryCard({ memory, related, onSelectRelated }: {
               variant="ghost"
               size="icon"
               className="size-6"
-              title={`Abrir conversa de origem: ${originSession.title}`}
+              title={t("memories.openOriginSession", { title: originSession.title })}
               onClick={() => {
                 if (originSession.mode !== mode) setMode(originSession.mode)
                 setView("chat")
@@ -171,16 +175,16 @@ export function MemoryCard({ memory, related, onSelectRelated }: {
               variant="ghost"
               size="icon"
               className="size-6"
-              title={memory.kind === "seasonal" ? "Promover a core (permanente)" : "Promover a decisão (permanente)"}
+              title={memory.kind === "seasonal" ? t("memories.promoteCore") : t("memories.promoteDecision")}
               onClick={() => void promote(memory.id)}
             >
               <ArrowUpCircle className="size-3.5" />
             </Button>
           )}
-          <Button variant="ghost" size="icon" className="size-6" title="Editar" onClick={() => setEditing(true)}>
+          <Button variant="ghost" size="icon" className="size-6" title={t("memories.edit")} onClick={() => setEditing(true)}>
             <Pencil className="size-3.5" />
           </Button>
-          <Button variant="ghost" size="icon" className="size-6" title="Deletar" onClick={() => setConfirmDelete(true)}>
+          <Button variant="ghost" size="icon" className="size-6" title={t("memories.delete")} onClick={() => setConfirmDelete(true)}>
             <Trash2 className="size-3.5" />
           </Button>
         </div>
@@ -188,11 +192,11 @@ export function MemoryCard({ memory, related, onSelectRelated }: {
 
       <div className="flex flex-wrap items-center gap-1.5 text-xs">
         <Badge variant="secondary" className={cn("px-1.5 py-0 text-[10px]", KIND_BADGE[memory.kind])}>
-          {KIND_LABEL[memory.kind]}
+          {t(`memories.kinds.${memory.kind}`, { defaultValue: KIND_LABEL[memory.kind] })}
         </Badge>
         {memory.category && (
           <Badge variant="outline" className="px-1.5 py-0 text-[10px]">
-            {CATEGORY_LABEL[memory.category]}
+            {t(`memories.categories.${memory.category}`, { defaultValue: CATEGORY_LABEL[memory.category] })}
           </Badge>
         )}
         {memory.kind === "project" && memory.projectName && (
@@ -202,7 +206,7 @@ export function MemoryCard({ memory, related, onSelectRelated }: {
         )}
         {memory.promotedFrom && (
           <Badge variant="outline" className="px-1.5 py-0 text-[10px] text-muted-foreground">
-            promovida
+            {t("memories.promoted")}
           </Badge>
         )}
         {memory.hasDoc && <FileText className="size-3 text-muted-foreground" />}
@@ -213,7 +217,7 @@ export function MemoryCard({ memory, related, onSelectRelated }: {
 
       <div className="flex items-center gap-3 text-[11px] text-muted-foreground">
         <span className="flex items-center gap-1.5">
-          peso
+          {t("memories.weightLabel")}
           <span className="inline-block h-1 w-16 overflow-hidden rounded-full bg-muted">
             <span
               className="block h-full rounded-full bg-primary/60"
@@ -221,15 +225,15 @@ export function MemoryCard({ memory, related, onSelectRelated }: {
             />
           </span>
         </span>
-        <span>{memory.hits} uso{memory.hits === 1 ? "" : "s"}</span>
-        <span>{formatDate(memory.createdAt)}</span>
-        {memory.expiresAt != null && <span>expira {formatDate(memory.expiresAt)}</span>}
+        <span>{t("memories.uses", { count: memory.hits })}</span>
+        <span>{formatDate(memory.createdAt, i18n.language)}</span>
+        {memory.expiresAt != null && <span>{t("memories.expires", { date: formatDate(memory.expiresAt, i18n.language) })}</span>}
       </div>
 
       {related.length > 0 && (
         <div className="flex flex-col gap-1 border-t pt-2">
           <span className="flex items-center gap-1 text-[11px] text-muted-foreground">
-            <Link2 className="size-3" /> Conectadas
+            <Link2 className="size-3" /> {t("memories.connected")}
           </span>
           {related.map((r) => (
             <button
@@ -247,9 +251,11 @@ export function MemoryCard({ memory, related, onSelectRelated }: {
       <ConfirmDialog
         open={confirmDelete}
         onOpenChange={setConfirmDelete}
-        title="Excluir memória?"
-        description={`"${memory.text}" será excluída permanentemente${memory.hasDoc ? ", junto com o documento anexado" : ""}.`}
-        confirmLabel="Excluir"
+        title={t("memories.deleteTitle")}
+        description={memory.hasDoc
+          ? t("memories.deleteDescriptionWithDoc", { text: memory.text })
+          : t("memories.deleteDescription", { text: memory.text })}
+        confirmLabel={t("memories.deleteConfirm")}
         destructive
         onConfirm={() => void remove(memory.id)}
       />
