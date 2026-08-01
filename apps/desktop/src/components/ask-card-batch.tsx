@@ -1,4 +1,5 @@
 import { useState } from "react"
+import { useTranslation } from "react-i18next"
 import { Bot, ChevronDown, HelpCircle, Layers, ShieldAlert, TriangleAlert } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -11,10 +12,10 @@ import type { PendingAskUI } from "@/src/stores/session-store"
 
 type PermissionDecision = "allow" | "always_chat" | "always" | "deny"
 
-const PERMIT_OPTIONS: { value: PermissionDecision; label: string }[] = [
-  { value: "allow", label: "Uma vez" },
-  { value: "always_chat", label: "Sempre neste chat" },
-  { value: "always", label: "Sempre" },
+const PERMIT_OPTIONS: { value: PermissionDecision; labelKey: string }[] = [
+  { value: "allow", labelKey: "permissions.once" },
+  { value: "always_chat", labelKey: "permissions.alwaysChat" },
+  { value: "always", labelKey: "permissions.always" },
 ]
 
 function BatchPermissionBlock({ item, choice, onChoice }: {
@@ -22,6 +23,7 @@ function BatchPermissionBlock({ item, choice, onChoice }: {
   choice: PermissionDecision
   onChoice: (value: PermissionDecision) => void
 }) {
+  const { t } = useTranslation()
   const claim = item.claim!
   const [, setOpen] = useState(false)
   return (
@@ -36,19 +38,21 @@ function BatchPermissionBlock({ item, choice, onChoice }: {
           <p className="break-all font-mono text-xs">{claim.title}</p>
           {claim.detail && (
             <p className={cn("text-xs", claim.critical ? "text-destructive" : "text-muted-foreground")}>
-              {claim.critical ? "Ação crítica: " : ""}{claim.detail}
+              {claim.critical ? `${t("ask.critical")}` : ""}{claim.detail}
             </p>
           )}
         </div>
         <DropdownMenu onOpenChange={setOpen}>
           <DropdownMenuTrigger render={<Button size="sm" variant="outline" className="gap-1 text-xs h-7" />}>
-            {PERMIT_OPTIONS.find((o) => o.value === choice)?.label ?? "Permitir"}
+            {PERMIT_OPTIONS.find((o) => o.value === choice)?.labelKey
+              ? t(PERMIT_OPTIONS.find((o) => o.value === choice)!.labelKey)
+              : t("permissions.allow")}
             <ChevronDown className="size-3" />
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
             {PERMIT_OPTIONS.map((opt) => (
               <DropdownMenuItem key={opt.value} onClick={() => onChoice(opt.value)}>
-                {opt.label}
+                {t(opt.labelKey)}
               </DropdownMenuItem>
             ))}
           </DropdownMenuContent>
@@ -59,6 +63,7 @@ function BatchPermissionBlock({ item, choice, onChoice }: {
 }
 
 export function AskCardBatch({ items }: { items: PendingAskUI[] }) {
+  const { t } = useTranslation()
   const [submitted, setSubmitted] = useState(false)
   const [permChoices, setPermChoices] = useState<Record<string, PermissionDecision>>({})
   const [selected, setSelected] = useState<Record<string, Set<string>>>({})
@@ -98,12 +103,12 @@ export function AskCardBatch({ items }: { items: PendingAskUI[] }) {
     <div className="flex flex-col gap-3 rounded-lg border bg-card p-3 text-card-foreground shadow-sm">
       <div className="flex items-center gap-2 text-xs text-muted-foreground">
         <Layers className="size-3.5" />
-        {items.length} pedidos de workers aguardando — responda tudo de uma vez
+        {t("ask.batchWaiting", { count: items.length })}
       </div>
       {items.map((item) => (
         <div key={item.requestId} className="flex flex-col gap-2 rounded-md border bg-background/50 p-2.5">
           <Badge variant="outline" className="w-fit gap-1 px-1.5 py-0 text-[10px] text-muted-foreground">
-            <Bot className="size-3" /> {item.origin?.workerTitle ?? "worker"}
+            <Bot className="size-3" /> {item.origin?.workerTitle ?? t("ask.worker")}
           </Badge>
           {item.kind === "permission" ? (
             <BatchPermissionBlock
@@ -147,10 +152,10 @@ export function AskCardBatch({ items }: { items: PendingAskUI[] }) {
       ))}
       <div className="flex justify-end gap-2">
         <Button size="sm" variant="outline" disabled={submitted} onClick={() => replyAll(true)}>
-          Negar/dispensar tudo
+          {t("ask.dismissAll")}
         </Button>
         <Button size="sm" disabled={submitted || !allAnswered} onClick={() => replyAll(false)}>
-          Responder tudo
+          {t("ask.answerAll")}
         </Button>
       </div>
     </div>
