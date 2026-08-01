@@ -331,6 +331,11 @@ export interface SendMessageInput {
   isFirstExchange?: boolean
   /** Configuração do modo loop (enviada do renderer) */
   loopConfig?: { maxIterations: number; maxTokensPerIter: number; autoReview: boolean }
+  /** Idioma preferido do usuário (nome em inglês, ex: "Portuguese", "English") —
+   * usado nos system prompts para instruir o modelo a responder nesse idioma
+   * por padrão. O modelo ainda pode seguir o idioma da própria mensagem do
+   * usuário quando ela difere claramente disto (ver IDENTITY em prompts.ts). */
+  language?: string
 }
 
 export type ChatEvent =

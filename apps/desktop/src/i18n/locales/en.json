@@ -1,0 +1,62 @@
+{
+  "settings": {
+    "title": "Settings",
+    "description": "Orbit settings",
+    "tabs": {
+      "providers": { "label": "Providers", "description": "API keys for AI providers." },
+      "autonomy": { "label": "Preferences", "description": "Default models, active modes, and memory." },
+      "mcp-skills": { "label": "Tools", "description": "MCP servers and user skills." },
+      "howto": { "label": "How It Works", "description": "Explanation of modes and combinations." },
+      "analytics": { "label": "Usage & Limits", "description": "Usage statistics and token consumption." },
+      "appearance": { "label": "Appearance", "description": "Theme and display modes." },
+      "data": { "label": "Data", "description": "Export and import your data." }
+    }
+  },
+  "preferences": {
+    "title": "Preferences",
+    "description": "Configure default models and active modes for each mode.",
+    "tabChat": "Chat",
+    "tabCode": "Code",
+    "language": {
+      "title": "Language",
+      "description": "Interface language and the assistant's reply language."
+    },
+    "defaultModel": "Default model",
+    "subagentModel": "Subagent model",
+    "orchestraModel": "Orchestra model",
+    "sameAsDefault": "Same as default",
+    "none": "None",
+    "searchModels": "Search models…",
+    "noModelsFound": "No models found.",
+    "configureProvider": "Configure a provider",
+    "manageProviders": "Manage providers",
+    "activeModes": "Active modes by default",
+    "modes": {
+      "simple": "Simple",
+      "brain": "Memory",
+      "thinking": "Thinking",
+      "search": "Research",
+      "browser": "Browser",
+      "plan": "Plan Mode",
+      "subagents": "Subagents",
+      "orchestra": "Orchestra"
+    },
+    "context": {
+      "title": "Context injection",
+      "off": { "label": "Never", "hint": "Memories are not injected into the prompt" },
+      "all": { "label": "Always", "hint": "Memories are injected into every conversation" },
+      "memory": { "label": "Only when active", "hint": "Only injects when the Memory toggle is on" },
+      "descriptionCode": "Project memories (decisions, conventions, structure) are injected into the prompt automatically. The agent fetches the rest on demand with the memory_graph tool.",
+      "descriptionChat": "Permanent facts, preferences, and seasonal memories are injected into the prompt for more personalized, natural replies."
+    },
+    "autoFolders": {
+      "title": "Automatic folders",
+      "description": "Automatically groups new chats into folders named after the project directory."
+    }
+  },
+  "common": {
+    "save": "Save",
+    "cancel": "Cancel",
+    "add": "Add"
+  }
+}

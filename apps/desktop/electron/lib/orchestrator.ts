@@ -395,6 +395,7 @@ export async function approvePlan(
           orchestrationRole: 'worker',
           parentSessionId: sessionId,
           workerTitle: task.title,
+          language: input.language,
         }
         await runChat(win, workerInput)
 
@@ -605,6 +606,7 @@ Rules:
             orchestrationRole: 'worker',
             parentSessionId: sessionId,
             workerTitle: wsInfo.title,
+            language: input.language,
           }
           await runChat(win, reuseInput)
 
@@ -649,6 +651,7 @@ Rules:
             orchestrationRole: 'worker',
             parentSessionId: sessionId,
             workerTitle: loopWorker.title,
+            language: input.language,
           }
           await runChat(win, lwInput)
 

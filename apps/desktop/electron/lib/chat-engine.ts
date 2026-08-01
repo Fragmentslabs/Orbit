@@ -461,6 +461,7 @@ export async function runChat(win: BrowserWindow, input: SendMessageInput): Prom
           workerModelId: input.workerModel?.modelId,
           force: input.text.includes('--force'),
           hooks,
+          language: input.language,
         })
         mainPart.state = 'done'
         mainPart.durationMs = Date.now() - mainStart
