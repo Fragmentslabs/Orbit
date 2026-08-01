@@ -1,4 +1,5 @@
 import { useCallback, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { ListPlus, Send, Square } from "lucide-react";
 import {
   Select,
@@ -30,6 +31,7 @@ export function SendButtonGroup({
   onStop,
   disabled,
 }: SendButtonGroupProps) {
+  const { t } = useTranslation();
   const [scheduleOpen, setScheduleOpen] = useState(false);
   const [pendingText, setPendingText] = useState<string | null>(null);
   const textInput = usePromptInputController().textInput;
@@ -68,7 +70,7 @@ export function SendButtonGroup({
   if (busy && !hasText) {
     return (
       <InputGroupButton
-        aria-label="Parar"
+        aria-label={t("send.stop")}
         size="icon-sm"
         variant="default"
         type="button"
@@ -85,7 +87,7 @@ export function SendButtonGroup({
       <>
         <div className="flex items-center -space-x-px">
           <InputGroupButton
-            aria-label="Adicionar à fila"
+            aria-label={t("send.addToQueue")}
             size="sm"
             variant="default"
             type="button"
@@ -93,7 +95,7 @@ export function SendButtonGroup({
             onClick={() => withClear(onQueue)}
           >
             <ListPlus className="size-4 mr-1" />
-            Adicionar à fila
+            {t("send.addToQueue")}
           </InputGroupButton>
           <Select
             value=""
@@ -106,7 +108,7 @@ export function SendButtonGroup({
             <SelectTrigger
               size="default"
               className="rounded-l-none !h-7 gap-0 px-1.5 border-primary bg-primary text-primary-foreground hover:bg-primary/90 shadow dark:bg-primary dark:text-primary-foreground dark:hover:bg-primary/90"
-              aria-label="Mais opções"
+              aria-label={t("send.moreOptions")}
             >
               <SelectValue />
             </SelectTrigger>
@@ -117,9 +119,9 @@ export function SendButtonGroup({
               alignItemWithTrigger={false}
               className="min-w-44 p-1"
             >
-              <SelectItem value="side-panel">Abrir no chat lateral</SelectItem>
-              <SelectItem value="stop-send">Parar e enviar</SelectItem>
-              <SelectItem value="schedule">Agendar</SelectItem>
+              <SelectItem value="side-panel">{t("send.openInSidePanel")}</SelectItem>
+              <SelectItem value="stop-send">{t("send.stopAndSend")}</SelectItem>
+              <SelectItem value="schedule">{t("send.schedule")}</SelectItem>
             </SelectContent>
           </Select>
         </div>
@@ -137,7 +139,7 @@ export function SendButtonGroup({
     <>
       <div className="flex items-center -space-x-px">
         <InputGroupButton
-          aria-label="Enviar"
+          aria-label={t("send.send")}
           size="sm"
           variant="default"
           type="submit"
@@ -145,7 +147,7 @@ export function SendButtonGroup({
           className="rounded-r-none h-7 border border-primary !transition-colors"
         >
           <Send className="size-4 mr-1" />
-          Enviar
+          {t("send.send")}
         </InputGroupButton>
         <Select
           value=""
@@ -158,7 +160,7 @@ export function SendButtonGroup({
             size="default"
             className="rounded-l-none !h-7 gap-0 px-1.5 border-primary bg-primary text-primary-foreground hover:bg-primary/90 shadow dark:bg-primary dark:text-primary-foreground dark:hover:bg-primary/90"
             disabled={!text}
-            aria-label="Mais opções"
+            aria-label={t("send.moreOptions")}
           >
             <SelectValue />
           </SelectTrigger>
@@ -169,8 +171,8 @@ export function SendButtonGroup({
             alignItemWithTrigger={false}
             className="min-w-44 p-1"
           >
-            <SelectItem value="schedule">Agendar mensagem</SelectItem>
-            <SelectItem value="side-panel">Enviar para chat lateral</SelectItem>
+            <SelectItem value="schedule">{t("send.scheduleMessage")}</SelectItem>
+            <SelectItem value="side-panel">{t("send.sendToSidePanel")}</SelectItem>
           </SelectContent>
         </Select>
       </div>

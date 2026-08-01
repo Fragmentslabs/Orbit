@@ -1,4 +1,5 @@
 import { Bot, Network, RefreshCw, Settings2 } from "lucide-react"
+import { useTranslation } from "react-i18next"
 import { DropdownMenuCheckboxItem } from "@/components/ui/dropdown-menu"
 
 /**
@@ -20,6 +21,7 @@ export function DelegationMenuItems({ subagents, orchestra, loop, onSubagentsCha
   /** Orquestração é exclusiva do modo code */
   mode?: "chat" | "code"
 }) {
+  const { t } = useTranslation()
   const gear = (onClick: () => void) => (
     <button
       type="button"
@@ -32,7 +34,7 @@ export function DelegationMenuItems({ subagents, orchestra, loop, onSubagentsCha
       }}
     >
       <Settings2 className="!size-3.5" />
-      <span className="sr-only">Configurar</span>
+      <span className="sr-only">{t("delegation.configure")}</span>
     </button>
   )
 
@@ -46,7 +48,7 @@ export function DelegationMenuItems({ subagents, orchestra, loop, onSubagentsCha
         }}
       >
         <Bot className="size-4" />
-        <span className="flex-1">Subagents</span>
+        <span className="flex-1">{t("delegation.subagents")}</span>
         {gear(onOpenConfig)}
       </DropdownMenuCheckboxItem>
       {mode !== "chat" && (
@@ -58,7 +60,7 @@ export function DelegationMenuItems({ subagents, orchestra, loop, onSubagentsCha
         }}
       >
         <Network className="size-4" />
-        <span className="flex-1">Orchestra</span>
+        <span className="flex-1">{t("delegation.orchestra")}</span>
         {gear(onOpenConfig)}
       </DropdownMenuCheckboxItem>
       )}
@@ -68,7 +70,7 @@ export function DelegationMenuItems({ subagents, orchestra, loop, onSubagentsCha
           onCheckedChange={(checked) => onLoopChange(checked)}
         >
           <RefreshCw className="size-4" />
-          <span className="flex-1">Loop</span>
+          <span className="flex-1">{t("delegation.loop")}</span>
           {onOpenLoopConfig && gear(onOpenLoopConfig)}
         </DropdownMenuCheckboxItem>
       )}

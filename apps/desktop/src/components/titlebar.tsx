@@ -164,7 +164,7 @@ function HamburgerMenu() {
             </DropdownMenuItem>
             <DropdownMenuItem onClick={() => setView("models")}>
               <PanelRightOpen className="size-4" />
-              Models
+              {t("header.models")}
             </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem onClick={() => windowApi.toggleFullscreen()}>
