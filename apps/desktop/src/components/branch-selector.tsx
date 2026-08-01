@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react"
+import { useTranslation, Trans } from "react-i18next"
 import { GitBranch, Check, LoaderIcon } from "lucide-react"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
@@ -12,6 +13,7 @@ interface BranchSelectorProps {
 }
 
 export function BranchSelector({ repoPath, onRequestAgentAction }: BranchSelectorProps) {
+  const { t } = useTranslation()
   const byDir = useBranchStore((s) => s.byDir[repoPath])
   const loading = useBranchStore((s) => s.loading)
   const fetchBranches = useBranchStore((s) => s.fetchBranches)
@@ -44,10 +46,10 @@ export function BranchSelector({ repoPath, onRequestAgentAction }: BranchSelecto
     const result = await checkoutBranch(repoPath, branch)
     setCheckoutLoading(false)
     if (!result.ok) {
-      setConflictError(result.error ?? "Erro desconhecido")
+      setConflictError(result.error ?? t("branch.unknownError"))
       setPendingBranch(branch)
     }
-  }, [checkoutBranch, repoPath])
+  }, [checkoutBranch, repoPath, t])
 
   const handleSelect = useCallback(async (branch: string) => {
     if (branch === byDir?.current) return
@@ -56,10 +58,10 @@ export function BranchSelector({ repoPath, onRequestAgentAction }: BranchSelecto
     const result = await checkoutBranch(repoPath, branch)
     setCheckoutLoading(false)
     if (!result.ok) {
-      setConflictError(result.error ?? "Erro desconhecido")
+      setConflictError(result.error ?? t("branch.unknownError"))
       setPendingBranch(branch)
     }
-  }, [byDir, checkoutBranch, repoPath])
+  }, [byDir, checkoutBranch, repoPath, t])
 
   const handleCommitAndSwitch = useCallback(async () => {
     if (!pendingBranch || !commitMessage.trim()) return
@@ -73,9 +75,9 @@ export function BranchSelector({ repoPath, onRequestAgentAction }: BranchSelecto
       setPendingBranch(null)
       retryCheckout(pendingBranch)
     } else {
-      setConflictError(result.error ?? "Erro ao commitar")
+      setConflictError(result.error ?? t("branch.commitError"))
     }
-  }, [pendingBranch, commitMessage, commitChanges, repoPath, retryCheckout])
+  }, [pendingBranch, commitMessage, commitChanges, repoPath, retryCheckout, t])
 
   const handleAgentResolve = useCallback(() => {
     if (!pendingBranch) return
@@ -101,7 +103,7 @@ export function BranchSelector({ repoPath, onRequestAgentAction }: BranchSelecto
           ) : (
             <GitBranch className="size-3 text-muted-foreground" />
           )}
-          <span className="max-w-20 truncate">{data.current || "(detached)"}</span>
+          <span className="max-w-20 truncate">{data.current || t("branch.detached")}</span>
         </button>
 
         {open && (
@@ -132,21 +134,21 @@ export function BranchSelector({ repoPath, onRequestAgentAction }: BranchSelecto
       <Dialog open={conflictError !== null} onOpenChange={(v) => { if (!v) { setConflictError(null); setPendingBranch(null) } }}>
         <DialogContent className="sm:max-w-md" showCloseButton={false}>
           <DialogHeader>
-            <DialogTitle>Mudanças não commitadas</DialogTitle>
+            <DialogTitle>{t("branch.uncommittedTitle")}</DialogTitle>
             <DialogDescription>
-              Existem mudanças locais que seriam sobrescritas ao trocar para branch <strong>{pendingBranch}</strong>.
+              <Trans i18nKey="branch.uncommittedDesc" values={{ branch: pendingBranch }} components={{ strong: <strong /> }} />
               <pre className="mt-2 max-h-24 overflow-auto rounded bg-muted p-2 text-xs text-muted-foreground">{conflictError}</pre>
             </DialogDescription>
           </DialogHeader>
           <DialogFooter className="flex-col gap-2 sm:flex-col">
-            <Button variant="default" className="w-full" onClick={() => { setCommitDialogOpen(true); setCommitMessage(`wip: mudanças antes de trocar para ${pendingBranch}`) }}>
-              Commitar mudanças
+            <Button variant="default" className="w-full" onClick={() => { setCommitDialogOpen(true); setCommitMessage(t("branch.wipDefault", { branch: pendingBranch })) }}>
+              {t("branch.commitChanges")}
             </Button>
             <Button variant="secondary" className="w-full" onClick={handleAgentResolve}>
-              Deixar IA resolver
+              {t("branch.agentResolve")}
             </Button>
             <Button variant="outline" className="w-full" onClick={() => { setConflictError(null); setPendingBranch(null) }}>
-              Cancelar
+              {t("common.cancel")}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -156,22 +158,22 @@ export function BranchSelector({ repoPath, onRequestAgentAction }: BranchSelecto
       <Dialog open={commitDialogOpen} onOpenChange={setCommitDialogOpen}>
         <DialogContent className="sm:max-w-sm" showCloseButton={false}>
           <DialogHeader>
-            <DialogTitle>Mensagem de commit</DialogTitle>
-            <DialogDescription>Digite uma mensagem para commitar as mudanças antes de trocar de branch.</DialogDescription>
+            <DialogTitle>{t("branch.commitTitle")}</DialogTitle>
+            <DialogDescription>{t("branch.commitDesc")}</DialogDescription>
           </DialogHeader>
           <Input
             value={commitMessage}
             onChange={(e) => setCommitMessage(e.target.value)}
-            placeholder="wip: mudanças antes de trocar de branch"
+            placeholder={t("branch.wipPlaceholder")}
             className="mt-2"
             autoFocus
           />
           <DialogFooter>
             <Button variant="outline" onClick={() => setCommitDialogOpen(false)} disabled={committing}>
-              Cancelar
+              {t("common.cancel")}
             </Button>
             <Button onClick={handleCommitAndSwitch} disabled={!commitMessage.trim() || committing}>
-              {committing ? "Commitando…" : "Commitar e trocar"}
+              {committing ? t("branch.committing") : t("branch.commitAndSwitch")}
             </Button>
           </DialogFooter>
         </DialogContent>
