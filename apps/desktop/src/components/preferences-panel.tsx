@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react"
-import { BrainIcon, CheckIcon, ChevronDownIcon, FolderIcon, SettingsIcon } from "lucide-react"
+import { useTranslation } from "react-i18next"
+import { BrainIcon, CheckIcon, ChevronDownIcon, FolderIcon, LanguagesIcon, SettingsIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
   ModelSelector,
@@ -21,6 +22,7 @@ import type { DefaultModel, ActiveModeDefaults } from "@/src/stores/model-mode-p
 import type { BrainContextMode } from "@/src/stores/brain-prefs"
 import { useBrainPrefs, useChatContext, useCodeContext } from "@/src/stores/brain-prefs"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { LOCALE_LABELS, SUPPORTED_LOCALES, useLocaleStore, type AppLocale } from "@/src/stores/locale-store"
 
 const MAX_MODELS_PER_PROVIDER = 40
 
@@ -57,6 +59,7 @@ function ModelField({
   )
 
   const selectedModel = value ? catalog[value.providerId]?.models[value.modelId] : undefined
+  const { t } = useTranslation()
 
   return (
     <div>
@@ -69,12 +72,12 @@ function ModelField({
               <ModelSelectorName>{selectedModel?.name ?? value.modelId}</ModelSelectorName>
             </>
           ) : (
-            <span className="text-muted-foreground">{nullLabel ?? "Nenhum"}</span>
+            <span className="text-muted-foreground">{nullLabel ?? t("preferences.none")}</span>
           )}
           <ChevronDownIcon className="size-3 text-muted-foreground" />
         </ModelSelectorTrigger>
         <ModelSelectorContent finalFocus={skipFinalFocus ? false : undefined}>
-          <ModelSelectorInput placeholder="Pesquisar modelos…" />
+          <ModelSelectorInput placeholder={t("preferences.searchModels")} />
           <ModelSelectorList>
             {nullLabel && (
               <ModelSelectorItem
@@ -86,7 +89,7 @@ function ModelField({
                 {!value ? <CheckIcon className="size-4" /> : <div className="size-4" />}
               </ModelSelectorItem>
             )}
-            <ModelSelectorEmpty>Nenhum modelo encontrado.</ModelSelectorEmpty>
+            <ModelSelectorEmpty>{t("preferences.noModelsFound")}</ModelSelectorEmpty>
             {groups.map(({ provider, models }) => (
               <ModelSelectorGroup heading={provider.name} key={provider.id}>
                 {models.map((model) => (
@@ -126,7 +129,7 @@ function ModelField({
               }}
             >
               <SettingsIcon className="size-3.5" />
-              {groups.length === 0 ? "Configurar um provedor" : "Gerenciar provedores"}
+              {groups.length === 0 ? t("preferences.configureProvider") : t("preferences.manageProviders")}
             </Button>
           </div>
         </ModelSelectorContent>
@@ -145,20 +148,21 @@ function ActiveModesSection({
   onChange: (key: keyof ActiveModeDefaults, value: boolean) => void
   isCode: boolean
 }) {
+  const { t } = useTranslation()
   const items: Array<{ key: keyof ActiveModeDefaults; label: string }> = [
-    { key: "simple", label: "Simples" },
-    { key: "brain", label: "Memória" },
-    { key: "thinking", label: "Thinking" },
-    { key: "search", label: "Pesquisa" },
-    ...(isCode ? [] : [{ key: "browser" as const, label: "Browser" }]),
-    ...(isCode ? [{ key: "plan" as const, label: "Modo Plano" }] : []),
-    { key: "subagents", label: "Subagentes" },
-    ...(isCode ? [{ key: "orchestra" as const, label: "Orquestra" }] : []),
+    { key: "simple", label: t("preferences.modes.simple") },
+    { key: "brain", label: t("preferences.modes.brain") },
+    { key: "thinking", label: t("preferences.modes.thinking") },
+    { key: "search", label: t("preferences.modes.search") },
+    ...(isCode ? [] : [{ key: "browser" as const, label: t("preferences.modes.browser") }]),
+    ...(isCode ? [{ key: "plan" as const, label: t("preferences.modes.plan") }] : []),
+    { key: "subagents", label: t("preferences.modes.subagents") },
+    ...(isCode ? [{ key: "orchestra" as const, label: t("preferences.modes.orchestra") }] : []),
   ]
 
   return (
     <div>
-      <p className="mb-1.5 text-xs font-medium text-muted-foreground">Modos ativos por padrão</p>
+      <p className="mb-1.5 text-xs font-medium text-muted-foreground">{t("preferences.activeModes")}</p>
       <div className="flex flex-wrap gap-1.5">
         {items.map(({ key, label }) => (
           <button
@@ -179,25 +183,29 @@ function ActiveModesSection({
   )
 }
 
-const CONTEXT_OPTIONS: { value: BrainContextMode; label: string; hint: string }[] = [
-  { value: "off", label: "Nunca", hint: "Memórias não são injetadas no prompt" },
-  { value: "all", label: "Sempre", hint: "Memórias são injetadas em toda conversa" },
-  { value: "memory", label: "Só quando ativo", hint: "Injeta apenas com o toggle Memória ativado" },
-]
+function useContextOptions(): { value: BrainContextMode; label: string; hint: string }[] {
+  const { t } = useTranslation()
+  return [
+    { value: "off", label: t("preferences.context.off.label"), hint: t("preferences.context.off.hint") },
+    { value: "all", label: t("preferences.context.all.label"), hint: t("preferences.context.all.hint") },
+    { value: "memory", label: t("preferences.context.memory.label"), hint: t("preferences.context.memory.hint") },
+  ]
+}
 
 function ContextSelect({ value, onChange }: {
   value: BrainContextMode
   onChange: (v: BrainContextMode) => void
 }) {
+  const options = useContextOptions()
   return (
     <Select value={value} onValueChange={(v) => v && onChange(v as BrainContextMode)}>
       <SelectTrigger className="min-w-48">
         <SelectValue>
-          {(v) => CONTEXT_OPTIONS.find((o) => o.value === v)?.label ?? v}
+          {(v) => options.find((o) => o.value === v)?.label ?? v}
         </SelectValue>
       </SelectTrigger>
       <SelectContent>
-        {CONTEXT_OPTIONS.map((opt) => (
+        {options.map((opt) => (
           <SelectItem key={opt.value} value={opt.value}>
             {opt.label}
           </SelectItem>
@@ -208,19 +216,20 @@ function ContextSelect({ value, onChange }: {
 }
 
 function MemoriaSection({ isCode }: { isCode: boolean }) {
+  const { t } = useTranslation()
   const context = isCode ? useCodeContext() : useChatContext()
   const setter = isCode
     ? useBrainPrefs((s) => s.setCodeContext)
     : useBrainPrefs((s) => s.setChatContext)
 
   const description = isCode
-    ? "Memórias de projeto (decisões, convenções, estrutura) são injetadas no prompt automaticamente. O agente busca o restante sob demanda com a ferramenta memory_graph."
-    : "Fatos permanentes, preferências e memórias sazonais são injetados no prompt pra respostas mais personalizadas e naturais."
+    ? t("preferences.context.descriptionCode")
+    : t("preferences.context.descriptionChat")
 
   return (
     <div className="border-t pt-3">
       <div className="mb-3 flex items-center justify-between">
-        <p className="text-xs font-semibold text-muted-foreground">Injeção de contexto</p>
+        <p className="text-xs font-semibold text-muted-foreground">{t("preferences.context.title")}</p>
         <ContextSelect value={context} onChange={setter} />
       </div>
       <p className="text-[11px] leading-tight text-muted-foreground">{description}</p>
@@ -229,11 +238,12 @@ function MemoriaSection({ isCode }: { isCode: boolean }) {
 }
 
 function ChatPrefs() {
+  const { t } = useTranslation()
   const { chatModel, setChatModel, chatActiveModes, setChatActiveMode } = useModelModePrefs()
 
   return (
     <div className="flex flex-col gap-4">
-      <ModelField label="Modelo padrão" value={chatModel} onChange={setChatModel} />
+      <ModelField label={t("preferences.defaultModel")} value={chatModel} onChange={setChatModel} />
       <ActiveModesSection modes={chatActiveModes} onChange={setChatActiveMode} isCode={false} />
       <MemoriaSection isCode={false} />
     </div>
@@ -241,14 +251,15 @@ function ChatPrefs() {
 }
 
 function CodePrefs() {
+  const { t } = useTranslation()
   const { codeModel, setCodeModel, subagentModel, setSubagentModel, orchestraModel, setOrchestraModel, codeActiveModes, setCodeActiveMode, autoCreateFolders, setAutoCreateFolders } = useModelModePrefs()
   const setWorkerModel = useProviderStore((s) => s.setWorkerModel)
 
   return (
     <div className="flex flex-col gap-4">
-      <ModelField label="Modelo padrão" value={codeModel} onChange={setCodeModel} />
-      <ModelField label="Modelo de subagentes" value={subagentModel} nullLabel="Mesmo que padrão" onChange={(m) => { setSubagentModel(m); setWorkerModel(m ?? codeModel) }} />
-      <ModelField label="Modelo de orquestra" value={orchestraModel} onChange={setOrchestraModel} />
+      <ModelField label={t("preferences.defaultModel")} value={codeModel} onChange={setCodeModel} />
+      <ModelField label={t("preferences.subagentModel")} value={subagentModel} nullLabel={t("preferences.sameAsDefault")} onChange={(m) => { setSubagentModel(m); setWorkerModel(m ?? codeModel) }} />
+      <ModelField label={t("preferences.orchestraModel")} value={orchestraModel} onChange={setOrchestraModel} />
       <ActiveModesSection modes={codeActiveModes} onChange={setCodeActiveMode} isCode={true} />
       <MemoriaSection isCode={true} />
       <div className="flex items-center gap-3 rounded-lg border border-border p-3 transition-colors hover:bg-accent/50">
@@ -256,9 +267,9 @@ function CodePrefs() {
           <FolderIcon className="size-4 text-primary" />
         </div>
         <div className="flex-1 min-w-0">
-          <p className="text-xs font-medium">Pastas automáticas</p>
+          <p className="text-xs font-medium">{t("preferences.autoFolders.title")}</p>
           <p className="text-[11px] text-muted-foreground leading-tight">
-            Agrupa automaticamente novos chats em pastas com o nome do diretório do projeto.
+            {t("preferences.autoFolders.description")}
           </p>
         </div>
         <button
@@ -281,22 +292,58 @@ function CodePrefs() {
   )
 }
 
+function LanguageSection() {
+  const { t } = useTranslation()
+  const locale = useLocaleStore((s) => s.locale)
+  const setLocale = useLocaleStore((s) => s.setLocale)
+
+  return (
+    <div className="border-t pt-4">
+      <p className="mb-2 text-xs font-medium text-muted-foreground">{t("preferences.language.title")}</p>
+      <div className="flex gap-2">
+        {SUPPORTED_LOCALES.map((value) => {
+          const active = locale === value
+          return (
+            <button
+              key={value}
+              type="button"
+              onClick={() => setLocale(value as AppLocale)}
+              className={`flex flex-1 items-center justify-center gap-1.5 rounded-lg border px-3 py-2 text-xs font-medium transition-colors ${
+                active
+                  ? "border-ring bg-accent text-accent-foreground shadow-sm"
+                  : "border-input bg-background text-muted-foreground hover:bg-accent/50 hover:text-foreground"
+              }`}
+            >
+              <LanguagesIcon className="size-4" />
+              {LOCALE_LABELS[value]}
+            </button>
+          )
+        })}
+      </div>
+      <p className="mt-1.5 text-[11px] leading-relaxed text-muted-foreground/70">
+        {t("preferences.language.description")}
+      </p>
+    </div>
+  )
+}
+
 export function PreferencesPanel() {
+  const { t } = useTranslation()
   const [tab, setTab] = useState<PrefsTab>("chat")
 
   return (
     <div className="flex h-full flex-col gap-4 overflow-y-auto pr-1">
       <div>
-        <p className="text-sm font-semibold">Preferências</p>
+        <p className="text-sm font-semibold">{t("preferences.title")}</p>
         <p className="mt-0.5 text-xs text-muted-foreground">
-          Configure modelos padrão e modos ativos para cada modo.
+          {t("preferences.description")}
         </p>
       </div>
 
       <SegmentedControl
         options={[
-          { value: "chat" as const, label: "Chat" },
-          { value: "code" as const, label: "Código" },
+          { value: "chat" as const, label: t("preferences.tabChat") },
+          { value: "code" as const, label: t("preferences.tabCode") },
         ]}
         value={tab}
         onChange={(v) => setTab(v as PrefsTab)}
@@ -304,6 +351,7 @@ export function PreferencesPanel() {
       />
 
       {tab === "chat" ? <ChatPrefs /> : <CodePrefs />}
+      <LanguageSection />
     </div>
   )
 }
