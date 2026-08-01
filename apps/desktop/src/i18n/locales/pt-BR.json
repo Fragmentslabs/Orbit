@@ -12,6 +12,70 @@
       "data": { "label": "Dados", "description": "Exportar e importar seus dados." }
     }
   },
+  "sidebar": {
+    "newChat": "Novo Chat",
+    "newSession": "Nova sessão",
+    "memories": "Memórias",
+    "tools": "Ferramentas",
+    "usage": "Uso e Limites",
+    "code": "Código",
+    "options": "Opções",
+    "create": "Criar",
+    "folder": {
+      "addToFolder": "Adicionar a pasta",
+      "removeFromCurrent": "Remover da pasta atual",
+      "newFolderPlaceholder": "Nova pasta…",
+      "newFolderTitle": "Nova pasta",
+      "folderNamePlaceholder": "Nome da pasta",
+      "none": "Nenhuma pasta",
+      "rename": "Renomear pasta",
+      "deleteTitle": "Remover pasta?",
+      "deleteDescription": "As conversas de \"{{name}}\" não serão excluídas — voltarão para a lista principal.",
+      "remove": "Remover",
+      "unmark": "Desmarcar",
+      "mark": "Marcar",
+      "add": "Adicionar"
+    },
+    "session": {
+      "unpin": "Desafixar",
+      "pin": "Fixar",
+      "rename": "Renomear",
+      "renameTitle": "Renomear conversa",
+      "fork": "Fork",
+      "openBeside": "Abrir ao lado",
+      "unarchive": "Desarquivar",
+      "archive": "Arquivar",
+      "select": "Selecionar",
+      "delete": "Deletar",
+      "confirmDelete": "Excluir",
+      "deleteTitle": "Excluir conversa?",
+      "deleteDescription": "\"{{title}}\" e todas as suas mensagens serão excluídas permanentemente."
+    },
+    "selection": {
+      "exit": "Sair do modo seleção",
+      "selectedCount_one": "{{count}} selecionado",
+      "selectedCount_other": "{{count}} selecionados",
+      "deleteSelected": "Excluir selecionados"
+    },
+    "groups": {
+      "folders": "Pastas",
+      "chats": "Chats",
+      "archived": "Arquivados",
+      "noChats": "Nenhuma conversa ainda"
+    },
+    "account": {
+      "localAssistant": "Assistente local",
+      "myAccount": "Minha Conta",
+      "profile": "Perfil",
+      "settings": "Configurações",
+      "changeTheme": "Alterar tema",
+      "light": "Claro",
+      "dark": "Escuro",
+      "system": "Sistema",
+      "logout": "Sair",
+      "connectApp": "Conectar App"
+    }
+  },
   "titlebar": {
     "minimize": "Minimizar",
     "restore": "Restaurar",

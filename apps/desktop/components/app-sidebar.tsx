@@ -1,4 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react"
+import { useTranslation } from "react-i18next"
 import { createPortal } from "react-dom"
 import { useDraggable } from "@dnd-kit/core"
 import {
@@ -182,6 +183,7 @@ function SelectionProvider({ children }: { children: React.ReactNode }) {
 }
 
 function NewChatButton() {
+  const { t } = useTranslation()
   const { mode, setView } = useWorkspace()
   const selectSession = useSessionStore((s) => s.selectSession)
   return (
@@ -194,12 +196,13 @@ function NewChatButton() {
       }}
     >
       <Plus className="size-4" />
-      {mode === "chat" ? "Novo Chat" : "Nova sessão"}
+      {mode === "chat" ? t("sidebar.newChat") : t("sidebar.newSession")}
     </Button>
   )
 }
 
 function MemoriesButton() {
+  const { t } = useTranslation()
   const { view, setView } = useWorkspace()
   const active = view === "memories"
   return (
@@ -212,7 +215,7 @@ function MemoriesButton() {
       onClick={() => setView(active ? "chat" : "memories")}
     >
       <BrainCircuit className="size-4" />
-      Memórias
+      {t("sidebar.memories")}
     </Button>
   )
 }
@@ -236,6 +239,7 @@ function ModelsButton() {
 }
 
 function McpSkillsButton() {
+  const { t } = useTranslation()
   const { mode } = useWorkspace()
   const openSettings = useSettingsUi((s) => s.openSettings)
   if (mode !== "code") return null
@@ -246,12 +250,13 @@ function McpSkillsButton() {
       onClick={() => openSettings("mcp-skills")}
     >
       <Puzzle className="size-4" />
-      Ferramentas
+      {t("sidebar.tools")}
     </Button>
   )
 }
 
 function UsageButton() {
+  const { t } = useTranslation()
   const openSettings = useSettingsUi((s) => s.openSettings)
   return (
     <Button
@@ -260,12 +265,13 @@ function UsageButton() {
       onClick={() => openSettings("analytics")}
     >
       <BarChart3 className="size-4" />
-      Uso e Limites
+      {t("sidebar.usage")}
     </Button>
   )
 }
 
 function ModeTabs() {
+  const { t } = useTranslation()
   const { mode, setMode } = useWorkspace()
 
   return (
@@ -277,7 +283,7 @@ function ModeTabs() {
         </TabsTrigger>
         <TabsTrigger value="code" className="flex-1 gap-1.5">
           <Terminal className="size-3.5" />
-          Código
+          {t("sidebar.code")}
         </TabsTrigger>
       </TabsList>
     </Tabs>
@@ -312,6 +318,7 @@ function EllipsisMenu({ items, groupClass = "group-hover/menu-item:opacity-100",
   groupClass?: string
   buttonClassName?: string
 }) {
+  const { t } = useTranslation()
   const [menuOpen, setMenuOpen] = useState(false)
   const [menuPos, setMenuPos] = useState({ top: 0, left: 0 })
   const buttonRef = useRef<HTMLButtonElement>(null)
@@ -358,7 +365,7 @@ function EllipsisMenu({ items, groupClass = "group-hover/menu-item:opacity-100",
           )}
       >
         <Ellipsis className="size-4" />
-        <span className="sr-only">Opções</span>
+        <span className="sr-only">{t("sidebar.options")}</span>
       </button>
       {menuOpen && createPortal(
         <div
@@ -401,6 +408,7 @@ function PromptDialog({ open, onOpenChange, title, initialValue = "", placeholde
   placeholder?: string
   onSubmit: (value: string) => void
 }) {
+  const { t } = useTranslation()
   const [value, setValue] = useState(initialValue)
 
   useEffect(() => {
@@ -429,8 +437,8 @@ function PromptDialog({ open, onOpenChange, title, initialValue = "", placeholde
           }}
         />
         <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button>
-          <Button onClick={submit}>Salvar</Button>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>{t("common.cancel")}</Button>
+          <Button onClick={submit}>{t("common.save")}</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
@@ -442,6 +450,7 @@ function MoveToFolderDialog({ open, onOpenChange, session }: {
   onOpenChange: (open: boolean) => void
   session: SessionInfo
 }) {
+  const { t } = useTranslation()
   const folders = useSessionStore((s) => s.folders).filter((f) => f.mode === session.mode)
   const moveToFolder = useSessionStore((s) => s.moveToFolder)
   const createFolder = useSessionStore((s) => s.createFolder)
@@ -451,7 +460,7 @@ function MoveToFolderDialog({ open, onOpenChange, session }: {
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-sm" showCloseButton={false}>
         <DialogHeader>
-          <DialogTitle>Adicionar a pasta</DialogTitle>
+          <DialogTitle>{t("sidebar.folder.addToFolder")}</DialogTitle>
         </DialogHeader>
         <div className="flex flex-col gap-1">
           {folders.map((folder) => (
@@ -478,14 +487,14 @@ function MoveToFolderDialog({ open, onOpenChange, session }: {
               }}
             >
               <Trash2 className="size-4" />
-              Remover da pasta atual
+              {t("sidebar.folder.removeFromCurrent")}
             </Button>
           )}
         </div>
         <div className="flex gap-2">
           <Input
             value={newName}
-            placeholder="Nova pasta…"
+            placeholder={t("sidebar.folder.newFolderPlaceholder")}
             onChange={(e) => setNewName(e.target.value)}
             onKeyDown={(e) => {
               if (e.key === "Enter" && newName.trim()) {
@@ -504,7 +513,7 @@ function MoveToFolderDialog({ open, onOpenChange, session }: {
               onOpenChange(false)
             }}
           >
-            Criar
+            {t("sidebar.create")}
           </Button>
         </div>
       </DialogContent>
@@ -524,6 +533,7 @@ function SessionRow({ session, button: ButtonComponent, buttonClassName, actionB
   /** Nó extra dentro do botão (ex: chevron de expandir do orquestrador) */
   trailing?: React.ReactNode
 }) {
+  const { t } = useTranslation()
   const { mode, setMode, setView } = useWorkspace()
   const selectSession = useSessionStore((s) => s.selectSession)
   const activeId = useSessionStore((s) => s.activeIds[mode])
@@ -550,18 +560,18 @@ function SessionRow({ session, button: ButtonComponent, buttonClassName, actionB
   const menuItems: MenuItem[] = [
     {
       icon: session.pinned ? <PinOff className="size-4" /> : <Pin className="size-4" />,
-      label: session.pinned ? "Desafixar" : "Fixar",
+      label: session.pinned ? t("sidebar.session.unpin") : t("sidebar.session.pin"),
       onSelect: () => togglePin(session.id),
     },
     {
       icon: <Folder className="size-4" />,
-      label: "Adicionar a pasta",
+      label: t("sidebar.folder.addToFolder"),
       onSelect: () => setMovingToFolder(true),
     },
-    { icon: <Pencil className="size-4" />, label: "Renomear", onSelect: () => setRenaming(true) },
+    { icon: <Pencil className="size-4" />, label: t("sidebar.session.rename"), onSelect: () => setRenaming(true) },
     {
       icon: <GitFork className="size-4" />,
-      label: "Fork",
+      label: t("sidebar.session.fork"),
       onSelect: () => {
         void forkSession(session.id).then((fork) => {
           if (!fork) return
@@ -573,17 +583,17 @@ function SessionRow({ session, button: ButtonComponent, buttonClassName, actionB
     },
     {
       icon: <ExternalLink className="size-4" />,
-      label: "Abrir ao lado",
+      label: t("sidebar.session.openBeside"),
       onSelect: () => usePanelStore.getState().openChatTab(session.id, session.title),
     },
     {
       icon: session.archived ? <ArchiveRestore className="size-4" /> : <Archive className="size-4" />,
-      label: session.archived ? "Desarquivar" : "Arquivar",
+      label: session.archived ? t("sidebar.session.unarchive") : t("sidebar.session.archive"),
       onSelect: () => toggleArchive(session.id),
     },
-    { icon: <CheckSquare className="size-4" />, label: "Selecionar", onSelect: () => enterSelectionMode(session.id) },
+    { icon: <CheckSquare className="size-4" />, label: t("sidebar.session.select"), onSelect: () => enterSelectionMode(session.id) },
     { separator: true, icon: <></>, label: "", onSelect: () => {} },
-    { icon: <Trash2 className="size-4" />, label: "Deletar", onSelect: () => setConfirmDelete(true), destructive: true },
+    { icon: <Trash2 className="size-4" />, label: t("sidebar.session.delete"), onSelect: () => setConfirmDelete(true), destructive: true },
   ]
 
   const handleClick = () => {
@@ -645,16 +655,16 @@ function SessionRow({ session, button: ButtonComponent, buttonClassName, actionB
       <ConfirmDialog
         open={confirmDelete}
         onOpenChange={setConfirmDelete}
-        title="Excluir conversa?"
-        description={`"${session.title}" e todas as suas mensagens serão excluídas permanentemente.`}
-        confirmLabel="Excluir"
+        title={t("sidebar.session.deleteTitle")}
+        description={t("sidebar.session.deleteDescription", { title: session.title })}
+        confirmLabel={t("sidebar.session.confirmDelete")}
         destructive
         onConfirm={() => void deleteSession(session.id)}
       />
       <PromptDialog
         open={renaming}
         onOpenChange={setRenaming}
-        title="Renomear conversa"
+        title={t("sidebar.session.renameTitle")}
         initialValue={session.title}
         onSubmit={(title) => renameSession(session.id, title)}
       />
@@ -767,6 +777,7 @@ function FolderItem({ folder, sessions, childrenByParent = {} }: {
   sessions: SessionInfo[]
   childrenByParent?: Record<string, SessionInfo[]>
 }) {
+  const { t } = useTranslation()
   const [expanded, setExpanded] = useState(true)
   const { mode } = useWorkspace()
   const selectSession = useSessionStore((s) => s.selectSession)
@@ -807,7 +818,7 @@ function FolderItem({ folder, sessions, childrenByParent = {} }: {
                 toggleFolder(folder.id)
               }}
               className="flex size-4 items-center justify-center rounded border border-sidebar-border bg-background shrink-0 hover:bg-sidebar-accent transition-colors"
-              aria-label={isSelected ? "Desmarcar" : "Marcar"}
+              aria-label={isSelected ? t("sidebar.folder.unmark") : t("sidebar.folder.mark")}
             >
               {isSelected ? <Check className="size-3 text-primary" /> : <Square className="size-3 text-sidebar-foreground/40" />}
             </button>
@@ -834,7 +845,7 @@ function FolderItem({ folder, sessions, childrenByParent = {} }: {
             className="absolute right-7 top-1.5 flex h-5 w-0 items-center justify-center overflow-hidden rounded-[calc(var(--radius-sm)-2px)] p-0 text-sidebar-foreground transition-all duration-200 group-hover/menu-row:w-5 group-hover/menu-row:text-sidebar-accent-foreground [&>svg]:size-4 [&>svg]:shrink-0"
           >
             <Plus className="size-4 shrink-0" />
-            <span className="sr-only">Adicionar</span>
+            <span className="sr-only">{t("sidebar.folder.add")}</span>
           </button>
         )}
 
@@ -842,16 +853,16 @@ function FolderItem({ folder, sessions, childrenByParent = {} }: {
           groupClass="group-hover/menu-row:opacity-100"
           buttonClassName="w-0 overflow-hidden group-hover/menu-row:w-5"
           items={[
-            { icon: <Pencil className="size-4" />, label: "Renomear", onSelect: () => setRenaming(true) },
+            { icon: <Pencil className="size-4" />, label: t("sidebar.session.rename"), onSelect: () => setRenaming(true) },
             {
               icon: folder.pinned ? <PinOff className="size-4" /> : <Pin className="size-4" />,
-              label: folder.pinned ? "Desafixar" : "Fixar",
+              label: folder.pinned ? t("sidebar.session.unpin") : t("sidebar.session.pin"),
               onSelect: () => toggleFolderPin(folder.id),
             },
-            { icon: <Trash2 className="size-4" />, label: "Remover", onSelect: () => setConfirmDelete(true) },
+            { icon: <Trash2 className="size-4" />, label: t("sidebar.folder.remove"), onSelect: () => setConfirmDelete(true) },
             selectionMode
               ? null
-              : { icon: <CheckSquare className="size-4" />, label: "Selecionar", onSelect: () => enterSelectionMode(undefined, folder.id) },
+              : { icon: <CheckSquare className="size-4" />, label: t("sidebar.session.select"), onSelect: () => enterSelectionMode(undefined, folder.id) },
           ].filter(Boolean) as MenuItem[]}
         />
       </div>
@@ -877,16 +888,16 @@ function FolderItem({ folder, sessions, childrenByParent = {} }: {
       <ConfirmDialog
         open={confirmDelete}
         onOpenChange={setConfirmDelete}
-        title="Remover pasta?"
-        description={`As conversas de "${folder.name}" não serão excluídas — voltarão para a lista principal.`}
-        confirmLabel="Remover"
+        title={t("sidebar.folder.deleteTitle")}
+        description={t("sidebar.folder.deleteDescription", { name: folder.name })}
+        confirmLabel={t("sidebar.folder.remove")}
         destructive
         onConfirm={() => deleteFolder(folder.id)}
       />
       <PromptDialog
         open={renaming}
         onOpenChange={setRenaming}
-        title="Renomear pasta"
+        title={t("sidebar.folder.rename")}
         initialValue={folder.name}
         onSubmit={(name) => renameFolder(folder.id, name)}
       />
@@ -895,6 +906,7 @@ function FolderItem({ folder, sessions, childrenByParent = {} }: {
 }
 
 function ChatHistory() {
+  const { t } = useTranslation()
   const { mode } = useWorkspace()
   const sessions = useSessionStore((s) => s.sessions)
   const folders = useSessionStore((s) => s.folders)
@@ -947,22 +959,22 @@ function ChatHistory() {
               type="button"
               onClick={exitSelectionMode}
               className="flex size-4 items-center justify-center rounded hover:bg-sidebar-foreground/10 transition-colors"
-              aria-label="Sair do modo seleção"
+              aria-label={t("sidebar.selection.exit")}
             >
               <X className="size-3" />
             </button>
             <span className="text-xs font-medium text-sidebar-foreground">
-              {totalSelected} selecionado{totalSelected !== 1 ? "s" : ""}
+              {t("sidebar.selection.selectedCount", { count: totalSelected })}
             </span>
           </div>
-          <Button variant="ghost" size="icon-sm" onClick={handleBulkDelete} className="text-red-500 hover:text-red-400 hover:bg-red-500/10" aria-label="Excluir selecionados">
+          <Button variant="ghost" size="icon-sm" onClick={handleBulkDelete} className="text-red-500 hover:text-red-400 hover:bg-red-500/10" aria-label={t("sidebar.selection.deleteSelected")}>
             <Trash2 className="size-4" />
           </Button>
         </div>
       )}
 
       <AccordionGroup
-        label="Pastas"
+        label={t("sidebar.groups.folders")}
         action={
           !selectionMode && (
             <button
@@ -971,7 +983,7 @@ function ChatHistory() {
                 setCreatingFolder(true)
               }}
               className="flex size-4 items-center justify-center rounded"
-              title="Nova pasta"
+              title={t("sidebar.folder.newFolderTitle")}
             >
               <FolderPlus className="size-3" />
             </button>
@@ -988,12 +1000,12 @@ function ChatHistory() {
             />
           ))}
           {sortedFolders.length === 0 && (
-            <div className="px-3 py-1 text-xs text-sidebar-foreground/50">Nenhuma pasta</div>
+            <div className="px-3 py-1 text-xs text-sidebar-foreground/50">{t("sidebar.folder.none")}</div>
           )}
         </SidebarMenu>
       </AccordionGroup>
 
-      <AccordionGroup label="Chats">
+      <AccordionGroup label={t("sidebar.groups.chats")}>
         <SidebarMenu>
           {pinned.map((session) => (
             <SessionItem key={session.id} session={session} childSessions={childrenByParent[session.id]} />
@@ -1002,13 +1014,13 @@ function ChatHistory() {
             <SessionItem key={session.id} session={session} childSessions={childrenByParent[session.id]} />
           ))}
           {pinned.length === 0 && recent.length === 0 && (
-            <div className="px-3 py-1 text-xs text-sidebar-foreground/50">Nenhuma conversa ainda</div>
+            <div className="px-3 py-1 text-xs text-sidebar-foreground/50">{t("sidebar.groups.noChats")}</div>
           )}
         </SidebarMenu>
       </AccordionGroup>
 
       {archived.length > 0 && (
-        <AccordionGroup label="Arquivados" defaultExpanded={false}>
+        <AccordionGroup label={t("sidebar.groups.archived")} defaultExpanded={false}>
           <SidebarMenu>
             {archived.map((session) => (
               <SessionItem key={session.id} session={session} />
@@ -1020,8 +1032,8 @@ function ChatHistory() {
       <PromptDialog
         open={creatingFolder}
         onOpenChange={setCreatingFolder}
-        title="Nova pasta"
-        placeholder="Nome da pasta"
+        title={t("sidebar.folder.newFolderTitle")}
+        placeholder={t("sidebar.folder.folderNamePlaceholder")}
         onSubmit={(name) => createFolder(mode, name)}
       />
     </>
@@ -1029,6 +1041,7 @@ function ChatHistory() {
 }
 
 function AccountDropdown({ onOpenSettings }: { onOpenSettings: () => void }) {
+  const { t } = useTranslation()
   const { theme, setTheme } = useTheme()
   const [themeOpen, setThemeOpen] = useState(false)
   const themeTimeoutRef = useRef<ReturnType<typeof setTimeout>>()
@@ -1051,7 +1064,7 @@ function AccountDropdown({ onOpenSettings }: { onOpenSettings: () => void }) {
         </Avatar>
         <div className="flex flex-1 flex-col truncate">
           <span className="truncate font-medium">Orbit</span>
-          <span className="truncate text-sidebar-foreground/60">Assistente local</span>
+          <span className="truncate text-sidebar-foreground/60">{t("sidebar.account.localAssistant")}</span>
         </div>
       </DropdownMenuTrigger>
       <DropdownMenuContent
@@ -1061,14 +1074,14 @@ function AccountDropdown({ onOpenSettings }: { onOpenSettings: () => void }) {
         className="w-56"
       >
         <DropdownMenuGroup>
-          <DropdownMenuLabel>Minha Conta</DropdownMenuLabel>
+          <DropdownMenuLabel>{t("sidebar.account.myAccount")}</DropdownMenuLabel>
           <DropdownMenuItem>
             <User className="size-4" />
-            Perfil
+            {t("sidebar.account.profile")}
           </DropdownMenuItem>
           <DropdownMenuItem onClick={onOpenSettings}>
             <Settings className="size-4" />
-            Configurações
+            {t("sidebar.account.settings")}
           </DropdownMenuItem>
           <DropdownMenuSub open={themeOpen} onOpenChange={setThemeOpen}>
             <DropdownMenuSubTrigger
@@ -1076,7 +1089,7 @@ function AccountDropdown({ onOpenSettings }: { onOpenSettings: () => void }) {
               onMouseLeave={closeTheme}
             >
               <Sun className="size-4" />
-              Alterar tema
+              {t("sidebar.account.changeTheme")}
             </DropdownMenuSubTrigger>
             <DropdownMenuSubContent
               onMouseEnter={openTheme}
@@ -1084,17 +1097,17 @@ function AccountDropdown({ onOpenSettings }: { onOpenSettings: () => void }) {
             >
               <DropdownMenuItem onClick={() => setTheme("light")}>
                 <Sun className="size-4" />
-                Claro
+                {t("sidebar.account.light")}
                 {theme === "light" && <span className="ml-auto text-xs">✓</span>}
               </DropdownMenuItem>
               <DropdownMenuItem onClick={() => setTheme("dark")}>
                 <Moon className="size-4" />
-                Escuro
+                {t("sidebar.account.dark")}
                 {theme === "dark" && <span className="ml-auto text-xs">✓</span>}
               </DropdownMenuItem>
               <DropdownMenuItem onClick={() => setTheme("system")}>
                 <Monitor className="size-4" />
-                Sistema
+                {t("sidebar.account.system")}
                 {theme === "system" && <span className="ml-auto text-xs">✓</span>}
               </DropdownMenuItem>
             </DropdownMenuSubContent>
@@ -1103,7 +1116,7 @@ function AccountDropdown({ onOpenSettings }: { onOpenSettings: () => void }) {
         <DropdownMenuSeparator />
         <DropdownMenuItem>
           <LogOut className="size-4" />
-          Sair
+          {t("sidebar.account.logout")}
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
@@ -1155,6 +1168,7 @@ export function AppSidebar() {
 }
 
 function AccountSection({ onOpenSettings }: { onOpenSettings: () => void }) {
+  const { t } = useTranslation()
   const [connectOpen, setConnectOpen] = useState(false)
 
   return (
@@ -1167,7 +1181,7 @@ function AccountSection({ onOpenSettings }: { onOpenSettings: () => void }) {
           className="w-full justify-start gap-2 text-xs font-normal text-muted-foreground hover:text-foreground rounded-sm p-2"
         >
           <Smartphone className="size-4" />
-          Conectar App
+          {t("sidebar.account.connectApp")}
         </Button>
         <SidebarSeparator className="my-1" />
         <AccountDropdown onOpenSettings={onOpenSettings} />
