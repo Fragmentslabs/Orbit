@@ -12,6 +12,88 @@
       "data": { "label": "Data", "description": "Export and import your data." }
     }
   },
+  "mcp": {
+    "kv": { "key": "Key", "value": "Value", "add": "Add" },
+    "servers": {
+      "title": "MCP Servers",
+      "description": "Connect to MCP servers to add dynamic tools to Orbit.",
+      "add": "Add",
+      "empty": "No MCP server configured.",
+      "toolsAvailable_one": "{{count}} tool available",
+      "toolsAvailable_other": "{{count}} tools available",
+      "reconnect": "Reconnect",
+      "edit": "Edit",
+      "remove": "Remove",
+      "status": {
+        "connected": "Connected",
+        "connecting": "Connecting…",
+        "error": "Error",
+        "disabled": "Disabled"
+      },
+      "dialog": {
+        "editTitle": "Edit MCP server",
+        "addTitle": "Add MCP server",
+        "description": "Connect to MCP (Model Context Protocol) servers to expand Orbit's tools.",
+        "name": "Name",
+        "namePlaceholder": "e.g.: my-server",
+        "type": "Type",
+        "typeHttp": "HTTP (Streamable)",
+        "typeStdio": "stdio (local command)",
+        "url": "URL",
+        "headers": "Headers (HTTP headers)",
+        "command": "Command",
+        "args": "Arguments (space-separated)",
+        "argsPlaceholder": "-y @modelcontextprotocol/server-filesystem /path",
+        "cwd": "Working directory",
+        "cwdPlaceholder": "Leave blank to inherit from Orbit",
+        "select": "Select",
+        "env": "Environment variables",
+        "envHint": "Variables are merged with Orbit's environment; values here take precedence.",
+        "advanced": "Advanced options",
+        "permissionMode": "Permission mode",
+        "permissionModeHint": "Overrides the global mode for this server's tools",
+        "permissionInherit": "Inherit from chat",
+        "permissionAsk": "Ask",
+        "permissionApprove": "Approve",
+        "permissionFull": "Full",
+        "autoReconnect": "Automatic reconnection",
+        "autoReconnectHint": "Tries to reconnect with exponential backoff on error"
+      }
+    },
+    "skills": {
+      "title": "Skills",
+      "description": "Curated knowledge injected into the agent's context. Create or manage your skills.",
+      "create": "Create",
+      "empty": "No skill created yet.",
+      "viewContent": "View content",
+      "noContent": "No content.",
+      "scripts_one": "{{count}} script",
+      "scripts_other": "{{count}} scripts",
+      "edit": "Edit",
+      "remove": "Remove",
+      "createMenu": {
+        "manual": { "title": "Create manually", "description": "Name, description, and markdown content" },
+        "import": { "title": "Import file", "description": ".skill or .md — select the skill's scripts too, if any" },
+        "askOrbit": { "title": "Ask Orbit to create it", "description": "Opens a chat with /create-skill — describe it and the agent builds the skill" }
+      },
+      "dialog": {
+        "editTitle": "Edit skill",
+        "createTitle": "Create skill",
+        "editDescription": "Edit the skill's fields. The slug defines the @slug reference in the \"/\" palette.",
+        "createDescription": "Create a skill that will be injected into Orbit's context and referenced via @slug in the \"/\" palette.",
+        "name": "Name",
+        "namePlaceholder": "e.g.: Commit Changes",
+        "slug": "Slug (@slug reference)",
+        "slugPlaceholder": "commit_changes",
+        "slugError": "Only lowercase letters, numbers, and underscores (_). No spaces or accents.",
+        "description": "Description",
+        "descriptionPlaceholder": "Commit and branch conventions",
+        "content": "Content (markdown)",
+        "contentPlaceholder": "Use conventional commits: feat:, fix:, chore:...",
+        "createButton": "Create skill"
+      }
+    }
+  },
   "analytics": {
     "title": "Orbit Usage",
     "loading": "Loading...",

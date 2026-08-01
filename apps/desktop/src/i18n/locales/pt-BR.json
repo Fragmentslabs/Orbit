@@ -12,6 +12,88 @@
       "data": { "label": "Dados", "description": "Exportar e importar seus dados." }
     }
   },
+  "mcp": {
+    "kv": { "key": "Chave", "value": "Valor", "add": "Adicionar" },
+    "servers": {
+      "title": "Servidores MCP",
+      "description": "Conecte-se a servidores MCP para adicionar ferramentas dinâmicas ao Orbit.",
+      "add": "Adicionar",
+      "empty": "Nenhum servidor MCP configurado.",
+      "toolsAvailable_one": "{{count}} ferramenta disponível",
+      "toolsAvailable_other": "{{count}} ferramentas disponíveis",
+      "reconnect": "Reconectar",
+      "edit": "Editar",
+      "remove": "Remover",
+      "status": {
+        "connected": "Conectado",
+        "connecting": "Conectando…",
+        "error": "Erro",
+        "disabled": "Desabilitado"
+      },
+      "dialog": {
+        "editTitle": "Editar servidor MCP",
+        "addTitle": "Adicionar servidor MCP",
+        "description": "Conecte-se a servidores MCP (Model Context Protocol) para expandir as ferramentas do Orbit.",
+        "name": "Nome",
+        "namePlaceholder": "ex: meu-servidor",
+        "type": "Tipo",
+        "typeHttp": "HTTP (Streamable)",
+        "typeStdio": "stdio (comando local)",
+        "url": "URL",
+        "headers": "Headers (cabeçalhos HTTP)",
+        "command": "Comando",
+        "args": "Argumentos (separados por espaço)",
+        "argsPlaceholder": "-y @modelcontextprotocol/server-filesystem /caminho",
+        "cwd": "Diretório de trabalho",
+        "cwdPlaceholder": "Deixe vazio para herdar do Orbit",
+        "select": "Selecionar",
+        "env": "Variáveis de ambiente",
+        "envHint": "As variáveis são mescladas com o ambiente do Orbit; valores aqui sobrescrevem.",
+        "advanced": "Opções avançadas",
+        "permissionMode": "Modo de permissão",
+        "permissionModeHint": "Override do modo global para tools deste servidor",
+        "permissionInherit": "Herda do chat",
+        "permissionAsk": "Perguntar",
+        "permissionApprove": "Autonomia",
+        "permissionFull": "Irrestrito",
+        "autoReconnect": "Reconexão automática",
+        "autoReconnectHint": "Tenta reconectar com backoff exponencial em caso de erro"
+      }
+    },
+    "skills": {
+      "title": "Skills",
+      "description": "Conhecimento curado injetado no contexto do agente. Crie ou gerencie suas skills.",
+      "create": "Criar",
+      "empty": "Nenhuma skill criada ainda.",
+      "viewContent": "Ver conteúdo",
+      "noContent": "Nenhum conteúdo.",
+      "scripts_one": "{{count}} script",
+      "scripts_other": "{{count}} scripts",
+      "edit": "Editar",
+      "remove": "Remover",
+      "createMenu": {
+        "manual": { "title": "Criar manualmente", "description": "Nome, descrição e conteúdo markdown" },
+        "import": { "title": "Importar arquivo", "description": ".skill ou .md — selecione junto os scripts da skill, se houver" },
+        "askOrbit": { "title": "Pedir para o Orbit criar", "description": "Abre um chat com /create-skill — descreva e o agente monta a skill" }
+      },
+      "dialog": {
+        "editTitle": "Editar skill",
+        "createTitle": "Criar skill",
+        "editDescription": "Edite os campos da skill. O slug define a referência @slug na paleta \"/\".",
+        "createDescription": "Crie uma skill que será injetada no contexto do Orbit e referenciada via @slug na paleta \"/\".",
+        "name": "Nome",
+        "namePlaceholder": "Ex: Fazer Commit",
+        "slug": "Slug (referência @slug)",
+        "slugPlaceholder": "fazer_commit",
+        "slugError": "Apenas letras minúsculas, números e underscores (_). Sem espaços ou acentos.",
+        "description": "Descrição",
+        "descriptionPlaceholder": "Padrões de commit e branch",
+        "content": "Conteúdo (markdown)",
+        "contentPlaceholder": "Use conventional commits: feat:, fix:, chore:...",
+        "createButton": "Criar skill"
+      }
+    }
+  },
   "analytics": {
     "title": "Uso do Orbit",
     "loading": "Carregando...",

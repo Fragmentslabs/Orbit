@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react"
+import { useTranslation } from "react-i18next"
 import {
   Cable,
   ChevronDown,
@@ -64,6 +65,7 @@ function KvEditor({ value, onChange, keyPlaceholder, valuePlaceholder }: {
   keyPlaceholder?: string
   valuePlaceholder?: string
 }) {
+  const { t } = useTranslation()
   const [items, setItems] = useState<Array<{ id: number; key: string; value: string }>>(() => [])
   const idRef = useRef(0)
   const valueJsonRef = useRef("")
@@ -118,13 +120,13 @@ function KvEditor({ value, onChange, keyPlaceholder, valuePlaceholder }: {
           <Input
             value={item.key}
             onChange={(e) => update(index, "key", e.target.value)}
-            placeholder={keyPlaceholder ?? "Chave"}
+            placeholder={keyPlaceholder ?? t("mcp.kv.key")}
             className="h-7 w-[140px] text-xs"
           />
           <Input
             value={item.value}
             onChange={(e) => update(index, "value", e.target.value)}
-            placeholder={valuePlaceholder ?? "Valor"}
+            placeholder={valuePlaceholder ?? t("mcp.kv.value")}
             className="h-7 flex-1 text-xs"
           />
           <button
@@ -142,7 +144,7 @@ function KvEditor({ value, onChange, keyPlaceholder, valuePlaceholder }: {
         className="flex h-7 items-center gap-1 rounded border border-dashed px-2 text-[11px] text-muted-foreground hover:border-solid hover:text-foreground"
       >
         <PlusIcon className="size-3" />
-        Adicionar
+        {t("mcp.kv.add")}
       </button>
     </div>
   )
@@ -157,6 +159,7 @@ function McpServerDialog({ open, onOpenChange, initial }: {
   onOpenChange: (v: boolean) => void
   initial?: McpServerConfig
 }) {
+  const { t } = useTranslation()
   const refresh = useSkillsStore((s) => s.refresh)
   const [name, setName] = useState(initial?.name ?? "")
   const [type, setType] = useState<"http" | "stdio">(initial?.type ?? "http")
@@ -232,36 +235,36 @@ function McpServerDialog({ open, onOpenChange, initial }: {
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-xl max-h-[80vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>{initial ? "Editar servidor MCP" : "Adicionar servidor MCP"}</DialogTitle>
+          <DialogTitle>{initial ? t("mcp.servers.dialog.editTitle") : t("mcp.servers.dialog.addTitle")}</DialogTitle>
           <DialogDescription>
-            Conecte-se a servidores MCP (Model Context Protocol) para expandir as ferramentas do Orbit.
+            {t("mcp.servers.dialog.description")}
           </DialogDescription>
         </DialogHeader>
         <div className="flex flex-col gap-3">
           <div>
-            <p className="mb-1 text-xs font-medium">Nome</p>
-            <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="ex: meu-servidor" />
+            <p className="mb-1 text-xs font-medium">{t("mcp.servers.dialog.name")}</p>
+            <Input value={name} onChange={(e) => setName(e.target.value)} placeholder={t("mcp.servers.dialog.namePlaceholder")} />
           </div>
           <div>
-            <p className="mb-1 text-xs font-medium">Tipo</p>
+            <p className="mb-1 text-xs font-medium">{t("mcp.servers.dialog.type")}</p>
             <Select value={type} onValueChange={(v) => setType(v as "http" | "stdio")}>
               <SelectTrigger>
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="http">HTTP (Streamable)</SelectItem>
-                <SelectItem value="stdio">stdio (comando local)</SelectItem>
+                <SelectItem value="http">{t("mcp.servers.dialog.typeHttp")}</SelectItem>
+                <SelectItem value="stdio">{t("mcp.servers.dialog.typeStdio")}</SelectItem>
               </SelectContent>
             </Select>
           </div>
           {type === "http" ? (
             <>
               <div>
-                <p className="mb-1 text-xs font-medium">URL</p>
+                <p className="mb-1 text-xs font-medium">{t("mcp.servers.dialog.url")}</p>
                 <Input value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://mcp.exa.ai/mcp" />
               </div>
               <div>
-                <p className="mb-1 text-xs font-medium">Headers (cabeçalhos HTTP)</p>
+                <p className="mb-1 text-xs font-medium">{t("mcp.servers.dialog.headers")}</p>
                 <KvEditor
                   value={headers}
                   onChange={setHeaders}
@@ -273,25 +276,25 @@ function McpServerDialog({ open, onOpenChange, initial }: {
           ) : (
             <>
               <div>
-                <p className="mb-1 text-xs font-medium">Comando</p>
+                <p className="mb-1 text-xs font-medium">{t("mcp.servers.dialog.command")}</p>
                 <Input value={command} onChange={(e) => setCommand(e.target.value)} placeholder="npx" />
               </div>
               <div>
-                <p className="mb-1 text-xs font-medium">Argumentos (separados por espaço)</p>
-                <Input value={args} onChange={(e) => setArgs(e.target.value)} placeholder="-y @modelcontextprotocol/server-filesystem /caminho" />
+                <p className="mb-1 text-xs font-medium">{t("mcp.servers.dialog.args")}</p>
+                <Input value={args} onChange={(e) => setArgs(e.target.value)} placeholder={t("mcp.servers.dialog.argsPlaceholder")} />
               </div>
               <div>
-                <p className="mb-1 text-xs font-medium">Diretório de trabalho</p>
+                <p className="mb-1 text-xs font-medium">{t("mcp.servers.dialog.cwd")}</p>
                 <div className="flex items-center gap-2">
-                  <Input value={cwd} onChange={(e) => setCwd(e.target.value)} placeholder="Deixe vazio para herdar do Orbit" className="flex-1" />
+                  <Input value={cwd} onChange={(e) => setCwd(e.target.value)} placeholder={t("mcp.servers.dialog.cwdPlaceholder")} className="flex-1" />
                   <Button type="button" variant="outline" size="sm" className="shrink-0 gap-1" onClick={() => void pickCwd()}>
                     <Folder className="size-3" />
-                    Selecionar
+                    {t("mcp.servers.dialog.select")}
                   </Button>
                 </div>
               </div>
               <div>
-                <p className="mb-1 text-xs font-medium">Variáveis de ambiente</p>
+                <p className="mb-1 text-xs font-medium">{t("mcp.servers.dialog.env")}</p>
                 <KvEditor
                   value={env}
                   onChange={setEnv}
@@ -299,34 +302,34 @@ function McpServerDialog({ open, onOpenChange, initial }: {
                   valuePlaceholder="sk-..."
                 />
                 <p className="mt-1 text-[10px] text-muted-foreground">
-                  As variáveis são mescladas com o ambiente do Orbit; valores aqui sobrescrevem.
+                  {t("mcp.servers.dialog.envHint")}
                 </p>
               </div>
             </>
           )}
           <div className="border-t pt-3">
-            <p className="mb-2 text-xs font-medium text-muted-foreground">Opções avançadas</p>
+            <p className="mb-2 text-xs font-medium text-muted-foreground">{t("mcp.servers.dialog.advanced")}</p>
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-xs font-medium">Modo de permissão</p>
-                <p className="text-[10px] text-muted-foreground">Override do modo global para tools deste servidor</p>
+                <p className="text-xs font-medium">{t("mcp.servers.dialog.permissionMode")}</p>
+                <p className="text-[10px] text-muted-foreground">{t("mcp.servers.dialog.permissionModeHint")}</p>
               </div>
               <Select value={permissionMode} onValueChange={(value) => setPermissionMode(value ?? '')}>
                 <SelectTrigger className="w-36">
-                  <SelectValue placeholder="Herda do chat" />
+                  <SelectValue placeholder={t("mcp.servers.dialog.permissionInherit")} />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">Herda do chat</SelectItem>
-                  <SelectItem value="ask">Perguntar</SelectItem>
-                  <SelectItem value="approve">Autonomia</SelectItem>
-                  <SelectItem value="full">Irrestrito</SelectItem>
+                  <SelectItem value="">{t("mcp.servers.dialog.permissionInherit")}</SelectItem>
+                  <SelectItem value="ask">{t("mcp.servers.dialog.permissionAsk")}</SelectItem>
+                  <SelectItem value="approve">{t("mcp.servers.dialog.permissionApprove")}</SelectItem>
+                  <SelectItem value="full">{t("mcp.servers.dialog.permissionFull")}</SelectItem>
                 </SelectContent>
               </Select>
             </div>
             <div className="mt-2 flex items-center justify-between">
               <div>
-                <p className="text-xs font-medium">Reconexão automática</p>
-                <p className="text-[10px] text-muted-foreground">Tenta reconectar com backoff exponencial em caso de erro</p>
+                <p className="text-xs font-medium">{t("mcp.servers.dialog.autoReconnect")}</p>
+                <p className="text-[10px] text-muted-foreground">{t("mcp.servers.dialog.autoReconnectHint")}</p>
               </div>
               <button
                 type="button"
@@ -343,10 +346,10 @@ function McpServerDialog({ open, onOpenChange, initial }: {
           </div>
         </div>
         <div className="flex justify-end gap-2 pt-2">
-          <Button variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>{t("common.cancel")}</Button>
           <Button disabled={!name.trim() || saving} onClick={() => void save()}>
             {saving && <LoaderCircle className="size-3.5 animate-spin" />}
-            {initial ? "Salvar" : "Adicionar"}
+            {initial ? t("common.save") : t("common.add")}
           </Button>
         </div>
       </DialogContent>
@@ -373,6 +376,7 @@ function CreateSkillDialog({ open, onOpenChange, initial }: {
   onOpenChange: (v: boolean) => void
   initial?: Skill
 }) {
+  const { t } = useTranslation()
   const [name, setName] = useState("")
   const [slug, setSlug] = useState("")
   const [slugEdited, setSlugEdited] = useState(false)
@@ -395,9 +399,9 @@ function CreateSkillDialog({ open, onOpenChange, initial }: {
 
   const slugError = useMemo(() => {
     if (!slugTouched || !slug) return ""
-    if (!SLUG_REGEX.test(slug)) return "Apenas letras minúsculas, números e underscores (_). Sem espaços ou acentos."
+    if (!SLUG_REGEX.test(slug)) return t("mcp.skills.dialog.slugError")
     return ""
-  }, [slug, slugTouched])
+  }, [slug, slugTouched, t])
 
   const canSave = name.trim() && content.trim() && slug.trim() && !slugError
 
@@ -435,24 +439,24 @@ function CreateSkillDialog({ open, onOpenChange, initial }: {
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle>{initial ? "Editar skill" : "Criar skill"}</DialogTitle>
+          <DialogTitle>{initial ? t("mcp.skills.dialog.editTitle") : t("mcp.skills.dialog.createTitle")}</DialogTitle>
           <DialogDescription>
             {initial
-              ? "Edite os campos da skill. O slug define a referência @slug na paleta \"/\"."
-              : "Crie uma skill que será injetada no contexto do Orbit e referenciada via @slug na paleta \"/\"."}
+              ? t("mcp.skills.dialog.editDescription")
+              : t("mcp.skills.dialog.createDescription")}
           </DialogDescription>
         </DialogHeader>
         <div className="flex flex-col gap-3">
           <div>
-            <p className="mb-1 text-xs font-medium">Nome</p>
+            <p className="mb-1 text-xs font-medium">{t("mcp.skills.dialog.name")}</p>
             <Input
               value={name}
               onChange={(e) => handleNameChange(e.target.value)}
-              placeholder="Ex: Fazer Commit"
+              placeholder={t("mcp.skills.dialog.namePlaceholder")}
             />
           </div>
           <div>
-            <p className="mb-1 text-xs font-medium">Slug (referência @slug)</p>
+            <p className="mb-1 text-xs font-medium">{t("mcp.skills.dialog.slug")}</p>
             <div className="relative">
               <span className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3 text-sm text-muted-foreground">
                 /
@@ -460,7 +464,7 @@ function CreateSkillDialog({ open, onOpenChange, initial }: {
               <Input
                 value={slug}
                 onChange={(e) => handleSlugChange(e.target.value)}
-                placeholder="fazer_commit"
+                placeholder={t("mcp.skills.dialog.slugPlaceholder")}
                 className={cn("pl-7", slugError && "border-destructive focus:border-destructive focus:ring-destructive/30")}
               />
             </div>
@@ -469,28 +473,28 @@ function CreateSkillDialog({ open, onOpenChange, initial }: {
             )}
           </div>
           <div>
-            <p className="mb-1 text-xs font-medium">Descrição</p>
+            <p className="mb-1 text-xs font-medium">{t("mcp.skills.dialog.description")}</p>
             <Input
               value={description}
               onChange={(e) => setDescription(e.target.value)}
-              placeholder="Padrões de commit e branch"
+              placeholder={t("mcp.skills.dialog.descriptionPlaceholder")}
             />
           </div>
           <div>
-            <p className="mb-1 text-xs font-medium">Conteúdo (markdown)</p>
+            <p className="mb-1 text-xs font-medium">{t("mcp.skills.dialog.content")}</p>
             <textarea
               value={content}
               onChange={(e) => setContent(e.target.value)}
-              placeholder="Use conventional commits: feat:, fix:, chore:..."
+              placeholder={t("mcp.skills.dialog.contentPlaceholder")}
               className="min-h-[120px] w-full rounded-md border border-input bg-input/20 px-3 py-2 text-xs/relaxed outline-none placeholder:text-muted-foreground focus:border-ring focus:ring-2 focus:ring-ring/30"
             />
           </div>
         </div>
         <div className="flex justify-end gap-2 pt-2">
-          <Button variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>{t("common.cancel")}</Button>
           <Button disabled={!canSave || saving} onClick={() => void save()}>
             {saving && <LoaderCircle className="size-3.5 animate-spin" />}
-            {initial ? "Salvar" : "Criar skill"}
+            {initial ? t("common.save") : t("mcp.skills.dialog.createButton")}
           </Button>
         </div>
       </DialogContent>
@@ -503,11 +507,12 @@ function CreateSkillDialog({ open, onOpenChange, initial }: {
 /* ------------------------------------------------------------------ */
 
 function StatusBadge({ state, error }: { state: string; error?: string }) {
+  const { t } = useTranslation()
   const map: Record<string, { label: string; className: string }> = {
-    connected: { label: "Conectado", className: "text-emerald-500" },
-    connecting: { label: "Conectando…", className: "text-amber-500" },
-    error: { label: error ?? "Erro", className: "text-destructive" },
-    disabled: { label: "Desabilitado", className: "text-muted-foreground" },
+    connected: { label: t("mcp.servers.status.connected"), className: "text-emerald-500" },
+    connecting: { label: t("mcp.servers.status.connecting"), className: "text-amber-500" },
+    error: { label: error ?? t("mcp.servers.status.error"), className: "text-destructive" },
+    disabled: { label: t("mcp.servers.status.disabled"), className: "text-muted-foreground" },
   }
   const s = map[state] ?? { label: state, className: "text-muted-foreground" }
   return <span className={cn("text-[10px] font-medium", s.className)}>{s.label}</span>
@@ -518,6 +523,7 @@ function StatusBadge({ state, error }: { state: string; error?: string }) {
 /* ------------------------------------------------------------------ */
 
 export function McpSkillsPanel() {
+  const { t } = useTranslation()
   const { skills, mcpServers, refresh } = useSkillsStore()
   const [mcpDialogOpen, setMcpDialogOpen] = useState(false)
   const [mcpEdit, setMcpEdit] = useState<McpServerConfig | undefined>()
@@ -556,20 +562,20 @@ export function McpSkillsPanel() {
       <div>
         <div className="mb-2 flex items-center justify-between">
           <div>
-            <p className="text-sm font-semibold">Servidores MCP</p>
+            <p className="text-sm font-semibold">{t("mcp.servers.title")}</p>
             <p className="mt-0.5 text-xs text-muted-foreground">
-              Conecte-se a servidores MCP para adicionar ferramentas dinâmicas ao Orbit.
+              {t("mcp.servers.description")}
             </p>
           </div>
           <Button size="sm" className="gap-1" onClick={() => { setMcpEdit(undefined); setMcpDialogOpen(true) }}>
             <PlusIcon className="size-3.5" />
-            Adicionar
+            {t("mcp.servers.add")}
           </Button>
         </div>
         {mcpServers.length === 0 ? (
           <div className="flex flex-col items-center gap-2 rounded-lg border border-dashed p-6 text-center">
             <Cable className="size-6 text-muted-foreground/50" />
-            <p className="text-xs text-muted-foreground">Nenhum servidor MCP configurado.</p>
+            <p className="text-xs text-muted-foreground">{t("mcp.servers.empty")}</p>
           </div>
         ) : (
           <div className="flex flex-col gap-2">
@@ -589,7 +595,7 @@ export function McpSkillsPanel() {
                       <details className="group mt-1">
                         <summary className="cursor-pointer text-[10px] text-muted-foreground hover:text-foreground list-none flex items-center gap-1">
                           <ChevronDown className="size-3 shrink-0 transition-transform group-open:rotate-0 -rotate-90" />
-                          {server.toolNames.length} ferramenta{(server.toolNames.length ?? 0) !== 1 ? "s" : ""} disponíve{(server.toolNames.length ?? 0) !== 1 ? "is" : "l"}
+                          {t("mcp.servers.toolsAvailable", { count: server.toolNames.length })}
                         </summary>
                         <div className="mt-1 flex flex-col gap-0.5">
                           {server.toolNames.map((name) => (
@@ -602,13 +608,13 @@ export function McpSkillsPanel() {
                     )}
                   </div>
                   <div className="flex items-center gap-1">
-                    <Button size="icon-sm" variant="ghost" title="Reconectar" onClick={() => void mcpApi.reconnect(server.config.name).then(() => refresh())}>
+                    <Button size="icon-sm" variant="ghost" title={t("mcp.servers.reconnect")} onClick={() => void mcpApi.reconnect(server.config.name).then(() => refresh())}>
                       <RefreshCw className="size-3.5" />
                     </Button>
-                    <Button size="icon-sm" variant="ghost" title="Editar" onClick={() => { setMcpEdit(server.config); setMcpDialogOpen(true) }}>
+                    <Button size="icon-sm" variant="ghost" title={t("mcp.servers.edit")} onClick={() => { setMcpEdit(server.config); setMcpDialogOpen(true) }}>
                       <ExternalLink className="size-3.5" />
                     </Button>
-                    <Button size="icon-sm" variant="ghost" title="Remover" className="text-destructive hover:text-destructive" onClick={async () => {
+                    <Button size="icon-sm" variant="ghost" title={t("mcp.servers.remove")} className="text-destructive hover:text-destructive" onClick={async () => {
                       const config = await mcpApi.config()
                       config.servers = config.servers.filter((s) => s.name !== server.config.name)
                       await mcpApi.save(config)
@@ -628,9 +634,9 @@ export function McpSkillsPanel() {
       <div>
         <div className="mb-2 flex items-center justify-between">
           <div>
-            <p className="text-sm font-semibold">Skills</p>
+            <p className="text-sm font-semibold">{t("mcp.skills.title")}</p>
             <p className="mt-0.5 text-xs text-muted-foreground">
-              Conhecimento curado injetado no contexto do agente. Crie ou gerencie suas skills.
+              {t("mcp.skills.description")}
             </p>
           </div>
           <DropdownMenu>
@@ -638,32 +644,32 @@ export function McpSkillsPanel() {
               className="inline-flex h-8 items-center gap-1 rounded-md bg-primary px-3 text-xs font-medium text-primary-foreground hover:bg-primary/90"
             >
               <PlusIcon className="size-3.5" />
-              Criar
+              {t("mcp.skills.create")}
               <ChevronDown className="size-3" />
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="min-w-64 p-1.5">
               <DropdownMenuItem onClick={() => { setSkillEdit(undefined); setSkillDialogOpen(true) }}>
                 <PenLine className="size-3.5" />
                 <div className="flex flex-col">
-                  <span>Criar manualmente</span>
-                  <span className="text-xs text-muted-foreground">Nome, descrição e conteúdo markdown</span>
+                  <span>{t("mcp.skills.createMenu.manual.title")}</span>
+                  <span className="text-xs text-muted-foreground">{t("mcp.skills.createMenu.manual.description")}</span>
                 </div>
               </DropdownMenuItem>
               <DropdownMenuItem onClick={() => void importSkill()}>
                 <FileUp className="size-3.5" />
                 <div className="flex flex-col">
-                  <span>Importar arquivo</span>
+                  <span>{t("mcp.skills.createMenu.import.title")}</span>
                   <span className="text-xs text-muted-foreground">
-                    .skill ou .md — selecione junto os scripts da skill, se houver
+                    {t("mcp.skills.createMenu.import.description")}
                   </span>
                 </div>
               </DropdownMenuItem>
               <DropdownMenuItem onClick={askOrbitToCreate}>
                 <Wand2 className="size-3.5" />
                 <div className="flex flex-col">
-                  <span>Pedir para o Orbit criar</span>
+                  <span>{t("mcp.skills.createMenu.askOrbit.title")}</span>
                   <span className="text-xs text-muted-foreground">
-                    Abre um chat com /create-skill — descreva e o agente monta a skill
+                    {t("mcp.skills.createMenu.askOrbit.description")}
                   </span>
                 </div>
               </DropdownMenuItem>
@@ -676,7 +682,7 @@ export function McpSkillsPanel() {
         {skills.length === 0 ? (
           <div className="flex flex-col items-center gap-2 rounded-lg border border-dashed p-6 text-center">
             <Sparkles className="size-6 text-muted-foreground/50" />
-            <p className="text-xs text-muted-foreground">Nenhuma skill criada ainda.</p>
+            <p className="text-xs text-muted-foreground">{t("mcp.skills.empty")}</p>
           </div>
         ) : (
           <div className="flex flex-col gap-2">
@@ -693,7 +699,7 @@ export function McpSkillsPanel() {
                     </span>
                     {skill.scripts && skill.scripts.length > 0 && (
                       <span className="rounded bg-muted px-1 py-0.5 text-[10px] text-muted-foreground">
-                        {skill.scripts.length} script{skill.scripts.length > 1 ? "s" : ""}
+                        {t("mcp.skills.scripts", { count: skill.scripts.length })}
                       </span>
                     )}
                   </div>
@@ -707,14 +713,14 @@ export function McpSkillsPanel() {
                     onClick={() => setViewContent(skill.slug)}
                   >
                     <FileText className="mr-1 size-3" />
-                    Ver conteúdo
+                    {t("mcp.skills.viewContent")}
                   </Button>
                 </div>
                 <div className="flex items-center gap-1 self-start pt-1">
-                  <Button size="icon-sm" variant="ghost" title="Editar" onClick={() => { setSkillEdit(skill); setSkillDialogOpen(true) }}>
+                  <Button size="icon-sm" variant="ghost" title={t("mcp.skills.edit")} onClick={() => { setSkillEdit(skill); setSkillDialogOpen(true) }}>
                     <Pencil className="size-3.5" />
                   </Button>
-                  <Button size="icon-sm" variant="ghost" title="Remover" className="text-destructive hover:text-destructive" onClick={async () => {
+                  <Button size="icon-sm" variant="ghost" title={t("mcp.skills.remove")} className="text-destructive hover:text-destructive" onClick={async () => {
                     await skillsApi.remove(skill.slug)
                     await refresh()
                   }}>
@@ -750,6 +756,7 @@ function SkillContentDialog({
   open: boolean
   onOpenChange: (open: boolean) => void
 }) {
+  const { t } = useTranslation()
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent style={{ maxWidth: "56rem" }}>
@@ -765,7 +772,7 @@ function SkillContentDialog({
               <AssistantMarkdown>{skill.content}</AssistantMarkdown>
             </div>
           ) : (
-            <p className="text-sm text-muted-foreground">Nenhum conteúdo.</p>
+            <p className="text-sm text-muted-foreground">{t("mcp.skills.noContent")}</p>
           )}
         </ScrollArea>
       </DialogContent>
