@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react"
+import { useTranslation } from "react-i18next"
 import { DndContext, PointerSensor, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core"
 
 import { SidebarProvider, useSidebar } from "@/components/ui/sidebar"
@@ -42,6 +43,7 @@ function HoverEdge({ onShow }: { onShow: () => void }) {
 }
 
 function Layout() {
+  const { t } = useTranslation()
   const { open, setOpen } = useSidebar()
   const { mode: workspaceMode, view, folders, setFolders } = useWorkspace()
   const activeSession = useActiveSession(workspaceMode)
@@ -143,10 +145,10 @@ function Layout() {
                 <ChatHeader
                   title={
                     view === "memories"
-                      ? "Memórias"
+                      ? t("sidebar.memories")
                       : view === "models"
-                        ? "Models"
-                        : activeSession?.title ?? (workspaceMode === "chat" ? "Nova conversa" : "Novo código")
+                        ? t("header.models")
+                        : activeSession?.title ?? (workspaceMode === "chat" ? t("header.newChat") : t("header.newCode"))
                   }
                   rightPanelOpen={rightPanelOpen}
                   onToggleSidebar={handleToggleSidebar}

@@ -1,4 +1,5 @@
-import { useEffect, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
+import { useTranslation } from "react-i18next"
 import { CalendarIcon, Clock } from "lucide-react"
 import {
   Dialog,
@@ -13,20 +14,8 @@ interface SchedulePreset {
   getTimestamp: () => number
 }
 
-const PRESETS: SchedulePreset[] = [
-  { label: "Em 30 minutos", getTimestamp: () => Date.now() + 30 * 60 * 1000 },
-  { label: "Em 1 hora", getTimestamp: () => Date.now() + 60 * 60 * 1000 },
-  { label: "Em 2 horas", getTimestamp: () => Date.now() + 2 * 60 * 60 * 1000 },
-  { label: "Amanhã às 09:00", getTimestamp: () => {
-    const d = new Date()
-    d.setDate(d.getDate() + 1)
-    d.setHours(9, 0, 0, 0)
-    return d.getTime()
-  }},
-]
-
-function formatDate(ts: number): string {
-  return new Date(ts).toLocaleString("pt-BR", {
+function formatDate(ts: number, locale: string): string {
+  return new Date(ts).toLocaleString(locale, {
     dateStyle: "full",
     timeStyle: "short",
   })
@@ -60,10 +49,23 @@ export function ScheduleMessageDialog({
   onOpenChange: (open: boolean) => void
   onConfirm: (timestamp: number) => void
 }) {
+  const { t, i18n } = useTranslation()
   const [customDate, setCustomDate] = useState(defaultDate())
   const [customTime, setCustomTime] = useState(defaultTime())
   const [selectedPreset, setSelectedPreset] = useState<number | null>(null)
   const [preview, setPreview] = useState<string | null>(null)
+
+  const presets = useMemo<SchedulePreset[]>(() => [
+    { label: t("send.scheduleDialog.inMinutes", { count: 30 }), getTimestamp: () => Date.now() + 30 * 60 * 1000 },
+    { label: t("send.scheduleDialog.inHours", { count: 1 }), getTimestamp: () => Date.now() + 60 * 60 * 1000 },
+    { label: t("send.scheduleDialog.inHours", { count: 2 }), getTimestamp: () => Date.now() + 2 * 60 * 60 * 1000 },
+    { label: t("send.scheduleDialog.tomorrow", { time: "09:00" }), getTimestamp: () => {
+      const d = new Date()
+      d.setDate(d.getDate() + 1)
+      d.setHours(9, 0, 0, 0)
+      return d.getTime()
+    }},
+  ], [t])
 
   useEffect(() => {
     if (open) {
@@ -78,23 +80,23 @@ export function ScheduleMessageDialog({
     if (selectedPreset !== null) return
     const ts = parseCustom(customDate, customTime)
     if (ts && ts > Date.now()) {
-      setPreview(formatDate(ts))
+      setPreview(formatDate(ts, i18n.language))
     } else {
       setPreview(null)
     }
-  }, [customDate, customTime, selectedPreset])
+  }, [customDate, customTime, selectedPreset, i18n.language])
 
   const handlePreset = (preset: SchedulePreset, idx: number) => {
     const ts = preset.getTimestamp()
     setSelectedPreset(idx)
-    setPreview(formatDate(ts))
+    setPreview(formatDate(ts, i18n.language))
   }
 
   const handleConfirm = () => {
     if (!preview) return
     let ts: number
     if (selectedPreset !== null) {
-      ts = PRESETS[selectedPreset].getTimestamp()
+      ts = presets[selectedPreset].getTimestamp()
     } else {
       const parsed = parseCustom(customDate, customTime)
       if (!parsed || parsed <= Date.now()) return
@@ -112,15 +114,15 @@ export function ScheduleMessageDialog({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-sm font-medium">
             <CalendarIcon className="size-4" />
-            Agendar mensagem
+            {t("send.scheduleMessage")}
           </DialogTitle>
         </DialogHeader>
 
         <div className="flex flex-col gap-4 py-2">
           <div className="flex flex-col gap-2">
-            <span className="text-xs text-muted-foreground">Escolha um horário</span>
+            <span className="text-xs text-muted-foreground">{t("send.scheduleDialog.chooseTime")}</span>
             <div className="grid grid-cols-2 gap-2">
-              {PRESETS.map((preset, idx) => (
+              {presets.map((preset, idx) => (
                 <Button
                   key={preset.label}
                   variant={selectedPreset === idx ? "default" : "outline"}
@@ -136,7 +138,7 @@ export function ScheduleMessageDialog({
           </div>
 
           <div className="flex flex-col gap-2">
-            <span className="text-xs text-muted-foreground">Ou defina data/hora</span>
+            <span className="text-xs text-muted-foreground">{t("send.scheduleDialog.customDateTime")}</span>
             <div className="flex gap-2">
               <input
                 type="text"
@@ -167,7 +169,7 @@ export function ScheduleMessageDialog({
 
           {preview && (
             <p className="text-xs text-muted-foreground text-center">
-              Enviará em <span className="font-medium text-foreground">{preview}</span>
+              {t("send.scheduleDialog.willSend", { time: <span className="font-medium text-foreground">{preview}</span> })}
             </p>
           )}
         </div>
@@ -178,10 +180,10 @@ export function ScheduleMessageDialog({
             size="sm"
             onClick={() => onOpenChange(false)}
           >
-            Cancelar
+            {t("send.scheduleDialog.cancel")}
           </Button>
           <Button size="sm" disabled={!canConfirm} onClick={handleConfirm}>
-            Confirmar
+            {t("send.scheduleDialog.confirm")}
           </Button>
         </div>
       </DialogContent>
