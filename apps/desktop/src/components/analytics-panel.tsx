@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 import {
   BarChart,
   Bar,
@@ -26,16 +27,20 @@ import { ModelSelectorLogo } from "@/src/components/ai/model-selector";
 import { ActivityHeatmap } from "@/src/components/activity-heatmap";
 import type { AnalyticsRange, AnalyticsSummary } from "@shared/analytics";
 
-const RANGE_LABELS: Record<AnalyticsRange, string> = {
-  total: "Total",
-  "30d": "30d",
-  "7d": "7d",
-  today: "Hoje",
-};
-
 const RANGE_ORDER: AnalyticsRange[] = ["total", "30d", "7d", "today"];
 
+function useRangeLabels(): Record<AnalyticsRange, string> {
+  const { t } = useTranslation();
+  return {
+    total: t("analytics.ranges.total"),
+    "30d": t("analytics.ranges.30d"),
+    "7d": t("analytics.ranges.7d"),
+    today: t("analytics.ranges.today"),
+  };
+}
+
 function ModelBarChart({ data }: { data: AnalyticsSummary }) {
+  const { t } = useTranslation();
   const [chartMode, setChartMode] = useState<"tokens" | "hours">("tokens")
 
   const chartData = useMemo(() => {
@@ -61,7 +66,7 @@ function ModelBarChart({ data }: { data: AnalyticsSummary }) {
   if (chartData.length === 0) {
     return (
       <div className="flex items-center justify-center rounded-lg border border-dashed p-8 text-xs text-muted-foreground">
-        Nenhum dado de uso disponível.
+        {t("analytics.noData")}
       </div>
     );
   }
@@ -70,7 +75,7 @@ function ModelBarChart({ data }: { data: AnalyticsSummary }) {
     <div>
       <div className="mb-2 flex items-center justify-between">
         <p className="text-xs font-medium text-muted-foreground">
-          Uso por modelo
+          {t("analytics.usageByModel")}
         </p>
         <div className="flex gap-1">
           <button
@@ -83,7 +88,7 @@ function ModelBarChart({ data }: { data: AnalyticsSummary }) {
             )}
             onClick={() => setChartMode("tokens")}
           >
-            Tokens
+            {t("analytics.tokens")}
           </button>
           <button
             type="button"
@@ -95,7 +100,7 @@ function ModelBarChart({ data }: { data: AnalyticsSummary }) {
             )}
             onClick={() => setChartMode("hours")}
           >
-            Horas
+            {t("analytics.hours")}
           </button>
         </div>
       </div>
@@ -137,19 +142,19 @@ function ModelBarChart({ data }: { data: AnalyticsSummary }) {
                     {d.label}
                   </p>
                   <div className="flex items-center justify-between gap-4 text-muted-foreground">
-                    <span>{chartMode === "tokens" ? "Tokens" : "Horas"}:</span>
+                    <span>{chartMode === "tokens" ? t("analytics.tokens") : t("analytics.hours")}:</span>
                     <span className="font-medium text-foreground">{val}</span>
                   </div>
                   <div className="flex items-center justify-between gap-4 text-muted-foreground">
-                    <span>Tokens totais:</span>
+                    <span>{t("analytics.totalTokens")}:</span>
                     <span className="tabular-nums text-foreground">{formatTokens(d.tokens)}</span>
                   </div>
                   <div className="flex items-center justify-between gap-4 text-muted-foreground">
-                    <span>Horas:</span>
+                    <span>{t("analytics.hours")}:</span>
                     <span className="tabular-nums text-foreground">{d.hours}h</span>
                   </div>
                   <div className="flex items-center justify-between gap-4 text-muted-foreground">
-                    <span>Custo:</span>
+                    <span>{t("analytics.cost")}:</span>
                     <span className="tabular-nums text-foreground">{d.cost > 0 ? formatCost(d.cost) : "—"}</span>
                   </div>
                 </div>
@@ -195,19 +200,20 @@ function ModelBarChart({ data }: { data: AnalyticsSummary }) {
 }
 
 function StatsGrid({ data }: { data: AnalyticsSummary }) {
+  const { t } = useTranslation();
   const stats = useMemo(
     () => [
-      { label: "Sessões", value: data.totalSessions },
-      { label: "Mensagens", value: data.totalMessages },
-      { label: "Dias ativos", value: data.activeDays },
-      { label: "Sequência atual", value: `${data.currentStreak} dias` },
-      { label: "Maior sequência", value: `${data.longestStreak} dias` },
+      { label: t("analytics.stats.sessions"), value: data.totalSessions },
+      { label: t("analytics.stats.messages"), value: data.totalMessages },
+      { label: t("analytics.stats.activeDays"), value: data.activeDays },
+      { label: t("analytics.stats.currentStreak"), value: t("analytics.stats.days", { count: data.currentStreak }) },
+      { label: t("analytics.stats.longestStreak"), value: t("analytics.stats.days", { count: data.longestStreak }) },
       {
-        label: "Horário de pico",
+        label: t("analytics.stats.peakHour"),
         value: `${String(data.peakHour).padStart(2, "0")}h`,
       },
     ],
-    [data],
+    [data, t],
   );
 
   return (
@@ -236,6 +242,7 @@ function LimitsDialog({
   open: boolean;
   onOpenChange: (v: boolean) => void;
 }) {
+  const { t } = useTranslation();
   const [tokenLimit, setTokenLimit] = useState("");
   const [costLimit, setCostLimit] = useState("");
 
@@ -247,14 +254,14 @@ function LimitsDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-sm">
         <DialogHeader>
-          <DialogTitle>Limites de uso</DialogTitle>
+          <DialogTitle>{t("analytics.limits.title")}</DialogTitle>
           <DialogDescription>
-            Defina limites mensais para controlar o consumo.
+            {t("analytics.limits.description")}
           </DialogDescription>
         </DialogHeader>
         <div className="flex flex-col gap-3">
           <div>
-            <p className="mb-1 text-xs font-medium">Limite mensal de tokens</p>
+            <p className="mb-1 text-xs font-medium">{t("analytics.limits.tokenLimit")}</p>
             <Input
               type="number"
               placeholder="ex: 1000000"
@@ -264,7 +271,7 @@ function LimitsDialog({
           </div>
           <div>
             <p className="mb-1 text-xs font-medium">
-              Limite mensal de gasto (USD)
+              {t("analytics.limits.costLimit")}
             </p>
             <Input
               type="number"
@@ -277,9 +284,9 @@ function LimitsDialog({
         </div>
         <div className="flex justify-end gap-2 pt-2">
           <Button variant="outline" onClick={() => onOpenChange(false)}>
-            Cancelar
+            {t("common.cancel")}
           </Button>
-          <Button onClick={() => void save()}>Salvar</Button>
+          <Button onClick={() => void save()}>{t("common.save")}</Button>
         </div>
       </DialogContent>
     </Dialog>
@@ -287,8 +294,10 @@ function LimitsDialog({
 }
 
 export function AnalyticsPanel() {
+  const { t } = useTranslation();
   const { data, range, loading, load, setRange } = useAnalyticsStore();
   const [limitsOpen, setLimitsOpen] = useState(false);
+  const rangeLabels = useRangeLabels();
 
   useEffect(() => {
     void load();
@@ -298,12 +307,12 @@ export function AnalyticsPanel() {
     <div className="flex h-full min-w-0 flex-col gap-3 overflow-y-auto overflow-x-hidden pr-1">
       {/* Top bar: title (left) ─ toggle (center, separated) ─ limits (right) */}
       <div className="flex items-center justify-between gap-2">
-        <p className="text-sm font-semibold shrink-0">Uso do Orbit</p>
+        <p className="text-sm font-semibold shrink-0">{t("analytics.title")}</p>
         <div className="flex gap-2">
           <SegmentedControl
           options={RANGE_ORDER.map((r) => ({
             value: r,
-            label: RANGE_LABELS[r],
+            label: rangeLabels[r],
           }))}
           value={range}
           onChange={(v) => setRange(v as AnalyticsRange)}
@@ -316,14 +325,14 @@ export function AnalyticsPanel() {
           onClick={() => setLimitsOpen(true)}
         >
           <Zap className="size-3" />
-          <span className="text-[11px]">Limites</span>
+          <span className="text-[11px]">{t("analytics.limits.button")}</span>
         </Button>
         </div>
       </div>
 
       {loading && !data ? (
         <div className="flex items-center justify-center py-8 text-xs text-muted-foreground">
-          Carregando...
+          {t("analytics.loading")}
         </div>
       ) : data ? (
         <>
@@ -339,14 +348,14 @@ export function AnalyticsPanel() {
               <div className="flex justify-end gap-3 text-xs">
                 <div className="flex items-center gap-1.5 rounded-lg border px-3 py-1.5">
                   <Hash className="size-3.5 text-muted-foreground" />
-                  <span className="text-muted-foreground">Tokens:</span>
+                  <span className="text-muted-foreground">{t("analytics.tokens")}:</span>
                   <span className="font-medium tabular-nums text-foreground">
                     {formatTokens(data.totalTokens)}
                   </span>
                 </div>
                 <div className="flex items-center gap-1.5 rounded-lg border px-3 py-1.5">
                   <Clock className="size-3.5 text-muted-foreground" />
-                  <span className="text-muted-foreground">Horas:</span>
+                  <span className="text-muted-foreground">{t("analytics.hours")}:</span>
                   <span className="font-medium tabular-nums text-foreground">
                     {data.totalHours.toFixed(1)}h
                   </span>
@@ -355,7 +364,7 @@ export function AnalyticsPanel() {
                   <span className="font-medium tabular-nums text-foreground">
                     {formatCost(data.totalCost)}
                   </span>
-                  <span className="text-muted-foreground">gasto</span>
+                  <span className="text-muted-foreground">{t("analytics.spent")}</span>
                 </div>
               </div>
             </div>
