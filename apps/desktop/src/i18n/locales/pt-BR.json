@@ -12,6 +12,70 @@
       "data": { "label": "Dados", "description": "Exportar e importar seus dados." }
     }
   },
+  "titlebar": {
+    "minimize": "Minimizar",
+    "restore": "Restaurar",
+    "maximize": "Maximizar",
+    "close": "Fechar",
+    "menu": "Menu",
+    "searchChats": "Buscar conversas",
+    "file": {
+      "title": "Arquivo",
+      "newChat": "Nova conversa",
+      "newCode": "Novo código",
+      "openFolder": "Abrir pasta",
+      "quit": "Sair"
+    },
+    "edit": {
+      "title": "Editar",
+      "undo": "Desfazer",
+      "redo": "Refazer",
+      "cut": "Recortar",
+      "copy": "Copiar",
+      "paste": "Colar"
+    },
+    "view": {
+      "title": "Visualizar",
+      "chats": "Conversas",
+      "fullscreen": "Tela cheia",
+      "reload": "Recarregar"
+    },
+    "help": {
+      "title": "Ajuda",
+      "howItWorks": "Como funciona",
+      "documentation": "Documentação",
+      "about": "Sobre o Orbit"
+    }
+  },
+  "header": {
+    "toggleSidebar": "Alternar sidebar",
+    "newChat": "Nova conversa",
+    "options": "Opções",
+    "pin": "Fixar",
+    "rename": "Renomear",
+    "archive": "Arquivar",
+    "delete": "Deletar",
+    "togglePanel": "Alternar painel"
+  },
+  "panel": {
+    "dropToOpen": "Solte para abrir",
+    "terminalNotFound": "Terminal não encontrado",
+    "newChat": {
+      "title": "Nova conversa",
+      "subtitle": "Digite uma mensagem para começar"
+    },
+    "selector": {
+      "title": "O que deseja abrir?",
+      "workersTitle": "Workers da conversa ativa"
+    },
+    "tabs": {
+      "chat": { "label": "Chat", "description": "Converse com a IA sobre qualquer assunto" },
+      "terminal": { "label": "Terminal", "description": "Execute comandos e scripts" },
+      "folders": { "label": "Pastas", "description": "Navegue pelos arquivos do projeto" },
+      "browser": { "label": "Browser", "description": "Pesquise e visualize páginas web" },
+      "diff": { "label": "Diff", "description": "Alterações das ferramentas" }
+    }
+  },
   "chat": {
     "retry": "Retry",
     "stopped": "Parou por atingir o limite de passos — pode ter ficado incompleto. Peça para continuar.",
