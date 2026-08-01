@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next"
 import {
   ArrowLeftIcon,
   ArrowRightIcon,
@@ -165,28 +166,32 @@ export const WebPreviewNavigationButton = ({
 
 export const WebPreviewBackButton = (props: Omit<WebPreviewNavigationButtonProps, "onClick" | "disabled" | "tooltip">) => {
   const { goBack, canGoBack } = useWebPreview()
-  return <WebPreviewNavigationButton onClick={goBack} disabled={!canGoBack} tooltip="Go back" {...props} />
+  const { t } = useTranslation()
+  return <WebPreviewNavigationButton onClick={goBack} disabled={!canGoBack} tooltip={t("webPreview.back")} {...props} />
 }
 
 export const WebPreviewForwardButton = (props: Omit<WebPreviewNavigationButtonProps, "onClick" | "disabled" | "tooltip">) => {
   const { goForward, canGoForward } = useWebPreview()
-  return <WebPreviewNavigationButton onClick={goForward} disabled={!canGoForward} tooltip="Go forward" {...props} />
+  const { t } = useTranslation()
+  return <WebPreviewNavigationButton onClick={goForward} disabled={!canGoForward} tooltip={t("webPreview.forward")} {...props} />
 }
 
 export const WebPreviewReloadButton = (props: Omit<WebPreviewNavigationButtonProps, "onClick" | "tooltip">) => {
   const { reload } = useWebPreview()
-  return <WebPreviewNavigationButton onClick={reload} tooltip="Reload" {...props} />
+  const { t } = useTranslation()
+  return <WebPreviewNavigationButton onClick={reload} tooltip={t("webPreview.reload")} {...props} />
 }
 
 export const WebPreviewOpenInNewTabButton = (props: Omit<WebPreviewNavigationButtonProps, "onClick" | "tooltip">) => {
   const { url } = useWebPreview()
+  const { t } = useTranslation()
   return (
     <WebPreviewNavigationButton 
       onClick={() => {
         if (url) window.open(url, "_blank")
       }} 
       disabled={!url}
-      tooltip="Open in new tab" 
+      tooltip={t("webPreview.openInNewTab")} 
       {...props} 
     />
   )
@@ -196,6 +201,7 @@ export type WebPreviewUrlProps = ComponentProps<typeof Input>
 
 export const WebPreviewUrl = ({ value, onChange, onKeyDown, ...props }: WebPreviewUrlProps) => {
   const { url, setUrl } = useWebPreview()
+  const { t } = useTranslation()
   const [inputValue, setInputValue] = useState(url)
 
   // Sync input value with context URL when it changes externally
@@ -221,7 +227,7 @@ export const WebPreviewUrl = ({ value, onChange, onKeyDown, ...props }: WebPrevi
       className="h-8 flex-1 text-sm"
       onChange={onChange ?? handleChange}
       onKeyDown={handleKeyDown}
-      placeholder="Enter URL..."
+      placeholder={t("webPreview.enterUrl")}
       value={value ?? inputValue}
       {...props}
     />
@@ -245,6 +251,7 @@ export const WebPreviewBody = ({
   ...props
 }: WebPreviewBodyProps) => {
   const { url, refreshKey, setUrl } = useWebPreview()
+  const { t } = useTranslation()
   const [localUrl, setLocalUrl] = useState("")
 
   if (!url && !src) {
@@ -254,14 +261,14 @@ export const WebPreviewBody = ({
           <Globe className="size-10 text-muted-foreground/80" />
         </div>
         <div className="space-y-1">
-          <h3 className="font-semibold text-foreground text-base">Navegador Web</h3>
+          <h3 className="font-semibold text-foreground text-base">{t("webPreview.emptyTitle")}</h3>
           <p className="text-xs text-muted-foreground max-w-[280px]">
-            Digite um endereço acima ou no campo abaixo para começar a navegar.
+            {t("webPreview.emptyHint")}
           </p>
         </div>
         <div className="flex w-full max-w-xs items-center space-x-2 mt-2">
           <Input 
-            placeholder="Ex: wikipedia.org, bing.com" 
+            placeholder={t("webPreview.urlExample")} 
             value={localUrl}
             onChange={(e) => setLocalUrl(e.target.value)}
             onKeyDown={(e) => {
@@ -272,7 +279,7 @@ export const WebPreviewBody = ({
             className="h-8 text-xs"
           />
           <Button onClick={() => setUrl(localUrl)} size="sm" className="h-8 px-3 text-xs">
-            Ir
+            {t("webPreview.go")}
           </Button>
         </div>
       </div>
@@ -293,7 +300,7 @@ export const WebPreviewBody = ({
         className={cn("bg-white", viewport ? "shrink-0 rounded-md border shadow-sm" : "size-full", className)}
         style={viewport ? { width: viewport.width, height: viewport.height } : undefined}
         src={(src ?? url) || undefined}
-        title="Preview"
+        title={t("webPreview.previewTitle")}
         {...(props as any)}
       />
       {loading}
@@ -316,6 +323,7 @@ export const WebPreviewConsole = ({
   ...props
 }: WebPreviewConsoleProps) => {
   const { consoleOpen, setConsoleOpen } = useWebPreview()
+  const { t } = useTranslation()
 
   return (
     <Collapsible
@@ -324,7 +332,7 @@ export const WebPreviewConsole = ({
       open={consoleOpen}
       {...props}
     >
-      <CollapsibleTrigger render={<Button className="flex w-full items-center justify-between p-4 text-left font-medium hover:bg-muted/50" variant="ghost" />}>Console
+      <CollapsibleTrigger render={<Button className="flex w-full items-center justify-between p-4 text-left font-medium hover:bg-muted/50" variant="ghost" />}>{t("webPreview.console")}
                     <ChevronDownIcon
                       className={cn("h-4 w-4 transition-transform duration-200", consoleOpen && "rotate-180")}
                     /></CollapsibleTrigger>
@@ -336,7 +344,7 @@ export const WebPreviewConsole = ({
       >
         <div className="max-h-48 space-y-1 overflow-y-auto">
           {logs.length === 0 ? (
-            <p className="text-muted-foreground">No console output</p>
+            <p className="text-muted-foreground">{t("webPreview.noConsoleOutput")}</p>
           ) : (
             logs.map((log, index) => (
               <div
