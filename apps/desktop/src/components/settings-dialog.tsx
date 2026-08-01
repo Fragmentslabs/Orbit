@@ -1,4 +1,5 @@
 import { memo, useEffect, useMemo, useRef, useState } from "react"
+import { useTranslation } from "react-i18next"
 import { BarChart3, BookOpen, Database, KeyRound, Palette, Puzzle, Shield, Trash2, Check, Plus, Wifi, WifiOff, RefreshCw, Server, X, Pencil } from "lucide-react"
 import {
   Dialog,
@@ -31,15 +32,18 @@ interface TabDef {
   description: string
 }
 
-const TABS: TabDef[] = [
-  { id: "providers", label: "Provedores", icon: KeyRound, description: "Chaves de API dos provedores de IA." },
-  { id: "autonomy", label: "Preferências", icon: Shield, description: "Modelos padrão, modos ativos e memória." },
-  { id: "mcp-skills", label: "Ferramentas", icon: Puzzle, description: "Servidores MCP e skills do usuário." },
-  { id: "howto", label: "Como Funciona", icon: BookOpen, description: "Explicação dos modos e combinações." },
-  { id: "analytics", label: "Uso e Limites", icon: BarChart3, description: "Estatísticas de uso e consumo de tokens." },
-  { id: "appearance", label: "Aparência", icon: Palette, description: "Tema e modos de exibição." },
-  { id: "data", label: "Dados", icon: Database, description: "Exportar e importar seus dados." },
-]
+function useTabs(): TabDef[] {
+  const { t } = useTranslation()
+  return [
+    { id: "providers", label: t("settings.tabs.providers.label"), icon: KeyRound, description: t("settings.tabs.providers.description") },
+    { id: "autonomy", label: t("settings.tabs.autonomy.label"), icon: Shield, description: t("settings.tabs.autonomy.description") },
+    { id: "mcp-skills", label: t("settings.tabs.mcp-skills.label"), icon: Puzzle, description: t("settings.tabs.mcp-skills.description") },
+    { id: "howto", label: t("settings.tabs.howto.label"), icon: BookOpen, description: t("settings.tabs.howto.description") },
+    { id: "analytics", label: t("settings.tabs.analytics.label"), icon: BarChart3, description: t("settings.tabs.analytics.description") },
+    { id: "appearance", label: t("settings.tabs.appearance.label"), icon: Palette, description: t("settings.tabs.appearance.description") },
+    { id: "data", label: t("settings.tabs.data.label"), icon: Database, description: t("settings.tabs.data.description") },
+  ]
+}
 
 const ProviderRow = memo(function ProviderRow({ providerId }: { providerId: string }) {
   const provider = useProviderStore((s) => s.catalog[providerId])
@@ -413,6 +417,8 @@ interface SettingsDialogProps {
 }
 
 export function SettingsDialog({ open, onOpenChange, initialTab = "providers" }: SettingsDialogProps) {
+  const { t } = useTranslation()
+  const TABS = useTabs()
   const [tab, setTab] = useState<SettingsTab>(initialTab)
   const providerSearchRef = useRef<HTMLInputElement>(null)
 
@@ -420,7 +426,7 @@ export function SettingsDialog({ open, onOpenChange, initialTab = "providers" }:
     if (open) setTab(initialTab)
   }, [initialTab, open])
 
-  const active = TABS.find((t) => t.id === tab) ?? TABS[0]
+  const active = TABS.find((tb) => tb.id === tab) ?? TABS[0]
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -432,9 +438,9 @@ export function SettingsDialog({ open, onOpenChange, initialTab = "providers" }:
         <div className="flex flex-row h-[600px]">
           <nav className="w-48 shrink-0 border-r bg-muted/30 p-2">
             <DialogHeader className="px-2 py-2 text-left">
-              <DialogTitle className="text-sm">Configurações</DialogTitle>
+              <DialogTitle className="text-sm">{t("settings.title")}</DialogTitle>
               <DialogDescription className="text-[11px] sr-only">
-                Configurações do Orbit
+                {t("settings.description")}
               </DialogDescription>
             </DialogHeader>
             <ul className="mt-1 flex flex-col gap-0.5">
