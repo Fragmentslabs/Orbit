@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { useTranslation } from "react-i18next"
 import { BookText, BrainCircuit, Briefcase, Crosshair, Database, Eye, EyeOff, FileUp, Gauge, GraduationCap, Layers, Link2, Package, Palette, Plus, Server, Shield, SlidersHorizontal, Terminal, TestTube, ZoomIn, ZoomOut } from "lucide-react"
 import type { LucideIcon } from "lucide-react"
+import type { TFunction } from "i18next"
 
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
@@ -50,9 +52,9 @@ function nodeRadius(memory: Memory, isRoot: boolean): number {
   return 11 + memory.weight * 5
 }
 
-function nodeLabel(memory: Memory, isRoot: boolean): string {
+function nodeLabel(memory: Memory, isRoot: boolean, t: TFunction): string {
   if (isRoot && memory.projectName) return memory.projectName
-  if (memory.area) return PROJECT_AREAS[memory.area]?.label ?? memory.text
+  if (memory.area) return t(`memories.areas.${memory.area}`, { defaultValue: PROJECT_AREAS[memory.area]?.label ?? memory.text })
   return memory.text.length > 34 ? `${memory.text.slice(0, 34)}…` : memory.text
 }
 
@@ -320,6 +322,7 @@ export function MemoryGraph({ pool, allById, query, selectedId, onSelect, projec
   onSelect: (id: string | null) => void
   projectDirectory?: string
 }) {
+  const { t } = useTranslation()
   const containerRef = useRef<HTMLDivElement>(null)
   const [transform, setTransform] = useState<Transform>({ x: 0, y: 0, k: 1 })
   const [linkSource, setLinkSource] = useState<string | null>(null)
@@ -534,37 +537,37 @@ export function MemoryGraph({ pool, allById, query, selectedId, onSelect, projec
     <div className="flex min-h-0 flex-1 gap-3 overflow-hidden">
       <div className="flex min-w-0 flex-1 flex-col gap-2">
         <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm" className="h-7 gap-1.5 text-xs" onClick={zoomIn} title="Ampliar (Ctrl+=)">
+          <Button variant="outline" size="sm" className="h-7 gap-1.5 text-xs" onClick={zoomIn} title={t("memories.zoomIn")}>
             <ZoomIn className="size-3.5" />
           </Button>
           <span className="min-w-[3rem] text-center text-[11px] tabular-nums text-muted-foreground">
             {Math.round(transform.k * 100)}%
           </span>
-          <Button variant="outline" size="sm" className="h-7 gap-1.5 text-xs" onClick={zoomOut} title="Reduzir (Ctrl+-)">
+          <Button variant="outline" size="sm" className="h-7 gap-1.5 text-xs" onClick={zoomOut} title={t("memories.zoomOut")}>
             <ZoomOut className="size-3.5" />
           </Button>
-          <Button variant="outline" size="sm" className="h-7 gap-1.5 text-xs" onClick={fitView} title="Centralizar (Ctrl+0)">
+          <Button variant="outline" size="sm" className="h-7 gap-1.5 text-xs" onClick={fitView} title={t("memories.centerTitle")}>
             <Crosshair className="size-3.5" />
-            Centralizar
+            {t("memories.center")}
           </Button>
           {collapsedIds.size > 0 && (
             <Button variant="ghost" size="sm" className="h-7 gap-1.5 text-xs" onClick={() => setCollapsedIds(new Set())}>
               <Plus className="size-3.5" />
-              Expandir tudo
+              {t("memories.expandAll")}
             </Button>
           )}
           {linkSource && (
             <span className="flex items-center gap-1 rounded-md border border-primary/40 bg-primary/10 px-2 py-0.5 text-[11px]">
               <Link2 className="size-3" />
-              Ctrl+click no destino para ligar
-              <button className="ml-1 hover:underline" onClick={() => setLinkSource(null)}>cancelar</button>
+              {t("memories.linkPrompt")}
+              <button className="ml-1 hover:underline" onClick={() => setLinkSource(null)}>{t("memories.linkCancel")}</button>
             </span>
           )}
           <span className="ml-auto flex items-center gap-3 text-[11px] text-muted-foreground">
             {(Object.keys(KIND_COLOR) as Array<keyof typeof KIND_COLOR>).map((kind) => (
               <span key={kind} className="flex items-center gap-1">
                 <span className="size-2 rounded-full" style={{ backgroundColor: KIND_COLOR[kind] }} />
-                {KIND_LABEL[kind]}
+                {t(`memories.kinds.${kind}`, { defaultValue: KIND_LABEL[kind] })}
               </span>
             ))}
           </span>
@@ -626,7 +629,7 @@ export function MemoryGraph({ pool, allById, query, selectedId, onSelect, projec
                     onPointerDown={(e) => e.stopPropagation()}
                   >
                     <title>
-                      {`[${KIND_LABEL[memory.kind]}${memory.area ? ` · ${PROJECT_AREAS[memory.area]?.label}` : ""}] ${memory.text}\npeso ${memory.weight.toFixed(2)} · ${memory.hits} usos${stale ? "\n(sem uso há mais de 30 dias)" : ""}${node.collapsed ? "\n(colapsado)" : ""}`}
+                      {`[${t(`memories.kinds.${memory.kind}`, { defaultValue: KIND_LABEL[memory.kind] })}${memory.area ? ` · ${t(`memories.areas.${memory.area}`, { defaultValue: PROJECT_AREAS[memory.area]?.label })}` : ""}] ${memory.text}\n${t("memories.tooltipWeight", { weight: memory.weight.toFixed(2) })} · ${t("memories.uses", { count: memory.hits })}${stale ? `\n${t("memories.tooltipStale")}` : ""}${node.collapsed ? `\n${t("memories.tooltipCollapsed")}` : ""}`}
                     </title>
                     {!node.isRoot && (recent || isSelected || isLinkSource) && (
                       <circle
@@ -664,7 +667,7 @@ export function MemoryGraph({ pool, allById, query, selectedId, onSelect, projec
                         </foreignObject>
                         <text y={node.r + 12} textAnchor="middle" fontSize={11} fontWeight={600}
                           className="fill-foreground select-none">
-                          {nodeLabel(memory, false)}
+                          {nodeLabel(memory, false, t)}
                         </text>
                       </>
                     ) : memory.category && CATEGORY_ICON[memory.category] ? (
@@ -680,7 +683,7 @@ export function MemoryGraph({ pool, allById, query, selectedId, onSelect, projec
                         </foreignObject>
                         <text y={node.r + 12} textAnchor="middle" fontSize={11} fontWeight={600}
                           className="fill-foreground select-none">
-                          {nodeLabel(memory, false)}
+                          {nodeLabel(memory, false, t)}
                         </text>
                       </>
                     ) : (
@@ -688,7 +691,7 @@ export function MemoryGraph({ pool, allById, query, selectedId, onSelect, projec
                         <circle r={node.r} fill={color} fillOpacity={0.22} stroke={color} strokeWidth={1.2} />
                         <text y={node.r + 12} textAnchor="middle" fontSize={10} fontWeight={400}
                           className="fill-foreground select-none">
-                          {nodeLabel(memory, false)}
+                          {nodeLabel(memory, false, t)}
                         </text>
                       </>
                     )}
@@ -781,7 +784,7 @@ export function MemoryGraph({ pool, allById, query, selectedId, onSelect, projec
           {dropActive && (
             <div className="pointer-events-none absolute inset-0 z-10 flex flex-col items-center justify-center gap-2 bg-background/70 text-sm">
               <FileUp className="size-8 text-primary" />
-              <span className="font-medium">Solte o arquivo para criar memória</span>
+              <span className="font-medium">{t("memories.dropFile")}</span>
             </div>
           )}
         </div>
