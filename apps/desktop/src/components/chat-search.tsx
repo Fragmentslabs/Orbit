@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react"
+import { useTranslation } from "react-i18next"
 import { FileCode, MessageSquare } from "lucide-react"
 
 import {
@@ -21,6 +22,7 @@ export function ChatSearch({ open, onOpenChange }: {
   open: boolean
   onOpenChange: (open: boolean) => void
 }) {
+  const { t } = useTranslation()
   const [query, setQuery] = useState("")
   const [results, setResults] = useState<SearchHit[]>([])
   const [loading, setLoading] = useState(false)
@@ -80,7 +82,7 @@ export function ChatSearch({ open, onOpenChange }: {
       >
         <Command shouldFilter={false}>
           <CommandInput
-            placeholder="Buscar conversas..."
+            placeholder={t("search.placeholder")}
             value={query}
             onValueChange={setQuery}
           />
@@ -91,7 +93,7 @@ export function ChatSearch({ open, onOpenChange }: {
               </div>
             )}
             {!loading && query.trim() && results.length === 0 && (
-              <CommandEmpty>Nenhum resultado encontrado</CommandEmpty>
+              <CommandEmpty>{t("search.empty")}</CommandEmpty>
             )}
             {!loading &&
               grouped.map(([sessionId, group]) => (
@@ -110,7 +112,7 @@ export function ChatSearch({ open, onOpenChange }: {
               ))}
             {!query.trim() && (
               <div className="px-2.5 py-6 text-center text-xs text-muted-foreground">
-                Digite para buscar em todas as conversas
+                {t("search.hint")}
               </div>
             )}
           </CommandList>
