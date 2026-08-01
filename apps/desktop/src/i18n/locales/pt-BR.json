@@ -58,5 +58,64 @@
     "save": "Salvar",
     "cancel": "Cancelar",
     "add": "Adicionar"
+  },
+  "appearance": {
+    "title": "Aparência",
+    "description": "Personalize a visualização do Orbit.",
+    "theme": {
+      "title": "Tema",
+      "light": "Claro",
+      "dark": "Escuro",
+      "system": "Sistema"
+    },
+    "displayMode": {
+      "title": "Modos de exibição",
+      "toggles": { "label": "Toggles", "hint": "Modos como toggles inline. Configurações avançadas no gear (⚙️)." },
+      "actions": { "label": "Ações", "hint": "Sem toggles inline. Todos os modos no botão \"+\"." },
+      "both": { "label": "Ambos", "hint": "Toggles inline + modos avançados também no botão \"+\"." }
+    },
+    "persona": {
+      "title": "Persona",
+      "show": "Mostrar persona"
+    }
+  },
+  "providers": {
+    "title": "Provedores de IA",
+    "description": "Adicione chaves de API para habilitar provedores. As chaves ficam salvas apenas neste computador.",
+    "connected": "Conectado",
+    "removeKey": "Remover chave",
+    "addKey": "Adicionar chave",
+    "apiKeyPlaceholder": "Chave de API do {{name}}",
+    "local": {
+      "title": "Provedores Locais",
+      "detect": "Detectar servidores locais",
+      "add": "Adicionar",
+      "notConnected": "Não conectado",
+      "edit": "Editar",
+      "remove": "Remover",
+      "none": "Nenhum provedor local configurado. Adicione um ou use \"Detectar\"."
+    },
+    "cloud": {
+      "title": "Provedores da Nuvem",
+      "searchPlaceholder": "Pesquisar provedor…",
+      "none": "Nenhum provedor encontrado"
+    },
+    "detect": {
+      "online": "Online",
+      "offline": "Offline",
+      "models": "{{count}} modelos"
+    },
+    "dialog": {
+      "editTitle": "Editar provedor local",
+      "addTitle": "Adicionar provedor local",
+      "description": "Configure um servidor local compatível com OpenAI (Ollama, LM Studio, etc.).",
+      "id": "ID",
+      "name": "Nome",
+      "namePlaceholder": "Meu Ollama",
+      "baseUrl": "Base URL",
+      "apiKey": "Chave de API",
+      "optional": "(opcional)",
+      "apiKeyPlaceholder": "Deixe em branco para manter a atual"
+    }
   }
 }

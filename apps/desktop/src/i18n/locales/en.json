@@ -58,5 +58,64 @@
     "save": "Save",
     "cancel": "Cancel",
     "add": "Add"
+  },
+  "appearance": {
+    "title": "Appearance",
+    "description": "Customize how Orbit looks.",
+    "theme": {
+      "title": "Theme",
+      "light": "Light",
+      "dark": "Dark",
+      "system": "System"
+    },
+    "displayMode": {
+      "title": "Display modes",
+      "toggles": { "label": "Toggles", "hint": "Modes as inline toggles. Advanced settings in the gear (⚙️)." },
+      "actions": { "label": "Actions", "hint": "No inline toggles. All modes in the \"+\" button." },
+      "both": { "label": "Both", "hint": "Inline toggles + advanced modes also in the \"+\" button." }
+    },
+    "persona": {
+      "title": "Persona",
+      "show": "Show persona"
+    }
+  },
+  "providers": {
+    "title": "AI Providers",
+    "description": "Add API keys to enable providers. Keys are only saved on this computer.",
+    "connected": "Connected",
+    "removeKey": "Remove key",
+    "addKey": "Add key",
+    "apiKeyPlaceholder": "{{name}} API key",
+    "local": {
+      "title": "Local Providers",
+      "detect": "Detect local servers",
+      "add": "Add",
+      "notConnected": "Not connected",
+      "edit": "Edit",
+      "remove": "Remove",
+      "none": "No local provider configured. Add one or use \"Detect\"."
+    },
+    "cloud": {
+      "title": "Cloud Providers",
+      "searchPlaceholder": "Search provider…",
+      "none": "No provider found"
+    },
+    "detect": {
+      "online": "Online",
+      "offline": "Offline",
+      "models": "{{count}} models"
+    },
+    "dialog": {
+      "editTitle": "Edit local provider",
+      "addTitle": "Add local provider",
+      "description": "Configure an OpenAI-compatible local server (Ollama, LM Studio, etc.).",
+      "id": "ID",
+      "name": "Name",
+      "namePlaceholder": "My Ollama",
+      "baseUrl": "Base URL",
+      "apiKey": "API Key",
+      "optional": "(optional)",
+      "apiKeyPlaceholder": "Leave blank to keep the current one"
+    }
   }
 }

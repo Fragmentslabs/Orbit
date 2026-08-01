@@ -1,39 +1,49 @@
 import { Sun, Moon, Monitor, List, Square, Layers, Smile } from "lucide-react"
+import { useTranslation } from "react-i18next"
 import { useTheme } from "@/components/theme-provider"
 import { useAppearanceStore, type DisplayMode } from "@/src/stores/appearance-store"
 
 type ThemePref = "light" | "dark" | "system"
 
-const themeChips: { value: ThemePref; label: string; icon: typeof Sun }[] = [
-  { value: "light", label: "Claro", icon: Sun },
-  { value: "dark", label: "Escuro", icon: Moon },
-  { value: "system", label: "Sistema", icon: Monitor },
-]
+function useThemeChips(): { value: ThemePref; label: string; icon: typeof Sun }[] {
+  const { t } = useTranslation()
+  return [
+    { value: "light", label: t("appearance.theme.light"), icon: Sun },
+    { value: "dark", label: t("appearance.theme.dark"), icon: Moon },
+    { value: "system", label: t("appearance.theme.system"), icon: Monitor },
+  ]
+}
 
-const modeChips: { value: DisplayMode; label: string; icon: typeof List; hint: string }[] = [
-  { value: "toggles", label: "Toggles", icon: List, hint: "Modos como toggles inline. Configurações avançadas no gear (⚙️)." },
-  { value: "actions", label: "Ações", icon: Square, hint: "Sem toggles inline. Todos os modos no botão \"+\"." },
-  { value: "both", label: "Ambos", icon: Layers, hint: "Toggles inline + modos avançados também no botão \"+\"." },
-]
+function useModeChips(): { value: DisplayMode; label: string; icon: typeof List; hint: string }[] {
+  const { t } = useTranslation()
+  return [
+    { value: "toggles", label: t("appearance.displayMode.toggles.label"), icon: List, hint: t("appearance.displayMode.toggles.hint") },
+    { value: "actions", label: t("appearance.displayMode.actions.label"), icon: Square, hint: t("appearance.displayMode.actions.hint") },
+    { value: "both", label: t("appearance.displayMode.both.label"), icon: Layers, hint: t("appearance.displayMode.both.hint") },
+  ]
+}
 
 export function AppearancePanel() {
+  const { t } = useTranslation()
   const { theme, setTheme } = useTheme()
   const displayMode = useAppearanceStore((s) => s.displayMode)
   const setDisplayMode = useAppearanceStore((s) => s.setDisplayMode)
   const personaVisible = useAppearanceStore((s) => s.personaVisible)
   const setPersonaVisible = useAppearanceStore((s) => s.setPersonaVisible)
+  const themeChips = useThemeChips()
+  const modeChips = useModeChips()
 
   return (
     <div className="flex h-full flex-col gap-6 overflow-y-auto pr-1">
       <div>
-        <p className="text-sm font-semibold">Aparência</p>
+        <p className="text-sm font-semibold">{t("appearance.title")}</p>
         <p className="mt-0.5 text-xs text-muted-foreground">
-          Personalize a visualização do Orbit.
+          {t("appearance.description")}
         </p>
       </div>
 
       <div>
-        <p className="mb-2 text-xs font-medium text-muted-foreground">Tema</p>
+        <p className="mb-2 text-xs font-medium text-muted-foreground">{t("appearance.theme.title")}</p>
         <div className="flex gap-2">
           {themeChips.map(({ value, label, icon: Icon }) => {
             const active = theme === value
@@ -57,7 +67,7 @@ export function AppearancePanel() {
       </div>
 
       <div>
-        <p className="mb-2 text-xs font-medium text-muted-foreground">Modos de exibição</p>
+        <p className="mb-2 text-xs font-medium text-muted-foreground">{t("appearance.displayMode.title")}</p>
         <div className="flex flex-col gap-2">
           <div className="flex gap-2">
             {modeChips.map(({ value, label, icon: Icon }) => {
@@ -86,10 +96,10 @@ export function AppearancePanel() {
       </div>
 
       <div className="border-t pt-4">
-        <p className="mb-3 text-xs font-medium text-muted-foreground">Persona</p>
+        <p className="mb-3 text-xs font-medium text-muted-foreground">{t("appearance.persona.title")}</p>
         <label className="flex cursor-pointer items-center gap-3 rounded-lg border border-input bg-background px-3 py-2.5 transition-colors hover:bg-accent/50">
           <Smile className="size-4 text-muted-foreground" />
-          <span className="flex-1 text-sm">Mostrar persona</span>
+          <span className="flex-1 text-sm">{t("appearance.persona.show")}</span>
           <button
             type="button"
             role="switch"
