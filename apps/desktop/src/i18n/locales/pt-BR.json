@@ -12,6 +12,39 @@
       "data": { "label": "Dados", "description": "Exportar e importar seus dados." }
     }
   },
+  "howto": {
+    "title": "Modos e Ferramentas",
+    "description": "O Orbit oferece vários modos que modificam o comportamento do agente. Ative-os antes de enviar a mensagem e combine-os para tarefas mais complexas.",
+    "combosWith": "Combina bem com:",
+    "recommended": {
+      "title": "Combinações Recomendadas",
+      "description": "Alguns modos funcionam melhor juntos. Aqui estão combinações testadas:"
+    },
+    "tip": {
+      "title": "Dica",
+      "text": "Todos os modos e suas configurações ficam disponíveis no input de mensagem. Use os toggles abaixo do input para ativar/desativar rapidamente, ou clique no botão \"+\" para acessar Subagents, Orchestra e Loop com suas configurações avançadas."
+    },
+    "modes": [
+      { "id": "search", "label": "Pesquisa", "modes": ["Chat", "Código"], "description": "Busca e lê páginas da web via HTTP.", "detail": "Adiciona as ferramentas websearch e webfetch ao agente. Rápido e eficiente para consultar documentação, APIs e informações públicas. Não executa JavaScript — ideal para conteúdo estático.", "combo": ["Browser", "Thinking"] },
+      { "id": "browser", "label": "Browser", "modes": ["Chat"], "description": "Navega em páginas como um browser real.", "detail": "Abre o painel direito com um navegador completo. Executa JavaScript, ideal para SPAs, formulários e páginas dinâmicas. O agente pode navegar, clicar, preencher campos e tirar screenshots.", "combo": ["Pesquisa", "Thinking"] },
+      { "id": "thinking", "label": "Thinking", "modes": ["Chat", "Código"], "description": "Raciocínio estendido do modelo.", "detail": "Ativa o modo reasoning/thinking do modelo (quando suportado). O modelo \"pensa\" antes de responder, resultando em respostas mais profundas e bem fundamentadas. Consome mais tokens e tempo.", "combo": ["Pesquisa", "Browser", "Loop"] },
+      { "id": "simple", "label": "Simples", "modes": ["Chat", "Código"], "description": "Respostas diretas em texto puro.", "detail": "Remove formatação avançada, citações e blocos de ferramentas da resposta. Útil quando você quer apenas o conteúdo essencial, sem enfeites.", "combo": [] },
+      { "id": "brain", "label": "Memória (Brain)", "modes": ["Chat", "Código"], "description": "Orbit lembra fatos e preferências entre conversas.", "detail": "Adiciona as ferramentas memory_save/search/link/open/graph. O Orbit pode salvar fatos, preferências e decisões e recuperá-los automaticamente em conversas futuras. Desative por chat se preferir uma interação sem contexto.", "combo": [] },
+      { "id": "subagents", "label": "Subagents", "modes": ["Chat", "Código"], "description": "Workers efêmeros em background para tarefas paralelas.", "detail": "Adiciona a ferramenta subagent ao agente. Quando o agente identifica subtarefas independentes, ele pode delegá-las a workers efêmeros que rodam em background com o modelo configurado. Os workers são descartados ao fim da tarefa — não aparecem na sidebar.", "combo": ["Loop", "Orchestra"] },
+      { "id": "orchestra", "label": "Orchestra", "modes": ["Código"], "description": "Divide o pedido em plano de tarefas + workers persistentes.", "detail": "O agente orquestrador planeja a tarefa (criando subtarefas com create_task), propõe o plano para sua aprovação e, após aprovado, executa cada subtarefa como uma sessão filha persistente no painel direito. Os workers rodam em paralelo com o modelo worker configurado. Resultado final é sintetizado pelo orquestrador.", "combo": ["Loop", "Subagents"] },
+      { "id": "loop", "label": "Loop", "modes": ["Código"], "description": "Agente revisa e itera até completar a tarefa.", "detail": "Após cada resposta, o sistema revisa criticamente o resultado. Se o objetivo não foi totalmente atingido, o agente continua trabalhando automaticamente (nova iteração). O número máximo de iterações e o comportamento (automático ou com confirmação) são configuráveis no gear. Ideal para tarefas complexas que exigem refinamento.", "combo": ["Subagents", "Orchestra", "Thinking"] },
+      { "id": "plan", "label": "Modo Plano", "modes": ["Código"], "description": "Apenas leitura — produz um plano sem editar arquivos.", "detail": "Bloqueia ferramentas de escrita (write, edit, bash). O agente apenas lê o código e produz um plano de implementação detalhado. Útil para revisão e planejamento antes de executar alterações.", "combo": ["Thinking", "Pesquisa"] },
+      { "id": "permissions", "label": "Permissões", "modes": ["Código"], "description": "Controle de segurança sobre ações do agente.", "detail": "Três níveis: Ask (pergunta antes de cada ação crítica), Approve (mostra resumo para aprovação), Full (executa automaticamente). Configurável no modal de Preferências ou diretamente no input.", "combo": [] }
+    ],
+    "combos": [
+      { "label": "Pesquisa aprofundada", "items": ["Pesquisa", "Browser", "Thinking"], "description": "Ative Pesquisa + Browser + Thinking juntos. O agente searching, navega em páginas complexas e raciocina profundamente sobre o que encontrou. Ideal para investigar tópicos técnicos, comparar documentações ou fazer análise competitiva." },
+      { "label": "Refinamento automático", "items": ["Loop", "Thinking"], "description": "Loop + Thinking: o agente revisa o próprio resultado com raciocínio estendido, identificando gaps e refinando até o objetivo ser atingido. Excelente para gerar código robusto, testes completos ou documentação detalhada." },
+      { "label": "Orquestração com revisão", "items": ["Orchestra", "Loop"], "description": "Orchestra + Loop: o orquestrador divide o problema em tarefas, workers executam em paralelo, e após a síntese o loop revisa o resultado, criando workers de continuação se necessário. O melhor dos dois mundos para problemas complexos." },
+      { "label": "Workers em múltiplas frentes", "items": ["Orchestra", "Subagents"], "description": "Orchestra + Subagents: o orquestrador coordena tarefas de alto nível (workers persistentes na sidebar), e dentro de cada tarefa o worker pode usar subagents efêmeros para investigações pontuais. Máximo de paralelismo." },
+      { "label": "Planejamento cuidadoso", "items": ["Modo Plano", "Thinking", "Pesquisa"], "description": "Modo Plano + Thinking + Pesquisa: antes de qualquer alteração, o agente pesquisa documentação, raciocina profundamente e produz um plano detalhado de implementação sem modificar arquivos. Aprove o plano e depois execute com as ferramentas normais." },
+      { "label": "Código com segurança", "items": ["Permissão: Ask", "Loop"], "description": "Permissão Ask + Loop: a cada iteração do loop, o agente pode pedir permissão antes de ações sensíveis (editar arquivos, executar comandos). Seguro para revisar código de terceiros ou fazer alterações em produção." }
+    ]
+  },
   "preferences": {
     "title": "Preferências",
     "description": "Configure modelos padrão e modos ativos para cada modo.",
@@ -77,6 +110,27 @@
     "persona": {
       "title": "Persona",
       "show": "Mostrar persona"
+    }
+  },
+  "data": {
+    "export": {
+      "title": "Exportar dados",
+      "description": "Baixe todos os seus dados (sessões, mensagens, memórias, skills, configurações) em um arquivo ZIP. Snapshots git e caches de modelo não são incluídos.",
+      "button": "Exportar",
+      "success": "Dados exportados para: {{path}}",
+      "error": "Erro ao exportar: {{message}}"
+    },
+    "import": {
+      "title": "Importar dados",
+      "description": "Selecione um arquivo ZIP exportado anteriormente para restaurar seus dados. Isso substituirá todos os dados atuais.",
+      "button": "Importar",
+      "confirm": "Importar dados substituirá seus dados atuais. Deseja continuar?",
+      "success": "Dados importados com sucesso! Recarregando interface…",
+      "error": "Erro ao importar: {{message}}"
+    },
+    "apiKeys": {
+      "title": "Chaves de API",
+      "description": "Incluir chaves salvas no backup"
     }
   },
   "providers": {

@@ -1,4 +1,5 @@
 import { useState } from "react"
+import { useTranslation } from "react-i18next"
 import { Download, Upload, AlertTriangle, CheckCircle2, Loader2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
@@ -20,6 +21,7 @@ function collectLocalStorage(): Record<string, string> {
 }
 
 export function DataPanel() {
+  const { t } = useTranslation()
   const [includeAuth, setIncludeAuth] = useState(false)
   const [exporting, setExporting] = useState(false)
   const [importing, setImporting] = useState(false)
@@ -32,16 +34,16 @@ export function DataPanel() {
       const ls = collectLocalStorage()
       const result = await dataApi.export(includeAuth, ls)
       if (result.cancelled) return
-      setMessage({ type: "success", text: `Dados exportados para: ${result.filePath}` })
+      setMessage({ type: "success", text: t("data.export.success", { path: result.filePath }) })
     } catch (e) {
-      setMessage({ type: "error", text: `Erro ao exportar: ${(e as Error).message}` })
+      setMessage({ type: "error", text: t("data.export.error", { message: (e as Error).message }) })
     } finally {
       setExporting(false)
     }
   }
 
   const handleImport = async () => {
-    if (!window.confirm("Importar dados substituirá seus dados atuais. Deseja continuar?")) return
+    if (!window.confirm(t("data.import.confirm"))) return
     setImporting(true)
     setMessage(null)
     try {
@@ -56,10 +58,10 @@ export function DataPanel() {
           localStorage.setItem(k, v)
         }
       }
-      setMessage({ type: "success", text: "Dados importados com sucesso! Recarregando interface…" })
+      setMessage({ type: "success", text: t("data.import.success") })
       setTimeout(() => window.location.reload(), 1500)
     } catch (e) {
-      setMessage({ type: "error", text: `Erro ao importar: ${(e as Error).message}` })
+      setMessage({ type: "error", text: t("data.import.error", { message: (e as Error).message }) })
     } finally {
       setImporting(false)
     }
@@ -68,17 +70,16 @@ export function DataPanel() {
   return (
     <div className="flex h-full flex-col gap-4 overflow-y-auto pr-1">
       <div>
-        <p className="text-sm font-semibold">Exportar dados</p>
+        <p className="text-sm font-semibold">{t("data.export.title")}</p>
         <p className="mt-0.5 text-xs text-muted-foreground">
-          Baixe todos os seus dados (sessões, mensagens, memórias, skills, configurações) em um
-          arquivo ZIP. Snapshots git e caches de modelo não são incluídos.
+          {t("data.export.description")}
         </p>
       </div>
 
       <div className="flex items-center justify-between rounded-lg border p-3">
         <div className="flex flex-col gap-0.5">
-          <span className="text-sm font-medium">Chaves de API</span>
-          <span className="text-xs text-muted-foreground">Incluir chaves salvas no backup</span>
+          <span className="text-sm font-medium">{t("data.apiKeys.title")}</span>
+          <span className="text-xs text-muted-foreground">{t("data.apiKeys.description")}</span>
         </div>
         <button
           type="button"
@@ -102,14 +103,13 @@ export function DataPanel() {
 
       <Button disabled={exporting} onClick={() => void handleExport()} className="gap-2 self-start">
         {exporting ? <Loader2 className="size-4 animate-spin" /> : <Download className="size-4" />}
-        Exportar
+        {t("data.export.button")}
       </Button>
 
       <div className="mt-4 border-t pt-4">
-        <p className="text-sm font-semibold">Importar dados</p>
+        <p className="text-sm font-semibold">{t("data.import.title")}</p>
         <p className="mt-0.5 text-xs text-muted-foreground">
-          Selecione um arquivo ZIP exportado anteriormente para restaurar seus dados. Isso
-          substituirá todos os dados atuais.
+          {t("data.import.description")}
         </p>
       </div>
 
@@ -120,7 +120,7 @@ export function DataPanel() {
         className="gap-2 self-start"
       >
         {importing ? <Loader2 className="size-4 animate-spin" /> : <Upload className="size-4" />}
-        Importar
+        {t("data.import.button")}
       </Button>
 
       {message && (
