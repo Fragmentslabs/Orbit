@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next"
 import { Check, Circle, LoaderCircle } from "lucide-react"
 import { cn } from "@/lib/utils"
 import type { ToolPart } from "@shared/chat"
@@ -26,6 +27,7 @@ function StatusIcon({ status }: { status: TodoItem["status"] }) {
 }
 
 export function TodoList({ part, stale }: { part: ToolPart; stale?: boolean }) {
+  const { t } = useTranslation()
   const items = itemsOf(part)
   if (items.length === 0) return null
   const done = items.filter((i) => i.status === "completed").length
@@ -33,7 +35,7 @@ export function TodoList({ part, stale }: { part: ToolPart; stale?: boolean }) {
   if (stale) {
     return (
       <p className="not-prose my-1 text-xs text-muted-foreground">
-        TODO ({done}/{items.length} concluídos) — atualizada mais abaixo
+        {t("todo.stale", { count: done, total: items.length })}
       </p>
     )
   }
@@ -41,7 +43,7 @@ export function TodoList({ part, stale }: { part: ToolPart; stale?: boolean }) {
   return (
     <div className="not-prose my-2 flex w-full flex-col gap-1 rounded-lg border bg-card/50 p-3">
       <p className="text-xs font-medium text-muted-foreground">
-        Tarefas ({done}/{items.length})
+        {t("todo.title", { count: done, total: items.length })}
       </p>
       {items.map((item, i) => (
         <div key={i} className="flex items-start gap-2 text-sm">
@@ -58,7 +60,7 @@ export function TodoList({ part, stale }: { part: ToolPart; stale?: boolean }) {
           >
             {item.content}
             {item.priority === "high" && item.status !== "completed" && (
-              <span className="ml-1.5 text-[10px] font-medium text-amber-500">alta</span>
+              <span className="ml-1.5 text-[10px] font-medium text-amber-500">{t("todo.high")}</span>
             )}
           </span>
         </div>

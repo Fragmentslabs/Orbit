@@ -1,4 +1,5 @@
 import type { ChatStatus, FileUIPart } from "ai"
+import { useTranslation } from "react-i18next"
 import {
   CornerDownLeftIcon,
   ImageIcon,
@@ -267,13 +268,14 @@ export type PromptInputAttachmentProps = HTMLAttributes<HTMLDivElement> & {
 
 export function PromptInputAttachment({ data, className, ...props }: PromptInputAttachmentProps) {
   const attachments = usePromptInputAttachments()
+  const { t } = useTranslation()
 
   const filename = data.filename || ""
 
   const mediaType = data.mediaType?.startsWith("image/") && data.url ? "image" : "file"
   const isImage = mediaType === "image"
 
-  const attachmentLabel = filename || (isImage ? "Image" : "Attachment")
+  const attachmentLabel = filename || (isImage ? t("attachments.image") : t("attachments.file"))
 
   return (
     <PromptInputHoverCard>
@@ -284,7 +286,7 @@ export function PromptInputAttachment({ data, className, ...props }: PromptInput
                       <div className="absolute inset-0 flex size-5 items-center justify-center overflow-hidden rounded bg-background transition-opacity group-hover:opacity-0">
                         {isImage ? (
                           <img
-                            alt={filename || "attachment"}
+                            alt={filename || t("attachments.attachment")}
                             className="size-5 object-cover"
                             height={20}
                             src={data.url}
@@ -297,7 +299,7 @@ export function PromptInputAttachment({ data, className, ...props }: PromptInput
                         )}
                       </div>
                       <Button
-                        aria-label="Remove attachment"
+                        aria-label={t("attachments.remove")}
                         className="absolute inset-0 size-5 cursor-pointer rounded p-0 opacity-0 transition-opacity group-hover:pointer-events-auto group-hover:opacity-100 [&>svg]:size-2.5"
                         onClick={e => {
                           e.stopPropagation()
@@ -307,7 +309,7 @@ export function PromptInputAttachment({ data, className, ...props }: PromptInput
                         variant="ghost"
                       >
                         <XIcon />
-                        <span className="sr-only">Remove</span>
+                        <span className="sr-only">{t("attachments.remove")}</span>
                       </Button>
                     </div><span className="flex-1 truncate">{attachmentLabel}</span></HoverCardTrigger>
       <PromptInputHoverCardContent className="w-auto p-2">
@@ -315,7 +317,7 @@ export function PromptInputAttachment({ data, className, ...props }: PromptInput
           {isImage && (
             <div className="flex max-h-36 w-36 items-center justify-center overflow-hidden rounded-md border">
               <img
-                alt={filename || "attachment preview"}
+                alt={filename || t("attachments.preview")}
                 className="max-h-full max-w-full object-contain"
                 height={144}
                 src={data.url}
@@ -326,7 +328,7 @@ export function PromptInputAttachment({ data, className, ...props }: PromptInput
           <div className="flex items-center gap-2.5">
             <div className="min-w-0 flex-1 space-y-1 px-0.5">
               <h4 className="truncate font-semibold text-sm leading-none">
-                {filename || (isImage ? "Image" : "Attachment")}
+                {filename || (isImage ? t("attachments.image") : t("attachments.file"))}
               </h4>
               {data.mediaType && (
                 <p className="truncate font-mono text-muted-foreground text-xs">{data.mediaType}</p>
@@ -368,10 +370,11 @@ export type PromptInputActionAddAttachmentsProps = ComponentProps<typeof Dropdow
 }
 
 export const PromptInputActionAddAttachments = ({
-  label = "Add photos or files",
+  label,
   ...props
 }: PromptInputActionAddAttachmentsProps) => {
   const attachments = usePromptInputAttachments()
+  const { t } = useTranslation()
 
   return (
     <DropdownMenuItem
@@ -380,7 +383,7 @@ export const PromptInputActionAddAttachments = ({
         attachments.openFileDialog()
       }}
     >
-      <ImageIcon className="mr-2 size-4" /> {label}
+      <ImageIcon className="mr-2 size-4" /> {label ?? t("input.attachFiles")}
     </DropdownMenuItem>
   )
 }
@@ -706,16 +709,17 @@ export const PromptInput = ({
   }
 
   // Render with or without local provider
+  const { t } = useTranslation()
   const inner = (
     <>
       <input
         accept={accept}
-        aria-label="Upload files"
+        aria-label={t("input.uploadFiles")}
         className="hidden"
         multiple={multiple}
         onChange={handleChange}
         ref={inputRef}
-        title="Upload files"
+        title={t("input.uploadFiles")}
         type="file"
       />
       {(() => {
@@ -937,6 +941,7 @@ export const PromptInputSubmit = ({
   children,
   ...props
 }: PromptInputSubmitProps) => {
+  const { t } = useTranslation()
   let Icon = <CornerDownLeftIcon className="size-4" />
 
   if (status === "submitted") {
@@ -949,7 +954,7 @@ export const PromptInputSubmit = ({
 
   return (
     <InputGroupButton
-      aria-label="Submit"
+      aria-label={t("input.submit")}
       className={cn(className)}
       size={size}
       type="submit"

@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import type { TokenUsage } from "@shared/chat"
 import { formatCost, formatTokens } from "@/src/lib/format"
@@ -8,9 +9,11 @@ import { formatCost, formatTokens } from "@/src/lib/format"
  */
 
 export function MessageUsage({ tokens }: { tokens: TokenUsage }) {
+  const { t, i18n } = useTranslation()
+  const nf = new Intl.NumberFormat(i18n.language)
   const summary = [
-    `${formatTokens(tokens.input)} in`,
-    `${formatTokens(tokens.output)} out`,
+    t("usage.inputIn", { count: formatTokens(tokens.input) }),
+    t("usage.outputOut", { count: formatTokens(tokens.output) }),
     tokens.cost !== undefined ? formatCost(tokens.cost) : null,
   ]
     .filter(Boolean)
@@ -27,20 +30,20 @@ export function MessageUsage({ tokens }: { tokens: TokenUsage }) {
       </TooltipTrigger>
       <TooltipContent side="top">
         <div className="flex flex-col gap-0.5 text-xs">
-          <span>Entrada: {tokens.input.toLocaleString("pt-BR")} tokens</span>
-          <span>Saída: {tokens.output.toLocaleString("pt-BR")} tokens</span>
-          {tokens.reasoning > 0 && <span>Reasoning: {tokens.reasoning.toLocaleString("pt-BR")}</span>}
-          {tokens.cacheRead > 0 && <span>Cache lido: {tokens.cacheRead.toLocaleString("pt-BR")}</span>}
-          {tokens.cacheWrite > 0 && <span>Cache gravado: {tokens.cacheWrite.toLocaleString("pt-BR")}</span>}
-          {tokens.cost !== undefined && <span>Custo: {formatCost(tokens.cost)}</span>}
+          <span>{t("usage.inputLine", { count: nf.format(tokens.input) })}</span>
+          <span>{t("usage.outputLine", { count: nf.format(tokens.output) })}</span>
+          {tokens.reasoning > 0 && <span>{t("usage.reasoningLine", { count: nf.format(tokens.reasoning) })}</span>}
+          {tokens.cacheRead > 0 && <span>{t("usage.cacheReadLine", { count: nf.format(tokens.cacheRead) })}</span>}
+          {tokens.cacheWrite > 0 && <span>{t("usage.cacheWriteLine", { count: nf.format(tokens.cacheWrite) })}</span>}
+          {tokens.cost !== undefined && <span>{t("usage.costLine", { cost: formatCost(tokens.cost) })}</span>}
           {tokens.lastStep && (
             <>
               <div className="my-0.5 border-t border-border" />
               <span className="text-muted-foreground">
-                Contexto atual: {(tokens.lastStep.input + tokens.lastStep.output).toLocaleString("pt-BR")} tokens
+                {t("usage.currentContext", { count: nf.format(tokens.lastStep.input + tokens.lastStep.output) })}
               </span>
               <span className="text-muted-foreground/70">
-                (entrada/saída acima somam todas as chamadas de tool desta resposta — não é o tamanho do contexto)
+                {t("usage.note")}
               </span>
             </>
           )}

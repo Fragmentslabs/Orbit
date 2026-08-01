@@ -1,4 +1,5 @@
 import { useState } from "react"
+import { useTranslation } from "react-i18next"
 import { ImageOff } from "lucide-react"
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog"
 import { cn } from "@/lib/utils"
@@ -13,6 +14,7 @@ export function Image({ src, alt, className }: {
   alt?: string
   className?: string
 }) {
+  const { t } = useTranslation()
   const [open, setOpen] = useState(false)
   const [failed, setFailed] = useState(false)
 
@@ -20,7 +22,7 @@ export function Image({ src, alt, className }: {
     return (
       <div className="not-prose my-2 flex w-fit items-center gap-2 rounded-lg border border-dashed px-3 py-2 text-xs text-muted-foreground">
         <ImageOff className="size-3.5" />
-        Imagem indisponível{alt ? ` — ${alt}` : ""}
+        {t("images.unavailable")}{alt ? ` — ${alt}` : ""}
       </div>
     )
   }
@@ -31,12 +33,12 @@ export function Image({ src, alt, className }: {
         <button
           type="button"
           onClick={() => setOpen(true)}
-          title="Ampliar imagem"
+          title={t("images.enlarge")}
           className="block cursor-zoom-in overflow-hidden rounded-lg border bg-muted/30 transition-colors hover:border-ring"
         >
           <img
             src={src}
-            alt={alt ?? "Imagem do assistente"}
+            alt={alt ?? t("images.assistantImage")}
             loading="lazy"
             onError={() => setFailed(true)}
             className="max-h-80 w-auto max-w-full object-contain"
@@ -49,10 +51,10 @@ export function Image({ src, alt, className }: {
 
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="max-w-5xl p-2">
-          <DialogTitle className="sr-only">{alt ?? "Imagem do assistente"}</DialogTitle>
+          <DialogTitle className="sr-only">{alt ?? t("images.assistantImage")}</DialogTitle>
           <img
             src={src}
-            alt={alt ?? "Imagem do assistente"}
+            alt={alt ?? t("images.assistantImage")}
             className="max-h-[82vh] w-full rounded-md object-contain"
           />
           {alt && <p className="px-1 pb-1 text-center text-xs text-muted-foreground">{alt}</p>}
