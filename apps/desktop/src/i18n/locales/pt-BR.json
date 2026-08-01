@@ -12,6 +12,47 @@
       "data": { "label": "Dados", "description": "Exportar e importar seus dados." }
     }
   },
+  "chat": {
+    "retry": "Retry",
+    "stopped": "Parou por atingir o limite de passos — pode ter ficado incompleto. Peça para continuar.",
+    "copy": "Copiar",
+    "revert": "Reverter até aqui",
+    "exploring": "Explorando {{label}}…",
+    "failed": "falhou",
+    "researching": "Pesquisando…",
+    "researchDone_one": "Pesquisa concluída · {{count}} etapa",
+    "researchDone_other": "Pesquisa concluída · {{count}} etapas",
+    "thinking": "Pensando…",
+    "steps": {
+      "websearch": "Pesquisando",
+      "webfetch": "Lendo página",
+      "browser_open": "Navegando",
+      "browser_links": "Coletando links"
+    },
+    "actions": {
+      "read": "Lendo",
+      "write": "Escrevendo",
+      "edit": "Editando",
+      "ls": "Listando",
+      "glob": "Buscando arquivos",
+      "grep": "Procurando",
+      "bash": "Executando",
+      "websearch": "Pesquisando",
+      "webfetch": "Lendo página"
+    },
+    "code": {
+      "working": "Trabalhando…",
+      "analyzing": "Analisando…",
+      "actionsWithError_one": "{{count}} ação · {{errors}} com erro",
+      "actionsWithError_other": "{{count}} ações · {{errors}} com erro",
+      "actionsDone_one": "{{count}} ação executada",
+      "actionsDone_other": "{{count}} ações executadas",
+      "hiddenActions_one": "+{{count}} ação oculta — mostrar todas",
+      "hiddenActions_other": "+{{count}} ações ocultas — mostrar todas",
+      "sourcesConsulted_one": "{{count}} fonte consultada",
+      "sourcesConsulted_other": "{{count}} fontes consultadas"
+    }
+  },
   "mcp": {
     "kv": { "key": "Chave", "value": "Valor", "add": "Adicionar" },
     "servers": {

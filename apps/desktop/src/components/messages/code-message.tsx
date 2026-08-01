@@ -1,4 +1,5 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { useTranslation } from "react-i18next"
 import { ChevronDownIcon } from "lucide-react"
 import { cn } from "@/lib/utils"
 import type { ChatMessage, MessagePart, ToolPart } from "@shared/chat"
@@ -36,16 +37,19 @@ import {
  * plano com pesquisa — fontes consultadas.
  */
 
-const ACTION_LABELS: Record<string, string> = {
-  read: "Lendo",
-  write: "Escrevendo",
-  edit: "Editando",
-  ls: "Listando",
-  glob: "Buscando arquivos",
-  grep: "Procurando",
-  bash: "Executando",
-  websearch: "Pesquisando",
-  webfetch: "Lendo página",
+function useActionLabels(): Record<string, string> {
+  const { t } = useTranslation()
+  return {
+    read: t("chat.actions.read"),
+    write: t("chat.actions.write"),
+    edit: t("chat.actions.edit"),
+    ls: t("chat.actions.ls"),
+    glob: t("chat.actions.glob"),
+    grep: t("chat.actions.grep"),
+    bash: t("chat.actions.bash"),
+    websearch: t("chat.actions.websearch"),
+    webfetch: t("chat.actions.webfetch"),
+  }
 }
 
 function fileChip(part: ToolPart): string | undefined {
@@ -66,7 +70,8 @@ function testSummaryOf(part: ToolPart): TestSummary | null {
 
 function ToolActionItem({ part }: { part: ToolPart }) {
   const [showOutput, setShowOutput] = useState(false)
-  const label = ACTION_LABELS[part.tool] ?? part.tool
+  const actionLabels = useActionLabels()
+  const label = actionLabels[part.tool] ?? part.tool
   const chip = fileChip(part)
   const detail = part.error ?? (part.tool === "bash" ? part.output : undefined)
 
@@ -121,6 +126,7 @@ function TaskGroup({ parts, snapshot, sessionId, messageId }: {
   sessionId?: string
   messageId?: string
 }) {
+  const { t } = useTranslation()
   const working = parts.some((p) => p.state === "running")
   const errors = parts.filter((p) => p.state === "error").length
   const [open, setOpen] = useState(false)
@@ -171,10 +177,10 @@ function TaskGroup({ parts, snapshot, sessionId, messageId }: {
   }, [sessionId, messageId])
 
   const title = working
-    ? "Trabalhando…"
+    ? t("chat.code.working")
     : errors > 0
-      ? `${parts.length} ${parts.length === 1 ? "ação" : "ações"} · ${errors} com erro`
-      : `${parts.length} ${parts.length === 1 ? "ação executada" : "ações executadas"}`
+      ? t("chat.code.actionsWithError", { count: parts.length, errors })
+      : t("chat.code.actionsDone", { count: parts.length })
 
   return (
     <Task open={open} onOpenChange={setOpen} className="not-prose my-2 w-full">
@@ -212,7 +218,7 @@ function TaskGroup({ parts, snapshot, sessionId, messageId }: {
             onClick={() => setShowAll(true)}
             className="text-xs text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
           >
-            +{hiddenCount} {hiddenCount === 1 ? "ação oculta" : "ações ocultas"} — mostrar todas
+            {t("chat.code.hiddenActions", { count: hiddenCount })}
           </button>
         )}
       </TaskContent>
@@ -252,6 +258,7 @@ export function CodeAssistantMessage({ message, sessionId, isLast, isBusy, onRet
   isBusy: boolean
   onRetry?: () => void
 }) {
+  const { t } = useTranslation()
   const segments = useMemo(() => segmentParts(message.parts), [message.parts])
   const finished = !(isLast && isBusy)
   const sources = useMemo(() => (finished ? extractSources(message) : []), [finished, message])
@@ -271,7 +278,7 @@ export function CodeAssistantMessage({ message, sessionId, isLast, isBusy, onRet
 
   return (
     <div className="flex w-full flex-col gap-1">
-      {waiting && <Shimmer className="text-sm">Analisando…</Shimmer>}
+      {waiting && <Shimmer className="text-sm">{t("chat.code.analyzing")}</Shimmer>}
       {segments.map((segment, index) =>
         segment.kind === "task" ? (
           <TaskGroup
@@ -305,7 +312,7 @@ export function CodeAssistantMessage({ message, sessionId, isLast, isBusy, onRet
         <Sources className="mt-2">
           <SourcesTrigger count={sources.length}>
             <p className="font-medium">
-              {sources.length} {sources.length === 1 ? "fonte consultada" : "fontes consultadas"}
+              {t("chat.code.sourcesConsulted", { count: sources.length })}
             </p>
             <ChevronDownIcon className="h-4 w-4" />
           </SourcesTrigger>
