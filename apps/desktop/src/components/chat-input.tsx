@@ -1,4 +1,5 @@
 import { useCallback, useMemo, useState } from "react"
+import { useTranslation } from "react-i18next"
 import { AlignLeft, Brain, BrainCircuit, Globe, PlusIcon, Search } from "lucide-react"
 import {
   DropdownMenu,
@@ -51,6 +52,7 @@ export function ChatInput({ onSubmit, status, onStop, sessionId }: {
   /** Sessão ativa — o toggle Brain é por chat (undefined = chat novo) */
   sessionId?: string
 }) {
+  const { t } = useTranslation()
   const [search, setSearch] = useState(false)
   const [browser, setBrowser] = useState(false)
   const simple = useSimpleMode(sessionId)
@@ -79,12 +81,12 @@ export function ChatInput({ onSubmit, status, onStop, sessionId }: {
   const actionCommands = useSlashActionCommands("chat")
 
   const modeToggleItems = useMemo<ModeToggleDef[]>(() => [
-    { icon: Search, label: "Pesquisa", active: search, onChange: (v: boolean) => setSearch(v) },
-    { icon: Globe, label: "Browser", active: browser, onChange: (v: boolean) => setBrowser(v) },
-    ...(model?.reasoning ? [{ icon: Brain, label: "Thinking", active: thinking, onChange: (v: boolean) => update({ enabled: v, variantId }) }] : []),
-    { icon: AlignLeft, label: "Simples", active: simple, onChange: (v: boolean) => setSimple(sessionId, v) },
-    { icon: BrainCircuit, label: "Memória", active: brain, onChange: (v: boolean) => setBrainEnabled(sessionId, v) },
-  ], [search, browser, model?.reasoning, thinking, simple, brain, sessionId, variantId, update, setBrainEnabled, setSimple])
+    { icon: Search, label: t("input.modes.search.label"), active: search, onChange: (v: boolean) => setSearch(v) },
+    { icon: Globe, label: t("input.modes.browser.label"), active: browser, onChange: (v: boolean) => setBrowser(v) },
+    ...(model?.reasoning ? [{ icon: Brain, label: t("input.modes.thinking.label"), active: thinking, onChange: (v: boolean) => update({ enabled: v, variantId }) }] : []),
+    { icon: AlignLeft, label: t("input.modes.simple.label"), active: simple, onChange: (v: boolean) => setSimple(sessionId, v) },
+    { icon: BrainCircuit, label: t("input.modes.brain.label"), active: brain, onChange: (v: boolean) => setBrainEnabled(sessionId, v) },
+  ], [search, browser, model?.reasoning, thinking, simple, brain, sessionId, variantId, update, setBrainEnabled, setSimple, t])
 
   const buildOptions = useCallback((): SendMessageOptions => ({
     research: search,
@@ -101,19 +103,19 @@ export function ChatInput({ onSubmit, status, onStop, sessionId }: {
       setText("")
     }
     return [
-      { id: "pesquisa", label: "Pesquisa", description: "Alterna busca web (websearch/webfetch)", keywords: ["web", "search"], group: "Modos" as const, active: search, run: toggle(() => setSearch((v) => !v)) },
-      { id: "browser", label: "Browser", description: "Alterna navegação com JavaScript", keywords: ["navegador", "web"], group: "Modos" as const, active: browser, run: toggle(() => setBrowser((v) => !v)) },
+      { id: "pesquisa", label: t("input.modes.search.label"), description: t("input.slash.searchDescription"), keywords: ["web", "search"], group: "Modos" as const, active: search, run: toggle(() => setSearch((v) => !v)) },
+      { id: "browser", label: t("input.modes.browser.label"), description: t("input.slash.browserDescription"), keywords: ["navegador", "web"], group: "Modos" as const, active: browser, run: toggle(() => setBrowser((v) => !v)) },
       ...(model?.reasoning && !model.reasoningAlwaysOn
-        ? [{ id: "thinking", label: "Thinking", description: "Alterna raciocínio estendido do modelo", keywords: ["reasoning", "pensar"], group: "Modos" as const, active: thinking, run: toggle(() => update({ enabled: !enabled, variantId })) }]
+        ? [{ id: "thinking", label: t("input.modes.thinking.label"), description: t("input.slash.thinkingDescription"), keywords: ["reasoning", "pensar"], group: "Modos" as const, active: thinking, run: toggle(() => update({ enabled: !enabled, variantId })) }]
         : []),
-      { id: "simples", label: "Simples", description: "Alterna respostas em texto puro", keywords: ["texto", "plain"], group: "Modos" as const, active: simple, run: toggle(() => setSimple(sessionId, !simple)) },
-      { id: "brain", label: "Memória (Brain)", description: "Orbit lembra fatos e preferências entre conversas", keywords: ["memoria", "brain"], group: "Modos" as const, active: brain, run: toggle(() => setBrainEnabled(sessionId, !brain)) },
+      { id: "simples", label: t("input.modes.simple.label"), description: t("input.slash.simpleDescription"), keywords: ["texto", "plain"], group: "Modos" as const, active: simple, run: toggle(() => setSimple(sessionId, !simple)) },
+      { id: "brain", label: t("input.slash.brainLabel"), description: t("input.slash.brainDescription"), keywords: ["memoria", "brain"], group: "Modos" as const, active: brain, run: toggle(() => setBrainEnabled(sessionId, !brain)) },
       ...actionCommands,
       ...referenceCommands,
-      { id: "novo-chat", label: "Nova conversa", description: "Começa um chat em branco", keywords: ["clear", "limpar", "novo"], group: "Ações" as const, run: toggle(() => void selectSession(mode, null)) },
-      { id: "settings", label: "Configurações", description: "Abre as configurações do Orbit", keywords: ["settings", "config"], group: "Ações" as const, run: toggle(() => openSettings()) },
+      { id: "novo-chat", label: t("input.slash.newChat"), description: t("input.slash.newChatDescription"), keywords: ["clear", "limpar", "novo"], group: "Ações" as const, run: toggle(() => void selectSession(mode, null)) },
+      { id: "settings", label: t("input.slash.settings"), description: t("input.slash.settingsDescription"), keywords: ["settings", "config"], group: "Ações" as const, run: toggle(() => openSettings()) },
     ]
-  }, [search, browser, thinking, simple, brain, model, enabled, variantId, update, sessionId, setBrainEnabled, setSimple, actionCommands, referenceCommands, selectSession, mode, openSettings])
+  }, [search, browser, thinking, simple, brain, model, enabled, variantId, update, sessionId, setBrainEnabled, setSimple, actionCommands, referenceCommands, selectSession, mode, openSettings, t])
 
   return (
     <PromptInputProvider>
@@ -152,7 +154,7 @@ export function ChatInput({ onSubmit, status, onStop, sessionId }: {
           {(attachment) => <PromptInputAttachment data={attachment} />}
         </PromptInputAttachments>
         <PromptInputBody>
-          <PromptInputTextarea placeholder="Pergunte qualquer coisa..." className="px-3 text-base md:text-base" />
+          <PromptInputTextarea placeholder={t("input.placeholder")} className="px-3 text-base md:text-base" />
         </PromptInputBody>
         <PromptInputFooter>
           <div className="flex items-center gap-1">
@@ -167,7 +169,7 @@ export function ChatInput({ onSubmit, status, onStop, sessionId }: {
                     <DropdownMenuSeparator />
                   </>
                 )}
-                <PromptInputActionAddAttachments label="Anexar arquivos" />
+                <PromptInputActionAddAttachments label={t("input.attachFiles")} />
               </DropdownMenuContent>
             </DropdownMenu>
             {displayMode === "actions" && <ContextMeter sessionId={sessionId} />}
@@ -209,26 +211,26 @@ export function ChatInput({ onSubmit, status, onStop, sessionId }: {
           <div className="flex items-center gap-1 mt-2">
           <ModeToggle
             icon={Search}
-            label="Pesquisa"
-            description="Busca e lê páginas da web via HTTP. Rápido, mas não executa JavaScript."
+            label={t("input.modes.search.label")}
+            description={t("input.modes.search.description")}
             active={search}
             onToggle={() => setSearch((v) => !v)}
           />
           <ModeToggle
             icon={Globe}
-            label="Browser"
-            description="Navega em páginas como um browser real. Executa JavaScript, ideal para SPAs."
+            label={t("input.modes.browser.label")}
+            description={t("input.modes.browser.description")}
             active={browser}
             onToggle={() => setBrowser((v) => !v)}
           />
           {model?.reasoning && (
             <ModeToggle
               icon={Brain}
-              label="Thinking"
+              label={t("input.modes.thinking.label")}
               description={
                 model.reasoningAlwaysOn
-                  ? "Este modelo sempre usa raciocínio extendido."
-                  : "Ativa raciocínio extendido do modelo. Custa mais tokens e tempo."
+                  ? t("input.modes.thinking.alwaysOn")
+                  : t("input.modes.thinking.description")
               }
               active={thinking}
               onToggle={() => update({ enabled: !enabled, variantId })}
@@ -237,15 +239,15 @@ export function ChatInput({ onSubmit, status, onStop, sessionId }: {
           )}
           <ModeToggle
             icon={AlignLeft}
-            label="Simples"
-            description="Respostas diretas em texto puro: sem formatação, citações ou blocos de ferramentas."
+            label={t("input.modes.simple.label")}
+            description={t("input.modes.simple.description")}
             active={simple}
             onToggle={() => setSimple(sessionId, !simple)}
           />
           <ModeToggle
             icon={BrainCircuit}
-            label="Memória"
-            description="Orbit lembra fatos e preferências suas entre conversas. Desative apenas neste chat se preferir uma interação sem contexto."
+            label={t("input.modes.brain.label")}
+            description={t("input.modes.brain.description")}
             active={brain}
             onToggle={() => setBrainEnabled(sessionId, !brain)}
           />

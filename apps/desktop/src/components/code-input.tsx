@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
+import { useTranslation } from "react-i18next"
 import { AlignLeft, Bot, Brain, BrainCircuit, FileText, MousePointerClick, Network, PlusIcon, RefreshCw, Search, X } from "lucide-react"
 import {
   DropdownMenu,
@@ -64,6 +65,7 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId }: 
   /** Sessão ativa — o toggle Brain é por chat (undefined = chat novo) */
   sessionId?: string
 }) {
+  const { t } = useTranslation()
   const [plan, setPlan] = useState(false)
   const [search, setSearch] = useState(false)
   const [subagents, setSubagents] = useState(false)
@@ -126,12 +128,12 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId }: 
   const removeSelection = usePanelStore((s) => s.removeSelection)
 
   const modeToggleItems = useMemo<ModeToggleDef[]>(() => [
-    { icon: Search, label: "Pesquisa", active: search, onChange: (v: boolean) => setSearch(v) },
-    { icon: FileText, label: "Modo Plano", active: plan, onChange: (v: boolean) => setPlan(v) },
-    ...(model?.reasoning ? [{ icon: Brain, label: "Thinking", active: thinking, onChange: (v: boolean) => update({ enabled: v, variantId }) }] : []),
-    { icon: AlignLeft, label: "Simples", active: simple, onChange: (v: boolean) => setSimple(sessionId, v) },
-    { icon: BrainCircuit, label: "Memória", active: brain, onChange: (v: boolean) => setBrainEnabled(sessionId, v) },
-  ], [search, plan, model?.reasoning, thinking, simple, brain, sessionId, variantId, update, setBrainEnabled, setSimple])
+    { icon: Search, label: t("input.modes.search.label"), active: search, onChange: (v: boolean) => setSearch(v) },
+    { icon: FileText, label: t("codeInput.modes.plan.label"), active: plan, onChange: (v: boolean) => setPlan(v) },
+    ...(model?.reasoning ? [{ icon: Brain, label: t("input.modes.thinking.label"), active: thinking, onChange: (v: boolean) => update({ enabled: v, variantId }) }] : []),
+    { icon: AlignLeft, label: t("input.modes.simple.label"), active: simple, onChange: (v: boolean) => setSimple(sessionId, v) },
+    { icon: BrainCircuit, label: t("input.modes.brain.label"), active: brain, onChange: (v: boolean) => setBrainEnabled(sessionId, v) },
+  ], [search, plan, model?.reasoning, thinking, simple, brain, sessionId, variantId, update, setBrainEnabled, setSimple, t])
 
   const handleSubmit = useCallback((message: { text?: string; files?: { mediaType?: string; filename?: string; url?: string }[] }) => {
     const files = toFileParts(message.files ?? [])
@@ -192,7 +194,7 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId }: 
     }
     const permission = (id: PermissionMode, label: string, description: string): SlashCommand => ({
       id: `perm-${id}`,
-      label: `Permissões: ${label}`,
+      label: t("codeInput.slash.permissionLabel", { label }),
       description,
       keywords: ["permissao", "autonomia", id],
       group: "Modos",
@@ -200,26 +202,26 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId }: 
       run: toggle(() => setPermissionMode(id)),
     })
     return [
-      { id: "pesquisa", label: "Pesquisa", description: "Alterna busca web para documentação", keywords: ["web", "search"], group: "Modos" as const, active: search, run: toggle(() => setSearch((v) => !v)) },
-      { id: "plano", label: "Modo Plano", description: "Alterna modo somente leitura (plano de implementação)", keywords: ["plan", "leitura"], group: "Modos" as const, active: plan, run: toggle(() => setPlan((v) => !v)) },
+      { id: "pesquisa", label: t("input.modes.search.label"), description: t("codeInput.slash.searchDescription"), keywords: ["web", "search"], group: "Modos" as const, active: search, run: toggle(() => setSearch((v) => !v)) },
+      { id: "plano", label: t("codeInput.modes.plan.label"), description: t("codeInput.slash.planDescription"), keywords: ["plan", "leitura"], group: "Modos" as const, active: plan, run: toggle(() => setPlan((v) => !v)) },
       ...(model?.reasoning && !model.reasoningAlwaysOn
-        ? [{ id: "thinking", label: "Thinking", description: "Alterna raciocínio estendido do modelo", keywords: ["reasoning", "pensar"], group: "Modos" as const, active: thinking, run: toggle(() => update({ enabled: !enabled, variantId })) }]
+        ? [{ id: "thinking", label: t("input.modes.thinking.label"), description: t("input.slash.thinkingDescription"), keywords: ["reasoning", "pensar"], group: "Modos" as const, active: thinking, run: toggle(() => update({ enabled: !enabled, variantId })) }]
         : []),
-      { id: "simples", label: "Simples", description: "Alterna respostas em texto puro", keywords: ["texto", "plain"], group: "Modos" as const, active: simple, run: toggle(() => setSimple(sessionId, !simple)) },
-      { id: "brain", label: "Memória (Brain)", description: "Orbit lembra decisões e convenções do projeto entre sessões", keywords: ["memoria", "brain"], group: "Modos" as const, active: brain, run: toggle(() => setBrainEnabled(sessionId, !brain)) },
-      { id: "subagents", label: "Subagents", description: "Alterna workers em background", keywords: ["worker", "delegar"], group: "Modos" as const, active: subagents, run: toggle(() => setSubagents((v) => !v)) },
-      ...(mode === "code" ? [{ id: "orchestra", label: "Orchestra", description: "Alterna orquestração em tarefas paralelas", keywords: ["workers", "plano"], group: "Modos" as const, active: orchestra, run: toggle(() => setOrchestra((v) => !v)) }] : []),
-      permission("ask", "Perguntar", "Confirma ações sensíveis antes de executar"),
-      permission("approve", "Autonomia", "Executa sozinho; ações críticas pedem confirmação"),
-      permission("full", "Irrestrito", "Sem perguntas (piso de segurança mantido)"),
+      { id: "simples", label: t("input.modes.simple.label"), description: t("input.slash.simpleDescription"), keywords: ["texto", "plain"], group: "Modos" as const, active: simple, run: toggle(() => setSimple(sessionId, !simple)) },
+      { id: "brain", label: t("input.slash.brainLabel"), description: t("codeInput.slash.brainDescription"), keywords: ["memoria", "brain"], group: "Modos" as const, active: brain, run: toggle(() => setBrainEnabled(sessionId, !brain)) },
+      { id: "subagents", label: t("codeInput.slash.subagentsLabel"), description: t("codeInput.slash.subagentsDescription"), keywords: ["worker", "delegar"], group: "Modos" as const, active: subagents, run: toggle(() => setSubagents((v) => !v)) },
+      ...(mode === "code" ? [{ id: "orchestra", label: t("codeInput.slash.orchestraLabel"), description: t("codeInput.slash.orchestraDescription"), keywords: ["workers", "plano"], group: "Modos" as const, active: orchestra, run: toggle(() => setOrchestra((v) => !v)) }] : []),
+      permission("ask", t("codeInput.slash.permAsk"), t("codeInput.slash.permAskDescription")),
+      permission("approve", t("codeInput.slash.permApprove"), t("codeInput.slash.permApproveDescription")),
+      permission("full", t("codeInput.slash.permFull"), t("codeInput.slash.permFullDescription")),
       ...actionCommands,
       ...referenceCommands,
-      { id: "nova-sessao", label: "Nova sessão", description: "Começa uma sessão de código em branco", keywords: ["clear", "limpar", "novo"], group: "Ações" as const, run: toggle(() => void useSessionStore.getState().selectSession(mode, null)) },
-      { id: "create-skill", label: "Criar skill", description: "Pede ao Orbit para criar uma skill (com scripts, se precisar)", keywords: ["skill", "criar", "aprender"], group: "Skills" as const, run: ({ setText }) => setText("/create-skill ") },
-      { id: "document", label: "Documentar aplicação", description: "Navega pelo app no painel, tira screenshots e documenta em docs/", keywords: ["docs", "documentacao", "screenshot"], group: "Ações" as const, run: ({ setText }) => setText("/document ") },
-      { id: "settings", label: "Configurações", description: "Abre as configurações do Orbit", keywords: ["settings", "config"], group: "Ações" as const, run: toggle(() => openSettings()) },
+      { id: "nova-sessao", label: t("codeInput.slash.newSession"), description: t("codeInput.slash.newSessionDescription"), keywords: ["clear", "limpar", "novo"], group: "Ações" as const, run: toggle(() => void useSessionStore.getState().selectSession(mode, null)) },
+      { id: "create-skill", label: t("codeInput.slash.createSkill"), description: t("codeInput.slash.createSkillDescription"), keywords: ["skill", "criar", "aprender"], group: "Skills" as const, run: ({ setText }) => setText("/create-skill ") },
+      { id: "document", label: t("codeInput.slash.documentApp"), description: t("codeInput.slash.documentAppDescription"), keywords: ["docs", "documentacao", "screenshot"], group: "Ações" as const, run: ({ setText }) => setText("/document ") },
+      { id: "settings", label: t("input.slash.settings"), description: t("input.slash.settingsDescription"), keywords: ["settings", "config"], group: "Ações" as const, run: toggle(() => openSettings()) },
     ]
-  }, [search, plan, thinking, simple, brain, subagents, orchestra, permissionMode, model, enabled, variantId, update, sessionId, setBrainEnabled, setSimple, setPermissionMode, actionCommands, referenceCommands, mode, openSettings])
+  }, [search, plan, thinking, simple, brain, subagents, orchestra, permissionMode, model, enabled, variantId, update, sessionId, setBrainEnabled, setSimple, setPermissionMode, actionCommands, referenceCommands, mode, openSettings, t])
 
   return (
     <PromptInputProvider>
@@ -246,7 +248,7 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId }: 
                 className="flex items-center gap-1 rounded-md border border-emerald-500/30 bg-emerald-500/10 px-1.5 py-0.5 text-[11px] text-emerald-600 dark:text-emerald-400"
               >
                 <MousePointerClick className="size-3" />
-                {"<"}{sel.tag}{">"} {sel.text ? `"${sel.text.slice(0, 24)}${sel.text.length > 24 ? "…" : ""}"` : "selecionado"}
+                {"<"}{sel.tag}{">"} {sel.text ? `"${sel.text.slice(0, 24)}${sel.text.length > 24 ? "…" : ""}"` : t("codeInput.selected")}
                 <button
                   type="button"
                   onClick={() => removeSelection(sel.id)}
@@ -266,7 +268,7 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId }: 
         >
           <PromptInputBody>
             <PromptInputTextarea
-              placeholder={folders.length === 0 ? "Selecione uma pasta para começar…" : "Pergunte sobre código..."}
+              placeholder={folders.length === 0 ? t("codeInput.placeholderNoFolder") : t("codeInput.placeholder")}
               className="px-3 text-base md:text-base"
             />
           </PromptInputBody>
@@ -295,7 +297,7 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId }: 
                     mode={mode}
                   />
                   <DropdownMenuSeparator />
-                  <PromptInputActionAddAttachments label="Anexar arquivos" />
+                  <PromptInputActionAddAttachments label={t("input.attachFiles")} />
                 </DropdownMenuContent>
               </DropdownMenu>
               <PermissionModePicker />
@@ -348,26 +350,26 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId }: 
           <div className="flex items-center gap-1 mt-2">
           <ModeToggle
             icon={Search}
-            label="Pesquisa"
-            description="Libera websearch e webfetch para consultar documentação online."
+            label={t("input.modes.search.label")}
+            description={t("codeInput.modes.search.description")}
             active={search}
             onToggle={() => setSearch((v) => !v)}
           />
             <ModeToggle
               icon={FileText}
-              label="Modo Plano"
-              description="Somente leitura. Produz um plano de implementação sem editar arquivos."
+              label={t("codeInput.modes.plan.label")}
+              description={t("codeInput.modes.plan.description")}
               active={plan}
               onToggle={() => setPlan((v) => !v)}
             />
             {model?.reasoning && (
               <ModeToggle
                 icon={Brain}
-                label="Thinking"
+                label={t("input.modes.thinking.label")}
                 description={
                   model.reasoningAlwaysOn
-                    ? "Este modelo sempre usa raciocínio extendido."
-                    : "Ativa raciocínio extendido do modelo. Custa mais tokens e tempo."
+                    ? t("input.modes.thinking.alwaysOn")
+                    : t("input.modes.thinking.description")
                 }
                 active={thinking}
                 onToggle={() => update({ enabled: !enabled, variantId })}
@@ -376,15 +378,15 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId }: 
             )}
             <ModeToggle
               icon={AlignLeft}
-              label="Simples"
-              description="Respostas diretas em texto puro: sem formatação nem blocos de ferramentas."
+              label={t("input.modes.simple.label")}
+              description={t("codeInput.modes.simple.description")}
               active={simple}
               onToggle={() => setSimple(sessionId, !simple)}
             />
             <ModeToggle
               icon={BrainCircuit}
-              label="Memória"
-              description="Orbit lembra decisões, convenções e estrutura do projeto entre sessões. Desative apenas neste chat se preferir uma interação sem contexto."
+              label={t("input.modes.brain.label")}
+              description={t("codeInput.modes.brain.description")}
               active={brain}
               onToggle={() => setBrainEnabled(sessionId, !brain)}
             />
