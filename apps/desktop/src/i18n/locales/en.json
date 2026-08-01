@@ -12,6 +12,70 @@
       "data": { "label": "Data", "description": "Export and import your data." }
     }
   },
+  "sidebar": {
+    "newChat": "New Chat",
+    "newSession": "New session",
+    "memories": "Memories",
+    "tools": "Tools",
+    "usage": "Usage & Limits",
+    "code": "Code",
+    "options": "Options",
+    "create": "Create",
+    "folder": {
+      "addToFolder": "Add to folder",
+      "removeFromCurrent": "Remove from current folder",
+      "newFolderPlaceholder": "New folder…",
+      "newFolderTitle": "New folder",
+      "folderNamePlaceholder": "Folder name",
+      "none": "No folders",
+      "rename": "Rename folder",
+      "deleteTitle": "Remove folder?",
+      "deleteDescription": "Chats in \"{{name}}\" won't be deleted — they'll go back to the main list.",
+      "remove": "Remove",
+      "unmark": "Unmark",
+      "mark": "Mark",
+      "add": "Add"
+    },
+    "session": {
+      "unpin": "Unpin",
+      "pin": "Pin",
+      "rename": "Rename",
+      "renameTitle": "Rename chat",
+      "fork": "Fork",
+      "openBeside": "Open beside",
+      "unarchive": "Unarchive",
+      "archive": "Archive",
+      "select": "Select",
+      "delete": "Delete",
+      "confirmDelete": "Delete",
+      "deleteTitle": "Delete chat?",
+      "deleteDescription": "\"{{title}}\" and all its messages will be permanently deleted."
+    },
+    "selection": {
+      "exit": "Exit selection mode",
+      "selectedCount_one": "{{count}} selected",
+      "selectedCount_other": "{{count}} selected",
+      "deleteSelected": "Delete selected"
+    },
+    "groups": {
+      "folders": "Folders",
+      "chats": "Chats",
+      "archived": "Archived",
+      "noChats": "No chats yet"
+    },
+    "account": {
+      "localAssistant": "Local assistant",
+      "myAccount": "My Account",
+      "profile": "Profile",
+      "settings": "Settings",
+      "changeTheme": "Change theme",
+      "light": "Light",
+      "dark": "Dark",
+      "system": "System",
+      "logout": "Log out",
+      "connectApp": "Connect App"
+    }
+  },
   "titlebar": {
     "minimize": "Minimize",
     "restore": "Restore",
