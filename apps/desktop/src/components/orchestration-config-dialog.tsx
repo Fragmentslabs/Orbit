@@ -1,4 +1,5 @@
 import { useMemo } from "react"
+import { useTranslation } from "react-i18next"
 import { BrainIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
@@ -31,6 +32,7 @@ export function OrchestrationConfigDialog({ open, onOpenChange }: {
   open: boolean
   onOpenChange: (open: boolean) => void
 }) {
+  const { t } = useTranslation()
   const catalog = useProviderStore((s) => s.catalog)
   const connectedProviders = useProviderStore((s) => s.connectedProviders)
   const workerModel = useProviderStore((s) => s.workerModel)
@@ -60,16 +62,15 @@ export function OrchestrationConfigDialog({ open, onOpenChange }: {
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-sm" showCloseButton={false}>
         <DialogHeader>
-          <DialogTitle>Configurar workers</DialogTitle>
+          <DialogTitle>{t("orchestrationConfig.title")}</DialogTitle>
         </DialogHeader>
 
         <div className="flex flex-col gap-4">
           <div className="rounded-md border border-amber-500/30 bg-amber-500/10 p-2 text-xs text-amber-600 dark:text-amber-400">
-            <strong>Atenção:</strong> workers rodam em paralelo e consomem tokens sem limite por
-            padrão — prefira um modelo econômico e acompanhe o custo exibido em cada execução.
+            <strong>{t("orchestrationConfig.attention")}</strong> {t("orchestrationConfig.attentionText")}
           </div>
           <div className="flex flex-col gap-1.5">
-            <p className="text-xs font-medium text-muted-foreground">Modelo do worker</p>
+            <p className="text-xs font-medium text-muted-foreground">{t("orchestrationConfig.workerModel")}</p>
             <Select
               value={workerModel ? `${workerModel.providerId}/${workerModel.modelId}` : null}
               onValueChange={(value) => {
@@ -80,7 +81,7 @@ export function OrchestrationConfigDialog({ open, onOpenChange }: {
               }}
             >
               <SelectTrigger className="w-full">
-                <SelectValue placeholder="Usar o modelo principal" />
+                <SelectValue placeholder={t("orchestrationConfig.useMainModel")} />
               </SelectTrigger>
               <SelectContent alignItemWithTrigger={false}>
                 {groups.map(({ provider, models }) => (
@@ -93,7 +94,7 @@ export function OrchestrationConfigDialog({ open, onOpenChange }: {
                         disabled={model.tool_call === false}
                       >
                         {model.name}
-                        {model.tool_call === false ? " (sem tools)" : ""}
+                        {model.tool_call === false ? ` (${t("orchestrationConfig.noTools")})` : ""}
                       </SelectItem>
                     ))}
                   </SelectGroup>
@@ -101,7 +102,7 @@ export function OrchestrationConfigDialog({ open, onOpenChange }: {
               </SelectContent>
             </Select>
             <p className="text-[11px] text-muted-foreground">
-              Sem seleção, os workers usam o mesmo modelo do chat principal.
+              {t("orchestrationConfig.noSelectionHint")}
             </p>
           </div>
 
@@ -119,7 +120,7 @@ export function OrchestrationConfigDialog({ open, onOpenChange }: {
                 }
               >
                 <BrainIcon className="size-3.5" />
-                Thinking no worker
+                {t("orchestrationConfig.thinkingOnWorker")}
               </button>
               {thinkingOn && (selectedCatalogModel.variants?.length ?? 0) > 0 && (
                 <ReasoningPicker
@@ -142,10 +143,10 @@ export function OrchestrationConfigDialog({ open, onOpenChange }: {
                 setWorkerReasoning(null)
               }}
             >
-              Limpar
+              {t("orchestrationConfig.clear")}
             </Button>
           )}
-          <Button onClick={() => onOpenChange(false)}>Concluir</Button>
+          <Button onClick={() => onOpenChange(false)}>{t("orchestrationConfig.done")}</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
