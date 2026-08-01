@@ -13,8 +13,10 @@
     }
   },
   "input": {
-    "placeholder": "Pergunte qualquer coisa...",
-    "attachFiles": "Anexar arquivos",
+ "placeholder": "Pergunte qualquer coisa...",
+ "attachFiles": "Anexar arquivos",
+ "submit": "Enviar",
+ "uploadFiles": "Enviar arquivos",
     "modes": {
       "search": { "label": "Pesquisa", "description": "Busca e lê páginas da web via HTTP. Rápido, mas não executa JavaScript." },
       "browser": { "label": "Browser", "description": "Navega em páginas como um browser real. Executa JavaScript, ideal para SPAs." },
@@ -67,6 +69,267 @@
       "documentApp": "Documentar aplicação",
       "documentAppDescription": "Navega pelo app no painel, tira screenshots e documenta em docs/"
     }
+  },
+  "reasoning": {
+ "placeholder": "Nível",
+ "thinking": "Pensando…",
+ "thoughtFewSeconds": "Pensou por alguns segundos",
+ "thoughtFor_one": "Pensou por {{count}} segundo",
+ "thoughtFor_other": "Pensou por {{count}} segundos",
+ "variants": {
+      "none": "Nenhum",
+      "minimal": "Mínimo",
+      "low": "Baixo",
+      "medium": "Médio",
+      "high": "Alto",
+      "xhigh": "Muito alto",
+      "max": "Máximo"
+    }
+  },
+  "delegation": {
+    "subagents": "Subagents",
+    "orchestra": "Orchestra",
+    "loop": "Loop",
+    "configure": "Configurar"
+  },
+  "permissions": {
+    "title": "Modo de permissões",
+    "ask": "Perguntar",
+    "askDescription": "Confirma ações sensíveis antes de executar",
+    "approve": "Autonomia",
+    "approveDescription": "Executa sozinho; ações críticas pedem confirmação",
+    "full": "Irrestrito",
+    "fullDescription": "Sem perguntas (piso de segurança mantido)",
+    "deny": "Negar",
+    "allow": "Permitir",
+    "once": "Uma vez",
+    "alwaysChat": "Sempre neste chat",
+    "always": "Sempre"
+  },
+  "send": {
+    "send": "Enviar",
+    "addToQueue": "Adicionar à fila",
+    "moreOptions": "Mais opções",
+    "openInSidePanel": "Abrir no chat lateral",
+    "stopAndSend": "Parar e enviar",
+    "schedule": "Agendar",
+    "scheduleMessage": "Agendar mensagem",
+    "sendToSidePanel": "Enviar para chat lateral",
+    "stop": "Parar",
+    "scheduleDialog": {
+      "chooseTime": "Escolha um horário",
+      "customDateTime": "Ou defina data/hora",
+      "willSend": "Enviará em {{time}}",
+      "inMinutes_one": "Em {{count}} minuto",
+      "inMinutes_other": "Em {{count}} minutos",
+      "inHours_one": "Em {{count}} hora",
+      "inHours_other": "Em {{count}} horas",
+      "tomorrow": "Amanhã às {{time}}",
+      "cancel": "Cancelar",
+      "confirm": "Confirmar"
+    }
+  },
+  "modelPicker": {
+ "loading": "Carregando...",
+ "error": "Erro",
+ "select": "Selecionar modelo",
+ "title": "Selecionar modelo"
+  },
+  "models": {
+    "loadingCatalog": "Carregando catálogo de modelos…",
+    "searchPlaceholder": "Buscar por nome, provider ou tag…",
+    "refreshCatalog": "Atualizar catálogo",
+    "bestForTitle": "Best For",
+    "count": "{{count}} de {{total}} modelos",
+    "noResults": "Nenhum modelo corresponde à busca ou aos filtros.",
+    "clearFilters": "Limpar",
+    "filters": {
+      "provider": "Provider",
+      "capability": "Capacidade",
+      "price": "Preço",
+      "speed": "Velocidade",
+      "context": "Contexto",
+      "contextSelected": "Contexto {{label}}",
+      "contextAny": "Qualquer",
+      "context32k": "32k+",
+      "context128k": "128k+",
+      "context1m": "1M+",
+      "availability": "Disponibilidade"
+    },
+    "capabilities": {
+      "coding": "Coding",
+      "vision": "Vision",
+      "agent": "Agent",
+      "reasoning": "Reasoning"
+    },
+    "prices": {
+      "free": "Free",
+      "low": "Low Cost",
+      "medium": "Medium",
+      "premium": "Premium"
+    },
+    "speeds": {
+      "fast": "Fast",
+      "balanced": "Balanced",
+      "deep": "Deep Thinking"
+    },
+    "columns": {
+      "model": "Modelo",
+      "coding": "Coding",
+      "agentic": "Agentic",
+      "intelligence": "Intel.",
+      "speed": "Speed",
+      "context": "Contexto",
+      "price": "In / Out $1M"
+    },
+    "categories": {
+      "coding": "Coding",
+      "agentic": "Agentic",
+      "vision": "Vision",
+      "speed": "Speed",
+      "intelligence": "Intelligence"
+    },
+    "bestFor": {
+      "coding": "Best Coding",
+      "agentic": "Best Agentic",
+      "intelligence": "Best Intelligence",
+      "vision": "Best Vision",
+      "speed": "Best Speed"
+    },
+    "compare": {
+      "selected_one": "{{count}} modelo selecionado",
+      "selected_other": "{{count}} modelos selecionados",
+      "clearSelection": "Limpar seleção",
+      "simplified": "Simplified",
+      "technical": "Technical",
+      "cost": "Cost",
+      "inOut": "{{input}} in · {{output}} out",
+      "benchmark": "Benchmark",
+      "context": "Contexto",
+      "priceInOut": "Preço (in/out $1M)"
+    },
+    "benchmarks": {
+      "swebench": "SWE-Bench",
+      "livecodebench": "LiveCodeBench",
+      "gpqa": "GPQA",
+      "hle": "Humanity's Last Exam",
+      "mmluPro": "MMLU-Pro",
+      "intelligenceIndex": "AA Intelligence Index",
+      "codingIndex": "AA Coding Index",
+      "agenticIndex": "AA Agentic Index",
+      "ttft": "TTFT",
+      "tokensPerSecond": "Tokens/s"
+    },
+    "detail": {
+      "overview": "Overview",
+      "bestFor": "Best For",
+      "pricing": "Pricing (USD / 1M tokens)",
+      "input": "Input",
+      "output": "Output",
+      "contextWindow": "Context Window",
+      "tokens": "tokens",
+      "performance": "Performance",
+      "tokensPerSecond": "Tokens/s",
+      "ttft": "TTFT",
+      "providers": "Providers",
+      "released": "Lançado em {{date}} · Fontes: {{sources}}",
+      "bestForItems": {
+        "architecture": "Architecture",
+        "refactoring": "Refactoring",
+        "coding": "Coding",
+        "agents": "Agents",
+        "largeProjects": "Large Projects",
+        "visionTasks": "Vision Tasks",
+        "highVolume": "High Volume",
+        "deepReasoning": "Deep Reasoning",
+        "costSensitive": "Cost Sensitive"
+      }
+    },
+    "aa": {
+      "connect": "Sem dados de velocidade — conectar Artificial Analysis",
+      "title": "Conectar Artificial Analysis",
+      "description": "A chave gratuita libera velocidade medida (tokens/s, TTFT) e benchmarks técnicos (GPQA, HLE, SWE-Bench…) para os scores e filtros de Speed.",
+      "createKey": "Criar chave em artificialanalysis.ai/api-access",
+      "keyPlaceholder": "Chave de API…",
+      "cancel": "Cancelar",
+      "saving": "Salvando…",
+      "saveAndRefresh": "Salvar e atualizar"
+    }
+  },
+  "memories": {
+    "searchPlaceholder": "Buscar memórias…",
+    "allProjects": "Todos",
+    "allProjectsFull": "Todos os projetos",
+    "tabList": "Lista",
+    "tabGraph": "Grafo",
+    "emptyTitleQuery": "Nenhuma memória encontrada",
+    "emptyTitleNone": "Nenhuma memória ainda",
+    "emptyQuery": "Tente outros termos de busca.",
+    "emptyChat": "Converse com o Brain ativo e o Orbit passa a lembrar fatos e preferências automaticamente.",
+    "emptyCode": "Trabalhe em um projeto com o Brain ativo e o Orbit memoriza decisões, convenções e estrutura.",
+    "kinds": {
+      "core": "core",
+      "seasonal": "sazonal",
+      "general": "geral",
+      "project": "projeto"
+    },
+    "categories": {
+      "preference": "preferência",
+      "convention": "convenção",
+      "structure": "estrutura",
+      "decision": "decisão",
+      "context": "contexto",
+      "database": "banco de dados",
+      "learning": "aprendizado",
+      "standard": "padronização"
+    },
+    "areas": {
+      "overview": "Contexto do Projeto",
+      "business": "Regras de Negócio",
+      "design": "Design System",
+      "architecture": "Arquitetura",
+      "preferences": "Preferências",
+      "infrastructure": "Infraestrutura",
+      "security": "Segurança",
+      "development": "Desenvolvimento",
+      "database": "Banco de Dados",
+      "testing": "Testes",
+      "performance": "Performance",
+      "dependencies": "Dependências",
+      "standards": "Padronização"
+    },
+    "editTitle": "Editar memória",
+    "tagsPlaceholder": "tags separadas por vírgula",
+    "weight": "Peso",
+    "save": "Salvar",
+    "loadingDoc": "Carregando documento…",
+    "viewDoc": "Ver documento anexado",
+    "openOriginSession": "Abrir conversa de origem: {{title}}",
+    "promoteCore": "Promover a core (permanente)",
+    "promoteDecision": "Promover a decisão (permanente)",
+    "edit": "Editar",
+    "delete": "Deletar",
+    "promoted": "promovida",
+    "weightLabel": "peso",
+    "uses_one": "{{count}} uso",
+    "uses_other": "{{count}} usos",
+    "expires": "expira {{date}}",
+    "connected": "Conectadas",
+    "deleteTitle": "Excluir memória?",
+    "deleteDescription": "\"{{text}}\" será excluída permanentemente.",
+    "deleteDescriptionWithDoc": "\"{{text}}\" será excluída permanentemente, junto com o documento anexado.",
+    "deleteConfirm": "Excluir",
+    "zoomIn": "Ampliar (Ctrl+=)",
+    "zoomOut": "Reduzir (Ctrl+-)",
+    "centerTitle": "Centralizar (Ctrl+0)",
+    "center": "Centralizar",
+    "expandAll": "Expandir tudo",
+    "linkPrompt": "Ctrl+click no destino para ligar",
+    "linkCancel": "cancelar",
+    "dropFile": "Solte o arquivo para criar memória",
+    "tooltipWeight": "peso {{weight}}",
+    "tooltipStale": "(sem uso há mais de 30 dias)",
+    "tooltipCollapsed": "(colapsado)"
   },
   "sidebar": {
     "newChat": "Novo Chat",
@@ -170,6 +433,8 @@
   "header": {
     "toggleSidebar": "Alternar sidebar",
     "newChat": "Nova conversa",
+    "newCode": "Novo código",
+    "models": "Modelos",
     "options": "Opções",
     "pin": "Fixar",
     "rename": "Renomear",
@@ -197,10 +462,13 @@
     }
   },
   "chat": {
-    "retry": "Retry",
-    "stopped": "Parou por atingir o limite de passos — pode ter ficado incompleto. Peça para continuar.",
-    "copy": "Copiar",
-    "revert": "Reverter até aqui",
+ "retry": "Retry",
+ "stopped": "Parou por atingir o limite de passos — pode ter ficado incompleto. Peça para continuar.",
+ "copy": "Copiar",
+ "revert": "Reverter até aqui",
+ "planTitle": "Plano",
+ "orchestrationTitle": "Orquestração",
+ "implementPlan": "Implementar plano",
     "exploring": "Explorando {{label}}…",
     "failed": "falhou",
     "researching": "Pesquisando…",
@@ -235,7 +503,262 @@
       "hiddenActions_other": "+{{count}} ações ocultas — mostrar todas",
       "sourcesConsulted_one": "{{count}} fonte consultada",
       "sourcesConsulted_other": "{{count}} fontes consultadas"
+    },
+    "empty": {
+      "chatTitle": "Pronto para conversar",
+      "chatSubtitle": "Selecione um chat ou inicie uma nova conversa",
+      "codeTitle": "Pronto para programar",
+      "codeSubtitle": "Selecione a pasta do projeto e descreva a tarefa"
+    },
+    "suggestions": {
+      "chat": [
+        "O que você pode fazer?",
+        "Me ajude a escrever um texto",
+        "Explique um conceito técnico",
+        "Faça um resumo de algum tópico"
+      ],
+      "code": [
+        "Revise meu código atual",
+        "Explique este repositório",
+        "Gere testes para este projeto",
+        "Refatore algo no código"
+      ]
     }
+  },
+  "usage": {
+    "inputIn": "{{count}} de entrada",
+    "outputOut": "{{count}} de saída",
+    "inputLine": "Entrada: {{count}} tokens",
+    "outputLine": "Saída: {{count}} tokens",
+    "reasoningLine": "Reasoning: {{count}}",
+    "cacheReadLine": "Cache lido: {{count}}",
+    "cacheWriteLine": "Cache gravado: {{count}}",
+    "costLine": "Custo: {{cost}}",
+    "currentContext": "Contexto atual: {{count}} tokens",
+    "note": "(entrada/saída acima somam todas as chamadas de tool desta resposta — não é o tamanho do contexto)",
+    "context": "Contexto",
+    "contextUsed": "Contexto usado",
+    "input": "Entrada",
+    "output": "Saída",
+    "reasoning": "Reasoning",
+    "tokensWord": "tokens",
+    "compacted": "Compactado — histórico anterior resumido",
+    "nearLimit": "Próximo do limite — o histórico será compactado em breve",
+    "atLimit": "Limite atingido — a compactação automática falhou",
+    "compactNow": "Compactar histórico agora"
+  },
+  "images": {
+    "unavailable": "Imagem indisponível",
+    "enlarge": "Ampliar imagem",
+    "assistantImage": "Imagem do assistente"
+  },
+  "todo": {
+    "stale": "TODO ({{count}}/{{total}} concluídos) — atualizada mais abaixo",
+    "title": "Tarefas ({{count}}/{{total}})",
+    "high": "alta"
+  },
+  "subagent": {
+    "defaultTask": "Subtarefa delegada",
+    "running": "Rodando em segundo plano…"
+  },
+  "branch": {
+    "previous": "Ramo anterior",
+    "next": "Próximo ramo",
+    "page": "{{current}} de {{total}}"
+  },
+  "attachments": {
+    "image": "Imagem",
+    "file": "Anexo",
+    "attachment": "anexo",
+    "remove": "Remover anexo",
+    "preview": "prévia do anexo"
+  },
+  "webPreview": {
+    "back": "Voltar",
+    "forward": "Avançar",
+    "reload": "Recarregar",
+    "openInNewTab": "Abrir em nova aba",
+    "enterUrl": "Digite um endereço…",
+    "emptyTitle": "Navegador Web",
+    "emptyHint": "Digite um endereço acima ou no campo abaixo para começar a navegar.",
+    "urlExample": "Ex: wikipedia.org, bing.com",
+    "go": "Ir",
+    "previewTitle": "Preview",
+    "console": "Console",
+    "noConsoleOutput": "Nenhuma saída no console"
+  },
+  "browser": {
+    "viewportFit": "Ajustar ao painel",
+    "viewportMobile": "Mobile · 390×844",
+    "viewportTablet": "Tablet · 834×1112",
+    "viewportDesktop": "Desktop · 1440×900",
+    "selecting": "Selecionando… clique em um elemento da página",
+    "selectForAgent": "Selecionar elemento para o agente",
+    "viewportTitle": "Tamanho da tela (responsividade)",
+    "exitFullscreen": "Sair da tela cheia",
+    "enterFullscreen": "Abrir em tela cheia",
+    "agentInBrowser": "Orbit no navegador",
+    "agentUsingBrowser": "Orbit está usando o navegador",
+    "browserActivity": "Atividade do navegador",
+    "emptyActivity": "As ações do agente aparecem aqui.",
+    "composerPlaceholder": "Peça algo ao Orbit sobre esta página…",
+    "composerPlaceholderNoFolder": "Selecione uma pasta no modo código para pedir à IA"
+  },
+  "ask": {
+    "critical": "Ação crítica: ",
+    "otherAnswer": "Outra resposta…",
+    "questionOf": "Pergunta {{current}} de {{total}}",
+    "dismiss": "Dispensar",
+    "advance": "Avançar",
+    "answer": "Responder",
+    "discussInPanel": "Discutir no chat lateral",
+    "compareOptions": "Comparar opções",
+    "worker": "worker",
+    "batchWaiting_one": "{{count}} pedido de worker aguardando — responda tudo de uma vez",
+    "batchWaiting_other": "{{count}} pedidos de workers aguardando — responda tudo de uma vez",
+    "dismissAll": "Negar/dispensar tudo",
+    "answerAll": "Responder tudo"
+  },
+  "branch": {
+    "unknownError": "Erro desconhecido",
+    "commitError": "Erro ao commitar",
+    "detached": "(detached)",
+    "uncommittedTitle": "Mudanças não commitadas",
+    "uncommittedDesc": "Existem mudanças locais que seriam sobrescritas ao trocar para branch <strong>{{branch}}</strong>.",
+    "commitChanges": "Commitar mudanças",
+    "agentResolve": "Deixar IA resolver",
+    "commitTitle": "Mensagem de commit",
+    "commitDesc": "Digite uma mensagem para commitar as mudanças antes de trocar de branch.",
+    "wipPlaceholder": "wip: mudanças antes de trocar de branch",
+    "wipDefault": "wip: mudanças antes de trocar para {{branch}}",
+    "committing": "Commitando…",
+    "commitAndSwitch": "Commitar e trocar"
+  },
+  "search": {
+    "placeholder": "Buscar conversas...",
+    "empty": "Nenhum resultado encontrado",
+    "hint": "Digite para buscar em todas as conversas"
+  },
+  "filePalette": {
+    "files": "Arquivos",
+    "loading": "Carregando..."
+  },
+  "folderSelector": {
+    "associate": "Associar pasta",
+    "recent": "Recentes",
+    "newFolder": "Nova pasta",
+    "remove": "Remover"
+  },
+  "initProject": {
+    "title": "Projeto novo por aqui",
+    "description": "Posso analisar a estrutura e gerar memórias por área (stack, arquitetura, design, regras de negócio…) para ganhar contexto de uma vez — em vez de descobrir tudo por tentativa e erro.",
+    "analyze": "Analisar projeto",
+    "later": "Agora não"
+  },
+  "loopConfig": {
+    "title": "Configuração do Loop",
+    "description": "Limites para o modo loop: o agente revisa o próprio resultado e itera até completar a tarefa ou atingir o limite.",
+    "maxIterations": "Iterações máximas",
+    "maxIterationsHint": "Quantas vezes o agente pode revisar e refinar o resultado (1-10)",
+    "tokensPerIter": "Tokens por revisão",
+    "tokensPerIterHint": "Limite de tokens para cada chamada de revisão (1.000-20.000)",
+    "timeout": "Timeout (minutos)",
+    "timeoutHint": "Tempo máximo total do loop antes de entregar resposta parcial (1-60)",
+    "autoReview": "Revisão automática",
+    "autoReviewHint": "Se desligado, pergunta antes de cada nova iteração",
+    "done": "Concluir"
+  },
+  "orchestrationConfig": {
+    "title": "Configurar workers",
+    "attention": "Atenção:",
+    "attentionText": "workers rodam em paralelo e consomem tokens sem limite por padrão — prefira um modelo econômico e acompanhe o custo exibido em cada execução.",
+    "workerModel": "Modelo do worker",
+    "useMainModel": "Usar o modelo principal",
+    "noTools": "sem tools",
+    "noSelectionHint": "Sem seleção, os workers usam o mesmo modelo do chat principal.",
+    "thinkingOnWorker": "Thinking no worker",
+    "clear": "Limpar",
+    "done": "Concluir"
+  },
+  "orchestration": {
+    "runningWorkers": "Executando workers…",
+    "proposedCount_one": "Plano proposto · {{count}} tarefa",
+    "proposedCount_other": "Plano proposto · {{count}} tarefas",
+    "completed": "Orquestração concluída",
+    "rejected": "Plano rejeitado",
+    "researchChip": "pesquisa",
+    "browserChip": "browser",
+    "readOnlyChip": "somente leitura",
+    "cost": "Custo desta orquestração: {{cost}} ({{tokens}} tokens)",
+    "reject": "Rejeitar",
+    "approveRun": "Aprovar e executar",
+    "approveRunWithCount_one": "Aprovar e executar ({{count}})",
+    "approveRunWithCount_other": "Aprovar e executar ({{count}})"
+  },
+  "planDialog": {
+    "doneCount": "({{checked}}/{{total}} concluídas)",
+    "loading": "Carregando...",
+    "notFound": "PLAN.md não encontrado.",
+    "reload": "Recarregar"
+  },
+  "planReview": {
+    "modeAsk": "Perguntas",
+    "modeApprove": "Autonomia",
+    "modeFull": "Irrestrito",
+    "modeAskShort": "Perguntar",
+    "proposed": "Plano de implementação proposto",
+    "implementing": "Implementando plano",
+    "viewPlan": "Ver plano",
+    "review": "Revisar",
+    "reject": "Rejeitar",
+    "accept": "Aceitar ({{mode}})",
+    "acceptWith": "Aceitar com {{mode}}",
+    "acceptOrchestration": "Aceitar com Orquestração",
+    "reviewPlaceholder": "Escreva seu feedback para revisar o plano...",
+    "send": "Enviar"
+  },
+  "revert": {
+    "filesRevertedNone": "Arquivos revertidos",
+    "filesRevertedOne": "1 arquivo revertido",
+    "filesRevertedMany": "{{n}} arquivos revertidos",
+    "conversationReverted": "Conversa revertida até este ponto",
+    "continueFromHere": "nova mensagem continua deste ponto",
+    "diff": "Diff",
+    "unrevert": "Desfazer"
+  },
+  "skillProposal": {
+    "building": "Montando a skill…",
+    "installed": "Skill adicionada — disponível como @{{slug}} na paleta \"/\"",
+    "discard": "Dispensar",
+    "add": "Adicionar skill",
+    "discarded": "Proposta dispensada."
+  },
+  "taskProgress": {
+    "title": "Tarefas",
+    "inProgress": "{{title}} em andamento",
+    "errors": "{{title}} com erros",
+    "done": "{{title}} concluídas"
+  },
+  "diff": {
+    "noChanges": "Nenhuma alteração encontrada",
+    "noChangesInMessage": "Nenhuma alteração nesta mensagem",
+    "filesCount_one": "{{count}} arquivo",
+    "filesCount_other": "{{count}} arquivos"
+  },
+  "folders": {
+    "noFolder": "Sem pasta",
+    "associated": "Pastas associadas",
+    "empty": "Nenhuma pasta associada a esta conversa.",
+    "explorer": "Explorador de Arquivos",
+    "copyPath": "Copiar path",
+    "copyContent": "Copiar conteúdo",
+    "reveal": "Mostrar na pasta",
+    "selectFileHint": "Selecione um arquivo no explorador ao lado",
+    "filesTab": "Arquivos",
+    "commitsTab": "Commits",
+    "loadingCommits": "Carregando commits...",
+    "gitHistoryError": "Não foi possível ler o histórico git desta pasta.",
+    "noCommits": "Nenhum commit encontrado."
   },
   "mcp": {
     "kv": { "key": "Chave", "value": "Valor", "add": "Adicionar" },
@@ -437,7 +960,9 @@
   "common": {
     "save": "Salvar",
     "cancel": "Cancelar",
-    "add": "Adicionar"
+    "add": "Adicionar",
+    "loading": "Carregando...",
+    "close": "Fechar"
   },
   "appearance": {
     "title": "Aparência",

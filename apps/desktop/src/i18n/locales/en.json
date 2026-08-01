@@ -13,8 +13,10 @@
     }
   },
   "input": {
-    "placeholder": "Ask anything...",
-    "attachFiles": "Attach files",
+ "placeholder": "Ask anything...",
+ "attachFiles": "Attach files",
+ "submit": "Submit",
+ "uploadFiles": "Upload files",
     "modes": {
       "search": { "label": "Research", "description": "Searches and reads web pages via HTTP. Fast, but doesn't run JavaScript." },
       "browser": { "label": "Browser", "description": "Navigates pages like a real browser. Runs JavaScript, ideal for SPAs." },
@@ -67,6 +69,267 @@
       "documentApp": "Document app",
       "documentAppDescription": "Navigates the app in the panel, takes screenshots, and documents it in docs/"
     }
+  },
+  "reasoning": {
+ "placeholder": "Level",
+ "thinking": "Thinking…",
+ "thoughtFewSeconds": "Thought for a few seconds",
+ "thoughtFor_one": "Thought for {{count}} second",
+ "thoughtFor_other": "Thought for {{count}} seconds",
+ "variants": {
+      "none": "None",
+      "minimal": "Minimal",
+      "low": "Low",
+      "medium": "Medium",
+      "high": "High",
+      "xhigh": "Very high",
+      "max": "Maximum"
+    }
+  },
+  "delegation": {
+    "subagents": "Subagents",
+    "orchestra": "Orchestra",
+    "loop": "Loop",
+    "configure": "Configure"
+  },
+  "permissions": {
+    "title": "Permission mode",
+    "ask": "Ask",
+    "askDescription": "Confirms sensitive actions before running",
+    "approve": "Autonomy",
+    "approveDescription": "Runs on its own; critical actions ask for confirmation",
+    "full": "Unrestricted",
+    "fullDescription": "No questions asked (safety floor still enforced)",
+    "deny": "Deny",
+    "allow": "Allow",
+    "once": "Once",
+    "alwaysChat": "Always in this chat",
+    "always": "Always"
+  },
+  "send": {
+    "send": "Send",
+    "addToQueue": "Add to queue",
+    "moreOptions": "More options",
+    "openInSidePanel": "Open in side chat",
+    "stopAndSend": "Stop and send",
+    "schedule": "Schedule",
+    "scheduleMessage": "Schedule message",
+    "sendToSidePanel": "Send to side chat",
+    "stop": "Stop",
+    "scheduleDialog": {
+      "chooseTime": "Pick a time",
+      "customDateTime": "Or set a custom date/time",
+      "willSend": "Will send in {{time}}",
+      "inMinutes_one": "In {{count}} minute",
+      "inMinutes_other": "In {{count}} minutes",
+      "inHours_one": "In {{count}} hour",
+      "inHours_other": "In {{count}} hours",
+      "tomorrow": "Tomorrow at {{time}}",
+      "cancel": "Cancel",
+      "confirm": "Confirm"
+    }
+  },
+  "modelPicker": {
+    "loading": "Loading...",
+    "error": "Error",
+    "select": "Select a model",
+    "title": "Select model"
+  },
+  "models": {
+    "loadingCatalog": "Loading model catalog…",
+    "searchPlaceholder": "Search by name, provider, or tag…",
+    "refreshCatalog": "Refresh catalog",
+    "bestForTitle": "Best For",
+    "count": "{{count}} of {{total}} models",
+    "noResults": "No model matches your search or filters.",
+    "clearFilters": "Clear",
+    "filters": {
+      "provider": "Provider",
+      "capability": "Capability",
+      "price": "Price",
+      "speed": "Speed",
+      "context": "Context",
+      "contextSelected": "Context {{label}}",
+      "contextAny": "Any",
+      "context32k": "32k+",
+      "context128k": "128k+",
+      "context1m": "1M+",
+      "availability": "Availability"
+    },
+    "capabilities": {
+      "coding": "Coding",
+      "vision": "Vision",
+      "agent": "Agent",
+      "reasoning": "Reasoning"
+    },
+    "prices": {
+      "free": "Free",
+      "low": "Low Cost",
+      "medium": "Medium",
+      "premium": "Premium"
+    },
+    "speeds": {
+      "fast": "Fast",
+      "balanced": "Balanced",
+      "deep": "Deep Thinking"
+    },
+    "columns": {
+      "model": "Model",
+      "coding": "Coding",
+      "agentic": "Agentic",
+      "intelligence": "Intel.",
+      "speed": "Speed",
+      "context": "Context",
+      "price": "In / Out $1M"
+    },
+    "categories": {
+      "coding": "Coding",
+      "agentic": "Agentic",
+      "vision": "Vision",
+      "speed": "Speed",
+      "intelligence": "Intelligence"
+    },
+    "bestFor": {
+      "coding": "Best Coding",
+      "agentic": "Best Agentic",
+      "intelligence": "Best Intelligence",
+      "vision": "Best Vision",
+      "speed": "Best Speed"
+    },
+    "compare": {
+      "selected_one": "{{count}} model selected",
+      "selected_other": "{{count}} models selected",
+      "clearSelection": "Clear selection",
+      "simplified": "Simplified",
+      "technical": "Technical",
+      "cost": "Cost",
+      "inOut": "{{input}} in · {{output}} out",
+      "benchmark": "Benchmark",
+      "context": "Context",
+      "priceInOut": "Price (in/out $1M)"
+    },
+    "benchmarks": {
+      "swebench": "SWE-Bench",
+      "livecodebench": "LiveCodeBench",
+      "gpqa": "GPQA",
+      "hle": "Humanity's Last Exam",
+      "mmluPro": "MMLU-Pro",
+      "intelligenceIndex": "AA Intelligence Index",
+      "codingIndex": "AA Coding Index",
+      "agenticIndex": "AA Agentic Index",
+      "ttft": "TTFT",
+      "tokensPerSecond": "Tokens/s"
+    },
+    "detail": {
+      "overview": "Overview",
+      "bestFor": "Best For",
+      "pricing": "Pricing (USD / 1M tokens)",
+      "input": "Input",
+      "output": "Output",
+      "contextWindow": "Context Window",
+      "tokens": "tokens",
+      "performance": "Performance",
+      "tokensPerSecond": "Tokens/s",
+      "ttft": "TTFT",
+      "providers": "Providers",
+      "released": "Released {{date}} · Sources: {{sources}}",
+      "bestForItems": {
+        "architecture": "Architecture",
+        "refactoring": "Refactoring",
+        "coding": "Coding",
+        "agents": "Agents",
+        "largeProjects": "Large Projects",
+        "visionTasks": "Vision Tasks",
+        "highVolume": "High Volume",
+        "deepReasoning": "Deep Reasoning",
+        "costSensitive": "Cost Sensitive"
+      }
+    },
+    "aa": {
+      "connect": "No speed data — connect Artificial Analysis",
+      "title": "Connect Artificial Analysis",
+      "description": "The free key unlocks measured speed (tokens/s, TTFT) and technical benchmarks (GPQA, HLE, SWE-Bench…) for the Speed scores and filters.",
+      "createKey": "Create key at artificialanalysis.ai/api-access",
+      "keyPlaceholder": "API Key…",
+      "cancel": "Cancel",
+      "saving": "Saving…",
+      "saveAndRefresh": "Save and refresh"
+    }
+  },
+  "memories": {
+    "searchPlaceholder": "Search memories…",
+    "allProjects": "All",
+    "allProjectsFull": "All projects",
+    "tabList": "List",
+    "tabGraph": "Graph",
+    "emptyTitleQuery": "No memories found",
+    "emptyTitleNone": "No memories yet",
+    "emptyQuery": "Try different search terms.",
+    "emptyChat": "Chat with Brain active and Orbit will start remembering facts and preferences automatically.",
+    "emptyCode": "Work on a project with Brain active and Orbit will remember decisions, conventions, and structure.",
+    "kinds": {
+      "core": "core",
+      "seasonal": "seasonal",
+      "general": "general",
+      "project": "project"
+    },
+    "categories": {
+      "preference": "preference",
+      "convention": "convention",
+      "structure": "structure",
+      "decision": "decision",
+      "context": "context",
+      "database": "database",
+      "learning": "learning",
+      "standard": "standard"
+    },
+    "areas": {
+      "overview": "Project Context",
+      "business": "Business Rules",
+      "design": "Design System",
+      "architecture": "Architecture",
+      "preferences": "Preferences",
+      "infrastructure": "Infrastructure",
+      "security": "Security",
+      "development": "Development",
+      "database": "Database",
+      "testing": "Testing",
+      "performance": "Performance",
+      "dependencies": "Dependencies",
+      "standards": "Standards"
+    },
+    "editTitle": "Edit memory",
+    "tagsPlaceholder": "tags separated by commas",
+    "weight": "Weight",
+    "save": "Save",
+    "loadingDoc": "Loading document…",
+    "viewDoc": "View attached document",
+    "openOriginSession": "Open origin conversation: {{title}}",
+    "promoteCore": "Promote to core (permanent)",
+    "promoteDecision": "Promote to decision (permanent)",
+    "edit": "Edit",
+    "delete": "Delete",
+    "promoted": "promoted",
+    "weightLabel": "weight",
+    "uses_one": "{{count}} use",
+    "uses_other": "{{count}} uses",
+    "expires": "expires {{date}}",
+    "connected": "Connected",
+    "deleteTitle": "Delete memory?",
+    "deleteDescription": "\"{{text}}\" will be permanently deleted.",
+    "deleteDescriptionWithDoc": "\"{{text}}\" will be permanently deleted, along with the attached document.",
+    "deleteConfirm": "Delete",
+    "zoomIn": "Zoom in (Ctrl+=)",
+    "zoomOut": "Zoom out (Ctrl+-)",
+    "centerTitle": "Center (Ctrl+0)",
+    "center": "Center",
+    "expandAll": "Expand all",
+    "linkPrompt": "Ctrl+click the target to link",
+    "linkCancel": "cancel",
+    "dropFile": "Drop the file to create a memory",
+    "tooltipWeight": "weight {{weight}}",
+    "tooltipStale": "(not used for over 30 days)",
+    "tooltipCollapsed": "(collapsed)"
   },
   "sidebar": {
     "newChat": "New Chat",
@@ -170,6 +433,8 @@
   "header": {
     "toggleSidebar": "Toggle sidebar",
     "newChat": "New chat",
+    "newCode": "New code",
+    "models": "Models",
     "options": "Options",
     "pin": "Pin",
     "rename": "Rename",
@@ -197,10 +462,13 @@
     }
   },
   "chat": {
-    "retry": "Retry",
-    "stopped": "Stopped after hitting the step limit — it may be incomplete. Ask it to continue.",
-    "copy": "Copy",
-    "revert": "Revert to here",
+ "retry": "Retry",
+ "stopped": "Stopped after reaching the step limit — it may be incomplete. Ask it to continue.",
+ "copy": "Copy",
+ "revert": "Revert to here",
+ "planTitle": "Plan",
+ "orchestrationTitle": "Orchestration",
+ "implementPlan": "Implement plan",
     "exploring": "Exploring {{label}}…",
     "failed": "failed",
     "researching": "Researching…",
@@ -235,7 +503,262 @@
       "hiddenActions_other": "+{{count}} hidden actions — show all",
       "sourcesConsulted_one": "{{count}} source consulted",
       "sourcesConsulted_other": "{{count}} sources consulted"
+    },
+    "empty": {
+      "chatTitle": "Ready to chat",
+      "chatSubtitle": "Select a chat or start a new conversation",
+      "codeTitle": "Ready to code",
+      "codeSubtitle": "Select the project folder and describe the task"
+    },
+    "suggestions": {
+      "chat": [
+        "What can you do?",
+        "Help me write a text",
+        "Explain a technical concept",
+        "Summarize a topic"
+      ],
+      "code": [
+        "Review my current code",
+        "Explain this repository",
+        "Generate tests for this project",
+        "Refactor something in the code"
+      ]
     }
+  },
+  "usage": {
+    "inputIn": "{{count}} in",
+    "outputOut": "{{count}} out",
+    "inputLine": "Input: {{count}} tokens",
+    "outputLine": "Output: {{count}} tokens",
+    "reasoningLine": "Reasoning: {{count}}",
+    "cacheReadLine": "Cache read: {{count}}",
+    "cacheWriteLine": "Cache write: {{count}}",
+    "costLine": "Cost: {{cost}}",
+    "currentContext": "Current context: {{count}} tokens",
+    "note": "(input/output above sum all tool calls in this reply — not the context size)",
+    "context": "Context",
+    "contextUsed": "Context used",
+    "input": "Input",
+    "output": "Output",
+    "reasoning": "Reasoning",
+    "tokensWord": "tokens",
+    "compacted": "Compacted — previous history summarized",
+    "nearLimit": "Near the limit — history will be compacted soon",
+    "atLimit": "Limit reached — automatic compaction failed",
+    "compactNow": "Compact history now"
+  },
+  "images": {
+    "unavailable": "Image unavailable",
+    "enlarge": "Enlarge image",
+    "assistantImage": "Assistant image"
+  },
+  "todo": {
+    "stale": "TODO ({{count}}/{{total}} done) — updated below",
+    "title": "Tasks ({{count}}/{{total}})",
+    "high": "high"
+  },
+  "subagent": {
+    "defaultTask": "Delegated subtask",
+    "running": "Running in the background…"
+  },
+  "branch": {
+    "previous": "Previous branch",
+    "next": "Next branch",
+    "page": "{{current}} of {{total}}"
+  },
+  "attachments": {
+    "image": "Image",
+    "file": "Attachment",
+    "attachment": "attachment",
+    "remove": "Remove attachment",
+    "preview": "attachment preview"
+  },
+  "webPreview": {
+    "back": "Go back",
+    "forward": "Go forward",
+    "reload": "Reload",
+    "openInNewTab": "Open in new tab",
+    "enterUrl": "Enter URL...",
+    "emptyTitle": "Web Browser",
+    "emptyHint": "Type an address above or in the field below to start browsing.",
+    "urlExample": "e.g. wikipedia.org, bing.com",
+    "go": "Go",
+    "previewTitle": "Preview",
+    "console": "Console",
+    "noConsoleOutput": "No console output"
+  },
+  "browser": {
+    "viewportFit": "Fit to panel",
+    "viewportMobile": "Mobile · 390×844",
+    "viewportTablet": "Tablet · 834×1112",
+    "viewportDesktop": "Desktop · 1440×900",
+    "selecting": "Selecting… click an element on the page",
+    "selectForAgent": "Select an element for the agent",
+    "viewportTitle": "Screen size (responsiveness)",
+    "exitFullscreen": "Exit full screen",
+    "enterFullscreen": "Open full screen",
+    "agentInBrowser": "Orbit in the browser",
+    "agentUsingBrowser": "Orbit is using the browser",
+    "browserActivity": "Browser activity",
+    "emptyActivity": "Agent actions will appear here.",
+    "composerPlaceholder": "Ask Orbit about this page…",
+    "composerPlaceholderNoFolder": "Select a folder in code mode to ask the AI"
+  },
+  "ask": {
+    "critical": "Critical action: ",
+    "otherAnswer": "Another answer…",
+    "questionOf": "Question {{current}} of {{total}}",
+    "dismiss": "Dismiss",
+    "advance": "Next",
+    "answer": "Answer",
+    "discussInPanel": "Discuss in side chat",
+    "compareOptions": "Compare options",
+    "worker": "worker",
+    "batchWaiting_one": "{{count}} worker request waiting — answer all at once",
+    "batchWaiting_other": "{{count}} worker requests waiting — answer all at once",
+    "dismissAll": "Deny/dismiss all",
+    "answerAll": "Answer all"
+  },
+  "branch": {
+    "unknownError": "Unknown error",
+    "commitError": "Error committing",
+    "detached": "(detached)",
+    "uncommittedTitle": "Uncommitted changes",
+    "uncommittedDesc": "There are local changes that would be overwritten when switching to branch <strong>{{branch}}</strong>.",
+    "commitChanges": "Commit changes",
+    "agentResolve": "Let the AI resolve",
+    "commitTitle": "Commit message",
+    "commitDesc": "Type a message to commit the changes before switching branches.",
+    "wipPlaceholder": "wip: changes before switching branches",
+    "wipDefault": "wip: changes before switching to {{branch}}",
+    "committing": "Committing…",
+    "commitAndSwitch": "Commit and switch"
+  },
+  "search": {
+    "placeholder": "Search conversations...",
+    "empty": "No results found",
+    "hint": "Type to search across all conversations"
+  },
+  "filePalette": {
+    "files": "Files",
+    "loading": "Loading..."
+  },
+  "folderSelector": {
+    "associate": "Associate folder",
+    "recent": "Recent",
+    "newFolder": "New folder",
+    "remove": "Remove"
+  },
+  "initProject": {
+    "title": "New project here",
+    "description": "I can analyze the structure and generate memories by area (stack, architecture, design, business rules…) to gain context all at once — instead of discovering everything by trial and error.",
+    "analyze": "Analyze project",
+    "later": "Not now"
+  },
+  "loopConfig": {
+    "title": "Loop Configuration",
+    "description": "Limits for loop mode: the agent reviews its own result and iterates until it completes the task or hits the limit.",
+    "maxIterations": "Max iterations",
+    "maxIterationsHint": "How many times the agent can review and refine the result (1-10)",
+    "tokensPerIter": "Tokens per review",
+    "tokensPerIterHint": "Token limit for each review call (1,000-20,000)",
+    "timeout": "Timeout (minutes)",
+    "timeoutHint": "Maximum total loop time before returning a partial answer (1-60)",
+    "autoReview": "Auto review",
+    "autoReviewHint": "If off, asks before each new iteration",
+    "done": "Done"
+  },
+  "orchestrationConfig": {
+    "title": "Configure workers",
+    "attention": "Heads up:",
+    "attentionText": "workers run in parallel and consume tokens with no limit by default — prefer an economical model and watch the cost shown on each run.",
+    "workerModel": "Worker model",
+    "useMainModel": "Use the main model",
+    "noTools": "no tools",
+    "noSelectionHint": "Without a selection, workers use the same model as the main chat.",
+    "thinkingOnWorker": "Thinking on worker",
+    "clear": "Clear",
+    "done": "Done"
+  },
+  "orchestration": {
+    "runningWorkers": "Running workers…",
+    "proposedCount_one": "Proposed plan · {{count}} task",
+    "proposedCount_other": "Proposed plan · {{count}} tasks",
+    "completed": "Orchestration completed",
+    "rejected": "Plan rejected",
+    "researchChip": "research",
+    "browserChip": "browser",
+    "readOnlyChip": "read-only",
+    "cost": "Cost of this orchestration: {{cost}} ({{tokens}} tokens)",
+    "reject": "Reject",
+    "approveRun": "Approve and run",
+    "approveRunWithCount_one": "Approve and run ({{count}})",
+    "approveRunWithCount_other": "Approve and run ({{count}})"
+  },
+  "planDialog": {
+    "doneCount": "({{checked}}/{{total}} done)",
+    "loading": "Loading...",
+    "notFound": "PLAN.md not found.",
+    "reload": "Reload"
+  },
+  "planReview": {
+    "modeAsk": "Questions",
+    "modeApprove": "Autonomy",
+    "modeFull": "Unrestricted",
+    "modeAskShort": "Ask",
+    "proposed": "Implementation plan proposed",
+    "implementing": "Implementing plan",
+    "viewPlan": "View plan",
+    "review": "Review",
+    "reject": "Reject",
+    "accept": "Accept ({{mode}})",
+    "acceptWith": "Accept with {{mode}}",
+    "acceptOrchestration": "Accept with Orchestration",
+    "reviewPlaceholder": "Write your feedback to review the plan...",
+    "send": "Send"
+  },
+  "revert": {
+    "filesRevertedNone": "Files reverted",
+    "filesRevertedOne": "1 file reverted",
+    "filesRevertedMany": "{{n}} files reverted",
+    "conversationReverted": "Conversation reverted up to this point",
+    "continueFromHere": "new message continues from this point",
+    "diff": "Diff",
+    "unrevert": "Undo"
+  },
+  "skillProposal": {
+    "building": "Building the skill…",
+    "installed": "Skill added — available as @{{slug}} in the \"/\" palette",
+    "discard": "Discard",
+    "add": "Add skill",
+    "discarded": "Proposal discarded."
+  },
+  "taskProgress": {
+    "title": "Tasks",
+    "inProgress": "{{title}} in progress",
+    "errors": "{{title}} with errors",
+    "done": "{{title}} done"
+  },
+  "diff": {
+    "noChanges": "No changes found",
+    "noChangesInMessage": "No changes in this message",
+    "filesCount_one": "{{count}} file",
+    "filesCount_other": "{{count}} files"
+  },
+  "folders": {
+    "noFolder": "No folder",
+    "associated": "Associated folders",
+    "empty": "No folder associated with this conversation.",
+    "explorer": "File Explorer",
+    "copyPath": "Copy path",
+    "copyContent": "Copy content",
+    "reveal": "Show in folder",
+    "selectFileHint": "Select a file in the explorer on the side",
+    "filesTab": "Files",
+    "commitsTab": "Commits",
+    "loadingCommits": "Loading commits...",
+    "gitHistoryError": "Could not read this folder's git history.",
+    "noCommits": "No commits found."
   },
   "mcp": {
     "kv": { "key": "Key", "value": "Value", "add": "Add" },
@@ -437,7 +960,9 @@
   "common": {
     "save": "Save",
     "cancel": "Cancel",
-    "add": "Add"
+    "add": "Add",
+    "loading": "Loading...",
+    "close": "Close"
   },
   "appearance": {
     "title": "Appearance",
