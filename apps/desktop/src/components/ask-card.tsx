@@ -1,4 +1,5 @@
 import { useState } from "react"
+import { useTranslation } from "react-i18next"
 import { Bot, ChevronLeft, ChevronRight, ChevronDown, HelpCircle, MessageSquare, ShieldAlert, TriangleAlert } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -24,6 +25,7 @@ function PermissionBody({ ask, submitted, onReply }: {
   submitted: boolean
   onReply: (value: unknown) => void
 }) {
+  const { t } = useTranslation()
   const claim = ask.claim!
   const [open, setOpen] = useState(false)
   return (
@@ -38,7 +40,7 @@ function PermissionBody({ ask, submitted, onReply }: {
           <p className="break-all font-mono text-xs">{claim.title}</p>
           {claim.detail && (
             <p className={cn("text-xs", claim.critical ? "text-destructive" : "text-muted-foreground")}>
-              {claim.critical ? "Ação crítica: " : ""}{claim.detail}
+              {claim.critical ? `${t("ask.critical")}` : ""}{claim.detail}
             </p>
           )}
         </div>
@@ -46,22 +48,22 @@ function PermissionBody({ ask, submitted, onReply }: {
       </div>
       <div className="flex justify-end gap-2">
         <Button size="sm" variant="outline" disabled={submitted} onClick={() => onReply("deny")}>
-          Negar
+          {t("permissions.deny")}
         </Button>
         <DropdownMenu open={open} onOpenChange={setOpen}>
           <DropdownMenuTrigger render={<Button size="sm" disabled={submitted} />}>
-            Permitir
+            {t("permissions.allow")}
             <ChevronDown className="ml-1 size-3" />
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
             <DropdownMenuItem onClick={() => { setOpen(false); onReply("allow") }}>
-              Uma vez
+              {t("permissions.once")}
             </DropdownMenuItem>
             <DropdownMenuItem onClick={() => { setOpen(false); onReply("always_chat") }}>
-              Sempre neste chat
+              {t("permissions.alwaysChat")}
             </DropdownMenuItem>
             <DropdownMenuItem onClick={() => { setOpen(false); onReply("always") }}>
-              Sempre
+              {t("permissions.always")}
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
@@ -77,6 +79,7 @@ export function QuestionItem({ question, selected, free, onToggle, onFree }: {
   onToggle: (option: string) => void
   onFree: (text: string) => void
 }) {
+  const { t } = useTranslation()
   return (
     <div className="flex flex-col gap-1.5">
       <p className="text-sm">{question.text}</p>
@@ -101,7 +104,7 @@ export function QuestionItem({ question, selected, free, onToggle, onFree }: {
       <Input
         value={free}
         onChange={(e) => onFree(e.target.value)}
-        placeholder="Outra resposta…"
+        placeholder={t("ask.otherAnswer")}
         className="h-7 text-xs"
       />
     </div>
@@ -132,6 +135,7 @@ function buildComparisonPrompt(questions: Question[], currentIndex: number): str
 function DiscussInPanelButton({ questions, currentIndex }: { questions: Question[]; currentIndex: number }) {
   const openChatTabWithPendingInput = usePanelStore((s) => s.openChatTabWithPendingInput)
   const createSession = useSessionStore((s) => s.createSession)
+  const { t } = useTranslation()
   const [working, setWorking] = useState(false)
 
   return (
@@ -142,15 +146,16 @@ function DiscussInPanelButton({ questions, currentIndex }: { questions: Question
       onClick={async () => {
         setWorking(true)
         try {
-          const session = await createSession("chat", { setActive: false, title: "Comparar opções" })
-          openChatTabWithPendingInput(session.id, "Comparar opções", buildComparisonPrompt(questions, currentIndex))
+          const title = t("ask.compareOptions")
+          const session = await createSession("chat", { setActive: false, title })
+          openChatTabWithPendingInput(session.id, title, buildComparisonPrompt(questions, currentIndex))
         } finally {
           setWorking(false)
         }
       }}
     >
       <MessageSquare className="mr-1 size-3.5" />
-      Discutir no chat lateral
+      {t("ask.discussInPanel")}
     </Button>
   )
 }
@@ -160,6 +165,7 @@ function QuestionBody({ ask, submitted, onReply }: {
   submitted: boolean
   onReply: (value: unknown) => void
 }) {
+  const { t } = useTranslation()
   const questions = ask.questions ?? []
   const [currentIndex, setCurrentIndex] = useState(0)
   const [selected, setSelected] = useState<Record<string, Set<string>>>({})
@@ -181,7 +187,7 @@ function QuestionBody({ ask, submitted, onReply }: {
         <div className="flex min-w-0 flex-1 flex-col gap-3">
           <div className="flex items-center justify-between">
             <span className="text-xs text-muted-foreground">
-              Pergunta {currentIndex + 1} de {questions.length}
+              {t("ask.questionOf", { current: currentIndex + 1, total: questions.length })}
             </span>
             <div className="flex items-center gap-1">
               <button
@@ -236,7 +242,7 @@ function QuestionBody({ ask, submitted, onReply }: {
             disabled={submitted}
             onClick={() => onReply({ rejected: true })}
           >
-            Dispensar
+            {t("ask.dismiss")}
           </Button>
           {currentIndex < questions.length - 1 ? (
             <Button
@@ -245,7 +251,7 @@ function QuestionBody({ ask, submitted, onReply }: {
               disabled={submitted}
               onClick={() => setCurrentIndex((i) => Math.min(questions.length - 1, i + 1))}
             >
-              Avançar
+              {t("ask.advance")}
             </Button>
           ) : (
             <Button
@@ -253,7 +259,7 @@ function QuestionBody({ ask, submitted, onReply }: {
               disabled={submitted || !allAnswered}
               onClick={() => onReply({ answers: questions.map(answerOf) })}
             >
-              Responder
+              {t("ask.answer")}
             </Button>
           )}
         </div>
