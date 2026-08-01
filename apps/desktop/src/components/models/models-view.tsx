@@ -1,4 +1,5 @@
 import { useEffect, useMemo } from "react"
+import { useTranslation } from "react-i18next"
 import { RefreshCw, Search, Sparkles } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
@@ -19,6 +20,7 @@ import { ModelsTable } from "./models-table"
  */
 
 export function ModelsView() {
+  const { t } = useTranslation()
   const initialize = useModelsStore((s) => s.initialize)
   const refresh = useModelsStore((s) => s.refresh)
   const snapshot = useModelsStore((s) => s.snapshot)
@@ -42,7 +44,7 @@ export function ModelsView() {
     return (
       <div className="flex flex-1 items-center justify-center gap-2 text-sm text-muted-foreground">
         <RefreshCw className="size-4 animate-spin" />
-        Carregando catálogo de modelos…
+        {t("models.loadingCatalog")}
       </div>
     )
   }
@@ -54,7 +56,7 @@ export function ModelsView() {
           <Search className="absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             className="pl-8"
-            placeholder="Buscar por nome, provider ou tag…"
+            placeholder={t("models.searchPlaceholder")}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
@@ -62,7 +64,7 @@ export function ModelsView() {
         <Button
           variant="ghost"
           size="icon-sm"
-          title="Atualizar catálogo"
+          title={t("models.refreshCatalog")}
           disabled={loading}
           onClick={() => void refresh()}
         >
@@ -77,7 +79,7 @@ export function ModelsView() {
         <div>
           <div className="mb-1.5 flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
             <Sparkles className="size-3.5" />
-            Best For
+            {t("models.bestForTitle")}
           </div>
           <BestForSection models={models} />
         </div>
@@ -85,7 +87,7 @@ export function ModelsView() {
 
       <div className="flex items-center justify-between gap-2 text-[11px] text-muted-foreground">
         <span>
-          {filtered.length} de {models.length} modelos
+          {t("models.count", { count: filtered.length, total: models.length })}
         </span>
         <AAKeyButton />
       </div>

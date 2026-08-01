@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react"
+import { useTranslation } from "react-i18next"
 import { GitCompareArrows, X } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
@@ -24,6 +25,7 @@ import { formatContext, formatPrice, SCORE_CATEGORIES } from "./meta"
 const MODEL_COLORS = ["bg-sky-500", "bg-violet-500", "bg-emerald-500", "bg-amber-500"]
 
 export function CompareFloatingCard() {
+  const { t } = useTranslation()
   const selected = useModelsStore((s) => s.selected)
   const clearSelected = useModelsStore((s) => s.clearSelected)
   const setCompareOpen = useModelsStore((s) => s.setCompareOpen)
@@ -39,29 +41,27 @@ export function CompareFloatingCard() {
         onClick={() => setCompareOpen(true)}
       >
         <GitCompareArrows className="size-3.5" />
-        {selected.length < 2
-          ? `${selected.length} modelo selecionado`
-          : `Comparing ${selected.length} Models`}
+        {t("models.compare.selected", { count: selected.length })}
       </Button>
       <Button variant="ghost" size="icon-sm" className="size-7" onClick={clearSelected}>
         <X className="size-3.5" />
-        <span className="sr-only">Limpar seleção</span>
+        <span className="sr-only">{t("models.compare.clearSelection")}</span>
       </Button>
     </div>
   )
 }
 
-const TECHNICAL_ROWS: { key: keyof ModelBenchmarks; label: string; unit: "percent" | "index" | "seconds" | "tps" }[] = [
-  { key: "swebench", label: "SWE-Bench", unit: "percent" },
-  { key: "livecodebench", label: "LiveCodeBench", unit: "percent" },
-  { key: "gpqa", label: "GPQA", unit: "percent" },
-  { key: "hle", label: "Humanity's Last Exam", unit: "percent" },
-  { key: "mmluPro", label: "MMLU-Pro", unit: "percent" },
-  { key: "intelligenceIndex", label: "AA Intelligence Index", unit: "index" },
-  { key: "codingIndex", label: "AA Coding Index", unit: "index" },
-  { key: "agenticIndex", label: "AA Agentic Index", unit: "index" },
-  { key: "ttft", label: "TTFT", unit: "seconds" },
-  { key: "tokensPerSecond", label: "Tokens/s", unit: "tps" },
+const TECHNICAL_ROWS: { key: keyof ModelBenchmarks; labelKey: string; unit: "percent" | "index" | "seconds" | "tps" }[] = [
+  { key: "swebench", labelKey: "models.benchmarks.swebench", unit: "percent" },
+  { key: "livecodebench", labelKey: "models.benchmarks.livecodebench", unit: "percent" },
+  { key: "gpqa", labelKey: "models.benchmarks.gpqa", unit: "percent" },
+  { key: "hle", labelKey: "models.benchmarks.hle", unit: "percent" },
+  { key: "mmluPro", labelKey: "models.benchmarks.mmluPro", unit: "percent" },
+  { key: "intelligenceIndex", labelKey: "models.benchmarks.intelligenceIndex", unit: "index" },
+  { key: "codingIndex", labelKey: "models.benchmarks.codingIndex", unit: "index" },
+  { key: "agenticIndex", labelKey: "models.benchmarks.agenticIndex", unit: "index" },
+  { key: "ttft", labelKey: "models.benchmarks.ttft", unit: "seconds" },
+  { key: "tokensPerSecond", labelKey: "models.benchmarks.tokensPerSecond", unit: "tps" },
 ]
 
 function formatBenchmark(value: number | undefined, unit: "percent" | "index" | "seconds" | "tps"): string {
@@ -82,6 +82,7 @@ function formatBenchmark(value: number | undefined, unit: "percent" | "index" | 
 }
 
 export function CompareDialog() {
+  const { t } = useTranslation()
   const snapshot = useModelsStore((s) => s.snapshot)
   const selected = useModelsStore((s) => s.selected)
   const compareOpen = useModelsStore((s) => s.compareOpen)
@@ -118,8 +119,8 @@ export function CompareDialog() {
             value={view}
             onChange={setView}
             options={[
-              { value: "simplified", label: "Simplified" },
-              { value: "technical", label: "Technical" },
+              { value: "simplified", label: t("models.compare.simplified") },
+              { value: "technical", label: t("models.compare.technical") },
             ]}
           />
         </div>
@@ -128,7 +129,7 @@ export function CompareDialog() {
           <div className="space-y-4">
             {SCORE_CATEGORIES.map((cat) => (
               <div key={cat.key}>
-                <div className="mb-1.5 text-xs font-medium">{cat.label}</div>
+                <div className="mb-1.5 text-xs font-medium">{t(`models.categories.${cat.key}`)}</div>
                 <div className="space-y-1">
                   {models.map((model, i) => {
                     const score = model.scores[cat.key]
@@ -152,14 +153,17 @@ export function CompareDialog() {
               </div>
             ))}
             <div>
-              <div className="mb-1.5 text-xs font-medium">Cost</div>
+              <div className="mb-1.5 text-xs font-medium">{t("models.compare.cost")}</div>
               <div className="space-y-1">
                 {models.map((model, i) => (
                   <div key={model.id} className="flex items-center gap-2 text-xs">
                     <span className={cn("size-2 shrink-0 rounded-full", MODEL_COLORS[i % MODEL_COLORS.length])} />
                     <span className="truncate text-muted-foreground">{model.name}</span>
                     <span className="ml-auto shrink-0 tabular-nums">
-                      {formatPrice(model.pricing.input)} in · {formatPrice(model.pricing.output)} out
+                      {t("models.compare.inOut", {
+                        input: formatPrice(model.pricing.input),
+                        output: formatPrice(model.pricing.output),
+                      })}
                     </span>
                   </div>
                 ))}
@@ -171,7 +175,7 @@ export function CompareDialog() {
             <table className="w-full text-xs">
               <thead>
                 <tr>
-                  <th className="p-1.5 text-left font-medium text-muted-foreground">Benchmark</th>
+                  <th className="p-1.5 text-left font-medium text-muted-foreground">{t("models.compare.benchmark")}</th>
                   {models.map((model, i) => (
                     <th key={model.id} className="p-1.5 text-right font-medium">
                       <span className="inline-flex items-center gap-1.5">
@@ -185,7 +189,7 @@ export function CompareDialog() {
               <tbody>
                 {TECHNICAL_ROWS.filter((row) => models.some((m) => m.benchmarks[row.key] !== undefined)).map((row) => (
                   <tr key={row.key} className="border-t">
-                    <td className="p-1.5 text-muted-foreground">{row.label}</td>
+                    <td className="p-1.5 text-muted-foreground">{t(row.labelKey)}</td>
                     {models.map((model) => (
                       <td key={model.id} className="p-1.5 text-right tabular-nums">
                         {formatBenchmark(model.benchmarks[row.key], row.unit)}
@@ -194,7 +198,7 @@ export function CompareDialog() {
                   </tr>
                 ))}
                 <tr className="border-t">
-                  <td className="p-1.5 text-muted-foreground">Contexto</td>
+                  <td className="p-1.5 text-muted-foreground">{t("models.compare.context")}</td>
                   {models.map((model) => (
                     <td key={model.id} className="p-1.5 text-right tabular-nums">
                       {formatContext(model.contextWindow)}
@@ -202,7 +206,7 @@ export function CompareDialog() {
                   ))}
                 </tr>
                 <tr className="border-t">
-                  <td className="p-1.5 text-muted-foreground">Preço (in/out $1M)</td>
+                  <td className="p-1.5 text-muted-foreground">{t("models.compare.priceInOut")}</td>
                   {models.map((model) => (
                     <td key={model.id} className="p-1.5 text-right tabular-nums">
                       {formatPrice(model.pricing.input)} / {formatPrice(model.pricing.output)}

@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react"
+import { useTranslation } from "react-i18next"
 import { BrainIcon, CheckIcon, ChevronDownIcon, SettingsIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
@@ -23,6 +24,7 @@ const MAX_MODELS_PER_PROVIDER = 40
  * (catálogo models.dev), agrupados por provedor, com indicador de reasoning.
  */
 export function ModelPicker() {
+  const { t } = useTranslation()
   const [open, setOpen] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [skipFinalFocus, setSkipFinalFocus] = useState(false)
@@ -54,14 +56,14 @@ export function ModelPicker() {
         <ModelSelectorTrigger render={<Button className="h-7 gap-1 px-1.5 text-xs" variant="ghost" />}>
           <ModelSelectorLogo provider={selected?.providerId ?? "openai"} />
           <ModelSelectorName>
-            {loading ? "Carregando..." : selectedModel?.name ?? (error ? "Erro" : "Selecionar modelo")}
+            {loading ? t("modelPicker.loading") : selectedModel?.name ?? (error ? t("modelPicker.error") : t("modelPicker.select"))}
           </ModelSelectorName>
           <ChevronDownIcon className="size-3 text-muted-foreground" />
         </ModelSelectorTrigger>
         <ModelSelectorContent finalFocus={skipFinalFocus ? false : undefined}>
-          <ModelSelectorInput placeholder="Pesquisar modelos…" />
+          <ModelSelectorInput placeholder={t("preferences.searchModels")} />
           <ModelSelectorList>
-            <ModelSelectorEmpty>Nenhum modelo encontrado.</ModelSelectorEmpty>
+            <ModelSelectorEmpty>{t("preferences.noModelsFound")}</ModelSelectorEmpty>
             {groups.map(({ provider, models }) => (
               <ModelSelectorGroup heading={provider.name} key={provider.id}>
                 {models.map((model) => (
@@ -101,7 +103,7 @@ export function ModelPicker() {
               }}
             >
               <SettingsIcon className="size-3.5" />
-              {groups.length === 0 ? "Configurar um provedor para começar" : "Gerenciar provedores"}
+              {groups.length === 0 ? t("preferences.configureProvider") : t("preferences.manageProviders")}
             </Button>
           </div>
         </ModelSelectorContent>
