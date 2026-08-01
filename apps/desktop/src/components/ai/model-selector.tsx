@@ -1,5 +1,6 @@
 "use client"
 
+import { useTranslation } from "react-i18next"
 import type { ComponentProps, ReactNode } from "react"
 import {
   Command,
@@ -35,14 +36,17 @@ export type ModelSelectorContentProps = ComponentProps<typeof DialogContent> & {
 export const ModelSelectorContent = ({
   className,
   children,
-  title = "Model Selector",
+  title,
   ...props
-}: ModelSelectorContentProps) => (
-  <DialogContent className={cn("p-0 sm:max-w-sm", className)} {...props}>
-    <DialogTitle className="sr-only">{title}</DialogTitle>
-    <Command className="**:data-[slot=command-input-wrapper]:h-auto">{children}</Command>
-  </DialogContent>
-)
+}: ModelSelectorContentProps) => {
+  const { t } = useTranslation()
+  return (
+    <DialogContent className={cn("p-0 sm:max-w-sm", className)} {...props}>
+      <DialogTitle className="sr-only">{title ?? t("modelPicker.title")}</DialogTitle>
+      <Command className="**:data-[slot=command-input-wrapper]:h-auto">{children}</Command>
+    </DialogContent>
+  )
+}
 
 export type ModelSelectorDialogProps = ComponentProps<typeof CommandDialog>
 

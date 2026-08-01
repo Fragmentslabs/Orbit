@@ -1,4 +1,5 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { useTranslation } from "react-i18next"
 import { ChevronRight, PaperclipIcon } from "lucide-react"
 import { UserMessageNav } from "@/src/components/user-message-nav"
 import { useWorkspace } from "@/lib/workspace-context"
@@ -27,20 +28,6 @@ import { useActiveSession, useSessionStatus, useSessionStore, type SendConfig } 
 import { brainEnabledFor } from "@/src/stores/brain-prefs"
 import { useProviderStore } from "@/src/stores/provider-store"
 import { useSimpleMode } from "@/src/stores/simple-prefs"
-
-const chatSuggestions = [
-  "O que você pode fazer?",
-  "Me ajude a escrever um texto",
-  "Explique um conceito técnico",
-  "Faça um resumo de algum tópico",
-]
-
-const codeSuggestions = [
-  "Revise meu código atual",
-  "Explique este repositório",
-  "Gere testes para este projeto",
-  "Refatore algo no código",
-]
 
 // Referências estáveis para seletores do zustand (evita loop de getSnapshot)
 const NO_MESSAGES: ChatMessage[] = []
@@ -145,6 +132,7 @@ function ChatMessages({ messages, isBusy, mode, sessionId, sendMessage, planIds,
   planReview: PlanReview | undefined
   plan?: OrchestrationPlan | undefined
 }) {
+  const { t } = useTranslation()
   const lastAssistantId = [...messages].reverse().find((m) => m.role === "assistant" && !m.summary)?.id
 
   const userMsgItems = useMemo(
@@ -237,8 +225,8 @@ function ChatMessages({ messages, isBusy, mode, sessionId, sendMessage, planIds,
         {planReview && planReview.status === "implementing" && sessionId && !plan && (
           <div className="px-1">
             <TaskProgress
-              tasks={[{ id: "plan", title: "Implementar plano", status: isBusy ? "streaming" : "idle" }]}
-              title="Plano"
+              tasks={[{ id: "plan", title: t("chat.implementPlan"), status: isBusy ? "streaming" : "idle" }]}
+              title={t("chat.planTitle")}
               onDismiss={() => useSessionStore.getState().dismissPlanReview(sessionId)}
             />
           </div>
@@ -394,9 +382,13 @@ export function ChatView({ sessionId }: { sessionId?: string } = {}) {
     [viewMode, handleChatSend, simpleMode, session?.id],
   )
 
+  const { t } = useTranslation()
+  const chatSuggestions = t("chat.suggestions.chat", { returnObjects: true }) as string[]
+  const codeSuggestions = t("chat.suggestions.code", { returnObjects: true }) as string[]
+
   const emptyState = viewMode === "chat"
-    ? { title: "Pronto para conversar", subtitle: "Selecione um chat ou inicie uma nova conversa", suggestions: chatSuggestions }
-    : { title: "Pronto para programar", subtitle: "Selecione a pasta do projeto e descreva a tarefa", suggestions: codeSuggestions }
+    ? { title: t("chat.empty.chatTitle"), subtitle: t("chat.empty.chatSubtitle"), suggestions: chatSuggestions }
+    : { title: t("chat.empty.codeTitle"), subtitle: t("chat.empty.codeSubtitle"), suggestions: codeSuggestions }
 
   return (
     <div className="relative flex h-full min-w-0 flex-1 flex-col">
@@ -497,7 +489,7 @@ export function ChatView({ sessionId }: { sessionId?: string } = {}) {
         <div className="mx-auto w-full max-w-2xl pb-2">
           <TaskProgress
             tasks={plan.tasks.map((t) => ({ id: t.id, title: t.title, status: t.status, mode: t.mode }))}
-            title="Orquestração"
+            title={t("chat.orchestrationTitle")}
             defaultExpanded={plan.status !== "done"}
             onDismiss={plan.status === "done" ? () => useSessionStore.getState().dismissOrchestration(session.id) : undefined}
           />

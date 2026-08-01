@@ -1,4 +1,5 @@
 import { useMemo } from "react"
+import { useTranslation } from "react-i18next"
 import { cn } from "@/lib/utils"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { useSessionStore } from "@/src/stores/session-store"
@@ -23,6 +24,7 @@ const C = 2 * Math.PI * R
 const NO_MSGS: import("@shared/chat").ChatMessage[] = []
 
 export function ContextMeter({ sessionId }: { sessionId?: string }) {
+  const { t } = useTranslation()
   const messages = useSessionStore((s) => (sessionId ? s.messages[sessionId] ?? NO_MSGS : NO_MSGS))
   const model = useProviderStore((s) => {
     const sel = s.selectedModel
@@ -89,7 +91,7 @@ export function ContextMeter({ sessionId }: { sessionId?: string }) {
           {limit ? (
             <>
               <div className="flex items-center justify-between">
-                <span>Contexto</span>
+                <span>{t("usage.context")}</span>
                 <span className="tabular-nums">
                   {formatTokens(used)} / {formatTokens(limit)}
                 </span>
@@ -103,29 +105,29 @@ export function ContextMeter({ sessionId }: { sessionId?: string }) {
               {lastTokens && (
                 <div className="space-y-1 text-[10px] text-muted-foreground">
                   <div className="flex justify-between">
-                    <span>Entrada</span>
+                    <span>{t("usage.input")}</span>
                     <span className="tabular-nums">{formatTokens(displayInput)}</span>
                   </div>
                   <div className="flex justify-between">
-                    <span>Saída</span>
+                    <span>{t("usage.output")}</span>
                     <span className="tabular-nums">{formatTokens(displayOutput)}</span>
                   </div>
                   {lastTokens.reasoning > 0 && (
                     <div className="flex justify-between">
-                      <span>Reasoning</span>
+                      <span>{t("usage.reasoning")}</span>
                       <span className="tabular-nums">{formatTokens(lastTokens.reasoning)}</span>
                     </div>
                   )}
                 </div>
               )}
               {compacted && (
-                <p className="text-[10px] text-muted-foreground/60">Compactado — histórico anterior resumido</p>
+                <p className="text-[10px] text-muted-foreground/60">{t("usage.compacted")}</p>
               )}
               {!compacted && pct >= 0.85 && pct < 1 && (
-                <p className="text-[10px] text-amber-500">Próximo do limite — o histórico será compactado em breve</p>
+                <p className="text-[10px] text-amber-500">{t("usage.nearLimit")}</p>
               )}
               {!compacted && atLimit && (
-                <p className="text-[10px] text-destructive">Limite atingido — a compactação automática falhou</p>
+                <p className="text-[10px] text-destructive">{t("usage.atLimit")}</p>
               )}
               <div className="pt-1 border-t border-border" />
               <Button
@@ -134,28 +136,28 @@ export function ContextMeter({ sessionId }: { sessionId?: string }) {
                 className="w-full text-xs h-7"
                 onClick={() => sessionId && chatApi.compact(sessionId)}
               >
-                Compactar histórico agora
+                {t("usage.compactNow")}
               </Button>
             </>
           ) : (
             <>
               <div className="flex items-center justify-between">
-                <span>Contexto usado</span>
-                <span className="tabular-nums">{formatTokens(used)} tokens</span>
+                <span>{t("usage.contextUsed")}</span>
+                <span className="tabular-nums">{formatTokens(used)} {t("usage.tokensWord")}</span>
               </div>
               {lastTokens && (
                 <div className="space-y-1 text-[10px] text-muted-foreground">
                   <div className="flex justify-between">
-                    <span>Entrada</span>
+                    <span>{t("usage.input")}</span>
                     <span className="tabular-nums">{formatTokens(displayInput)}</span>
                   </div>
                   <div className="flex justify-between">
-                    <span>Saída</span>
+                    <span>{t("usage.output")}</span>
                     <span className="tabular-nums">{formatTokens(displayOutput)}</span>
                   </div>
                   {lastTokens.reasoning > 0 && (
                     <div className="flex justify-between">
-                      <span>Reasoning</span>
+                      <span>{t("usage.reasoning")}</span>
                       <span className="tabular-nums">{formatTokens(lastTokens.reasoning)}</span>
                     </div>
                   )}
@@ -168,7 +170,7 @@ export function ContextMeter({ sessionId }: { sessionId?: string }) {
                 className="w-full text-xs h-7"
                 onClick={() => sessionId && chatApi.compact(sessionId)}
               >
-                Compactar histórico agora
+                {t("usage.compactNow")}
               </Button>
             </>
           )}
