@@ -1,5 +1,6 @@
 import { Archive, Ellipsis, PanelLeft, PanelRightClose, PanelRightOpen, Pencil, Pin, Trash2 } from "lucide-react"
 import { useState } from "react"
+import { useTranslation } from "react-i18next"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -23,7 +24,8 @@ interface ChatHeaderProps {
   onFoldersChange?: (folders: string[]) => void
 }
 
-export function ChatHeader({ title = "Nova conversa", hasMenu, rightPanelOpen, onToggleSidebar, onToggleRightPanel, repoPath, workspaceMode, onRequestAgentAction, folders, onFoldersChange }: ChatHeaderProps) {
+export function ChatHeader({ title, hasMenu, rightPanelOpen, onToggleSidebar, onToggleRightPanel, repoPath, workspaceMode, onRequestAgentAction, folders, onFoldersChange }: ChatHeaderProps) {
+  const { t } = useTranslation()
   const [menuOpen, setMenuOpen] = useState(false)
 
   return (
@@ -31,11 +33,11 @@ export function ChatHeader({ title = "Nova conversa", hasMenu, rightPanelOpen, o
       {onToggleSidebar && (
         <Button variant="ghost" size="icon-sm" className="size-7 shrink-0" onClick={onToggleSidebar}>
           <PanelLeft className="size-4" />
-          <span className="sr-only">Alternar sidebar</span>
+          <span className="sr-only">{t("header.toggleSidebar")}</span>
         </Button>
       )}
       <div className="flex items-center gap-1 min-w-0 flex-1">
-        <span className="truncate text-sm font-medium text-foreground">{title}</span>
+        <span className="truncate text-sm font-medium text-foreground">{title ?? t("header.newChat")}</span>
         {workspaceMode === 'code' && repoPath && <BranchSelector repoPath={repoPath} onRequestAgentAction={onRequestAgentAction} />}
         {workspaceMode === 'code' && folders && folders.length > 0 && onFoldersChange && (
           <FolderSelector folders={folders} onFoldersChange={onFoldersChange} compact />
@@ -44,24 +46,24 @@ export function ChatHeader({ title = "Nova conversa", hasMenu, rightPanelOpen, o
           <DropdownMenu open={menuOpen} onOpenChange={setMenuOpen}>
             <DropdownMenuTrigger render={<Button variant="ghost" size="icon-sm" className="size-6 shrink-0" />}>
               <Ellipsis className="size-3.5" />
-              <span className="sr-only">Opções</span>
+              <span className="sr-only">{t("header.options")}</span>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="start" className="min-w-40">
               <DropdownMenuItem>
                 <Pin className="size-4" />
-                Fixar
+                {t("header.pin")}
               </DropdownMenuItem>
               <DropdownMenuItem>
                 <Pencil className="size-4" />
-                Renomear
+                {t("header.rename")}
               </DropdownMenuItem>
               <DropdownMenuItem>
                 <Archive className="size-4" />
-                Arquivar
+                {t("header.archive")}
               </DropdownMenuItem>
               <DropdownMenuItem>
                 <Trash2 className="size-4" />
-                Deletar
+                {t("header.delete")}
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
@@ -70,7 +72,7 @@ export function ChatHeader({ title = "Nova conversa", hasMenu, rightPanelOpen, o
       {onToggleRightPanel && (
         <Button variant="ghost" size="icon-sm" className="size-7 shrink-0" onClick={onToggleRightPanel}>
           {rightPanelOpen ? <PanelRightClose className="size-4" /> : <PanelRightOpen className="size-4" />}
-          <span className="sr-only">Alternar painel</span>
+          <span className="sr-only">{t("header.togglePanel")}</span>
         </Button>
       )}
     </div>

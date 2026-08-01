@@ -12,6 +12,70 @@
       "data": { "label": "Data", "description": "Export and import your data." }
     }
   },
+  "titlebar": {
+    "minimize": "Minimize",
+    "restore": "Restore",
+    "maximize": "Maximize",
+    "close": "Close",
+    "menu": "Menu",
+    "searchChats": "Search chats",
+    "file": {
+      "title": "File",
+      "newChat": "New chat",
+      "newCode": "New code",
+      "openFolder": "Open folder",
+      "quit": "Quit"
+    },
+    "edit": {
+      "title": "Edit",
+      "undo": "Undo",
+      "redo": "Redo",
+      "cut": "Cut",
+      "copy": "Copy",
+      "paste": "Paste"
+    },
+    "view": {
+      "title": "View",
+      "chats": "Chats",
+      "fullscreen": "Fullscreen",
+      "reload": "Reload"
+    },
+    "help": {
+      "title": "Help",
+      "howItWorks": "How it works",
+      "documentation": "Documentation",
+      "about": "About Orbit"
+    }
+  },
+  "header": {
+    "toggleSidebar": "Toggle sidebar",
+    "newChat": "New chat",
+    "options": "Options",
+    "pin": "Pin",
+    "rename": "Rename",
+    "archive": "Archive",
+    "delete": "Delete",
+    "togglePanel": "Toggle panel"
+  },
+  "panel": {
+    "dropToOpen": "Drop to open",
+    "terminalNotFound": "Terminal not found",
+    "newChat": {
+      "title": "New chat",
+      "subtitle": "Type a message to get started"
+    },
+    "selector": {
+      "title": "What do you want to open?",
+      "workersTitle": "Active conversation's workers"
+    },
+    "tabs": {
+      "chat": { "label": "Chat", "description": "Chat with the AI about anything" },
+      "terminal": { "label": "Terminal", "description": "Run commands and scripts" },
+      "folders": { "label": "Folders", "description": "Browse the project's files" },
+      "browser": { "label": "Browser", "description": "Search and view web pages" },
+      "diff": { "label": "Diff", "description": "Changes made by tools" }
+    }
+  },
   "chat": {
     "retry": "Retry",
     "stopped": "Stopped after hitting the step limit — it may be incomplete. Ask it to continue.",

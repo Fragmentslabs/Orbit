@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo } from "react"
+import { useTranslation } from "react-i18next"
 import { useDroppable, useDndContext } from "@dnd-kit/core"
 import { FileCode, Globe, Folder, MessageSquare, Terminal, X, PlusIcon, Bot, LoaderIcon, XCircleIcon, Trash2, GripVertical } from "lucide-react"
 import {
@@ -27,15 +28,19 @@ interface TabMeta {
   description: string
 }
 
-const tabMeta: Record<TabType, TabMeta> = {
-  chat: { icon: MessageSquare, label: "Chat", description: "Converse com a IA sobre qualquer assunto" },
-  terminal: { icon: Terminal, label: "Terminal", description: "Execute comandos e scripts" },
-  folders: { icon: Folder, label: "Pastas", description: "Navegue pelos arquivos do projeto" },
-  browser: { icon: Globe, label: "Browser", description: "Pesquise e visualize páginas web" },
-  diff: { icon: FileCode, label: "Diff", description: "Alterações das ferramentas" },
+function useTabMeta(): Record<TabType, TabMeta> {
+  const { t } = useTranslation()
+  return {
+    chat: { icon: MessageSquare, label: t("panel.tabs.chat.label"), description: t("panel.tabs.chat.description") },
+    terminal: { icon: Terminal, label: t("panel.tabs.terminal.label"), description: t("panel.tabs.terminal.description") },
+    folders: { icon: Folder, label: t("panel.tabs.folders.label"), description: t("panel.tabs.folders.description") },
+    browser: { icon: Globe, label: t("panel.tabs.browser.label"), description: t("panel.tabs.browser.description") },
+    diff: { icon: FileCode, label: t("panel.tabs.diff.label"), description: t("panel.tabs.diff.description") },
+  }
 }
 
 function NewChatTab({ onCreated }: { onCreated: (sessionId: string) => void }) {
+  const { t } = useTranslation()
   const handleSubmit = async (text: string, options: SendMessageOptions, files?: FilePart[]) => {
     const newSession = await useSessionStore.getState().createSession("chat", { setActive: false })
     onCreated(newSession.id)
@@ -46,8 +51,8 @@ function NewChatTab({ onCreated }: { onCreated: (sessionId: string) => void }) {
     <div className="flex flex-1 flex-col overflow-hidden p-4" style={{ '--panel-bg': 'var(--sidebar)' } as React.CSSProperties}>
       <div className="flex flex-1 flex-col items-center justify-center gap-4">
         <div className="flex flex-col items-center gap-2">
-          <p className="text-lg font-medium text-foreground">Nova conversa</p>
-          <p className="text-sm text-muted-foreground">Digite uma mensagem para começar</p>
+          <p className="text-lg font-medium text-foreground">{t("panel.newChat.title")}</p>
+          <p className="text-sm text-muted-foreground">{t("panel.newChat.subtitle")}</p>
         </div>
       </div>
       <ChatInput onSubmit={handleSubmit} />
@@ -56,11 +61,12 @@ function NewChatTab({ onCreated }: { onCreated: (sessionId: string) => void }) {
 }
 
 function TerminalTabContent({ tabId }: { tabId: string }) {
+  const { t } = useTranslation()
   const terminalEntry = useTerminalStore((s) => s.entries[tabId])
   if (!terminalEntry) {
     return (
       <div className="flex flex-1 items-center justify-center text-xs text-muted-foreground">
-        Terminal não encontrado
+        {t("panel.terminalNotFound")}
       </div>
     )
   }
@@ -106,6 +112,7 @@ function TabContent({ tab, onUpdateTab }: { tab: PanelTab; onUpdateTab: (id: str
 }
 
 export function RightPanelDropZone() {
+  const { t } = useTranslation()
   const { active } = useDndContext()
   const { setNodeRef, isOver } = useDroppable({ id: "right-panel-drop-zone" })
   const isDragging = active !== null
@@ -124,7 +131,7 @@ export function RightPanelDropZone() {
     >
       <div className="flex flex-col items-center gap-2 text-primary">
         <GripVertical className="size-6" />
-        <span className="text-sm font-medium whitespace-nowrap">Solte para abrir</span>
+        <span className="text-sm font-medium whitespace-nowrap">{t("panel.dropToOpen")}</span>
       </div>
     </div>
   )
@@ -142,6 +149,8 @@ function SelectorScreen({ onSelect, onOpenWorker }: {
   onSelect: (type: TabType) => void
   onOpenWorker: (sessionId: string, title: string) => void
 }) {
+  const { t } = useTranslation()
+  const tabMeta = useTabMeta()
   const { mode } = useWorkspace()
   const activeId = useSessionStore((s) => s.activeIds[mode])
   const sessions = useSessionStore((s) => s.sessions)
@@ -158,7 +167,7 @@ function SelectorScreen({ onSelect, onOpenWorker }: {
 
   const availableTabs = useMemo(
     () => (Object.entries(tabMeta) as [TabType, TabMeta][]).filter(([type]) => mode !== "chat" || type === "chat"),
-    [mode],
+    [mode, tabMeta],
   )
 
   useEffect(() => {
@@ -170,7 +179,7 @@ function SelectorScreen({ onSelect, onOpenWorker }: {
   return (
     <div className="flex flex-1 flex-col overflow-hidden">
       <div className="flex flex-1 flex-col items-center justify-center gap-4 p-6">
-        <p className="text-sm font-medium text-foreground">O que deseja abrir?</p>
+        <p className="text-sm font-medium text-foreground">{t("panel.selector.title")}</p>
         <div className={cn("grid gap-3 w-full max-w-xs", availableTabs.length === 1 ? "grid-cols-1 justify-items-center" : "grid-cols-2")}>
           {availableTabs.map(([type, { icon: Icon, label, description }]) => {
             const isDisabled = !activeId && (type === "folders" || type === "diff")
@@ -196,7 +205,7 @@ function SelectorScreen({ onSelect, onOpenWorker }: {
 
         {workers.length > 0 && (
           <div className="mt-2 flex w-full max-w-xs flex-col gap-1">
-            <p className="px-1 text-[11px] font-medium text-muted-foreground">Workers da conversa ativa</p>
+            <p className="px-1 text-[11px] font-medium text-muted-foreground">{t("panel.selector.workersTitle")}</p>
             {workers.map((worker) => (
               <button
                 key={worker.id}
@@ -255,6 +264,8 @@ function formatUptime(startTime: number): string {
 }
 
 export function RightPanel() {
+  const { t } = useTranslation()
+  const tabMeta = useTabMeta()
   const { mode, folders } = useWorkspace()
   const activeSessionId = useSessionStore((s) => s.activeIds[mode])
   const sessions = useSessionStore((s) => s.sessions)
@@ -274,7 +285,7 @@ export function RightPanel() {
 
   const availableTabs = useMemo(
     () => (Object.entries(tabMeta) as [TabType, TabMeta][]).filter(([type]) => mode !== "chat" || type === "chat"),
-    [mode],
+    [mode, tabMeta],
   )
 
   const addTab = useCallback(async (type: TabType, sessionId?: string, title?: string) => {
@@ -311,7 +322,7 @@ export function RightPanel() {
     const tabTitle = `${meta.label} ${nid > 1 ? nid : ""}`.trim()
     addTabToStore(sessionKey, { id, type, title: tabTitle })
     setActiveTabInStore(sessionKey, id)
-  }, [activeSessionId, tabs, addTabToStore, setActiveTabInStore, folders])
+  }, [activeSessionId, tabs, addTabToStore, setActiveTabInStore, folders, tabMeta])
 
   const removeTab = useCallback((id: string) => {
     const sk = activeSessionId ?? "__orphan__"
@@ -414,7 +425,7 @@ export function RightPanel() {
         )}>
           <div className="flex flex-col items-center gap-2 text-primary">
             <GripVertical className="size-6" />
-            <span className="text-sm font-medium whitespace-nowrap">Solte para abrir</span>
+            <span className="text-sm font-medium whitespace-nowrap">{t("panel.dropToOpen")}</span>
           </div>
         </div>
       )}

@@ -1,4 +1,5 @@
 import { useEffect, useState, type CSSProperties } from "react"
+import { useTranslation } from "react-i18next"
 import {
   ArchiveRestore,
   Copy,
@@ -42,6 +43,7 @@ const dragStyle: CSSProperties = { WebkitAppRegion: "drag" } as CSSProperties
 const noDragStyle: CSSProperties = { WebkitAppRegion: "no-drag" } as CSSProperties
 
 function WindowControls() {
+  const { t } = useTranslation()
   const [maximized, setMaximized] = useState(false)
 
   useEffect(() => {
@@ -53,7 +55,7 @@ function WindowControls() {
     <div className="flex h-full items-stretch" style={noDragStyle}>
       <button
         type="button"
-        aria-label="Minimizar"
+        aria-label={t("titlebar.minimize")}
         onClick={() => windowApi.minimize()}
         className="inline-flex w-11 items-center justify-center text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
       >
@@ -61,7 +63,7 @@ function WindowControls() {
       </button>
       <button
         type="button"
-        aria-label={maximized ? "Restaurar" : "Maximizar"}
+        aria-label={maximized ? t("titlebar.restore") : t("titlebar.maximize")}
         onClick={() => windowApi.maximize()}
         className="inline-flex w-11 items-center justify-center text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
       >
@@ -69,7 +71,7 @@ function WindowControls() {
       </button>
       <button
         type="button"
-        aria-label="Fechar"
+        aria-label={t("titlebar.close")}
         onClick={() => windowApi.close()}
         className="inline-flex w-11 items-center justify-center text-muted-foreground transition-colors hover:bg-destructive hover:text-destructive-foreground"
       >
@@ -80,6 +82,7 @@ function WindowControls() {
 }
 
 function HamburgerMenu() {
+  const { t } = useTranslation()
   const [open, setOpen] = useState(false)
   const { setView, setMode } = useWorkspace()
   const openSettings = useSettingsUi((s) => s.openSettings)
@@ -90,31 +93,31 @@ function HamburgerMenu() {
         render={<Button variant="ghost" size="icon-sm" className="size-6" style={noDragStyle} />}
       >
         <MenuIcon className="size-3.5" />
-        <span className="sr-only">Menu</span>
+        <span className="sr-only">{t("titlebar.menu")}</span>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="min-w-44">
         <DropdownMenuSub>
           <DropdownMenuSubTrigger>
             <FilePlus className="size-4" />
-            Arquivo
+            {t("titlebar.file.title")}
           </DropdownMenuSubTrigger>
           <DropdownMenuSubContent>
             <DropdownMenuItem onClick={() => setView("chat")}>
               <FilePlus className="size-4" />
-              Nova conversa
+              {t("titlebar.file.newChat")}
             </DropdownMenuItem>
             <DropdownMenuItem onClick={() => setMode("code")}>
               <FileCode className="size-4" />
-              Novo código
+              {t("titlebar.file.newCode")}
             </DropdownMenuItem>
             <DropdownMenuItem>
               <FolderOpen className="size-4" />
-              Abrir pasta
+              {t("titlebar.file.openFolder")}
             </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem onClick={() => windowApi.close()}>
               <X className="size-4" />
-              Sair
+              {t("titlebar.file.quit")}
             </DropdownMenuItem>
           </DropdownMenuSubContent>
         </DropdownMenuSub>
@@ -122,29 +125,29 @@ function HamburgerMenu() {
         <DropdownMenuSub>
           <DropdownMenuSubTrigger>
             <Undo2 className="size-4" />
-            Editar
+            {t("titlebar.edit.title")}
           </DropdownMenuSubTrigger>
           <DropdownMenuSubContent>
             <DropdownMenuItem>
               <Undo2 className="size-4" />
-              Desfazer
+              {t("titlebar.edit.undo")}
             </DropdownMenuItem>
             <DropdownMenuItem>
               <Redo2 className="size-4" />
-              Refazer
+              {t("titlebar.edit.redo")}
             </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem>
               <Scissors className="size-4" />
-              Recortar
+              {t("titlebar.edit.cut")}
             </DropdownMenuItem>
             <DropdownMenuItem>
               <Copy className="size-4" />
-              Copiar
+              {t("titlebar.edit.copy")}
             </DropdownMenuItem>
             <DropdownMenuItem>
               <ClipboardPaste className="size-4" />
-              Colar
+              {t("titlebar.edit.paste")}
             </DropdownMenuItem>
           </DropdownMenuSubContent>
         </DropdownMenuSub>
@@ -152,12 +155,12 @@ function HamburgerMenu() {
         <DropdownMenuSub>
           <DropdownMenuSubTrigger>
             <Eye className="size-4" />
-            Visualizar
+            {t("titlebar.view.title")}
           </DropdownMenuSubTrigger>
           <DropdownMenuSubContent>
             <DropdownMenuItem onClick={() => setView("chat")}>
               <PanelLeft className="size-4" />
-              Conversas
+              {t("titlebar.view.chats")}
             </DropdownMenuItem>
             <DropdownMenuItem onClick={() => setView("models")}>
               <PanelRightOpen className="size-4" />
@@ -166,11 +169,11 @@ function HamburgerMenu() {
             <DropdownMenuSeparator />
             <DropdownMenuItem onClick={() => windowApi.toggleFullscreen()}>
               <Maximize2 className="size-4" />
-              Tela cheia
+              {t("titlebar.view.fullscreen")}
             </DropdownMenuItem>
             <DropdownMenuItem onClick={() => location.reload()}>
               <RefreshCw className="size-4" />
-              Recarregar
+              {t("titlebar.view.reload")}
             </DropdownMenuItem>
           </DropdownMenuSubContent>
         </DropdownMenuSub>
@@ -180,20 +183,20 @@ function HamburgerMenu() {
         <DropdownMenuSub>
           <DropdownMenuSubTrigger>
             <Info className="size-4" />
-            Ajuda
+            {t("titlebar.help.title")}
           </DropdownMenuSubTrigger>
           <DropdownMenuSubContent>
             <DropdownMenuItem onClick={() => openSettings("howto")}>
               <FileText className="size-4" />
-              Como funciona
+              {t("titlebar.help.howItWorks")}
             </DropdownMenuItem>
             <DropdownMenuItem>
               <ExternalLink className="size-4" />
-              Documentação
+              {t("titlebar.help.documentation")}
             </DropdownMenuItem>
             <DropdownMenuItem>
               <ArchiveRestore className="size-4" />
-              Sobre o Orbit
+              {t("titlebar.help.about")}
             </DropdownMenuItem>
           </DropdownMenuSubContent>
         </DropdownMenuSub>
@@ -203,6 +206,7 @@ function HamburgerMenu() {
 }
 
 export function TitleBar({ onSearchOpen }: { onSearchOpen?: () => void }) {
+  const { t } = useTranslation()
   const isMac = windowApi.platform === "darwin"
 
   return (
@@ -214,7 +218,7 @@ export function TitleBar({ onSearchOpen }: { onSearchOpen?: () => void }) {
         <HamburgerMenu />
         <button
           type="button"
-          aria-label="Buscar conversas"
+          aria-label={t("titlebar.searchChats")}
           onClick={onSearchOpen}
           className="inline-flex size-6 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
         >
