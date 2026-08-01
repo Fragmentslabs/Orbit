@@ -12,6 +12,62 @@
       "data": { "label": "Data", "description": "Export and import your data." }
     }
   },
+  "input": {
+    "placeholder": "Ask anything...",
+    "attachFiles": "Attach files",
+    "modes": {
+      "search": { "label": "Research", "description": "Searches and reads web pages via HTTP. Fast, but doesn't run JavaScript." },
+      "browser": { "label": "Browser", "description": "Navigates pages like a real browser. Runs JavaScript, ideal for SPAs." },
+      "thinking": { "label": "Thinking", "alwaysOn": "This model always uses extended reasoning.", "description": "Enables the model's extended reasoning. Costs more tokens and time." },
+      "simple": { "label": "Simple", "description": "Direct plain-text replies: no formatting, citations, or tool blocks." },
+      "brain": { "label": "Memory", "description": "Orbit remembers your facts and preferences across conversations. Turn it off just for this chat if you prefer a context-free interaction." }
+    },
+    "slash": {
+      "searchDescription": "Toggles web search (websearch/webfetch)",
+      "browserDescription": "Toggles JavaScript navigation",
+      "thinkingDescription": "Toggles the model's extended reasoning",
+      "simpleDescription": "Toggles plain-text replies",
+      "brainLabel": "Memory (Brain)",
+      "brainDescription": "Orbit remembers facts and preferences across conversations",
+      "newChat": "New chat",
+      "newChatDescription": "Starts a blank chat",
+      "settings": "Settings",
+      "settingsDescription": "Opens Orbit's settings"
+    }
+  },
+  "codeInput": {
+    "placeholderNoFolder": "Select a folder to get started…",
+    "placeholder": "Ask about code...",
+    "selected": "selected",
+    "modes": {
+      "search": { "description": "Enables websearch and webfetch to look up documentation online." },
+      "plan": { "label": "Plan Mode", "description": "Read-only. Produces an implementation plan without editing files." },
+      "simple": { "description": "Direct plain-text replies: no formatting or tool blocks." },
+      "brain": { "description": "Orbit remembers the project's decisions, conventions, and structure across sessions. Turn it off just for this chat if you prefer a context-free interaction." }
+    },
+    "slash": {
+      "searchDescription": "Toggles web search for documentation",
+      "planDescription": "Toggles read-only mode (implementation plan)",
+      "brainDescription": "Orbit remembers the project's decisions and conventions across sessions",
+      "subagentsLabel": "Subagents",
+      "subagentsDescription": "Toggles background workers",
+      "orchestraLabel": "Orchestra",
+      "orchestraDescription": "Toggles orchestration into parallel tasks",
+      "permissionLabel": "Permissions: {{label}}",
+      "permAsk": "Ask",
+      "permAskDescription": "Confirms sensitive actions before running",
+      "permApprove": "Autonomy",
+      "permApproveDescription": "Runs on its own; critical actions ask for confirmation",
+      "permFull": "Unrestricted",
+      "permFullDescription": "No questions asked (safety floor still enforced)",
+      "newSession": "New session",
+      "newSessionDescription": "Starts a blank code session",
+      "createSkill": "Create skill",
+      "createSkillDescription": "Asks Orbit to create a skill (with scripts, if needed)",
+      "documentApp": "Document app",
+      "documentAppDescription": "Navigates the app in the panel, takes screenshots, and documents it in docs/"
+    }
+  },
   "sidebar": {
     "newChat": "New Chat",
     "newSession": "New session",

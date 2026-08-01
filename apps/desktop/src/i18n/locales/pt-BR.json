@@ -12,6 +12,62 @@
       "data": { "label": "Dados", "description": "Exportar e importar seus dados." }
     }
   },
+  "input": {
+    "placeholder": "Pergunte qualquer coisa...",
+    "attachFiles": "Anexar arquivos",
+    "modes": {
+      "search": { "label": "Pesquisa", "description": "Busca e lê páginas da web via HTTP. Rápido, mas não executa JavaScript." },
+      "browser": { "label": "Browser", "description": "Navega em páginas como um browser real. Executa JavaScript, ideal para SPAs." },
+      "thinking": { "label": "Thinking", "alwaysOn": "Este modelo sempre usa raciocínio extendido.", "description": "Ativa raciocínio extendido do modelo. Custa mais tokens e tempo." },
+      "simple": { "label": "Simples", "description": "Respostas diretas em texto puro: sem formatação, citações ou blocos de ferramentas." },
+      "brain": { "label": "Memória", "description": "Orbit lembra fatos e preferências suas entre conversas. Desative apenas neste chat se preferir uma interação sem contexto." }
+    },
+    "slash": {
+      "searchDescription": "Alterna busca web (websearch/webfetch)",
+      "browserDescription": "Alterna navegação com JavaScript",
+      "thinkingDescription": "Alterna raciocínio estendido do modelo",
+      "simpleDescription": "Alterna respostas em texto puro",
+      "brainLabel": "Memória (Brain)",
+      "brainDescription": "Orbit lembra fatos e preferências entre conversas",
+      "newChat": "Nova conversa",
+      "newChatDescription": "Começa um chat em branco",
+      "settings": "Configurações",
+      "settingsDescription": "Abre as configurações do Orbit"
+    }
+  },
+  "codeInput": {
+    "placeholderNoFolder": "Selecione uma pasta para começar…",
+    "placeholder": "Pergunte sobre código...",
+    "selected": "selecionado",
+    "modes": {
+      "search": { "description": "Libera websearch e webfetch para consultar documentação online." },
+      "plan": { "label": "Modo Plano", "description": "Somente leitura. Produz um plano de implementação sem editar arquivos." },
+      "simple": { "description": "Respostas diretas em texto puro: sem formatação nem blocos de ferramentas." },
+      "brain": { "description": "Orbit lembra decisões, convenções e estrutura do projeto entre sessões. Desative apenas neste chat se preferir uma interação sem contexto." }
+    },
+    "slash": {
+      "searchDescription": "Alterna busca web para documentação",
+      "planDescription": "Alterna modo somente leitura (plano de implementação)",
+      "brainDescription": "Orbit lembra decisões e convenções do projeto entre sessões",
+      "subagentsLabel": "Subagents",
+      "subagentsDescription": "Alterna workers em background",
+      "orchestraLabel": "Orchestra",
+      "orchestraDescription": "Alterna orquestração em tarefas paralelas",
+      "permissionLabel": "Permissões: {{label}}",
+      "permAsk": "Perguntar",
+      "permAskDescription": "Confirma ações sensíveis antes de executar",
+      "permApprove": "Autonomia",
+      "permApproveDescription": "Executa sozinho; ações críticas pedem confirmação",
+      "permFull": "Irrestrito",
+      "permFullDescription": "Sem perguntas (piso de segurança mantido)",
+      "newSession": "Nova sessão",
+      "newSessionDescription": "Começa uma sessão de código em branco",
+      "createSkill": "Criar skill",
+      "createSkillDescription": "Pede ao Orbit para criar uma skill (com scripts, se precisar)",
+      "documentApp": "Documentar aplicação",
+      "documentAppDescription": "Navega pelo app no painel, tira screenshots e documenta em docs/"
+    }
+  },
   "sidebar": {
     "newChat": "Novo Chat",
     "newSession": "Nova sessão",
