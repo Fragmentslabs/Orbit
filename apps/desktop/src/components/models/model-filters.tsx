@@ -1,4 +1,5 @@
 import { useMemo } from "react"
+import { useTranslation } from "react-i18next"
 import { ChevronDown, X } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
@@ -71,14 +72,15 @@ function MultiFilter({ label, options, values, onToggle }: {
   )
 }
 
-const CONTEXT_OPTIONS: { value: ContextFilter; label: string }[] = [
-  { value: "any", label: "Qualquer" },
-  { value: "32k", label: "32k+" },
-  { value: "128k", label: "128k+" },
-  { value: "1m", label: "1M+" },
+const CONTEXT_OPTIONS: { value: ContextFilter; labelKey: string }[] = [
+  { value: "any", labelKey: "models.filters.contextAny" },
+  { value: "32k", labelKey: "models.filters.context32k" },
+  { value: "128k", labelKey: "models.filters.context128k" },
+  { value: "1m", labelKey: "models.filters.context1m" },
 ]
 
 export function ModelFiltersRow({ models }: { models: OrbitModel[] }) {
+  const { t } = useTranslation()
   const filters = useModelsStore((s) => s.filters)
   const toggleFilter = useModelsStore((s) => s.toggleFilter)
   const setContext = useModelsStore((s) => s.setContext)
@@ -123,50 +125,55 @@ export function ModelFiltersRow({ models }: { models: OrbitModel[] }) {
     return { capability, price, speed }
   }, [models])
 
-  const toOptions = (labels: Record<string, string>, countMap: Map<string, number>) =>
+  const toOptions = (labels: Record<string, string>, countMap: Map<string, number>, ns: string) =>
     Object.entries(labels).map(([value, label]) => ({
       value,
-      label,
+      label: t(`models.${ns}.${value}`, { defaultValue: label }),
       hint: String(countMap.get(value) ?? 0),
     }))
+
+  const contextLabel = CONTEXT_OPTIONS.find((o) => o.value === filters.context)?.labelKey
 
   return (
     <div className="flex flex-wrap items-center gap-1.5">
       <MultiFilter
-        label="Provider"
+        label={t("models.filters.provider")}
         options={providerOptions}
         values={filters.providers}
         onToggle={(v) => toggleFilter("providers", v)}
       />
       <MultiFilter
-        label="Capacidade"
-        options={toOptions(CAPABILITY_LABELS, counts.capability)}
+        label={t("models.filters.capability")}
+        options={toOptions(CAPABILITY_LABELS, counts.capability, "capabilities")}
         values={filters.capabilities}
         onToggle={(v) => toggleFilter("capabilities", v)}
       />
       <MultiFilter
-        label="Preço"
-        options={toOptions(PRICE_LABELS, counts.price)}
+        label={t("models.filters.price")}
+        options={toOptions(PRICE_LABELS, counts.price, "prices")}
         values={filters.prices}
         onToggle={(v) => toggleFilter("prices", v)}
       />
       <MultiFilter
-        label="Velocidade"
-        options={toOptions(SPEED_LABELS, counts.speed)}
+        label={t("models.filters.speed")}
+        options={toOptions(SPEED_LABELS, counts.speed, "speeds")}
         values={filters.speeds}
         onToggle={(v) => toggleFilter("speeds", v)}
       />
-      <FilterDropdown label={filters.context === "any" ? "Contexto" : `Contexto ${CONTEXT_OPTIONS.find((o) => o.value === filters.context)?.label}`} count={filters.context !== "any" ? 1 : 0}>
+      <FilterDropdown
+        label={filters.context === "any" ? t("models.filters.context") : t("models.filters.contextSelected", { label: t(contextLabel!) })}
+        count={filters.context !== "any" ? 1 : 0}
+      >
         <DropdownMenuRadioGroup value={filters.context} onValueChange={(v) => setContext(v as ContextFilter)}>
           {CONTEXT_OPTIONS.map((opt) => (
             <DropdownMenuRadioItem key={opt.value} value={opt.value}>
-              {opt.label}
+              {t(opt.labelKey)}
             </DropdownMenuRadioItem>
           ))}
         </DropdownMenuRadioGroup>
       </FilterDropdown>
       <MultiFilter
-        label="Disponibilidade"
+        label={t("models.filters.availability")}
         options={availabilityOptions}
         values={filters.availability}
         onToggle={(v) => toggleFilter("availability", v)}
@@ -174,7 +181,7 @@ export function ModelFiltersRow({ models }: { models: OrbitModel[] }) {
       {hasActiveFilters(filters) && (
         <Button variant="ghost" size="sm" className="h-7 gap-1 text-xs text-muted-foreground" onClick={clearFilters}>
           <X className="size-3" />
-          Limpar
+          {t("models.clearFilters")}
         </Button>
       )}
     </div>

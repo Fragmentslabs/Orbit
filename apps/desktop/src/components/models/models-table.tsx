@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react"
+import { useTranslation } from "react-i18next"
 import { ArrowDown, ArrowUp } from "lucide-react"
 
 import { Badge } from "@/components/ui/badge"
@@ -12,14 +13,14 @@ import { ModelCheckbox, ScoreBar } from "./shared"
 
 type SortKey = "name" | "coding" | "agentic" | "intelligence" | "speed" | "context" | "price"
 
-const COLUMNS: { key: SortKey; label: string; className?: string }[] = [
-  { key: "name", label: "Modelo", className: "min-w-44" },
-  { key: "coding", label: "Coding", className: "w-24" },
-  { key: "agentic", label: "Agentic", className: "w-24" },
-  { key: "intelligence", label: "Intel.", className: "w-24" },
-  { key: "speed", label: "Speed", className: "w-24" },
-  { key: "context", label: "Contexto", className: "w-20 text-right" },
-  { key: "price", label: "In / Out $1M", className: "w-28 text-right" },
+const COLUMNS: { key: SortKey; labelKey: string; className?: string }[] = [
+  { key: "name", labelKey: "models.columns.model", className: "min-w-44" },
+  { key: "coding", labelKey: "models.columns.coding", className: "w-24" },
+  { key: "agentic", labelKey: "models.columns.agentic", className: "w-24" },
+  { key: "intelligence", labelKey: "models.columns.intelligence", className: "w-24" },
+  { key: "speed", labelKey: "models.columns.speed", className: "w-24" },
+  { key: "context", labelKey: "models.columns.context", className: "w-20 text-right" },
+  { key: "price", labelKey: "models.columns.price", className: "w-28 text-right" },
 ]
 
 function sortValue(model: OrbitModel, key: SortKey): number | string {
@@ -36,6 +37,7 @@ function sortValue(model: OrbitModel, key: SortKey): number | string {
 }
 
 export function ModelsTable({ models }: { models: OrbitModel[] }) {
+  const { t } = useTranslation()
   const selected = useModelsStore((s) => s.selected)
   const toggleSelected = useModelsStore((s) => s.toggleSelected)
   const setDetailId = useModelsStore((s) => s.setDetailId)
@@ -64,7 +66,7 @@ export function ModelsTable({ models }: { models: OrbitModel[] }) {
   if (models.length === 0) {
     return (
       <div className="flex flex-1 items-center justify-center text-sm text-muted-foreground">
-        Nenhum modelo corresponde à busca ou aos filtros.
+        {t("models.noResults")}
       </div>
     )
   }
@@ -85,7 +87,7 @@ export function ModelsTable({ models }: { models: OrbitModel[] }) {
                 onClick={() => handleSort(col.key)}
               >
                 <span className="inline-flex items-center gap-1">
-                  {col.label}
+                  {t(col.labelKey)}
                   {sortKey === col.key &&
                     (sortAsc ? <ArrowUp className="size-3" /> : <ArrowDown className="size-3" />)}
                 </span>
@@ -113,7 +115,7 @@ export function ModelsTable({ models }: { models: OrbitModel[] }) {
                     {model.providerName}
                     {model.speedTier === "deep" && (
                       <Badge variant="secondary" className="h-3.5 px-1 text-[9px]">
-                        {SPEED_LABELS.deep}
+                        {t("models.speeds.deep", { defaultValue: SPEED_LABELS.deep })}
                       </Badge>
                     )}
                   </span>

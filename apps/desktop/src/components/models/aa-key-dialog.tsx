@@ -1,4 +1,5 @@
 import { useState } from "react"
+import { useTranslation } from "react-i18next"
 import { ExternalLink, Gauge } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
@@ -23,6 +24,7 @@ import { useModelsStore } from "@/src/stores/models-store"
 const AA_KEYS_URL = "https://artificialanalysis.ai/api-access"
 
 export function AAKeyButton() {
+  const { t } = useTranslation()
   const hasKey = useModelsStore((s) => s.snapshot?.hasAAKey ?? false)
   const refresh = useModelsStore((s) => s.refresh)
   const [open, setOpen] = useState(false)
@@ -54,16 +56,13 @@ export function AAKeyButton() {
         onClick={() => setOpen(true)}
       >
         <Gauge className="size-3" />
-        Sem dados de velocidade — conectar Artificial Analysis
+        {t("models.aa.connect")}
       </Button>
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="sm:max-w-sm" showCloseButton={false}>
           <DialogHeader>
-            <DialogTitle>Conectar Artificial Analysis</DialogTitle>
-            <DialogDescription>
-              A chave gratuita libera velocidade medida (tokens/s, TTFT) e benchmarks
-              técnicos (GPQA, HLE, SWE-Bench…) para os scores e filtros de Speed.
-            </DialogDescription>
+            <DialogTitle>{t("models.aa.title")}</DialogTitle>
+            <DialogDescription>{t("models.aa.description")}</DialogDescription>
           </DialogHeader>
           <a
             className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
@@ -72,22 +71,22 @@ export function AAKeyButton() {
             rel="noreferrer"
           >
             <ExternalLink className="size-3" />
-            Criar chave em artificialanalysis.ai/api-access
+            {t("models.aa.createKey")}
           </a>
           <Input
             autoFocus
             type="password"
             value={key}
-            placeholder="Chave de API…"
+            placeholder={t("models.aa.keyPlaceholder")}
             onChange={(e) => setKey(e.target.value)}
             onKeyDown={(e) => {
               if (e.key === "Enter") void save()
             }}
           />
           <DialogFooter>
-            <Button variant="outline" onClick={() => setOpen(false)}>Cancelar</Button>
+            <Button variant="outline" onClick={() => setOpen(false)}>{t("common.cancel")}</Button>
             <Button disabled={!key.trim() || saving} onClick={() => void save()}>
-              {saving ? "Salvando…" : "Salvar e atualizar"}
+              {saving ? t("models.aa.saving") : t("models.aa.saveAndRefresh")}
             </Button>
           </DialogFooter>
         </DialogContent>

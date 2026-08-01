@@ -1,4 +1,5 @@
 import { useMemo } from "react"
+import { useTranslation } from "react-i18next"
 import { Check } from "lucide-react"
 
 import { Badge } from "@/components/ui/badge"
@@ -20,14 +21,14 @@ import { ScoreBar } from "./shared"
 function bestForOf(model: OrbitModel): string[] {
   const items: string[] = []
   const s = model.scores
-  if ((s.coding ?? 0) >= 80) items.push("Architecture", "Refactoring")
-  else if ((s.coding ?? 0) >= 60) items.push("Coding")
-  if ((s.agentic ?? 0) >= 70) items.push("Agents")
-  if (model.contextWindow >= 400_000) items.push("Large Projects")
-  if ((s.vision ?? 0) >= 60) items.push("Vision Tasks")
-  if ((s.speed ?? 0) >= 70 && model.priceTier !== "premium") items.push("High Volume")
-  if (model.speedTier === "deep") items.push("Deep Reasoning")
-  if (model.priceTier === "free" || model.priceTier === "low") items.push("Cost Sensitive")
+  if ((s.coding ?? 0) >= 80) items.push("architecture", "refactoring")
+  else if ((s.coding ?? 0) >= 60) items.push("coding")
+  if ((s.agentic ?? 0) >= 70) items.push("agents")
+  if (model.contextWindow >= 400_000) items.push("largeProjects")
+  if ((s.vision ?? 0) >= 60) items.push("visionTasks")
+  if ((s.speed ?? 0) >= 70 && model.priceTier !== "premium") items.push("highVolume")
+  if (model.speedTier === "deep") items.push("deepReasoning")
+  if (model.priceTier === "free" || model.priceTier === "low") items.push("costSensitive")
   return items.slice(0, 6)
 }
 
@@ -43,6 +44,7 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 }
 
 export function ModelDetailPanel() {
+  const { t } = useTranslation()
   const snapshot = useModelsStore((s) => s.snapshot)
   const detailId = useModelsStore((s) => s.detailId)
   const setDetailId = useModelsStore((s) => s.setDetailId)
@@ -63,7 +65,7 @@ export function ModelDetailPanel() {
             <SheetDescription className="flex flex-wrap items-center gap-1.5">
               {model.providerName}
               <Badge variant="secondary" className="h-4 px-1.5 text-[10px]">
-                {SPEED_LABELS[model.speedTier]}
+                {t(`models.speeds.${model.speedTier}`, { defaultValue: SPEED_LABELS[model.speedTier] })}
               </Badge>
               {model.tags.map((tag) => (
                 <Badge key={tag} variant="outline" className="h-4 px-1.5 text-[10px]">
@@ -74,12 +76,12 @@ export function ModelDetailPanel() {
           </SheetHeader>
 
           <div className="flex flex-col gap-5">
-            <Section title="Overview">
+            <Section title={t("models.detail.overview")}>
               <div className="space-y-2.5">
                 {SCORE_CATEGORIES.map((cat) => (
                   <div key={cat.key}>
                     <div className="mb-1 flex items-center justify-between text-xs">
-                      <span>{cat.label}</span>
+                      <span>{t(`models.categories.${cat.key}`)}</span>
                     </div>
                     <ScoreBar score={model.scores[cat.key as keyof ModelScores]} />
                   </div>
@@ -88,46 +90,46 @@ export function ModelDetailPanel() {
             </Section>
 
             {bestFor.length > 0 && (
-              <Section title="Best For">
+              <Section title={t("models.detail.bestFor")}>
                 <div className="grid grid-cols-2 gap-1.5">
                   {bestFor.map((item) => (
                     <div key={item} className="flex items-center gap-1.5 text-xs">
                       <Check className="size-3.5 text-emerald-500" />
-                      {item}
+                      {t(`models.detail.bestForItems.${item}`)}
                     </div>
                   ))}
                 </div>
               </Section>
             )}
 
-            <Section title="Pricing (USD / 1M tokens)">
+            <Section title={t("models.detail.pricing")}>
               <div className="grid grid-cols-2 gap-2">
                 <div className="rounded-lg border p-2.5">
-                  <div className="text-[10px] text-muted-foreground">Input</div>
+                  <div className="text-[10px] text-muted-foreground">{t("models.detail.input")}</div>
                   <div className="text-sm font-medium tabular-nums">{formatPrice(model.pricing.input)}</div>
                 </div>
                 <div className="rounded-lg border p-2.5">
-                  <div className="text-[10px] text-muted-foreground">Output</div>
+                  <div className="text-[10px] text-muted-foreground">{t("models.detail.output")}</div>
                   <div className="text-sm font-medium tabular-nums">{formatPrice(model.pricing.output)}</div>
                 </div>
               </div>
             </Section>
 
-            <Section title="Context Window">
+            <Section title={t("models.detail.contextWindow")}>
               <div className="rounded-lg border p-2.5 text-sm font-medium tabular-nums">
                 {formatContext(model.contextWindow)}
                 {model.contextWindow > 0 && (
-                  <span className="ml-1 text-[10px] font-normal text-muted-foreground">tokens</span>
+                  <span className="ml-1 text-[10px] font-normal text-muted-foreground">{t("models.detail.tokens")}</span>
                 )}
               </div>
             </Section>
 
             {(model.benchmarks.tokensPerSecond !== undefined || model.benchmarks.ttft !== undefined) && (
-              <Section title="Performance">
+              <Section title={t("models.detail.performance")}>
                 <div className="grid grid-cols-2 gap-2">
                   {model.benchmarks.tokensPerSecond !== undefined && (
                     <div className="rounded-lg border p-2.5">
-                      <div className="text-[10px] text-muted-foreground">Tokens/s</div>
+                      <div className="text-[10px] text-muted-foreground">{t("models.detail.tokensPerSecond")}</div>
                       <div className="text-sm font-medium tabular-nums">
                         {model.benchmarks.tokensPerSecond.toFixed(0)}
                       </div>
@@ -135,7 +137,7 @@ export function ModelDetailPanel() {
                   )}
                   {model.benchmarks.ttft !== undefined && (
                     <div className="rounded-lg border p-2.5">
-                      <div className="text-[10px] text-muted-foreground">TTFT</div>
+                      <div className="text-[10px] text-muted-foreground">{t("models.detail.ttft")}</div>
                       <div className="text-sm font-medium tabular-nums">
                         {model.benchmarks.ttft.toFixed(2)}s
                       </div>
@@ -145,7 +147,7 @@ export function ModelDetailPanel() {
               </Section>
             )}
 
-            <Section title="Providers">
+            <Section title={t("models.detail.providers")}>
               <div className="flex flex-wrap gap-1.5">
                 {model.availability.map((provider) => (
                   <Badge key={provider} variant="secondary" className="text-[10px]">
@@ -157,7 +159,7 @@ export function ModelDetailPanel() {
 
             {model.releaseDate && (
               <div className="text-[10px] text-muted-foreground">
-                Lançado em {model.releaseDate} · Fontes: {model.sources.join(", ")}
+                {t("models.detail.released", { date: model.releaseDate, sources: model.sources.join(", ") })}
               </div>
             )}
           </div>

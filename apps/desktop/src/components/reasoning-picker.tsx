@@ -1,4 +1,5 @@
 import { Brain } from "lucide-react"
+import { useTranslation } from "react-i18next"
 import {
   Select,
   SelectContent,
@@ -21,6 +22,7 @@ export function ReasoningPicker({
   selected: string | undefined
   onSelect: (variantId: string) => void
 }) {
+  const { t } = useTranslation()
   if (variants.length === 0) return null
 
   return (
@@ -30,12 +32,12 @@ export function ReasoningPicker({
         className="h-7 gap-1 border-none bg-transparent px-1.5 text-xs hover:bg-muted dark:bg-transparent dark:hover:bg-muted"
       >
         <Brain className="size-3 text-foreground" />
-        <SelectValue placeholder="Nível" />
+        <SelectValue placeholder={t("reasoning.placeholder")} />
       </SelectTrigger>
       <SelectContent side="top" sideOffset={4} align="start" alignItemWithTrigger={false}>
         {variants.map((variant) => (
           <SelectItem key={variant.id} value={variant.id}>
-            {variant.label}
+            {t(`reasoning.variants.${variant.id}`, { defaultValue: variant.label })}
           </SelectItem>
         ))}
       </SelectContent>

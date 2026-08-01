@@ -1,4 +1,5 @@
 import { useMemo } from "react"
+import { useTranslation } from "react-i18next"
 import { Bot, Brain, Code2, Eye, Zap } from "lucide-react"
 
 import { cn } from "@/lib/utils"
@@ -10,12 +11,12 @@ import { useModelsStore } from "@/src/stores/models-store"
  * dos scores normalizados do dataset completo (ignora filtros da tabela).
  */
 
-const CATEGORIES: { key: keyof ModelScores; label: string; icon: React.ElementType }[] = [
-  { key: "coding", label: "Best Coding", icon: Code2 },
-  { key: "agentic", label: "Best Agentic", icon: Bot },
-  { key: "intelligence", label: "Best Intelligence", icon: Brain },
-  { key: "vision", label: "Best Vision", icon: Eye },
-  { key: "speed", label: "Best Speed", icon: Zap },
+const CATEGORIES: { key: keyof ModelScores; labelKey: string; icon: React.ElementType }[] = [
+  { key: "coding", labelKey: "models.bestFor.coding", icon: Code2 },
+  { key: "agentic", labelKey: "models.bestFor.agentic", icon: Bot },
+  { key: "intelligence", labelKey: "models.bestFor.intelligence", icon: Brain },
+  { key: "vision", labelKey: "models.bestFor.vision", icon: Eye },
+  { key: "speed", labelKey: "models.bestFor.speed", icon: Zap },
 ]
 
 function topThree(models: OrbitModel[], key: keyof ModelScores): OrbitModel[] {
@@ -26,6 +27,7 @@ function topThree(models: OrbitModel[], key: keyof ModelScores): OrbitModel[] {
 }
 
 export function BestForSection({ models, className }: { models: OrbitModel[]; className?: string }) {
+  const { t } = useTranslation()
   const setDetailId = useModelsStore((s) => s.setDetailId)
 
   const rankings = useMemo(
@@ -41,7 +43,7 @@ export function BestForSection({ models, className }: { models: OrbitModel[]; cl
         <div key={cat.key} className="rounded-lg border bg-card p-2.5">
           <div className="mb-1.5 flex items-center gap-1.5 text-[11px] font-medium text-muted-foreground">
             <cat.icon className="size-3.5" />
-            {cat.label}
+            {t(cat.labelKey)}
           </div>
           <ol className="space-y-0.5">
             {cat.top.map((model, i) => (
