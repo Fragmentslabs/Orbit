@@ -1,4 +1,5 @@
 import { isValidElement, useState, type ReactNode } from "react"
+import { useTranslation } from "react-i18next"
 import {
   BotIcon,
   CheckIcon,
@@ -107,6 +108,7 @@ export function ReasoningPartView({ part }: { part: ReasoningPart }) {
 /** Cabeçalho do acordeon de agente: ícone por papel + label + estado.
  * Componente interno para ler isOpen do contexto do Reasoning (chevron). */
 function AgentTriggerBody({ part }: { part: AgentPart }) {
+  const { t } = useTranslation()
   const { isOpen } = useReasoning()
   const Icon = part.role === "main" ? SparklesIcon : BotIcon
   const seconds = part.durationMs ? Math.max(1, Math.round(part.durationMs / 1000)) : undefined
@@ -115,13 +117,13 @@ function AgentTriggerBody({ part }: { part: AgentPart }) {
       <Icon className="size-4 shrink-0" />
       {part.state === "running" ? (
         <Shimmer duration={1}>
-          {part.role === "main" ? part.label : `Explorando ${part.label}…`}
+          {part.role === "main" ? part.label : t("chat.exploring", { label: part.label })}
         </Shimmer>
       ) : (
         <p className={cn(part.state === "error" && "text-destructive")}>
           {part.label}
           {part.state === "error"
-            ? " · falhou"
+            ? ` · ${t("chat.failed")}`
             : seconds !== undefined
               ? ` · ${seconds}s`
               : ""}
@@ -196,6 +198,7 @@ export function GenericToolView({ part, label, subtitle }: {
 }
 
 export function MessageError({ error, onRetry }: { error: string; onRetry?: () => void }) {
+  const { t } = useTranslation()
   return (
     <div className="flex items-center justify-between gap-2 rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive">
       <span className="flex-1">{error}</span>
@@ -206,7 +209,7 @@ export function MessageError({ error, onRetry }: { error: string; onRetry?: () =
           className="flex shrink-0 items-center gap-1 rounded-md px-1.5 py-1 font-medium text-destructive hover:bg-destructive/20"
         >
           <RotateCwIcon className="size-3.5" />
-          Retry
+          {t("chat.retry")}
         </button>
       )}
     </div>
@@ -216,34 +219,34 @@ export function MessageError({ error, onRetry }: { error: string; onRetry?: () =
 /** Resposta parou por atingir o teto de passos, não por decisão do modelo —
  * sem isso, fica indistinguível de uma conclusão normal (ver message.truncated). */
 export function MessageTruncated() {
+  const { t } = useTranslation()
   return (
     <div className="flex items-center gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-600 dark:text-amber-400">
       <span className="flex-1">
-        Parou por atingir o limite de passos — pode ter ficado incompleto. Peça para continuar.
+        {t("chat.stopped")}
       </span>
     </div>
   )
 }
 
-function formatTime(timestamp: number): string {
-  return new Date(timestamp).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })
-}
-
 export function MessageTimestamp({ timestamp }: { timestamp: number }) {
+  const { i18n } = useTranslation()
+  const formatted = new Date(timestamp).toLocaleTimeString(i18n.language, { hour: "2-digit", minute: "2-digit" })
   return (
     <span className="select-none px-1 text-[11px] tabular-nums text-muted-foreground/70">
-      {formatTime(timestamp)}
+      {formatted}
     </span>
   )
 }
 
 export function CopyAction({ text }: { text: string }) {
+  const { t } = useTranslation()
   const [copied, setCopied] = useState(false)
 
   return (
     <Action
-      tooltip="Copiar"
-      label="Copiar"
+      tooltip={t("chat.copy")}
+      label={t("chat.copy")}
       onClick={() => {
         void navigator.clipboard.writeText(text)
         setCopied(true)
@@ -260,6 +263,7 @@ export function AssistantMessageActions({ message, sessionId }: {
   message: ChatMessage
   sessionId?: string
 }) {
+  const { t } = useTranslation()
   const revertToMessage = useSessionStore((s) => s.revertToMessage)
   const activeRevert = useSessionStore((s) =>
     sessionId ? s.sessions.find((x) => x.id === sessionId)?.revert : undefined,
@@ -273,8 +277,8 @@ export function AssistantMessageActions({ message, sessionId }: {
       <CopyAction text={messageText(message)} />
       {canRevert && (
         <Action
-          tooltip="Reverter até aqui"
-          label="Reverter até aqui"
+          tooltip={t("chat.revert")}
+          label={t("chat.revert")}
           onClick={() => void revertToMessage(sessionId!, message.id)}
         >
           <Undo2Icon className="size-3.5" />

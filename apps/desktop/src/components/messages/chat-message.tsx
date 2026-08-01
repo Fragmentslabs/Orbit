@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react"
+import { useTranslation } from "react-i18next"
 import { GlobeIcon, LinkIcon, SearchIcon, XCircleIcon } from "lucide-react"
 import type { ChatMessage, MessagePart, ToolPart } from "@shared/chat"
 import { extractSources, hostnameOf, parseSearchResults, WEB_TOOLS } from "@/src/lib/message-utils"
@@ -30,18 +31,21 @@ import {
  * consultadas listadas ao final.
  */
 
-const STEP_LABELS: Record<string, string> = {
-  websearch: "Pesquisando",
-  webfetch: "Lendo página",
-  browser_open: "Navegando",
-  browser_links: "Coletando links",
+function useStepLabels(): Record<string, string> {
+  const { t } = useTranslation()
+  return {
+    websearch: t("chat.steps.websearch"),
+    webfetch: t("chat.steps.webfetch"),
+    browser_open: t("chat.steps.browser_open"),
+    browser_links: t("chat.steps.browser_links"),
+  }
 }
 
-function stepInfo(part: ToolPart) {
+function stepInfo(part: ToolPart, stepLabels: Record<string, string>) {
   const input = part.input ?? {}
   const query = typeof input.query === "string" ? input.query : undefined
   const url = typeof input.url === "string" ? hostnameOf(input.url) : undefined
-  const base = STEP_LABELS[part.tool] ?? part.tool
+  const base = stepLabels[part.tool] ?? part.tool
   return {
     icon: part.tool === "websearch" ? SearchIcon : GlobeIcon,
     label: query ? `${base} "${query}"` : url ? `${base} ${url}` : base,
@@ -49,7 +53,8 @@ function stepInfo(part: ToolPart) {
 }
 
 function ResearchStep({ part }: { part: ToolPart }) {
-  const { icon, label } = stepInfo(part)
+  const stepLabels = useStepLabels()
+  const { icon, label } = stepInfo(part, stepLabels)
   const results = part.tool === "websearch" && part.output ? parseSearchResults(part.output) : []
 
   return (
@@ -74,6 +79,7 @@ function ResearchStep({ part }: { part: ToolPart }) {
 }
 
 function ResearchBlock({ parts }: { parts: ToolPart[] }) {
+  const { t } = useTranslation()
   const researching = parts.some((p) => p.state === "running")
   const [open, setOpen] = useState(researching)
 
@@ -86,9 +92,9 @@ function ResearchBlock({ parts }: { parts: ToolPart[] }) {
     <ChainOfThought open={open} onOpenChange={setOpen} className="my-2">
       <ChainOfThoughtHeader>
         {researching ? (
-          <Shimmer>Pesquisando…</Shimmer>
+          <Shimmer>{t("chat.researching")}</Shimmer>
         ) : (
-          `Pesquisa concluída · ${parts.length} ${parts.length === 1 ? "etapa" : "etapas"}`
+          t("chat.researchDone", { count: parts.length })
         )}
       </ChainOfThoughtHeader>
       <ChainOfThoughtContent>
@@ -125,6 +131,7 @@ export function ChatAssistantMessage({ message, isLast, isBusy, onRetry }: {
   isBusy: boolean
   onRetry?: () => void
 }) {
+  const { t } = useTranslation()
   const segments = useMemo(() => segmentParts(message.parts), [message.parts])
   const finished = !(isLast && isBusy)
   const sources = useMemo(() => (finished ? extractSources(message) : []), [finished, message])
@@ -139,7 +146,7 @@ export function ChatAssistantMessage({ message, isLast, isBusy, onRetry }: {
 
   return (
     <div className="flex w-full flex-col gap-1">
-      {waiting && <Shimmer className="text-sm">Pensando…</Shimmer>}
+      {waiting && <Shimmer className="text-sm">{t("chat.thinking")}</Shimmer>}
       {segments.map((segment, index) =>
         segment.kind === "research" ? (
           <ResearchBlock key={segment.id} parts={segment.parts} />

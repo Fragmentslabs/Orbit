@@ -12,6 +12,47 @@
       "data": { "label": "Data", "description": "Export and import your data." }
     }
   },
+  "chat": {
+    "retry": "Retry",
+    "stopped": "Stopped after hitting the step limit — it may be incomplete. Ask it to continue.",
+    "copy": "Copy",
+    "revert": "Revert to here",
+    "exploring": "Exploring {{label}}…",
+    "failed": "failed",
+    "researching": "Researching…",
+    "researchDone_one": "Research done · {{count}} step",
+    "researchDone_other": "Research done · {{count}} steps",
+    "thinking": "Thinking…",
+    "steps": {
+      "websearch": "Searching",
+      "webfetch": "Reading page",
+      "browser_open": "Navigating",
+      "browser_links": "Collecting links"
+    },
+    "actions": {
+      "read": "Reading",
+      "write": "Writing",
+      "edit": "Editing",
+      "ls": "Listing",
+      "glob": "Searching files",
+      "grep": "Grepping",
+      "bash": "Running",
+      "websearch": "Searching",
+      "webfetch": "Reading page"
+    },
+    "code": {
+      "working": "Working…",
+      "analyzing": "Analyzing…",
+      "actionsWithError_one": "{{count}} action · {{errors}} with error",
+      "actionsWithError_other": "{{count}} actions · {{errors}} with error",
+      "actionsDone_one": "{{count}} action performed",
+      "actionsDone_other": "{{count}} actions performed",
+      "hiddenActions_one": "+{{count}} hidden action — show all",
+      "hiddenActions_other": "+{{count}} hidden actions — show all",
+      "sourcesConsulted_one": "{{count}} source consulted",
+      "sourcesConsulted_other": "{{count}} sources consulted"
+    }
+  },
   "mcp": {
     "kv": { "key": "Key", "value": "Value", "add": "Add" },
     "servers": {
