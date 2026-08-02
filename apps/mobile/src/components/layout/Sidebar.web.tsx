@@ -1,6 +1,7 @@
 import { useEffect, useState, useRef, useCallback } from 'react'
 import { View, Text, Pressable, ScrollView, Animated } from 'react-native'
 import { useRouter } from 'expo-router'
+import { useTranslation } from 'react-i18next'
 import {
   MessageSquare,
   BrainCircuit,
@@ -28,6 +29,7 @@ type NavItem = {
 }
 
 export function Sidebar() {
+  const { t } = useTranslation()
   const router = useRouter()
   const sidebarOpen = useWorkspaceStore((s) => s.sidebarOpen)
   const sidebarPinned = useWorkspaceStore((s) => s.sidebarPinned)
@@ -85,24 +87,24 @@ export function Sidebar() {
 
   const topItems: NavItem[] = [
     {
-      label: mode === 'chat' ? 'Novo Chat' : 'Nova Sessão',
+      label: mode === 'chat' ? t('sidebar.newChat') : t('sidebar.newSession'),
       icon: Plus,
       action: handleNewChat,
     },
     {
-      label: mode === 'chat' ? 'Chats' : 'Sessões',
+      label: mode === 'chat' ? t('sidebar.chats') : t('sidebar.sessions'),
       icon: MessageSquare,
       view: 'home',
     },
-    { label: 'Memórias', icon: BrainCircuit, view: 'memories' },
-    { label: 'Uso e Limites', icon: BarChart3, view: 'usage' },
-    { label: 'Ferramentas', icon: Puzzle, view: 'tools', codeOnly: true },
+    { label: t('sidebar.memories'), icon: BrainCircuit, view: 'memories' },
+    { label: t('sidebar.usageLimits'), icon: BarChart3, view: 'usage' },
+    { label: t('sidebar.tools'), icon: Puzzle, view: 'tools', codeOnly: true },
   ]
 
   const footerItems: NavItem[] = [
-    { label: 'Configurações', icon: Settings, view: 'settings' },
-    { label: 'Tema', icon: Palette, view: 'theme' },
-    { label: 'Desconectar', icon: LogOut, action: handleDisconnect },
+    { label: t('sidebar.settings'), icon: Settings, view: 'settings' },
+    { label: t('sidebar.theme'), icon: Palette, view: 'theme' },
+    { label: t('sidebar.disconnect'), icon: LogOut, action: handleDisconnect },
   ]
 
   const filteredTopItems = topItems.filter((item) => !item.codeOnly || mode === 'code')
@@ -166,7 +168,7 @@ export function Sidebar() {
           <View className="flex-1">
             {/* Header with pin */}
             <View className="flex-row items-center justify-between px-4 py-3 border-b border-border">
-              <Text className="text-sm font-semibold text-foreground">Navegação</Text>
+              <Text className="text-sm font-semibold text-foreground">{t('sidebar.navigation')}</Text>
               <Pressable
                 onPress={() => pinSidebar(!sidebarPinned)}
                 className="p-1 rounded-md hover:bg-accent"
@@ -181,8 +183,8 @@ export function Sidebar() {
 
           {/* Mode Tabs */}
           <View className="flex-row border-b border-border">
-            <ModeTab label="Chat" active={mode === 'chat'} onPress={() => setMode('chat')} />
-            <ModeTab label="Código" active={mode === 'code'} onPress={() => setMode('code')} />
+            <ModeTab label={t('sidebar.modeChat')} active={mode === 'chat'} onPress={() => setMode('chat')} />
+            <ModeTab label={t('sidebar.modeCode')} active={mode === 'code'} onPress={() => setMode('code')} />
           </View>
 
           {/* Navigation Items */}
@@ -217,7 +219,7 @@ export function Sidebar() {
                     navigate(`/(main)/${item.view}`)
                   }
                 }}
-                destructive={item.label === 'Desconectar'}
+                destructive={item.action === handleDisconnect}
               />
             ))}
           </View>

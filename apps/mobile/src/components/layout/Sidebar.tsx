@@ -3,6 +3,7 @@ import { View, Text, Pressable, Animated, ScrollView, Alert, Dimensions } from '
 import type { GestureResponderEvent } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useRouter } from 'expo-router'
+import { useTranslation } from 'react-i18next'
 import {
   MessageSquare,
   Terminal,
@@ -48,6 +49,7 @@ type NavItem = {
 }
 
 export function Sidebar() {
+  const { t } = useTranslation()
   const router = useRouter()
   const sidebarOpen = useWorkspaceStore((s) => s.sidebarOpen)
   const mode = useWorkspaceStore((s) => s.mode)
@@ -135,12 +137,12 @@ export function Sidebar() {
   const handleBulkDelete = () => {
     const count = totalSelected
     Alert.alert(
-      count > 1 ? `Excluir ${count} itens?` : 'Excluir?',
-      'Os chats selecionados serão excluídos permanentemente. Pastas removidas mantêm os chats (voltam pra raiz).',
+      count > 1 ? t('sidebar.bulkDeleteTitle_other', { count }) : t('sidebar.bulkDeleteTitle_one', { count }),
+      t('sidebar.bulkDeleteBody'),
       [
-        { text: 'Cancelar', style: 'cancel' },
+        { text: t('sidebar.cancel'), style: 'cancel' },
         {
-          text: 'Excluir',
+          text: t('sidebar.delete'),
           style: 'destructive',
           onPress: async () => {
             await Promise.all([
@@ -180,30 +182,30 @@ export function Sidebar() {
 
   const sessionMenuItems: ActionMenuItem[] = sessionMenuTarget
     ? [
-        { icon: Pencil, label: 'Renomear', onPress: () => setRenamingSession(sessionMenuTarget.id) },
+        { icon: Pencil, label: t('sidebar.rename'), onPress: () => setRenamingSession(sessionMenuTarget.id) },
         {
           icon: sessionMenuTarget.pinned ? PinOff : Pin,
-          label: sessionMenuTarget.pinned ? 'Desafixar' : 'Fixar',
+          label: sessionMenuTarget.pinned ? t('sidebar.unpin') : t('sidebar.pin'),
           onPress: () => void setPinned(sessionMenuTarget.id, !sessionMenuTarget.pinned),
         },
         {
           icon: sessionMenuTarget.archived ? ArchiveRestore : Archive,
-          label: sessionMenuTarget.archived ? 'Desarquivar' : 'Arquivar',
+          label: sessionMenuTarget.archived ? t('sidebar.unarchive') : t('sidebar.archive'),
           onPress: () => void setArchived(sessionMenuTarget.id, !sessionMenuTarget.archived),
         },
         {
           icon: CheckSquare,
-          label: 'Selecionar',
+          label: t('sidebar.select'),
           onPress: () => enterSelectionMode(sessionMenuTarget.id),
         },
         {
           icon: Trash2,
-          label: 'Excluir',
+          label: t('sidebar.delete'),
           destructive: true,
           onPress: () =>
-            Alert.alert('Excluir conversa?', `"${sessionMenuTarget.title}" será excluída permanentemente.`, [
-              { text: 'Cancelar', style: 'cancel' },
-              { text: 'Excluir', style: 'destructive', onPress: () => void deleteSession(sessionMenuTarget.id) },
+            Alert.alert(t('sidebar.deleteConversationTitle'), t('sidebar.deleteConversationBody', { title: sessionMenuTarget.title }), [
+              { text: t('sidebar.cancel'), style: 'cancel' },
+              { text: t('sidebar.delete'), style: 'destructive', onPress: () => void deleteSession(sessionMenuTarget.id) },
             ]),
         },
       ]
@@ -211,25 +213,25 @@ export function Sidebar() {
 
   const folderMenuItems: ActionMenuItem[] = folderMenuTarget
     ? [
-        { icon: Pencil, label: 'Renomear', onPress: () => setRenamingFolder(folderMenuTarget.id) },
+        { icon: Pencil, label: t('sidebar.rename'), onPress: () => setRenamingFolder(folderMenuTarget.id) },
         {
           icon: folderMenuTarget.pinned ? PinOff : Pin,
-          label: folderMenuTarget.pinned ? 'Desafixar' : 'Fixar',
+          label: folderMenuTarget.pinned ? t('sidebar.unpin') : t('sidebar.pin'),
           onPress: () => void setFolderPinned(folderMenuTarget.id, !folderMenuTarget.pinned),
         },
         {
           icon: CheckSquare,
-          label: 'Selecionar',
+          label: t('sidebar.select'),
           onPress: () => enterSelectionMode(undefined, folderMenuTarget.id),
         },
         {
           icon: Trash2,
-          label: 'Remover pasta',
+          label: t('sidebar.removeFolder'),
           destructive: true,
           onPress: () =>
-            Alert.alert('Remover pasta?', `Os chats de "${folderMenuTarget.name}" voltam pra raiz.`, [
-              { text: 'Cancelar', style: 'cancel' },
-              { text: 'Remover', style: 'destructive', onPress: () => void deleteFolder(folderMenuTarget.id) },
+            Alert.alert(t('sidebar.removeFolderTitle'), t('sidebar.removeFolderBody', { name: folderMenuTarget.name }), [
+              { text: t('sidebar.cancel'), style: 'cancel' },
+              { text: t('sidebar.removeFolder'), style: 'destructive', onPress: () => void deleteFolder(folderMenuTarget.id) },
             ]),
         },
       ]
@@ -262,14 +264,14 @@ export function Sidebar() {
   }, [selectionMode, toggleSelected, closeSidebar, router])
 
   const topItems: NavItem[] = [
-    { label: 'Memórias', icon: BrainCircuit, view: 'memories' },
-    { label: 'Uso e Limites', icon: BarChart3, view: 'usage' },
-    { label: 'Ferramentas', icon: Puzzle, view: 'tools', codeOnly: true },
+    { label: t('sidebar.memories'), icon: BrainCircuit, view: 'memories' },
+    { label: t('sidebar.usageLimits'), icon: BarChart3, view: 'usage' },
+    { label: t('sidebar.tools'), icon: Puzzle, view: 'tools', codeOnly: true },
   ]
 
   const footerItems: NavItem[] = [
-    { label: 'Configurações', icon: Settings, view: 'settings' },
-    { label: 'Desconectar', icon: LogOut, action: handleDisconnect },
+    { label: t('sidebar.settings'), icon: Settings, view: 'settings' },
+    { label: t('sidebar.disconnect'), icon: LogOut, action: handleDisconnect },
   ]
 
   const filteredTopItems = topItems.filter((item) => !item.codeOnly || mode === 'code')
@@ -334,14 +336,14 @@ export function Sidebar() {
             <View className="flex-row rounded-xl p-1" style={{ backgroundColor: tokens.muted }}>
               <ModeTab
                 icon={MessageSquare}
-                label="Chat"
+                label={t('sidebar.modeChat')}
                 active={mode === 'chat'}
                 onPress={() => setMode('chat')}
                 tokens={tokens}
               />
               <ModeTab
                 icon={Terminal}
-                label="Código"
+                label={t('sidebar.modeCode')}
                 active={mode === 'code'}
                 onPress={() => setMode('code')}
                 tokens={tokens}
@@ -357,7 +359,7 @@ export function Sidebar() {
                   <X size={16} color={tokens.mutedForeground} />
                 </Pressable>
                 <Text className="text-sm font-medium" style={{ color: tokens.foreground }}>
-                  {totalSelected} selecionado{totalSelected !== 1 ? 's' : ''}
+                  {t('sidebar.selected', { count: totalSelected })}
                 </Text>
               </View>
               <Pressable onPress={handleBulkDelete} className="p-1.5" disabled={totalSelected === 0}>
@@ -376,7 +378,7 @@ export function Sidebar() {
               >
                 <Plus size={18} color={tokens.foreground} />
                 <Text className="text-sm font-medium" style={{ color: tokens.foreground }}>
-                  {mode === 'chat' ? 'Novo Chat' : 'Nova Sessão'}
+                  {mode === 'chat' ? t('sidebar.newChat') : t('sidebar.newSession')}
                 </Text>
               </Pressable>
             </View>
@@ -403,7 +405,7 @@ export function Sidebar() {
             {/* Lista de chats */}
             <View className="mt-2 pt-2" style={{ borderTopWidth: 1, borderTopColor: tokens.border }}>
               {pinned.length > 0 && (
-                <SessionGroup label="Fixados" tokens={tokens}>
+                <SessionGroup label={t('sidebar.pinned')} tokens={tokens}>
                   {pinned.map((s) => (
                     <SessionRow
                       key={s.id}
@@ -422,7 +424,7 @@ export function Sidebar() {
               )}
 
               {folderGroups.length > 0 && (
-                <SessionGroup label="Pastas" tokens={tokens}>
+                <SessionGroup label={t('sidebar.folders')} tokens={tokens}>
                   {folderGroups.map(({ folder, sessions: folderSessions }) => (
                     <View key={folder.id}>
                       <Pressable
@@ -466,11 +468,11 @@ export function Sidebar() {
               )}
 
               <SessionGroup
-                label="Chats"
+                label={t('sidebar.chats')}
                 tokens={tokens}
                 action={{
                   icon: Search,
-                  label: 'Buscar conversas',
+                  label: t('sidebar.searchChats'),
                   onPress: () => {
                     closeSidebar()
                     router.push('/(main)/search')
@@ -480,8 +482,8 @@ export function Sidebar() {
                 {recent.length === 0 ? (
                   <Text className="px-4 py-2 text-sm" style={{ color: tokens.mutedForeground }}>
                     {pinned.length === 0 && folderGroups.length === 0
-                      ? 'Nenhuma conversa ainda'
-                      : 'Nenhum chat recente'}
+                      ? t('sidebar.noConversations')
+                      : t('sidebar.noRecentChats')}
                   </Text>
                 ) : (
                   recent.map((s) => (
@@ -517,7 +519,7 @@ export function Sidebar() {
                     navigate(`/(main)/${item.view}`)
                   }
                 }}
-                destructive={item.label === 'Desconectar'}
+                destructive={item.action === handleDisconnect}
                 tokens={tokens}
               />
             ))}
@@ -539,14 +541,14 @@ export function Sidebar() {
       />
       <RenamePrompt
         visible={renamingSession !== null}
-        title="Renomear conversa"
+        title={t('sidebar.renameConversation')}
         initialValue={renamingSessionTarget?.title ?? ''}
         onClose={() => setRenamingSession(null)}
         onSubmit={(title) => renamingSessionTarget && void renameSession(renamingSessionTarget.id, title)}
       />
       <RenamePrompt
         visible={renamingFolder !== null}
-        title="Renomear pasta"
+        title={t('sidebar.renameFolderTitle')}
         initialValue={renamingFolderTarget?.name ?? ''}
         onClose={() => setRenamingFolder(null)}
         onSubmit={(name) => renamingFolderTarget && void renameFolder(renamingFolderTarget.id, name)}
