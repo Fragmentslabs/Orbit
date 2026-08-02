@@ -3,6 +3,7 @@ import { View, Text, Platform, StyleSheet } from 'react-native'
 import type { ConnectionConfig } from '@orbit/companion-client'
 import { Spin } from '~/components/ui/spin'
 import { Loader2 } from 'lucide-react-native'
+import { useTranslation } from 'react-i18next'
 import { getThemeTokens } from '~/lib/theme-tokens'
 import { useThemeStore } from '~/stores/theme-store'
 
@@ -24,13 +25,14 @@ try {
 }
 
 export function QRScannerWrapper({ onScanned, disabled }: Props) {
+  const { t } = useTranslation()
   const tokens = getThemeTokens(useThemeStore((s) => s.resolved))
 
   if (!canUseCamera || !QRScannerInner) {
     return (
       <View style={s.fallback}>
         <Text style={[s.fallbackText, { color: tokens.mutedForeground }]}>
-          QR Code disponível apenas em dispositivos móveis com câmera.
+          {t('qrScanner.webFallback')}
         </Text>
       </View>
     )

@@ -1,4 +1,5 @@
 import { useEffect, useMemo } from 'react'
+import { useTranslation } from 'react-i18next'
 import { useToolsStore } from '~/stores/tools-store'
 import { useWorkspaceStore } from '~/stores/workspace-store'
 import { actionsForMode } from '@orbit/shared'
@@ -15,6 +16,7 @@ export interface SlashCommand {
 }
 
 export function useSlashCommands(): SlashCommand[] {
+  const { t } = useTranslation()
   const mode = useWorkspaceStore((s) => s.mode) as SessionMode
   const skills = useToolsStore((s) => s.skills)
   const mcpServers = useToolsStore((s) => s.mcpServers)
@@ -53,7 +55,7 @@ export function useSlashCommands(): SlashCommand[] {
       ...skills.map<SlashCommand>((skill) => ({
         id: `skill-${skill.slug}`,
         label: `@${skill.slug}`,
-        description: skill.description || 'Skill do usuário',
+        description: skill.description || t('slashCommands.userSkill'),
         keywords: [skill.slug, skill.name],
         group: 'Skills' as const,
         run: ({ setText }) => setText(`@${skill.slug} `),
@@ -67,7 +69,7 @@ export function useSlashCommands(): SlashCommand[] {
         .map<SlashCommand>((server) => ({
           id: `mcp-${server.config.name}`,
           label: `@mcp:${server.config.name}`,
-          description: `Usar as ferramentas deste servidor MCP (${server.toolNames.length} tools)`,
+          description: t('slashCommands.useMcpTools', { count: server.toolNames.length }),
           group: 'MCP' as const,
           run: ({ setText }) => setText(`@mcp:${server.config.name} `),
         })),
@@ -76,13 +78,13 @@ export function useSlashCommands(): SlashCommand[] {
     // Modos - toggles simples
     items.push({
       id: 'novo-chat',
-      label: 'Nova conversa',
-      description: 'Começa um chat em branco',
-      keywords: ['clear', 'limpar', 'novo'],
+      label: t('slashCommands.newConversation'),
+      description: t('slashCommands.newConversationDesc'),
+      keywords: ['clear', 'limpar', 'novo', 'new'],
       group: 'Ações',
       run: toggle(() => {}),
     })
 
     return items
-  }, [mode, skills, mcpServers])
+  }, [mode, skills, mcpServers, t])
 }

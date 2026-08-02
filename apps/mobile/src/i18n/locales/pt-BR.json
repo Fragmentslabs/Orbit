@@ -522,6 +522,39 @@
     "tipLabel": "Dica:",
     "tipText": "use Tailscale para acessar seu desktop de qualquer lugar, sem configurar a rede."
   },
+  "qrScanner": {
+    "preparingCamera": "Preparando câmera...",
+    "permissionRequiredTitle": "Permissão de câmera necessária",
+    "permissionRequiredDesc": "O Orbit precisa de acesso à câmera para escanear o QR code de conexão.",
+    "grantPermission": "Conceder Permissão",
+    "detected": "QR code detectado!",
+    "scanAgain": "Escanar novamente",
+    "webFallback": "QR Code disponível apenas em dispositivos móveis com câmera."
+  },
+  "urlAccordion": {
+    "connectManually": "Conectar manualmente",
+    "ipPortPinHint": "IP, porta e PIN do Orbit Desktop",
+    "ipAddress": "Endereço IP",
+    "port": "Porta",
+    "pin": "PIN",
+    "invalidPin": "PIN inválido. Verifique o PIN exibido no Orbit Desktop.",
+    "connecting": "Conectando...",
+    "connect": "Conectar"
+  },
+  "notifications": {
+    "defaultSessionTitle": "Sessão",
+    "pendingQuestionTitle": "Pergunta pendente",
+    "newMessageTitle": "Nova mensagem",
+    "newMessageBody": "Nova mensagem",
+    "chatErrorTitle": "Erro no chat",
+    "chatErrorBody": "Ocorreu um erro durante o chat."
+  },
+  "slashCommands": {
+    "userSkill": "Skill do usuário",
+    "useMcpTools": "Usar as ferramentas deste servidor MCP ({{count}} tools)",
+    "newConversation": "Nova conversa",
+    "newConversationDesc": "Começa um chat em branco"
+  },
   "themeScreen": {
     "title": "Tema",
     "light": "Claro",
