@@ -100,5 +100,67 @@
     "navigation": "Navegação",
     "sessions": "Sessões",
     "theme": "Tema"
+  },
+  "chatHeader": {
+    "fork": "Fork",
+    "deleteTitle": "Excluir conversa?",
+    "deleteBody": "\"{{title}}\" e todas as suas mensagens serão excluídas permanentemente."
+  },
+  "promptInput": {
+    "placeholder": "Pergunte qualquer coisa...",
+    "loadingFile": "Carregando arquivo...",
+    "modes": {
+      "research": "Pesquisa",
+      "browser": "Browser",
+      "simple": "Simples",
+      "brain": "Memória",
+      "thinking": "Thinking",
+      "plan": "Modo Plano",
+      "subagents": "Subagentes",
+      "orchestra": "Orquestração",
+      "loop": "Loop"
+    }
+  },
+  "chatScreen": {
+    "newConversationTitle": "Nova conversa",
+    "newConversationSubtitle": "Comece a conversar com o assistente.",
+    "implementPlan": "Implementar plano",
+    "plan": "Plano",
+    "orchestration": "Orquestração"
+  },
+  "sendButtonGroup": {
+    "sendOptions": "Opções de envio",
+    "stopAndSend": "Parar e enviar",
+    "schedule": "Agendar",
+    "scheduleMessage": "Agendar mensagem"
+  },
+  "chatAssistant": {
+    "reasoning": "Raciocínio",
+    "thinking": "Pensando…",
+    "searchingLabel": "Pesquisando",
+    "readingPageLabel": "Lendo página",
+    "searchingWeb": "Pesquisando na web…",
+    "searchDone_one": "Pesquisa concluída · {{count}} etapa",
+    "searchDone_other": "Pesquisa concluída · {{count}} etapas",
+    "actionLabels": {
+      "read": "Lendo",
+      "write": "Escrevendo",
+      "edit": "Editando",
+      "ls": "Listando",
+      "glob": "Buscando arquivos",
+      "grep": "Procurando",
+      "bash": "Executando",
+      "websearch": "Pesquisando",
+      "webfetch": "Lendo página"
+    },
+    "working": "Trabalhando…",
+    "actionsWithErrors_one": "{{count}} ação · {{errors}} com erro",
+    "actionsWithErrors_other": "{{count}} ações · {{errors}} com erro",
+    "actionsExecuted_one": "{{count}} ação executada",
+    "actionsExecuted_other": "{{count}} ações executadas",
+    "hiddenActions_one": "+{{count}} ação oculta — mostrar todas",
+    "hiddenActions_other": "+{{count}} ações ocultas — mostrar todas",
+    "sourcesConsulted_one": "{{count}} Fonte Consultada",
+    "sourcesConsulted_other": "{{count}} Fontes Consultadas"
   }
 }

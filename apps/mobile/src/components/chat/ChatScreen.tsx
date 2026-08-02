@@ -1,5 +1,6 @@
 import { useCallback, useState, useEffect, useRef } from 'react'
 import { View, Text, Animated } from 'react-native'
+import { useTranslation } from 'react-i18next'
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller'
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Stack, useRouter } from 'expo-router'
@@ -65,6 +66,7 @@ interface ChatScreenProps {
 const NO_MESSAGES: never[] = []
 
 export function ChatScreen({ sessionId }: ChatScreenProps) {
+  const { t } = useTranslation()
   const router = useRouter()
   const insets = useSafeAreaInsets()
   const mode = useWorkspaceStore((s) => s.mode)
@@ -318,8 +320,8 @@ export function ChatScreen({ sessionId }: ChatScreenProps) {
           >
             {personaVisible && <Persona state="idle" size={112} />}
             <View style={{ marginTop: 16, alignItems: 'center', gap: 4 }}>
-              <Text style={{ fontSize: 18, fontWeight: '600', color: tokens.foreground }}>Nova conversa</Text>
-              <Text style={{ fontSize: 14, color: tokens.mutedForeground }}>Comece a conversar com o assistente.</Text>
+              <Text style={{ fontSize: 18, fontWeight: '600', color: tokens.foreground }}>{t('chatScreen.newConversationTitle')}</Text>
+              <Text style={{ fontSize: 14, color: tokens.mutedForeground }}>{t('chatScreen.newConversationSubtitle')}</Text>
             </View>
           </Animated.View>
 
@@ -335,8 +337,8 @@ export function ChatScreen({ sessionId }: ChatScreenProps) {
                     ? <View className="px-4 pb-2"><PlanReviewCard sessionId={sessionId!} review={planReview} /></View>
                     : planReview && planReview.status === 'implementing'
                       ? <View className="px-4 pb-2"><TaskProgress
-                          tasks={[{ id: 'plan', title: 'Implementar plano', status: isStreaming ? 'streaming' : 'idle' }]}
-                          title="Plano"
+                          tasks={[{ id: 'plan', title: t('chatScreen.implementPlan'), status: isStreaming ? 'streaming' : 'idle' }]}
+                          title={t('chatScreen.plan')}
                         /></View>
                       : undefined
                 }
@@ -369,8 +371,8 @@ export function ChatScreen({ sessionId }: ChatScreenProps) {
         {sessionId && orchestration && (orchestration.status === 'approved' || orchestration.status === 'running' || orchestration.status === 'done') && (
           <View style={{ paddingHorizontal: 16, marginBottom: 8 }}>
             <TaskProgress
-              tasks={orchestration.tasks.map((t: any) => ({ id: t.id, title: t.title, status: t.status, mode: t.mode }))}
-              title="Orquestração"
+              tasks={orchestration.tasks.map((task: any) => ({ id: task.id, title: task.title, status: task.status, mode: task.mode }))}
+              title={t('chatScreen.orchestration')}
               defaultExpanded={orchestration.status !== 'done'}
             />
           </View>

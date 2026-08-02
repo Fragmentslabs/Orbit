@@ -1,5 +1,6 @@
 import { memo, useState } from 'react'
 import { View, Animated, Pressable, Alert, StyleSheet } from 'react-native'
+import { useTranslation } from 'react-i18next'
 import { Menu, Ellipsis, Pencil, Pin, PinOff, Archive, ArchiveRestore, GitFork, Trash2 } from 'lucide-react-native'
 import type { SessionInfo } from '@orbit/shared'
 import { Persona, type PersonaState } from '~/components/ai/Persona'
@@ -36,6 +37,7 @@ export const ChatHeader = memo(function ChatHeader({
   onFork,
   onDelete,
 }: ChatHeaderProps) {
+  const { t } = useTranslation()
   const openSidebar = useWorkspaceStore((s) => s.openSidebar)
   const personaVisible = useAppearanceStore((s) => s.personaVisible)
   const [menuOpen, setMenuOpen] = useState(false)
@@ -44,11 +46,11 @@ export const ChatHeader = memo(function ChatHeader({
 
   const handleDeletePress = () => {
     Alert.alert(
-      'Excluir conversa?',
-      `"${session?.title}" e todas as suas mensagens serão excluídas permanentemente.`,
+      t('chatHeader.deleteTitle'),
+      t('chatHeader.deleteBody', { title: session?.title }),
       [
-        { text: 'Cancelar', style: 'cancel' },
-        { text: 'Excluir', style: 'destructive', onPress: onDelete },
+        { text: t('sidebar.cancel'), style: 'cancel' },
+        { text: t('sidebar.delete'), style: 'destructive', onPress: onDelete },
       ],
     )
   }
@@ -79,25 +81,25 @@ export const ChatHeader = memo(function ChatHeader({
         visible={menuOpen}
         onClose={() => setMenuOpen(false)}
         items={[
-          { icon: Pencil, label: 'Renomear', onPress: () => setRenaming(true) },
+          { icon: Pencil, label: t('sidebar.rename'), onPress: () => setRenaming(true) },
           {
             icon: session?.pinned ? PinOff : Pin,
-            label: session?.pinned ? 'Desafixar' : 'Fixar',
+            label: session?.pinned ? t('sidebar.unpin') : t('sidebar.pin'),
             onPress: onTogglePin,
           },
           {
             icon: session?.archived ? ArchiveRestore : Archive,
-            label: session?.archived ? 'Desarquivar' : 'Arquivar',
+            label: session?.archived ? t('sidebar.unarchive') : t('sidebar.archive'),
             onPress: onToggleArchive,
           },
-          { icon: GitFork, label: 'Fork', onPress: onFork },
-          { icon: Trash2, label: 'Excluir', destructive: true, onPress: handleDeletePress },
+          { icon: GitFork, label: t('chatHeader.fork'), onPress: onFork },
+          { icon: Trash2, label: t('sidebar.delete'), destructive: true, onPress: handleDeletePress },
         ]}
       />
 
       <RenamePrompt
         visible={renaming}
-        title="Renomear conversa"
+        title={t('sidebar.renameConversation')}
         initialValue={session?.title ?? ''}
         onClose={() => setRenaming(false)}
         onSubmit={onRename}

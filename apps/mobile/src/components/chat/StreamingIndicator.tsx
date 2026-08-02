@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Animated, Easing, View, type ViewProps } from 'react-native'
+import { useTranslation } from 'react-i18next'
 import { getThemeTokens } from '~/lib/theme-tokens'
 import { useThemeStore } from '~/stores/theme-store'
 
@@ -10,6 +11,7 @@ import { useThemeStore } from '~/stores/theme-store'
  * consegue animar sem depender de masked-view/linear-gradient).
  */
 export function StreamingIndicator({ style }: { style?: ViewProps['style'] }) {
+  const { t } = useTranslation()
   const tokens = getThemeTokens(useThemeStore((s) => s.resolved))
   const [progress] = useState(() => new Animated.Value(0))
 
@@ -26,7 +28,7 @@ export function StreamingIndicator({ style }: { style?: ViewProps['style'] }) {
     return () => loop.stop()
   }, [progress])
 
-  const chars = 'Pensando…'.split('')
+  const chars = t('chatAssistant.thinking').split('')
 
   return (
     <View style={[{ flexDirection: 'row', alignItems: 'center' }, style]}>

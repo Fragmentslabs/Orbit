@@ -14,6 +14,7 @@ import {
 } from 'lucide-react-native'
 import { Image } from 'expo-image'
 import * as Clipboard from 'expo-clipboard'
+import { useTranslation } from 'react-i18next'
 import type {
   ChatMessage,
   MessagePart,
@@ -82,6 +83,7 @@ function UserMessage({ message }: { message: ChatMessage }) {
 // ─── Reasoning (Raciocínio) ──────────────────────────────────────────────────
 
 function ReasoningPartView({ part }: { part: ReasoningPart }) {
+  const { t } = useTranslation()
   const [open, setOpen] = useState(true)
   const tokens = getThemeTokens(useThemeStore((s) => s.resolved))
   const hsl = (v: string) => v.replace(/hsla?\(|\)/g, '').replace(/,/g, '')
@@ -123,7 +125,7 @@ function ReasoningPartView({ part }: { part: ReasoningPart }) {
             flex: 1,
           }}
         >
-          Raciocínio{seconds !== undefined ? ` · ${seconds}s` : ''}
+          {t('chatAssistant.reasoning')}{seconds !== undefined ? ` · ${seconds}s` : ''}
         </Text>
         {part.state === 'streaming' && (
           <ActivityIndicator size="small" style={{ transform: [{ scale: 0.75 }] }} color={tokens.mutedForeground} />
@@ -162,11 +164,12 @@ function ReasoningPartView({ part }: { part: ReasoningPart }) {
 // ─── Research Block (Grouping consecutive web tools) ───────────────────────
 
 function ResearchStep({ part }: { part: ToolPart }) {
+  const { t } = useTranslation()
   const tokens = getThemeTokens(useThemeStore((s) => s.resolved))
   const input = part.input ?? {}
   const query = typeof input.query === 'string' ? input.query : undefined
   const url = typeof input.url === 'string' ? hostnameOf(input.url) : undefined
-  const baseLabel = part.tool === 'websearch' ? 'Pesquisando' : 'Lendo página'
+  const baseLabel = part.tool === 'websearch' ? t('chatAssistant.searchingLabel') : t('chatAssistant.readingPageLabel')
   const label = query ? `${baseLabel} "${query}"` : url ? `${baseLabel} ${url}` : baseLabel
 
   const results = part.tool === 'websearch' && part.output ? parseSearchResults(part.output) : []
@@ -203,6 +206,7 @@ function ResearchStep({ part }: { part: ToolPart }) {
 }
 
 function ResearchBlock({ parts }: { parts: ToolPart[] }) {
+  const { t } = useTranslation()
   const researching = parts.some((p) => p.state === 'running')
   const [open, setOpen] = useState(researching)
   const tokens = getThemeTokens(useThemeStore((s) => s.resolved))
@@ -246,8 +250,8 @@ function ResearchBlock({ parts }: { parts: ToolPart[] }) {
           }}
         >
           {researching
-            ? 'Pesquisando na web…'
-            : `Pesquisa concluída · ${parts.length} ${parts.length === 1 ? 'etapa' : 'etapas'}`}
+            ? t('chatAssistant.searchingWeb')
+            : t('chatAssistant.searchDone', { count: parts.length })}
         </Text>
         {open ? (
           <ChevronDown size={14} color={tokens.mutedForeground} />
@@ -275,18 +279,6 @@ function ResearchBlock({ parts }: { parts: ToolPart[] }) {
 
 const MAX_VISIBLE_TOOLS = 5
 
-const ACTION_LABELS: Record<string, string> = {
-  read: 'Lendo',
-  write: 'Escrevendo',
-  edit: 'Editando',
-  ls: 'Listando',
-  glob: 'Buscando arquivos',
-  grep: 'Procurando',
-  bash: 'Executando',
-  websearch: 'Pesquisando',
-  webfetch: 'Lendo página',
-}
-
 function toolChip(part: ToolPart): string | undefined {
   const input = part.input ?? {}
   const candidate = input.filePath ?? input.dirPath ?? input.pattern ?? input.query ?? input.url ?? input.command
@@ -296,9 +288,10 @@ function toolChip(part: ToolPart): string | undefined {
 }
 
 function ToolActionRow({ part }: { part: ToolPart }) {
+  const { t } = useTranslation()
   const [showOutput, setShowOutput] = useState(false)
   const tokens = getThemeTokens(useThemeStore((s) => s.resolved))
-  const label = ACTION_LABELS[part.tool] ?? part.title ?? part.tool
+  const label = t(`chatAssistant.actionLabels.${part.tool}`, { defaultValue: part.title ?? part.tool })
   const chip = toolChip(part)
   const detail = part.error ?? (part.tool === 'bash' ? part.output : part.output)
 
@@ -364,6 +357,7 @@ function ToolActionRow({ part }: { part: ToolPart }) {
 }
 
 function TaskGroup({ parts }: { parts: ToolPart[] }) {
+  const { t } = useTranslation()
   const working = parts.some((p) => p.state === 'running')
   const errors = parts.filter((p) => p.state === 'error').length
   const [open, setOpen] = useState(false)
@@ -392,10 +386,10 @@ function TaskGroup({ parts }: { parts: ToolPart[] }) {
   const hiddenCount = parts.length - MAX_VISIBLE_TOOLS
 
   const title = working
-    ? 'Trabalhando…'
+    ? t('chatAssistant.working')
     : errors > 0
-      ? `${parts.length} ${parts.length === 1 ? 'ação' : 'ações'} · ${errors} com erro`
-      : `${parts.length} ${parts.length === 1 ? 'ação executada' : 'ações executadas'}`
+      ? t('chatAssistant.actionsWithErrors', { count: parts.length, errors })
+      : t('chatAssistant.actionsExecuted', { count: parts.length })
 
   return (
     <View
@@ -447,7 +441,7 @@ function TaskGroup({ parts }: { parts: ToolPart[] }) {
           {hiddenCount > 0 && !showAll && (
             <Pressable onPress={() => setShowAll(true)} style={{ marginTop: 8 }}>
               <Text style={{ fontSize: 11, color: tokens.mutedForeground }}>
-                +{hiddenCount} {hiddenCount === 1 ? 'ação oculta' : 'ações ocultas'} — mostrar todas
+                {t('chatAssistant.hiddenActions', { count: hiddenCount })}
               </Text>
             </Pressable>
           )}
@@ -497,6 +491,7 @@ function AgentPartView({ part }: { part: AgentPart }) {
 // ─── Sources List ────────────────────────────────────────────────────────────
 
 function SourcesBlock({ sources }: { sources: any[] }) {
+  const { t } = useTranslation()
   const [open, setOpen] = useState(false)
   const tokens = getThemeTokens(useThemeStore((s) => s.resolved))
 
@@ -512,7 +507,7 @@ function SourcesBlock({ sources }: { sources: any[] }) {
         className="flex-row items-center gap-1 py-1 cursor-pointer"
       >
         <Text className="text-[11px] font-bold uppercase tracking-wider" style={{ color: tokens.mutedForeground }}>
-          {sources.length} {sources.length === 1 ? 'Fonte Consultada' : 'Fontes Consultadas'}
+          {t('chatAssistant.sourcesConsulted', { count: sources.length })}
         </Text>
         {open ? (
           <ChevronDown size={12} color={tokens.mutedForeground} />
@@ -569,6 +564,7 @@ function segmentParts(parts: MessagePart[]): Segment[] {
 }
 
 export function ChatAssistantMessage({ message, compact, isLast, isBusy, onRevert }: ChatAssistantMessageProps) {
+  const { t } = useTranslation()
   const isUser = message.role === 'user'
   const tokens = getThemeTokens(useThemeStore((s) => s.resolved))
 
@@ -590,7 +586,7 @@ export function ChatAssistantMessage({ message, compact, isLast, isBusy, onRever
     <View className="self-start w-full py-2 my-1 items-start">
       {waiting && (
         <View className="py-1">
-          <Shimmer className="text-sm font-semibold">Pensando…</Shimmer>
+          <Shimmer className="text-sm font-semibold">{t('chatAssistant.thinking')}</Shimmer>
         </View>
       )}
 
