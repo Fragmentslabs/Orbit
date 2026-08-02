@@ -100,5 +100,67 @@
     "navigation": "Navigation",
     "sessions": "Sessions",
     "theme": "Theme"
+  },
+  "chatHeader": {
+    "fork": "Fork",
+    "deleteTitle": "Delete conversation?",
+    "deleteBody": "\"{{title}}\" and all its messages will be permanently deleted."
+  },
+  "promptInput": {
+    "placeholder": "Ask anything...",
+    "loadingFile": "Loading file...",
+    "modes": {
+      "research": "Research",
+      "browser": "Browser",
+      "simple": "Simple",
+      "brain": "Memory",
+      "thinking": "Thinking",
+      "plan": "Plan mode",
+      "subagents": "Subagents",
+      "orchestra": "Orchestration",
+      "loop": "Loop"
+    }
+  },
+  "chatScreen": {
+    "newConversationTitle": "New conversation",
+    "newConversationSubtitle": "Start chatting with the assistant.",
+    "implementPlan": "Implement plan",
+    "plan": "Plan",
+    "orchestration": "Orchestration"
+  },
+  "sendButtonGroup": {
+    "sendOptions": "Send options",
+    "stopAndSend": "Stop and send",
+    "schedule": "Schedule",
+    "scheduleMessage": "Schedule message"
+  },
+  "chatAssistant": {
+    "reasoning": "Reasoning",
+    "thinking": "Thinking…",
+    "searchingLabel": "Searching",
+    "readingPageLabel": "Reading page",
+    "searchingWeb": "Searching the web…",
+    "searchDone_one": "Search done · {{count}} step",
+    "searchDone_other": "Search done · {{count}} steps",
+    "actionLabels": {
+      "read": "Reading",
+      "write": "Writing",
+      "edit": "Editing",
+      "ls": "Listing",
+      "glob": "Searching files",
+      "grep": "Searching",
+      "bash": "Running",
+      "websearch": "Searching",
+      "webfetch": "Reading page"
+    },
+    "working": "Working…",
+    "actionsWithErrors_one": "{{count}} action · {{errors}} failed",
+    "actionsWithErrors_other": "{{count}} actions · {{errors}} failed",
+    "actionsExecuted_one": "{{count}} action executed",
+    "actionsExecuted_other": "{{count}} actions executed",
+    "hiddenActions_one": "+{{count}} hidden action — show all",
+    "hiddenActions_other": "+{{count}} hidden actions — show all",
+    "sourcesConsulted_one": "{{count}} Source Consulted",
+    "sourcesConsulted_other": "{{count}} Sources Consulted"
   }
 }

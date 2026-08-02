@@ -18,6 +18,7 @@ import {
   RefreshCw,
 } from 'lucide-react-native'
 import { Image } from 'expo-image'
+import { useTranslation } from 'react-i18next'
 import type { SendMessageOptions, FilePart, SessionInfo } from '@orbit/shared'
 import { resolveSlashAction } from '@orbit/shared'
 import { cn } from '~/lib/utils'
@@ -68,6 +69,7 @@ export function PromptInput({
   onCreateSession,
   onNavigateToSession,
 }: PromptInputProps) {
+  const { t } = useTranslation()
   const [text, setText] = useState('')
   const [activeModes, setActiveModes] = useState<Record<string, boolean>>({
     brain: true,
@@ -332,10 +334,10 @@ export function PromptInput({
   )
 
   const modesList = [
-    { id: 'research', icon: Search, label: 'Pesquisa' },
-    { id: 'browser', icon: Globe, label: 'Browser' },
-    { id: 'simple', icon: AlignLeft, label: 'Simples' },
-    { id: 'brain', icon: BrainCircuit, label: 'Memória' },
+    { id: 'research', icon: Search, label: t('promptInput.modes.research') },
+    { id: 'browser', icon: Globe, label: t('promptInput.modes.browser') },
+    { id: 'simple', icon: AlignLeft, label: t('promptInput.modes.simple') },
+    { id: 'brain', icon: BrainCircuit, label: t('promptInput.modes.brain') },
   ]
 
   const toggleSheetMode = useCallback((id: string) => {
@@ -388,7 +390,7 @@ export function PromptInput({
             style={{ borderBottomWidth: 1, borderBottomColor: tokens.border }}
           >
             <ActivityIndicator size="small" color={tokens.primary} />
-            <Text className="text-xs" style={{ color: tokens.mutedForeground }}>Carregando arquivo...</Text>
+            <Text className="text-xs" style={{ color: tokens.mutedForeground }}>{t('promptInput.loadingFile')}</Text>
           </View>
         )}
 
@@ -398,7 +400,7 @@ export function PromptInput({
             ref={inputRef}
             value={text}
             onChangeText={setText}
-            placeholder="Pergunte qualquer coisa..."
+            placeholder={t('promptInput.placeholder')}
             placeholderTextColor={tokens.mutedForeground}
             multiline
             maxLength={4096}
@@ -526,17 +528,17 @@ export function PromptInput({
         onPhotos={handlePickPhotos}
         onFiles={handlePickFiles}
         simpleModes={[
-          { id: 'research', icon: Search, label: 'Pesquisa', active: activeModes.research ?? false, onToggle: () => toggleMode('research') },
-          { id: 'browser', icon: Globe, label: 'Browser', active: activeModes.browser ?? false, onToggle: () => toggleMode('browser') },
-          { id: 'simple', icon: AlignLeft, label: 'Simples', active: activeModes.simple ?? false, onToggle: () => toggleMode('simple') },
-          { id: 'brain', icon: BrainCircuit, label: 'Memória', active: activeModes.brain ?? false, onToggle: () => toggleMode('brain') },
-          ...(model?.reasoning ? [{ id: 'thinking', icon: Brain, label: 'Thinking', active: thinking, onToggle: () => update({ enabled: !enabled, variantId }) }] : []),
+          { id: 'research', icon: Search, label: t('promptInput.modes.research'), active: activeModes.research ?? false, onToggle: () => toggleMode('research') },
+          { id: 'browser', icon: Globe, label: t('promptInput.modes.browser'), active: activeModes.browser ?? false, onToggle: () => toggleMode('browser') },
+          { id: 'simple', icon: AlignLeft, label: t('promptInput.modes.simple'), active: activeModes.simple ?? false, onToggle: () => toggleMode('simple') },
+          { id: 'brain', icon: BrainCircuit, label: t('promptInput.modes.brain'), active: activeModes.brain ?? false, onToggle: () => toggleMode('brain') },
+          ...(model?.reasoning ? [{ id: 'thinking', icon: Brain, label: t('promptInput.modes.thinking'), active: thinking, onToggle: () => update({ enabled: !enabled, variantId }) }] : []),
         ]}
         configModes={[
-          ...(workspaceMode === 'code' ? [{ id: 'plan', icon: FileText, label: 'Modo Plano', active: plan, onToggle: () => setPlan((v) => !v) }] : []),
-          { id: 'subagents', icon: Bot, label: 'Subagentes', active: subagents, onToggle: () => setSubagents((v) => !v), onConfigure: () => { setPlusOpen(false); setWorkerConfigOpen(true) } },
-          ...(workspaceMode === 'code' ? [{ id: 'orchestra', icon: Network, label: 'Orquestração', active: orchestra, onToggle: () => setOrchestra((v) => !v), onConfigure: () => { setPlusOpen(false); setWorkerConfigOpen(true) } }] : []),
-          { id: 'loop', icon: RefreshCw, label: 'Loop', active: loop, onToggle: () => setLoop((v) => !v), onConfigure: () => { setPlusOpen(false); setLoopConfigOpen(true) } },
+          ...(workspaceMode === 'code' ? [{ id: 'plan', icon: FileText, label: t('promptInput.modes.plan'), active: plan, onToggle: () => setPlan((v) => !v) }] : []),
+          { id: 'subagents', icon: Bot, label: t('promptInput.modes.subagents'), active: subagents, onToggle: () => setSubagents((v) => !v), onConfigure: () => { setPlusOpen(false); setWorkerConfigOpen(true) } },
+          ...(workspaceMode === 'code' ? [{ id: 'orchestra', icon: Network, label: t('promptInput.modes.orchestra'), active: orchestra, onToggle: () => setOrchestra((v) => !v), onConfigure: () => { setPlusOpen(false); setWorkerConfigOpen(true) } }] : []),
+          { id: 'loop', icon: RefreshCw, label: t('promptInput.modes.loop'), active: loop, onToggle: () => setLoop((v) => !v), onConfigure: () => { setPlusOpen(false); setLoopConfigOpen(true) } },
         ]}
         displayMode={displayMode}
       />

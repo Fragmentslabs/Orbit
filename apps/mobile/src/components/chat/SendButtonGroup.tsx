@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { View, Text, Pressable, Modal, Animated, StyleSheet } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Send, Square, ArrowUp, ListPlus, CalendarIcon } from 'lucide-react-native'
+import { useTranslation } from 'react-i18next'
 import { cn } from '~/lib/utils'
 import { getThemeTokens } from '~/lib/theme-tokens'
 import { useThemeStore } from '~/stores/theme-store'
@@ -27,6 +28,7 @@ export function SendButtonGroup({
   hasText,
   disabled,
 }: SendButtonGroupProps) {
+  const { t } = useTranslation()
   const tokens = getThemeTokens(useThemeStore((s) => s.resolved))
   const insets = useSafeAreaInsets()
   const [menuVisible, setMenuVisible] = useState(false)
@@ -69,11 +71,11 @@ export function SendButtonGroup({
 
   const menuOptions = isStreaming && canAct
     ? [
-        { label: 'Parar e enviar', icon: Send, action: () => { setMenuVisible(false); onStopAndSend() } },
-        { label: 'Agendar', icon: CalendarIcon, action: () => { setMenuVisible(false); onSchedule() } },
+        { label: t('sendButtonGroup.stopAndSend'), icon: Send, action: () => { setMenuVisible(false); onStopAndSend() } },
+        { label: t('sendButtonGroup.schedule'), icon: CalendarIcon, action: () => { setMenuVisible(false); onSchedule() } },
       ]
     : [
-        { label: 'Agendar mensagem', icon: CalendarIcon, action: () => { setMenuVisible(false); onSchedule() } },
+        { label: t('sendButtonGroup.scheduleMessage'), icon: CalendarIcon, action: () => { setMenuVisible(false); onSchedule() } },
       ]
 
   if (isBusyNoText) {
@@ -127,7 +129,7 @@ export function SendButtonGroup({
           <View style={[s.handle, { backgroundColor: tokens.muted }]} />
 
           <View style={[s.optionsList, { borderBottomColor: tokens.border }]}>
-            <Text style={[s.sectionLabel, { color: tokens.mutedForeground }]}>Opções de envio</Text>
+            <Text style={[s.sectionLabel, { color: tokens.mutedForeground }]}>{t('sendButtonGroup.sendOptions')}</Text>
           </View>
 
           <View style={s.optionItems}>
