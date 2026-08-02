@@ -215,5 +215,42 @@
     "research": "Pesquisa",
     "browser": "Browser",
     "readOnly": "Só leitura"
+  },
+  "subAgentCard": {
+    "defaultTask": "Subtarefa delegada",
+    "runningBackground": "Rodando em segundo plano…"
+  },
+  "skillProposal": {
+    "building": "Montando a skill…",
+    "added": "Skill adicionada",
+    "availableAs": "Disponível como @{{slug}}",
+    "dismissed": "Proposta dispensada.",
+    "extraFiles_one": "{{count}} arquivo adicional",
+    "extraFiles_other": "{{count}} arquivos adicionais",
+    "dismiss": "Dispensar",
+    "addSkill": "Adicionar skill"
+  },
+  "taskProgress": {
+    "defaultTitle": "Tarefas",
+    "inProgress": "{{title}} em andamento",
+    "completed": "{{title}} concluídas"
+  },
+  "revertBar": {
+    "filesRevertedNone": "Arquivos revertidos",
+    "filesReverted_one": "1 arquivo revertido",
+    "filesReverted_other": "{{count}} arquivos revertidos",
+    "conversationReverted": "Conversa revertida até este ponto",
+    "continuesFromHere": " — nova mensagem continua deste ponto",
+    "undo": "Desfazer"
+  },
+  "rightPanel": {
+    "browser": "Navegador",
+    "diff": "Diff",
+    "terminal": "Terminal",
+    "folders": "Pastas",
+    "browserNotConnected": "Navegador não conectado.",
+    "noChangesDetected": "Nenhuma alteração detectada.",
+    "terminalDisconnected": "Terminal desconectado.",
+    "noFolderOpen": "Nenhuma pasta aberta."
   }
 }

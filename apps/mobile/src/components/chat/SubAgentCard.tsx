@@ -1,13 +1,15 @@
 import { View, Text } from 'react-native'
 import { Bot, XCircle } from 'lucide-react-native'
+import { useTranslation } from 'react-i18next'
 import type { ToolPart } from '@orbit/shared'
 import { Shimmer } from '~/components/ai/Shimmer'
 import { getThemeTokens } from '~/lib/theme-tokens'
 import { useThemeStore } from '~/stores/theme-store'
 
 export function SubAgentCard({ part }: { part: ToolPart }) {
+  const { t } = useTranslation()
   const tokens = getThemeTokens(useThemeStore((s) => s.resolved))
-  const task = typeof part.input?.task === 'string' ? part.input.task : 'Subtarefa delegada'
+  const task = typeof part.input?.task === 'string' ? part.input.task : t('subAgentCard.defaultTask')
 
   return (
     <View
@@ -33,7 +35,7 @@ export function SubAgentCard({ part }: { part: ToolPart }) {
         </Text>
       </View>
       {part.state === 'running' && (
-        <Shimmer className="mt-1.5">Rodando em segundo plano…</Shimmer>
+        <Shimmer className="mt-1.5">{t('subAgentCard.runningBackground')}</Shimmer>
       )}
       {part.state === 'error' && part.error && (
         <Text className="mt-1.5 text-xs" style={{ color: tokens.destructive }}>

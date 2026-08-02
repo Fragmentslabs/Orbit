@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react'
 import { Animated, PanResponder, Pressable, Text, View } from 'react-native'
 import { History, MessageSquareText, Undo2, X } from 'lucide-react-native'
+import { useTranslation } from 'react-i18next'
 import type { SessionInfo } from '@orbit/shared'
 import { getThemeTokens } from '~/lib/theme-tokens'
 import { useThemeStore } from '~/stores/theme-store'
@@ -14,6 +15,7 @@ interface RevertBarProps {
 }
 
 export function RevertBar({ session, onUnrevert, onDismiss }: RevertBarProps) {
+  const { t } = useTranslation()
   const tokens = getThemeTokens(useThemeStore((s) => s.resolved))
   const [dismissed, setDismissed] = useState(false)
   const translateY = useRef(new Animated.Value(0)).current
@@ -53,11 +55,9 @@ export function RevertBar({ session, onUnrevert, onDismiss }: RevertBarProps) {
   const count = revert.files?.length ?? 0
   const label = isCode
     ? count === 0
-      ? 'Arquivos revertidos'
-      : count === 1
-        ? '1 arquivo revertido'
-        : `${count} arquivos revertidos`
-    : 'Conversa revertida até este ponto'
+      ? t('revertBar.filesRevertedNone')
+      : t('revertBar.filesReverted', { count })
+    : t('revertBar.conversationReverted')
 
   return (
     <Animated.View
@@ -92,7 +92,7 @@ export function RevertBar({ session, onUnrevert, onDismiss }: RevertBarProps) {
         >
           {label}
           <Text style={{ color: tokens.mutedForeground }}>
-            {' '}— nova mensagem continua deste ponto
+            {t('revertBar.continuesFromHere')}
           </Text>
         </Text>
         <Pressable
@@ -110,7 +110,7 @@ export function RevertBar({ session, onUnrevert, onDismiss }: RevertBarProps) {
           })}
         >
           <Undo2 size={12} color={tokens.foreground} />
-          <Text style={{ fontSize: 12, color: tokens.foreground }}>Desfazer</Text>
+          <Text style={{ fontSize: 12, color: tokens.foreground }}>{t('revertBar.undo')}</Text>
         </Pressable>
         <Pressable
           onPress={() => {

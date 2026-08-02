@@ -1,5 +1,6 @@
 import { View, Text, Pressable, ActivityIndicator, StyleSheet } from 'react-native'
 import { Sparkles, Check, X } from 'lucide-react-native'
+import { useTranslation } from 'react-i18next'
 import { useToolsStore } from '~/stores/tools-store'
 import { getThemeTokens } from '~/lib/theme-tokens'
 import { useThemeStore } from '~/stores/theme-store'
@@ -14,6 +15,7 @@ interface SkillProposalCardProps {
  * Espelha o SkillProposalCard do desktop.
  */
 export function SkillProposalCard({ part }: SkillProposalCardProps) {
+  const { t } = useTranslation()
   const tokens = getThemeTokens(useThemeStore((s) => s.resolved))
   const pending = useToolsStore((s) => s.pending)
   const skills = useToolsStore((s) => s.skills)
@@ -31,7 +33,7 @@ export function SkillProposalCard({ part }: SkillProposalCardProps) {
     return (
       <View style={[s.card, { borderColor: tokens.border, backgroundColor: tokens.card }]}>
         <ActivityIndicator size="small" color={tokens.primary} />
-        <Text style={[s.statusText, { color: tokens.mutedForeground }]}>Montando a skill…</Text>
+        <Text style={[s.statusText, { color: tokens.mutedForeground }]}>{t('skillProposal.building')}</Text>
       </View>
     )
   }
@@ -43,8 +45,8 @@ export function SkillProposalCard({ part }: SkillProposalCardProps) {
           <Check size={16} color="#22c55e" />
         </View>
         <View style={{ flex: 1 }}>
-          <Text style={[s.title, { color: tokens.foreground }]}>Skill adicionada</Text>
-          <Text style={[s.slug, { color: tokens.mutedForeground }]}>Disponível como @{slug}</Text>
+          <Text style={[s.title, { color: tokens.foreground }]}>{t('skillProposal.added')}</Text>
+          <Text style={[s.slug, { color: tokens.mutedForeground }]}>{t('skillProposal.availableAs', { slug })}</Text>
         </View>
       </View>
     )
@@ -56,7 +58,7 @@ export function SkillProposalCard({ part }: SkillProposalCardProps) {
         <View style={[s.iconWrap, { backgroundColor: tokens.muted }]}>
           <X size={16} color={tokens.mutedForeground} />
         </View>
-        <Text style={[s.statusText, { color: tokens.mutedForeground }]}>Proposta dispensada.</Text>
+        <Text style={[s.statusText, { color: tokens.mutedForeground }]}>{t('skillProposal.dismissed')}</Text>
       </View>
     )
   }
@@ -77,15 +79,15 @@ export function SkillProposalCard({ part }: SkillProposalCardProps) {
       </View>
       {proposal.files && proposal.files.length > 0 && (
         <Text style={[s.files, { color: tokens.mutedForeground }]}>
-          {proposal.files.length} {proposal.files.length === 1 ? 'arquivo adicional' : 'arquivos adicionais'}
+          {t('skillProposal.extraFiles', { count: proposal.files.length })}
         </Text>
       )}
       <View style={[s.actions, { borderTopColor: tokens.border }]}>
         <Pressable onPress={() => void discardSkill(proposal.slug)} style={[s.btn, { borderColor: tokens.border }]}>
-          <Text style={[s.btnText, { color: tokens.foreground }]}>Dispensar</Text>
+          <Text style={[s.btnText, { color: tokens.foreground }]}>{t('skillProposal.dismiss')}</Text>
         </Pressable>
         <Pressable onPress={() => void approveSkill(proposal.slug)} style={[s.btn, { backgroundColor: tokens.primary }]}>
-          <Text style={[s.btnText, { color: '#fff' }]}>Adicionar skill</Text>
+          <Text style={[s.btnText, { color: '#fff' }]}>{t('skillProposal.addSkill')}</Text>
         </Pressable>
       </View>
     </View>

@@ -215,5 +215,42 @@
     "research": "Research",
     "browser": "Browser",
     "readOnly": "Read-only"
+  },
+  "subAgentCard": {
+    "defaultTask": "Delegated subtask",
+    "runningBackground": "Running in the background…"
+  },
+  "skillProposal": {
+    "building": "Assembling the skill…",
+    "added": "Skill added",
+    "availableAs": "Available as @{{slug}}",
+    "dismissed": "Proposal dismissed.",
+    "extraFiles_one": "{{count}} extra file",
+    "extraFiles_other": "{{count}} extra files",
+    "dismiss": "Dismiss",
+    "addSkill": "Add skill"
+  },
+  "taskProgress": {
+    "defaultTitle": "Tasks",
+    "inProgress": "{{title}} in progress",
+    "completed": "{{title}} completed"
+  },
+  "revertBar": {
+    "filesRevertedNone": "Files reverted",
+    "filesReverted_one": "1 file reverted",
+    "filesReverted_other": "{{count}} files reverted",
+    "conversationReverted": "Conversation reverted to this point",
+    "continuesFromHere": " — new message continues from here",
+    "undo": "Undo"
+  },
+  "rightPanel": {
+    "browser": "Browser",
+    "diff": "Diff",
+    "terminal": "Terminal",
+    "folders": "Folders",
+    "browserNotConnected": "Browser not connected.",
+    "noChangesDetected": "No changes detected.",
+    "terminalDisconnected": "Terminal disconnected.",
+    "noFolderOpen": "No folder open."
   }
 }
