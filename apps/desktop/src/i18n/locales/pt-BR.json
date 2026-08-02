@@ -561,17 +561,13 @@
     "defaultTask": "Subtarefa delegada",
     "running": "Rodando em segundo plano…"
   },
-  "branch": {
-    "previous": "Ramo anterior",
-    "next": "Próximo ramo",
-    "page": "{{current}} de {{total}}"
-  },
   "attachments": {
     "image": "Imagem",
     "file": "Anexo",
     "attachment": "anexo",
     "remove": "Remover anexo",
-    "preview": "prévia do anexo"
+    "preview": "prévia do anexo",
+    "unnamedFile": "Arquivo"
   },
   "webPreview": {
     "back": "Voltar",
@@ -619,7 +615,24 @@
     "dismissAll": "Negar/dispensar tudo",
     "answerAll": "Responder tudo"
   },
+  "connectApp": {
+    "title": "Conectar App",
+    "description": "Escaneie o QR code com o app Orbit para conectar.",
+    "statusError": "Não foi possível obter o status do servidor.",
+    "serverActive": "Servidor ativo",
+    "serverInactive": "Servidor inativo",
+    "qrAlt": "QR Code de conexão",
+    "pinHint": "Ou digite o PIN no app",
+    "host": "Host",
+    "portWs": "Porta WS",
+    "connectedDevices": "Dispositivos conectados",
+    "refresh": "Atualizar",
+    "close": "Fechar"
+  },
   "branch": {
+    "previous": "Ramo anterior",
+    "next": "Próximo ramo",
+    "page": "{{current}} de {{total}}",
     "unknownError": "Erro desconhecido",
     "commitError": "Erro ao commitar",
     "detached": "(detached)",

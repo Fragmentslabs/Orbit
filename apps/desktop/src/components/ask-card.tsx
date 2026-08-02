@@ -12,10 +12,10 @@ import { usePanelStore } from "@/src/stores/panel-store"
 import { useSessionStore } from "@/src/stores/session-store"
 import type { PendingAskUI } from "@/src/stores/session-store"
 
-function OriginBadge({ workerTitle }: { workerTitle: string }) {
+function OriginBadge({ workerTitle, t }: { workerTitle: string; t: (key: string) => string }) {
   return (
     <Badge variant="outline" className="gap-1 px-1.5 py-0 text-[10px] text-muted-foreground">
-      <Bot className="size-3" /> worker: {workerTitle}
+      <Bot className="size-3" /> {t("ask.worker")}: {workerTitle}
     </Badge>
   )
 }
@@ -44,7 +44,7 @@ function PermissionBody({ ask, submitted, onReply }: {
             </p>
           )}
         </div>
-        {ask.origin && <OriginBadge workerTitle={ask.origin.workerTitle} />}
+        {ask.origin && <OriginBadge workerTitle={ask.origin.workerTitle} t={t} />}
       </div>
       <div className="flex justify-end gap-2">
         <Button size="sm" variant="outline" disabled={submitted} onClick={() => onReply("deny")}>
@@ -229,7 +229,7 @@ function QuestionBody({ ask, submitted, onReply }: {
             />
           )}
         </div>
-        {ask.origin && <OriginBadge workerTitle={ask.origin.workerTitle} />}
+        {ask.origin && <OriginBadge workerTitle={ask.origin.workerTitle} t={t} />}
       </div>
       <div className="flex items-center justify-between gap-2">
         <div className="ml-6">

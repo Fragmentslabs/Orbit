@@ -51,6 +51,7 @@ const MessageItem = memo(
     index: number
   }) {
   const AssistantMessage = mode === "chat" ? ChatAssistantMessage : CodeAssistantMessage
+  const { t } = useTranslation()
 
   const handleRetry = useCallback(() => {
     const prevUser = [...messages].slice(0, index).reverse().find((m) => m.role === "user")
@@ -78,7 +79,7 @@ const MessageItem = memo(
                     className="flex h-7 cursor-default select-none items-center gap-1.5 rounded-md border border-border px-1.5 text-sm"
                   >
                     <PaperclipIcon className="size-3 text-muted-foreground" />
-                    <span className="truncate">{file.filename ?? "Arquivo"}</span>
+                    <span className="truncate">{file.filename ?? t("attachments.unnamedFile")}</span>
                   </div>
                 ),
               )}
