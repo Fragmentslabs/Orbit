@@ -366,5 +366,12 @@
     "useThis": "Usar esta",
     "noSubfolders": "Nenhuma subpasta aqui.",
     "listError": "Não foi possível listar as pastas."
+  },
+  "attachment": {
+    "defaultFilename": "Arquivo",
+    "camera": "Câmera",
+    "photos": "Fotos",
+    "files": "Arquivos",
+    "openWith": "Abrir com…"
   }
 }

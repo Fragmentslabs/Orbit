@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Modal, View, Text, Pressable, Animated, Switch, StyleSheet } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Camera, Image as ImageIcon, Paperclip, Settings2 } from 'lucide-react-native'
+import { useTranslation } from 'react-i18next'
 import { getThemeTokens } from '~/lib/theme-tokens'
 import { useThemeStore } from '~/stores/theme-store'
 import type { DisplayMode } from '~/stores/appearance-store'
@@ -38,6 +39,7 @@ export function AttachmentSheet({
   configModes,
   displayMode,
 }: AttachmentSheetProps) {
+  const { t } = useTranslation()
   const tokens = getThemeTokens(useThemeStore((s) => s.resolved))
   const insets = useSafeAreaInsets()
   const [slideAnim] = useState(() => new Animated.Value(SHEET_HEIGHT))
@@ -78,9 +80,9 @@ export function AttachmentSheet({
         <View style={[s.handle, { backgroundColor: tokens.muted }]} />
 
         <View style={[s.actionsRow, { borderBottomColor: tokens.border }]}>
-          <SheetAction icon={Camera} label="Câmera" onPress={onCamera} tokens={tokens} />
-          <SheetAction icon={ImageIcon} label="Fotos" onPress={onPhotos} tokens={tokens} />
-          <SheetAction icon={Paperclip} label="Arquivos" onPress={onFiles} tokens={tokens} />
+          <SheetAction icon={Camera} label={t('attachment.camera')} onPress={onCamera} tokens={tokens} />
+          <SheetAction icon={ImageIcon} label={t('attachment.photos')} onPress={onPhotos} tokens={tokens} />
+          <SheetAction icon={Paperclip} label={t('attachment.files')} onPress={onFiles} tokens={tokens} />
         </View>
 
         {hasSimple && simpleModes && (
