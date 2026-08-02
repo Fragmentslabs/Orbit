@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback } from 'react'
 import { View, Text, Pressable, Modal, ScrollView, ActivityIndicator, TextInput } from 'react-native'
 import { FileText, RefreshCw, X, MessageSquareText, Send } from 'lucide-react-native'
+import { useTranslation } from 'react-i18next'
 import type { PlanReview, PermissionMode } from '@orbit/shared'
 import { useSessionStore } from '~/stores/session-store'
 import { useConnectionStore } from '~/stores/connection-store'
@@ -13,19 +14,28 @@ interface Props {
   review: PlanReview
 }
 
-const ALL_MODES: { id: PermissionMode; label: string }[] = [
-  { id: 'ask', label: 'Perguntas' },
-  { id: 'approve', label: 'Autonomia' },
-  { id: 'full', label: 'Irrestrito' },
-]
+function useAllModes(): { id: PermissionMode; label: string }[] {
+  const { t } = useTranslation()
+  return [
+    { id: 'ask', label: t('planReview.modes.ask') },
+    { id: 'approve', label: t('planReview.modes.approve') },
+    { id: 'full', label: t('planReview.modes.full') },
+  ]
+}
 
-const MODE_LABEL: Record<PermissionMode, string> = {
-  ask: 'Perguntar',
-  approve: 'Autonomia',
-  full: 'Irrestrito',
+function useModeLabel(): Record<PermissionMode, string> {
+  const { t } = useTranslation()
+  return {
+    ask: t('planReview.modes.askLabel'),
+    approve: t('planReview.modes.approve'),
+    full: t('planReview.modes.full'),
+  }
 }
 
 export function PlanReviewCard({ sessionId, review }: Props) {
+  const { t } = useTranslation()
+  const ALL_MODES = useAllModes()
+  const MODE_LABEL = useModeLabel()
   const tokens = getThemeTokens(useThemeStore((s) => s.resolved))
   const acceptPlanReview = useSessionStore((s) => s.acceptPlanReview)
   const rejectPlanReview = useSessionStore((s) => s.rejectPlanReview)
@@ -86,7 +96,7 @@ export function PlanReviewCard({ sessionId, review }: Props) {
         <View className="flex-row items-center gap-2">
           <FileText size={16} color={tokens.primary} />
           <Text className="font-medium text-xs flex-shrink" style={{ color: tokens.foreground }}>
-            {isProposed ? 'Plano de implementação proposto' : 'Implementando plano'}
+            {isProposed ? t('planReview.proposedTitle') : t('planReview.implementingTitle')}
           </Text>
           {checkboxCount > 0 && (
             <Text className="text-xs" style={{ color: tokens.mutedForeground }}>
@@ -99,7 +109,7 @@ export function PlanReviewCard({ sessionId, review }: Props) {
               className="px-2 py-1 rounded-md"
               style={{ backgroundColor: tokens.card }}
             >
-              <Text className="text-xs font-medium" style={{ color: tokens.primary }}>Ver plano</Text>
+              <Text className="text-xs font-medium" style={{ color: tokens.primary }}>{t('planReview.viewPlan')}</Text>
             </Pressable>
             {isProposed ? (
               <>
@@ -109,14 +119,14 @@ export function PlanReviewCard({ sessionId, review }: Props) {
                   style={{ backgroundColor: tokens.card }}
                 >
                   <MessageSquareText size={12} color={tokens.mutedForeground} />
-                  <Text className="text-xs" style={{ color: tokens.mutedForeground }}>Revisar</Text>
+                  <Text className="text-xs" style={{ color: tokens.mutedForeground }}>{t('planReview.review')}</Text>
                 </Pressable>
                 <Pressable
                   onPress={() => rejectPlanReview(sessionId)}
                   className="px-2 py-1 rounded-md"
                   style={{ backgroundColor: tokens.card }}
                 >
-                  <Text className="text-xs" style={{ color: tokens.mutedForeground }}>Rejeitar</Text>
+                  <Text className="text-xs" style={{ color: tokens.mutedForeground }}>{t('planReview.reject')}</Text>
                 </Pressable>
                 <Pressable
                   onPress={() => acceptPlanReview(sessionId, currentMode)}
@@ -124,7 +134,7 @@ export function PlanReviewCard({ sessionId, review }: Props) {
                   style={{ backgroundColor: tokens.primary }}
                 >
                   <Text className="text-xs font-medium" style={{ color: '#fff' }}>
-                    Aceitar ({MODE_LABEL[currentMode]})
+                    {t('planReview.accept', { mode: MODE_LABEL[currentMode] })}
                   </Text>
                 </Pressable>
                 {otherModes.length > 0 && (
@@ -147,7 +157,7 @@ export function PlanReviewCard({ sessionId, review }: Props) {
                       style={{ backgroundColor: tokens.card }}
                     >
                       <Text className="text-[10px]" style={{ color: tokens.mutedForeground }}>
-                        Orquestração
+                        {t('planReview.orchestration')}
                       </Text>
                     </Pressable>
                   </View>
@@ -168,7 +178,7 @@ export function PlanReviewCard({ sessionId, review }: Props) {
             <TextInput
               value={reviewText}
               onChangeText={setReviewText}
-              placeholder="Escreva seu feedback para revisar o plano..."
+              placeholder={t('planReview.reviewPlaceholder')}
               placeholderTextColor={tokens.mutedForeground}
               style={{
                 flex: 1,
@@ -224,6 +234,7 @@ function PlanDialog({
   checkboxCount: number
   checkedCount: number
 }) {
+  const { t } = useTranslation()
   const tokens = getThemeTokens(useThemeStore((s) => s.resolved))
 
   return (
@@ -245,7 +256,7 @@ function PlanDialog({
             <Text className="text-base font-semibold" style={{ color: tokens.foreground }}>PLAN.md</Text>
             {checkboxCount > 0 && (
               <Text className="text-sm" style={{ color: tokens.mutedForeground }}>
-                ({checkedCount}/{checkboxCount} concluídas)
+                {t('planReview.completedCount', { checked: checkedCount, total: checkboxCount })}
               </Text>
             )}
           </View>
@@ -263,7 +274,7 @@ function PlanDialog({
             </Text>
           ) : (
             <Text className="text-sm" style={{ color: tokens.mutedForeground }}>
-              PLAN.md não encontrado.
+              {t('planReview.notFound')}
             </Text>
           )}
         </ScrollView>
@@ -275,7 +286,7 @@ function PlanDialog({
           style={{ backgroundColor: tokens.muted }}
         >
           <RefreshCw size={14} color={tokens.foreground} />
-          <Text className="text-sm font-medium" style={{ color: tokens.foreground }}>Recarregar</Text>
+          <Text className="text-sm font-medium" style={{ color: tokens.foreground }}>{t('planReview.reload')}</Text>
         </Pressable>
       </View>
     </Modal>

@@ -3,6 +3,7 @@ import { Modal, View, Text, Pressable, Animated, Switch, StyleSheet, ScrollView,
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Shield, ShieldCheck, ShieldOff, Brain, Check, Bot, Network, FileText, RefreshCw, ChevronRight, Settings2, GitBranch } from 'lucide-react-native'
 import type { LucideIcon } from 'lucide-react-native'
+import { useTranslation } from 'react-i18next'
 import type { ModelVariant } from '@orbit/shared'
 import { getThemeTokens } from '~/lib/theme-tokens'
 import { useThemeStore } from '~/stores/theme-store'
@@ -11,11 +12,14 @@ import type { DisplayMode } from '~/stores/appearance-store'
 
 type PermissionModeValue = 'ask' | 'approve' | 'full'
 
-const PERMISSION_MODES: { id: PermissionModeValue; label: string; icon: LucideIcon }[] = [
-  { id: 'ask', label: 'Perguntar', icon: Shield },
-  { id: 'approve', label: 'Autonomia', icon: ShieldCheck },
-  { id: 'full', label: 'Irrestrito', icon: ShieldOff },
-]
+function usePermissionModes(): { id: PermissionModeValue; label: string; icon: LucideIcon }[] {
+  const { t } = useTranslation()
+  return [
+    { id: 'ask', label: t('configSheet.permissionModes.ask'), icon: Shield },
+    { id: 'approve', label: t('configSheet.permissionModes.approve'), icon: ShieldCheck },
+    { id: 'full', label: t('configSheet.permissionModes.full'), icon: ShieldOff },
+  ]
+}
 
 interface Props {
   visible: boolean
@@ -75,6 +79,8 @@ export function ConfigSheet({
   onGitBranchChange,
   gitBranchLoading,
 }: Props) {
+  const { t } = useTranslation()
+  const PERMISSION_MODES = usePermissionModes()
   const tokens = getThemeTokens(useThemeStore((s) => s.resolved))
   const insets = useSafeAreaInsets()
   const [slideAnim] = useState(() => new Animated.Value(SHEET_HEIGHT))
@@ -115,11 +121,11 @@ export function ConfigSheet({
       >
         <View style={[s.handle, { backgroundColor: tokens.muted }]} />
         <ScrollView showsVerticalScrollIndicator={false}>
-          <Text style={[s.sectionTitle, { color: tokens.mutedForeground }]}>Configurações</Text>
+          <Text style={[s.sectionTitle, { color: tokens.mutedForeground }]}>{t('configSheet.title')}</Text>
 
           {/* Permission mode */}
           <View style={[s.card, { borderColor: tokens.border }]}>
-            <Text style={[s.cardLabel, { color: tokens.foreground }]}>Modo de permissões</Text>
+            <Text style={[s.cardLabel, { color: tokens.foreground }]}>{t('configSheet.permissionMode')}</Text>
             <View style={s.permissionRow}>
               {PERMISSION_MODES.map((mode) => {
                 const ModeIcon = mode.icon
@@ -150,7 +156,7 @@ export function ConfigSheet({
             <View style={s.cardRow}>
               <View style={s.cardRowLeft}>
                 <Brain size={18} color={tokens.mutedForeground} />
-                <Text style={[s.cardLabel, { color: tokens.foreground }]}>Thinking</Text>
+                <Text style={[s.cardLabel, { color: tokens.foreground }]}>{t('configSheet.thinking')}</Text>
               </View>
               <Switch
                 value={thinking}
@@ -186,7 +192,7 @@ export function ConfigSheet({
             )}
             {reasoningAlwaysOn && (
               <Text style={[s.hint, { color: tokens.mutedForeground }]}>
-                Este modelo sempre usa raciocínio extendido.
+                {t('configSheet.reasoningAlwaysOnHint')}
               </Text>
             )}
           </View>
@@ -196,7 +202,7 @@ export function ConfigSheet({
             <View style={[s.card, { borderColor: tokens.border, alignItems: 'center' }]}>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
                 <GitBranch size={18} color={tokens.mutedForeground} />
-                <Text style={[s.cardLabel, { color: tokens.foreground }]}>Branch Git</Text>
+                <Text style={[s.cardLabel, { color: tokens.foreground }]}>{t('configSheet.gitBranch')}</Text>
               </View>
               <View style={[s.permissionRow, { marginTop: 10 }]}>
                 {gitBranchLoading ? (
@@ -233,7 +239,7 @@ export function ConfigSheet({
             <View style={s.cardRow}>
               <View style={s.cardRowLeft}>
                 <Bot size={18} color={tokens.mutedForeground} />
-                <Text style={[s.cardLabel, { color: tokens.foreground }]}>Subagentes</Text>
+                <Text style={[s.cardLabel, { color: tokens.foreground }]}>{t('configSheet.subagents')}</Text>
               </View>
               <Switch
                 value={subagents}
@@ -246,7 +252,7 @@ export function ConfigSheet({
               <Pressable onPress={onConfigureWorkers} style={[s.modelCard, { backgroundColor: rowSelectedBg, borderColor: tokens.border }]}>
                 <Bot size={16} color={tokens.primary} />
                 <Text style={[s.modelCardLabel, { color: tokens.foreground }]}>
-                  {workerModelLabel ?? 'Usar o mesmo modelo do chat'}
+                  {workerModelLabel ?? t('configSheet.useSameModel')}
                 </Text>
                 <ChevronRight size={14} color={tokens.mutedForeground} />
               </Pressable>
@@ -260,7 +266,7 @@ export function ConfigSheet({
             <View style={s.cardRow}>
               <View style={s.cardRowLeft}>
                 <Network size={18} color={tokens.mutedForeground} />
-                <Text style={[s.cardLabel, { color: tokens.foreground }]}>Orquestração</Text>
+                <Text style={[s.cardLabel, { color: tokens.foreground }]}>{t('configSheet.orchestration')}</Text>
               </View>
               <Switch
                 value={orchestra}
@@ -273,7 +279,7 @@ export function ConfigSheet({
               <Pressable onPress={onConfigureWorkers} style={[s.modelCard, { backgroundColor: rowSelectedBg, borderColor: tokens.border }]}>
                 <Network size={16} color={tokens.primary} />
                 <Text style={[s.modelCardLabel, { color: tokens.foreground }]}>
-                  {workerModelLabel ?? 'Usar o mesmo modelo do chat'}
+                  {workerModelLabel ?? t('configSheet.useSameModel')}
                 </Text>
                 <ChevronRight size={14} color={tokens.mutedForeground} />
               </Pressable>
@@ -287,7 +293,7 @@ export function ConfigSheet({
             <View style={s.cardRow}>
               <View style={s.cardRowLeft}>
                 <RefreshCw size={18} color={tokens.mutedForeground} />
-                <Text style={[s.cardLabel, { color: tokens.foreground }]}>Loop</Text>
+                <Text style={[s.cardLabel, { color: tokens.foreground }]}>{t('configSheet.loop')}</Text>
               </View>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                 {loop && onConfigureLoop && (
@@ -305,7 +311,7 @@ export function ConfigSheet({
             </View>
             {loop && (
               <Text style={[s.hint, { color: tokens.mutedForeground }]}>
-                Agente revisa e itera até completar a tarefa.
+                {t('configSheet.loopHint')}
               </Text>
             )}
           </View>

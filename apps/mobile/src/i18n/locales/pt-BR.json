@@ -162,5 +162,58 @@
     "hiddenActions_other": "+{{count}} ações ocultas — mostrar todas",
     "sourcesConsulted_one": "{{count}} Fonte Consultada",
     "sourcesConsulted_other": "{{count}} Fontes Consultadas"
+  },
+  "askCard": {
+    "permissionRequired": "Permissão necessária",
+    "criticalAction": "Ação crítica: ",
+    "deny": "Negar",
+    "once": "Uma vez",
+    "alwaysThisChat": "Sempre neste chat",
+    "always": "Sempre",
+    "questionLabel": "Pergunta",
+    "otherAnswerPlaceholder": "Outra resposta…",
+    "dismiss": "Dispensar",
+    "advance": "Avançar",
+    "answer": "Responder"
+  },
+  "configSheet": {
+    "title": "Configurações",
+    "permissionModes": { "ask": "Perguntar", "approve": "Autonomia", "full": "Irrestrito" },
+    "permissionMode": "Modo de permissões",
+    "thinking": "Thinking",
+    "reasoningAlwaysOnHint": "Este modelo sempre usa raciocínio extendido.",
+    "gitBranch": "Branch Git",
+    "subagents": "Subagentes",
+    "orchestration": "Orquestração",
+    "loop": "Loop",
+    "loopHint": "Agente revisa e itera até completar a tarefa.",
+    "useSameModel": "Usar o mesmo modelo do chat"
+  },
+  "planReview": {
+    "proposedTitle": "Plano de implementação proposto",
+    "implementingTitle": "Implementando plano",
+    "viewPlan": "Ver plano",
+    "review": "Revisar",
+    "reject": "Rejeitar",
+    "accept": "Aceitar ({{mode}})",
+    "orchestration": "Orquestração",
+    "reviewPlaceholder": "Escreva seu feedback para revisar o plano...",
+    "completedCount": "({{checked}}/{{total}} concluídas)",
+    "notFound": "PLAN.md não encontrado.",
+    "reload": "Recarregar",
+    "modes": { "ask": "Perguntas", "askLabel": "Perguntar", "approve": "Autonomia", "full": "Irrestrito" }
+  },
+  "orchestrationPlan": {
+    "runningWorkers": "Executando workers...",
+    "proposed_one": "Plano proposto · {{count}} tarefa",
+    "proposed_other": "Plano proposto · {{count}} tarefas",
+    "done": "Orquestração concluída",
+    "rejected": "Plano rejeitado",
+    "cost": "Custo desta orquestração: {{cost}} ({{tokens}} tokens)",
+    "reject": "Rejeitar",
+    "approveAndRun": "Aprovar e executar {{count}}",
+    "research": "Pesquisa",
+    "browser": "Browser",
+    "readOnly": "Só leitura"
   }
 }
