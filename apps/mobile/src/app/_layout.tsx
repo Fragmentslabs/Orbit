@@ -1,4 +1,5 @@
 import "../global.css";
+import "../i18n";
 
 import { useEffect, useMemo } from "react"
 import { Appearance, useColorScheme } from "react-native"
@@ -15,6 +16,7 @@ import { useNotificationPrefsStore } from "../stores/notification-prefs-store";
 import { useSessionStore } from "../stores/session-store";
 import { useThemeStore, hydrateThemePreference } from "../stores/theme-store";
 import { useAppearanceStore, hydratePersonaVisible } from "../stores/appearance-store";
+import { useLocaleStore, hydrateLocale } from "../stores/locale-store";
 import { startMessageScheduler } from "../stores/message-queue-store";
 
 SplashScreen.preventAutoHideAsync();
@@ -61,6 +63,9 @@ export default function RootLayout() {
     });
     hydratePersonaVisible().then((visible) => {
       useAppearanceStore.getState().setPersonaVisible(visible);
+    });
+    hydrateLocale().then((locale) => {
+      useLocaleStore.getState().setLocale(locale);
     });
   }, []);
 
