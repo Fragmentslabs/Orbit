@@ -1,12 +1,10 @@
 import type { Memory, MemoryKind, ProjectArea, ProjectCategory } from '@orbit/shared'
+import i18n from '~/i18n'
 
 /** Rótulos e cores por tipo de memória — espelho do meta.ts do desktop. */
 
-export const KIND_LABEL: Record<MemoryKind, string> = {
-  core: 'core',
-  seasonal: 'sazonal',
-  general: 'geral',
-  project: 'projeto',
+export function kindLabel(kind: MemoryKind): string {
+  return i18n.t(`memoryMeta.kind.${kind}`)
 }
 
 /** Cor sólida por kind (badges e nós do grafo) */
@@ -17,15 +15,8 @@ export const KIND_COLOR: Record<MemoryKind, string> = {
   project: '#10b981',
 }
 
-export const CATEGORY_LABEL: Record<ProjectCategory, string> = {
-  preference: 'preferência',
-  convention: 'convenção',
-  structure: 'estrutura',
-  decision: 'decisão',
-  context: 'contexto',
-  database: 'banco de dados',
-  learning: 'aprendizado',
-  standard: 'padronização',
+export function categoryLabel(category: ProjectCategory): string {
+  return i18n.t(`memoryMeta.category.${category}`)
 }
 
 /** Ícone Lucide por categoria (usado nos badges de memórias sem área). */
@@ -61,5 +52,5 @@ export function lastActivity(memory: Memory): number {
 }
 
 export function formatDate(ts: number): string {
-  return new Date(ts).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric' })
+  return new Date(ts).toLocaleDateString(i18n.language, { day: '2-digit', month: 'short', year: 'numeric' })
 }

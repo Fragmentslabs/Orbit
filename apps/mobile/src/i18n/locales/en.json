@@ -373,5 +373,47 @@
     "photos": "Photos",
     "files": "Files",
     "openWith": "Open with…"
+  },
+  "memoryMeta": {
+    "kind": { "core": "core", "seasonal": "seasonal", "general": "general", "project": "project" },
+    "category": {
+      "preference": "preference",
+      "convention": "convention",
+      "structure": "structure",
+      "decision": "decision",
+      "context": "context",
+      "database": "database",
+      "learning": "learning",
+      "standard": "standard"
+    }
+  },
+  "memoryCard": {
+    "editTitle": "Edit memory",
+    "tagsPlaceholder": "comma-separated tags",
+    "weight": "Weight",
+    "cancel": "Cancel",
+    "save": "Save",
+    "loadingDocument": "Loading document…",
+    "promoted": "promoted",
+    "uses_one": "{{count}} use",
+    "uses_other": "{{count}} uses",
+    "expires": "expires {{date}}",
+    "connected": "Connected",
+    "deleteTitle": "Delete memory?",
+    "deleteBody": "\"{{text}}\" will be permanently deleted{{docSuffix}}.",
+    "deleteBodyDocSuffix": ", along with the attached document"
+  },
+  "memoryGraph": {
+    "center": "Center"
+  },
+  "memoriesScreen": {
+    "title": "Memories",
+    "searchPlaceholder": "Search memories…",
+    "allProjects": "All",
+    "emptyFound": "No memories found",
+    "emptyYet": "No memories yet",
+    "emptyTrySearch": "Try other search terms.",
+    "emptyChatHint": "Chat with Brain enabled and Orbit will start remembering facts and preferences automatically.",
+    "emptyCodeHint": "Work on a project with Brain enabled and Orbit memorizes decisions, conventions, and structure."
   }
 }

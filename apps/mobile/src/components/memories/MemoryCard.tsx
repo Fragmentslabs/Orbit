@@ -7,10 +7,11 @@
 import { useEffect, useState } from 'react'
 import { View, Text, Pressable, TextInput, Modal, ScrollView, Alert, StyleSheet } from 'react-native'
 import { ArrowUpCircle, FileText, Link2, Pencil, Trash2, X } from 'lucide-react-native'
+import { useTranslation } from 'react-i18next'
 import type { Memory } from '@orbit/shared'
 import { useMemoryStore } from '~/stores/memory-store'
 import { AssistantMarkdown } from '~/components/chat/AssistantMarkdown'
-import { KIND_COLOR, KIND_LABEL, CATEGORY_LABEL, canPromote, formatDate } from './meta'
+import { KIND_COLOR, kindLabel, categoryLabel, canPromote, formatDate } from './meta'
 import { getThemeTokens } from '~/lib/theme-tokens'
 import { useThemeStore } from '~/stores/theme-store'
 
@@ -21,6 +22,7 @@ function EditModal({ memory, visible, onClose }: {
   visible: boolean
   onClose: () => void
 }) {
+  const { t } = useTranslation()
   const update = useMemoryStore((s) => s.update)
   const [text, setText] = useState(memory.text)
   const [tags, setTags] = useState(memory.tags.join(', '))
@@ -39,7 +41,7 @@ function EditModal({ memory, visible, onClose }: {
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
       <View style={s.modalBackdrop}>
         <View style={[s.modalBox, { backgroundColor: tokens.card, borderColor: tokens.border }]}>
-          <Text style={[s.modalTitle, { color: tokens.foreground }]}>Editar memória</Text>
+          <Text style={[s.modalTitle, { color: tokens.foreground }]}>{t('memoryCard.editTitle')}</Text>
           <TextInput
             value={text}
             onChangeText={setText}
@@ -50,13 +52,13 @@ function EditModal({ memory, visible, onClose }: {
           <TextInput
             value={tags}
             onChangeText={setTags}
-            placeholder="tags separadas por vírgula"
+            placeholder={t('memoryCard.tagsPlaceholder')}
             placeholderTextColor={tokens.mutedForeground}
             style={[s.modalInput, { borderColor: tokens.border, color: tokens.foreground }]}
             autoCapitalize="none"
           />
           <View style={s.weightRow}>
-            <Text style={[s.weightLabel, { color: tokens.mutedForeground }]}>Peso</Text>
+            <Text style={[s.weightLabel, { color: tokens.mutedForeground }]}>{t('memoryCard.weight')}</Text>
             <View style={s.weightChips}>
               {WEIGHT_PRESETS.map((preset) => (
                 <Pressable
@@ -78,7 +80,7 @@ function EditModal({ memory, visible, onClose }: {
           </View>
           <View style={s.modalActions}>
             <Pressable onPress={onClose} style={s.cancelBtn}>
-              <Text style={[s.cancelText, { color: tokens.mutedForeground }]}>Cancelar</Text>
+              <Text style={[s.cancelText, { color: tokens.mutedForeground }]}>{t('memoryCard.cancel')}</Text>
             </Pressable>
             <Pressable
               onPress={() => {
@@ -92,7 +94,7 @@ function EditModal({ memory, visible, onClose }: {
               }}
               style={[s.saveBtn, { backgroundColor: tokens.primary }]}
             >
-              <Text style={[s.saveText, { color: tokens.primaryForeground }]}>Salvar</Text>
+              <Text style={[s.saveText, { color: tokens.primaryForeground }]}>{t('memoryCard.save')}</Text>
             </Pressable>
           </View>
         </View>
@@ -106,6 +108,7 @@ function DocModal({ memory, visible, onClose }: {
   visible: boolean
   onClose: () => void
 }) {
+  const { t } = useTranslation()
   const openDoc = useMemoryStore((s) => s.openDoc)
   const [doc, setDoc] = useState<string | null>(null)
   const tokens = getThemeTokens(useThemeStore((s) => s.resolved))
@@ -131,7 +134,7 @@ function DocModal({ memory, visible, onClose }: {
           </View>
           <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 32 }}>
             {doc === null ? (
-              <Text style={[s.docLoading, { color: tokens.mutedForeground }]}>Carregando documento…</Text>
+              <Text style={[s.docLoading, { color: tokens.mutedForeground }]}>{t('memoryCard.loadingDocument')}</Text>
             ) : (
               <AssistantMarkdown text={doc} />
             )}
@@ -148,6 +151,7 @@ export function MemoryCard({ memory, related, onSelectRelated }: {
   related: Memory[]
   onSelectRelated?: (id: string) => void
 }) {
+  const { t } = useTranslation()
   const remove = useMemoryStore((s) => s.remove)
   const promote = useMemoryStore((s) => s.promote)
 
@@ -159,11 +163,14 @@ export function MemoryCard({ memory, related, onSelectRelated }: {
 
   const handleDelete = () => {
     Alert.alert(
-      'Excluir memória?',
-      `"${memory.text}" será excluída permanentemente${memory.hasDoc ? ', junto com o documento anexado' : ''}.`,
+      t('memoryCard.deleteTitle'),
+      t('memoryCard.deleteBody', {
+        text: memory.text,
+        docSuffix: memory.hasDoc ? t('memoryCard.deleteBodyDocSuffix') : '',
+      }),
       [
-        { text: 'Cancelar', style: 'cancel' },
-        { text: 'Excluir', style: 'destructive', onPress: () => void remove(memory.id) },
+        { text: t('sidebar.cancel'), style: 'cancel' },
+        { text: t('sidebar.delete'), style: 'destructive', onPress: () => void remove(memory.id) },
       ],
     )
   }
@@ -175,11 +182,11 @@ export function MemoryCard({ memory, related, onSelectRelated }: {
       {/* Badges + tags */}
       <View style={s.badgesRow}>
         <View style={[s.kindBadge, { backgroundColor: `${kindColor}26` }]}>
-          <Text style={[s.kindBadgeText, { color: kindColor }]}>{KIND_LABEL[memory.kind]}</Text>
+          <Text style={[s.kindBadgeText, { color: kindColor }]}>{kindLabel(memory.kind)}</Text>
         </View>
         {memory.kind === 'project' && memory.category && (
           <View style={[s.outlineBadge, { borderColor: tokens.muted }]}>
-            <Text style={[s.outlineBadgeText, { color: tokens.mutedForeground }]}>{CATEGORY_LABEL[memory.category]}</Text>
+            <Text style={[s.outlineBadgeText, { color: tokens.mutedForeground }]}>{categoryLabel(memory.category)}</Text>
           </View>
         )}
         {memory.kind === 'project' && memory.projectName && (
@@ -189,7 +196,7 @@ export function MemoryCard({ memory, related, onSelectRelated }: {
         )}
         {memory.promotedFrom && (
           <View style={[s.outlineBadge, { borderColor: tokens.muted }]}>
-            <Text style={[s.outlineBadgeText, { color: tokens.mutedForeground }]}>promovida</Text>
+            <Text style={[s.outlineBadgeText, { color: tokens.mutedForeground }]}>{t('memoryCard.promoted')}</Text>
           </View>
         )}
         {memory.hasDoc && <FileText size={12} color={tokens.mutedForeground} />}
@@ -206,9 +213,9 @@ export function MemoryCard({ memory, related, onSelectRelated }: {
             <View style={[s.weightFill, { width: `${Math.round(memory.weight * 100)}%` }]} />
           </View>
         </View>
-        <Text style={[s.metaText, { color: tokens.mutedForeground }]}>{memory.hits} uso{memory.hits === 1 ? '' : 's'}</Text>
+        <Text style={[s.metaText, { color: tokens.mutedForeground }]}>{t('memoryCard.uses', { count: memory.hits })}</Text>
         <Text style={[s.metaText, { color: tokens.mutedForeground }]}>{formatDate(memory.createdAt)}</Text>
-        {memory.expiresAt != null && <Text style={[s.metaText, { color: tokens.mutedForeground }]}>expira {formatDate(memory.expiresAt)}</Text>}
+        {memory.expiresAt != null && <Text style={[s.metaText, { color: tokens.mutedForeground }]}>{t('memoryCard.expires', { date: formatDate(memory.expiresAt) })}</Text>}
       </View>
 
       {/* Conectadas */}
@@ -216,7 +223,7 @@ export function MemoryCard({ memory, related, onSelectRelated }: {
         <View style={[s.relatedBox, { borderTopColor: tokens.border }]}>
           <View style={s.relatedHeader}>
             <Link2 size={11} color={tokens.mutedForeground} />
-            <Text style={[s.metaText, { color: tokens.mutedForeground }]}>Conectadas</Text>
+            <Text style={[s.metaText, { color: tokens.mutedForeground }]}>{t('memoryCard.connected')}</Text>
           </View>
           {related.map((r) => (
             <Pressable key={r.id} onPress={() => onSelectRelated?.(r.id)}>

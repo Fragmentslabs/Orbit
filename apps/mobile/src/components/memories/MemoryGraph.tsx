@@ -9,9 +9,10 @@ import { View, Text, Pressable, ScrollView, StyleSheet } from 'react-native'
 import { Gesture, GestureDetector } from 'react-native-gesture-handler'
 import Svg, { G, Line, Circle, Rect, Text as SvgText } from 'react-native-svg'
 import { Crosshair, X } from 'lucide-react-native'
+import { useTranslation } from 'react-i18next'
 import type { Memory } from '@orbit/shared'
 import { jaccard, normalizeText, PROJECT_AREAS } from '@orbit/shared'
-import { KIND_COLOR, KIND_LABEL, lastActivity } from './meta'
+import { KIND_COLOR, kindLabel, lastActivity } from './meta'
 import { MemoryCard } from './MemoryCard'
 import { getThemeTokens } from '~/lib/theme-tokens'
 import { useThemeStore } from '~/stores/theme-store'
@@ -247,6 +248,7 @@ export function MemoryGraph({ pool, allById, query, selectedId, onSelect }: {
   selectedId: string | null
   onSelect: (id: string | null) => void
 }) {
+  const { t } = useTranslation()
   const [transform, setTransform] = useState<Transform>({ x: 0, y: 0, k: 1 })
   const [size, setSize] = useState({ w: 0, h: 0 })
   const gestureBase = useRef<Transform>({ x: 0, y: 0, k: 1 })
@@ -260,7 +262,7 @@ export function MemoryGraph({ pool, allById, query, selectedId, onSelect }: {
     (memory: Memory) => {
       if (queryTokens.length === 0) return true
       const haystack = normalizeText(`${memory.text} ${memory.tags.join(' ')}`)
-      return queryTokens.every((t) => haystack.includes(t))
+      return queryTokens.every((tok) => haystack.includes(tok))
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps -- tokens derivam de query
     [query],
@@ -329,13 +331,13 @@ export function MemoryGraph({ pool, allById, query, selectedId, onSelect }: {
       <View style={s.toolbar}>
         <Pressable onPress={() => fitView()} style={[s.centerBtn, { borderColor: tokens.border }]}>
           <Crosshair size={13} color={tokens.foreground} />
-          <Text style={[s.centerBtnText, { color: tokens.foreground }]}>Centralizar</Text>
+          <Text style={[s.centerBtnText, { color: tokens.foreground }]}>{t('memoryGraph.center')}</Text>
         </Pressable>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.legend}>
           {(Object.keys(KIND_COLOR) as Array<keyof typeof KIND_COLOR>).map((kind) => (
             <View key={kind} style={s.legendItem}>
               <View style={[s.legendDot, { backgroundColor: KIND_COLOR[kind] }]} />
-              <Text style={[s.legendText, { color: tokens.mutedForeground }]}>{KIND_LABEL[kind]}</Text>
+              <Text style={[s.legendText, { color: tokens.mutedForeground }]}>{kindLabel(kind)}</Text>
             </View>
           ))}
         </ScrollView>

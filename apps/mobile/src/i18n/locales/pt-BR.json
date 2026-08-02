@@ -373,5 +373,47 @@
     "photos": "Fotos",
     "files": "Arquivos",
     "openWith": "Abrir com…"
+  },
+  "memoryMeta": {
+    "kind": { "core": "core", "seasonal": "sazonal", "general": "geral", "project": "projeto" },
+    "category": {
+      "preference": "preferência",
+      "convention": "convenção",
+      "structure": "estrutura",
+      "decision": "decisão",
+      "context": "contexto",
+      "database": "banco de dados",
+      "learning": "aprendizado",
+      "standard": "padronização"
+    }
+  },
+  "memoryCard": {
+    "editTitle": "Editar memória",
+    "tagsPlaceholder": "tags separadas por vírgula",
+    "weight": "Peso",
+    "cancel": "Cancelar",
+    "save": "Salvar",
+    "loadingDocument": "Carregando documento…",
+    "promoted": "promovida",
+    "uses_one": "{{count}} uso",
+    "uses_other": "{{count}} usos",
+    "expires": "expira {{date}}",
+    "connected": "Conectadas",
+    "deleteTitle": "Excluir memória?",
+    "deleteBody": "\"{{text}}\" será excluída permanentemente{{docSuffix}}.",
+    "deleteBodyDocSuffix": ", junto com o documento anexado"
+  },
+  "memoryGraph": {
+    "center": "Centralizar"
+  },
+  "memoriesScreen": {
+    "title": "Memórias",
+    "searchPlaceholder": "Buscar memórias…",
+    "allProjects": "Todos",
+    "emptyFound": "Nenhuma memória encontrada",
+    "emptyYet": "Nenhuma memória ainda",
+    "emptyTrySearch": "Tente outros termos de busca.",
+    "emptyChatHint": "Converse com o Brain ativo e o Orbit passa a lembrar fatos e preferências automaticamente.",
+    "emptyCodeHint": "Trabalhe em um projeto com o Brain ativo e o Orbit memoriza decisões, convenções e estrutura."
   }
 }
