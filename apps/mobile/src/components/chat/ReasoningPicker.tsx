@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Modal, View, Text, Pressable, StyleSheet } from 'react-native'
 import { Brain, Check } from 'lucide-react-native'
+import { useTranslation } from 'react-i18next'
 import { getThemeTokens } from '~/lib/theme-tokens'
 import { useThemeStore } from '~/stores/theme-store'
 import { hslToRgba } from '~/lib/theme'
@@ -13,6 +14,7 @@ interface Props {
 }
 
 export function ReasoningPicker({ variants, selected, onSelect }: Props) {
+  const { t } = useTranslation()
   const tokens = getThemeTokens(useThemeStore((s) => s.resolved))
   const [open, setOpen] = useState(false)
   const current = variants.find((v) => v.id === selected)
@@ -28,14 +30,14 @@ export function ReasoningPicker({ variants, selected, onSelect }: Props) {
       <Pressable onPress={() => setOpen(true)} style={s.trigger}>
         <Brain size={14} color={tokens.mutedForeground} />
         <Text style={[s.triggerText, { color: tokens.mutedForeground }]}>
-          {current?.label ?? 'Nível'}
+          {current?.label ?? t('reasoningPicker.level')}
         </Text>
       </Pressable>
 
       <Modal visible={open} transparent animationType="fade" onRequestClose={() => setOpen(false)}>
         <Pressable style={s.backdrop} onPress={() => setOpen(false)} />
         <View style={[s.menu, { borderColor: tokens.border, backgroundColor: tokens.card }]}>
-          <Text style={[s.menuTitle, { color: tokens.mutedForeground }]}>Nível de raciocínio</Text>
+          <Text style={[s.menuTitle, { color: tokens.mutedForeground }]}>{t('reasoningPicker.levelTitle')}</Text>
           {variants.map((variant) => {
             const selectedId = variant.id === selected
             return (

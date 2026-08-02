@@ -6,17 +6,21 @@ import { useState } from 'react'
 import { Modal, View, Text, Pressable, StyleSheet } from 'react-native'
 import { Shield, ShieldCheck, ShieldOff, Check } from 'lucide-react-native'
 import type { LucideIcon } from 'lucide-react-native'
+import { useTranslation } from 'react-i18next'
 import { getThemeTokens } from '~/lib/theme-tokens'
 import { useThemeStore } from '~/stores/theme-store'
 import { hslToRgba } from '~/lib/theme'
 
 export type PermissionModeValue = 'ask' | 'approve' | 'full'
 
-const MODES: { id: PermissionModeValue; label: string; description: string; icon: LucideIcon }[] = [
-  { id: 'ask', label: 'Perguntar', description: 'Confirma ações sensíveis antes de executar', icon: Shield },
-  { id: 'approve', label: 'Autonomia', description: 'Executa sozinho; ações críticas pedem confirmação', icon: ShieldCheck },
-  { id: 'full', label: 'Irrestrito', description: 'Sem perguntas (piso de segurança mantido)', icon: ShieldOff },
-]
+function useModes(): { id: PermissionModeValue; label: string; description: string; icon: LucideIcon }[] {
+  const { t } = useTranslation()
+  return [
+    { id: 'ask', label: t('permissionModePicker.ask'), description: t('permissionModePicker.askDescription'), icon: Shield },
+    { id: 'approve', label: t('permissionModePicker.approve'), description: t('permissionModePicker.approveDescription'), icon: ShieldCheck },
+    { id: 'full', label: t('permissionModePicker.full'), description: t('permissionModePicker.fullDescription'), icon: ShieldOff },
+  ]
+}
 
 interface Props {
   value: PermissionModeValue
@@ -24,6 +28,8 @@ interface Props {
 }
 
 export function PermissionModePicker({ value, onChange }: Props) {
+  const { t } = useTranslation()
+  const MODES = useModes()
   const tokens = getThemeTokens(useThemeStore((s) => s.resolved))
   const [open, setOpen] = useState(false)
   const current = MODES.find((m) => m.id === value) ?? MODES[0]
@@ -43,7 +49,7 @@ export function PermissionModePicker({ value, onChange }: Props) {
       <Modal visible={open} transparent animationType="fade" onRequestClose={() => setOpen(false)}>
         <Pressable style={s.backdrop} onPress={() => setOpen(false)} />
         <View style={[s.menu, { borderColor: tokens.border, backgroundColor: tokens.card }]}>
-          <Text style={[s.menuTitle, { color: tokens.mutedForeground }]}>Modo de permissões</Text>
+          <Text style={[s.menuTitle, { color: tokens.mutedForeground }]}>{t('permissionModePicker.title')}</Text>
           {MODES.map((mode) => {
             const ModeIcon = mode.icon
             const selected = mode.id === value
