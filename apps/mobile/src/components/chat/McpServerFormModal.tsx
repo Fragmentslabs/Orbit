@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Modal, View, Text, TextInput, Pressable, ScrollView, Switch, StyleSheet, Alert } from 'react-native'
 import { X, Save, Plus, Trash2 } from 'lucide-react-native'
+import { useTranslation } from 'react-i18next'
 import { useToolsStore } from '~/stores/tools-store'
 import { getThemeTokens } from '~/lib/theme-tokens'
 import { useThemeStore } from '~/stores/theme-store'
@@ -12,13 +13,18 @@ interface McpServerFormModalProps {
   edit?: McpServerConfig
 }
 
-const PERMISSION_MODES = [
-  { id: 'ask' as const, label: 'Perguntar' },
-  { id: 'approve' as const, label: 'Aprovar' },
-  { id: 'full' as const, label: 'Total' },
-]
+function usePermissionModes() {
+  const { t } = useTranslation()
+  return [
+    { id: 'ask' as const, label: t('mcpServerFormModal.permissionModes.ask') },
+    { id: 'approve' as const, label: t('mcpServerFormModal.permissionModes.approve') },
+    { id: 'full' as const, label: t('mcpServerFormModal.permissionModes.full') },
+  ]
+}
 
 export function McpServerFormModal({ visible, onClose, edit }: McpServerFormModalProps) {
+  const { t } = useTranslation()
+  const PERMISSION_MODES = usePermissionModes()
   const tokens = getThemeTokens(useThemeStore((s) => s.resolved))
   const saveMcpConfig = useToolsStore((s) => s.saveMcpConfig)
   const mcpServers = useToolsStore((s) => s.mcpServers)
@@ -40,7 +46,7 @@ export function McpServerFormModal({ visible, onClose, edit }: McpServerFormModa
   const [saving, setSaving] = useState(false)
 
   const handleSave = async () => {
-    if (!name.trim()) return Alert.alert('Nome obrigatório', 'Digite um nome para o servidor.')
+    if (!name.trim()) return Alert.alert(t('mcpServerFormModal.nameRequiredTitle'), t('mcpServerFormModal.nameRequiredBody'))
 
     const config: McpServerConfig = {
       name: name.trim(),
@@ -51,14 +57,14 @@ export function McpServerFormModal({ visible, onClose, edit }: McpServerFormModa
     }
 
     if (type === 'http') {
-      if (!url.trim()) return Alert.alert('URL obrigatório', 'Digite a URL do servidor HTTP.')
+      if (!url.trim()) return Alert.alert(t('mcpServerFormModal.urlRequiredTitle'), t('mcpServerFormModal.urlRequiredBody'))
       config.url = url.trim()
       const hdrs = headers.filter((h) => h.key.trim())
       if (hdrs.length > 0) {
         config.headers = Object.fromEntries(hdrs.map((h) => [h.key.trim(), h.value]))
       }
     } else {
-      if (!command.trim()) return Alert.alert('Comando obrigatório', 'Digite o comando do servidor STDIO.')
+      if (!command.trim()) return Alert.alert(t('mcpServerFormModal.commandRequiredTitle'), t('mcpServerFormModal.commandRequiredBody'))
       config.command = command.trim()
       const args = argsText.split('\n').map((a) => a.trim()).filter(Boolean)
       if (args.length > 0) config.args = args
@@ -77,7 +83,7 @@ export function McpServerFormModal({ visible, onClose, edit }: McpServerFormModa
       await saveMcpConfig(fullConfig)
       onClose()
     } catch {
-      Alert.alert('Erro', 'Não foi possível salvar o servidor MCP.')
+      Alert.alert(t('mcpServerFormModal.errorTitle'), t('mcpServerFormModal.errorBody'))
     } finally {
       setSaving(false)
     }
@@ -105,7 +111,7 @@ export function McpServerFormModal({ visible, onClose, edit }: McpServerFormModa
           <View style={[s.handle, { backgroundColor: tokens.muted }]} />
           <View style={s.header}>
             <Text style={[s.headerTitle, { color: tokens.foreground }]}>
-              {edit ? 'Editar servidor MCP' : 'Novo servidor MCP'}
+              {edit ? t('mcpServerFormModal.editTitle') : t('mcpServerFormModal.newTitle')}
             </Text>
             <Pressable onPress={handleClose} style={s.closeBtn}>
               <X size={20} color={tokens.foreground} />
@@ -114,18 +120,18 @@ export function McpServerFormModal({ visible, onClose, edit }: McpServerFormModa
 
           <ScrollView style={{ flex: 1 }} contentContainerStyle={{ gap: 14, paddingBottom: 24 }}>
             <View>
-              <Text style={[s.label, { color: tokens.mutedForeground }]}>Nome</Text>
+              <Text style={[s.label, { color: tokens.mutedForeground }]}>{t('mcpServerFormModal.nameLabel')}</Text>
               <TextInput
                 value={name}
                 onChangeText={setName}
-                placeholder="meu-servidor"
+                placeholder={t('mcpServerFormModal.namePlaceholder')}
                 placeholderTextColor={tokens.mutedForeground}
                 style={[s.input, { color: tokens.foreground, backgroundColor: tokens.card, borderColor: tokens.border }]}
               />
             </View>
 
             <View>
-              <Text style={[s.label, { color: tokens.mutedForeground }]}>Tipo</Text>
+              <Text style={[s.label, { color: tokens.mutedForeground }]}>{t('mcpServerFormModal.typeLabel')}</Text>
               <View style={s.segmented}>
                 <Pressable
                   onPress={() => setType('http')}
@@ -144,7 +150,7 @@ export function McpServerFormModal({ visible, onClose, edit }: McpServerFormModa
 
             {type === 'http' ? (
               <View>
-                <Text style={[s.label, { color: tokens.mutedForeground }]}>URL</Text>
+                <Text style={[s.label, { color: tokens.mutedForeground }]}>{t('mcpServerFormModal.urlLabel')}</Text>
                 <TextInput
                   value={url}
                   onChangeText={setUrl}
@@ -155,27 +161,27 @@ export function McpServerFormModal({ visible, onClose, edit }: McpServerFormModa
                   style={[s.input, { color: tokens.foreground, backgroundColor: tokens.card, borderColor: tokens.border }]}
                 />
                 <Text style={[s.fieldHint, { color: tokens.mutedForeground }]}>
-                  Endpoint Streamable HTTP do servidor
+                  {t('mcpServerFormModal.urlHint')}
                 </Text>
 
-                <Text style={[s.label, { color: tokens.mutedForeground, marginTop: 8 }]}>Cabeçalhos HTTP</Text>
+                <Text style={[s.label, { color: tokens.mutedForeground, marginTop: 8 }]}>{t('mcpServerFormModal.httpHeaders')}</Text>
                 {headers.map((h, i) => (
                   <View key={i} style={s.kvRow}>
                     <TextInput
                       value={h.key}
-                      onChangeText={(t) => {
-                        const next = [...headers]; next[i] = { ...next[i], key: t }; setHeaders(next)
+                      onChangeText={(v) => {
+                        const next = [...headers]; next[i] = { ...next[i], key: v }; setHeaders(next)
                       }}
-                      placeholder="Chave"
+                      placeholder={t('mcpServerFormModal.keyPlaceholder')}
                       placeholderTextColor={tokens.mutedForeground}
                       style={[s.kvKey, { color: tokens.foreground, backgroundColor: tokens.card, borderColor: tokens.border }]}
                     />
                     <TextInput
                       value={h.value}
-                      onChangeText={(t) => {
-                        const next = [...headers]; next[i] = { ...next[i], value: t }; setHeaders(next)
+                      onChangeText={(v) => {
+                        const next = [...headers]; next[i] = { ...next[i], value: v }; setHeaders(next)
                       }}
-                      placeholder="Valor"
+                      placeholder={t('mcpServerFormModal.valuePlaceholder')}
                       placeholderTextColor={tokens.mutedForeground}
                       style={[s.kvValue, { color: tokens.foreground, backgroundColor: tokens.card, borderColor: tokens.border }]}
                     />
@@ -186,13 +192,13 @@ export function McpServerFormModal({ visible, onClose, edit }: McpServerFormModa
                 ))}
                 <Pressable onPress={() => setHeaders([...headers, { key: '', value: '' }])} style={s.addBtn}>
                   <Plus size={14} color={tokens.primary} />
-                  <Text style={[s.addText, { color: tokens.primary }]}>Adicionar cabeçalho</Text>
+                  <Text style={[s.addText, { color: tokens.primary }]}>{t('mcpServerFormModal.addHeader')}</Text>
                 </Pressable>
               </View>
             ) : (
               <View>
                 <View>
-                  <Text style={[s.label, { color: tokens.mutedForeground }]}>Comando</Text>
+                  <Text style={[s.label, { color: tokens.mutedForeground }]}>{t('mcpServerFormModal.command')}</Text>
                   <TextInput
                     value={command}
                     onChangeText={setCommand}
@@ -204,7 +210,7 @@ export function McpServerFormModal({ visible, onClose, edit }: McpServerFormModa
                 </View>
 
                 <View style={{ marginTop: 10 }}>
-                  <Text style={[s.label, { color: tokens.mutedForeground }]}>Argumentos (um por linha)</Text>
+                  <Text style={[s.label, { color: tokens.mutedForeground }]}>{t('mcpServerFormModal.argsLabel')}</Text>
                   <TextInput
                     value={argsText}
                     onChangeText={setArgsText}
@@ -217,11 +223,11 @@ export function McpServerFormModal({ visible, onClose, edit }: McpServerFormModa
                 </View>
 
                 <View style={{ marginTop: 10 }}>
-                  <Text style={[s.label, { color: tokens.mutedForeground }]}>Diretório de trabalho</Text>
+                  <Text style={[s.label, { color: tokens.mutedForeground }]}>{t('mcpServerFormModal.cwdLabel')}</Text>
                   <TextInput
                     value={cwd}
                     onChangeText={setCwd}
-                    placeholder="/caminho/do/projeto"
+                    placeholder={t('mcpServerFormModal.cwdPlaceholder')}
                     placeholderTextColor={tokens.mutedForeground}
                     autoCapitalize="none"
                     style={[s.input, { color: tokens.foreground, backgroundColor: tokens.card, borderColor: tokens.border }]}
@@ -229,24 +235,24 @@ export function McpServerFormModal({ visible, onClose, edit }: McpServerFormModa
                 </View>
 
                 <View style={{ marginTop: 10 }}>
-                  <Text style={[s.label, { color: tokens.mutedForeground }]}>Variáveis de ambiente</Text>
+                  <Text style={[s.label, { color: tokens.mutedForeground }]}>{t('mcpServerFormModal.envVars')}</Text>
                   {envVars.map((e, i) => (
                     <View key={i} style={s.kvRow}>
                       <TextInput
                         value={e.key}
-                        onChangeText={(t) => {
-                          const next = [...envVars]; next[i] = { ...next[i], key: t }; setEnvVars(next)
+                        onChangeText={(v) => {
+                          const next = [...envVars]; next[i] = { ...next[i], key: v }; setEnvVars(next)
                         }}
-                        placeholder="Chave"
+                        placeholder={t('mcpServerFormModal.keyPlaceholder')}
                         placeholderTextColor={tokens.mutedForeground}
                         style={[s.kvKey, { color: tokens.foreground, backgroundColor: tokens.card, borderColor: tokens.border }]}
                       />
                       <TextInput
                         value={e.value}
-                        onChangeText={(t) => {
-                          const next = [...envVars]; next[i] = { ...next[i], value: t }; setEnvVars(next)
+                        onChangeText={(v) => {
+                          const next = [...envVars]; next[i] = { ...next[i], value: v }; setEnvVars(next)
                         }}
-                        placeholder="Valor"
+                        placeholder={t('mcpServerFormModal.valuePlaceholder')}
                         placeholderTextColor={tokens.mutedForeground}
                         style={[s.kvValue, { color: tokens.foreground, backgroundColor: tokens.card, borderColor: tokens.border }]}
                       />
@@ -257,14 +263,14 @@ export function McpServerFormModal({ visible, onClose, edit }: McpServerFormModa
                   ))}
                   <Pressable onPress={() => setEnvVars([...envVars, { key: '', value: '' }])} style={s.addBtn}>
                     <Plus size={14} color={tokens.primary} />
-                    <Text style={[s.addText, { color: tokens.primary }]}>Adicionar variável</Text>
+                    <Text style={[s.addText, { color: tokens.primary }]}>{t('mcpServerFormModal.addVar')}</Text>
                   </Pressable>
                 </View>
               </View>
             )}
 
             <View>
-              <Text style={[s.label, { color: tokens.mutedForeground }]}>Modo de permissão</Text>
+              <Text style={[s.label, { color: tokens.mutedForeground }]}>{t('mcpServerFormModal.permissionMode')}</Text>
               <View style={s.permissionRow}>
                 {PERMISSION_MODES.map((m) => (
                   <Pressable
@@ -291,7 +297,7 @@ export function McpServerFormModal({ visible, onClose, edit }: McpServerFormModa
             </View>
 
             <View style={s.switchRow}>
-              <Text style={[s.switchLabel, { color: tokens.foreground }]}>Reconexão automática</Text>
+              <Text style={[s.switchLabel, { color: tokens.foreground }]}>{t('mcpServerFormModal.autoReconnect')}</Text>
               <Switch
                 value={autoReconnect}
                 onValueChange={setAutoReconnect}
@@ -303,11 +309,11 @@ export function McpServerFormModal({ visible, onClose, edit }: McpServerFormModa
 
           <View style={[s.footer, { borderTopColor: tokens.border }]}>
             <Pressable onPress={handleClose} style={[s.cancelBtn, { borderColor: tokens.border }]}>
-              <Text style={[s.cancelText, { color: tokens.foreground }]}>Cancelar</Text>
+              <Text style={[s.cancelText, { color: tokens.foreground }]}>{t('mcpServerFormModal.cancel')}</Text>
             </Pressable>
             <Pressable onPress={handleSave} disabled={saving} style={[s.saveBtn, { backgroundColor: tokens.primary, opacity: saving ? 0.6 : 1 }]}>
               <Save size={16} color="#fff" />
-              <Text style={s.saveText}>{saving ? 'Salvando…' : 'Salvar'}</Text>
+              <Text style={s.saveText}>{saving ? t('mcpServerFormModal.saving') : t('mcpServerFormModal.save')}</Text>
             </Pressable>
           </View>
         </View>
