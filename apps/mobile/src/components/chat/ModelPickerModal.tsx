@@ -2,6 +2,7 @@ import { useState, useMemo } from 'react'
 import { Modal, View, Text, TextInput, Pressable, ScrollView, Platform } from 'react-native'
 import { X, Search, Check, Brain, RefreshCw } from 'lucide-react-native'
 import { Image } from 'expo-image'
+import { useTranslation } from 'react-i18next'
 import { useSettingsStore } from '~/stores/settings-store'
 import { useThemeStore } from '~/stores/theme-store'
 import { getThemeTokens } from '~/lib/theme-tokens'
@@ -27,6 +28,7 @@ function ModelRowSkeleton({ tokens }: { tokens: Record<string, string> }) {
 }
 
 export function ModelPickerModal({ visible, onClose }: ModelPickerModalProps) {
+  const { t } = useTranslation()
   const catalog = useSettingsStore((s) => s.catalog)
   const selectedModel = useSettingsStore((s) => s.selectedModel)
   const selectModel = useSettingsStore((s) => s.selectModel)
@@ -115,7 +117,7 @@ export function ModelPickerModal({ visible, onClose }: ModelPickerModalProps) {
 
           {/* Header */}
           <View className="flex-row items-center justify-between px-4 py-3.5" style={{ borderBottomWidth: 1, borderBottomColor: tokens.border }}>
-            <Text style={{ fontSize: 16, fontWeight: '600', color: tokens.foreground }}>Selecionar Modelo</Text>
+            <Text style={{ fontSize: 16, fontWeight: '600', color: tokens.foreground }}>{t('modelPickerModal.title')}</Text>
             <Pressable onPress={onClose} className="p-1 rounded-md" style={({ pressed }) => pressed ? { backgroundColor: tokens.muted } : undefined}>
               <X size={20} color={tokens.foreground} />
             </Pressable>
@@ -128,7 +130,7 @@ export function ModelPickerModal({ visible, onClose }: ModelPickerModalProps) {
               <TextInput
                 value={search}
                 onChangeText={setSearch}
-                placeholder="Pesquisar modelos…"
+                placeholder={t('modelPickerModal.searchPlaceholder')}
                 placeholderTextColor={tokens.mutedForeground}
                 className="flex-1 text-sm py-0.5"
                 style={{ color: tokens.foreground }}
@@ -164,11 +166,11 @@ export function ModelPickerModal({ visible, onClose }: ModelPickerModalProps) {
               </View>
             ) : groups.length === 0 ? (
               <View className="py-12 items-center">
-                <Text className="text-sm mb-1 text-center font-medium" style={{ color: tokens.mutedForeground }}>Nenhum modelo disponível.</Text>
+                <Text className="text-sm mb-1 text-center font-medium" style={{ color: tokens.mutedForeground }}>{t('modelPickerModal.noModelsAvailable')}</Text>
                 <Text className="text-xs text-center px-4 leading-relaxed" style={{ color: tokens.mutedForeground, opacity: 0.75 }}>
                   {connectedProviders.length === 0
-                    ? "Por favor, configure as credenciais de um provedor nas configurações do desktop."
-                    : "Tente pesquisar por outro nome de modelo."}
+                    ? t('modelPickerModal.configureProviderHint')
+                    : t('modelPickerModal.trySearchHint')}
                 </Text>
               </View>
             ) : (

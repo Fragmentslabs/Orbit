@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import { Modal, View, Text, TextInput, Pressable, ScrollView, Switch, StyleSheet } from 'react-native'
 import { X, Search, Check, Sparkles, Brain } from 'lucide-react-native'
 import { Image } from 'expo-image'
+import { useTranslation } from 'react-i18next'
 import { useSettingsStore } from '~/stores/settings-store'
 import { Storage } from '~/lib/storage'
 import { getThemeTokens } from '~/lib/theme-tokens'
@@ -20,6 +21,7 @@ interface WorkerModelModalProps {
  * modelo do chat" (limpa a configuração).
  */
 export function WorkerModelModal({ visible, onClose }: WorkerModelModalProps) {
+  const { t } = useTranslation()
   const tokens = getThemeTokens(useThemeStore((s) => s.resolved))
   const catalog = useSettingsStore((s) => s.catalog)
   const connectedProviders = useSettingsStore((s) => s.connectedProviders)
@@ -79,13 +81,13 @@ export function WorkerModelModal({ visible, onClose }: WorkerModelModalProps) {
           <View style={[s.handle, { backgroundColor: tokens.muted }]} />
 
           <View style={s.header}>
-            <Text style={[s.headerTitle, { color: tokens.foreground }]}>Modelo dos workers</Text>
+            <Text style={[s.headerTitle, { color: tokens.foreground }]}>{t('workerModelModal.title')}</Text>
             <Pressable onPress={onClose} style={s.closeBtn}>
               <X size={20} color={tokens.foreground} />
             </Pressable>
           </View>
           <Text style={[s.headerDesc, { color: tokens.mutedForeground }]}>
-            Usado pelos subagentes e pela orquestração. Sem configuração, os workers usam o mesmo modelo do chat.
+            {t('workerModelModal.description')}
           </Text>
 
           {/* Usar o modelo do chat */}
@@ -98,7 +100,7 @@ export function WorkerModelModal({ visible, onClose }: WorkerModelModalProps) {
             style={[s.sameModelRow, { borderColor: tokens.border }, !workerModel && { backgroundColor: rowSelectedBg }]}
           >
             <Sparkles size={16} color={tokens.primary} />
-            <Text style={[s.sameModelText, { color: tokens.foreground }]}>Usar o mesmo modelo do chat</Text>
+            <Text style={[s.sameModelText, { color: tokens.foreground }]}>{t('workerModelModal.useSameModel')}</Text>
             {!workerModel && <Check size={16} color={tokens.primary} />}
           </Pressable>
 
@@ -108,7 +110,7 @@ export function WorkerModelModal({ visible, onClose }: WorkerModelModalProps) {
             <TextInput
               value={search}
               onChangeText={setSearch}
-              placeholder="Pesquisar modelos…"
+              placeholder={t('workerModelModal.searchPlaceholder')}
               placeholderTextColor={tokens.mutedForeground}
               style={[s.searchInput, { color: tokens.foreground }]}
               autoCapitalize="none"
@@ -123,7 +125,7 @@ export function WorkerModelModal({ visible, onClose }: WorkerModelModalProps) {
                 <View style={s.thinkingRow}>
                   <View className="flex-row items-center gap-2">
                     <Brain size={18} color={tokens.mutedForeground} />
-                    <Text style={[s.thinkingLabel, { color: tokens.foreground }]}>Thinking no worker</Text>
+                    <Text style={[s.thinkingLabel, { color: tokens.foreground }]}>{t('workerModelModal.thinkingOnWorker')}</Text>
                   </View>
                   <Switch
                     value={thinkingOn}

@@ -331,5 +331,40 @@
     "commandRequiredBody": "Enter the STDIO server's command.",
     "errorTitle": "Error",
     "errorBody": "Could not save the MCP server."
+  },
+  "workerModelModal": {
+    "title": "Worker model",
+    "description": "Used by subagents and orchestration. Without configuration, workers use the same model as the chat.",
+    "useSameModel": "Use the same model as the chat",
+    "searchPlaceholder": "Search models…",
+    "thinkingOnWorker": "Thinking on worker"
+  },
+  "modelPickerModal": {
+    "title": "Select Model",
+    "searchPlaceholder": "Search models…",
+    "noModelsAvailable": "No models available.",
+    "configureProviderHint": "Please configure a provider's credentials in Orbit Desktop's settings.",
+    "trySearchHint": "Try searching for a different model name."
+  },
+  "scheduleSheet": {
+    "title": "Schedule message",
+    "presetIn30Min": "In 30 minutes",
+    "presetIn1Hour": "In 1 hour",
+    "presetIn2Hours": "In 2 hours",
+    "presetTomorrow9am": "Tomorrow at 9:00 AM",
+    "custom": "Custom",
+    "date": "Date",
+    "time": "Time",
+    "willSendAt": "Will send at",
+    "cancel": "Cancel",
+    "confirm": "Confirm",
+    "ok": "OK"
+  },
+  "folderSelector": {
+    "associateFolder": "Attach folder",
+    "selectFolderTitle": "Select folder on desktop",
+    "useThis": "Use this",
+    "noSubfolders": "No subfolders here.",
+    "listError": "Could not list the folders."
   }
 }

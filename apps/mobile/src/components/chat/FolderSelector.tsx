@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { Modal, View, Text, Pressable, ScrollView, ActivityIndicator, StyleSheet } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Folder, FolderUp, Plus, X, Check, History } from 'lucide-react-native'
+import { useTranslation } from 'react-i18next'
 import type { ListDirsResponse } from '@orbit/shared'
 import { useConnectionStore } from '~/stores/connection-store'
 import { Storage } from '~/lib/storage'
@@ -38,6 +39,7 @@ interface FolderSelectorProps {
 }
 
 export function FolderSelector({ folders, onFoldersChange, disabled }: FolderSelectorProps) {
+  const { t } = useTranslation()
   const tokens = getThemeTokens(useThemeStore((s) => s.resolved))
   const [browserOpen, setBrowserOpen] = useState(false)
   const [browserTarget, setBrowserTarget] = useState<'primary' | 'extra'>('primary')
@@ -73,7 +75,7 @@ export function FolderSelector({ folders, onFoldersChange, disabled }: FolderSel
       <Pressable onPress={() => openBrowser('primary')} style={[s.chip, { borderColor: tokens.border, backgroundColor: tokens.card }]}>
         <Folder size={13} color={tokens.primary} />
         <Text style={[s.chipText, { color: tokens.foreground }]} numberOfLines={1}>
-          {folders.length === 0 ? 'Associar pasta' : folderName(folders[0])}
+          {folders.length === 0 ? t('folderSelector.associateFolder') : folderName(folders[0])}
         </Text>
       </Pressable>
 
@@ -109,6 +111,7 @@ function DirBrowserModal({
   onClose: () => void
   onPick: (path: string) => void
 }) {
+  const { t } = useTranslation()
   const tokens = getThemeTokens(useThemeStore((s) => s.resolved))
   const insets = useSafeAreaInsets()
   const wsClient = useConnectionStore((s) => s.wsClient)
@@ -126,7 +129,7 @@ function DirBrowserModal({
         if (res.ok && res.data) {
           setListing(res.data as ListDirsResponse)
         } else {
-          setError(res.error ?? 'Não foi possível listar as pastas.')
+          setError(res.error ?? t('folderSelector.listError'))
         }
       } catch (err) {
         setError(String(err))
@@ -153,7 +156,7 @@ function DirBrowserModal({
           <View style={[s.handle, { backgroundColor: tokens.muted }]} />
 
           <View style={s.sheetHeader}>
-            <Text style={[s.sheetTitle, { color: tokens.foreground }]}>Selecionar pasta no desktop</Text>
+            <Text style={[s.sheetTitle, { color: tokens.foreground }]}>{t('folderSelector.selectFolderTitle')}</Text>
             <Pressable onPress={onClose} style={{ padding: 4 }}>
               <X size={20} color={tokens.foreground} />
             </Pressable>
@@ -183,7 +186,7 @@ function DirBrowserModal({
               style={[s.useBtn, { backgroundColor: tokens.primary }]}
             >
               <Check size={14} color={tokens.primaryForeground} />
-              <Text style={[s.useBtnText, { color: tokens.primaryForeground }]}>Usar esta</Text>
+              <Text style={[s.useBtnText, { color: tokens.primaryForeground }]}>{t('folderSelector.useThis')}</Text>
             </Pressable>
           </View>
 
@@ -209,7 +212,7 @@ function DirBrowserModal({
               ))
             )}
             {!loading && !error && listing?.dirs.length === 0 && (
-              <Text style={[s.emptyText, { color: tokens.mutedForeground }]}>Nenhuma subpasta aqui.</Text>
+              <Text style={[s.emptyText, { color: tokens.mutedForeground }]}>{t('folderSelector.noSubfolders')}</Text>
             )}
           </ScrollView>
         </View>
