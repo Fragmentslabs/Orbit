@@ -366,5 +366,12 @@
     "useThis": "Use this",
     "noSubfolders": "No subfolders here.",
     "listError": "Could not list the folders."
+  },
+  "attachment": {
+    "defaultFilename": "File",
+    "camera": "Camera",
+    "photos": "Photos",
+    "files": "Files",
+    "openWith": "Open with…"
   }
 }

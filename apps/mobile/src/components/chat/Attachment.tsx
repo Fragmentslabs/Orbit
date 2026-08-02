@@ -1,12 +1,14 @@
 import { View, Text, Pressable, StyleSheet } from 'react-native'
 import { Image } from 'expo-image'
 import { Paperclip, X } from 'lucide-react-native'
+import { useTranslation } from 'react-i18next'
 import type { FilePart } from '@orbit/shared'
 import { openFilePart } from '~/lib/attachments'
 import { getThemeTokens } from '~/lib/theme-tokens'
 import { useThemeStore } from '~/stores/theme-store'
 
 export function InputAttachment({ file, onRemove }: { file: FilePart; onRemove: () => void }) {
+  const { t } = useTranslation()
   const tokens = getThemeTokens(useThemeStore((s) => s.resolved))
   const isImage = file.mime.startsWith('image/')
   return (
@@ -17,7 +19,7 @@ export function InputAttachment({ file, onRemove }: { file: FilePart; onRemove: 
         <Paperclip size={13} color={tokens.mutedForeground} />
       )}
       <Text style={[s.inputChipText, { color: tokens.foreground }]} numberOfLines={1}>
-        {file.filename ?? 'Arquivo'}
+        {file.filename ?? t('attachment.defaultFilename')}
       </Text>
       <Pressable onPress={onRemove} hitSlop={8} style={[s.removeBtn, { backgroundColor: tokens.muted }]}>
         <X size={11} color={tokens.mutedForeground} />
@@ -27,6 +29,7 @@ export function InputAttachment({ file, onRemove }: { file: FilePart; onRemove: 
 }
 
 export function MessageAttachment({ file }: { file: FilePart }) {
+  const { t } = useTranslation()
   const tokens = getThemeTokens(useThemeStore((s) => s.resolved))
   const isImage = file.mime.startsWith('image/')
 
@@ -45,7 +48,7 @@ export function MessageAttachment({ file }: { file: FilePart }) {
       <View style={[s.fileChip, { borderColor: tokens.border, backgroundColor: tokens.card }]}>
         <Paperclip size={13} color={tokens.mutedForeground} />
         <Text style={[s.fileChipText, { color: tokens.foreground }]} numberOfLines={1}>
-          {file.filename ?? 'Arquivo'}
+          {file.filename ?? t('attachment.defaultFilename')}
         </Text>
       </View>
     )
@@ -55,7 +58,7 @@ export function MessageAttachment({ file }: { file: FilePart }) {
     <Pressable onPress={() => void openFilePart(file)} style={[s.fileChip, { borderColor: tokens.border, backgroundColor: tokens.card }]}>
       <Paperclip size={13} color={tokens.mutedForeground} />
       <Text style={[s.fileChipText, { color: tokens.foreground }]} numberOfLines={1}>
-        {file.filename ?? 'Arquivo'}
+        {file.filename ?? t('attachment.defaultFilename')}
       </Text>
     </Pressable>
   )

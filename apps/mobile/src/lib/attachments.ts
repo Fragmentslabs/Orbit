@@ -11,6 +11,7 @@
 import { Platform } from 'react-native'
 import * as FileSystem from 'expo-file-system/legacy'
 import type { FilePart } from '@orbit/shared'
+import i18n from '~/i18n'
 
 let Sharing: typeof import('expo-sharing') | undefined
 
@@ -78,6 +79,6 @@ export async function openFilePart(file: FilePart): Promise<void> {
 
   Sharing = require('expo-sharing') as typeof import('expo-sharing')
   if (await Sharing.isAvailableAsync()) {
-    await Sharing.shareAsync(localUri, { mimeType: file.mime, dialogTitle: file.filename ?? 'Abrir com…' })
+    await Sharing.shareAsync(localUri, { mimeType: file.mime, dialogTitle: file.filename ?? i18n.t('attachment.openWith') })
   }
 }
