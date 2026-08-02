@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { View, Text, ScrollView, Pressable, Switch, StyleSheet } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { useRouter } from 'expo-router'
@@ -22,6 +23,7 @@ import {
   Palette,
   AlertTriangle,
   Folder,
+  Languages,
   ChevronRight,
 } from 'lucide-react-native'
 import { useConnectionStore } from '~/stores/connection-store'
@@ -30,6 +32,7 @@ import { Spin } from '~/components/ui/spin'
 import { getThemeTokens, type ThemeTokens } from '~/lib/theme-tokens'
 import { useThemeStore } from '~/stores/theme-store'
 import { useNotificationPrefsStore } from '~/stores/notification-prefs-store'
+import { useLocaleStore, LOCALE_LABELS, SUPPORTED_LOCALES, type AppLocale } from '~/stores/locale-store'
 
 interface CompanionPreferences {
   brain: boolean
@@ -40,19 +43,30 @@ interface CompanionPreferences {
   simple: boolean
 }
 
-const PERMISSION_MODES: { id: CompanionPreferences['permissionMode']; label: string }[] = [
-  { id: 'ask', label: 'Perguntar' },
-  { id: 'approve', label: 'Aprovar' },
-  { id: 'full', label: 'Total' },
-]
+function usePermissionModes(): { id: CompanionPreferences['permissionMode']; label: string }[] {
+  const { t } = useTranslation()
+  return [
+    { id: 'ask', label: t('settings.preferences.permissionModes.ask') },
+    { id: 'approve', label: t('settings.preferences.permissionModes.approve') },
+    { id: 'full', label: t('settings.preferences.permissionModes.full') },
+  ]
+}
 
-const REASONING_LEVELS: { id: CompanionPreferences['reasoningLevel']; label: string }[] = [
-  { id: 'low', label: 'Baixo' },
-  { id: 'medium', label: 'Médio' },
-  { id: 'high', label: 'Alto' },
-]
+function useReasoningLevels(): { id: CompanionPreferences['reasoningLevel']; label: string }[] {
+  const { t } = useTranslation()
+  return [
+    { id: 'low', label: t('settings.preferences.reasoningLevels.low') },
+    { id: 'medium', label: t('settings.preferences.reasoningLevels.medium') },
+    { id: 'high', label: t('settings.preferences.reasoningLevels.high') },
+  ]
+}
 
 export default function SettingsScreen() {
+  const { t } = useTranslation()
+  const PERMISSION_MODES = usePermissionModes()
+  const REASONING_LEVELS = useReasoningLevels()
+  const locale = useLocaleStore((s) => s.locale)
+  const setLocale = useLocaleStore((s) => s.setLocale)
   const router = useRouter()
   const connection = useConnectionStore((s) => s.connection)
   const config = useConnectionStore((s) => s.config)
@@ -103,7 +117,7 @@ export default function SettingsScreen() {
   const selectedModelName =
     selectedModel && catalog
       ? catalog[selectedModel.providerId]?.models[selectedModel.modelId]?.name ?? selectedModel.modelId
-      : 'Não definido'
+      : t('settings.model.notSet')
 
   return (
     <SafeAreaView style={[s.container, { backgroundColor: tokens.background }]} edges={['top']}>
@@ -112,7 +126,7 @@ export default function SettingsScreen() {
         <Pressable onPress={() => router.back()} style={s.headerBtn}>
           <ArrowLeft size={22} color={tokens.foreground} />
         </Pressable>
-        <Text style={[s.headerTitle, { color: tokens.foreground }]}>Configurações</Text>
+        <Text style={[s.headerTitle, { color: tokens.foreground }]}>{t('settings.title')}</Text>
         <Pressable onPress={handleRefresh} disabled={refreshing || loading} style={s.headerBtn}>
           <Spin active={refreshing || loading}>
             <RefreshCw size={18} color={tokens.mutedForeground} />
@@ -122,21 +136,21 @@ export default function SettingsScreen() {
 
       <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 48 }}>
         {/* ── Conexão ─────────────────────────────────────────────── */}
-        <Text style={[s.sectionLabel, { color: tokens.mutedForeground }]}>Conexão</Text>
+        <Text style={[s.sectionLabel, { color: tokens.mutedForeground }]}>{t('settings.connection.sectionLabel')}</Text>
         <View style={[s.card, { borderColor: tokens.border, backgroundColor: tokens.card }]}>
-          <Row icon={Wifi} label="Status" value={connection.status === 'connected' ? 'Conectado' : 'Desconectado'} />
+          <Row icon={Wifi} label={t('settings.connection.status')} value={connection.status === 'connected' ? t('settings.connection.connected') : t('settings.connection.disconnected')} />
           <RowDivider />
-          <Row icon={Monitor} label="Desktop" value={connection.deviceName ?? config?.host ?? '—'} />
+          <Row icon={Monitor} label={t('settings.connection.desktop')} value={connection.deviceName ?? config?.host ?? '—'} />
           <RowDivider />
-          <Row icon={LogOut} label="Desconectar" destructive onPress={handleDisconnect} />
+          <Row icon={LogOut} label={t('settings.connection.disconnect')} destructive onPress={handleDisconnect} />
         </View>
 
         {/* ── Provedores ──────────────────────────────────────────── */}
-        <Text style={[s.sectionLabel, { color: tokens.mutedForeground }]}>Provedores</Text>
+        <Text style={[s.sectionLabel, { color: tokens.mutedForeground }]}>{t('settings.providers.sectionLabel')}</Text>
         <View style={[s.card, { borderColor: tokens.border, backgroundColor: tokens.card }]}>
           {connectedProviders.length === 0 ? (
             <Text style={[s.emptyText, { color: tokens.mutedForeground }]}>
-              Nenhum provedor conectado. As credenciais são gerenciadas no Orbit Desktop.
+              {t('settings.providers.none')}
             </Text>
           ) : (
             <View style={s.providersWrap}>
@@ -153,37 +167,37 @@ export default function SettingsScreen() {
             </View>
           )}
           <Text style={[s.helperText, { color: tokens.mutedForeground }]}>
-            Para adicionar ou remover provedores, use as configurações do Orbit Desktop.
+            {t('settings.providers.helper')}
           </Text>
         </View>
 
         {/* ── Modelo ──────────────────────────────────────────────── */}
-        <Text style={[s.sectionLabel, { color: tokens.mutedForeground }]}>Modelo</Text>
+        <Text style={[s.sectionLabel, { color: tokens.mutedForeground }]}>{t('settings.model.sectionLabel')}</Text>
         <View style={[s.card, { borderColor: tokens.border, backgroundColor: tokens.card }]}>
-          <Row icon={Cpu} label="Modelo ativo" value={selectedModelName} />
+          <Row icon={Cpu} label={t('settings.model.active')} value={selectedModelName} />
         </View>
 
         {/* ── Preferências (sincronizadas com o desktop) ──────────── */}
-        <Text style={[s.sectionLabel, { color: tokens.mutedForeground }]}>Preferências</Text>
+        <Text style={[s.sectionLabel, { color: tokens.mutedForeground }]}>{t('settings.preferences.sectionLabel')}</Text>
         <View style={[s.card, { borderColor: tokens.border, backgroundColor: tokens.card }]}>
           <SwitchRow
             icon={BrainCircuit}
-            label="Memória (Brain)"
+            label={t('settings.preferences.brain')}
             value={preferences?.brain ?? true}
             onChange={(v) => setPref({ brain: v })}
           />
           <RowDivider />
           <SwitchRow
             icon={BrainCircuit}
-            label="Contexto automático"
-            description="Injeta memórias relevantes no prompt"
+            label={t('settings.preferences.autoContext')}
+            description={t('settings.preferences.autoContextDescription')}
             value={preferences?.brainContext ?? true}
             onChange={(v) => setPref({ brainContext: v })}
           />
           <RowDivider />
           <SwitchRow
             icon={Brain}
-            label="Raciocínio"
+            label={t('settings.preferences.reasoning')}
             value={preferences?.reasoning ?? false}
             onChange={(v) => setPref({ reasoning: v })}
           />
@@ -191,7 +205,7 @@ export default function SettingsScreen() {
             <>
               <RowDivider />
               <View style={s.segmentRow}>
-                <Text style={[s.segmentLabel, { color: tokens.foreground }]}>Nível</Text>
+                <Text style={[s.segmentLabel, { color: tokens.foreground }]}>{t('settings.preferences.level')}</Text>
                 <View style={[s.segmentGroup, { backgroundColor: tokens.border }]}>
                   {REASONING_LEVELS.map((level) => (
                     <Pressable
@@ -217,8 +231,8 @@ export default function SettingsScreen() {
           <RowDivider />
           <SwitchRow
             icon={AlignLeft}
-            label="Modo simples"
-            description="Respostas diretas, sem formatação"
+            label={t('settings.preferences.simple')}
+            description={t('settings.preferences.simpleDescription')}
             value={preferences?.simple ?? false}
             onChange={(v) => setPref({ simple: v })}
           />
@@ -226,7 +240,7 @@ export default function SettingsScreen() {
           <View style={s.segmentRow}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
               <Shield size={18} color={tokens.mutedForeground} />
-              <Text style={[s.rowLabel, { color: tokens.foreground }]}>Permissões</Text>
+              <Text style={[s.rowLabel, { color: tokens.foreground }]}>{t('settings.preferences.permissions')}</Text>
             </View>
             <View style={[s.segmentGroup, { backgroundColor: tokens.border }]}>
               {PERMISSION_MODES.map((pm) => (
@@ -247,66 +261,93 @@ export default function SettingsScreen() {
           <RowDivider />
           <SwitchRow
             icon={Folder}
-            label="Pastas automáticas"
-            description="Agrupa novos chats de código em pastas pelo nome do diretório"
+            label={t('settings.preferences.autoFolders')}
+            description={t('settings.preferences.autoFoldersDescription')}
             value={autoCreateFolders}
             onChange={setAutoCreateFolders}
           />
         </View>
 
         {/* ── Notificações ──────────────────────────────────────────── */}
-        <Text style={[s.sectionLabel, { color: tokens.mutedForeground }]}>Notificações</Text>
+        <Text style={[s.sectionLabel, { color: tokens.mutedForeground }]}>{t('settings.notifications.sectionLabel')}</Text>
         <View style={[s.card, { borderColor: tokens.border, backgroundColor: tokens.card }]}>
           <SwitchRow
             icon={Bell}
-            label="Perguntas do desktop"
-            description="Quando o Orbit precisar de permissão ou resposta"
+            label={t('settings.notifications.pendingAsk')}
+            description={t('settings.notifications.pendingAskDescription')}
             value={notificationPrefs.pendingAsk}
             onChange={(v) => setNotificationPref('pendingAsk', v)}
           />
           <RowDivider />
           <SwitchRow
             icon={MessageCircle}
-            label="Nova mensagem"
-            description="Quando o assistente responder (sessão inativa)"
+            label={t('settings.notifications.newMessage')}
+            description={t('settings.notifications.newMessageDescription')}
             value={notificationPrefs.newMessage}
             onChange={(v) => setNotificationPref('newMessage', v)}
           />
           <RowDivider />
           <SwitchRow
             icon={AlertTriangle}
-            label="Erro no chat"
-            description="Quando ocorrer um erro durante o processamento"
+            label={t('settings.notifications.chatError')}
+            description={t('settings.notifications.chatErrorDescription')}
             value={notificationPrefs.chatError}
             onChange={(v) => setNotificationPref('chatError', v)}
           />
         </View>
 
         {/* ── Ferramentas ─────────────────────────────────────────── */}
-        <Text style={[s.sectionLabel, { color: tokens.mutedForeground }]}>Ferramentas</Text>
+        <Text style={[s.sectionLabel, { color: tokens.mutedForeground }]}>{t('settings.tools.sectionLabel')}</Text>
         <View style={[s.card, { borderColor: tokens.border, backgroundColor: tokens.card }]}>
           <Row
             icon={Puzzle}
-            label="MCPs e Skills"
+            label={t('settings.tools.mcpSkills')}
             onPress={() => router.push('/(main)/tools')}
             chevron
           />
         </View>
 
         {/* ── Aparência ──────────────────────────────────────────── */}
-        <Text style={[s.sectionLabel, { color: tokens.mutedForeground }]}>Aparência</Text>
+        <Text style={[s.sectionLabel, { color: tokens.mutedForeground }]}>{t('settings.appearanceSection.sectionLabel')}</Text>
         <View style={[s.card, { borderColor: tokens.border, backgroundColor: tokens.card }]}>
-          <Row icon={Palette} label="Tema e modos" onPress={() => router.push('/(main)/appearance')} chevron />
+          <Row icon={Palette} label={t('settings.appearanceSection.themeAndModes')} onPress={() => router.push('/(main)/appearance')} chevron />
+        </View>
+
+        {/* ── Idioma ──────────────────────────────────────────────── */}
+        <Text style={[s.sectionLabel, { color: tokens.mutedForeground }]}>{t('settings.language.sectionLabel')}</Text>
+        <View style={[s.card, { borderColor: tokens.border, backgroundColor: tokens.card }]}>
+          <View style={s.segmentRow}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+              <Languages size={18} color={tokens.mutedForeground} />
+              <Text style={[s.rowLabel, { color: tokens.foreground }]}>{t('settings.language.sectionLabel')}</Text>
+            </View>
+            <View style={[s.segmentGroup, { backgroundColor: tokens.border }]}>
+              {SUPPORTED_LOCALES.map((loc) => (
+                <Pressable
+                  key={loc}
+                  onPress={() => setLocale(loc)}
+                  style={[s.segment, locale === loc && { backgroundColor: tokens.primary }]}
+                >
+                  <Text
+                    style={[s.segmentText, { color: tokens.mutedForeground }, locale === loc && { color: tokens.primaryForeground }]}
+                  >
+                    {LOCALE_LABELS[loc]}
+                  </Text>
+                </Pressable>
+              ))}
+            </View>
+          </View>
+          <Text style={[s.helperText, { color: tokens.mutedForeground }]}>{t('settings.language.description')}</Text>
         </View>
 
         {/* ── Informações ──────────────────────────────────────────── */}
-        <Text style={[s.sectionLabel, { color: tokens.mutedForeground }]}>Informações</Text>
+        <Text style={[s.sectionLabel, { color: tokens.mutedForeground }]}>{t('settings.info.sectionLabel')}</Text>
         <View style={[s.card, { borderColor: tokens.border, backgroundColor: tokens.card }]}>
-          <Row icon={BookOpen} label="Como funciona" onPress={() => router.push('/(main)/howto')} chevron />
+          <Row icon={BookOpen} label={t('settings.info.howItWorks')} onPress={() => router.push('/(main)/howto')} chevron />
         </View>
 
         <View style={s.footer}>
-          <Text style={[s.footerText, { color: tokens.mutedForeground }]}>Orbit Mobile v1.0.0</Text>
+          <Text style={[s.footerText, { color: tokens.mutedForeground }]}>{t('settings.footer')}</Text>
         </View>
       </ScrollView>
     </SafeAreaView>

@@ -1,0 +1,64 @@
+{
+  "settings": {
+    "title": "Configurações",
+    "connection": {
+      "sectionLabel": "Conexão",
+      "status": "Status",
+      "connected": "Conectado",
+      "disconnected": "Desconectado",
+      "desktop": "Desktop",
+      "disconnect": "Desconectar"
+    },
+    "providers": {
+      "sectionLabel": "Provedores",
+      "none": "Nenhum provedor conectado. As credenciais são gerenciadas no Orbit Desktop.",
+      "helper": "Para adicionar ou remover provedores, use as configurações do Orbit Desktop."
+    },
+    "model": {
+      "sectionLabel": "Modelo",
+      "active": "Modelo ativo",
+      "notSet": "Não definido"
+    },
+    "preferences": {
+      "sectionLabel": "Preferências",
+      "brain": "Memória (Brain)",
+      "autoContext": "Contexto automático",
+      "autoContextDescription": "Injeta memórias relevantes no prompt",
+      "reasoning": "Raciocínio",
+      "level": "Nível",
+      "reasoningLevels": { "low": "Baixo", "medium": "Médio", "high": "Alto" },
+      "simple": "Modo simples",
+      "simpleDescription": "Respostas diretas, sem formatação",
+      "permissions": "Permissões",
+      "permissionModes": { "ask": "Perguntar", "approve": "Aprovar", "full": "Total" },
+      "autoFolders": "Pastas automáticas",
+      "autoFoldersDescription": "Agrupa novos chats de código em pastas pelo nome do diretório"
+    },
+    "notifications": {
+      "sectionLabel": "Notificações",
+      "pendingAsk": "Perguntas do desktop",
+      "pendingAskDescription": "Quando o Orbit precisar de permissão ou resposta",
+      "newMessage": "Nova mensagem",
+      "newMessageDescription": "Quando o assistente responder (sessão inativa)",
+      "chatError": "Erro no chat",
+      "chatErrorDescription": "Quando ocorrer um erro durante o processamento"
+    },
+    "tools": {
+      "sectionLabel": "Ferramentas",
+      "mcpSkills": "MCPs e Skills"
+    },
+    "appearanceSection": {
+      "sectionLabel": "Aparência",
+      "themeAndModes": "Tema e modos"
+    },
+    "info": {
+      "sectionLabel": "Informações",
+      "howItWorks": "Como funciona"
+    },
+    "language": {
+      "sectionLabel": "Idioma",
+      "description": "Idioma da interface e das respostas do assistente."
+    },
+    "footer": "Orbit Mobile v1.0.0"
+  }
+}
