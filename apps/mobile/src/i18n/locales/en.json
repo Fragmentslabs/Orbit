@@ -555,6 +555,9 @@
     "newConversation": "New conversation",
     "newConversationDesc": "Starts a blank chat"
   },
+  "sessionStore": {
+    "queuedOffline": "No connection to the desktop. Message queued for automatic delivery."
+  },
   "themeScreen": {
     "title": "Theme",
     "light": "Light",
