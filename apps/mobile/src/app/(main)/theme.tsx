@@ -3,13 +3,17 @@ import { SafeAreaView } from 'react-native-safe-area-context'
 import { useRouter } from 'expo-router'
 import { Palette, ArrowLeft, Sun, Moon, Monitor } from 'lucide-react-native'
 import { Appearance, useColorScheme } from 'react-native'
+import { useTranslation } from 'react-i18next'
 import { useThemeStore, type ThemePreference } from '~/stores/theme-store'
 
-const THEME_OPTIONS: { value: ThemePreference; label: string; icon: typeof Sun }[] = [
-  { value: 'light', label: 'Claro', icon: Sun },
-  { value: 'dark', label: 'Escuro', icon: Moon },
-  { value: 'system', label: 'Sistema', icon: Monitor },
-]
+function useThemeOptions(): { value: ThemePreference; label: string; icon: typeof Sun }[] {
+  const { t } = useTranslation()
+  return [
+    { value: 'light', label: t('themeScreen.light'), icon: Sun },
+    { value: 'dark', label: t('themeScreen.dark'), icon: Moon },
+    { value: 'system', label: t('themeScreen.system'), icon: Monitor },
+  ]
+}
 
 const tokens = {
   light: {
@@ -33,13 +37,15 @@ const tokens = {
 }
 
 export default function ThemeScreen() {
+  const { t } = useTranslation()
+  const THEME_OPTIONS = useThemeOptions()
   const router = useRouter()
   const systemScheme = useColorScheme()
   const systemIsDark = systemScheme !== 'light'
   const current = useThemeStore((s) => s.preference)
   const resolved = useThemeStore((s) => s.resolved)
   const setPreference = useThemeStore((s) => s.setPreference)
-  const t = tokens[resolved]
+  const tk = tokens[resolved]
 
   const handleSelect = (value: ThemePreference) => {
     setPreference(value, systemIsDark)
@@ -48,13 +54,13 @@ export default function ThemeScreen() {
   }
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: t.background }} edges={['top']}>
-      <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: t.border }}>
+    <SafeAreaView style={{ flex: 1, backgroundColor: tk.background }} edges={['top']}>
+      <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: tk.border }}>
         <Pressable onPress={() => router.back()} style={{ padding: 4, marginLeft: -4 }}>
-          <ArrowLeft size={22} color={t.foreground} />
+          <ArrowLeft size={22} color={tk.foreground} />
         </Pressable>
-        <Text style={{ flex: 1, fontSize: 16, fontWeight: '600', color: t.foreground, textAlign: 'center', marginRight: 24 }}>
-          Tema
+        <Text style={{ flex: 1, fontSize: 16, fontWeight: '600', color: tk.foreground, textAlign: 'center', marginRight: 24 }}>
+          {t('themeScreen.title')}
         </Text>
       </View>
       <ScrollView style={{ flex: 1 }}>
@@ -73,21 +79,21 @@ export default function ThemeScreen() {
                   paddingHorizontal: 16,
                   paddingVertical: 12,
                   borderRadius: 8,
-                  backgroundColor: isActive ? t.accent : t.card,
+                  backgroundColor: isActive ? tk.accent : tk.card,
                   borderWidth: 1,
-                  borderColor: isActive ? t.primary + '4D' : t.border,
+                  borderColor: isActive ? tk.primary + '4D' : tk.border,
                 }}
               >
-                <Icon size={20} color={isActive ? t.primary : t.mutedFg} />
+                <Icon size={20} color={isActive ? tk.primary : tk.mutedFg} />
                 <Text style={{
                   fontSize: 14,
                   flex: 1,
-                  color: t.foreground,
+                  color: tk.foreground,
                   fontWeight: isActive ? '500' : '400',
                 }}>
                   {option.label}
                 </Text>
-                {isActive && <Text style={{ fontSize: 12, color: t.primary }}>✓</Text>}
+                {isActive && <Text style={{ fontSize: 12, color: tk.primary }}>✓</Text>}
               </Pressable>
             )
           })}

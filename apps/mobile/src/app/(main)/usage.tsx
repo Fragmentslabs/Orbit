@@ -13,18 +13,22 @@ import {
   CalendarDays,
   Layers,
 } from 'lucide-react-native'
+import { useTranslation } from 'react-i18next'
 import type { AnalyticsSummary, AnalyticsRange } from '@orbit/shared'
 import { useConnectionStore } from '~/stores/connection-store'
 import { useSettingsStore } from '~/stores/settings-store'
 import { getThemeTokens } from '~/lib/theme-tokens'
 import { useThemeStore } from '~/stores/theme-store'
 
-const RANGES: { id: AnalyticsRange; label: string }[] = [
-  { id: 'today', label: 'Hoje' },
-  { id: '7d', label: '7 dias' },
-  { id: '30d', label: '30 dias' },
-  { id: 'total', label: 'Total' },
-]
+function useRanges(): { id: AnalyticsRange; label: string }[] {
+  const { t } = useTranslation()
+  return [
+    { id: 'today', label: t('usageScreen.rangeToday') },
+    { id: '7d', label: t('usageScreen.range7d') },
+    { id: '30d', label: t('usageScreen.range30d') },
+    { id: 'total', label: t('usageScreen.rangeTotal') },
+  ]
+}
 
 function formatTokens(n: number): string {
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`
@@ -45,6 +49,8 @@ function formatHours(hours: number): string {
 }
 
 export default function UsageScreen() {
+  const { t } = useTranslation()
+  const RANGES = useRanges()
   const router = useRouter()
   const wsClient = useConnectionStore((s) => s.wsClient)
   const catalog = useSettingsStore((s) => s.catalog)
@@ -83,7 +89,7 @@ export default function UsageScreen() {
         <Pressable onPress={() => router.back()} style={s.headerBtn}>
           <ArrowLeft size={22} color={tokens.foreground} />
         </Pressable>
-        <Text style={[s.headerTitle, { color: tokens.foreground }]}>Uso e Limites</Text>
+        <Text style={[s.headerTitle, { color: tokens.foreground }]}>{t('usageScreen.title')}</Text>
         <View style={s.headerBtn} />
       </View>
 
@@ -108,25 +114,25 @@ export default function UsageScreen() {
         refreshControl={<RefreshControl refreshing={loading} onRefresh={() => void fetchSummary(range)} tintColor={tokens.primary} />}
       >
         <View style={s.grid}>
-          <StatCard icon={MessageSquare} label="Mensagens" value={String(summary?.totalMessages ?? 0)} />
-          <StatCard icon={Layers} label="Tokens" value={formatTokens(summary?.totalTokens ?? 0)} />
-          <StatCard icon={Coins} label="Custo" value={formatCost(summary?.totalCost ?? 0)} />
-          <StatCard icon={Clock} label="Horas de uso" value={formatHours(summary?.totalHours ?? 0)} />
-          <StatCard icon={CalendarDays} label="Dias ativos" value={String(summary?.activeDays ?? 0)} />
+          <StatCard icon={MessageSquare} label={t('usageScreen.messages')} value={String(summary?.totalMessages ?? 0)} />
+          <StatCard icon={Layers} label={t('usageScreen.tokens')} value={formatTokens(summary?.totalTokens ?? 0)} />
+          <StatCard icon={Coins} label={t('usageScreen.cost')} value={formatCost(summary?.totalCost ?? 0)} />
+          <StatCard icon={Clock} label={t('usageScreen.hoursOfUse')} value={formatHours(summary?.totalHours ?? 0)} />
+          <StatCard icon={CalendarDays} label={t('usageScreen.activeDays')} value={String(summary?.activeDays ?? 0)} />
           <StatCard
             icon={Flame}
-            label="Sequência"
+            label={t('usageScreen.streak')}
             value={`${summary?.currentStreak ?? 0}d`}
-            hint={summary?.longestStreak ? `recorde ${summary.longestStreak}d` : undefined}
+            hint={summary?.longestStreak ? t('usageScreen.record', { days: summary.longestStreak }) : undefined}
           />
         </View>
 
-        <Text style={[s.sectionLabel, { color: tokens.mutedForeground }]}>Por modelo</Text>
+        <Text style={[s.sectionLabel, { color: tokens.mutedForeground }]}>{t('usageScreen.byModel')}</Text>
         <View style={[s.card, { borderColor: tokens.border, backgroundColor: tokens.card }]}>
           {topModels.length === 0 ? (
             <View style={s.emptyBox}>
               <BarChart3 size={24} color={tokens.mutedForeground} />
-              <Text style={[s.emptyText, { color: tokens.mutedForeground }]}>Sem uso registrado neste período.</Text>
+              <Text style={[s.emptyText, { color: tokens.mutedForeground }]}>{t('usageScreen.noUsageInPeriod')}</Text>
             </View>
           ) : (
             topModels.map((model, index) => {
@@ -146,13 +152,13 @@ export default function UsageScreen() {
                   <View style={{ flex: 1, gap: 4 }}>
                     <View style={s.modelTopRow}>
                       <Text style={[s.modelName, { color: tokens.foreground }]} numberOfLines={1}>{name}</Text>
-                      <Text style={[s.modelTokens, { color: tokens.mutedForeground }]}>{formatTokens(model.tokens)} tokens</Text>
+                      <Text style={[s.modelTokens, { color: tokens.mutedForeground }]}>{t('usageScreen.tokensLabel', { tokens: formatTokens(model.tokens) })}</Text>
                     </View>
                     <View style={[s.barTrack, { backgroundColor: tokens.muted }]}>
                       <View style={[s.barFill, { width: `${pct}%`, backgroundColor: tokens.primary }]} />
                     </View>
                     <Text style={[s.modelMeta, { color: tokens.mutedForeground }]}>
-                      {model.messages} msgs · {formatHours(model.hours)} · {formatCost(model.cost)}
+                      {t('usageScreen.modelMeta', { messages: model.messages, hours: formatHours(model.hours), cost: formatCost(model.cost) })}
                     </Text>
                   </View>
                 </View>
@@ -161,15 +167,15 @@ export default function UsageScreen() {
           )}
         </View>
 
-        <Text style={[s.sectionLabel, { color: tokens.mutedForeground }]}>Sessões</Text>
+        <Text style={[s.sectionLabel, { color: tokens.mutedForeground }]}>{t('usageScreen.sessions')}</Text>
         <View style={[s.card, { borderColor: tokens.border, backgroundColor: tokens.card }]}>
           <View style={s.inlineRow}>
-            <Text style={[s.inlineLabel, { color: tokens.foreground }]}>Sessões no período</Text>
+            <Text style={[s.inlineLabel, { color: tokens.foreground }]}>{t('usageScreen.sessionsInPeriod')}</Text>
             <Text style={[s.inlineValue, { color: tokens.primary }]}>{summary?.totalSessions ?? 0}</Text>
           </View>
           <View style={[s.rowDivider, { backgroundColor: tokens.border }]} />
           <View style={s.inlineRow}>
-            <Text style={[s.inlineLabel, { color: tokens.foreground }]}>Horário de pico</Text>
+            <Text style={[s.inlineLabel, { color: tokens.foreground }]}>{t('usageScreen.peakHour')}</Text>
             <Text style={[s.inlineValue, { color: tokens.primary }]}>
               {summary?.peakHour !== undefined ? `${String(summary.peakHour).padStart(2, '0')}:00` : '—'}
             </Text>

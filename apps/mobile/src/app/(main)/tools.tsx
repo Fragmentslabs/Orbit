@@ -22,12 +22,14 @@ import {
   MessageSquare,
   FileText,
 } from 'lucide-react-native'
+import { useTranslation } from 'react-i18next'
 import type { Skill, McpServerStatus, McpConnectionState, McpServerConfig, SkillProposal } from '@orbit/shared'
 import { useToolsStore } from '~/stores/tools-store'
 import { useSessionStore } from '~/stores/session-store'
 import { useDraftInput } from '~/stores/draft-input-store'
 import { getThemeTokens } from '~/lib/theme-tokens'
 import { useThemeStore } from '~/stores/theme-store'
+import i18n from '~/i18n'
 import { SkillFormModal } from '~/components/chat/SkillFormModal'
 import { SkillContentModal } from '~/components/chat/SkillContentModal'
 import { McpServerFormModal } from '~/components/chat/McpServerFormModal'
@@ -54,6 +56,7 @@ function McpServerCard({
   onDelete: (name: string) => void
   onReconnect: (name?: string) => void
 }) {
+  const { t } = useTranslation()
   const tokens = getThemeTokens(useThemeStore((s) => s.resolved))
   const [toolsOpen, setToolsOpen] = useState(false)
 
@@ -93,7 +96,7 @@ function McpServerCard({
           style={[s.toolsToggle, { borderTopColor: tokens.border }]}
         >
           <Text style={[s.toolsToggleText, { color: tokens.mutedForeground }]}>
-            {server.toolNames.length} {server.toolNames.length === 1 ? 'tool' : 'tools'}
+            {t('toolsScreen.toolsCount', { count: server.toolNames.length })}
           </Text>
           {toolsOpen ? (
             <ChevronDown size={14} color={tokens.mutedForeground} />
@@ -113,15 +116,15 @@ function McpServerCard({
       <View style={[s.actionsRow, { borderTopColor: tokens.border }]}>
         <Pressable onPress={() => onReconnect(server.config.name)} style={s.actionBtn}>
           <RefreshCw size={13} color={tokens.mutedForeground} />
-          <Text style={[s.actionLabel, { color: tokens.mutedForeground }]}>Reconectar</Text>
+          <Text style={[s.actionLabel, { color: tokens.mutedForeground }]}>{t('toolsScreen.reconnect')}</Text>
         </Pressable>
         <Pressable onPress={() => onEdit(server.config)} style={s.actionBtn}>
           <Pencil size={13} color={tokens.mutedForeground} />
-          <Text style={[s.actionLabel, { color: tokens.mutedForeground }]}>Editar</Text>
+          <Text style={[s.actionLabel, { color: tokens.mutedForeground }]}>{t('toolsScreen.edit')}</Text>
         </Pressable>
         <Pressable onPress={() => onDelete(server.config.name)} style={s.actionBtn}>
           <Trash2 size={13} color={tokens.destructive} />
-          <Text style={[s.actionLabel, { color: tokens.destructive }]}>Excluir</Text>
+          <Text style={[s.actionLabel, { color: tokens.destructive }]}>{t('toolsScreen.delete')}</Text>
         </Pressable>
       </View>
     </View>
@@ -139,6 +142,7 @@ function SkillCard({
   onEdit: (skill: Skill) => void
   onDelete: (slug: string) => void
 }) {
+  const { t } = useTranslation()
   const tokens = getThemeTokens(useThemeStore((s) => s.resolved))
 
   return (
@@ -155,7 +159,7 @@ function SkillCard({
         </View>
         <View style={[s.sourceBadge, { backgroundColor: skill.source === 'global' ? 'rgba(99,102,241,0.12)' : 'rgba(245,158,11,0.12)' }]}>
           <Text style={[s.sourceLabel, { color: skill.source === 'global' ? '#818cf8' : '#f59e0b' }]}>
-            {skill.source === 'global' ? 'Global' : 'Projeto'}
+            {skill.source === 'global' ? t('toolsScreen.global') : t('toolsScreen.project')}
           </Text>
         </View>
       </View>
@@ -163,22 +167,22 @@ function SkillCard({
         <Text style={[s.skillSlug, { color: tokens.mutedForeground }]}>@{skill.slug}</Text>
         {skill.scripts && skill.scripts.length > 0 && (
           <Text style={[s.skillScripts, { color: tokens.mutedForeground }]}>
-            {skill.scripts.length} {skill.scripts.length === 1 ? 'script' : 'scripts'}
+            {t('toolsScreen.scriptsCount', { count: skill.scripts.length })}
           </Text>
         )}
       </View>
       <View style={[s.actionsRow, { borderTopColor: tokens.border }]}>
         <Pressable onPress={() => onView(skill)} style={s.actionBtn}>
           <Eye size={13} color={tokens.mutedForeground} />
-          <Text style={[s.actionLabel, { color: tokens.mutedForeground }]}>Ver</Text>
+          <Text style={[s.actionLabel, { color: tokens.mutedForeground }]}>{t('toolsScreen.view')}</Text>
         </Pressable>
         <Pressable onPress={() => onEdit(skill)} style={s.actionBtn}>
           <Pencil size={13} color={tokens.mutedForeground} />
-          <Text style={[s.actionLabel, { color: tokens.mutedForeground }]}>Editar</Text>
+          <Text style={[s.actionLabel, { color: tokens.mutedForeground }]}>{t('toolsScreen.edit')}</Text>
         </Pressable>
         <Pressable onPress={() => onDelete(skill.slug)} style={s.actionBtn}>
           <Trash2 size={13} color={tokens.destructive} />
-          <Text style={[s.actionLabel, { color: tokens.destructive }]}>Excluir</Text>
+          <Text style={[s.actionLabel, { color: tokens.destructive }]}>{t('toolsScreen.delete')}</Text>
         </Pressable>
       </View>
     </View>
@@ -187,11 +191,14 @@ function SkillCard({
 
 // ─── Create Skill Dropdown ────────────────────────────────────────────────────
 
-const CREATE_OPTIONS = [
-  { id: 'create', icon: FileText, label: 'Criar manualmente' },
-  { id: 'import', icon: FileUp, label: 'Importar arquivo' },
-  { id: 'ask', icon: MessageSquare, label: 'Pedir para o Orbit criar' },
-] as const
+function useCreateOptions() {
+  const { t } = useTranslation()
+  return [
+    { id: 'create' as const, icon: FileText, label: t('toolsScreen.createManually') },
+    { id: 'import' as const, icon: FileUp, label: t('toolsScreen.importFile') },
+    { id: 'ask' as const, icon: MessageSquare, label: t('toolsScreen.askOrbitToCreate') },
+  ]
+}
 
 function CreateSkillDropdown({
   onCreate,
@@ -202,6 +209,8 @@ function CreateSkillDropdown({
   onImport: () => void
   onAskOrbit: () => void
 }) {
+  const { t } = useTranslation()
+  const CREATE_OPTIONS = useCreateOptions()
   const tokens = getThemeTokens(useThemeStore((s) => s.resolved))
   const [open, setOpen] = useState(false)
 
@@ -216,7 +225,7 @@ function CreateSkillDropdown({
     <View style={{ position: 'relative' }}>
       <Pressable onPress={() => setOpen((o) => !o)} style={s.dropdownTrigger}>
         <Plus size={14} color={tokens.primary} />
-        <Text style={[s.dropdownTriggerText, { color: tokens.primary }]}>Criar</Text>
+        <Text style={[s.dropdownTriggerText, { color: tokens.primary }]}>{t('toolsScreen.create')}</Text>
         <ChevronDown size={12} color={tokens.primary} />
       </Pressable>
 
@@ -248,10 +257,10 @@ function CreateSkillDropdown({
 
 function stateLabel(state: McpConnectionState): string {
   switch (state) {
-    case 'connected': return 'Conectado'
-    case 'connecting': return 'Conectando'
-    case 'error': return 'Erro'
-    case 'disabled': return 'Desativado'
+    case 'connected': return i18n.t('toolsScreen.stateConnected')
+    case 'connecting': return i18n.t('toolsScreen.stateConnecting')
+    case 'error': return i18n.t('toolsScreen.stateError')
+    case 'disabled': return i18n.t('toolsScreen.stateDisabled')
   }
 }
 
@@ -276,6 +285,7 @@ function serverStateBadge(state: McpConnectionState, tokens: Record<string, stri
 // ─── Screen ───────────────────────────────────────────────────────────────────
 
 export default function ToolsScreen() {
+  const { t } = useTranslation()
   const router = useRouter()
   const tokens = getThemeTokens(useThemeStore((s) => s.resolved))
   const setDraft = useDraftInput((s) => s.setDraft)
@@ -322,9 +332,9 @@ export default function ToolsScreen() {
   }
 
   const handleDeleteSkill = (slug: string) => {
-    Alert.alert('Excluir skill', `Excluir @${slug}?`, [
-      { text: 'Cancelar', style: 'cancel' },
-      { text: 'Excluir', style: 'destructive', onPress: () => void removeSkill(slug) },
+    Alert.alert(t('toolsScreen.deleteSkillTitle'), t('toolsScreen.deleteSkillBody', { slug }), [
+      { text: t('toolsScreen.cancel'), style: 'cancel' },
+      { text: t('toolsScreen.delete'), style: 'destructive', onPress: () => void removeSkill(slug) },
     ])
   }
 
@@ -340,7 +350,7 @@ export default function ToolsScreen() {
       const base64 = await FileSystem.readAsStringAsync(asset.uri, { encoding: FileSystem.EncodingType.Base64 })
       await importSkill(base64, asset.name ?? 'skill.skill')
     } catch (err) {
-      Alert.alert('Erro', String(err))
+      Alert.alert(t('toolsScreen.errorTitle'), String(err))
     } finally {
       setImporting(false)
     }
@@ -365,10 +375,10 @@ export default function ToolsScreen() {
   }
 
   const handleDeleteMcp = (name: string) => {
-    Alert.alert('Excluir servidor', `Excluir "${name}"?`, [
-      { text: 'Cancelar', style: 'cancel' },
+    Alert.alert(t('toolsScreen.deleteServerTitle'), t('toolsScreen.deleteServerBody', { name }), [
+      { text: t('toolsScreen.cancel'), style: 'cancel' },
       {
-        text: 'Excluir',
+        text: t('toolsScreen.delete'),
         style: 'destructive',
         onPress: async () => {
           const filtered = mcpServers.map((s) => s.config).filter((c) => c.name !== name)
@@ -384,7 +394,7 @@ export default function ToolsScreen() {
         <Pressable onPress={() => router.back()} style={s.headerBtn}>
           <ArrowLeft size={22} color={tokens.foreground} />
         </Pressable>
-        <Text style={[s.headerTitle, { color: tokens.foreground }]}>Ferramentas</Text>
+        <Text style={[s.headerTitle, { color: tokens.foreground }]}>{t('toolsScreen.title')}</Text>
         <View style={s.headerBtn} />
       </View>
 
@@ -398,9 +408,9 @@ export default function ToolsScreen() {
         {isEmpty && (
           <View style={s.emptyBox}>
             <Puzzle size={32} color={tokens.mutedForeground} />
-            <Text style={[s.emptyTitle, { color: tokens.foreground }]}>Nenhuma ferramenta encontrada</Text>
+            <Text style={[s.emptyTitle, { color: tokens.foreground }]}>{t('toolsScreen.emptyTitle')}</Text>
             <Text style={[s.emptyDesc, { color: tokens.mutedForeground }]}>
-              Configure Skills e servidores MCP no Orbit Desktop ou crie uma skill aqui mesmo.
+              {t('toolsScreen.emptyDesc')}
             </Text>
           </View>
         )}
@@ -409,7 +419,7 @@ export default function ToolsScreen() {
         {pending.length > 0 && (
           <>
             <Text style={[s.sectionLabel, { color: tokens.mutedForeground }]}>
-              Propostas pendentes ({pending.length})
+              {t('toolsScreen.pendingProposals', { count: pending.length })}
             </Text>
             <View style={s.section}>
               {pending.map((prop) => (
@@ -424,11 +434,11 @@ export default function ToolsScreen() {
           <>
             <View style={s.sectionHeader}>
               <Text style={[s.sectionLabel, { color: tokens.mutedForeground }]}>
-                Servidores MCP ({mcpServers.length})
+                {t('toolsScreen.mcpServers', { count: mcpServers.length })}
               </Text>
               <Pressable onPress={() => { setEditMcp(undefined); setMcpFormOpen(true) }} style={s.addSectionBtn}>
                 <Plus size={14} color={tokens.primary} />
-                <Text style={[s.addSectionText, { color: tokens.primary }]}>Adicionar</Text>
+                <Text style={[s.addSectionText, { color: tokens.primary }]}>{t('toolsScreen.add')}</Text>
               </Pressable>
             </View>
             <View style={s.section}>
@@ -448,7 +458,7 @@ export default function ToolsScreen() {
         {/* Skills */}
         <View style={s.sectionHeader}>
           <Text style={[s.sectionLabel, { color: tokens.mutedForeground }]}>
-            Skills ({skills.length})
+            {t('toolsScreen.skills', { count: skills.length })}
           </Text>
           <CreateSkillDropdown
             onCreate={handleCreateSkill}
@@ -473,7 +483,7 @@ export default function ToolsScreen() {
             <View style={s.emptyBox}>
               <Sparkles size={24} color={tokens.mutedForeground} />
               <Text style={[s.emptyDesc, { color: tokens.mutedForeground }]}>
-                Nenhuma skill ainda. Crie uma ou importe do desktop.
+                {t('toolsScreen.noSkillsYet')}
               </Text>
             </View>
           )
@@ -489,6 +499,7 @@ export default function ToolsScreen() {
 }
 
 function PendingProposalCard({ proposal }: { proposal: SkillProposal }) {
+  const { t } = useTranslation()
   const tokens = getThemeTokens(useThemeStore((s) => s.resolved))
   const approveSkill = useToolsStore((s) => s.approveSkill)
   const discardSkill = useToolsStore((s) => s.discardSkill)
@@ -505,15 +516,15 @@ function PendingProposalCard({ proposal }: { proposal: SkillProposal }) {
       <Text style={[s.pendingSlug, { color: tokens.mutedForeground }]}>@{proposal.slug}</Text>
       {proposal.files && proposal.files.length > 0 && (
         <Text style={[s.pendingFiles, { color: tokens.mutedForeground }]}>
-          {proposal.files.length} {proposal.files.length === 1 ? 'arquivo adicional' : 'arquivos adicionais'}
+          {t('toolsScreen.extraFiles', { count: proposal.files.length })}
         </Text>
       )}
       <View style={[s.pendingActions, { borderTopColor: tokens.border }]}>
         <Pressable onPress={() => void discardSkill(proposal.slug)} style={[s.pendingBtn, { borderColor: tokens.border }]}>
-          <Text style={[s.pendingBtnText, { color: tokens.foreground }]}>Dispensar</Text>
+          <Text style={[s.pendingBtnText, { color: tokens.foreground }]}>{t('toolsScreen.dismiss')}</Text>
         </Pressable>
         <Pressable onPress={() => void approveSkill(proposal.slug)} style={[s.pendingBtn, { backgroundColor: tokens.primary }]}>
-          <Text style={[s.pendingBtnText, { color: '#fff' }]}>Adicionar skill</Text>
+          <Text style={[s.pendingBtnText, { color: '#fff' }]}>{t('toolsScreen.addSkill')}</Text>
         </Pressable>
       </View>
     </View>
