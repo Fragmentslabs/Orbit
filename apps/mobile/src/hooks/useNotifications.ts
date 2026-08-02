@@ -1,4 +1,5 @@
 import { useEffect } from 'react'
+import { useTranslation } from 'react-i18next'
 import type { ChatEventMessage, PendingAskNotification, NewMessageNotification, ChatStatus } from '@orbit/shared'
 import { useConnectionStore } from '../stores/connection-store'
 import { useNotificationPrefsStore } from '../stores/notification-prefs-store'
@@ -19,6 +20,8 @@ import {
  * - Limpa badge ao abrir o app
  */
 export function useNotifications() {
+  const { t } = useTranslation()
+
   // ─── Configura handler de exibição ───────────────────────────────────────
 
   useEffect(() => {
@@ -44,10 +47,10 @@ export function useNotifications() {
       const ask = event as PendingAskNotification
       const sessions = useSessionStore.getState().sessions
       const session = sessions.find((s) => s.id === ask.sessionId)
-      const sessionTitle = session?.title ?? 'Sessão'
+      const sessionTitle = session?.title ?? t('notifications.defaultSessionTitle')
 
       void scheduleLocalNotification({
-        title: 'Pergunta pendente',
+        title: t('notifications.pendingQuestionTitle'),
         body: `${sessionTitle}: ${ask.title}`,
         data: { type: 'pending-ask', sessionId: ask.sessionId },
       })
@@ -64,10 +67,10 @@ export function useNotifications() {
       const activeSessionId = useSessionStore.getState().activeSessionId
       if (msg.sessionId === activeSessionId) return
 
-      const body = msg.messagePreview || msg.sessionTitle || 'Nova mensagem'
+      const body = msg.messagePreview || msg.sessionTitle || t('notifications.newMessageBody')
 
       void scheduleLocalNotification({
-        title: 'Nova mensagem',
+        title: t('notifications.newMessageTitle'),
         body,
         data: { type: 'new-message', sessionId: msg.sessionId },
       })
@@ -82,8 +85,8 @@ export function useNotifications() {
       const chatEvent = msg.event as { type: string; sessionId: string; status: ChatStatus; error?: string } | null
       if (chatEvent?.type === 'status' && chatEvent.status === 'error') {
         void scheduleLocalNotification({
-          title: 'Erro no chat',
-          body: chatEvent.error ?? 'Ocorreu um erro durante o chat.',
+          title: t('notifications.chatErrorTitle'),
+          body: chatEvent.error ?? t('notifications.chatErrorBody'),
           data: { type: 'chat-error', sessionId: chatEvent.sessionId },
         })
       }
@@ -94,7 +97,7 @@ export function useNotifications() {
       unsubMsg()
       unsubChat()
     }
-  }, [])
+  }, [t])
 
   // ─── Handle notificação tocada ──────────────────────────────────────────
 

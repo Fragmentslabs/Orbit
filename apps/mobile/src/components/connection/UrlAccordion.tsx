@@ -2,6 +2,7 @@ import { useState, useCallback, useEffect, useRef } from 'react'
 import { View, Text, TextInput, Pressable, Animated, Platform, StyleSheet } from 'react-native'
 import { ChevronDown, Globe, Keyboard, Loader2 } from 'lucide-react-native'
 import * as Device from 'expo-device'
+import { useTranslation } from 'react-i18next'
 import { useConnectionStore } from '~/stores/connection-store'
 import { Button } from '~/components/ui/button'
 import { Input } from '~/components/ui/input'
@@ -18,6 +19,7 @@ interface UrlAccordionProps {
 }
 
 export function UrlAccordion({ prefill, defaultExpanded = true }: UrlAccordionProps) {
+  const { t } = useTranslation()
   const tokens = getThemeTokens(useThemeStore((s) => s.resolved))
   const { connection, connect } = useConnectionStore()
   const [expanded, setExpanded] = useState(defaultExpanded)
@@ -108,8 +110,8 @@ export function UrlAccordion({ prefill, defaultExpanded = true }: UrlAccordionPr
             <Globe size={18} color={tokens.primary} />
           </View>
           <View>
-            <Text style={[s.fg, { color: tokens.foreground }]}>Conectar manualmente</Text>
-            <Text style={[s.mutedFg, { color: tokens.mutedForeground }]}>IP, porta e PIN do Orbit Desktop</Text>
+            <Text style={[s.fg, { color: tokens.foreground }]}>{t('urlAccordion.connectManually')}</Text>
+            <Text style={[s.mutedFg, { color: tokens.mutedForeground }]}>{t('urlAccordion.ipPortPinHint')}</Text>
           </View>
         </View>
         <Animated.View style={{ transform: [{ rotate: rotateInterpolation }] }}>
@@ -121,17 +123,17 @@ export function UrlAccordion({ prefill, defaultExpanded = true }: UrlAccordionPr
         <View style={s.body}>
           <View style={s.row}>
             <View style={{ flex: 1, gap: 6 }}>
-              <Text style={[s.label, { color: tokens.mutedForeground }]}>Endereço IP</Text>
+              <Text style={[s.label, { color: tokens.mutedForeground }]}>{t('urlAccordion.ipAddress')}</Text>
               <Input placeholder="192.168.1.100" value={ip} onChangeText={setIp} keyboardType="numbers-and-punctuation" autoCapitalize="none" autoCorrect={false} />
             </View>
             <View style={{ width: 80, gap: 6 }}>
-              <Text style={[s.label, { color: tokens.mutedForeground }]}>Porta</Text>
+              <Text style={[s.label, { color: tokens.mutedForeground }]}>{t('urlAccordion.port')}</Text>
               <Input placeholder="3847" value={port} onChangeText={setPort} keyboardType="number-pad" style={{ textAlign: 'center' }} />
             </View>
           </View>
 
           <View style={{ gap: 8 }}>
-            <Text style={[s.label, { color: tokens.mutedForeground }]}>PIN</Text>
+            <Text style={[s.label, { color: tokens.mutedForeground }]}>{t('urlAccordion.pin')}</Text>
             <View style={s.pinRow}>
               {pin.map((digit, i) => (
                 <TextInput
@@ -153,7 +155,7 @@ export function UrlAccordion({ prefill, defaultExpanded = true }: UrlAccordionPr
           {connection.error ? (
             <View style={s.errorBox}>
               <Text style={[s.errorText, { color: '#ff3344' }]}>
-                {connection.error === 'invalid_pin' ? 'PIN inválido. Verifique o PIN exibido no Orbit Desktop.' : connection.error}
+                {connection.error === 'invalid_pin' ? t('urlAccordion.invalidPin') : connection.error}
               </Text>
             </View>
           ) : null}
@@ -162,7 +164,7 @@ export function UrlAccordion({ prefill, defaultExpanded = true }: UrlAccordionPr
             <View style={{ flex: 1 }}>
               <Button onPress={handleConnect} disabled={!canConnect || isConnecting}>
                 {isConnecting ? <Spin><Loader2 size={16} /></Spin> : null}
-                {isConnecting ? 'Conectando...' : 'Conectar'}
+                {isConnecting ? t('urlAccordion.connecting') : t('urlAccordion.connect')}
               </Button>
             </View>
             <Button variant="ghost" size="icon" onPress={handleReset}>

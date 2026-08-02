@@ -2,6 +2,7 @@ import { useState, useCallback } from 'react'
 import { View, Text, Pressable, StyleSheet } from 'react-native'
 import { CameraView, useCameraPermissions } from 'expo-camera'
 import { parseConnectionPayload, type ConnectionConfig } from '@orbit/companion-client'
+import { useTranslation } from 'react-i18next'
 import { Button } from '~/components/ui/button'
 import { getThemeTokens } from '~/lib/theme-tokens'
 import { useThemeStore } from '~/stores/theme-store'
@@ -12,6 +13,7 @@ interface QRScannerProps {
 }
 
 export function QRScanner({ onScanned, disabled }: QRScannerProps) {
+  const { t } = useTranslation()
   const tokens = getThemeTokens(useThemeStore((s) => s.resolved))
   const [permission, requestPermission] = useCameraPermissions()
   const [scanned, setScanned] = useState(false)
@@ -31,7 +33,7 @@ export function QRScanner({ onScanned, disabled }: QRScannerProps) {
   if (!permission) {
     return (
       <View style={s.center}>
-        <Text style={[s.mutedFg, { color: tokens.mutedForeground }]}>Preparando câmera...</Text>
+        <Text style={[s.mutedFg, { color: tokens.mutedForeground }]}>{t('qrScanner.preparingCamera')}</Text>
       </View>
     )
   }
@@ -39,11 +41,11 @@ export function QRScanner({ onScanned, disabled }: QRScannerProps) {
   if (!permission.granted) {
     return (
       <View style={[s.center, { padding: 24 }]}>
-        <Text style={[s.permTitle, { color: tokens.foreground }]}>Permissão de câmera necessária</Text>
+        <Text style={[s.permTitle, { color: tokens.foreground }]}>{t('qrScanner.permissionRequiredTitle')}</Text>
         <Text style={[s.permDesc, { color: tokens.mutedForeground }]}>
-          O Orbit precisa de acesso à câmera para escanear o QR code de conexão.
+          {t('qrScanner.permissionRequiredDesc')}
         </Text>
-        <Button onPress={requestPermission}>Conceder Permissão</Button>
+        <Button onPress={requestPermission}>{t('qrScanner.grantPermission')}</Button>
       </View>
     )
   }
@@ -59,7 +61,7 @@ export function QRScanner({ onScanned, disabled }: QRScannerProps) {
           <View style={s.scanFrame} />
           {scanned && (
             <View style={s.scannedBadge}>
-              <Text style={s.scannedText}>QR code detectado!</Text>
+              <Text style={s.scannedText}>{t('qrScanner.detected')}</Text>
             </View>
           )}
         </View>
@@ -68,7 +70,7 @@ export function QRScanner({ onScanned, disabled }: QRScannerProps) {
       {scanned && (
         <View style={s.rescanOverlay}>
           <Pressable style={[s.rescanBtn, { backgroundColor: tokens.primary }]} onPress={() => setScanned(false)}>
-            <Text style={[s.rescanText, { color: tokens.primaryForeground }]}>Escanar novamente</Text>
+            <Text style={[s.rescanText, { color: tokens.primaryForeground }]}>{t('qrScanner.scanAgain')}</Text>
           </Pressable>
         </View>
       )}

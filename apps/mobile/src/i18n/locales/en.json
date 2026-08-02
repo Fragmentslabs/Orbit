@@ -522,6 +522,39 @@
     "tipLabel": "Tip:",
     "tipText": "use Tailscale to reach your desktop from anywhere, no network setup needed."
   },
+  "qrScanner": {
+    "preparingCamera": "Preparing camera...",
+    "permissionRequiredTitle": "Camera permission required",
+    "permissionRequiredDesc": "Orbit needs camera access to scan the connection QR code.",
+    "grantPermission": "Grant Permission",
+    "detected": "QR code detected!",
+    "scanAgain": "Scan again",
+    "webFallback": "QR Code is only available on mobile devices with a camera."
+  },
+  "urlAccordion": {
+    "connectManually": "Connect manually",
+    "ipPortPinHint": "IP, port and PIN from Orbit Desktop",
+    "ipAddress": "IP address",
+    "port": "Port",
+    "pin": "PIN",
+    "invalidPin": "Invalid PIN. Check the PIN shown on Orbit Desktop.",
+    "connecting": "Connecting...",
+    "connect": "Connect"
+  },
+  "notifications": {
+    "defaultSessionTitle": "Session",
+    "pendingQuestionTitle": "Pending question",
+    "newMessageTitle": "New message",
+    "newMessageBody": "New message",
+    "chatErrorTitle": "Chat error",
+    "chatErrorBody": "An error occurred during the chat."
+  },
+  "slashCommands": {
+    "userSkill": "User skill",
+    "useMcpTools": "Use this MCP server's tools ({{count}} tools)",
+    "newConversation": "New conversation",
+    "newConversationDesc": "Starts a blank chat"
+  },
   "themeScreen": {
     "title": "Theme",
     "light": "Light",
