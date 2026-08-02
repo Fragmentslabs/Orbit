@@ -162,5 +162,58 @@
     "hiddenActions_other": "+{{count}} hidden actions — show all",
     "sourcesConsulted_one": "{{count}} Source Consulted",
     "sourcesConsulted_other": "{{count}} Sources Consulted"
+  },
+  "askCard": {
+    "permissionRequired": "Permission required",
+    "criticalAction": "Critical action: ",
+    "deny": "Deny",
+    "once": "Once",
+    "alwaysThisChat": "Always in this chat",
+    "always": "Always",
+    "questionLabel": "Question",
+    "otherAnswerPlaceholder": "Other answer…",
+    "dismiss": "Dismiss",
+    "advance": "Next",
+    "answer": "Answer"
+  },
+  "configSheet": {
+    "title": "Settings",
+    "permissionModes": { "ask": "Ask", "approve": "Autonomy", "full": "Unrestricted" },
+    "permissionMode": "Permission mode",
+    "thinking": "Thinking",
+    "reasoningAlwaysOnHint": "This model always uses extended reasoning.",
+    "gitBranch": "Git branch",
+    "subagents": "Subagents",
+    "orchestration": "Orchestration",
+    "loop": "Loop",
+    "loopHint": "Agent reviews and iterates until the task is complete.",
+    "useSameModel": "Use the same model as the chat"
+  },
+  "planReview": {
+    "proposedTitle": "Proposed implementation plan",
+    "implementingTitle": "Implementing plan",
+    "viewPlan": "View plan",
+    "review": "Review",
+    "reject": "Reject",
+    "accept": "Accept ({{mode}})",
+    "orchestration": "Orchestration",
+    "reviewPlaceholder": "Write your feedback to review the plan...",
+    "completedCount": "({{checked}}/{{total}} completed)",
+    "notFound": "PLAN.md not found.",
+    "reload": "Reload",
+    "modes": { "ask": "Questions", "askLabel": "Ask", "approve": "Autonomy", "full": "Unrestricted" }
+  },
+  "orchestrationPlan": {
+    "runningWorkers": "Running workers...",
+    "proposed_one": "Proposed plan · {{count}} task",
+    "proposed_other": "Proposed plan · {{count}} tasks",
+    "done": "Orchestration complete",
+    "rejected": "Plan rejected",
+    "cost": "Cost of this orchestration: {{cost}} ({{tokens}} tokens)",
+    "reject": "Reject",
+    "approveAndRun": "Approve and run {{count}}",
+    "research": "Research",
+    "browser": "Browser",
+    "readOnly": "Read-only"
   }
 }

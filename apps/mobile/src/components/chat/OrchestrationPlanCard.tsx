@@ -11,6 +11,7 @@ import {
   Terminal,
   X,
 } from 'lucide-react-native'
+import { useTranslation } from 'react-i18next'
 import type { OrchestrationPlan, OrchestrationTask } from '@orbit/shared'
 import { useSessionStore } from '~/stores/session-store'
 import { getThemeTokens } from '~/lib/theme-tokens'
@@ -28,11 +29,12 @@ function TaskModeIcon({ task }: { task: OrchestrationTask }) {
 }
 
 function TaskChips({ task }: { task: OrchestrationTask }) {
+  const { t } = useTranslation()
   const tokens = getThemeTokens(useThemeStore((s) => s.resolved))
   const chips: { icon: typeof Search; label: string }[] = []
-  if (task.options.research) chips.push({ icon: Search, label: 'Pesquisa' })
-  if (task.options.browser) chips.push({ icon: Globe, label: 'Browser' })
-  if (task.options.plan) chips.push({ icon: FileText, label: 'Só leitura' })
+  if (task.options.research) chips.push({ icon: Search, label: t('orchestrationPlan.research') })
+  if (task.options.browser) chips.push({ icon: Globe, label: t('orchestrationPlan.browser') })
+  if (task.options.plan) chips.push({ icon: FileText, label: t('orchestrationPlan.readOnly') })
   if (chips.length === 0) return null
   return (
     <View className="flex-row items-center gap-1">
@@ -62,6 +64,7 @@ function TaskStatusIcon({ status }: { status: OrchestrationTask['status'] }) {
 }
 
 export function OrchestrationPlanCard({ sessionId, plan }: Props) {
+  const { t } = useTranslation()
   const tokens = getThemeTokens(useThemeStore((s) => s.resolved))
   const approvePlan = useSessionStore((s) => s.approvePlan)
   const rejectPlan = useSessionStore((s) => s.rejectPlan)
@@ -95,15 +98,15 @@ export function OrchestrationPlanCard({ sessionId, plan }: Props) {
         {running ? (
           <View className="flex-row items-center gap-1">
             <ActivityIndicator size="small" color={tokens.foreground} />
-            <Text className="font-medium text-sm" style={{ color: tokens.foreground }}>Executando workers...</Text>
+            <Text className="font-medium text-sm" style={{ color: tokens.foreground }}>{t('orchestrationPlan.runningWorkers')}</Text>
           </View>
         ) : (
           <Text className="font-medium text-sm" style={{ color: tokens.foreground }}>
             {proposed
-              ? `Plano proposto · ${plan.tasks.length} ${plan.tasks.length === 1 ? 'tarefa' : 'tarefas'}`
+              ? t('orchestrationPlan.proposed', { count: plan.tasks.length })
               : plan.status === 'done'
-                ? 'Orquestração concluída'
-                : 'Plano rejeitado'}
+                ? t('orchestrationPlan.done')
+                : t('orchestrationPlan.rejected')}
           </Text>
         )}
       </View>
@@ -155,8 +158,10 @@ export function OrchestrationPlanCard({ sessionId, plan }: Props) {
 
       {plan.usage && (plan.status === 'running' || plan.status === 'approved' || plan.status === 'done') && (
         <Text className="mt-2 text-[11px]" style={{ color: tokens.mutedForeground }}>
-          Custo desta orquestração: {plan.usage.cost !== undefined ? formatCost(plan.usage.cost) : '—'} (
-          {formatTokens(plan.usage.input + plan.usage.output)} tokens)
+          {t('orchestrationPlan.cost', {
+            cost: plan.usage.cost !== undefined ? formatCost(plan.usage.cost) : '—',
+            tokens: formatTokens(plan.usage.input + plan.usage.output),
+          })}
         </Text>
       )}
 
@@ -167,7 +172,7 @@ export function OrchestrationPlanCard({ sessionId, plan }: Props) {
             className="px-3 py-1.5 rounded-md"
             style={{ backgroundColor: tokens.card }}
           >
-            <Text className="text-xs" style={{ color: tokens.mutedForeground }}>Rejeitar</Text>
+            <Text className="text-xs" style={{ color: tokens.mutedForeground }}>{t('orchestrationPlan.reject')}</Text>
           </Pressable>
           <Pressable
             onPress={() =>
@@ -182,7 +187,7 @@ export function OrchestrationPlanCard({ sessionId, plan }: Props) {
             style={{ backgroundColor: selectedCount === 0 ? tokens.muted : tokens.primary }}
           >
             <Text className="text-xs font-medium" style={{ color: selectedCount === 0 ? tokens.mutedForeground : '#fff' }}>
-              Aprovar e executar {selectedCount < plan.tasks.length ? `(${selectedCount})` : ''}
+              {t('orchestrationPlan.approveAndRun', { count: selectedCount < plan.tasks.length ? `(${selectedCount})` : '' })}
             </Text>
           </Pressable>
         </View>

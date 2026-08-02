@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { View, Text, Pressable, TextInput, Platform } from 'react-native'
 import { ShieldAlert, HelpCircle, TriangleAlert, User, ChevronDown } from 'lucide-react-native'
+import { useTranslation } from 'react-i18next'
 import type { PendingAsk } from '~/stores/chat-store'
 import { getThemeTokens } from '~/lib/theme-tokens'
 import { useThemeStore } from '~/stores/theme-store'
@@ -37,6 +38,7 @@ function btnPrimary(tokens: Record<string, string>) {
 }
 
 export function AskCard({ ask, onReply }: AskCardProps) {
+  const { t } = useTranslation()
   const tokens = getThemeTokens(useThemeStore((s) => s.resolved))
   const [submitted, setSubmitted] = useState(false)
   const [permitOpen, setPermitOpen] = useState(false)
@@ -82,7 +84,7 @@ export function AskCard({ ask, onReply }: AskCardProps) {
               color: tokens.foreground,
             }}
           >
-            Permissão necessária
+            {t('askCard.permissionRequired')}
           </Text>
           {ask.origin && (
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginLeft: 'auto' }}>
@@ -117,7 +119,7 @@ export function AskCard({ ask, onReply }: AskCardProps) {
               marginBottom: 10,
             }}
           >
-            {critical ? 'Ação crítica: ' : ''}{ask.claim.detail}
+            {critical ? t('askCard.criticalAction') : ''}{ask.claim.detail}
           </Text>
         )}
 
@@ -128,7 +130,7 @@ export function AskCard({ ask, onReply }: AskCardProps) {
             disabled={submitted}
             style={{ ...btnMuted(tokens), opacity: submitted ? 0.4 : 1 }}
           >
-            <Text style={{ fontSize: 12, fontWeight: '600', color: tokens.foreground }}>Negar</Text>
+            <Text style={{ fontSize: 12, fontWeight: '600', color: tokens.foreground }}>{t('askCard.deny')}</Text>
           </Pressable>
           <View style={{ flex: 1, flexDirection: 'row' }}>
             <Pressable
@@ -142,7 +144,7 @@ export function AskCard({ ask, onReply }: AskCardProps) {
               }}
             >
               <Text style={{ fontSize: 12, fontWeight: '600', color: tokens.primaryForeground }}>
-                Uma vez
+                {t('askCard.once')}
               </Text>
             </Pressable>
             <Pressable
@@ -183,21 +185,21 @@ export function AskCard({ ask, onReply }: AskCardProps) {
               onPress={() => { setPermitOpen(false); reply('allow') }}
               style={{ paddingVertical: 11, paddingHorizontal: 14 }}
             >
-              <Text style={{ fontSize: 13, color: tokens.foreground }}>Uma vez</Text>
+              <Text style={{ fontSize: 13, color: tokens.foreground }}>{t('askCard.once')}</Text>
             </Pressable>
             <View style={{ height: 1, backgroundColor: tokens.border }} />
             <Pressable
               onPress={() => { setPermitOpen(false); reply('always_chat') }}
               style={{ paddingVertical: 11, paddingHorizontal: 14 }}
             >
-              <Text style={{ fontSize: 13, color: tokens.foreground }}>Sempre neste chat</Text>
+              <Text style={{ fontSize: 13, color: tokens.foreground }}>{t('askCard.alwaysThisChat')}</Text>
             </Pressable>
             <View style={{ height: 1, backgroundColor: tokens.border }} />
             <Pressable
               onPress={() => { setPermitOpen(false); reply('always') }}
               style={{ paddingVertical: 11, paddingHorizontal: 14 }}
             >
-              <Text style={{ fontSize: 13, color: tokens.foreground }}>Sempre</Text>
+              <Text style={{ fontSize: 13, color: tokens.foreground }}>{t('askCard.always')}</Text>
             </Pressable>
           </View>
         )}
@@ -261,7 +263,7 @@ export function AskCard({ ask, onReply }: AskCardProps) {
               color: tokens.foreground,
             }}
           >
-            Pergunta {questions.length > 1 ? `${questionIndex + 1}/${questions.length}` : ''}
+            {t('askCard.questionLabel')} {questions.length > 1 ? `${questionIndex + 1}/${questions.length}` : ''}
           </Text>
           {ask.origin && (
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginLeft: 'auto' }}>
@@ -355,7 +357,7 @@ export function AskCard({ ask, onReply }: AskCardProps) {
         <TextInput
           value={textAnswer}
           onChangeText={(v) => setTextAnswers((prev) => ({ ...prev, [q.id]: v }))}
-          placeholder="Outra resposta…"
+          placeholder={t('askCard.otherAnswerPlaceholder')}
           placeholderTextColor={tokens.mutedForeground}
           multiline
           editable={!submitted}
@@ -380,7 +382,7 @@ export function AskCard({ ask, onReply }: AskCardProps) {
             style={{ ...btnMuted(tokens), opacity: submitted ? 0.4 : 1 }}
           >
             <Text style={{ fontSize: 12, fontWeight: '600', color: tokens.mutedForeground }}>
-              Dispensar
+              {t('askCard.dismiss')}
             </Text>
           </Pressable>
           {questionIndex < questions.length - 1 ? (
@@ -390,7 +392,7 @@ export function AskCard({ ask, onReply }: AskCardProps) {
               style={{ ...btnMuted(tokens), opacity: submitted ? 0.4 : 1, flex: 1 }}
             >
               <Text style={{ fontSize: 12, fontWeight: '600', color: tokens.foreground }}>
-                Avançar
+                {t('askCard.advance')}
               </Text>
             </Pressable>
           ) : (
@@ -400,7 +402,7 @@ export function AskCard({ ask, onReply }: AskCardProps) {
               style={{ ...btnPrimary(tokens), opacity: submitted || !allAnswered ? 0.4 : 1 }}
             >
               <Text style={{ fontSize: 12, fontWeight: '600', color: tokens.primaryForeground }}>
-                Responder
+                {t('askCard.answer')}
               </Text>
             </Pressable>
           )}
