@@ -38,7 +38,26 @@ import { forwardChatEvent } from './companion-server'
  * ferramentas e emite eventos incrementais para o renderer via IPC.
  */
 
-const MAX_STEPS = 50
+// Teto de segurança, não um limite operacional normal — o opencode (de onde
+// este engine foi portado) roda sem teto por padrão (agent.steps ?? Infinity)
+// e só para quando o modelo decide (finishReason === 'stop'). 50 era baixo
+// demais: tarefas de código reais passam disso e a stream cortava no meio,
+// indistinguível de uma conclusão normal. 300 é folga suficiente pra
+// qualquer tarefa real; existe só pra não deixar um loop patológico rodar
+// para sempre.
+const MAX_STEPS = 300
+// Nudge do último passo permitido — mesma ideia do MAX_STEPS_PROMPT do
+// opencode (packages/core/src/session/runner/max-steps.ts): em vez de
+// cortar a stream no meio de uma tool call, desabilita as tools e força o
+// modelo a resumir em texto o que fez e o que falta. `truncated` (abaixo)
+// vira um backstop raro, não o caminho comum.
+const MAX_STEPS_PROMPT = `MAXIMUM STEPS REACHED for this turn. Tools are now disabled — respond with text ONLY.
+
+Your response must:
+- State that the step limit was reached
+- Summarize what was accomplished so far
+- List any remaining pending items
+- Suggest what to do next (the user can say "continue" to resume)`
 const abortControllers = new Map<string, AbortController>()
 
 function newId(prefix: string) {
@@ -535,6 +554,14 @@ export async function runChat(win: BrowserWindow, input: SendMessageInput): Prom
       stopWhen: stepCountIs(MAX_STEPS),
       abortSignal: controller.signal,
       providerOptions: await buildProviderOptions(input),
+      prepareStep: ({ stepNumber, messages }) => {
+        if (stepNumber < MAX_STEPS) return {}
+        return {
+          activeTools: [],
+          toolChoice: 'none' as const,
+          messages: [...messages, { role: 'user' as const, content: MAX_STEPS_PROMPT }],
+        }
+      },
       onError: () => {
         // erros são tratados no loop do fullStream
       },
@@ -685,11 +712,11 @@ export async function runChat(win: BrowserWindow, input: SendMessageInput): Prom
             ...toTokenUsage(part.totalUsage, provider?.models[input.modelId]?.cost),
             lastStep: lastStepUsage,
           }
-          // Bateu no teto de passos (MAX_STEPS) sem o modelo ter decidido
-          // parar por conta própria — a resposta pode ter ficado incompleta
-          // (ex.: TODO com itens pendentes). Sem isso, esse caso era
-          // indistinguível de uma conclusão normal tanto pra UI quanto pro
-          // modelo no próximo turno.
+          // Backstop raro: o prepareStep acima já força um resumo em texto
+          // no último passo (finishReason deveria vir 'stop'). Isso só
+          // dispara se mesmo assim o modelo não fechar limpo — sem isso,
+          // esse caso ficaria indistinguível de uma conclusão normal tanto
+          // pra UI quanto pro modelo no próximo turno.
           if (stepCount >= MAX_STEPS && part.finishReason !== 'stop') {
             assistantMessage.truncated = true
           }
