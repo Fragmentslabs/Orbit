@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react"
+import { useTranslation } from "react-i18next"
 import QRCode from "qrcode"
 import { Smartphone, RefreshCw, ShieldAlert, Wifi, WifiOff } from "lucide-react"
 import {
@@ -18,6 +19,7 @@ interface Props {
 }
 
 export function ConnectAppDialog({ open, onOpenChange }: Props) {
+  const { t } = useTranslation()
   const [status, setStatus] = useState<CompanionStatus | null>(null)
   const [qrDataUrl, setQrDataUrl] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -29,7 +31,7 @@ export function ConnectAppDialog({ open, onOpenChange }: Props) {
       setStatus(s)
       setError(null)
     } catch {
-      setError("Não foi possível obter o status do servidor.")
+      setError(t("connectApp.statusError"))
     }
   }
 
@@ -67,10 +69,10 @@ export function ConnectAppDialog({ open, onOpenChange }: Props) {
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Smartphone className="size-5" />
-            Conectar App
+            {t("connectApp.title")}
           </DialogTitle>
           <DialogDescription>
-            Escaneie o QR code com o app Orbit para conectar.
+            {t("connectApp.description")}
           </DialogDescription>
         </DialogHeader>
 
@@ -80,12 +82,12 @@ export function ConnectAppDialog({ open, onOpenChange }: Props) {
             {running ? (
               <>
                 <Wifi className="size-4 text-green-500" />
-                <span className="text-green-600 dark:text-green-400">Servidor ativo</span>
+                <span className="text-green-600 dark:text-green-400">{t("connectApp.serverActive")}</span>
               </>
             ) : (
               <>
                 <WifiOff className="size-4 text-muted-foreground" />
-                <span className="text-muted-foreground">Servidor inativo</span>
+                <span className="text-muted-foreground">{t("connectApp.serverInactive")}</span>
               </>
             )}
           </div>
@@ -95,7 +97,7 @@ export function ConnectAppDialog({ open, onOpenChange }: Props) {
             <div className="rounded-xl border-4 border-primary/20 p-2">
               <img
                 src={qrDataUrl}
-                alt="QR Code de conexão"
+                alt={t("connectApp.qrAlt")}
                 className="size-56"
               />
             </div>
@@ -112,7 +114,7 @@ export function ConnectAppDialog({ open, onOpenChange }: Props) {
           {/* PIN */}
           {running && status?.pin ? (
             <div className="text-center">
-              <p className="mb-1 text-xs text-muted-foreground">Ou digite o PIN no app:</p>
+              <p className="mb-1 text-xs text-muted-foreground">{t("connectApp.pinHint")}:</p>
               <p className="tracking-[0.3em] text-2xl font-bold text-foreground">
                 {status.pin.split("").map((d, i) => (
                   <span
@@ -132,11 +134,11 @@ export function ConnectAppDialog({ open, onOpenChange }: Props) {
           {running && status?.ip ? (
             <div className="w-full rounded-lg bg-muted px-3 py-2">
               <div className="flex justify-between text-xs">
-                <span className="text-muted-foreground">Host</span>
+                <span className="text-muted-foreground">{t("connectApp.host")}</span>
                 <span className="font-mono text-foreground">{status.ip}</span>
               </div>
               <div className="flex justify-between text-xs mt-1">
-                <span className="text-muted-foreground">Porta WS</span>
+                <span className="text-muted-foreground">{t("connectApp.portWs")}</span>
                 <span className="font-mono text-foreground">{status.port}</span>
               </div>
             </div>
@@ -146,7 +148,7 @@ export function ConnectAppDialog({ open, onOpenChange }: Props) {
           {running && (status?.connectedClients?.length ?? 0) > 0 ? (
             <div className="w-full">
               <p className="mb-1 text-xs font-medium text-muted-foreground">
-                Dispositivos conectados
+                {t("connectApp.connectedDevices")}
               </p>
               <div className="space-y-1">
                 {status!.connectedClients.map((c, i) => (
@@ -171,10 +173,10 @@ export function ConnectAppDialog({ open, onOpenChange }: Props) {
         <div className="flex justify-center gap-2">
           <Button variant="outline" size="sm" onClick={fetchStatus}>
             <RefreshCw className="mr-1 size-3" />
-            Atualizar
+            {t("connectApp.refresh")}
           </Button>
           <Button variant="outline" size="sm" onClick={() => onOpenChange(false)}>
-            Fechar
+            {t("connectApp.close")}
           </Button>
         </div>
       </DialogContent>

@@ -561,17 +561,13 @@
     "defaultTask": "Delegated subtask",
     "running": "Running in the background…"
   },
-  "branch": {
-    "previous": "Previous branch",
-    "next": "Next branch",
-    "page": "{{current}} of {{total}}"
-  },
   "attachments": {
     "image": "Image",
     "file": "Attachment",
     "attachment": "attachment",
     "remove": "Remove attachment",
-    "preview": "attachment preview"
+    "preview": "attachment preview",
+    "unnamedFile": "File"
   },
   "webPreview": {
     "back": "Go back",
@@ -619,7 +615,24 @@
     "dismissAll": "Deny/dismiss all",
     "answerAll": "Answer all"
   },
+  "connectApp": {
+    "title": "Connect App",
+    "description": "Scan the QR code with the Orbit app to connect.",
+    "statusError": "Could not fetch the server status.",
+    "serverActive": "Server active",
+    "serverInactive": "Server inactive",
+    "qrAlt": "Connection QR code",
+    "pinHint": "Or type the PIN in the app",
+    "host": "Host",
+    "portWs": "WS port",
+    "connectedDevices": "Connected devices",
+    "refresh": "Refresh",
+    "close": "Close"
+  },
   "branch": {
+    "previous": "Previous branch",
+    "next": "Next branch",
+    "page": "{{current}} of {{total}}",
     "unknownError": "Unknown error",
     "commitError": "Error committing",
     "detached": "(detached)",
