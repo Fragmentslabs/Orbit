@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Modal, View, Text, TextInput, Pressable, ScrollView, StyleSheet, Alert } from 'react-native'
 import { X, Save } from 'lucide-react-native'
+import { useTranslation } from 'react-i18next'
 import { useToolsStore } from '~/stores/tools-store'
 import { getThemeTokens } from '~/lib/theme-tokens'
 import { useThemeStore } from '~/stores/theme-store'
@@ -24,6 +25,7 @@ function slugify(name: string): string {
 }
 
 export function SkillFormModal({ visible, onClose, edit }: SkillFormModalProps) {
+  const { t } = useTranslation()
   const tokens = getThemeTokens(useThemeStore((s) => s.resolved))
   const createSkill = useToolsStore((s) => s.createSkill)
   const [name, setName] = useState(edit?.name ?? '')
@@ -39,9 +41,9 @@ export function SkillFormModal({ visible, onClose, edit }: SkillFormModalProps) 
   }
 
   const handleSave = async () => {
-    if (!name.trim()) return Alert.alert('Nome obrigatório', 'Digite um nome para a skill.')
-    if (!content.trim()) return Alert.alert('Conteúdo obrigatório', 'Digite o conteúdo da skill.')
-    if (slug && !SLUG_REGEX.test(slug)) return Alert.alert('Slug inválido', 'Use apenas letras minúsculas, números e underscores (máx 60 caracteres).')
+    if (!name.trim()) return Alert.alert(t('skillFormModal.nameRequiredTitle'), t('skillFormModal.nameRequiredBody'))
+    if (!content.trim()) return Alert.alert(t('skillFormModal.contentRequiredTitle'), t('skillFormModal.contentRequiredBody'))
+    if (slug && !SLUG_REGEX.test(slug)) return Alert.alert(t('skillFormModal.invalidSlugTitle'), t('skillFormModal.invalidSlugBody'))
     setSaving(true)
     try {
       await createSkill({
@@ -52,7 +54,7 @@ export function SkillFormModal({ visible, onClose, edit }: SkillFormModalProps) 
       })
       onClose()
     } catch {
-      Alert.alert('Erro', 'Não foi possível salvar a skill.')
+      Alert.alert(t('skillFormModal.errorTitle'), t('skillFormModal.errorBody'))
     } finally {
       setSaving(false)
     }
@@ -75,7 +77,7 @@ export function SkillFormModal({ visible, onClose, edit }: SkillFormModalProps) 
           <View style={[s.handle, { backgroundColor: tokens.muted }]} />
           <View style={s.header}>
             <Text style={[s.headerTitle, { color: tokens.foreground }]}>
-              {edit ? 'Editar skill' : 'Nova skill'}
+              {edit ? t('skillFormModal.editTitle') : t('skillFormModal.newTitle')}
             </Text>
             <Pressable onPress={handleClose} style={s.closeBtn}>
               <X size={20} color={tokens.foreground} />
@@ -84,22 +86,22 @@ export function SkillFormModal({ visible, onClose, edit }: SkillFormModalProps) 
 
           <ScrollView style={{ flex: 1 }} contentContainerStyle={{ gap: 12, paddingBottom: 24 }}>
             <View>
-              <Text style={[s.label, { color: tokens.mutedForeground }]}>Nome</Text>
+              <Text style={[s.label, { color: tokens.mutedForeground }]}>{t('skillFormModal.nameLabel')}</Text>
               <TextInput
                 value={name}
                 onChangeText={handleNameChange}
-                placeholder="Ex: Revisão de código"
+                placeholder={t('skillFormModal.namePlaceholder')}
                 placeholderTextColor={tokens.mutedForeground}
                 style={[s.input, { color: tokens.foreground, backgroundColor: tokens.card, borderColor: tokens.border }]}
               />
             </View>
 
             <View>
-              <Text style={[s.label, { color: tokens.mutedForeground }]}>Slug (identificador @slug)</Text>
+              <Text style={[s.label, { color: tokens.mutedForeground }]}>{t('skillFormModal.slugLabel')}</Text>
               <TextInput
                 value={slug}
-                onChangeText={(t) => { setSlug(t); setSlugEdited(true) }}
-                placeholder="auto-gerado"
+                onChangeText={(v) => { setSlug(v); setSlugEdited(true) }}
+                placeholder={t('skillFormModal.slugPlaceholder')}
                 placeholderTextColor={tokens.mutedForeground}
                 autoCapitalize="none"
                 style={[s.input, { color: tokens.foreground, backgroundColor: tokens.card, borderColor: tokens.border }]}
@@ -107,22 +109,22 @@ export function SkillFormModal({ visible, onClose, edit }: SkillFormModalProps) 
             </View>
 
             <View>
-              <Text style={[s.label, { color: tokens.mutedForeground }]}>Descrição</Text>
+              <Text style={[s.label, { color: tokens.mutedForeground }]}>{t('skillFormModal.descriptionLabel')}</Text>
               <TextInput
                 value={description}
                 onChangeText={setDescription}
-                placeholder="O que essa skill faz?"
+                placeholder={t('skillFormModal.descriptionPlaceholder')}
                 placeholderTextColor={tokens.mutedForeground}
                 style={[s.input, { color: tokens.foreground, backgroundColor: tokens.card, borderColor: tokens.border }]}
               />
             </View>
 
             <View>
-              <Text style={[s.label, { color: tokens.mutedForeground }]}>Conteúdo (markdown)</Text>
+              <Text style={[s.label, { color: tokens.mutedForeground }]}>{t('skillFormModal.contentLabel')}</Text>
               <TextInput
                 value={content}
                 onChangeText={setContent}
-                placeholder="Instruções detalhadas da skill…"
+                placeholder={t('skillFormModal.contentPlaceholder')}
                 placeholderTextColor={tokens.mutedForeground}
                 multiline
                 textAlignVertical="top"
@@ -133,11 +135,11 @@ export function SkillFormModal({ visible, onClose, edit }: SkillFormModalProps) 
 
           <View style={[s.footer, { borderTopColor: tokens.border }]}>
             <Pressable onPress={handleClose} style={[s.cancelBtn, { borderColor: tokens.border }]}>
-              <Text style={[s.cancelText, { color: tokens.foreground }]}>Cancelar</Text>
+              <Text style={[s.cancelText, { color: tokens.foreground }]}>{t('skillFormModal.cancel')}</Text>
             </Pressable>
             <Pressable onPress={handleSave} disabled={saving} style={[s.saveBtn, { backgroundColor: tokens.primary, opacity: saving ? 0.6 : 1 }]}>
               <Save size={16} color="#fff" />
-              <Text style={s.saveText}>{saving ? 'Salvando…' : 'Salvar'}</Text>
+              <Text style={s.saveText}>{saving ? t('skillFormModal.saving') : t('skillFormModal.save')}</Text>
             </Pressable>
           </View>
         </View>
