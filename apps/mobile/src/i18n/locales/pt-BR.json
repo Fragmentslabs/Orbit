@@ -555,6 +555,9 @@
     "newConversation": "Nova conversa",
     "newConversationDesc": "Começa um chat em branco"
   },
+  "sessionStore": {
+    "queuedOffline": "Sem conexão com o desktop. Mensagem enfileirada para envio automático."
+  },
   "themeScreen": {
     "title": "Tema",
     "light": "Claro",

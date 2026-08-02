@@ -25,6 +25,7 @@ import type {
   PermissionMode,
 } from '@orbit/shared'
 import { Storage } from '~/lib/storage'
+import i18n from '~/i18n'
 import { useConnectionStore } from './connection-store'
 import { useMessageQueueStore, __setSessionDeps } from './message-queue-store'
 import { useSettingsStore } from './settings-store'
@@ -359,7 +360,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       // Mostra status de erro amigável
       set((state) => ({
         status: { ...state.status, [sessionId]: 'error' as ChatStatus },
-        errors: { ...state.errors, [sessionId]: 'Sem conexão com o desktop. Mensagem enfileirada para envio automático.' },
+        errors: { ...state.errors, [sessionId]: i18n.t('sessionStore.queuedOffline') },
       }))
       return
     }
