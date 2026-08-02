@@ -8,6 +8,7 @@ import { View, Text, Pressable, TextInput, FlatList, ScrollView, RefreshControl,
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { useRouter } from 'expo-router'
 import { ArrowLeft, RefreshCw, Search, List, Network, X } from 'lucide-react-native'
+import { useTranslation } from 'react-i18next'
 import type { Memory, MemoryKind } from '@orbit/shared'
 import { searchMemories } from '@orbit/shared'
 import { useMemoryStore } from '~/stores/memory-store'
@@ -22,6 +23,7 @@ import { useThemeStore } from '~/stores/theme-store'
 const ALL_PROJECTS = '__all__'
 
 export default function MemoriesScreen() {
+  const { t } = useTranslation()
   const router = useRouter()
   const mode = useWorkspaceStore((s) => s.mode)
   const index = useMemoryStore((s) => s.index)
@@ -80,7 +82,7 @@ export default function MemoriesScreen() {
         <Pressable onPress={() => router.back()} style={s.headerBtn}>
           <ArrowLeft size={22} color={tokens.foreground} />
         </Pressable>
-        <Text style={[s.headerTitle, { color: tokens.foreground }]}>Memórias</Text>
+        <Text style={[s.headerTitle, { color: tokens.foreground }]}>{t('memoriesScreen.title')}</Text>
         <Pressable onPress={() => void fetch()} disabled={loading} style={s.headerBtn}>
           <Spin active={loading}>
             <RefreshCw size={18} color={tokens.mutedForeground} />
@@ -96,7 +98,7 @@ export default function MemoriesScreen() {
             <TextInput
               value={query}
               onChangeText={setQuery}
-              placeholder="Buscar memórias…"
+              placeholder={t('memoriesScreen.searchPlaceholder')}
               placeholderTextColor={tokens.mutedForeground}
               style={[s.searchInput, { color: tokens.foreground }]}
               autoCapitalize="none"
@@ -137,7 +139,7 @@ export default function MemoriesScreen() {
               style={[s.projectChip, projectFilter === ALL_PROJECTS && { backgroundColor: tokens.primary, borderColor: tokens.primary }]}
             >
               <Text style={[s.projectChipText, { color: tokens.mutedForeground }, projectFilter === ALL_PROJECTS && { color: tokens.primaryForeground }]}>
-                Todos
+                {t('memoriesScreen.allProjects')}
               </Text>
             </Pressable>
             {projects.map((p) => (
@@ -157,13 +159,13 @@ export default function MemoriesScreen() {
         {/* Conteúdo */}
         {empty ? (
           <View style={s.emptyBox}>
-            <Text style={[s.emptyTitle, { color: tokens.foreground }]}>Nenhuma memória {query ? 'encontrada' : 'ainda'}</Text>
+            <Text style={[s.emptyTitle, { color: tokens.foreground }]}>{query ? t('memoriesScreen.emptyFound') : t('memoriesScreen.emptyYet')}</Text>
             <Text style={[s.emptyDesc, { color: tokens.mutedForeground }]}>
               {query
-                ? 'Tente outros termos de busca.'
+                ? t('memoriesScreen.emptyTrySearch')
                 : mode === 'chat'
-                  ? 'Converse com o Brain ativo e o Orbit passa a lembrar fatos e preferências automaticamente.'
-                  : 'Trabalhe em um projeto com o Brain ativo e o Orbit memoriza decisões, convenções e estrutura.'}
+                  ? t('memoriesScreen.emptyChatHint')
+                  : t('memoriesScreen.emptyCodeHint')}
             </Text>
           </View>
         ) : tab === 'list' ? (
