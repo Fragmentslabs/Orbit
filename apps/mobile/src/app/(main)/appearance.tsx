@@ -3,12 +3,14 @@ import { SafeAreaView } from 'react-native-safe-area-context'
 import { useRouter } from 'expo-router'
 import { ArrowLeft, Sun, Moon, Monitor, List, Square, Layers, Smile } from 'lucide-react-native'
 import { Appearance, useColorScheme } from 'react-native'
+import { useTranslation } from 'react-i18next'
 import { useThemeStore, type ThemePreference } from '~/stores/theme-store'
 import { useAppearanceStore, type DisplayMode } from '~/stores/appearance-store'
 import { getThemeTokens } from '~/lib/theme-tokens'
 import { useThemeStore as useThemeTokensStore } from '~/stores/theme-store'
 
 export default function AppearanceScreen() {
+  const { t } = useTranslation()
   const router = useRouter()
   const systemScheme = useColorScheme()
   const systemIsDark = systemScheme !== 'light'
@@ -26,15 +28,15 @@ export default function AppearanceScreen() {
   }
 
   const themeChips: { value: ThemePreference; label: string; icon: typeof Sun }[] = [
-    { value: 'light', label: 'Claro', icon: Sun },
-    { value: 'dark', label: 'Escuro', icon: Moon },
-    { value: 'system', label: 'Sistema', icon: Monitor },
+    { value: 'light', label: t('appearanceScreen.themeLight'), icon: Sun },
+    { value: 'dark', label: t('appearanceScreen.themeDark'), icon: Moon },
+    { value: 'system', label: t('appearanceScreen.themeSystem'), icon: Monitor },
   ]
 
   const modeChips: { value: DisplayMode; label: string; icon: typeof List; hint: string }[] = [
-    { value: 'toggles', label: 'Toggles', icon: List, hint: 'Modos como toggles inline. Configurações avançadas no gear (⚙️).' },
-    { value: 'actions', label: 'Ações', icon: Square, hint: 'Sem toggles inline. Todos os modos no botão "+".' },
-    { value: 'both', label: 'Ambos', icon: Layers, hint: 'Toggles inline + modos avançados também no botão "+".' },
+    { value: 'toggles', label: t('appearanceScreen.displayModeToggles'), icon: List, hint: t('appearanceScreen.displayModeTogglesHint') },
+    { value: 'actions', label: t('appearanceScreen.displayModeActions'), icon: Square, hint: t('appearanceScreen.displayModeActionsHint') },
+    { value: 'both', label: t('appearanceScreen.displayModeBoth'), icon: Layers, hint: t('appearanceScreen.displayModeBothHint') },
   ]
 
   return (
@@ -43,12 +45,12 @@ export default function AppearanceScreen() {
         <Pressable onPress={() => router.back()} style={s.backBtn}>
           <ArrowLeft size={22} color={tokens.foreground} />
         </Pressable>
-        <Text style={[s.headerTitle, { color: tokens.foreground }]}>Aparência</Text>
+        <Text style={[s.headerTitle, { color: tokens.foreground }]}>{t('appearanceScreen.title')}</Text>
         <View style={{ width: 34 }} />
       </View>
 
       <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 40 }} showsVerticalScrollIndicator={false}>
-        <Text style={[s.sectionTitle, { color: tokens.mutedForeground }]}>Tema</Text>
+        <Text style={[s.sectionTitle, { color: tokens.mutedForeground }]}>{t('appearanceScreen.themeSection')}</Text>
 
         <View style={[s.card, { borderColor: tokens.border, backgroundColor: tokens.card }]}>
           <View style={s.chipRow}>
@@ -75,7 +77,7 @@ export default function AppearanceScreen() {
           </View>
         </View>
 
-        <Text style={[s.sectionTitle, { color: tokens.mutedForeground, marginTop: 24 }]}>Modos de exibição</Text>
+        <Text style={[s.sectionTitle, { color: tokens.mutedForeground, marginTop: 24 }]}>{t('appearanceScreen.displayModesSection')}</Text>
 
         <View style={[s.card, { borderColor: tokens.border, backgroundColor: tokens.card }]}>
           <View style={s.chipRow}>
@@ -105,12 +107,12 @@ export default function AppearanceScreen() {
           </Text>
         </View>
 
-        <Text style={[s.sectionTitle, { color: tokens.mutedForeground, marginTop: 24 }]}>Persona</Text>
+        <Text style={[s.sectionTitle, { color: tokens.mutedForeground, marginTop: 24 }]}>{t('appearanceScreen.personaSection')}</Text>
 
         <View style={[s.card, { borderColor: tokens.border, backgroundColor: tokens.card }]}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
             <Smile size={20} color={tokens.mutedForeground} />
-            <Text style={{ flex: 1, fontSize: 14, color: tokens.foreground }}>Mostrar persona</Text>
+            <Text style={{ flex: 1, fontSize: 14, color: tokens.foreground }}>{t('appearanceScreen.showPersona')}</Text>
             <Switch
               value={personaVisible}
               onValueChange={setPersonaVisible}

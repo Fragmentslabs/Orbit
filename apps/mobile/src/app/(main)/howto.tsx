@@ -2,6 +2,7 @@ import { View, Text, ScrollView, Pressable, StyleSheet } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { useRouter } from 'expo-router'
 import { ArrowLeft, Search, Globe, Brain, AlignLeft, BrainCircuit, Bot, Network, RefreshCw, FileText, KeyRound, BookOpen } from 'lucide-react-native'
+import { useTranslation } from 'react-i18next'
 import { getThemeTokens } from '~/lib/theme-tokens'
 import { useThemeStore } from '~/stores/theme-store'
 
@@ -14,30 +15,16 @@ interface ModeInfo {
   combo?: string[]
 }
 
-const MODES: ModeInfo[] = [
-  { icon: Search, label: 'Pesquisa', modes: ['Chat', 'Código'], description: 'Busca e lê páginas da web via HTTP.', detail: 'Adiciona as ferramentas websearch e webfetch ao agente. Rápido para consultar documentação e APIs.', combo: ['Browser', 'Thinking'] },
-  { icon: Globe, label: 'Browser', modes: ['Chat'], description: 'Navega em páginas como um browser real.', detail: 'Abre o painel direito com um navegador completo. Executa JavaScript, ideal para SPAs e páginas dinâmicas.', combo: ['Pesquisa', 'Thinking'] },
-  { icon: Brain, label: 'Thinking', modes: ['Chat', 'Código'], description: 'Raciocínio estendido do modelo.', detail: 'O modelo \"pensa\" antes de responder, resultando em respostas mais profundas. Consome mais tokens.', combo: ['Pesquisa', 'Browser', 'Loop'] },
-  { icon: AlignLeft, label: 'Simples', modes: ['Chat', 'Código'], description: 'Respostas diretas em texto puro.', detail: 'Remove formatação avançada e blocos de ferramentas da resposta.', combo: [] },
-  { icon: BrainCircuit, label: 'Memória (Brain)', modes: ['Chat', 'Código'], description: 'Orbit lembra fatos e preferências entre conversas.', detail: 'Adiciona ferramentas de memória. O Orbit pode salvar e recuperar fatos automaticamente.', combo: [] },
-  { icon: Bot, label: 'Subagents', modes: ['Chat', 'Código'], description: 'Workers efêmeros para tarefas paralelas.', detail: 'O agente delega subtarefas a workers em background. Eles são descartados ao fim da tarefa.', combo: ['Loop', 'Orchestra'] },
-  { icon: Network, label: 'Orchestra', modes: ['Código'], description: 'Divide o pedido em plano + workers persistentes.', detail: 'O orquestrador planeja, você aprova, e cada tarefa vira uma sessão filha no painel direito.', combo: ['Loop', 'Subagents'] },
-  { icon: RefreshCw, label: 'Loop', modes: ['Código'], description: 'Agente revisa e itera até completar a tarefa.', detail: 'Após cada resposta, o sistema revisa o resultado. Se incompleto, o agente continua automaticamente.', combo: ['Subagents', 'Orchestra', 'Thinking'] },
-  { icon: FileText, label: 'Modo Plano', modes: ['Código'], description: 'Apenas leitura — produz um plano sem editar.', detail: 'Bloqueia ferramentas de escrita. O agente lê o código e produz um plano detalhado.', combo: ['Thinking', 'Pesquisa'] },
-  { icon: KeyRound, label: 'Permissões', modes: ['Código'], description: 'Controle de segurança sobre ações do agente.', detail: 'Três níveis: Ask (pergunta), Approve (resumo), Full (automático).', combo: [] },
-]
-
-const COMBOS: { label: string; items: string[]; description: string }[] = [
-  { label: 'Pesquisa aprofundada', items: ['Pesquisa', 'Browser', 'Thinking'], description: 'O agente search, navega em páginas dinâmicas e raciocina profundamente. Ideal para investigar tópicos técnicos.' },
-  { label: 'Refinamento automático', items: ['Loop', 'Thinking'], description: 'O agente revisa o próprio resultado com raciocínio estendido. Excelente para gerar código robusto.' },
-  { label: 'Orquestração com revisão', items: ['Orchestra', 'Loop'], description: 'Workers executam em paralelo e o loop revisa o resultado, criando continuações se necessário.' },
-  { label: 'Workers em múltiplas frentes', items: ['Orchestra', 'Subagents'], description: 'O orquestrador coordena tarefas de alto nível e cada worker pode usar subagents para investigações pontuais.' },
-  { label: 'Planejamento cuidadoso', items: ['Modo Plano', 'Thinking', 'Pesquisa'], description: 'Antes de alterar, o agente pesquisa, raciocina e produz um plano sem modificar arquivos.' },
-]
+const MODE_ICONS = [Search, Globe, Brain, AlignLeft, BrainCircuit, Bot, Network, RefreshCw, FileText, KeyRound]
 
 export default function HowToScreen() {
+  const { t } = useTranslation()
   const router = useRouter()
   const tokens = getThemeTokens(useThemeStore((s) => s.resolved))
+
+  const rawModes = t('howtoScreen.modes', { returnObjects: true }) as Omit<ModeInfo, 'icon'>[]
+  const MODES: ModeInfo[] = rawModes.map((m, i) => ({ ...m, icon: MODE_ICONS[i] }))
+  const COMBOS = t('howtoScreen.combos', { returnObjects: true }) as { label: string; items: string[]; description: string }[]
 
   const hslToHsla = (hsl: string, alpha: number) => {
     const m = hsl.match(/hsl\(([^)]+)\)/)
@@ -51,14 +38,14 @@ export default function HowToScreen() {
         <Pressable onPress={() => router.back()} style={s.backBtn}>
           <ArrowLeft size={22} color={tokens.foreground} />
         </Pressable>
-        <Text style={[s.headerTitle, { color: tokens.foreground }]}>Como funciona</Text>
+        <Text style={[s.headerTitle, { color: tokens.foreground }]}>{t('howtoScreen.title')}</Text>
         <View style={{ width: 34 }} />
       </View>
 
       <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 40 }} showsVerticalScrollIndicator={false}>
-        <Text style={[s.sectionTitle, { color: tokens.mutedForeground }]}>Modos e Ferramentas</Text>
+        <Text style={[s.sectionTitle, { color: tokens.mutedForeground }]}>{t('howtoScreen.sectionModes')}</Text>
         <Text style={[s.sectionDesc, { color: tokens.mutedForeground }]}>
-          O Orbit oferece vários modos que modificam o comportamento do agente. Ative-os antes de enviar a mensagem.
+          {t('howtoScreen.sectionModesDesc')}
         </Text>
 
         {MODES.map((mode) => {
@@ -77,13 +64,13 @@ export default function HowToScreen() {
               <Text style={[s.cardDesc, { color: tokens.mutedForeground }]}>{mode.description}</Text>
               <Text style={[s.cardDetail, { color: tokens.foreground }]}>{mode.detail}</Text>
               {mode.combo && mode.combo.length > 0 && (
-                <Text style={[s.combo, { color: tokens.mutedForeground }]}>Combina bem com: {mode.combo.join(', ')}</Text>
+                <Text style={[s.combo, { color: tokens.mutedForeground }]}>{t('howtoScreen.combinesWellWith', { items: mode.combo.join(', ') })}</Text>
               )}
             </View>
           )
         })}
 
-        <Text style={[s.sectionTitle, { color: tokens.mutedForeground, marginTop: 24 }]}>Combinações Recomendadas</Text>
+        <Text style={[s.sectionTitle, { color: tokens.mutedForeground, marginTop: 24 }]}>{t('howtoScreen.sectionCombos')}</Text>
 
         {COMBOS.map((combo) => (
           <View key={combo.label} style={[s.comboCard, { borderColor: tokens.border, backgroundColor: tokens.accent }]}>
@@ -105,9 +92,9 @@ export default function HowToScreen() {
 
         {/* Tip */}
         <View style={[s.tipBox, { borderColor: tokens.primary, backgroundColor: hslToHsla(tokens.primary, 0.12) }]}>
-          <Text style={[s.tipTitle, { color: tokens.primary }]}>Dica</Text>
+          <Text style={[s.tipTitle, { color: tokens.primary }]}>{t('howtoScreen.tipTitle')}</Text>
           <Text style={[s.tipText, { color: tokens.mutedForeground }]}>
-            Use os toggles abaixo do input para ativar/desativar modos rapidamente, ou o botão "+" para acessar configurações avançadas de Subagents, Orchestra e Loop.
+            {t('howtoScreen.tipText')}
           </Text>
         </View>
       </ScrollView>

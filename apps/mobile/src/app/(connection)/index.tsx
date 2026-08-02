@@ -11,6 +11,7 @@ import {
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { ArrowRight, History, Loader2, Monitor, ScanLine, X } from 'lucide-react-native'
+import { useTranslation } from 'react-i18next'
 import type { ConnectionConfig } from '@orbit/companion-client'
 import * as Device from 'expo-device'
 import { useConnectionStore } from '~/stores/connection-store'
@@ -29,6 +30,7 @@ import { useThemeStore } from '~/stores/theme-store'
 const canUseCamera = Platform.OS === 'ios' || Platform.OS === 'android'
 
 export default function ConnectionScreen() {
+  const { t } = useTranslation()
   const { connection, config: savedConfig, disconnect, connect } = useConnectionStore()
   const { recent, loadRecent, removeRecent } = useRecentConnectionsStore()
   const { status: discoveryStatus, found } = useDesktopDiscovery()
@@ -107,14 +109,14 @@ export default function ConnectionScreen() {
         <View style={s.reconnecting}>
           <Persona state="listening" size={120} />
           <View style={s.reconnectingText}>
-            <Text style={[s.title, { color: tokens.foreground }]}>Reconectando</Text>
+            <Text style={[s.title, { color: tokens.foreground }]}>{t('connectionScreen.reconnecting')}</Text>
             <Text style={[s.mutedFg, { color: tokens.mutedForeground }]}>
               {savedConfig?.host}:{savedConfig?.port}
             </Text>
           </View>
           <ConnectionStatus state={connection} />
           <Button variant="outline" onPress={handleCancelReconnect}>
-            Cancelar
+            {t('connectionScreen.cancel')}
           </Button>
         </View>
       </SafeAreaView>
@@ -125,9 +127,9 @@ export default function ConnectionScreen() {
     <View style={isWide ? s.headerWide : s.headerCenter}>
       <Persona state={personaState} size={isWide ? 160 : 140} />
       <View style={isWide ? { gap: 4 } : { alignItems: 'center', gap: 4 }}>
-        <Text style={[s.titleLarge, { color: tokens.foreground }]}>Orbit</Text>
+        <Text style={[s.titleLarge, { color: tokens.foreground }]}>{t('connectionScreen.appName')}</Text>
         <Text style={[s.subtitle, { color: tokens.mutedForeground }, !isWide && { textAlign: 'center' }]}>
-          Conecte-se ao Orbit Desktop para{'\n'}acompanhar e controlar suas sessões
+          {t('connectionScreen.subtitle')}
         </Text>
       </View>
     </View>
@@ -144,16 +146,16 @@ export default function ConnectionScreen() {
         </View>
         <View style={{ flex: 1 }}>
           <Text style={[s.fgSemibold, { color: tokens.foreground }]}>
-            Desktop encontrado{found.name ? ` — ${found.name}` : ''}
+            {t('connectionScreen.desktopFound', { name: found.name ? ` — ${found.name}` : '' })}
           </Text>
-          <Text style={[s.mutedFg, { color: tokens.mutedForeground }]}>{found.host}:{found.wsPort} · toque para conectar</Text>
+          <Text style={[s.mutedFg, { color: tokens.mutedForeground }]}>{found.host}:{found.wsPort} · {t('connectionScreen.tapToConnect')}</Text>
         </View>
         <ArrowRight size={16} color={tokens.primary} />
       </Pressable>
     ) : discoveryStatus === 'checking' ? (
       <View style={s.checkingRow}>
         <Spin><Loader2 size={12} color={tokens.mutedForeground} /></Spin>
-        <Text style={[s.mutedFg, { color: tokens.mutedForeground }]}>Procurando Orbit Desktop na rede…</Text>
+        <Text style={[s.mutedFg, { color: tokens.mutedForeground }]}>{t('connectionScreen.searchingNetwork')}</Text>
       </View>
     ) : null
 
@@ -162,7 +164,7 @@ export default function ConnectionScreen() {
       <View style={{ gap: 8 }}>
         <View style={s.recentsHeader}>
           <History size={13} color={tokens.mutedForeground} />
-          <Text style={[s.recentsTitle, { color: tokens.mutedForeground }]}>Recentes</Text>
+          <Text style={[s.recentsTitle, { color: tokens.mutedForeground }]}>{t('connectionScreen.recent')}</Text>
         </View>
         {recent.map((rc: RecentConnection) => (
           <Pressable
@@ -193,8 +195,8 @@ export default function ConnectionScreen() {
     showQr ? (
       <Card style={{ overflow: 'hidden', padding: 12 }}>
         <View style={s.qrHeader}>
-          <Text style={[s.fg, { color: tokens.foreground }]}>Escanear QR Code</Text>
-          <Button variant="ghost" size="sm" onPress={() => setShowQr(false)}>Cancelar</Button>
+          <Text style={[s.fg, { color: tokens.foreground }]}>{t('connectionScreen.scanQrCode')}</Text>
+          <Button variant="ghost" size="sm" onPress={() => setShowQr(false)}>{t('connectionScreen.cancel')}</Button>
         </View>
         <View style={[s.qrCamera, { backgroundColor: '#000' }]}>
           <QRScannerWrapper onScanned={handleQrScanned} />
@@ -202,7 +204,7 @@ export default function ConnectionScreen() {
       </Card>
     ) : (
       <Button onPress={() => setShowQr(true)} size="lg">
-        <ScanLine size={18} color="#4a2e0a" /> Escanear QR Code
+        <ScanLine size={18} color="#4a2e0a" /> {t('connectionScreen.scanQrCode')}
       </Button>
     )
   ) : null
@@ -214,9 +216,7 @@ export default function ConnectionScreen() {
       <ConnectionStatus state={connection} detailed />
       <View style={[s.tipBox, { backgroundColor: 'rgba(26,28,34,0.5)' }]}>
         <Text style={[s.tipText, { color: tokens.mutedForeground }]}>
-          <Text style={{ fontWeight: '600' }}>Dica:</Text> use{' '}
-          <Text style={{ fontWeight: '600' }}>Tailscale</Text> para acessar seu desktop de
-          qualquer lugar, sem configurar a rede.
+          <Text style={{ fontWeight: '600' }}>{t('connectionScreen.tipLabel')}</Text> {t('connectionScreen.tipText')}
         </Text>
       </View>
     </>
