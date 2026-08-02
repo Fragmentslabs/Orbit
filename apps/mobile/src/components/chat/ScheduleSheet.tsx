@@ -3,6 +3,7 @@ import { View, Text, Pressable, Animated, Modal, StyleSheet, Dimensions } from '
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import DateTimePicker from '@expo/ui/community/datetime-picker'
 import { CalendarIcon, Clock, ChevronDown } from 'lucide-react-native'
+import { useTranslation } from 'react-i18next'
 import { getThemeTokens } from '~/lib/theme-tokens'
 import { useThemeStore } from '~/stores/theme-store'
 
@@ -11,31 +12,34 @@ interface SchedulePreset {
   getTimestamp: () => number
 }
 
-const PRESETS: SchedulePreset[] = [
-  { label: 'Em 30 minutos', getTimestamp: () => Date.now() + 30 * 60 * 1000 },
-  { label: 'Em 1 hora', getTimestamp: () => Date.now() + 60 * 60 * 1000 },
-  { label: 'Em 2 horas', getTimestamp: () => Date.now() + 2 * 60 * 60 * 1000 },
-  { label: 'Amanhã às 09:00', getTimestamp: () => {
-    const d = new Date()
-    d.setDate(d.getDate() + 1)
-    d.setHours(9, 0, 0, 0)
-    return d.getTime()
-  }},
-]
+function usePresets(): SchedulePreset[] {
+  const { t } = useTranslation()
+  return [
+    { label: t('scheduleSheet.presetIn30Min'), getTimestamp: () => Date.now() + 30 * 60 * 1000 },
+    { label: t('scheduleSheet.presetIn1Hour'), getTimestamp: () => Date.now() + 60 * 60 * 1000 },
+    { label: t('scheduleSheet.presetIn2Hours'), getTimestamp: () => Date.now() + 2 * 60 * 60 * 1000 },
+    { label: t('scheduleSheet.presetTomorrow9am'), getTimestamp: () => {
+      const d = new Date()
+      d.setDate(d.getDate() + 1)
+      d.setHours(9, 0, 0, 0)
+      return d.getTime()
+    }},
+  ]
+}
 
-function formatDate(ts: number): string {
-  return new Date(ts).toLocaleString('pt-BR', {
+function formatDate(ts: number, locale: string): string {
+  return new Date(ts).toLocaleString(locale, {
     dateStyle: 'full',
     timeStyle: 'short',
   })
 }
 
-function formatDateShort(d: Date): string {
-  return d.toLocaleDateString('pt-BR')
+function formatDateShort(d: Date, locale: string): string {
+  return d.toLocaleDateString(locale)
 }
 
-function formatTimeShort(d: Date): string {
-  return d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+function formatTimeShort(d: Date, locale: string): string {
+  return d.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' })
 }
 
 interface ScheduleSheetProps {
@@ -47,6 +51,9 @@ interface ScheduleSheetProps {
 const SHEET_HEIGHT = Math.min(Dimensions.get('window').height * 0.72, 560)
 
 export function ScheduleSheet({ visible, onClose, onConfirm }: ScheduleSheetProps) {
+  const { t, i18n } = useTranslation()
+  const locale = i18n.language
+  const PRESETS = usePresets()
   const tokens = getThemeTokens(useThemeStore((s) => s.resolved))
   const insets = useSafeAreaInsets()
   const [slideAnim] = useState(() => new Animated.Value(SHEET_HEIGHT))
@@ -79,13 +86,13 @@ export function ScheduleSheet({ visible, onClose, onConfirm }: ScheduleSheetProp
       setSelectedPreset(0)
       setCustomExpanded(false)
       setPickerTarget(null)
-      setPreview(formatDate(defaultDate.getTime()))
+      setPreview(formatDate(defaultDate.getTime(), locale))
     }
   }, [visible, slideAnim, backdropAnim])
 
   useEffect(() => {
     if (customExpanded) {
-      setPreview(formatDate(selectedDate.getTime()))
+      setPreview(formatDate(selectedDate.getTime(), locale))
     }
   }, [selectedDate, customExpanded])
 
@@ -95,7 +102,7 @@ export function ScheduleSheet({ visible, onClose, onConfirm }: ScheduleSheetProp
     setCustomExpanded(false)
     setPickerTarget(null)
     setSelectedDate(new Date(ts))
-    setPreview(formatDate(ts))
+    setPreview(formatDate(ts, locale))
   }
 
   const toggleCustom = () => {
@@ -103,7 +110,7 @@ export function ScheduleSheet({ visible, onClose, onConfirm }: ScheduleSheetProp
     setCustomExpanded(willExpand)
     if (willExpand) {
       setSelectedPreset(null)
-      setPreview(formatDate(selectedDate.getTime()))
+      setPreview(formatDate(selectedDate.getTime(), locale))
     } else {
       setPickerTarget(null)
     }
@@ -155,7 +162,7 @@ export function ScheduleSheet({ visible, onClose, onConfirm }: ScheduleSheetProp
 
         <View style={[s.header, { borderBottomColor: tokens.border }]}>
           <CalendarIcon size={18} color={tokens.foreground} />
-          <Text style={[s.title, { color: tokens.foreground }]}>Agendar mensagem</Text>
+          <Text style={[s.title, { color: tokens.foreground }]}>{t('scheduleSheet.title')}</Text>
         </View>
 
         <View style={s.presetsRow}>
@@ -189,7 +196,7 @@ export function ScheduleSheet({ visible, onClose, onConfirm }: ScheduleSheetProp
           style={[s.customToggle, { borderBottomColor: tokens.border, backgroundColor: customExpanded ? tokens.muted : 'transparent' }]}
         >
           <Text style={[s.customToggleText, { color: customExpanded ? tokens.foreground : tokens.mutedForeground }]}>
-            Personalizado
+            {t('scheduleSheet.custom')}
           </Text>
           <ChevronDown
             size={16}
@@ -202,34 +209,34 @@ export function ScheduleSheet({ visible, onClose, onConfirm }: ScheduleSheetProp
           <View style={s.customFields}>
             <Pressable onPress={() => openPicker('date')} style={[s.fieldRow, { backgroundColor: tokens.border }]}>
               <CalendarIcon size={18} color={tokens.mutedForeground} />
-              <Text style={[s.fieldLabel, { color: tokens.mutedForeground }]}>Data</Text>
-              <Text style={[s.fieldValue, { color: tokens.foreground }]}>{formatDateShort(selectedDate)}</Text>
+              <Text style={[s.fieldLabel, { color: tokens.mutedForeground }]}>{t('scheduleSheet.date')}</Text>
+              <Text style={[s.fieldValue, { color: tokens.foreground }]}>{formatDateShort(selectedDate, locale)}</Text>
             </Pressable>
 
             <Pressable onPress={() => openPicker('time')} style={[s.fieldRow, { backgroundColor: tokens.border }]}>
               <Clock size={18} color={tokens.mutedForeground} />
-              <Text style={[s.fieldLabel, { color: tokens.mutedForeground }]}>Horário</Text>
-              <Text style={[s.fieldValue, { color: tokens.foreground }]}>{formatTimeShort(selectedDate)}</Text>
+              <Text style={[s.fieldLabel, { color: tokens.mutedForeground }]}>{t('scheduleSheet.time')}</Text>
+              <Text style={[s.fieldValue, { color: tokens.foreground }]}>{formatTimeShort(selectedDate, locale)}</Text>
             </Pressable>
           </View>
         )}
 
         {preview && (
           <Text style={[s.preview, { color: tokens.mutedForeground }]}>
-            Enviará em <Text style={[s.previewHighlight, { color: tokens.foreground }]}>{preview}</Text>
+            {t('scheduleSheet.willSendAt')} <Text style={[s.previewHighlight, { color: tokens.foreground }]}>{preview}</Text>
           </Text>
         )}
 
         <View style={[s.actions, { borderTopColor: tokens.border }]}>
           <Pressable onPress={onClose} style={[s.actionBtn, { borderColor: tokens.border }]}>
-            <Text style={[s.actionLabel, { color: tokens.foreground }]}>Cancelar</Text>
+            <Text style={[s.actionLabel, { color: tokens.foreground }]}>{t('scheduleSheet.cancel')}</Text>
           </Pressable>
           <Pressable
             onPress={handleConfirm}
             disabled={!canConfirm}
             style={[s.actionBtn, { backgroundColor: canConfirm ? tokens.primary : tokens.muted, opacity: canConfirm ? 1 : 0.5 }]}
           >
-            <Text style={[s.actionLabel, { color: tokens.primaryForeground, fontWeight: '600' }]}>Confirmar</Text>
+            <Text style={[s.actionLabel, { color: tokens.primaryForeground, fontWeight: '600' }]}>{t('scheduleSheet.confirm')}</Text>
           </Pressable>
         </View>
       </Animated.View>
@@ -246,7 +253,7 @@ export function ScheduleSheet({ visible, onClose, onConfirm }: ScheduleSheetProp
               onChange={(_event: any, date?: Date) => handlePickerDone(date)}
             />
             <Pressable onPress={() => setPickerTarget(null)} style={[s.pickerDone, { borderTopColor: tokens.border }]}>
-              <Text style={[s.pickerDoneText, { color: tokens.primary }]}>OK</Text>
+              <Text style={[s.pickerDoneText, { color: tokens.primary }]}>{t('scheduleSheet.ok')}</Text>
             </Pressable>
           </View>
         </View>
@@ -264,7 +271,7 @@ export function ScheduleSheet({ visible, onClose, onConfirm }: ScheduleSheetProp
               onChange={(_event: any, date?: Date) => handlePickerDone(date)}
             />
             <Pressable onPress={() => setPickerTarget(null)} style={[s.pickerDone, { borderTopColor: tokens.border }]}>
-              <Text style={[s.pickerDoneText, { color: tokens.primary }]}>OK</Text>
+              <Text style={[s.pickerDoneText, { color: tokens.primary }]}>{t('scheduleSheet.ok')}</Text>
             </Pressable>
           </View>
         </View>

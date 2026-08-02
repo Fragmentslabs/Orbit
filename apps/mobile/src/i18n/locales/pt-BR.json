@@ -331,5 +331,40 @@
     "commandRequiredBody": "Digite o comando do servidor STDIO.",
     "errorTitle": "Erro",
     "errorBody": "Não foi possível salvar o servidor MCP."
+  },
+  "workerModelModal": {
+    "title": "Modelo dos workers",
+    "description": "Usado pelos subagentes e pela orquestração. Sem configuração, os workers usam o mesmo modelo do chat.",
+    "useSameModel": "Usar o mesmo modelo do chat",
+    "searchPlaceholder": "Pesquisar modelos…",
+    "thinkingOnWorker": "Thinking no worker"
+  },
+  "modelPickerModal": {
+    "title": "Selecionar Modelo",
+    "searchPlaceholder": "Pesquisar modelos…",
+    "noModelsAvailable": "Nenhum modelo disponível.",
+    "configureProviderHint": "Por favor, configure as credenciais de um provedor nas configurações do desktop.",
+    "trySearchHint": "Tente pesquisar por outro nome de modelo."
+  },
+  "scheduleSheet": {
+    "title": "Agendar mensagem",
+    "presetIn30Min": "Em 30 minutos",
+    "presetIn1Hour": "Em 1 hora",
+    "presetIn2Hours": "Em 2 horas",
+    "presetTomorrow9am": "Amanhã às 09:00",
+    "custom": "Personalizado",
+    "date": "Data",
+    "time": "Horário",
+    "willSendAt": "Enviará em",
+    "cancel": "Cancelar",
+    "confirm": "Confirmar",
+    "ok": "OK"
+  },
+  "folderSelector": {
+    "associateFolder": "Associar pasta",
+    "selectFolderTitle": "Selecionar pasta no desktop",
+    "useThis": "Usar esta",
+    "noSubfolders": "Nenhuma subpasta aqui.",
+    "listError": "Não foi possível listar as pastas."
   }
 }
