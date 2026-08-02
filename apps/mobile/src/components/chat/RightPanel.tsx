@@ -1,19 +1,25 @@
 import { View, Text, Pressable, ScrollView } from 'react-native'
 import { useState } from 'react'
 import { Globe, Diff, Terminal, Folder, X } from 'lucide-react-native'
+import { useTranslation } from 'react-i18next'
 import { cn } from '~/lib/utils'
 import { useWorkspaceStore } from '~/stores/workspace-store'
 
 type Tab = 'browser' | 'diff' | 'terminal' | 'folders'
 
-const tabs: { key: Tab; label: string; icon: typeof Globe }[] = [
-  { key: 'browser', label: 'Navegador', icon: Globe },
-  { key: 'diff', label: 'Diff', icon: Diff },
-  { key: 'terminal', label: 'Terminal', icon: Terminal },
-  { key: 'folders', label: 'Pastas', icon: Folder },
-]
+function useTabs(): { key: Tab; label: string; icon: typeof Globe }[] {
+  const { t } = useTranslation()
+  return [
+    { key: 'browser', label: t('rightPanel.browser'), icon: Globe },
+    { key: 'diff', label: t('rightPanel.diff'), icon: Diff },
+    { key: 'terminal', label: t('rightPanel.terminal'), icon: Terminal },
+    { key: 'folders', label: t('rightPanel.folders'), icon: Folder },
+  ]
+}
 
 export function RightPanel() {
+  const { t } = useTranslation()
+  const tabs = useTabs()
   const [activeTab, setActiveTab] = useState<Tab>('browser')
   const rightPanelOpen = useWorkspaceStore((s) => s.rightPanelOpen)
   const toggleRightPanel = useWorkspaceStore((s) => s.toggleRightPanel)
@@ -55,16 +61,16 @@ export function RightPanel() {
       {/* Content */}
       <ScrollView className="flex-1 p-4">
         {activeTab === 'browser' && (
-          <Text className="text-sm text-muted-foreground">Navegador não conectado.</Text>
+          <Text className="text-sm text-muted-foreground">{t('rightPanel.browserNotConnected')}</Text>
         )}
         {activeTab === 'diff' && (
-          <Text className="text-sm text-muted-foreground">Nenhuma alteração detectada.</Text>
+          <Text className="text-sm text-muted-foreground">{t('rightPanel.noChangesDetected')}</Text>
         )}
         {activeTab === 'terminal' && (
-          <Text className="text-sm text-muted-foreground">Terminal desconectado.</Text>
+          <Text className="text-sm text-muted-foreground">{t('rightPanel.terminalDisconnected')}</Text>
         )}
         {activeTab === 'folders' && (
-          <Text className="text-sm text-muted-foreground">Nenhuma pasta aberta.</Text>
+          <Text className="text-sm text-muted-foreground">{t('rightPanel.noFolderOpen')}</Text>
         )}
       </ScrollView>
     </View>

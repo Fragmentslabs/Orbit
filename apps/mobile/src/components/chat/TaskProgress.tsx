@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { View, Text, Pressable } from 'react-native'
 import { Check, ChevronDown, Loader, X, MessageSquare, Terminal } from 'lucide-react-native'
+import { useTranslation } from 'react-i18next'
 import { getThemeTokens } from '~/lib/theme-tokens'
 import { useThemeStore } from '~/stores/theme-store'
 import { hslToRgba } from '~/lib/theme'
@@ -14,13 +15,15 @@ export interface TaskItem {
 
 export function TaskProgress({
   tasks,
-  title = 'Tarefas',
+  title,
   defaultExpanded = true,
 }: {
   tasks: TaskItem[]
   title?: string
   defaultExpanded?: boolean
 }) {
+  const { t } = useTranslation()
+  const resolvedTitle = title ?? t('taskProgress.defaultTitle')
   const [expanded, setExpanded] = useState(defaultExpanded)
   const tokens = getThemeTokens(useThemeStore((s) => s.resolved))
   const total = tasks.length
@@ -54,7 +57,7 @@ export function TaskProgress({
           <Check size={14} color="#10b981" />
         )}
         <Text className="text-xs font-medium flex-shrink" style={{ color: tokens.foreground, flexShrink: 1 }}>
-          {running ? `${title} em andamento` : `${title} concluídas`}
+          {running ? t('taskProgress.inProgress', { title: resolvedTitle }) : t('taskProgress.completed', { title: resolvedTitle })}
         </Text>
         <Text className="text-xs" style={{ color: tokens.mutedForeground }}>
           {done}/{total}
