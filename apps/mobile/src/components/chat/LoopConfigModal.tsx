@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Modal, View, Text, TextInput, Pressable, Switch, StyleSheet, ScrollView } from 'react-native'
 import { X, RefreshCw } from 'lucide-react-native'
+import { useTranslation } from 'react-i18next'
 import { useSettingsStore, type LoopConfig } from '~/stores/settings-store'
 import { getThemeTokens } from '~/lib/theme-tokens'
 import { useThemeStore } from '~/stores/theme-store'
@@ -11,6 +12,7 @@ interface LoopConfigModalProps {
 }
 
 export function LoopConfigModal({ visible, onClose }: LoopConfigModalProps) {
+  const { t } = useTranslation()
   const tokens = getThemeTokens(useThemeStore((s) => s.resolved))
   const savedConfig = useSettingsStore((s) => s.loopConfig)
   const setLoopConfig = useSettingsStore((s) => s.setLoopConfig)
@@ -42,19 +44,19 @@ export function LoopConfigModal({ visible, onClose }: LoopConfigModalProps) {
           <View style={[s.handle, { backgroundColor: tokens.muted }]} />
 
           <View style={s.header}>
-            <Text style={[s.headerTitle, { color: tokens.foreground }]}>Configuração do Loop</Text>
+            <Text style={[s.headerTitle, { color: tokens.foreground }]}>{t('loopConfig.title')}</Text>
             <Pressable onPress={handleClose} style={s.closeBtn}>
               <X size={20} color={tokens.foreground} />
             </Pressable>
           </View>
           <Text style={[s.headerDesc, { color: tokens.mutedForeground }]}>
-            O agente revisa o próprio resultado e itera até completar a tarefa ou atingir o limite.
+            {t('loopConfig.description')}
           </Text>
 
           <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 24 }}>
             {/* Max Iterations */}
             <View style={[s.card, { borderColor: tokens.border }]}>
-              <Text style={[s.cardLabel, { color: tokens.foreground }]}>Iterações máximas</Text>
+              <Text style={[s.cardLabel, { color: tokens.foreground }]}>{t('loopConfig.maxIterations')}</Text>
               <TextInput
                 value={maxIterations}
                 onChangeText={setMaxIterations}
@@ -64,7 +66,7 @@ export function LoopConfigModal({ visible, onClose }: LoopConfigModalProps) {
                 style={[s.input, { color: tokens.foreground, backgroundColor: tokens.border, borderColor: tokens.muted }]}
               />
               <Text style={[s.hint, { color: tokens.mutedForeground }]}>
-                Quantas vezes o agente pode revisar e refinar (1-10)
+                {t('loopConfig.maxIterationsHint')}
               </Text>
             </View>
 
@@ -72,9 +74,9 @@ export function LoopConfigModal({ visible, onClose }: LoopConfigModalProps) {
             <View style={[s.card, { borderColor: tokens.border }]}>
               <View style={s.switchRow}>
                 <View style={{ flex: 1 }}>
-                  <Text style={[s.cardLabel, { color: tokens.foreground }]}>Revisão automática</Text>
+                  <Text style={[s.cardLabel, { color: tokens.foreground }]}>{t('loopConfig.autoReview')}</Text>
                   <Text style={[s.hint, { color: tokens.mutedForeground }]}>
-                    Se desligado, pergunta antes de cada nova iteração
+                    {t('loopConfig.autoReviewHint')}
                   </Text>
                 </View>
                 <Switch
@@ -92,7 +94,7 @@ export function LoopConfigModal({ visible, onClose }: LoopConfigModalProps) {
               style={[s.saveBtn, { backgroundColor: tokens.primary }]}
             >
               <RefreshCw size={16} color="#fff" />
-              <Text style={s.saveBtnText}>Salvar</Text>
+              <Text style={s.saveBtnText}>{t('loopConfig.save')}</Text>
             </Pressable>
           </ScrollView>
         </View>

@@ -252,5 +252,27 @@
     "noChangesDetected": "No changes detected.",
     "terminalDisconnected": "Terminal disconnected.",
     "noFolderOpen": "No folder open."
+  },
+  "reasoningPicker": {
+    "level": "Level",
+    "levelTitle": "Reasoning level"
+  },
+  "permissionModePicker": {
+    "title": "Permission mode",
+    "ask": "Ask",
+    "askDescription": "Confirms sensitive actions before running",
+    "approve": "Autonomy",
+    "approveDescription": "Runs on its own; critical actions ask for confirmation",
+    "full": "Unrestricted",
+    "fullDescription": "No questions asked (safety floor still applies)"
+  },
+  "loopConfig": {
+    "title": "Loop configuration",
+    "description": "The agent reviews its own result and iterates until the task is done or the limit is reached.",
+    "maxIterations": "Max iterations",
+    "maxIterationsHint": "How many times the agent can review and refine (1-10)",
+    "autoReview": "Automatic review",
+    "autoReviewHint": "If off, it asks before each new iteration",
+    "save": "Save"
   }
 }

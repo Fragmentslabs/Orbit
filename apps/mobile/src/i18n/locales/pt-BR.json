@@ -252,5 +252,27 @@
     "noChangesDetected": "Nenhuma alteração detectada.",
     "terminalDisconnected": "Terminal desconectado.",
     "noFolderOpen": "Nenhuma pasta aberta."
+  },
+  "reasoningPicker": {
+    "level": "Nível",
+    "levelTitle": "Nível de raciocínio"
+  },
+  "permissionModePicker": {
+    "title": "Modo de permissões",
+    "ask": "Perguntar",
+    "askDescription": "Confirma ações sensíveis antes de executar",
+    "approve": "Autonomia",
+    "approveDescription": "Executa sozinho; ações críticas pedem confirmação",
+    "full": "Irrestrito",
+    "fullDescription": "Sem perguntas (piso de segurança mantido)"
+  },
+  "loopConfig": {
+    "title": "Configuração do Loop",
+    "description": "O agente revisa o próprio resultado e itera até completar a tarefa ou atingir o limite.",
+    "maxIterations": "Iterações máximas",
+    "maxIterationsHint": "Quantas vezes o agente pode revisar e refinar (1-10)",
+    "autoReview": "Revisão automática",
+    "autoReviewHint": "Se desligado, pergunta antes de cada nova iteração",
+    "save": "Salvar"
   }
 }
