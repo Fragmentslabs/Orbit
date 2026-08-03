@@ -16,7 +16,7 @@ import { getProvider } from './catalog'
 import { abortChat, runChat, toModelMessages } from './chat-engine'
 import { ORCHESTRATOR_PLAN_PROMPT, ORCHESTRATOR_SYNTHESIS_PROMPT } from './prompts'
 import { resolveModel } from './providers'
-import { buildProviderOptions } from './reasoning'
+import { buildProviderOptions, interleavedReasoningField, normalizeMessages } from './reasoning'
 import { readJson, writeJson } from './storage'
 import { createSubagentTool, createTaskTool } from './tools/orchestration'
 import type { ToolContext } from './tools/context'
@@ -153,9 +153,13 @@ export async function runOrchestration(win: BrowserWindow, input: SendMessageInp
       ),
       subagent: subagentTool,
     }
-    const baseMessages = toModelMessages(history.slice(0, -1))
+    const provider = await getProvider(input.providerId)
+    const baseMessages = normalizeMessages(
+      toModelMessages(history.slice(0, -1)),
+      interleavedReasoningField(provider, input.modelId),
+    )
     const providerOptions = await buildProviderOptions(input)
-    const cost = (await getProvider(input.providerId))?.models[input.modelId]?.cost
+    const cost = provider?.models[input.modelId]?.cost
 
     // Consome o stream de uma passada de planejamento, emitindo parts (texto,
     // raciocínio, tool-calls) para a UI mostrar o orquestrador trabalhando —
@@ -445,11 +449,15 @@ export async function approvePlan(
       .join('\n\n---\n\n')
 
     const model = await resolveModel(input.providerId, input.modelId)
+    const provider = await getProvider(input.providerId)
     const stream = streamText({
       model,
       system: ORCHESTRATOR_SYNTHESIS_PROMPT,
       messages: [
-        ...toModelMessages(history.slice(0, -1)),
+        ...normalizeMessages(
+          toModelMessages(history.slice(0, -1)),
+          interleavedReasoningField(provider, input.modelId),
+        ),
         { role: 'user', content: `Worker results:\n\n${resultsText}` },
       ],
       abortSignal: controller.signal,
@@ -478,7 +486,6 @@ export async function approvePlan(
     if (started) emit(win, { type: 'part', sessionId, messageId: synthesisMessage.id, part })
 
     // Usage da síntese: registrado na própria mensagem e somado ao plano
-    const provider = await getProvider(input.providerId)
     synthesisMessage.tokens = toTokenUsage(await stream.usage, provider?.models[input.modelId]?.cost)
     plan.usage = addTokenUsage(plan.usage, synthesisMessage.tokens)
     await saveMessages(sessionId, history)
