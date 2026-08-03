@@ -32,7 +32,7 @@ export function DateSeparator({ timestamp }: { timestamp: number }) {
   return (
     <View className="my-2 items-center">
       <View className="rounded-full px-3 py-1" style={{ backgroundColor: tokens.muted }}>
-        <Text className="text-[11px] font-medium" style={{ color: tokens.mutedForeground }}>{label}</Text>
+        <Text selectable={false} className="text-[11px] font-medium" style={{ color: tokens.mutedForeground }}>{label}</Text>
       </View>
     </View>
   )
