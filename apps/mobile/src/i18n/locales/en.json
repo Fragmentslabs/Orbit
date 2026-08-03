@@ -104,7 +104,18 @@
   "chatHeader": {
     "fork": "Fork",
     "deleteTitle": "Delete conversation?",
-    "deleteBody": "\"{{title}}\" and all its messages will be permanently deleted."
+    "deleteBody": "\"{{title}}\" and all its messages will be permanently deleted.",
+    "searchInChat": "Search in chat"
+  },
+  "chatSearch": {
+    "placeholder": "Search this conversation...",
+    "of": "{{current}} of {{total}}",
+    "noMatches": "No results",
+    "dateFilter": "Jump to a date"
+  },
+  "dateSeparator": {
+    "today": "Today",
+    "yesterday": "Yesterday"
   },
   "promptInput": {
     "placeholder": "Ask anything...",

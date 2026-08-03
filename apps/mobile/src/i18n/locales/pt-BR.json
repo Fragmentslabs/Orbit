@@ -104,7 +104,18 @@
   "chatHeader": {
     "fork": "Fork",
     "deleteTitle": "Excluir conversa?",
-    "deleteBody": "\"{{title}}\" e todas as suas mensagens serão excluídas permanentemente."
+    "deleteBody": "\"{{title}}\" e todas as suas mensagens serão excluídas permanentemente.",
+    "searchInChat": "Buscar na conversa"
+  },
+  "chatSearch": {
+    "placeholder": "Buscar nesta conversa...",
+    "of": "{{current}} de {{total}}",
+    "noMatches": "Nenhum resultado",
+    "dateFilter": "Ir para uma data"
+  },
+  "dateSeparator": {
+    "today": "Hoje",
+    "yesterday": "Ontem"
   },
   "promptInput": {
     "placeholder": "Pergunte qualquer coisa...",

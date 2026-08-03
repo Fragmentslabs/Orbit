@@ -1,7 +1,7 @@
 import { memo, useState } from 'react'
 import { View, Animated, Pressable, Alert, StyleSheet } from 'react-native'
 import { useTranslation } from 'react-i18next'
-import { Menu, Ellipsis, Pencil, Pin, PinOff, Archive, ArchiveRestore, GitFork, Trash2 } from 'lucide-react-native'
+import { Menu, Ellipsis, Pencil, Pin, PinOff, Archive, ArchiveRestore, GitFork, Search, Trash2 } from 'lucide-react-native'
 import type { SessionInfo } from '@orbit/shared'
 import { Persona, type PersonaState } from '~/components/ai/Persona'
 import { useWorkspaceStore } from '~/stores/workspace-store'
@@ -10,6 +10,7 @@ import { ActionMenu } from '~/components/ui/action-menu'
 import { RenamePrompt } from '~/components/ui/rename-prompt'
 import { getThemeTokens } from '~/lib/theme-tokens'
 import { useThemeStore } from '~/stores/theme-store'
+import { useChatSearchStore } from '~/stores/chat-search-store'
 
 interface ChatHeaderProps {
   /** Sessão atual — undefined enquanto o chat é um rascunho (ainda não enviado). */
@@ -23,6 +24,8 @@ interface ChatHeaderProps {
   onToggleArchive: () => void
   onFork: () => void
   onDelete: () => void
+  /** Busca na conversa é exclusiva do modo chat. */
+  searchEnabled?: boolean
 }
 
 // memo: o header carrega a view nativa do Rive (Persona) — sem memo ele
@@ -36,6 +39,7 @@ export const ChatHeader = memo(function ChatHeader({
   onToggleArchive,
   onFork,
   onDelete,
+  searchEnabled,
 }: ChatHeaderProps) {
   const { t } = useTranslation()
   const openSidebar = useWorkspaceStore((s) => s.openSidebar)
@@ -43,6 +47,7 @@ export const ChatHeader = memo(function ChatHeader({
   const [menuOpen, setMenuOpen] = useState(false)
   const [renaming, setRenaming] = useState(false)
   const tokens = getThemeTokens(useThemeStore((s) => s.resolved))
+  const toggleChatSearch = useChatSearchStore((s) => s.toggle)
 
   const handleDeletePress = () => {
     Alert.alert(
@@ -81,6 +86,7 @@ export const ChatHeader = memo(function ChatHeader({
         visible={menuOpen}
         onClose={() => setMenuOpen(false)}
         items={[
+          ...(searchEnabled ? [{ icon: Search, label: t('chatHeader.searchInChat'), onPress: toggleChatSearch }] : []),
           { icon: Pencil, label: t('sidebar.rename'), onPress: () => setRenaming(true) },
           {
             icon: session?.pinned ? PinOff : Pin,

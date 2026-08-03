@@ -22,6 +22,9 @@ import { PlanReviewCard } from "@/src/components/plan-review-card"
 import { InitProjectCard } from "@/src/components/init-project-card"
 import { RevertBar } from "@/src/components/revert-bar"
 import { AssistantMessageActions, CopyAction, MessageTimestamp } from "@/src/components/messages/shared"
+import { DateSeparator, isNewDay } from "@/src/components/messages/date-separator"
+import { ChatMessageSearchBar } from "@/src/components/chat-message-search-bar"
+import { useChatSearchStore } from "@/src/stores/chat-search-store"
 import { Actions } from "@/src/components/ai/actions"
 import { messageText, visibleMessageText } from "@/src/lib/message-utils"
 import { useActiveSession, useSessionStatus, useSessionStore, type SendConfig } from "@/src/stores/session-store"
@@ -63,7 +66,7 @@ const MessageItem = memo(
   if (msg.role === "user") {
     const files = msg.parts.filter((p): p is FilePart => p.type === "file")
     return (
-      <Message from="user" data-user-msg-id={msg.id}>
+      <Message from="user" data-user-msg-id={msg.id} data-msg-id={msg.id}>
         <div className="group/user-msg flex flex-col">
           {files.length > 0 && (
             <MessageAttachments className="mb-1">
@@ -98,7 +101,7 @@ const MessageItem = memo(
   }
 
   return (
-    <Message from="assistant">
+    <Message from="assistant" data-msg-id={msg.id}>
       <MessageContent>
         <AssistantMessage
           message={msg}
@@ -196,26 +199,37 @@ function ChatMessages({ messages, isBusy, mode, sessionId, sendMessage, planIds,
     <Conversation className="relative flex-1 -mt-10">
       <ConversationContent className="mx-auto w-full max-w-3xl">
         {messages.map((msg, index) => {
-          if (msg.summary) return <SummaryCard key={msg.id} message={msg} />
+          const showSeparator = isNewDay(messages[index - 1]?.createdAt, msg.createdAt)
+
+          if (msg.summary) {
+            return (
+              <div key={msg.id}>
+                {showSeparator && <DateSeparator timestamp={msg.createdAt} />}
+                <SummaryCard message={msg} />
+              </div>
+            )
+          }
 
           const isLast = msg.id === lastAssistantId
           const finished = msg.role !== "assistant" || !(isLast && isBusy)
           const waiting = msg.role === "assistant" && isLast && isBusy && msg.parts.length === 0
 
           return (
-            <MessageItem
-              key={msg.id}
-              msg={msg}
-              isLast={isLast}
-              waiting={waiting}
-              finished={finished}
-              isBusy={isBusy}
-              mode={mode}
-              sessionId={sessionId}
-              sendMessage={sendMessage}
-              messages={messages}
-              index={index}
-            />
+            <div key={msg.id}>
+              {showSeparator && <DateSeparator timestamp={msg.createdAt} />}
+              <MessageItem
+                msg={msg}
+                isLast={isLast}
+                waiting={waiting}
+                finished={finished}
+                isBusy={isBusy}
+                mode={mode}
+                sessionId={sessionId}
+                sendMessage={sendMessage}
+                messages={messages}
+                index={index}
+              />
+            </div>
           )
         })}
         {planReview && planReview.status === "proposed" && sessionId && (
@@ -271,6 +285,7 @@ export function ChatView({ sessionId }: { sessionId?: string } = {}) {
   const selectSession = useSessionStore((s) => s.selectSession)
   const initializeProviders = useProviderStore((s) => s.initialize)
   const simpleMode = useSimpleMode(session?.id)
+  const chatSearchOpen = useChatSearchStore((s) => s.open)
 
   useEffect(() => {
     void initializeProviders()
@@ -280,6 +295,11 @@ export function ChatView({ sessionId }: { sessionId?: string } = {}) {
   useEffect(() => {
     if (sessionId) void useSessionStore.getState().ensureMessages(sessionId)
   }, [sessionId])
+
+  // Fecha a busca ao trocar de sessão para não deixar resultados obsoletos visíveis
+  useEffect(() => {
+    useChatSearchStore.getState().close()
+  }, [session?.id])
 
   // Sincroniza pasta da sessão (ex.: vinda do mobile) com o workspace
   const prevSessionId = useRef(session?.id)
@@ -463,6 +483,7 @@ export function ChatView({ sessionId }: { sessionId?: string } = {}) {
         >
           <div className={`flex min-h-0 flex-1 flex-col ${topVisible && !simpleMode && personaVisible ? "pt-6" : "pt-2"}`}>
             <div className="pointer-events-none sticky top-0 z-10 h-12 bg-linear-to-b to-transparent" style={{ backgroundImage: 'linear-gradient(to bottom, var(--panel-bg, var(--background)), transparent)' }} />
+            {chatSearchOpen && viewMode === "chat" && <ChatMessageSearchBar messages={messages} />}
             <ChatMessages messages={messages} isBusy={isBusy} mode={viewMode} sessionId={session?.id} sendMessage={sendMessage} planIds={planMsgIds} planReview={planReview} plan={plan} />
           </div>
         </div>
