@@ -33,7 +33,7 @@ export function DateSeparator({ timestamp }: { timestamp: number }) {
 
   return (
     <div className="sticky top-12 z-10 my-3 flex justify-center">
-      <span className="rounded-full bg-muted px-3 py-1 text-[11px] font-medium text-muted-foreground shadow-sm">
+      <span className="select-none rounded-full bg-muted px-3 py-1 text-[11px] font-medium text-muted-foreground shadow-sm">
         {label}
       </span>
     </div>
