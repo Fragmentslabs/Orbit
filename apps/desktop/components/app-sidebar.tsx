@@ -184,7 +184,7 @@ function SelectionProvider({ children }: { children: React.ReactNode }) {
 
 function NewChatButton() {
   const { t } = useTranslation()
-  const { mode, setView } = useWorkspace()
+  const { mode, setView, setFolders } = useWorkspace()
   const selectSession = useSessionStore((s) => s.selectSession)
   return (
     <Button
@@ -192,6 +192,13 @@ function NewChatButton() {
       className="w-full justify-start gap-2 text-sm"
       onClick={() => {
         setView("chat")
+        // Nova sessão herda as pastas de trabalho do último chat do modo
+        if (mode === "code") {
+          const last = [...useSessionStore.getState().sessions]
+            .filter((s) => s.mode === "code" && !s.archived && !s.parentId && !!s.directory)
+            .sort((a, b) => b.updatedAt - a.updatedAt)[0]
+          if (last) setFolders([last.directory!, ...(last.extraDirectories ?? [])])
+        }
         void selectSession(mode, null)
       }}
     >
@@ -779,8 +786,7 @@ function FolderItem({ folder, sessions, childrenByParent = {} }: {
 }) {
   const { t } = useTranslation()
   const [expanded, setExpanded] = useState(true)
-  const { mode } = useWorkspace()
-  const selectSession = useSessionStore((s) => s.selectSession)
+  const { mode, setFolders } = useWorkspace()
   const renameFolder = useSessionStore((s) => s.renameFolder)
   const toggleFolderPin = useSessionStore((s) => s.toggleFolderPin)
   const deleteFolder = useSessionStore((s) => s.deleteFolder)
@@ -836,11 +842,19 @@ function FolderItem({ folder, sessions, childrenByParent = {} }: {
           <button
             onClick={(e) => {
               e.stopPropagation()
-              // Novo chat dentro da pasta: limpa a seleção e pré-atribui a pasta
-              void useSessionStore
-                .getState()
-                .createSession(mode, { folderId: folder.id })
-                .then((session) => selectSession(mode, session.id))
+              // Novo chat na pasta: a sessão só é criada ao enviar a 1ª mensagem.
+              // Herda as pastas de trabalho do chat mais recente da pasta e guarda
+              // a pasta para a criação futura (evita a "Nova sessão de código" em branco).
+              const mostRecent = sessions.reduce<SessionInfo | undefined>(
+                (best, s) => (best && s.updatedAt <= best.updatedAt ? best : s),
+                undefined,
+              )
+              if (mostRecent?.directory) {
+                setFolders([mostRecent.directory, ...(mostRecent.extraDirectories ?? [])])
+              }
+              const store = useSessionStore.getState()
+              void store.selectSession(mode, null)
+              store.setPendingFolder(folder.id)
             }}
             className="absolute right-7 top-1.5 flex h-5 w-0 items-center justify-center overflow-hidden rounded-[calc(var(--radius-sm)-2px)] p-0 text-sidebar-foreground transition-all duration-200 group-hover/menu-row:w-5 group-hover/menu-row:text-sidebar-accent-foreground [&>svg]:size-4 [&>svg]:shrink-0"
           >
