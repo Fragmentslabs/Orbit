@@ -53,6 +53,9 @@ interface SessionState {
   status: Record<string, ChatStatus>
   errors: Record<string, string | undefined>
   activeIds: Record<SessionMode, string | null>
+  /** Pasta a atribuir à próxima sessão criada pelo fluxo de novo chat.
+   *  O "+" da pasta não cria sessão no clique — só ao enviar a 1ª mensagem. */
+  pendingFolderId: string | null
   /** Contagem de mensagens não lidas por sessão. */
   unreadCounts: Record<string, number>
   /** Planos de orquestração por sessão orquestradora */
@@ -75,6 +78,7 @@ interface SessionState {
   dismissOrchestration: (sessionId: string) => void
   createSession: (mode: SessionMode, partial?: Partial<SessionInfo> & { setActive?: boolean }) => Promise<SessionInfo>
   selectSession: (mode: SessionMode, id: string | null) => Promise<void>
+  setPendingFolder: (folderId: string | null) => void
   renameSession: (id: string, title: string) => void
   togglePin: (id: string) => void
   toggleArchive: (id: string) => void
@@ -146,6 +150,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
   status: {},
   errors: {},
   activeIds: { chat: null, code: null },
+  pendingFolderId: null,
   orchestration: {},
   planReviews: {},
   _planReviewOutbox: {},
@@ -212,6 +217,8 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     set((state) => ({
       activeIds: { ...state.activeIds, [mode]: id },
       unreadCounts: id ? { ...state.unreadCounts, [id]: 0 } : state.unreadCounts,
+      // Navegar para outra sessão ou abrir um novo chat encerra o intent de pasta pendente
+      pendingFolderId: null,
     }))
     if (id) {
       await get().ensureMessages(id)
@@ -229,6 +236,8 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       }
     }
   },
+
+  setPendingFolder: (folderId) => set({ pendingFolderId: folderId }),
 
   ensureMessages: async (sessionId) => {
     if (get().messages[sessionId] !== undefined) return
@@ -500,11 +509,18 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     let sessionId = config.sessionId ?? get().activeIds[mode]
     let session = get().sessions.find((s) => s.id === sessionId)
     if (!session) {
+      // A pasta pendente só vale se pertencer ao mesmo modo da sessão a criar
+      const pendingFolderId = get().pendingFolderId
+      const pendingFolder = pendingFolderId
+        ? get().folders.find((f) => f.id === pendingFolderId)
+        : undefined
       session = await get().createSession(mode, {
         directory: config.directory,
         extraDirectories: config.extraDirectories,
+        ...(pendingFolder && pendingFolder.mode === mode ? { folderId: pendingFolderId } : {}),
       })
       sessionId = session.id
+      if (pendingFolderId) set({ pendingFolderId: null })
       // O toggle Brain do chat novo (rascunho) passa a valer para esta sessão
       useBrainPrefs.getState().adopt(sessionId)
       useSimplePrefs.getState().adopt(sessionId)
