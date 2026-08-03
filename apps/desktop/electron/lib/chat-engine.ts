@@ -7,6 +7,7 @@ import type {
   FilePart,
   MessagePart,
   PermissionMode,
+  ReasoningPart,
   SendMessageInput,
   SessionInfo,
   ToolPart,
@@ -16,7 +17,7 @@ import { getProvider } from './catalog'
 import { compactHistory, findLastSummaryIndex, shouldCompact } from './compaction'
 import { createToolApproval, takeDenialReason } from './permission'
 import { buildSystemPrompt } from './prompts'
-import { buildProviderOptions } from './reasoning'
+import { buildProviderOptions, interleavedReasoningField, normalizeMessages } from './reasoning'
 import { resolveModel } from './providers'
 import { extractPdfText } from './pdf'
 import { extractSpreadsheetText } from './xlsx'
@@ -244,6 +245,22 @@ export function toModelMessages(history: ChatMessage[]): ModelMessage[] {
       const content: UserContent = files.map(fileToModelContent)
       if (text.trim()) content.push({ type: 'text', text })
       result.push({ role: 'user', content })
+      continue
+    }
+    if (message.role === 'assistant') {
+      // Reenvia o raciocínio do assistente ao modelo: provedores com
+      // reasoning_content (ex: DeepSeek) exigem o texto de volta nos turnos
+      // seguintes. O campo é injetado via providerOptions por
+      // normalizeMessages (interleaved) — aqui só preservamos os parts.
+      const reasoning = message.parts
+        .filter((p): p is ReasoningPart => p.type === 'reasoning')
+        .map((p) => p.text)
+        .join('\n')
+      const content: Extract<ModelMessage, { role: 'assistant' }>['content'] = []
+      if (reasoning.trim()) content.push({ type: 'reasoning', text: reasoning })
+      if (text.trim()) content.push({ type: 'text', text })
+      if (content.length === 0) continue
+      result.push({ role: 'assistant', content })
       continue
     }
     if (!text.trim()) continue
@@ -548,18 +565,29 @@ export async function runChat(win: BrowserWindow, input: SendMessageInput): Prom
     const result = streamText({
       model,
       system: await buildSystemPrompt(input),
-      messages: toModelMessages(history.slice(0, -1)),
+      messages: normalizeMessages(
+        toModelMessages(history.slice(0, -1)),
+        interleavedReasoningField(provider, input.modelId),
+      ),
       tools: supportsTools ? buildToolSet(input, toolContext) : undefined,
       toolApproval,
       stopWhen: stepCountIs(MAX_STEPS),
       abortSignal: controller.signal,
       providerOptions: await buildProviderOptions(input),
       prepareStep: ({ stepNumber, messages }) => {
-        if (stepNumber < MAX_STEPS) return {}
+        // Reaplica a normalização de reasoning a cada passo do tool loop: o
+        // SDK reconstrói as mensagens entre steps e pode descartar o
+        // reasoning_content vazio retornado numa chamada de tool (DeepSeek
+        // exige o campo de volta em todas as mensagens de assistente).
+        const normalized = normalizeMessages(
+          messages,
+          interleavedReasoningField(provider, input.modelId),
+        )
+        if (stepNumber < MAX_STEPS) return normalized === messages ? {} : { messages: normalized }
         return {
           activeTools: [],
           toolChoice: 'none' as const,
-          messages: [...messages, { role: 'user' as const, content: MAX_STEPS_PROMPT }],
+          messages: [...normalized, { role: 'user' as const, content: MAX_STEPS_PROMPT }],
         }
       },
       onError: () => {

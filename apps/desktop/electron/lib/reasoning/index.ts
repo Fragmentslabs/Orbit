@@ -1,5 +1,5 @@
-import type { JSONValue } from 'ai'
-import type { SendMessageInput } from '@shared/chat'
+import type { JSONValue, ModelMessage } from 'ai'
+import type { CatalogProvider, SendMessageInput } from '@shared/chat'
 import { getProvider } from '../catalog'
 import { mergeOptions } from './merge'
 import { buildBaseOptions } from './options'
@@ -50,4 +50,65 @@ export async function buildProviderOptions(
 
   const namespace = SDK_NAMESPACES[modelInput.npm] ?? input.providerId
   return { [namespace]: merged as Record<string, JSONValue> }
+}
+
+/**
+ * Campo usado para reenviar o raciocínio na mensagem do assistente — portado
+ * do opencode (provider.ts → interleaved default). Provedores que caem no
+ * adaptador openai-compatible e servem modelos DeepSeek usam
+ * `reasoning_content`; o DeepSeek exige o campo em TODAS as mensagens de
+ * assistente em turnos seguintes, mesmo quando vazio (senão a API retorna 400).
+ */
+export function interleavedReasoningField(
+  provider: CatalogProvider | undefined,
+  modelId: string,
+): string | undefined {
+  const npm = provider?.npm ?? '@ai-sdk/openai-compatible'
+  if (npm === '@ai-sdk/openai-compatible' && modelId.toLowerCase().includes('deepseek')) {
+    return 'reasoning_content'
+  }
+  return undefined
+}
+
+/**
+ * Move o raciocínio das mensagens de assistente para o providerOptions do
+ * SDK — portado do opencode (transform.ts → normalizeMessages). Sempre define
+ * o campo, mesmo vazio: provedores como o DeepSeek exigem o reasoning_content
+ * de volta em todas as mensagens de assistente em turnos subsequentes, e o
+ * conversor do @ai-sdk/openai-compatible descartaria um valor vazio vindo dos
+ * parts (ele só emite `reasoning_content` quando `reasoning.length > 0`).
+ *
+ * É idempotente: se a mensagem não tem parts de reasoning (porque já foi
+ * normalizada antes, ex: prepareStep), preserva o valor já presente no
+ * providerOptions em vez de sobrescrever com vazio.
+ */
+export function normalizeMessages(msgs: ModelMessage[], field?: string): ModelMessage[] {
+  if (!field) return msgs
+  return msgs.map((msg): ModelMessage => {
+    if (msg.role !== 'assistant') return msg
+    if (!Array.isArray(msg.content)) return msg
+    const reasoningParts = msg.content.filter(
+      (part): part is Extract<ModelMessage, { role: 'assistant' }>['content'][number] & {
+        type: 'reasoning'
+        text: string
+      } => part.type === 'reasoning',
+    )
+    const existing = msg.providerOptions?.openaiCompatible as Record<string, JSONValue> | undefined
+    const reasoningContent =
+      reasoningParts.length > 0
+        ? reasoningParts.map((part) => part.text).join('')
+        : ((existing?.[field] as string | undefined) ?? '')
+    const filteredContent = msg.content.filter((part) => part.type !== 'reasoning')
+    return {
+      ...msg,
+      content: filteredContent,
+      providerOptions: {
+        ...msg.providerOptions,
+        openaiCompatible: {
+          ...existing,
+          [field]: reasoningContent,
+        },
+      },
+    }
+  })
 }
