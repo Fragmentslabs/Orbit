@@ -1,8 +1,9 @@
-import { useRef, useEffect, useCallback, useState } from 'react'
+import { useRef, useEffect, useCallback, useState, forwardRef, useImperativeHandle } from 'react'
 import { View, FlatList, Pressable, Keyboard } from 'react-native'
 import { ChevronDown } from 'lucide-react-native'
 import { MessageBubble } from '~/components/chat/MessageBubble'
 import { SummaryCard } from '~/components/chat/SummaryCard'
+import { DateSeparator, isNewDay } from '~/components/chat/DateSeparator'
 import { getThemeTokens } from '~/lib/theme-tokens'
 import { useThemeStore } from '~/stores/theme-store'
 import type { ChatMessage } from '@orbit/shared'
@@ -14,7 +15,11 @@ interface MessageListProps {
   ListFooterComponent?: React.ReactElement
 }
 
-export function MessageList({ messages, isStreaming, onRevert, ListFooterComponent }: MessageListProps) {
+export interface MessageListHandle {
+  scrollToMessageId: (id: string) => void
+}
+
+export const MessageList = forwardRef<MessageListHandle, MessageListProps>(function MessageList({ messages, isStreaming, onRevert, ListFooterComponent }, ref) {
   const listRef = useRef<FlatList<ChatMessage>>(null)
   const [isAtBottom, setIsAtBottom] = useState(true)
   const isUserScrolling = useRef(false)
@@ -51,6 +56,18 @@ export function MessageList({ messages, isStreaming, onRevert, ListFooterCompone
     return () => show.remove()
   }, [isAtBottom])
 
+  useImperativeHandle(ref, () => ({
+    scrollToMessageId: (id: string) => {
+      const index = messages.findIndex((m) => m.id === id)
+      if (index === -1) return
+      try {
+        listRef.current?.scrollToIndex({ index, animated: true, viewPosition: 0.35 })
+      } catch {
+        // ignora — item ainda não medido, o fallback abaixo cobre esse caso
+      }
+    },
+  }), [messages])
+
   return (
     <View className="flex-1 relative">
       <FlatList
@@ -60,6 +77,9 @@ export function MessageList({ messages, isStreaming, onRevert, ListFooterCompone
         keyExtractor={(item) => item.id}
         renderItem={({ item, index }) => (
           <View className="py-1">
+            {isNewDay(messages[index - 1]?.createdAt, item.createdAt) && (
+              <DateSeparator timestamp={item.createdAt} />
+            )}
             {item.summary ? (
               <SummaryCard message={item} />
             ) : (
@@ -81,6 +101,11 @@ export function MessageList({ messages, isStreaming, onRevert, ListFooterCompone
             listRef.current?.scrollToEnd({ animated: false })
           }
         }}
+        onScrollToIndexFailed={(info) => {
+          setTimeout(() => {
+            listRef.current?.scrollToIndex({ index: info.index, animated: true, viewPosition: 0.35 })
+          }, 100)
+        }}
       />
 
       {/* Scroll to bottom button */}
@@ -95,4 +120,4 @@ export function MessageList({ messages, isStreaming, onRevert, ListFooterCompone
       )}
     </View>
   )
-}
+})

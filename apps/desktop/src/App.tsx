@@ -150,6 +150,8 @@ function Layout() {
                         ? t("header.models")
                         : activeSession?.title ?? (workspaceMode === "chat" ? t("header.newChat") : t("header.newCode"))
                   }
+                  hasMenu={view === "chat" && workspaceMode === "chat" && !!activeSession}
+                  session={view === "chat" && workspaceMode === "chat" ? activeSession : undefined}
                   rightPanelOpen={rightPanelOpen}
                   onToggleSidebar={handleToggleSidebar}
                   onToggleRightPanel={workspaceMode === "code" || workspaceMode === "chat" ? () => setRightPanelOpen(!rightPanelOpen) : undefined}

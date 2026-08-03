@@ -1,4 +1,4 @@
-import { Archive, Ellipsis, PanelLeft, PanelRightClose, PanelRightOpen, Pencil, Pin, Trash2 } from "lucide-react"
+import { Archive, ArchiveRestore, Ellipsis, PanelLeft, PanelRightClose, PanelRightOpen, Pencil, Pin, PinOff, Search, Trash2 } from "lucide-react"
 import { useState } from "react"
 import { useTranslation } from "react-i18next"
 import {
@@ -8,12 +8,25 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { Button } from "@/components/ui/button"
+import { ConfirmDialog } from "@/components/ui/alert-dialog"
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
+import { Input } from "@/components/ui/input"
+import type { SessionInfo } from "@shared/chat"
 import { BranchSelector } from "@/src/components/branch-selector"
 import { FolderSelector } from "@/src/components/folder-selector"
+import { useSessionStore } from "@/src/stores/session-store"
+import { useChatSearchStore } from "@/src/stores/chat-search-store"
 
 interface ChatHeaderProps {
   title?: string
   hasMenu?: boolean
+  session?: SessionInfo
   rightPanelOpen?: boolean
   onToggleSidebar?: () => void
   onToggleRightPanel?: () => void
@@ -24,9 +37,52 @@ interface ChatHeaderProps {
   onFoldersChange?: (folders: string[]) => void
 }
 
-export function ChatHeader({ title, hasMenu, rightPanelOpen, onToggleSidebar, onToggleRightPanel, repoPath, workspaceMode, onRequestAgentAction, folders, onFoldersChange }: ChatHeaderProps) {
+function RenameDialog({ open, onOpenChange, initialValue, onSubmit }: {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  initialValue: string
+  onSubmit: (value: string) => void
+}) {
+  const { t } = useTranslation()
+  const [value, setValue] = useState(initialValue)
+
+  const submit = () => {
+    const trimmed = value.trim()
+    if (trimmed) onSubmit(trimmed)
+    onOpenChange(false)
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={(next) => { if (next) setValue(initialValue); onOpenChange(next) }}>
+      <DialogContent className="sm:max-w-sm" showCloseButton={false}>
+        <DialogHeader>
+          <DialogTitle>{t("sidebar.session.renameTitle")}</DialogTitle>
+        </DialogHeader>
+        <Input
+          autoFocus
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") submit()
+          }}
+        />
+        <DialogFooter>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>
+            {t("common.cancel")}
+          </Button>
+          <Button onClick={submit}>{t("sidebar.session.rename")}</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+export function ChatHeader({ title, hasMenu, session, rightPanelOpen, onToggleSidebar, onToggleRightPanel, repoPath, workspaceMode, onRequestAgentAction, folders, onFoldersChange }: ChatHeaderProps) {
   const { t } = useTranslation()
   const [menuOpen, setMenuOpen] = useState(false)
+  const [renaming, setRenaming] = useState(false)
+  const [confirmDelete, setConfirmDelete] = useState(false)
+  const toggleChatSearch = useChatSearchStore((s) => s.toggle)
 
   return (
     <div className="flex h-12 items-center gap-2 px-4">
@@ -49,22 +105,30 @@ export function ChatHeader({ title, hasMenu, rightPanelOpen, onToggleSidebar, on
               <span className="sr-only">{t("header.options")}</span>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="start" className="min-w-40">
-              <DropdownMenuItem>
-                <Pin className="size-4" />
-                {t("header.pin")}
+              <DropdownMenuItem onClick={() => toggleChatSearch()}>
+                <Search className="size-4" />
+                {t("header.searchInChat")}
               </DropdownMenuItem>
-              <DropdownMenuItem>
-                <Pencil className="size-4" />
-                {t("header.rename")}
-              </DropdownMenuItem>
-              <DropdownMenuItem>
-                <Archive className="size-4" />
-                {t("header.archive")}
-              </DropdownMenuItem>
-              <DropdownMenuItem>
-                <Trash2 className="size-4" />
-                {t("header.delete")}
-              </DropdownMenuItem>
+              {session && (
+                <>
+                  <DropdownMenuItem onClick={() => useSessionStore.getState().togglePin(session.id)}>
+                    {session.pinned ? <PinOff className="size-4" /> : <Pin className="size-4" />}
+                    {session.pinned ? t("sidebar.session.unpin") : t("header.pin")}
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => setRenaming(true)}>
+                    <Pencil className="size-4" />
+                    {t("header.rename")}
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => useSessionStore.getState().toggleArchive(session.id)}>
+                    {session.archived ? <ArchiveRestore className="size-4" /> : <Archive className="size-4" />}
+                    {session.archived ? t("sidebar.session.unarchive") : t("header.archive")}
+                  </DropdownMenuItem>
+                  <DropdownMenuItem variant="destructive" onClick={() => setConfirmDelete(true)}>
+                    <Trash2 className="size-4" />
+                    {t("header.delete")}
+                  </DropdownMenuItem>
+                </>
+              )}
             </DropdownMenuContent>
           </DropdownMenu>
         )}
@@ -74,6 +138,25 @@ export function ChatHeader({ title, hasMenu, rightPanelOpen, onToggleSidebar, on
           {rightPanelOpen ? <PanelRightClose className="size-4" /> : <PanelRightOpen className="size-4" />}
           <span className="sr-only">{t("header.togglePanel")}</span>
         </Button>
+      )}
+      {session && (
+        <>
+          <RenameDialog
+            open={renaming}
+            onOpenChange={setRenaming}
+            initialValue={session.title}
+            onSubmit={(value) => useSessionStore.getState().renameSession(session.id, value)}
+          />
+          <ConfirmDialog
+            open={confirmDelete}
+            onOpenChange={setConfirmDelete}
+            title={t("sidebar.session.deleteTitle")}
+            description={t("sidebar.session.deleteDescription", { title: session.title })}
+            confirmLabel={t("sidebar.session.confirmDelete")}
+            destructive
+            onConfirm={() => void useSessionStore.getState().deleteSession(session.id)}
+          />
+        </>
       )}
     </div>
   )

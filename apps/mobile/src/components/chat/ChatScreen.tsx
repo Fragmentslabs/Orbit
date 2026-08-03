@@ -13,7 +13,8 @@ import { useChatStore } from '~/stores/chat-store'
 import { useWorkspaceStore } from '~/stores/workspace-store'
 import { useSettingsStore } from '~/stores/settings-store'
 import { useAppearanceStore } from '~/stores/appearance-store'
-import { MessageList } from '~/components/chat/MessageList'
+import { MessageList, type MessageListHandle } from '~/components/chat/MessageList'
+import { ChatMessageSearchBar } from '~/components/chat/ChatMessageSearchBar'
 import { ChatInput } from '~/components/chat/ChatInput'
 import { AskCard } from '~/components/chat/AskCard'
 import { Suggestions } from '~/components/chat/Suggestion'
@@ -23,6 +24,7 @@ import { FolderSelector } from '~/components/chat/FolderSelector'
 import { Persona } from '~/components/ai/Persona'
 import { getThemeTokens } from '~/lib/theme-tokens'
 import { useThemeStore } from '~/stores/theme-store'
+import { useChatSearchStore } from '~/stores/chat-search-store'
 import { useShallow } from 'zustand/react/shallow'
 import { startMessageScheduler, useMessageQueueStore } from '~/stores/message-queue-store'
 import { Storage } from '~/lib/storage'
@@ -101,6 +103,10 @@ export function ChatScreen({ sessionId }: ChatScreenProps) {
   const activeAsks = sessionId ? pendingAsks[sessionId] ?? [] : []
   const isEmpty = activeMessages.length === 0
 
+  const messageListRef = useRef<MessageListHandle>(null)
+  const chatSearchOpen = useChatSearchStore((s) => s.open)
+  const closeChatSearch = useChatSearchStore((s) => s.close)
+
   // Persona: grande no centro quando vazio, some assim que a conversa começa.
   const chatProgress = useRef(new Animated.Value(isEmpty ? 0 : 1)).current
   // Persona pequena do header: só aparece depois que a do centro termina de
@@ -129,6 +135,7 @@ export function ChatScreen({ sessionId }: ChatScreenProps) {
 
   useEffect(() => {
     void selectSession(sessionId ?? null)
+    closeChatSearch()
   }, [sessionId])
 
   useEffect(() => {
@@ -299,7 +306,15 @@ export function ChatScreen({ sessionId }: ChatScreenProps) {
           onToggleArchive={handleToggleArchive}
           onFork={handleFork}
           onDelete={handleDelete}
+          searchEnabled={!isCode}
         />
+
+        {chatSearchOpen && !isCode && !isEmpty && (
+          <ChatMessageSearchBar
+            messages={activeMessages}
+            onJumpToMessage={(id) => messageListRef.current?.scrollToMessageId(id)}
+          />
+        )}
 
         <View style={{ flex: 1 }}>
           {/* Centro: persona grande + título — some assim que a conversa começa */}
@@ -329,6 +344,7 @@ export function ChatScreen({ sessionId }: ChatScreenProps) {
           <Animated.View pointerEvents={isEmpty ? 'none' : 'auto'} style={{ flex: 1, opacity: chatProgress }}>
             {!isEmpty && (
               <MessageList
+                ref={messageListRef}
                 messages={activeMessages}
                 isStreaming={isStreaming}
                 onRevert={handleRevert}

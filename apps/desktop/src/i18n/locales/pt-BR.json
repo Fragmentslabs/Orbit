@@ -440,7 +440,21 @@
     "rename": "Renomear",
     "archive": "Arquivar",
     "delete": "Deletar",
-    "togglePanel": "Alternar painel"
+    "togglePanel": "Alternar painel",
+    "searchInChat": "Buscar na conversa"
+  },
+  "chatSearch": {
+    "placeholder": "Buscar nesta conversa...",
+    "of": "{{current}} de {{total}}",
+    "noMatches": "Nenhum resultado",
+    "dateFilter": "Ir para uma data",
+    "previousMatch": "Resultado anterior",
+    "nextMatch": "Próximo resultado",
+    "close": "Fechar busca"
+  },
+  "dateSeparator": {
+    "today": "Hoje",
+    "yesterday": "Ontem"
   },
   "panel": {
     "dropToOpen": "Solte para abrir",
