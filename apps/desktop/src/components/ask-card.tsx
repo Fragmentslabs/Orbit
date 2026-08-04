@@ -81,8 +81,8 @@ export function QuestionItem({ question, selected, free, onToggle, onFree }: {
 }) {
   const { t } = useTranslation()
   return (
-    <div className="flex flex-col gap-1.5">
-      <p className="text-sm">{question.text}</p>
+    <div className="flex min-w-0 flex-col gap-1.5">
+      <p className="min-w-0 whitespace-pre-wrap break-words text-sm">{question.text}</p>
       {question.options && question.options.length > 0 && (
         <div className="flex flex-wrap gap-1.5">
           {question.options.map((option) => (
@@ -276,7 +276,7 @@ export function AskCard({ ask }: { ask: PendingAskUI }) {
   }
 
   return (
-    <div className="flex flex-col gap-2 rounded-lg border bg-card p-3 text-card-foreground shadow-sm">
+    <div className="flex min-w-0 flex-col gap-2 rounded-lg border bg-card p-3 text-card-foreground shadow-sm">
       {ask.kind === "permission" ? (
         <PermissionBody ask={ask} submitted={submitted} onReply={reply} />
       ) : (

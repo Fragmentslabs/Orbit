@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { useDroppable, useDndContext } from "@dnd-kit/core"
 import { FileCode, Globe, Folder, MessageSquare, Terminal, X, PlusIcon, Bot, LoaderIcon, XCircleIcon, Trash2, GripVertical } from "lucide-react"
@@ -15,11 +15,13 @@ import { ManagedTerminalTab } from "@/src/components/terminal-tab"
 import { BrowserTab } from "@/src/components/browser-tab"
 import { FoldersTab } from "@/src/components/folders-tab"
 import { DiffTab } from "@/src/components/diff-tab"
+import { ProcessOutputDialog } from "@/src/components/process-output-dialog"
 import { useWorkspace } from "@/lib/workspace-context"
 import { usePanelStore, nextTabId, type TabType, type PanelTab } from "@/src/stores/panel-store"
 import { useSessionStore } from "@/src/stores/session-store"
 import { useProcessStore } from "@/src/stores/process-store"
 import { useTerminalStore } from "@/src/stores/terminal-store"
+import type { ProcessInfo } from "@/src/lib/ipc"
 import { cn } from "@/lib/utils"
 
 interface TabMeta {
@@ -159,6 +161,8 @@ function SelectorScreen({ onSelect, onOpenWorker }: {
   const processes = useProcessStore((s) => s.processes)
   const fetchProcesses = useProcessStore((s) => s.fetch)
   const killProcess = useProcessStore((s) => s.kill)
+  const [outputPid, setOutputPid] = useState<number | null>(null)
+  const outputProcess: ProcessInfo | null = processes.find((p) => p.pid === outputPid) ?? null
 
   const workers = useMemo(
     () => sessions.filter((s) => s.parentId === activeId),
@@ -226,30 +230,55 @@ function SelectorScreen({ onSelect, onOpenWorker }: {
       </div>
 
       {processes.length > 0 && (
-        <div className="flex items-center gap-2 border-t border-sidebar-border px-3 py-2 text-xs text-sidebar-foreground/70">
-          {processes.map((p) => (
-            <div key={p.pid} className="flex items-center gap-1.5 rounded-md bg-sidebar-accent/50 px-2 py-1">
-              {p.status === "running" ? (
-                <span className="size-1.5 rounded-full bg-emerald-500 shrink-0" />
-              ) : (
-                <span className="size-1.5 rounded-full bg-muted-foreground/50 shrink-0" />
-              )}
-              <span className="font-medium">{p.label}</span>
-              <span className="text-[10px]">PID {p.pid}</span>
-              <span className="text-[10px]">{formatUptime(p.startTime)}</span>
-              {p.status !== "running" && (
-                <span className="text-[10px] text-muted-foreground">({p.status})</span>
-              )}
-              <button
-                onClick={() => void killProcess(p.pid)}
-                className="ml-0.5 flex size-3.5 items-center justify-center rounded-sm text-sidebar-foreground/50 hover:text-destructive"
+        <div className="border-t border-sidebar-border">
+          <div className="flex gap-2 overflow-x-auto px-3 py-2">
+            {processes.map((p) => (
+              <div
+                key={p.pid}
+                role="button"
+                tabIndex={0}
+                onClick={() => setOutputPid(p.pid)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") setOutputPid(p.pid)
+                }}
+                className="flex w-40 shrink-0 flex-col gap-1 rounded-md border border-sidebar-border bg-sidebar-accent/50 px-2.5 py-1.5 text-left transition-colors hover:bg-sidebar-accent cursor-pointer"
+                title={t("panel.processes.viewOutput")}
               >
-                <Trash2 className="size-3" />
-              </button>
-            </div>
-          ))}
+                <div className="flex items-center gap-1.5">
+                  {p.status === "running" ? (
+                    <span className="size-1.5 shrink-0 rounded-full bg-emerald-500" />
+                  ) : (
+                    <span className="size-1.5 shrink-0 rounded-full bg-muted-foreground/50" />
+                  )}
+                  <span className="min-w-0 flex-1 truncate text-xs font-medium text-sidebar-foreground">{p.label}</span>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      void killProcess(p.pid)
+                    }}
+                    title={t("panel.processes.kill")}
+                    className="flex size-4 shrink-0 items-center justify-center rounded-sm text-sidebar-foreground/50 hover:text-destructive"
+                  >
+                    <Trash2 className="size-3" />
+                  </button>
+                </div>
+                <div className="flex flex-wrap items-center gap-x-1 text-[10px] text-sidebar-foreground/60">
+                  <span>PID {p.pid}</span>
+                  <span>·</span>
+                  <span>{formatUptime(p.startTime)}</span>
+                  {p.status !== "running" && (
+                    <>
+                      <span>·</span>
+                      <span>{t(`panel.processes.status.${p.status}`)}</span>
+                    </>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       )}
+      <ProcessOutputDialog process={outputProcess} onOpenChange={(open) => !open && setOutputPid(null)} />
     </div>
   )
 }

@@ -467,6 +467,16 @@
       "title": "What do you want to open?",
       "workersTitle": "Active conversation's workers"
     },
+    "processes": {
+      "viewOutput": "View output",
+      "kill": "Kill process",
+      "outputEmpty": "No output captured yet.",
+      "status": {
+        "running": "Running",
+        "exited": "Exited",
+        "killed": "Killed"
+      }
+    },
     "tabs": {
       "chat": { "label": "Chat", "description": "Chat with the AI about anything" },
       "terminal": { "label": "Terminal", "description": "Run commands and scripts" },

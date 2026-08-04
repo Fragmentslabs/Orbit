@@ -10,7 +10,7 @@ import { listCredentialProviders, removeCredential, setCredential } from './lib/
 import { getCatalog, ensureCustomProvidersSeeded } from './lib/catalog'
 import { addCustomProvider, listCustomProviders, removeCustomProvider, updateCustomProvider } from './lib/custom-providers'
 import { detectLocal } from './lib/detect-local'
-import { killAll as killAllProcesses, listProcesses, killProcess } from './lib/process-manager'
+import { killAll as killAllProcesses, listProcesses, killProcess, getProcessOutput } from './lib/process-manager'
 import { getModelsSnapshot, invalidateModelsSnapshot } from './lib/models'
 import { revert as revertSession, unrevert as unrevertSession } from './lib/session/revert'
 import { getInitStatus, runProjectInit, type RunInitInput } from './lib/project-init'
@@ -795,6 +795,7 @@ app.whenReady().then(() => {
   // Processos em background
   ipcMain.handle('process:list', () => listProcesses())
   ipcMain.handle('process:kill', (_event, pid: number) => killProcess(pid))
+  ipcMain.handle('process:output', (_event, pid: number) => getProcessOutput(pid))
 
   app.on('before-quit', () => killAllProcesses())
 
