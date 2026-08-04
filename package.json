@@ -1,27 +1,27 @@
-{
-  "name": "orbit-monorepo",
-  "private": true,
-  "version": "0.1.0",
-  "workspaces": [
-    "packages/*",
-    "apps/*"
-  ],
-  "devDependencies": {
-    "@types/react": "^18.3.31"
-  },
-  "optionalDependencies": {
-    "@tailwindcss/oxide-linux-x64-gnu": "4.3.2",
-    "lightningcss-linux-x64-gnu": "1.30.1"
-  },
-  "overrides": {
-    "lightningcss": "1.30.1"
-  },
-  "scripts": {
-    "desktop:dev": "npm run dev --workspace=@orbit/desktop",
-    "desktop:build": "npm run build --workspace=@orbit/desktop",
-    "mobile:dev": "npm run start --workspace=@orbit/mobile",
-    "mobile:web": "npm run web --workspace=@orbit/mobile",
-    "typecheck": "npm run typecheck --workspaces --if-present",
-    "lint": "npm run lint --workspaces --if-present"
-  }
+﻿{
+    "name":  "orbit-monorepo",
+    "private":  true,
+    "version":  "0.1.0",
+    "workspaces":  [
+                       "packages/*",
+                       "apps/*"
+                   ],
+    "devDependencies":  {
+                            "@types/react":  "^18.3.31"
+                        },
+    "optionalDependencies":  {
+                                 "@tailwindcss/oxide-linux-x64-gnu":  "4.3.3",
+                                 "lightningcss-linux-x64-gnu":  "1.30.1"
+                             },
+    "scripts":  {
+                    "desktop:dev":  "npm run dev --workspace=@orbit/desktop",
+                    "desktop:build":  "npm run build --workspace=@orbit/desktop",
+                    "mobile:dev":  "npm run start --workspace=@orbit/mobile",
+                    "mobile:web":  "npm run web --workspace=@orbit/mobile",
+                    "typecheck":  "npm run typecheck --workspaces --if-present",
+                    "lint":  "npm run lint --workspaces --if-present"
+                },
+    "dependencies":  {
+                         "getenv":  "^2.0.0"
+                     }
 }

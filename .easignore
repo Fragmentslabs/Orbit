@@ -1,0 +1,11 @@
+# EAS archive exclusions (monorepo root)
+# only the Android app + workspace packages are needed to build the mobile APK
+
+apps/desktop
+docs
+.claude
+.tmp*
+release
+*.log
+bf2*
+app.json
