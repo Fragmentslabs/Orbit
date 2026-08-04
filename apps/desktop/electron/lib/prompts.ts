@@ -1,6 +1,7 @@
 import type { SendMessageInput } from '@shared/chat'
 import type { Memory } from '@shared/memory'
 import { loadPromptContext } from './memory/service'
+import { buildPastChatsContext, detectPastChatsIntent } from './past-chats'
 import { loadSkills } from './skills'
 import { listMcpToolDescriptions } from './mcp'
 
@@ -354,6 +355,13 @@ export async function buildSystemPrompt(input: SendMessageInput): Promise<string
     parts.push(
       'The message contains @memoria: the user EXPLICITLY ORDERED you to check memory. Run memory_search on the message topic BEFORE answering and use whatever you find.',
     )
+  }
+
+  // Conversas passadas: injeta snippets de chats anteriores só quando o usuário
+  // pergunta explicitamente sobre elas (intenção detectada) — nunca automaticamente
+  if (input.orchestrationRole !== 'worker' && detectPastChatsIntent(input.text)) {
+    const past = await buildPastChatsContext(input)
+    if (past) parts.push(past)
   }
 
   if (input.text.includes('@mcp:')) {
