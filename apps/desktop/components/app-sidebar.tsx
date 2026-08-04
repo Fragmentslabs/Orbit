@@ -17,6 +17,7 @@ import {
   Folder,
   FolderPlus,
   GitFork,
+  Loader2,
   LogOut,
   MessageSquare,
   Monitor,
@@ -528,6 +529,28 @@ function MoveToFolderDialog({ open, onOpenChange, session }: {
   )
 }
 
+/** Chave do localStorage que guarda quais pastas ficam abertas (id → aberta). */
+const FOLDER_EXPANDED_KEY = "orbit.sidebar.folder-expanded"
+
+function loadExpandedFolders(): Record<string, boolean> {
+  try {
+    const raw = localStorage.getItem(FOLDER_EXPANDED_KEY)
+    return raw ? (JSON.parse(raw) as Record<string, boolean>) : {}
+  } catch {
+    return {}
+  }
+}
+
+function persistExpandedFolder(id: string, expanded: boolean) {
+  try {
+    const map = loadExpandedFolders()
+    map[id] = expanded
+    localStorage.setItem(FOLDER_EXPANDED_KEY, JSON.stringify(map))
+  } catch {
+    // localStorage indisponível — ignora silenciosamente
+  }
+}
+
 function SessionRow({ session, button: ButtonComponent, buttonClassName, actionButtonClassName, icon: Icon = MessageSquare, statusDot, trailing }: {
   session: SessionInfo
   button: React.ElementType
@@ -638,17 +661,18 @@ function SessionRow({ session, button: ButtonComponent, buttonClassName, actionB
             >
               {isSelected && <Check className="size-3 text-primary" />}
             </button>
-          ) : unreadCounts[session.id] > 0 && activeId !== session.id && statusDot !== "submitted" && statusDot !== "streaming" ? (
-            <span className="size-2 shrink-0 rounded-full bg-primary" />
-          ) : (
+) : (
             <Icon className="size-4 shrink-0" />
           )}
           <span className="truncate">{session.title}</span>
           {(statusDot === "submitted" || statusDot === "streaming") && (
-            <span className="size-1.5 shrink-0 animate-pulse rounded-full bg-emerald-500" />
+            <Loader2 className="size-3 shrink-0 animate-spin text-primary" />
           )}
           {statusDot === "error" && (
             <span className="size-1.5 shrink-0 rounded-full bg-destructive" />
+          )}
+          {!statusDot && unreadCounts[session.id] > 0 && activeId !== session.id && (
+            <span className="size-2 shrink-0 rounded-full bg-primary" />
           )}
           {trailing}
         </div>
@@ -744,6 +768,7 @@ function SessionRowWithChildren({ session, childSessions, hasChildren }: {
         button={SidebarMenuSubButton}
         actionButtonClassName="top-1"
         session={session}
+        statusDot={statusMap[session.id]}
         trailing={
           hasChildren ? (
             <span
@@ -785,7 +810,7 @@ function FolderItem({ folder, sessions, childrenByParent = {} }: {
   childrenByParent?: Record<string, SessionInfo[]>
 }) {
   const { t } = useTranslation()
-  const [expanded, setExpanded] = useState(true)
+  const [expanded, setExpanded] = useState(() => loadExpandedFolders()[folder.id] ?? false)
   const { mode, setFolders } = useWorkspace()
   const renameFolder = useSessionStore((s) => s.renameFolder)
   const toggleFolderPin = useSessionStore((s) => s.toggleFolderPin)
@@ -801,8 +826,12 @@ function FolderItem({ folder, sessions, childrenByParent = {} }: {
     if (selectionMode) {
       e.stopPropagation()
       toggleFolder(folder.id)
-    } else {
-      setExpanded((prev) => !prev)
+} else {
+      setExpanded((prev) => {
+        const next = !prev
+        persistExpandedFolder(folder.id, next)
+        return next
+      })
     }
   }
 
