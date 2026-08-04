@@ -490,6 +490,7 @@
  "stopped": "Stopped after reaching the step limit — it may be incomplete. Ask it to continue.",
  "copy": "Copy",
  "revert": "Revert to here",
+ "responseDuration": "Response time",
  "planTitle": "Plan",
  "orchestrationTitle": "Orchestration",
  "implementPlan": "Implement plan",

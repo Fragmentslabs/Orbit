@@ -177,7 +177,10 @@ export interface ChatMessage {
   id: string
   role: "user" | "assistant"
   parts: MessagePart[]
+  /** Quando a mensagem foi criada — para o assistant, é o início do turno (antes do modelo responder). */
   createdAt: number
+  /** Quando o assistant terminou de responder (stream concluído, erro ou abort). Ausente enquanto ainda está gerando. */
+  completedAt?: number
   providerId?: string
   modelId?: string
   error?: string

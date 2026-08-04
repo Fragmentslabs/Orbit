@@ -1,5 +1,6 @@
 import { View, Text, Pressable } from 'react-native'
 import { Copy, RotateCcw, Clock, CheckCircle } from 'lucide-react-native'
+import { useTranslation } from 'react-i18next'
 import type { ChatMessage } from '@orbit/shared'
 import { getThemeTokens } from '~/lib/theme-tokens'
 import { useThemeStore } from '~/stores/theme-store'
@@ -11,9 +12,20 @@ interface MessageActionsProps {
   onRevert?: () => void
 }
 
-function formatTime(ts: number): string {
+function formatTime(ts: number, locale: string): string {
   const d = new Date(ts)
-  return d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+  return d.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' })
+}
+
+function formatDuration(ms: number): string {
+  const totalSeconds = Math.max(0, Math.round(ms / 1000))
+  if (totalSeconds < 60) return `${totalSeconds}s`
+  const totalMinutes = Math.floor(totalSeconds / 60)
+  const seconds = totalSeconds % 60
+  if (totalMinutes < 60) return `${totalMinutes}m ${String(seconds).padStart(2, '0')}s`
+  const hours = Math.floor(totalMinutes / 60)
+  const minutes = totalMinutes % 60
+  return `${hours}h ${String(minutes).padStart(2, '0')}m`
 }
 
 function formatTokens(n: number): string {
@@ -28,6 +40,7 @@ function formatCost(cost: number): string {
 }
 
 export function MessageActions({ message, onCopy, onRevert }: MessageActionsProps) {
+  const { i18n } = useTranslation()
   const tokens = getThemeTokens(useThemeStore((s) => s.resolved))
   const [copied, setCopied] = useState(false)
 
@@ -78,8 +91,14 @@ export function MessageActions({ message, onCopy, onRevert }: MessageActionsProp
       )}
 
       <Text style={{ fontSize: 10, fontFamily: 'monospace', color: tokens.mutedForeground }}>
-        {formatTime(message.createdAt)}
+        {formatTime(message.completedAt ?? message.createdAt, i18n.language)}
       </Text>
+
+      {message.completedAt && (
+        <Text style={{ fontSize: 10, fontFamily: 'monospace', color: tokens.mutedForeground }}>
+          · {formatDuration(message.completedAt - message.createdAt)}
+        </Text>
+      )}
 
       {message.tokens && (
         <Text style={{ fontSize: 10, fontFamily: 'monospace', color: tokens.mutedForeground }}>

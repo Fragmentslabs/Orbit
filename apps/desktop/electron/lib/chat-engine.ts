@@ -768,6 +768,7 @@ export async function runChat(win: BrowserWindow, input: SendMessageInput): Prom
         part.state = 'done'
       }
     }
+    assistantMessage.completedAt = Date.now()
     // Persiste a mensagem primeiro para que o usuário a veja o quanto antes
     await saveMessages(sessionId, history)
     // Captura snapshot final (git diff) e salva de novo se houver mudanças
@@ -794,6 +795,7 @@ export async function runChat(win: BrowserWindow, input: SendMessageInput): Prom
         part.state = 'done'
       }
     }
+    assistantMessage.completedAt = Date.now()
     await saveMessages(sessionId, history)
     emit(win, { type: 'message', sessionId, message: assistantMessage })
     emit(win, {
