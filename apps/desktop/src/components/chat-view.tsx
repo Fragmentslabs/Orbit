@@ -143,7 +143,7 @@ function ChatMessages({ messages, isBusy, mode, sessionId, sendMessage, planIds,
     () =>
       messages
         .filter((m) => m.role === "user")
-        .map((m) => ({ id: m.id, text: visibleMessageText(m) })),
+        .map((m) => ({ id: m.id, text: visibleMessageText(m), time: m.createdAt })),
     [messages],
   )
 
