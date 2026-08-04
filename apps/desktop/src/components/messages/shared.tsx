@@ -17,6 +17,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { cn } from "@/lib/utils"
 import type { AgentPart, ChatMessage, ReasoningPart, ToolPart } from "@shared/chat"
 import { hostnameOf, messageText, visibleMessageText } from "@/src/lib/message-utils"
+import { formatDuration } from "@/src/lib/format"
 import { useSessionStore } from "@/src/stores/session-store"
 import { Actions, Action } from "@/src/components/ai/actions"
 import {
@@ -239,6 +240,19 @@ export function MessageTimestamp({ timestamp }: { timestamp: number }) {
   )
 }
 
+/** Tempo entre o início e a conclusão da resposta do assistant (createdAt → completedAt). */
+export function MessageDuration({ startedAt, completedAt }: { startedAt: number; completedAt: number }) {
+  const { t } = useTranslation()
+  return (
+    <span
+      className="select-none px-1 text-[11px] tabular-nums text-muted-foreground/70"
+      title={t("chat.responseDuration")}
+    >
+      {formatDuration(completedAt - startedAt)}
+    </span>
+  )
+}
+
 export function CopyAction({ text }: { text: string }) {
   const { t } = useTranslation()
   const [copied, setCopied] = useState(false)
@@ -284,7 +298,8 @@ export function AssistantMessageActions({ message, sessionId }: {
           <Undo2Icon className="size-3.5" />
         </Action>
       )}
-      <MessageTimestamp timestamp={message.createdAt} />
+      <MessageTimestamp timestamp={message.completedAt ?? message.createdAt} />
+      {message.completedAt && <MessageDuration startedAt={message.createdAt} completedAt={message.completedAt} />}
       {message.tokens && <MessageUsage tokens={message.tokens} />}
     </Actions>
   )

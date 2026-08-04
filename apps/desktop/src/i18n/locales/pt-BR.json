@@ -490,6 +490,7 @@
  "stopped": "Parou por atingir o limite de passos — pode ter ficado incompleto. Peça para continuar.",
  "copy": "Copiar",
  "revert": "Reverter até aqui",
+ "responseDuration": "Tempo de resposta",
  "planTitle": "Plano",
  "orchestrationTitle": "Orquestração",
  "implementPlan": "Implementar plano",
