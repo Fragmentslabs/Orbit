@@ -90,7 +90,7 @@ const s = StyleSheet.create({
   scannedBadge: { position: 'absolute', bottom: 32, borderRadius: 9999, backgroundColor: 'rgba(0,0,0,0.6)', paddingHorizontal: 16, paddingVertical: 8 },
   scannedText: { fontSize: 14, color: '#fff' },
 
-  rescanOverlay: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(0,0,0,0.3)' },
+  rescanOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(0,0,0,0.3)' },
   rescanBtn: { borderRadius: 9999, paddingHorizontal: 24, paddingVertical: 12 },
   rescanText: { fontWeight: '500' },
 })
