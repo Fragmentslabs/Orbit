@@ -83,8 +83,20 @@ export function ManagedTerminalTab({ ptyId }: ManagedTerminalTabProps) {
       window.ipcRenderer.invoke("terminal:resize", pid, cols, rows).catch(console.error)
     })
 
+    // Ctrl+Shift+C: copia a seleção (o Ctrl+C comum é capturado pelo menu
+    // nativo do Electron e nunca chega aqui). Retorna false para não enviar
+    // o atalho ao shell.
+    term.attachCustomKeyEventHandler((event) => {
+      if (event.type === "keydown" && event.ctrlKey && event.shiftKey && event.code === "KeyC") {
+        const selection = term.getSelection()
+        if (selection) void navigator.clipboard.writeText(selection).catch(() => undefined)
+        return false
+      }
+      return true
+    })
+
     const fit = () => {
-      try { fitAddon.fit() } catch { }
+      try { fitAddon.fit() } catch { return }
     }
 
     requestAnimationFrame(() => {
