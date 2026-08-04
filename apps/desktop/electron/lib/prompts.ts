@@ -340,10 +340,12 @@ export async function buildSystemPrompt(input: SendMessageInput): Promise<string
 
   parts.push(...(await buildSkillsBlock(input)))
 
-  // Servidores MCP disponíveis
-  const mcpBlock = listMcpToolDescriptions()
-  if (mcpBlock) {
-    parts.push(`AVAILABLE MCP TOOLS. Connected MCP servers and their tools (use the <server>_ prefix to call them):\n${mcpBlock}`)
+  // Servidores MCP disponíveis (só no modo código — no chat as tools MCP não existem)
+  if (input.mode === 'code') {
+    const mcpBlock = listMcpToolDescriptions()
+    if (mcpBlock) {
+      parts.push(`AVAILABLE MCP TOOLS. Connected MCP servers and their tools (use the <server>_ prefix to call them):\n${mcpBlock}`)
+    }
   }
 
   // Contexto automático: injeta memórias no prompt

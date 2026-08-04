@@ -42,14 +42,10 @@ export function buildToolSet(input: SendMessageInput, ctx: ToolContext | null): 
   const allowQuestion =
     input.orchestrationRole !== 'worker' || (input.options.permissionMode ?? 'ask') !== 'full'
 
-  // Tools de servidores MCP configurados: disponíveis em ambos os modos
-  Object.assign(tools, getMcpTools())
-
-  // Propor skills vale nos dois modos (fluxo /create-skill inicia em chat);
-  // workers não criam skills
-  if (input.orchestrationRole !== 'worker') tools.create_skill = createSkillTool()
-
   if (input.mode === 'chat') {
+    // Modo chat: SEM tools MCP — um chat básico não deve ter nenhuma tool.
+    // As tools só aparecem quando um toggle está ativo, e cada toggle expõe
+    // apenas as suas próprias (nunca servidores MCP externos).
     if (input.options.research) {
       tools.websearch = createWebSearchTool()
       tools.webfetch = createWebFetchTool()
@@ -59,12 +55,18 @@ export function buildToolSet(input: SendMessageInput, ctx: ToolContext | null): 
       tools.browser_links = createBrowserLinksTool(input.sessionId)
     }
     if (allowBrain) Object.assign(tools, createChatMemoryTools(input))
-    if (allowQuestion) tools.question = createQuestionTool(input, ctx?.abort)
     if (allowDelegation) tools.subagent = createSubagentTool(input, ctx)
+    // Fluxo explícito /create-skill: habilita só a tool de propor skill
+    if (input.orchestrationRole !== 'worker' && input.text.trimStart().startsWith('/create-skill')) {
+      tools.create_skill = createSkillTool()
+    }
     return tools
   }
 
-  // Modo código: web somente com o toggle de pesquisa; escrita/shell bloqueados no plano
+  // Modo código: MCP disponível (servidores configurados) + skill flow
+  Object.assign(tools, getMcpTools())
+  if (input.orchestrationRole !== 'worker') tools.create_skill = createSkillTool()
+
   if (input.options.research) {
     tools.websearch = createWebSearchTool()
     tools.webfetch = createWebFetchTool()
