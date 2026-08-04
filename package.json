@@ -9,6 +9,13 @@
   "devDependencies": {
     "@types/react": "^18.3.31"
   },
+  "optionalDependencies": {
+    "@tailwindcss/oxide-linux-x64-gnu": "4.3.2",
+    "lightningcss-linux-x64-gnu": "1.30.1"
+  },
+  "overrides": {
+    "lightningcss": "1.30.1"
+  },
   "scripts": {
     "desktop:dev": "npm run dev --workspace=@orbit/desktop",
     "desktop:build": "npm run build --workspace=@orbit/desktop",
