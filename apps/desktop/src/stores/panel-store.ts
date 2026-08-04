@@ -33,7 +33,7 @@ export interface ActivityEntry {
 }
 
 export type PanelEvent =
-  | { type: "open"; url?: string }
+  | { type: "open"; url?: string; sessionId: string }
   | { type: "resize"; width: number | null; height: number | null; label: string }
   | { type: "fullscreen"; on: boolean }
   | { type: "activity"; label: string }
@@ -54,6 +54,8 @@ interface PanelState {
 
   browserRequestId: number
   browserUrl?: string
+  /** Sessão de chat que originou o pedido de abrir o browser do painel. */
+  browserRequestSessionId?: string
   selectMode: boolean
   setSelectMode: (value: boolean) => void
   selections: BrowserSelection[]
@@ -149,6 +151,7 @@ export const usePanelStore = create<PanelState>((set, get) => {
 
     browserRequestId: 0,
     browserUrl: undefined,
+    browserRequestSessionId: undefined,
     selectMode: false,
     setSelectMode: (value) => set({ selectMode: value }),
     selections: [],
@@ -183,10 +186,13 @@ export const usePanelStore = create<PanelState>((set, get) => {
       switch (event.type) {
         case "open":
           markActive()
+          // Não força rightPanelOpen aqui: quem decide se abre a UI é o
+          // RightPanel, que sabe se essa sessão é a que está ativa agora —
+          // senão o painel "vaza" pra qualquer chat que o usuário abrir depois.
           set((state) => ({
-            rightPanelOpen: true,
             browserRequestId: state.browserRequestId + 1,
             browserUrl: event.url ?? state.browserUrl,
+            browserRequestSessionId: event.sessionId,
           }))
           break
         case "resize":

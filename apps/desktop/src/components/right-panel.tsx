@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { useDroppable, useDndContext } from "@dnd-kit/core"
 import { FileCode, Globe, Folder, MessageSquare, Terminal, X, PlusIcon, Bot, LoaderIcon, XCircleIcon, Trash2, GripVertical } from "lucide-react"
@@ -371,17 +371,31 @@ export function RightPanel() {
     )
   }, [activeSessionId, tabs, activeTabId])
 
-  // Agente pediu o browser (tools panel_*): garante/ativa a aba Browser
+  // Agente pediu o browser (tools panel_*): garante/ativa a aba Browser — só
+  // na sessão que pediu, e só nesse pedido específico (não a cada troca de
+  // chat: sem o guard de "já tratado", browserRequestId!==0 permaneceria
+  // verdadeiro pra sempre e reabriria a aba em qualquer sessão visitada depois).
   const browserRequestId = usePanelStore((s) => s.browserRequestId)
+  const browserRequestSessionId = usePanelStore((s) => s.browserRequestSessionId)
+  const lastHandledBrowserRequestId = useRef(0)
   useEffect(() => {
-    if (browserRequestId === 0 || !activeSessionId) return
+    if (browserRequestId === 0 || browserRequestId === lastHandledBrowserRequestId.current) return
+    lastHandledBrowserRequestId.current = browserRequestId
+    if (!browserRequestSessionId) return
+
     const id = "browser-agent"
-    const exists = tabs.some((t) => t.id === id)
-    if (!exists) {
-      addTabToStore(activeSessionId, { id, type: "browser", title: "Browser" })
+    const sessionTabs = usePanelStore.getState().tabsBySession[browserRequestSessionId] ?? []
+    if (!sessionTabs.some((t) => t.id === id)) {
+      addTabToStore(browserRequestSessionId, { id, type: "browser", title: "Browser" })
     }
-    setActiveTabInStore(activeSessionId, id)
-  }, [browserRequestId, activeSessionId])
+    setActiveTabInStore(browserRequestSessionId, id)
+
+    // Só traz o painel pra frente se o usuário já está olhando essa sessão —
+    // sessões em background (workers, outros chats) não devem roubar o foco.
+    if (browserRequestSessionId === activeSessionId) {
+      usePanelStore.getState().setRightPanelOpen(true)
+    }
+  }, [browserRequestId, browserRequestSessionId, activeSessionId, addTabToStore, setActiveTabInStore])
 
   // "Enviar para chat lateral" vindo do input: abre aba de chat
   const pendingChatTab = usePanelStore((s) => s.pendingChatTab)

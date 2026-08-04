@@ -25,7 +25,7 @@ function getWc(): WebContents | null {
 }
 
 export type PanelEvent =
-  | { type: 'open'; url?: string }
+  | { type: 'open'; url?: string; sessionId: string }
   | { type: 'resize'; width: number | null; height: number | null; label: string }
   | { type: 'fullscreen'; on: boolean }
   | { type: 'activity'; label: string }
@@ -45,11 +45,15 @@ function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
-/** Garante o webview montado (abre o painel se preciso) e retorna o WebContents. */
-export async function ensurePanelBrowser(url?: string): Promise<WebContents> {
+/**
+ * Garante o webview montado (abre o painel se preciso) e retorna o WebContents.
+ * `sessionId` identifica de qual chat veio o pedido — a UI usa isso pra abrir a
+ * aba Browser só naquela sessão, sem vazar pra outros chats abertos depois.
+ */
+export async function ensurePanelBrowser(sessionId: string, url?: string): Promise<WebContents> {
   const existing = getWc()
   if (existing) return existing
-  broadcastPanelEvent({ type: 'open', url })
+  broadcastPanelEvent({ type: 'open', url, sessionId })
   const deadline = Date.now() + REGISTER_TIMEOUT_MS
   while (Date.now() < deadline) {
     const wc = getWc()
@@ -67,11 +71,12 @@ async function waitForLoad(wc: WebContents): Promise<void> {
 
 /** Redimensiona o viewport do browser (responsividade). null = preenche o painel. */
 export async function panelResize(
+  sessionId: string,
   width: number | null,
   height: number | null,
   label: string,
 ): Promise<string> {
-  await ensurePanelBrowser()
+  await ensurePanelBrowser(sessionId)
   activity(`Redimensionando para ${label}`)
   broadcastPanelEvent({ type: 'resize', width, height, label })
   await delay(700) // deixa o layout refluir na nova largura
@@ -86,8 +91,8 @@ export async function panelFullscreen(on: boolean): Promise<void> {
   await delay(350)
 }
 
-export async function panelNavigate(url: string): Promise<{ title: string; url: string }> {
-  const wc = await ensurePanelBrowser(url)
+export async function panelNavigate(sessionId: string, url: string): Promise<{ title: string; url: string }> {
+  const wc = await ensurePanelBrowser(sessionId, url)
   activity(`Navegando para ${url}`)
   try {
     await Promise.race([wc.loadURL(url), delay(LOAD_TIMEOUT_MS)])
@@ -135,8 +140,8 @@ const READ_SCRIPT = `(() => {
   }
 })()`
 
-export async function panelRead(): Promise<string> {
-  const wc = await ensurePanelBrowser()
+export async function panelRead(sessionId: string): Promise<string> {
+  const wc = await ensurePanelBrowser(sessionId)
   activity('Lendo a página')
   const result = (await wc.executeJavaScript(READ_SCRIPT)) as {
     title: string
@@ -160,8 +165,8 @@ function findScript(ref?: number, selector?: string): string {
   return `document.querySelector(${JSON.stringify(selector ?? '')})`
 }
 
-export async function panelClick(ref?: number, selector?: string): Promise<string> {
-  const wc = await ensurePanelBrowser()
+export async function panelClick(sessionId: string, ref?: number, selector?: string): Promise<string> {
+  const wc = await ensurePanelBrowser(sessionId)
   activity(`Clicando em ${ref != null ? `ref ${ref}` : selector}`)
   const outcome = (await wc.executeJavaScript(`(() => {
     const el = ${findScript(ref, selector)}
@@ -176,12 +181,13 @@ export async function panelClick(ref?: number, selector?: string): Promise<strin
 }
 
 export async function panelType(
+  sessionId: string,
   text: string,
   ref?: number,
   selector?: string,
   pressEnter?: boolean,
 ): Promise<string> {
-  const wc = await ensurePanelBrowser()
+  const wc = await ensurePanelBrowser(sessionId)
   activity('Digitando…')
   const outcome = (await wc.executeJavaScript(`(() => {
     const el = ${findScript(ref, selector)}
@@ -211,8 +217,8 @@ export async function panelType(
  * Com fullscreen, entra em tela cheia para capturar a tela toda e volta à visão
  * lateral logo depois (o print sai maior e a UI retorna ao normal).
  */
-export async function panelScreenshot(fullscreen = false): Promise<Buffer> {
-  const wc = await ensurePanelBrowser()
+export async function panelScreenshot(sessionId: string, fullscreen = false): Promise<Buffer> {
+  const wc = await ensurePanelBrowser(sessionId)
   activity('Capturando a tela')
   const capture = async (maxWidth: number) => {
     const image = await wc.capturePage()
