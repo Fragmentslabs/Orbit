@@ -35,8 +35,11 @@ export default defineConfig({
               // bundle, esse caminho relativo passa a apontar para dentro de
               // dist-electron/, onde o worker não existe. Externalizar deixa
               // o require apontar pro node_modules real, preservando os
-              // caminhos relativos entre os arquivos do pacote.
-              external: ['node-pty', 'pdf-parse'],
+              // caminhos relativos entre os arquivos do pacote. O
+              // @napi-rs/canvas também é externalizado: é um módulo nativo
+              // (.node), impossível de bundlar, e é usado para polyfill do
+              // DOMMatrix exigido pelo pdfjs-dist.
+              external: ['node-pty', 'pdf-parse', '@napi-rs/canvas'],
             },
           },
         },
