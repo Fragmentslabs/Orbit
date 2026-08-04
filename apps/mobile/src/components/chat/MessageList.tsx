@@ -22,7 +22,9 @@ export interface MessageListHandle {
 export const MessageList = forwardRef<MessageListHandle, MessageListProps>(function MessageList({ messages, isStreaming, onRevert, ListFooterComponent }, ref) {
   const listRef = useRef<FlatList<ChatMessage>>(null)
   const [isAtBottom, setIsAtBottom] = useState(true)
-  const isUserScrolling = useRef(false)
+  // `pinnedRef` é a fonte de verdade para "ancorado no rodapé" (sem re-render):
+  // guia o autoscroll pelo crescimento real do conteúdo durante o streaming.
+  const pinnedRef = useRef(true)
   const tokens = getThemeTokens(useThemeStore((s) => s.resolved))
 
   useEffect(() => {
@@ -35,15 +37,14 @@ export const MessageList = forwardRef<MessageListHandle, MessageListProps>(funct
     const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent
     const atBottom = contentOffset.y + layoutMeasurement.height >= contentSize.height - 60
     setIsAtBottom(atBottom)
-    if (atBottom) {
-      isUserScrolling.current = false
-    }
+    // Subir acima do limite desancora; chegar no fundo re-ancora.
+    pinnedRef.current = atBottom
   }, [])
 
   const scrollToBottom = useCallback(() => {
     listRef.current?.scrollToEnd({ animated: true })
     setIsAtBottom(true)
-    isUserScrolling.current = false
+    pinnedRef.current = true
   }, [])
 
   // Auto-scroll quando o teclado abre (mantém últimas mensagens visíveis)
@@ -96,9 +97,13 @@ export const MessageList = forwardRef<MessageListHandle, MessageListProps>(funct
         contentContainerStyle={{ paddingVertical: 8, paddingHorizontal: 16 }}
         onScroll={handleScroll}
         scrollEventThrottle={100}
-        onContentSizeChange={() => {
-          if (isAtBottom) {
-            listRef.current?.scrollToEnd({ animated: false })
+        onContentSizeChange={(_width, height) => {
+          // Usa a altura medida do conteúdo (== offset do rodapé) em vez de
+          // scrollToEnd, que adivinha a posição e "pula" errado no streaming.
+          if (pinnedRef.current) {
+            requestAnimationFrame(() => {
+              listRef.current?.scrollToOffset({ offset: height, animated: false })
+            })
           }
         }}
         onScrollToIndexFailed={(info) => {
