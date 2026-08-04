@@ -43,7 +43,7 @@ export function createPanelBrowserTools(ctx: ToolContext): ToolSet {
         url: z.string().describe('Full URL (http/https)'),
       }),
       execute: async ({ url }) => {
-        const result = await panelNavigate(url)
+        const result = await panelNavigate(ctx.sessionId, url)
         return `Carregado: ${result.title || '(sem título)'} — ${result.url}. Use panel_read para ver o conteúdo ou panel_screenshot para ver a tela.`
       },
     }),
@@ -51,7 +51,7 @@ export function createPanelBrowserTools(ctx: ToolContext): ToolSet {
       description:
         'Reads the page open in the panel browser: title, URL, visible text, and interactive elements with numbered refs for panel_click/panel_type.',
       inputSchema: z.object({}),
-      execute: async () => panelRead(),
+      execute: async () => panelRead(ctx.sessionId),
     }),
     panel_click: tool({
       description:
@@ -62,7 +62,7 @@ export function createPanelBrowserTools(ctx: ToolContext): ToolSet {
       }),
       execute: async ({ ref, selector }) => {
         if (ref == null && !selector) return 'Informe ref ou selector.'
-        return panelClick(ref, selector)
+        return panelClick(ctx.sessionId, ref, selector)
       },
     }),
     panel_type: tool({
@@ -76,7 +76,7 @@ export function createPanelBrowserTools(ctx: ToolContext): ToolSet {
       }),
       execute: async ({ text, ref, selector, pressEnter }) => {
         if (ref == null && !selector) return 'Informe ref ou selector.'
-        return panelType(text, ref, selector, pressEnter)
+        return panelType(ctx.sessionId, text, ref, selector, pressEnter)
       },
     }),
     panel_resize: tool({
@@ -88,9 +88,9 @@ export function createPanelBrowserTools(ctx: ToolContext): ToolSet {
         height: z.number().int().min(400).max(2160).optional().describe('Custom height in px'),
       }),
       execute: async ({ preset, width, height }) => {
-        if (width && height) return panelResize(width, height, `${width}×${height}`)
+        if (width && height) return panelResize(ctx.sessionId, width, height, `${width}×${height}`)
         const chosen = VIEWPORT_PRESETS[preset ?? 'fit']
-        return panelResize(chosen.width, chosen.height, chosen.label)
+        return panelResize(ctx.sessionId, chosen.width, chosen.height, chosen.label)
       },
     }),
     panel_screenshot: tool({
@@ -107,7 +107,7 @@ export function createPanelBrowserTools(ctx: ToolContext): ToolSet {
           .describe('Captures full screen (bigger shot) and returns to the side view'),
       }) as any,
       execute: async ({ savePath, fullscreen }, { toolCallId }) => {
-        const webp = await panelScreenshot(fullscreen === true)
+        const webp = await panelScreenshot(ctx.sessionId, fullscreen === true)
         screenshotStash.set(toolCallId, webp.toString('base64'))
         let saved = ''
         if (savePath) {
@@ -153,7 +153,7 @@ export function createPanelBrowserTools(ctx: ToolContext): ToolSet {
         let buffer: Buffer
         let ext: string
         if (fromPanel) {
-          buffer = await panelScreenshot()
+          buffer = await panelScreenshot(ctx.sessionId)
           ext = 'webp'
         } else if (imagePath) {
           ext = path.extname(imagePath).slice(1).toLowerCase()
