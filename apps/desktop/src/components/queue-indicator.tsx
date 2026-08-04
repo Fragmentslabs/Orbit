@@ -1,5 +1,5 @@
 import { useState } from "react"
-import { CalendarIcon, ChevronDownIcon, ListPlus } from "lucide-react"
+import { CalendarIcon, ChevronDownIcon, ListPlus, X } from "lucide-react"
 import {
   Collapsible,
   CollapsibleContent,
@@ -28,6 +28,7 @@ function formatSchedule(ts: number): string {
 export function QueueIndicator({ sessionId }: QueueIndicatorProps) {
   const [open, setOpen] = useState(false)
   const queues = useMessageQueueStore((s) => s.queues)
+  const remove = useMessageQueueStore((s) => s.remove)
   if (!sessionId) return null
   const items = queues[sessionId]
   if (!items || items.length === 0) return null
@@ -57,18 +58,30 @@ export function QueueIndicator({ sessionId }: QueueIndicatorProps) {
           {items.map((msg) => (
             <div
               key={msg.id}
-              className="flex items-center gap-2 rounded-md px-3 py-1.5 text-xs hover:bg-muted/50"
+              className="group/item flex items-center justify-between gap-2 rounded-md px-3 py-1.5 text-xs hover:bg-muted/50"
             >
-              {msg.scheduledAt ? (
-                <CalendarIcon className="size-3.5 shrink-0 text-muted-foreground" />
-              ) : (
-                <ListPlus className="size-3.5 shrink-0 text-muted-foreground" />
-              )}
-              <span className="line-clamp-1 flex-1 text-muted-foreground">
-                {msg.text}
+              <span className="flex min-w-0 flex-1 items-center gap-2">
+                {msg.scheduledAt ? (
+                  <CalendarIcon className="size-3.5 shrink-0 text-muted-foreground" />
+                ) : (
+                  <ListPlus className="size-3.5 shrink-0 text-muted-foreground" />
+                )}
+                <span className="line-clamp-1 text-muted-foreground">
+                  {msg.text}
+                </span>
               </span>
-              <span className="shrink-0 text-[10px] text-muted-foreground/60">
-                {msg.scheduledAt ? formatSchedule(msg.scheduledAt) : "Fila"}
+              <span className="flex shrink-0 items-center gap-1">
+                <span className="text-[10px] text-muted-foreground/60">
+                  {msg.scheduledAt ? formatSchedule(msg.scheduledAt) : "Fila"}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => remove(sessionId, msg.id)}
+                  title="Cancelar envio"
+                  className="rounded p-0.5 text-muted-foreground/50 transition-colors hover:bg-destructive/10 hover:text-destructive"
+                >
+                  <X className="size-3.5" />
+                </button>
               </span>
             </div>
           ))}
