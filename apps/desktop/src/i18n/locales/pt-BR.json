@@ -467,6 +467,16 @@
       "title": "O que deseja abrir?",
       "workersTitle": "Workers da conversa ativa"
     },
+    "processes": {
+      "viewOutput": "Ver saída",
+      "kill": "Encerrar processo",
+      "outputEmpty": "Sem saída capturada ainda.",
+      "status": {
+        "running": "Em execução",
+        "exited": "Finalizado",
+        "killed": "Encerrado"
+      }
+    },
     "tabs": {
       "chat": { "label": "Chat", "description": "Converse com a IA sobre qualquer assunto" },
       "terminal": { "label": "Terminal", "description": "Execute comandos e scripts" },
