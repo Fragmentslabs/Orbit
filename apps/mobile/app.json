@@ -1,7 +1,7 @@
 {
   "expo": {
     "name": "Orbit",
-    "slug": "orbit",
+    "slug": "fragments-labs",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
@@ -25,7 +25,11 @@
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
       "predictiveBackGestureEnabled": false,
-      "package": "com.desknik.orbit"
+      "package": "com.fragmentslabs.orbit",
+      "permissions": [
+        "android.permission.CAMERA",
+        "android.permission.RECORD_AUDIO"
+      ]
     },
     "web": {
       "output": "static",
@@ -68,6 +72,13 @@
     ],
     "experiments": {
       "typedRoutes": true
-    }
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "ee306300-6011-446b-a46e-e85ea6604c38"
+      }
+    },
+    "owner": "fragmentslabs"
   }
 }

@@ -41,3 +41,6 @@ example
 # generated native folders
 /ios
 /android
+
+# backup do histórico aninhado (redundante com o monorepo)
+mobile-history.bundle
