@@ -524,7 +524,7 @@ export function ChatView({ sessionId }: { sessionId?: string } = {}) {
           {pendingAsks
             .filter((a) => !a.batchId)
             .map((ask) => (
-              <AskCard key={ask.requestId} ask={ask} />
+              <AskCard key={ask.requestId} ask={ask} sessionId={session?.id} />
             ))}
           {[...new Set(pendingAsks.map((a) => a.batchId).filter(Boolean))].map((batchId) => (
             <AskCardBatch

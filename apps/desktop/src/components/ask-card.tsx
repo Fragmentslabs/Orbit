@@ -132,7 +132,12 @@ function buildComparisonPrompt(questions: Question[], currentIndex: number): str
   ].join("\n")
 }
 
-function DiscussInPanelButton({ questions, currentIndex }: { questions: Question[]; currentIndex: number }) {
+function DiscussInPanelButton({ questions, currentIndex, parentSessionId }: {
+  questions: Question[]
+  currentIndex: number
+  /** Sessão que fez a pergunta (chat atual ou worker) — o sub-chat de discussão nasce aninhado nela. */
+  parentSessionId?: string
+}) {
   const openChatTabWithPendingInput = usePanelStore((s) => s.openChatTabWithPendingInput)
   const createSession = useSessionStore((s) => s.createSession)
   const { t } = useTranslation()
@@ -147,7 +152,9 @@ function DiscussInPanelButton({ questions, currentIndex }: { questions: Question
         setWorking(true)
         try {
           const title = t("ask.compareOptions")
-          const session = await createSession("chat", { setActive: false, title })
+          // parentId marca como sub-chat: some da sidebar (que só lista sessões
+          // raiz) e aparece só como worker/tab desta conversa no painel lateral.
+          const session = await createSession("chat", { setActive: false, title, parentId: parentSessionId })
           openChatTabWithPendingInput(session.id, title, buildComparisonPrompt(questions, currentIndex))
         } finally {
           setWorking(false)
@@ -160,10 +167,11 @@ function DiscussInPanelButton({ questions, currentIndex }: { questions: Question
   )
 }
 
-function QuestionBody({ ask, submitted, onReply }: {
+function QuestionBody({ ask, submitted, onReply, sessionId }: {
   ask: PendingAskUI
   submitted: boolean
   onReply: (value: unknown) => void
+  sessionId?: string
 }) {
   const { t } = useTranslation()
   const questions = ask.questions ?? []
@@ -233,7 +241,11 @@ function QuestionBody({ ask, submitted, onReply }: {
       </div>
       <div className="flex items-center justify-between gap-2">
         <div className="ml-6">
-          <DiscussInPanelButton questions={questions} currentIndex={currentIndex} />
+          <DiscussInPanelButton
+            questions={questions}
+            currentIndex={currentIndex}
+            parentSessionId={ask.origin?.workerSessionId ?? sessionId}
+          />
         </div>
         <div className="flex items-center gap-2">
           <Button
@@ -268,7 +280,7 @@ function QuestionBody({ ask, submitted, onReply }: {
   )
 }
 
-export function AskCard({ ask }: { ask: PendingAskUI }) {
+export function AskCard({ ask, sessionId }: { ask: PendingAskUI; sessionId?: string }) {
   const [submitted, setSubmitted] = useState(false)
   const reply = (value: unknown) => {
     setSubmitted(true)
@@ -280,7 +292,7 @@ export function AskCard({ ask }: { ask: PendingAskUI }) {
       {ask.kind === "permission" ? (
         <PermissionBody ask={ask} submitted={submitted} onReply={reply} />
       ) : (
-        <QuestionBody ask={ask} submitted={submitted} onReply={reply} />
+        <QuestionBody ask={ask} submitted={submitted} onReply={reply} sessionId={sessionId} />
       )}
     </div>
   )
