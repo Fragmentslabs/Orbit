@@ -32,7 +32,7 @@ export function DateSeparator({ timestamp }: { timestamp: number }) {
       : date.toLocaleDateString(i18n.language, { day: "2-digit", month: "2-digit", year: "numeric" })
 
   return (
-    <div className="sticky top-12 z-10 my-3 flex justify-center">
+    <div className="sticky top-8 z-10 my-3 flex justify-center">
       <span className="select-none rounded-full bg-muted px-3 py-1 text-[11px] font-medium text-muted-foreground shadow-sm">
         {label}
       </span>
