@@ -210,6 +210,8 @@ export interface CompanionStatus {
   httpRunning: boolean
   ip: string
   pin: string | null
+  /** Erro de bind do servidor WS (ex.: porta ocupada por outra instância). */
+  bindError: string | null
   connectedClients: { deviceName: string; connectedAt: number }[]
 }
 
