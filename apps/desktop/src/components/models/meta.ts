@@ -9,6 +9,15 @@ export const CAPABILITY_LABELS: Record<string, string> = {
   reasoning: "Reasoning",
 }
 
+/** Modalidades de entrada (models.dev/OpenRouter): text, image, audio, video, pdf */
+export const MODALITY_LABELS: Record<string, string> = {
+  text: "Text",
+  image: "Image",
+  audio: "Audio",
+  video: "Video",
+  pdf: "Document (PDF)",
+}
+
 export const PRICE_LABELS: Record<PriceTier, string> = {
   free: "Free",
   low: "Low Cost",

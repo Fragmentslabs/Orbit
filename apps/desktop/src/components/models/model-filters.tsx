@@ -14,7 +14,7 @@ import {
 import { cn } from "@/lib/utils"
 import type { OrbitModel } from "@shared/models"
 import { hasActiveFilters, useModelsStore, type ContextFilter } from "@/src/stores/models-store"
-import { availabilityLabel, CAPABILITY_LABELS, PRICE_LABELS, SPEED_LABELS } from "./meta"
+import { availabilityLabel, CAPABILITY_LABELS, MODALITY_LABELS, PRICE_LABELS, SPEED_LABELS } from "./meta"
 
 /** Linha de filtros da aba Models — dropdowns multi-seleção por dimensão. */
 
@@ -115,14 +115,16 @@ export function ModelFiltersRow({ models }: { models: OrbitModel[] }) {
   // (ex: Speed sem a chave da Artificial Analysis)
   const counts = useMemo(() => {
     const capability = new Map<string, number>()
+    const modality = new Map<string, number>()
     const price = new Map<string, number>()
     const speed = new Map<string, number>()
     for (const m of models) {
       for (const tag of m.tags) capability.set(tag, (capability.get(tag) ?? 0) + 1)
+      for (const mod of m.modalities) modality.set(mod, (modality.get(mod) ?? 0) + 1)
       price.set(m.priceTier, (price.get(m.priceTier) ?? 0) + 1)
       speed.set(m.speedTier, (speed.get(m.speedTier) ?? 0) + 1)
     }
-    return { capability, price, speed }
+    return { capability, modality, price, speed }
   }, [models])
 
   const toOptions = (labels: Record<string, string>, countMap: Map<string, number>, ns: string) =>
@@ -147,6 +149,12 @@ export function ModelFiltersRow({ models }: { models: OrbitModel[] }) {
         options={toOptions(CAPABILITY_LABELS, counts.capability, "capabilities")}
         values={filters.capabilities}
         onToggle={(v) => toggleFilter("capabilities", v)}
+      />
+      <MultiFilter
+        label={t("models.filters.modality")}
+        options={toOptions(MODALITY_LABELS, counts.modality, "modalities")}
+        values={filters.modalities}
+        onToggle={(v) => toggleFilter("modalities", v)}
       />
       <MultiFilter
         label={t("models.filters.price")}
