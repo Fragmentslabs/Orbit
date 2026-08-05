@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, useCallback, memo } from 'react'
+import { useEffect, useMemo, useState, useCallback, useRef, memo } from 'react'
 import { View, Text, Pressable, Animated, ScrollView, Alert, Dimensions } from 'react-native'
 import type { GestureResponderEvent } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
@@ -25,11 +25,13 @@ import {
   Archive,
   ArchiveRestore,
   CheckSquare,
+  ChevronDown,
   Search,
 } from 'lucide-react-native'
 import { useWorkspaceStore } from '~/stores/workspace-store'
 import { useConnectionStore } from '~/stores/connection-store'
 import { useSessionStore } from '~/stores/session-store'
+import { Storage } from '~/lib/storage'
 import { Spin } from '~/components/ui/spin'
 import { ActionMenu, type ActionMenuItem } from '~/components/ui/action-menu'
 import { RenamePrompt } from '~/components/ui/rename-prompt'
@@ -39,6 +41,9 @@ import { useThemeStore } from '~/stores/theme-store'
 import type { ThemeTokens } from '~/lib/theme-tokens'
 
 const DRAWER_WIDTH = 308
+
+/** Mesma chave do desktop (app-sidebar) — pastas abertas/fechadas persistidas. */
+const FOLDER_EXPANDED_KEY = 'orbit.sidebar.folder-expanded'
 
 type NavItem = {
   label: string
@@ -131,6 +136,35 @@ export function Sidebar() {
       setSelectionMode(false)
     }
   }, [selectedIds.size, selectedFolderIds.size, selectionMode])
+
+  // ─── Pastas em acordeão (mesma lógica do desktop: fechadas por padrão, estado persistido) ──
+  const [expandedFolders, setExpandedFolders] = useState<Record<string, boolean>>({})
+  const expandedLoadedRef = useRef(false)
+
+  useEffect(() => {
+    let mounted = true
+    void Storage.getItem(FOLDER_EXPANDED_KEY).then((raw) => {
+      if (!mounted || expandedLoadedRef.current) return
+      expandedLoadedRef.current = true
+      try {
+        setExpandedFolders(raw ? (JSON.parse(raw) as Record<string, boolean>) : {})
+      } catch {
+        setExpandedFolders({})
+      }
+    })
+    return () => {
+      mounted = false
+    }
+  }, [])
+
+  const toggleFolderExpanded = useCallback((id: string) => {
+    expandedLoadedRef.current = true
+    setExpandedFolders((prev) => {
+      const next = { ...prev, [id]: !prev[id] }
+      void Storage.setItem(FOLDER_EXPANDED_KEY, JSON.stringify(next))
+      return next
+    })
+  }, [])
 
   const totalSelected = selectedIds.size + selectedFolderIds.size
 
@@ -412,6 +446,7 @@ export function Sidebar() {
                       title={s.title}
                       active={s.id === activeSessionId}
                       streaming={status[s.id] === 'streaming' || status[s.id] === 'submitted'}
+                      error={status[s.id] === 'error'}
                       unread={unreadCounts[s.id] > 0}
                       selectionMode={selectionMode}
                       selected={selectedIds.has(s.id)}
@@ -425,45 +460,63 @@ export function Sidebar() {
 
               {folderGroups.length > 0 && (
                 <SessionGroup label={t('sidebar.folders')} tokens={tokens}>
-                  {folderGroups.map(({ folder, sessions: folderSessions }) => (
-                    <View key={folder.id}>
-                      <Pressable
-                        onLongPress={(e) => openFolderMenu(folder.id, e.nativeEvent.pageY)}
-                        onPress={() => selectionMode && toggleSelectedFolder(folder.id)}
-                        className="mx-3 flex-row items-center gap-2 rounded-lg px-3 py-2"
-                        style={selectedFolderIds.has(folder.id) ? { backgroundColor: tokens.accent } : undefined}
-                      >
-                        {selectionMode && (
-                          <View className="mr-0.5">
-                            {selectedFolderIds.has(folder.id) ? (
-                              <Check size={14} color={tokens.primary} />
-                            ) : (
-                              <Square size={14} color={tokens.mutedForeground} />
-                            )}
-                          </View>
-                        )}
-                        <Folder size={14} color={tokens.mutedForeground} />
-                        <Text className="text-sm font-medium" numberOfLines={1} style={{ color: tokens.foreground }}>
-                          {folder.name}
-                        </Text>
-                      </Pressable>
-                      {folderSessions.map((s) => (
-                        <SessionRow
-                          key={s.id}
-                          title={s.title}
-                          indented
-                          active={s.id === activeSessionId}
-                          streaming={status[s.id] === 'streaming' || status[s.id] === 'submitted'}
-                          unread={unreadCounts[s.id] > 0}
-                          selectionMode={selectionMode}
-                          selected={selectedIds.has(s.id)}
-                          onPress={() => handleOpenSession(s.id)}
-                          onLongPress={(e) => openSessionMenu(s.id, e.nativeEvent.pageY)}
-                          tokens={tokens}
-                        />
-                      ))}
-                    </View>
-                  ))}
+                  {folderGroups.map(({ folder, sessions: folderSessions }) => {
+                    const expanded = expandedFolders[folder.id] ?? false
+                    return (
+                      <View key={folder.id}>
+                        <Pressable
+                          onLongPress={(e) => openFolderMenu(folder.id, e.nativeEvent.pageY)}
+                          onPress={() => {
+                            if (selectionMode) {
+                              toggleSelectedFolder(folder.id)
+                            } else {
+                              toggleFolderExpanded(folder.id)
+                            }
+                          }}
+                          className="mx-3 flex-row items-center gap-2 rounded-lg px-3 py-2"
+                          style={selectedFolderIds.has(folder.id) ? { backgroundColor: tokens.accent } : undefined}
+                        >
+                          {selectionMode && (
+                            <View className="mr-0.5">
+                              {selectedFolderIds.has(folder.id) ? (
+                                <Check size={14} color={tokens.primary} />
+                              ) : (
+                                <Square size={14} color={tokens.mutedForeground} />
+                              )}
+                            </View>
+                          )}
+                          <Folder size={14} color={tokens.mutedForeground} />
+                          <Text className="flex-1 text-sm font-medium" numberOfLines={1} style={{ color: tokens.foreground }}>
+                            {folder.name}
+                          </Text>
+                          {!selectionMode && (
+                            <ChevronDown
+                              size={16}
+                              color={tokens.mutedForeground}
+                              style={{ transform: [{ rotate: expanded ? '0deg' : '-90deg' }] }}
+                            />
+                          )}
+                        </Pressable>
+                        {expanded &&
+                          folderSessions.map((s) => (
+                            <SessionRow
+                              key={s.id}
+                              title={s.title}
+                              indented
+                              active={s.id === activeSessionId}
+                              streaming={status[s.id] === 'streaming' || status[s.id] === 'submitted'}
+                              error={status[s.id] === 'error'}
+                              unread={unreadCounts[s.id] > 0}
+                              selectionMode={selectionMode}
+                              selected={selectedIds.has(s.id)}
+                              onPress={() => handleOpenSession(s.id)}
+                              onLongPress={(e) => openSessionMenu(s.id, e.nativeEvent.pageY)}
+                              tokens={tokens}
+                            />
+                          ))}
+                      </View>
+                    )
+                  })}
                 </SessionGroup>
               )}
 
@@ -492,6 +545,7 @@ export function Sidebar() {
                       title={s.title}
                       active={s.id === activeSessionId}
                       streaming={status[s.id] === 'streaming' || status[s.id] === 'submitted'}
+                      error={status[s.id] === 'error'}
                       unread={unreadCounts[s.id] > 0}
                       selectionMode={selectionMode}
                       selected={selectedIds.has(s.id)}
@@ -662,6 +716,7 @@ const SessionRow = memo(function SessionRow({
   title,
   active,
   streaming,
+  error,
   unread,
   indented,
   selectionMode,
@@ -673,6 +728,7 @@ const SessionRow = memo(function SessionRow({
   title: string
   active: boolean
   streaming?: boolean
+  error?: boolean
   unread?: boolean
   indented?: boolean
   selectionMode?: boolean
@@ -697,12 +753,6 @@ const SessionRow = memo(function SessionRow({
         ) : (
           <Square size={16} color={tokens.mutedForeground} />
         )
-      ) : streaming ? (
-        <Spin><Loader2 size={16} color={tokens.primary} /></Spin>
-      ) : unread ? (
-        <View className="size-4 items-center justify-center">
-          <View className="size-2.5 rounded-full" style={{ backgroundColor: tokens.primary }} />
-        </View>
       ) : (
         <MessageSquare size={16} color={active ? tokens.foreground : tokens.mutedForeground} />
       )}
@@ -713,12 +763,24 @@ const SessionRow = memo(function SessionRow({
       >
         {title}
       </Text>
+      {streaming && (
+        <Spin>
+          <Loader2 size={14} color={tokens.primary} />
+        </Spin>
+      )}
+      {error && (
+        <View className="size-2 rounded-full" style={{ backgroundColor: tokens.destructive }} />
+      )}
+      {!streaming && !active && unread && (
+        <View className="size-2.5 rounded-full" style={{ backgroundColor: tokens.primary }} />
+      )}
     </Pressable>
   )
 }, (prev, next) =>
   prev.title === next.title &&
   prev.active === next.active &&
   prev.streaming === next.streaming &&
+  prev.error === next.error &&
   prev.unread === next.unread &&
   prev.indented === next.indented &&
   prev.selectionMode === next.selectionMode &&
