@@ -1,4 +1,4 @@
-import { isValidElement, useState, type ReactNode } from "react"
+import { isValidElement, useMemo, useState, type ReactNode } from "react"
 import { useTranslation } from "react-i18next"
 import {
   BotIcon,
@@ -6,6 +6,7 @@ import {
   ChevronDownIcon,
   CopyIcon,
   LoaderIcon,
+  RefreshCwIcon,
   RotateCwIcon,
   SparklesIcon,
   TerminalIcon,
@@ -14,10 +15,20 @@ import {
 } from "lucide-react"
 import type { Components } from "streamdown"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuGroup,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import { cn } from "@/lib/utils"
-import type { AgentPart, ChatMessage, ReasoningPart, ToolPart } from "@shared/chat"
+import type { AgentPart, ChatMessage, MessageErrorKind, ReasoningPart, ToolPart } from "@shared/chat"
+import { ModalityIcons } from "@/src/components/ai/modality-icons"
+import { useProviderStore } from "@/src/stores/provider-store"
 import { hostnameOf, messageText, visibleMessageText } from "@/src/lib/message-utils"
-import { formatDuration } from "@/src/lib/format"
+import { formatDuration, formatTime } from "@/src/lib/format"
 import { useSessionStore } from "@/src/stores/session-store"
 import { Actions, Action } from "@/src/components/ai/actions"
 import {
@@ -33,6 +44,9 @@ import { Reasoning, ReasoningContent, ReasoningTrigger, useReasoning } from "@/s
 import { Shimmer } from "@/src/components/ai/shimmer"
 
 /** Peças de mensagem compartilhadas entre os modos chat e código. */
+
+/** Teto por provedor no menu de troca de modelo do card de erro. */
+const MAX_SWITCH_MODELS = 20
 
 function childrenToText(children: ReactNode): string {
   if (typeof children === "string" || typeof children === "number") return String(children)
@@ -198,20 +212,128 @@ export function GenericToolView({ part, label, subtitle }: {
   )
 }
 
-export function MessageError({ error, onRetry }: { error: string; onRetry?: () => void }) {
+/**
+ * Menu de troca de modelo oferecido no card de erro. Existe porque falhas de
+ * moderação e de modelo indisponível são do provedor, não do request: repetir a
+ * mesma chamada reproduz o mesmo erro — só outro modelo resolve. Seleciona o
+ * modelo e reenvia o turno em um clique.
+ */
+function SwitchModelMenu({
+  failedModel,
+  onRetry,
+}: {
+  failedModel?: { providerId?: string; modelId?: string }
+  onRetry: () => void
+}) {
   const { t } = useTranslation()
+  const catalog = useProviderStore((s) => s.catalog)
+  const connectedProviders = useProviderStore((s) => s.connectedProviders)
+  const selectModel = useProviderStore((s) => s.selectModel)
+
+  const groups = useMemo(
+    () =>
+      connectedProviders
+        .filter((id) => catalog[id])
+        .map((id) => ({
+          provider: catalog[id],
+          // Modelos que aceitam imagem primeiro: o gatilho mais comum desses
+          // bloqueios é justamente um turno com imagem no contexto.
+          models: Object.values(catalog[id].models)
+            .filter((m) => !(id === failedModel?.providerId && m.id === failedModel?.modelId))
+            .sort((a, b) => {
+              const av = a.modalities?.input?.includes("image") ? 0 : 1
+              const bv = b.modalities?.input?.includes("image") ? 0 : 1
+              return av - bv || (b.release_date ?? "").localeCompare(a.release_date ?? "")
+            })
+            .slice(0, MAX_SWITCH_MODELS),
+        }))
+        .filter((g) => g.models.length > 0),
+    [catalog, connectedProviders, failedModel?.providerId, failedModel?.modelId],
+  )
+
+  if (groups.length === 0) return null
+
   return (
-    <div className="flex items-center justify-between gap-2 rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive">
-      <span className="flex-1">{error}</span>
-      {onRetry && (
-        <button
-          type="button"
-          onClick={onRetry}
-          className="flex shrink-0 items-center gap-1 rounded-md px-1.5 py-1 font-medium text-destructive hover:bg-destructive/20"
-        >
-          <RotateCwIcon className="size-3.5" />
-          {t("chat.retry")}
-        </button>
+    <DropdownMenu>
+      <DropdownMenuTrigger
+        render={
+          <button
+            type="button"
+            className="flex shrink-0 items-center gap-1 rounded-md px-1.5 py-1 font-medium text-destructive hover:bg-destructive/20"
+          />
+        }
+      >
+        <RefreshCwIcon className="size-3.5" />
+        {t("chat.switchModel")}
+        <ChevronDownIcon className="size-3" />
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="max-h-80 w-64 overflow-y-auto">
+        {groups.map((group) => (
+          <DropdownMenuGroup key={group.provider.id}>
+            <DropdownMenuLabel className="text-xs text-muted-foreground">
+              {group.provider.name}
+            </DropdownMenuLabel>
+            {group.models.map((model) => (
+              <DropdownMenuItem
+                key={`${group.provider.id}/${model.id}`}
+                onClick={() => {
+                  selectModel(group.provider.id, model.id)
+                  onRetry()
+                }}
+                className="gap-2"
+              >
+                <span className="flex-1 truncate">{model.name}</span>
+                <ModalityIcons
+                  modalities={model.modalities?.input}
+                  className="size-3 shrink-0 text-muted-foreground"
+                />
+              </DropdownMenuItem>
+            ))}
+          </DropdownMenuGroup>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  )
+}
+
+export function MessageError({
+  error,
+  kind,
+  failedModel,
+  onRetry,
+}: {
+  error: string
+  kind?: MessageErrorKind
+  failedModel?: { providerId?: string; modelId?: string }
+  onRetry?: () => void
+}) {
+  const { t } = useTranslation()
+  // Falhas do provedor têm explicação própria; o texto cru vira detalhe
+  // secundário (nunca é descartado — é o que permite diagnosticar).
+  const explained = kind === "moderation" || kind === "model-unavailable"
+
+  return (
+    <div className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+      <div className="flex items-start justify-between gap-2">
+        <span className="flex-1">{explained ? t(`chat.errorKind.${kind}`) : error}</span>
+        <div className="flex shrink-0 items-center gap-1">
+          {explained && <SwitchModelMenu failedModel={failedModel} onRetry={() => onRetry?.()} />}
+          {onRetry && (
+            <button
+              type="button"
+              onClick={onRetry}
+              className="flex shrink-0 items-center gap-1 rounded-md px-1.5 py-1 font-medium text-destructive hover:bg-destructive/20"
+            >
+              <RotateCwIcon className="size-3.5" />
+              {t("chat.retry")}
+            </button>
+          )}
+        </div>
+      </div>
+      {explained && (
+        <p className="mt-1 font-mono text-[11px] leading-relaxed break-words text-destructive/70">
+          {error}
+        </p>
       )}
     </div>
   )
@@ -232,7 +354,7 @@ export function MessageTruncated() {
 
 export function MessageTimestamp({ timestamp }: { timestamp: number }) {
   const { i18n } = useTranslation()
-  const formatted = new Date(timestamp).toLocaleTimeString(i18n.language, { hour: "2-digit", minute: "2-digit" })
+  const formatted = formatTime(timestamp, i18n.language)
   return (
     <span className="select-none px-1 text-[11px] tabular-nums text-muted-foreground/70">
       {formatted}
