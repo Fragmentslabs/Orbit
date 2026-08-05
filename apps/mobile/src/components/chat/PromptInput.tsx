@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, useEffect } from 'react'
+import { useState, useRef, useCallback, useEffect, memo, type ReactNode } from 'react'
 import { View, TextInput, Pressable, Text, ScrollView, ActivityIndicator, Platform, TouchableOpacity } from 'react-native'
 import {
   Search,
@@ -99,7 +99,12 @@ export function PromptInput({
   const [workerConfigOpen, setWorkerConfigOpen] = useState(false)
   const [loopConfigOpen, setLoopConfigOpen] = useState(false)
   const [isFocused, setIsFocused] = useState(false)
-  const workspaceMode = useWorkspaceStore((s) => s.mode)
+  // Modo lido sem assinatura (snapshot no render): o PromptInput não precisa
+  // re-renderizar quando a aba chat/código troca — os únicos trechos que
+  // dependem do modo (toggles avançados e comandos "/") vivem em componentes
+  // filhos que assinam o modo eles mesmos. Isso segura o memo do ChatInput e
+  // elimina o delay da troca de aba.
+  const workspaceMode = useWorkspaceStore.getState().mode
   const tokens = getThemeTokens(useThemeStore((s) => s.resolved))
   const [permissionMode, setPermissionMode] = useState<'ask' | 'approve' | 'full'>('ask')
   const [scheduleSheetVisible, setScheduleSheetVisible] = useState(false)
@@ -153,8 +158,6 @@ export function PromptInput({
     const draft = useDraftInput.getState().consume(sessionId)
     if (draft) setText(draft)
   }, [sessionId])
-
-  const slashCommands = useSlashCommands()
 
   const handleKeyPress = (e: any) => {
     if (e.nativeEvent.key === 'Enter') {
@@ -246,6 +249,7 @@ export function PromptInput({
   const handleSend = useCallback(() => {
     const trimmed = text.trim()
     if (!trimmed || isStreaming || disabled) return
+    const modeNow = useWorkspaceStore.getState().mode
 
     const options: SendMessageOptions = {
       research: activeModes.research ?? false,
@@ -253,37 +257,38 @@ export function PromptInput({
       simple: activeModes.simple ?? false,
       brain: activeModes.brain ?? false,
       reasoning: { enabled: thinking, variantId },
-      plan: workspaceMode === 'code' ? plan : undefined,
+      plan: modeNow === 'code' ? plan : undefined,
       subagents,
-      orchestrate: orchestra && workspaceMode === 'code' ? {} : undefined,
+      orchestrate: orchestra && modeNow === 'code' ? {} : undefined,
       loop,
-      permissionMode: workspaceMode === 'code' ? permissionMode : undefined,
+      permissionMode: modeNow === 'code' ? permissionMode : undefined,
     }
 
     // Comandos "/" viram o prompt do pipeline correspondente
-    const resolved = resolveSlashAction(trimmed, workspaceMode)
+    const resolved = resolveSlashAction(trimmed, modeNow)
     const finalText = resolved?.prompt ?? trimmed
 
     onSend(finalText, options, attachments.length > 0 ? attachments : undefined)
     setText('')
     setAttachments([])
     setPlusOpen(false)
-  }, [text, isStreaming, disabled, onSend, activeModes, plan, subagents, orchestra, loop, attachments, workspaceMode, permissionMode, thinking, variantId])
+  }, [text, isStreaming, disabled, onSend, activeModes, plan, subagents, orchestra, loop, attachments, permissionMode, thinking, variantId])
 
   const buildOptions = useCallback(() => {
+    const modeNow = useWorkspaceStore.getState().mode
     return {
       research: activeModes.research ?? false,
       browser: activeModes.browser ?? false,
       simple: activeModes.simple ?? false,
       brain: activeModes.brain ?? false,
       reasoning: { enabled: thinking, variantId },
-      plan: workspaceMode === 'code' ? plan : undefined,
+      plan: modeNow === 'code' ? plan : undefined,
       subagents,
-      orchestrate: orchestra && workspaceMode === 'code' ? {} : undefined,
+      orchestrate: orchestra && modeNow === 'code' ? {} : undefined,
       loop,
-      permissionMode: workspaceMode === 'code' ? permissionMode : undefined,
+      permissionMode: modeNow === 'code' ? permissionMode : undefined,
     } satisfies SendMessageOptions
-  }, [activeModes, thinking, variantId, plan, subagents, orchestra, loop, workspaceMode, permissionMode])
+  }, [activeModes, thinking, variantId, plan, subagents, orchestra, loop, permissionMode])
 
   const enqueueForSend = useMessageQueueStore((s) => s.enqueueForSend)
   const enqueueScheduled = useMessageQueueStore((s) => s.enqueueScheduled)
@@ -291,21 +296,23 @@ export function PromptInput({
   const handleQueue = useCallback(() => {
     const trimmed = text.trim()
     if (!trimmed || !sessionId) return
-    const resolved = resolveSlashAction(trimmed, workspaceMode)
-    enqueueForSend(sessionId, resolved?.prompt ?? trimmed, buildOptions(), workspaceMode)
+    const modeNow = useWorkspaceStore.getState().mode
+    const resolved = resolveSlashAction(trimmed, modeNow)
+    enqueueForSend(sessionId, resolved?.prompt ?? trimmed, buildOptions(), modeNow)
     setText('')
     setAttachments([])
-  }, [text, sessionId, enqueueForSend, buildOptions, workspaceMode])
+  }, [text, sessionId, enqueueForSend, buildOptions])
 
   const handleStopAndSend = useCallback(() => {
     const trimmed = text.trim()
     if (!trimmed || !sessionId) return
-    const resolved = resolveSlashAction(trimmed, workspaceMode)
+    const modeNow = useWorkspaceStore.getState().mode
+    const resolved = resolveSlashAction(trimmed, modeNow)
     onAbort()
-    enqueueForSend(sessionId, resolved?.prompt ?? trimmed, buildOptions(), workspaceMode)
+    enqueueForSend(sessionId, resolved?.prompt ?? trimmed, buildOptions(), modeNow)
     setText('')
     setAttachments([])
-  }, [text, sessionId, onAbort, enqueueForSend, buildOptions, workspaceMode])
+  }, [text, sessionId, onAbort, enqueueForSend, buildOptions])
 
   const handleSchedule = useCallback(() => {
     setScheduleSheetVisible(true)
@@ -325,12 +332,13 @@ export function PromptInput({
         onNavigateToSession?.(sid)
       }
 
-      const resolved = resolveSlashAction(trimmed, workspaceMode)
-      enqueueScheduled(sid, resolved?.prompt ?? trimmed, buildOptions(), workspaceMode, timestamp)
+      const modeNow = useWorkspaceStore.getState().mode
+      const resolved = resolveSlashAction(trimmed, modeNow)
+      enqueueScheduled(sid, resolved?.prompt ?? trimmed, buildOptions(), modeNow, timestamp)
       setText('')
       setAttachments([])
     },
-    [text, sessionId, onCreateSession, onNavigateToSession, enqueueScheduled, buildOptions, workspaceMode],
+    [text, sessionId, onCreateSession, onNavigateToSession, enqueueScheduled, buildOptions],
   )
 
   const modesList = [
@@ -360,7 +368,7 @@ export function PromptInput({
       )}
 
       {/* Attachments & Input border box */}
-      <SlashPalette value={text} setText={setText} commands={slashCommands}>
+      <SlashPaletteShell value={text} setText={setText}>
       <View
         className="rounded-2xl overflow-hidden px-3 py-1 mb-2"
         style={{
@@ -456,7 +464,7 @@ export function PromptInput({
           </View>
         </View>
       </View>
-      </SlashPalette>
+      </SlashPaletteShell>
 
       {/* Mode Toggles Row — oculto em modo "actions" */}
       {displayMode !== 'actions' && (
@@ -498,21 +506,20 @@ export function PromptInput({
               </Pressable>
             )
           })}
-          {/* Advanced mode toggles — plan, subagents, orchestra, loop */}
-          {workspaceMode === 'code' && (
-            <View className="flex-row items-center gap-2" style={{ borderLeftWidth: 1, borderLeftColor: tokens.border, paddingLeft: 6 }}>
-              <AdvancedToggle icon={FileText} active={plan} onPress={() => setPlan((v) => !v)} tokens={tokens} />
-              <AdvancedToggle icon={Bot} active={subagents} onPress={() => setSubagents((v) => !v)} tokens={tokens} />
-              <AdvancedToggle icon={Network} active={orchestra} onPress={() => setOrchestra((v) => !v)} tokens={tokens} />
-              <AdvancedToggle icon={RefreshCw} active={loop} onPress={() => setLoop((v) => !v)} tokens={tokens} />
-            </View>
-          )}
-          {workspaceMode === 'chat' && (
-            <View className="flex-row items-center gap-2" style={{ borderLeftWidth: 1, borderLeftColor: tokens.border, paddingLeft: 6 }}>
-              <AdvancedToggle icon={Bot} active={subagents} onPress={() => setSubagents((v) => !v)} tokens={tokens} />
-              <AdvancedToggle icon={RefreshCw} active={loop} onPress={() => setLoop((v) => !v)} tokens={tokens} />
-            </View>
-          )}
+          {/* Advanced mode toggles — plan, subagents, orchestra, loop. Componente
+              filho que assina o modo ele mesmo: trocar chat/código não precisa
+              re-renderizar o PromptInput inteiro. */}
+          <AdvancedModesRow
+            plan={plan}
+            subagents={subagents}
+            orchestra={orchestra}
+            loop={loop}
+            onTogglePlan={() => setPlan((v) => !v)}
+            onToggleSubagents={() => setSubagents((v) => !v)}
+            onToggleOrchestra={() => setOrchestra((v) => !v)}
+            onToggleLoop={() => setLoop((v) => !v)}
+            tokens={tokens}
+          />
         </View>
         <ContextMeter sessionId={sessionId} />
       </View>
@@ -593,3 +600,65 @@ function AdvancedToggle({ icon: Icon, active, onPress, tokens }: { icon: React.C
     </Pressable>
   )
 }
+
+// Folha que assina o modo workspace sozinha — só ela re-renderiza quando a aba
+// chat/código troca, sem cascata para o PromptInput (que é memo-seguro).
+const AdvancedModesRow = memo(function AdvancedModesRow({
+  plan,
+  subagents,
+  orchestra,
+  loop,
+  onTogglePlan,
+  onToggleSubagents,
+  onToggleOrchestra,
+  onToggleLoop,
+  tokens,
+}: {
+  plan: boolean
+  subagents: boolean
+  orchestra: boolean
+  loop: boolean
+  onTogglePlan: () => void
+  onToggleSubagents: () => void
+  onToggleOrchestra: () => void
+  onToggleLoop: () => void
+  tokens: any
+}) {
+  const workspaceMode = useWorkspaceStore((s) => s.mode)
+  if (workspaceMode === 'code') {
+    return (
+      <View className="flex-row items-center gap-2" style={{ borderLeftWidth: 1, borderLeftColor: tokens.border, paddingLeft: 6 }}>
+        <AdvancedToggle icon={FileText} active={plan} onPress={onTogglePlan} tokens={tokens} />
+        <AdvancedToggle icon={Bot} active={subagents} onPress={onToggleSubagents} tokens={tokens} />
+        <AdvancedToggle icon={Network} active={orchestra} onPress={onToggleOrchestra} tokens={tokens} />
+        <AdvancedToggle icon={RefreshCw} active={loop} onPress={onToggleLoop} tokens={tokens} />
+      </View>
+    )
+  }
+  return (
+    <View className="flex-row items-center gap-2" style={{ borderLeftWidth: 1, borderLeftColor: tokens.border, paddingLeft: 6 }}>
+      <AdvancedToggle icon={Bot} active={subagents} onPress={onToggleSubagents} tokens={tokens} />
+      <AdvancedToggle icon={RefreshCw} active={loop} onPress={onToggleLoop} tokens={tokens} />
+    </View>
+  )
+})
+
+// Folha que move o useSlashCommands (que assina o modo) para fora do corpo do
+// PromptInput: ao trocar a aba, só este shell re-renderiza e recomputa os
+// comandos — o PromptInput fica intacto (memo do ChatInput segura).
+const SlashPaletteShell = memo(function SlashPaletteShell({
+  value,
+  setText,
+  children,
+}: {
+  value: string
+  setText: (t: string) => void
+  children: ReactNode
+}) {
+  const commands = useSlashCommands()
+  return (
+    <SlashPalette value={value} setText={setText} commands={commands}>
+      {children}
+    </SlashPalette>
+  )
+})
