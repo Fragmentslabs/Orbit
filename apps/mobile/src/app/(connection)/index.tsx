@@ -6,38 +6,35 @@ import {
   KeyboardAvoidingView,
   Platform,
   Pressable,
-  useWindowDimensions,
   StyleSheet,
 } from 'react-native'
-import { SafeAreaView } from 'react-native-safe-area-context'
-import { ArrowRight, History, Loader2, Monitor, ScanLine, X } from 'lucide-react-native'
+import { ArrowRight, Globe, Loader2, Monitor, ScanLine } from 'lucide-react-native'
 import { useTranslation } from 'react-i18next'
 import type { ConnectionConfig } from '@orbit/companion-client'
 import * as Device from 'expo-device'
 import { useConnectionStore } from '~/stores/connection-store'
-import { useRecentConnectionsStore, type RecentConnection } from '~/stores/recent-connections-store'
+import { useRecentConnectionsStore } from '~/stores/recent-connections-store'
 import { useDesktopDiscovery } from '~/hooks/useDesktopDiscovery'
 import { Button } from '~/components/ui/button'
-import { Card } from '~/components/ui/card'
 import { ConnectionStatus } from '~/components/connection/ConnectionStatus'
-import { QRScannerWrapper } from '~/components/connection/QRScannerWrapper'
-import { UrlAccordion } from '~/components/connection/UrlAccordion'
+import { ManualConnectSheet } from '~/components/connection/ManualConnectSheet'
+import { QRScannerModal } from '~/components/connection/QRScannerModal'
 import { Persona, type PersonaState } from '~/components/ai/Persona'
 import { Spin } from '~/components/ui/spin'
 import { getThemeTokens } from '~/lib/theme-tokens'
 import { useThemeStore } from '~/stores/theme-store'
+import { SafeScreen } from '~/components/layout/SafeScreen'
 
 const canUseCamera = Platform.OS === 'ios' || Platform.OS === 'android'
 
 export default function ConnectionScreen() {
   const { t } = useTranslation()
   const { connection, config: savedConfig, disconnect, connect } = useConnectionStore()
-  const { recent, loadRecent, removeRecent } = useRecentConnectionsStore()
+  const { recent, loadRecent } = useRecentConnectionsStore()
   const { status: discoveryStatus, found } = useDesktopDiscovery()
-  const [showQr, setShowQr] = useState(false)
+  const [qrOpen, setQrOpen] = useState(false)
+  const [manualOpen, setManualOpen] = useState(false)
   const [prefill, setPrefill] = useState<{ host: string; port: number } | undefined>(undefined)
-  const { width } = useWindowDimensions()
-  const isWide = width >= 768
   const tokens = getThemeTokens(useThemeStore((s) => s.resolved))
 
   const isAutoReconnecting = !!savedConfig && connection.status !== 'disconnected' && !connection.error
@@ -78,34 +75,46 @@ export default function ConnectionScreen() {
     [recent],
   )
 
+  const connectWith = useCallback((host: string, port: number, pin?: string, token?: string) => {
+    connect({
+      host,
+      port,
+      pin: pin ?? '',
+      token,
+      deviceName: Device.deviceName ?? `Orbit ${Platform.OS}`,
+    })
+  }, [connect])
+
   const handleQrScanned = useCallback((config: Omit<ConnectionConfig, 'pin'> & { pin?: string }) => {
-    setShowQr(false)
+    setQrOpen(false)
     const token = findSavedToken(config.host)
     if (config.pin || token) {
-      connect({
-        host: config.host,
-        port: config.port,
-        pin: config.pin ?? '',
-        token,
-        deviceName: Device.deviceName ?? `Orbit ${Platform.OS}`,
-      })
+      connectWith(config.host, config.port, config.pin, token)
       return
     }
     setPrefill({ host: config.host, port: config.port })
-  }, [connect, findSavedToken])
+    setManualOpen(true)
+  }, [connectWith, findSavedToken])
 
-  const handlePrefill = useCallback((host: string, port: number, auth?: { pin?: string; token?: string }) => {
-    const token = auth?.token ?? findSavedToken(host)
-    if (auth?.pin || token) {
-      connect({ host, port, pin: auth?.pin ?? '', token, deviceName: Device.deviceName ?? `Orbit ${Platform.OS}` })
+  const handleFacilitatorConnect = useCallback(() => {
+    if (!found) return
+    const token = findSavedToken(found.host)
+    if (found.pin || token) {
+      connectWith(found.host, found.wsPort, found.pin, token)
       return
     }
-    setPrefill({ host, port })
-  }, [connect, findSavedToken])
+    setPrefill({ host: found.host, port: found.wsPort })
+    setManualOpen(true)
+  }, [found, connectWith, findSavedToken])
+
+  const closeManual = useCallback(() => {
+    setManualOpen(false)
+    setPrefill(undefined)
+  }, [])
 
   if (isAutoReconnecting && !reconnectDismissed) {
     return (
-      <SafeAreaView style={[s.container, { backgroundColor: tokens.background }]}>
+      <SafeScreen style={s.container} edges={['top', 'right', 'bottom', 'left']}>
         <View style={s.reconnecting}>
           <Persona state="listening" size={120} />
           <View style={s.reconnectingText}>
@@ -119,16 +128,16 @@ export default function ConnectionScreen() {
             {t('connectionScreen.cancel')}
           </Button>
         </View>
-      </SafeAreaView>
+      </SafeScreen>
     )
   }
 
   const header = (
-    <View style={isWide ? s.headerWide : s.headerCenter}>
-      <Persona state={personaState} size={isWide ? 160 : 140} />
-      <View style={isWide ? { gap: 4 } : { alignItems: 'center', gap: 4 }}>
+    <View style={s.header}>
+      <Persona state={personaState} size={140} />
+      <View style={{ alignItems: 'center', gap: 4 }}>
         <Text style={[s.titleLarge, { color: tokens.foreground }]}>{t('connectionScreen.appName')}</Text>
-        <Text style={[s.subtitle, { color: tokens.mutedForeground }, !isWide && { textAlign: 'center' }]}>
+        <Text style={[s.subtitle, { color: tokens.mutedForeground }, { textAlign: 'center' }]}>
           {t('connectionScreen.subtitle')}
         </Text>
       </View>
@@ -138,7 +147,7 @@ export default function ConnectionScreen() {
   const facilitator =
     discoveryStatus === 'found' && found ? (
       <Pressable
-        onPress={() => handlePrefill(found.host, found.wsPort, { pin: found.pin })}
+        onPress={handleFacilitatorConnect}
         style={[s.facilitatorCard, { borderColor: 'rgba(245,166,35,0.3)', backgroundColor: 'rgba(245,166,35,0.1)' }]}
       >
         <View style={[s.facilitatorIcon, { backgroundColor: 'rgba(245,166,35,0.15)' }]}>
@@ -159,57 +168,11 @@ export default function ConnectionScreen() {
       </View>
     ) : null
 
-  const recents =
-    recent.length > 0 ? (
-      <View style={{ gap: 8 }}>
-        <View style={s.recentsHeader}>
-          <History size={13} color={tokens.mutedForeground} />
-          <Text style={[s.recentsTitle, { color: tokens.mutedForeground }]}>{t('connectionScreen.recent')}</Text>
-        </View>
-        {recent.map((rc: RecentConnection) => (
-          <Pressable
-            key={`${rc.host}:${rc.port}`}
-            onPress={() => handlePrefill(rc.host, rc.port, { token: rc.token, pin: rc.pin })}
-            style={[s.recentCard, { borderColor: '#1f2128', backgroundColor: '#111318' }]}
-          >
-            <View style={[s.recentIcon, { backgroundColor: '#1a1c22' }]}>
-              <Monitor size={16} color={tokens.mutedForeground} />
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={[s.fg, { color: tokens.foreground }]}>{rc.deviceName ?? rc.host}</Text>
-              <Text style={[s.mutedFg, { color: tokens.mutedForeground }]}>{rc.host}:{rc.port}</Text>
-            </View>
-            <Pressable
-              onPress={() => void removeRecent(rc.host, rc.port)}
-              hitSlop={8}
-              style={s.removeBtn}
-            >
-              <X size={14} color={tokens.mutedForeground} />
-            </Pressable>
-          </Pressable>
-        ))}
-      </View>
-    ) : null
-
   const qrButton = canUseCamera ? (
-    showQr ? (
-      <Card style={{ overflow: 'hidden', padding: 12 }}>
-        <View style={s.qrHeader}>
-          <Text style={[s.fg, { color: tokens.foreground }]}>{t('connectionScreen.scanQrCode')}</Text>
-          <Button variant="ghost" size="sm" onPress={() => setShowQr(false)}>{t('connectionScreen.cancel')}</Button>
-        </View>
-        <View style={[s.qrCamera, { backgroundColor: '#000' }]}>
-          <QRScannerWrapper onScanned={handleQrScanned} />
-        </View>
-      </Card>
-    ) : (
-      <Button onPress={() => setShowQr(true)} size="lg">
-        <ScanLine size={18} color="#4a2e0a" /> {t('connectionScreen.scanQrCode')}
-      </Button>
-    )
+    <Button onPress={() => setQrOpen(true)} size="lg">
+      <ScanLine size={18} color="#4a2e0a" /> {t('connectionScreen.scanQrCode')}
+    </Button>
   ) : null
-
-  const manualConnect = <UrlAccordion prefill={prefill} defaultExpanded={isWide} />
 
   const statusAndHint = (
     <>
@@ -223,7 +186,7 @@ export default function ConnectionScreen() {
   )
 
   return (
-    <SafeAreaView style={[s.container, { backgroundColor: tokens.background }]} edges={['top']}>
+    <SafeScreen style={s.container}>
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={{ flex: 1 }}
@@ -234,71 +197,55 @@ export default function ConnectionScreen() {
           keyboardShouldPersistTaps="handled"
           automaticallyAdjustKeyboardInsets
         >
-          {isWide ? (
-            <View style={s.wideContainer}>
-              <View style={s.wideRow}>
-                <View style={s.wideCol}>
-                  {header}
-                  {facilitator}
-                  {recents}
-                </View>
-                <View style={s.wideCol}>
-                  {manualConnect}
-                  {qrButton}
-                  {statusAndHint}
-                </View>
-              </View>
-            </View>
-          ) : (
-            <View style={s.mobileContainer}>
-              {header}
-              {facilitator}
-              {qrButton}
-              {manualConnect}
-              {recents}
-              {statusAndHint}
-            </View>
-          )}
+          <View style={s.content}>
+            {header}
+            {facilitator}
+            {qrButton}
+            <Button variant="outline" size="lg" onPress={() => setManualOpen(true)} style={s.fullWidth}>
+              <Globe size={18} color={tokens.primary} /> {t('connectionScreen.connectManually')}
+            </Button>
+            {statusAndHint}
+          </View>
         </ScrollView>
       </KeyboardAvoidingView>
-    </SafeAreaView>
+
+      <ManualConnectSheet visible={manualOpen} onClose={closeManual} prefill={prefill} />
+      <QRScannerModal visible={qrOpen} onClose={() => setQrOpen(false)} onScanned={handleQrScanned} />
+    </SafeScreen>
   )
 }
 
 const s = StyleSheet.create({
   container: { flex: 1 },
+  content: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'stretch',
+    gap: 20,
+    width: '100%',
+    maxWidth: 420,
+    alignSelf: 'center',
+    paddingHorizontal: 20,
+    paddingTop: 32,
+  },
+  fullWidth: { alignSelf: 'stretch' },
+
   reconnecting: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 20, paddingHorizontal: 24 },
   reconnectingText: { alignItems: 'center', gap: 4 },
   title: { fontSize: 18, fontWeight: '600' },
   titleLarge: { fontSize: 24, fontWeight: 'bold' },
 
-  headerWide: { alignItems: 'flex-start', gap: 16 },
-  headerCenter: { alignItems: 'center', gap: 16 },
+  header: { alignItems: 'center', gap: 16 },
   subtitle: { fontSize: 14, lineHeight: 20 },
 
-  facilitatorCard: { width: '100%', flexDirection: 'row', alignItems: 'center', gap: 12, borderRadius: 12, borderWidth: 1, paddingHorizontal: 16, paddingVertical: 14 },
+  facilitatorCard: { flexDirection: 'row', alignItems: 'center', gap: 12, borderRadius: 12, borderWidth: 1, paddingHorizontal: 16, paddingVertical: 14 },
   facilitatorIcon: { width: 40, height: 40, borderRadius: 6, alignItems: 'center', justifyContent: 'center' },
 
-  checkingRow: { width: '100%', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 8 },
-
-  recentsHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 4 },
-  recentsTitle: { fontSize: 12, fontWeight: '500', textTransform: 'uppercase', letterSpacing: 0.5 },
-  recentCard: { flexDirection: 'row', alignItems: 'center', gap: 12, borderRadius: 12, borderWidth: 1, paddingHorizontal: 16, paddingVertical: 12 },
-  recentIcon: { width: 36, height: 36, borderRadius: 6, alignItems: 'center', justifyContent: 'center' },
-  removeBtn: { width: 28, height: 28, borderRadius: 6, alignItems: 'center', justifyContent: 'center' },
-
-  qrHeader: { marginBottom: 8, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  qrCamera: { height: 256, overflow: 'hidden', borderRadius: 8 },
+  checkingRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 8 },
 
   tipBox: { borderRadius: 12, paddingHorizontal: 16, paddingVertical: 12 },
   tipText: { fontSize: 12, lineHeight: 20 },
 
-  fg: { fontSize: 14, fontWeight: '500' },
   fgSemibold: { fontSize: 14, fontWeight: '600' },
   mutedFg: { fontSize: 12 },
-
-  wideContainer: { flex: 1, justifyContent: 'center', paddingHorizontal: 32 },
-  wideRow: { maxWidth: 896, alignSelf: 'center', width: '100%', flexDirection: 'row', gap: 48 },
-  wideCol: { flex: 1, gap: 24 },
-  mobileContainer: { flex: 1, gap: 24, paddingHorizontal: 20, paddingTop: 40 },
 })
