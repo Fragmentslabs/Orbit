@@ -3,26 +3,63 @@
     "title": "Configurações",
     "description": "Configurações do Orbit",
     "tabs": {
-      "providers": { "label": "Provedores", "description": "Chaves de API dos provedores de IA." },
-      "autonomy": { "label": "Preferências", "description": "Modelos padrão, modos ativos e memória." },
-      "mcp-skills": { "label": "Ferramentas", "description": "Servidores MCP e skills do usuário." },
-      "howto": { "label": "Como Funciona", "description": "Explicação dos modos e combinações." },
-      "analytics": { "label": "Uso e Limites", "description": "Estatísticas de uso e consumo de tokens." },
-      "appearance": { "label": "Aparência", "description": "Tema e modos de exibição." },
-      "data": { "label": "Dados", "description": "Exportar e importar seus dados." }
+      "providers": {
+        "label": "Provedores",
+        "description": "Chaves de API dos provedores de IA."
+      },
+      "autonomy": {
+        "label": "Preferências",
+        "description": "Modelos padrão, modos ativos e memória."
+      },
+      "mcp-skills": {
+        "label": "Ferramentas",
+        "description": "Servidores MCP e skills do usuário."
+      },
+      "howto": {
+        "label": "Como Funciona",
+        "description": "Explicação dos modos e combinações."
+      },
+      "analytics": {
+        "label": "Uso e Limites",
+        "description": "Estatísticas de uso e consumo de tokens."
+      },
+      "appearance": {
+        "label": "Aparência",
+        "description": "Tema e modos de exibição."
+      },
+      "data": {
+        "label": "Dados",
+        "description": "Exportar e importar seus dados."
+      }
     }
   },
   "input": {
- "placeholder": "Pergunte qualquer coisa...",
- "attachFiles": "Anexar arquivos",
- "submit": "Enviar",
- "uploadFiles": "Enviar arquivos",
+    "placeholder": "Pergunte qualquer coisa...",
+    "attachFiles": "Anexar arquivos",
+    "submit": "Enviar",
+    "uploadFiles": "Enviar arquivos",
     "modes": {
-      "search": { "label": "Pesquisa", "description": "Busca e lê páginas da web via HTTP. Rápido, mas não executa JavaScript." },
-      "browser": { "label": "Browser", "description": "Navega em páginas como um browser real. Executa JavaScript, ideal para SPAs." },
-      "thinking": { "label": "Thinking", "alwaysOn": "Este modelo sempre usa raciocínio extendido.", "description": "Ativa raciocínio extendido do modelo. Custa mais tokens e tempo." },
-      "simple": { "label": "Simples", "description": "Respostas diretas em texto puro: sem formatação, citações ou blocos de ferramentas." },
-      "brain": { "label": "Memória", "description": "Orbit lembra fatos e preferências suas entre conversas. Desative apenas neste chat se preferir uma interação sem contexto." }
+      "search": {
+        "label": "Pesquisa",
+        "description": "Busca e lê páginas da web via HTTP. Rápido, mas não executa JavaScript."
+      },
+      "browser": {
+        "label": "Browser",
+        "description": "Navega em páginas como um browser real. Executa JavaScript, ideal para SPAs."
+      },
+      "thinking": {
+        "label": "Thinking",
+        "alwaysOn": "Este modelo sempre usa raciocínio extendido.",
+        "description": "Ativa raciocínio extendido do modelo. Custa mais tokens e tempo."
+      },
+      "simple": {
+        "label": "Simples",
+        "description": "Respostas diretas em texto puro: sem formatação, citações ou blocos de ferramentas."
+      },
+      "brain": {
+        "label": "Memória",
+        "description": "Orbit lembra fatos e preferências suas entre conversas. Desative apenas neste chat se preferir uma interação sem contexto."
+      }
     },
     "slash": {
       "searchDescription": "Alterna busca web (websearch/webfetch)",
@@ -42,10 +79,19 @@
     "placeholder": "Pergunte sobre código...",
     "selected": "selecionado",
     "modes": {
-      "search": { "description": "Libera websearch e webfetch para consultar documentação online." },
-      "plan": { "label": "Modo Plano", "description": "Somente leitura. Produz um plano de implementação sem editar arquivos." },
-      "simple": { "description": "Respostas diretas em texto puro: sem formatação nem blocos de ferramentas." },
-      "brain": { "description": "Orbit lembra decisões, convenções e estrutura do projeto entre sessões. Desative apenas neste chat se preferir uma interação sem contexto." }
+      "search": {
+        "description": "Libera websearch e webfetch para consultar documentação online."
+      },
+      "plan": {
+        "label": "Modo Plano",
+        "description": "Somente leitura. Produz um plano de implementação sem editar arquivos."
+      },
+      "simple": {
+        "description": "Respostas diretas em texto puro: sem formatação nem blocos de ferramentas."
+      },
+      "brain": {
+        "description": "Orbit lembra decisões, convenções e estrutura do projeto entre sessões. Desative apenas neste chat se preferir uma interação sem contexto."
+      }
     },
     "slash": {
       "searchDescription": "Alterna busca web para documentação",
@@ -71,12 +117,12 @@
     }
   },
   "reasoning": {
- "placeholder": "Nível",
- "thinking": "Pensando…",
- "thoughtFewSeconds": "Pensou por alguns segundos",
- "thoughtFor_one": "Pensou por {{count}} segundo",
- "thoughtFor_other": "Pensou por {{count}} segundos",
- "variants": {
+    "placeholder": "Nível",
+    "thinking": "Pensando…",
+    "thoughtFewSeconds": "Pensou por alguns segundos",
+    "thoughtFor_one": "Pensou por {{count}} segundo",
+    "thoughtFor_other": "Pensou por {{count}} segundos",
+    "variants": {
       "none": "Nenhum",
       "minimal": "Mínimo",
       "low": "Baixo",
@@ -130,10 +176,10 @@
     }
   },
   "modelPicker": {
- "loading": "Carregando...",
- "error": "Erro",
- "select": "Selecionar modelo",
- "title": "Selecionar modelo"
+    "loading": "Carregando...",
+    "error": "Erro",
+    "select": "Selecionar modelo",
+    "title": "Selecionar modelo"
   },
   "models": {
     "loadingCatalog": "Carregando catálogo de modelos…",
@@ -154,7 +200,8 @@
       "context32k": "32k+",
       "context128k": "128k+",
       "context1m": "1M+",
-      "availability": "Disponibilidade"
+      "availability": "Disponibilidade",
+      "modality": "Modalidade"
     },
     "capabilities": {
       "coding": "Coding",
@@ -243,7 +290,8 @@
         "highVolume": "High Volume",
         "deepReasoning": "Deep Reasoning",
         "costSensitive": "Cost Sensitive"
-      }
+      },
+      "modalities": "Modalidades de entrada"
     },
     "aa": {
       "connect": "Sem dados de velocidade — conectar Artificial Analysis",
@@ -254,6 +302,13 @@
       "cancel": "Cancelar",
       "saving": "Salvando…",
       "saveAndRefresh": "Salvar e atualizar"
+    },
+    "modalities": {
+      "text": "Texto",
+      "image": "Imagem",
+      "audio": "Áudio",
+      "video": "Vídeo",
+      "pdf": "Documento (PDF)"
     }
   },
   "memories": {
@@ -478,22 +533,42 @@
       }
     },
     "tabs": {
-      "chat": { "label": "Chat", "description": "Converse com a IA sobre qualquer assunto" },
-      "terminal": { "label": "Terminal", "description": "Execute comandos e scripts" },
-      "folders": { "label": "Pastas", "description": "Navegue pelos arquivos do projeto" },
-      "browser": { "label": "Browser", "description": "Pesquise e visualize páginas web" },
-      "diff": { "label": "Diff", "description": "Alterações das ferramentas" }
+      "chat": {
+        "label": "Chat",
+        "description": "Converse com a IA sobre qualquer assunto"
+      },
+      "terminal": {
+        "label": "Terminal",
+        "description": "Execute comandos e scripts"
+      },
+      "folders": {
+        "label": "Pastas",
+        "description": "Navegue pelos arquivos do projeto"
+      },
+      "browser": {
+        "label": "Browser",
+        "description": "Pesquise e visualize páginas web"
+      },
+      "diff": {
+        "label": "Diff",
+        "description": "Alterações das ferramentas"
+      }
     }
   },
   "chat": {
- "retry": "Retry",
- "stopped": "Parou por atingir o limite de passos — pode ter ficado incompleto. Peça para continuar.",
- "copy": "Copiar",
- "revert": "Reverter até aqui",
- "responseDuration": "Tempo de resposta",
- "planTitle": "Plano",
- "orchestrationTitle": "Orquestração",
- "implementPlan": "Implementar plano",
+    "retry": "Retry",
+    "switchModel": "Trocar modelo",
+    "errorKind": {
+      "moderation": "O provedor bloqueou esta resposta no filtro de conteúdo dele. Isso roda no servidor do provedor e não dá para desligar daqui — dá falso-positivo com frequência em turnos que incluem imagens. Trocar de modelo resolve.",
+      "model-unavailable": "Este provedor não serve o modelo selecionado. Escolha outro modelo para continuar."
+    },
+    "stopped": "Parou por atingir o limite de passos — pode ter ficado incompleto. Peça para continuar.",
+    "copy": "Copiar",
+    "revert": "Reverter até aqui",
+    "responseDuration": "Tempo de resposta",
+    "planTitle": "Plano",
+    "orchestrationTitle": "Orquestração",
+    "implementPlan": "Implementar plano",
     "exploring": "Explorando {{label}}…",
     "failed": "falhou",
     "researching": "Pesquisando…",
@@ -799,7 +874,11 @@
     "noCommits": "Nenhum commit encontrado."
   },
   "mcp": {
-    "kv": { "key": "Chave", "value": "Valor", "add": "Adicionar" },
+    "kv": {
+      "key": "Chave",
+      "value": "Valor",
+      "add": "Adicionar"
+    },
     "servers": {
       "title": "Servidores MCP",
       "description": "Conecte-se a servidores MCP para adicionar ferramentas dinâmicas ao Orbit.",
@@ -858,9 +937,18 @@
       "edit": "Editar",
       "remove": "Remover",
       "createMenu": {
-        "manual": { "title": "Criar manualmente", "description": "Nome, descrição e conteúdo markdown" },
-        "import": { "title": "Importar arquivo", "description": ".skill ou .md — selecione junto os scripts da skill, se houver" },
-        "askOrbit": { "title": "Pedir para o Orbit criar", "description": "Abre um chat com /create-skill — descreva e o agente monta a skill" }
+        "manual": {
+          "title": "Criar manualmente",
+          "description": "Nome, descrição e conteúdo markdown"
+        },
+        "import": {
+          "title": "Importar arquivo",
+          "description": ".skill ou .md — selecione junto os scripts da skill, se houver"
+        },
+        "askOrbit": {
+          "title": "Pedir para o Orbit criar",
+          "description": "Abre um chat com /create-skill — descreva e o agente monta a skill"
+        }
       },
       "dialog": {
         "editTitle": "Editar skill",
@@ -933,24 +1021,186 @@
       "text": "Todos os modos e suas configurações ficam disponíveis no input de mensagem. Use os toggles abaixo do input para ativar/desativar rapidamente, ou clique no botão \"+\" para acessar Subagents, Orchestra e Loop com suas configurações avançadas."
     },
     "modes": [
-      { "id": "search", "label": "Pesquisa", "modes": ["Chat", "Código"], "description": "Busca e lê páginas da web via HTTP.", "detail": "Adiciona as ferramentas websearch e webfetch ao agente. Rápido e eficiente para consultar documentação, APIs e informações públicas. Não executa JavaScript — ideal para conteúdo estático.", "combo": ["Browser", "Thinking"] },
-      { "id": "browser", "label": "Browser", "modes": ["Chat"], "description": "Navega em páginas como um browser real.", "detail": "Abre o painel direito com um navegador completo. Executa JavaScript, ideal para SPAs, formulários e páginas dinâmicas. O agente pode navegar, clicar, preencher campos e tirar screenshots.", "combo": ["Pesquisa", "Thinking"] },
-      { "id": "thinking", "label": "Thinking", "modes": ["Chat", "Código"], "description": "Raciocínio estendido do modelo.", "detail": "Ativa o modo reasoning/thinking do modelo (quando suportado). O modelo \"pensa\" antes de responder, resultando em respostas mais profundas e bem fundamentadas. Consome mais tokens e tempo.", "combo": ["Pesquisa", "Browser", "Loop"] },
-      { "id": "simple", "label": "Simples", "modes": ["Chat", "Código"], "description": "Respostas diretas em texto puro.", "detail": "Remove formatação avançada, citações e blocos de ferramentas da resposta. Útil quando você quer apenas o conteúdo essencial, sem enfeites.", "combo": [] },
-      { "id": "brain", "label": "Memória (Brain)", "modes": ["Chat", "Código"], "description": "Orbit lembra fatos e preferências entre conversas.", "detail": "Adiciona as ferramentas memory_save/search/link/open/graph. O Orbit pode salvar fatos, preferências e decisões e recuperá-los automaticamente em conversas futuras. Desative por chat se preferir uma interação sem contexto.", "combo": [] },
-      { "id": "subagents", "label": "Subagents", "modes": ["Chat", "Código"], "description": "Workers efêmeros em background para tarefas paralelas.", "detail": "Adiciona a ferramenta subagent ao agente. Quando o agente identifica subtarefas independentes, ele pode delegá-las a workers efêmeros que rodam em background com o modelo configurado. Os workers são descartados ao fim da tarefa — não aparecem na sidebar.", "combo": ["Loop", "Orchestra"] },
-      { "id": "orchestra", "label": "Orchestra", "modes": ["Código"], "description": "Divide o pedido em plano de tarefas + workers persistentes.", "detail": "O agente orquestrador planeja a tarefa (criando subtarefas com create_task), propõe o plano para sua aprovação e, após aprovado, executa cada subtarefa como uma sessão filha persistente no painel direito. Os workers rodam em paralelo com o modelo worker configurado. Resultado final é sintetizado pelo orquestrador.", "combo": ["Loop", "Subagents"] },
-      { "id": "loop", "label": "Loop", "modes": ["Código"], "description": "Agente revisa e itera até completar a tarefa.", "detail": "Após cada resposta, o sistema revisa criticamente o resultado. Se o objetivo não foi totalmente atingido, o agente continua trabalhando automaticamente (nova iteração). O número máximo de iterações e o comportamento (automático ou com confirmação) são configuráveis no gear. Ideal para tarefas complexas que exigem refinamento.", "combo": ["Subagents", "Orchestra", "Thinking"] },
-      { "id": "plan", "label": "Modo Plano", "modes": ["Código"], "description": "Apenas leitura — produz um plano sem editar arquivos.", "detail": "Bloqueia ferramentas de escrita (write, edit, bash). O agente apenas lê o código e produz um plano de implementação detalhado. Útil para revisão e planejamento antes de executar alterações.", "combo": ["Thinking", "Pesquisa"] },
-      { "id": "permissions", "label": "Permissões", "modes": ["Código"], "description": "Controle de segurança sobre ações do agente.", "detail": "Três níveis: Ask (pergunta antes de cada ação crítica), Approve (mostra resumo para aprovação), Full (executa automaticamente). Configurável no modal de Preferências ou diretamente no input.", "combo": [] }
+      {
+        "id": "search",
+        "label": "Pesquisa",
+        "modes": [
+          "Chat",
+          "Código"
+        ],
+        "description": "Busca e lê páginas da web via HTTP.",
+        "detail": "Adiciona as ferramentas websearch e webfetch ao agente. Rápido e eficiente para consultar documentação, APIs e informações públicas. Não executa JavaScript — ideal para conteúdo estático.",
+        "combo": [
+          "Browser",
+          "Thinking"
+        ]
+      },
+      {
+        "id": "browser",
+        "label": "Browser",
+        "modes": [
+          "Chat"
+        ],
+        "description": "Navega em páginas como um browser real.",
+        "detail": "Abre o painel direito com um navegador completo. Executa JavaScript, ideal para SPAs, formulários e páginas dinâmicas. O agente pode navegar, clicar, preencher campos e tirar screenshots.",
+        "combo": [
+          "Pesquisa",
+          "Thinking"
+        ]
+      },
+      {
+        "id": "thinking",
+        "label": "Thinking",
+        "modes": [
+          "Chat",
+          "Código"
+        ],
+        "description": "Raciocínio estendido do modelo.",
+        "detail": "Ativa o modo reasoning/thinking do modelo (quando suportado). O modelo \"pensa\" antes de responder, resultando em respostas mais profundas e bem fundamentadas. Consome mais tokens e tempo.",
+        "combo": [
+          "Pesquisa",
+          "Browser",
+          "Loop"
+        ]
+      },
+      {
+        "id": "simple",
+        "label": "Simples",
+        "modes": [
+          "Chat",
+          "Código"
+        ],
+        "description": "Respostas diretas em texto puro.",
+        "detail": "Remove formatação avançada, citações e blocos de ferramentas da resposta. Útil quando você quer apenas o conteúdo essencial, sem enfeites.",
+        "combo": []
+      },
+      {
+        "id": "brain",
+        "label": "Memória (Brain)",
+        "modes": [
+          "Chat",
+          "Código"
+        ],
+        "description": "Orbit lembra fatos e preferências entre conversas.",
+        "detail": "Adiciona as ferramentas memory_save/search/link/open/graph. O Orbit pode salvar fatos, preferências e decisões e recuperá-los automaticamente em conversas futuras. Desative por chat se preferir uma interação sem contexto.",
+        "combo": []
+      },
+      {
+        "id": "subagents",
+        "label": "Subagents",
+        "modes": [
+          "Chat",
+          "Código"
+        ],
+        "description": "Workers efêmeros em background para tarefas paralelas.",
+        "detail": "Adiciona a ferramenta subagent ao agente. Quando o agente identifica subtarefas independentes, ele pode delegá-las a workers efêmeros que rodam em background com o modelo configurado. Os workers são descartados ao fim da tarefa — não aparecem na sidebar.",
+        "combo": [
+          "Loop",
+          "Orchestra"
+        ]
+      },
+      {
+        "id": "orchestra",
+        "label": "Orchestra",
+        "modes": [
+          "Código"
+        ],
+        "description": "Divide o pedido em plano de tarefas + workers persistentes.",
+        "detail": "O agente orquestrador planeja a tarefa (criando subtarefas com create_task), propõe o plano para sua aprovação e, após aprovado, executa cada subtarefa como uma sessão filha persistente no painel direito. Os workers rodam em paralelo com o modelo worker configurado. Resultado final é sintetizado pelo orquestrador.",
+        "combo": [
+          "Loop",
+          "Subagents"
+        ]
+      },
+      {
+        "id": "loop",
+        "label": "Loop",
+        "modes": [
+          "Código"
+        ],
+        "description": "Agente revisa e itera até completar a tarefa.",
+        "detail": "Após cada resposta, o sistema revisa criticamente o resultado. Se o objetivo não foi totalmente atingido, o agente continua trabalhando automaticamente (nova iteração). O número máximo de iterações e o comportamento (automático ou com confirmação) são configuráveis no gear. Ideal para tarefas complexas que exigem refinamento.",
+        "combo": [
+          "Subagents",
+          "Orchestra",
+          "Thinking"
+        ]
+      },
+      {
+        "id": "plan",
+        "label": "Modo Plano",
+        "modes": [
+          "Código"
+        ],
+        "description": "Apenas leitura — produz um plano sem editar arquivos.",
+        "detail": "Bloqueia ferramentas de escrita (write, edit, bash). O agente apenas lê o código e produz um plano de implementação detalhado. Útil para revisão e planejamento antes de executar alterações.",
+        "combo": [
+          "Thinking",
+          "Pesquisa"
+        ]
+      },
+      {
+        "id": "permissions",
+        "label": "Permissões",
+        "modes": [
+          "Código"
+        ],
+        "description": "Controle de segurança sobre ações do agente.",
+        "detail": "Três níveis: Ask (pergunta antes de cada ação crítica), Approve (mostra resumo para aprovação), Full (executa automaticamente). Configurável no modal de Preferências ou diretamente no input.",
+        "combo": []
+      }
     ],
     "combos": [
-      { "label": "Pesquisa aprofundada", "items": ["Pesquisa", "Browser", "Thinking"], "description": "Ative Pesquisa + Browser + Thinking juntos. O agente searching, navega em páginas complexas e raciocina profundamente sobre o que encontrou. Ideal para investigar tópicos técnicos, comparar documentações ou fazer análise competitiva." },
-      { "label": "Refinamento automático", "items": ["Loop", "Thinking"], "description": "Loop + Thinking: o agente revisa o próprio resultado com raciocínio estendido, identificando gaps e refinando até o objetivo ser atingido. Excelente para gerar código robusto, testes completos ou documentação detalhada." },
-      { "label": "Orquestração com revisão", "items": ["Orchestra", "Loop"], "description": "Orchestra + Loop: o orquestrador divide o problema em tarefas, workers executam em paralelo, e após a síntese o loop revisa o resultado, criando workers de continuação se necessário. O melhor dos dois mundos para problemas complexos." },
-      { "label": "Workers em múltiplas frentes", "items": ["Orchestra", "Subagents"], "description": "Orchestra + Subagents: o orquestrador coordena tarefas de alto nível (workers persistentes na sidebar), e dentro de cada tarefa o worker pode usar subagents efêmeros para investigações pontuais. Máximo de paralelismo." },
-      { "label": "Planejamento cuidadoso", "items": ["Modo Plano", "Thinking", "Pesquisa"], "description": "Modo Plano + Thinking + Pesquisa: antes de qualquer alteração, o agente pesquisa documentação, raciocina profundamente e produz um plano detalhado de implementação sem modificar arquivos. Aprove o plano e depois execute com as ferramentas normais." },
-      { "label": "Código com segurança", "items": ["Permissão: Ask", "Loop"], "description": "Permissão Ask + Loop: a cada iteração do loop, o agente pode pedir permissão antes de ações sensíveis (editar arquivos, executar comandos). Seguro para revisar código de terceiros ou fazer alterações em produção." }
+      {
+        "label": "Pesquisa aprofundada",
+        "items": [
+          "Pesquisa",
+          "Browser",
+          "Thinking"
+        ],
+        "description": "Ative Pesquisa + Browser + Thinking juntos. O agente searching, navega em páginas complexas e raciocina profundamente sobre o que encontrou. Ideal para investigar tópicos técnicos, comparar documentações ou fazer análise competitiva."
+      },
+      {
+        "label": "Refinamento automático",
+        "items": [
+          "Loop",
+          "Thinking"
+        ],
+        "description": "Loop + Thinking: o agente revisa o próprio resultado com raciocínio estendido, identificando gaps e refinando até o objetivo ser atingido. Excelente para gerar código robusto, testes completos ou documentação detalhada."
+      },
+      {
+        "label": "Orquestração com revisão",
+        "items": [
+          "Orchestra",
+          "Loop"
+        ],
+        "description": "Orchestra + Loop: o orquestrador divide o problema em tarefas, workers executam em paralelo, e após a síntese o loop revisa o resultado, criando workers de continuação se necessário. O melhor dos dois mundos para problemas complexos."
+      },
+      {
+        "label": "Workers em múltiplas frentes",
+        "items": [
+          "Orchestra",
+          "Subagents"
+        ],
+        "description": "Orchestra + Subagents: o orquestrador coordena tarefas de alto nível (workers persistentes na sidebar), e dentro de cada tarefa o worker pode usar subagents efêmeros para investigações pontuais. Máximo de paralelismo."
+      },
+      {
+        "label": "Planejamento cuidadoso",
+        "items": [
+          "Modo Plano",
+          "Thinking",
+          "Pesquisa"
+        ],
+        "description": "Modo Plano + Thinking + Pesquisa: antes de qualquer alteração, o agente pesquisa documentação, raciocina profundamente e produz um plano detalhado de implementação sem modificar arquivos. Aprove o plano e depois execute com as ferramentas normais."
+      },
+      {
+        "label": "Código com segurança",
+        "items": [
+          "Permissão: Ask",
+          "Loop"
+        ],
+        "description": "Permissão Ask + Loop: a cada iteração do loop, o agente pode pedir permissão antes de ações sensíveis (editar arquivos, executar comandos). Seguro para revisar código de terceiros ou fazer alterações em produção."
+      }
     ]
   },
   "preferences": {
@@ -984,9 +1234,18 @@
     },
     "context": {
       "title": "Injeção de contexto",
-      "off": { "label": "Nunca", "hint": "Memórias não são injetadas no prompt" },
-      "all": { "label": "Sempre", "hint": "Memórias são injetadas em toda conversa" },
-      "memory": { "label": "Só quando ativo", "hint": "Injeta apenas com o toggle Memória ativado" },
+      "off": {
+        "label": "Nunca",
+        "hint": "Memórias não são injetadas no prompt"
+      },
+      "all": {
+        "label": "Sempre",
+        "hint": "Memórias são injetadas em toda conversa"
+      },
+      "memory": {
+        "label": "Só quando ativo",
+        "hint": "Injeta apenas com o toggle Memória ativado"
+      },
       "descriptionCode": "Memórias de projeto (decisões, convenções, estrutura) são injetadas no prompt automaticamente. O agente busca o restante sob demanda com a ferramenta memory_graph.",
       "descriptionChat": "Fatos permanentes, preferências e memórias sazonais são injetados no prompt pra respostas mais personalizadas e naturais."
     },
@@ -1013,9 +1272,18 @@
     },
     "displayMode": {
       "title": "Modos de exibição",
-      "toggles": { "label": "Toggles", "hint": "Modos como toggles inline. Configurações avançadas no gear (⚙️)." },
-      "actions": { "label": "Ações", "hint": "Sem toggles inline. Todos os modos no botão \"+\"." },
-      "both": { "label": "Ambos", "hint": "Toggles inline + modos avançados também no botão \"+\"." }
+      "toggles": {
+        "label": "Toggles",
+        "hint": "Modos como toggles inline. Configurações avançadas no gear (⚙️)."
+      },
+      "actions": {
+        "label": "Ações",
+        "hint": "Sem toggles inline. Todos os modos no botão \"+\"."
+      },
+      "both": {
+        "label": "Ambos",
+        "hint": "Toggles inline + modos avançados também no botão \"+\"."
+      }
     },
     "persona": {
       "title": "Persona",
