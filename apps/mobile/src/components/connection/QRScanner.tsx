@@ -33,7 +33,7 @@ export function QRScanner({ onScanned, disabled }: QRScannerProps) {
   if (!permission) {
     return (
       <View style={s.center}>
-        <Text style={[s.mutedFg, { color: tokens.mutedForeground }]}>{t('qrScanner.preparingCamera')}</Text>
+        <Text style={[s.mutedFg, { color: 'rgba(255,255,255,0.75)' }]}>{t('qrScanner.preparingCamera')}</Text>
       </View>
     )
   }
@@ -41,8 +41,8 @@ export function QRScanner({ onScanned, disabled }: QRScannerProps) {
   if (!permission.granted) {
     return (
       <View style={[s.center, { padding: 24 }]}>
-        <Text style={[s.permTitle, { color: tokens.foreground }]}>{t('qrScanner.permissionRequiredTitle')}</Text>
-        <Text style={[s.permDesc, { color: tokens.mutedForeground }]}>
+        <Text style={s.permTitle}>{t('qrScanner.permissionRequiredTitle')}</Text>
+        <Text style={s.permDesc}>
           {t('qrScanner.permissionRequiredDesc')}
         </Text>
         <Button onPress={requestPermission}>{t('qrScanner.grantPermission')}</Button>
@@ -53,7 +53,7 @@ export function QRScanner({ onScanned, disabled }: QRScannerProps) {
   return (
     <View style={s.scannerContainer}>
       <CameraView
-        style={{ flex: 1, minHeight: 300 }}
+        style={{ flex: 1 }}
         barcodeScannerSettings={{ barcodeTypes: ['qr'] }}
         onBarcodeScanned={scanned ? undefined : handleBarcodeScanned}
       >
@@ -81,12 +81,12 @@ export function QRScanner({ onScanned, disabled }: QRScannerProps) {
 const s = StyleSheet.create({
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 16 },
   mutedFg: {},
-  permTitle: { textAlign: 'center', fontSize: 18, fontWeight: '600' },
-  permDesc: { textAlign: 'center', fontSize: 14 },
+  permTitle: { textAlign: 'center', fontSize: 18, fontWeight: '600', color: '#fff' },
+  permDesc: { textAlign: 'center', fontSize: 14, color: 'rgba(255,255,255,0.75)' },
 
-  scannerContainer: { overflow: 'hidden', borderRadius: 12 },
+  scannerContainer: { flex: 1 },
   overlay: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  scanFrame: { width: 224, height: 224, borderRadius: 16, borderWidth: 2, borderColor: 'rgba(255,255,255,0.6)' },
+  scanFrame: { width: 240, height: 240, borderRadius: 16, borderWidth: 2, borderColor: 'rgba(255,255,255,0.6)' },
   scannedBadge: { position: 'absolute', bottom: 32, borderRadius: 9999, backgroundColor: 'rgba(0,0,0,0.6)', paddingHorizontal: 16, paddingVertical: 8 },
   scannedText: { fontSize: 14, color: '#fff' },
 
