@@ -51,6 +51,8 @@ interface PanelState {
   setTabsForSession: (sessionId: string, tabs: PanelTab[], activeId: string | null) => void
   getTabs: (sessionId: string) => PanelTab[]
   getActiveTabId: (sessionId: string) => string | null
+  /** Atualiza o título das abas de chat que apontam para uma sessão (ex.: agente nomeou o chat). */
+  renameChatTabs: (sessionId: string, title: string) => void
 
   browserRequestId: number
   browserUrl?: string
@@ -148,6 +150,20 @@ export const usePanelStore = create<PanelState>((set, get) => {
     getTabs: (sessionId) => get().tabsBySession[sessionId] ?? [],
 
     getActiveTabId: (sessionId) => get().activeTabBySession[sessionId] ?? null,
+
+    renameChatTabs: (sessionId, title) =>
+      set((state) => {
+        let changed = false
+        const tabsBySession: Record<string, PanelTab[]> = {}
+        for (const [sk, tabs] of Object.entries(state.tabsBySession)) {
+          const next = tabs.map((t) =>
+            t.sessionId === sessionId && t.type === "chat" && t.title !== title ? { ...t, title } : t,
+          )
+          if (next.some((t, i) => t !== tabs[i])) changed = true
+          tabsBySession[sk] = next
+        }
+        return changed ? { tabsBySession } : state
+      }),
 
     browserRequestId: 0,
     browserUrl: undefined,

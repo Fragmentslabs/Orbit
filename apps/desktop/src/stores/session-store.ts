@@ -24,6 +24,7 @@ import { useModelModePrefs } from "@/src/stores/model-mode-prefs"
 import { useProviderStore } from "@/src/stores/provider-store"
 import { useLoopConfigStore } from "@/src/stores/loop-config-store"
 import { LOCALE_PROMPT_NAME, useLocaleStore } from "@/src/stores/locale-store"
+import { usePanelStore } from "@/src/stores/panel-store"
 
 /**
  * Store de sessões/mensagens no padrão do opencode: sessões persistidas
@@ -749,11 +750,14 @@ function applyChatEvent(event: ChatEvent, set: Setter, get: () => SessionState) 
       set((state) => ({ messages: { ...state.messages, [sessionId]: event.messages } }))
       break
 
-    case "title":
+case "title":
       set((state) => {
         const sessions = state.sessions.map((s) => (s.id === sessionId ? { ...s, title: event.title } : s))
         return { sessions }
       })
+      // O agente nomeou o chat: espelha o novo título nas abas de chat do
+      // painel lateral que apontam para essa sessão.
+      usePanelStore.getState().renameChatTabs(sessionId, event.title)
       break
 
     case "orchestration:plan":
