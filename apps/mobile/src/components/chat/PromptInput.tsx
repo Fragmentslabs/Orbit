@@ -417,10 +417,8 @@ export function PromptInput({
           />
         </View>
 
-        {/* Footer Row */}
-        <View className="flex-row items-center justify-between pt-1.5 pb-1 mt-1"
-          style={{ borderTopWidth: 1, borderTopColor: tokens.border }}
-        >
+        {/* Footer Row — sem separador, igual ao desktop */}
+        <View className="flex-row items-center justify-between pt-1.5 pb-1 mt-1">
           {/* Plus + Config actions */}
           <View className="flex-row items-center gap-1">
             <TouchableOpacity

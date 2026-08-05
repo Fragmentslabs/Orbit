@@ -2,8 +2,9 @@ import { useCallback, useState, useEffect, useRef } from 'react'
 import { View, Text, Animated } from 'react-native'
 import { useTranslation } from 'react-i18next'
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller'
-import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Stack, useRouter } from 'expo-router'
+import { SafeScreen } from '~/components/layout/SafeScreen'
 import type { SendMessageOptions, FilePart } from '@orbit/shared'
 import { PlanReviewCard } from '~/components/chat/PlanReviewCard'
 import { TaskProgress } from '~/components/chat/TaskProgress'
@@ -51,13 +52,6 @@ function normalizeFolderName(directoryPath: string): string {
     .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
     .join(' ')
 }
-
-const DEFAULT_SUGGESTIONS = [
-  'What can you help me with?',
-  'Explain a concept simply',
-  'Help me brainstorm ideas',
-  'Review my code',
-]
 
 interface ChatScreenProps {
   /** ID da sessão existente. Ausente = rascunho de conversa nova. */
@@ -165,6 +159,11 @@ export function ChatScreen({ sessionId }: ChatScreenProps) {
   }, [session?.directory, session?.extraDirectories])
 
   const isCode = (session?.mode ?? mode) === 'code'
+
+  // Sugestões do estado vazio — traduzidas e por modo, como no desktop
+  const chatSuggestions = t('chatScreen.suggestions.chat', { returnObjects: true }) as string[]
+  const codeSuggestions = t('chatScreen.suggestions.code', { returnObjects: true }) as string[]
+  const suggestions = isCode ? codeSuggestions : chatSuggestions
 
   const handleSend = useCallback(
     async (text: string, options?: SendMessageOptions, files?: FilePart[]) => {
@@ -284,7 +283,7 @@ export function ChatScreen({ sessionId }: ChatScreenProps) {
   const personaVisible = useAppearanceStore((s) => s.personaVisible)
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: tokens.background }} edges={['top', 'bottom']}>
+    <SafeScreen edges={['top', 'bottom']}>
       <Stack.Screen options={{ headerShown: false }} />
 
       {/* KAV do react-native-keyboard-controller: mesma API do RN, mas a
@@ -366,7 +365,7 @@ export function ChatScreen({ sessionId }: ChatScreenProps) {
         {/* Sugestões — ancoradas acima do input, só na conversa vazia */}
         {isEmpty && (
           <View style={{ paddingHorizontal: 16, marginBottom: 12 }}>
-            <Suggestions suggestions={DEFAULT_SUGGESTIONS} onSelect={handleSuggestion} />
+            <Suggestions suggestions={suggestions} onSelect={handleSuggestion} />
           </View>
         )}
 
@@ -415,6 +414,6 @@ export function ChatScreen({ sessionId }: ChatScreenProps) {
           onNavigateToSession={(sid) => router.replace({ pathname: '/(main)/chat/[id]', params: { id: sid } })}
         />
       </KeyboardAvoidingView>
-    </SafeAreaView>
+    </SafeScreen>
   )
 }
