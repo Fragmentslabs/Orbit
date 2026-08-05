@@ -15,14 +15,39 @@ async function saveSession(session: SessionInfo): Promise<void> {
 }
 
 /**
- * Trunca a lista de mensagens a partir do par (user message + resposta)
- * que contém `messageId`, retornando [truncated, discarded].
+ * Trunca a lista a partir do turno que contém `messageId`, retornando
+ * [truncated, discarded].
+ *
+ * O revert é acionado pela mensagem do USUÁRIO: corta nela mesma, descartando
+ * ela e tudo que veio depois. Um id de mensagem de assistente continua aceito
+ * (companion em versão antiga) e corta no par user+resposta — mas só quando a
+ * anterior é mesmo do usuário, senão duas mensagens de usuário seguidas (envio
+ * que falhou, fila) fariam o corte engolir o turno anterior.
  */
 function truncateAt(messages: ChatMessage[], messageId: string): [ChatMessage[], ChatMessage[]] {
   const idx = messages.findIndex((m) => m.id === messageId)
   if (idx < 0) return [messages, []]
-  const cut = idx > 0 && messages[idx - 1].role === 'user' ? idx - 1 : idx
+  const cut =
+    messages[idx].role === 'assistant' && idx > 0 && messages[idx - 1].role === 'user'
+      ? idx - 1
+      : idx
   return [messages.slice(0, cut), messages.slice(cut)]
+}
+
+/**
+ * Tree hash a restaurar no modo código: o estado do filesystem ANTES do turno.
+ *
+ * Só mensagens de assistente carregam snapshot (é o chat-engine que captura no
+ * início do stream). Como o revert agora parte da mensagem do usuário, o
+ * snapshot vem da resposta imediatamente seguinte. Olhamos só o alvo e o
+ * próximo de propósito — varrer o resto da lista acharia o snapshot de um turno
+ * posterior e restauraria o filesystem para o estado errado.
+ */
+function startSnapshotFor(messages: ChatMessage[], idx: number): string | undefined {
+  const own = messages[idx]?.snapshot?.start
+  if (own) return own
+  const next = messages[idx + 1]
+  return next?.role === 'assistant' ? next.snapshot?.start : undefined
 }
 
 export async function revert(sessionId: string, messageId: string): Promise<SessionRevert | null> {
@@ -30,8 +55,8 @@ export async function revert(sessionId: string, messageId: string): Promise<Sess
   if (!session) return null
 
   const messages = (await readJson<ChatMessage[]>(StorageKeys.messages(sessionId))) ?? []
-  const target = messages.find((m) => m.id === messageId)
-  if (!target) return null
+  const targetIdx = messages.findIndex((m) => m.id === messageId)
+  if (targetIdx < 0) return null
 
   // Ambos os modos truncam as mensagens imediatamente
   const [truncated, discarded] = truncateAt(messages, messageId)
@@ -40,9 +65,9 @@ export async function revert(sessionId: string, messageId: string): Promise<Sess
   await writeJson(StorageKeys.messages(sessionId), truncated)
   broadcastChatEvent({ type: 'messages', sessionId, messages: truncated })
 
-  if (session.directory && target.snapshot?.start) {
+  const start = startSnapshotFor(messages, targetIdx)
+  if (session.directory && start) {
     // Modo código: também restaura o filesystem para o snapshot da mensagem
-    const start = target.snapshot.start
     const current = await capture(session.directory)
     await restore(session.directory, start)
     const changes = await diff(session.directory, start, current)
