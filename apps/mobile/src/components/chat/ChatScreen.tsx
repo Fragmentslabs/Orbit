@@ -1,4 +1,4 @@
-import { useCallback, useState, useEffect, useRef } from 'react'
+import { useCallback, useState, useEffect, useRef, useMemo } from 'react'
 import { View, Text, Animated } from 'react-native'
 import { useTranslation } from 'react-i18next'
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller'
@@ -152,11 +152,19 @@ export function ChatScreen({ sessionId }: ChatScreenProps) {
   // Pastas do modo código: rascunho começa vazio; sessão existente herda as
   // pastas dela (e mudanças são persistidas no próximo envio).
   const [folders, setFolders] = useState<string[]>([])
+  // Ref espelho das pastas, atualizado no setter (não no render): o handleSend
+  // fica com identidade estável entre trocas de modo — senão o memo do
+  // ChatInput quebra e o PromptInput inteiro re-renderiza (o delay da troca).
+  const foldersRef = useRef<string[]>([])
+  const updateFolders = useCallback((next: string[]) => {
+    foldersRef.current = next
+    setFolders(next)
+  }, [])
   useEffect(() => {
     if (session?.directory) {
-      setFolders([session.directory, ...(session.extraDirectories ?? [])])
+      updateFolders([session.directory, ...(session.extraDirectories ?? [])])
     }
-  }, [session?.directory, session?.extraDirectories])
+  }, [session?.directory, session?.extraDirectories, updateFolders])
 
   const isCode = (session?.mode ?? mode) === 'code'
 
@@ -167,8 +175,14 @@ export function ChatScreen({ sessionId }: ChatScreenProps) {
 
   const handleSend = useCallback(
     async (text: string, options?: SendMessageOptions, files?: FilePart[]) => {
-      const dirConfig = isCode && folders.length > 0
-        ? { directory: folders[0], extraDirectories: folders.slice(1) }
+      // Modo lido na hora do envio (getState) + pastas via ref: nada disso
+      // entra nas deps, então o handleSend não muda quando a aba troca.
+      const target = sessionId
+        ? useSessionStore.getState().sessions.find((s) => s.id === sessionId)
+        : undefined
+      const codeMode = (target?.mode ?? useWorkspaceStore.getState().mode) === 'code'
+      const dirConfig = codeMode && foldersRef.current.length > 0
+        ? { directory: foldersRef.current[0], extraDirectories: foldersRef.current.slice(1) }
         : {}
       if (sessionId) {
         sendMessage(text, { options, files, sessionId, ...dirConfig })
@@ -177,30 +191,30 @@ export function ChatScreen({ sessionId }: ChatScreenProps) {
       if (creating) return
       setCreating(true)
       try {
-        const created = await createSession(mode)
+        const created = await createSession(useWorkspaceStore.getState().mode)
         if (!created) return
 
-        if (isCode && folders.length > 0 && useSettingsStore.getState().autoCreateFolders) {
+        if (codeMode && foldersRef.current.length > 0 && useSettingsStore.getState().autoCreateFolders) {
           const allFolders = useSessionStore.getState().folders
           const autoFolderMap = await loadAutoFolderMap()
-          const existingFolderId = autoFolderMap[folders[0]]
+          const existingFolderId = autoFolderMap[foldersRef.current[0]]
           const existingFolder = allFolders.find((f) => f.id === existingFolderId)
 
           if (existingFolder) {
             await useSessionStore.getState().moveToFolder(created.id, existingFolder.id)
           } else {
-            const folderName = normalizeFolderName(folders[0])
+            const folderName = normalizeFolderName(foldersRef.current[0])
             const matchingFolder = allFolders.find(
-              (f) => f.name === folderName && f.mode === 'code' && !autoFolderMap[folders[0]],
+              (f) => f.name === folderName && f.mode === 'code' && !autoFolderMap[foldersRef.current[0]],
             )
             if (matchingFolder) {
-              autoFolderMap[folders[0]] = matchingFolder.id
+              autoFolderMap[foldersRef.current[0]] = matchingFolder.id
               await persistAutoFolderMap(autoFolderMap)
               await useSessionStore.getState().moveToFolder(created.id, matchingFolder.id)
             } else {
               const newFolder = await useSessionStore.getState().createFolder('code', folderName)
               if (newFolder) {
-                autoFolderMap[folders[0]] = newFolder.id
+                autoFolderMap[foldersRef.current[0]] = newFolder.id
                 await persistAutoFolderMap(autoFolderMap)
                 await useSessionStore.getState().moveToFolder(created.id, newFolder.id)
               }
@@ -214,7 +228,7 @@ export function ChatScreen({ sessionId }: ChatScreenProps) {
         setCreating(false)
       }
     },
-    [sessionId, sendMessage, createSession, mode, router, creating, isCode, folders],
+    [sessionId, sendMessage, createSession, router, creating],
   )
 
   const handleAbort = useCallback(() => {
@@ -272,6 +286,41 @@ export function ChatScreen({ sessionId }: ChatScreenProps) {
     },
     [],
   )
+
+  // Identidades estáveis entre trocas de modo — sem elas o memo do ChatInput
+  // quebra e o PromptInput inteiro re-renderiza (o delay da troca de aba).
+  const onCreateSession = useCallback(
+    () => createSession(useWorkspaceStore.getState().mode),
+    [createSession],
+  )
+
+  const onNavigateToSession = useCallback(
+    (sid: string) => router.replace({ pathname: '/(main)/chat/[id]', params: { id: sid } }),
+    [router],
+  )
+
+  // Footer da lista memoizado: o MessageList é memo e precisa de props
+  // estáveis para não re-renderizar quando o modo troca.
+  const listFooter = useMemo<React.ReactElement | undefined>(() => {
+    if (planReview && planReview.status === 'proposed') {
+      return (
+        <View className="px-4 pb-2">
+          <PlanReviewCard sessionId={sessionId!} review={planReview} />
+        </View>
+      )
+    }
+    if (planReview && planReview.status === 'implementing') {
+      return (
+        <View className="px-4 pb-2">
+          <TaskProgress
+            tasks={[{ id: 'plan', title: t('chatScreen.implementPlan'), status: isStreaming ? 'streaming' : 'idle' }]}
+            title={t('chatScreen.plan')}
+          />
+        </View>
+      )
+    }
+    return undefined
+  }, [planReview, isStreaming, t, sessionId])
 
   const handleDelete = useCallback(async () => {
     if (!sessionId) return
@@ -347,16 +396,7 @@ export function ChatScreen({ sessionId }: ChatScreenProps) {
                 messages={activeMessages}
                 isStreaming={isStreaming}
                 onRevert={handleRevert}
-                ListFooterComponent={
-                  planReview && planReview.status === 'proposed'
-                    ? <View className="px-4 pb-2"><PlanReviewCard sessionId={sessionId!} review={planReview} /></View>
-                    : planReview && planReview.status === 'implementing'
-                      ? <View className="px-4 pb-2"><TaskProgress
-                          tasks={[{ id: 'plan', title: t('chatScreen.implementPlan'), status: isStreaming ? 'streaming' : 'idle' }]}
-                          title={t('chatScreen.plan')}
-                        /></View>
-                      : undefined
-                }
+                ListFooterComponent={listFooter}
               />
             )}
           </Animated.View>
@@ -372,7 +412,7 @@ export function ChatScreen({ sessionId }: ChatScreenProps) {
         {/* Modo código: seleção da pasta principal + adicionais (como no desktop) */}
         {isCode && (
           <View style={{ paddingHorizontal: 16, marginBottom: 8 }}>
-            <FolderSelector folders={folders} onFoldersChange={setFolders} />
+            <FolderSelector folders={folders} onFoldersChange={updateFolders} />
           </View>
         )}
 
@@ -410,8 +450,8 @@ export function ChatScreen({ sessionId }: ChatScreenProps) {
           onAbort={handleAbort}
           isStreaming={isStreaming}
           sessionId={sessionId}
-          onCreateSession={() => createSession(mode)}
-          onNavigateToSession={(sid) => router.replace({ pathname: '/(main)/chat/[id]', params: { id: sid } })}
+          onCreateSession={onCreateSession}
+          onNavigateToSession={onNavigateToSession}
         />
       </KeyboardAvoidingView>
     </SafeScreen>
