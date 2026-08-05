@@ -719,15 +719,16 @@
     "title": "Conectar App",
     "description": "Escaneie o QR code com o app Orbit para conectar.",
     "statusError": "Não foi possível obter o status do servidor.",
-    "serverActive": "Servidor ativo",
     "serverInactive": "Servidor inativo",
+    "portInUse": "Porta já em uso por outra instância do Orbit. Feche a outra instância para usar a conexão por aqui.",
     "qrAlt": "QR Code de conexão",
-    "pinHint": "Ou digite o PIN no app",
+    "pinHint": "Digite o PIN no app",
     "host": "Host",
     "portWs": "Porta WS",
-    "connectedDevices": "Dispositivos conectados",
-    "refresh": "Atualizar",
-    "close": "Fechar"
+    "tabQr": "QR Code",
+    "tabManual": "Manual",
+    "connectedDevices_one": "{{count}} dispositivo conectado",
+    "connectedDevices_other": "{{count}} dispositivos conectados"
   },
   "branch": {
     "previous": "Ramo anterior",
