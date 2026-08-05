@@ -16,6 +16,7 @@ import { StorageKeys } from '@shared/chat'
 import { getProvider } from './catalog'
 import { compactHistory, findLastSummaryIndex, shouldCompact } from './compaction'
 import { createToolApproval, takeDenialReason } from './permission'
+import { classifyProviderError, errorToText } from './errors'
 import { buildSystemPrompt } from './prompts'
 import { buildProviderOptions, interleavedReasoningField, normalizeMessages } from './reasoning'
 import { resolveModel } from './providers'
@@ -154,7 +155,7 @@ async function preprocessAttachment(file: FilePart): Promise<MessagePart[]> {
     try {
       text = await extractPdfText(file.url)
     } catch (err) {
-      text = `(erro ao extrair texto: ${err instanceof Error ? err.message : String(err)})`
+      text = `(erro ao extrair texto: ${errorToText(err)})`
     }
     return [
       attachmentChip(file),
@@ -167,7 +168,7 @@ async function preprocessAttachment(file: FilePart): Promise<MessagePart[]> {
     try {
       text = await extractSpreadsheetText(file.url)
     } catch (err) {
-      text = `(erro ao ler planilha: ${err instanceof Error ? err.message : String(err)})`
+      text = `(erro ao ler planilha: ${errorToText(err)})`
     }
     return [
       attachmentChip(file),
@@ -180,7 +181,7 @@ async function preprocessAttachment(file: FilePart): Promise<MessagePart[]> {
     try {
       text = await extractDocxText(file.url)
     } catch (err) {
-      text = `(erro ao ler documento: ${err instanceof Error ? err.message : String(err)})`
+      text = `(erro ao ler documento: ${errorToText(err)})`
     }
     return [
       attachmentChip(file),
@@ -522,7 +523,7 @@ export async function runChat(win: BrowserWindow, input: SendMessageInput): Prom
         upsertPart({
           id: newId('prt'),
           type: 'text',
-          text: `## Análise falhou\n\n${err instanceof Error ? err.message : String(err)}`,
+          text: `## Análise falhou\n\n${errorToText(err)}`,
           state: 'done',
         })
       }
@@ -729,7 +730,7 @@ export async function runChat(win: BrowserWindow, input: SendMessageInput): Prom
             tool: part.toolName,
             state: 'error',
             input: existing?.input,
-            error: part.error instanceof Error ? part.error.message : String(part.error),
+            error: errorToText(part.error),
           })
           break
         }
@@ -750,7 +751,7 @@ export async function runChat(win: BrowserWindow, input: SendMessageInput): Prom
           }
           break
         case 'error':
-          throw part.error instanceof Error ? part.error : new Error(String(part.error))
+          throw part.error instanceof Error ? part.error : new Error(errorToText(part.error))
         default:
           break
       }
@@ -788,8 +789,9 @@ export async function runChat(win: BrowserWindow, input: SendMessageInput): Prom
     if (isFirstExchange && input.orchestrationRole !== 'worker') void generateTitle(input, win)
   } catch (err) {
     const aborted = controller.signal.aborted
-    const message = err instanceof Error ? err.message : String(err)
+    const { kind, detail: message } = classifyProviderError(err)
     assistantMessage.error = aborted ? undefined : message
+    assistantMessage.errorKind = aborted || kind === 'unknown' ? undefined : kind
     for (const part of assistantMessage.parts) {
       if ((part.type === 'text' || part.type === 'reasoning') && part.state === 'streaming') {
         part.state = 'done'

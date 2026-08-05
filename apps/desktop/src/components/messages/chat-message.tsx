@@ -168,7 +168,14 @@ export function ChatAssistantMessage({ message, isLast, isBusy, onRetry }: {
           <GenericToolView key={segment.id} part={segment.part} label={segment.part.tool} />
         ),
       )}
-      {message.error && <MessageError error={message.error} onRetry={onRetry} />}
+      {message.error && (
+        <MessageError
+          error={message.error}
+          kind={message.errorKind}
+          failedModel={{ providerId: message.providerId, modelId: message.modelId }}
+          onRetry={onRetry}
+        />
+      )}
       {!message.error && message.truncated && <MessageTruncated />}
       {finished && sources.length > 0 && (
         <Sources className="mt-2">

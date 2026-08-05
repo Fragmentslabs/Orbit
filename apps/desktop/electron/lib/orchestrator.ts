@@ -14,6 +14,7 @@ import type {
 import { StorageKeys } from '@shared/chat'
 import { getProvider } from './catalog'
 import { abortChat, runChat, toModelMessages } from './chat-engine'
+import { classifyProviderError, errorToText } from './errors'
 import { ORCHESTRATOR_PLAN_PROMPT, ORCHESTRATOR_SYNTHESIS_PROMPT } from './prompts'
 import { resolveModel } from './providers'
 import { buildProviderOptions, interleavedReasoningField, normalizeMessages } from './reasoning'
@@ -232,7 +233,7 @@ export async function runOrchestration(win: BrowserWindow, input: SendMessageInp
             break
           }
           case 'error':
-            throw part.error instanceof Error ? part.error : new Error(String(part.error))
+            throw part.error instanceof Error ? part.error : new Error(errorToText(part.error))
         }
       }
       return { text: text.trim(), usage: await stream.usage }
@@ -288,8 +289,9 @@ export async function runOrchestration(win: BrowserWindow, input: SendMessageInp
     emit(win, { type: 'status', sessionId, status: 'idle' })
   } catch (err) {
     const aborted = controller.signal.aborted
-    const message = err instanceof Error ? err.message : String(err)
+    const { kind, detail: message } = classifyProviderError(err)
     assistantMessage.error = aborted ? undefined : message
+    assistantMessage.errorKind = aborted || kind === 'unknown' ? undefined : kind
     await saveMessages(sessionId, history)
     emit(win, { type: 'message', sessionId, message: assistantMessage })
     emit(win, {
@@ -680,7 +682,7 @@ Rules:
     emit(win, { type: 'status', sessionId, status: 'idle' })
   } catch (err) {
     const aborted = controller.signal.aborted
-    const message = err instanceof Error ? err.message : String(err)
+    const message = errorToText(err)
     plan.status = 'done'
     await persistPlan(win, sessionId, plan)
     emit(win, {

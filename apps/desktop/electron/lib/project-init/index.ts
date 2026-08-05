@@ -6,6 +6,7 @@ import fs from 'node:fs/promises'
 import path from 'node:path'
 import { projectIdOf } from '../memory/domain'
 import * as memoryService from '../memory/service'
+import { errorToText } from '../errors'
 import { resolveModel } from '../providers'
 import { createGlobTool, createGrepTool, createListTool, createReadTool } from '../tools/files'
 import type { ToolContext } from '../tools/context'
@@ -283,13 +284,13 @@ ${scanDescription}`,
       } else if (part.type === 'tool-call') {
         hooks.onAgentDelta?.(key, toolCallLine(part.toolName, part.input))
       } else if (part.type === 'error') {
-        throw part.error instanceof Error ? part.error : new Error(String(part.error))
+        throw part.error instanceof Error ? part.error : new Error(errorToText(part.error))
       }
     }
     hooks.onAgentDone?.(key, true)
     return { area, raw: buffer, failed: false }
   } catch (err) {
-    hooks.onAgentDelta?.(key, `\n_(exploração interrompida: ${err instanceof Error ? err.message : String(err)})_`)
+    hooks.onAgentDelta?.(key, `\n_(exploração interrompida: ${errorToText(err)})_`)
     hooks.onAgentDone?.(key, false)
     return { area, raw: buffer, failed: true }
   } finally {

@@ -26,7 +26,14 @@ export function SimpleAssistantMessage({ message, isLast, isBusy, onRetry }: {
       {textParts.map((part) => (
         <AssistantMarkdown key={part.id}>{(part as { type: "text"; text: string }).text}</AssistantMarkdown>
       ))}
-      {message.error && <MessageError error={message.error} onRetry={onRetry} />}
+      {message.error && (
+        <MessageError
+          error={message.error}
+          kind={message.errorKind}
+          failedModel={{ providerId: message.providerId, modelId: message.modelId }}
+          onRetry={onRetry}
+        />
+      )}
     </div>
   )
 }
