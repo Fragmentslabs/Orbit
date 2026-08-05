@@ -1,4 +1,5 @@
-import { Text, Pressable, StyleSheet } from "react-native";
+import { Text, Pressable, View, StyleSheet } from "react-native";
+import { Children, type ReactNode } from "react";
 import { getThemeTokens } from '~/lib/theme-tokens';
 import { useThemeStore } from '~/stores/theme-store';
 
@@ -9,6 +10,24 @@ type ButtonProps = React.ComponentPropsWithoutRef<typeof Pressable> & {
   variant?: ButtonVariant;
   size?: ButtonSize;
 };
+
+/**
+ * Conteúdo do botão: strings/numbers viram <Text> com a cor do variante;
+ * elementos (ícones, Spin, etc.) são mantidos como estão. Renderizar tudo numa
+ * <View> row evita o problema de SVG dentro de <Text> — que alinha o ícone pela
+ * baseline do texto em vez do centro vertical do botão.
+ */
+function renderContent(children: ReactNode, textColor: string, disabled: boolean): ReactNode {
+  return Children.map(children, (child) => {
+    // JSX preserva espaços literais entre elementos (`<Icon /> {t('...')}`) como
+    // nós de texto " " — ignorá-los evita um vão fantasma entre ícone e label.
+    if (typeof child === 'string' && child.trim() === '') return null;
+    if (typeof child === 'string' || typeof child === 'number') {
+      return <Text style={[s.text, { color: textColor }, disabled && s.textDisabled]}>{child}</Text>;
+    }
+    return child;
+  });
+}
 
 function Button({ variant = 'default', size = 'default', style, disabled, children, ...rest }: ButtonProps) {
   const tokens = getThemeTokens(useThemeStore((s) => s.resolved));
@@ -49,9 +68,13 @@ function Button({ variant = 'default', size = 'default', style, disabled, childr
       {...rest}
     >
       {(pressState) => (
-        <Text style={[s.text, { color: textColor }, disabled && s.textDisabled]}>
-          {typeof children === "function" ? children(pressState) : children}
-        </Text>
+        <View style={s.content}>
+          {renderContent(
+            typeof children === 'function' ? children(pressState) : children,
+            textColor,
+            !!disabled,
+          )}
+        </View>
       )}
     </Pressable>
   );
@@ -66,13 +89,18 @@ const SIZE_MAP: Record<ButtonSize, object> = {
 
 const s = StyleSheet.create({
   base: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
     borderRadius: 6,
     height: 40,
     paddingHorizontal: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  content: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    flexShrink: 1,
   },
   disabled: { opacity: 0.5 },
   text: { fontSize: 14, fontWeight: '500' },
