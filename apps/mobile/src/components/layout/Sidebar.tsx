@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, useCallback, useRef, memo } from 'react'
-import { View, Text, Pressable, Animated, ScrollView, Alert, Dimensions } from 'react-native'
-import type { GestureResponderEvent } from 'react-native'
+import { View, Text, Pressable, Animated, Alert, Dimensions, SectionList } from 'react-native'
+import type { GestureResponderEvent, SectionListData, SectionListRenderItemInfo } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useRouter } from 'expo-router'
 import { useTranslation } from 'react-i18next'
@@ -39,11 +39,24 @@ import { cn } from '~/lib/utils'
 import { getThemeTokens } from '~/lib/theme-tokens'
 import { useThemeStore } from '~/stores/theme-store'
 import type { ThemeTokens } from '~/lib/theme-tokens'
+import type { SessionInfo, FolderInfo } from '@orbit/shared'
 
 const DRAWER_WIDTH = 308
 
 /** Mesma chave do desktop (app-sidebar) — pastas abertas/fechadas persistidas. */
 const FOLDER_EXPANDED_KEY = 'orbit.sidebar.folder-expanded'
+
+/** Item sentinela do grupo "Chats" vazio — SectionList não chama renderItem
+ *  para seções com data vazio, então o texto de estado vazio é um item. */
+const EMPTY_CHATS_ITEM = { __empty: true }
+
+type ChatListItem = SessionInfo | FolderInfo | typeof EMPTY_CHATS_ITEM
+
+/** Seções da lista virtualizada: fixados, pastas (recolhidas + expandidas) e chats. */
+type ChatListSection = SectionListData<ChatListItem> & {
+  kind: 'pinned' | 'folders' | 'folder' | 'chats' | 'chats-empty'
+  folder?: FolderInfo
+}
 
 type NavItem = {
   label: string
@@ -329,6 +342,111 @@ export function Sidebar() {
     return { pinned, folderGroups, recent }
   }, [sessions, folders, mode])
 
+  // Seções da SectionList. Pastas recolhidas viram itens de uma seção "Pastas"
+  // (header com o label); pastas abertas viram seções próprias, onde o header
+  // É a linha da pasta e os dados são as sessões dela — cada linha da lista
+  // fica virtualizada, então trocar de modo monta só ~12 células de uma vez.
+  const sections = useMemo<ChatListSection[]>(() => {
+    const out: ChatListSection[] = []
+    if (pinned.length > 0) out.push({ kind: 'pinned', data: pinned })
+    if (folderGroups.length > 0) {
+      const collapsed: FolderInfo[] = []
+      const expandedSections: ChatListSection[] = []
+      for (const g of folderGroups) {
+        if (expandedFolders[g.folder.id]) {
+          expandedSections.push({ kind: 'folder', folder: g.folder, data: g.sessions })
+        } else {
+          collapsed.push(g.folder)
+        }
+      }
+      out.push({ kind: 'folders', data: collapsed })
+      out.push(...expandedSections)
+    }
+    if (recent.length > 0) {
+      out.push({ kind: 'chats', data: recent })
+    } else if (pinned.length > 0 || folderGroups.length > 0) {
+      // Mantém o grupo "Chats" visível com o texto de vazio (como antes)
+      out.push({ kind: 'chats-empty', data: [EMPTY_CHATS_ITEM] })
+    }
+    return out
+  }, [pinned, folderGroups, recent, expandedFolders])
+
+  const keyExtractor = (item: ChatListItem) => {
+    if ('__empty' in item) return 'chats-empty'
+    if ('title' in item) return `session:${item.id}`
+    return `folder:${item.id}`
+  }
+
+  const renderFolderRow = (folder: FolderInfo, expanded: boolean) => (
+    <FolderRow
+      folder={folder}
+      expanded={expanded}
+      selectionMode={selectionMode}
+      selected={selectedFolderIds.has(folder.id)}
+      onToggle={() => {
+        if (selectionMode) toggleSelectedFolder(folder.id)
+        else toggleFolderExpanded(folder.id)
+      }}
+      onLongPress={(e) => openFolderMenu(folder.id, e.nativeEvent.pageY)}
+      tokens={tokens}
+    />
+  )
+
+  const renderItem = ({ item, section }: SectionListRenderItemInfo<ChatListItem>) => {
+    const listSection = section as ChatListSection
+    if (listSection.kind === 'chats-empty') {
+      return (
+        <Text className="px-4 py-2 text-sm" style={{ color: tokens.mutedForeground }}>
+          {t('sidebar.noRecentChats')}
+        </Text>
+      )
+    }
+    if (listSection.kind === 'folders') {
+      return renderFolderRow(item as FolderInfo, false)
+    }
+    const session = item as SessionInfo
+    return (
+      <SessionRow
+        title={session.title}
+        active={session.id === activeSessionId}
+        streaming={status[session.id] === 'streaming' || status[session.id] === 'submitted'}
+        error={status[session.id] === 'error'}
+        unread={unreadCounts[session.id] > 0}
+        selectionMode={selectionMode}
+        selected={selectedIds.has(session.id)}
+        onPress={() => handleOpenSession(session.id)}
+        onLongPress={(e) => openSessionMenu(session.id, e.nativeEvent.pageY)}
+        tokens={tokens}
+      />
+    )
+  }
+
+  const renderSectionHeader = ({ section }: { section: SectionListData<ChatListItem> }) => {
+    const listSection = section as ChatListSection
+    if (listSection.kind === 'folder' && listSection.folder) {
+      return renderFolderRow(listSection.folder, true)
+    }
+    if (listSection.kind === 'pinned') return <GroupHeader label={t('sidebar.pinned')} tokens={tokens} />
+    if (listSection.kind === 'folders') return <GroupHeader label={t('sidebar.folders')} tokens={tokens} />
+    if (listSection.kind === 'chats' || listSection.kind === 'chats-empty') {
+      return (
+        <GroupHeader
+          label={t('sidebar.chats')}
+          tokens={tokens}
+          action={{
+            icon: Search,
+            label: t('sidebar.searchChats'),
+            onPress: () => {
+              closeSidebar()
+              router.push('/(main)/search')
+            },
+          }}
+        />
+      )
+    }
+    return null
+  }
+
   return (
     <>
       {/* Backdrop */}
@@ -402,162 +520,65 @@ export function Sidebar() {
             </View>
           )}
 
-          <ScrollView className="flex-1" contentContainerStyle={{ paddingBottom: 8 }}>
-            {/* Novo chat */}
-            <View className="px-3 pt-2 pb-1">
-              <Pressable
-                onPress={handleNewChat}
-                className="flex-row items-center justify-center gap-2 rounded-xl py-3"
-                style={{ borderWidth: 1, borderColor: tokens.border }}
-              >
-                <Plus size={18} color={tokens.foreground} />
-                <Text className="text-sm font-medium" style={{ color: tokens.foreground }}>
-                  {mode === 'chat' ? t('sidebar.newChat') : t('sidebar.newSession')}
-                </Text>
-              </Pressable>
-            </View>
+          {/* Lista de chats — SectionList virtualizada: trocar de modo monta
+              só as células visíveis (~12 por lote), igual ao seletor de modelos */}
+          <SectionList
+            className="flex-1"
+            sections={sections}
+            keyExtractor={keyExtractor}
+            renderItem={renderItem}
+            renderSectionHeader={renderSectionHeader}
+            stickySectionHeadersEnabled={false}
+            initialNumToRender={12}
+            maxToRenderPerBatch={12}
+            windowSize={7}
+            updateCellsBatchingPeriod={40}
+            contentContainerStyle={{ paddingBottom: 8 }}
+            ListHeaderComponent={
+              <View>
+                {/* Novo chat */}
+                <View className="px-3 pt-2 pb-1">
+                  <Pressable
+                    onPress={handleNewChat}
+                    className="flex-row items-center justify-center gap-2 rounded-xl py-3"
+                    style={{ borderWidth: 1, borderColor: tokens.border }}
+                  >
+                    <Plus size={18} color={tokens.foreground} />
+                    <Text className="text-sm font-medium" style={{ color: tokens.foreground }}>
+                      {mode === 'chat' ? t('sidebar.newChat') : t('sidebar.newSession')}
+                    </Text>
+                  </Pressable>
+                </View>
 
-            {/* Ações fixas */}
-            <View className="pt-1">
-              {filteredTopItems.map((item) => (
-                <SidebarItem
-                  key={item.label}
-                  icon={item.icon}
-                  label={item.label}
-                  onPress={() => {
-                    if (item.action) {
-                      item.action()
-                    } else if (item.view) {
-                      navigate(`/(main)/${item.view}`)
-                    }
-                  }}
-                  tokens={tokens}
-                />
-              ))}
-            </View>
-
-            {/* Lista de chats */}
-            <View className="mt-2 pt-2" style={{ borderTopWidth: 1, borderTopColor: tokens.border }}>
-              {pinned.length > 0 && (
-                <SessionGroup label={t('sidebar.pinned')} tokens={tokens}>
-                  {pinned.map((s) => (
-                    <SessionRow
-                      key={s.id}
-                      title={s.title}
-                      active={s.id === activeSessionId}
-                      streaming={status[s.id] === 'streaming' || status[s.id] === 'submitted'}
-                      error={status[s.id] === 'error'}
-                      unread={unreadCounts[s.id] > 0}
-                      selectionMode={selectionMode}
-                      selected={selectedIds.has(s.id)}
-                      onPress={() => handleOpenSession(s.id)}
-                      onLongPress={(e) => openSessionMenu(s.id, e.nativeEvent.pageY)}
+                {/* Ações fixas */}
+                <View className="pt-1">
+                  {filteredTopItems.map((item) => (
+                    <SidebarItem
+                      key={item.label}
+                      icon={item.icon}
+                      label={item.label}
+                      onPress={() => {
+                        if (item.action) {
+                          item.action()
+                        } else if (item.view) {
+                          navigate(`/(main)/${item.view}`)
+                        }
+                      }}
                       tokens={tokens}
                     />
                   ))}
-                </SessionGroup>
-              )}
+                </View>
 
-              {folderGroups.length > 0 && (
-                <SessionGroup label={t('sidebar.folders')} tokens={tokens}>
-                  {folderGroups.map(({ folder, sessions: folderSessions }) => {
-                    const expanded = expandedFolders[folder.id] ?? false
-                    return (
-                      <View key={folder.id}>
-                        <Pressable
-                          onLongPress={(e) => openFolderMenu(folder.id, e.nativeEvent.pageY)}
-                          onPress={() => {
-                            if (selectionMode) {
-                              toggleSelectedFolder(folder.id)
-                            } else {
-                              toggleFolderExpanded(folder.id)
-                            }
-                          }}
-                          className="mx-3 flex-row items-center gap-2 rounded-lg px-3 py-2"
-                          style={selectedFolderIds.has(folder.id) ? { backgroundColor: tokens.accent } : undefined}
-                        >
-                          {selectionMode && (
-                            <View className="mr-0.5">
-                              {selectedFolderIds.has(folder.id) ? (
-                                <Check size={14} color={tokens.primary} />
-                              ) : (
-                                <Square size={14} color={tokens.mutedForeground} />
-                              )}
-                            </View>
-                          )}
-                          <Folder size={14} color={tokens.mutedForeground} />
-                          <Text className="flex-1 text-sm font-medium" numberOfLines={1} style={{ color: tokens.foreground }}>
-                            {folder.name}
-                          </Text>
-                          {!selectionMode && (
-                            <ChevronDown
-                              size={16}
-                              color={tokens.mutedForeground}
-                              style={{ transform: [{ rotate: expanded ? '0deg' : '-90deg' }] }}
-                            />
-                          )}
-                        </Pressable>
-                        {expanded &&
-                          folderSessions.map((s) => (
-                            <SessionRow
-                              key={s.id}
-                              title={s.title}
-                              indented
-                              active={s.id === activeSessionId}
-                              streaming={status[s.id] === 'streaming' || status[s.id] === 'submitted'}
-                              error={status[s.id] === 'error'}
-                              unread={unreadCounts[s.id] > 0}
-                              selectionMode={selectionMode}
-                              selected={selectedIds.has(s.id)}
-                              onPress={() => handleOpenSession(s.id)}
-                              onLongPress={(e) => openSessionMenu(s.id, e.nativeEvent.pageY)}
-                              tokens={tokens}
-                            />
-                          ))}
-                      </View>
-                    )
-                  })}
-                </SessionGroup>
-              )}
-
-              <SessionGroup
-                label={t('sidebar.chats')}
-                tokens={tokens}
-                action={{
-                  icon: Search,
-                  label: t('sidebar.searchChats'),
-                  onPress: () => {
-                    closeSidebar()
-                    router.push('/(main)/search')
-                  },
-                }}
-              >
-                {recent.length === 0 ? (
-                  <Text className="px-4 py-2 text-sm" style={{ color: tokens.mutedForeground }}>
-                    {pinned.length === 0 && folderGroups.length === 0
-                      ? t('sidebar.noConversations')
-                      : t('sidebar.noRecentChats')}
-                  </Text>
-                ) : (
-                  recent.map((s) => (
-                    <SessionRow
-                      key={s.id}
-                      title={s.title}
-                      active={s.id === activeSessionId}
-                      streaming={status[s.id] === 'streaming' || status[s.id] === 'submitted'}
-                      error={status[s.id] === 'error'}
-                      unread={unreadCounts[s.id] > 0}
-                      selectionMode={selectionMode}
-                      selected={selectedIds.has(s.id)}
-                      onPress={() => handleOpenSession(s.id)}
-                      onLongPress={(e) => openSessionMenu(s.id, e.nativeEvent.pageY)}
-                      tokens={tokens}
-                    />
-                  ))
-                )}
-              </SessionGroup>
-            </View>
-          </ScrollView>
+                {/* Divisor entre as ações fixas e a lista de chats */}
+                <View className="mt-2 pt-2" style={{ borderTopWidth: 1, borderTopColor: tokens.border }} />
+              </View>
+            }
+            ListEmptyComponent={
+              <Text className="px-4 py-2 text-sm" style={{ color: tokens.mutedForeground }}>
+                {t('sidebar.noConversations')}
+              </Text>
+            }
+          />
 
           {/* Footer */}
           <View className="pt-2 pb-2" style={{ borderTopWidth: 1, borderTopColor: tokens.border }}>
@@ -674,14 +695,12 @@ const SidebarItem = memo(function SidebarItem({
   )
 })
 
-const SessionGroup = memo(function SessionGroup({
+const GroupHeader = memo(function GroupHeader({
   label,
-  children,
   tokens,
   action,
 }: {
   label: string
-  children: React.ReactNode
   tokens: ThemeTokens
   action?: {
     icon: typeof Search
@@ -691,26 +710,78 @@ const SessionGroup = memo(function SessionGroup({
 }) {
   const ActionIcon = action?.icon
   return (
-    <View className="mb-2">
-      <View className="flex-row items-center justify-between px-4 pb-3">
-        <Text className="text-xs font-medium uppercase tracking-wide" style={{ color: tokens.mutedForeground }}>
-          {label}
-        </Text>
-        {action && ActionIcon && (
-          <Pressable
-            onPress={action.onPress}
-            hitSlop={10}
-            accessibilityLabel={action.label}
-            className="h-7 w-7 items-center justify-center rounded-md active:opacity-70"
-          >
-            <ActionIcon size={16} color={tokens.mutedForeground} />
-          </Pressable>
-        )}
-      </View>
-      {children}
+    <View className="flex-row items-center justify-between px-4 pb-3 pt-2">
+      <Text className="text-xs font-medium uppercase tracking-wide" style={{ color: tokens.mutedForeground }}>
+        {label}
+      </Text>
+      {action && ActionIcon && (
+        <Pressable
+          onPress={action.onPress}
+          hitSlop={10}
+          accessibilityLabel={action.label}
+          className="h-7 w-7 items-center justify-center rounded-md active:opacity-70"
+        >
+          <ActionIcon size={16} color={tokens.mutedForeground} />
+        </Pressable>
+      )}
     </View>
   )
 })
+
+const FolderRow = memo(function FolderRow({
+  folder,
+  expanded,
+  selectionMode,
+  selected,
+  onToggle,
+  onLongPress,
+  tokens,
+}: {
+  folder: FolderInfo
+  expanded: boolean
+  selectionMode?: boolean
+  selected?: boolean
+  onToggle: () => void
+  onLongPress?: (e: GestureResponderEvent) => void
+  tokens: ThemeTokens
+}) {
+  return (
+    <Pressable
+      onLongPress={onLongPress}
+      onPress={onToggle}
+      className="mx-3 flex-row items-center gap-2 rounded-lg px-3 py-2"
+      style={selected ? { backgroundColor: tokens.accent } : undefined}
+    >
+      {selectionMode && (
+        <View className="mr-0.5">
+          {selected ? (
+            <Check size={14} color={tokens.primary} />
+          ) : (
+            <Square size={14} color={tokens.mutedForeground} />
+          )}
+        </View>
+      )}
+      <Folder size={14} color={tokens.mutedForeground} />
+      <Text className="flex-1 text-sm font-medium" numberOfLines={1} style={{ color: tokens.foreground }}>
+        {folder.name}
+      </Text>
+      {!selectionMode && (
+        <ChevronDown
+          size={16}
+          color={tokens.mutedForeground}
+          style={{ transform: [{ rotate: expanded ? '0deg' : '-90deg' }] }}
+        />
+      )}
+    </Pressable>
+  )
+}, (prev, next) =>
+  prev.folder === next.folder &&
+  prev.expanded === next.expanded &&
+  prev.selectionMode === next.selectionMode &&
+  prev.selected === next.selected &&
+  prev.tokens === next.tokens &&
+  prev.onToggle === next.onToggle
+)
 
 const SessionRow = memo(function SessionRow({
   title,
