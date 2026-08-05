@@ -57,6 +57,25 @@ export class CompanionWebSocket {
     this.shouldReconnect = true
     this.reconnectAttempt = 0
     this.setState({ reconnectAttempt: 0 })
+
+    // Se já existe um socket (reconexão sem disconnect() explícito — ex.: a
+    // tela de conexão chamando connect() de novo), fecha o anterior ANTES de
+    // abrir outro. Sem isso cada connect() vazava uma conexão no servidor,
+    // que acumulava o mesmo device N vezes na lista de conectados.
+    if (this.ws) {
+      const old = this.ws
+      this.ws = null
+      old.onopen = null
+      old.onmessage = null
+      old.onclose = null
+      old.onerror = null
+      if (old.readyState === WebSocket.OPEN || old.readyState === WebSocket.CONNECTING) {
+        try {
+          old.close()
+        } catch { /* ignore */ }
+      }
+    }
+
     this.open()
   }
 

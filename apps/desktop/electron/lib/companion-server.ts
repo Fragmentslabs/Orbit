@@ -70,6 +70,7 @@ interface ConnectedClient {
 
 let server: Server | null = null
 let wss: WebSocketServer | null = null
+let wsBindError: string | null = null // erro de bind (ex.: porta ocupada por outra instância do Orbit)
 let currentPin: string = ''
 let pinCreatedAt: number = 0
 const pinAttempts = new Map<string, number[]>() // ip → timestamps
@@ -940,6 +941,20 @@ export function startCompanionServer(): { port: number; ip: string; pin: string;
   server = createServer()
   wss = new WebSocketServer({ server })
 
+  wsBindError = null
+
+  // Se o bind falhar (ex.: porta 3847 já ocupada por outra instância do Orbit),
+  // marca o erro e derruba o wss — senão a UI mostraria um servidor "ativo"
+  // fantasma (wss !== null) que ninguém consegue alcançar.
+  server.on('error', (err: Error) => {
+    console.error('[Companion] WS server error:', err)
+    wsBindError = err.message
+    try { wss?.close() } catch { /* ignore */ }
+    try { server?.close() } catch { /* ignore */ }
+    wss = null
+    server = null
+  })
+
   regeneratePin()
 
   // Iniciar servidor HTTP REST junto com o WS
@@ -1000,6 +1015,7 @@ export function stopCompanionServer(): void {
   server?.close()
   wss = null
   server = null
+  wsBindError = null
 }
 
 export function getCompanionStatus() {
@@ -1010,6 +1026,7 @@ export function getCompanionStatus() {
     httpRunning: isCompanionHttpRunning(),
     ip: getLocalIp(),
     pin: wss ? getCurrentPin() : currentPin,
+    bindError: wsBindError,
     connectedClients: [...clients].filter(c => c.authenticated).map(c => ({
       deviceName: c.deviceName,
       connectedAt: c.connectedAt,

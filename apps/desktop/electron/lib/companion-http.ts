@@ -510,6 +510,9 @@ export function startCompanionHttpServer(
 
   httpServer.on('error', (err: Error) => {
     console.error('[CompanionHTTP] Server error:', err)
+    // Não deixa um servidor fantasma: se o bind falhou (porta em uso por outra
+    // instância), reporta not running em vez de httpServer !== null para sempre.
+    httpServer = null
   })
 
   httpServer.listen(HTTP_PORT, '0.0.0.0', () => {
