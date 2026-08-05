@@ -337,7 +337,9 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId }: 
                 }}
                 onSendToSidePanel={async (text) => {
                   const { directory, extraDirectories } = getDirs()
-                  const newSession = await createSession(mode, { setActive: false, directory, extraDirectories })
+                  // Novo chat na mesma pasta da sessão atual (se ela estiver em uma)
+                  const current = useSessionStore.getState().sessions.find((s) => s.id === sessionId)
+                  const newSession = await createSession(mode, { setActive: false, directory, extraDirectories, folderId: current?.folderId ?? null })
                   await sendMessage(mode, text, { options: buildOptions(), sessionId: newSession.id, directory, extraDirectories })
                   openChatTab(newSession.id, newSession.title)
                 }}

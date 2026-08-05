@@ -198,7 +198,9 @@ export function ChatInput({ onSubmit, status, onStop, sessionId }: {
                 if (sessionId) enqueueScheduled(sessionId, text, buildOptions(), mode, timestamp)
               }}
               onSendToSidePanel={async (text) => {
-                const newSession = await createSession(mode, { setActive: false })
+                // Novo chat na mesma pasta da sessão atual (se ela estiver em uma)
+                const current = useSessionStore.getState().sessions.find((s) => s.id === sessionId)
+                const newSession = await createSession(mode, { setActive: false, folderId: current?.folderId ?? null })
                 await sendMessage(mode, text, { options: buildOptions(), sessionId: newSession.id })
                 openChatTab(newSession.id, newSession.title)
               }}
