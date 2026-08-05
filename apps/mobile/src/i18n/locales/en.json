@@ -1,65 +1,58 @@
 {
   "settings": {
     "title": "Settings",
+    "providers": "Providers",
+    "preferences": "Preferences",
+    "notifications": "Notifications",
+    "tools": "Tools",
+    "appearance": "Appearance",
+    "language": "Language",
+    "howItWorks": "How it works",
     "connection": {
-      "sectionLabel": "Connection",
       "status": "Status",
       "connected": "Connected",
       "disconnected": "Disconnected",
       "desktop": "Desktop",
       "disconnect": "Disconnect"
     },
-    "providers": {
-      "sectionLabel": "Providers",
-      "none": "No provider connected. Credentials are managed on Orbit Desktop.",
-      "helper": "To add or remove providers, use Orbit Desktop's settings."
-    },
-    "model": {
-      "sectionLabel": "Model",
-      "active": "Active model",
-      "notSet": "Not set"
-    },
-    "preferences": {
-      "sectionLabel": "Preferences",
-      "brain": "Memory (Brain)",
-      "autoContext": "Automatic context",
-      "autoContextDescription": "Injects relevant memories into the prompt",
-      "reasoning": "Reasoning",
-      "level": "Level",
-      "reasoningLevels": { "low": "Low", "medium": "Medium", "high": "High" },
-      "simple": "Simple mode",
-      "simpleDescription": "Direct replies, no formatting",
-      "permissions": "Permissions",
-      "permissionModes": { "ask": "Ask", "approve": "Approve", "full": "Full" },
-      "autoFolders": "Automatic folders",
-      "autoFoldersDescription": "Groups new code chats into folders by directory name"
-    },
-    "notifications": {
-      "sectionLabel": "Notifications",
-      "pendingAsk": "Desktop questions",
-      "pendingAskDescription": "When Orbit needs permission or an answer",
-      "newMessage": "New message",
-      "newMessageDescription": "When the assistant replies (inactive session)",
-      "chatError": "Chat error",
-      "chatErrorDescription": "When an error occurs during processing"
-    },
-    "tools": {
-      "sectionLabel": "Tools",
-      "mcpSkills": "MCPs & Skills"
-    },
-    "appearanceSection": {
-      "sectionLabel": "Appearance",
-      "themeAndModes": "Theme and modes"
-    },
-    "info": {
-      "sectionLabel": "Information",
-      "howItWorks": "How it works"
-    },
-    "language": {
-      "sectionLabel": "Language",
-      "description": "Interface language and the assistant's reply language."
-    },
-    "footer": "Orbit Mobile v1.0.0"
+    "footer": "Orbit Mobile v{{version}}"
+  },
+  "providersScreen": {
+    "title": "Providers",
+    "modelSection": "Model",
+    "activeModel": "Active model",
+    "modelNotSet": "Not set",
+    "providersSection": "Providers",
+    "none": "No provider connected. Credentials are managed on Orbit Desktop.",
+    "helper": "To add or remove providers, use Orbit Desktop's settings."
+  },
+  "preferencesScreen": {
+    "title": "Preferences",
+    "brain": "Memory (Brain)",
+    "autoContext": "Automatic context",
+    "autoContextDescription": "Injects relevant memories into the prompt",
+    "reasoning": "Reasoning",
+    "level": "Level",
+    "reasoningLevels": { "low": "Low", "medium": "Medium", "high": "High" },
+    "simple": "Simple mode",
+    "simpleDescription": "Direct replies, no formatting",
+    "permissions": "Permissions",
+    "permissionModes": { "ask": "Ask", "approve": "Approve", "full": "Full" },
+    "autoFolders": "Automatic folders",
+    "autoFoldersDescription": "Groups new code chats into folders by directory name"
+  },
+  "notificationsScreen": {
+    "title": "Notifications",
+    "pendingAsk": "Desktop questions",
+    "pendingAskDescription": "When Orbit needs permission or an answer",
+    "newMessage": "New message",
+    "newMessageDescription": "When the assistant replies (inactive session)",
+    "chatError": "Chat error",
+    "chatErrorDescription": "When an error occurs during processing"
+  },
+  "languageScreen": {
+    "title": "Language",
+    "description": "Interface language and the assistant's reply language."
   },
   "sidebar": {
     "modeChat": "Chat",
@@ -137,7 +130,21 @@
     "newConversationSubtitle": "Start chatting with the assistant.",
     "implementPlan": "Implement plan",
     "plan": "Plan",
-    "orchestration": "Orchestration"
+    "orchestration": "Orchestration",
+    "suggestions": {
+      "chat": [
+        "What can you do?",
+        "Help me write a text",
+        "Explain a technical concept",
+        "Summarize a topic"
+      ],
+      "code": [
+        "Review my current code",
+        "Explain this repository",
+        "Generate tests for this project",
+        "Refactor something in the code"
+      ]
+    }
   },
   "sendButtonGroup": {
     "sendOptions": "Send options",
@@ -529,6 +536,7 @@
     "tapToConnect": "tap to connect",
     "searchingNetwork": "Looking for Orbit Desktop on the network…",
     "recent": "Recent",
+    "connectManually": "Connect manually",
     "scanQrCode": "Scan QR Code",
     "tipLabel": "Tip:",
     "tipText": "use Tailscale to reach your desktop from anywhere, no network setup needed."
@@ -540,17 +548,21 @@
     "grantPermission": "Grant Permission",
     "detected": "QR code detected!",
     "scanAgain": "Scan again",
+    "close": "Close",
+    "hint": "Point your camera at the QR code shown on Orbit Desktop",
     "webFallback": "QR Code is only available on mobile devices with a camera."
   },
-  "urlAccordion": {
-    "connectManually": "Connect manually",
-    "ipPortPinHint": "IP, port and PIN from Orbit Desktop",
+  "manualConnectSheet": {
+    "title": "Connect manually",
+    "subtitle": "Enter the IP, port and PIN shown on Orbit Desktop",
+    "recent": "Recent",
     "ipAddress": "IP address",
     "port": "Port",
     "pin": "PIN",
     "invalidPin": "Invalid PIN. Check the PIN shown on Orbit Desktop.",
     "connecting": "Connecting...",
-    "connect": "Connect"
+    "connect": "Connect",
+    "reset": "Clear fields"
   },
   "notifications": {
     "defaultSessionTitle": "Session",

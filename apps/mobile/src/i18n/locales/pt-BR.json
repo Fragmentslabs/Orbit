@@ -1,65 +1,58 @@
 {
   "settings": {
     "title": "Configurações",
+    "providers": "Provedores",
+    "preferences": "Preferências",
+    "notifications": "Notificações",
+    "tools": "Ferramentas",
+    "appearance": "Aparência",
+    "language": "Idioma",
+    "howItWorks": "Como funciona",
     "connection": {
-      "sectionLabel": "Conexão",
       "status": "Status",
       "connected": "Conectado",
       "disconnected": "Desconectado",
       "desktop": "Desktop",
       "disconnect": "Desconectar"
     },
-    "providers": {
-      "sectionLabel": "Provedores",
-      "none": "Nenhum provedor conectado. As credenciais são gerenciadas no Orbit Desktop.",
-      "helper": "Para adicionar ou remover provedores, use as configurações do Orbit Desktop."
-    },
-    "model": {
-      "sectionLabel": "Modelo",
-      "active": "Modelo ativo",
-      "notSet": "Não definido"
-    },
-    "preferences": {
-      "sectionLabel": "Preferências",
-      "brain": "Memória (Brain)",
-      "autoContext": "Contexto automático",
-      "autoContextDescription": "Injeta memórias relevantes no prompt",
-      "reasoning": "Raciocínio",
-      "level": "Nível",
-      "reasoningLevels": { "low": "Baixo", "medium": "Médio", "high": "Alto" },
-      "simple": "Modo simples",
-      "simpleDescription": "Respostas diretas, sem formatação",
-      "permissions": "Permissões",
-      "permissionModes": { "ask": "Perguntar", "approve": "Aprovar", "full": "Total" },
-      "autoFolders": "Pastas automáticas",
-      "autoFoldersDescription": "Agrupa novos chats de código em pastas pelo nome do diretório"
-    },
-    "notifications": {
-      "sectionLabel": "Notificações",
-      "pendingAsk": "Perguntas do desktop",
-      "pendingAskDescription": "Quando o Orbit precisar de permissão ou resposta",
-      "newMessage": "Nova mensagem",
-      "newMessageDescription": "Quando o assistente responder (sessão inativa)",
-      "chatError": "Erro no chat",
-      "chatErrorDescription": "Quando ocorrer um erro durante o processamento"
-    },
-    "tools": {
-      "sectionLabel": "Ferramentas",
-      "mcpSkills": "MCPs e Skills"
-    },
-    "appearanceSection": {
-      "sectionLabel": "Aparência",
-      "themeAndModes": "Tema e modos"
-    },
-    "info": {
-      "sectionLabel": "Informações",
-      "howItWorks": "Como funciona"
-    },
-    "language": {
-      "sectionLabel": "Idioma",
-      "description": "Idioma da interface e das respostas do assistente."
-    },
-    "footer": "Orbit Mobile v1.0.0"
+    "footer": "Orbit Mobile v{{version}}"
+  },
+  "providersScreen": {
+    "title": "Provedores",
+    "modelSection": "Modelo",
+    "activeModel": "Modelo ativo",
+    "modelNotSet": "Não definido",
+    "providersSection": "Provedores",
+    "none": "Nenhum provedor conectado. As credenciais são gerenciadas no Orbit Desktop.",
+    "helper": "Para adicionar ou remover provedores, use as configurações do Orbit Desktop."
+  },
+  "preferencesScreen": {
+    "title": "Preferências",
+    "brain": "Memória (Brain)",
+    "autoContext": "Contexto automático",
+    "autoContextDescription": "Injeta memórias relevantes no prompt",
+    "reasoning": "Raciocínio",
+    "level": "Nível",
+    "reasoningLevels": { "low": "Baixo", "medium": "Médio", "high": "Alto" },
+    "simple": "Modo simples",
+    "simpleDescription": "Respostas diretas, sem formatação",
+    "permissions": "Permissões",
+    "permissionModes": { "ask": "Perguntar", "approve": "Aprovar", "full": "Total" },
+    "autoFolders": "Pastas automáticas",
+    "autoFoldersDescription": "Agrupa novos chats de código em pastas pelo nome do diretório"
+  },
+  "notificationsScreen": {
+    "title": "Notificações",
+    "pendingAsk": "Perguntas do desktop",
+    "pendingAskDescription": "Quando o Orbit precisar de permissão ou resposta",
+    "newMessage": "Nova mensagem",
+    "newMessageDescription": "Quando o assistente responder (sessão inativa)",
+    "chatError": "Erro no chat",
+    "chatErrorDescription": "Quando ocorrer um erro durante o processamento"
+  },
+  "languageScreen": {
+    "title": "Idioma",
+    "description": "Idioma da interface e das respostas do assistente."
   },
   "sidebar": {
     "modeChat": "Chat",
@@ -137,7 +130,21 @@
     "newConversationSubtitle": "Comece a conversar com o assistente.",
     "implementPlan": "Implementar plano",
     "plan": "Plano",
-    "orchestration": "Orquestração"
+    "orchestration": "Orquestração",
+    "suggestions": {
+      "chat": [
+        "O que você pode fazer?",
+        "Me ajude a escrever um texto",
+        "Explique um conceito técnico",
+        "Faça um resumo de algum tópico"
+      ],
+      "code": [
+        "Revise meu código atual",
+        "Explique este repositório",
+        "Gere testes para este projeto",
+        "Refatore algo no código"
+      ]
+    }
   },
   "sendButtonGroup": {
     "sendOptions": "Opções de envio",
@@ -529,6 +536,7 @@
     "tapToConnect": "toque para conectar",
     "searchingNetwork": "Procurando Orbit Desktop na rede…",
     "recent": "Recentes",
+    "connectManually": "Conectar manualmente",
     "scanQrCode": "Escanear QR Code",
     "tipLabel": "Dica:",
     "tipText": "use Tailscale para acessar seu desktop de qualquer lugar, sem configurar a rede."
@@ -539,18 +547,22 @@
     "permissionRequiredDesc": "O Orbit precisa de acesso à câmera para escanear o QR code de conexão.",
     "grantPermission": "Conceder Permissão",
     "detected": "QR code detectado!",
-    "scanAgain": "Escanar novamente",
+    "scanAgain": "Escanear novamente",
+    "close": "Fechar",
+    "hint": "Aponte a câmera para o QR Code exibido no Orbit Desktop",
     "webFallback": "QR Code disponível apenas em dispositivos móveis com câmera."
   },
-  "urlAccordion": {
-    "connectManually": "Conectar manualmente",
-    "ipPortPinHint": "IP, porta e PIN do Orbit Desktop",
+  "manualConnectSheet": {
+    "title": "Conectar manualmente",
+    "subtitle": "Digite o IP, a porta e o PIN exibidos no Orbit Desktop",
+    "recent": "Recentes",
     "ipAddress": "Endereço IP",
     "port": "Porta",
     "pin": "PIN",
     "invalidPin": "PIN inválido. Verifique o PIN exibido no Orbit Desktop.",
     "connecting": "Conectando...",
-    "connect": "Conectar"
+    "connect": "Conectar",
+    "reset": "Limpar campos"
   },
   "notifications": {
     "defaultSessionTitle": "Sessão",
