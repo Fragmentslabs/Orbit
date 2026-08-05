@@ -746,7 +746,13 @@
     "wipPlaceholder": "wip: mudanças antes de trocar de branch",
     "wipDefault": "wip: mudanças antes de trocar para {{branch}}",
     "committing": "Commitando…",
-    "commitAndSwitch": "Commitar e trocar"
+    "commitAndSwitch": "Commitar e trocar",
+    "newBranch": "Nova branch",
+    "createTitle": "Criar branch",
+    "createDesc": "Nome da branch a criar. Você será trocado para ela imediatamente.",
+    "createPlaceholder": "feature/minha-mudanca",
+    "createAndSwitch": "Criar e trocar",
+    "creating": "Criando…"
   },
   "search": {
     "placeholder": "Buscar conversas...",

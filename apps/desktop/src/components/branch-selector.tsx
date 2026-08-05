@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 import { useTranslation, Trans } from "react-i18next"
-import { GitBranch, Check, LoaderIcon } from "lucide-react"
+import { GitBranch, Check, LoaderIcon, PlusIcon } from "lucide-react"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -18,6 +18,7 @@ export function BranchSelector({ repoPath, onRequestAgentAction }: BranchSelecto
   const loading = useBranchStore((s) => s.loading)
   const fetchBranches = useBranchStore((s) => s.fetchBranches)
   const checkoutBranch = useBranchStore((s) => s.checkoutBranch)
+  const createBranch = useBranchStore((s) => s.createBranch)
   const commitChanges = useBranchStore((s) => s.commitChanges)
   const [open, setOpen] = useState(false)
   const [checkoutLoading, setCheckoutLoading] = useState(false)
@@ -26,6 +27,10 @@ export function BranchSelector({ repoPath, onRequestAgentAction }: BranchSelecto
   const [commitDialogOpen, setCommitDialogOpen] = useState(false)
   const [commitMessage, setCommitMessage] = useState("")
   const [committing, setCommitting] = useState(false)
+  const [createDialogOpen, setCreateDialogOpen] = useState(false)
+  const [branchName, setBranchName] = useState("")
+  const [creating, setCreating] = useState(false)
+  const [createError, setCreateError] = useState<string | null>(null)
   const ref = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -86,6 +91,28 @@ export function BranchSelector({ repoPath, onRequestAgentAction }: BranchSelecto
     onRequestAgentAction?.(`Tenho mudanças não commitadas no repositório e preciso trocar para a branch "${pendingBranch}". Faça commit ou stash das mudanças e depois execute o checkout para a branch "${pendingBranch}".`)
   }, [pendingBranch, onRequestAgentAction])
 
+  const openCreateDialog = useCallback(() => {
+    setOpen(false)
+    setBranchName("")
+    setCreateError(null)
+    setCreateDialogOpen(true)
+  }, [])
+
+  const handleCreate = useCallback(async () => {
+    const name = branchName.trim()
+    if (!name || creating) return
+    setCreating(true)
+    setCreateError(null)
+    const result = await createBranch(repoPath, name)
+    setCreating(false)
+    if (result.ok) {
+      setCreateDialogOpen(false)
+      setBranchName("")
+    } else {
+      setCreateError(result.error ?? t("branch.unknownError"))
+    }
+  }, [branchName, creating, createBranch, repoPath, t])
+
   const data = byDir
   if (!data || data.branches.length === 0) return null
 
@@ -126,6 +153,16 @@ export function BranchSelector({ repoPath, onRequestAgentAction }: BranchSelecto
                 </button>
               )
             })}
+            <div className="mt-1 border-t border-foreground/10 pt-1">
+              <button
+                type="button"
+                onClick={openCreateDialog}
+                className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-foreground/10 hover:text-foreground"
+              >
+                <PlusIcon className="size-3.5 shrink-0" />
+                {t("branch.newBranch")}
+              </button>
+            </div>
           </div>
         )}
       </div>
@@ -174,6 +211,40 @@ export function BranchSelector({ repoPath, onRequestAgentAction }: BranchSelecto
             </Button>
             <Button onClick={handleCommitAndSwitch} disabled={!commitMessage.trim() || committing}>
               {committing ? t("branch.committing") : t("branch.commitAndSwitch")}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Create branch dialog */}
+      <Dialog open={createDialogOpen} onOpenChange={setCreateDialogOpen}>
+        <DialogContent className="sm:max-w-sm" showCloseButton={false}>
+          <DialogHeader>
+            <DialogTitle>{t("branch.createTitle")}</DialogTitle>
+            <DialogDescription>{t("branch.createDesc")}</DialogDescription>
+          </DialogHeader>
+          <Input
+            value={branchName}
+            onChange={(e) => {
+              setBranchName(e.target.value)
+              setCreateError(null)
+            }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") void handleCreate()
+            }}
+            placeholder={t("branch.createPlaceholder")}
+            className="mt-2"
+            autoFocus
+          />
+          {createError && (
+            <p className="mt-1 break-words font-mono text-xs text-destructive">{createError}</p>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setCreateDialogOpen(false)} disabled={creating}>
+              {t("common.cancel")}
+            </Button>
+            <Button onClick={() => void handleCreate()} disabled={!branchName.trim() || creating}>
+              {creating ? t("branch.creating") : t("branch.createAndSwitch")}
             </Button>
           </DialogFooter>
         </DialogContent>

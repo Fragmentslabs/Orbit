@@ -11,6 +11,7 @@ interface BranchState {
   checkoutLoading: string | null
   fetchBranches: (repoPath: string) => Promise<void>
   checkoutBranch: (repoPath: string, branch: string) => Promise<{ ok: boolean; error?: string }>
+  createBranch: (repoPath: string, branch: string) => Promise<{ ok: boolean; error?: string }>
   commitChanges: (repoPath: string, message: string) => Promise<{ ok: boolean; error?: string }>
 }
 
@@ -37,6 +38,17 @@ export const useBranchStore = create<BranchState>((set, get) => ({
   checkoutBranch: async (repoPath, branch) => {
     set({ checkoutLoading: branch })
     const result = await window.ipcRenderer.invoke("git:checkout", repoPath, branch) as
+      { ok: true } | { ok: false; error: string }
+    if (result.ok) {
+      await get().fetchBranches(repoPath)
+    }
+    set({ checkoutLoading: null })
+    return result
+  },
+
+  createBranch: async (repoPath, branch) => {
+    set({ checkoutLoading: branch })
+    const result = await window.ipcRenderer.invoke("git:createBranch", repoPath, branch) as
       { ok: true } | { ok: false; error: string }
     if (result.ok) {
       await get().fetchBranches(repoPath)
