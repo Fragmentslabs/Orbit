@@ -878,7 +878,9 @@
     "commitsTab": "Commits",
     "loadingCommits": "Loading commits...",
     "gitHistoryError": "Could not read this folder's git history.",
-    "noCommits": "No commits found."
+    "noCommits": "No commits found.",
+    "editMode": "Edit",
+    "previewMode": "Preview"
   },
   "mcp": {
     "kv": {
