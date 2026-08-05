@@ -5,7 +5,6 @@
  */
 import { useEffect, useMemo, useState } from 'react'
 import { View, Text, Pressable, TextInput, FlatList, ScrollView, RefreshControl, StyleSheet } from 'react-native'
-import { SafeAreaView } from 'react-native-safe-area-context'
 import { useRouter } from 'expo-router'
 import { ArrowLeft, RefreshCw, Search, List, Network, X } from 'lucide-react-native'
 import { useTranslation } from 'react-i18next'
@@ -19,6 +18,7 @@ import { lastActivity } from '~/components/memories/meta'
 import { Spin } from '~/components/ui/spin'
 import { getThemeTokens } from '~/lib/theme-tokens'
 import { useThemeStore } from '~/stores/theme-store'
+import { SafeScreen } from '~/components/layout/SafeScreen'
 
 const ALL_PROJECTS = '__all__'
 
@@ -76,7 +76,7 @@ export default function MemoriesScreen() {
   const empty = (tab === 'graph' ? pool : filtered).length === 0
 
   return (
-    <SafeAreaView style={[s.container, { backgroundColor: tokens.background }]} edges={['top']}>
+    <SafeScreen style={s.container}>
       {/* Header */}
       <View style={[s.header, { borderBottomColor: tokens.border }]}>
         <Pressable onPress={() => router.back()} style={s.headerBtn}>
@@ -199,7 +199,7 @@ export default function MemoriesScreen() {
           />
         )}
       </View>
-    </SafeAreaView>
+    </SafeScreen>
   )
 }
 

@@ -7,7 +7,6 @@ import {
   TextInput,
   View,
 } from 'react-native'
-import { SafeAreaView } from 'react-native-safe-area-context'
 import { useRouter } from 'expo-router'
 import { ArrowLeft, FileCode, MessageSquare, Search, X } from 'lucide-react-native'
 import type { SearchHit } from '@orbit/shared'
@@ -15,6 +14,7 @@ import { useSessionStore } from '~/stores/session-store'
 import { useWorkspaceStore } from '~/stores/workspace-store'
 import { getThemeTokens } from '~/lib/theme-tokens'
 import { useThemeStore } from '~/stores/theme-store'
+import { SafeScreen } from '~/components/layout/SafeScreen'
 
 type SearchGroup = {
   sessionId: string
@@ -94,7 +94,7 @@ export function ChatSearchScreen() {
   }, [groups])
 
   return (
-    <SafeAreaView className="flex-1" style={{ backgroundColor: tokens.background }} edges={['top']}>
+    <SafeScreen>
       <View
         className="flex-row items-center gap-2 px-3 pb-3"
         style={{ borderBottomWidth: 1, borderBottomColor: tokens.border }}
@@ -182,6 +182,6 @@ export function ChatSearchScreen() {
           }}
         />
       )}
-    </SafeAreaView>
+    </SafeScreen>
   )
 }

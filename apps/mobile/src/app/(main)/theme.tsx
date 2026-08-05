@@ -1,10 +1,10 @@
 import { View, Text, Pressable, ScrollView } from 'react-native'
-import { SafeAreaView } from 'react-native-safe-area-context'
 import { useRouter } from 'expo-router'
 import { Palette, ArrowLeft, Sun, Moon, Monitor } from 'lucide-react-native'
 import { Appearance, useColorScheme } from 'react-native'
 import { useTranslation } from 'react-i18next'
 import { useThemeStore, type ThemePreference } from '~/stores/theme-store'
+import { SafeScreen } from '~/components/layout/SafeScreen'
 
 function useThemeOptions(): { value: ThemePreference; label: string; icon: typeof Sun }[] {
   const { t } = useTranslation()
@@ -54,7 +54,7 @@ export default function ThemeScreen() {
   }
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: tk.background }} edges={['top']}>
+    <SafeScreen backgroundColor={tk.background}>
       <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: tk.border }}>
         <Pressable onPress={() => router.back()} style={{ padding: 4, marginLeft: -4 }}>
           <ArrowLeft size={22} color={tk.foreground} />
@@ -99,6 +99,6 @@ export default function ThemeScreen() {
           })}
         </View>
       </ScrollView>
-    </SafeAreaView>
+    </SafeScreen>
   )
 }

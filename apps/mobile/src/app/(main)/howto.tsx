@@ -1,10 +1,10 @@
 import { View, Text, ScrollView, Pressable, StyleSheet } from 'react-native'
-import { SafeAreaView } from 'react-native-safe-area-context'
 import { useRouter } from 'expo-router'
 import { ArrowLeft, Search, Globe, Brain, AlignLeft, BrainCircuit, Bot, Network, RefreshCw, FileText, KeyRound, BookOpen } from 'lucide-react-native'
 import { useTranslation } from 'react-i18next'
 import { getThemeTokens } from '~/lib/theme-tokens'
 import { useThemeStore } from '~/stores/theme-store'
+import { SafeScreen } from '~/components/layout/SafeScreen'
 
 interface ModeInfo {
   icon: typeof Search
@@ -32,7 +32,7 @@ export default function HowToScreen() {
   }
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: tokens.background }} edges={['top']}>
+    <SafeScreen>
       {/* Header */}
       <View style={[s.header, { borderBottomColor: tokens.border }]}>
         <Pressable onPress={() => router.back()} style={s.backBtn}>
@@ -98,7 +98,7 @@ export default function HowToScreen() {
           </Text>
         </View>
       </ScrollView>
-    </SafeAreaView>
+    </SafeScreen>
   )
 }
 

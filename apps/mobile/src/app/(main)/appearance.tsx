@@ -1,5 +1,4 @@
 import { View, Text, Pressable, ScrollView, StyleSheet, Switch } from 'react-native'
-import { SafeAreaView } from 'react-native-safe-area-context'
 import { useRouter } from 'expo-router'
 import { ArrowLeft, Sun, Moon, Monitor, List, Square, Layers, Smile } from 'lucide-react-native'
 import { Appearance, useColorScheme } from 'react-native'
@@ -8,6 +7,7 @@ import { useThemeStore, type ThemePreference } from '~/stores/theme-store'
 import { useAppearanceStore, type DisplayMode } from '~/stores/appearance-store'
 import { getThemeTokens } from '~/lib/theme-tokens'
 import { useThemeStore as useThemeTokensStore } from '~/stores/theme-store'
+import { SafeScreen } from '~/components/layout/SafeScreen'
 
 export default function AppearanceScreen() {
   const { t } = useTranslation()
@@ -40,7 +40,7 @@ export default function AppearanceScreen() {
   ]
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: tokens.background }} edges={['top']}>
+    <SafeScreen>
       <View style={[s.header, { borderBottomColor: tokens.border }]}>
         <Pressable onPress={() => router.back()} style={s.backBtn}>
           <ArrowLeft size={22} color={tokens.foreground} />
@@ -122,7 +122,7 @@ export default function AppearanceScreen() {
           </View>
         </View>
       </ScrollView>
-    </SafeAreaView>
+    </SafeScreen>
   )
 }
 
