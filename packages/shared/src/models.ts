@@ -50,6 +50,8 @@ export interface OrbitModel {
   benchmarks: ModelBenchmarks
   /** Provedores onde o modelo está disponível (openrouter + ids do models.dev) */
   availability: string[]
+  /** Modalidades de entrada aceitas (text, image, audio, video, pdf) — union OpenRouter + models.dev */
+  modalities: string[]
   /** Capacidades derivadas: coding, vision, agent, reasoning, free… */
   tags: string[]
   releaseDate?: string
