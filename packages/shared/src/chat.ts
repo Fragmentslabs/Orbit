@@ -173,6 +173,15 @@ export interface AssistantSnapshot {
   patch?: string
 }
 
+/**
+ * Causa da falha de um turno, quando reconhecível.
+ * - `moderation`: o provedor bloqueou a resposta por filtro de conteúdo. É
+ *   server-side (ex: DashScope/Qwen) — não há como desligar pelo request.
+ * - `model-unavailable`: o modelo não existe/não é servido pelo provedor.
+ * Ambos são resolvidos trocando de modelo, não repetindo a mesma chamada.
+ */
+export type MessageErrorKind = "moderation" | "model-unavailable" | "unknown"
+
 export interface ChatMessage {
   id: string
   role: "user" | "assistant"
@@ -184,6 +193,9 @@ export interface ChatMessage {
   providerId?: string
   modelId?: string
   error?: string
+  /** Classificação da falha — a UI usa para explicar a causa e oferecer a ação
+   *  certa (ex: moderação do provedor só é contornável trocando de modelo). */
+  errorKind?: MessageErrorKind
   /** Gerada em modo simples: UI enxuta (sem tool/reasoning views); texto ainda com markdown */
   simple?: boolean
   /** Tokens consumidos na geração desta mensagem (assistant) */
@@ -373,6 +385,12 @@ export type ChatEvent =
   /** Lista de pastas mudou (criada/renomeada/fixada/removida) — substituição completa */
   | { type: "folders"; folders: FolderInfo[] }
 
+/** Modalidades suportadas por um modelo (models.dev): text, image, audio, video, pdf */
+export interface ModelModalities {
+  input: string[]
+  output: string[]
+}
+
 /** Modelo do catálogo models.dev (mesmo formato usado pelo opencode) */
 export interface CatalogModel {
   id: string
@@ -384,6 +402,8 @@ export interface CatalogModel {
   variants?: ModelVariant[]
   tool_call: boolean
   attachment: boolean
+  /** Tipos de input/output aceitos (text, image, audio, video, pdf) */
+  modalities?: ModelModalities
   release_date?: string
   limit?: { context: number; output: number }
   cost?: { input: number; output: number }
