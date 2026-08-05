@@ -32,6 +32,21 @@ const BUNDLED_SDKS: Record<string, unknown> = {
   '@ai-sdk/openai-compatible': createOpenAICompatible,
 }
 
+/**
+ * Indica se o modelo de um provider é servido pelo adaptador openai-compatible
+ * no resolveModel — espelha exatamente a regra de fallback: SDKs sem pacote
+ * empacotado (npm fora de BUNDLED_SDKS) e o próprio openai-compatible caem em
+ * createOpenAICompatible. O módulo de reasoning usa isso para decidir onde
+ * injetar campos interleaved (ex: reasoning_content do DeepSeek) — o gate pelo
+ * nome do npm do catálogo deixava de fora providers como o OpenRouter
+ * (npm: "@openrouter/ai-sdk-provider") mesmo com o runtime servindo via
+ * adaptador openai-compatible.
+ */
+export function isServedByOpenAiCompatible(npm: string | undefined): boolean {
+  if (npm == null || npm === '@ai-sdk/openai-compatible') return true
+  return !(npm in BUNDLED_SDKS)
+}
+
 export class ProviderResolutionError extends Error {}
 
 export async function resolveModel(providerId: string, modelId: string): Promise<LanguageModel> {

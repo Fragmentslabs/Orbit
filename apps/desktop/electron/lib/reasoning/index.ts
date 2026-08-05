@@ -1,6 +1,7 @@
 import type { JSONValue, ModelMessage } from 'ai'
 import type { CatalogProvider, SendMessageInput } from '@shared/chat'
 import { getProvider } from '../catalog'
+import { isServedByOpenAiCompatible } from '../providers'
 import { mergeOptions } from './merge'
 import { buildBaseOptions } from './options'
 import { generateVariants, toModelInput } from './variants'
@@ -54,17 +55,19 @@ export async function buildProviderOptions(
 
 /**
  * Campo usado para reenviar o raciocínio na mensagem do assistente — portado
- * do opencode (provider.ts → interleaved default). Provedores que caem no
- * adaptador openai-compatible e servem modelos DeepSeek usam
- * `reasoning_content`; o DeepSeek exige o campo em TODAS as mensagens de
- * assistente em turnos seguintes, mesmo quando vazio (senão a API retorna 400).
+ * do opencode (provider.ts → interleaved default). Modelos DeepSeek servidos
+ * pelo adaptador openai-compatible usam `reasoning_content`; o DeepSeek exige
+ * o campo em TODAS as mensagens de assistente em turnos seguintes, mesmo
+ * quando vazio (senão a API retorna 400). O gate usa a regra de resolução real
+ * do runtime (isServedByOpenAiCompatible), não só o npm do catálogo — senão
+ * provedores como OpenRouter (npm "@openrouter/ai-sdk-provider", servido via
+ * createOpenAICompatible no resolveModel) ficariam de fora.
  */
 export function interleavedReasoningField(
   provider: CatalogProvider | undefined,
   modelId: string,
 ): string | undefined {
-  const npm = provider?.npm ?? '@ai-sdk/openai-compatible'
-  if (npm === '@ai-sdk/openai-compatible' && modelId.toLowerCase().includes('deepseek')) {
+  if (isServedByOpenAiCompatible(provider?.npm) && modelId.toLowerCase().includes('deepseek')) {
     return 'reasoning_content'
   }
   return undefined
