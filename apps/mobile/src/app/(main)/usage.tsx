@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
 import { View, Text, Pressable, ScrollView, RefreshControl, StyleSheet } from 'react-native'
-import { SafeAreaView } from 'react-native-safe-area-context'
 import { useRouter } from 'expo-router'
 import { Image } from 'expo-image'
 import {
@@ -19,6 +18,7 @@ import { useConnectionStore } from '~/stores/connection-store'
 import { useSettingsStore } from '~/stores/settings-store'
 import { getThemeTokens } from '~/lib/theme-tokens'
 import { useThemeStore } from '~/stores/theme-store'
+import { SafeScreen } from '~/components/layout/SafeScreen'
 
 function useRanges(): { id: AnalyticsRange; label: string }[] {
   const { t } = useTranslation()
@@ -84,7 +84,7 @@ export default function UsageScreen() {
   const maxTokens = topModels[0]?.tokens ?? 1
 
   return (
-    <SafeAreaView style={[s.container, { backgroundColor: tokens.background }]} edges={['top']}>
+    <SafeScreen style={s.container}>
       <View style={[s.header, { borderBottomColor: tokens.border }]}>
         <Pressable onPress={() => router.back()} style={s.headerBtn}>
           <ArrowLeft size={22} color={tokens.foreground} />
@@ -182,7 +182,7 @@ export default function UsageScreen() {
           </View>
         </View>
       </ScrollView>
-    </SafeAreaView>
+    </SafeScreen>
   )
 }
 
