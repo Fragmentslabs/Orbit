@@ -1,8 +1,10 @@
 import { useState, useMemo } from 'react'
 import { View, Text, Pressable, LayoutAnimation, Platform, UIManager } from 'react-native'
 import { CalendarIcon, ListPlus, ChevronDown } from 'lucide-react-native'
+import { useTranslation } from 'react-i18next'
 import { useMessageQueueStore } from '~/stores/message-queue-store'
 import { getThemeTokens } from '~/lib/theme-tokens'
+import { formatTime } from '~/lib/format-time'
 import { useThemeStore } from '~/stores/theme-store'
 
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
@@ -13,20 +15,19 @@ interface QueueIndicatorProps {
   sessionId?: string
 }
 
-function formatSchedule(ts: number): string {
+function formatSchedule(ts: number, locale: string): string {
   const now = Date.now()
   const diff = ts - now
   if (diff < 0) return 'Agora'
   if (diff < 60_000) return 'Em segundos'
   if (diff < 3_600_000) return `Em ${Math.ceil(diff / 60_000)}min`
   if (diff < 86_400_000) return `Em ${Math.ceil(diff / 3_600_000)}h`
-  return new Date(ts).toLocaleString('pt-BR', {
-    dateStyle: 'short',
-    timeStyle: 'short',
-  })
+  const date = new Date(ts).toLocaleDateString(locale, { dateStyle: 'short' })
+  return `${date} ${formatTime(ts, locale)}`
 }
 
 export function QueueIndicator({ sessionId }: QueueIndicatorProps) {
+  const { i18n } = useTranslation()
   const tokens = getThemeTokens(useThemeStore((s) => s.resolved))
   const queues = useMessageQueueStore((s) => s.queues)
   const [expanded, setExpanded] = useState(false)
@@ -85,7 +86,7 @@ export function QueueIndicator({ sessionId }: QueueIndicatorProps) {
                 {msg.text}
               </Text>
               <Text className="text-[10px]" style={{ color: tokens.mutedForeground, opacity: 0.6 }}>
-                {msg.scheduledAt ? formatSchedule(msg.scheduledAt) : 'Fila'}
+                {msg.scheduledAt ? formatSchedule(msg.scheduledAt, i18n.language) : 'Fila'}
               </Text>
             </View>
           ))}

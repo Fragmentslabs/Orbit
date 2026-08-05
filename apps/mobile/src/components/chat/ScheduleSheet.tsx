@@ -5,6 +5,7 @@ import DateTimePicker from '@expo/ui/community/datetime-picker'
 import { CalendarIcon, Clock, ChevronDown } from 'lucide-react-native'
 import { useTranslation } from 'react-i18next'
 import { getThemeTokens } from '~/lib/theme-tokens'
+import { formatTime, formatDateTime } from '~/lib/format-time'
 import { useThemeStore } from '~/stores/theme-store'
 
 interface SchedulePreset {
@@ -27,19 +28,8 @@ function usePresets(): SchedulePreset[] {
   ]
 }
 
-function formatDate(ts: number, locale: string): string {
-  return new Date(ts).toLocaleString(locale, {
-    dateStyle: 'full',
-    timeStyle: 'short',
-  })
-}
-
 function formatDateShort(d: Date, locale: string): string {
   return d.toLocaleDateString(locale)
-}
-
-function formatTimeShort(d: Date, locale: string): string {
-  return d.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' })
 }
 
 interface ScheduleSheetProps {
@@ -86,13 +76,13 @@ export function ScheduleSheet({ visible, onClose, onConfirm }: ScheduleSheetProp
       setSelectedPreset(0)
       setCustomExpanded(false)
       setPickerTarget(null)
-      setPreview(formatDate(defaultDate.getTime(), locale))
+      setPreview(formatDateTime(defaultDate.getTime(), locale))
     }
   }, [visible, slideAnim, backdropAnim])
 
   useEffect(() => {
     if (customExpanded) {
-      setPreview(formatDate(selectedDate.getTime(), locale))
+      setPreview(formatDateTime(selectedDate.getTime(), locale))
     }
   }, [selectedDate, customExpanded])
 
@@ -102,7 +92,7 @@ export function ScheduleSheet({ visible, onClose, onConfirm }: ScheduleSheetProp
     setCustomExpanded(false)
     setPickerTarget(null)
     setSelectedDate(new Date(ts))
-    setPreview(formatDate(ts, locale))
+    setPreview(formatDateTime(ts, locale))
   }
 
   const toggleCustom = () => {
@@ -110,7 +100,7 @@ export function ScheduleSheet({ visible, onClose, onConfirm }: ScheduleSheetProp
     setCustomExpanded(willExpand)
     if (willExpand) {
       setSelectedPreset(null)
-      setPreview(formatDate(selectedDate.getTime(), locale))
+      setPreview(formatDateTime(selectedDate.getTime(), locale))
     } else {
       setPickerTarget(null)
     }
@@ -216,7 +206,7 @@ export function ScheduleSheet({ visible, onClose, onConfirm }: ScheduleSheetProp
             <Pressable onPress={() => openPicker('time')} style={[s.fieldRow, { backgroundColor: tokens.border }]}>
               <Clock size={18} color={tokens.mutedForeground} />
               <Text style={[s.fieldLabel, { color: tokens.mutedForeground }]}>{t('scheduleSheet.time')}</Text>
-              <Text style={[s.fieldValue, { color: tokens.foreground }]}>{formatTimeShort(selectedDate, locale)}</Text>
+              <Text style={[s.fieldValue, { color: tokens.foreground }]}>{formatTime(selectedDate.getTime(), locale)}</Text>
             </Pressable>
           </View>
         )}
