@@ -97,9 +97,9 @@
       "searchDescription": "Alterna busca web para documentação",
       "planDescription": "Alterna modo somente leitura (plano de implementação)",
       "brainDescription": "Orbit lembra decisões e convenções do projeto entre sessões",
-      "subagentsLabel": "Subagents",
+      "subagentsLabel": "Subagentes",
       "subagentsDescription": "Alterna workers em background",
-      "orchestraLabel": "Orchestra",
+      "orchestraLabel": "Orquestra",
       "orchestraDescription": "Alterna orquestração em tarefas paralelas",
       "permissionLabel": "Permissões: {{label}}",
       "permAsk": "Perguntar",
@@ -133,8 +133,8 @@
     }
   },
   "delegation": {
-    "subagents": "Subagents",
-    "orchestra": "Orchestra",
+    "subagents": "Subagentes",
+    "orchestra": "Orquestra",
     "loop": "Loop",
     "configure": "Configurar"
   },
@@ -185,12 +185,12 @@
     "loadingCatalog": "Carregando catálogo de modelos…",
     "searchPlaceholder": "Buscar por nome, provider ou tag…",
     "refreshCatalog": "Atualizar catálogo",
-    "bestForTitle": "Best For",
+    "bestForTitle": "Melhor para",
     "count": "{{count}} de {{total}} modelos",
     "noResults": "Nenhum modelo corresponde à busca ou aos filtros.",
     "clearFilters": "Limpar",
     "filters": {
-      "provider": "Provider",
+      "provider": "Provedor",
       "capability": "Capacidade",
       "price": "Preço",
       "speed": "Velocidade",
@@ -204,52 +204,52 @@
       "modality": "Modalidade"
     },
     "capabilities": {
-      "coding": "Coding",
-      "vision": "Vision",
-      "agent": "Agent",
-      "reasoning": "Reasoning"
+      "coding": "Código",
+      "vision": "Visão",
+      "agent": "Agente",
+      "reasoning": "Raciocínio"
     },
     "prices": {
-      "free": "Free",
-      "low": "Low Cost",
-      "medium": "Medium",
+      "free": "Grátis",
+      "low": "Baixo custo",
+      "medium": "Médio",
       "premium": "Premium"
     },
     "speeds": {
-      "fast": "Fast",
-      "balanced": "Balanced",
-      "deep": "Deep Thinking"
+      "fast": "Rápido",
+      "balanced": "Equilibrado",
+      "deep": "Raciocínio profundo"
     },
     "columns": {
       "model": "Modelo",
-      "coding": "Coding",
-      "agentic": "Agentic",
+      "coding": "Código",
+      "agentic": "Agêntico",
       "intelligence": "Intel.",
-      "speed": "Speed",
+      "speed": "Velocidade",
       "context": "Contexto",
       "price": "In / Out $1M"
     },
     "categories": {
-      "coding": "Coding",
-      "agentic": "Agentic",
-      "vision": "Vision",
-      "speed": "Speed",
-      "intelligence": "Intelligence"
+      "coding": "Código",
+      "agentic": "Agêntico",
+      "vision": "Visão",
+      "speed": "Velocidade",
+      "intelligence": "Inteligência"
     },
     "bestFor": {
-      "coding": "Best Coding",
-      "agentic": "Best Agentic",
-      "intelligence": "Best Intelligence",
-      "vision": "Best Vision",
-      "speed": "Best Speed"
+      "coding": "Melhor em código",
+      "agentic": "Melhor agêntico",
+      "intelligence": "Maior inteligência",
+      "vision": "Melhor em visão",
+      "speed": "Mais rápido"
     },
     "compare": {
       "selected_one": "{{count}} modelo selecionado",
       "selected_other": "{{count}} modelos selecionados",
       "clearSelection": "Limpar seleção",
-      "simplified": "Simplified",
-      "technical": "Technical",
-      "cost": "Cost",
+      "simplified": "Simplificado",
+      "technical": "Técnico",
+      "cost": "Custo",
       "inOut": "{{input}} in · {{output}} out",
       "benchmark": "Benchmark",
       "context": "Contexto",
@@ -268,28 +268,28 @@
       "tokensPerSecond": "Tokens/s"
     },
     "detail": {
-      "overview": "Overview",
-      "bestFor": "Best For",
-      "pricing": "Pricing (USD / 1M tokens)",
-      "input": "Input",
-      "output": "Output",
-      "contextWindow": "Context Window",
+      "overview": "Visão geral",
+      "bestFor": "Melhor para",
+      "pricing": "Preços (USD / 1M tokens)",
+      "input": "Entrada",
+      "output": "Saída",
+      "contextWindow": "Janela de contexto",
       "tokens": "tokens",
-      "performance": "Performance",
+      "performance": "Desempenho",
       "tokensPerSecond": "Tokens/s",
       "ttft": "TTFT",
-      "providers": "Providers",
+      "providers": "Provedores",
       "released": "Lançado em {{date}} · Fontes: {{sources}}",
       "bestForItems": {
-        "architecture": "Architecture",
-        "refactoring": "Refactoring",
-        "coding": "Coding",
-        "agents": "Agents",
-        "largeProjects": "Large Projects",
-        "visionTasks": "Vision Tasks",
-        "highVolume": "High Volume",
-        "deepReasoning": "Deep Reasoning",
-        "costSensitive": "Cost Sensitive"
+        "architecture": "Arquitetura",
+        "refactoring": "Refatoração",
+        "coding": "Código",
+        "agents": "Agentes",
+        "largeProjects": "Projetos grandes",
+        "visionTasks": "Tarefas de visão",
+        "highVolume": "Alto volume",
+        "deepReasoning": "Raciocínio profundo",
+        "costSensitive": "Sensível a custo"
       },
       "modalities": "Modalidades de entrada"
     },
@@ -323,7 +323,7 @@
     "emptyChat": "Converse com o Brain ativo e o Orbit passa a lembrar fatos e preferências automaticamente.",
     "emptyCode": "Trabalhe em um projeto com o Brain ativo e o Orbit memoriza decisões, convenções e estrutura.",
     "kinds": {
-      "core": "core",
+      "core": "núcleo",
       "seasonal": "sazonal",
       "general": "geral",
       "project": "projeto"
@@ -349,7 +349,7 @@
       "development": "Desenvolvimento",
       "database": "Banco de Dados",
       "testing": "Testes",
-      "performance": "Performance",
+      "performance": "Desempenho",
       "dependencies": "Dependências",
       "standards": "Padronização"
     },
@@ -433,7 +433,7 @@
     },
     "groups": {
       "folders": "Pastas",
-      "chats": "Chats",
+      "chats": "Conversas",
       "archived": "Arquivados",
       "noChats": "Nenhuma conversa ainda"
     },
@@ -556,7 +556,7 @@
     }
   },
   "chat": {
-    "retry": "Retry",
+    "retry": "Tentar novamente",
     "switchModel": "Trocar modelo",
     "errorKind": {
       "moderation": "O provedor bloqueou esta resposta no filtro de conteúdo dele. Isso roda no servidor do provedor e não dá para desligar daqui — dá falso-positivo com frequência em turnos que incluem imagens. Trocar de modelo resolve.",
@@ -630,7 +630,7 @@
     "outputOut": "{{count}} de saída",
     "inputLine": "Entrada: {{count}} tokens",
     "outputLine": "Saída: {{count}} tokens",
-    "reasoningLine": "Reasoning: {{count}}",
+    "reasoningLine": "Raciocínio: {{count}}",
     "cacheReadLine": "Cache lido: {{count}}",
     "cacheWriteLine": "Cache gravado: {{count}}",
     "costLine": "Custo: {{cost}}",
@@ -640,7 +640,7 @@
     "contextUsed": "Contexto usado",
     "input": "Entrada",
     "output": "Saída",
-    "reasoning": "Reasoning",
+    "reasoning": "Raciocínio",
     "tokensWord": "tokens",
     "compacted": "Compactado — histórico anterior resumido",
     "nearLimit": "Próximo do limite — o histórico será compactado em breve",
@@ -679,7 +679,7 @@
     "emptyHint": "Digite um endereço acima ou no campo abaixo para começar a navegar.",
     "urlExample": "Ex: wikipedia.org, bing.com",
     "go": "Ir",
-    "previewTitle": "Preview",
+    "previewTitle": "Visualização",
     "console": "Console",
     "noConsoleOutput": "Nenhuma saída no console"
   },
@@ -1088,7 +1088,7 @@
       },
       {
         "id": "subagents",
-        "label": "Subagents",
+        "label": "Subagentes",
         "modes": [
           "Chat",
           "Código"
@@ -1097,12 +1097,12 @@
         "detail": "Adiciona a ferramenta subagent ao agente. Quando o agente identifica subtarefas independentes, ele pode delegá-las a workers efêmeros que rodam em background com o modelo configurado. Os workers são descartados ao fim da tarefa — não aparecem na sidebar.",
         "combo": [
           "Loop",
-          "Orchestra"
+          "Orquestra"
         ]
       },
       {
         "id": "orchestra",
-        "label": "Orchestra",
+        "label": "Orquestra",
         "modes": [
           "Código"
         ],
@@ -1110,7 +1110,7 @@
         "detail": "O agente orquestrador planeja a tarefa (criando subtarefas com create_task), propõe o plano para sua aprovação e, após aprovado, executa cada subtarefa como uma sessão filha persistente no painel direito. Os workers rodam em paralelo com o modelo worker configurado. Resultado final é sintetizado pelo orquestrador.",
         "combo": [
           "Loop",
-          "Subagents"
+          "Subagentes"
         ]
       },
       {
@@ -1122,8 +1122,8 @@
         "description": "Agente revisa e itera até completar a tarefa.",
         "detail": "Após cada resposta, o sistema revisa criticamente o resultado. Se o objetivo não foi totalmente atingido, o agente continua trabalhando automaticamente (nova iteração). O número máximo de iterações e o comportamento (automático ou com confirmação) são configuráveis no gear. Ideal para tarefas complexas que exigem refinamento.",
         "combo": [
-          "Subagents",
-          "Orchestra",
+          "Subagentes",
+          "Orquestra",
           "Thinking"
         ]
       },
@@ -1172,7 +1172,7 @@
       {
         "label": "Orquestração com revisão",
         "items": [
-          "Orchestra",
+          "Orquestra",
           "Loop"
         ],
         "description": "Orchestra + Loop: o orquestrador divide o problema em tarefas, workers executam em paralelo, e após a síntese o loop revisa o resultado, criando workers de continuação se necessário. O melhor dos dois mundos para problemas complexos."
@@ -1180,8 +1180,8 @@
       {
         "label": "Workers em múltiplas frentes",
         "items": [
-          "Orchestra",
-          "Subagents"
+          "Orquestra",
+          "Subagentes"
         ],
         "description": "Orchestra + Subagents: o orquestrador coordena tarefas de alto nível (workers persistentes na sidebar), e dentro de cada tarefa o worker pode usar subagents efêmeros para investigações pontuais. Máximo de paralelismo."
       },
@@ -1345,7 +1345,7 @@
       "id": "ID",
       "name": "Nome",
       "namePlaceholder": "Meu Ollama",
-      "baseUrl": "Base URL",
+      "baseUrl": "URL base",
       "apiKey": "Chave de API",
       "optional": "(opcional)",
       "apiKeyPlaceholder": "Deixe em branco para manter a atual"
