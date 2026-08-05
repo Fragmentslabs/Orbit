@@ -1188,10 +1188,10 @@ export function AppSidebar() {
         </SidebarHeader>
         <SidebarContent>
           <div className="flex min-w-0 flex-col overflow-x-hidden select-none">
-            <div className="px-3 py-2">
+            <div className="px-2 py-2">
               <NewChatButton />
             </div>
-            <div className="space-y-1 px-3 pb-2">
+            <div className="space-y-1 px-2 pb-2">
               <MemoriesButton />
               <ModelsButton />
               <UsageButton />
@@ -1217,7 +1217,7 @@ function AccountSection({ onOpenSettings }: { onOpenSettings: () => void }) {
   return (
     <>
       <ConnectAppDialog open={connectOpen} onOpenChange={setConnectOpen} />
-      <div className="flex flex-col gap-1 px-3 py-2">
+      <div className="flex flex-col gap-1 px-2 py-2">
         <Button
           variant="ghost"
           onClick={() => setConnectOpen(true)}
