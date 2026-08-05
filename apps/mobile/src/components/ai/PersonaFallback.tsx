@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
-import { Animated, Easing, View, useColorScheme } from 'react-native'
+import { Animated, Easing, View } from 'react-native'
+import { useThemeStore } from '~/stores/theme-store'
 import type { PersonaState } from './persona-types'
 
 interface Props {
@@ -8,7 +9,9 @@ interface Props {
 }
 
 export function PersonaFallback({ state, size }: Props) {
-  const isLight = useColorScheme() === 'light'
+  // Tema do app (não o do SO) — igual ao RivePersona, senão o fallback fica
+  // branco quando o usuário escolhe claro com o sistema em escuro.
+  const isLight = useThemeStore((s) => s.resolved) === 'light'
   const [pulse] = useState(() => new Animated.Value(1))
   const [glow] = useState(() => new Animated.Value(0.4))
 

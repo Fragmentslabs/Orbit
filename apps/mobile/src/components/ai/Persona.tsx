@@ -1,11 +1,11 @@
-import { memo, useCallback, useEffect, useRef } from 'react'
+import { memo, useEffect } from 'react'
 import type { ComponentType, FC } from 'react'
 import { View } from 'react-native'
 import Constants, { ExecutionEnvironment } from 'expo-constants'
 import { PersonaFallback } from './PersonaFallback'
 import { useThemeStore } from '~/stores/theme-store'
 import {
-  PERSONA_RIVE_URL,
+  PERSONA_RIVE_SOURCE,
   PERSONA_STATE_MACHINE,
   type PersonaProps,
   type PersonaState,
@@ -22,24 +22,19 @@ interface RiveRGBA {
 
 interface RiveRefLike {
   setInputState: (stateMachine: string, input: string, value: boolean) => void
-  setColor: (path: string, color: RiveRGBA | string) => void
 }
 
 interface RiveModule {
   default: ComponentType<Record<string, unknown>>
   Fit: Record<string, string>
-  /** Ref que só é populado após o Rive terminar de carregar (evento nativo "loaded"). */
+  AutoBind: (value: boolean) => { type: string; value: boolean }
+  /** Retorna [refCallback, ref] — o ref só fica não-nulo após o load nativo. */
   useRive: () => [(node: RiveRefLike | null) => void, RiveRefLike | null]
+  useRiveColor: (
+    ref: RiveRefLike | null,
+    path: string,
+  ) => [RiveRGBA | undefined, (value: RiveRGBA | string) => void]
 }
-
-/**
- * Vincula a "ViewModel instance" padrão ao artboard. É o que faz o `setColor`
- * de fato surtir efeito no nativo (`getColorProperty` operam sobre a instance
- * vinculada). Equivale ao `useDefault: true` do desktop — sem isso o comando
- * `setColorPropertyValue` é um no-op silencioso e a persona fica presa no
- * estado inicial do .riv (branca sobre branco no tema claro).
- */
-const DATA_BINDING = { type: 'index', value: 0 } as const
 
 let riveModule: RiveModule | null = null
 if (!isExpoGo) {
@@ -53,87 +48,52 @@ if (!isExpoGo) {
 const BOOL_INPUTS: PersonaState[] = ['listening', 'thinking', 'speaking', 'asleep']
 const COLOR_PROPERTY = 'color'
 
+/** Mesmas cores do desktop/web (Persona.web.tsx). */
+const LIGHT_RGB = [60, 65, 85] as const
+const DARK_RGB = [255, 255, 255] as const
+
 const RivePersona: FC<Required<PersonaProps>> = ({ state, size }) => {
-  const Rive = riveModule!.default
-  const [setRiveRef, riveRef] = riveModule!.useRive()
-  const loadedRef = useRef<RiveRefLike | null>(null)
+  const rive = riveModule!
+  const Rive = rive.default
+
+  // `riveRef` só é preenchido quando o nativo emite `RiveReactNativeLoaded`, ou
+  // seja, quando a ViewModel já está vinculada e as propriedades existem. Antes
+  // disso qualquer setColor/setInputState é silenciosamente perdido — era o que
+  // deixava a persona branca (invisível) no tema claro.
+  const [setRiveRef, riveRef] = rive.useRive()
+  const [, setColor] = rive.useRiveColor(riveRef, COLOR_PROPERTY)
   const isLight = useThemeStore((s) => s.resolved) === 'light'
-  const [r, g, b] = isLight ? [60, 65, 85] : [255, 255, 255]
 
-  const applyColor = useCallback(
-    (ref: RiveRefLike) => {
+  useEffect(() => {
+    if (!riveRef) return
+    const [r, g, b] = isLight ? LIGHT_RGB : DARK_RGB
+    setColor({ r, g, b, a: 255 })
+  }, [riveRef, setColor, isLight])
+
+  useEffect(() => {
+    if (!riveRef) return
+    for (const input of BOOL_INPUTS) {
       try {
-        ref.setColor(COLOR_PROPERTY, { r, g, b, a: 255 })
+        riveRef.setInputState(PERSONA_STATE_MACHINE, input, state === input)
       } catch {
-        // a propriedade pode não existir enquanto o asset ainda carrega
+        // input pode não existir na state machine do asset
       }
-    },
-    [r, g, b],
-  )
-
-  const applyInputs = useCallback(
-    (ref: RiveRefLike) => {
-      for (const input of BOOL_INPUTS) {
-        try {
-          ref.setInputState(PERSONA_STATE_MACHINE, input, state === input)
-        } catch {
-          // input pode não existir enquanto o asset carrega
-        }
-      }
-    },
-    [state],
-  )
-
-  // Aplica color/inputs IMEDIATAMENTE (via ref normal) E reaplica quando o
-  // riveRef popular. O caminho via useRive() depende do evento nativo
-  // "RiveReactNativeLoaded", que no New Architecture (Fabric) pode nunca
-  // casar com o viewTag do lado nativo — sem o retry imediato a persona
-  // ficaria presa no estado inicial do .riv (invisível).
-  const setCombinedRef = useCallback(
-    (node: RiveRefLike | null) => {
-      loadedRef.current = node
-      setRiveRef(node)
-      if (node) {
-        applyColor(node)
-        applyInputs(node)
-      }
-    },
-    [setRiveRef, applyColor, applyInputs],
-  )
-
-  // Reaplica quando riveRef popula (evento de load) ou tema/estado mudam.
-  useEffect(() => {
-    if (!loadedRef.current) return
-    applyColor(loadedRef.current)
-    applyInputs(loadedRef.current)
-  }, [riveRef, applyColor, applyInputs])
-
-  // Rede de segurança: reaplica em delays escalonados para cobrir o caso em que
-  // o evento nativo "RiveReactNativeLoaded" não casa com o viewTag (Fabric) —
-  // nesse cenário o riveRef nunca popula e a única janela de aplicar a cor é
-  // depender do ViewModel já vinculado, que acontece um pouco depois do load.
-  useEffect(() => {
-    const apply = () => {
-      if (!loadedRef.current) return
-      applyColor(loadedRef.current)
-      applyInputs(loadedRef.current)
     }
-    apply()
-    const timers = [400, 1000, 2400].map((t) => setTimeout(apply, t))
-    return () => timers.forEach(clearTimeout)
-  }, [riveRef, applyColor, applyInputs])
+  }, [riveRef, state])
 
   return (
     <Rive
-      ref={setCombinedRef}
-      url={PERSONA_RIVE_URL}
+      ref={setRiveRef}
+      source={PERSONA_RIVE_SOURCE}
       stateMachineName={PERSONA_STATE_MACHINE}
-      dataBinding={DATA_BINDING}
       autoplay
-      fit={riveModule!.Fit.Contain}
-      onError={(event: unknown) => {
+      fit={rive.Fit.Contain}
+      // Equivalente nativo do `useDefault: true` usado no desktop/web: vincula a
+      // instância padrão da ViewModel, sem a qual a propriedade `color` não existe.
+      dataBinding={rive.AutoBind(true)}
+      onError={(error: unknown) => {
         if (__DEV__) {
-          console.warn('[RivePersona] Rive error:', (event as { nativeEvent?: unknown })?.nativeEvent ?? event)
+          console.warn('[RivePersona] Rive error:', error)
         }
       }}
       style={{ width: size, height: size }}
