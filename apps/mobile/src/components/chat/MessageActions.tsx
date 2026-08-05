@@ -3,6 +3,7 @@ import { Copy, RotateCcw, Clock, CheckCircle } from 'lucide-react-native'
 import { useTranslation } from 'react-i18next'
 import type { ChatMessage } from '@orbit/shared'
 import { getThemeTokens } from '~/lib/theme-tokens'
+import { formatTime } from '~/lib/format-time'
 import { useThemeStore } from '~/stores/theme-store'
 import { useState } from 'react'
 
@@ -10,11 +11,6 @@ interface MessageActionsProps {
   message: ChatMessage
   onCopy?: () => void
   onRevert?: () => void
-}
-
-function formatTime(ts: number, locale: string): string {
-  const d = new Date(ts)
-  return d.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' })
 }
 
 function formatDuration(ms: number): string {
