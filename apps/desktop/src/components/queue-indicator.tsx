@@ -1,4 +1,5 @@
 import { useState } from "react"
+import { useTranslation } from "react-i18next"
 import { CalendarIcon, ChevronDownIcon, ListPlus, X } from "lucide-react"
 import {
   Collapsible,
@@ -7,25 +8,25 @@ import {
 } from "~/components/ui/collapsible"
 import { useMessageQueueStore } from "@/src/stores/message-queue-store"
 import { cn } from "@/lib/utils"
+import { formatTime } from "@/src/lib/format"
 
 interface QueueIndicatorProps {
   sessionId?: string
 }
 
-function formatSchedule(ts: number): string {
+function formatSchedule(ts: number, locale: string): string {
   const now = Date.now()
   const diff = ts - now
   if (diff < 0) return "Agora"
   if (diff < 60_000) return "Em segundos"
   if (diff < 3_600_000) return `Em ${Math.ceil(diff / 60_000)}min`
   if (diff < 86_400_000) return `Em ${Math.ceil(diff / 3_600_000)}h`
-  return new Date(ts).toLocaleString("pt-BR", {
-    dateStyle: "short",
-    timeStyle: "short",
-  })
+  const date = new Date(ts).toLocaleDateString(locale, { dateStyle: "short" })
+  return `${date} ${formatTime(ts, locale)}`
 }
 
 export function QueueIndicator({ sessionId }: QueueIndicatorProps) {
+  const { i18n } = useTranslation()
   const [open, setOpen] = useState(false)
   const queues = useMessageQueueStore((s) => s.queues)
   const remove = useMessageQueueStore((s) => s.remove)
@@ -72,7 +73,7 @@ export function QueueIndicator({ sessionId }: QueueIndicatorProps) {
               </span>
               <span className="flex shrink-0 items-center gap-1">
                 <span className="text-[10px] text-muted-foreground/60">
-                  {msg.scheduledAt ? formatSchedule(msg.scheduledAt) : "Fila"}
+                  {msg.scheduledAt ? formatSchedule(msg.scheduledAt, i18n.language) : "Fila"}
                 </span>
                 <button
                   type="button"
