@@ -15,7 +15,6 @@ import {
 } from "@/components/ui/command"
 import { Dialog, DialogContent, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { cn } from "@/lib/utils"
-import { CheckIcon } from "lucide-react"
 import { useState } from "react"
 import { Button } from "@/components/ui/button"
 
@@ -241,6 +240,7 @@ export default function ModelSelectorDemo() {
                         setOpen(false)
                       }}
                       value={model.id}
+                      className={selectedModel === model.id ? "bg-primary/10" : undefined}
                     >
                       <ModelSelectorLogo provider={model.chefSlug} />
                       <ModelSelectorName>{model.name}</ModelSelectorName>
@@ -249,11 +249,6 @@ export default function ModelSelectorDemo() {
                           <ModelSelectorLogo key={provider} provider={provider} />
                         ))}
                       </ModelSelectorLogoGroup>
-                      {selectedModel === model.id ? (
-                        <CheckIcon className="ml-auto size-4" />
-                      ) : (
-                        <div className="ml-auto size-4" />
-                      )}
                     </ModelSelectorItem>
                   ))}
               </ModelSelectorGroup>

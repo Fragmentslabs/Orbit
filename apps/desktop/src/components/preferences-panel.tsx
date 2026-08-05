@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
-import { BrainIcon, CheckIcon, ChevronDownIcon, FolderIcon, LanguagesIcon, SettingsIcon } from "lucide-react"
+import { BrainIcon, ChevronDownIcon, FolderIcon, LanguagesIcon, SettingsIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
   ModelSelector,
@@ -83,10 +83,9 @@ function ModelField({
               <ModelSelectorItem
                 onSelect={() => { onChange(null); setOpen(false) }}
                 value={nullLabel}
-                className="flex justify-between"
+                className={!value ? "bg-primary/10" : undefined}
               >
                 <span className="text-muted-foreground">{nullLabel}</span>
-                {!value ? <CheckIcon className="size-4" /> : <div className="size-4" />}
               </ModelSelectorItem>
             )}
             <ModelSelectorEmpty>{t("preferences.noModelsFound")}</ModelSelectorEmpty>
@@ -100,16 +99,16 @@ function ModelField({
                       setOpen(false)
                     }}
                     value={`${provider.name} ${model.name} ${model.id}`}
+                    className={
+                      value?.providerId === provider.id && value.modelId === model.id
+                        ? "bg-primary/10"
+                        : undefined
+                    }
                   >
                     <ModelSelectorLogo provider={provider.id} />
                     <ModelSelectorName>{model.name}</ModelSelectorName>
                     {model.reasoning && (
                       <BrainIcon className="size-3 shrink-0 text-muted-foreground" />
-                    )}
-                    {value?.providerId === provider.id && value.modelId === model.id ? (
-                      <CheckIcon className="ml-auto size-4" />
-                    ) : (
-                      <div className="ml-auto size-4" />
                     )}
                   </ModelSelectorItem>
                 ))}

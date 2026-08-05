@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
-import { BrainIcon, CheckIcon, ChevronDownIcon, SettingsIcon } from "lucide-react"
+import { BrainIcon, ChevronDownIcon, SettingsIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
   ModelSelector,
@@ -15,6 +15,7 @@ import {
   ModelSelectorTrigger,
 } from "@/src/components/ai/model-selector"
 import { SettingsDialog } from "@/src/components/settings-dialog"
+import { ModalityIcons } from "@/src/components/ai/modality-icons"
 import { useProviderStore } from "@/src/stores/provider-store"
 
 const MAX_MODELS_PER_PROVIDER = 40
@@ -74,16 +75,20 @@ export function ModelPicker() {
                       setOpen(false)
                     }}
                     value={`${provider.name} ${model.name} ${model.id}`}
+                    className={
+                      selected?.providerId === provider.id && selected.modelId === model.id
+                        ? "bg-primary/10"
+                        : undefined
+                    }
                   >
                     <ModelSelectorLogo provider={provider.id} />
                     <ModelSelectorName>{model.name}</ModelSelectorName>
+                    <ModalityIcons
+                      modalities={model.modalities?.input}
+                      className="size-3 shrink-0 text-muted-foreground"
+                    />
                     {model.reasoning && (
                       <BrainIcon className="size-3 shrink-0 text-muted-foreground" />
-                    )}
-                    {selected?.providerId === provider.id && selected.modelId === model.id ? (
-                      <CheckIcon className="ml-auto size-4" />
-                    ) : (
-                      <div className="ml-auto size-4" />
                     )}
                   </ModelSelectorItem>
                 ))}
