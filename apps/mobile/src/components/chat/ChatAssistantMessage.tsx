@@ -54,10 +54,14 @@ interface ChatAssistantMessageProps {
 
 // ─── User Message Attachments & Bubble ───────────────────────────────────────
 
-function UserMessage({ message }: { message: ChatMessage }) {
+function UserMessage({ message, onRevert }: { message: ChatMessage; onRevert?: () => void }) {
   const text = visibleMessageText(message)
   const files = message.parts.filter((p): p is FilePart => p.type === 'file')
   const tokens = getThemeTokens(useThemeStore((s) => s.resolved))
+
+  const handleCopy = useCallback(async () => {
+    await Clipboard.setStringAsync(text)
+  }, [text])
 
   return (
     <View className="self-end max-w-[85%] items-end my-1">
@@ -76,6 +80,8 @@ function UserMessage({ message }: { message: ChatMessage }) {
           </Text>
         </View>
       )}
+
+      <MessageActions message={message} onCopy={handleCopy} onRevert={onRevert} />
     </View>
   )
 }
@@ -579,7 +585,7 @@ export function ChatAssistantMessage({ message, compact, isLast, isBusy, onRever
   }, [message])
 
   if (isUser) {
-    return <UserMessage message={message} />
+    return <UserMessage message={message} onRevert={onRevert} />
   }
 
   return (
