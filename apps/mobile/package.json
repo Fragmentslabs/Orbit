@@ -3,6 +3,9 @@
   "main": "expo-router/entry",
   "version": "0.1.0",
   "dependencies": {
+    "@babel/plugin-transform-arrow-functions": "^7.29.7",
+    "@babel/plugin-transform-shorthand-properties": "^7.29.7",
+    "@babel/plugin-transform-template-literals": "^7.29.7",
     "@expo/ui": "~57.0.4",
     "@orbit/companion-client": "*",
     "@orbit/shared": "*",
@@ -72,6 +75,7 @@
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4.3.2",
+    "babel-preset-expo": "~57.0.5",
     "@types/react": "~19.2.2",
     "eslint": "^9.0.0",
     "eslint-config-expo": "~57.0.0",
