@@ -21,7 +21,7 @@ import { TaskProgress } from "@/src/components/task-progress"
 import { PlanReviewCard } from "@/src/components/plan-review-card"
 import { InitProjectCard } from "@/src/components/init-project-card"
 import { RevertBar } from "@/src/components/revert-bar"
-import { AssistantMessageActions, CopyAction, MessageTimestamp } from "@/src/components/messages/shared"
+import { AssistantMessageActions, CopyAction, MessageTimestamp, RevertAction } from "@/src/components/messages/shared"
 import { DateSeparator, isNewDay } from "@/src/components/messages/date-separator"
 import { ChatMessageSearchBar } from "@/src/components/chat-message-search-bar"
 import { useChatSearchStore } from "@/src/stores/chat-search-store"
@@ -94,6 +94,7 @@ const MessageItem = memo(
           <Actions className="-mb-1 items-center justify-end opacity-0 transition-opacity group-hover/user-msg:opacity-100">
             <MessageTimestamp timestamp={msg.createdAt} />
             <CopyAction text={visibleMessageText(msg)} />
+            <RevertAction messageId={msg.id} sessionId={sessionId} />
           </Actions>
         </div>
       </Message>
@@ -111,7 +112,7 @@ const MessageItem = memo(
           onRetry={handleRetry}
         />
       </MessageContent>
-      {finished && !waiting && <AssistantMessageActions message={msg} sessionId={sessionId} />}
+      {finished && !waiting && <AssistantMessageActions message={msg} />}
     </Message>
   )
   },

@@ -394,9 +394,25 @@ export function CopyAction({ text }: { text: string }) {
   )
 }
 
-/** Barra de ações do assistente: copiar + revert + horário + tokens/custo. */
-export function AssistantMessageActions({ message, sessionId }: {
-  message: ChatMessage
+/** Barra de ações do assistente: copiar + horário + tokens/custo. */
+export function AssistantMessageActions({ message }: { message: ChatMessage }) {
+  return (
+    <Actions className="mt-1 items-center">
+      <CopyAction text={messageText(message)} />
+      <MessageTimestamp timestamp={message.completedAt ?? message.createdAt} />
+      {message.completedAt && <MessageDuration startedAt={message.createdAt} completedAt={message.completedAt} />}
+      {message.tokens && <MessageUsage tokens={message.tokens} />}
+    </Actions>
+  )
+}
+
+/**
+ * Revert oferecido na mensagem do USUÁRIO: descarta esse turno e tudo depois
+ * dele (no modo código, também desfaz as alterações em disco) e devolve o texto
+ * e os anexos ao input, como se a mensagem estivesse sendo editada.
+ */
+export function RevertAction({ messageId, sessionId }: {
+  messageId: string
   sessionId?: string
 }) {
   const { t } = useTranslation()
@@ -404,26 +420,16 @@ export function AssistantMessageActions({ message, sessionId }: {
   const activeRevert = useSessionStore((s) =>
     sessionId ? s.sessions.find((x) => x.id === sessionId)?.revert : undefined,
   )
-  const canRevert = Boolean(sessionId && !activeRevert && (
-    message.snapshot?.start || message.role === 'assistant'
-  ))
+  if (!sessionId || activeRevert) return null
 
   return (
-    <Actions className="mt-1 items-center">
-      <CopyAction text={messageText(message)} />
-      {canRevert && (
-        <Action
-          tooltip={t("chat.revert")}
-          label={t("chat.revert")}
-          onClick={() => void revertToMessage(sessionId!, message.id)}
-        >
-          <Undo2Icon className="size-3.5" />
-        </Action>
-      )}
-      <MessageTimestamp timestamp={message.completedAt ?? message.createdAt} />
-      {message.completedAt && <MessageDuration startedAt={message.createdAt} completedAt={message.completedAt} />}
-      {message.tokens && <MessageUsage tokens={message.tokens} />}
-    </Actions>
+    <Action
+      tooltip={t("chat.revert")}
+      label={t("chat.revert")}
+      onClick={() => void revertToMessage(sessionId, messageId)}
+    >
+      <Undo2Icon className="size-3.5" />
+    </Action>
   )
 }
 

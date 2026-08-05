@@ -16,6 +16,7 @@ import type {
 } from "@shared/chat"
 import { StorageKeys } from "@shared/chat"
 import { chatApi, sessionApi, storage } from "@/src/lib/ipc"
+import { visibleMessageText } from "@/src/lib/message-utils"
 import { useBrainPrefs } from "@/src/stores/brain-prefs"
 import { useSimplePrefs } from "@/src/stores/simple-prefs"
 import { useDraftInput } from "@/src/stores/draft-input"
@@ -594,7 +595,17 @@ export const useSessionStore = create<SessionState>((set, get) => ({
   // aqui só espelha imediatamente para a barra de revert aparecer sem delay
   revertToMessage: async (sessionId, messageId) => {
     const revert = await sessionApi.revert(sessionId, messageId)
-    if (revert) set((state) => updateSessionIn(state, sessionId, { revert }))
+    if (!revert) return
+    set((state) => updateSessionIn(state, sessionId, { revert }))
+    // A mensagem revertida volta para o input, como se estivesse sendo editada.
+    // O texto sai de `discardedMessages` em vez de vir num campo próprio do
+    // SessionRevert: anexos são data URLs e duplicá-los dobraria o tamanho da
+    // sessão em disco.
+    const prompt = revert.discardedMessages?.find((m) => m.role === "user")
+    if (prompt) {
+      const files = prompt.parts.filter((p): p is FilePart => p.type === "file")
+      useDraftInput.getState().setDraft(sessionId, visibleMessageText(prompt), files)
+    }
   },
 
   unrevert: async (sessionId) => {
