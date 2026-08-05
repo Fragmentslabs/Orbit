@@ -8,6 +8,7 @@ import { Storage } from '~/lib/storage'
 import { getThemeTokens } from '~/lib/theme-tokens'
 import { useThemeStore } from '~/stores/theme-store'
 import { hslToRgba } from '~/lib/theme'
+import { ModalityIcons } from '~/components/ui/modality-icons'
 import type { ModelVariant } from '@orbit/shared'
 
 interface WorkerModelModalProps {
@@ -196,6 +197,7 @@ export function WorkerModelModal({ visible, onClose }: WorkerModelModalProps) {
                           <Text style={[s.modelName, { color: tokens.foreground }]}>{model.name}</Text>
                           <Text style={[s.modelId, { color: tokens.mutedForeground }]} numberOfLines={1}>{model.id}</Text>
                         </View>
+                        <ModalityIcons modalities={model.modalities?.input} color={tokens.mutedForeground} />
                         {isSelected && <Check size={16} color={tokens.primary} />}
                       </Pressable>
                     )
