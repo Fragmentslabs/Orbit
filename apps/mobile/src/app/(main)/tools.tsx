@@ -1,8 +1,7 @@
-import { useCallback, useEffect, useState } from 'react'
-import { View, Text, Pressable, ScrollView, RefreshControl, StyleSheet, Alert } from 'react-native'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { View, Text, Pressable, ScrollView, RefreshControl, StyleSheet, Alert, useWindowDimensions } from 'react-native'
 import * as DocumentPicker from 'expo-document-picker'
 import * as FileSystem from 'expo-file-system/legacy'
-import { SafeAreaView } from 'react-native-safe-area-context'
 import { useRouter } from 'expo-router'
 import {
   ArrowLeft,
@@ -18,6 +17,7 @@ import {
   Pencil,
   Trash2,
   RefreshCw,
+  MoreHorizontal,
   FileUp,
   MessageSquare,
   FileText,
@@ -30,6 +30,8 @@ import { useDraftInput } from '~/stores/draft-input-store'
 import { getThemeTokens } from '~/lib/theme-tokens'
 import { useThemeStore } from '~/stores/theme-store'
 import i18n from '~/i18n'
+import { ActionMenu, type ActionMenuItem } from '~/components/ui/action-menu'
+import { SafeScreen } from '~/components/layout/SafeScreen'
 import { SkillFormModal } from '~/components/chat/SkillFormModal'
 import { SkillContentModal } from '~/components/chat/SkillContentModal'
 import { McpServerFormModal } from '~/components/chat/McpServerFormModal'
@@ -45,6 +47,7 @@ function ConnectionDot({ state }: { state: McpConnectionState }) {
   return <View style={{ width: size, height: size, borderRadius: size / 2, backgroundColor: color }} />
 }
 
+/** Menu "..." ancorado no trigger de cada card. */
 function McpServerCard({
   server,
   onEdit,
@@ -59,6 +62,21 @@ function McpServerCard({
   const { t } = useTranslation()
   const tokens = getThemeTokens(useThemeStore((s) => s.resolved))
   const [toolsOpen, setToolsOpen] = useState(false)
+  const windowWidth = useWindowDimensions().width
+  const triggerRef = useRef<View>(null)
+  const [menuAnchor, setMenuAnchor] = useState<{ top: number; right: number } | null>(null)
+
+  const openMenu = () => {
+    triggerRef.current?.measure((_x, _y, w, h, px, py) => {
+      setMenuAnchor({ top: py + h + 4, right: windowWidth - px - w })
+    })
+  }
+
+  const menuItems: ActionMenuItem[] = [
+    { icon: RefreshCw, label: t('toolsScreen.reconnect'), onPress: () => onReconnect(server.config.name) },
+    { icon: Pencil, label: t('toolsScreen.edit'), onPress: () => onEdit(server.config) },
+    { icon: Trash2, label: t('toolsScreen.delete'), destructive: true, onPress: () => onDelete(server.config.name) },
+  ]
 
   return (
     <View style={[s.serverCard, { borderColor: tokens.border, backgroundColor: tokens.card }]}>
@@ -67,12 +85,15 @@ function McpServerCard({
         <Text style={[s.serverName, { color: tokens.foreground }]} numberOfLines={1}>
           {server.config.name}
         </Text>
-        <View style={[s.stateBadge, serverStateBadge(server.state, tokens)]}>
+        <View style={[s.stateBadge, { backgroundColor: tokens.muted }]}>
           <ConnectionDot state={server.state} />
-          <Text style={[s.stateLabel, { color: stateLabelColor(server.state) }]}>
+          <Text style={[s.stateLabel, { color: tokens.mutedForeground }]}>
             {stateLabel(server.state)}
           </Text>
         </View>
+        <Pressable ref={triggerRef} onPress={openMenu} hitSlop={10} style={s.menuTrigger}>
+          <MoreHorizontal size={18} color={tokens.mutedForeground} />
+        </Pressable>
       </View>
       {server.error && (
         <Text style={[s.serverError, { color: '#ef4444' }]} numberOfLines={2}>{server.error}</Text>
@@ -113,20 +134,7 @@ function McpServerCard({
         </View>
       )}
 
-      <View style={[s.actionsRow, { borderTopColor: tokens.border }]}>
-        <Pressable onPress={() => onReconnect(server.config.name)} style={s.actionBtn}>
-          <RefreshCw size={13} color={tokens.mutedForeground} />
-          <Text style={[s.actionLabel, { color: tokens.mutedForeground }]}>{t('toolsScreen.reconnect')}</Text>
-        </Pressable>
-        <Pressable onPress={() => onEdit(server.config)} style={s.actionBtn}>
-          <Pencil size={13} color={tokens.mutedForeground} />
-          <Text style={[s.actionLabel, { color: tokens.mutedForeground }]}>{t('toolsScreen.edit')}</Text>
-        </Pressable>
-        <Pressable onPress={() => onDelete(server.config.name)} style={s.actionBtn}>
-          <Trash2 size={13} color={tokens.destructive} />
-          <Text style={[s.actionLabel, { color: tokens.destructive }]}>{t('toolsScreen.delete')}</Text>
-        </Pressable>
-      </View>
+      <ActionMenu visible={menuAnchor !== null} onClose={() => setMenuAnchor(null)} items={menuItems} anchor={menuAnchor ?? undefined} />
     </View>
   )
 }
@@ -144,6 +152,21 @@ function SkillCard({
 }) {
   const { t } = useTranslation()
   const tokens = getThemeTokens(useThemeStore((s) => s.resolved))
+  const windowWidth = useWindowDimensions().width
+  const triggerRef = useRef<View>(null)
+  const [menuAnchor, setMenuAnchor] = useState<{ top: number; right: number } | null>(null)
+
+  const openMenu = () => {
+    triggerRef.current?.measure((_x, _y, w, h, px, py) => {
+      setMenuAnchor({ top: py + h + 4, right: windowWidth - px - w })
+    })
+  }
+
+  const menuItems: ActionMenuItem[] = [
+    { icon: Eye, label: t('toolsScreen.view'), onPress: () => onView(skill) },
+    { icon: Pencil, label: t('toolsScreen.edit'), onPress: () => onEdit(skill) },
+    { icon: Trash2, label: t('toolsScreen.delete'), destructive: true, onPress: () => onDelete(skill.slug) },
+  ]
 
   return (
     <View style={[s.skillCard, { borderColor: tokens.border, backgroundColor: tokens.card }]}>
@@ -157,11 +180,14 @@ function SkillCard({
             <Text style={[s.skillDesc, { color: tokens.mutedForeground }]} numberOfLines={2}>{skill.description}</Text>
           )}
         </View>
-        <View style={[s.sourceBadge, { backgroundColor: skill.source === 'global' ? 'rgba(99,102,241,0.12)' : 'rgba(245,158,11,0.12)' }]}>
-          <Text style={[s.sourceLabel, { color: skill.source === 'global' ? '#818cf8' : '#f59e0b' }]}>
+        <View style={[s.sourceBadge, { backgroundColor: tokens.muted }]}>
+          <Text style={[s.sourceLabel, { color: tokens.mutedForeground }]}>
             {skill.source === 'global' ? t('toolsScreen.global') : t('toolsScreen.project')}
           </Text>
         </View>
+        <Pressable ref={triggerRef} onPress={openMenu} hitSlop={10} style={s.menuTrigger}>
+          <MoreHorizontal size={18} color={tokens.mutedForeground} />
+        </Pressable>
       </View>
       <View style={[s.skillFooter, { borderTopColor: tokens.border }]}>
         <Text style={[s.skillSlug, { color: tokens.mutedForeground }]}>@{skill.slug}</Text>
@@ -171,20 +197,8 @@ function SkillCard({
           </Text>
         )}
       </View>
-      <View style={[s.actionsRow, { borderTopColor: tokens.border }]}>
-        <Pressable onPress={() => onView(skill)} style={s.actionBtn}>
-          <Eye size={13} color={tokens.mutedForeground} />
-          <Text style={[s.actionLabel, { color: tokens.mutedForeground }]}>{t('toolsScreen.view')}</Text>
-        </Pressable>
-        <Pressable onPress={() => onEdit(skill)} style={s.actionBtn}>
-          <Pencil size={13} color={tokens.mutedForeground} />
-          <Text style={[s.actionLabel, { color: tokens.mutedForeground }]}>{t('toolsScreen.edit')}</Text>
-        </Pressable>
-        <Pressable onPress={() => onDelete(skill.slug)} style={s.actionBtn}>
-          <Trash2 size={13} color={tokens.destructive} />
-          <Text style={[s.actionLabel, { color: tokens.destructive }]}>{t('toolsScreen.delete')}</Text>
-        </Pressable>
-      </View>
+
+      <ActionMenu visible={menuAnchor !== null} onClose={() => setMenuAnchor(null)} items={menuItems} anchor={menuAnchor ?? undefined} />
     </View>
   )
 }
@@ -223,10 +237,10 @@ function CreateSkillDropdown({
 
   return (
     <View style={{ position: 'relative' }}>
-      <Pressable onPress={() => setOpen((o) => !o)} style={s.dropdownTrigger}>
-        <Plus size={14} color={tokens.primary} />
-        <Text style={[s.dropdownTriggerText, { color: tokens.primary }]}>{t('toolsScreen.create')}</Text>
-        <ChevronDown size={12} color={tokens.primary} />
+      <Pressable onPress={() => setOpen((o) => !o)} style={[s.sectionBtn, { backgroundColor: tokens.primary }]}>
+        <Plus size={14} color={tokens.primaryForeground} />
+        <Text style={[s.sectionBtnText, { color: tokens.primaryForeground }]}>{t('toolsScreen.create')}</Text>
+        <ChevronDown size={12} color={tokens.primaryForeground} />
       </Pressable>
 
       {open && (
@@ -261,24 +275,6 @@ function stateLabel(state: McpConnectionState): string {
     case 'connecting': return i18n.t('toolsScreen.stateConnecting')
     case 'error': return i18n.t('toolsScreen.stateError')
     case 'disabled': return i18n.t('toolsScreen.stateDisabled')
-  }
-}
-
-function stateLabelColor(state: McpConnectionState): string {
-  switch (state) {
-    case 'connected': return '#22c55e'
-    case 'connecting': return '#f59e0b'
-    case 'error': return '#ef4444'
-    case 'disabled': return '#6b7280'
-  }
-}
-
-function serverStateBadge(state: McpConnectionState, tokens: Record<string, string>) {
-  switch (state) {
-    case 'connected': return { backgroundColor: 'rgba(34,197,94,0.12)' }
-    case 'connecting': return { backgroundColor: 'rgba(245,158,11,0.12)' }
-    case 'error': return { backgroundColor: 'rgba(239,68,68,0.12)' }
-    case 'disabled': return { backgroundColor: 'rgba(107,114,128,0.12)' }
   }
 }
 
@@ -389,7 +385,7 @@ export default function ToolsScreen() {
   }
 
   return (
-    <SafeAreaView style={[s.container, { backgroundColor: tokens.background }]} edges={['top']}>
+    <SafeScreen style={s.container}>
       <View style={[s.header, { borderBottomColor: tokens.border }]}>
         <Pressable onPress={() => router.back()} style={s.headerBtn}>
           <ArrowLeft size={22} color={tokens.foreground} />
@@ -436,9 +432,9 @@ export default function ToolsScreen() {
               <Text style={[s.sectionLabel, { color: tokens.mutedForeground }]}>
                 {t('toolsScreen.mcpServers', { count: mcpServers.length })}
               </Text>
-              <Pressable onPress={() => { setEditMcp(undefined); setMcpFormOpen(true) }} style={s.addSectionBtn}>
-                <Plus size={14} color={tokens.primary} />
-                <Text style={[s.addSectionText, { color: tokens.primary }]}>{t('toolsScreen.add')}</Text>
+              <Pressable onPress={() => { setEditMcp(undefined); setMcpFormOpen(true) }} style={[s.sectionBtn, { backgroundColor: tokens.primary }]}>
+                <Plus size={14} color={tokens.primaryForeground} />
+                <Text style={[s.sectionBtnText, { color: tokens.primaryForeground }]}>{t('toolsScreen.add')}</Text>
               </Pressable>
             </View>
             <View style={s.section}>
@@ -494,7 +490,7 @@ export default function ToolsScreen() {
       <SkillFormModal visible={skillFormOpen} onClose={() => setSkillFormOpen(false)} edit={editSkill} />
       <SkillContentModal visible={viewSkill !== null} onClose={() => setViewSkill(null)} skill={viewSkill} />
       <McpServerFormModal visible={mcpFormOpen} onClose={() => setMcpFormOpen(false)} edit={editMcp} />
-    </SafeAreaView>
+    </SafeScreen>
   )
 }
 
@@ -558,8 +554,15 @@ const s = StyleSheet.create({
     textTransform: 'uppercase',
     letterSpacing: 0.6,
   },
-  addSectionBtn: { flexDirection: 'row', alignItems: 'center', gap: 3, paddingVertical: 4, paddingHorizontal: 6 },
-  addSectionText: { fontSize: 12, fontWeight: '600' },
+  sectionBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    height: 34,
+    paddingHorizontal: 12,
+    borderRadius: 6,
+  },
+  sectionBtnText: { fontSize: 13, fontWeight: '500' },
   section: {
     marginHorizontal: 16,
     gap: 8,
@@ -587,6 +590,7 @@ const s = StyleSheet.create({
     borderRadius: 10,
   },
   stateLabel: { fontSize: 10, fontWeight: '600' },
+  menuTrigger: { padding: 2 },
   serverError: { fontSize: 11, paddingHorizontal: 12, paddingBottom: 6 },
   serverMeta: {
     flexDirection: 'row',
@@ -608,16 +612,6 @@ const s = StyleSheet.create({
   toolsToggleText: { fontSize: 11, fontWeight: '500' },
   toolsList: { paddingHorizontal: 12, paddingVertical: 6, gap: 4, borderTopWidth: 1 },
   toolName: { fontSize: 11, fontFamily: 'monospace', paddingVertical: 1 },
-  actionsRow: { flexDirection: 'row', borderTopWidth: 1 },
-  actionBtn: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 4,
-    paddingVertical: 9,
-  },
-  actionLabel: { fontSize: 11, fontWeight: '600' },
 
   skillCard: { borderRadius: 12, borderWidth: 1, overflow: 'hidden' },
   skillRow: {
@@ -665,17 +659,9 @@ const s = StyleSheet.create({
   },
   pendingBtnText: { fontSize: 12, fontWeight: '600' },
 
-  dropdownTrigger: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 3,
-    paddingVertical: 4,
-    paddingHorizontal: 8,
-  },
-  dropdownTriggerText: { fontSize: 12, fontWeight: '600' },
   dropdown: {
     position: 'absolute',
-    top: 28,
+    top: 40,
     right: 0,
     borderRadius: 10,
     borderWidth: 1,
