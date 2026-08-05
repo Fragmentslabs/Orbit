@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
+import { formatTime } from "@/src/lib/format"
 import { companionApi, type CompanionStatus } from "@/src/lib/ipc"
 
 interface Props {
@@ -19,7 +20,7 @@ interface Props {
 }
 
 export function ConnectAppDialog({ open, onOpenChange }: Props) {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
   const [status, setStatus] = useState<CompanionStatus | null>(null)
   const [qrDataUrl, setQrDataUrl] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -39,7 +40,7 @@ export function ConnectAppDialog({ open, onOpenChange }: Props) {
     if (!open) return
     fetchStatus()
     pollingRef.current = setInterval(fetchStatus, 3000)
-    // Modo de pareamento: enquanto o modal está aberto, o PIN atual fica
+// Modo de pareamento: enquanto o modal está aberto, o PIN atual fica
     // disponível via /api/ping para o app conectar com um toque ao achar
     // o desktop na rede (o PIN já é exibido em texto aqui mesmo).
     void companionApi.setPairingMode(true)
@@ -159,7 +160,7 @@ export function ConnectAppDialog({ open, onOpenChange }: Props) {
                     <Smartphone className="size-3 text-green-500" />
                     <span className="text-foreground">{c.deviceName}</span>
                     <span className="ml-auto text-muted-foreground">
-                      {new Date(c.connectedAt).toLocaleTimeString()}
+                      {formatTime(c.connectedAt, i18n.language)}
                     </span>
                   </div>
                 ))}

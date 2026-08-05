@@ -8,17 +8,11 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
+import { formatDateTime } from "@/src/lib/format"
 
 interface SchedulePreset {
   label: string
   getTimestamp: () => number
-}
-
-function formatDate(ts: number, locale: string): string {
-  return new Date(ts).toLocaleString(locale, {
-    dateStyle: "full",
-    timeStyle: "short",
-  })
 }
 
 function defaultDate(): string {
@@ -80,7 +74,7 @@ export function ScheduleMessageDialog({
     if (selectedPreset !== null) return
     const ts = parseCustom(customDate, customTime)
     if (ts && ts > Date.now()) {
-      setPreview(formatDate(ts, i18n.language))
+      setPreview(formatDateTime(ts, i18n.language))
     } else {
       setPreview(null)
     }
@@ -89,7 +83,7 @@ export function ScheduleMessageDialog({
   const handlePreset = (preset: SchedulePreset, idx: number) => {
     const ts = preset.getTimestamp()
     setSelectedPreset(idx)
-    setPreview(formatDate(ts, i18n.language))
+    setPreview(formatDateTime(ts, i18n.language))
   }
 
   const handleConfirm = () => {

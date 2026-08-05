@@ -16,6 +16,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { Input } from "@/components/ui/input"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { cn } from "@/lib/utils"
+import { formatTime } from "@/src/lib/format"
 
 export interface WebPreviewContextValue {
   url: string
@@ -323,7 +324,7 @@ export const WebPreviewConsole = ({
   ...props
 }: WebPreviewConsoleProps) => {
   const { consoleOpen, setConsoleOpen } = useWebPreview()
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
 
   return (
     <Collapsible
@@ -356,7 +357,7 @@ export const WebPreviewConsole = ({
                 )}
                 key={`${log.timestamp.getTime()}-${index}`}
               >
-                <span className="text-muted-foreground">{log.timestamp.toLocaleTimeString()}</span>{" "}
+                <span className="text-muted-foreground">{formatTime(log.timestamp.getTime(), i18n.language)}</span>{" "}
                 {log.message}
               </div>
             ))
