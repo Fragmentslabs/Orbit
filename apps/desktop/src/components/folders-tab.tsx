@@ -5,12 +5,14 @@ import {
   ChevronUpIcon,
   CopyIcon,
   Ellipsis,
+  EyeIcon,
   FolderGit2Icon,
   FolderOpenIcon,
   FolderTreeIcon,
   HistoryIcon,
   FolderIcon,
   PanelRightCloseIcon,
+  PenLineIcon,
 } from "lucide-react";
 import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -63,6 +65,7 @@ import {
   CommitSeparator,
   CommitTimestamp,
 } from "@/src/components/ai/commit";
+import { MessageResponse } from "@/src/components/ai/message";
 
 interface DirEntryInfo {
   name: string;
@@ -290,6 +293,7 @@ export function FoldersTab() {
   const [copied, setCopied] = useState(false);
   const copyTimeoutRef = useRef<number>();
   const [fileBrowserOpen, setFileBrowserOpen] = useState(true);
+  const [mdMode, setMdMode] = useState<"edit" | "preview">("preview");
 
   const [commits, setCommits] = useState<CommitEntry[] | null>(null);
   const [commitsError, setCommitsError] = useState<string | null>(null);
@@ -338,6 +342,7 @@ export function FoldersTab() {
     setFileLoading(true);
     setFileError(null);
     setFileContent(null);
+    setMdMode("preview");
     const result = (await window.ipcRenderer.invoke(
       "fs:readFile",
       filePath,
@@ -353,7 +358,7 @@ export function FoldersTab() {
       setFileLoading(true);
       setFileError(null);
       setFileContent(null);
-      const result = (await window.ipcRenderer.invoke(
+    const result = (await window.ipcRenderer.invoke(
         "git:showFile",
         repoPath,
         hash,
@@ -361,6 +366,7 @@ export function FoldersTab() {
         deleted,
       )) as ReadFileResult;
       setFileLoading(false);
+      setMdMode("preview");
       if ("content" in result) setFileContent(result.content);
       else setFileError(result.error);
     },
@@ -374,8 +380,14 @@ export function FoldersTab() {
     [openLiveFile],
   );
 
+  const isMarkdownFile = viewedFile ? /(?:\.md|\.markdown)$/i.test(viewedFile.path) : false;
+
   useEffect(() => {
     if (!fileContent || !viewedFile) {
+      setHighlighted(null);
+      return;
+    }
+    if (isMarkdownFile && mdMode === "preview") {
       setHighlighted(null);
       return;
     }
@@ -390,7 +402,7 @@ export function FoldersTab() {
     return () => {
       cancelled = true;
     };
-  }, [fileContent, viewedFile, isDark]);
+  }, [fileContent, viewedFile, isDark, isMarkdownFile, mdMode]);
 
   const handleCopy = useCallback(async () => {
     if (!fileContent) return;
@@ -513,19 +525,59 @@ export function FoldersTab() {
             </ArtifactActions>
           </ArtifactHeader>
           {viewedFile ? (
-            <ArtifactContent className="min-h-0 min-w-0 flex-1 overflow-auto  p-0">
-              {fileLoading ? (
-                <div className="p-4 text-sm text-muted-foreground">
-                  {t("common.loading")}
+            <div className="relative flex min-h-0 min-w-0 flex-1 flex-col">
+              {isMarkdownFile && (
+                <div className="absolute top-3 right-3 z-20">
+                  <div className="flex items-center gap-0.5 rounded-full border border-border bg-popover/90 p-0.5 shadow-sm backdrop-blur-xl">
+                    <button
+                      type="button"
+                      onClick={() => setMdMode("edit")}
+                      title={t("folders.editMode")}
+                      className={cn(
+                        "flex size-6 items-center justify-center rounded-full transition-colors",
+                        mdMode === "edit"
+                          ? "bg-primary text-primary-foreground"
+                          : "text-muted-foreground hover:bg-accent hover:text-accent-foreground",
+                      )}
+                    >
+                      <PenLineIcon className="size-3.5" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setMdMode("preview")}
+                      title={t("folders.previewMode")}
+                      className={cn(
+                        "flex size-6 items-center justify-center rounded-full transition-colors",
+                        mdMode === "preview"
+                          ? "bg-primary text-primary-foreground"
+                          : "text-muted-foreground hover:bg-accent hover:text-accent-foreground",
+                      )}
+                    >
+                      <EyeIcon className="size-3.5" />
+                    </button>
+                  </div>
                 </div>
-              ) : fileError ? (
-                <div className="p-4 text-sm text-muted-foreground">
-                  {fileError}
-                </div>
-              ) : fileContent != null ? (
-                <CodeView content={fileContent} highlighted={highlighted} />
-              ) : null}
-            </ArtifactContent>
+              )}
+              <ArtifactContent className="min-h-0 min-w-0 flex-1 overflow-auto  p-0">
+                {fileLoading ? (
+                  <div className="p-4 text-sm text-muted-foreground">
+                    {t("common.loading")}
+                  </div>
+                ) : fileError ? (
+                  <div className="p-4 text-sm text-muted-foreground">
+                    {fileError}
+                  </div>
+                ) : fileContent != null ? (
+                  isMarkdownFile && mdMode === "preview" ? (
+                    <div className="min-w-0 px-4 py-4 text-sm text-foreground">
+                      <MessageResponse>{fileContent}</MessageResponse>
+                    </div>
+                  ) : (
+                    <CodeView content={fileContent} highlighted={highlighted} />
+                  )
+                ) : null}
+              </ArtifactContent>
+            </div>
           ) : (
             <div className="flex min-h-0 min-w-0 flex-1 flex-col items-center justify-center gap-4 p-6 text-center">
               <FolderTreeIcon className="size-16 text-muted-foreground/20" />

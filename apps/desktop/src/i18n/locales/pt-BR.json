@@ -878,7 +878,9 @@
     "commitsTab": "Commits",
     "loadingCommits": "Carregando commits...",
     "gitHistoryError": "Não foi possível ler o histórico git desta pasta.",
-    "noCommits": "Nenhum commit encontrado."
+    "noCommits": "Nenhum commit encontrado.",
+    "editMode": "Editar",
+    "previewMode": "Visualizar"
   },
   "mcp": {
     "kv": {
