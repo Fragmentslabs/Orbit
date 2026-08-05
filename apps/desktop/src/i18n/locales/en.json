@@ -719,15 +719,16 @@
     "title": "Connect App",
     "description": "Scan the QR code with the Orbit app to connect.",
     "statusError": "Could not fetch the server status.",
-    "serverActive": "Server active",
     "serverInactive": "Server inactive",
+    "portInUse": "Port already in use by another Orbit instance. Close the other instance to use the connection here.",
     "qrAlt": "Connection QR code",
-    "pinHint": "Or type the PIN in the app",
+    "pinHint": "Type the PIN in the app",
     "host": "Host",
     "portWs": "WS port",
-    "connectedDevices": "Connected devices",
-    "refresh": "Refresh",
-    "close": "Close"
+    "tabQr": "QR Code",
+    "tabManual": "Manual",
+    "connectedDevices_one": "1 connected device",
+    "connectedDevices_other": "{{count}} connected devices"
   },
   "branch": {
     "previous": "Previous branch",
