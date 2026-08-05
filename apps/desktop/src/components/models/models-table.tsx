@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge"
 import { cn } from "@/lib/utils"
 import type { OrbitModel } from "@shared/models"
 import { useModelsStore } from "@/src/stores/models-store"
+import { ModalityIcons } from "@/src/components/ai/modality-icons"
 import { formatContext, formatPrice, SPEED_LABELS } from "./meta"
 import { ModelCheckbox, ScoreBar } from "./shared"
 
@@ -118,6 +119,7 @@ export function ModelsTable({ models }: { models: OrbitModel[] }) {
                         {t("models.speeds.deep", { defaultValue: SPEED_LABELS.deep })}
                       </Badge>
                     )}
+                    <ModalityIcons modalities={model.modalities} className="size-3 shrink-0" />
                   </span>
                 </div>
               </td>

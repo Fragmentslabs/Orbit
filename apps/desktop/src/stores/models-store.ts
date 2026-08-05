@@ -10,6 +10,8 @@ export type ContextFilter = "any" | "32k" | "128k" | "1m"
 export interface ModelFilters {
   providers: string[]
   capabilities: string[]
+  /** Modalidades de entrada: text, image, audio, video, pdf */
+  modalities: string[]
   prices: PriceTier[]
   speeds: SpeedTier[]
   context: ContextFilter
@@ -19,6 +21,7 @@ export interface ModelFilters {
 const EMPTY_FILTERS: ModelFilters = {
   providers: [],
   capabilities: [],
+  modalities: [],
   prices: [],
   speeds: [],
   context: "any",
@@ -116,6 +119,7 @@ export function hasActiveFilters(filters: ModelFilters): boolean {
   return (
     filters.providers.length > 0 ||
     filters.capabilities.length > 0 ||
+    filters.modalities.length > 0 ||
     filters.prices.length > 0 ||
     filters.speeds.length > 0 ||
     filters.availability.length > 0 ||
@@ -133,6 +137,7 @@ export function filterModels(models: OrbitModel[], search: string, filters: Mode
     }
     if (filters.providers.length && !filters.providers.includes(model.provider)) return false
     if (filters.capabilities.length && !filters.capabilities.every((c) => model.tags.includes(c))) return false
+    if (filters.modalities.length && !filters.modalities.every((m) => model.modalities.includes(m))) return false
     if (filters.prices.length && !filters.prices.includes(model.priceTier)) return false
     if (filters.speeds.length && !filters.speeds.includes(model.speedTier)) return false
     if (model.contextWindow < CONTEXT_MIN[filters.context]) return false

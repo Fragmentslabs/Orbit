@@ -12,7 +12,7 @@ import {
 } from "@/components/ui/sheet"
 import type { ModelScores, OrbitModel } from "@shared/models"
 import { useModelsStore } from "@/src/stores/models-store"
-import { availabilityLabel, formatContext, formatPrice, SCORE_CATEGORIES, SPEED_LABELS } from "./meta"
+import { availabilityLabel, formatContext, formatPrice, MODALITY_LABELS, SCORE_CATEGORIES, SPEED_LABELS } from "./meta"
 import { ScoreBar } from "./shared"
 
 /** Painel direito com o perfil completo do modelo clicado na tabela. */
@@ -143,6 +143,18 @@ export function ModelDetailPanel() {
                       </div>
                     </div>
                   )}
+                </div>
+              </Section>
+            )}
+
+            {model.modalities.length > 0 && (
+              <Section title={t("models.detail.modalities")}>
+                <div className="flex flex-wrap gap-1.5">
+                  {model.modalities.map((mod) => (
+                    <Badge key={mod} variant="secondary" className="text-[10px]">
+                      {t(`models.modalities.${mod}`, { defaultValue: MODALITY_LABELS[mod] })}
+                    </Badge>
+                  ))}
                 </div>
               </Section>
             )}

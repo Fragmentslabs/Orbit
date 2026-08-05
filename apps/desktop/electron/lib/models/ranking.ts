@@ -69,6 +69,21 @@ function buildAvailabilityIndex(catalog: Catalog): Map<string, Set<string>> {
   return index
 }
 
+/** Modalidades de input via models.dev: chave normalizada do modelo → set de modalidades */
+function buildModalitiesIndex(catalog: Catalog): Map<string, Set<string>> {
+  const index = new Map<string, Set<string>>()
+  for (const providerId in catalog) {
+    for (const modelId in catalog[providerId].models) {
+      const input = catalog[providerId].models[modelId].modalities?.input
+      if (!input || input.length === 0) continue
+      const key = normalizeKey(modelId)
+      if (!index.has(key)) index.set(key, new Set())
+      for (const m of input) index.get(key)!.add(m)
+    }
+  }
+  return index
+}
+
 interface RawModel {
   id: string
   name: string
@@ -81,6 +96,7 @@ interface RawModel {
   reasoningMandatory: boolean
   vision: boolean
   toolCall: boolean
+  modalities: string[]
   releaseDate?: string
   sources: OrbitModel['sources']
   matchKeys: string[]
@@ -109,6 +125,7 @@ function fromOpenRouter(m: OpenRouterModel): RawModel {
     reasoningMandatory: m.reasoning?.mandatory ?? false,
     vision: (m.architecture?.input_modalities ?? []).includes('image'),
     toolCall: (m.supported_parameters ?? []).includes('tools'),
+    modalities: m.architecture?.input_modalities ?? [],
     releaseDate: m.created ? new Date(m.created * 1000).toISOString().slice(0, 10) : undefined,
     sources: ['openrouter'],
     matchKeys: [normalizeKey(idSuffix(m.id)), normalizeKey(idSuffix(m.canonical_slug ?? m.id)), normalizeKey(m.name)],
@@ -158,6 +175,7 @@ function fromAA(m: AAModel): RawModel {
     reasoningMandatory: false,
     vision: false,
     toolCall: false,
+    modalities: [],
     releaseDate: m.release_date,
     sources: ['artificialanalysis'],
     matchKeys: [normalizeKey(m.slug), normalizeKey(m.name)],
@@ -172,6 +190,7 @@ function normalizeScore(value: number | undefined, max: number): number | undefi
 
 export function buildOrbitModels({ openRouter, aa, catalog }: BuildInput): OrbitModel[] {
   const availabilityIndex = buildAvailabilityIndex(catalog)
+  const modalitiesIndex = buildModalitiesIndex(catalog)
 
   // Base: OpenRouter; índice por chave normalizada para casar com a AA
   const raws: RawModel[] = openRouter.map(fromOpenRouter)
@@ -219,6 +238,15 @@ export function buildOrbitModels({ openRouter, aa, catalog }: BuildInput): Orbit
     }
     if (!raw.sources.includes('openrouter')) availability.shift()
 
+    // Modalidades: union do que o OpenRouter informa com o models.dev (que
+    // cobre video/pdf que o OpenRouter nem sempre lista)
+    const modalities = [...raw.modalities]
+    for (const key of raw.matchKeys) {
+      for (const m of modalitiesIndex.get(key) ?? []) {
+        if (!modalities.includes(m)) modalities.push(m)
+      }
+    }
+
     const priceTier = priceTierOf(raw.pricing.input, raw.pricing.output)
     const tags: string[] = []
     if ((scores.coding ?? 0) >= 60) tags.push('coding')
@@ -239,6 +267,7 @@ export function buildOrbitModels({ openRouter, aa, catalog }: BuildInput): Orbit
       scores,
       benchmarks: raw.benchmarks,
       availability,
+      modalities,
       tags,
       releaseDate: raw.releaseDate,
       sources: raw.sources,
