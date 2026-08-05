@@ -1,7 +1,10 @@
 /** Estados do Persona — idênticos ao desktop (apps/desktop/src/components/ai/persona.tsx). */
 export type PersonaState = 'idle' | 'listening' | 'thinking' | 'speaking' | 'asleep'
 
-/** Asset Rive compartilhado com o desktop. */
+/** Asset Rive empacotado no app para evitar falhas de download no Android. */
+export const PERSONA_RIVE_SOURCE = require('../../../assets/halo-2.0.riv') as number
+
+/** URL mantida como referência para a versão web. */
 export const PERSONA_RIVE_URL =
   'https://ejiidnob33g9ap1r.public.blob.vercel-storage.com/halo-2.0.riv'
 

@@ -13,6 +13,10 @@ config.resolver.nodeModulesPaths = [
   path.resolve(workspaceRoot, "node_modules"),
 ];
 
+// `halo-2.0.riv` (persona) é empacotado como asset local; sem essa entrada o
+// Metro trata o require() como módulo e falha com "Unable to resolve".
+config.resolver.assetExts = [...config.resolver.assetExts, "riv"];
+
 // Apply withNativewind FIRST so its CSS resolution chain is established,
 // then layer our custom lucide redirect on top.
 const nativeWindConfig = withNativewind(config);

@@ -91,6 +91,7 @@
 
 /* ── Dark theme ───────────────────────────────── */
 @media (prefers-color-scheme: dark) {
+  :root {
   --background: hsl(240 11% 4%);
   --foreground: hsl(0 0% 98%);
 
@@ -119,4 +120,5 @@
   --input-color: hsl(240 3% 16%);
   --ring-color: hsl(240 4% 46%);
   --sidebar-color: hsl(240 6% 10%);
+  }
 }
