@@ -5,6 +5,7 @@ node_modules/
 
 # Expo
 .expo/
+.expo-export-check/
 dist/
 web-build/
 expo-env.d.ts
@@ -42,5 +43,5 @@ example
 /ios
 /android
 
-# backup do histórico aninhado (redundante com o monorepo)
+# backup do histï¿½rico aninhado (redundante com o monorepo)
 mobile-history.bundle
