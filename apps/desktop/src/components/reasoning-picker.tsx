@@ -32,7 +32,16 @@ export function ReasoningPicker({
         className="h-7 gap-1 border-none bg-transparent px-1.5 text-xs hover:bg-muted dark:bg-transparent dark:hover:bg-muted"
       >
         <Brain className="size-3 text-foreground" />
-        <SelectValue placeholder={t("reasoning.placeholder")} />
+        <SelectValue placeholder={t("reasoning.placeholder")}>
+          {(value) => {
+            // Base UI renderiza o valor cru no trigger; aqui formatamos com o label traduzido
+            if (value == null) return t("reasoning.placeholder")
+            const variant = variants.find((v) => v.id === value)
+            return variant
+              ? t(`reasoning.variants.${variant.id}`, { defaultValue: variant.label })
+              : String(value)
+          }}
+        </SelectValue>
       </SelectTrigger>
       <SelectContent side="top" sideOffset={4} align="start" alignItemWithTrigger={false}>
         {variants.map((variant) => (

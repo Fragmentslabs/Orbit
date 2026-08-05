@@ -27,7 +27,7 @@ export function UserMessageNav({ items, activeId, onSelect, planIds }: UserMessa
   if (items.length < 2) return null
 
   return (
-    <nav className="group pointer-events-none absolute right-3 top-4 z-30 flex flex-col items-end gap-1.5">
+    <nav className="group pointer-events-auto absolute right-3 top-4 z-30 flex flex-col items-end gap-1.5">
       <TooltipProvider delay={300}>
         {items.map((item) => {
           const isPlan = planIds?.has(item.id)
@@ -44,7 +44,8 @@ export function UserMessageNav({ items, activeId, onSelect, planIds }: UserMessa
                     type="button"
                     onClick={() => onSelect(item.id)}
                     className={cn(
-                      // Transição suave; no hover do grupo TODAS as barras crescem (altura + largura)
+                      // Transição suave; no hover do container (nav) TODAS as barras crescem (altura + largura).
+                      // O hover fica no grupo todo, não na barrinha, para os gaps entre as barras não quebrarem o efeito.
                       "pointer-events-auto rounded-full transition-all duration-200 ease-out",
                       "group-hover:h-2.5 group-hover:w-7 group-hover:transition-all group-hover:duration-200",
                       isPlan
