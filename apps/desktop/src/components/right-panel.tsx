@@ -299,6 +299,7 @@ export function RightPanel() {
   const activeSessionId = useSessionStore((s) => s.activeIds[mode])
   const sessions = useSessionStore((s) => s.sessions)
   const statusMap = useSessionStore((s) => s.status)
+  const unreadCounts = useSessionStore((s) => s.unreadCounts)
 
   const tabsBySession = usePanelStore((s) => s.tabsBySession)
   const activeTabBySession = usePanelStore((s) => s.activeTabBySession)
@@ -477,6 +478,9 @@ export function RightPanel() {
           {tabs.map((tab) => {
             const { icon: Icon } = tabMeta[tab.type]
             const TabIcon = tab.type === "chat" && tab.sessionId ? Bot : Icon
+            const tabStatus = tab.sessionId ? statusMap[tab.sessionId] : undefined
+            const isWorking = tabStatus === "submitted" || tabStatus === "streaming"
+            const hasUnread = !!tab.sessionId && (unreadCounts[tab.sessionId] ?? 0) > 0
             return (
               <div
                 key={tab.id}
@@ -490,6 +494,10 @@ export function RightPanel() {
               >
                 <TabIcon className="size-3.5 shrink-0" />
                 <span className="truncate max-w-24">{tab.title}</span>
+                {isWorking && <LoaderIcon className="size-3 shrink-0 animate-spin text-primary" />}
+                {!isWorking && hasUnread && tab.id !== activeTabId && (
+                  <span className="size-2 shrink-0 rounded-full bg-primary" title="Mensagens não lidas" />
+                )}
                 <button
                   onClick={(e) => { e.stopPropagation(); removeTab(tab.id) }}
                   className="ml-0.5 flex size-3.5 shrink-0 items-center justify-center rounded-sm opacity-0 transition-opacity group-hover:opacity-100 hover:bg-sidebar-foreground/10"
