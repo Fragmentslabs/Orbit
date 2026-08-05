@@ -671,7 +671,7 @@ function SessionRow({ session, button: ButtonComponent, buttonClassName, actionB
           {statusDot === "error" && (
             <span className="size-1.5 shrink-0 rounded-full bg-destructive" />
           )}
-          {statusDot !== "submitted" && statusDot !== "streaming" && unreadCounts[session.id] > 0 && activeId !== session.id && (
+          {statusDot !== "submitted" && statusDot !== "streaming" && statusDot !== "error" && unreadCounts[session.id] > 0 && activeId !== session.id && (
             <span className="size-2 shrink-0 rounded-full bg-primary" />
           )}
           {trailing}
@@ -719,6 +719,7 @@ function SessionItem({ session, childSessions = [] }: {
       <SessionRow
         button={SidebarMenuButton}
         session={session}
+        statusDot={statusMap[session.id]}
         trailing={
           hasChildren ? (
             <span

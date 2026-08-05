@@ -348,8 +348,7 @@ function FullscreenComposer() {
   )
 }
 
-export function BrowserTab() {
-  const browserUrl = usePanelStore((s) => s.browserUrl)
+export function BrowserTab({ initialUrl }: { initialUrl?: string }) {
   const fullscreen = usePanelStore((s) => s.fullscreen)
   const setFullscreen = usePanelStore((s) => s.setFullscreen)
 
@@ -365,7 +364,7 @@ export function BrowserTab() {
 
   return (
     <WebPreview
-      defaultUrl={browserUrl ?? ""}
+      defaultUrl={initialUrl ?? ""}
       className={cn(
         "bg-sidebar",
         fullscreen

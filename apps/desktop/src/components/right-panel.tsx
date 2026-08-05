@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { useDroppable, useDndContext } from "@dnd-kit/core"
-import { FileCode, Globe, Folder, MessageSquare, Terminal, X, PlusIcon, Bot, LoaderIcon, XCircleIcon, Trash2, GripVertical } from "lucide-react"
+import { FileCode, Globe, Folder, MessageSquare, Terminal, X, PlusIcon, Bot, LoaderIcon, Loader2, XCircleIcon, Trash2, GripVertical } from "lucide-react"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -101,7 +101,7 @@ function TabContent({ tab, onUpdateTab }: { tab: PanelTab; onUpdateTab: (id: str
     case "browser":
       return (
         <div className="flex flex-1 flex-col overflow-hidden">
-          <BrowserTab />
+          <BrowserTab initialUrl={tab.url} />
         </div>
       )
     case "diff":
@@ -386,8 +386,17 @@ export function RightPanel() {
 
     const id = "browser-agent"
     const sessionTabs = usePanelStore.getState().tabsBySession[browserRequestSessionId] ?? []
-    if (!sessionTabs.some((t) => t.id === id)) {
-      addTabToStore(browserRequestSessionId, { id, type: "browser", title: "Browser" })
+    const { browserUrl } = usePanelStore.getState()
+    const existing = sessionTabs.find((t) => t.id === id)
+    if (!existing) {
+      addTabToStore(browserRequestSessionId, { id, type: "browser", title: "Browser", url: browserUrl })
+    } else if (existing.url !== browserUrl) {
+      // Re-montagem (troca de aba) usa a URL do pedido mais recente do agente.
+      usePanelStore.getState().setTabsForSession(
+        browserRequestSessionId,
+        sessionTabs.map((t) => (t.id === id ? { ...t, url: browserUrl } : t)),
+        usePanelStore.getState().getActiveTabId(browserRequestSessionId),
+      )
     }
     setActiveTabInStore(browserRequestSessionId, id)
 
@@ -480,6 +489,7 @@ export function RightPanel() {
             const TabIcon = tab.type === "chat" && tab.sessionId ? Bot : Icon
             const tabStatus = tab.sessionId ? statusMap[tab.sessionId] : undefined
             const isWorking = tabStatus === "submitted" || tabStatus === "streaming"
+            const isError = tabStatus === "error"
             const hasUnread = !!tab.sessionId && (unreadCounts[tab.sessionId] ?? 0) > 0
             return (
               <div
@@ -494,8 +504,11 @@ export function RightPanel() {
               >
                 <TabIcon className="size-3.5 shrink-0" />
                 <span className="truncate max-w-24">{tab.title}</span>
-                {isWorking && <LoaderIcon className="size-3 shrink-0 animate-spin text-primary" />}
-                {!isWorking && hasUnread && tab.id !== activeTabId && (
+                {isWorking && <Loader2 className="size-3 shrink-0 animate-spin text-primary" />}
+                {isError && (
+                  <span className="size-1.5 shrink-0 rounded-full bg-destructive" />
+                )}
+                {!isWorking && !isError && hasUnread && tab.id !== activeTabId && (
                   <span className="size-2 shrink-0 rounded-full bg-primary" title="Mensagens não lidas" />
                 )}
                 <button

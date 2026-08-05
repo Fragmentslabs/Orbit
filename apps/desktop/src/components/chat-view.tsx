@@ -193,7 +193,24 @@ function ChatMessages({ messages, isBusy, mode, sessionId, sendMessage, planIds,
   const handleNavSelect = useCallback((id: string) => {
     const el = document.querySelector<HTMLElement>(`[data-user-msg-id="${id}"]`)
     if (!el) return
-    el.scrollIntoView({ behavior: "smooth", block: "nearest" })
+    // Rola o container de scroll real (div interna do StickToBottom), que fica
+    // sob um ancestral com overflow-y-hidden — scrollIntoView nem sempre rola
+    // o container certo nessa estrutura.
+    let scroller = el.parentElement
+    while (scroller) {
+      const overflowY = getComputedStyle(scroller).overflowY
+      if (overflowY === "auto" || overflowY === "scroll") break
+      scroller = scroller.parentElement
+    }
+    if (!scroller) return
+    const containerRect = scroller.getBoundingClientRect()
+    const elRect = el.getBoundingClientRect()
+    const target =
+      scroller.scrollTop +
+      (elRect.top - containerRect.top) -
+      (scroller.clientHeight - elRect.height) / 2
+    const max = scroller.scrollHeight - scroller.clientHeight
+    scroller.scrollTo({ top: Math.max(0, Math.min(target, max)), behavior: "smooth" })
   }, [])
 
   return (

@@ -9,6 +9,8 @@ export interface PanelTab {
   sessionId?: string
   messageId?: string
   pending?: boolean
+  /** URL inicial da aba Browser (ausente = abre a tela padrão com busca). */
+  url?: string
 }
 
 export interface BrowserSelection {
