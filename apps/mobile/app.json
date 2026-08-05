@@ -9,7 +9,7 @@
     "userInterfaceStyle": "dark",
     "backgroundColor": "#09090c",
     "ios": {
-      "icon": "./assets/expo.icon",
+      "icon": "./assets/images/icon.png",
       "infoPlist": {
         "NSAppTransportSecurity": {
           "NSAllowsLocalNetworking": true
@@ -31,6 +31,10 @@
         "android.permission.RECORD_AUDIO"
       ]
     },
+    "notification": {
+      "icon": "./assets/images/android-icon-monochrome.png",
+      "color": "#09090c"
+    },
     "web": {
       "output": "static",
       "bundler": "metro",
@@ -41,7 +45,7 @@
       [
         "expo-splash-screen",
         {
-          "backgroundColor": "#09090c",
+          "backgroundColor": "#18181B",
           "image": "./assets/images/splash-icon.png",
           "imageWidth": 76
         }
@@ -68,7 +72,14 @@
           }
         }
       ],
-      "expo-sharing"
+      "expo-sharing",
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/images/android-icon-monochrome.png",
+          "color": "#09090c"
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true
