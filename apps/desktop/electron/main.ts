@@ -465,6 +465,15 @@ app.whenReady().then(() => {
     }
   })
 
+  ipcMain.handle('git:createBranch', async (_event, repoPath: string, branch: string) => {
+    try {
+      await execFileAsync('git', ['checkout', '-b', branch], { cwd: repoPath })
+      return { ok: true as const }
+    } catch (err) {
+      return { ok: false as const, error: (err as Error).message }
+    }
+  })
+
   ipcMain.handle('git:commitAll', async (_event, repoPath: string, message: string) => {
     try {
       await execFileAsync('git', ['add', '-A'], { cwd: repoPath })
