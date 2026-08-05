@@ -46,15 +46,19 @@ export function MessageActions({ message, onCopy, onRevert }: MessageActionsProp
     setTimeout(() => setCopied(false), 2000)
   }
 
+  // Na bolha do usuário a barra fica logo abaixo de um bloco estreito e
+  // alinhado à direita — o filete separador ali vira um risco solto.
+  const isUser = message.role === 'user'
+
   return (
     <View
       style={{
         flexDirection: 'row',
         alignItems: 'center',
         gap: 4,
-        marginTop: 8,
-        paddingTop: 8,
-        borderTopWidth: 1,
+        marginTop: isUser ? 4 : 8,
+        paddingTop: isUser ? 0 : 8,
+        borderTopWidth: isUser ? 0 : 1,
         borderTopColor: tokens.border,
         opacity: 0.55,
       }}
@@ -73,7 +77,10 @@ export function MessageActions({ message, onCopy, onRevert }: MessageActionsProp
         }
       </Pressable>
 
-      {onRevert && message.role === 'assistant' && (
+      {/* Revert parte da mensagem do usuário: descarta esse turno e tudo
+          depois dele e devolve texto/anexos ao input, como se estivesse
+          editando a mensagem. */}
+      {onRevert && message.role === 'user' && (
         <Pressable
           onPress={onRevert}
           style={({ pressed }) => ({

@@ -154,10 +154,16 @@ export function PromptInput({
     if (!hydrated) hydrate()
   }, [hydrated, hydrate])
 
+  // Assina o draft (não só lê na troca de sessão): o revert devolve a mensagem
+  // ao input estando na mesma sessão, e um consume só no [sessionId] perderia.
+  const pendingDraft = useDraftInput((s) => s.drafts[sessionId ?? 'draft'])
   useEffect(() => {
-    const draft = useDraftInput.getState().consume(sessionId)
-    if (draft) setText(draft)
-  }, [sessionId])
+    if (pendingDraft === undefined) return
+    const payload = useDraftInput.getState().consume(sessionId)
+    if (!payload) return
+    setText(payload.text)
+    if (payload.files?.length) setAttachments((prev) => [...prev, ...payload.files!])
+  }, [pendingDraft, sessionId])
 
   const handleKeyPress = (e: any) => {
     if (e.nativeEvent.key === 'Enter') {
