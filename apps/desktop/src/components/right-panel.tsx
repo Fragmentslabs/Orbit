@@ -10,6 +10,8 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { ChatView } from "@/src/components/chat-view"
 import { ChatInput } from "@/src/components/chat-input"
+import { BranchSelector } from "@/src/components/branch-selector"
+import { FolderSelector } from "@/src/components/folder-selector"
 import type { SendMessageOptions, FilePart } from "@shared/chat"
 import { ManagedTerminalTab } from "@/src/components/terminal-tab"
 import { BrowserTab } from "@/src/components/browser-tab"
@@ -43,14 +45,26 @@ function useTabMeta(): Record<TabType, TabMeta> {
 
 function NewChatTab({ onCreated }: { onCreated: (sessionId: string) => void }) {
   const { t } = useTranslation()
+  const { folders, setFolders } = useWorkspace()
   const handleSubmit = async (text: string, options: SendMessageOptions, files?: FilePart[]) => {
-    const newSession = await useSessionStore.getState().createSession("chat", { setActive: false })
-    onCreated(newSession.id)
-    await useSessionStore.getState().sendMessage("chat", text, { options, sessionId: newSession.id, files })
+    if (folders.length > 0) {
+      // Espelha o painel principal: novo chat com pasta vira sessão de código
+      const [directory, ...extraDirectories] = folders
+      const newSession = await useSessionStore.getState().createSession("code", { setActive: false, directory, extraDirectories })
+      onCreated(newSession.id)
+      await useSessionStore.getState().sendMessage("code", text, { options, sessionId: newSession.id, directory, extraDirectories, files })
+    } else {
+      const newSession = await useSessionStore.getState().createSession("chat", { setActive: false })
+      onCreated(newSession.id)
+      await useSessionStore.getState().sendMessage("chat", text, { options, sessionId: newSession.id, files })
+    }
   }
 
   return (
     <div className="flex flex-1 flex-col overflow-hidden p-4" style={{ '--panel-bg': 'var(--sidebar)' } as React.CSSProperties}>
+      <div className="flex flex-wrap items-center gap-2 px-3 py-1.5">
+        <FolderSelector folders={folders} onFoldersChange={setFolders} />
+      </div>
       <div className="flex flex-1 flex-col items-center justify-center gap-4">
         <div className="flex flex-col items-center gap-2">
           <p className="text-lg font-medium text-foreground">{t("panel.newChat.title")}</p>
@@ -58,6 +72,50 @@ function NewChatTab({ onCreated }: { onCreated: (sessionId: string) => void }) {
         </div>
       </div>
       <ChatInput onSubmit={handleSubmit} />
+    </div>
+  )
+}
+
+/** Header de um chat aberto em aba: nome + pasta + branch, como o header do painel principal */
+function ChatTabHeader({ sessionId }: { sessionId?: string }) {
+  const session = useSessionStore((s) => (sessionId ? s.sessions.find((x) => x.id === sessionId) : undefined))
+  const setSessionDirectories = useSessionStore((s) => s.setSessionDirectories)
+  const setFolders = useWorkspace().setFolders
+  const folders = useMemo(() => {
+    if (!session?.directory) return []
+    return [session.directory, ...(session.extraDirectories ?? [])]
+  }, [session])
+
+  const handleAgentAction = useCallback((instruction: string) => {
+    if (!sessionId) return
+    const s = useSessionStore.getState().sessions.find((x) => x.id === sessionId)
+    void useSessionStore.getState().sendMessage("code", instruction, {
+      options: { simple: true },
+      sessionId,
+      directory: s?.directory,
+      extraDirectories: s?.extraDirectories,
+    })
+  }, [sessionId])
+
+  if (!session) return null
+
+  const isCode = session.mode === "code" && !!session.directory
+
+  return (
+    <div className="flex items-center gap-2 px-1 pb-2">
+      <span className="min-w-0 truncate text-sm font-medium text-foreground">{session.title}</span>
+      {isCode && session.directory && <BranchSelector repoPath={session.directory} onRequestAgentAction={handleAgentAction} />}
+      {folders.length > 0 && (
+        <FolderSelector
+          folders={folders}
+          onFoldersChange={(next) => {
+            setSessionDirectories(session.id, next[0], next.slice(1))
+            // Mantém o workspace sincronizado (o input do painel envia com as pastas do workspace)
+            setFolders(next)
+          }}
+          compact
+        />
+      )}
     </div>
   )
 }
@@ -87,6 +145,7 @@ function TabContent({ tab, onUpdateTab }: { tab: PanelTab; onUpdateTab: (id: str
       }
       return (
         <div className="flex flex-1 flex-col overflow-hidden p-4" style={{ '--panel-bg': 'var(--sidebar)' } as React.CSSProperties}>
+          <ChatTabHeader sessionId={tab.sessionId} />
           <ChatView sessionId={tab.sessionId} />
         </div>
       )
