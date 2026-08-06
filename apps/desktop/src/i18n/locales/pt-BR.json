@@ -27,11 +27,29 @@
         "label": "Aparência",
         "description": "Tema e modos de exibição."
       },
+      "system": {
+        "label": "Sistema",
+        "description": "Integrações com o sistema operacional."
+      },
       "data": {
         "label": "Dados",
         "description": "Exportar e importar seus dados."
       }
     }
+  },
+  "system": {
+    "title": "Sistema",
+    "description": "Integrações do Orbit com o seu sistema operacional.",
+    "openWith": {
+      "title": "Menu de contexto do Explorer (Windows)",
+      "enabled": "Abrir com Orbit",
+      "description": "Adiciona a opção \"Abrir com Orbit\" ao clicar com o botão direito em uma pasta. Ao escolher, o Orbit abre um novo chat no modo código com a pasta.",
+      "devHint": "Disponível apenas na versão instalada do app (Windows)."
+    }
+  },
+  "openFolder": {
+    "overlayTitle": "Abrir no modo código",
+    "overlayHint": "Solte a pasta para criar um novo chat no modo código"
   },
   "input": {
     "placeholder": "Pergunte qualquer coisa...",

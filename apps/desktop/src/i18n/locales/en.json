@@ -27,11 +27,29 @@
         "label": "Appearance",
         "description": "Theme and display modes."
       },
+      "system": {
+        "label": "System",
+        "description": "Operating system integrations."
+      },
       "data": {
         "label": "Data",
         "description": "Export and import your data."
       }
     }
+  },
+  "system": {
+    "title": "System",
+    "description": "Orbit integrations with your operating system.",
+    "openWith": {
+      "title": "Explorer context menu (Windows)",
+      "enabled": "Open with Orbit",
+      "description": "Adds an \"Open with Orbit\" option when right-clicking a folder. Choosing it opens a new code-mode chat with that folder.",
+      "devHint": "Only available in the installed version of the app (Windows)."
+    }
+  },
+  "openFolder": {
+    "overlayTitle": "Open in code mode",
+    "overlayHint": "Drop the folder to create a new code-mode chat"
   },
   "input": {
     "placeholder": "Ask anything...",

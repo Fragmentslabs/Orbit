@@ -29,6 +29,25 @@ export const windowApi = {
     const wrapper = window.ipcRenderer.on("window:maximized-change", (maximized) => listener(maximized as boolean))
     return () => window.ipcRenderer.off("window:maximized-change", wrapper)
   },
+  /** Pasta aberta via "Abrir com Orbit" (Explorer) ou segunda instância */
+  onOpenFolder: (listener: (directory: string) => void) => {
+    if (!window.ipcRenderer) return () => {}
+    const wrapper = window.ipcRenderer.on("app:open-folder", (directory) => listener(directory as string))
+    return () => window.ipcRenderer.off("app:open-folder", wrapper)
+  },
+  /** Busca pasta pendente da abertura fria (app iniciado pelo Explorer) */
+  consumePendingOpen: () =>
+    (window.ipcRenderer?.invoke("app:consumePendingOpen") ?? Promise.resolve(null)) as Promise<string | null>,
+}
+
+/** Integração "Abrir com Orbit" no menu de contexto do Explorer (Windows) */
+export const openWithApi = {
+  status: () =>
+    window.ipcRenderer.invoke("openwith:status") as Promise<{ supported: boolean; registered: boolean; error?: string }>,
+  register: () =>
+    window.ipcRenderer.invoke("openwith:register") as Promise<{ ok: boolean; error?: string }>,
+  unregister: () =>
+    window.ipcRenderer.invoke("openwith:unregister") as Promise<{ ok: boolean; error?: string }>,
 }
 
 export const storage = {
@@ -185,6 +204,10 @@ export const fsApi = {
     window.ipcRenderer.invoke("fs:listFilesRecursive", dirPath) as Promise<{ ok: true; files: string[] } | { ok: false; error: string }>,
   readFileAsDataUrl: (filePath: string) =>
     window.ipcRenderer.invoke("fs:readFileAsDataUrl", filePath) as Promise<{ dataUrl: string } | { error: string }>,
+  stat: (filePath: string) =>
+    window.ipcRenderer.invoke("fs:stat", filePath) as Promise<
+      { ok: true; isDirectory: boolean; isFile: boolean; size: number } | { ok: false; error: string }
+    >,
 }
 
 export const searchApi = {

@@ -7,7 +7,8 @@ import { TooltipProvider } from "@/components/ui/tooltip"
 import { AppSidebar } from "@/components/app-sidebar"
 import { ThemeProvider } from "@/components/theme-provider"
 import { WorkspaceProvider, useWorkspace } from "@/lib/workspace-context"
-import { panelApi } from "@/src/lib/ipc"
+import { FolderOpen } from "lucide-react"
+import { fsApi, panelApi, windowApi } from "@/src/lib/ipc"
 import { usePanelStore } from "@/src/stores/panel-store"
 import { useActiveSession, useSessionStore } from "@/src/stores/session-store"
 import { ChatHeader } from "@/src/components/chat-header"
@@ -45,9 +46,9 @@ function HoverEdge({ onShow }: { onShow: () => void }) {
 function Layout() {
   const { t } = useTranslation()
   const { open, setOpen } = useSidebar()
-  const { mode: workspaceMode, view, folders, setFolders } = useWorkspace()
+  const { mode: workspaceMode, view, folders, setFolders, setMode, setView } = useWorkspace()
   const activeSession = useActiveSession(workspaceMode)
-  const [mode, setMode] = useState<SidebarMode>(loadMode)
+  const [mode, setModeState] = useState<SidebarMode>(loadMode)
   const rightPanelOpen = usePanelStore((s) => s.rightPanelOpen)
   const setRightPanelOpen = usePanelStore((s) => s.setRightPanelOpen)
   const hideTimer = useRef<ReturnType<typeof setTimeout>>()
@@ -56,6 +57,83 @@ function Layout() {
   useEffect(() => {
     return panelApi.onEvent((event) => usePanelStore.getState().applyEvent(event))
   }, [])
+
+  // ─── Abertura de pasta no modo código ─────────────────────────────────────
+  // Usada pelo "Abrir com Orbit" do Explorer e pelo drag & drop de pastas.
+  const openFolderInCode = useCallback(
+    async (directory: string) => {
+      await useSessionStore.getState().createSession("code", { directory, setActive: true })
+      setMode("code")
+      setView("chat")
+      setFolders([directory])
+    },
+    [setMode, setView, setFolders],
+  )
+
+  useEffect(() => {
+    const unsub = windowApi.onOpenFolder((directory) => void openFolderInCode(directory))
+    // Abertura fria: o main deixou a pasta pendente antes do React montar
+    void windowApi.consumePendingOpen().then((directory) => {
+      if (directory) void openFolderInCode(directory)
+    })
+    return unsub
+  }, [openFolderInCode])
+
+  // ─── Drag & drop de pastas (só pastas; arquivos seguem o fluxo de anexo) ─
+  const [draggingFolder, setDraggingFolder] = useState(false)
+  const dragDepth = useRef(0)
+
+  const isFolderDrag = useCallback((e: React.DragEvent) => {
+    if (!e.dataTransfer.types.includes("Files")) return false
+    const item = e.dataTransfer.items?.[0]
+    const entry = item?.webkitGetAsEntry?.()
+    return !!entry?.isDirectory
+  }, [])
+
+  const handleDragEnter = useCallback(
+    (e: React.DragEvent) => {
+      if (!isFolderDrag(e)) return
+      e.preventDefault()
+      dragDepth.current += 1
+      setDraggingFolder(true)
+    },
+    [isFolderDrag],
+  )
+
+  const handleDragOver = useCallback(
+    (e: React.DragEvent) => {
+      if (!isFolderDrag(e)) return
+      e.preventDefault()
+      e.dataTransfer.dropEffect = "copy"
+    },
+    [isFolderDrag],
+  )
+
+  const handleDragLeave = useCallback(
+    (e: React.DragEvent) => {
+      if (!isFolderDrag(e)) return
+      dragDepth.current = Math.max(0, dragDepth.current - 1)
+      if (dragDepth.current === 0) setDraggingFolder(false)
+    },
+    [isFolderDrag],
+  )
+
+  const handleDrop = useCallback(
+    (e: React.DragEvent) => {
+      if (!isFolderDrag(e)) return
+      e.preventDefault()
+      dragDepth.current = 0
+      setDraggingFolder(false)
+      const file = e.dataTransfer.files?.[0]
+      if (!file) return
+      const filePath = window.getPathForFile(file)
+      if (!filePath) return
+      void fsApi.stat(filePath).then((stat) => {
+        if (stat.ok && stat.isDirectory) void openFolderInCode(filePath)
+      })
+    },
+    [isFolderDrag, openFolderInCode],
+  )
 
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY, mode)
@@ -90,10 +168,10 @@ function Layout() {
     clearTimeout(hideTimer.current)
     clearTimeout(showTimer.current)
     if (open) {
-      setMode("hover")
+      setModeState("hover")
       setOpen(false)
     } else {
-      setMode("pinned")
+      setModeState("pinned")
       setOpen(true)
     }
   }, [open, setOpen])
@@ -131,7 +209,22 @@ function Layout() {
 
   return (
     <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
-      <div className="relative flex min-w-0 flex-1">
+      <div
+        className="relative flex min-w-0 flex-1"
+        onDragEnter={handleDragEnter}
+        onDragOver={handleDragOver}
+        onDragLeave={handleDragLeave}
+        onDrop={handleDrop}
+      >
+        {draggingFolder && (
+          <div className="pointer-events-none absolute inset-0 z-[100] flex items-center justify-center bg-background/80 backdrop-blur-sm">
+            <div className="flex flex-col items-center gap-2 rounded-xl border border-border bg-background px-8 py-6 shadow-lg">
+              <FolderOpen className="size-8 text-primary" />
+              <p className="text-sm font-medium">{t("openFolder.overlayTitle")}</p>
+              <p className="text-xs text-muted-foreground">{t("openFolder.overlayHint")}</p>
+            </div>
+          </div>
+        )}
         {!open && mode === "hover" && <HoverEdge onShow={handleHoverShow} />}
         <div
           onMouseEnter={handleSidebarMouseEnter}

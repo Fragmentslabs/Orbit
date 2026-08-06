@@ -68,6 +68,111 @@ process.env.VITE_PUBLIC = VITE_DEV_SERVER_URL ? path.join(process.env.APP_ROOT, 
 
 let win: BrowserWindow | null
 
+// ─── "Abrir com Orbit" (menu de contexto do Explorer) ───────────────────────
+// Registra em HKCU (sem admin) as entradas que fazem o botão direito em uma
+// pasta oferecer "Abrir com Orbit". Ao clicar, o Windows lança o app com o
+// caminho da pasta em argv — o single-instance reencaminha para o renderer.
+const OPEN_WITH_COMMAND = "OpenWithOrbit"
+const OPEN_WITH_KEYS = [
+  `Software\\Classes\\Directory\\shell\\${OPEN_WITH_COMMAND}`,
+  `Software\\Classes\\Directory\\Background\\shell\\${OPEN_WITH_COMMAND}`,
+]
+
+function openWithLabel(): string {
+  return app.getLocale().toLowerCase().startsWith("pt") ? "Abrir com Orbit" : "Open with Orbit"
+}
+
+async function registerOpenWith(): Promise<{ ok: boolean; error?: string }> {
+  // Só na versão instalada: em dev o execPath é o electron.exe e o comando
+  // registrado não abriria o app (faltaria o argumento do diretório do app).
+  if (process.platform !== "win32" || !app.isPackaged) {
+    return { ok: false, error: "unsupported" }
+  }
+  const exe = process.execPath
+  try {
+    for (const key of OPEN_WITH_KEYS) {
+      await execFileAsync("reg.exe", ["add", `HKCU\\${key}`, "/ve", "/d", openWithLabel(), "/f"])
+      await execFileAsync("reg.exe", ["add", `HKCU\\${key}`, "/v", "Icon", "/d", exe, "/f"])
+      await execFileAsync("reg.exe", ["add", `HKCU\\${key}\\command`, "/ve", "/d", `"${exe}" "%V"`, "/f"])
+    }
+    return { ok: true }
+  } catch (err) {
+    return { ok: false, error: (err as Error).message }
+  }
+}
+
+async function unregisterOpenWith(): Promise<{ ok: boolean; error?: string }> {
+  if (process.platform !== "win32") return { ok: true }
+  try {
+    for (const key of OPEN_WITH_KEYS) {
+      await execFileAsync("reg.exe", ["delete", `HKCU\\${key}`, "/f"]).catch(() => {})
+    }
+    return { ok: true }
+  } catch (err) {
+    return { ok: false, error: (err as Error).message }
+  }
+}
+
+async function getOpenWithStatus(): Promise<{ supported: boolean; registered: boolean; error?: string }> {
+  if (process.platform !== "win32" || !app.isPackaged) return { supported: false, registered: false }
+  try {
+    await execFileAsync("reg.exe", ["query", `HKCU\\${OPEN_WITH_KEYS[0]}`, "/ve"])
+    return { supported: true, registered: true }
+  } catch {
+    return { supported: true, registered: false }
+  }
+}
+
+// ─── Single instance + abertura de pasta via argv ───────────────────────────
+// O lock precisa ser pedido antes do ready; a instância secundária repassa o
+// argv (caminho da pasta) para a primária via evento.
+const gotSingleInstanceLock = app.requestSingleInstanceLock()
+if (!gotSingleInstanceLock) {
+  app.quit()
+}
+
+let pendingOpenFolder: string | null = null
+
+async function findFolderArg(argv: string[]): Promise<string | null> {
+  for (const raw of argv) {
+    if (!raw || raw === "." || raw === ".." || raw.startsWith("-")) continue
+    if (!path.isAbsolute(raw)) continue
+    // Em dev o vite-plugin-electron lança o electron com o diretório do app:
+    // isso não é uma abertura de pasta e não deve disparar o fluxo.
+    if (!app.isPackaged && path.resolve(raw) === path.resolve(process.env.APP_ROOT ?? "")) continue
+    try {
+      const stat = await fs.stat(raw)
+      if (stat.isDirectory()) return path.resolve(raw)
+    } catch {
+      // não é um caminho válido — ignora
+    }
+  }
+  return null
+}
+
+/** Encaminha uma pasta ao renderer; se a janela ainda está carregando, deixa
+ *  pendente para o renderer buscar via app:consumePendingOpen na montagem. */
+function queueOpenFolder(directory: string) {
+  if (win && !win.isDestroyed() && !win.webContents.isLoading()) {
+    win.show()
+    win.focus()
+    win.webContents.send("app:open-folder", directory)
+    return
+  }
+  pendingOpenFolder = directory
+}
+
+app.on("second-instance", (_event, argv) => {
+  if (win) {
+    if (win.isMinimized()) win.restore()
+    win.show()
+    win.focus()
+  }
+  void findFolderArg(argv).then((dir) => {
+    if (dir) queueOpenFolder(dir)
+  })
+})
+
 function createWindow() {
   win = new BrowserWindow({
     icon: path.join(process.env.VITE_PUBLIC, 'logo.png'),
@@ -351,6 +456,9 @@ async function getFileAtCommit(
 }
 
 app.whenReady().then(() => {
+  // Instância secundária: o lock não foi obtido e o app já está saindo.
+  if (!gotSingleInstanceLock) return
+
   // Controles da titlebar customizada (frame: false em win/linux)
   ipcMain.handle('window:minimize', () => win?.minimize())
   ipcMain.handle('window:maximize', () => {
@@ -411,6 +519,29 @@ app.whenReady().then(() => {
     } catch (err) {
       return { ok: false, error: (err as Error).message }
     }
+  })
+
+  // Stat de caminho (ex.: validar pasta solta por drag & drop)
+  ipcMain.handle('fs:stat', async (_event, filePath: string) => {
+    try {
+      const stat = await fs.stat(filePath)
+      return { ok: true, isDirectory: stat.isDirectory(), isFile: stat.isFile(), size: stat.size }
+    } catch (err) {
+      return { ok: false, error: (err as Error).message }
+    }
+  })
+
+  // Integração "Abrir com Orbit" no menu de contexto do Explorer
+  ipcMain.handle('openwith:status', () => getOpenWithStatus())
+  ipcMain.handle('openwith:register', () => registerOpenWith())
+  ipcMain.handle('openwith:unregister', () => unregisterOpenWith())
+
+  // Pasta pendente (app iniciado via "Abrir com Orbit"): o renderer busca na
+  // montagem para não perder o evento enviado antes do React subir.
+  ipcMain.handle('app:consumePendingOpen', () => {
+    const dir = pendingOpenFolder
+    pendingOpenFolder = null
+    return dir
   })
 
   const MAX_FILE_SIZE_MB = 10
@@ -830,6 +961,16 @@ app.whenReady().then(() => {
   ipcMain.handle('custom-providers:update', (_event, id: string, patch: { name?: string; baseURL?: string; apiKey?: string }) =>
     updateCustomProvider(id, patch))
   ipcMain.handle('custom-providers:detect', () => detectLocal())
+
+  // Abertura fria via "Abrir com Orbit": a pasta chega em argv e fica pendente
+  // até o renderer montar (a janela ainda está carregando aqui).
+  void findFolderArg(process.argv).then((dir) => {
+    if (dir) queueOpenFolder(dir)
+  })
+
+  // Mantém o menu de contexto do Explorer sempre apontando para o exe atual
+  // (o caminho muda a cada instalação/atualização).
+  if (app.isPackaged) void registerOpenWith()
 
   createWindow()
 })

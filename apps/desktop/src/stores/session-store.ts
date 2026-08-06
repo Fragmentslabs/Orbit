@@ -87,6 +87,8 @@ interface SessionState {
   deleteSession: (id: string) => Promise<void>
   deleteSessions: (ids: string[]) => Promise<void>
   moveToFolder: (id: string, folderId: string | null) => void
+  /** Atualiza as pastas de trabalho de uma sessão de código */
+  setSessionDirectories: (id: string, directory: string | undefined, extraDirectories?: string[]) => void
   /** Duplica a sessão (até messageId, se informado) com novos IDs */
   forkSession: (id: string, messageId?: string) => Promise<SessionInfo | null>
   /** Restaura o filesystem para antes da mensagem (modo código) */
@@ -170,7 +172,17 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     sessions.sort((a, b) => b.updatedAt - a.updatedAt)
 
     const folders = (await storage.read<FolderInfo[]>(StorageKeys.folders)) ?? []
-    set({ sessions, folders })
+    // Merge em vez de substituição: uma sessão/pasta criada enquanto a carga
+    // estava em andamento (ex.: abertura via "Abrir com Orbit" na montagem)
+    // não pode ser perdida pelo set abaixo.
+    set((state) => {
+      const byId = new Map(state.sessions.map((s) => [s.id, s]))
+      for (const s of sessions) byId.set(s.id, s)
+      const mergedSessions = [...byId.values()].sort((a, b) => b.updatedAt - a.updatedAt)
+      const folderById = new Map(state.folders.map((f) => [f.id, f]))
+      for (const f of folders) folderById.set(f.id, f)
+      return { sessions: mergedSessions, folders: [...folderById.values()] }
+    })
 
     chatApi.onEvent((event) => applyChatEvent(event, set, get))
   },
@@ -373,6 +385,14 @@ export const useSessionStore = create<SessionState>((set, get) => ({
   },
 
   moveToFolder: (id, folderId) => set((state) => updateSessionIn(state, id, { folderId })),
+
+  setSessionDirectories: (id, directory, extraDirectories) =>
+    set((state) =>
+      updateSessionIn(state, id, {
+        ...(directory !== undefined ? { directory } : {}),
+        extraDirectories: extraDirectories ?? [],
+      }),
+    ),
 
   forkSession: async (id, messageId) => {
     const source = get().sessions.find((s) => s.id === id)

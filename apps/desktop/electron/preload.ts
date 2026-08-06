@@ -1,7 +1,11 @@
-import { ipcRenderer, contextBridge } from 'electron'
+import { ipcRenderer, contextBridge, webUtils } from 'electron'
 import type { IpcRendererEvent } from 'electron'
 
 contextBridge.exposeInMainWorld('platform', process.platform)
+
+// Caminho real de arquivos/pastas soltos por drag & drop (File.path foi
+// removido no Electron 32 — esta é a forma oficial de obter o path).
+contextBridge.exposeInMainWorld('getPathForFile', (file: File) => webUtils.getPathForFile(file))
 
 contextBridge.exposeInMainWorld('ipcRenderer', {
   on(channel: string, listener: (...args: unknown[]) => void) {
