@@ -39,6 +39,8 @@ export interface GetMessagesRequest {
   type: 'messages:get'
   sessionId: string
   limit?: number
+  /** Número de mensagens mais recentes já carregadas; usado para paginação para cima. */
+  offset?: number
 }
 
 export interface SendMessageRequest {

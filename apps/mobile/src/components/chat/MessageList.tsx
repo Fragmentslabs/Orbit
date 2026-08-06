@@ -13,6 +13,7 @@ interface MessageListProps {
   isStreaming?: boolean
   onRevert?: (messageId: string) => void
   ListFooterComponent?: React.ReactElement
+  onLoadOlder?: () => void
 }
 
 export interface MessageListHandle {
@@ -25,12 +26,12 @@ export interface MessageListHandle {
 // o memo segura e a lista fica intocada.
 export const MessageList = memo(
   forwardRef<MessageListHandle, MessageListProps>(function MessageList(
-    { messages, isStreaming, onRevert, ListFooterComponent },
+    { messages, isStreaming, onRevert, ListFooterComponent, onLoadOlder },
     ref,
   ) {
     const listRef = useRef<FlatList<ChatMessage>>(null)
     const [isAtBottom, setIsAtBottom] = useState(true)
-    // `pinnedRef` é a fonte de verdade para "ancorado no rodapé" (sem re-render):
+    const loadingOlderRef = useRef(false)
     // guia o autoscroll pelo crescimento real do conteúdo durante o streaming.
     const pinnedRef = useRef(true)
     const tokens = getThemeTokens(useThemeStore((s) => s.resolved))
@@ -49,10 +50,19 @@ export const MessageList = memo(
       pinnedRef.current = atBottom
     }, [])
 
+    const handleLoadOlder = useCallback(() => {
+      if (loadingOlderRef.current || !onLoadOlder) return
+      loadingOlderRef.current = true
+      onLoadOlder()
+      setTimeout(() => {
+        loadingOlderRef.current = false
+      }, 500)
+    }, [onLoadOlder])
+
     const scrollToBottom = useCallback(() => {
       listRef.current?.scrollToEnd({ animated: true })
       setIsAtBottom(true)
-      pinnedRef.current = true
+
     }, [])
 
     // Auto-scroll quando o teclado abre (mantém últimas mensagens visíveis)
@@ -103,14 +113,21 @@ export const MessageList = memo(
           )}
           ListFooterComponent={ListFooterComponent}
           contentContainerStyle={{ paddingVertical: 8, paddingHorizontal: 16 }}
+          initialNumToRender={8}
+          maxToRenderPerBatch={6}
+          windowSize={5}
+          updateCellsBatchingPeriod={50}
+          removeClippedSubviews
+          onStartReached={handleLoadOlder}
+          onStartReachedThreshold={0.2}
           onScroll={handleScroll}
-          scrollEventThrottle={100}
+
           onContentSizeChange={(_width, height) => {
             // Usa a altura medida do conteúdo (== offset do rodapé) em vez de
             // scrollToEnd, que adivinha a posição e "pula" errado no streaming.
             if (pinnedRef.current) {
               requestAnimationFrame(() => {
-                listRef.current?.scrollToOffset({ offset: height, animated: false })
+                listRef.current?.scrollToEnd({ animated: false })
               })
             }
           }}

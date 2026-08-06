@@ -78,8 +78,10 @@ export function ChatScreen({ sessionId }: ChatScreenProps) {
   )
   const activeStatus = useSessionStore((s) => (sessionId ? s.status[sessionId] : undefined))
   const selectSession = useSessionStore((s) => s.selectSession)
+  const loadOlderMessages = useSessionStore((s) => s.loadOlderMessages)
   const sendMessage = useSessionStore((s) => s.sendMessage)
   const planReview = useSessionStore((s) => (sessionId ? s.planReviews[sessionId] : undefined))
+
   const orchestration = useSessionStore((s) => (sessionId ? s.orchestration[sessionId] : undefined))
   const createSession = useSessionStore((s) => s.createSession)
   const abortChat = useSessionStore((s) => s.abortChat)
@@ -396,6 +398,7 @@ export function ChatScreen({ sessionId }: ChatScreenProps) {
                 messages={activeMessages}
                 isStreaming={isStreaming}
                 onRevert={handleRevert}
+                onLoadOlder={sessionId ? () => void loadOlderMessages(sessionId) : undefined}
                 ListFooterComponent={listFooter}
               />
             )}

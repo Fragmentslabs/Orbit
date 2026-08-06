@@ -336,9 +336,12 @@ async function handleRequest(client: ConnectedClient, requestId: string, req: Co
       case 'messages:get': {
         const messages = await readJson<ChatMessage[]>(StorageKeys.messages(req.sessionId)) ?? []
         // Enviar apenas as últimas N mensagens para não sobrecarregar
-        const limit = req.limit ?? 50
-        const recent = messages.slice(-limit)
-        sendResponse(ws, requestId, true, recent)
+        const limit = Math.min(req.limit ?? 50, 100)
+        const offset = Math.max(req.offset ?? 0, 0)
+        const end = Math.max(messages.length - offset, 0)
+        const start = Math.max(end - limit, 0)
+        const page = messages.slice(start, end)
+        sendResponse(ws, requestId, true, page)
         break
       }
 

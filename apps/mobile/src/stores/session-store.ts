@@ -38,7 +38,9 @@ const CACHE_SESSIONS_KEY = 'orbit_cache_sessions'
 const CACHE_MESSAGES_PREFIX = 'orbit_cache_msgs_'
 const CACHE_ORCHESTRATION_PREFIX = 'orbit_cache_orch_'
 const MAX_CACHED_SESSIONS = 20
+const INITIAL_MESSAGES_LIMIT = 40
 const MAX_CACHED_MESSAGES = 200
+const MAX_INITIAL_CACHED_MESSAGES = INITIAL_MESSAGES_LIMIT
 
 async function cacheSessions(sessions: SessionInfo[]) {
   const recent = sessions.slice(0, MAX_CACHED_SESSIONS)
@@ -106,9 +108,11 @@ interface SessionState {
   fetchFolders: () => Promise<void>
   /** Seleciona sessão e carrega mensagens. */
   selectSession: (id: string | null) => Promise<void>
-  /** Busca mensagens de uma sessão via WS. */
+  /** Busca as mensagens mais recentes de uma sessão via WS. */
   fetchMessages: (sessionId: string) => Promise<void>
-  /** Envia mensagem via WS (usa o modelo selecionado no settings-store por padrão). */
+  /** Carrega uma página de mensagens antigas, anexando-a no início. */
+  loadOlderMessages: (sessionId: string) => Promise<void>
+
   sendMessage: (
     text: string,
     config?: {
@@ -296,11 +300,13 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       // Carrega do cache primeiro (instantâneo), depois busca da rede
       const cached = await loadCachedMessages(id)
       if (cached) {
+        // O cache pode conter até 200 itens para uso futuro, mas a abertura
+        // deve montar somente a janela inicial leve.
         set((state) => ({
-          messages: { ...state.messages, [id]: cached },
+          messages: { ...state.messages, [id]: cached.slice(-MAX_INITIAL_CACHED_MESSAGES) },
         }))
       }
-      // Carrega pedidos pendentes do cache
+
       const asks = await loadCachedAsks(id)
       if (asks && asks.length > 0) {
         useChatStore.getState().setPendingAsks(id, asks)
@@ -318,28 +324,53 @@ export const useSessionStore = create<SessionState>((set, get) => ({
   },
 
   fetchMessages: async (sessionId) => {
-    const { wsClient, connection } = useConnectionStore.getState()
+    const { wsClient } = useConnectionStore.getState()
     try {
       const res = await wsClient.send({
         type: 'messages:get',
         sessionId,
-        limit: 200,
+        limit: INITIAL_MESSAGES_LIMIT,
       })
       if (res.ok && Array.isArray(res.data)) {
         const msgs = res.data as ChatMessage[]
-        set((state) => ({
-          messages: { ...state.messages, [sessionId]: msgs },
-        }))
-        void cacheMessages(sessionId, msgs)
+        set((state) => {
+          const current = state.messages[sessionId] ?? []
+          const byId = new Map(msgs.map((message) => [message.id, message]))
+          for (const message of current) byId.set(message.id, message)
+          const merged = [...byId.values()].sort((a, b) => a.createdAt - b.createdAt)
+          return { messages: { ...state.messages, [sessionId]: merged } }
+        })
+        void cacheMessages(sessionId, get().messages[sessionId] ?? msgs)
       }
     } catch {
-      // Fallback para cache quando offline
-      const cached = await loadCachedMessages(sessionId)
-      if (cached) {
-        set((state) => ({
-          messages: { ...state.messages, [sessionId]: cached },
-        }))
+      // O cache já foi exibido pelo selectSession.
+    }
+  },
+
+  loadOlderMessages: async (sessionId) => {
+    const current = get().messages[sessionId] ?? []
+    if (current.length === 0) return
+    const { wsClient } = useConnectionStore.getState()
+    try {
+      const res = await wsClient.send({
+        type: 'messages:get',
+        sessionId,
+        limit: INITIAL_MESSAGES_LIMIT,
+        offset: current.length,
+      })
+      if (res.ok && Array.isArray(res.data)) {
+        const older = res.data as ChatMessage[]
+        if (older.length === 0) return
+        set((state) => {
+          const existing = state.messages[sessionId] ?? []
+          const ids = new Set(existing.map((message) => message.id))
+          const merged = [...older.filter((message) => !ids.has(message.id)), ...existing]
+          return { messages: { ...state.messages, [sessionId]: merged } }
+        })
+        void cacheMessages(sessionId, get().messages[sessionId] ?? current)
       }
+    } catch {
+      // Paginação é oportunista; mantém as mensagens já visíveis.
     }
   },
 
