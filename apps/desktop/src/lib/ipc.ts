@@ -116,6 +116,11 @@ export const sessionApi = {
 
 export const chatApi = {
   send: (input: SendMessageInput) => window.ipcRenderer.invoke("chat:send", input),
+  /** Emite um ChatEvent (sessão/pasta criada ou alterada na UI) para o main,
+   *  que o repassa às outras janelas e aos companions (mobile) em tempo real. */
+  emit: (event: ChatEvent) => {
+    window.ipcRenderer?.send("chat:event:emit", event)
+  },
   abort: (sessionId: string) => window.ipcRenderer.invoke("chat:abort", sessionId),
   compact: (sessionId: string) => window.ipcRenderer.invoke("chat:compact", sessionId),
   approvePlan: (sessionId: string, planId: string, taskIds?: string[]) =>

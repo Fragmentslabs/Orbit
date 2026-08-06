@@ -23,7 +23,7 @@ import { loadTrustRules } from './lib/permission/trust-rules'
 import { clearSessionTrust } from './lib/permission'
 import { savePlanFile, deletePlanFile, readPlanFile } from './lib/plan-file'
 import { registerMediaProtocol } from './lib/media'
-import { startCompanionServer, getCompanionStatus, setPairingMode } from './lib/companion-server'
+import { startCompanionServer, getCompanionStatus, setPairingMode, forwardChatEvent } from './lib/companion-server'
 import { readJson as readStorageJson } from './lib/storage'
 import { registerPanelWebContents } from './lib/panel-browser'
 import { setupMemoryScheduler } from './lib/memory/scheduler'
@@ -37,6 +37,7 @@ import { dataDir, listKeys, readJson, removeJson, writeJson } from './lib/storag
 import { searchSessions } from './lib/search-sessions'
 import { destroyBrowserWindow } from './lib/tools'
 import type { SendMessageInput, SessionInfo } from '@shared/chat'
+import type { ChatEvent } from '@shared/chat'
 import { StorageKeys } from '@shared/chat'
 import type { Memory, MemoryEvent } from '@shared/memory'
 
@@ -715,6 +716,19 @@ app.whenReady().then(() => {
 
   // Browser do painel direito: o renderer registra o webContents do <webview>
   ipcMain.on('panel:register', (_event, id: number | null) => registerPanelWebContents(id))
+
+  // Eventos de sessão/pasta emitidos pelo renderer (novo chat, renomear, pin,
+  // arquivar, mover, deletar...). O remetente já aplicou a mudança no store
+  // local — aqui o evento segue para as OUTRAS janelas e para os companions
+  // (mobile), mantendo a sincronização em tempo real nos dois sentidos.
+  ipcMain.on('chat:event:emit', (event, chatEvent: ChatEvent) => {
+    for (const win of BrowserWindow.getAllWindows()) {
+      if (!win.isDestroyed() && win.webContents.id !== event.sender.id) {
+        win.webContents.send('chat:event', chatEvent)
+      }
+    }
+    forwardChatEvent(chatEvent)
+  })
 
   // Imagens das respostas do assistente (orbit-media://)
   registerMediaProtocol()

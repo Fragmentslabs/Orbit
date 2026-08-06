@@ -147,6 +147,18 @@ function updateSessionIn(state: SessionState, id: string, patch: Partial<Session
   return { sessions }
 }
 
+/** Emite um ChatEvent para o main → outras janelas + companions (mobile).
+ *  O store local já aplicou a mudança; o evento é só sincronização. */
+function emitChatEvent(event: ChatEvent) {
+  chatApi.emit(event)
+}
+
+/** Evento "session" com o objeto atualizado do store (pós-set). */
+function emitSessionEvent(id: string) {
+  const session = useSessionStore.getState().sessions.find((s) => s.id === id)
+  if (session) emitChatEvent({ type: "session", sessionId: id, session })
+}
+
 export const useSessionStore = create<SessionState>((set, get) => ({
   initialized: false,
   sessions: [],
@@ -225,6 +237,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       activeIds: setActive ? { ...state.activeIds, [mode]: session.id } : state.activeIds,
       messages: { ...state.messages, [session.id]: [] },
     }))
+    emitChatEvent({ type: "session", sessionId: session.id, session })
     return session
   },
 
@@ -337,19 +350,26 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     })
   },
 
-  renameSession: (id, title) => set((state) => updateSessionIn(state, id, { title })),
+  renameSession: (id, title) => {
+    set((state) => updateSessionIn(state, id, { title }))
+    emitSessionEvent(id)
+  },
 
-  togglePin: (id) =>
+  togglePin: (id) => {
     set((state) => {
       const session = state.sessions.find((s) => s.id === id)
       return session ? updateSessionIn(state, id, { pinned: !session.pinned }) : state
-    }),
+    })
+    emitSessionEvent(id)
+  },
 
-  toggleArchive: (id) =>
+  toggleArchive: (id) => {
     set((state) => {
       const session = state.sessions.find((s) => s.id === id)
       return session ? updateSessionIn(state, id, { archived: !session.archived }) : state
-    }),
+    })
+    emitSessionEvent(id)
+  },
 
   deleteSession: async (id) => {
     // Cascata: deletar um orquestrador aborta e remove seus workers filhos.
@@ -366,6 +386,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       useSessionModelPrefs.getState().clear(sid)
       void storage.remove(StorageKeys.planReview(sid))
       void storage.remove(StorageKeys.pendingAsks(sid))
+      emitChatEvent({ type: "session:deleted", sessionId: sid })
     }
     const idSet = new Set(ids)
     set((state) => {
@@ -386,15 +407,20 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     })
   },
 
-  moveToFolder: (id, folderId) => set((state) => updateSessionIn(state, id, { folderId })),
+  moveToFolder: (id, folderId) => {
+    set((state) => updateSessionIn(state, id, { folderId }))
+    emitSessionEvent(id)
+  },
 
-  setSessionDirectories: (id, directory, extraDirectories) =>
+  setSessionDirectories: (id, directory, extraDirectories) => {
     set((state) =>
       updateSessionIn(state, id, {
         ...(directory !== undefined ? { directory } : {}),
         extraDirectories: extraDirectories ?? [],
       }),
-    ),
+    )
+    emitSessionEvent(id)
+  },
 
   forkSession: async (id, messageId) => {
     const source = get().sessions.find((s) => s.id === id)
@@ -442,6 +468,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       sessions: [fork, ...state.sessions],
       messages: { ...state.messages, [fork.id]: cloned },
     }))
+    emitChatEvent({ type: "session", sessionId: fork.id, session: fork })
     return fork
   },
 
@@ -463,6 +490,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       useSimplePrefs.getState().clear(sid)
       useSessionModelPrefs.getState().clear(sid)
       void storage.remove(StorageKeys.planReview(sid))
+      emitChatEvent({ type: "session:deleted", sessionId: sid })
     }
     set((state) => {
       const messages = { ...state.messages }
@@ -485,24 +513,31 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       persistFolders(folders)
       return { folders }
     })
+    emitChatEvent({ type: "folders", folders: get().folders })
     return folder
   },
 
-  renameFolder: (id, name) =>
+  renameFolder: (id, name) => {
     set((state) => {
       const folders = state.folders.map((f) => (f.id === id ? { ...f, name } : f))
       persistFolders(folders)
       return { folders }
-    }),
+    })
+    emitChatEvent({ type: "folders", folders: get().folders })
+  },
 
-  toggleFolderPin: (id) =>
+  toggleFolderPin: (id) => {
     set((state) => {
       const folders = state.folders.map((f) => (f.id === id ? { ...f, pinned: !f.pinned } : f))
       persistFolders(folders)
       return { folders }
-    }),
+    })
+    emitChatEvent({ type: "folders", folders: get().folders })
+  },
 
-  deleteFolder: (id) =>
+  deleteFolder: (id) => {
+    // Sessões afetadas ANTES do set (depois, folderId já estará null)
+    const affected = get().sessions.filter((s) => s.folderId === id).map((s) => s.id)
     set((state) => {
       const folders = state.folders.filter((f) => f.id !== id)
       persistFolders(folders)
@@ -522,7 +557,10 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       }
       persistAutoFolderMap(autoFolderMap)
       return { folders, sessions }
-    }),
+    })
+    for (const sid of affected) emitSessionEvent(sid)
+    emitChatEvent({ type: "folders", folders: get().folders })
+  },
 
   sendMessage: async (mode, text, config) => {
     const provider = useProviderStore.getState()
