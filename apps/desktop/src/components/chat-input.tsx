@@ -38,6 +38,7 @@ import { usePanelStore } from "@/src/stores/panel-store"
 import { useSessionStore } from "@/src/stores/session-store"
 import { useSettingsUi } from "@/src/stores/settings-ui"
 import { useProviderStore } from "@/src/stores/provider-store"
+import { useSessionModel } from "@/src/stores/session-model-prefs"
 import { useReasoningPrefs } from "@/src/stores/reasoning-prefs"
 import { useSimpleMode, useSimplePrefs } from "@/src/stores/simple-prefs"
 import type { ChatStatus, FilePart, SendMessageOptions } from "@shared/chat"
@@ -60,10 +61,9 @@ export function ChatInput({ onSubmit, status, onStop, sessionId }: {
   const brain = useBrainEnabled(sessionId)
   const setBrainEnabled = useBrainPrefs((s) => s.setEnabled)
   const brainContext = useChatContext()
-  const selected = useProviderStore((s) => s.selectedModel)
-  const model = useProviderStore((s) =>
-    s.selectedModel ? s.catalog[s.selectedModel.providerId]?.models[s.selectedModel.modelId] : undefined,
-  )
+  const selected = useSessionModel(sessionId)
+  const catalog = useProviderStore((s) => s.catalog)
+  const model = selected ? catalog[selected.providerId]?.models[selected.modelId] : undefined
   const { enabled, variantId, update } = useReasoningPrefs(selected?.providerId, selected?.modelId)
   const thinking = enabled || !!model?.reasoningAlwaysOn
   const busy = status === "submitted" || status === "streaming"
@@ -182,7 +182,7 @@ export function ChatInput({ onSubmit, status, onStop, sessionId }: {
                 onSelect={(id) => update({ enabled: true, variantId: id })}
               />
             )}
-            <ModelPicker />
+            <ModelPicker sessionId={sessionId} />
             <SendButtonGroup
               busy={busy}
               disabled={false}

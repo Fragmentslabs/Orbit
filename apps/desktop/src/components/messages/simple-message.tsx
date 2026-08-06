@@ -8,8 +8,9 @@ import { AssistantMarkdown, MessageError } from "@/src/components/messages/share
  * sem reasoning nem tool views. Enquanto o modelo trabalha sem texto visível,
  * mostra um shimmer.
  */
-export function SimpleAssistantMessage({ message, isLast, isBusy, onRetry }: {
+export function SimpleAssistantMessage({ message, sessionId, isLast, isBusy, onRetry }: {
   message: ChatMessage
+  sessionId?: string
   isLast: boolean
   isBusy: boolean
   onRetry?: () => void
@@ -28,6 +29,7 @@ export function SimpleAssistantMessage({ message, isLast, isBusy, onRetry }: {
       ))}
       {message.error && (
         <MessageError
+          sessionId={sessionId}
           error={message.error}
           kind={message.errorKind}
           failedModel={{ providerId: message.providerId, modelId: message.modelId }}

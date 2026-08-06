@@ -661,7 +661,7 @@ function SessionRow({ session, button: ButtonComponent, buttonClassName, actionB
             >
               {isSelected && <Check className="size-3 text-primary" />}
             </button>
-) : (
+          ) : (
             <Icon className="size-4 shrink-0" />
           )}
           <span className="truncate">{session.title}</span>
@@ -875,10 +875,12 @@ function FolderItem({ folder, sessions, childrenByParent = {} }: {
               // Novo chat na pasta: a sessão só é criada ao enviar a 1ª mensagem.
               // Herda as pastas de trabalho do chat mais recente da pasta e guarda
               // a pasta para a criação futura (evita a "Nova sessão de código" em branco).
-              const mostRecent = sessions.reduce<SessionInfo | undefined>(
-                (best, s) => (best && s.updatedAt <= best.updatedAt ? best : s),
-                undefined,
-              )
+              const mostRecent = sessions
+                .filter((s) => s.folderId === folder.id)
+                .reduce<SessionInfo | undefined>(
+                  (best, s) => (best && s.updatedAt <= best.updatedAt ? best : s),
+                  undefined,
+                )
               if (mostRecent?.directory) {
                 setFolders([mostRecent.directory, ...(mostRecent.extraDirectories ?? [])])
               }
@@ -975,7 +977,7 @@ function ChatHistory() {
   }
 
   const modeSessions = useMemo(
-    () => sessions.filter((s) => s.mode === mode),
+    () => sessions.filter((s) => s.mode === mode).sort((a, b) => b.updatedAt - a.updatedAt),
     [sessions, mode],
   )
   // Workers ficam agrupados sob o orquestrador (independente do modo do worker)
@@ -984,13 +986,22 @@ function ChatHistory() {
     for (const s of sessions) {
       if (s.parentId && !s.archived) (map[s.parentId] ??= []).push(s)
     }
+    for (const children of Object.values(map)) children.sort((a, b) => b.updatedAt - a.updatedAt)
     return map
   }, [sessions])
   const active = modeSessions.filter((s) => !s.archived && !s.parentId)
   const archived = modeSessions.filter((s) => s.archived && !s.parentId)
   const modeFolders = folders.filter((f) => f.mode === mode)
-  const sortedFolders = [...modeFolders.filter((f) => f.pinned), ...modeFolders.filter((f) => !f.pinned)]
-  const rootSessions = active.filter((s) => !s.folderId || !modeFolders.some((f) => f.id === s.folderId))
+  const folderActivity = (folderId: string) => active
+    .filter((s) => s.folderId === folderId)
+    .reduce((latest, s) => Math.max(latest, s.updatedAt), 0)
+  const sortedFolders = [...modeFolders].sort((a, b) => {
+    if (a.pinned !== b.pinned) return a.pinned ? -1 : 1
+    return folderActivity(b.id) - folderActivity(a.id)
+  })
+  const rootSessions = active
+    .filter((s) => !s.folderId || !modeFolders.some((f) => f.id === s.folderId))
+    .sort((a, b) => b.updatedAt - a.updatedAt)
   const pinned = rootSessions.filter((s) => s.pinned)
   const recent = rootSessions.filter((s) => !s.pinned)
 

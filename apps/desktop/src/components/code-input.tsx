@@ -41,6 +41,7 @@ import { useMessageQueueStore } from "@/src/stores/message-queue-store"
 import { usePanelStore } from "@/src/stores/panel-store"
 import { usePermissionPrefs } from "@/src/stores/permission-prefs"
 import { useProviderStore } from "@/src/stores/provider-store"
+import { useSessionModel } from "@/src/stores/session-model-prefs"
 import { useSettingsUi } from "@/src/stores/settings-ui"
 import { useReasoningPrefs } from "@/src/stores/reasoning-prefs"
 import { useSessionStore } from "@/src/stores/session-store"
@@ -89,10 +90,9 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId }: 
   useEffect(() => {
     void useSkillsStore.getState().refresh(folders[0])
   }, [folders])
-  const selected = useProviderStore((s) => s.selectedModel)
-  const model = useProviderStore((s) =>
-    s.selectedModel ? s.catalog[s.selectedModel.providerId]?.models[s.selectedModel.modelId] : undefined,
-  )
+  const selected = useSessionModel(sessionId)
+  const catalog = useProviderStore((s) => s.catalog)
+  const model = selected ? catalog[selected.providerId]?.models[selected.modelId] : undefined
   const { enabled, variantId, update } = useReasoningPrefs(selected?.providerId, selected?.modelId)
   const thinking = enabled || !!model?.reasoningAlwaysOn
   const busy = status === "submitted" || status === "streaming"
@@ -314,7 +314,7 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId }: 
                   onSelect={(id) => update({ enabled: true, variantId: id })}
                 />
               )}
-              <ModelPicker />
+              <ModelPicker sessionId={sessionId} />
               <SendButtonGroup
                 busy={busy}
                 disabled={folders.length === 0}

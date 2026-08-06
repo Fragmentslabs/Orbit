@@ -197,7 +197,8 @@
     "loading": "Loading...",
     "error": "Error",
     "select": "Select a model",
-    "title": "Select model"
+    "title": "Select model",
+    "recent": "Recent"
   },
   "models": {
     "loadingCatalog": "Loading model catalog…",

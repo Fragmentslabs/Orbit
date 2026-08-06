@@ -52,9 +52,9 @@ function useActionLabels(): Record<string, string> {
   }
 }
 
-function fileChip(part: ToolPart): string | undefined {
+function toolChip(part: ToolPart): string | undefined {
   const input = part.input ?? {}
-  const candidate = input.filePath ?? input.dirPath ?? input.pattern ?? input.query ?? input.url
+  const candidate = input.filePath ?? input.dirPath ?? input.pattern ?? input.query ?? input.url ?? input.command
   if (typeof candidate !== "string" || !candidate) return undefined
   // Para caminhos, mostra só o nome do arquivo/última pasta
   const isPath = typeof input.filePath === "string" || typeof input.dirPath === "string"
@@ -72,7 +72,7 @@ function ToolActionItem({ part }: { part: ToolPart }) {
   const [showOutput, setShowOutput] = useState(false)
   const actionLabels = useActionLabels()
   const label = actionLabels[part.tool] ?? part.tool
-  const chip = fileChip(part)
+  const chip = toolChip(part)
   const detail = part.error ?? (part.tool === "bash" ? part.output : undefined)
 
   return (
@@ -308,6 +308,7 @@ export function CodeAssistantMessage({ message, sessionId, isLast, isBusy, onRet
       )}
       {message.error && (
         <MessageError
+          sessionId={sessionId}
           error={message.error}
           kind={message.errorKind}
           failedModel={{ providerId: message.providerId, modelId: message.modelId }}

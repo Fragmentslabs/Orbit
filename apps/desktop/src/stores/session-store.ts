@@ -23,6 +23,7 @@ import { useDraftInput } from "@/src/stores/draft-input"
 import { useMessageQueueStore } from "@/src/stores/message-queue-store"
 import { useModelModePrefs } from "@/src/stores/model-mode-prefs"
 import { useProviderStore } from "@/src/stores/provider-store"
+import { sessionModelFor, useSessionModelPrefs } from "@/src/stores/session-model-prefs"
 import { useLoopConfigStore } from "@/src/stores/loop-config-store"
 import { LOCALE_PROMPT_NAME, useLocaleStore } from "@/src/stores/locale-store"
 import { usePanelStore } from "@/src/stores/panel-store"
@@ -362,6 +363,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       void chatApi.closeBrowser(sid)
       useBrainPrefs.getState().setEnabled(sid, true) // limpa o override do Brain
       useSimplePrefs.getState().clear(sid)
+      useSessionModelPrefs.getState().clear(sid)
       void storage.remove(StorageKeys.planReview(sid))
       void storage.remove(StorageKeys.pendingAsks(sid))
     }
@@ -459,6 +461,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       void chatApi.closeBrowser(sid)
       useBrainPrefs.getState().setEnabled(sid, true)
       useSimplePrefs.getState().clear(sid)
+      useSessionModelPrefs.getState().clear(sid)
       void storage.remove(StorageKeys.planReview(sid))
     }
     set((state) => {
@@ -523,7 +526,10 @@ export const useSessionStore = create<SessionState>((set, get) => ({
 
   sendMessage: async (mode, text, config) => {
     const provider = useProviderStore.getState()
-    const selected = provider.selectedModel
+    // O modelo segue a sessão: override do chat (ou do draft de chat novo)
+    // > default global do provider.
+    const targetSessionId = config.sessionId ?? get().activeIds[mode]
+    const selected = sessionModelFor(targetSessionId) ?? provider.selectedModel
     if (!selected) {
       throw new Error("Nenhum modelo selecionado. Configure um provedor em Configurações.")
     }
@@ -547,6 +553,8 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       useBrainPrefs.getState().adopt(sessionId)
       useSimplePrefs.getState().adopt(sessionId)
       useDraftInput.getState().adopt(sessionId)
+      // O modelo escolhido no chat novo (draft) passa a ser o da sessão
+      useSessionModelPrefs.getState().adopt(sessionId)
     } else if (mode === "code") {
       const dirChanged = config.directory && session.directory !== config.directory
       const extraChanged =
@@ -820,6 +828,7 @@ case "title":
       break
 
     case "session:deleted":
+      useSessionModelPrefs.getState().clear(sessionId)
       set((state) => {
         const sessions = state.sessions.filter((s) => s.id !== sessionId)
         const messages = { ...state.messages }

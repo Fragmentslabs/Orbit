@@ -27,6 +27,7 @@ import { cn } from "@/lib/utils"
 import type { AgentPart, ChatMessage, MessageErrorKind, ReasoningPart, ToolPart } from "@shared/chat"
 import { ModalityIcons } from "@/src/components/ai/modality-icons"
 import { useProviderStore } from "@/src/stores/provider-store"
+import { useSessionModelPrefs } from "@/src/stores/session-model-prefs"
 import { hostnameOf, messageText, visibleMessageText } from "@/src/lib/message-utils"
 import { formatDuration, formatTime } from "@/src/lib/format"
 import { useSessionStore } from "@/src/stores/session-store"
@@ -219,16 +220,18 @@ export function GenericToolView({ part, label, subtitle }: {
  * modelo e reenvia o turno em um clique.
  */
 function SwitchModelMenu({
+  sessionId,
   failedModel,
   onRetry,
 }: {
+  sessionId?: string
   failedModel?: { providerId?: string; modelId?: string }
   onRetry: () => void
 }) {
   const { t } = useTranslation()
   const catalog = useProviderStore((s) => s.catalog)
   const connectedProviders = useProviderStore((s) => s.connectedProviders)
-  const selectModel = useProviderStore((s) => s.selectModel)
+  const selectModel = useSessionModelPrefs((s) => s.selectModel)
 
   const groups = useMemo(
     () =>
@@ -277,7 +280,7 @@ function SwitchModelMenu({
               <DropdownMenuItem
                 key={`${group.provider.id}/${model.id}`}
                 onClick={() => {
-                  selectModel(group.provider.id, model.id)
+                  selectModel(sessionId, group.provider.id, model.id)
                   onRetry()
                 }}
                 className="gap-2"
@@ -297,11 +300,13 @@ function SwitchModelMenu({
 }
 
 export function MessageError({
+  sessionId,
   error,
   kind,
   failedModel,
   onRetry,
 }: {
+  sessionId?: string
   error: string
   kind?: MessageErrorKind
   failedModel?: { providerId?: string; modelId?: string }
@@ -317,7 +322,9 @@ export function MessageError({
       <div className="flex items-start justify-between gap-2">
         <span className="flex-1">{explained ? t(`chat.errorKind.${kind}`) : error}</span>
         <div className="flex shrink-0 items-center gap-1">
-          {explained && <SwitchModelMenu failedModel={failedModel} onRetry={() => onRetry?.()} />}
+          {explained && (
+            <SwitchModelMenu sessionId={sessionId} failedModel={failedModel} onRetry={() => onRetry?.()} />
+          )}
           {onRetry && (
             <button
               type="button"

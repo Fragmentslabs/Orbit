@@ -4,6 +4,7 @@ import { cn } from "@/lib/utils"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { useSessionStore } from "@/src/stores/session-store"
 import { useProviderStore } from "@/src/stores/provider-store"
+import { useSessionModel } from "@/src/stores/session-model-prefs"
 import { formatTokens } from "@/src/lib/format"
 import { chatApi } from "@/src/lib/ipc"
 import { Button } from "@/components/ui/button"
@@ -26,9 +27,10 @@ const NO_MSGS: import("@shared/chat").ChatMessage[] = []
 export function ContextMeter({ sessionId }: { sessionId?: string }) {
   const { t } = useTranslation()
   const messages = useSessionStore((s) => (sessionId ? s.messages[sessionId] ?? NO_MSGS : NO_MSGS))
+  const selected = useSessionModel(sessionId)
   const model = useProviderStore((s) => {
-    const sel = s.selectedModel
-    return sel ? s.catalog[sel.providerId]?.models[sel.modelId] : undefined
+    if (!selected) return undefined
+    return s.catalog[selected.providerId]?.models[selected.modelId]
   })
 
   const limit = model?.limit?.context

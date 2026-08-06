@@ -125,8 +125,9 @@ function segmentParts(parts: MessagePart[]): Segment[] {
   return segments
 }
 
-export function ChatAssistantMessage({ message, isLast, isBusy, onRetry }: {
+export function ChatAssistantMessage({ message, sessionId, isLast, isBusy, onRetry }: {
   message: ChatMessage
+  sessionId?: string
   isLast: boolean
   isBusy: boolean
   onRetry?: () => void
@@ -165,11 +166,19 @@ export function ChatAssistantMessage({ message, isLast, isBusy, onRetry }: {
         ) : segment.part.tool === "create_skill" ? (
           <SkillProposalCard key={segment.id} part={segment.part} />
         ) : segment.part.tool === "show_image" ? null : (
-          <GenericToolView key={segment.id} part={segment.part} label={segment.part.tool} />
+          <GenericToolView
+            key={segment.id}
+            part={segment.part}
+            label={segment.part.tool}
+            subtitle={
+              typeof segment.part.input?.command === "string" ? segment.part.input.command : undefined
+            }
+          />
         ),
       )}
       {message.error && (
         <MessageError
+          sessionId={sessionId}
           error={message.error}
           kind={message.errorKind}
           failedModel={{ providerId: message.providerId, modelId: message.modelId }}
