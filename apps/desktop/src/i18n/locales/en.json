@@ -724,7 +724,8 @@
     "hideChatFeed": "Hide conversation",
     "pinFeed": "Pin conversation",
     "unpinFeed": "Unpin conversation",
-    "emptyConversation": "No messages yet — send something in the field below."
+    "emptyConversation": "No messages yet — send something in the field below.",
+    "loadingOlder": "Loading previous messages…"
   },
   "ask": {
     "critical": "Critical action: ",

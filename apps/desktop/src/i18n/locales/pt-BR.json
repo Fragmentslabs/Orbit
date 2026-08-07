@@ -724,7 +724,8 @@
     "hideChatFeed": "Ocultar conversa",
     "pinFeed": "Fixar conversa",
     "unpinFeed": "Desafixar conversa",
-    "emptyConversation": "Sem mensagens ainda — envie algo no campo abaixo."
+    "emptyConversation": "Sem mensagens ainda — envie algo no campo abaixo.",
+    "loadingOlder": "Carregando mensagens anteriores…"
   },
   "ask": {
     "critical": "Ação crítica: ",

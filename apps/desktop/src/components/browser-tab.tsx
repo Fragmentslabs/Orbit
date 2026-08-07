@@ -47,7 +47,7 @@ import { CodeAssistantMessage } from "@/src/components/messages/code-message"
 import { ModelPicker } from "@/src/components/model-picker"
 import { PermissionModePicker } from "@/src/components/permission-mode-picker"
 import { visibleMessageText } from "@/src/lib/message-utils"
-import { panelApi } from "@/src/lib/ipc"
+import { panelApi, windowApi } from "@/src/lib/ipc"
 import { usePanelStore, type Viewport } from "@/src/stores/panel-store"
 import { usePermissionPrefs } from "@/src/stores/permission-prefs"
 import {
@@ -394,11 +394,67 @@ function FullscreenChatFeed({ pinned, onTogglePin }: { pinned: boolean; onToggle
     if (sessionId) void useSessionStore.getState().ensureMessages(sessionId)
   }, [sessionId])
 
-  // Auto-scroll: novas mensagens / deltas do streaming / asks mudam a lista
+  // Mensagens renderizáveis (ignora resumos) — base para a janela virtualizada.
+  const visibleMessages = useMemo(() => messages.filter((m) => !m.summary), [messages])
+
+  // Virtualização "invertida": mostra a janela dos mais recentes e carrega os
+  // antigos em chunks conforme o usuário rola para o topo (infinite scroll reverso).
+  const MIN_WINDOW = 40
+  const CHUNK = 40
+  /** Pixels estimados por mensagem antiga ainda não renderizada (placeholder superior). */
+  const OLDER_PX = 52
+  const [startOffset, setStartOffset] = useState(0)
+  const inited = useRef(false)
+  const prevLength = useRef(visibleMessages.length)
+  const prevExpanded = useRef(expanded)
+  const rendered = visibleMessages.slice(startOffset)
+  const hasOlder = startOffset > 0
+
+  // No primeiro render, ancora no fim: mostra apenas os MIN_WINDOW mais recentes.
   useEffect(() => {
+    if (inited.current) return
+    inited.current = true
+    setStartOffset(Math.max(0, visibleMessages.length - MIN_WINDOW))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  const scrollToBottom = () => {
     const el = scrollRef.current
     if (el) el.scrollTop = el.scrollHeight
-  }, [messages, pendingAsks])
+  }
+
+  // Ao abrir (hover/pin), posiciona no fim para exibir as mensagens mais recentes.
+  useEffect(() => {
+    if (expanded && !prevExpanded.current) scrollToBottom()
+    prevExpanded.current = expanded
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [expanded])
+
+  // Auto-scroll: novas mensagens / deltas do streaming / asks mudam a lista
+  useEffect(() => {
+    if (visibleMessages.length > prevLength.current) scrollToBottom()
+    prevLength.current = visibleMessages.length
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visibleMessages.length])
+
+  // Carrega um chunk de mensagens antigas, preservando a posição de rolagem.
+  const loadOlder = useCallback(() => {
+    const el = scrollRef.current
+    if (!el || startOffset <= 0) return
+    const prevHeight = el.scrollHeight
+    setStartOffset((s) => Math.max(0, s - CHUNK))
+    requestAnimationFrame(() => {
+      // Compensa a altura adicionada no topo para o viewport não "pular".
+      if (el) el.scrollTop += el.scrollHeight - prevHeight
+    })
+  }, [startOffset, CHUNK])
+
+  // Ao chegar perto do topo, expande a janela para os mais antigos.
+  const handleScroll = () => {
+    const el = scrollRef.current
+    if (!el || startOffset <= 0) return
+    if (el.scrollTop < 60) loadOlder()
+  }
 
   // Auto-expande (fixa) quando chega um pedido de permissão/pergunta novo,
   // para o usuário conseguir responder sem sair da tela cheia
@@ -478,12 +534,24 @@ function FullscreenChatFeed({ pinned, onTogglePin }: { pinned: boolean; onToggle
                 {pinned ? <PinOffIcon className="size-3.5" /> : <PinIcon className="size-3.5" />}
               </button>
             </div>
-            <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto p-3">
+            <div ref={scrollRef} onScroll={handleScroll} className="min-h-0 flex-1 overflow-y-auto p-3">
               {messages.length === 0 && !hasAsks ? (
                 <p className="px-2 py-6 text-center text-xs text-muted-foreground">{t("browser.emptyConversation")}</p>
               ) : (
-                <div className="flex flex-col gap-3">
-                  {messages.map((msg) => {
+                <div className="flex flex-col">
+                  {/* Placeholder de mensagens antigas ainda não carregadas —
+                      ao rolar para o topo, `loadOlder` as materializa em chunks. */}
+                  {hasOlder && (
+                    <div
+                      aria-hidden
+                      className="pointer-events-none flex w-full items-center justify-center py-2 text-[10px] uppercase tracking-wide text-muted-foreground/60"
+                      style={{ height: startOffset * OLDER_PX }}
+                    >
+                      {t("browser.loadingOlder")}
+                    </div>
+                  )}
+                  <div className="flex flex-col gap-3">
+                  {rendered.map((msg) => {
                     if (msg.summary) return null
                     if (msg.role === "user") {
                       return (
@@ -517,6 +585,7 @@ function FullscreenChatFeed({ pinned, onTogglePin }: { pinned: boolean; onToggle
                       ))}
                     </div>
                   )}
+                </div>
                 </div>
               )}
             </div>
@@ -613,6 +682,15 @@ export function BrowserTab({ initialUrl }: { initialUrl?: string }) {
   const setFullscreen = usePanelStore((s) => s.setFullscreen)
   const [chatPinned, setChatPinned] = useState(false)
 
+  /**
+   * No macOS a janela usa titleBarStyle 'hiddenInset': as bolinhas de fechar/
+   * minimizar/redimensionar ficam sobrepostas ao topo do conteúdo. Em tela cheia
+   * o overlay cobre a janela inteira e esbarra nesses controles; compensamos
+   * deixando a TitleBar (h-8) visível e iniciando o overlay logo abaixo dela,
+   * mantendo o header padrão do app abaixo do header nativo da janela.
+   */
+  const isMac = windowApi.platform === "darwin"
+
   // Fecha o feed de conversa ao sair da tela cheia
   useEffect(() => {
     if (!fullscreen) setChatPinned(false)
@@ -634,7 +712,7 @@ export function BrowserTab({ initialUrl }: { initialUrl?: string }) {
       className={cn(
         "bg-sidebar",
         fullscreen
-          ? "fixed inset-0 z-[70] h-auto w-auto rounded-none border-0"
+          ? cn("fixed inset-0 z-[70] h-auto w-auto rounded-none border-0", isMac && "top-8")
           : "h-full w-full rounded-none border-0",
       )}
     >
