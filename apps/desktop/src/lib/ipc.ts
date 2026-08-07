@@ -15,6 +15,16 @@ import type { PanelEvent } from "@/src/stores/panel-store"
 
 export type { SearchHit }
 
+/** Ações acionadas pelo menu nativo do macOS (menu:action). */
+export type MenuAction =
+  | "settings"
+  | "new-chat"
+  | "new-code"
+  | "view-chats"
+  | "view-memories"
+  | "view-models"
+  | "how-to"
+
 /** Wrapper tipado sobre a bridge IPC exposta pelo preload. */
 
 export const windowApi = {
@@ -38,6 +48,12 @@ export const windowApi = {
   /** Busca pasta pendente da abertura fria (app iniciado pelo Explorer) */
   consumePendingOpen: () =>
     (window.ipcRenderer?.invoke("app:consumePendingOpen") ?? Promise.resolve(null)) as Promise<string | null>,
+  /** Ações do menu nativo do macOS (menu bar do topo da tela) */
+  onMenuAction: (listener: (action: MenuAction) => void) => {
+    if (!window.ipcRenderer) return () => {}
+    const wrapper = window.ipcRenderer.on("menu:action", (action) => listener(action as MenuAction))
+    return () => window.ipcRenderer.off("menu:action", wrapper)
+  },
 }
 
 /** Integração "Abrir com Orbit" no menu de contexto do Explorer (Windows) */
