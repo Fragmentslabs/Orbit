@@ -40,8 +40,6 @@ export function ContextMeter({ sessionId }: { sessionId?: string }) {
     : undefined
 
   const used = lastTokens ? sumTokens(lastTokens) : 0
-  if (used === 0) return null
-
   const pct = limit && limit > 0 ? used / limit : 0
   const atLimit = pct >= 1
 
@@ -50,6 +48,8 @@ export function ContextMeter({ sessionId }: { sessionId?: string }) {
     const sendMsg = useSessionStore.getState().sendMessage
     sendMsg('/compact', { sessionId })
   }, [sessionId])
+
+  if (used === 0) return null
 
   return (
     <Pressable className="flex-row items-center gap-1 rounded-md px-1.5 py-1 opacity-40 text-foreground" onPress={handleCompact}>
