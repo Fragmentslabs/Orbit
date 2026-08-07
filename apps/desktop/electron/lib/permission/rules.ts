@@ -1,4 +1,6 @@
 import path from 'node:path'
+import { readFileSync, statSync } from 'node:fs'
+import { dataDir } from '../storage'
 import type { PermissionClaim } from '@shared/chat'
 
 export interface Assessment {
@@ -14,10 +16,12 @@ function shorten(text: string, max = 80): string {
 /**
  * Tools nativas (first-party) do Orbit. O catch-all de MCP usa "_" como
  * separador de servidor — tools nativas em snake_case (show_image, panel_*,
- * memory_*, bash_background/list/kill, create_skill) cairiam nele e pediriam
- * permissão em toda chamada. Esta allowlist garante que nativas NUNCA sejam
- * avaliadas como MCP. As que merecem avaliação (bash, write, edit) têm regras
- * próprias no assess() — o resto aprova sem perguntar.
+ * memory_*, browser_*, bash_background/list/kill, create_skill) cairiam nele
+ * e pediriam permissão em toda chamada. Esta allowlist garante que nativas
+ * NUNCA sejam avaliadas como MCP. As que merecem avaliação (bash, write,
+ * edit) têm regras próprias no assess() — o resto aprova sem perguntar.
+ * Além da allowlist, o usuário pode ampliar o "nunca pedir" via
+ * permissions.json (campo neverAsk) — ver loadUserNeverAsk().
  */
 const NATIVE_TOOLS = new Set([
   // Browser do painel direito
@@ -28,11 +32,18 @@ const NATIVE_TOOLS = new Set([
   'panel_resize',
   'panel_screenshot',
   'show_image',
+  // Browser do modo chat (toggle "Browser") — tools nativas do toggle,
+  // não MCP; caíam no catch-all "_" e pediam permissão como servidor "browser"
+  'browser_open',
+  'browser_links',
   // Memória (brain)
   'memory_save',
   'memory_search',
   'memory_open',
   'memory_graph',
+  // memory_link existe só no modo chat (cria vínculos entre memórias);
+  // também caía no catch-all como servidor "memory"
+  'memory_link',
   // Processos em background
   'bash_background',
   'bash_list',
@@ -40,6 +51,36 @@ const NATIVE_TOOLS = new Set([
   // Skills
   'create_skill',
 ])
+
+const USER_RULES_FILE = () => path.join(dataDir(), 'permissions.json')
+
+let cachedNeverAskMtime = -1
+let cachedNeverAsk: Set<string> | null = null
+
+/**
+ * Lista "nunca pedir permissão" do usuário, lida de permissions.json
+ * (mesmo diretório do mcp-config.json). Formato:
+ *   { "neverAsk": ["bash", "write", "edit", "websearch"] }
+ * Arquivo ausente ou inválido = lista vazia. Cache por mtime para o
+ * assess() (chamado a cada tool call) não fazer I/O desnecessário.
+ */
+function loadUserNeverAsk(): Set<string> {
+  try {
+    const file = USER_RULES_FILE()
+    const mtime = statSync(file).mtimeMs
+    if (cachedNeverAsk && mtime === cachedNeverAskMtime) return cachedNeverAsk
+    const raw = readFileSync(file, 'utf-8')
+    const parsed = JSON.parse(raw) as { neverAsk?: unknown }
+    cachedNeverAsk = new Set(
+      Array.isArray(parsed.neverAsk) ? parsed.neverAsk.filter((t): t is string => typeof t === 'string') : [],
+    )
+    cachedNeverAskMtime = mtime
+  } catch {
+    cachedNeverAsk = new Set()
+    cachedNeverAskMtime = -1
+  }
+  return cachedNeverAsk
+}
 
 function isCriticalTarget(target: string, dir: string): boolean {
   const clean = target.replace(/["']/g, '')
@@ -138,15 +179,18 @@ function assessFileWrite(tool: string, filePath: string): Assessment | null {
 
 export function assess(toolName: string, input: unknown, dir: string | null): Assessment | null {
   const args = (input ?? {}) as Record<string, unknown>
+  // "Nunca pedir": allowlist de nativas + lista configurável do usuário
+  // (permissions.json → neverAsk). O check vem antes das regras de risco:
+  // quem colocou a tool aqui quer execução sem pergunta — isForbidden
+  // (bloqueio duro) continua valendo por cima disso.
+  if (NATIVE_TOOLS.has(toolName) || loadUserNeverAsk().has(toolName)) return null
   if (toolName === 'bash' && typeof args.command === 'string') {
     return assessBash(args.command, dir)
   }
   if ((toolName === 'write' || toolName === 'edit') && typeof args.filePath === 'string') {
     return assessFileWrite(toolName, args.filePath)
   }
-  // Tools nativas nunca pedem permissão — o catch-all "_" é exclusivo para
-  // servidores MCP (Nodara_*, N8N_-_Vlk_*, ...)
-  if (NATIVE_TOOLS.has(toolName)) return null
+  // Catch-all "_" exclusivo para servidores MCP (Nodara_*, N8N_-_Vlk_*, ...)
   if (toolName.includes('_')) {
     const serverName = toolName.split('_')[0]
     return {
