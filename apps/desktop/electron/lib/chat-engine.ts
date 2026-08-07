@@ -270,16 +270,36 @@ export function toModelMessages(history: ChatMessage[]): ModelMessage[] {
   return result
 }
 
+const MAX_TITLE_LENGTH = 50
+
+function truncateTitle(text: string): string {
+  const cleaned = text
+    .trim()
+    .replace(/\*\*/g, '') // negrito/marcação forte
+    .replace(/[*_`#>~]/g, '') // outra marcação markdown
+    .replace(/^["']|["']$/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+  if (cleaned.length <= MAX_TITLE_LENGTH) return cleaned
+  // corta no limite de caracteres SEM quebrar palavra no meio, quando possível
+  const hard = cleaned.slice(0, MAX_TITLE_LENGTH)
+  const lastSpace = hard.lastIndexOf(' ')
+  const cut = lastSpace > MAX_TITLE_LENGTH * 0.5 ? lastSpace : hard.length
+  return hard.slice(0, cut).trim()
+}
+
 async function generateTitle(input: SendMessageInput, win: BrowserWindow) {
   try {
     const model = await resolveModel(input.providerId, input.modelId)
     const { text } = await generateText({
       model,
       system:
-        'Gere um título curto (máximo 50 caracteres) para a conversa com base na mensagem do usuário. Responda APENAS com o título, sem aspas, no idioma da mensagem.',
+        'Gere um título curto e descritivo para a conversa, em texto puro, no idioma da mensagem do usuário. ' +
+        'Regras: sem negrito, sem asteriscos, sem aspas, sem emojis e sem formatação de qualquer tipo; no máximo 50 caracteres. ' +
+        'Responda APENAS com o título final, nada mais.',
       prompt: input.text.slice(0, 2000),
     })
-    const title = text.trim().replace(/^["']|["']$/g, '').slice(0, 60)
+    const title = truncateTitle(text)
     if (!title) return
 
     const session = await readJson<SessionInfo>(StorageKeys.session(input.sessionId))
