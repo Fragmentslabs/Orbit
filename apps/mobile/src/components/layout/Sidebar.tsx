@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState, useCallback, useRef, memo } from 'react'
+import type { ReactElement } from 'react'
 import { View, Text, Pressable, Animated, Alert, Dimensions, SectionList } from 'react-native'
 import type { GestureResponderEvent, SectionListData, SectionListRenderItemInfo } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
@@ -9,6 +10,7 @@ import {
   Terminal,
   BrainCircuit,
   BarChart3,
+  Bot,
   Puzzle,
   Settings,
   LogOut,
@@ -26,6 +28,7 @@ import {
   ArchiveRestore,
   CheckSquare,
   ChevronDown,
+  ChevronRight,
   Search,
 } from 'lucide-react-native'
 import { useWorkspaceStore } from '~/stores/workspace-store'
@@ -46,15 +49,22 @@ const DRAWER_WIDTH = 308
 /** Mesma chave do desktop (app-sidebar) — pastas abertas/fechadas persistidas. */
 const FOLDER_EXPANDED_KEY = 'orbit.sidebar.folder-expanded'
 
-/** Item sentinela do grupo "Chats" vazio — SectionList não chama renderItem
+/** Itens sentinela para seções vazias — SectionList não chama renderItem
  *  para seções com data vazio, então o texto de estado vazio é um item. */
-const EMPTY_CHATS_ITEM = { __empty: true }
+const EMPTY_CHATS_ITEM = { __empty: 'chats-empty' as const }
+const EMPTY_FOLDERS_ITEM = { __empty: 'folders-empty' as const }
 
-type ChatListItem = SessionInfo | FolderInfo | typeof EMPTY_CHATS_ITEM
+/** Array vazio estável — identidade fixa evita quebrar o memo do SessionRow. */
+const EMPTY_CHILDREN: SessionInfo[] = []
 
-/** Seções da lista virtualizada: fixados, pastas (recolhidas + expandidas) e chats. */
+type EmptyItem = { __empty: 'chats-empty' | 'folders-empty' }
+type ChatListItem = SessionInfo | FolderInfo | EmptyItem
+
+/** Seções da lista virtualizada: cabeçalhos de grupo (acordeão), pastas
+ *  (recolhidas + expandidas), chats (fixados no topo, como no desktop) e
+ *  arquivados. */
 type ChatListSection = SectionListData<ChatListItem> & {
-  kind: 'pinned' | 'folders' | 'folder' | 'chats' | 'chats-empty'
+  kind: 'folders-group' | 'folders' | 'folders-empty' | 'folder' | 'chats-group' | 'chats' | 'chats-empty' | 'archived-group' | 'archived'
   folder?: FolderInfo
 }
 
@@ -146,7 +156,8 @@ export function Sidebar() {
 
   useEffect(() => {
     if (selectionMode && selectedIds.size === 0 && selectedFolderIds.size === 0) {
-      setSelectionMode(false)
+      const timer = setTimeout(() => setSelectionMode(false), 0)
+      return () => clearTimeout(timer)
     }
   }, [selectedIds.size, selectedFolderIds.size, selectionMode])
 
@@ -177,6 +188,14 @@ export function Sidebar() {
       void Storage.setItem(FOLDER_EXPANDED_KEY, JSON.stringify(next))
       return next
     })
+  }, [])
+
+  // ─── Agrupadores em acordeão (mesma lógica do desktop: Pastas e Chats
+  // abertos por padrão, Arquivados recolhido; estado só em memória) ──────────
+  const [groupsExpanded, setGroupsExpanded] = useState({ folders: true, chats: true, archived: false })
+
+  const toggleGroup = useCallback((key: 'folders' | 'chats' | 'archived') => {
+    setGroupsExpanded((prev) => ({ ...prev, [key]: !prev[key] }))
   }, [])
 
   const totalSelected = selectedIds.size + selectedFolderIds.size
@@ -323,56 +342,140 @@ export function Sidebar() {
 
   const filteredTopItems = topItems.filter((item) => !item.codeOnly || mode === 'code')
 
-  // ─── Lista de chats agrupada: fixados / pastas / chats ───────────────────
-  const { pinned, folderGroups, recent } = useMemo(() => {
-    const modeSessions = sessions.filter((s) => s.mode === mode && !s.parentId && !s.archived)
+  // ─── Lista de chats agrupada: fixados / pastas / chats / arquivados ──────
+  const { pinned, folderGroups, recent, archived } = useMemo(() => {
+    const modeSessions = sessions.filter((s) => s.mode === mode && !s.parentId)
+    const activeSessions = modeSessions.filter((s) => !s.archived)
     const modeFolders = folders.filter((f) => f.mode === mode)
-    const rootSessions = modeSessions.filter(
+    const rootSessions = activeSessions.filter(
       (s) => !s.folderId || !modeFolders.some((f) => f.id === s.folderId),
     )
     const pinned = rootSessions.filter((s) => s.pinned).sort((a, b) => b.updatedAt - a.updatedAt)
     const recent = rootSessions.filter((s) => !s.pinned).sort((a, b) => b.updatedAt - a.updatedAt)
-    const sortedFolders = [...modeFolders.filter((f) => f.pinned), ...modeFolders.filter((f) => !f.pinned)]
+    const archived = modeSessions
+      .filter((s) => s.archived)
+      .sort((a, b) => b.updatedAt - a.updatedAt)
+    // Ordem das pastas segue o desktop: fixadas primeiro, depois por atividade
+    // (sessão mais recente dentro da pasta) — dentre as fixadas, mais recentes
+    // primeiro.
+    const folderActivity = (folderId: string) =>
+      activeSessions
+        .filter((s) => s.folderId === folderId)
+        .reduce((latest, s) => Math.max(latest, s.updatedAt), 0)
+    const sortedFolders = [...modeFolders].sort((a, b) => {
+      if (a.pinned !== b.pinned) return a.pinned ? -1 : 1
+      return folderActivity(b.id) - folderActivity(a.id)
+    })
     const folderGroups = sortedFolders.map((folder) => ({
       folder,
-      sessions: modeSessions
+      sessions: activeSessions
         .filter((s) => s.folderId === folder.id)
         .sort((a, b) => b.updatedAt - a.updatedAt),
     }))
-    return { pinned, folderGroups, recent }
+    return { pinned, folderGroups, recent, archived }
   }, [sessions, folders, mode])
 
-  // Seções da SectionList. Pastas recolhidas viram itens de uma seção "Pastas"
-  // (header com o label); pastas abertas viram seções próprias, onde o header
-  // É a linha da pasta e os dados são as sessões dela — cada linha da lista
-  // fica virtualizada, então trocar de modo monta só ~12 células de uma vez.
+  // ─── Subchats (workers/forks) — agrupados sob o chat pai, como o desktop
+  // (childrenByParent em app-sidebar): o pai ganha um chevron colado no título
+  // e os subchats ficam indentados com linha vertical. ────────────────────────────────────────────────
+  const childrenByParent = useMemo(() => {
+    const map: Record<string, SessionInfo[]> = {}
+    for (const s of sessions) {
+      if (s.parentId && !s.archived) (map[s.parentId] ??= []).push(s)
+    }
+    for (const children of Object.values(map)) children.sort((a, b) => b.updatedAt - a.updatedAt)
+    return map
+  }, [sessions])
+
+  // Subchats abertos por padrão (igual ao useState(true) do desktop); estado
+  // só em memória.
+  const [childrenExpanded, setChildrenExpanded] = useState<Record<string, boolean>>({})
+  const toggleChildren = useCallback((id: string) => {
+    setChildrenExpanded((prev) => ({ ...prev, [id]: !(prev[id] ?? true) }))
+  }, [])
+
+  // Seções da SectionList. Cada agrupador (Pastas/Chats/Arquivados) abre com
+  // uma seção-só-cabeçalho (o acordeão); o conteúdo de cada grupo só entra na
+  // lista quando o grupo está aberto. Dentro de "Pastas" a ordem de
+  // `folderGroups` é preservada: pastas recolhidas viram itens de uma seção
+  // "Pastas" e pastas abertas viram seções próprias (header = linha da pasta,
+  // dados = sessões dela) inseridas NA POSIÇÃO da pasta — assim expandir/
+  // recolher não move a pasta de lugar. Cada linha da lista fica virtualizada,
+  // então trocar de modo monta só ~12 células de uma vez.
   const sections = useMemo<ChatListSection[]>(() => {
     const out: ChatListSection[] = []
-    if (pinned.length > 0) out.push({ kind: 'pinned', data: pinned })
-    if (folderGroups.length > 0) {
-      const collapsed: FolderInfo[] = []
-      const expandedSections: ChatListSection[] = []
-      for (const g of folderGroups) {
-        if (expandedFolders[g.folder.id]) {
-          expandedSections.push({ kind: 'folder', folder: g.folder, data: g.sessions })
-        } else {
-          collapsed.push(g.folder)
+
+    // ── Grupo "Pastas" (acordeão) ──
+    out.push({ kind: 'folders-group', data: [] })
+    if (groupsExpanded.folders) {
+      if (folderGroups.length > 0) {
+        // Executa em runs: blocos contíguos de pastas recolhidas formam uma
+        // seção; cada pasta aberta vira uma seção própria no meio do caminho.
+        let collapsedRun: FolderInfo[] = []
+        for (const g of folderGroups) {
+          if (expandedFolders[g.folder.id]) {
+            if (collapsedRun.length > 0) {
+              out.push({ kind: 'folders', data: collapsedRun })
+              collapsedRun = []
+            }
+            out.push({ kind: 'folder', folder: g.folder, data: g.sessions })
+          } else {
+            collapsedRun.push(g.folder)
+          }
         }
+        if (collapsedRun.length > 0) out.push({ kind: 'folders', data: collapsedRun })
+      } else {
+        out.push({ kind: 'folders-empty', data: [EMPTY_FOLDERS_ITEM] })
       }
-      out.push({ kind: 'folders', data: collapsed })
-      out.push(...expandedSections)
     }
-    if (recent.length > 0) {
-      out.push({ kind: 'chats', data: recent })
-    } else if (pinned.length > 0 || folderGroups.length > 0) {
-      // Mantém o grupo "Chats" visível com o texto de vazio (como antes)
-      out.push({ kind: 'chats-empty', data: [EMPTY_CHATS_ITEM] })
+
+    // ── Grupo "Chats" (acordeão) — fixados no topo da própria seção, como no
+    // desktop (sem sub-seção "Fixados"; cada fixado mostra o ícone de pin) ──
+    out.push({ kind: 'chats-group', data: [] })
+    if (groupsExpanded.chats) {
+      if (pinned.length > 0 || recent.length > 0) {
+        out.push({ kind: 'chats', data: [...pinned, ...recent] })
+      } else {
+        out.push({ kind: 'chats-empty', data: [EMPTY_CHATS_ITEM] })
+      }
     }
+
+    // ── Grupo "Arquivados" (acordeão, só aparece quando existe conteúdo) ──
+    if (archived.length > 0) {
+      out.push({ kind: 'archived-group', data: [] })
+      if (groupsExpanded.archived) {
+        out.push({ kind: 'archived', data: archived })
+      }
+    }
+
     return out
-  }, [pinned, folderGroups, recent, expandedFolders])
+  }, [pinned, folderGroups, recent, archived, expandedFolders, groupsExpanded])
+
+  // Linha de subchat — mesmo visual do chat normal, mas com ícone Bot (como o
+  // desktop: SessionRow com icon={Bot} nos filhos).
+  const renderChildRow = useCallback(
+    (child: SessionInfo) => (
+      <SessionRow
+        key={child.id}
+        title={child.title}
+        active={child.id === activeSessionId}
+        streaming={status[child.id] === 'streaming' || status[child.id] === 'submitted'}
+        error={status[child.id] === 'error'}
+        unread={unreadCounts[child.id] > 0}
+        pinned={child.pinned}
+        icon={Bot}
+        selectionMode={selectionMode}
+        selected={selectedIds.has(child.id)}
+        onPress={() => handleOpenSession(child.id)}
+        onLongPress={(e) => openSessionMenu(child.id, e.nativeEvent.pageY)}
+        tokens={tokens}
+      />
+    ),
+    [activeSessionId, status, unreadCounts, selectionMode, selectedIds, handleOpenSession, openSessionMenu, tokens],
+  )
 
   const keyExtractor = (item: ChatListItem) => {
-    if ('__empty' in item) return 'chats-empty'
+    if ('__empty' in item) return item.__empty
     if ('title' in item) return `session:${item.id}`
     return `folder:${item.id}`
   }
@@ -401,10 +504,21 @@ export function Sidebar() {
         </Text>
       )
     }
+    if (listSection.kind === 'folders-empty') {
+      return (
+        <Text className="px-4 py-2 text-sm" style={{ color: tokens.mutedForeground }}>
+          {t('sidebar.noFolders')}
+        </Text>
+      )
+    }
     if (listSection.kind === 'folders') {
       return renderFolderRow(item as FolderInfo, false)
     }
     const session = item as SessionInfo
+    // Subchats aparecem aninhados sob o pai — exceto em Arquivados, que segue o
+    // desktop (archived renderiza SessionItem sem childSessions).
+    const children =
+      listSection.kind === 'archived' ? EMPTY_CHILDREN : (childrenByParent[session.id] ?? EMPTY_CHILDREN)
     return (
       <SessionRow
         title={session.title}
@@ -412,8 +526,15 @@ export function Sidebar() {
         streaming={status[session.id] === 'streaming' || status[session.id] === 'submitted'}
         error={status[session.id] === 'error'}
         unread={unreadCounts[session.id] > 0}
+        indented={listSection.kind === 'folder'}
+        pinned={session.pinned}
         selectionMode={selectionMode}
         selected={selectedIds.has(session.id)}
+        childSessions={children}
+        childrenExpanded={childrenExpanded[session.id] ?? true}
+        childrenParentId={session.id}
+        onToggleChildren={toggleChildren}
+        renderChild={children.length > 0 ? renderChildRow : undefined}
         onPress={() => handleOpenSession(session.id)}
         onLongPress={(e) => openSessionMenu(session.id, e.nativeEvent.pageY)}
         tokens={tokens}
@@ -423,15 +544,12 @@ export function Sidebar() {
 
   const renderSectionHeader = ({ section }: { section: SectionListData<ChatListItem> }) => {
     const listSection = section as ChatListSection
-    if (listSection.kind === 'folder' && listSection.folder) {
-      return renderFolderRow(listSection.folder, true)
-    }
-    if (listSection.kind === 'pinned') return <GroupHeader label={t('sidebar.pinned')} tokens={tokens} />
-    if (listSection.kind === 'folders') return <GroupHeader label={t('sidebar.folders')} tokens={tokens} />
-    if (listSection.kind === 'chats' || listSection.kind === 'chats-empty') {
+    if (listSection.kind === 'folders-group') {
       return (
-        <GroupHeader
-          label={t('sidebar.chats')}
+        <AccordionHeader
+          label={t('sidebar.folders')}
+          expanded={groupsExpanded.folders}
+          onToggle={() => toggleGroup('folders')}
           tokens={tokens}
           action={{
             icon: Search,
@@ -443,6 +561,29 @@ export function Sidebar() {
           }}
         />
       )
+    }
+    if (listSection.kind === 'chats-group') {
+      return (
+        <AccordionHeader
+          label={t('sidebar.chats')}
+          expanded={groupsExpanded.chats}
+          onToggle={() => toggleGroup('chats')}
+          tokens={tokens}
+        />
+      )
+    }
+    if (listSection.kind === 'archived-group') {
+      return (
+        <AccordionHeader
+          label={t('sidebar.archived')}
+          expanded={groupsExpanded.archived}
+          onToggle={() => toggleGroup('archived')}
+          tokens={tokens}
+        />
+      )
+    }
+    if (listSection.kind === 'folder' && listSection.folder) {
+      return renderFolderRow(listSection.folder, true)
     }
     return null
   }
@@ -695,35 +836,65 @@ const SidebarItem = memo(function SidebarItem({
   )
 })
 
-const GroupHeader = memo(function GroupHeader({
+/** Cabeçalho de agrupador em acordeão (Pastas/Chats/Arquivados) — replica o
+ *  AccordionGroup do desktop: label clicável com chevron (right recolhido /
+ *  down aberto). Layout igual ao desktop: label com flex-1 e chevron na
+ *  extremidade direita ("between"), com a ação (ex: lupa de busca) entre a
+ *  label e o chevron. A ação é um Pressable aninhado — o responder do RN dá
+ *  o toque ao filho, então tocar na lupa não alterna o acordeão (equivalente
+ *  ao stopPropagation do desktop). No RN o rotate do lucide some em algumas
+ *  versões, então trocamos o ícone em vez de rotacionar. */
+const AccordionHeader = memo(function AccordionHeader({
   label,
-  tokens,
+  expanded,
+  onToggle,
   action,
+  tokens,
 }: {
   label: string
-  tokens: ThemeTokens
+  expanded: boolean
+  onToggle: () => void
   action?: {
     icon: typeof Search
     label: string
     onPress: () => void
   }
+  tokens: ThemeTokens
 }) {
   const ActionIcon = action?.icon
   return (
-    <View className="flex-row items-center justify-between px-4 pb-3 pt-2">
-      <Text className="text-xs font-medium uppercase tracking-wide" style={{ color: tokens.mutedForeground }}>
-        {label}
-      </Text>
-      {action && ActionIcon && (
-        <Pressable
-          onPress={action.onPress}
-          hitSlop={10}
-          accessibilityLabel={action.label}
-          className="h-7 w-7 items-center justify-center rounded-md active:opacity-70"
+    <View className="flex-row items-center px-4 pb-2 pt-3">
+      <Pressable
+        onPress={onToggle}
+        hitSlop={6}
+        accessibilityRole="button"
+        accessibilityLabel={label}
+        accessibilityState={{ expanded }}
+        className="min-w-0 flex-1 flex-row items-center gap-1.5 py-0.5"
+      >
+        <Text
+          className="flex-1 text-xs font-medium uppercase tracking-wide"
+          numberOfLines={1}
+          style={{ color: tokens.mutedForeground }}
         >
-          <ActionIcon size={16} color={tokens.mutedForeground} />
-        </Pressable>
-      )}
+          {label}
+        </Text>
+        {action && ActionIcon && (
+          <Pressable
+            onPress={action.onPress}
+            hitSlop={10}
+            accessibilityLabel={action.label}
+            className="h-7 w-7 shrink-0 items-center justify-center rounded-md active:opacity-70"
+          >
+            <ActionIcon size={16} color={tokens.mutedForeground} />
+          </Pressable>
+        )}
+        {expanded ? (
+          <ChevronDown size={14} color={tokens.mutedForeground} />
+        ) : (
+          <ChevronRight size={14} color={tokens.mutedForeground} />
+        )}
+      </Pressable>
     </View>
   )
 })
@@ -762,16 +933,20 @@ const FolderRow = memo(function FolderRow({
         </View>
       )}
       <Folder size={14} color={tokens.mutedForeground} />
-      <Text className="flex-1 text-sm font-medium" numberOfLines={1} style={{ color: tokens.foreground }}>
-        {folder.name}
-      </Text>
-      {!selectionMode && (
-        <ChevronDown
-          size={16}
-          color={tokens.mutedForeground}
-          style={{ transform: [{ rotate: expanded ? '0deg' : '-90deg' }] }}
-        />
-      )}
+      {/* Desktop: chevron colado no texto da pasta (gap-1, sem between); o pin
+          fica fora do container flex-1, na extremidade direita da linha. */}
+      <View className="min-w-0 flex-1 flex-row items-center gap-1">
+        <Text className="shrink text-sm font-medium" numberOfLines={1} style={{ color: tokens.foreground }}>
+          {folder.name}
+        </Text>
+        {!selectionMode &&
+          (expanded ? (
+            <ChevronDown size={14} color={tokens.mutedForeground} style={{ flexShrink: 0 }} />
+          ) : (
+            <ChevronRight size={14} color={tokens.mutedForeground} style={{ flexShrink: 0 }} />
+          ))}
+      </View>
+      {folder.pinned && <Pin size={14} color={tokens.mutedForeground} />}
     </Pressable>
   )
 }, (prev, next) =>
@@ -790,8 +965,15 @@ const SessionRow = memo(function SessionRow({
   error,
   unread,
   indented,
+  pinned,
   selectionMode,
   selected,
+  icon = MessageSquare,
+  childSessions,
+  childrenExpanded,
+  childrenParentId,
+  onToggleChildren,
+  renderChild,
   onPress: _onPress,
   onLongPress: _onLongPress,
   tokens,
@@ -802,19 +984,33 @@ const SessionRow = memo(function SessionRow({
   error?: boolean
   unread?: boolean
   indented?: boolean
+  pinned?: boolean
   selectionMode?: boolean
   selected?: boolean
+  icon?: typeof MessageSquare
+  /** Subchats (workers/forks) aninhados sob o chat pai, como no desktop
+   *  (SessionItem / SessionRowWithChildren). */
+  childSessions?: SessionInfo[]
+  childrenExpanded?: boolean
+  childrenParentId?: string
+  onToggleChildren?: (id: string) => void
+  renderChild?: (child: SessionInfo) => ReactElement
   onPress: () => void
   onLongPress?: (e: GestureResponderEvent) => void
   tokens: ThemeTokens
 }) {
-  return (
+  const Icon = icon
+  const childrenList = childSessions ?? EMPTY_CHILDREN
+  const hasChildren = childrenList.length > 0
+  const subExpanded = childrenExpanded ?? true
+
+  const card = (
     <Pressable
       onPress={_onPress}
       onLongPress={_onLongPress}
       className={cn(
-        'mx-3 mb-0.5 flex-row items-center gap-3 rounded-lg px-3 py-2.5',
-        indented && 'ml-6',
+        'flex-row items-center gap-3 rounded-lg px-3 py-2.5',
+        !indented && 'mx-3 mb-0.5',
       )}
       style={(active || selected) ? { backgroundColor: tokens.accent } : undefined}
     >
@@ -825,28 +1021,82 @@ const SessionRow = memo(function SessionRow({
           <Square size={16} color={tokens.mutedForeground} />
         )
       ) : (
-        <MessageSquare size={16} color={active ? tokens.foreground : tokens.mutedForeground} />
+        <Icon size={16} color={active ? tokens.foreground : tokens.mutedForeground} />
       )}
-      <Text
-        className={cn('flex-1 text-sm', active && 'font-medium')}
-        numberOfLines={1}
-        style={{ color: tokens.foreground }}
-      >
-        {title}
-      </Text>
-      {streaming && (
-        <Spin>
-          <Loader2 size={14} color={tokens.primary} />
-        </Spin>
-      )}
-      {error && (
-        <View className="size-2 rounded-full" style={{ backgroundColor: tokens.destructive }} />
-      )}
-      {!streaming && !active && unread && (
-        <View className="size-2.5 rounded-full" style={{ backgroundColor: tokens.primary }} />
-      )}
+      {/* Desktop: título + indicadores + chevron de subchats no trailing (colado
+          no texto, dentro do container flex-1); pin fora, na extremidade. */}
+      <View className="min-w-0 flex-1 flex-row items-center gap-2">
+        <Text
+          className={cn('shrink text-sm', active && 'font-medium')}
+          numberOfLines={1}
+          style={{ color: tokens.foreground }}
+        >
+          {title}
+        </Text>
+        {streaming && (
+          <Spin>
+            <Loader2 size={14} color={tokens.primary} />
+          </Spin>
+        )}
+        {error && (
+          <View className="size-2 rounded-full" style={{ backgroundColor: tokens.destructive }} />
+        )}
+        {!streaming && !active && unread && (
+          <View className="size-2.5 rounded-full" style={{ backgroundColor: tokens.primary }} />
+        )}
+        {hasChildren && (
+          <Pressable
+            hitSlop={8}
+            accessibilityRole="button"
+            onPress={() => onToggleChildren?.(childrenParentId ?? '')}
+            className="shrink-0 p-0.5"
+          >
+            {subExpanded ? (
+              <ChevronDown size={14} color={tokens.mutedForeground} />
+            ) : (
+              <ChevronRight size={14} color={tokens.mutedForeground} />
+            )}
+          </Pressable>
+        )}
+      </View>
+      {pinned && <Pin size={14} color={tokens.mutedForeground} />}
     </Pressable>
   )
+
+  // Subchats: linha alinhada com o ícone do chat pai (+8px de folga, mesmo
+  // padrão da linha das pastas). Chats soltos partem da borda do drawer
+  // (ml-8 = 24 + 8); dentro de pasta o conteúdo já começa depois da linha da
+  // pasta + pl-2.5, então ml-5 = ícone do pai + 8.
+  const content = (
+    <View>
+      {card}
+      {hasChildren && subExpanded && renderChild && (
+        <View
+          className={cn('border-l py-0.5 pl-2.5', indented ? 'ml-5' : 'ml-8')}
+          style={{ borderColor: tokens.border }}
+        >
+          {childrenList.map((child) => renderChild(child))}
+        </View>
+      )}
+    </View>
+  )
+
+  // Sessões dentro de pasta ficam indentadas com linha vertical à esquerda.
+  // A linha fica alinhada com o ícone da pasta no card pai (mx-3 + px-3 = 24px)
+  // com uma folga de 8px: ml-8 = 32px; em modo de seleção o checkbox soma 16px
+  // (ml-12 = 48px). A borda cobre o padding vertical inteiro da célula (incluindo
+  // os subchats), então a linha continua sem quebrar entre os cards.
+  if (indented) {
+    return (
+      <View
+        className={cn('border-l py-0.5 pl-2.5', selectionMode ? 'ml-12' : 'ml-8')}
+        style={{ borderColor: tokens.border }}
+      >
+        {content}
+      </View>
+    )
+  }
+  return content
 }, (prev, next) =>
   prev.title === next.title &&
   prev.active === next.active &&
@@ -854,7 +1104,14 @@ const SessionRow = memo(function SessionRow({
   prev.error === next.error &&
   prev.unread === next.unread &&
   prev.indented === next.indented &&
+  prev.pinned === next.pinned &&
   prev.selectionMode === next.selectionMode &&
   prev.selected === next.selected &&
+  prev.icon === next.icon &&
+  prev.childSessions === next.childSessions &&
+  prev.childrenExpanded === next.childrenExpanded &&
+  prev.childrenParentId === next.childrenParentId &&
+  prev.onToggleChildren === next.onToggleChildren &&
+  prev.renderChild === next.renderChild &&
   prev.tokens === next.tokens
 )
