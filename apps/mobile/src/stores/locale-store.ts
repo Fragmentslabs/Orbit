@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import { Storage } from '~/lib/storage'
-import i18n from '~/i18n'
+import i18n, { detectSystemLocale } from '~/i18n'
 
 const LOCALE_KEY = 'orbit_locale'
 
@@ -26,7 +26,7 @@ interface LocaleState {
 }
 
 export const useLocaleStore = create<LocaleState>((set) => ({
-  locale: 'pt-BR',
+  locale: detectSystemLocale(),
   setLocale: (locale) => {
     set({ locale })
     void i18n.changeLanguage(locale)
@@ -40,5 +40,5 @@ export async function hydrateLocale(): Promise<AppLocale> {
     const raw = await Storage.getItem(LOCALE_KEY)
     if (raw === 'pt-BR' || raw === 'en') return raw
   } catch { /* ignore */ }
-  return 'pt-BR'
+  return detectSystemLocale()
 }
