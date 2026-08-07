@@ -11,6 +11,36 @@ function shorten(text: string, max = 80): string {
   return single.length > max ? `${single.slice(0, max)}…` : single
 }
 
+/**
+ * Tools nativas (first-party) do Orbit. O catch-all de MCP usa "_" como
+ * separador de servidor — tools nativas em snake_case (show_image, panel_*,
+ * memory_*, bash_background/list/kill, create_skill) cairiam nele e pediriam
+ * permissão em toda chamada. Esta allowlist garante que nativas NUNCA sejam
+ * avaliadas como MCP. As que merecem avaliação (bash, write, edit) têm regras
+ * próprias no assess() — o resto aprova sem perguntar.
+ */
+const NATIVE_TOOLS = new Set([
+  // Browser do painel direito
+  'panel_navigate',
+  'panel_read',
+  'panel_click',
+  'panel_type',
+  'panel_resize',
+  'panel_screenshot',
+  'show_image',
+  // Memória (brain)
+  'memory_save',
+  'memory_search',
+  'memory_open',
+  'memory_graph',
+  // Processos em background
+  'bash_background',
+  'bash_list',
+  'bash_kill',
+  // Skills
+  'create_skill',
+])
+
 function isCriticalTarget(target: string, dir: string): boolean {
   const clean = target.replace(/["']/g, '')
   if (clean === '/' || clean === '~' || clean === '.' || clean === '..' || clean === '*') return true
@@ -114,6 +144,9 @@ export function assess(toolName: string, input: unknown, dir: string | null): As
   if ((toolName === 'write' || toolName === 'edit') && typeof args.filePath === 'string') {
     return assessFileWrite(toolName, args.filePath)
   }
+  // Tools nativas nunca pedem permissão — o catch-all "_" é exclusivo para
+  // servidores MCP (Nodara_*, N8N_-_Vlk_*, ...)
+  if (NATIVE_TOOLS.has(toolName)) return null
   if (toolName.includes('_')) {
     const serverName = toolName.split('_')[0]
     return {
