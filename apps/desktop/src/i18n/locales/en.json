@@ -717,7 +717,13 @@
     "browserActivity": "Browser activity",
     "emptyActivity": "Agent actions will appear here.",
     "composerPlaceholder": "Ask Orbit about this page…",
-    "composerPlaceholderNoFolder": "Select a folder in code mode to ask the AI"
+    "composerPlaceholderNoFolder": "Select a folder in code mode to ask the AI",
+    "chatFeed": "Conversation",
+    "showChatFeed": "Show conversation",
+    "hideChatFeed": "Hide conversation",
+    "pinFeed": "Pin conversation",
+    "unpinFeed": "Unpin conversation",
+    "emptyConversation": "No messages yet — send something in the field below."
   },
   "ask": {
     "critical": "Critical action: ",
@@ -899,7 +905,19 @@
     "gitHistoryError": "Could not read this folder's git history.",
     "noCommits": "No commits found.",
     "editMode": "Edit",
-    "previewMode": "Preview"
+    "previewMode": "Preview",
+    "uncommitted": "Uncommitted changes",
+    "aheadBehind": "{{ahead}} ahead, {{behind}} behind {{branch}}",
+    "pull": "Pull",
+    "push": "Push",
+    "pullHint": "Pull commits from the remote",
+    "pushHint": "Push commits (creates the remote branch if it doesn't exist)",
+    "pulledOk": "Commits pulled successfully.",
+    "pushedOk": "Commits pushed successfully.",
+    "pushedCreated": "Remote branch created and commits pushed.",
+    "noRemote": "No remote configured. Create the repository on GitHub/GitLab and add the remote (e.g.: git remote add origin <url>).",
+    "noUpstreamPull": "Current branch has no remote tracking branch — push first (the Push button creates the remote branch).",
+    "authFailed": "Git/GitHub authentication failed. Configure a token (e.g.: gh auth login) or SSH credentials and try again."
   },
   "mcp": {
     "kv": {

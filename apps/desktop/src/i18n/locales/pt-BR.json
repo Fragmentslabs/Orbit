@@ -717,7 +717,13 @@
     "browserActivity": "Atividade do navegador",
     "emptyActivity": "As ações do agente aparecem aqui.",
     "composerPlaceholder": "Peça algo ao Orbit sobre esta página…",
-    "composerPlaceholderNoFolder": "Selecione uma pasta no modo código para pedir à IA"
+    "composerPlaceholderNoFolder": "Selecione uma pasta no modo código para pedir à IA",
+    "chatFeed": "Conversa",
+    "showChatFeed": "Mostrar conversa",
+    "hideChatFeed": "Ocultar conversa",
+    "pinFeed": "Fixar conversa",
+    "unpinFeed": "Desafixar conversa",
+    "emptyConversation": "Sem mensagens ainda — envie algo no campo abaixo."
   },
   "ask": {
     "critical": "Ação crítica: ",
@@ -899,7 +905,19 @@
     "gitHistoryError": "Não foi possível ler o histórico git desta pasta.",
     "noCommits": "Nenhum commit encontrado.",
     "editMode": "Editar",
-    "previewMode": "Visualizar"
+    "previewMode": "Visualizar",
+    "uncommitted": "Mudanças não commitadas",
+    "aheadBehind": "{{ahead}} à frente, {{behind}} atrás da {{branch}}",
+    "pull": "Puxar",
+    "push": "Enviar",
+    "pullHint": "Puxar commits do remoto",
+    "pushHint": "Enviar commits (cria a branch remota se não existir)",
+    "pulledOk": "Commits puxados com sucesso.",
+    "pushedOk": "Commits enviados com sucesso.",
+    "pushedCreated": "Branch remota criada e commits enviados.",
+    "noRemote": "Nenhum remote configurado. Crie o repositório no GitHub/GitLab e adicione o remote (ex.: git remote add origin <url>).",
+    "noUpstreamPull": "A branch atual não tem branch remota de tracking — envie os commits primeiro (o botão Enviar cria a branch remota).",
+    "authFailed": "Falha de autenticação com o Git/GitHub. Configure um token (ex.: gh auth login) ou credenciais SSH e tente novamente."
   },
   "mcp": {
     "kv": {

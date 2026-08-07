@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import {
   ArrowLeftIcon,
@@ -6,13 +6,17 @@ import {
   ExternalLinkIcon,
   Loader2Icon,
   Maximize2Icon,
+  MessagesSquareIcon,
   Minimize2Icon,
   MonitorIcon,
   MousePointerClickIcon,
+  PinIcon,
+  PinOffIcon,
   RefreshCcwIcon,
   SendIcon,
   SmartphoneIcon,
   SparklesIcon,
+  SquareIcon,
   TabletIcon,
 } from "lucide-react"
 import {
@@ -23,6 +27,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { useWorkspace } from "@/lib/workspace-context"
 import { cn } from "@/lib/utils"
+import type { ChatMessage } from "@shared/chat"
 import {
   WebPreview,
   WebPreviewBody,
@@ -35,10 +40,22 @@ import {
   WebPreviewOpenInNewTabButton,
   useWebPreview,
 } from "@/src/components/ai/web-preview"
+import { Message, MessageContent } from "@/src/components/ai/message"
+import { AskCard } from "@/src/components/ask-card"
+import { AskCardBatch } from "@/src/components/ask-card-batch"
+import { CodeAssistantMessage } from "@/src/components/messages/code-message"
+import { ModelPicker } from "@/src/components/model-picker"
+import { PermissionModePicker } from "@/src/components/permission-mode-picker"
+import { visibleMessageText } from "@/src/lib/message-utils"
 import { panelApi } from "@/src/lib/ipc"
 import { usePanelStore, type Viewport } from "@/src/stores/panel-store"
 import { usePermissionPrefs } from "@/src/stores/permission-prefs"
-import { useActiveSession, useSessionStore } from "@/src/stores/session-store"
+import {
+  useActiveSession,
+  useSessionStatus,
+  useSessionStore,
+  type PendingAskUI,
+} from "@/src/stores/session-store"
 
 /**
  * Aba Browser do painel direito, controlável pelo agente (tools panel_*):
@@ -254,35 +271,226 @@ function AgentIndicator() {
   )
 }
 
-/** Feed do que o agente está fazendo — mostrado na tela cheia. */
+/** Feed do que o agente está fazendo — barinha na borda direita da tela cheia
+ *  que expande no hover (não cobre o conteúdo da página permanentemente). */
 function ActivityFeed() {
   const agentActive = usePanelStore((s) => s.agentActive)
   const activity = usePanelStore((s) => s.activity)
   const { t } = useTranslation()
+  const [hovered, setHovered] = useState(false)
+
   return (
-    <div className="absolute right-3 top-3 z-10 flex max-h-[45vh] w-72 flex-col overflow-hidden rounded-xl border bg-background/95 shadow-lg backdrop-blur">
-      <div className="flex items-center gap-2 border-b px-3 py-2 text-xs font-medium">
-        <SparklesIcon className={cn("size-3.5", agentActive ? "text-emerald-500" : "text-muted-foreground")} />
-        {agentActive ? t("browser.agentUsingBrowser") : t("browser.browserActivity")}
-      </div>
-      <div className="flex-1 overflow-y-auto p-1.5">
-        {activity.length === 0 ? (
-          <p className="px-2 py-3 text-center text-[11px] text-muted-foreground">
-            {t("browser.emptyActivity")}
-          </p>
-        ) : (
-          activity.map((entry, i) => (
-            <div
-              key={entry.id}
-              className={cn(
-                "flex items-start gap-2 rounded-md px-2 py-1.5 text-[11px]",
-                i === 0 ? "text-foreground" : "text-muted-foreground",
-              )}
-            >
-              <span className={cn("mt-1 size-1.5 shrink-0 rounded-full", i === 0 ? "bg-emerald-500" : "bg-muted-foreground/40")} />
-              <span className="min-w-0 flex-1">{entry.label}</span>
+    <div
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      className="absolute right-0 top-1/2 z-10 -translate-y-1/2"
+    >
+      <div
+        className={cn(
+          "flex flex-col overflow-hidden rounded-l-xl border border-r-0 bg-background/95 shadow-lg backdrop-blur transition-[width] duration-200",
+          hovered ? "w-72" : "w-9",
+        )}
+      >
+        {/* Alça: sempre visível, indica atividade com um ponto pulsante */}
+        <button
+          type="button"
+          title={t("browser.browserActivity")}
+          className="flex h-12 w-full items-center justify-center text-muted-foreground transition-colors hover:text-foreground"
+        >
+          <span className="relative flex items-center justify-center">
+            <SparklesIcon className="size-4" />
+            {agentActive && (
+              <span className="absolute -right-1.5 -top-1.5 flex size-2">
+                <span className="absolute inline-flex size-full animate-ping rounded-full bg-emerald-500 opacity-75" />
+                <span className="relative inline-flex size-2 rounded-full bg-emerald-500" />
+              </span>
+            )}
+          </span>
+        </button>
+        {hovered && (
+          <div className="flex min-h-0 flex-col">
+            <div className="flex items-center gap-2 border-b px-3 py-2 text-xs font-medium">
+              <SparklesIcon className={cn("size-3.5", agentActive ? "text-emerald-500" : "text-muted-foreground")} />
+              {agentActive ? t("browser.agentUsingBrowser") : t("browser.browserActivity")}
             </div>
-          ))
+            <div className="max-h-[55vh] overflow-y-auto p-1.5">
+              {activity.length === 0 ? (
+                <p className="px-2 py-3 text-center text-[11px] text-muted-foreground">
+                  {t("browser.emptyActivity")}
+                </p>
+              ) : (
+                activity.map((entry, i) => (
+                  <div
+                    key={entry.id}
+                    className={cn(
+                      "flex items-start gap-2 rounded-md px-2 py-1.5 text-[11px]",
+                      i === 0 ? "text-foreground" : "text-muted-foreground",
+                    )}
+                  >
+                    <span className={cn("mt-1 size-1.5 shrink-0 rounded-full", i === 0 ? "bg-emerald-500" : "bg-muted-foreground/40")} />
+                    <span className="min-w-0 flex-1">{entry.label}</span>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+/** Listas estáveis para os seletores do zustand (evitam re-render por referência nova). */
+const NO_MSGS: ChatMessage[] = []
+const NO_ASKS: PendingAskUI[] = []
+
+/** Conversa da sessão de código ativa, ao vivo — painel lateral esquerdo
+ *  colapsável da tela cheia. Mostra o streaming do agente em tempo real. */
+function FullscreenChatFeed({ pinned, onTogglePin }: { pinned: boolean; onTogglePin: () => void }) {
+  const { t } = useTranslation()
+  const activeSession = useActiveSession("code")
+  const sessionId = activeSession?.id
+  const messages = useSessionStore((s) => (sessionId ? s.messages[sessionId] ?? NO_MSGS : NO_MSGS))
+  const status = useSessionStatus(sessionId)
+  const pendingAsks = useSessionStore((s) => (sessionId ? s.pendingAsks[sessionId] ?? NO_ASKS : NO_ASKS))
+  const isBusy = status === "submitted" || status === "streaming"
+  const [hovered, setHovered] = useState(false)
+  const scrollRef = useRef<HTMLDivElement | null>(null)
+  const expanded = pinned || hovered
+  const hasAsks = pendingAsks.length > 0
+
+  // Carrega o histórico da sessão (a tela cheia pode abrir antes do chat)
+  useEffect(() => {
+    if (sessionId) void useSessionStore.getState().ensureMessages(sessionId)
+  }, [sessionId])
+
+  // Auto-scroll: novas mensagens / deltas do streaming / asks mudam a lista
+  useEffect(() => {
+    const el = scrollRef.current
+    if (el) el.scrollTop = el.scrollHeight
+  }, [messages, pendingAsks])
+
+  // Auto-expande (fixa) quando chega um pedido de permissão/pergunta novo,
+  // para o usuário conseguir responder sem sair da tela cheia
+  const prevAsks = useRef(0)
+  useEffect(() => {
+    if (pendingAsks.length > prevAsks.current && pendingAsks.length > 0 && !pinned) onTogglePin()
+    prevAsks.current = pendingAsks.length
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingAsks.length])
+
+  const lastAssistantId = useMemo(() => {
+    const last = [...messages].reverse().find((m) => m.role === "assistant" && !m.summary)
+    return last?.id
+  }, [messages])
+
+  return (
+    <div
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      className="absolute left-0 top-1/2 z-10 -translate-y-1/2"
+    >
+      <div
+        className={cn(
+          "flex flex-col overflow-hidden rounded-r-xl border border-l-0 bg-background/95 shadow-lg backdrop-blur transition-[width,height] duration-200",
+          expanded ? "h-[min(70vh,540px)] w-96" : "w-9",
+        )}
+      >
+        {/* Alça: sempre visível; ponto pulsante = agente ativo (verde) ou ask pendente (âmbar) */}
+        <button
+          type="button"
+          onClick={onTogglePin}
+          title={expanded ? t("browser.hideChatFeed") : t("browser.showChatFeed")}
+          className="flex h-12 w-full shrink-0 items-center justify-center text-muted-foreground transition-colors hover:text-foreground"
+        >
+          <span className="relative flex items-center justify-center">
+            <MessagesSquareIcon className="size-4" />
+            {(isBusy || hasAsks) && (
+              <span className="absolute -right-1.5 -top-1.5 flex size-2">
+                <span
+                  className={cn(
+                    "absolute inline-flex size-full animate-ping rounded-full opacity-75",
+                    hasAsks ? "bg-amber-500" : "bg-emerald-500",
+                  )}
+                />
+                <span
+                  className={cn("relative inline-flex size-2 rounded-full", hasAsks ? "bg-amber-500" : "bg-emerald-500")}
+                />
+              </span>
+            )}
+          </span>
+        </button>
+        {expanded && (
+          <div className="flex min-h-0 flex-1 flex-col">
+            <div className="flex items-center gap-2 border-b px-3 py-2">
+              <MessagesSquareIcon className="size-3.5 shrink-0 text-muted-foreground" />
+              <span className="min-w-0 flex-1 truncate text-xs font-medium">
+                {activeSession?.title ?? t("browser.chatFeed")}
+              </span>
+              {isBusy && (
+                <span className="flex shrink-0 items-center gap-1 text-[11px] text-emerald-500">
+                  <span className="relative flex size-1.5">
+                    <span className="absolute inline-flex size-full animate-ping rounded-full bg-emerald-500 opacity-75" />
+                    <span className="relative inline-flex size-1.5 rounded-full bg-emerald-500" />
+                  </span>
+                  {t("chat.code.analyzing")}
+                </span>
+              )}
+              <button
+                type="button"
+                onClick={onTogglePin}
+                title={pinned ? t("browser.unpinFeed") : t("browser.pinFeed")}
+                className={cn(
+                  "flex size-6 shrink-0 items-center justify-center rounded text-muted-foreground transition-colors hover:text-foreground",
+                  pinned && "text-primary hover:text-primary",
+                )}
+              >
+                {pinned ? <PinOffIcon className="size-3.5" /> : <PinIcon className="size-3.5" />}
+              </button>
+            </div>
+            <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto p-3">
+              {messages.length === 0 && !hasAsks ? (
+                <p className="px-2 py-6 text-center text-xs text-muted-foreground">{t("browser.emptyConversation")}</p>
+              ) : (
+                <div className="flex flex-col gap-3">
+                  {messages.map((msg) => {
+                    if (msg.summary) return null
+                    if (msg.role === "user") {
+                      return (
+                        <Message from="user" key={msg.id} data-msg-id={msg.id}>
+                          <MessageContent>
+                            <p className="whitespace-pre-wrap text-sm">{visibleMessageText(msg)}</p>
+                          </MessageContent>
+                        </Message>
+                      )
+                    }
+                    const isLast = msg.id === lastAssistantId
+                    return (
+                      <Message from="assistant" key={msg.id} data-msg-id={msg.id}>
+                        <MessageContent>
+                          <CodeAssistantMessage message={msg} sessionId={sessionId} isLast={isLast} isBusy={isBusy} />
+                        </MessageContent>
+                      </Message>
+                    )
+                  })}
+                  {/* Pedidos de permissão de tools / perguntas aguardando resposta —
+                      mesmo comportamento do chat de código (chat-view). */}
+                  {hasAsks && (
+                    <div className="flex flex-col gap-2 border-t pt-2">
+                      {pendingAsks
+                        .filter((a) => !a.batchId)
+                        .map((ask) => (
+                          <AskCard key={ask.requestId} ask={ask} sessionId={sessionId} />
+                        ))}
+                      {[...new Set(pendingAsks.map((a) => a.batchId).filter(Boolean))].map((batchId) => (
+                        <AskCardBatch key={batchId} items={pendingAsks.filter((a) => a.batchId === batchId)} />
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
         )}
       </div>
     </div>
@@ -290,11 +498,14 @@ function ActivityFeed() {
 }
 
 /** Composer para pedir algo à IA sem sair da tela cheia (envia ao chat de código). */
-function FullscreenComposer() {
+function FullscreenComposer({ onSent }: { onSent?: () => void }) {
   const { folders } = useWorkspace()
   const activeSession = useActiveSession("code")
   const sendMessage = useSessionStore((s) => s.sendMessage)
+  const stopStreaming = useSessionStore((s) => s.stopStreaming)
   const permissionMode = usePermissionPrefs((s) => s.mode)
+  const status = useSessionStatus(activeSession?.id)
+  const isBusy = status === "submitted" || status === "streaming"
   const { t } = useTranslation()
   const [text, setText] = useState("")
   const [sending, setSending] = useState(false)
@@ -313,36 +524,55 @@ function FullscreenComposer() {
         sessionId: activeSession?.id,
       })
       setText("")
+      // Abre o feed de conversa para o usuário acompanhar a resposta
+      onSent?.()
     } finally {
       setSending(false)
     }
   }
 
   return (
-    <div className="absolute bottom-4 left-1/2 z-10 w-full max-w-xl -translate-x-1/2 px-4">
-      <div className="flex items-end gap-2 rounded-xl border-2 border-sidebar-border bg-background/95 p-1.5 shadow-lg backdrop-blur">
-        <textarea
-          value={text}
-          onChange={(e) => setText(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" && !e.shiftKey) {
-              e.preventDefault()
-              void submit()
-            }
-          }}
-          rows={1}
-          placeholder={disabled ? t("browser.composerPlaceholderNoFolder") : t("browser.composerPlaceholder")}
-          disabled={disabled}
-          className="max-h-32 min-h-9 flex-1 resize-none bg-transparent px-2 py-1.5 text-sm outline-none placeholder:text-muted-foreground disabled:opacity-60"
-        />
-        <button
-          type="button"
-          onClick={() => void submit()}
-          disabled={disabled || sending || !text.trim()}
-          className="flex size-9 items-center justify-center rounded-lg bg-primary text-primary-foreground disabled:opacity-40"
-        >
-          {sending ? <Loader2Icon className="size-4 animate-spin" /> : <SendIcon className="size-4" />}
-        </button>
+    <div className="absolute bottom-4 left-1/2 z-20 w-full max-w-2xl -translate-x-1/2 px-4">
+      <div className="rounded-xl border-2 border-sidebar-border bg-background/95 shadow-lg backdrop-blur">
+        <div className="flex items-center gap-1 border-b border-border/60 px-2 py-1.5">
+          <ModelPicker sessionId={activeSession?.id} />
+          <PermissionModePicker />
+        </div>
+        <div className="flex items-end gap-2 p-1.5">
+          <textarea
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault()
+                void submit()
+              }
+            }}
+            rows={1}
+            placeholder={disabled ? t("browser.composerPlaceholderNoFolder") : t("browser.composerPlaceholder")}
+            disabled={disabled}
+            className="max-h-32 min-h-9 flex-1 resize-none bg-transparent px-2 py-1.5 text-sm outline-none placeholder:text-muted-foreground disabled:opacity-60"
+          />
+          {isBusy ? (
+            <button
+              type="button"
+              onClick={() => activeSession?.id && stopStreaming(activeSession.id)}
+              title={t("send.stop")}
+              className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-destructive text-destructive-foreground transition-colors hover:bg-destructive/90"
+            >
+              <SquareIcon className="size-4" />
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={() => void submit()}
+              disabled={disabled || sending || !text.trim()}
+              className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground disabled:opacity-40"
+            >
+              {sending ? <Loader2Icon className="size-4 animate-spin" /> : <SendIcon className="size-4" />}
+            </button>
+          )}
+        </div>
       </div>
     </div>
   )
@@ -351,6 +581,12 @@ function FullscreenComposer() {
 export function BrowserTab({ initialUrl }: { initialUrl?: string }) {
   const fullscreen = usePanelStore((s) => s.fullscreen)
   const setFullscreen = usePanelStore((s) => s.setFullscreen)
+  const [chatPinned, setChatPinned] = useState(false)
+
+  // Fecha o feed de conversa ao sair da tela cheia
+  useEffect(() => {
+    if (!fullscreen) setChatPinned(false)
+  }, [fullscreen])
 
   // Esc sai da tela cheia
   useEffect(() => {
@@ -394,7 +630,8 @@ export function BrowserTab({ initialUrl }: { initialUrl?: string }) {
         <AgentIndicator />
         {fullscreen && <ActivityFeed />}
         <PanelBrowserBody />
-        {fullscreen && <FullscreenComposer />}
+        {fullscreen && <FullscreenChatFeed pinned={chatPinned} onTogglePin={() => setChatPinned((v) => !v)} />}
+        {fullscreen && <FullscreenComposer onSent={() => setChatPinned(true)} />}
       </div>
     </WebPreview>
   )
