@@ -4,12 +4,13 @@ import {
   ChevronDown,
   ChevronRight,
   AlertCircle,
-  Clock,
+  Brain,
   Globe,
   Search,
   Link,
   Paperclip,
   Bot,
+  Sparkles,
   Terminal,
 } from 'lucide-react-native'
 import { Image } from 'expo-image'
@@ -25,7 +26,6 @@ import type {
   ImagePart,
   FilePart,
 } from '@orbit/shared'
-import { cn } from '~/lib/utils'
 import { AssistantMarkdown } from './AssistantMarkdown'
 import { MessageActions } from './MessageActions'
 import { MessageAttachment } from './Attachment'
@@ -92,49 +92,45 @@ function ReasoningPartView({ part }: { part: ReasoningPart }) {
   const { t } = useTranslation()
   const [open, setOpen] = useState(true)
   const tokens = getThemeTokens(useThemeStore((s) => s.resolved))
-  const hsl = (v: string) => v.replace(/hsla?\(|\)/g, '').replace(/,/g, '')
+
+  // Fecha automaticamente 1s após o streaming terminar (espelha o desktop)
+  const isStreaming = part.state === 'streaming'
+  const wasStreaming = useRef(isStreaming)
+  useEffect(() => {
+    if (wasStreaming.current && !isStreaming) {
+      const timer = setTimeout(() => setOpen(false), 1000)
+      return () => clearTimeout(timer)
+    }
+    wasStreaming.current = isStreaming
+  }, [isStreaming])
 
   if (!part.text) return null
 
   const seconds = part.durationMs ? Math.max(1, Math.round(part.durationMs / 1000)) : undefined
 
   return (
-    <View
-      style={{
-        marginVertical: 6,
-        borderRadius: 12,
-        borderWidth: 1,
-        borderColor: hslToRgba(hsl(tokens.border), 0.6),
-        backgroundColor: hslToRgba(hsl(tokens.muted), 0.15),
-        overflow: 'hidden',
-        width: '100%',
-      }}
-    >
+    <View style={{ marginVertical: 4, width: '100%' }}>
       <TouchableOpacity
         onPress={() => setOpen((prev) => !prev)}
         activeOpacity={0.7}
-        style={{
-          flexDirection: 'row',
-          alignItems: 'center',
-          gap: 8,
-          paddingHorizontal: 12,
-          paddingVertical: 8,
-          backgroundColor: hslToRgba(hsl(tokens.muted), 0.3),
-        }}
+        style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 2 }}
       >
-        <Clock size={12} color={tokens.mutedForeground} />
-        <Text
-          style={{
-            fontSize: 12,
-            fontWeight: '600',
-            color: tokens.mutedForeground,
-            flex: 1,
-          }}
-        >
-          {t('chatAssistant.reasoning')}{seconds !== undefined ? ` · ${seconds}s` : ''}
-        </Text>
-        {part.state === 'streaming' && (
-          <ActivityIndicator size="small" style={{ transform: [{ scale: 0.75 }] }} color={tokens.mutedForeground} />
+        <Brain size={13} color={tokens.mutedForeground} />
+        {isStreaming ? (
+          <View style={{ flex: 1 }}>
+            <Shimmer className="text-xs font-semibold">{t('chatAssistant.reasoning')}</Shimmer>
+          </View>
+        ) : (
+          <Text
+            style={{
+              fontSize: 12,
+              fontWeight: '600',
+              color: tokens.mutedForeground,
+              flex: 1,
+            }}
+          >
+            {t('chatAssistant.reasoning')}{seconds !== undefined ? ` · ${seconds}s` : ''}
+          </Text>
         )}
         {open ? (
           <ChevronDown size={14} color={tokens.mutedForeground} />
@@ -143,24 +139,8 @@ function ReasoningPartView({ part }: { part: ReasoningPart }) {
         )}
       </TouchableOpacity>
       {open && (
-        <View
-          style={{
-            paddingHorizontal: 12,
-            paddingVertical: 8,
-            borderTopWidth: 1,
-            borderTopColor: hslToRgba(hsl(tokens.border), 0.2),
-          }}
-        >
-          <Text
-            style={{
-              fontSize: 12,
-              color: hslToRgba(hsl(tokens.mutedForeground), 0.8),
-              fontStyle: 'italic',
-              lineHeight: 18,
-            }}
-          >
-            {part.text}
-          </Text>
+        <View style={{ marginTop: 2 }}>
+          <AssistantMarkdown text={part.text} streaming={part.state === 'streaming'} muted size={12} />
         </View>
       )}
     </View>
@@ -169,44 +149,59 @@ function ReasoningPartView({ part }: { part: ReasoningPart }) {
 
 // ─── Research Block (Grouping consecutive web tools) ───────────────────────
 
-function ResearchStep({ part }: { part: ToolPart }) {
+function ResearchStep({ part, isLast }: { part: ToolPart; isLast?: boolean }) {
   const { t } = useTranslation()
   const tokens = getThemeTokens(useThemeStore((s) => s.resolved))
+  const hsl = (v: string) => v.replace(/hsla?\(|\)/g, '').replace(/,/g, '')
   const input = part.input ?? {}
   const query = typeof input.query === 'string' ? input.query : undefined
   const url = typeof input.url === 'string' ? hostnameOf(input.url) : undefined
   const baseLabel = part.tool === 'websearch' ? t('chatAssistant.searchingLabel') : t('chatAssistant.readingPageLabel')
   const label = query ? `${baseLabel} "${query}"` : url ? `${baseLabel} ${url}` : baseLabel
+  const running = part.state === 'running'
 
   const results = part.tool === 'websearch' && part.output ? parseSearchResults(part.output) : []
 
   return (
-    <View className="mt-1.5 pl-3 border-l border-border/40">
-      <View className="flex-row items-center gap-1.5">
-        {part.state === 'running' ? (
-          <ActivityIndicator size="small" style={{ transform: [{ scale: 0.75 }] }} color={tokens.primary} />
-        ) : part.state === 'error' ? (
-          <AlertCircle size={12} className="text-destructive" />
-        ) : part.tool === 'websearch' ? (
-          <Search size={12} className="text-muted-foreground" />
-        ) : (
-          <Globe size={12} className="text-muted-foreground" />
+    <View style={{ flexDirection: 'row', gap: 10 }}>
+      <View style={{ alignSelf: 'stretch', alignItems: 'center' }}>
+        <View style={{ width: 16, height: 16, alignItems: 'center', justifyContent: 'center' }}>
+          {running ? (
+            <ActivityIndicator size="small" style={{ transform: [{ scale: 0.75 }] }} color={tokens.primary} />
+          ) : part.state === 'error' ? (
+            <AlertCircle size={13} color={tokens.destructive} />
+          ) : part.tool === 'websearch' ? (
+            <Search size={13} color={tokens.mutedForeground} />
+          ) : (
+            <Globe size={13} color={tokens.mutedForeground} />
+          )}
+        </View>
+        {!isLast && (
+          <View style={{ width: 1, flex: 1, backgroundColor: hslToRgba(hsl(tokens.border), 0.6), marginVertical: 3 }} />
         )}
-        <Text className={cn('text-xs', part.state === 'running' ? 'text-primary font-medium' : 'text-muted-foreground')}>
+      </View>
+      <View style={{ flex: 1, paddingBottom: isLast ? 0 : 8 }}>
+        <Text
+          style={{
+            fontSize: 12,
+            color: running ? tokens.foreground : tokens.mutedForeground,
+            fontWeight: running ? '600' : '400',
+          }}
+        >
           {label}
         </Text>
-      </View>
 
-      {results.length > 0 && (
-        <View className="flex-row flex-wrap gap-1.5 mt-1 ml-4">
-          {results.slice(0, 4).map((res) => (
-            <View key={res.url} className="flex-row items-center gap-1 bg-muted/40 rounded px-1.5 py-0.5">
-              <Link size={10} className="text-muted-foreground" />
-              <Text className="text-[10px] text-muted-foreground font-mono">{hostnameOf(res.url)}</Text>
-            </View>
-          ))}
-        </View>
-      )}
+        {results.length > 0 && (
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 4 }}>
+            {results.slice(0, 4).map((res) => (
+              <View key={res.url} className="flex-row items-center gap-1 bg-muted/40 rounded px-1.5 py-0.5">
+                <Link size={10} className="text-muted-foreground" />
+                <Text className="text-[10px] text-muted-foreground font-mono">{hostnameOf(res.url)}</Text>
+              </View>
+            ))}
+          </View>
+        )}
+      </View>
     </View>
   )
 }
@@ -214,66 +209,46 @@ function ResearchStep({ part }: { part: ToolPart }) {
 function ResearchBlock({ parts }: { parts: ToolPart[] }) {
   const { t } = useTranslation()
   const researching = parts.some((p) => p.state === 'running')
-  const [open, setOpen] = useState(researching)
+  const [open, setOpen] = useState(false)
   const tokens = getThemeTokens(useThemeStore((s) => s.resolved))
   const hsl = (v: string) => v.replace(/hsla?\(|\)/g, '').replace(/,/g, '')
-
-  useEffect(() => {
-    setOpen(researching)
-  }, [researching])
+  const isOpen = researching || open
 
   return (
-    <View
-      style={{
-        marginVertical: 6,
-        borderRadius: 12,
-        borderWidth: 1,
-        borderColor: hslToRgba(hsl(tokens.border), 0.6),
-        backgroundColor: hslToRgba(hsl(tokens.muted), 0.15),
-        overflow: 'hidden',
-        width: '100%',
-      }}
-    >
+    <View style={{ marginVertical: 4, width: '100%' }}>
       <TouchableOpacity
         onPress={() => setOpen((prev) => !prev)}
         activeOpacity={0.7}
-        style={{
-          flexDirection: 'row',
-          alignItems: 'center',
-          gap: 8,
-          paddingHorizontal: 12,
-          paddingVertical: 8,
-          backgroundColor: hslToRgba(hsl(tokens.muted), 0.3),
-        }}
+        style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 2 }}
       >
-        <Search size={13} color={tokens.primary} />
-        <Text
-          style={{
-            fontSize: 12,
-            fontWeight: '600',
-            color: tokens.foreground,
-            flex: 1,
-          }}
-        >
-          {researching
-            ? t('chatAssistant.searchingWeb')
-            : t('chatAssistant.searchDone', { count: parts.length })}
-        </Text>
-        {open ? (
+        <Brain size={13} color={tokens.mutedForeground} />
+        {researching ? (
+          <Shimmer className="text-xs font-semibold">{t('chatAssistant.searchingWeb')}</Shimmer>
+        ) : (
+          <Text style={{ fontSize: 12, fontWeight: '600', color: tokens.mutedForeground, flexShrink: 1 }}>
+            {t('chatAssistant.searchDone', { count: parts.length })}
+          </Text>
+        )}
+        {isOpen ? (
           <ChevronDown size={14} color={tokens.mutedForeground} />
         ) : (
           <ChevronRight size={14} color={tokens.mutedForeground} />
         )}
       </TouchableOpacity>
-      {open && (
+      {isOpen && (
         <View
           style={{
+            marginTop: 6,
+            borderRadius: 12,
+            borderWidth: 1,
+            borderColor: hslToRgba(hsl(tokens.border), 0.6),
+            backgroundColor: hslToRgba(hsl(tokens.muted), 0.12),
             paddingHorizontal: 12,
-            paddingBottom: 10,
+            paddingVertical: 10,
           }}
         >
-          {parts.map((part) => (
-            <ResearchStep key={part.id} part={part} />
+          {parts.map((part, index) => (
+            <ResearchStep key={part.id} part={part} isLast={index === parts.length - 1} />
           ))}
         </View>
       )}
@@ -302,7 +277,7 @@ function ToolActionRow({ part }: { part: ToolPart }) {
   const detail = part.error ?? (part.tool === 'bash' ? part.output : part.output)
 
   return (
-    <View style={{ marginTop: 6, paddingLeft: 10, borderLeftWidth: 2, borderLeftColor: tokens.border }}>
+    <View style={{ paddingVertical: 5 }}>
       <Pressable
         onPress={() => detail && setShowOutput((v) => !v)}
         disabled={!detail}
@@ -371,10 +346,7 @@ function TaskGroup({ parts }: { parts: ToolPart[] }) {
   const prevWorking = useRef(working)
   const tokens = getThemeTokens(useThemeStore((s) => s.resolved))
   const hsl = (v: string) => v.replace(/hsla?\(|\)/g, '').replace(/,/g, '')
-
-  useEffect(() => {
-    if (working) setOpen(true)
-  }, [working])
+  const isOpen = working || open
 
   useEffect(() => {
     if (prevWorking.current && !working) {
@@ -383,10 +355,6 @@ function TaskGroup({ parts }: { parts: ToolPart[] }) {
     }
     prevWorking.current = working
   }, [working])
-
-  useEffect(() => {
-    setShowAll(false)
-  }, [parts.length])
 
   const visibleParts = showAll ? parts : parts.slice(-MAX_VISIBLE_TOOLS)
   const hiddenCount = parts.length - MAX_VISIBLE_TOOLS
@@ -398,54 +366,37 @@ function TaskGroup({ parts }: { parts: ToolPart[] }) {
       : t('chatAssistant.actionsExecuted', { count: parts.length })
 
   return (
-    <View
-      style={{
-        marginVertical: 6,
-        borderRadius: 12,
-        borderWidth: 1,
-        borderColor: hslToRgba(hsl(tokens.border), 0.6),
-        backgroundColor: hslToRgba(hsl(tokens.muted), 0.15),
-        overflow: 'hidden',
-        width: '100%',
-      }}
-    >
+    <View style={{ marginVertical: 4, width: '100%' }}>
       <TouchableOpacity
         onPress={() => setOpen((prev) => !prev)}
         activeOpacity={0.7}
-        style={{
-          flexDirection: 'row',
-          alignItems: 'center',
-          gap: 8,
-          paddingHorizontal: 12,
-          paddingVertical: 8,
-          backgroundColor: hslToRgba(hsl(tokens.muted), 0.3),
-        }}
+        style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 2 }}
       >
         {working ? (
-          <ActivityIndicator size="small" style={{ transform: [{ scale: 0.75 }] }} color={tokens.primary} />
+          <Shimmer className="text-xs font-semibold">{title}</Shimmer>
         ) : (
-          <Terminal size={13} color={tokens.mutedForeground} />
+          <Text style={{ fontSize: 12, fontWeight: '500', color: tokens.mutedForeground, flexShrink: 1 }}>{title}</Text>
         )}
-        {working ? (
-          <View style={{ flex: 1 }}>
-            <Shimmer className="text-xs font-semibold">{title}</Shimmer>
-          </View>
-        ) : (
-          <Text style={{ fontSize: 12, fontWeight: '600', color: tokens.foreground, flex: 1 }}>{title}</Text>
-        )}
-        {open ? (
+        {isOpen ? (
           <ChevronDown size={14} color={tokens.mutedForeground} />
         ) : (
           <ChevronRight size={14} color={tokens.mutedForeground} />
         )}
       </TouchableOpacity>
-      {open && (
-        <View style={{ paddingHorizontal: 12, paddingBottom: 10 }}>
+      {isOpen && (
+        <View
+          style={{
+            marginTop: 2,
+            paddingLeft: 12,
+            borderLeftWidth: 2,
+            borderLeftColor: hslToRgba(hsl(tokens.border), 0.6),
+          }}
+        >
           {visibleParts.map((part) => (
             <ToolActionRow key={part.id} part={part} />
           ))}
           {hiddenCount > 0 && !showAll && (
-            <Pressable onPress={() => setShowAll(true)} style={{ marginTop: 8 }}>
+            <Pressable onPress={() => setShowAll(true)} style={{ marginVertical: 4 }}>
               <Text style={{ fontSize: 11, color: tokens.mutedForeground }}>
                 {t('chatAssistant.hiddenActions', { count: hiddenCount })}
               </Text>
@@ -462,32 +413,41 @@ function TaskGroup({ parts }: { parts: ToolPart[] }) {
 function AgentPartView({ part }: { part: AgentPart }) {
   const [open, setOpen] = useState(part.state === 'running')
   const tokens = getThemeTokens(useThemeStore((s) => s.resolved))
+  const Icon = part.role === 'main' ? Sparkles : Bot
 
   return (
-    <View className="my-1.5 rounded-xl border border-border/60 bg-muted/10 overflow-hidden">
+    <View style={{ marginVertical: 4, width: '100%' }}>
       <TouchableOpacity
         onPress={() => setOpen((prev) => !prev)}
         activeOpacity={0.7}
-        className="flex-row items-center gap-2 px-3 py-2 bg-muted/20 cursor-pointer"
+        style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 2 }}
       >
-        <Bot size={13} className={part.state === 'running' ? 'text-yellow-500' : 'text-primary'} />
-        <Text className="text-xs font-semibold text-foreground flex-1">
-          {part.label}
-        </Text>
-        {part.state === 'running' && (
-          <ActivityIndicator size="small" style={{ transform: [{ scale: 0.75 }] }} color={tokens.primary} />
+        <Icon size={13} color={part.state === 'running' ? tokens.primary : tokens.mutedForeground} />
+        {part.state === 'running' ? (
+          <View style={{ flex: 1 }}>
+            <Shimmer className="text-xs font-semibold">{part.label}</Shimmer>
+          </View>
+        ) : (
+          <Text
+            style={{
+              fontSize: 12,
+              fontWeight: '600',
+              color: part.state === 'error' ? tokens.destructive : tokens.foreground,
+              flex: 1,
+            }}
+          >
+            {part.label}
+          </Text>
         )}
         {open ? (
-          <ChevronDown size={14} className="text-muted-foreground" />
+          <ChevronDown size={14} color={tokens.mutedForeground} />
         ) : (
-          <ChevronRight size={14} className="text-muted-foreground" />
+          <ChevronRight size={14} color={tokens.mutedForeground} />
         )}
       </TouchableOpacity>
       {open && part.text && (
-        <View className="px-3 py-2 border-t border-border/30">
-          <Text className="text-xs text-muted-foreground leading-relaxed italic">
-            {part.text}
-          </Text>
+        <View style={{ marginTop: 2 }}>
+          <AssistantMarkdown text={part.text} streaming={part.state === 'running'} muted size={12} />
         </View>
       )}
     </View>

@@ -8,6 +8,10 @@ interface AssistantMarkdownProps {
   text: string
   /** Durante streaming: parse leve, code block sem highlight, caret no fim. */
   streaming?: boolean
+  /** Texto secundário (ex.: reasoning) em cor muted e headings menores. */
+  muted?: boolean
+  /** Tamanho do corpo (padrão 14). */
+  size?: number
 }
 
 type InlineSegment =
@@ -305,7 +309,7 @@ const InlineText = memo(function InlineText({
 
 const HEADING_SIZE = [20, 17, 15] as const
 
-function ListBlock({ items, color, muted }: { items: ListItem[]; color: string; muted: string }) {
+function ListBlock({ items, color, muted, size = 14 }: { items: ListItem[]; color: string; muted: string; size?: number }) {
   return (
     <View style={{ gap: 4 }}>
       {items.map((item, j) => {
@@ -333,7 +337,7 @@ function ListBlock({ items, color, muted }: { items: ListItem[]; color: string; 
               <InlineText
                 segments={item.segments}
                 color={color}
-                size={14}
+                size={size}
               />
             </View>
           </View>
@@ -343,8 +347,9 @@ function ListBlock({ items, color, muted }: { items: ListItem[]; color: string; 
   )
 }
 
-function AssistantMarkdownInner({ text, streaming = false }: AssistantMarkdownProps) {
+function AssistantMarkdownInner({ text, streaming = false, muted = false, size = 14 }: AssistantMarkdownProps) {
   const tokens = getThemeTokens(useThemeStore((s) => s.resolved))
+  const bodyColor = muted ? tokens.mutedForeground : tokens.foreground
   const blocks = useMemo(() => {
     const source = streaming ? stabilizeMarkdown(text) : text
     return parseMarkdown(source)
@@ -355,14 +360,14 @@ function AssistantMarkdownInner({ text, streaming = false }: AssistantMarkdownPr
       {blocks.map((block, i) => {
         switch (block.type) {
           case 'paragraph':
-            return <InlineText key={i} segments={block.segments} color={tokens.foreground} size={14} />
+            return <InlineText key={i} segments={block.segments} color={bodyColor} size={size} />
           case 'heading':
             return (
               <InlineText
                 key={i}
                 segments={block.segments}
-                color={tokens.foreground}
-                size={HEADING_SIZE[Math.min(block.level, 3) - 1] ?? 15}
+                color={bodyColor}
+                size={Math.max(13, HEADING_SIZE[Math.min(block.level, 3) - 1] - (muted ? 5 : 0))}
                 weight="700"
               />
             )
@@ -380,8 +385,9 @@ function AssistantMarkdownInner({ text, streaming = false }: AssistantMarkdownPr
               <ListBlock
                 key={i}
                 items={block.items}
-                color={tokens.foreground}
+                color={bodyColor}
                 muted={tokens.mutedForeground}
+                size={size}
               />
             )
           case 'table':
