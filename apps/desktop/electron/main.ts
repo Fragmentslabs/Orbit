@@ -377,6 +377,12 @@ interface CommitEntry {
   message: string
   body: string
   files: CommitFileEntry[]
+  /** Refs (branches locais/remotas e tags) que apontam exatamente para este commit. */
+  refs: string[]
+  /** Commit é ancestral da branch principal (main/master). */
+  onDefault: boolean
+  /** Commit é alcançável a partir do upstream da branch atual (já está no remoto). */
+  pushed: boolean
 }
 
 const STATUS_MAP: Record<string, CommitFileEntry['status']> = {
@@ -422,13 +428,106 @@ async function getGitLog(repoPath: string): Promise<{ ok: true; commits: CommitE
       }
     }
 
+    // ── Contexto de branches para badges/regiões no log ────────────────
+    // Mapa hash -> refs completas (refs/heads, refs/remotes, refs/tags)
+    const refsByHash = new Map<string, string[]>()
+    try {
+      const { stdout: refsOut } = await execFileAsync(
+        'git',
+        ['for-each-ref', '--format=%(refname)%1F%(objectname)', 'refs/heads', 'refs/remotes', 'refs/tags'],
+        { cwd: repoPath, maxBuffer: 10 * 1024 * 1024 },
+      )
+      for (const line of refsOut.split('\n')) {
+        const sep = line.indexOf('\x1f')
+        if (sep <= 0) continue
+        const ref = line.slice(0, sep)
+        const hash = line.slice(sep + 1).trim()
+        if (!hash) continue
+        const arr = refsByHash.get(hash) ?? []
+        arr.push(ref)
+        refsByHash.set(hash, arr)
+      }
+    } catch {
+      // repo sem refs
+    }
+
+    let currentBranch: string | null = null
+    try {
+      const { stdout } = await execFileAsync('git', ['branch', '--show-current'], { cwd: repoPath })
+      currentBranch = stdout.trim() || null
+    } catch {
+      // detached/erro
+    }
+
+    // Branch principal: origin/HEAD -> fallback main/master local
+    let defaultBranch: string | null = null
+    try {
+      const { stdout } = await execFileAsync('git', ['symbolic-ref', '--short', 'refs/remotes/origin/HEAD'], { cwd: repoPath })
+      defaultBranch = stdout.trim().replace(/^origin\//, '') || null
+    } catch {
+      for (const candidate of ['main', 'master']) {
+        try {
+          await execFileAsync('git', ['rev-parse', '--verify', '--quiet', candidate], { cwd: repoPath })
+          defaultBranch = candidate
+          break
+        } catch {
+          // candidato não existe
+        }
+      }
+    }
+
+    // Upstream da branch atual (ex.: origin/feature)
+    let upstream: string | null = null
+    if (currentBranch) {
+      try {
+        const { stdout } = await execFileAsync(
+          'git',
+          ['rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{upstream}'],
+          { cwd: repoPath },
+        )
+        upstream = stdout.trim() || null
+      } catch {
+        // sem upstream ainda
+      }
+    }
+
+    // Conjuntos de hashes alcançáveis (limite 60 cobre o log de 30)
+    const pushedSet = new Set<string>()
+    if (upstream) {
+      try {
+        const { stdout } = await execFileAsync('git', ['rev-list', '-n', '60', upstream], { cwd: repoPath, maxBuffer: 10 * 1024 * 1024 })
+        for (const h of stdout.split('\n')) pushedSet.add(h.trim())
+      } catch {
+        // upstream inválido
+      }
+    }
+    const defaultSet = new Set<string>()
+    if (defaultBranch) {
+      try {
+        const { stdout } = await execFileAsync('git', ['rev-list', '-n', '60', defaultBranch], { cwd: repoPath, maxBuffer: 10 * 1024 * 1024 })
+        for (const h of stdout.split('\n')) defaultSet.add(h.trim())
+      } catch {
+        // branch principal inválida
+      }
+    }
+
     const commits: CommitEntry[] = metaOut
       .split(RECORD_SEP)
       .map(rec => rec.replace(/^\n+/, '').trim())
       .filter(Boolean)
       .map(rec => {
         const [hash, author, date, subject, body = ''] = rec.split(FIELD_SEP)
-        return { hash, author, date, message: subject, body: body.trim(), files: filesByHash.get(hash) ?? [] }
+        return {
+          hash,
+          author,
+          date,
+          message: subject,
+          body: body.trim(),
+          files: filesByHash.get(hash) ?? [],
+          refs: refsByHash.get(hash) ?? [],
+          onDefault: defaultSet.has(hash),
+          pushed: pushedSet.has(hash),
+        }
       })
 
     return { ok: true, commits }

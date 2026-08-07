@@ -917,7 +917,8 @@
     "pushedCreated": "Remote branch created and commits pushed.",
     "noRemote": "No remote configured. Create the repository on GitHub/GitLab and add the remote (e.g.: git remote add origin <url>).",
     "noUpstreamPull": "Current branch has no remote tracking branch — push first (the Push button creates the remote branch).",
-    "authFailed": "Git/GitHub authentication failed. Configure a token (e.g.: gh auth login) or SSH credentials and try again."
+    "authFailed": "Git/GitHub authentication failed. Configure a token (e.g.: gh auth login) or SSH credentials and try again.",
+    "localBranch": "{{branch}} (local only)"
   },
   "mcp": {
     "kv": {

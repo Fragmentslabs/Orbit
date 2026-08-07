@@ -1,5 +1,12 @@
 import { CheckIcon, CopyIcon, FileIcon, GitCommitIcon, MinusIcon, PlusIcon } from "lucide-react"
-import { type ComponentProps, type HTMLAttributes, useEffect, useRef, useState } from "react"
+import {
+  forwardRef,
+  type ComponentProps,
+  type HTMLAttributes,
+  useEffect,
+  useRef,
+  useState,
+} from "react"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
@@ -16,7 +23,7 @@ export const Commit = ({ className, children, ...props }: CommitProps) => (
 export type CommitHeaderProps = ComponentProps<typeof CollapsibleTrigger>
 
 export const CommitHeader = ({ className, children, ...props }: CommitHeaderProps) => (
-  <CollapsibleTrigger {...props} render={<div className={cn(
+  <CollapsibleTrigger nativeButton={false} {...props} render={<div className={cn(
             "group flex cursor-pointer items-center justify-between gap-4 p-3 text-left transition-colors hover:opacity-80",
             className,
           )} />}>{children}</CollapsibleTrigger>
@@ -33,11 +40,14 @@ export const CommitHash = ({ className, children, ...props }: CommitHashProps) =
 
 export type CommitMessageProps = HTMLAttributes<HTMLSpanElement>
 
-export const CommitMessage = ({ className, children, ...props }: CommitMessageProps) => (
-  <span className={cn("font-medium text-sm", className)} {...props}>
-    {children}
-  </span>
+export const CommitMessage = forwardRef<HTMLSpanElement, CommitMessageProps>(
+  ({ className, children, ...props }, ref) => (
+    <span ref={ref} className={cn("font-medium text-sm", className)} {...props}>
+      {children}
+    </span>
+  ),
 )
+CommitMessage.displayName = "CommitMessage"
 
 export type CommitMetadataProps = HTMLAttributes<HTMLDivElement>
 

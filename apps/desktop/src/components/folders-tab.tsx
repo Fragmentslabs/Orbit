@@ -1,8 +1,9 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   CheckIcon,
   ChevronUpIcon,
+  CloudIcon,
   CopyIcon,
   DownloadIcon,
   Ellipsis,
@@ -17,6 +18,7 @@ import {
   FolderIcon,
   PanelRightCloseIcon,
   PenLineIcon,
+  TagIcon,
   UploadIcon,
 } from "lucide-react";
 import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
@@ -38,7 +40,7 @@ import { useWorkspace } from "@/lib/workspace-context";
 import { useTheme } from "@/components/theme-provider";
 import { highlightLines, type HighlightedToken } from "@/lib/code-highlighter";
 import { FolderSelector } from "@/src/components/folder-selector";
-import { useBranchStore, type SyncResult } from "@/src/stores/branch-store";
+import { useBranchStore, type BranchSyncInfo, type SyncResult } from "@/src/stores/branch-store";
 import {
   FileTree,
   FileTreeFile,
@@ -90,6 +92,9 @@ interface CommitEntry {
   message: string;
   body: string;
   files: CommitFileEntry[];
+  refs: string[];
+  onDefault: boolean;
+  pushed: boolean;
 }
 
 type ReaddirResult =
@@ -124,6 +129,135 @@ function getBreadcrumbs(rootPath: string, filePath: string): string[] {
   const relative = file.slice(root.length + 1);
   const parts = relative.split("/");
   return [getBaseName(rootPath), ...parts];
+}
+
+// ── Regiões do log de commits (estilo VS Code) ──────────────────────────
+type CommitRegionKind = "default" | "pushed" | "local";
+
+interface CommitRegion {
+  kind: CommitRegionKind;
+  label: string;
+}
+
+interface CommitRow {
+  divider?: CommitRegion;
+  commit?: CommitEntry;
+}
+
+const REGION_STYLES: Record<CommitRegionKind, { line: string; chip: string }> = {
+  local: {
+    line: "bg-amber-500/40",
+    chip: "border-amber-500/40 bg-amber-500/10 text-amber-600 dark:text-amber-400",
+  },
+  pushed: {
+    line: "bg-emerald-500/40",
+    chip: "border-emerald-500/40 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
+  },
+  default: {
+    line: "bg-border",
+    chip: "border-border bg-muted text-muted-foreground",
+  },
+};
+
+/** Região de um commit: branch principal, branch atual já no remoto, ou branch atual só local. */
+function commitRegion(commit: CommitEntry, info: BranchSyncInfo | undefined): CommitRegion | null {
+  if (!info?.current) return null;
+  if (info.defaultBranch && info.defaultBranch !== info.current) {
+    if (commit.onDefault) return { kind: "default", label: info.defaultBranch };
+    return commit.pushed
+      ? { kind: "pushed", label: info.upstream ?? info.current }
+      : { kind: "local", label: info.current };
+  }
+  return commit.pushed
+    ? { kind: "pushed", label: info.upstream ?? info.current }
+    : { kind: "local", label: info.current };
+}
+
+// ── Badges de refs nos cards ────────────────────────────────────────────
+type RefKind = "current" | "default" | "remote" | "tag" | "head" | "other";
+
+function classifyRef(
+  ref: string,
+  current: string | null | undefined,
+  defaultBranch: string | null | undefined,
+): { kind: RefKind; name: string } {
+  if (ref.startsWith("refs/heads/")) {
+    const name = ref.slice("refs/heads/".length);
+    if (name === current) return { kind: "current", name };
+    if (name === defaultBranch) return { kind: "default", name };
+    return { kind: "head", name };
+  }
+  if (ref.startsWith("refs/remotes/")) {
+    return { kind: "remote", name: ref.slice("refs/remotes/".length) };
+  }
+  if (ref.startsWith("refs/tags/")) {
+    return { kind: "tag", name: ref.slice("refs/tags/".length) };
+  }
+  return { kind: "other", name: ref };
+}
+
+const REF_BADGE_STYLES: Record<RefKind, string> = {
+  current: "border-primary/30 bg-primary/10 text-primary",
+  default: "border-emerald-500/40 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
+  remote: "border-sky-500/40 bg-sky-500/10 text-sky-600 dark:text-sky-400",
+  tag: "border-amber-500/40 bg-amber-500/10 text-amber-600 dark:text-amber-400",
+  head: "border-border bg-muted text-muted-foreground",
+  other: "border-border bg-muted text-muted-foreground",
+};
+
+const REF_PRIORITY: Record<RefKind, number> = {
+  current: 0,
+  default: 1,
+  remote: 2,
+  tag: 3,
+  head: 4,
+  other: 5,
+};
+
+const MAX_REF_BADGES = 3;
+
+function CommitRefBadges({
+  refs,
+  current,
+  defaultBranch,
+}: {
+  refs: string[];
+  current?: string | null;
+  defaultBranch?: string | null;
+}) {
+  if (!refs.length) return null;
+  const badges = refs
+    .map((ref) => classifyRef(ref, current, defaultBranch))
+    .sort((a, b) => REF_PRIORITY[a.kind] - REF_PRIORITY[b.kind]);
+  const visible = badges.slice(0, MAX_REF_BADGES);
+  const rest = badges.length - visible.length;
+  return (
+    <div className="flex flex-wrap items-center gap-1 pt-1.5">
+      {visible.map((b) => (
+        <span
+          key={b.name}
+          title={b.name}
+          className={cn(
+            "inline-flex max-w-32 items-center gap-1 truncate rounded-full border px-1.5 py-px text-[9px] font-medium",
+            REF_BADGE_STYLES[b.kind],
+          )}
+        >
+          {b.kind === "tag" && <TagIcon className="size-2.5 shrink-0" />}
+          {b.kind === "remote" && <CloudIcon className="size-2.5 shrink-0" />}
+          {b.kind === "current" && <GitBranchIcon className="size-2.5 shrink-0" />}
+          <span className="truncate">{b.name}</span>
+        </span>
+      ))}
+      {rest > 0 && (
+        <span
+          title={badges.slice(MAX_REF_BADGES).map((b) => b.name).join(", ")}
+          className="inline-flex shrink-0 items-center rounded-full border border-border bg-muted px-1.5 py-px text-[9px] font-medium text-muted-foreground"
+        >
+          +{rest}
+        </span>
+      )}
+    </div>
+  );
 }
 
 function renderEntries(
@@ -297,6 +431,21 @@ export function FoldersTab() {
   const [commitsError, setCommitsError] = useState<string | null>(null);
   const [commitsLoading, setCommitsLoading] = useState(false);
   const [commitsReload, setCommitsReload] = useState(0);
+
+  // Linhas do log com divisores de região (main vs branch atual vs remoto)
+  const commitRows = useMemo<CommitRow[]>(() => {
+    if (!commits) return [];
+    const rows: CommitRow[] = [];
+    let prevKey: string | null = null;
+    for (const commit of commits) {
+      const region = commitRegion(commit, branchInfo);
+      const key = region ? `${region.kind}\u0000${region.label}` : null;
+      if (region && key !== prevKey) rows.push({ divider: region });
+      prevKey = key;
+      rows.push({ commit });
+    }
+    return rows;
+  }, [commits, branchInfo]);
   const [syncStatus, setSyncStatus] = useState<
     { kind: "error" | "info"; text: string } | null
   >(null);
@@ -817,90 +966,130 @@ export function FoldersTab() {
                           {t("folders.noCommits")}
                         </div>
                       )}
-                    {commits?.map((commit) => (
-                      <Commit key={commit.hash}>
-                        <CommitHeader className="p-2">
-                          <CommitInfo className="min-w-0 gap-1">
-                            <HoverCard>
-                              <HoverCardTrigger
-                                delay={300}
-                                render={
-                                  <CommitMessage className="line-clamp-2 cursor-default break-words text-xs leading-snug font-medium">
-                                    {commit.message}
-                                  </CommitMessage>
-                                }
-                              />
-                              <HoverCardContent
-                                align="start"
-                                className="w-64 space-y-1.5"
-                                side="right"
-                              >
-                                <p className="font-medium leading-snug break-words">
-                                  {commit.message}
-                                </p>
-                                {commit.body && (
-                                  <p className="whitespace-pre-line break-words text-muted-foreground text-[11px] leading-relaxed">
-                                    {commit.body}
-                                  </p>
-                                )}
-                                <div className="flex items-center gap-1.5 pt-1 text-[10px] text-muted-foreground">
-                                  <CommitHash className="shrink-0 text-[10px]">
-                                    {commit.hash.slice(0, 7)}
-                                  </CommitHash>
-                                  <CommitSeparator className="shrink-0" />
-                                  <span className="truncate">
-                                    {commit.author}
-                                  </span>
-                                  <CommitSeparator className="shrink-0" />
-                                  <CommitTimestamp
-                                    className="shrink-0 text-[10px]"
-                                    date={new Date(commit.date)}
-                                  />
-                                </div>
-                              </HoverCardContent>
-                            </HoverCard>
-                            <CommitMetadata className="min-w-0 text-[10px]">
-                              <CommitHash className="shrink-0 text-[10px]">
-                                {commit.hash.slice(0, 7)}
-                              </CommitHash>
-                              <CommitSeparator className="shrink-0" />
-                              <span className="truncate">{commit.author}</span>
-                              <CommitSeparator className="shrink-0" />
-                              <CommitTimestamp
-                                className="shrink-0 text-[10px]"
-                                date={new Date(commit.date)}
-                              />
-                            </CommitMetadata>
-                          </CommitInfo>
-                        </CommitHeader>
-                        {commit.files.length > 0 && (
-                          <CommitContent className="p-2">
-                            <CommitFiles>
-                              {commit.files.map((f) => (
-                                <CommitFile
-                                  key={f.path}
-                                  className="cursor-pointer text-[11px]"
-                                  onClick={() =>
-                                    openCommitFile(
-                                      folders[0],
-                                      commit.hash,
-                                      f.path,
-                                      f.status === "deleted",
-                                    )
+                    {commitRows.map((row) =>
+                      row.divider ? (
+                        <div
+                          key={`divider-${row.divider.kind}-${row.divider.label}`}
+                          aria-hidden
+                          className="flex items-center gap-2 px-1"
+                        >
+                          <div
+                            className={cn(
+                              "h-px flex-1",
+                              REGION_STYLES[row.divider.kind].line,
+                            )}
+                          />
+                          <span
+                            className={cn(
+                              "shrink-0 rounded-full border px-2 py-px text-[9px] font-medium",
+                              REGION_STYLES[row.divider.kind].chip,
+                            )}
+                          >
+                            {row.divider.kind === "local"
+                              ? t("folders.localBranch", {
+                                  branch: row.divider.label,
+                                })
+                              : row.divider.label}
+                          </span>
+                          <div
+                            className={cn(
+                              "h-px flex-1",
+                              REGION_STYLES[row.divider.kind].line,
+                            )}
+                          />
+                        </div>
+                      ) : (
+                        <Commit key={row.commit!.hash}>
+                          <CommitHeader className="p-2">
+                            <CommitInfo className="min-w-0 gap-1">
+                              <HoverCard>
+                                <HoverCardTrigger
+                                  delay={300}
+                                  render={
+                                    <CommitMessage className="line-clamp-2 cursor-default break-words text-xs leading-snug font-medium">
+                                      {row.commit!.message}
+                                    </CommitMessage>
                                   }
+                                />
+                                <HoverCardContent
+                                  align="start"
+                                  className="w-64 space-y-1.5"
+                                  side="right"
                                 >
-                                  <CommitFileInfo>
-                                    <CommitFileStatus status={f.status} />
-                                    <CommitFileIcon />
-                                    <CommitFilePath>{f.path}</CommitFilePath>
-                                  </CommitFileInfo>
-                                </CommitFile>
-                              ))}
-                            </CommitFiles>
-                          </CommitContent>
-                        )}
-                      </Commit>
-                    ))}
+                                  <p className="font-medium leading-snug break-words">
+                                    {row.commit!.message}
+                                  </p>
+                                  {row.commit!.body && (
+                                    <p className="whitespace-pre-line break-words text-muted-foreground text-[11px] leading-relaxed">
+                                      {row.commit!.body}
+                                    </p>
+                                  )}
+                                  <div className="flex items-center gap-1.5 pt-1 text-[10px] text-muted-foreground">
+                                    <CommitHash className="shrink-0 text-[10px]">
+                                      {row.commit!.hash.slice(0, 7)}
+                                    </CommitHash>
+                                    <CommitSeparator className="shrink-0" />
+                                    <span className="truncate">
+                                      {row.commit!.author}
+                                    </span>
+                                    <CommitSeparator className="shrink-0" />
+                                    <CommitTimestamp
+                                      className="shrink-0 text-[10px]"
+                                      date={new Date(row.commit!.date)}
+                                    />
+                                  </div>
+                                </HoverCardContent>
+                              </HoverCard>
+                              <CommitMetadata className="min-w-0 text-[10px]">
+                                <CommitHash className="shrink-0 text-[10px]">
+                                  {row.commit!.hash.slice(0, 7)}
+                                </CommitHash>
+                                <CommitSeparator className="shrink-0" />
+                                <span className="truncate">
+                                  {row.commit!.author}
+                                </span>
+                                <CommitSeparator className="shrink-0" />
+                                <CommitTimestamp
+                                  className="shrink-0 text-[10px]"
+                                  date={new Date(row.commit!.date)}
+                                />
+                              </CommitMetadata>
+                              <CommitRefBadges
+                                refs={row.commit!.refs}
+                                current={branchInfo?.current}
+                                defaultBranch={branchInfo?.defaultBranch}
+                              />
+                            </CommitInfo>
+                          </CommitHeader>
+                          {row.commit!.files.length > 0 && (
+                            <CommitContent className="p-2">
+                              <CommitFiles>
+                                {row.commit!.files.map((f) => (
+                                  <CommitFile
+                                    key={f.path}
+                                    className="cursor-pointer text-[11px]"
+                                    onClick={() =>
+                                      openCommitFile(
+                                        folders[0],
+                                        row.commit!.hash,
+                                        f.path,
+                                        f.status === "deleted",
+                                      )
+                                    }
+                                  >
+                                    <CommitFileInfo>
+                                      <CommitFileStatus status={f.status} />
+                                      <CommitFileIcon />
+                                      <CommitFilePath>{f.path}</CommitFilePath>
+                                    </CommitFileInfo>
+                                  </CommitFile>
+                                ))}
+                              </CommitFiles>
+                            </CommitContent>
+                          )}
+                        </Commit>
+                      ),
+                    )}
                   </div>
                 </ScrollArea>
               </TabsContent>
