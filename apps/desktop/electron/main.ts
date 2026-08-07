@@ -437,6 +437,114 @@ async function getGitLog(repoPath: string): Promise<{ ok: true; commits: CommitE
   }
 }
 
+/** Executa git com prompt de terminal desabilitado (falha rápido em vez de
+ *  travar pedindo credencial) e sem abrir editor de merge. */
+function runGit(repoPath: string, args: string[], timeout = 120_000) {
+  return execFileAsync('git', args, {
+    cwd: repoPath,
+    maxBuffer: 10 * 1024 * 1024,
+    timeout,
+    env: { ...process.env, GIT_TERMINAL_PROMPT: '0', GIT_EDITOR: 'true' },
+  })
+}
+
+function gitError(err: unknown): { message: string; kind: 'auth' | 'noUpstream' | 'noRemote' | 'other' } {
+  const e = err as { message?: string; stderr?: string }
+  const message = (e.stderr?.trim() || e.message || String(err)).replace(/\s+/g, ' ').trim()
+  const lower = message.toLowerCase()
+  if (/authentication failed|could not read username|could not read password|permission denied|publickey|401|403/.test(lower)) {
+    return { message, kind: 'auth' }
+  }
+  if (/no tracking information|no upstream/i.test(lower)) {
+    return { message, kind: 'noUpstream' }
+  }
+  return { message, kind: 'other' }
+}
+
+interface BranchSyncInfo {
+  current: string | null
+  defaultBranch: string | null
+  ahead: number
+  behind: number
+  upstream: string | null
+  hasRemote: boolean
+  dirty: boolean
+}
+
+/** Indicador estilo VS Code: branch atual vs branch principal (main/master),
+ *  à frente/atrás, upstream, sujo (mudanças não commitadas). */
+async function getBranchInfo(repoPath: string): Promise<BranchSyncInfo> {
+  const info: BranchSyncInfo = {
+    current: null,
+    defaultBranch: null,
+    ahead: 0,
+    behind: 0,
+    upstream: null,
+    hasRemote: false,
+    dirty: false,
+  }
+  try {
+    const [{ stdout: branchOut }, { stdout: remoteOut }, { stdout: statusOut }] = await Promise.all([
+      runGit(repoPath, ['branch', '--show-current'], 15_000),
+      runGit(repoPath, ['remote'], 15_000),
+      runGit(repoPath, ['status', '--porcelain'], 15_000),
+    ])
+    info.current = branchOut.trim() || null
+    info.hasRemote = remoteOut.trim().length > 0
+    info.dirty = statusOut.trim().length > 0
+
+    // Branch principal: origin/HEAD (remote) -> fallback para main/master local
+    try {
+      const { stdout: headOut } = await runGit(
+        repoPath,
+        ['symbolic-ref', '--short', 'refs/remotes/origin/HEAD'],
+        15_000,
+      )
+      info.defaultBranch = headOut.trim().replace(/^origin\//, '') || null
+    } catch {
+      for (const candidate of ['main', 'master']) {
+        try {
+          await runGit(repoPath, ['rev-parse', '--verify', '--quiet', candidate], 15_000)
+          info.defaultBranch = candidate
+          break
+        } catch {
+          // candidato não existe
+        }
+      }
+    }
+
+    if (info.current) {
+      try {
+        const { stdout: upOut } = await runGit(
+          repoPath,
+          ['rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{upstream}'],
+          15_000,
+        )
+        info.upstream = upOut.trim() || null
+      } catch {
+        // sem upstream
+      }
+      if (info.defaultBranch && info.defaultBranch !== info.current) {
+        try {
+          const { stdout } = await runGit(
+            repoPath,
+            ['rev-list', '--left-right', '--count', `${info.defaultBranch}...HEAD`],
+            15_000,
+          )
+          const [left, right] = stdout.trim().split(/\s+/).map(Number)
+          info.behind = left || 0
+          info.ahead = right || 0
+        } catch {
+          // branch principal sem ref local ou repo sem commits
+        }
+      }
+    }
+  } catch {
+    // repo inválido/inacessível — devolve o mínimo
+  }
+  return info
+}
+
 async function getFileAtCommit(
   repoPath: string,
   hash: string,
@@ -613,6 +721,61 @@ app.whenReady().then(() => {
       return { ok: true as const }
     } catch (err) {
       return { ok: false as const, error: (err as Error).message }
+    }
+  })
+
+  ipcMain.handle('git:branchInfo', async (_event, repoPath: string) => {
+    try {
+      return { ok: true as const, info: await getBranchInfo(repoPath) }
+    } catch (err) {
+      return { ok: false as const, error: (err as Error).message }
+    }
+  })
+
+  ipcMain.handle('git:pull', async (_event, repoPath: string) => {
+    try {
+      await runGit(repoPath, ['pull', '--no-edit'])
+      return { ok: true as const }
+    } catch (err) {
+      return { ok: false as const, ...gitError(err) }
+    }
+  })
+
+  ipcMain.handle('git:push', async (_event, repoPath: string) => {
+    try {
+      const { stdout: branchOut } = await runGit(repoPath, ['branch', '--show-current'], 15_000)
+      const branch = branchOut.trim()
+      if (!branch) {
+        return { ok: false as const, message: 'No current branch', kind: 'other' as const }
+      }
+
+      let upstream: string | null = null
+      try {
+        const { stdout: upOut } = await runGit(
+          repoPath,
+          ['rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{upstream}'],
+          15_000,
+        )
+        upstream = upOut.trim() || null
+      } catch {
+        // sem upstream ainda
+      }
+
+      if (upstream) {
+        await runGit(repoPath, ['push'])
+        return { ok: true as const, created: false }
+      }
+
+      const { stdout: remoteOut } = await runGit(repoPath, ['remote'], 15_000)
+      if (!remoteOut.trim()) {
+        return { ok: false as const, message: 'No remote configured', kind: 'noRemote' as const }
+      }
+      // Sem branch remota: cria via -u origin <branch> (autenticado pelas
+      // credenciais já configuradas no git — token/SSH; nunca pede no terminal)
+      await runGit(repoPath, ['push', '-u', 'origin', branch])
+      return { ok: true as const, created: true }
+    } catch (err) {
+      return { ok: false as const, ...gitError(err) }
     }
   })
 

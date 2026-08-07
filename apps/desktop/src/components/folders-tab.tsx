@@ -4,15 +4,20 @@ import {
   CheckIcon,
   ChevronUpIcon,
   CopyIcon,
+  DownloadIcon,
   Ellipsis,
   EyeIcon,
   FolderGit2Icon,
   FolderOpenIcon,
   FolderTreeIcon,
+  GitBranchIcon,
+  ArrowDownIcon,
+  ArrowUpIcon,
   HistoryIcon,
   FolderIcon,
   PanelRightCloseIcon,
   PenLineIcon,
+  UploadIcon,
 } from "lucide-react";
 import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -33,7 +38,7 @@ import { useWorkspace } from "@/lib/workspace-context";
 import { useTheme } from "@/components/theme-provider";
 import { highlightLines, type HighlightedToken } from "@/lib/code-highlighter";
 import { FolderSelector } from "@/src/components/folder-selector";
-import { useBranchStore } from "@/src/stores/branch-store";
+import { useBranchStore, type SyncResult } from "@/src/stores/branch-store";
 import {
   FileTree,
   FileTreeFile,
@@ -270,18 +275,11 @@ export function FoldersTab() {
 
   // Recarrega diretórios quando o branch git muda
   const currentBranch = useBranchStore((s) => (folders[0] ? s.byDir[folders[0]]?.current : undefined))
-  useEffect(() => {
-    if (!currentBranch || folders.length === 0) return
-    const f = folders[0]
-    setDirCache((prev) => {
-      if (!prev[f]) return prev
-      const next = { ...prev }
-      delete next[f]
-      return next
-    })
-    loadDir(f)
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentBranch])
+  const branchInfo = useBranchStore((s) => (folders[0] ? s.infoByDir[folders[0]] : undefined))
+  const syncBusyDir = useBranchStore((s) => s.syncBusyDir)
+  const refreshInfo = useBranchStore((s) => s.refreshInfo)
+  const pullChanges = useBranchStore((s) => s.pullChanges)
+  const pushChanges = useBranchStore((s) => s.pushChanges)
 
   const [viewedFile, setViewedFile] = useState<ViewedFile>();
   const [fileContent, setFileContent] = useState<string | null>(null);
@@ -298,6 +296,10 @@ export function FoldersTab() {
   const [commits, setCommits] = useState<CommitEntry[] | null>(null);
   const [commitsError, setCommitsError] = useState<string | null>(null);
   const [commitsLoading, setCommitsLoading] = useState(false);
+  const [commitsReload, setCommitsReload] = useState(0);
+  const [syncStatus, setSyncStatus] = useState<
+    { kind: "error" | "info"; text: string } | null
+  >(null);
 
   const loadDir = useCallback(async (dirPath: string) => {
     if (loadingRef.current.has(dirPath)) return;
@@ -313,6 +315,25 @@ export function FoldersTab() {
       setDirCache((prev) => ({ ...prev, [dirPath]: result.entries }));
     }
   }, []);
+
+  const reloadRootDir = useCallback(
+    (dir: string) => {
+      setDirCache((prev) => {
+        if (!prev[dir]) return prev
+        const next = { ...prev }
+        delete next[dir]
+        return next
+      })
+      loadDir(dir)
+    },
+    [loadDir],
+  )
+
+  useEffect(() => {
+    if (!currentBranch || folders.length === 0) return
+    reloadRootDir(folders[0])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentBranch])
 
   useEffect(() => {
     for (const f of folders) entryIsDirRef.current.set(f, true);
@@ -424,11 +445,53 @@ export function FoldersTab() {
       .catch(console.error);
   }, [viewedFile]);
 
+  const syncErrorMessage = useCallback(
+    (result: Extract<SyncResult, { ok: false }>) => {
+      if (result.kind === "noRemote") return t("folders.noRemote");
+      if (result.kind === "noUpstream") return t("folders.noUpstreamPull");
+      if (result.kind === "auth")
+        return `${t("folders.authFailed")}\n${result.message}`;
+      return result.message;
+    },
+    [t],
+  );
+
+  const handlePull = useCallback(async () => {
+    const repo = folders[0];
+    if (!repo || syncBusyDir) return;
+    setSyncStatus(null);
+    const result = await pullChanges(repo);
+    if (result.ok) {
+      reloadRootDir(repo);
+      setCommitsReload((n) => n + 1);
+      setSyncStatus({ kind: "info", text: t("folders.pulledOk") });
+    } else {
+      setSyncStatus({ kind: "error", text: syncErrorMessage(result) });
+    }
+  }, [folders, syncBusyDir, pullChanges, reloadRootDir, syncErrorMessage, t]);
+
+  const handlePush = useCallback(async () => {
+    const repo = folders[0];
+    if (!repo || syncBusyDir) return;
+    setSyncStatus(null);
+    const result = await pushChanges(repo);
+    if (result.ok) {
+      setCommitsReload((n) => n + 1);
+      setSyncStatus({
+        kind: "info",
+        text: result.created ? t("folders.pushedCreated") : t("folders.pushedOk"),
+      });
+    } else {
+      setSyncStatus({ kind: "error", text: syncErrorMessage(result) });
+    }
+  }, [folders, syncBusyDir, pushChanges, syncErrorMessage, t]);
+
   useEffect(() => {
     if (viewMode !== "commits" || folders.length === 0) return;
     let cancelled = false;
     setCommitsLoading(true);
     setCommitsError(null);
+    void refreshInfo(folders[0]);
     window.ipcRenderer.invoke("git:log", folders[0]).then((result) => {
       if (cancelled) return;
       const r = result as GitLogResult;
@@ -443,7 +506,7 @@ export function FoldersTab() {
     return () => {
       cancelled = true;
     };
-  }, [viewMode, folders]);
+  }, [viewMode, folders, commitsReload, refreshInfo]);
 
   useEffect(() => () => window.clearTimeout(copyTimeoutRef.current), []);
 
@@ -655,6 +718,86 @@ export function FoldersTab() {
                 className="min-h-0 min-w-0 flex-1 overflow-hidden"
                 value="commits"
               >
+                <div className="flex shrink-0 flex-col gap-1 border-b border-border/60 px-2 py-1.5">
+                  <div className="flex items-center gap-1.5 text-xs">
+                    <GitBranchIcon className="size-3.5 shrink-0 text-muted-foreground" />
+                    <span
+                      className="max-w-24 truncate font-medium"
+                      title={branchInfo?.current ?? undefined}
+                    >
+                      {branchInfo?.current || t("branch.detached")}
+                    </span>
+                    {branchInfo?.dirty && (
+                      <span
+                        className="shrink-0 text-amber-500"
+                        title={t("folders.uncommitted")}
+                      >
+                        *
+                      </span>
+                    )}
+                    {branchInfo?.defaultBranch &&
+                      branchInfo.current &&
+                      branchInfo.defaultBranch !== branchInfo.current && (
+                        <span
+                          className="flex shrink-0 items-center gap-0.5 rounded bg-muted px-1.5 py-px text-[10px] text-muted-foreground"
+                          title={t("folders.aheadBehind", {
+                            ahead: branchInfo.ahead,
+                            behind: branchInfo.behind,
+                            branch: branchInfo.defaultBranch,
+                          })}
+                        >
+                          <ArrowUpIcon className="size-2.5 text-emerald-500" />
+                          {branchInfo.ahead}
+                          <ArrowDownIcon className="ml-1 size-2.5 text-rose-500" />
+                          {branchInfo.behind}
+                          <span className="ml-1 text-foreground/50">
+                            ⇄ {branchInfo.defaultBranch}
+                          </span>
+                        </span>
+                      )}
+                    <span className="flex-1" />
+                    <button
+                      type="button"
+                      onClick={() => void handlePull()}
+                      disabled={
+                        syncBusyDir !== null ||
+                        !branchInfo?.current ||
+                        !branchInfo?.hasRemote
+                      }
+                      title={t("folders.pullHint")}
+                      className="flex h-6 shrink-0 items-center gap-1 rounded border border-border px-1.5 text-[11px] transition-colors hover:bg-accent disabled:opacity-40"
+                    >
+                      <DownloadIcon className="size-3" />
+                      {t("folders.pull")}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void handlePush()}
+                      disabled={syncBusyDir !== null || !branchInfo?.current}
+                      title={t("folders.pushHint")}
+                      className="flex h-6 shrink-0 items-center gap-1 rounded border border-border px-1.5 text-[11px] transition-colors hover:bg-accent disabled:opacity-40"
+                    >
+                      {syncBusyDir ? (
+                        <span className="size-3 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                      ) : (
+                        <UploadIcon className="size-3" />
+                      )}
+                      {t("folders.push")}
+                    </button>
+                  </div>
+                  {syncStatus && (
+                    <p
+                      className={cn(
+                        "break-words text-[10px] leading-snug",
+                        syncStatus.kind === "error"
+                          ? "text-destructive"
+                          : "text-muted-foreground",
+                      )}
+                    >
+                      {syncStatus.text}
+                    </p>
+                  )}
+                </div>
                 <ScrollArea className="h-full">
                   <div className="flex flex-col gap-2 p-2 text-xs">
                     {commitsLoading && (
