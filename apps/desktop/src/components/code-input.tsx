@@ -28,6 +28,7 @@ import { PermissionModePicker } from "@/src/components/permission-mode-picker"
 import { ReasoningPicker } from "@/src/components/reasoning-picker"
 import { DraftInputBridge } from "@/src/components/draft-input-bridge"
 import { ChatInputDraft } from "@/src/components/chat-input-draft"
+import { clearInputDraft } from "@/src/stores/chat-draft"
 import { QueueIndicator } from "@/src/components/queue-indicator"
 import { ContextMeter } from "@/src/components/context-meter"
 import { SendButtonGroup } from "@/src/components/send-button-group"
@@ -160,6 +161,7 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId }: 
       } else if (sessionId && folders.length > 0) {
         const { directory, extraDirectories } = getDirs()
         enqueueForSend(sessionId, resolveText(text), buildOptions(), mode, { directory, extraDirectories, files })
+        clearInputDraft(sessionId)
       }
       return
     }
@@ -178,6 +180,9 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId }: 
         .join("\n\n")}`
       usePanelStore.getState().clearSelections()
     }
+    // A mensagem foi enviada: o rascunho da sessão (se existia de uma troca
+    // anterior) não pode mais voltar ao input ao reabrir o chat.
+    if (sessionId) clearInputDraft(sessionId)
     return onSubmit(
       text,
       buildOptions(),

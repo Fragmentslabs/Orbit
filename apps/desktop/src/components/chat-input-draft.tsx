@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react"
 import { usePromptInputController } from "@/src/components/ai/prompt-input"
-import { setInputDraft, getInputDraft } from "@/src/stores/chat-draft"
+import { setInputDraft, getInputDraft, clearInputDraft } from "@/src/stores/chat-draft"
 
 export function ChatInputDraft({ sessionId }: { sessionId?: string }) {
   const controller = usePromptInputController()
@@ -18,7 +18,14 @@ export function ChatInputDraft({ sessionId }: { sessionId?: string }) {
     const prev = prevKeyRef.current
     if (prev !== key) {
       const text = valueRef.current
-      if (text) setInputDraft(prev, text)
+      if (text) {
+        setInputDraft(prev, text)
+      } else {
+        // O input saiu vazio da sessão anterior: qualquer rascunho salvo dela
+        // está obsoleto (a mensagem foi enviada ou apagada). Sem essa limpeza,
+        // o texto enviado voltaria ao input ao reabrir o chat.
+        clearInputDraft(prev)
+      }
       const saved = getInputDraft(key)
       controller.textInput.setInput(saved)
       prevKeyRef.current = key

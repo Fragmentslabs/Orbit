@@ -140,6 +140,7 @@ export function ChatInput({ onSubmit, status, onStop, sessionId }: {
               onStop?.()
             } else if (sessionId) {
               enqueueForSend(sessionId, resolveText(text), buildOptions(), mode, { files })
+              clearInputDraft(sessionId)
             }
             return
           }
