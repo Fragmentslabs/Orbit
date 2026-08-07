@@ -1,9 +1,17 @@
 import { Sun, Moon, Monitor, List, Square, Layers, Smile } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import { useTheme } from "@/components/theme-provider"
-import { useAppearanceStore, type DisplayMode } from "@/src/stores/appearance-store"
+import { useAppearanceStore, type DisplayMode, type TabClosePosition } from "@/src/stores/appearance-store"
 
 type ThemePref = "light" | "dark" | "system"
+
+function useClosePositionChips(): { value: TabClosePosition; label: string }[] {
+  const { t } = useTranslation()
+  return [
+    { value: "left", label: t("appearance.tabClosePosition.left") },
+    { value: "right", label: t("appearance.tabClosePosition.right") },
+  ]
+}
 
 function useThemeChips(): { value: ThemePref; label: string; icon: typeof Sun }[] {
   const { t } = useTranslation()
@@ -30,8 +38,11 @@ export function AppearancePanel() {
   const setDisplayMode = useAppearanceStore((s) => s.setDisplayMode)
   const personaVisible = useAppearanceStore((s) => s.personaVisible)
   const setPersonaVisible = useAppearanceStore((s) => s.setPersonaVisible)
+  const tabClosePosition = useAppearanceStore((s) => s.tabClosePosition)
+  const setTabClosePosition = useAppearanceStore((s) => s.setTabClosePosition)
   const themeChips = useThemeChips()
   const modeChips = useModeChips()
+  const closePositionChips = useClosePositionChips()
 
   return (
     <div className="flex h-full flex-col gap-6 overflow-y-auto pr-1">
@@ -92,6 +103,29 @@ export function AppearancePanel() {
           <p className="text-[11px] leading-relaxed text-muted-foreground/70">
             {modeChips.find((c) => c.value === displayMode)?.hint}
           </p>
+        </div>
+      </div>
+
+      <div>
+        <p className="mb-2 text-xs font-medium text-muted-foreground">{t("appearance.tabClosePosition.title")}</p>
+        <div className="flex gap-2">
+          {closePositionChips.map(({ value, label }) => {
+            const active = tabClosePosition === value
+            return (
+              <button
+                key={value}
+                type="button"
+                onClick={() => setTabClosePosition(value)}
+                className={`flex flex-1 items-center justify-center gap-1.5 rounded-lg border px-3 py-2 text-xs font-medium transition-colors ${
+                  active
+                    ? "border-ring bg-accent text-accent-foreground shadow-sm"
+                    : "border-input bg-background text-muted-foreground hover:bg-accent/50 hover:text-foreground"
+                }`}
+              >
+                {label}
+              </button>
+            )
+          })}
         </div>
       </div>
 

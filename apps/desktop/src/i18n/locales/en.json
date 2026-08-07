@@ -1338,6 +1338,11 @@
     "persona": {
       "title": "Persona",
       "show": "Show persona"
+    },
+    "tabClosePosition": {
+      "title": "Panel tab close button",
+      "left": "Left",
+      "right": "Right"
     }
   },
   "data": {

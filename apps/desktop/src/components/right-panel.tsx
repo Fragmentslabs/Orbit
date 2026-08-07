@@ -23,6 +23,7 @@ import { usePanelStore, nextTabId, type TabType, type PanelTab } from "@/src/sto
 import { useSessionStore } from "@/src/stores/session-store"
 import { useProcessStore } from "@/src/stores/process-store"
 import { useTerminalStore } from "@/src/stores/terminal-store"
+import { useAppearanceStore } from "@/src/stores/appearance-store"
 import type { ProcessInfo } from "@/src/lib/ipc"
 import { cn } from "@/lib/utils"
 
@@ -353,6 +354,7 @@ function formatUptime(startTime: number): string {
 
 export function RightPanel() {
   const { t } = useTranslation()
+  const tabClosePosition = useAppearanceStore((s) => s.tabClosePosition)
   const tabMeta = useTabMeta()
   const { mode, folders } = useWorkspace()
   const activeSessionId = useSessionStore((s) => s.activeIds[mode])
@@ -550,6 +552,18 @@ export function RightPanel() {
             const isWorking = tabStatus === "submitted" || tabStatus === "streaming"
             const isError = tabStatus === "error"
             const hasUnread = !!tab.sessionId && (unreadCounts[tab.sessionId] ?? 0) > 0
+            const closeOnLeft = tabClosePosition === "left"
+            const closeButton = (
+              <button
+                onClick={(e) => { e.stopPropagation(); removeTab(tab.id) }}
+                className={cn(
+                  "flex size-3.5 shrink-0 items-center justify-center rounded-sm opacity-0 transition-opacity group-hover:opacity-100 hover:bg-sidebar-foreground/10",
+                  closeOnLeft ? "mr-0.5" : "ml-0.5",
+                )}
+              >
+                <X className="size-2.5" />
+              </button>
+            )
             return (
               <div
                 key={tab.id}
@@ -561,6 +575,7 @@ export function RightPanel() {
                 )}
                 onClick={() => activeSessionId && setActiveTabInStore(activeSessionId, tab.id)}
               >
+                {closeOnLeft && closeButton}
                 <TabIcon className="size-3.5 shrink-0" />
                 <span className="truncate max-w-24">{tab.title}</span>
                 {isWorking && <Loader2 className="size-3 shrink-0 animate-spin text-primary" />}
@@ -570,12 +585,7 @@ export function RightPanel() {
                 {!isWorking && !isError && hasUnread && tab.id !== activeTabId && (
                   <span className="size-2 shrink-0 rounded-full bg-primary" title="Mensagens não lidas" />
                 )}
-                <button
-                  onClick={(e) => { e.stopPropagation(); removeTab(tab.id) }}
-                  className="ml-0.5 flex size-3.5 shrink-0 items-center justify-center rounded-sm opacity-0 transition-opacity group-hover:opacity-100 hover:bg-sidebar-foreground/10"
-                >
-                  <X className="size-2.5" />
-                </button>
+                {!closeOnLeft && closeButton}
               </div>
             )
           })}

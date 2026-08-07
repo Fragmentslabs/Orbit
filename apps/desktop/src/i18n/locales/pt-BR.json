@@ -1338,6 +1338,11 @@
     "persona": {
       "title": "Persona",
       "show": "Mostrar persona"
+    },
+    "tabClosePosition": {
+      "title": "Botão de fechar das abas do painel",
+      "left": "Esquerda",
+      "right": "Direita"
     }
   },
   "data": {
