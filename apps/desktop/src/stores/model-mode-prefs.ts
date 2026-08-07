@@ -92,7 +92,7 @@ export const useModelModePrefs = create<ModelModePrefsState>((set) => ({
   codeActiveModes: loadJson<ActiveModeDefaults>(CODE_ACTIVE_MODES_KEY, DEFAULT_CODE_MODES),
   chatPermissionMode: loadJson<"ask" | "approve" | "full">(CHAT_PERM_MODE_KEY, "ask"),
   codePermissionMode: loadJson<"ask" | "approve" | "full">(CODE_PERM_MODE_KEY, "approve"),
-  autoCreateFolders: loadJson<boolean>(AUTO_FOLDERS_KEY, false),
+  autoCreateFolders: loadJson<boolean>(AUTO_FOLDERS_KEY, true),
 
   setDefaultMode: (mode) => {
     localStorage.setItem(DEFAULT_MODE_KEY, JSON.stringify(mode))
