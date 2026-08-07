@@ -9,6 +9,7 @@
     "userInterfaceStyle": "dark",
     "backgroundColor": "#09090c",
     "ios": {
+      "bundleIdentifier": "com.fragmentslabs.orbit",
       "icon": "./assets/images/icon.png",
       "infoPlist": {
         "NSAppTransportSecurity": {
