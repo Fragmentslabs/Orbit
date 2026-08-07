@@ -918,7 +918,8 @@
     "noRemote": "No remote configured. Create the repository on GitHub/GitLab and add the remote (e.g.: git remote add origin <url>).",
     "noUpstreamPull": "Current branch has no remote tracking branch — push first (the Push button creates the remote branch).",
     "authFailed": "Git/GitHub authentication failed. Configure a token (e.g.: gh auth login) or SSH credentials and try again.",
-    "localBranch": "{{branch}} (local only)"
+"localBranch": "{{branch}} (local only)",
+    "imageNotAvailable": "Image preview in commits is not supported yet."
   },
   "mcp": {
     "kv": {

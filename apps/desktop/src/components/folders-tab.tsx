@@ -73,6 +73,7 @@ import {
   CommitTimestamp,
 } from "@/src/components/ai/commit";
 import { MessageResponse } from "@/src/components/ai/message";
+import { Image } from "@/src/components/ai/image";
 
 interface DirEntryInfo {
   name: string;
@@ -120,6 +121,12 @@ const FILE_PANEL_MIN_PX = 200;
 function getBaseName(p: string) {
   const parts = p.replace(/\\/g, "/").split("/");
   return parts[parts.length - 1] || p;
+}
+
+const IMAGE_FILE_RE = /\.(png|jpe?g|gif|webp|svg|bmp|avif|ico)$/i;
+
+function isImageFile(p: string) {
+  return IMAGE_FILE_RE.test(p);
 }
 
 function getBreadcrumbs(rootPath: string, filePath: string): string[] {
@@ -415,8 +422,9 @@ export function FoldersTab() {
   const pullChanges = useBranchStore((s) => s.pullChanges)
   const pushChanges = useBranchStore((s) => s.pushChanges)
 
-  const [viewedFile, setViewedFile] = useState<ViewedFile>();
+const [viewedFile, setViewedFile] = useState<ViewedFile>();
   const [fileContent, setFileContent] = useState<string | null>(null);
+  const [fileImage, setFileImage] = useState<string | null>(null);
   const [fileError, setFileError] = useState<string | null>(null);
   const [fileLoading, setFileLoading] = useState(false);
   const [highlighted, setHighlighted] = useState<HighlightedToken[][] | null>(
@@ -507,12 +515,23 @@ export function FoldersTab() {
     [dirCache, loadDir],
   );
 
-  const openLiveFile = useCallback(async (filePath: string) => {
+const openLiveFile = useCallback(async (filePath: string) => {
     setViewedFile({ kind: "live", path: filePath });
     setFileLoading(true);
     setFileError(null);
     setFileContent(null);
+    setFileImage(null);
     setMdMode("preview");
+    if (isImageFile(filePath)) {
+      const result = (await window.ipcRenderer.invoke(
+        "fs:readFileAsDataUrl",
+        filePath,
+      )) as { dataUrl: string } | { error: string };
+      setFileLoading(false);
+      if ("dataUrl" in result) setFileImage(result.dataUrl);
+      else setFileError(result.error);
+      return;
+    }
     const result = (await window.ipcRenderer.invoke(
       "fs:readFile",
       filePath,
@@ -528,6 +547,12 @@ export function FoldersTab() {
       setFileLoading(true);
       setFileError(null);
       setFileContent(null);
+      setFileImage(null);
+      if (isImageFile(path)) {
+        setFileLoading(false);
+        setFileError(t("folders.imageNotAvailable"));
+        return;
+      }
     const result = (await window.ipcRenderer.invoke(
         "git:showFile",
         repoPath,
@@ -540,7 +565,7 @@ export function FoldersTab() {
       if ("content" in result) setFileContent(result.content);
       else setFileError(result.error);
     },
-    [],
+    [t],
   );
 
   const handleSelect = useCallback(
@@ -551,6 +576,7 @@ export function FoldersTab() {
   );
 
   const isMarkdownFile = viewedFile ? /(?:\.md|\.markdown)$/i.test(viewedFile.path) : false;
+  const isImage = viewedFile ? isImageFile(viewedFile.path) : false;
 
   useEffect(() => {
     if (!fileContent || !viewedFile) {
@@ -721,7 +747,7 @@ export function FoldersTab() {
                       <CopyIcon className="size-4" />
                       {t("folders.copyPath")}
                     </DropdownMenuItem>
-                    <DropdownMenuItem onClick={handleCopy}>
+<DropdownMenuItem onClick={handleCopy} disabled={isImage}>
                       {copied ? <CheckIcon className="size-4" /> : <CopyIcon className="size-4" />}
                       {t("folders.copyContent")}
                     </DropdownMenuItem>
@@ -778,6 +804,13 @@ export function FoldersTab() {
                 ) : fileError ? (
                   <div className="p-4 text-sm text-muted-foreground">
                     {fileError}
+                  </div>
+                ) : fileImage != null ? (
+                  <div className="flex min-w-0 items-start justify-center p-4">
+                    <Image
+                      src={fileImage}
+                      alt={viewedFile ? getBaseName(viewedFile.path) : undefined}
+                    />
                   </div>
                 ) : fileContent != null ? (
                   isMarkdownFile && mdMode === "preview" ? (

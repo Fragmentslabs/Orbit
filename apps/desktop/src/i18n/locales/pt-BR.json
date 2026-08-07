@@ -918,7 +918,8 @@
     "noRemote": "Nenhum remote configurado. Crie o repositório no GitHub/GitLab e adicione o remote (ex.: git remote add origin <url>).",
     "noUpstreamPull": "A branch atual não tem branch remota de tracking — envie os commits primeiro (o botão Enviar cria a branch remota).",
     "authFailed": "Falha de autenticação com o Git/GitHub. Configure um token (ex.: gh auth login) ou credenciais SSH e tente novamente.",
-    "localBranch": "{{branch}} (só local)"
+    "localBranch": "{{branch}} (só local)",
+    "imageNotAvailable": "Visualização de imagem em commits ainda não é suportada."
   },
   "mcp": {
     "kv": {
