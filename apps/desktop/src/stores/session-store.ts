@@ -591,8 +591,10 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       useBrainPrefs.getState().adopt(sessionId)
       useSimplePrefs.getState().adopt(sessionId)
       useDraftInput.getState().adopt(sessionId)
-      // O modelo escolhido no chat novo (draft) passa a ser o da sessão
-      useSessionModelPrefs.getState().adopt(sessionId)
+      // O modelo escolhido no chat novo (draft) passa a ser o da sessão; sem
+      // escolha explícita, fixa o modelo efetivamente usado (herdado do último
+      // chat), para o picker e o envio continuarem consistentes.
+      useSessionModelPrefs.getState().adopt(sessionId, selected)
     } else if (mode === "code") {
       const dirChanged = config.directory && session.directory !== config.directory
       const extraChanged =

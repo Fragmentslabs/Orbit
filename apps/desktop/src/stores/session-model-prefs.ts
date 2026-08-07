@@ -1,7 +1,9 @@
 import { create } from "zustand"
 
+import type { SessionInfo } from "@shared/chat"
 import type { SelectedModel } from "@/src/stores/provider-store"
 import { useProviderStore } from "@/src/stores/provider-store"
+import { useSessionStore } from "@/src/stores/session-store"
 
 /**
  * Modelo selecionado POR CHAT (padrão do opencode: o modelo segue a sessão,
@@ -53,7 +55,7 @@ interface SessionModelPrefsState {
   recents: SelectedModel[]
   selectModel: (sessionId: string | null | undefined, providerId: string, modelId: string) => void
   /** Move o override do draft (chat novo) para a sessão criada no 1º envio */
-  adopt: (sessionId: string) => void
+  adopt: (sessionId: string, fallback?: SelectedModel) => void
   clear: (sessionId: string) => void
 }
 
@@ -80,11 +82,18 @@ export const useSessionModelPrefs = create<SessionModelPrefsState>((set, get) =>
     if (!sessionId) useProviderStore.getState().selectModel(providerId, modelId)
   },
 
-  adopt: (sessionId) => {
+  adopt: (sessionId, fallback) => {
     const overrides = { ...get().overrides }
-    if (overrides[DRAFT_KEY] === undefined) return
-    overrides[sessionId] = overrides[DRAFT_KEY]
-    delete overrides[DRAFT_KEY]
+    if (overrides[DRAFT_KEY] !== undefined) {
+      overrides[sessionId] = overrides[DRAFT_KEY]
+      delete overrides[DRAFT_KEY]
+    } else if (fallback) {
+      // Sem escolha explícita no draft, fixa o modelo efetivamente usado
+      // (herdado do último chat) para a sessão continuar nele.
+      overrides[sessionId] = fallback
+    } else {
+      return
+    }
     persistRecord(overrides)
     set({ overrides })
   },
@@ -97,16 +106,36 @@ export const useSessionModelPrefs = create<SessionModelPrefsState>((set, get) =>
   },
 }))
 
-/** Modelo efetivo da sessão: override por chat > default global do provider. */
+/** Sessão mais recente não arquivada e não-worker — o modelo dela é o default
+ *  do próximo chat novo. */
+function latestSession(sessions: SessionInfo[]): SessionInfo | undefined {
+  return sessions.filter((s) => !s.archived && !s.parentId).sort((a, b) => b.updatedAt - a.updatedAt)[0]
+}
+
+/** Modelo efetivo da sessão: override por chat > default global do provider.
+ *  Chat novo (draft) sem escolha explícita herda o modelo do último chat usado
+ *  (override da sessão mais recente) antes de cair no default global. */
 export function sessionModelFor(sessionId?: string | null): SelectedModel | null {
-  const override = useSessionModelPrefs.getState().overrides[sessionId ?? DRAFT_KEY]
+  const prefs = useSessionModelPrefs.getState()
+  const override = prefs.overrides[sessionId ?? DRAFT_KEY]
   if (override) return override
+  if (!sessionId) {
+    const latest = latestSession(useSessionStore.getState().sessions)
+    const latestOverride = latest ? prefs.overrides[latest.id] : undefined
+    if (latestOverride) return latestOverride
+  }
   return useProviderStore.getState().selectedModel
 }
 
-/** Hook reativo do modelo efetivo da sessão (reage a override e a default). */
+/** Hook reativo do modelo efetivo da sessão (reage a override, a default e à
+ *  sessão mais recente — para o chat novo acompanhar o último modelo usado). */
 export function useSessionModel(sessionId?: string | null): SelectedModel | null {
-  const override = useSessionModelPrefs((s) => s.overrides[sessionId ?? DRAFT_KEY] ?? null)
+  const overrides = useSessionModelPrefs((s) => s.overrides)
   const globalModel = useProviderStore((s) => s.selectedModel)
-  return override ?? globalModel
+  const sessions = useSessionStore((s) => s.sessions)
+  const override = sessionId ? overrides[sessionId] : overrides[DRAFT_KEY]
+  if (override) return override
+  if (sessionId) return globalModel
+  const latest = latestSession(sessions)
+  return (latest && overrides[latest.id]) ?? globalModel
 }
