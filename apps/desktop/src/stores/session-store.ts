@@ -772,13 +772,14 @@ function applyChatEvent(event: ChatEvent, set: Setter, get: () => SessionState) 
       }))
       break
 
-    case "message":
+case "message": {
+      const inbound = event.message
       set((state) => {
         const list = state.messages[sessionId] ?? []
-        const idx = list.findIndex((m) => m.id === event.message.id)
-        const next = idx >= 0 ? list.map((m, i) => (i === idx ? event.message : m)) : [...list, event.message]
+        const idx = list.findIndex((m) => m.id === inbound.id)
+        const next = idx >= 0 ? list.map((m, i) => (i === idx ? inbound : m)) : [...list, inbound]
 
-        const isInbound = event.message.role === "assistant"
+        const isInbound = inbound.role === "assistant"
         const activeId = state.activeIds["chat"] ?? state.activeIds["code"] ?? null
         const unreadCounts =
           isInbound && sessionId !== activeId
@@ -787,7 +788,21 @@ function applyChatEvent(event: ChatEvent, set: Setter, get: () => SessionState) 
 
         return { messages: { ...state.messages, [sessionId]: next }, unreadCounts }
       })
+
+      // Um modelo só entra nos "recentes" quando foi de fato usado: a resposta
+      // final do agente (completedAt) chegou completa, com conteúdo real e sem
+      // erro. Se o 1º turno falhar (sem resposta), não conta como uso — e um
+      // turno posterior que responder, sim.
+      if (
+        inbound.role === "assistant" &&
+        inbound.completedAt &&
+        !inbound.error &&
+        inbound.parts.some((p) => p.type === "text" || p.type === "tool" || p.type === "image" || p.type === "agent")
+      ) {
+        useSessionModelPrefs.getState().markUsed(inbound.providerId, inbound.modelId)
+      }
       break
+    }
 
     case "part":
       set((state) => {

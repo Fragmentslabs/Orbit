@@ -197,8 +197,9 @@
     "loading": "Carregando...",
     "error": "Erro",
     "select": "Selecionar modelo",
-    "title": "Selecionar modelo",
-    "recent": "Recentes"
+"title": "Selecionar modelo",
+    "recent": "Recentes",
+    "removeRecent": "Remover dos recentes"
   },
   "models": {
     "loadingCatalog": "Carregando catálogo de modelos…",

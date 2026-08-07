@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
-import { BrainIcon, ChevronDownIcon, SettingsIcon } from "lucide-react"
+import { BrainIcon, ChevronDownIcon, SettingsIcon, XIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
   ModelSelector,
@@ -35,8 +35,9 @@ export function ModelPicker({ sessionId }: { sessionId?: string }) {
   const catalog = useProviderStore((s) => s.catalog)
   const connectedProviders = useProviderStore((s) => s.connectedProviders)
   const selected = useSessionModel(sessionId)
-  const recents = useSessionModelPrefs((s) => s.recents)
+const recents = useSessionModelPrefs((s) => s.recents)
   const selectModel = useSessionModelPrefs((s) => s.selectModel)
+  const removeRecent = useSessionModelPrefs((s) => s.removeRecent)
   const loading = useProviderStore((s) => s.loading)
   const error = useProviderStore((s) => s.error)
 
@@ -112,6 +113,21 @@ export function ModelPicker({ sessionId }: { sessionId?: string }) {
                     {model.reasoning && (
                       <BrainIcon className="size-3 shrink-0 text-muted-foreground" />
                     )}
+                    <button
+                      type="button"
+                      tabIndex={-1}
+                      title={t("modelPicker.removeRecent")}
+                      aria-label={t("modelPicker.removeRecent")}
+                      onPointerDown={(e) => e.stopPropagation()}
+                      onClick={(e) => {
+                        e.preventDefault()
+                        e.stopPropagation()
+                        removeRecent(recent.providerId, recent.modelId)
+                      }}
+                      className="hidden shrink-0 cursor-pointer items-center rounded-sm p-0.5 text-muted-foreground transition-colors hover:bg-muted group-hover/command-item:flex hover:text-foreground"
+                    >
+                      <XIcon className="size-3" />
+                    </button>
                   </ModelSelectorItem>
                 ))}
               </ModelSelectorGroup>

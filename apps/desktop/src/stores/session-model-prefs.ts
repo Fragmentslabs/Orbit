@@ -56,6 +56,11 @@ interface SessionModelPrefsState {
   selectModel: (sessionId: string | null | undefined, providerId: string, modelId: string) => void
   /** Move o override do draft (chat novo) para a sessão criada no 1º envio */
   adopt: (sessionId: string, fallback?: SelectedModel) => void
+  /** Registra um modelo como "usado" (entra nos recentes). Chamado apenas
+   *  quando o agente concluiu uma resposta de fato — nunca em falha. */
+  markUsed: (providerId?: string, modelId?: string) => void
+  /** Remove um modelo dos recentes (botão "x" no seletor). */
+  removeRecent: (providerId: string, modelId: string) => void
   clear: (sessionId: string) => void
 }
 
@@ -63,19 +68,15 @@ export const useSessionModelPrefs = create<SessionModelPrefsState>((set, get) =>
   overrides: loadRecord(),
   recents: loadRecents(),
 
-  selectModel: (sessionId, providerId, modelId) => {
+selectModel: (sessionId, providerId, modelId) => {
     const selected: SelectedModel = { providerId, modelId }
     const key = sessionId ?? DRAFT_KEY
     const overrides = { ...get().overrides, [key]: selected }
     persistRecord(overrides)
 
-    const recents = [
-      selected,
-      ...get().recents.filter((r) => !(r.providerId === providerId && r.modelId === modelId)),
-    ].slice(0, MAX_RECENTS)
-    persistRecents(recents)
-
-    set({ overrides, recents })
+    // NOTA: escolher não mexe em `recents` — um modelo só entra nos recentes
+    // quando é realmente usado (markUsed, no fim de uma resposta do agente).
+    set({ overrides })
 
     // Chat novo (draft): o modelo escolhido vira também o default global,
     // para o próximo chat novo já abrir nele.
@@ -96,6 +97,20 @@ export const useSessionModelPrefs = create<SessionModelPrefsState>((set, get) =>
     }
     persistRecord(overrides)
     set({ overrides })
+  },
+
+  markUsed: (providerId, modelId) => {
+    if (!providerId || !modelId) return
+    if (get().recents.some((r) => r.providerId === providerId && r.modelId === modelId)) return
+    const recents = [{ providerId, modelId }, ...get().recents].slice(0, MAX_RECENTS)
+    persistRecents(recents)
+    set({ recents })
+  },
+
+  removeRecent: (providerId, modelId) => {
+    const recents = get().recents.filter((r) => !(r.providerId === providerId && r.modelId === modelId))
+    persistRecents(recents)
+    set({ recents })
   },
 
   clear: (sessionId) => {
