@@ -135,6 +135,36 @@ const VIEWPORT_PRESETS: { icon: typeof MonitorIcon; labelKey: string; viewport: 
   { icon: MonitorIcon, labelKey: "browser.viewportDesktop", viewport: { width: 1440, height: 900, label: "desktop" } },
 ]
 
+/** Delays de hover das barras laterais da tela cheia — mesma convenção da
+ *  sidebar do app (App.tsx: SIDEBAR_SHOW_DELAY=100 / SIDEBAR_HIDE_DELAY=300). */
+const EDGE_SHOW_DELAY = 100
+const EDGE_HIDE_DELAY = 300
+
+/** Hover com delay simétrico para as barras laterais: abre rápido (100ms) ao
+ *  encostar na borda e fecha com folga (300ms) ao sair — evita expandir ao
+ *  cruzar a borda de passagem e colapsar ao mover o mouse para a página. */
+function useEdgeHover() {
+  const [hovered, setHovered] = useState(false)
+  const showTimer = useRef<ReturnType<typeof setTimeout>>()
+  const hideTimer = useRef<ReturnType<typeof setTimeout>>()
+  const handleEnter = useCallback(() => {
+    clearTimeout(hideTimer.current)
+    showTimer.current = setTimeout(() => setHovered(true), EDGE_SHOW_DELAY)
+  }, [])
+  const handleLeave = useCallback(() => {
+    clearTimeout(showTimer.current)
+    hideTimer.current = setTimeout(() => setHovered(false), EDGE_HIDE_DELAY)
+  }, [])
+  useEffect(
+    () => () => {
+      clearTimeout(showTimer.current)
+      clearTimeout(hideTimer.current)
+    },
+    [],
+  )
+  return { hovered, handleEnter, handleLeave }
+}
+
 function PanelBrowserBody() {
   const { url, setUrl } = useWebPreview()
   const selectMode = usePanelStore((s) => s.selectMode)
@@ -277,25 +307,25 @@ function ActivityFeed() {
   const agentActive = usePanelStore((s) => s.agentActive)
   const activity = usePanelStore((s) => s.activity)
   const { t } = useTranslation()
-  const [hovered, setHovered] = useState(false)
+  const { hovered, handleEnter, handleLeave } = useEdgeHover()
 
   return (
     <div
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
-      className="absolute right-0 top-1/2 z-10 -translate-y-1/2"
+      onMouseEnter={handleEnter}
+      onMouseLeave={handleLeave}
+      className="absolute inset-y-0 right-0 z-10 flex items-center"
     >
       <div
         className={cn(
-          "flex flex-col overflow-hidden rounded-l-xl border border-r-0 bg-background/95 shadow-lg backdrop-blur transition-[width] duration-200",
-          hovered ? "w-72" : "w-9",
+          "flex flex-col overflow-hidden rounded-l-xl border border-r-0 bg-background/95 shadow-lg backdrop-blur transition-all duration-300 ease-out",
+          hovered ? "h-[min(55vh,440px)] w-72" : "h-12 w-9",
         )}
       >
         {/* Alça: sempre visível, indica atividade com um ponto pulsante */}
         <button
           type="button"
           title={t("browser.browserActivity")}
-          className="flex h-12 w-full items-center justify-center text-muted-foreground transition-colors hover:text-foreground"
+          className="flex h-12 w-full shrink-0 items-center justify-center text-muted-foreground transition-colors hover:text-foreground"
         >
           <span className="relative flex items-center justify-center">
             <SparklesIcon className="size-4" />
@@ -308,12 +338,12 @@ function ActivityFeed() {
           </span>
         </button>
         {hovered && (
-          <div className="flex min-h-0 flex-col">
+          <div className="flex min-h-0 flex-1 animate-in flex-col fade-in-0 duration-200">
             <div className="flex items-center gap-2 border-b px-3 py-2 text-xs font-medium">
               <SparklesIcon className={cn("size-3.5", agentActive ? "text-emerald-500" : "text-muted-foreground")} />
               {agentActive ? t("browser.agentUsingBrowser") : t("browser.browserActivity")}
             </div>
-            <div className="max-h-[55vh] overflow-y-auto p-1.5">
+            <div className="min-h-0 flex-1 overflow-y-auto p-1.5">
               {activity.length === 0 ? (
                 <p className="px-2 py-3 text-center text-[11px] text-muted-foreground">
                   {t("browser.emptyActivity")}
@@ -354,7 +384,7 @@ function FullscreenChatFeed({ pinned, onTogglePin }: { pinned: boolean; onToggle
   const status = useSessionStatus(sessionId)
   const pendingAsks = useSessionStore((s) => (sessionId ? s.pendingAsks[sessionId] ?? NO_ASKS : NO_ASKS))
   const isBusy = status === "submitted" || status === "streaming"
-  const [hovered, setHovered] = useState(false)
+  const { hovered, handleEnter, handleLeave } = useEdgeHover()
   const scrollRef = useRef<HTMLDivElement | null>(null)
   const expanded = pinned || hovered
   const hasAsks = pendingAsks.length > 0
@@ -386,14 +416,14 @@ function FullscreenChatFeed({ pinned, onTogglePin }: { pinned: boolean; onToggle
 
   return (
     <div
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
-      className="absolute left-0 top-1/2 z-10 -translate-y-1/2"
+      onMouseEnter={handleEnter}
+      onMouseLeave={handleLeave}
+      className="absolute inset-y-0 left-0 z-10 flex items-center"
     >
       <div
         className={cn(
-          "flex flex-col overflow-hidden rounded-r-xl border border-l-0 bg-background/95 shadow-lg backdrop-blur transition-[width,height] duration-200",
-          expanded ? "h-[min(70vh,540px)] w-96" : "w-9",
+          "flex flex-col overflow-hidden rounded-r-xl border border-l-0 bg-background/95 shadow-lg backdrop-blur transition-all duration-300 ease-out",
+          expanded ? "h-[min(70vh,540px)] w-96" : "h-12 w-9",
         )}
       >
         {/* Alça: sempre visível; ponto pulsante = agente ativo (verde) ou ask pendente (âmbar) */}
@@ -421,7 +451,7 @@ function FullscreenChatFeed({ pinned, onTogglePin }: { pinned: boolean; onToggle
           </span>
         </button>
         {expanded && (
-          <div className="flex min-h-0 flex-1 flex-col">
+          <div className="flex min-h-0 flex-1 animate-in flex-col fade-in-0 duration-200">
             <div className="flex items-center gap-2 border-b px-3 py-2">
               <MessagesSquareIcon className="size-3.5 shrink-0 text-muted-foreground" />
               <span className="min-w-0 flex-1 truncate text-xs font-medium">
