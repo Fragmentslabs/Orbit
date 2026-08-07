@@ -18,6 +18,7 @@ import {
   SparklesIcon,
   SquareIcon,
   TabletIcon,
+  X,
 } from "lucide-react"
 import {
   DropdownMenu,
@@ -608,13 +609,25 @@ function FullscreenComposer({ onSent }: { onSent?: () => void }) {
   const { t } = useTranslation()
   const [text, setText] = useState("")
   const [sending, setSending] = useState(false)
+  const selections = usePanelStore((s) => s.selections)
+  const removeSelection = usePanelStore((s) => s.removeSelection)
 
   const disabled = folders.length === 0
   const submit = async () => {
-    const value = text.trim()
-    if (!value || disabled || sending) return
+    const base = text.trim()
+    if (!base || disabled || sending) return
     setSending(true)
     const [directory, ...extraDirectories] = folders
+    // Elementos selecionados no browser seguem na mensagem, como no input principal
+    let value = base
+    if (selections.length > 0) {
+      value += `\n\n${selections
+        .map(
+          (sel) =>
+            `[Elemento selecionado no browser do painel — <${sel.tag}> em ${sel.url}]\nselector: ${sel.selector}\ntexto: ${sel.text || "(sem texto)"}\nhtml: ${sel.html}`,
+        )
+        .join("\n\n")}`
+    }
     try {
       await sendMessage("code", value, {
         options: { permissionMode, brain: true },
@@ -622,6 +635,7 @@ function FullscreenComposer({ onSent }: { onSent?: () => void }) {
         extraDirectories,
         sessionId: activeSession?.id,
       })
+      if (selections.length > 0) usePanelStore.getState().clearSelections()
       setText("")
       // Abre o feed de conversa para o usuário acompanhar a resposta
       onSent?.()
@@ -637,6 +651,27 @@ function FullscreenComposer({ onSent }: { onSent?: () => void }) {
           <ModelPicker sessionId={activeSession?.id} />
           <PermissionModePicker />
         </div>
+        {selections.length > 0 && (
+          <div className="flex flex-wrap items-center gap-1.5 border-b border-border/60 px-2 py-1.5">
+            {selections.map((sel) => (
+              <span
+                key={sel.id}
+                title={`${sel.selector}\n"${sel.text}"`}
+                className="flex items-center gap-1 rounded-md border border-emerald-500/30 bg-emerald-500/10 px-1.5 py-0.5 text-[11px] text-emerald-600 dark:text-emerald-400"
+              >
+                <MousePointerClickIcon className="size-3" />
+                {"<"}{sel.tag}{">"} {sel.text ? `"${sel.text.slice(0, 24)}${sel.text.length > 24 ? "…" : ""}"` : t("codeInput.selected")}
+                <button
+                  type="button"
+                  onClick={() => removeSelection(sel.id)}
+                  className="ml-0.5 rounded-sm hover:bg-emerald-500/20"
+                >
+                  <X className="size-3" />
+                </button>
+              </span>
+            ))}
+          </div>
+        )}
         <div className="flex items-end gap-2 p-1.5">
           <textarea
             value={text}
