@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url'
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 import fs from 'node:fs/promises'
+import { chmodSync } from 'node:fs'
 import path from 'node:path'
 import type * as NodePty from 'node-pty'
 import { listCredentialProviders, removeCredential, setCredential } from './lib/auth'
@@ -312,7 +313,30 @@ app.on('activate', () => {
 
 const terminals = new Map<string, NodePty.IPty>()
 
+/**
+ * O node-pty@1.1.0 publica o `spawn-helper` (macOS) sem o bit de execução no
+ * tarball; sem +x o posix_spawn falha com EACCES e o terminal nunca abre.
+ * Ajusta o modo do binário do prebuild atual (idempotente). No app empacotado
+ * o binário vive em app.asar.unpacked, então repetimos o dance do node-pty.
+ */
+function ensurePtyHelperExecutable() {
+  if (process.platform !== 'darwin') return
+  try {
+    let helper = path.join(
+      path.dirname(_require.resolve('node-pty/package.json')),
+      'prebuilds',
+      `${process.platform}-${process.arch}`,
+      'spawn-helper',
+    )
+    if (helper.includes('app.asar')) helper = helper.replace('app.asar', 'app.asar.unpacked')
+    chmodSync(helper, 0o755)
+  } catch (err) {
+    console.warn('[terminal] não foi possível ajustar permissões do spawn-helper:', (err as Error).message)
+  }
+}
+
 function createTerminal(id: string, cols = 80, rows = 24, cwd?: string) {
+  ensurePtyHelperExecutable()
   const isWin = process.platform === 'win32'
   const shellCmd = isWin ? 'powershell.exe' : (process.env.SHELL || '/bin/bash')
 
@@ -769,9 +793,14 @@ app.whenReady().then(() => {
   })
 
   ipcMain.handle('terminal:create', (_event, id: string, cols?: number, rows?: number, cwd?: string) => {
-    const proc = createTerminal(id, cols, rows, cwd)
-    terminals.set(id, proc)
-    return { pid: proc.pid }
+    try {
+      const proc = createTerminal(id, cols, rows, cwd)
+      terminals.set(id, proc)
+      return { pid: proc.pid }
+    } catch (err) {
+      console.error('[terminal] falha ao criar PTY:', (err as Error).message)
+      throw err
+    }
   })
 
   ipcMain.handle('terminal:write', (_event, id: string, data: string) => {
