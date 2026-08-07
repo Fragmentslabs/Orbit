@@ -7,7 +7,9 @@ import path from 'node:path'
 import { projectIdOf } from '../memory/domain'
 import * as memoryService from '../memory/service'
 import { errorToText } from '../errors'
+import { getProvider } from '../catalog'
 import { resolveModel } from '../providers'
+import { reasoningPrepareStep } from '../reasoning'
 import { createGlobTool, createGrepTool, createListTool, createReadTool } from '../tools/files'
 import type { ToolContext } from '../tools/context'
 import { describeScan, scanProject, type ProjectScan } from './scanner'
@@ -243,6 +245,8 @@ async function exploreArea(
   area: Exclude<ProjectArea, 'overview'>,
   mission: string,
   hooks: InitHooks,
+  workerProviderId: string,
+  workerModelId: string,
   scopeLabel?: string,
   language?: string,
 ): Promise<AreaResult> {
@@ -253,6 +257,9 @@ async function exploreArea(
   hooks.onAgentStart?.(key, label)
   let buffer = ''
   try {
+    // provider/modelId permitem reaplicar o interleave de reasoning (DeepSeek)
+    // em cada passo do tool loop, como o agente principal faz.
+    const provider = await getProvider(workerProviderId)
     const result = streamText({
       model,
       system: `You are an Orbit onboarding subagent investigating ONE area of a project. Use the tools (read, ls, glob, grep) to VERIFY the code — don't just infer from the scan. Be economical: a few right files beat scanning everything.
@@ -276,6 +283,7 @@ ${scanDescription}`,
       tools: readOnlyTools(toolDirectory, controller.signal),
       stopWhen: stepCountIs(WORKER_MAX_STEPS),
       abortSignal: controller.signal,
+      prepareStep: reasoningPrepareStep(provider, workerModelId),
     })
     for await (const part of result.fullStream) {
       if (part.type === 'text-delta') {
@@ -496,6 +504,9 @@ interface RunScopeInput {
   scan: ProjectScan
   model: LanguageModel
   workerModel: LanguageModel
+  /** Provider/modelo efetivos do worker (usados para interleave de reasoning). */
+  workerProviderId: string
+  workerModelId: string
   /** Node ao qual as áreas deste escopo se conectam como filhas (overview ou node do subprojeto). */
   rootId: string
   /** Nome do subprojeto — undefined no escopo raiz. */
@@ -516,7 +527,7 @@ interface RunScopeInput {
  * subprojeto) — cada subprojeto roda isso isoladamente, gerando sua própria
  * sub-árvore de áreas conectadas ao node do subprojeto, não direto à raiz. */
 async function runScope(input: RunScopeInput): Promise<{ done: ProjectArea[]; summaries: Map<ProjectArea, string> }> {
-  const { storageDirectory, toolDirectory, scanDescription, scan, model, workerModel, rootId, subproject, scopeLabel, isRootWithSubprojects, force, hooks, main, language } = input
+  const { storageDirectory, toolDirectory, scanDescription, scan, model, workerModel, workerProviderId, workerModelId, rootId, subproject, scopeLabel, isRootWithSubprojects, force, hooks, main, language } = input
   const savedIds = new Map<ProjectArea, string>()
   const savedSummaries = new Map<ProjectArea, string>()
   const done: ProjectArea[] = []
@@ -578,7 +589,7 @@ async function runScope(input: RunScopeInput): Promise<{ done: ProjectArea[]; su
   const workers = Array.from({ length: maxWorkers }, async () => {
     while (queue.length > 0) {
       const planned = queue.shift()!
-      const result = await exploreArea(workerModel, scanDescription, toolDirectory, planned.area, planned.mission, hooks, scopeLabel, language)
+      const result = await exploreArea(workerModel, scanDescription, toolDirectory, planned.area, planned.mission, hooks, workerProviderId, workerModelId, scopeLabel, language)
       // Dispara a consolidação e segue para a próxima área sem esperar
       void consolidate(result)
     }
@@ -612,7 +623,7 @@ Reply with JSON (write "reason", "gap", and "mission" text values in ${outputLan
       if (!(review.area in PROJECT_AREAS) || review.area === 'overview') break
       if (done.includes(review.area)) continue // já investigada
       main(`\n🔁 Loop ${loopIter + 1}${scopeLabel ? ` (${scopeLabel})` : ''}: gap detectado — **${review.gap}**\n`)
-      const extraResult = await exploreArea(workerModel, scanDescription, toolDirectory, review.area as Exclude<ProjectArea, 'overview'>, review.mission, hooks, scopeLabel, language)
+      const extraResult = await exploreArea(workerModel, scanDescription, toolDirectory, review.area as Exclude<ProjectArea, 'overview'>, review.mission, hooks, workerProviderId, workerModelId, scopeLabel, language)
       if (extraResult.raw.trim()) {
         const refined = await refineFindings(model, review.area as ProjectArea, extraResult.raw, savedSummaries, language)
         await saveAreaMemory(storageDirectory, review.area as ProjectArea, refined, rootId, force, subproject)
@@ -652,10 +663,9 @@ export async function runProjectInit(input: RunInitInput): Promise<string[]> {
     )
 
     const model = await resolveModel(input.providerId, input.modelId)
-    const workerModel = await resolveModel(
-      input.workerProviderId ?? input.providerId,
-      input.workerModelId ?? input.modelId,
-    )
+    const workerProviderId = input.workerProviderId ?? input.providerId
+    const workerModelId = input.workerModelId ?? input.modelId
+    const workerModel = await resolveModel(workerProviderId, workerModelId)
 
     // 2. Overview inicial a partir do scan — o node raiz nasce cedo para as
     // áreas já se ligarem a ele; complementos o enriquecem depois
@@ -685,6 +695,8 @@ export async function runProjectInit(input: RunInitInput): Promise<string[]> {
       scan,
       model,
       workerModel,
+      workerProviderId,
+      workerModelId,
       rootId,
       isRootWithSubprojects: hasSubprojects,
       force,
@@ -721,6 +733,8 @@ export async function runProjectInit(input: RunInitInput): Promise<string[]> {
         scan: spScan,
         model,
         workerModel,
+        workerProviderId,
+        workerModelId,
         rootId: spNode.id,
         subproject: sp.name,
         scopeLabel: sp.name,

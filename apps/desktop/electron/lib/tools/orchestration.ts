@@ -3,8 +3,9 @@ import { z } from 'zod'
 import type { OrchestrationTask, SendMessageInput, SessionMode } from '@shared/chat'
 import { createToolApproval } from '../permission'
 import { buildSystemPrompt } from '../prompts'
+import { getProvider } from '../catalog'
 import { resolveModel } from '../providers'
-import { buildProviderOptions } from '../reasoning'
+import { buildProviderOptions, reasoningPrepareStep } from '../reasoning'
 import type { ToolContext } from './context'
 import { buildToolSet } from './index'
 
@@ -88,6 +89,9 @@ export function createSubagentTool(
           : null
 
       const model = await resolveModel(worker.providerId, worker.modelId)
+      // provider do worker p/ reaplicar o interleave de reasoning (DeepSeek)
+      // a cada passo do tool loop — o mesmo prepareStep do agente principal.
+      const workerProvider = await getProvider(worker.providerId)
       const tools = buildToolSet(workerInput, workerCtx)
       const toolApproval = createToolApproval(
         workerInput.options.permissionMode ?? 'ask',
@@ -108,6 +112,7 @@ export function createSubagentTool(
         stopWhen: stepCountIs(maxSteps),
         abortSignal: ctx?.abort,
         providerOptions: await buildProviderOptions(workerInput),
+        prepareStep: reasoningPrepareStep(workerProvider, worker.modelId),
       })
       const notice = codeUnavailable
         ? '[Aviso: não há pasta de trabalho nesta conversa — o subagente rodou em modo chat, sem acesso a arquivos.]\n\n'

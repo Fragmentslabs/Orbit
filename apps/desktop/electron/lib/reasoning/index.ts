@@ -115,3 +115,26 @@ export function normalizeMessages(msgs: ModelMessage[], field?: string): ModelMe
     }
   })
 }
+
+/**
+ * prepareStep para fluxos com tool loop (subagentes, exploração do /init,
+ * orquestrador) que reaplica a normalização de reasoning a cada passo: o SDK
+ * reconstrói as mensagens entre steps e pode descartar o reasoning_content
+ * vazio retornado numa chamada de tool (DeepSeek exige o campo de volta em
+ * TODAS as mensagens de assistente, senão responde 400 invalid_request_error).
+ *
+ * Retorna um prepareStep a ser passado em streamText/generateText. Para
+ * provedores/modelos sem o campo interleaved devolve `undefined` (sem custo). Espelha a lógica do chat-engine para que subagentes e o agente
+ * principal compartilhem o mesmo suporte.
+ */
+export function reasoningPrepareStep(
+  provider: CatalogProvider | undefined,
+  modelId: string,
+): (({ messages }: { messages: ModelMessage[] }) => { messages?: ModelMessage[] } | {}) | undefined {
+  const field = interleavedReasoningField(provider, modelId)
+  if (!field) return undefined
+  return ({ messages }) => {
+    const normalized = normalizeMessages(messages, field)
+    return normalized === messages ? {} : { messages: normalized }
+  }
+}

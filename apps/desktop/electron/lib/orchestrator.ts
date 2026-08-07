@@ -17,7 +17,7 @@ import { abortChat, runChat, toModelMessages } from './chat-engine'
 import { classifyProviderError, errorToText } from './errors'
 import { ORCHESTRATOR_PLAN_PROMPT, ORCHESTRATOR_SYNTHESIS_PROMPT } from './prompts'
 import { resolveModel } from './providers'
-import { buildProviderOptions, interleavedReasoningField, normalizeMessages } from './reasoning'
+import { buildProviderOptions, interleavedReasoningField, normalizeMessages, reasoningPrepareStep } from './reasoning'
 import { readJson, writeJson } from './storage'
 import { createSubagentTool, createTaskTool } from './tools/orchestration'
 import type { ToolContext } from './tools/context'
@@ -174,6 +174,7 @@ export async function runOrchestration(win: BrowserWindow, input: SendMessageInp
         stopWhen: stepCountIs(PLAN_MAX_STEPS),
         abortSignal: controller.signal,
         providerOptions,
+        prepareStep: reasoningPrepareStep(provider, input.modelId),
         onError: () => { /* tratado no loop do fullStream */ },
       })
       let text = ''
