@@ -270,7 +270,22 @@ export const useSessionStore = create<SessionState>((set, get) => ({
   ensureMessages: async (sessionId) => {
     if (get().messages[sessionId] !== undefined) return
     const messages = (await storage.read<ChatMessage[]>(StorageKeys.messages(sessionId))) ?? []
-    set((state) => ({ messages: { ...state.messages, [sessionId]: messages } }))
+    set((state) => {
+      // Reconciliação de status: se a última mensagem do assistente já tem
+      // tokens/error (fim do stream) e o status ficou preso em
+      // streaming/submitted (evento status: idle perdido durante um reload),
+      // destrava a UI.
+      const status = state.status
+      const lastAssistant = [...messages].reverse().find((m) => m.role === "assistant")
+      const finished =
+        lastAssistant !== undefined &&
+        (lastAssistant.tokens !== undefined || lastAssistant.error !== undefined)
+      const stuck = status[sessionId] === "streaming" || status[sessionId] === "submitted"
+      return {
+        messages: { ...state.messages, [sessionId]: messages },
+        ...(finished && stuck ? { status: { ...status, [sessionId]: "idle" as ChatStatus } } : {}),
+      }
+    })
   },
 
   approvePlan: (sessionId, planId, taskIds) => {
@@ -657,6 +672,13 @@ export const useSessionStore = create<SessionState>((set, get) => ({
 
   stopStreaming: (sessionId) => {
     void chatApi.abort(sessionId)
+    // Otimista: quando a geração já terminou, o abort é no-op e nenhum status
+    // volta — sem isto o status ficaria preso em streaming/submitted e o botão
+    // de parar pareceria não funcionar.
+    set((state) => ({
+      status: { ...state.status, [sessionId]: "idle" as ChatStatus },
+      errors: { ...state.errors, [sessionId]: undefined },
+    }))
   },
 
   // O main persiste e emite o evento "session" com o estado atualizado —
@@ -786,7 +808,19 @@ case "message": {
             ? { ...state.unreadCounts, [sessionId]: (state.unreadCounts[sessionId] ?? 0) + 1 }
             : state.unreadCounts
 
-        return { messages: { ...state.messages, [sessionId]: next }, unreadCounts }
+        // Reconciliação de status: uma mensagem do assistente com tokens/error
+        // significa que a geração terminou. Se o evento `status: idle` se
+        // perdeu, isto destrava o input/stop e some com o "Pensando".
+        const finished =
+          inbound.role === "assistant" && (inbound.tokens !== undefined || inbound.error !== undefined)
+        const stuck =
+          state.status[sessionId] === "streaming" || state.status[sessionId] === "submitted"
+        const status =
+          finished && stuck
+            ? { ...state.status, [sessionId]: "idle" as ChatStatus }
+            : state.status
+
+        return { messages: { ...state.messages, [sessionId]: next }, unreadCounts, status }
       })
 
       // Um modelo só entra nos "recentes" quando foi de fato usado: a resposta

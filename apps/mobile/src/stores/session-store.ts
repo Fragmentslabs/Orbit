@@ -338,7 +338,21 @@ export const useSessionStore = create<SessionState>((set, get) => ({
           const byId = new Map(msgs.map((message) => [message.id, message]))
           for (const message of current) byId.set(message.id, message)
           const merged = [...byId.values()].sort((a, b) => a.createdAt - b.createdAt)
-          return { messages: { ...state.messages, [sessionId]: merged } }
+
+          // Reconciliação de status pós-reconexão: se a última mensagem do
+          // assistente já tem tokens/error (fim do stream) e o status ficou
+          // preso em streaming/submitted (evento status: idle perdido durante
+          // o gap de conexão), destrava a UI.
+          const status = state.status
+          const lastAssistant = [...merged].reverse().find((m) => m.role === 'assistant')
+          const finished =
+            lastAssistant !== undefined &&
+            (lastAssistant.tokens !== undefined || lastAssistant.error !== undefined)
+          const stuck = status[sessionId] === 'streaming' || status[sessionId] === 'submitted'
+          return {
+            messages: { ...state.messages, [sessionId]: merged },
+            ...(finished && stuck ? { status: { ...status, [sessionId]: 'idle' as ChatStatus } } : {}),
+          }
         })
         void cacheMessages(sessionId, get().messages[sessionId] ?? msgs)
       }
@@ -470,6 +484,10 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     } catch {
       // Silently fail
     }
+    // Otimista: quando a geração já terminou no desktop, o chat:abort é no-op e
+    // nenhum status volta — sem isto o status ficaria preso em streaming/
+    // submitted e o botão de parar pareceria não funcionar.
+    set((state) => ({ status: { ...state.status, [sessionId]: 'idle' as ChatStatus } }))
   },
 
   renameSession: async (sessionId, title) => {
