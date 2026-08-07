@@ -10,6 +10,8 @@ import {
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
+import { formatDateTime } from "@/src/lib/format"
+import { useLocaleStore } from "@/src/stores/locale-store"
 import { cn } from "@/lib/utils"
 
 export type CommitProps = ComponentProps<typeof Collapsible>
@@ -99,10 +101,8 @@ export type CommitTimestampProps = HTMLAttributes<HTMLTimeElement> & {
 }
 
 export const CommitTimestamp = ({ date, className, children, ...props }: CommitTimestampProps) => {
-  const formatted = new Intl.RelativeTimeFormat("en", { numeric: "auto" }).format(
-    Math.round((date.getTime() - Date.now()) / (1000 * 60 * 60 * 24)),
-    "day",
-  )
+  const locale = useLocaleStore((s) => s.locale)
+  const formatted = formatDateTime(date.getTime(), locale)
 
   return (
     <time
