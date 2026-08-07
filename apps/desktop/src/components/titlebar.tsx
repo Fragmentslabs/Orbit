@@ -208,48 +208,14 @@ function HamburgerMenu() {
 export function TitleBar({ onSearchOpen }: { onSearchOpen?: () => void }) {
   const { t } = useTranslation()
   const isMac = windowApi.platform === "darwin"
-  const { setView, setMode } = useWorkspace()
-  const openSettings = useSettingsUi((s) => s.openSettings)
-
-  // No Mac as ações vivem no menu nativo do topo (ver createAppMenu no main);
-  // aqui só despachamos para os stores/estados do renderer.
-  useEffect(() => {
-    if (!isMac) return
-    return windowApi.onMenuAction((action) => {
-      switch (action) {
-        case "settings":
-          openSettings()
-          break
-        case "new-chat":
-        case "view-chats":
-          setView("chat")
-          break
-        case "new-code":
-          setMode("code")
-          break
-        case "view-memories":
-          setView("memories")
-          break
-        case "view-models":
-          setView("models")
-          break
-        case "how-to":
-          openSettings("howto")
-          break
-      }
-    })
-  }, [isMac, setView, setMode, openSettings])
 
   return (
     <div
       className="flex h-8 shrink-0 select-none items-center justify-between border-b border-border/50 bg-sidebar"
       style={dragStyle}
     >
-      <div
-        className={`flex h-full items-center gap-1 ${isMac ? "translate-y-[2px] pl-[80px]" : "pl-1.5"}`}
-        style={noDragStyle}
-      >
-        {!isMac && <HamburgerMenu />}
+      <div className="flex h-full items-center gap-1 pl-1.5" style={noDragStyle}>
+        <HamburgerMenu />
         <button
           type="button"
           aria-label={t("titlebar.searchChats")}

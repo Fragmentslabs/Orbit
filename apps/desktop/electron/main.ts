@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, dialog, shell, Menu, type MenuItemConstructorOptions } from 'electron'
+import { app, BrowserWindow, ipcMain, dialog, shell } from 'electron'
 import { createRequire } from 'node:module'
 import { fileURLToPath } from 'node:url'
 import { execFile } from 'node:child_process'
@@ -181,7 +181,7 @@ function createWindow() {
     minHeight: 480,
     backgroundColor: '#00000000',
     ...(process.platform === 'darwin'
-      ? { titleBarStyle: 'hiddenInset' as const, trafficLightPosition: { x: 16, y: 10 } as const }
+      ? { titleBarStyle: 'hiddenInset' as const }
       : { frame: false }),
     webPreferences: {
       preload: path.join(__dirname, 'preload.mjs'),
@@ -212,84 +212,6 @@ function createWindow() {
     // win.loadFile('dist/index.html')
     win.loadFile(path.join(RENDERER_DIST, 'index.html'))
   }
-}
-
-// Menu nativo do macOS: no Mac a barra de menus fica no topo da tela, então as
-// ações do hamburger (que o renderer esconde nesse SO) migram para cá, com
-// atalhos nativos (Cmd+N, Cmd+Shift+N, Cmd+O, Cmd+,). Em win/linux nada muda:
-// o menu bar continua escondido e o hamburger segue no app.
-function createAppMenu() {
-  if (process.platform !== 'darwin') return
-  const send = (action: string) => win?.webContents.send('menu:action', action)
-  const openFolder = async () => {
-    const result = await dialog.showOpenDialog(win!, { properties: ['openDirectory'] })
-    if (result.canceled || result.filePaths.length === 0) return
-    win?.webContents.send('app:open-folder', result.filePaths[0])
-  }
-  const template: MenuItemConstructorOptions[] = [
-    {
-      label: 'Orbit',
-      submenu: [
-        { role: 'about', label: 'Sobre o Orbit' },
-        { type: 'separator' },
-        { label: 'Preferências…', accelerator: 'Cmd+,', click: () => send('settings') },
-        { type: 'separator' },
-        { role: 'services', label: 'Serviços' },
-        { type: 'separator' },
-        { role: 'hide', label: 'Esconder o Orbit' },
-        { role: 'hideOthers', label: 'Esconder Outros' },
-        { role: 'unhide', label: 'Mostrar Tudo' },
-        { type: 'separator' },
-        { role: 'quit', label: 'Sair do Orbit' },
-      ],
-    },
-    {
-      label: 'Arquivo',
-      submenu: [
-        { label: 'Novo Chat', accelerator: 'Cmd+N', click: () => send('new-chat') },
-        { label: 'Nova Sessão de Código', accelerator: 'Cmd+Shift+N', click: () => send('new-code') },
-        { label: 'Abrir Pasta…', accelerator: 'Cmd+O', click: openFolder },
-        { type: 'separator' },
-        { role: 'close', label: 'Fechar Janela' },
-      ],
-    },
-    {
-      label: 'Editar',
-      submenu: [
-        { role: 'undo', label: 'Desfazer' },
-        { role: 'redo', label: 'Refazer' },
-        { type: 'separator' },
-        { role: 'cut', label: 'Recortar' },
-        { role: 'copy', label: 'Copiar' },
-        { role: 'paste', label: 'Colar' },
-        { role: 'selectAll', label: 'Selecionar Tudo' },
-      ],
-    },
-    {
-      label: 'Exibir',
-      submenu: [
-        { label: 'Chats', click: () => send('view-chats') },
-        { label: 'Memórias', click: () => send('view-memories') },
-        { label: 'Modelos', click: () => send('view-models') },
-        { type: 'separator' },
-        { role: 'togglefullscreen', label: 'Tela Cheia' },
-        { role: 'reload', label: 'Recarregar' },
-        { role: 'toggleDevTools', label: 'Ferramentas do Desenvolvedor' },
-      ],
-    },
-    {
-      label: 'Janela',
-      submenu: [
-        { role: 'minimize', label: 'Minimizar' },
-        { role: 'zoom', label: 'Zoom' },
-      ],
-    },
-    {
-      label: 'Ajuda',
-      submenu: [{ label: 'Como funciona', click: () => send('how-to') }],
-    },
-  ]
-  Menu.setApplicationMenu(Menu.buildFromTemplate(template))
 }
 
 // Quit when all windows are closed, except on macOS. There, it's common
@@ -746,8 +668,6 @@ async function getFileAtCommit(
 app.whenReady().then(() => {
   // Instância secundária: o lock não foi obtido e o app já está saindo.
   if (!gotSingleInstanceLock) return
-
-  createAppMenu()
 
   // Controles da titlebar customizada (frame: false em win/linux)
   ipcMain.handle('window:minimize', () => win?.minimize())
