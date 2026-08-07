@@ -26,6 +26,14 @@ function newId(prefix: string) {
   return `${prefix}_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 10)}`
 }
 
+/** Abort controllers do loop por sessão (separados dos do runChat). */
+const loopControllers = new Map<string, AbortController>()
+
+/** Aborta o loop de uma sessão — chamado junto com abortChat(). */
+export function abortLoop(sessionId: string) {
+  loopControllers.get(sessionId)?.abort()
+}
+
 function emit(win: BrowserWindow, event: Record<string, unknown>) {
   if (!win.isDestroyed()) win.webContents.send('chat:event', event)
 }
@@ -102,21 +110,35 @@ export async function runChatWithLoop(
   let iteration = 0
   let currentInput = { ...input }
 
-  while (iteration < config.maxIterations) {
-    await runChat(win, currentInput)
+  // Loop-level abort: abortar o runChat da iteração atual não encerra o loop —
+  // ele seguiria para a próxima iteração mesmo com o usuário tentando parar.
+  const controller = new AbortController()
+  loopControllers.set(input.sessionId, controller)
+  try {
+    while (iteration < config.maxIterations && !controller.signal.aborted) {
+      await runChat(win, currentInput)
+      if (controller.signal.aborted) break
 
-    const history = await loadMessages(input.sessionId)
-    const hasNewUser = history
-      .slice()
-      .reverse()
-      .some((m) => m.role === 'user' && iteration > 0)
-    if (hasNewUser) break
+      const history = await loadMessages(input.sessionId)
+      const hasNewUser = history
+        .slice()
+        .reverse()
+        .some((m) => m.role === 'user' && iteration > 0)
+      if (hasNewUser) break
 
-    const review = await reviewIteration(input.sessionId, input.text, history, config.maxTokensPerIter, input.providerId, input.modelId)
-    if (review.status === 'done') break
+      const review = await reviewIteration(
+        input.sessionId,
+        input.text,
+        history,
+        config.maxTokensPerIter,
+        input.providerId,
+        input.modelId,
+        controller.signal,
+      )
+      if (review.status === 'done') break
 
-    iteration++
-    if (iteration >= config.maxIterations) break
+      iteration++
+      if (iteration >= config.maxIterations) break
 
     // Replan: abordagem atual não resolve — reformula o prompt e reinicia
     if (review.status === 'replan') {
@@ -173,5 +195,8 @@ export async function runChatWithLoop(
     emit(win, { type: 'message', sessionId: input.sessionId, message: followUp })
 
     currentInput = { ...currentInput, text: review.followUpPrompt ?? 'Continue o trabalho.' }
+    }
+  } finally {
+    loopControllers.delete(input.sessionId)
   }
 }

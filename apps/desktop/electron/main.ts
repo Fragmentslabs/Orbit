@@ -16,7 +16,7 @@ import { getModelsSnapshot, invalidateModelsSnapshot } from './lib/models'
 import { revert as revertSession, unrevert as unrevertSession } from './lib/session/revert'
 import { getInitStatus, runProjectInit, type RunInitInput } from './lib/project-init'
 import { abortChat, compactSession, runChat } from './lib/chat-engine'
-import { runChatWithLoop } from './lib/loop-engine'
+import { runChatWithLoop, abortLoop } from './lib/loop-engine'
 import { reply as askReply, rejectSession as rejectSessionAsks } from './lib/ask-broker'
 import { abortOrchestration, approvePlan, rejectPlan, runOrchestration } from './lib/orchestrator'
 import { initMcp, listMcpStatus, readMcpConfig, reconnectMcp, saveMcpConfig } from './lib/mcp'
@@ -1062,6 +1062,7 @@ app.whenReady().then(() => {
   })
   ipcMain.handle('chat:abort', (_event, sessionId: string) => {
     abortChat(sessionId)
+    abortLoop(sessionId)
     abortOrchestration(sessionId)
     rejectSessionAsks(sessionId)
     clearSessionTrust(sessionId)
