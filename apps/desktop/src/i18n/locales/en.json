@@ -1259,7 +1259,8 @@
     "tabCode": "Code",
     "language": {
       "title": "Language",
-      "description": "Interface language and the assistant's reply language."
+      "description": "Interface language and the assistant's reply language.",
+      "system": "System"
     },
     "defaultModel": "Default model",
     "subagentModel": "Subagent model",

@@ -101,7 +101,7 @@ export type CommitTimestampProps = HTMLAttributes<HTMLTimeElement> & {
 }
 
 export const CommitTimestamp = ({ date, className, children, ...props }: CommitTimestampProps) => {
-  const locale = useLocaleStore((s) => s.locale)
+  const locale = useLocaleStore((s) => s.activeLocale)
   const formatted = formatDateTime(date.getTime(), locale)
 
   return (

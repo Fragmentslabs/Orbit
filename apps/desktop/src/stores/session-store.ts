@@ -650,7 +650,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       directory: config.directory ?? session.directory,
       extraDirectories: config.extraDirectories ?? session.extraDirectories,
       workerModel,
-      language: LOCALE_PROMPT_NAME[useLocaleStore.getState().locale],
+      language: LOCALE_PROMPT_NAME[useLocaleStore.getState().activeLocale],
       ...(config.options.loop ? { loopConfig: useLoopConfigStore.getState().config } : {}),
     })
   },

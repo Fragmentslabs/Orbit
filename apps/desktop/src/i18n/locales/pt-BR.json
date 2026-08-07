@@ -1259,7 +1259,8 @@
     "tabCode": "Código",
     "language": {
       "title": "Idioma",
-      "description": "Idioma da interface e das respostas do assistente."
+      "description": "Idioma da interface e das respostas do assistente.",
+      "system": "Sistema"
     },
     "defaultModel": "Modelo padrão",
     "subagentModel": "Modelo de subagentes",

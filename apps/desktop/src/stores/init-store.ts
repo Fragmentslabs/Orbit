@@ -106,7 +106,7 @@ export const useInitStore = create<InitState>((set, get) => ({
       workerProviderId: worker?.providerId,
       workerModelId: worker?.modelId,
       force,
-      language: LOCALE_PROMPT_NAME[useLocaleStore.getState().locale],
+      language: LOCALE_PROMPT_NAME[useLocaleStore.getState().activeLocale],
     })
   },
 

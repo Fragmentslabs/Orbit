@@ -314,7 +314,7 @@ function LanguageSection() {
               }`}
             >
               <LanguagesIcon className="size-4" />
-              {LOCALE_LABELS[value]}
+              {value === "system" ? t("preferences.language.system") : LOCALE_LABELS[value]}
             </button>
           )
         })}
