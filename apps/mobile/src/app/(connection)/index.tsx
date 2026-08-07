@@ -44,9 +44,7 @@ export default function ConnectionScreen() {
       ? 'speaking'
       : connection.status === 'connecting' || connection.status === 'authenticating'
         ? 'listening'
-        : connection.error
-          ? 'asleep'
-          : 'idle'
+        : 'idle'
 
   useEffect(() => { loadRecent() }, [loadRecent])
 
