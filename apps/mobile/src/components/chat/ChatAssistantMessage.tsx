@@ -27,6 +27,7 @@ import type {
   FilePart,
 } from '@orbit/shared'
 import { AssistantMarkdown } from './AssistantMarkdown'
+import { TodoChecklist } from './TodoChecklist'
 import { MessageActions } from './MessageActions'
 import { MessageAttachment } from './Attachment'
 import { SkillProposalCard } from './SkillProposalCard'
@@ -538,6 +539,11 @@ export function ChatAssistantMessage({ message, compact, isLast, isBusy, onRever
   const finished = message.error === undefined
   const sources = useMemo(() => (finished ? extractSources(message) : []), [finished, message])
 
+  // Só a última todowrite é a checklist viva; anteriores viram uma linha discreta
+  const lastTodoId = [...message.parts]
+    .reverse()
+    .find((p) => p.type === 'tool' && p.tool === 'todowrite')?.id
+
   const waiting = message.role === 'assistant' && isLast && isBusy && message.parts.length === 0
 
   const handleCopy = useCallback(async () => {
@@ -580,6 +586,9 @@ export function ChatAssistantMessage({ message, compact, isLast, isBusy, onRever
             }
             if (part.tool === 'create_skill') {
               return <SkillProposalCard key={part.id} part={part as ToolPart} />
+            }
+            if (part.tool === 'todowrite') {
+              return <TodoChecklist key={part.id} part={part} stale={part.id !== lastTodoId} />
             }
             // tools especiais que não entram no TaskGroup
             return <TaskGroup key={part.id} parts={[part]} />

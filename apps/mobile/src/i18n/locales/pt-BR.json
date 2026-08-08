@@ -33,11 +33,19 @@
     "autoContextDescription": "Injeta memórias relevantes no prompt",
     "reasoning": "Raciocínio",
     "level": "Nível",
-    "reasoningLevels": { "low": "Baixo", "medium": "Médio", "high": "Alto" },
+    "reasoningLevels": {
+      "low": "Baixo",
+      "medium": "Médio",
+      "high": "Alto"
+    },
     "simple": "Modo simples",
     "simpleDescription": "Respostas diretas, sem formatação",
     "permissions": "Permissões",
-    "permissionModes": { "ask": "Perguntar", "approve": "Aprovar", "full": "Total" },
+    "permissionModes": {
+      "ask": "Perguntar",
+      "approve": "Aprovar",
+      "full": "Total"
+    },
     "autoFolders": "Pastas automáticas",
     "autoFoldersDescription": "Agrupa novos chats de código em pastas pelo nome do diretório"
   },
@@ -197,7 +205,11 @@
   },
   "configSheet": {
     "title": "Configurações",
-    "permissionModes": { "ask": "Perguntar", "approve": "Autonomia", "full": "Irrestrito" },
+    "permissionModes": {
+      "ask": "Perguntar",
+      "approve": "Autonomia",
+      "full": "Irrestrito"
+    },
     "permissionMode": "Modo de permissões",
     "thinking": "Thinking",
     "reasoningAlwaysOnHint": "Este modelo sempre usa raciocínio extendido.",
@@ -220,7 +232,12 @@
     "completedCount": "({{checked}}/{{total}} concluídas)",
     "notFound": "PLAN.md não encontrado.",
     "reload": "Recarregar",
-    "modes": { "ask": "Perguntas", "askLabel": "Perguntar", "approve": "Autonomia", "full": "Irrestrito" }
+    "modes": {
+      "ask": "Perguntas",
+      "askLabel": "Perguntar",
+      "approve": "Autonomia",
+      "full": "Irrestrito"
+    }
   },
   "orchestrationPlan": {
     "runningWorkers": "Executando workers...",
@@ -253,6 +270,11 @@
     "defaultTitle": "Tarefas",
     "inProgress": "{{title}} em andamento",
     "completed": "{{title}} concluídas"
+  },
+  "todo": {
+    "stale": "TODO ({{count}}/{{total}} concluídos) — atualizada mais abaixo",
+    "title": "Tarefas ({{count}}/{{total}})",
+    "high": "alta"
   },
   "revertBar": {
     "filesRevertedNone": "Arquivos revertidos",
@@ -337,7 +359,11 @@
     "envVars": "Variáveis de ambiente",
     "addVar": "Adicionar variável",
     "permissionMode": "Modo de permissão",
-    "permissionModes": { "ask": "Perguntar", "approve": "Aprovar", "full": "Total" },
+    "permissionModes": {
+      "ask": "Perguntar",
+      "approve": "Aprovar",
+      "full": "Total"
+    },
     "autoReconnect": "Reconexão automática",
     "cancel": "Cancelar",
     "save": "Salvar",
@@ -394,7 +420,12 @@
     "openWith": "Abrir com…"
   },
   "memoryMeta": {
-    "kind": { "core": "core", "seasonal": "sazonal", "general": "geral", "project": "projeto" },
+    "kind": {
+      "core": "core",
+      "seasonal": "sazonal",
+      "general": "geral",
+      "project": "projeto"
+    },
     "category": {
       "preference": "preferência",
       "convention": "convenção",
@@ -450,23 +481,168 @@
     "tipTitle": "Dica",
     "tipText": "Use os toggles abaixo do input para ativar/desativar modos rapidamente, ou o botão \"+\" para acessar configurações avançadas de Subagents, Orchestra e Loop.",
     "modes": [
-      { "label": "Pesquisa", "modes": ["Chat", "Código"], "description": "Busca e lê páginas da web via HTTP.", "detail": "Adiciona as ferramentas websearch e webfetch ao agente. Rápido para consultar documentação e APIs.", "combo": ["Browser", "Thinking"] },
-      { "label": "Browser", "modes": ["Chat"], "description": "Navega em páginas como um browser real.", "detail": "Abre o painel direito com um navegador completo. Executa JavaScript, ideal para SPAs e páginas dinâmicas.", "combo": ["Pesquisa", "Thinking"] },
-      { "label": "Thinking", "modes": ["Chat", "Código"], "description": "Raciocínio estendido do modelo.", "detail": "O modelo \"pensa\" antes de responder, resultando em respostas mais profundas. Consome mais tokens.", "combo": ["Pesquisa", "Browser", "Loop"] },
-      { "label": "Simples", "modes": ["Chat", "Código"], "description": "Respostas diretas em texto puro.", "detail": "Remove formatação avançada e blocos de ferramentas da resposta.", "combo": [] },
-      { "label": "Memória (Brain)", "modes": ["Chat", "Código"], "description": "Orbit lembra fatos e preferências entre conversas.", "detail": "Adiciona ferramentas de memória. O Orbit pode salvar e recuperar fatos automaticamente.", "combo": [] },
-      { "label": "Subagents", "modes": ["Chat", "Código"], "description": "Workers efêmeros para tarefas paralelas.", "detail": "O agente delega subtarefas a workers em background. Eles são descartados ao fim da tarefa.", "combo": ["Loop", "Orchestra"] },
-      { "label": "Orchestra", "modes": ["Código"], "description": "Divide o pedido em plano + workers persistentes.", "detail": "O orquestrador planeja, você aprova, e cada tarefa vira uma sessão filha no painel direito.", "combo": ["Loop", "Subagents"] },
-      { "label": "Loop", "modes": ["Código"], "description": "Agente revisa e itera até completar a tarefa.", "detail": "Após cada resposta, o sistema revisa o resultado. Se incompleto, o agente continua automaticamente.", "combo": ["Subagents", "Orchestra", "Thinking"] },
-      { "label": "Modo Plano", "modes": ["Código"], "description": "Apenas leitura — produz um plano sem editar.", "detail": "Bloqueia ferramentas de escrita. O agente lê o código e produz um plano detalhado.", "combo": ["Thinking", "Pesquisa"] },
-      { "label": "Permissões", "modes": ["Código"], "description": "Controle de segurança sobre ações do agente.", "detail": "Três níveis: Ask (pergunta), Approve (resumo), Full (automático).", "combo": [] }
+      {
+        "label": "Pesquisa",
+        "modes": [
+          "Chat",
+          "Código"
+        ],
+        "description": "Busca e lê páginas da web via HTTP.",
+        "detail": "Adiciona as ferramentas websearch e webfetch ao agente. Rápido para consultar documentação e APIs.",
+        "combo": [
+          "Browser",
+          "Thinking"
+        ]
+      },
+      {
+        "label": "Browser",
+        "modes": [
+          "Chat"
+        ],
+        "description": "Navega em páginas como um browser real.",
+        "detail": "Abre o painel direito com um navegador completo. Executa JavaScript, ideal para SPAs e páginas dinâmicas.",
+        "combo": [
+          "Pesquisa",
+          "Thinking"
+        ]
+      },
+      {
+        "label": "Thinking",
+        "modes": [
+          "Chat",
+          "Código"
+        ],
+        "description": "Raciocínio estendido do modelo.",
+        "detail": "O modelo \"pensa\" antes de responder, resultando em respostas mais profundas. Consome mais tokens.",
+        "combo": [
+          "Pesquisa",
+          "Browser",
+          "Loop"
+        ]
+      },
+      {
+        "label": "Simples",
+        "modes": [
+          "Chat",
+          "Código"
+        ],
+        "description": "Respostas diretas em texto puro.",
+        "detail": "Remove formatação avançada e blocos de ferramentas da resposta.",
+        "combo": []
+      },
+      {
+        "label": "Memória (Brain)",
+        "modes": [
+          "Chat",
+          "Código"
+        ],
+        "description": "Orbit lembra fatos e preferências entre conversas.",
+        "detail": "Adiciona ferramentas de memória. O Orbit pode salvar e recuperar fatos automaticamente.",
+        "combo": []
+      },
+      {
+        "label": "Subagents",
+        "modes": [
+          "Chat",
+          "Código"
+        ],
+        "description": "Workers efêmeros para tarefas paralelas.",
+        "detail": "O agente delega subtarefas a workers em background. Eles são descartados ao fim da tarefa.",
+        "combo": [
+          "Loop",
+          "Orchestra"
+        ]
+      },
+      {
+        "label": "Orchestra",
+        "modes": [
+          "Código"
+        ],
+        "description": "Divide o pedido em plano + workers persistentes.",
+        "detail": "O orquestrador planeja, você aprova, e cada tarefa vira uma sessão filha no painel direito.",
+        "combo": [
+          "Loop",
+          "Subagents"
+        ]
+      },
+      {
+        "label": "Loop",
+        "modes": [
+          "Código"
+        ],
+        "description": "Agente revisa e itera até completar a tarefa.",
+        "detail": "Após cada resposta, o sistema revisa o resultado. Se incompleto, o agente continua automaticamente.",
+        "combo": [
+          "Subagents",
+          "Orchestra",
+          "Thinking"
+        ]
+      },
+      {
+        "label": "Modo Plano",
+        "modes": [
+          "Código"
+        ],
+        "description": "Apenas leitura — produz um plano sem editar.",
+        "detail": "Bloqueia ferramentas de escrita. O agente lê o código e produz um plano detalhado.",
+        "combo": [
+          "Thinking",
+          "Pesquisa"
+        ]
+      },
+      {
+        "label": "Permissões",
+        "modes": [
+          "Código"
+        ],
+        "description": "Controle de segurança sobre ações do agente.",
+        "detail": "Três níveis: Ask (pergunta), Approve (resumo), Full (automático).",
+        "combo": []
+      }
     ],
     "combos": [
-      { "label": "Pesquisa aprofundada", "items": ["Pesquisa", "Browser", "Thinking"], "description": "O agente search, navega em páginas dinâmicas e raciocina profundamente. Ideal para investigar tópicos técnicos." },
-      { "label": "Refinamento automático", "items": ["Loop", "Thinking"], "description": "O agente revisa o próprio resultado com raciocínio estendido. Excelente para gerar código robusto." },
-      { "label": "Orquestração com revisão", "items": ["Orchestra", "Loop"], "description": "Workers executam em paralelo e o loop revisa o resultado, criando continuações se necessário." },
-      { "label": "Workers em múltiplas frentes", "items": ["Orchestra", "Subagents"], "description": "O orquestrador coordena tarefas de alto nível e cada worker pode usar subagents para investigações pontuais." },
-      { "label": "Planejamento cuidadoso", "items": ["Modo Plano", "Thinking", "Pesquisa"], "description": "Antes de alterar, o agente pesquisa, raciocina e produz um plano sem modificar arquivos." }
+      {
+        "label": "Pesquisa aprofundada",
+        "items": [
+          "Pesquisa",
+          "Browser",
+          "Thinking"
+        ],
+        "description": "O agente search, navega em páginas dinâmicas e raciocina profundamente. Ideal para investigar tópicos técnicos."
+      },
+      {
+        "label": "Refinamento automático",
+        "items": [
+          "Loop",
+          "Thinking"
+        ],
+        "description": "O agente revisa o próprio resultado com raciocínio estendido. Excelente para gerar código robusto."
+      },
+      {
+        "label": "Orquestração com revisão",
+        "items": [
+          "Orchestra",
+          "Loop"
+        ],
+        "description": "Workers executam em paralelo e o loop revisa o resultado, criando continuações se necessário."
+      },
+      {
+        "label": "Workers em múltiplas frentes",
+        "items": [
+          "Orchestra",
+          "Subagents"
+        ],
+        "description": "O orquestrador coordena tarefas de alto nível e cada worker pode usar subagents para investigações pontuais."
+      },
+      {
+        "label": "Planejamento cuidadoso",
+        "items": [
+          "Modo Plano",
+          "Thinking",
+          "Pesquisa"
+        ],
+        "description": "Antes de alterar, o agente pesquisa, raciocina e produz um plano sem modificar arquivos."
+      }
     ]
   },
   "toolsScreen": {
