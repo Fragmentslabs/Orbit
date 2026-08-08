@@ -379,6 +379,29 @@ export function RightPanel() {
     [mode, tabMeta],
   )
 
+  /**
+   * Número da próxima aba numerada ("Terminal", "Terminal 2", "Terminal 3"…):
+   * POR CHAT (conta só as abas abertas desta sessão, não um contador global) e
+   * preenchendo lacunas — se a "Terminal 1" foi fechada, a próxima volta a ser
+   * a 1 em vez de pular para 4, 5… (o id único global continua vindo de
+   * nextTabId(); o número aqui é apenas o rótulo visível).
+   */
+  const nextTabNumber = useCallback(
+    (type: TabType): number => {
+      const label = tabMeta[type].label
+      const used = new Set<number>()
+      for (const tab of tabs) {
+        if (tab.type !== type) continue
+        const m = tab.title.match(new RegExp(`^${label}(?: (\\d+))?$`))
+        if (m) used.add(m[1] ? parseInt(m[1], 10) : 1)
+      }
+      let n = 1
+      while (used.has(n)) n++
+      return n
+    },
+    [tabs, tabMeta],
+  )
+
   const addTab = useCallback(async (type: TabType, sessionId?: string, title?: string) => {
     if ((type === "folders" || type === "diff") && !activeSessionId) return
 
@@ -398,9 +421,9 @@ export function RightPanel() {
       return
     }
     if (type === "terminal") {
-      const nid = nextTabId()
-      const id = `terminal-${nid}`
-      const tabTitle = `Terminal ${nid > 1 ? nid : ""}`.trim()
+      const n = nextTabNumber("terminal")
+      const id = `terminal-${nextTabId()}`
+      const tabTitle = n > 1 ? `Terminal ${n}` : "Terminal"
       const cwdFolder = folders[0]
       await useTerminalStore.getState().createTerminal(id, cwdFolder)
       addTabToStore(sessionKey, { id, type: "terminal", title: tabTitle })
@@ -408,12 +431,12 @@ export function RightPanel() {
       return
     }
     const meta = tabMeta[type]
-    const nid = nextTabId()
-    const id = `${type}-${nid}`
-    const tabTitle = `${meta.label} ${nid > 1 ? nid : ""}`.trim()
+    const n = nextTabNumber(type)
+    const id = `${type}-${nextTabId()}`
+    const tabTitle = n > 1 ? `${meta.label} ${n}` : meta.label
     addTabToStore(sessionKey, { id, type, title: tabTitle })
     setActiveTabInStore(sessionKey, id)
-  }, [activeSessionId, tabs, addTabToStore, setActiveTabInStore, folders, tabMeta])
+  }, [activeSessionId, tabs, addTabToStore, setActiveTabInStore, folders, tabMeta, nextTabNumber])
 
   const removeTab = useCallback((id: string) => {
     const sk = activeSessionId ?? "__orphan__"
