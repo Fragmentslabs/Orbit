@@ -630,9 +630,15 @@ function SessionRow({ session, button: ButtonComponent, buttonClassName, actionB
     if (selectionMode) {
       toggle(session.id)
     } else {
-      if (session.mode !== mode) setMode(session.mode)
+      // Sub-chats (discussão do painel lateral, workers) pertencem à sessão do
+      // pai: abrir um filho não pode trocar a seção da sidebar para o modo do
+      // filho (um sub-chat de uma sessão de código continua no "código").
+      const targetMode = session.parentId
+        ? (useSessionStore.getState().sessions.find((s) => s.id === session.parentId)?.mode ?? session.mode)
+        : session.mode
+      if (targetMode !== mode) setMode(targetMode)
       setView("chat")
-      void selectSession(session.mode, session.id)
+      void selectSession(targetMode, session.id)
     }
   }
 

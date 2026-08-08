@@ -152,9 +152,22 @@ function DiscussInPanelButton({ questions, currentIndex, parentSessionId }: {
         setWorking(true)
         try {
           const title = t("ask.compareOptions")
-          // parentId marca como sub-chat: some da sidebar (que só lista sessões
-          // raiz) e aparece só como worker/tab desta conversa no painel lateral.
-          const session = await createSession("chat", { setActive: false, title, parentId: parentSessionId })
+          // O sub-chat de discussão herda o modo e as pastas da sessão que fez
+          // a pergunta: continua na seção da sidebar do pai (um pai de código
+          // não deve "pular" para chat ao clicar no filho) e o subagente
+          // enxerga o mesmo diretório — lê a pasta para embasar a discussão.
+          const parent = parentSessionId
+            ? useSessionStore.getState().sessions.find((s) => s.id === parentSessionId)
+            : undefined
+          const mode = parent?.mode ?? "chat"
+          const session = await createSession(mode, {
+            setActive: false,
+            title,
+            parentId: parentSessionId,
+            ...(mode === "code"
+              ? { directory: parent?.directory, extraDirectories: parent?.extraDirectories }
+              : {}),
+          })
           openChatTabWithPendingInput(session.id, title, buildComparisonPrompt(questions, currentIndex))
         } finally {
           setWorking(false)
