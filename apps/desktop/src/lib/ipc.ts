@@ -193,9 +193,9 @@ export const analyticsApi = {
 }
 
 export const panelApi = {
-  /** Registra (ou limpa, com null) o webContents do <webview> do painel */
-  register: (webContentsId: number | null) =>
-    window.ipcRenderer.send("panel:register", webContentsId),
+  /** Registra (ou limpa, com null) o webContents do <webview> do painel — por sessão de chat */
+  register: (sessionId: string | null, webContentsId: number | null) =>
+    window.ipcRenderer.send("panel:register", sessionId, webContentsId),
   onEvent: (listener: (event: PanelEvent) => void) => {
     const wrapper = window.ipcRenderer.on("panel:event", (event) => listener(event as PanelEvent))
     return () => window.ipcRenderer.off("panel:event", wrapper)

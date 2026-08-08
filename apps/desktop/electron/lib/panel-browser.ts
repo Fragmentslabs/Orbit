@@ -7,20 +7,28 @@ import sharp from 'sharp'
  * as operações (navegar, ler, clicar, digitar, screenshot) rodam direto no
  * WebContents. Quando o agente precisa do browser e o painel está fechado,
  * broadcastamos "panel:event" e aguardamos o registro — o painel abre sozinho.
+ *
+ * O registro é POR SESSÃO de chat (Map sessionId → webContentsId): cada chat
+ * tem sua própria aba/instância de browser, e as tools de um agente agem no
+ * webview da SUA sessão — dois agentes em chats diferentes navegam/capturam
+ * simultaneamente, cada um no seu browser, sem se atropelar.
  */
 
 const REGISTER_TIMEOUT_MS = 10_000
 const LOAD_TIMEOUT_MS = 20_000
 
-let panelWcId: number | null = null
+const panelWcs = new Map<string, number>()
 
-export function registerPanelWebContents(id: number | null): void {
-  panelWcId = id
+export function registerPanelWebContents(sessionId: string | null, id: number | null): void {
+  if (!sessionId) return
+  if (id == null) panelWcs.delete(sessionId)
+  else panelWcs.set(sessionId, id)
 }
 
-function getWc(): WebContents | null {
-  if (panelWcId == null) return null
-  const wc = webContents.fromId(panelWcId)
+function getWc(sessionId: string): WebContents | null {
+  const wcId = panelWcs.get(sessionId)
+  if (wcId == null) return null
+  const wc = webContents.fromId(wcId)
   return wc && !wc.isDestroyed() ? wc : null
 }
 
@@ -46,17 +54,19 @@ function delay(ms: number): Promise<void> {
 }
 
 /**
- * Garante o webview montado (abre o painel se preciso) e retorna o WebContents.
- * `sessionId` identifica de qual chat veio o pedido — a UI usa isso pra abrir a
- * aba Browser só naquela sessão, sem vazar pra outros chats abertos depois.
+ * Garante o webview da sessão montado (abre o painel se preciso) e retorna o
+ * WebContents DAQUELA sessão. `sessionId` identifica de qual chat veio o
+ * pedido — a UI usa isso pra abrir a aba Browser só naquela sessão, sem vazar
+ * pra outros chats abertos depois, e o registro por sessão garante que as
+ * tools de um agente nunca agem no browser de outro chat.
  */
 export async function ensurePanelBrowser(sessionId: string, url?: string): Promise<WebContents> {
-  const existing = getWc()
+  const existing = getWc(sessionId)
   if (existing) return existing
   broadcastPanelEvent({ type: 'open', url, sessionId })
   const deadline = Date.now() + REGISTER_TIMEOUT_MS
   while (Date.now() < deadline) {
-    const wc = getWc()
+    const wc = getWc(sessionId)
     if (wc) return wc
     await delay(200)
   }

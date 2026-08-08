@@ -10,17 +10,21 @@ import {
   Globe,
 } from "lucide-react"
 import type { ComponentProps, ReactNode } from "react"
-import { createContext, useContext, useEffect, useState } from "react"
+import { createContext, useContext, useEffect, useRef, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import { Input } from "@/components/ui/input"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { cn } from "@/lib/utils"
 import { formatTime } from "@/src/lib/format"
+import { mountWebview, unmountWebview } from "@/src/components/browser/webview-session"
 
 export interface WebPreviewContextValue {
   url: string
   setUrl: (url: string) => void
+  /** Atualiza a URL atual sem empurrar no histórico (usado quando o conteúdo
+   *  do webview navega por fora — ex.: agente dirigindo o browser). */
+  syncUrl: (url: string) => void
   consoleOpen: boolean
   setConsoleOpen: (open: boolean) => void
   goBack: () => void
@@ -103,6 +107,15 @@ export const WebPreview = ({
     }
   }
 
+  const syncUrl = (newUrl: string) => {
+    setHistory((prev) => {
+      if (prev[currentIndex] === newUrl) return prev
+      const next = [...prev]
+      next[currentIndex] = newUrl
+      return next
+    })
+  }
+
   const reload = () => {
     setRefreshKey(prev => prev + 1)
   }
@@ -110,6 +123,7 @@ export const WebPreview = ({
   const contextValue: WebPreviewContextValue = {
     url,
     setUrl: handleUrlChange,
+    syncUrl,
     consoleOpen,
     setConsoleOpen,
     goBack,
@@ -241,6 +255,12 @@ export type WebPreviewBodyProps = ComponentProps<"iframe"> & {
   onWebviewRef?: (el: HTMLElement | null) => void
   /** Dimensões fixas do viewport (responsividade). Ausente = preenche o container. */
   viewport?: { width: number; height: number } | null
+  /** Chave de persistência do <webview> no pool (sessionId:tabId). Quando
+   *  presente, o webview sobrevive a desmontagens do componente (troca de
+   *  chat/aba) e a página continua viva — e o agente pode navegar em background. */
+  persistKey?: string
+  /** Mensagens de console do webview persistido (ex.: payloads do modo seleção). */
+  onConsoleMessage?: (message: string) => void
 }
 
 export const WebPreviewBody = ({
@@ -249,25 +269,114 @@ export const WebPreviewBody = ({
   src,
   onWebviewRef,
   viewport,
+  persistKey,
+  onConsoleMessage,
   ...props
 }: WebPreviewBodyProps) => {
-  const { url, refreshKey, setUrl } = useWebPreview()
+  const { url, refreshKey, setUrl, syncUrl } = useWebPreview()
   const { t } = useTranslation()
   const [localUrl, setLocalUrl] = useState("")
+  const containerRef = useRef<HTMLDivElement | null>(null)
+  const syncUrlRef = useRef(syncUrl)
+  syncUrlRef.current = syncUrl
+  const onWebviewRefRef = useRef(onWebviewRef)
+  onWebviewRefRef.current = onWebviewRef
+  const onConsoleMessageRef = useRef(onConsoleMessage)
+  onConsoleMessageRef.current = onConsoleMessage
 
-  if (!url && !src) {
+  // Webview persistente (pool): o elemento <webview> sobrevive ao unmount do
+  // componente — voltar a esta aba reexibe a página exatamente onde estava.
+  useEffect(() => {
+    if (!persistKey) return
+    const container = containerRef.current
+    if (!container) return
+    const el = mountWebview(
+      persistKey,
+      container,
+      src ?? url ?? undefined,
+      (navUrl) => syncUrlRef.current(navUrl),
+      (message) => onConsoleMessageRef.current?.(message),
+    )
+    onWebviewRefRef.current?.(el)
+    // Aba já tinha página carregada (de um ciclo anterior)? Espelha na barra.
+    try {
+      const currentUrl = el.getURL()
+      if (currentUrl && currentUrl !== "about:blank") syncUrlRef.current(currentUrl)
+    } catch {
+      // guest ainda não pronto — o próximo did-navigate sincroniza
+    }
+    return () => {
+      onWebviewRefRef.current?.(null)
+      unmountWebview(persistKey)
+    }
+    // monta/desmonta conforme a chave: a navegação é feita por loadURL (efeito
+    // do PanelBrowserBody) ou pelo agente — nunca recria o webview.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [persistKey])
+
+  const empty = !url && !src
+
+  if (persistKey) {
+    // Com persistência, o container SEMPRE existe (o efeito acima anexa o
+    // webview mesmo sem URL inicial) — o estado vazio vira um overlay, e a
+    // primeira URL digitada navega no MESMO webview persistido.
     return (
-      <div className="flex flex-1 flex-col items-center justify-center p-6 text-center bg-transparent text-muted-foreground gap-4 h-full">
-        <div className="p-4 bg-muted rounded-full">
+      <div
+        className={cn(
+          "relative flex-1 overflow-auto",
+          viewport && "flex items-start justify-center bg-muted/40 p-3",
+        )}
+      >
+        {/* O <webview> vive no pool (webview-session.ts) e é movido pra cá */}
+        <div
+          ref={containerRef}
+          className={cn("bg-white", viewport ? "shrink-0 rounded-md border shadow-sm" : "size-full", className)}
+          style={viewport ? { width: viewport.width, height: viewport.height } : undefined}
+          {...(props as any)}
+        />
+        {empty && (
+          <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-4 bg-sidebar p-6 text-center text-muted-foreground">
+            <div className="rounded-full bg-muted p-4">
+              <Globe className="size-10 text-muted-foreground/80" />
+            </div>
+            <div className="space-y-1">
+              <h3 className="text-base font-semibold text-foreground">{t("webPreview.emptyTitle")}</h3>
+              <p className="max-w-[280px] text-xs text-muted-foreground">{t("webPreview.emptyHint")}</p>
+            </div>
+            <div className="mt-2 flex w-full max-w-xs items-center space-x-2">
+              <Input
+                placeholder={t("webPreview.urlExample")}
+                value={localUrl}
+                onChange={(e) => setLocalUrl(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    setUrl(localUrl)
+                  }
+                }}
+                className="h-8 text-xs"
+              />
+              <Button onClick={() => setUrl(localUrl)} size="sm" className="h-8 px-3 text-xs">
+                {t("webPreview.go")}
+              </Button>
+            </div>
+          </div>
+        )}
+        {loading}
+      </div>
+    )
+  }
+
+  if (empty) {
+    return (
+      <div className="flex flex-1 flex-col items-center justify-center gap-4 bg-transparent p-6 text-center text-muted-foreground h-full">
+        <div className="rounded-full bg-muted p-4">
           <Globe className="size-10 text-muted-foreground/80" />
         </div>
         <div className="space-y-1">
-          <h3 className="font-semibold text-foreground text-base">{t("webPreview.emptyTitle")}</h3>
-          <p className="text-xs text-muted-foreground max-w-[280px]">
-            {t("webPreview.emptyHint")}
-          </p>
+          <h3 className="text-base font-semibold text-foreground">{t("webPreview.emptyTitle")}</h3>
+          <p className="max-w-[280px] text-xs text-muted-foreground">{t("webPreview.emptyHint")}</p>
         </div>
-        <div className="flex w-full max-w-xs items-center space-x-2 mt-2">
+        <div className="mt-2 flex w-full max-w-xs items-center space-x-2">
           <Input 
             placeholder={t("webPreview.urlExample")} 
             value={localUrl}

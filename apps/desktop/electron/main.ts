@@ -1089,7 +1089,10 @@ app.whenReady().then(() => {
   })
 
   // Browser do painel direito: o renderer registra o webContents do <webview>
-  ipcMain.on('panel:register', (_event, id: number | null) => registerPanelWebContents(id))
+  // por sessão de chat (panel:register) — cada chat tem seu próprio browser.
+  ipcMain.on('panel:register', (_event, sessionId: string | null, id: number | null) =>
+    registerPanelWebContents(sessionId, id),
+  )
 
   // Eventos de sessão/pasta emitidos pelo renderer (novo chat, renomear, pin,
   // arquivar, mover, deletar...). O remetente já aplicou a mudança no store

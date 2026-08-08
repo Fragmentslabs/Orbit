@@ -48,7 +48,8 @@ import { CodeAssistantMessage } from "@/src/components/messages/code-message"
 import { ModelPicker } from "@/src/components/model-picker"
 import { PermissionModePicker } from "@/src/components/permission-mode-picker"
 import { visibleMessageText } from "@/src/lib/message-utils"
-import { panelApi, windowApi } from "@/src/lib/ipc"
+import { windowApi } from "@/src/lib/ipc"
+import { reloadWebview } from "@/src/components/browser/webview-session"
 import { usePanelStore, type Viewport } from "@/src/stores/panel-store"
 import { usePermissionPrefs } from "@/src/stores/permission-prefs"
 import {
@@ -166,64 +167,54 @@ function useEdgeHover() {
   return { hovered, handleEnter, handleLeave }
 }
 
-function PanelBrowserBody() {
-  const { url, setUrl } = useWebPreview()
+function PanelBrowserBody({ persistKey }: { persistKey?: string }) {
+  const { url, refreshKey } = useWebPreview()
   const selectMode = usePanelStore((s) => s.selectMode)
   const viewport = usePanelStore((s) => s.viewport)
   const webviewRef = useRef<WebviewElement | null>(null)
-  const readyRef = useRef(false)
   const initialSrcRef = useRef(url)
-  const setUrlRef = useRef(setUrl)
-  setUrlRef.current = setUrl
 
+  // O <webview> vive no pool (webview-session.ts) — aqui só guardamos a
+  // referência do elemento para os comandos (loadURL, execução de JS).
   const handleWebviewRef = useCallback((el: HTMLElement | null) => {
-    const webview = el as WebviewElement | null
-    if (!webview) {
-      readyRef.current = false
-      webviewRef.current = null
-      panelApi.register(null)
-      return
+    webviewRef.current = el as WebviewElement | null
+  }, [])
+
+  const handleConsoleMessage = useCallback((message: string) => {
+    if (!message.startsWith(SELECT_PREFIX)) return
+    try {
+      usePanelStore.getState().addSelection(JSON.parse(message.slice(SELECT_PREFIX.length)))
+    } catch {
+      // payload malformado — ignora
     }
-    webviewRef.current = webview
-    webview.addEventListener("dom-ready", () => {
-      readyRef.current = true
-      panelApi.register(webview.getWebContentsId())
-    })
-    const syncUrl = (e: Event) => {
-      const navUrl = (e as Event & { url?: string }).url
-      if (navUrl && navUrl !== "about:blank") setUrlRef.current(navUrl)
-    }
-    webview.addEventListener("did-navigate", syncUrl)
-    webview.addEventListener("did-navigate-in-page", syncUrl)
-    webview.addEventListener("console-message", (e) => {
-      const message = (e as Event & { message?: string }).message
-      if (!message?.startsWith(SELECT_PREFIX)) return
-      try {
-        usePanelStore.getState().addSelection(JSON.parse(message.slice(SELECT_PREFIX.length)))
-      } catch {
-        // payload malformado — ignora
-      }
-    })
   }, [])
 
   // Navegação controlada: mudanças na barra de URL viram loadURL (sem remount)
   useEffect(() => {
     const webview = webviewRef.current
-    if (!webview || !readyRef.current || !url) return
+    if (!webview || !url) return
     if (webview.getURL() !== url) void webview.loadURL(url).catch(() => {})
   }, [url])
 
   useEffect(() => {
     const webview = webviewRef.current
-    if (!webview || !readyRef.current) return
+    if (!webview) return
     void webview.executeJavaScript(selectMode ? SELECT_ON : SELECT_OFF).catch(() => {})
   }, [selectMode])
+
+  // Botão reload: recarrega no MESMO webview (a página persistida não é
+  // destruída — apenas recarregada).
+  useEffect(() => {
+    if (refreshKey > 0 && persistKey) reloadWebview(persistKey)
+  }, [refreshKey, persistKey])
 
   return (
     <WebPreviewBody
       src={initialSrcRef.current || undefined}
       onWebviewRef={handleWebviewRef}
+      onConsoleMessage={handleConsoleMessage}
       viewport={viewport}
+      persistKey={persistKey}
     />
   )
 }
@@ -712,7 +703,7 @@ function FullscreenComposer({ onSent }: { onSent?: () => void }) {
   )
 }
 
-export function BrowserTab({ initialUrl }: { initialUrl?: string }) {
+export function BrowserTab({ initialUrl, persistKey }: { initialUrl?: string; persistKey?: string }) {
   const fullscreen = usePanelStore((s) => s.fullscreen)
   const setFullscreen = usePanelStore((s) => s.setFullscreen)
   const [chatPinned, setChatPinned] = useState(false)
@@ -772,7 +763,7 @@ export function BrowserTab({ initialUrl }: { initialUrl?: string }) {
       <div className="relative flex min-h-0 flex-1 flex-col">
         <AgentIndicator />
         {fullscreen && <ActivityFeed />}
-        <PanelBrowserBody />
+        <PanelBrowserBody persistKey={persistKey} />
         {fullscreen && <FullscreenChatFeed pinned={chatPinned} onTogglePin={() => setChatPinned((v) => !v)} />}
         {fullscreen && <FullscreenComposer onSent={() => setChatPinned(true)} />}
       </div>
