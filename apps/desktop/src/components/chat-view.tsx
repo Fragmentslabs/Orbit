@@ -379,13 +379,21 @@ export function ChatView({ sessionId }: { sessionId?: string } = {}) {
       timers.push(setTimeout(() => setCenterPersonaVisible(true), 300))
       timers.push(setTimeout(() => setDisplayCenterState("idle"), 1000))
     } else if (hasChat) {
-      // Permanece no chat, apenas isBusy mudou
+      // Permanece no chat (isBusy mudou durante a transição de entrada e
+      // cancelou os timers): convergem para o estado final — chat visível e
+      // centro oculto. Sem isso, o estado vazio (texto + sugestões) fica
+      // preso com opacidade total, aparecendo como "background" do chat.
       setChatVisible(true)
+      setCenterVisible(false)
+      setCenterPersonaVisible(false)
       setDisplayTopState(isBusyRef.current ? "thinking" : "idle")
     } else {
-      // Permanece sem chat — garante tudo visível
+      // Permanece sem chat (isBusy mudou durante a saída do chat) — garante
+      // o estado final: tudo do centro visível, topo oculto e persona acordada.
       setCenterVisible(true)
       setCenterPersonaVisible(true)
+      setDisplayCenterState("idle")
+      setTopVisible(false)
     }
 
     return () => timers.forEach(clearTimeout)
