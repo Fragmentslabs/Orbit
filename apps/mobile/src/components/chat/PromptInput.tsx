@@ -252,34 +252,6 @@ export function PromptInput({
     setAttachments((prev) => prev.filter((item) => item.id !== id))
   }
 
-  const handleSend = useCallback(() => {
-    const trimmed = text.trim()
-    if (!trimmed || isStreaming || disabled) return
-    const modeNow = useWorkspaceStore.getState().mode
-
-    const options: SendMessageOptions = {
-      research: activeModes.research ?? false,
-      browser: activeModes.browser ?? false,
-      simple: activeModes.simple ?? false,
-      brain: activeModes.brain ?? false,
-      reasoning: { enabled: thinking, variantId },
-      plan: modeNow === 'code' ? plan : undefined,
-      subagents,
-      orchestrate: orchestra && modeNow === 'code' ? {} : undefined,
-      loop,
-      permissionMode: modeNow === 'code' ? permissionMode : undefined,
-    }
-
-    // Comandos "/" viram o prompt do pipeline correspondente
-    const resolved = resolveSlashAction(trimmed, modeNow)
-    const finalText = resolved?.prompt ?? trimmed
-
-    onSend(finalText, options, attachments.length > 0 ? attachments : undefined)
-    setText('')
-    setAttachments([])
-    setPlusOpen(false)
-  }, [text, isStreaming, disabled, onSend, activeModes, plan, subagents, orchestra, loop, attachments, permissionMode, thinking, variantId])
-
   const buildOptions = useCallback(() => {
     const modeNow = useWorkspaceStore.getState().mode
     return {
@@ -319,6 +291,49 @@ export function PromptInput({
     setText('')
     setAttachments([])
   }, [text, sessionId, onAbort, enqueueForSend, buildOptions])
+
+  const handleSend = useCallback(() => {
+    const trimmed = text.trim()
+    if (!trimmed || disabled) return
+
+    // Agente em execução: em vez de bloquear o envio (causava o texto ficar
+    // preso no input ao dar Enter), manda para a fila da sessão — o mesmo
+    // "enviar para o painel lateral" do desktop — e limpa o input para o
+    // usuário continuar digitando enquanto o agente trabalha.
+    if (isStreaming) {
+      if (sessionId) {
+        handleQueue()
+      } else {
+        setText('')
+        setAttachments([])
+      }
+      return
+    }
+
+    const modeNow = useWorkspaceStore.getState().mode
+
+    const options: SendMessageOptions = {
+      research: activeModes.research ?? false,
+      browser: activeModes.browser ?? false,
+      simple: activeModes.simple ?? false,
+      brain: activeModes.brain ?? false,
+      reasoning: { enabled: thinking, variantId },
+      plan: modeNow === 'code' ? plan : undefined,
+      subagents,
+      orchestrate: orchestra && modeNow === 'code' ? {} : undefined,
+      loop,
+      permissionMode: modeNow === 'code' ? permissionMode : undefined,
+    }
+
+    // Comandos "/" viram o prompt do pipeline correspondente
+    const resolved = resolveSlashAction(trimmed, modeNow)
+    const finalText = resolved?.prompt ?? trimmed
+
+    onSend(finalText, options, attachments.length > 0 ? attachments : undefined)
+    setText('')
+    setAttachments([])
+    setPlusOpen(false)
+  }, [text, isStreaming, disabled, onSend, handleQueue, sessionId, activeModes, plan, subagents, orchestra, loop, attachments, permissionMode, thinking, variantId])
 
   const handleSchedule = useCallback(() => {
     setScheduleSheetVisible(true)
@@ -418,7 +433,7 @@ export function PromptInput({
             placeholderTextColor={tokens.mutedForeground}
             multiline
             maxLength={4096}
-            editable={!isStreaming && !disabled}
+            editable={!disabled}
             onFocus={() => setIsFocused(true)}
             onBlur={() => setIsFocused(false)}
             onKeyPress={handleKeyPress}

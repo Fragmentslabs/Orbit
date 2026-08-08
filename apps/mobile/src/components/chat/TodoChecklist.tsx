@@ -1,5 +1,6 @@
-import { View, Text, ActivityIndicator } from 'react-native'
+import { View, Text } from 'react-native'
 import { Check, Circle } from 'lucide-react-native'
+import { Spinner } from '~/components/ui/spinner'
 import { useTranslation } from 'react-i18next'
 import type { ToolPart } from '@orbit/shared'
 import { getThemeTokens } from '~/lib/theme-tokens'
@@ -26,8 +27,7 @@ function itemsOf(part: ToolPart): TodoItem[] {
 function StatusIcon({ status }: { status: TodoItem['status'] }) {
   const tokens = getThemeTokens(useThemeStore((s) => s.resolved))
   if (status === 'completed') return <Check size={13} color="#10b981" />
-  if (status === 'in_progress')
-    return <ActivityIndicator size="small" style={{ transform: [{ scale: 0.6 }] }} color={tokens.primary} />
+  if (status === 'in_progress') return <Spinner size={14} color={tokens.primary} />
   return <Circle size={13} color={tokens.mutedForeground} />
 }
 
