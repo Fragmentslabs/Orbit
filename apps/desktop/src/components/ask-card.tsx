@@ -39,7 +39,7 @@ function PermissionBody({ ask, submitted, onReply }: {
         <div className="min-w-0 flex-1">
           <p className="break-all font-mono text-xs">{claim.title}</p>
           {claim.detail && (
-            <p className={cn("text-xs", claim.critical ? "text-destructive" : "text-muted-foreground")}>
+            <p className={cn("whitespace-pre-wrap break-words text-xs", claim.critical ? "text-destructive" : "text-muted-foreground")}>
               {claim.critical ? `${t("ask.critical")}` : ""}{claim.detail}
             </p>
           )}
@@ -84,14 +84,14 @@ export function QuestionItem({ question, selected, free, onToggle, onFree }: {
     <div className="flex min-w-0 flex-col gap-1.5">
       <p className="min-w-0 whitespace-pre-wrap break-words text-sm">{question.text}</p>
       {question.options && question.options.length > 0 && (
-        <div className="flex flex-wrap gap-1.5">
+        <div className="flex min-w-0 flex-wrap gap-1.5">
           {question.options.map((option) => (
             <Button
               key={option}
               size="sm"
               variant="outline"
               className={cn(
-                "h-7 text-xs",
+                "h-auto min-h-6 max-w-full whitespace-normal break-words text-left",
                 selected.has(option) && "border-primary bg-primary/10 text-primary hover:bg-primary/15",
               )}
               onClick={() => onToggle(option)}

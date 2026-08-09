@@ -37,7 +37,7 @@ function BatchPermissionBlock({ item, choice, onChoice }: {
         <div className="min-w-0 flex-1">
           <p className="break-all font-mono text-xs">{claim.title}</p>
           {claim.detail && (
-            <p className={cn("text-xs", claim.critical ? "text-destructive" : "text-muted-foreground")}>
+            <p className={cn("whitespace-pre-wrap break-words text-xs", claim.critical ? "text-destructive" : "text-muted-foreground")}>
               {claim.critical ? `${t("ask.critical")}` : ""}{claim.detail}
             </p>
           )}
