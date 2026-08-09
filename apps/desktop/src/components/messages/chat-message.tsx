@@ -138,10 +138,12 @@ export function ChatAssistantMessage({ message, sessionId, isLast, isBusy, onRet
   const sources = useMemo(() => (finished ? extractSources(message) : []), [finished, message])
   const waiting = isLast && isBusy && message.parts.length === 0
 
-  // Texto seguido de ferramentas é narração intermediária ("pensando alto"),
-  // não a resposta final — renderiza em cor apagada.
-  const lastToolIndex = segments.reduce(
-    (last, segment, i) => (segment.kind === "research" ? i : last),
+  // Só o último texto da mensagem é a resposta final (branca); os anteriores
+  // são narração intermediária ("pensando alto") e ficam em cor apagada —
+  // inclusive se alguma ferramenta (pesquisa, agente etc.) chegar depois do
+  // texto final no stream.
+  const lastTextIndex = segments.reduce(
+    (last, segment, i) => (segment.kind === "part" && segment.part.type === "text" ? i : last),
     -1,
   )
 
@@ -152,7 +154,7 @@ export function ChatAssistantMessage({ message, sessionId, isLast, isBusy, onRet
         segment.kind === "research" ? (
           <ResearchBlock key={segment.id} parts={segment.parts} />
         ) : segment.part.type === "text" ? (
-          <AssistantMarkdown key={segment.id} muted={index < lastToolIndex}>
+          <AssistantMarkdown key={segment.id} muted={index < lastTextIndex}>
             {segment.part.text}
           </AssistantMarkdown>
         ) : segment.part.type === "reasoning" ? (

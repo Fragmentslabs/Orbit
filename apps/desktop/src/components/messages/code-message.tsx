@@ -264,10 +264,11 @@ export function CodeAssistantMessage({ message, sessionId, isLast, isBusy, onRet
   const sources = useMemo(() => (finished ? extractSources(message) : []), [finished, message])
   const waiting = isLast && isBusy && message.parts.length === 0
 
-  // Texto seguido de ações é narração intermediária do agente, não a
-  // resposta final — renderiza em cor apagada.
-  const lastTaskIndex = segments.reduce(
-    (last, segment, i) => (segment.kind === "task" ? i : last),
+  // Só o último texto da mensagem é a resposta final (branca); os anteriores
+  // são narração intermediária do agente e ficam em cor apagada — inclusive
+  // se alguma ação (read, bash etc.) chegar depois do texto final no stream.
+  const lastTextIndex = segments.reduce(
+    (last, segment, i) => (segment.kind === "part" && segment.part.type === "text" ? i : last),
     -1,
   )
 
@@ -289,7 +290,7 @@ export function CodeAssistantMessage({ message, sessionId, isLast, isBusy, onRet
             messageId={message.id}
           />
         ) : segment.part.type === "text" ? (
-          <AssistantMarkdown key={segment.id} muted={index < lastTaskIndex}>
+          <AssistantMarkdown key={segment.id} muted={index < lastTextIndex}>
             {segment.part.text}
           </AssistantMarkdown>
         ) : segment.part.type === "reasoning" ? (
