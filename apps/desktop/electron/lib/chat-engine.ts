@@ -30,7 +30,7 @@ import { runProjectInit, type InitHooks } from './project-init'
 import { PROJECT_AREAS, type ProjectArea } from '@shared/memory'
 import { readJson, writeJson } from './storage'
 import { buildToolSet, type ToolContext } from './tools'
-import { toStepUsage, toTokenUsage } from './usage'
+import { addTokenUsage, toStepUsage, toTokenUsage } from './usage'
 import { messageContextText } from './todo-context'
 import { forwardChatEvent } from './companion-server'
 
@@ -60,6 +60,16 @@ Your response must:
 - Summarize what was accomplished so far
 - List any remaining pending items
 - Suggest what to do next (the user can say "continue" to resume)`
+
+// Auto-continue quando o modelo bate no limite de TOKENS DE SAÍDA
+// (finish_reason "length") — o padrão do opencode (#17471/#18108): a
+// resposta foi CORTADA, não finalizada; re-roda-se o turno com um pedido de
+// continuação e o contexto completo, limitado por turno. Sem isso, a stream
+// cortava no meio de um texto/tool call silenciosamente, indistinguível de
+// conclusão normal — a causa raiz das "respostas interrompidas do nada".
+const MAX_AUTO_CONTINUES = 3
+const AUTO_CONTINUE_PROMPT = `[SYSTEM: the previous reply was cut off by the model's output token limit (finish_reason "length") — this is NOT the end of the turn. Continue exactly from where you left off: do NOT repeat or summarize what was already written, just pick up the next part and finish the work. If you were mid-task, complete it.]`
+const AUTO_CONTINUE_TOOL_PROMPT = (toolNames: string) => `[SYSTEM: the previous reply was cut off by the model's output token limit (finish_reason "length") in the middle of a ${toolNames} tool call. That tool call was NOT executed. Do NOT retry it as one giant operation — split it into smaller operations (smaller file writes, shorter commands, less data per call) and continue from where you left off.]`
 const abortControllers = new Map<string, AbortController>()
 
 function newId(prefix: string) {
@@ -583,204 +593,275 @@ export async function runChat(win: BrowserWindow, input: SendMessageInput): Prom
     // Só injeta conteúdo de memória na primeira troca da sessão
     input.isFirstExchange = isFirstExchange
 
-    const result = streamText({
-      model,
-      system: await buildSystemPrompt(input),
-      messages: normalizeMessages(
-        toModelMessages(history.slice(0, -1)),
-        interleavedReasoningField(provider, input.modelId),
-      ),
-      tools: supportsTools ? buildToolSet(input, toolContext) : undefined,
-      toolApproval,
-      stopWhen: stepCountIs(MAX_STEPS),
-      abortSignal: controller.signal,
-      providerOptions: await buildProviderOptions(input),
-      prepareStep: ({ stepNumber, messages }) => {
-        // Reaplica a normalização de reasoning a cada passo do tool loop: o
-        // SDK reconstrói as mensagens entre steps e pode descartar o
-        // reasoning_content vazio retornado numa chamada de tool (DeepSeek
-        // exige o campo de volta em todas as mensagens de assistente).
-        const normalized = normalizeMessages(
-          messages,
-          interleavedReasoningField(provider, input.modelId),
-        )
-        if (stepNumber < MAX_STEPS) return normalized === messages ? {} : { messages: normalized }
-        return {
-          activeTools: [],
-          toolChoice: 'none' as const,
-          messages: [...normalized, { role: 'user' as const, content: MAX_STEPS_PROMPT }],
-        }
-      },
-      onError: () => {
-        // erros são tratados no loop do fullStream
-      },
-    })
+    // Mensagens para a PRIMEIRA chamada da rodada (histórico até a última
+    // mensagem do usuário). As continuações usam as mensagens de resposta
+    // acumuladas do turno anterior + a instrução de continuar (padrão do
+    // opencode: injetar uma "synthetic user message" e re-entrar no loop,
+    // com teto de tentativas por turno).
+    const initialMessages = normalizeMessages(
+      toModelMessages(history.slice(0, -1)),
+      interleavedReasoningField(provider, input.modelId),
+    )
+    let autoContinues = 0
+    let lastFinishReason: string | undefined
+    let previousResponseMessages: ModelMessage[] = []
+    let truncatedToolNames = ''
 
-    let streaming = false
-    let lastSave = Date.now()
-    const reasoningStart = new Map<string, number>()
-    // Usage do último step (última chamada real ao modelo) — ao contrário do
-    // total do turno (soma de todos os steps), reflete o tamanho real do
-    // contexto no momento em que a resposta terminou.
-    let lastStepUsage: ReturnType<typeof toStepUsage> | undefined
-    let stepCount = 0
+    for (;;) {
+      const result = streamText({
+        model,
+        system: await buildSystemPrompt(input),
+        messages:
+          autoContinues === 0
+            ? initialMessages
+            : normalizeMessages(
+                [
+                  ...initialMessages,
+                  ...previousResponseMessages,
+                  {
+                    role: 'user' as const,
+                    content: truncatedToolNames
+                      ? AUTO_CONTINUE_TOOL_PROMPT(truncatedToolNames)
+                      : AUTO_CONTINUE_PROMPT,
+                  },
+                ],
+                interleavedReasoningField(provider, input.modelId),
+              ),
+        tools: supportsTools ? buildToolSet(input, toolContext) : undefined,
+        toolApproval,
+        stopWhen: stepCountIs(MAX_STEPS),
+        abortSignal: controller.signal,
+        providerOptions: await buildProviderOptions(input),
+        prepareStep: ({ stepNumber, messages }) => {
+          // Reaplica a normalização de reasoning a cada passo do tool loop: o
+          // SDK reconstrói as mensagens entre steps e pode descartar o
+          // reasoning_content vazio retornado numa chamada de tool (DeepSeek
+          // exige o campo de volta em todas as mensagens de assistente).
+          const normalized = normalizeMessages(
+            messages,
+            interleavedReasoningField(provider, input.modelId),
+          )
+          if (stepNumber < MAX_STEPS) return normalized === messages ? {} : { messages: normalized }
+          return {
+            activeTools: [],
+            toolChoice: 'none' as const,
+            messages: [...normalized, { role: 'user' as const, content: MAX_STEPS_PROMPT }],
+          }
+        },
+        onError: () => {
+          // erros são tratados no loop do fullStream
+        },
+      })
 
-    for await (const part of result.fullStream) {
-      if (!streaming) {
-        streaming = true
-        emit(win, { type: 'status', sessionId, status: 'streaming' })
-      }
+      let streaming = false
+      let lastSave = Date.now()
+      const reasoningStart = new Map<string, number>()
+      // Usage do último step (última chamada real ao modelo) — ao contrário do
+      // total do turno (soma de todos os steps), reflete o tamanho real do
+      // contexto no momento em que a resposta terminou.
+      let lastStepUsage: ReturnType<typeof toStepUsage> | undefined
+      let stepCount = 0
 
-      switch (part.type) {
-        case 'finish-step':
-          lastStepUsage = toStepUsage(part.usage)
-          stepCount++
-          break
-        case 'text-start':
-          upsertPart({ id: part.id, type: 'text', text: '', state: 'streaming' })
-          break
-        case 'text-delta': {
-          const existing = assistantMessage.parts.find((p) => p.id === part.id)
-          if (existing?.type === 'text') {
-            existing.text += part.text
-            emit(win, {
-              type: 'part-delta',
-              sessionId,
-              messageId: assistantMessage.id,
-              partId: part.id,
-              kind: 'text',
-              delta: part.text,
-            })
-          }
-          break
+      for await (const part of result.fullStream) {
+        if (!streaming) {
+          streaming = true
+          emit(win, { type: 'status', sessionId, status: 'streaming' })
         }
-        case 'text-end': {
-          const existing = assistantMessage.parts.find((p) => p.id === part.id)
-          if (existing?.type === 'text') upsertPart({ ...existing, state: 'done' })
-          break
-        }
-        case 'reasoning-start':
-          reasoningStart.set(part.id, Date.now())
-          upsertPart({ id: part.id, type: 'reasoning', text: '', state: 'streaming' })
-          break
-        case 'reasoning-delta': {
-          const existing = assistantMessage.parts.find((p) => p.id === part.id)
-          if (existing?.type === 'reasoning') {
-            existing.text += part.text
-            emit(win, {
-              type: 'part-delta',
-              sessionId,
-              messageId: assistantMessage.id,
-              partId: part.id,
-              kind: 'reasoning',
-              delta: part.text,
-            })
-          }
-          break
-        }
-        case 'reasoning-end': {
-          const existing = assistantMessage.parts.find((p) => p.id === part.id)
-          if (existing?.type === 'reasoning') {
-            const started = reasoningStart.get(part.id)
-            upsertPart({
-              ...existing,
-              state: 'done',
-              durationMs: started ? Date.now() - started : undefined,
-            })
-          }
-          break
-        }
-        case 'tool-call':
-          upsertPart({
-            id: part.toolCallId,
-            type: 'tool',
-            tool: part.toolName,
-            state: 'running',
-            input: part.input as Record<string, unknown>,
-          })
-          break
-        case 'tool-result': {
-          const existing = assistantMessage.parts.find((p) => p.id === part.toolCallId) as
-            | ToolPart
-            | undefined
-          upsertPart({
-            id: part.toolCallId,
-            type: 'tool',
-            tool: part.toolName,
-            state: 'done',
-            input: existing?.input,
-            output: typeof part.output === 'string' ? part.output : JSON.stringify(part.output, null, 2),
-          })
-          // show_image: a imagem vira parte da resposta (renderizada pelo ai/image)
-          if (part.toolName === 'show_image') {
-            const output = part.output as { mediaUrl?: string; alt?: string } | string
-            if (typeof output === 'object' && output?.mediaUrl) {
-              upsertPart({
-                id: `${part.toolCallId}-img`,
-                type: 'image',
-                src: output.mediaUrl,
-                alt: output.alt || undefined,
+
+        switch (part.type) {
+          case 'finish-step':
+            lastStepUsage = toStepUsage(part.usage)
+            stepCount++
+            break
+          case 'text-start':
+            upsertPart({ id: part.id, type: 'text', text: '', state: 'streaming' })
+            break
+          case 'text-delta': {
+            const existing = assistantMessage.parts.find((p) => p.id === part.id)
+            if (existing?.type === 'text') {
+              existing.text += part.text
+              emit(win, {
+                type: 'part-delta',
+                sessionId,
+                messageId: assistantMessage.id,
+                partId: part.id,
+                kind: 'text',
+                delta: part.text,
               })
             }
+            break
           }
-          break
-        }
-        case 'tool-output-denied': {
-          // Execução negada pelo gate de permissões (política ou usuário)
-          const existing = assistantMessage.parts.find((p) => p.id === part.toolCallId) as
-            | ToolPart
-            | undefined
-          upsertPart({
-            id: part.toolCallId,
-            type: 'tool',
-            tool: part.toolName,
-            state: 'error',
-            input: existing?.input,
-            error: takeDenialReason(part.toolCallId) ?? 'Ação negada pela política de permissões.',
-          })
-          break
-        }
-        case 'tool-error': {
-          const existing = assistantMessage.parts.find((p) => p.id === part.toolCallId) as
-            | ToolPart
-            | undefined
-          upsertPart({
-            id: part.toolCallId,
-            type: 'tool',
-            tool: part.toolName,
-            state: 'error',
-            input: existing?.input,
-            error: errorToText(part.error),
-          })
-          break
-        }
-        case 'finish':
-          // Usage agregado da geração (todos os steps) + custo via catálogo;
-          // lastStep guarda o tamanho real do contexto na última chamada.
-          assistantMessage.tokens = {
-            ...toTokenUsage(part.totalUsage, provider?.models[input.modelId]?.cost),
-            lastStep: lastStepUsage,
+          case 'text-end': {
+            const existing = assistantMessage.parts.find((p) => p.id === part.id)
+            if (existing?.type === 'text') upsertPart({ ...existing, state: 'done' })
+            break
           }
-          // Backstop raro: o prepareStep acima já força um resumo em texto
-          // no último passo (finishReason deveria vir 'stop'). Isso só
-          // dispara se mesmo assim o modelo não fechar limpo — sem isso,
-          // esse caso ficaria indistinguível de uma conclusão normal tanto
-          // pra UI quanto pro modelo no próximo turno.
-          if (stepCount >= MAX_STEPS && part.finishReason !== 'stop') {
-            assistantMessage.truncated = true
+          case 'reasoning-start':
+            reasoningStart.set(part.id, Date.now())
+            upsertPart({ id: part.id, type: 'reasoning', text: '', state: 'streaming' })
+            break
+          case 'reasoning-delta': {
+            const existing = assistantMessage.parts.find((p) => p.id === part.id)
+            if (existing?.type === 'reasoning') {
+              existing.text += part.text
+              emit(win, {
+                type: 'part-delta',
+                sessionId,
+                messageId: assistantMessage.id,
+                partId: part.id,
+                kind: 'reasoning',
+                delta: part.text,
+              })
+            }
+            break
           }
-          break
-        case 'error':
-          throw part.error instanceof Error ? part.error : new Error(errorToText(part.error))
-        default:
-          break
+          case 'reasoning-end': {
+            const existing = assistantMessage.parts.find((p) => p.id === part.id)
+            if (existing?.type === 'reasoning') {
+              const started = reasoningStart.get(part.id)
+              upsertPart({
+                ...existing,
+                state: 'done',
+                durationMs: started ? Date.now() - started : undefined,
+              })
+            }
+            break
+          }
+          case 'tool-call':
+            upsertPart({
+              id: part.toolCallId,
+              type: 'tool',
+              tool: part.toolName,
+              state: 'running',
+              input: part.input as Record<string, unknown>,
+            })
+            break
+          case 'tool-result': {
+            const existing = assistantMessage.parts.find((p) => p.id === part.toolCallId) as
+              | ToolPart
+              | undefined
+            upsertPart({
+              id: part.toolCallId,
+              type: 'tool',
+              tool: part.toolName,
+              state: 'done',
+              input: existing?.input,
+              output: typeof part.output === 'string' ? part.output : JSON.stringify(part.output, null, 2),
+            })
+            // show_image: a imagem vira parte da resposta (renderizada pelo ai/image)
+            if (part.toolName === 'show_image') {
+              const output = part.output as { mediaUrl?: string; alt?: string } | string
+              if (typeof output === 'object' && output?.mediaUrl) {
+                upsertPart({
+                  id: `${part.toolCallId}-img`,
+                  type: 'image',
+                  src: output.mediaUrl,
+                  alt: output.alt || undefined,
+                })
+              }
+            }
+            break
+          }
+          case 'tool-output-denied': {
+            // Execução negada pelo gate de permissões (política ou usuário)
+            const existing = assistantMessage.parts.find((p) => p.id === part.toolCallId) as
+              | ToolPart
+              | undefined
+            upsertPart({
+              id: part.toolCallId,
+              type: 'tool',
+              tool: part.toolName,
+              state: 'error',
+              input: existing?.input,
+              error: takeDenialReason(part.toolCallId) ?? 'Ação negada pela política de permissões.',
+            })
+            break
+          }
+          case 'tool-error': {
+            const existing = assistantMessage.parts.find((p) => p.id === part.toolCallId) as
+              | ToolPart
+              | undefined
+            upsertPart({
+              id: part.toolCallId,
+              type: 'tool',
+              tool: part.toolName,
+              state: 'error',
+              input: existing?.input,
+              error: errorToText(part.error),
+            })
+            break
+          }
+          case 'finish':
+            // Usage agregado da geração (todos os steps) + custo via catálogo;
+            // lastStep guarda o tamanho real do contexto na última chamada.
+            // Em auto-continue, soma a cada iteração do loop (a mensagem é a
+            // mesma, mas cada chamada ao modelo tem seu próprio uso).
+            {
+              const stepTokens = toTokenUsage(part.totalUsage, provider?.models[input.modelId]?.cost)
+              assistantMessage.tokens = {
+                ...addTokenUsage(assistantMessage.tokens, stepTokens),
+                lastStep: lastStepUsage,
+              }
+            }
+            lastFinishReason = part.finishReason
+            // Backstop raro: o prepareStep acima já força um resumo em texto
+            // no último passo (finishReason deveria vir 'stop'). Isso só
+            // dispara se mesmo assim o modelo não fechar limpo — sem isso,
+            // esse caso ficaria indistinguível de uma conclusão normal tanto
+            // pra UI quanto pro modelo no próximo turno.
+            if (stepCount >= MAX_STEPS && part.finishReason !== 'stop') {
+              assistantMessage.truncated = true
+            }
+            break
+          case 'error':
+            throw part.error instanceof Error ? part.error : new Error(errorToText(part.error))
+          default:
+            break
+        }
+
+        // Persistência incremental: garante que um crash não perca a resposta
+        if (assistantMessage.parts.length > 0 && Date.now() - lastSave > 2000) {
+          lastSave = Date.now()
+          await saveMessages(sessionId, history)
+        }
       }
 
-      // Persistência incremental: garante que um crash não perca a resposta
-      if (assistantMessage.parts.length > 0 && Date.now() - lastSave > 2000) {
-        lastSave = Date.now()
-        await saveMessages(sessionId, history)
+      // Auto-continue por limite de TOKENS DE SAÍDA (finish_reason 'length'):
+      // a resposta foi cortada no meio, não finalizada — igual ao opencode
+      // (#17471/#18108), re-entramos no loop com uma "synthetic user message"
+      // pedindo pra continuar do ponto exato do corte, com teto por turno.
+      // Se a última tool call ficou pela metade (part sem resultado), a tool
+      // é marcada como não executada e o modelo é instruído a dividir a
+      // operação em pedaços menores.
+      const pendingToolCalls = assistantMessage.parts.filter(
+        (p): p is ToolPart => p.type === 'tool' && p.state === 'running',
+      )
+
+      if (
+        lastFinishReason === 'length' &&
+        !controller.signal.aborted &&
+        autoContinues < MAX_AUTO_CONTINUES
+      ) {
+        autoContinues++
+        for (const pending of pendingToolCalls) {
+          upsertPart({
+            ...pending,
+            state: 'error',
+            error: 'Chamada de ferramenta cortada pelo limite de tokens de saída — não executada.',
+          })
+        }
+        truncatedToolNames = pendingToolCalls.map((p) => p.tool).join(', ')
+        previousResponseMessages = await result.responseMessages
+        continue
       }
+
+      if (lastFinishReason === 'length') {
+        // Esgotou o teto de continuações: sinaliza truncamento (a UI mostra o
+        // aviso e o próximo turno recebe o nudge de continuar via
+        // messageContextText) — nunca um fim silencioso.
+        assistantMessage.truncated = true
+      }
+      break
     }
 
     // Finaliza partes que ficaram em streaming (ex.: abort)
