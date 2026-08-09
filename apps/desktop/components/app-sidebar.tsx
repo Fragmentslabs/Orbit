@@ -568,6 +568,7 @@ function SessionRow({ session, button: ButtonComponent, buttonClassName, actionB
   const selectSession = useSessionStore((s) => s.selectSession)
   const activeId = useSessionStore((s) => s.activeIds[mode])
   const unreadCounts = useSessionStore((s) => s.unreadCounts)
+  const pendingAsks = useSessionStore((s) => s.pendingAsks)
   const togglePin = useSessionStore((s) => s.togglePin)
   const toggleArchive = useSessionStore((s) => s.toggleArchive)
   const deleteSession = useSessionStore((s) => s.deleteSession)
@@ -576,6 +577,11 @@ function SessionRow({ session, button: ButtonComponent, buttonClassName, actionB
   const { selectionMode, selectedIds, toggle, enterSelectionMode } = useSelection()
 
   const isSelected = selectedIds.has(session.id)
+
+  // Perguntas/permissões aguardando resposta do usuário: o agente está parado
+  // esperando input (não está trabalhando) — o status permanece "streaming",
+  // mas a UI deve indicar "precisa da sua resposta", não um spinner de atividade.
+  const hasPendingAsk = (pendingAsks[session.id]?.length ?? 0) > 0
 
   const { setNodeRef, listeners, attributes, isDragging } = useDraggable({
     id: session.id,
@@ -671,13 +677,16 @@ function SessionRow({ session, button: ButtonComponent, buttonClassName, actionB
             <Icon className="size-4 shrink-0" />
           )}
           <span className="truncate">{session.title}</span>
-          {(statusDot === "submitted" || statusDot === "streaming") && (
+          {(statusDot === "submitted" || statusDot === "streaming") && !hasPendingAsk && (
             <Loader2 className="size-3 shrink-0 animate-spin text-primary" />
+          )}
+          {hasPendingAsk && (
+            <span className="size-2 shrink-0 rounded-full bg-primary" title={t("sidebar.awaitingInput")} />
           )}
           {statusDot === "error" && (
             <span className="size-1.5 shrink-0 rounded-full bg-destructive" />
           )}
-          {statusDot !== "submitted" && statusDot !== "streaming" && statusDot !== "error" && unreadCounts[session.id] > 0 && activeId !== session.id && (
+          {!hasPendingAsk && statusDot !== "submitted" && statusDot !== "streaming" && statusDot !== "error" && unreadCounts[session.id] > 0 && activeId !== session.id && (
             <span className="size-2 shrink-0 rounded-full bg-primary" />
           )}
           {trailing}

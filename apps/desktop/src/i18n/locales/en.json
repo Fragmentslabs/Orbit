@@ -415,6 +415,7 @@
     "code": "Code",
     "options": "Options",
     "create": "Create",
+    "awaitingInput": "Awaiting your response…",
     "folder": {
       "addToFolder": "Add to folder",
       "removeFromCurrent": "Remove from current folder",

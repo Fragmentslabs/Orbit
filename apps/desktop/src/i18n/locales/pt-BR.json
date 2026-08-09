@@ -415,6 +415,7 @@
     "code": "Código",
     "options": "Opções",
     "create": "Criar",
+    "awaitingInput": "Aguardando sua resposta…",
     "folder": {
       "addToFolder": "Adicionar a pasta",
       "removeFromCurrent": "Remover da pasta atual",
