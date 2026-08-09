@@ -16,7 +16,7 @@ function shorten(text: string, max = 80): string {
 /**
  * Tools nativas (first-party) do Orbit. O catch-all de MCP usa "_" como
  * separador de servidor — tools nativas em snake_case (show_image, panel_*,
- * memory_*, browser_*, bash_background/list/kill, create_skill) cairiam nele
+ * memory_*, browser_*, bash_background/list/kill/output, create_skill) cairiam nele
  * e pediriam permissão em toda chamada. Esta allowlist garante que nativas
  * NUNCA sejam avaliadas como MCP. As que merecem avaliação (bash, write,
  * edit) têm regras próprias no assess() — o resto aprova sem perguntar.
@@ -48,6 +48,7 @@ const NATIVE_TOOLS = new Set([
   'bash_background',
   'bash_list',
   'bash_kill',
+  'bash_output',
   // Skills
   'create_skill',
 ])

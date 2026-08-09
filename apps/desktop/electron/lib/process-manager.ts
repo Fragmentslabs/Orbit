@@ -1,4 +1,5 @@
 import { spawn } from 'node:child_process'
+import type { ChildProcess } from 'node:child_process'
 import { userShellEnv } from './shell-env'
 
 export interface ProcessInfo {
@@ -15,13 +16,62 @@ export interface ProcessInfo {
 // gigabytes de log de builds longos (ex.: eas build) na memória do main.
 const MAX_OUTPUT_CHARS = 200_000
 
-const processes = new Map<number, { info: ProcessInfo; child: import('node:child_process').ChildProcess; output: string }>()
+const processes = new Map<number, { info: ProcessInfo; child: ChildProcess; output: string }>()
 
 function appendOutput(entry: { output: string }, chunk: string) {
   entry.output += chunk
   if (entry.output.length > MAX_OUTPUT_CHARS) {
     entry.output = entry.output.slice(entry.output.length - MAX_OUTPUT_CHARS)
   }
+}
+
+function attachOutput(entry: { info: ProcessInfo; child: ChildProcess; output: string }) {
+  entry.child.stdout?.on('data', (chunk: Buffer) => appendOutput(entry, chunk.toString('utf8')))
+  entry.child.stderr?.on('data', (chunk: Buffer) => appendOutput(entry, chunk.toString('utf8')))
+
+  entry.child.on('exit', (exitCode) => {
+    const e = processes.get(entry.info.pid)
+    if (e) {
+      e.info.status = 'exited'
+      e.info.exitCode = exitCode ?? undefined
+    }
+  })
+
+  entry.child.on('error', () => {
+    const e = processes.get(entry.info.pid)
+    if (e) {
+      e.info.status = 'exited'
+      e.info.exitCode = undefined
+    }
+  })
+}
+
+/**
+ * Registra um processo já iniciado (por spawnBackground ou pela promoção
+ * automática do bash foreground que estourou o timeout) no gerenciador,
+ * assumindo o buffer de saída e os listeners de status.
+ * Se o processo já encerrou antes do registro (corrida), reflete o estado.
+ */
+export function registerProcess(
+  child: ChildProcess,
+  opts: { label: string; command: string; cwd: string; pid: number; initialOutput?: string },
+): ProcessInfo {
+  const info: ProcessInfo = {
+    pid: opts.pid,
+    label: opts.label,
+    command: opts.command,
+    cwd: opts.cwd,
+    startTime: Date.now(),
+    status: 'running',
+  }
+  const entry = { info, child, output: opts.initialOutput ?? '' }
+  processes.set(opts.pid, entry)
+  attachOutput(entry)
+  if (child.exitCode !== null && child.exitCode !== undefined) {
+    info.status = 'exited'
+    info.exitCode = child.exitCode
+  }
+  return info
 }
 
 export function spawnBackground(label: string, command: string, cwd?: string): ProcessInfo {
@@ -42,39 +92,16 @@ export function spawnBackground(label: string, command: string, cwd?: string): P
         env: userShellEnv(),
       })
 
+  // Ao sair do app os processos exibidos no painel são mortos; desafixar não
+  // deixa o main terminar antes do filho.
   child.unref()
 
-  const info: ProcessInfo = {
-    pid: child.pid ?? 0,
+  const info = registerProcess(child, {
     label,
     command,
     cwd: cwd ?? process.cwd(),
-    startTime: Date.now(),
-    status: 'running',
-  }
-
-  const entry = { info, child, output: '' }
-  processes.set(child.pid ?? 0, entry)
-
-  child.stdout?.on('data', (chunk: Buffer) => appendOutput(entry, chunk.toString('utf8')))
-  child.stderr?.on('data', (chunk: Buffer) => appendOutput(entry, chunk.toString('utf8')))
-
-  child.on('exit', (exitCode) => {
-    const e = processes.get(child.pid ?? 0)
-    if (e) {
-      e.info.status = 'exited'
-      e.info.exitCode = exitCode ?? undefined
-    }
+    pid: child.pid ?? 0,
   })
-
-  child.on('error', () => {
-    const e = processes.get(child.pid ?? 0)
-    if (e) {
-      e.info.status = 'exited'
-      e.info.exitCode = undefined
-    }
-  })
-
   return info
 }
 

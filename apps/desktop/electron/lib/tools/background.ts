@@ -1,6 +1,6 @@
 import { tool } from 'ai'
 import { z } from 'zod'
-import { spawnBackground, killProcess, listProcesses } from '../process-manager'
+import { spawnBackground, killProcess, listProcesses, getProcessOutput } from '../process-manager'
 import type { ToolContext } from './context'
 
 export function createBackgroundTools(ctx: ToolContext) {
@@ -54,7 +54,29 @@ export function createBackgroundTools(ctx: ToolContext) {
     },
   })
 
-  return { bash_background: bashBackground, bash_list: bashList, bash_kill: bashKill }
+  const bashOutput = tool({
+    description:
+      'Returns the recent output (stdout/stderr) of a background process. ' +
+      'Use to follow the progress of builds or commands that were promoted to the background.',
+    inputSchema: z.object({
+      pid: z.number().describe('PID of the background process'),
+      tail: z
+        .number()
+        .optional()
+        .describe('Max chars to return from the end of the buffer (default 2000, max 20000)'),
+    }),
+    execute: async ({ pid, tail }) => {
+      const limit = Math.min(Math.max(tail ?? 2000, 100), 20_000)
+      const out = getProcessOutput(pid)
+      const proc = listProcesses().find((p) => p.pid === pid)
+      if (!proc && out === '') return `Processo PID ${pid} não encontrado (já removido).`
+      const header = `${proc?.label ?? `PID ${pid}`} — ${proc?.status ?? 'finalizado'}`
+      const snippet = out.length > limit ? `…(últimos ${limit} chars)\n${out.slice(-limit)}` : out
+      return `${header}\n${snippet || '(sem saída ainda)'}`
+    },
+  })
+
+  return { bash_background: bashBackground, bash_list: bashList, bash_kill: bashKill, bash_output: bashOutput }
 }
 
 function formatUptime(startTime: number): string {
