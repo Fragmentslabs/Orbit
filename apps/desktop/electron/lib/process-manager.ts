@@ -10,6 +10,8 @@ export interface ProcessInfo {
   startTime: number
   status: 'running' | 'exited' | 'killed'
   exitCode?: number
+  /** Sessão de chat que iniciou o processo — escopo do painel e das tools bash_*. */
+  sessionId?: string
 }
 
 // Buffer de saída por processo — cap simples em caracteres, evita acumular
@@ -54,7 +56,7 @@ function attachOutput(entry: { info: ProcessInfo; child: ChildProcess; output: s
  */
 export function registerProcess(
   child: ChildProcess,
-  opts: { label: string; command: string; cwd: string; pid: number; initialOutput?: string },
+  opts: { label: string; command: string; cwd: string; pid: number; initialOutput?: string; sessionId?: string },
 ): ProcessInfo {
   const info: ProcessInfo = {
     pid: opts.pid,
@@ -63,6 +65,7 @@ export function registerProcess(
     cwd: opts.cwd,
     startTime: Date.now(),
     status: 'running',
+    sessionId: opts.sessionId,
   }
   const entry = { info, child, output: opts.initialOutput ?? '' }
   processes.set(opts.pid, entry)
@@ -74,7 +77,7 @@ export function registerProcess(
   return info
 }
 
-export function spawnBackground(label: string, command: string, cwd?: string): ProcessInfo {
+export function spawnBackground(label: string, command: string, cwd?: string, sessionId?: string): ProcessInfo {
   const isWin = process.platform === 'win32'
 
   const child = isWin
@@ -101,17 +104,28 @@ export function spawnBackground(label: string, command: string, cwd?: string): P
     command,
     cwd: cwd ?? process.cwd(),
     pid: child.pid ?? 0,
+    sessionId,
   })
   return info
 }
 
-export function getProcessOutput(pid: number): string {
-  return processes.get(pid)?.output ?? ''
+export function getProcessOutput(pid: number, sessionId?: string): string {
+  const entry = processes.get(pid)
+  if (!entry) return ''
+  // Escopo por sessão: output só para o dono (ou processos sem dono, ex.: legados).
+  if (sessionId !== undefined && entry.info.sessionId !== undefined && entry.info.sessionId !== sessionId) {
+    return ''
+  }
+  return entry.output
 }
 
-export function killProcess(pid: number): boolean {
+export function killProcess(pid: number, sessionId?: string): boolean {
   const entry = processes.get(pid)
   if (!entry) return false
+  // Escopo por sessão: só o dono (ou processos sem dono) pode encerrar.
+  if (sessionId !== undefined && entry.info.sessionId !== undefined && entry.info.sessionId !== sessionId) {
+    return false
+  }
 
   if (entry.info.status === 'running') {
     try {
@@ -150,9 +164,10 @@ export function killProcess(pid: number): boolean {
   return true
 }
 
-export function listProcesses(): ProcessInfo[] {
+export function listProcesses(sessionId?: string): ProcessInfo[] {
   const results: ProcessInfo[] = []
   for (const [, entry] of processes) {
+    if (sessionId !== undefined && entry.info.sessionId !== sessionId) continue
     results.push({ ...entry.info })
   }
   return results

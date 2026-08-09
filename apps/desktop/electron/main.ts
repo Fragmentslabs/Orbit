@@ -1325,7 +1325,7 @@ app.whenReady().then(() => {
   void loadTrustRules()
 
   // Processos em background
-  ipcMain.handle('process:list', () => listProcesses())
+  ipcMain.handle('process:list', (_event, sessionId?: string) => listProcesses(sessionId))
   ipcMain.handle('process:kill', (_event, pid: number) => killProcess(pid))
   ipcMain.handle('process:output', (_event, pid: number) => getProcessOutput(pid))
 

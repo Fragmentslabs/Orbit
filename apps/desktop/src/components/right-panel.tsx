@@ -234,11 +234,12 @@ function SelectorScreen({ onSelect, onOpenWorker }: {
     [mode, tabMeta],
   )
 
+  // Footer escopado por sessão: só processos iniciados pelo chat ativo.
   useEffect(() => {
-    fetchProcesses()
-    const interval = setInterval(() => fetchProcesses(), 3_000)
+    fetchProcesses(activeId ?? undefined)
+    const interval = setInterval(() => fetchProcesses(activeId ?? undefined), 3_000)
     return () => clearInterval(interval)
-  }, [fetchProcesses])
+  }, [fetchProcesses, activeId])
 
   return (
     <div className="flex flex-1 flex-col overflow-hidden">

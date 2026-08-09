@@ -35,7 +35,7 @@ function makeLabel(command: string): string {
   return `auto: ${flat.slice(0, 60)}${flat.length > 60 ? '…' : ''}`
 }
 
-function runShell(command: string, cwd: string, timeout: number, abort: AbortSignal) {
+function runShell(command: string, cwd: string, timeout: number, abort: AbortSignal, sessionId?: string) {
   return new Promise<{ output: string; exitCode: number | null; background?: ProcessInfo }>(
     (resolve, reject) => {
       const isWin = process.platform === 'win32'
@@ -80,6 +80,7 @@ function runShell(command: string, cwd: string, timeout: number, abort: AbortSig
           cwd,
           pid,
           initialOutput: output,
+          sessionId,
         })
         resolve({ output, exitCode: null, background })
       }, timeout)
@@ -124,7 +125,7 @@ export function createBashTool(ctx: ToolContext) {
     }),
     execute: async ({ command, timeout }) => {
       const ms = Math.min(Math.max(timeout ?? DEFAULT_TIMEOUT, 0), MAX_TIMEOUT)
-      const { output, exitCode, background } = await runShell(command, ctx.directory, ms, ctx.abort)
+      const { output, exitCode, background } = await runShell(command, ctx.directory, ms, ctx.abort, ctx.sessionId)
       if (background) {
         const partial = output.slice(0, 4000)
         return (

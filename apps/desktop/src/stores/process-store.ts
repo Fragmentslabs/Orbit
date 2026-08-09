@@ -5,15 +5,15 @@ import type { ProcessInfo } from "@/src/lib/ipc"
 
 interface ProcessStore {
   processes: ProcessInfo[]
-  fetch: () => Promise<void>
+  fetch: (sessionId?: string) => Promise<void>
   kill: (pid: number) => Promise<void>
 }
 
 export const useProcessStore = create<ProcessStore>((set) => ({
   processes: [],
 
-  fetch: async () => {
-    const processes = await processApi.list()
+  fetch: async (sessionId?: string) => {
+    const processes = await processApi.list(sessionId)
     set({ processes })
   },
 

@@ -115,10 +115,12 @@ export interface ProcessInfo {
   startTime: number
   status: "running" | "exited" | "killed"
   exitCode?: number
+  /** Sessão de chat que iniciou o processo (filtro do footer e das tools bash_*). */
+  sessionId?: string
 }
 
 export const processApi = {
-  list: () => window.ipcRenderer.invoke("process:list") as Promise<ProcessInfo[]>,
+  list: (sessionId?: string) => window.ipcRenderer.invoke("process:list", sessionId) as Promise<ProcessInfo[]>,
   kill: (pid: number) => window.ipcRenderer.invoke("process:kill", pid) as Promise<boolean>,
   output: (pid: number) => window.ipcRenderer.invoke("process:output", pid) as Promise<string>,
 }

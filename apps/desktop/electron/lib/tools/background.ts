@@ -15,7 +15,7 @@ export function createBackgroundTools(ctx: ToolContext) {
       command: z.string().describe('Command to run in background'),
     }),
     execute: async ({ label, command }) => {
-      const info = spawnBackground(label, command, ctx.directory)
+      const info = spawnBackground(label, command, ctx.directory, ctx.sessionId)
       return {
         pid: info.pid,
         label: info.label,
@@ -31,8 +31,8 @@ export function createBackgroundTools(ctx: ToolContext) {
       'Shows PID, label, status, and uptime.',
     inputSchema: z.object({}),
     execute: async () => {
-      const procs = listProcesses()
-      if (procs.length === 0) return 'Nenhum processo em background.'
+      const procs = listProcesses(ctx.sessionId)
+      if (procs.length === 0) return 'Nenhum processo em background neste chat.'
       return procs
         .map(
           (p) =>
@@ -48,9 +48,9 @@ export function createBackgroundTools(ctx: ToolContext) {
       pid: z.number().describe('PID of the process to kill'),
     }),
     execute: async ({ pid }) => {
-      const ok = killProcess(pid)
+      const ok = killProcess(pid, ctx.sessionId)
       if (ok) return `Processo PID ${pid} morto.`
-      return `Processo PID ${pid} não encontrado.`
+      return `Processo PID ${pid} não encontrado nesta sessão.`
     },
   })
 
@@ -67,9 +67,9 @@ export function createBackgroundTools(ctx: ToolContext) {
     }),
     execute: async ({ pid, tail }) => {
       const limit = Math.min(Math.max(tail ?? 2000, 100), 20_000)
-      const out = getProcessOutput(pid)
-      const proc = listProcesses().find((p) => p.pid === pid)
-      if (!proc && out === '') return `Processo PID ${pid} não encontrado (já removido).`
+      const out = getProcessOutput(pid, ctx.sessionId)
+      const proc = listProcesses(ctx.sessionId).find((p) => p.pid === pid)
+      if (!proc && out === '') return `Processo PID ${pid} não encontrado nesta sessão.`
       const header = `${proc?.label ?? `PID ${pid}`} — ${proc?.status ?? 'finalizado'}`
       const snippet = out.length > limit ? `…(últimos ${limit} chars)\n${out.slice(-limit)}` : out
       return `${header}\n${snippet || '(sem saída ainda)'}`
