@@ -35,6 +35,7 @@ import { sanitizeSlug, serializeSkill } from './lib/skills/parser'
 import { computeAnalytics } from './lib/analytics'
 import { approvePendingSkill, discardPendingSkill, listPendingSkills } from './lib/skills/pending'
 import { dataDir, listKeys, readJson, removeJson, writeJson } from './lib/storage'
+import { loginShellArgs, userShellEnv } from './lib/shell-env'
 import { searchSessions } from './lib/search-sessions'
 import { destroyBrowserWindow } from './lib/tools'
 import type { SendMessageInput, SessionInfo } from '@shared/chat'
@@ -340,12 +341,12 @@ function createTerminal(id: string, cols = 80, rows = 24, cwd?: string) {
   const isWin = process.platform === 'win32'
   const shellCmd = isWin ? 'powershell.exe' : (process.env.SHELL || '/bin/bash')
 
-  const ptyProcess = nodePty.spawn(shellCmd, [], {
+  const ptyProcess = nodePty.spawn(shellCmd, loginShellArgs(), {
     name: 'xterm-256color',
     cols,
     rows,
     cwd: cwd ?? process.env.HOME ?? process.env.USERPROFILE ?? '/',
-    env: process.env as Record<string, string>,
+    env: userShellEnv(),
   })
 
   ptyProcess.onData((data) => {

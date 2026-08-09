@@ -1,4 +1,5 @@
 import { spawn } from 'node:child_process'
+import { userShellEnv } from './shell-env'
 
 export interface ProcessInfo {
   pid: number
@@ -32,11 +33,13 @@ export function spawnBackground(label: string, command: string, cwd?: string): P
         detached: true,
         stdio: ['ignore', 'pipe', 'pipe'],
         windowsHide: true,
+        env: userShellEnv(),
       })
     : spawn('/bin/bash', ['-c', command], {
         cwd,
         detached: true,
         stdio: ['ignore', 'pipe', 'pipe'],
+        env: userShellEnv(),
       })
 
   child.unref()

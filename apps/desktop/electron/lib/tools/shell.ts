@@ -2,6 +2,7 @@ import { tool } from 'ai'
 import { spawn, execSync } from 'node:child_process'
 import { z } from 'zod'
 import type { ToolContext } from './context'
+import { userShellEnv } from '../shell-env'
 
 const DEFAULT_TIMEOUT = 2 * 60 * 1000
 const MAX_TIMEOUT = 10 * 60 * 1000
@@ -32,8 +33,8 @@ function runShell(command: string, cwd: string, timeout: number, abort: AbortSig
   return new Promise<{ output: string; exitCode: number | null }>((resolve, reject) => {
     const isWin = process.platform === 'win32'
     const child = isWin
-      ? spawn('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', command], { cwd })
-      : spawn(process.env.SHELL || '/bin/bash', ['-c', command], { cwd })
+      ? spawn('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', command], { cwd, env: userShellEnv() })
+      : spawn(process.env.SHELL || '/bin/bash', ['-c', command], { cwd, env: userShellEnv() })
 
     let output = ''
     const append = (chunk: Buffer) => {
