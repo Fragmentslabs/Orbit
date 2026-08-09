@@ -40,7 +40,7 @@ export function createQuestionTool(input: SendMessageInput, signal?: AbortSignal
 
   return tool({
     description:
-      'Asks the user structured questions. Use it when facing decisions with multiple valid approaches, ambiguous requirements, or choices that affect the outcome — offer clear options. Do NOT use it for trivial confirmations. IMPORTANT: the question (text) must be just the question itself, WITHOUT examples or options — options must be provided exclusively in the "options" field.',
+      'Asks the user structured questions to UNBLOCK an actual task you are executing (decisions about implementation, ambiguous requirements, choices that affect the outcome) — offer clear options. Do NOT use it to answer a conversational question, to propose development options the user did not ask for, or for trivial confirmations. IMPORTANT: the question (text) must be just the question itself, WITHOUT examples or options — options must be provided exclusively in the "options" field.',
     inputSchema: z.object({
       questions: z
         .array(
