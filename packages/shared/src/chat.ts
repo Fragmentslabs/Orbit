@@ -208,6 +208,10 @@ export interface ChatMessage {
    * vez de o modelo concluir naturalmente — sinaliza à UI e ao próprio
    * modelo (no próximo turno) que o trabalho pode ter ficado incompleto. */
   truncated?: boolean
+  /** true quando a resposta terminou com itens da TODO ainda "in_progress"
+   * (o modelo não marcou como concluído). Vira lembrete para o modelo no
+   * próximo turno (via messageContextText) e para a UI explicar o spinner. */
+  todoReminder?: boolean
 }
 
 export interface ModelVariant {

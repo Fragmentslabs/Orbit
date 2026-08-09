@@ -70,7 +70,24 @@ Your response must:
 const MAX_AUTO_CONTINUES = 3
 const AUTO_CONTINUE_PROMPT = `[SYSTEM: the previous reply was cut off by the model's output token limit (finish_reason "length") — this is NOT the end of the turn. Continue exactly from where you left off: do NOT repeat or summarize what was already written, just pick up the next part and finish the work. If you were mid-task, complete it.]`
 const AUTO_CONTINUE_TOOL_PROMPT = (toolNames: string) => `[SYSTEM: the previous reply was cut off by the model's output token limit (finish_reason "length") in the middle of a ${toolNames} tool call. That tool call was NOT executed. Do NOT retry it as one giant operation — split it into smaller operations (smaller file writes, shorter commands, less data per call) and continue from where you left off.]`
+// Nudge de fechamento da TODO: o turno terminou em 'stop' mas o modelo não
+// reenviou a lista marcando os itens como completed (os checkboxes ficam com
+// spinner infinito na UI). Re-entramos no loop com uma synthetic user
+// message pedindo para resolver o estado — mesmo padrão do auto-continue,
+// com teto por turno para não virar loop.
+const MAX_TODO_NUDGES = 2
+const TODO_COMPLETION_PROMPT = `[SYSTEM: your reply ended, but the last TODO list still has items marked as "in_progress". If you actually completed them, re-send the TODO list marking those items as "completed" (do NOT repeat the work summary — just update the checklist). If they are truly still not finished, say so briefly. Do not end the turn again without resolving the TODO state.]`
 const abortControllers = new Map<string, AbortController>()
+
+/** true quando a última todowrite da mensagem tem itens "in_progress" —
+ * o card de tarefas ficaria com spinner eterno se o turno acabar assim. */
+function hasTodoInProgress(parts: MessagePart[]): boolean {
+  const todo = [...parts]
+    .reverse()
+    .find((p): p is ToolPart => p.type === 'tool' && p.tool === 'todowrite' && p.state === 'done')
+  const items = (todo?.input?.items ?? []) as { status?: string }[]
+  return items.some((i) => i.status === 'in_progress')
+}
 
 function newId(prefix: string) {
   return `${prefix}_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 10)}`
@@ -603,6 +620,7 @@ export async function runChat(win: BrowserWindow, input: SendMessageInput): Prom
       interleavedReasoningField(provider, input.modelId),
     )
     let autoContinues = 0
+    let todoNudges = 0
     let lastFinishReason: string | undefined
     let previousResponseMessages: ModelMessage[] = []
     let truncatedToolNames = ''
@@ -612,7 +630,7 @@ export async function runChat(win: BrowserWindow, input: SendMessageInput): Prom
         model,
         system: await buildSystemPrompt(input),
         messages:
-          autoContinues === 0
+          autoContinues === 0 && todoNudges === 0
             ? initialMessages
             : normalizeMessages(
                 [
@@ -620,9 +638,11 @@ export async function runChat(win: BrowserWindow, input: SendMessageInput): Prom
                   ...previousResponseMessages,
                   {
                     role: 'user' as const,
-                    content: truncatedToolNames
-                      ? AUTO_CONTINUE_TOOL_PROMPT(truncatedToolNames)
-                      : AUTO_CONTINUE_PROMPT,
+                    content: todoNudges > 0
+                      ? TODO_COMPLETION_PROMPT
+                      : truncatedToolNames
+                        ? AUTO_CONTINUE_TOOL_PROMPT(truncatedToolNames)
+                        : AUTO_CONTINUE_PROMPT,
                   },
                 ],
                 interleavedReasoningField(provider, input.modelId),
@@ -861,6 +881,22 @@ export async function runChat(win: BrowserWindow, input: SendMessageInput): Prom
         // messageContextText) — nunca um fim silencioso.
         assistantMessage.truncated = true
       }
+
+      // Nudge de fechamento da TODO: o turno terminou naturalmente ('stop')
+      // mas a última todowrite ainda tem itens "in_progress" — o modelo
+      // respondeu sem marcar as tarefas como concluídas, e o card fica com
+      // spinner eterno. Re-entra no loop com a synthetic user message
+      // (padrão do auto-continue) pedindo o fechamento, limitado por turno.
+      if (
+        lastFinishReason !== 'length' &&
+        !controller.signal.aborted &&
+        todoNudges < MAX_TODO_NUDGES &&
+        hasTodoInProgress(assistantMessage.parts)
+      ) {
+        todoNudges++
+        previousResponseMessages = await result.responseMessages
+        continue
+      }
       break
     }
 
@@ -871,6 +907,9 @@ export async function runChat(win: BrowserWindow, input: SendMessageInput): Prom
       }
     }
     assistantMessage.completedAt = Date.now()
+    // TODO não fechada ao final do turno → lembrete persistente para o
+    // próximo turno (messageContextText reemite o aviso via todoReminder).
+    if (hasTodoInProgress(assistantMessage.parts)) assistantMessage.todoReminder = true
     // Persiste a mensagem primeiro para que o usuário a veja o quanto antes
     await saveMessages(sessionId, history)
     // Captura snapshot final (git diff) e salva de novo se houver mudanças
