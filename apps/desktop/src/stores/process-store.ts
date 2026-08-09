@@ -6,7 +6,7 @@ import type { ProcessInfo } from "@/src/lib/ipc"
 interface ProcessStore {
   processes: ProcessInfo[]
   fetch: (sessionId?: string) => Promise<void>
-  kill: (pid: number) => Promise<void>
+  kill: (pid: number, sessionId?: string) => Promise<void>
 }
 
 export const useProcessStore = create<ProcessStore>((set) => ({
@@ -17,8 +17,8 @@ export const useProcessStore = create<ProcessStore>((set) => ({
     set({ processes })
   },
 
-  kill: async (pid) => {
-    await processApi.kill(pid)
+  kill: async (pid, sessionId) => {
+    await processApi.kill(pid, sessionId)
     set((state) => ({
       processes: state.processes.filter((p) => p.pid !== pid),
     }))

@@ -121,8 +121,8 @@ export interface ProcessInfo {
 
 export const processApi = {
   list: (sessionId?: string) => window.ipcRenderer.invoke("process:list", sessionId) as Promise<ProcessInfo[]>,
-  kill: (pid: number) => window.ipcRenderer.invoke("process:kill", pid) as Promise<boolean>,
-  output: (pid: number) => window.ipcRenderer.invoke("process:output", pid) as Promise<string>,
+  kill: (pid: number, sessionId?: string) => window.ipcRenderer.invoke("process:kill", pid, sessionId) as Promise<boolean>,
+  output: (pid: number, sessionId?: string) => window.ipcRenderer.invoke("process:output", pid, sessionId) as Promise<string>,
 }
 
 export const sessionApi = {

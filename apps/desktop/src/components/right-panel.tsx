@@ -315,7 +315,7 @@ function SelectorScreen({ onSelect, onOpenWorker }: {
                   <button
                     onClick={(e) => {
                       e.stopPropagation()
-                      void killProcess(p.pid)
+                      void killProcess(p.pid, activeId ?? undefined)
                     }}
                     title={t("panel.processes.kill")}
                     className="flex size-4 shrink-0 items-center justify-center rounded-sm text-sidebar-foreground/50 hover:text-destructive"

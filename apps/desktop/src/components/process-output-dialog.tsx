@@ -16,7 +16,7 @@ export function ProcessOutputDialog({ process, onOpenChange }: {
     if (!process) return
     let cancelled = false
     const fetchOutput = async () => {
-      const text = await processApi.output(process.pid)
+      const text = await processApi.output(process.pid, process.sessionId)
       if (!cancelled) setOutput(text)
     }
     void fetchOutput()

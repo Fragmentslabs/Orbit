@@ -1326,8 +1326,8 @@ app.whenReady().then(() => {
 
   // Processos em background
   ipcMain.handle('process:list', (_event, sessionId?: string) => listProcesses(sessionId))
-  ipcMain.handle('process:kill', (_event, pid: number) => killProcess(pid))
-  ipcMain.handle('process:output', (_event, pid: number) => getProcessOutput(pid))
+  ipcMain.handle('process:kill', (_event, pid: number, sessionId?: string) => killProcess(pid, sessionId))
+  ipcMain.handle('process:output', (_event, pid: number, sessionId?: string) => getProcessOutput(pid, sessionId))
 
   app.on('before-quit', () => killAllProcesses())
 

@@ -74,6 +74,10 @@ function runShell(command: string, cwd: string, timeout: number, abort: AbortSig
         child.stderr.removeListener('data', append)
         child.removeAllListeners('close')
         child.removeAllListeners('error')
+        // A partir daqui o processo é dono da própria vida: o abort do turno
+        // (Stop, nova mensagem) NÃO deve derrubá-lo — só bash_kill/lixeira. Sem
+        // esta remoção, o abort disparava onAbort e matava o processo promovido.
+        abort.removeEventListener('abort', onAbort)
         const background = registerProcess(child, {
           label: makeLabel(command),
           command,
