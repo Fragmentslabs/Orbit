@@ -133,12 +133,13 @@ export function ChatInput({ onSubmit, status, onStop, sessionId }: {
             const resolved = resolveSlashAction(raw, "chat")
             return resolved?.prompt ?? raw
           }
-          // Enter pressionado durante execução: fila ou stop
+          // Enter durante execução: com texto, enfileira; sem texto, não faz
+          // NADA — parar é intencional (botão de stop ou Tab+Enter nele);
+          // nunca "resposta em branco" para cancelar.
           if (busy) {
             const text = message.text?.trim()
-            if (!text) {
-              onStop?.()
-            } else if (sessionId) {
+            if (!text) return
+            if (sessionId) {
               enqueueForSend(sessionId, resolveText(text), buildOptions(), mode, { files })
               clearInputDraft(sessionId)
             }
