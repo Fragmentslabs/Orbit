@@ -72,12 +72,25 @@ const RivePersona: FC<Required<PersonaProps>> = ({ state, size }) => {
 
   useEffect(() => {
     if (!riveRef) return
-    for (const input of BOOL_INPUTS) {
-      try {
-        riveRef.setInputState(PERSONA_STATE_MACHINE, input, state === input)
-      } catch {
-        // input pode não existir na state machine do asset
+    let cancelled = false
+    const apply = () => {
+      if (cancelled) return
+      for (const input of BOOL_INPUTS) {
+        try {
+          riveRef.setInputState(PERSONA_STATE_MACHINE, input, state === input)
+        } catch {
+          // input pode não existir na state machine do asset
+        }
       }
+    }
+    apply()
+    // No Android os inputs do state machine podem ficar prontos alguns frames
+    // depois do evento de load do nativo — reaplica para o estado não se perder
+    // (era o que deixava o persona preso em 'asleep' na tela inicial).
+    const retry = setTimeout(apply, 200)
+    return () => {
+      cancelled = true
+      clearTimeout(retry)
     }
   }, [riveRef, state])
 

@@ -39,12 +39,22 @@ export default function ConnectionScreen() {
 
   const isAutoReconnecting = !!savedConfig && connection.status !== 'disconnected' && !connection.error
 
-  const personaState: PersonaState =
-    connection.status === 'connected'
+  // Ao entrar na tela o persona começa dormindo e acorda depois de um instante,
+  // tocando a transição sleep → normal (espelho do fluxo do desktop). Só depois
+  // disso ele assume o estado derivado da conexão.
+  const [personaAwake, setPersonaAwake] = useState(false)
+  useEffect(() => {
+    const t = setTimeout(() => setPersonaAwake(true), 700)
+    return () => clearTimeout(t)
+  }, [])
+
+  const personaState: PersonaState = personaAwake
+    ? connection.status === 'connected'
       ? 'speaking'
       : connection.status === 'connecting' || connection.status === 'authenticating'
         ? 'listening'
         : 'idle'
+    : 'asleep'
 
   useEffect(() => { loadRecent() }, [loadRecent])
 
