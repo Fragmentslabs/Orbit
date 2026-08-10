@@ -41,6 +41,15 @@ const HIDDEN_HEIGHT = 800
 
 const records = new Map<string, WebviewRecord>()
 
+/** `<webview>`s que já emitiram `dom-ready`. Antes disso, chamar getURL()/
+ *  loadURL() lança "The WebView must be attached to the DOM and the dom-ready
+ *  event emitted before this method can be called" — um erro não capturado
+ *  num useEffect derrubava o app inteiro (tela preta) ao montar um webview
+ *  novo. Só chamamos essas APIs com o guest pronto. */
+const readyEls = new WeakSet<WebviewElement>()
+/** loadURL agendado para quando o guest ficar pronto (última vitória). */
+const pendingNav = new WeakMap<WebviewElement, string>()
+
 let hiddenHost: HTMLDivElement | null = null
 
 function getHiddenHost(): HTMLDivElement {
@@ -73,6 +82,51 @@ function sessionIdOf(key: string): string {
   return idx >= 0 ? key.slice(0, idx) : key
 }
 
+/** Garante o listener de dom-ready (idempotente) — cobre também `<webview>`s
+ *  renderizados pelo React fora do pool (ex.: aba Browser do painel direito). */
+function trackReady(el: WebviewElement) {
+  if (readyEls.has(el)) return
+  el.addEventListener("dom-ready", () => {
+    readyEls.add(el)
+    const pending = pendingNav.get(el)
+    if (pending !== undefined) {
+      pendingNav.delete(el)
+      void el.loadURL(pending).catch(() => {})
+    }
+  })
+}
+
+/** true quando o guest já emitiu dom-ready (getURL/loadURL são seguros). */
+export function isWebviewReady(el: WebviewElement): boolean {
+  trackReady(el)
+  return readyEls.has(el)
+}
+
+/** getURL() que nunca lança: retorna "" enquanto o guest não estiver pronto. */
+export function safeWebviewURL(el: WebviewElement): string {
+  if (!isWebviewReady(el)) return ""
+  try {
+    return el.getURL()
+  } catch {
+    return ""
+  }
+}
+
+/** loadURL() que nunca lança: navega agora se pronto; senão agenda para o
+ *  dom-ready. Se o src inicial já é o URL desejado, não agenda (o próprio
+ *  load do guest resolve). */
+export function navigateWebview(el: WebviewElement, url: string): void {
+  if (!isWebviewReady(el)) {
+    if (el.src !== url) pendingNav.set(el, url)
+    return
+  }
+  try {
+    if (el.getURL() !== url) void el.loadURL(url).catch(() => {})
+  } catch {
+    pendingNav.set(el, url)
+  }
+}
+
 /**
  * Garante que o webview da chave existe (criando no host oculto se preciso).
  * Callbacks são atualizados a cada chamada — o componente montado define o
@@ -92,6 +146,13 @@ export function ensureWebview(
     records.set(key, rec)
 
     el.addEventListener("dom-ready", () => {
+      // Marca pronto e descarrega navegação agendada antes do guest iniciar
+      trackReady(el)
+      const pending = pendingNav.get(el)
+      if (pending !== undefined) {
+        pendingNav.delete(el)
+        void el.loadURL(pending).catch(() => {})
+      }
       try {
         const wcId = el.getWebContentsId()
         if (wcId > 0) panelApi.register(sessionIdOf(key), wcId)

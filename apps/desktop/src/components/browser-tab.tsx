@@ -49,7 +49,11 @@ import { ModelPicker } from "@/src/components/model-picker"
 import { PermissionModePicker } from "@/src/components/permission-mode-picker"
 import { visibleMessageText } from "@/src/lib/message-utils"
 import { windowApi } from "@/src/lib/ipc"
-import { reloadWebview } from "@/src/components/browser/webview-session"
+import {
+  navigateWebview,
+  reloadWebview,
+  type WebviewElement,
+} from "@/src/components/browser/webview-session"
 import { usePanelStore, type Viewport } from "@/src/stores/panel-store"
 import { usePermissionPrefs } from "@/src/stores/permission-prefs"
 import {
@@ -66,14 +70,6 @@ import {
  * - modo seleção: clique em um elemento vira badge/anexo no input do code mode
  * - viewport (responsividade), tela cheia com feed de atividade e composer p/ IA
  */
-
-interface WebviewElement extends HTMLElement {
-  getWebContentsId(): number
-  getURL(): string
-  loadURL(url: string): Promise<void>
-  executeJavaScript(code: string): Promise<unknown>
-  isLoading(): boolean
-}
 
 const SELECT_PREFIX = "__ORBIT_SELECT__"
 
@@ -189,11 +185,15 @@ function PanelBrowserBody({ persistKey }: { persistKey?: string }) {
     }
   }, [])
 
-  // Navegação controlada: mudanças na barra de URL viram loadURL (sem remount)
+  // Navegação controlada: mudanças na barra de URL viram loadURL (sem remount).
+  // navigateWebview é seguro: getURL()/loadURL() lançam se o guest ainda não
+  // emitiu dom-ready — num webview recém-criado um erro não capturado aqui
+  // derrubava o app inteiro (tela preta). A navegação fica agendada até o
+  // dom-ready quando necessário.
   useEffect(() => {
     const webview = webviewRef.current
     if (!webview || !url) return
-    if (webview.getURL() !== url) void webview.loadURL(url).catch(() => {})
+    navigateWebview(webview, url)
   }, [url])
 
   useEffect(() => {

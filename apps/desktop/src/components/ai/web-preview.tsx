@@ -17,7 +17,7 @@ import { Input } from "@/components/ui/input"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { cn } from "@/lib/utils"
 import { formatTime } from "@/src/lib/format"
-import { mountWebview, unmountWebview } from "@/src/components/browser/webview-session"
+import { mountWebview, safeWebviewURL, unmountWebview } from "@/src/components/browser/webview-session"
 
 export interface WebPreviewContextValue {
   url: string
@@ -299,12 +299,9 @@ export const WebPreviewBody = ({
     )
     onWebviewRefRef.current?.(el)
     // Aba já tinha página carregada (de um ciclo anterior)? Espelha na barra.
-    try {
-      const currentUrl = el.getURL()
-      if (currentUrl && currentUrl !== "about:blank") syncUrlRef.current(currentUrl)
-    } catch {
-      // guest ainda não pronto — o próximo did-navigate sincroniza
-    }
+    // safeWebviewURL não lança antes do dom-ready — o did-navigate sincroniza.
+    const currentUrl = safeWebviewURL(el)
+    if (currentUrl && currentUrl !== "about:blank") syncUrlRef.current(currentUrl)
     return () => {
       onWebviewRefRef.current?.(null)
       unmountWebview(persistKey)
