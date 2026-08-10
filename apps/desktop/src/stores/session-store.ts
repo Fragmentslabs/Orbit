@@ -287,18 +287,28 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     if (get().messages[sessionId] !== undefined) return
     const messages = (await storage.read<ChatMessage[]>(StorageKeys.messages(sessionId))) ?? []
     set((state) => {
+      // Eventos do main podem chegar enquanto o read do histórico está em
+      // andamento (especialmente após reload com um turno ainda rodando).
+      // Nunca substitua esses eventos pelo snapshot possivelmente antigo do
+      // disco: mescle por ID e deixe o estado recebido ao vivo vencer.
+      const live = state.messages[sessionId] ?? []
+      const liveById = new Map(live.map((message) => [message.id, message]))
+      const merged = messages.map((message) => liveById.get(message.id) ?? message)
+      const historicalIds = new Set(messages.map((message) => message.id))
+      merged.push(...live.filter((message) => !historicalIds.has(message.id)))
+
       // Reconciliação de status: se a última mensagem do assistente já tem
       // tokens/error (fim do stream) e o status ficou preso em
       // streaming/submitted (evento status: idle perdido durante um reload),
       // destrava a UI.
       const status = state.status
-      const lastAssistant = [...messages].reverse().find((m) => m.role === "assistant")
+      const lastAssistant = [...merged].reverse().find((m) => m.role === "assistant")
       const finished =
         lastAssistant !== undefined &&
         (lastAssistant.tokens !== undefined || lastAssistant.error !== undefined)
       const stuck = status[sessionId] === "streaming" || status[sessionId] === "submitted"
       return {
-        messages: { ...state.messages, [sessionId]: messages },
+        messages: { ...state.messages, [sessionId]: merged },
         ...(finished && stuck ? { status: { ...status, [sessionId]: "idle" as ChatStatus } } : {}),
       }
     })

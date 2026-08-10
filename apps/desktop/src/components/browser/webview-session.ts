@@ -49,6 +49,8 @@ const records = new Map<string, WebviewRecord>()
 const readyEls = new WeakSet<WebviewElement>()
 /** loadURL agendado para quando o guest ficar pronto (última vitória). */
 const pendingNav = new WeakMap<WebviewElement, string>()
+/** Scripts aguardando o dom-ready — evita rejeição fatal no renderer. */
+const pendingScripts = new WeakMap<WebviewElement, string[]>()
 
 let hiddenHost: HTMLDivElement | null = null
 
@@ -64,7 +66,6 @@ function getHiddenHost(): HTMLDivElement {
 }
 
 function createWebview(src: string): WebviewElement {
-  // @ts-ignore — tag específica do Electron
   const el = document.createElement("webview") as WebviewElement
   el.src = src || "about:blank"
   el.style.cssText = "width: 100%; height: 100%; display: flex; background: white; border: 0;"
@@ -93,6 +94,11 @@ function trackReady(el: WebviewElement) {
       pendingNav.delete(el)
       void el.loadURL(pending).catch(() => {})
     }
+    const scripts = pendingScripts.get(el)
+    if (scripts?.length) {
+      pendingScripts.delete(el)
+      for (const code of scripts) void el.executeJavaScript(code).catch(() => {})
+    }
   })
 }
 
@@ -115,6 +121,23 @@ export function safeWebviewURL(el: WebviewElement): string {
 /** loadURL() que nunca lança: navega agora se pronto; senão agenda para o
  *  dom-ready. Se o src inicial já é o URL desejado, não agenda (o próprio
  *  load do guest resolve). */
+/** Executa JS apenas depois de o guest estar anexado e pronto. */
+export function executeWebviewJavaScript(el: WebviewElement, code: string): void {
+  if (!isWebviewReady(el)) {
+    const queued = pendingScripts.get(el) ?? []
+    queued.push(code)
+    pendingScripts.set(el, queued)
+    return
+  }
+  try {
+    void el.executeJavaScript(code).catch(() => {})
+  } catch {
+    const queued = pendingScripts.get(el) ?? []
+    queued.push(code)
+    pendingScripts.set(el, queued)
+  }
+}
+
 export function navigateWebview(el: WebviewElement, url: string): void {
   if (!isWebviewReady(el)) {
     if (el.src !== url) pendingNav.set(el, url)
@@ -146,8 +169,11 @@ export function ensureWebview(
     records.set(key, rec)
 
     el.addEventListener("dom-ready", () => {
-      // Marca pronto e descarrega navegação agendada antes do guest iniciar
-      trackReady(el)
+      // O listener de trackReady pode ser instalado durante este mesmo evento;
+      // marcar diretamente aqui garante que efeitos React posteriores vejam o
+      // guest como pronto e não tentem chamar APIs cedo demais.
+      readyEls.add(el)
+      // Descarrega navegação/script agendados antes do guest iniciar
       const pending = pendingNav.get(el)
       if (pending !== undefined) {
         pendingNav.delete(el)

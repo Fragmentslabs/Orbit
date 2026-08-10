@@ -50,6 +50,7 @@ import { PermissionModePicker } from "@/src/components/permission-mode-picker"
 import { visibleMessageText } from "@/src/lib/message-utils"
 import { windowApi } from "@/src/lib/ipc"
 import {
+  executeWebviewJavaScript,
   navigateWebview,
   reloadWebview,
   type WebviewElement,
@@ -216,7 +217,7 @@ function PanelBrowserBody({
   useEffect(() => {
     const webview = webviewRef.current
     if (!webview) return
-    void webview.executeJavaScript(selectMode ? SELECT_ON : SELECT_OFF).catch(() => {})
+    executeWebviewJavaScript(webview, selectMode ? SELECT_ON : SELECT_OFF)
   }, [selectMode])
 
   // Botão reload: recarrega no MESMO webview (a página persistida não é

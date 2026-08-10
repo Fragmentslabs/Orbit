@@ -214,7 +214,7 @@ function ChatMessages({ messages, isBusy, mode, sessionId, sendMessage, planIds,
   }, [])
 
   return (
-    <Conversation className="relative flex-1 -mt-10">
+    <Conversation key={sessionId ?? "no-session"} className="relative flex-1 -mt-10">
       <ConversationContent className="mx-auto w-full max-w-3xl">
         {messages.map((msg, index) => {
           const showSeparator = isNewDay(messages[index - 1]?.createdAt, msg.createdAt)
@@ -309,10 +309,13 @@ export function ChatView({ sessionId }: { sessionId?: string } = {}) {
     void initializeProviders()
   }, [initializeProviders])
 
-  // View com sessão explícita (worker no painel direito): carrega o histórico
+  // Carrega o histórico tanto para views explícitas (workers/painel) quanto
+  // para a sessão principal. Após um reload do renderer, o status pode voltar
+  // como streaming antes de a lista de mensagens ter sido hidratada; sem este
+  // efeito a UI ficava vazia enquanto o engine continuava rodando.
   useEffect(() => {
-    if (sessionId) void useSessionStore.getState().ensureMessages(sessionId)
-  }, [sessionId])
+    if (session?.id) void useSessionStore.getState().ensureMessages(session.id)
+  }, [session?.id])
 
   // Fecha a busca ao trocar de sessão para não deixar resultados obsoletos visíveis
   useEffect(() => {
