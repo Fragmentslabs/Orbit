@@ -329,10 +329,7 @@ async function generateTitle(input: SendMessageInput, win: BrowserWindow) {
     const title = truncateTitle(text)
     if (!title) return
 
-    const session = await readJson<SessionInfo>(StorageKeys.session(input.sessionId))
-    if (session) {
-      await writeJson(StorageKeys.session(input.sessionId), { ...session, title, updatedAt: Date.now() })
-    }
+    await bumpSessionActivity(win, input.sessionId)
     emit(win, { type: 'title', sessionId: input.sessionId, title })
   } catch {
     // título é cosmético; falha silenciosa
@@ -354,6 +351,18 @@ export function getRunningSessionIds(): string[] {
   return [...abortControllers.keys()]
 }
 
+/** Enviar mensagem = atividade: atualiza o updatedAt da sessão e propaga o
+ *  evento "session" para todas as janelas e o mobile. Sem esse evento o store
+ *  do renderer nunca vê o novo updatedAt e a sidebar não reordena — o chat
+ *  não sobe para o topo dos recentes (nem a pasta que o contém). */
+async function bumpSessionActivity(win: BrowserWindow, sessionId: string): Promise<void> {
+  const session = await readJson<SessionInfo>(StorageKeys.session(sessionId))
+  if (!session) return
+  const updated = { ...session, updatedAt: Date.now() }
+  await writeJson(StorageKeys.session(sessionId), updated)
+  emit(win, { type: 'session', sessionId, session: updated })
+}
+
 export async function runChat(win: BrowserWindow, input: SendMessageInput): Promise<void> {
   const { sessionId } = input
   abortControllers.get(sessionId)?.abort()
@@ -361,6 +370,7 @@ export async function runChat(win: BrowserWindow, input: SendMessageInput): Prom
   abortControllers.set(sessionId, controller)
 
   emit(win, { type: 'status', sessionId, status: 'submitted' })
+  await bumpSessionActivity(win, sessionId)
 
   // Revert ativo: nova mensagem consolida o revert — descarta as mensagens
   // posteriores ao ponto revertido antes de carregar o histórico
@@ -925,8 +935,7 @@ export async function runChat(win: BrowserWindow, input: SendMessageInput): Prom
       await saveMessages(sessionId, history)
     }
 
-    const session = await readJson<SessionInfo>(StorageKeys.session(sessionId))
-    if (session) await writeJson(StorageKeys.session(sessionId), { ...session, updatedAt: Date.now() })
+    await bumpSessionActivity(win, sessionId)
 
     emit(win, { type: 'message', sessionId, message: assistantMessage })
     emit(win, { type: 'status', sessionId, status: 'idle' })
