@@ -15,6 +15,7 @@ import { FolderSelector } from "@/src/components/folder-selector"
 import type { SendMessageOptions, FilePart } from "@shared/chat"
 import { ManagedTerminalTab } from "@/src/components/terminal-tab"
 import { BrowserTab } from "@/src/components/browser-tab"
+import { destroyWebview } from "@/src/components/browser/webview-session"
 import { FoldersTab } from "@/src/components/folders-tab"
 import { DiffTab } from "@/src/components/diff-tab"
 import { ProcessOutputDialog } from "@/src/components/process-output-dialog"
@@ -138,7 +139,7 @@ function TerminalTabContent({ tabId }: { tabId: string }) {
   )
 }
 
-function TabContent({ tab, onUpdateTab }: { tab: PanelTab; onUpdateTab: (id: string, updates: Partial<PanelTab>) => void }) {
+function TabContent({ tab, sessionId, onUpdateTab }: { tab: PanelTab; sessionId?: string; onUpdateTab: (id: string, updates: Partial<PanelTab>) => void }) {
   switch (tab.type) {
     case "chat":
       if (tab.pending) {
@@ -161,7 +162,14 @@ function TabContent({ tab, onUpdateTab }: { tab: PanelTab; onUpdateTab: (id: str
     case "browser":
       return (
         <div className="flex flex-1 flex-col overflow-hidden">
-          <BrowserTab initialUrl={tab.url} />
+          <BrowserTab
+            initialUrl={tab.url}
+            // Webview persistente no pool (webview-session.ts): a página da aba
+            // sobrevive a trocas de aba/chat — voltar reexibe onde estava, e o
+            // agente continua controlando o browser em background.
+            persistKey={sessionId ? `${sessionId}:${tab.id}` : undefined}
+            onUrlChange={(url) => onUpdateTab(tab.id, { url })}
+          />
         </div>
       )
     case "diff":
@@ -445,17 +453,26 @@ export function RightPanel() {
     if (tab?.type === "terminal") {
       useTerminalStore.getState().killTerminal(id)
     }
+    if (tab?.type === "browser" && activeSessionId) {
+      // Fechou a aba: destrói o webview do pool e desregistra no main (senão a
+      // página continuaria viva no host oculto e o agente navegaria um browser órfão).
+      destroyWebview(`${activeSessionId}:${id}`)
+    }
     removeTabFromStore(sk, id)
   }, [activeSessionId, tabs, removeTabFromStore])
 
   const updateTab = useCallback((id: string, updates: Partial<PanelTab>) => {
     const sk = activeSessionId ?? "__orphan__"
+    // Lê do store em vez do closure: did-navigate pode chegar depois de outras
+    // mudanças de abas — com o closure, o map sobre uma lista antiga descartaria
+    // abas adicionadas entretanto.
+    const current = usePanelStore.getState().tabsBySession[sk] ?? []
     usePanelStore.getState().setTabsForSession(
       sk,
-      tabs.map((t) => (t.id === id ? { ...t, ...updates } : t)),
-      activeTabId,
+      current.map((t) => (t.id === id ? { ...t, ...updates } : t)),
+      usePanelStore.getState().getActiveTabId(sk),
     )
-  }, [activeSessionId, tabs, activeTabId])
+  }, [activeSessionId])
 
   // Agente pediu o browser (tools panel_*): garante/ativa a aba Browser — só
   // na sessão que pediu, e só nesse pedido específico (não a cada troca de
@@ -597,7 +614,7 @@ export function RightPanel() {
                     ? "bg-sidebar-accent text-sidebar-accent-foreground"
                     : "text-sidebar-foreground/50 hover:text-sidebar-foreground hover:bg-sidebar-accent/50",
                 )}
-                onClick={() => activeSessionId && setActiveTabInStore(activeSessionId, tab.id)}
+                onClick={() => setActiveTabInStore(sessionKey, tab.id)}
               >
                 {closeOnLeft && closeButton}
                 <TabIcon className="size-3.5 shrink-0" />
@@ -634,7 +651,12 @@ export function RightPanel() {
 
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
         {activeTab ? (
-          <TabContent tab={activeTab} onUpdateTab={updateTab} />
+          // key força remount ao trocar de aba: sem ela, o React reusa a mesma
+          // instância para abas do mesmo tipo (browser↔browser) e elas passam a
+          // compartilhar estado/histórico — era o "contexto compartilhado" e a
+          // alternância que não funcionava. Com persistKey, o remount apenas
+          // reanexa o webview daquela aba vindo do pool.
+          <TabContent key={activeTab.id} tab={activeTab} sessionId={activeSessionId ?? undefined} onUpdateTab={updateTab} />
         ) : (
           <SelectorScreen
             onSelect={addTab}

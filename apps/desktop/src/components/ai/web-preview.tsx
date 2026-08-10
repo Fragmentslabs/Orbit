@@ -261,6 +261,8 @@ export type WebPreviewBodyProps = ComponentProps<"iframe"> & {
   persistKey?: string
   /** Mensagens de console do webview persistido (ex.: payloads do modo seleção). */
   onConsoleMessage?: (message: string) => void
+  /** Notifica navegações do guest (did-navigate), além do syncUrl interno. */
+  onNavigate?: (url: string) => void
 }
 
 export const WebPreviewBody = ({
@@ -271,6 +273,7 @@ export const WebPreviewBody = ({
   viewport,
   persistKey,
   onConsoleMessage,
+  onNavigate,
   ...props
 }: WebPreviewBodyProps) => {
   const { url, refreshKey, setUrl, syncUrl } = useWebPreview()
@@ -283,6 +286,8 @@ export const WebPreviewBody = ({
   onWebviewRefRef.current = onWebviewRef
   const onConsoleMessageRef = useRef(onConsoleMessage)
   onConsoleMessageRef.current = onConsoleMessage
+  const onNavigateRef = useRef(onNavigate)
+  onNavigateRef.current = onNavigate
 
   // Webview persistente (pool): o elemento <webview> sobrevive ao unmount do
   // componente — voltar a esta aba reexibe a página exatamente onde estava.
@@ -294,7 +299,10 @@ export const WebPreviewBody = ({
       persistKey,
       container,
       src ?? url ?? undefined,
-      (navUrl) => syncUrlRef.current(navUrl),
+      (navUrl) => {
+        syncUrlRef.current(navUrl)
+        onNavigateRef.current?.(navUrl)
+      },
       (message) => onConsoleMessageRef.current?.(message),
     )
     onWebviewRefRef.current?.(el)

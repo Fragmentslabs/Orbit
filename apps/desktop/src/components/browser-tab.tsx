@@ -163,7 +163,13 @@ function useEdgeHover() {
   return { hovered, handleEnter, handleLeave }
 }
 
-function PanelBrowserBody({ persistKey }: { persistKey?: string }) {
+function PanelBrowserBody({
+  persistKey,
+  onUrlChange,
+}: {
+  persistKey?: string
+  onUrlChange?: (url: string) => void
+}) {
   const { url, refreshKey } = useWebPreview()
   const selectMode = usePanelStore((s) => s.selectMode)
   const viewport = usePanelStore((s) => s.viewport)
@@ -190,9 +196,20 @@ function PanelBrowserBody({ persistKey }: { persistKey?: string }) {
   // emitiu dom-ready — num webview recém-criado um erro não capturado aqui
   // derrubava o app inteiro (tela preta). A navegação fica agendada até o
   // dom-ready quando necessário.
+  //
+  // A PRIMEIRA execução após montar não navega: na remontagem de uma aba com
+  // webview vivo no pool, a página real é sincronizada pelo mount
+  // (safeWebviewURL → syncUrl) — navegar aqui com a URL antiga (tab.url)
+  // jogaria a aba de volta para uma página anterior (ex.: agente navegou para
+  // Z enquanto a aba estava oculta). No webview novo, o src inicial carrega.
+  const initialNavSkipped = useRef(false)
   useEffect(() => {
     const webview = webviewRef.current
     if (!webview || !url) return
+    if (!initialNavSkipped.current) {
+      initialNavSkipped.current = true
+      return
+    }
     navigateWebview(webview, url)
   }, [url])
 
@@ -213,6 +230,7 @@ function PanelBrowserBody({ persistKey }: { persistKey?: string }) {
       src={initialSrcRef.current || undefined}
       onWebviewRef={handleWebviewRef}
       onConsoleMessage={handleConsoleMessage}
+      onNavigate={onUrlChange}
       viewport={viewport}
       persistKey={persistKey}
     />
@@ -703,7 +721,16 @@ function FullscreenComposer({ onSent }: { onSent?: () => void }) {
   )
 }
 
-export function BrowserTab({ initialUrl, persistKey }: { initialUrl?: string; persistKey?: string }) {
+export function BrowserTab({
+  initialUrl,
+  persistKey,
+  onUrlChange,
+}: {
+  initialUrl?: string
+  persistKey?: string
+  /** Notifica a URL atual da página (did-navigate) — mantém tab.url sincronizado. */
+  onUrlChange?: (url: string) => void
+}) {
   const fullscreen = usePanelStore((s) => s.fullscreen)
   const setFullscreen = usePanelStore((s) => s.setFullscreen)
   const [chatPinned, setChatPinned] = useState(false)
@@ -763,7 +790,7 @@ export function BrowserTab({ initialUrl, persistKey }: { initialUrl?: string; pe
       <div className="relative flex min-h-0 flex-1 flex-col">
         <AgentIndicator />
         {fullscreen && <ActivityFeed />}
-        <PanelBrowserBody persistKey={persistKey} />
+        <PanelBrowserBody persistKey={persistKey} onUrlChange={onUrlChange} />
         {fullscreen && <FullscreenChatFeed pinned={chatPinned} onTogglePin={() => setChatPinned((v) => !v)} />}
         {fullscreen && <FullscreenComposer onSent={() => setChatPinned(true)} />}
       </div>
