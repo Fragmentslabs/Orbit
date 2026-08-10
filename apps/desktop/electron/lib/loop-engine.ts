@@ -34,6 +34,11 @@ export function abortLoop(sessionId: string) {
   loopControllers.get(sessionId)?.abort()
 }
 
+/** Sessões com loop ativo (entre iterações do runChat, durante a revisão). */
+export function getLoopRunningSessionIds(): string[] {
+  return [...loopControllers.keys()]
+}
+
 function emit(win: BrowserWindow, event: Record<string, unknown>) {
   if (!win.isDestroyed()) win.webContents.send('chat:event', event)
 }

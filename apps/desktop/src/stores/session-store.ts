@@ -198,6 +198,22 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     })
 
     chatApi.onEvent((event) => applyChatEvent(event, set, get))
+
+    // Após um reload do renderer, o main sabe quais sessões continuam rodando
+    // (o engine vive no main process) — re-emite o status para a UI voltar a
+    // mostrar spinner e botão de parar sem esperar o próximo evento do turno.
+    // `if (!status[id])` preserva um status que chegou entretanto (ex: idle
+    // do fim do turno entre o invoke e o set).
+    void chatApi.running().then((running) => {
+      if (running.length === 0) return
+      set((state) => {
+        const status = { ...state.status }
+        for (const id of running) {
+          if (status[id] === undefined) status[id] = "streaming" as ChatStatus
+        }
+        return { status }
+      })
+    })
   },
 
   createSession: async (mode, partial) => {

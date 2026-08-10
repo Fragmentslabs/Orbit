@@ -140,6 +140,9 @@ export const chatApi = {
     window.ipcRenderer?.send("chat:event:emit", event)
   },
   abort: (sessionId: string) => window.ipcRenderer.invoke("chat:abort", sessionId),
+  /** Sessões ainda rodando no main (após reload do renderer, para re-emitir
+   *  o status de streaming sem esperar o próximo evento). */
+  running: () => window.ipcRenderer.invoke("chat:running") as Promise<string[]>,
   compact: (sessionId: string) => window.ipcRenderer.invoke("chat:compact", sessionId),
   approvePlan: (sessionId: string, planId: string, taskIds?: string[]) =>
     window.ipcRenderer.invoke("chat:approvePlan", sessionId, planId, taskIds),

@@ -348,6 +348,12 @@ export function abortChat(sessionId: string) {
   abortControllers.get(sessionId)?.abort()
 }
 
+/** Sessões com um runChat em andamento — o main re-emite o status após um
+ *  reload do renderer, para a UI voltar a mostrar spinner/botão de parar. */
+export function getRunningSessionIds(): string[] {
+  return [...abortControllers.keys()]
+}
+
 export async function runChat(win: BrowserWindow, input: SendMessageInput): Promise<void> {
   const { sessionId } = input
   abortControllers.get(sessionId)?.abort()

@@ -15,10 +15,10 @@ import { killAll as killAllProcesses, listProcesses, killProcess, getProcessOutp
 import { getModelsSnapshot, invalidateModelsSnapshot } from './lib/models'
 import { revert as revertSession, unrevert as unrevertSession } from './lib/session/revert'
 import { getInitStatus, runProjectInit, type RunInitInput } from './lib/project-init'
-import { abortChat, compactSession, runChat } from './lib/chat-engine'
-import { runChatWithLoop, abortLoop } from './lib/loop-engine'
+import { abortChat, compactSession, getRunningSessionIds, runChat } from './lib/chat-engine'
+import { runChatWithLoop, abortLoop, getLoopRunningSessionIds } from './lib/loop-engine'
 import { reply as askReply, rejectSession as rejectSessionAsks } from './lib/ask-broker'
-import { abortOrchestration, approvePlan, rejectPlan, runOrchestration } from './lib/orchestrator'
+import { abortOrchestration, approvePlan, getOrchestrationRunningSessionIds, rejectPlan, runOrchestration } from './lib/orchestrator'
 import { initMcp, listMcpStatus, readMcpConfig, reconnectMcp, saveMcpConfig } from './lib/mcp'
 import { loadTrustRules } from './lib/permission/trust-rules'
 import { clearSessionTrust } from './lib/permission'
@@ -1068,6 +1068,13 @@ app.whenReady().then(() => {
     rejectSessionAsks(sessionId)
     clearSessionTrust(sessionId)
   })
+  // Sessões ainda rodando no main (engine vive aqui) — o renderer consulta
+  // após um reload para re-exibir spinner/botão de parar imediatamente.
+  ipcMain.handle('chat:running', () => [
+    ...getRunningSessionIds(),
+    ...getLoopRunningSessionIds(),
+    ...getOrchestrationRunningSessionIds(),
+  ])
   ipcMain.handle('chat:askReply', (_event, requestId: string, value: unknown) => askReply(requestId, value))
   ipcMain.handle('chat:approvePlan', (_event, sessionId: string, planId: string, taskIds?: string[]) => {
     if (win) void approvePlan(win, sessionId, planId, taskIds)

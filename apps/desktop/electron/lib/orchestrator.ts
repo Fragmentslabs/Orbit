@@ -98,6 +98,11 @@ export function abortOrchestration(sessionId: string) {
   pending.delete(sessionId)
 }
 
+/** Sessões com orquestração em andamento (planejamento/síntese). */
+export function getOrchestrationRunningSessionIds(): string[] {
+  return [...controllers.keys()]
+}
+
 /** Fase 1 — planejamento. Substitui runChat quando options.orchestrate está ativo. */
 export async function runOrchestration(win: BrowserWindow, input: SendMessageInput): Promise<void> {
   const { sessionId } = input
