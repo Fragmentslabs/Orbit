@@ -1,6 +1,6 @@
-import { useEffect, useState } from "react"
+import { useState } from "react"
 import { useTranslation } from "react-i18next"
-import { ChevronDown, FileTextIcon, RefreshCwIcon, MessageSquareText, X } from "lucide-react"
+import { ChevronDown, FileTextIcon, MessageSquareText, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
   DropdownMenu,
@@ -11,7 +11,6 @@ import {
 import { usePermissionPrefs } from "@/src/stores/permission-prefs"
 import { useSessionStore } from "@/src/stores/session-store"
 import { PlanDialog } from "@/src/components/plan-dialog"
-import { chatApi } from "@/src/lib/ipc"
 import type { PlanReview } from "@shared/chat"
 import type { PermissionMode } from "@shared/chat"
 
@@ -30,8 +29,6 @@ const MODE_LABEL: Record<PermissionMode, string> = {
 export function PlanReviewCard({ sessionId, review }: { sessionId: string; review: PlanReview }) {
   const { t } = useTranslation()
   const [dialogOpen, setDialogOpen] = useState(false)
-  const [content, setContent] = useState<string | null>(null)
-  const [loading, setLoading] = useState(false)
   const [reviewOpen, setReviewOpen] = useState(false)
   const [reviewText, setReviewText] = useState("")
   const acceptPlanReview = useSessionStore((s) => s.acceptPlanReview)
@@ -40,20 +37,7 @@ export function PlanReviewCard({ sessionId, review }: { sessionId: string; revie
   const dismissPlanReview = useSessionStore((s) => s.dismissPlanReview)
   const currentMode = usePermissionPrefs((s) => s.mode)
   const otherModes = ALL_MODES.filter((m) => m.id !== currentMode)
-  const session = useSessionStore((s) => s.sessions.find((x) => x.id === sessionId))
-
-  async function load() {
-    if (!session?.directory) return
-    setLoading(true)
-    try {
-      setContent(await chatApi.readPlanFile(session.directory))
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  useEffect(() => { load() }, [review.status])
-
+  const content = review.content ?? null
   const checkboxCount = content
     ? [...content.matchAll(/\[(\s|x)\]/gi)].length
     : 0
@@ -126,9 +110,6 @@ export function PlanReviewCard({ sessionId, review }: { sessionId: string; revie
               </>
             ) : (
               <>
-                <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={load} disabled={loading}>
-                  <RefreshCwIcon className={`size-3.5 ${loading ? "animate-spin" : ""}`} />
-                </Button>
                 <button
                   type="button"
                   onClick={() => dismissPlanReview(sessionId)}
@@ -155,7 +136,7 @@ export function PlanReviewCard({ sessionId, review }: { sessionId: string; revie
           </div>
         )}
       </div>
-      <PlanDialog sessionId={sessionId} open={dialogOpen} onOpenChange={setDialogOpen} />
+      <PlanDialog content={content} open={dialogOpen} onOpenChange={setDialogOpen} />
     </>
   )
 }

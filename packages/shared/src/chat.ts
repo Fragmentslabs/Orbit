@@ -269,6 +269,8 @@ export interface AskItem {
 export interface PlanReview {
   status: "proposed" | "implementing" | "rejected" | "revising"
   messageId: string
+  /** Conteúdo do plano exibido no chat; não é persistido como arquivo por padrão. */
+  content?: string
   permissionMode?: PermissionMode
 }
 

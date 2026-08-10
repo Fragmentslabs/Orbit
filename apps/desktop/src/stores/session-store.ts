@@ -349,10 +349,6 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     const updated: PlanReview = { ...review, status: "rejected" }
     set((state) => ({ planReviews: { ...state.planReviews, [sessionId]: updated } }))
     void storage.write(StorageKeys.planReview(sessionId), updated)
-    const session = get().sessions.find((s) => s.id === sessionId)
-    if (session?.directory) {
-      void chatApi.deletePlanFile(session.directory)
-    }
   },
 
   dismissPlanReview: (sessionId: string) => {
@@ -1017,17 +1013,13 @@ case "title":
       const msgs = state.messages[sessionId] ?? []
       const lastAssistant = [...msgs].reverse().find((m) => m.role === "assistant")
       if (lastAssistant) {
-        const review: PlanReview = { status: "proposed", messageId: lastAssistant.id }
+        const review: PlanReview = {
+          status: "proposed",
+          messageId: lastAssistant.id,
+          content: extractMessageText(lastAssistant),
+        }
         patch.planReviews = { ...state.planReviews, [sessionId]: review }
         void storage.write(StorageKeys.planReview(sessionId), review)
-        // Salva PLAN.md no diretório da sessão
-        const session = state.sessions.find((s) => s.id === sessionId)
-        if (session?.directory) {
-          const planText = extractMessageText(lastAssistant)
-          if (planText) {
-            void chatApi.savePlanFile(session.directory, planText)
-          }
-        }
       }
     }
     const cleanOutbox = { ...state._planReviewOutbox }
