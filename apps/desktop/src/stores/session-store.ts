@@ -920,12 +920,15 @@ case "title":
         const sessions = exists
           ? state.sessions.map((s) => (s.id === event.session.id ? event.session : s))
           : [event.session, ...state.sessions]
-        // Workers nascem vazios e o main emite "session" antes de iniciar o
-        // runChat deles: inicializar o buffer aqui garante que os primeiros
-        // events de message/part não sejam perdidos nem sobrescritos por um
-        // ensureMessages tardio (que vira no-op com a chave já definida).
+        // Workers/companions nascem vazios e o main emite "session" antes de
+        // iniciar o runChat deles: inicializar o buffer aqui garante que os
+        // primeiros events de message/part não sejam perdidos nem sobrescritos
+        // por um ensureMessages tardio (que vira no-op com a chave já definida).
+        // SÓ para sessões NOVAS: numa sessão que já existe em disco com
+        // histórico, pré-inicializar como [] faria o ensureMessages virar
+        // no-op e o chat abriria vazio (histórico "perdido") após um reload.
         const messages =
-          state.messages[event.session.id] === undefined
+          !exists && state.messages[event.session.id] === undefined
             ? { ...state.messages, [event.session.id]: [] }
             : state.messages
         return { sessions, messages }
