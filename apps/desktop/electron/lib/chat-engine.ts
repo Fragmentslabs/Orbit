@@ -690,6 +690,7 @@ export async function runChat(win: BrowserWindow, input: SendMessageInput): Prom
       })
 
       let streaming = false
+      let sawFinish = false
       let lastSave = Date.now()
       const reasoningStart = new Map<string, number>()
       // Usage do último step (última chamada real ao modelo) — ao contrário do
@@ -840,6 +841,7 @@ export async function runChat(win: BrowserWindow, input: SendMessageInput): Prom
               }
             }
             lastFinishReason = part.finishReason
+            sawFinish = true
             // Backstop raro: o prepareStep acima já força um resumo em texto
             // no último passo (finishReason deveria vir 'stop'). Isso só
             // dispara se mesmo assim o modelo não fechar limpo — sem isso,
@@ -860,6 +862,17 @@ export async function runChat(win: BrowserWindow, input: SendMessageInput): Prom
           lastSave = Date.now()
           await saveMessages(sessionId, history)
         }
+      }
+
+      // Alguns provedores/gateways encerram o stream sem emitir `finish` (ou
+      // retornam um motivo não padronizado) quando a conexão é interrompida.
+      // Sem este diagnóstico o turno parecia concluído normalmente e o agente
+      // parava no meio. Não tentamos repetir automaticamente — isso poderia
+      // duplicar tool calls — mas persistimos o estado como truncado e deixamos
+      // o próximo turno receber o lembrete de continuação.
+      if (!sawFinish && !controller.signal.aborted) {
+        assistantMessage.truncated = true
+        console.warn(`[chat] stream terminou sem finish para sessão ${sessionId}`)
       }
 
       // Auto-continue por limite de TOKENS DE SAÍDA (finish_reason 'length'):

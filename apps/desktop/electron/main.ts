@@ -188,6 +188,10 @@ function createWindow() {
     webPreferences: {
       preload: path.join(__dirname, 'preload.mjs'),
       webviewTag: true,
+      // O agente roda no processo main, mas as ferramentas de browser e a
+      // sincronização do renderer não podem ser congeladas quando a janela
+      // perde foco ou fica em segundo plano.
+      backgroundThrottling: false,
     },
   })
 
