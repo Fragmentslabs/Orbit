@@ -19,6 +19,7 @@ import { createQuestionTool } from './question'
 import { createBackgroundTools } from './background'
 import { createBashTool } from './shell'
 import { createTodoTool } from './todo'
+import { createSessionContextTool } from './session-context'
 import { createVerifyChangesTool } from './verify-changes'
 import { createWebFetchTool, createWebSearchTool } from './web'
 
@@ -83,6 +84,7 @@ export function buildToolSet(input: SendMessageInput, ctx: ToolContext | null): 
     // (ok no plano) e não recebem orientação extra no prompt — o modelo
     // decide quando chamá-las.
     tools.verify_changes = createVerifyChangesTool(ctx)
+    tools.session_context = createSessionContextTool(ctx)
     if (!input.options.plan) {
       tools.write = createWriteTool(ctx)
       tools.edit = createEditTool(ctx)

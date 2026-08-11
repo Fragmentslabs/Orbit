@@ -215,6 +215,12 @@ export interface ChatMessage {
   errorKind?: MessageErrorKind
   /** Gerada em modo simples: UI enxuta (sem tool/reasoning views); texto ainda com markdown */
   simple?: boolean
+  /** Modo ativo do turno em que a mensagem foi enviada (user) — metadados
+   *  lidos pela tool session_context. Ausente em mensagens antigas. */
+  mode?: SessionMode
+  /** Modo de permissões vigente no turno (user) — metadados lidos pela tool
+   *  session_context. Ausente em mensagens antigas. */
+  permissionMode?: PermissionMode
   /** Tokens consumidos na geração desta mensagem (assistant) */
   tokens?: TokenUsage
   /** Mensagem sintética de compactação: resumo do histórico anterior */

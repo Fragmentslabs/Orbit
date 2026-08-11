@@ -431,6 +431,10 @@ export async function runChat(win: BrowserWindow, input: SendMessageInput): Prom
       { id: newId('prt'), type: 'text', text: input.text, state: 'done' },
     ],
     createdAt: Date.now(),
+    // Metadados do turno persistidos na mensagem do usuário — a tool
+    // session_context os lê para responder "o que foi alterado no turno X?"
+    mode: input.mode,
+    permissionMode: input.options.permissionMode ?? 'ask',
   }
   history.push(userMessage)
   emit(win, { type: 'message', sessionId, message: userMessage })
