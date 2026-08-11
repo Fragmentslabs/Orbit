@@ -171,7 +171,6 @@ function PanelBrowserBody({ persistKey }: { persistKey?: string }) {
   const { url, refreshKey } = useWebPreview()
   const selectMode = usePanelStore((s) => s.selectMode)
   const viewport = usePanelStore((s) => s.viewport)
-  const webviewRef = useRef<WebviewElement | null>(null)
   const initialSrcRef = useRef(url)
   // Estado do elemento: a montagem pode ser tardia (estado vazio → primeira URL
   // na barra) e o <webview> do pool é re-anexado a cada volta à aba — os efeitos
@@ -181,7 +180,6 @@ function PanelBrowserBody({ persistKey }: { persistKey?: string }) {
   // O <webview> vive no pool (webview-session.ts) — aqui só guardamos a
   // referência do elemento para os comandos (loadURL, execução de JS).
   const handleWebviewRef = useCallback((el: HTMLElement | null) => {
-    webviewRef.current = el as WebviewElement | null
     setWebviewEl(el as WebviewElement | null)
   }, [])
 
@@ -231,6 +229,8 @@ function PanelBrowserBody({ persistKey }: { persistKey?: string }) {
     const onReady = () => {
       readyRef.current = true
       applyPendingUrl()
+      // Toggle de seleção feito antes do dom-ready não se perde
+      void webviewEl.executeJavaScript(usePanelStore.getState().selectMode ? SELECT_ON : SELECT_OFF).catch(() => {})
     }
     webviewEl.addEventListener("dom-ready", onReady)
     try {
@@ -242,11 +242,12 @@ function PanelBrowserBody({ persistKey }: { persistKey?: string }) {
     return () => webviewEl.removeEventListener("dom-ready", onReady)
   }, [webviewEl])
 
+  // Modo seleção (clique vira badge no input): só roda com o guest pronto; se o
+  // toggle vier antes, o onReady re-aplica com o estado atual do store.
   useEffect(() => {
-    const webview = webviewRef.current
-    if (!webview) return
-    void webview.executeJavaScript(selectMode ? SELECT_ON : SELECT_OFF).catch(() => {})
-  }, [selectMode])
+    if (!webviewEl || !readyRef.current) return
+    void webviewEl.executeJavaScript(selectMode ? SELECT_ON : SELECT_OFF).catch(() => {})
+  }, [selectMode, webviewEl])
 
   // Botão reload: recarrega no MESMO webview (a página persistida não é
   // destruída — apenas recarregada).
