@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
-import { AlignLeft, Bot, Brain, BrainCircuit, FileText, MousePointerClick, Network, PlusIcon, RefreshCw, Search, X } from "lucide-react"
+import { AlignLeft, Bot, BrainCircuit, FileText, MousePointerClick, Network, PlusIcon, RefreshCw, Search, X } from "lucide-react"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -26,6 +26,7 @@ import { ModeToggle } from "@/src/components/mode-toggle"
 import { OrchestrationConfigDialog } from "@/src/components/orchestration-config-dialog"
 import { PermissionModePicker } from "@/src/components/permission-mode-picker"
 import { ReasoningPicker } from "@/src/components/reasoning-picker"
+import { QuickSettingsMenu } from "@/src/components/quick-settings-menu"
 import { DraftInputBridge } from "@/src/components/draft-input-bridge"
 import { ChatInputDraft } from "@/src/components/chat-input-draft"
 import { clearInputDraft } from "@/src/stores/chat-draft"
@@ -104,7 +105,8 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId }: 
   const createSession = useSessionStore((s) => s.createSession)
   const openChatTab = usePanelStore((s) => s.openChatTab)
   const sessionDir = useSessionStore((s) => sessionId ? s.sessions.find(x => x.id === sessionId)?.directory : undefined)
-  const displayMode = useAppearanceStore((s) => s.displayMode)
+  const modesInRow = useAppearanceStore((s) => s.modesInRow)
+  const modeLabelStyle = useAppearanceStore((s) => s.modeLabelStyle)
   const referenceCommands = useReferenceCommands()
   const actionCommands = useSlashActionCommands("code")
 
@@ -131,10 +133,9 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId }: 
   const modeToggleItems = useMemo<ModeToggleDef[]>(() => [
     { icon: Search, label: t("input.modes.search.label"), active: search, onChange: (v: boolean) => setSearch(v) },
     { icon: FileText, label: t("codeInput.modes.plan.label"), active: plan, onChange: (v: boolean) => setPlan(v) },
-    ...(model?.reasoning ? [{ icon: Brain, label: t("input.modes.thinking.label"), active: thinking, onChange: (v: boolean) => update({ enabled: v, variantId }) }] : []),
     { icon: AlignLeft, label: t("input.modes.simple.label"), active: simple, onChange: (v: boolean) => setSimple(sessionId, v) },
     { icon: BrainCircuit, label: t("input.modes.brain.label"), active: brain, onChange: (v: boolean) => setBrainEnabled(sessionId, v) },
-  ], [search, plan, model?.reasoning, thinking, simple, brain, sessionId, variantId, update, setBrainEnabled, setSimple, t])
+  ], [search, plan, simple, brain, sessionId, setBrainEnabled, setSimple, t])
 
   const handleSubmit = useCallback((message: { text?: string; files?: { mediaType?: string; filename?: string; url?: string }[] }) => {
     const files = toFileParts(message.files ?? [])
@@ -209,9 +210,6 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId }: 
     return [
       { id: "pesquisa", label: t("input.modes.search.label"), description: t("codeInput.slash.searchDescription"), keywords: ["web", "search"], group: "Modos" as const, active: search, run: toggle(() => setSearch((v) => !v)) },
       { id: "plano", label: t("codeInput.modes.plan.label"), description: t("codeInput.slash.planDescription"), keywords: ["plan", "leitura"], group: "Modos" as const, active: plan, run: toggle(() => setPlan((v) => !v)) },
-      ...(model?.reasoning && !model.reasoningAlwaysOn
-        ? [{ id: "thinking", label: t("input.modes.thinking.label"), description: t("input.slash.thinkingDescription"), keywords: ["reasoning", "pensar"], group: "Modos" as const, active: thinking, run: toggle(() => update({ enabled: !enabled, variantId })) }]
-        : []),
       { id: "simples", label: t("input.modes.simple.label"), description: t("input.slash.simpleDescription"), keywords: ["texto", "plain"], group: "Modos" as const, active: simple, run: toggle(() => setSimple(sessionId, !simple)) },
       { id: "brain", label: t("input.slash.brainLabel"), description: t("codeInput.slash.brainDescription"), keywords: ["memoria", "brain"], group: "Modos" as const, active: brain, run: toggle(() => setBrainEnabled(sessionId, !brain)) },
       { id: "subagents", label: t("codeInput.slash.subagentsLabel"), description: t("codeInput.slash.subagentsDescription"), keywords: ["worker", "delegar"], group: "Modos" as const, active: subagents, run: toggle(() => setSubagents((v) => !v)) },
@@ -226,7 +224,7 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId }: 
       { id: "document", label: t("codeInput.slash.documentApp"), description: t("codeInput.slash.documentAppDescription"), keywords: ["docs", "documentacao", "screenshot"], group: "Ações" as const, run: ({ setText }) => setText("/document ") },
       { id: "settings", label: t("input.slash.settings"), description: t("input.slash.settingsDescription"), keywords: ["settings", "config"], group: "Ações" as const, run: toggle(() => openSettings()) },
     ]
-  }, [search, plan, thinking, simple, brain, subagents, orchestra, permissionMode, model, enabled, variantId, update, sessionId, setBrainEnabled, setSimple, setPermissionMode, actionCommands, referenceCommands, mode, openSettings, t])
+  }, [search, plan, simple, brain, subagents, orchestra, permissionMode, sessionId, setBrainEnabled, setSimple, setPermissionMode, actionCommands, referenceCommands, mode, openSettings, t])
 
   return (
     <PromptInputProvider>
@@ -234,7 +232,7 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId }: 
       <SlashPalette commands={slashCommands}>
       <DraftInputBridge sessionId={sessionId} />
       <ChatInputDraft sessionId={sessionId} />
-      <div className="w-full max-w-2xl mx-auto pb-4">
+      <div className="w-full max-w-2xl mx-auto pb-4 @container">
         {!hasMessages && (
           <div className="flex flex-wrap items-center gap-2 px-3 py-1.5">
             <FolderSelector folders={folders} onFoldersChange={setFolders} />
@@ -284,12 +282,8 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId }: 
                   <PlusIcon className="size-4" />
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="start" className="min-w-56 p-1.5">
-                  {displayMode !== "toggles" && (
-                    <>
-                      <ModeMenuItems items={modeToggleItems} />
-                      <DropdownMenuSeparator />
-                    </>
-                  )}
+                  <ModeMenuItems items={modeToggleItems} />
+                  <DropdownMenuSeparator />
                   <DelegationMenuItems
                     subagents={subagents}
                     orchestra={orchestra}
@@ -305,18 +299,24 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId }: 
                   <PromptInputActionAddAttachments label={t("input.attachFiles")} />
                 </DropdownMenuContent>
               </DropdownMenu>
-              <PermissionModePicker />
-              {displayMode === "actions" && <ContextMeter sessionId={sessionId} />}
+              <QuickSettingsMenu sessionId={sessionId} showPermission />
+              <div className="hidden @md:block">
+                <PermissionModePicker />
+              </div>
             </div>
             <div className="flex items-center gap-1">
-              {thinking && model?.variants && model.variants.length > 0 && (
-                <ReasoningPicker
-                  variants={model.variants}
-                  selected={variantId}
-                  onSelect={(id) => update({ enabled: true, variantId: id })}
-                />
-              )}
-              <ModelPicker sessionId={sessionId} />
+              <div className="hidden @md:flex items-center gap-1">
+                {model?.variants && model.variants.length > 0 && (
+                  <ReasoningPicker
+                    variants={model.variants}
+                    enabled={thinking}
+                    canDisable={!model.reasoningAlwaysOn}
+                    selected={variantId}
+                    onSelect={(id) => update({ enabled: id != null, variantId: id ?? undefined })}
+                  />
+                )}
+                <ModelPicker sessionId={sessionId} />
+              </div>
               <SendButtonGroup
                 busy={busy}
                 cancelling={status === "cancelling"}
@@ -350,51 +350,49 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId }: 
             </div>
           </PromptInputFooter>
         </PromptInput>
-      {displayMode !== "actions" && (
-        <PromptInputTools>
-          <div className="flex items-center gap-1 mt-2">
-          <ModeToggle
-            icon={Search}
-            label={t("input.modes.search.label")}
-            description={t("codeInput.modes.search.description")}
-            active={search}
-            onToggle={() => setSearch((v) => !v)}
-          />
+      <PromptInputTools>
+        <div className="mt-2 flex flex-wrap items-center gap-1">
+          {modesInRow.includes("search") && (
+            <ModeToggle
+              icon={Search}
+              label={t("input.modes.search.label")}
+              description={t("codeInput.modes.search.description")}
+              active={search}
+              onToggle={() => setSearch((v) => !v)}
+              iconOnly={modeLabelStyle === "icon"}
+            />
+          )}
+          {modesInRow.includes("plan") && (
             <ModeToggle
               icon={FileText}
               label={t("codeInput.modes.plan.label")}
               description={t("codeInput.modes.plan.description")}
               active={plan}
               onToggle={() => setPlan((v) => !v)}
+              iconOnly={modeLabelStyle === "icon"}
             />
-            {model?.reasoning && (
-              <ModeToggle
-                icon={Brain}
-                label={t("input.modes.thinking.label")}
-                description={
-                  model.reasoningAlwaysOn
-                    ? t("input.modes.thinking.alwaysOn")
-                    : t("input.modes.thinking.description")
-                }
-                active={thinking}
-                onToggle={() => update({ enabled: !enabled, variantId })}
-                disabled={model.reasoningAlwaysOn}
-              />
-            )}
+          )}
+          {modesInRow.includes("simple") && (
             <ModeToggle
               icon={AlignLeft}
               label={t("input.modes.simple.label")}
               description={t("codeInput.modes.simple.description")}
               active={simple}
               onToggle={() => setSimple(sessionId, !simple)}
+              iconOnly={modeLabelStyle === "icon"}
             />
+          )}
+          {modesInRow.includes("brain") && (
             <ModeToggle
               icon={BrainCircuit}
               label={t("input.modes.brain.label")}
               description={t("codeInput.modes.brain.description")}
               active={brain}
               onToggle={() => setBrainEnabled(sessionId, !brain)}
+              iconOnly={modeLabelStyle === "icon"}
             />
+          )}
+          {modesInRow.includes("subagents") && (
             <ModeToggle
               icon={Bot}
               label={t("codeInput.modes.subagents.label")}
@@ -405,35 +403,38 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId }: 
                 setSubagents(next)
                 if (next) setOrchestra(false)
               }}
+              iconOnly={modeLabelStyle === "icon"}
             />
-            {mode === "code" && (
-              <ModeToggle
-                icon={Network}
-                label={t("codeInput.modes.orchestra.label")}
-                description={t("codeInput.modes.orchestra.description")}
-                active={orchestra}
-                onToggle={() => {
-                  const next = !orchestra
-                  setOrchestra(next)
-                  if (next) setSubagents(false)
-                }}
-              />
-            )}
+          )}
+          {mode === "code" && modesInRow.includes("orchestra") && (
+            <ModeToggle
+              icon={Network}
+              label={t("codeInput.modes.orchestra.label")}
+              description={t("codeInput.modes.orchestra.description")}
+              active={orchestra}
+              onToggle={() => {
+                const next = !orchestra
+                setOrchestra(next)
+                if (next) setSubagents(false)
+              }}
+              iconOnly={modeLabelStyle === "icon"}
+            />
+          )}
+          {modesInRow.includes("loop") && (
             <ModeToggle
               icon={RefreshCw}
               label={t("codeInput.modes.loop.label")}
               description={t("codeInput.modes.loop.description")}
               active={loop}
               onToggle={() => setLoop((v) => !v)}
-              onConfig={() => setLoopConfigOpen(true)}
-              configLabel={t("delegation.configure")}
+              iconOnly={modeLabelStyle === "icon"}
             />
-          </div>
-          <div className="ml-auto mt-2">
-            <ContextMeter sessionId={sessionId} />
-          </div>
-        </PromptInputTools>
-      )}
+          )}
+        </div>
+        <div className="ml-auto mt-2">
+          <ContextMeter sessionId={sessionId} />
+        </div>
+      </PromptInputTools>
         <OrchestrationConfigDialog open={configOpen} onOpenChange={setConfigOpen} />
         <LoopConfigDialog open={loopConfigOpen} onOpenChange={setLoopConfigOpen} />
       </div>

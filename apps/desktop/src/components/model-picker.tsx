@@ -27,11 +27,20 @@ const MAX_MODELS_PER_PROVIDER = 40
  * O modelo é POR CHAT: `sessionId` decide qual override ler/escrever
  * (undefined = chat novo, usa o draft até o primeiro envio).
  */
-export function ModelPicker({ sessionId }: { sessionId?: string }) {
+export function ModelPicker({ sessionId, open: openProp, onOpenChange: onOpenChangeProp, hideTrigger }: {
+  sessionId?: string
+  /** Controle externo do diálogo (usado pelo menu de configurações rápidas) */
+  open?: boolean
+  onOpenChange?: (open: boolean) => void
+  /** Oculta o trigger — útil quando outro elemento abre o diálogo */
+  hideTrigger?: boolean
+}) {
   const { t } = useTranslation()
-  const [open, setOpen] = useState(false)
+  const [internalOpen, setInternalOpen] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [skipFinalFocus, setSkipFinalFocus] = useState(false)
+  const open = openProp ?? internalOpen
+  const onOpenChange = onOpenChangeProp ?? setInternalOpen
   const catalog = useProviderStore((s) => s.catalog)
   const connectedProviders = useProviderStore((s) => s.connectedProviders)
   const selected = useSessionModel(sessionId)
@@ -69,19 +78,21 @@ const recents = useSessionModelPrefs((s) => s.recents)
 
   const pick = (providerId: string, modelId: string) => {
     selectModel(sessionId, providerId, modelId)
-    setOpen(false)
+    onOpenChange(false)
   }
 
   return (
     <>
-      <ModelSelector open={open} onOpenChange={setOpen}>
-        <ModelSelectorTrigger render={<Button className="h-7 gap-1 px-1.5 text-xs" variant="ghost" />}>
-          <ModelSelectorLogo provider={selected?.providerId ?? "openai"} />
-          <ModelSelectorName>
-            {loading ? t("modelPicker.loading") : selectedModel?.name ?? (error ? t("modelPicker.error") : t("modelPicker.select"))}
-          </ModelSelectorName>
-          <ChevronDownIcon className="size-3 text-muted-foreground" />
-        </ModelSelectorTrigger>
+      <ModelSelector open={open} onOpenChange={onOpenChange}>
+        {!hideTrigger && (
+          <ModelSelectorTrigger render={<Button className="h-7 gap-1 px-1.5 text-xs" variant="ghost" />}>
+            <ModelSelectorLogo provider={selected?.providerId ?? "openai"} />
+            <ModelSelectorName>
+              {loading ? t("modelPicker.loading") : selectedModel?.name ?? (error ? t("modelPicker.error") : t("modelPicker.select"))}
+            </ModelSelectorName>
+            <ChevronDownIcon className="size-3 text-muted-foreground" />
+          </ModelSelectorTrigger>
+        )}
         <ModelSelectorContent finalFocus={skipFinalFocus ? false : undefined}>
           <ModelSelectorInput placeholder={t("preferences.searchModels")} />
           <ModelSelectorList>
@@ -165,7 +176,7 @@ const recents = useSessionModelPrefs((s) => s.recents)
               className="w-full justify-start gap-2 text-xs"
               onClick={() => {
                 setSkipFinalFocus(true)
-                setOpen(false)
+                onOpenChange(false)
                 // Aguarda o dialog de seleção fechar completamente (animação ~100ms)
                 // para evitar conflito de foco com o input autofocus do settings.
                 setTimeout(() => setSettingsOpen(true), 120)

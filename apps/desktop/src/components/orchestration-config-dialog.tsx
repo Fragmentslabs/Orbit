@@ -125,8 +125,9 @@ export function OrchestrationConfigDialog({ open, onOpenChange }: {
               {thinkingOn && (selectedCatalogModel.variants?.length ?? 0) > 0 && (
                 <ReasoningPicker
                   variants={selectedCatalogModel.variants!}
+                  enabled={thinkingOn}
                   selected={workerReasoning?.variantId}
-                  onSelect={(id) => setWorkerReasoning({ enabled: true, variantId: id })}
+                  onSelect={(id) => setWorkerReasoning({ enabled: true, variantId: id ?? undefined })}
                 />
               )}
             </div>

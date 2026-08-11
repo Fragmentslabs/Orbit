@@ -65,11 +65,6 @@
         "label": "Browser",
         "description": "Navigates pages like a real browser. Runs JavaScript, ideal for SPAs."
       },
-      "thinking": {
-        "label": "Thinking",
-        "alwaysOn": "This model always uses extended reasoning.",
-        "description": "Enables the model's extended reasoning. Costs more tokens and time."
-      },
       "simple": {
         "label": "Simple",
         "description": "Direct plain-text replies: no formatting, citations, or tool blocks."
@@ -77,12 +72,14 @@
       "brain": {
         "label": "Memory",
         "description": "Orbit remembers your facts and preferences across conversations. Turn it off just for this chat if you prefer a context-free interaction."
+      },
+      "thinking": {
+        "label": "Thinking"
       }
     },
     "slash": {
       "searchDescription": "Toggles web search (websearch/webfetch)",
       "browserDescription": "Toggles JavaScript navigation",
-      "thinkingDescription": "Toggles the model's extended reasoning",
       "simpleDescription": "Toggles plain-text replies",
       "brainLabel": "Memory (Brain)",
       "brainDescription": "Orbit remembers facts and preferences across conversations",
@@ -90,7 +87,9 @@
       "newChatDescription": "Starts a blank chat",
       "settings": "Settings",
       "settingsDescription": "Opens Orbit's settings"
-    }
+    },
+    "quickSettings": "Quick settings",
+    "quickSettingsModel": "Model"
   },
   "codeInput": {
     "placeholderNoFolder": "Select a folder to get started…",
@@ -160,7 +159,8 @@
       "high": "High",
       "xhigh": "Very high",
       "max": "Maximum"
-    }
+    },
+    "off": "Off"
   },
   "delegation": {
     "subagents": "Subagents",
@@ -210,7 +210,7 @@
     "loading": "Loading...",
     "error": "Error",
     "select": "Select a model",
-"title": "Select model",
+    "title": "Select model",
     "recent": "Recent",
     "removeRecent": "Remove from recents"
   },
@@ -936,7 +936,7 @@
     "noRemote": "No remote configured. Create the repository on GitHub/GitLab and add the remote (e.g.: git remote add origin <url>).",
     "noUpstreamPull": "Current branch has no remote tracking branch — push first (the Push button creates the remote branch).",
     "authFailed": "Git/GitHub authentication failed. Configure a token (e.g.: gh auth login) or SSH credentials and try again.",
-"localBranch": "{{branch}} (local only)",
+    "localBranch": "{{branch}} (local only)",
     "imageNotAvailable": "Image preview in commits is not supported yet."
   },
   "mcp": {
@@ -1337,21 +1337,6 @@
       "dark": "Dark",
       "system": "System"
     },
-    "displayMode": {
-      "title": "Display modes",
-      "toggles": {
-        "label": "Toggles",
-        "hint": "Modes as inline toggles. Advanced settings in the gear (⚙️)."
-      },
-      "actions": {
-        "label": "Actions",
-        "hint": "No inline toggles. All modes in the \"+\" button."
-      },
-      "both": {
-        "label": "Both",
-        "hint": "Inline toggles + advanced modes also in the \"+\" button."
-      }
-    },
     "persona": {
       "title": "Persona",
       "show": "Show persona"
@@ -1360,6 +1345,18 @@
       "title": "Panel tab close button",
       "left": "Left",
       "right": "Right"
+    },
+    "bottomModes": {
+      "title": "Modes in the bottom bar",
+      "hint": "Which modes appear as toggles below the input. The \"+\" menu always shows all modes.",
+      "all": "Select all",
+      "none": "Clear"
+    },
+    "modeLabelStyle": {
+      "title": "Bottom bar display",
+      "label": "Icon and text",
+      "icon": "Icon only",
+      "hint": "On narrow windows the bar switches to icons automatically."
     }
   },
   "data": {

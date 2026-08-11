@@ -1,6 +1,6 @@
 import { useCallback, useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
-import { AlignLeft, Brain, BrainCircuit, Globe, PlusIcon, Search } from "lucide-react"
+import { AlignLeft, BrainCircuit, Globe, PlusIcon, Search } from "lucide-react"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -23,6 +23,7 @@ import { ModelPicker } from "@/src/components/model-picker"
 import { ModeToggle } from "@/src/components/mode-toggle"
 
 import { ReasoningPicker } from "@/src/components/reasoning-picker"
+import { QuickSettingsMenu } from "@/src/components/quick-settings-menu"
 import { DraftInputBridge } from "@/src/components/draft-input-bridge"
 import { ChatInputDraft } from "@/src/components/chat-input-draft"
 import { clearInputDraft } from "@/src/stores/chat-draft"
@@ -76,17 +77,17 @@ export function ChatInput({ onSubmit, status, onStop, sessionId }: {
   const sendMessage = useSessionStore((s) => s.sendMessage)
   const createSession = useSessionStore((s) => s.createSession)
   const openChatTab = usePanelStore((s) => s.openChatTab)
-  const displayMode = useAppearanceStore((s) => s.displayMode)
+  const modesInRow = useAppearanceStore((s) => s.modesInRow)
+  const modeLabelStyle = useAppearanceStore((s) => s.modeLabelStyle)
   const referenceCommands = useReferenceCommands("chat")
   const actionCommands = useSlashActionCommands("chat")
 
   const modeToggleItems = useMemo<ModeToggleDef[]>(() => [
     { icon: Search, label: t("input.modes.search.label"), active: search, onChange: (v: boolean) => setSearch(v) },
     { icon: Globe, label: t("input.modes.browser.label"), active: browser, onChange: (v: boolean) => setBrowser(v) },
-    ...(model?.reasoning ? [{ icon: Brain, label: t("input.modes.thinking.label"), active: thinking, onChange: (v: boolean) => update({ enabled: v, variantId }) }] : []),
     { icon: AlignLeft, label: t("input.modes.simple.label"), active: simple, onChange: (v: boolean) => setSimple(sessionId, v) },
     { icon: BrainCircuit, label: t("input.modes.brain.label"), active: brain, onChange: (v: boolean) => setBrainEnabled(sessionId, v) },
-  ], [search, browser, model?.reasoning, thinking, simple, brain, sessionId, variantId, update, setBrainEnabled, setSimple, t])
+  ], [search, browser, simple, brain, sessionId, setBrainEnabled, setSimple, t])
 
   const buildOptions = useCallback((): SendMessageOptions => ({
     research: search,
@@ -105,9 +106,6 @@ export function ChatInput({ onSubmit, status, onStop, sessionId }: {
     return [
       { id: "pesquisa", label: t("input.modes.search.label"), description: t("input.slash.searchDescription"), keywords: ["web", "search"], group: "Modos" as const, active: search, run: toggle(() => setSearch((v) => !v)) },
       { id: "browser", label: t("input.modes.browser.label"), description: t("input.slash.browserDescription"), keywords: ["navegador", "web"], group: "Modos" as const, active: browser, run: toggle(() => setBrowser((v) => !v)) },
-      ...(model?.reasoning && !model.reasoningAlwaysOn
-        ? [{ id: "thinking", label: t("input.modes.thinking.label"), description: t("input.slash.thinkingDescription"), keywords: ["reasoning", "pensar"], group: "Modos" as const, active: thinking, run: toggle(() => update({ enabled: !enabled, variantId })) }]
-        : []),
       { id: "simples", label: t("input.modes.simple.label"), description: t("input.slash.simpleDescription"), keywords: ["texto", "plain"], group: "Modos" as const, active: simple, run: toggle(() => setSimple(sessionId, !simple)) },
       { id: "brain", label: t("input.slash.brainLabel"), description: t("input.slash.brainDescription"), keywords: ["memoria", "brain"], group: "Modos" as const, active: brain, run: toggle(() => setBrainEnabled(sessionId, !brain)) },
       ...actionCommands,
@@ -115,14 +113,14 @@ export function ChatInput({ onSubmit, status, onStop, sessionId }: {
       { id: "novo-chat", label: t("input.slash.newChat"), description: t("input.slash.newChatDescription"), keywords: ["clear", "limpar", "novo"], group: "Ações" as const, run: toggle(() => void selectSession(mode, null)) },
       { id: "settings", label: t("input.slash.settings"), description: t("input.slash.settingsDescription"), keywords: ["settings", "config"], group: "Ações" as const, run: toggle(() => openSettings()) },
     ]
-  }, [search, browser, thinking, simple, brain, model, enabled, variantId, update, sessionId, setBrainEnabled, setSimple, actionCommands, referenceCommands, selectSession, mode, openSettings, t])
+  }, [search, browser, simple, brain, sessionId, setBrainEnabled, setSimple, actionCommands, referenceCommands, selectSession, mode, openSettings, t])
 
   return (
     <PromptInputProvider>
     <SlashPalette commands={slashCommands}>
     <DraftInputBridge sessionId={sessionId} />
     <ChatInputDraft sessionId={sessionId} />
-    <div className="w-full max-w-2xl mx-auto pb-4">
+    <div className="w-full max-w-2xl mx-auto pb-4 @container">
       <QueueIndicator sessionId={sessionId} />
       <PromptInput
         multiple
@@ -165,26 +163,26 @@ export function ChatInput({ onSubmit, status, onStop, sessionId }: {
                 <PlusIcon className="size-4" />
               </DropdownMenuTrigger>
               <DropdownMenuContent align="start" className="min-w-56 p-1.5">
-                {displayMode !== "toggles" && (
-                  <>
-                    <ModeMenuItems items={modeToggleItems} />
-                    <DropdownMenuSeparator />
-                  </>
-                )}
+                <ModeMenuItems items={modeToggleItems} />
+                <DropdownMenuSeparator />
                 <PromptInputActionAddAttachments label={t("input.attachFiles")} />
               </DropdownMenuContent>
             </DropdownMenu>
-            {displayMode === "actions" && <ContextMeter sessionId={sessionId} />}
+            <QuickSettingsMenu sessionId={sessionId} />
           </div>
           <div className="flex items-center gap-1">
-            {thinking && model?.variants && model.variants.length > 0 && (
-              <ReasoningPicker
-                variants={model.variants}
-                selected={variantId}
-                onSelect={(id) => update({ enabled: true, variantId: id })}
-              />
-            )}
-            <ModelPicker sessionId={sessionId} />
+            <div className="hidden @md:flex items-center gap-1">
+              {model?.variants && model.variants.length > 0 && (
+                <ReasoningPicker
+                  variants={model.variants}
+                  enabled={thinking}
+                  canDisable={!model.reasoningAlwaysOn}
+                  selected={variantId}
+                  onSelect={(id) => update({ enabled: id != null, variantId: id ?? undefined })}
+                />
+              )}
+              <ModelPicker sessionId={sessionId} />
+            </div>
             <SendButtonGroup
               busy={busy}
               cancelling={status === "cancelling"}
@@ -211,57 +209,53 @@ export function ChatInput({ onSubmit, status, onStop, sessionId }: {
           </div>
         </PromptInputFooter>
       </PromptInput>
-      {displayMode !== "actions" && (
-        <PromptInputTools>
-          <div className="flex items-center gap-1 mt-2">
-          <ModeToggle
-            icon={Search}
-            label={t("input.modes.search.label")}
-            description={t("input.modes.search.description")}
-            active={search}
-            onToggle={() => setSearch((v) => !v)}
-          />
-          <ModeToggle
-            icon={Globe}
-            label={t("input.modes.browser.label")}
-            description={t("input.modes.browser.description")}
-            active={browser}
-            onToggle={() => setBrowser((v) => !v)}
-          />
-          {model?.reasoning && (
+      <PromptInputTools>
+        <div className="mt-2 flex flex-wrap items-center gap-1">
+          {modesInRow.includes("search") && (
             <ModeToggle
-              icon={Brain}
-              label={t("input.modes.thinking.label")}
-              description={
-                model.reasoningAlwaysOn
-                  ? t("input.modes.thinking.alwaysOn")
-                  : t("input.modes.thinking.description")
-              }
-              active={thinking}
-              onToggle={() => update({ enabled: !enabled, variantId })}
-              disabled={model.reasoningAlwaysOn}
+              icon={Search}
+              label={t("input.modes.search.label")}
+              description={t("input.modes.search.description")}
+              active={search}
+              onToggle={() => setSearch((v) => !v)}
+              iconOnly={modeLabelStyle === "icon"}
             />
           )}
-          <ModeToggle
-            icon={AlignLeft}
-            label={t("input.modes.simple.label")}
-            description={t("input.modes.simple.description")}
-            active={simple}
-            onToggle={() => setSimple(sessionId, !simple)}
-          />
-          <ModeToggle
-            icon={BrainCircuit}
-            label={t("input.modes.brain.label")}
-            description={t("input.modes.brain.description")}
-            active={brain}
-            onToggle={() => setBrainEnabled(sessionId, !brain)}
-          />
+          {modesInRow.includes("browser") && (
+            <ModeToggle
+              icon={Globe}
+              label={t("input.modes.browser.label")}
+              description={t("input.modes.browser.description")}
+              active={browser}
+              onToggle={() => setBrowser((v) => !v)}
+              iconOnly={modeLabelStyle === "icon"}
+            />
+          )}
+          {modesInRow.includes("simple") && (
+            <ModeToggle
+              icon={AlignLeft}
+              label={t("input.modes.simple.label")}
+              description={t("input.modes.simple.description")}
+              active={simple}
+              onToggle={() => setSimple(sessionId, !simple)}
+              iconOnly={modeLabelStyle === "icon"}
+            />
+          )}
+          {modesInRow.includes("brain") && (
+            <ModeToggle
+              icon={BrainCircuit}
+              label={t("input.modes.brain.label")}
+              description={t("input.modes.brain.description")}
+              active={brain}
+              onToggle={() => setBrainEnabled(sessionId, !brain)}
+              iconOnly={modeLabelStyle === "icon"}
+            />
+          )}
         </div>
-          <div className="ml-auto mt-2">
-            <ContextMeter sessionId={sessionId} />
-          </div>
-        </PromptInputTools>
-      )}
+        <div className="ml-auto mt-2">
+          <ContextMeter sessionId={sessionId} />
+        </div>
+      </PromptInputTools>
     </div>
     </SlashPalette>
     </PromptInputProvider>

@@ -65,11 +65,6 @@
         "label": "Browser",
         "description": "Navega em páginas como um browser real. Executa JavaScript, ideal para SPAs."
       },
-      "thinking": {
-        "label": "Thinking",
-        "alwaysOn": "Este modelo sempre usa raciocínio extendido.",
-        "description": "Ativa raciocínio extendido do modelo. Custa mais tokens e tempo."
-      },
       "simple": {
         "label": "Simples",
         "description": "Respostas diretas em texto puro: sem formatação, citações ou blocos de ferramentas."
@@ -77,12 +72,14 @@
       "brain": {
         "label": "Memória",
         "description": "Orbit lembra fatos e preferências suas entre conversas. Desative apenas neste chat se preferir uma interação sem contexto."
+      },
+      "thinking": {
+        "label": "Thinking"
       }
     },
     "slash": {
       "searchDescription": "Alterna busca web (websearch/webfetch)",
       "browserDescription": "Alterna navegação com JavaScript",
-      "thinkingDescription": "Alterna raciocínio estendido do modelo",
       "simpleDescription": "Alterna respostas em texto puro",
       "brainLabel": "Memória (Brain)",
       "brainDescription": "Orbit lembra fatos e preferências entre conversas",
@@ -90,7 +87,9 @@
       "newChatDescription": "Começa um chat em branco",
       "settings": "Configurações",
       "settingsDescription": "Abre as configurações do Orbit"
-    }
+    },
+    "quickSettings": "Configurações rápidas",
+    "quickSettingsModel": "Modelo"
   },
   "codeInput": {
     "placeholderNoFolder": "Selecione uma pasta para começar…",
@@ -160,7 +159,8 @@
       "high": "Alto",
       "xhigh": "Muito alto",
       "max": "Máximo"
-    }
+    },
+    "off": "Desligado"
   },
   "delegation": {
     "subagents": "Subagentes",
@@ -210,7 +210,7 @@
     "loading": "Carregando...",
     "error": "Erro",
     "select": "Selecionar modelo",
-"title": "Selecionar modelo",
+    "title": "Selecionar modelo",
     "recent": "Recentes",
     "removeRecent": "Remover dos recentes"
   },
@@ -1337,21 +1337,6 @@
       "dark": "Escuro",
       "system": "Sistema"
     },
-    "displayMode": {
-      "title": "Modos de exibição",
-      "toggles": {
-        "label": "Toggles",
-        "hint": "Modos como toggles inline. Configurações avançadas no gear (⚙️)."
-      },
-      "actions": {
-        "label": "Ações",
-        "hint": "Sem toggles inline. Todos os modos no botão \"+\"."
-      },
-      "both": {
-        "label": "Ambos",
-        "hint": "Toggles inline + modos avançados também no botão \"+\"."
-      }
-    },
     "persona": {
       "title": "Persona",
       "show": "Mostrar persona"
@@ -1360,6 +1345,18 @@
       "title": "Botão de fechar das abas do painel",
       "left": "Esquerda",
       "right": "Direita"
+    },
+    "bottomModes": {
+      "title": "Modos na barra inferior",
+      "hint": "Quais modos aparecem como toggles abaixo do input. O menu \"+\" sempre mostra todos.",
+      "all": "Selecionar todos",
+      "none": "Limpar"
+    },
+    "modeLabelStyle": {
+      "title": "Exibição da barra inferior",
+      "label": "Ícone e texto",
+      "icon": "Só ícone",
+      "hint": "Em janelas estreitas a barra muda para só ícones automaticamente."
     }
   },
   "data": {
