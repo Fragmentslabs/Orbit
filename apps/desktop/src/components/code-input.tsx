@@ -309,9 +309,6 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId }: 
               {displayMode === "actions" && <ContextMeter sessionId={sessionId} />}
             </div>
             <div className="flex items-center gap-1">
-              {subagents && <Bot className="size-3 text-sidebar-foreground/40" />}
-              {mode === "code" && orchestra && <Network className="size-3 text-sidebar-foreground/40" />}
-              {loop && <RefreshCw className="size-3 text-sidebar-foreground/40" />}
               {thinking && model?.variants && model.variants.length > 0 && (
                 <ReasoningPicker
                   variants={model.variants}
@@ -396,6 +393,39 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId }: 
               description={t("codeInput.modes.brain.description")}
               active={brain}
               onToggle={() => setBrainEnabled(sessionId, !brain)}
+            />
+            <ModeToggle
+              icon={Bot}
+              label={t("codeInput.modes.subagents.label")}
+              description={t("codeInput.modes.subagents.description")}
+              active={subagents}
+              onToggle={() => {
+                const next = !subagents
+                setSubagents(next)
+                if (next) setOrchestra(false)
+              }}
+            />
+            {mode === "code" && (
+              <ModeToggle
+                icon={Network}
+                label={t("codeInput.modes.orchestra.label")}
+                description={t("codeInput.modes.orchestra.description")}
+                active={orchestra}
+                onToggle={() => {
+                  const next = !orchestra
+                  setOrchestra(next)
+                  if (next) setSubagents(false)
+                }}
+              />
+            )}
+            <ModeToggle
+              icon={RefreshCw}
+              label={t("codeInput.modes.loop.label")}
+              description={t("codeInput.modes.loop.description")}
+              active={loop}
+              onToggle={() => setLoop((v) => !v)}
+              onConfig={() => setLoopConfigOpen(true)}
+              configLabel={t("delegation.configure")}
             />
           </div>
           <div className="ml-auto mt-2">

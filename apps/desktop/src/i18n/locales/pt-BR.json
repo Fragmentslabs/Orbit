@@ -109,6 +109,18 @@
       },
       "brain": {
         "description": "Orbit lembra decisões, convenções e estrutura do projeto entre sessões. Desative apenas neste chat se preferir uma interação sem contexto."
+      },
+      "subagents": {
+        "label": "Subagentes",
+        "description": "Delega tarefas pontuais a workers efêmeros em background."
+      },
+      "orchestra": {
+        "label": "Orquestra",
+        "description": "Divide a tarefa em subtarefas paralelas executadas por sessões filhas no painel."
+      },
+      "loop": {
+        "label": "Loop",
+        "description": "Revisa e itera até completar a tarefa."
       }
     },
     "slash": {

@@ -109,6 +109,18 @@
       },
       "brain": {
         "description": "Orbit remembers the project's decisions, conventions, and structure across sessions. Turn it off just for this chat if you prefer a context-free interaction."
+      },
+      "subagents": {
+        "label": "Subagents",
+        "description": "Delegates one-off tasks to ephemeral background workers."
+      },
+      "orchestra": {
+        "label": "Orchestra",
+        "description": "Splits the task into parallel subtasks run by child sessions in the panel."
+      },
+      "loop": {
+        "label": "Loop",
+        "description": "Reviews and iterates until the task is complete."
       }
     },
     "slash": {
