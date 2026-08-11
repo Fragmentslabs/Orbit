@@ -27,9 +27,13 @@ export function RevertBar({ session }: { session: SessionInfo }) {
   const count = revert.files?.length ?? 0
   // Modo código sem snapshot: o truncamento aconteceu, mas o filesystem não
   // pôde ser restaurado — aviso explícito em vez de tratar como revert de chat.
+  // 'capture-failed' (restore falhou) tem mensagem própria vs. 'no-snapshot'
+  // (snapshot indisponível para a mensagem).
   const filesNotRestored = Boolean(session.directory) && revert.filesRestored === false
   const label = filesNotRestored
-    ? t("revert.filesNotRestored")
+    ? revert.reason === "capture-failed"
+      ? t("revert.filesRestoreFailed")
+      : t("revert.filesNotRestored")
     : isCode
       ? count === 0
         ? t("revert.filesRevertedNone")

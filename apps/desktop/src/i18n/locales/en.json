@@ -871,6 +871,7 @@
     "filesRevertedMany": "{{n}} files reverted",
     "conversationReverted": "Conversation reverted up to this point",
     "filesNotRestored": "The conversation was truncated, but the file changes could NOT be undone (no snapshot available for this message).",
+    "filesRestoreFailed": "The conversation was truncated, but the file changes could NOT be undone (failed to restore the snapshot).",
     "continueFromHere": "new message continues from this point",
     "diff": "Diff",
     "unrevert": "Undo"

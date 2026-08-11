@@ -81,21 +81,37 @@ export async function revert(sessionId: string, messageId: string): Promise<Sess
       return revertState
     }
 
-    // Modo código: também restaura o filesystem para o snapshot da mensagem
-    const current = await capture(session.directory)
-    await restore(session.directory, start)
-    const changes = await diff(session.directory, start, current)
+    // Modo código: também restaura o filesystem para o snapshot da mensagem.
+    // O truncamento já foi persistido acima — se a restauração falhar, a
+    // exceção NÃO pode subir: as mensagens ficariam cortadas sem barra de
+    // revert nem unrevert. Persiste o revert com filesRestored:false e
+    // reason:'capture-failed' para a UI avisar explicitamente.
+    try {
+      const current = await capture(session.directory)
+      await restore(session.directory, start)
+      const changes = await diff(session.directory, start, current)
 
-    const revertState: SessionRevert = {
-      messageId,
-      snapshot: current,
-      files: changes.files,
-      diff: changes.patch,
-      filesRestored: true,
-      discardedMessages: discarded,
+      const revertState: SessionRevert = {
+        messageId,
+        snapshot: current,
+        files: changes.files,
+        diff: changes.patch,
+        filesRestored: true,
+        discardedMessages: discarded,
+      }
+      await saveSession({ ...session, revert: revertState })
+      return revertState
+    } catch (err) {
+      console.error('[revert] falha ao restaurar o filesystem (truncamento já salvo):', err)
+      const revertState: SessionRevert = {
+        messageId,
+        filesRestored: false,
+        reason: 'capture-failed',
+        discardedMessages: discarded,
+      }
+      await saveSession({ ...session, revert: revertState })
+      return revertState
     }
-    await saveSession({ ...session, revert: revertState })
-    return revertState
   }
 
   // Modo chat: apenas truncamento
