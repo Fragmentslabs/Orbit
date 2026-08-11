@@ -1,6 +1,7 @@
 import { Bot, Network, RefreshCw, Settings2 } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import { DropdownMenuCheckboxItem } from "@/components/ui/dropdown-menu"
+import { cn } from "@/lib/utils"
 
 /**
  * Itens de menu dos modos de delegação (dropdown "+" dos inputs):
@@ -22,10 +23,13 @@ export function DelegationMenuItems({ subagents, orchestra, loop, onSubagentsCha
   mode?: "chat" | "code"
 }) {
   const { t } = useTranslation()
-  const gear = (onClick: () => void) => (
+  const gear = (onClick: () => void, checked: boolean) => (
     <button
       type="button"
-      className="ml-auto flex size-5 items-center justify-center rounded text-muted-foreground hover:bg-foreground/10 hover:text-foreground"
+      className={cn(
+        "absolute top-1/2 -translate-y-1/2 flex size-5 items-center justify-center rounded text-muted-foreground hover:bg-foreground/10 hover:text-foreground",
+        checked ? "right-8" : "right-2",
+      )}
       onPointerDown={(e) => e.stopPropagation()}
       onClick={(e) => {
         e.preventDefault()
@@ -46,10 +50,11 @@ export function DelegationMenuItems({ subagents, orchestra, loop, onSubagentsCha
           onSubagentsChange(checked)
           if (checked) onOrchestraChange(false)
         }}
+        className={cn(subagents && "pr-14")}
       >
         <Bot className="size-4" />
         <span className="flex-1">{t("delegation.subagents")}</span>
-        {gear(onOpenConfig)}
+        {gear(onOpenConfig, subagents)}
       </DropdownMenuCheckboxItem>
       {mode !== "chat" && (
       <DropdownMenuCheckboxItem
@@ -58,20 +63,22 @@ export function DelegationMenuItems({ subagents, orchestra, loop, onSubagentsCha
           onOrchestraChange(checked)
           if (checked) onSubagentsChange(false)
         }}
+        className={cn(orchestra && "pr-14")}
       >
         <Network className="size-4" />
         <span className="flex-1">{t("delegation.orchestra")}</span>
-        {gear(onOpenConfig)}
+        {gear(onOpenConfig, orchestra)}
       </DropdownMenuCheckboxItem>
       )}
       {onLoopChange && (
         <DropdownMenuCheckboxItem
           checked={loop ?? false}
           onCheckedChange={(checked) => onLoopChange(checked)}
+          className={cn(loop && "pr-14")}
         >
           <RefreshCw className="size-4" />
           <span className="flex-1">{t("delegation.loop")}</span>
-          {onOpenLoopConfig && gear(onOpenLoopConfig)}
+          {onOpenLoopConfig && gear(onOpenLoopConfig, loop ?? false)}
         </DropdownMenuCheckboxItem>
       )}
     </>
