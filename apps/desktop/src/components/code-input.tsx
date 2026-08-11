@@ -96,7 +96,7 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId }: 
   const model = selected ? catalog[selected.providerId]?.models[selected.modelId] : undefined
   const { enabled, variantId, update } = useReasoningPrefs(selected?.providerId, selected?.modelId)
   const thinking = enabled || !!model?.reasoningAlwaysOn
-  const busy = status === "submitted" || status === "streaming"
+  const busy = status === "submitted" || status === "streaming" || status === "cancelling"
   const openSettings = useSettingsUi((s) => s.openSettings)
   const enqueueForSend = useMessageQueueStore((s) => s.enqueueForSend)
   const enqueueScheduled = useMessageQueueStore((s) => s.enqueueScheduled)
@@ -319,6 +319,7 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId }: 
               <ModelPicker sessionId={sessionId} />
               <SendButtonGroup
                 busy={busy}
+                cancelling={status === "cancelling"}
                 disabled={folders.length === 0}
                 onStop={() => onStop?.()}
                 onQueue={(text) => {

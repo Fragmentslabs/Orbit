@@ -331,7 +331,7 @@ export function ChatView({ sessionId }: { sessionId?: string } = {}) {
     }
   }, [session?.id, session?.directory, viewMode, setFolders])
 
-  const isBusy = status === "submitted" || status === "streaming"
+  const isBusy = status === "submitted" || status === "streaming" || status === "cancelling"
   const hasChat = messages.length > 0
   const personaVisible = useAppearanceStore((s) => s.personaVisible)
   // Pasta alvo do card de init: a da sessão ou a selecionada no FolderSelector

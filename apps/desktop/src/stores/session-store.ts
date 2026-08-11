@@ -694,13 +694,24 @@ export const useSessionStore = create<SessionState>((set, get) => ({
 
   stopStreaming: (sessionId) => {
     void chatApi.abort(sessionId)
-    // Otimista: quando a geração já terminou, o abort é no-op e nenhum status
-    // volta — sem isto o status ficaria preso em streaming/submitted e o botão
-    // de parar pareceria não funcionar.
+    // Fase "cancelling": o abort foi pedido mas o main ainda não confirmou —
+    // o botão vira "Encerrando…" desabilitado em vez de sumir, e o status só
+    // volta a idle quando o engine emitir (ou o fallback abaixo confirmar que
+    // nada estava rodando).
     set((state) => ({
-      status: { ...state.status, [sessionId]: "idle" as ChatStatus },
+      status: { ...state.status, [sessionId]: "cancelling" as ChatStatus },
       errors: { ...state.errors, [sessionId]: undefined },
     }))
+    // Fallback: quando a geração já terminou, o abort é no-op e nenhum status
+    // volta — sem isto o status ficaria preso em cancelling para sempre.
+    window.setTimeout(() => {
+      void chatApi.running().then((ids) => {
+        if (ids.includes(sessionId)) return
+        set((state) => ({
+          status: { ...state.status, [sessionId]: "idle" as ChatStatus },
+        }))
+      })
+    }, 2500)
   },
 
   // O main persiste e emite o evento "session" com o estado atualizado —

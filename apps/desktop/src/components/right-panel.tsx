@@ -208,7 +208,7 @@ export function RightPanelDropZone() {
 }
 
 function WorkerStatusIcon({ status }: { status: string }) {
-  if (status === "submitted" || status === "streaming") {
+  if (status === "submitted" || status === "streaming" || status === "cancelling") {
     return <LoaderIcon className="size-3 shrink-0 animate-spin text-muted-foreground" />
   }
   if (status === "error") return <XCircleIcon className="size-3 shrink-0 text-destructive" />
@@ -311,7 +311,7 @@ function SelectorScreen({ onSelect, onOpenWorker }: {
                   if (e.key === "Enter" || e.key === " ") setOutputPid(p.pid)
                 }}
                 className="flex w-40 shrink-0 flex-col gap-1 rounded-md border border-sidebar-border bg-sidebar-accent/50 px-2.5 py-1.5 text-left transition-colors hover:bg-sidebar-accent cursor-pointer"
-                title={t("panel.processes.viewOutput")}
+                title={`${p.command}\n\n${t("panel.processes.viewOutput")}`}
               >
                 <div className="flex items-center gap-1.5">
                   {p.status === "running" ? (
@@ -549,7 +549,7 @@ export function RightPanel() {
       const status = statusMap[session.id]
       if (
         session.parentId === activeSessionId &&
-        (status === "submitted" || status === "streaming")
+        (status === "submitted" || status === "streaming" || status === "cancelling")
       ) {
         const id = `chat-${session.id}`
         const exists = tabs.some((t) => t.id === id)

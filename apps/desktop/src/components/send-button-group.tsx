@@ -11,9 +11,12 @@ import {
 import { InputGroupButton } from "@/components/ui/input-group";
 import { usePromptInputController } from "@/src/components/ai/prompt-input";
 import { ScheduleMessageDialog } from "@/src/components/schedule-message-dialog";
+import { cn } from "@/lib/utils";
 
 interface SendButtonGroupProps {
   busy: boolean;
+  /** Fase de cancelamento: o abort foi pedido mas o engine ainda não confirmou */
+  cancelling?: boolean;
   onQueue: (text: string) => void;
   onStopAndSend: (text: string) => void;
   onSchedule: (text: string, timestamp: number) => void;
@@ -24,6 +27,7 @@ interface SendButtonGroupProps {
 
 export function SendButtonGroup({
   busy,
+  cancelling,
   onQueue,
   onStopAndSend,
   onSchedule,
@@ -74,9 +78,11 @@ export function SendButtonGroup({
         size="icon-sm"
         variant="default"
         type="button"
+        disabled={cancelling}
         onClick={onStop}
+        title={cancelling ? t("send.cancelling") : undefined}
       >
-        <Square className="size-4" />
+        <Square className={cn("size-4", cancelling && "animate-pulse")} />
       </InputGroupButton>
     );
   }

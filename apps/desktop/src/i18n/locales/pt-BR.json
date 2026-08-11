@@ -192,6 +192,7 @@
     "scheduleMessage": "Agendar mensagem",
     "sendToSidePanel": "Enviar para chat lateral",
     "stop": "Parar",
+    "cancelling": "Encerrando…",
     "scheduleDialog": {
       "chooseTime": "Escolha um horário",
       "customDateTime": "Ou defina data/hora",

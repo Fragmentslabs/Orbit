@@ -36,7 +36,7 @@ export function ProcessOutputDialog({ process, onOpenChange }: {
       <DialogContent className="flex max-h-[80vh] flex-col sm:max-w-2xl">
         <DialogHeader>
           <DialogTitle className="truncate">{process?.label}</DialogTitle>
-          <DialogDescription className="truncate font-mono text-xs">{process?.command}</DialogDescription>
+          <DialogDescription className="break-all whitespace-pre-wrap font-mono text-xs">{process?.command}</DialogDescription>
         </DialogHeader>
         <pre
           ref={preRef}

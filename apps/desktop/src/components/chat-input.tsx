@@ -66,7 +66,7 @@ export function ChatInput({ onSubmit, status, onStop, sessionId }: {
   const model = selected ? catalog[selected.providerId]?.models[selected.modelId] : undefined
   const { enabled, variantId, update } = useReasoningPrefs(selected?.providerId, selected?.modelId)
   const thinking = enabled || !!model?.reasoningAlwaysOn
-  const busy = status === "submitted" || status === "streaming"
+  const busy = status === "submitted" || status === "streaming" || status === "cancelling"
 
   const { mode } = useWorkspace()
   const selectSession = useSessionStore((s) => s.selectSession)
@@ -187,6 +187,7 @@ export function ChatInput({ onSubmit, status, onStop, sessionId }: {
             <ModelPicker sessionId={sessionId} />
             <SendButtonGroup
               busy={busy}
+              cancelling={status === "cancelling"}
               disabled={false}
               onStop={() => onStop?.()}
               onQueue={(text) => {

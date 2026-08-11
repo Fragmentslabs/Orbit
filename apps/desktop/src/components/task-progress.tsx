@@ -8,7 +8,7 @@ import { cn } from "@/lib/utils"
 export interface TaskItem {
   id: string
   title: string
-  status: "idle" | "submitted" | "streaming" | "error"
+  status: "idle" | "submitted" | "streaming" | "cancelling" | "error"
   mode?: "chat" | "code"
 }
 
@@ -28,7 +28,7 @@ export function TaskProgress({
   const total = tasks.length
   const done = tasks.filter((t) => t.status === "idle").length
   const running = tasks.some(
-    (t) => t.status === "submitted" || t.status === "streaming",
+    (t) => t.status === "submitted" || t.status === "streaming" || t.status === "cancelling",
   )
   const hasErrors = tasks.some((t) => t.status === "error")
   const progress = total > 0 ? Math.round((done / total) * 100) : 0

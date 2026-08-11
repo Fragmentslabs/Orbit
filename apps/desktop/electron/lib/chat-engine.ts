@@ -89,6 +89,10 @@ const VERIFY_CHANGES_PROMPT = `[SYSTEM: Você usou ferramentas de escrita e não
 const WRITE_TOOLS = new Set(['edit', 'write', 'bash'])
 const VERIFY_TOOLS = new Set(['read', 'grep', 'glob', 'verify_changes'])
 const abortControllers = new Map<string, AbortController>()
+// Comando bash ativo por sessão (diagnóstico): preenchido no tool-call e
+// limpo no tool-result/error — o abortChat loga o comando que estava rodando
+// quando o usuário apertou parar, e o finally avisa se ele pode ter ficado vivo.
+const activeBashCommands = new Map<string, string>()
 
 /** true quando a última todowrite da mensagem tem itens "in_progress" —
  * o card de tarefas ficaria com spinner eterno se o turno acabar assim. */
@@ -353,6 +357,10 @@ function emit(win: BrowserWindow, event: ChatEvent) {
 }
 
 export function abortChat(sessionId: string) {
+  const cmd = activeBashCommands.get(sessionId)
+  console.log(
+    `[chat] abort da sessão ${sessionId}${cmd ? ` — comando bash ativo: ${cmd}` : ''}`,
+  )
   abortControllers.get(sessionId)?.abort()
 }
 
@@ -806,6 +814,10 @@ export async function runChat(win: BrowserWindow, input: SendMessageInput): Prom
               state: 'running',
               input: part.input as Record<string, unknown>,
             })
+            if (part.toolName === 'bash') {
+              const input = part.input as Record<string, unknown> | undefined
+              activeBashCommands.set(sessionId, typeof input?.command === 'string' ? input.command : '')
+            }
             break
           case 'tool-result': {
             const existing = assistantMessage.parts.find((p) => p.id === part.toolCallId) as
@@ -819,6 +831,7 @@ export async function runChat(win: BrowserWindow, input: SendMessageInput): Prom
               input: existing?.input,
               output: typeof part.output === 'string' ? part.output : JSON.stringify(part.output, null, 2),
             })
+            if (part.toolName === 'bash') activeBashCommands.delete(sessionId)
             // show_image: a imagem vira parte da resposta (renderizada pelo ai/image)
             if (part.toolName === 'show_image') {
               const output = part.output as { mediaUrl?: string; alt?: string } | string
@@ -846,6 +859,7 @@ export async function runChat(win: BrowserWindow, input: SendMessageInput): Prom
               input: existing?.input,
               error: takeDenialReason(part.toolCallId) ?? 'Ação negada pela política de permissões.',
             })
+            if (part.toolName === 'bash') activeBashCommands.delete(sessionId)
             break
           }
           case 'tool-error': {
@@ -860,6 +874,7 @@ export async function runChat(win: BrowserWindow, input: SendMessageInput): Prom
               input: existing?.input,
               error: errorToText(part.error),
             })
+            if (part.toolName === 'bash') activeBashCommands.delete(sessionId)
             break
           }
           case 'finish':
@@ -1038,6 +1053,15 @@ export async function runChat(win: BrowserWindow, input: SendMessageInput): Prom
     })
   } finally {
     if (abortControllers.get(sessionId) === controller) abortControllers.delete(sessionId)
+    const activeCmd = activeBashCommands.get(sessionId)
+    activeBashCommands.delete(sessionId)
+    if (controller.signal.aborted && activeCmd) {
+      console.warn(
+        `[chat] turno da sessão ${sessionId} abortado com comando bash ativo — ` +
+          'se ele não encerrou, continua rodando (veja o painel de processos): ' +
+          `${activeCmd}`,
+      )
+    }
   }
 }
 

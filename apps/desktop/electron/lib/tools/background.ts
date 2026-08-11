@@ -48,7 +48,7 @@ export function createBackgroundTools(ctx: ToolContext) {
       pid: z.number().describe('PID of the process to kill'),
     }),
     execute: async ({ pid }) => {
-      const ok = killProcess(pid, ctx.sessionId)
+      const ok = await killProcess(pid, ctx.sessionId)
       if (ok) return `Processo PID ${pid} morto.`
       return `Processo PID ${pid} não encontrado nesta sessão.`
     },

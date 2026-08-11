@@ -6,7 +6,7 @@
 
 export type SessionMode = "chat" | "code"
 
-export type ChatStatus = "idle" | "submitted" | "streaming" | "error"
+export type ChatStatus = "idle" | "submitted" | "streaming" | "cancelling" | "error"
 
 /** Resultado de busca textual em sessões (título + mensagens). */
 export interface SearchHit {

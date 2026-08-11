@@ -394,7 +394,7 @@ function FullscreenChatFeed({ pinned, onTogglePin }: { pinned: boolean; onToggle
   const messages = useSessionStore((s) => (sessionId ? s.messages[sessionId] ?? NO_MSGS : NO_MSGS))
   const status = useSessionStatus(sessionId)
   const pendingAsks = useSessionStore((s) => (sessionId ? s.pendingAsks[sessionId] ?? NO_ASKS : NO_ASKS))
-  const isBusy = status === "submitted" || status === "streaming"
+  const isBusy = status === "submitted" || status === "streaming" || status === "cancelling"
   const { hovered, handleEnter, handleLeave } = useEdgeHover()
   const scrollRef = useRef<HTMLDivElement | null>(null)
   const expanded = pinned || hovered
@@ -615,7 +615,7 @@ function FullscreenComposer({ onSent }: { onSent?: () => void }) {
   const stopStreaming = useSessionStore((s) => s.stopStreaming)
   const permissionMode = usePermissionPrefs((s) => s.mode)
   const status = useSessionStatus(activeSession?.id)
-  const isBusy = status === "submitted" || status === "streaming"
+  const isBusy = status === "submitted" || status === "streaming" || status === "cancelling"
   const { t } = useTranslation()
   const [text, setText] = useState("")
   const [sending, setSending] = useState(false)

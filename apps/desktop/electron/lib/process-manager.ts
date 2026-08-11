@@ -1,6 +1,9 @@
-import { spawn } from 'node:child_process'
+import { spawn, execFile } from 'node:child_process'
+import { promisify } from 'node:util'
 import type { ChildProcess } from 'node:child_process'
 import { userShellEnv } from './shell-env'
+
+const execFileAsync = promisify(execFile)
 
 export interface ProcessInfo {
   pid: number
@@ -119,7 +122,7 @@ export function getProcessOutput(pid: number, sessionId?: string): string {
   return entry.output
 }
 
-export function killProcess(pid: number, sessionId?: string): boolean {
+export async function killProcess(pid: number, sessionId?: string): Promise<boolean> {
   const entry = processes.get(pid)
   if (!entry) return false
   // Escopo por sessão: só o dono (ou processos sem dono) pode encerrar.
@@ -128,11 +131,20 @@ export function killProcess(pid: number, sessionId?: string): boolean {
   }
 
   if (entry.info.status === 'running') {
+    const isWin = process.platform === 'win32'
     try {
-      const isWin = process.platform === 'win32'
       if (isWin) {
-        // /T mata a árvore inteira (o processo e todos os filhos dele).
-        spawn('taskkill', ['/PID', String(pid), '/T', '/F'], { stdio: 'ignore' })
+        // Aguarda o taskkill terminar (exit code 0 = morto). Em falha (exit != 0:
+        // access denied, processo já morto…) a entrada NÃO é removida — o card
+        // continua no painel para nova tentativa, e o status real vira 'exited'
+        // sozinho via evento do child quando o processo de fato morrer. Antes
+        // disso, a entrada era deletada na hora: o processo sumia da UI mesmo
+        // vivo, e "não dava para parar" porque não havia onde apertar.
+        try {
+          await execFileAsync('taskkill', ['/PID', String(pid), '/T', '/F'], { windowsHide: true })
+        } catch {
+          return false
+        }
       } else {
         // detached:true roda o comando com setsid, então ele lidera seu próprio
         // grupo de processos — matar só o PID (positivo) mata a shell mas deixa
@@ -147,7 +159,7 @@ export function killProcess(pid: number, sessionId?: string): boolean {
           try {
             process.kill(-pid, 'SIGKILL')
           } catch {
-            try { process.kill(pid, 'SIGKILL') } catch {}
+            try { process.kill(pid, 'SIGKILL') } catch { /* já encerrou */ }
           }
         }, 3000)
       }
@@ -186,7 +198,7 @@ export function killAll(): void {
           process.kill(pid, 'SIGTERM')
         }
       }
-    } catch {}
+    } catch { /* processo já pode ter encerrado — kill no quit é best-effort */ }
   }
   processes.clear()
 }

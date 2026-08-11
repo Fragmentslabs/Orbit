@@ -90,7 +90,10 @@ function ToolActionItem({ part }: { part: ToolPart }) {
         {part.state === "running" ? <Shimmer>{label}</Shimmer> : <span>{label}</span>}
         {chip && (
           <TaskItemFile>
-            <span className="max-w-64 truncate font-mono">{chip}</span>
+            {/* title = comando/caminho completo no hover (o truncate corta em ~256px) */}
+            <span className="max-w-64 truncate font-mono" title={chip}>
+              {chip}
+            </span>
           </TaskItemFile>
         )}
         {detail && (

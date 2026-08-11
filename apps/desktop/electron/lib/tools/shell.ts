@@ -1,5 +1,6 @@
 import { tool } from 'ai'
-import { spawn, execSync } from 'node:child_process'
+import { spawn, execFile } from 'node:child_process'
+import { promisify } from 'node:util'
 import { z } from 'zod'
 import type { ToolContext } from './context'
 import { userShellEnv } from '../shell-env'
@@ -9,12 +10,22 @@ const DEFAULT_TIMEOUT = 2 * 60 * 1000
 const MAX_TIMEOUT = 10 * 60 * 1000
 const MAX_OUTPUT = 30_000
 const SIGKILL_GRACE = 200
+// Janela de tolerância após o kill do abort: se o processo não emitiu 'close'
+// nesse tempo, o kill falhou (ex.: taskkill sem permissão no Windows) — o
+// runShell resolve mesmo assim (nunca deixa o turno do agente preso).
+const SETTLE_GRACE_MS = 5000
 
-function killTree(pid: number): void {
+const execFileAsync = promisify(execFile)
+
+async function killTree(pid: number): Promise<void> {
   const isWin = process.platform === 'win32'
   if (isWin) {
+    // taskkill via execFile (assíncrono): execSync BLOQUEAVA o main process —
+    // congelava todos os IPC handlers durante o kill, inclusive novos cliques
+    // no botão de parar. Falha (exit != 0) é comum (processo já morto) e é
+    // coberta pelo watchdog de settle do runShell.
     try {
-      execSync(`taskkill /pid ${pid} /T /F`, { stdio: 'ignore' })
+      await execFileAsync('taskkill', ['/PID', String(pid), '/T', '/F'], { windowsHide: true })
     } catch {
       // process may have already exited
     }
@@ -23,10 +34,12 @@ function killTree(pid: number): void {
   try {
     process.kill(-pid, 'SIGTERM')
     setTimeout(() => {
-      try { process.kill(-pid, 'SIGKILL') } catch {}
+      // SIGKILL de reforço caso o SIGTERM não tenha sido suficiente
+      try { process.kill(-pid, 'SIGKILL') } catch { /* já encerrou */ }
     }, SIGKILL_GRACE)
   } catch {
-    try { process.kill(pid, 'SIGTERM') } catch {}
+    // sem grupo próprio (ex.: spawn sem detached) — cai no kill direto
+    try { process.kill(pid, 'SIGTERM') } catch { /* já encerrou */ }
   }
 }
 
@@ -44,6 +57,7 @@ function runShell(command: string, cwd: string, timeout: number, abort: AbortSig
             cwd,
             env: userShellEnv(),
             stdio: ['ignore', 'pipe', 'pipe'],
+            windowsHide: true,
           })
         : spawn(process.env.SHELL || '/bin/bash', ['-c', command], {
             cwd,
@@ -62,7 +76,45 @@ function runShell(command: string, cwd: string, timeout: number, abort: AbortSig
       child.stderr.on('data', append)
 
       const pid = child.pid
-      const kill = () => { if (pid != null) killTree(pid) }
+      const kill = () => { if (pid != null) void killTree(pid) }
+
+      // Watchdog pós-abort: se o kill falhar silenciosamente (ex.: taskkill
+      // sem permissão no Windows), o 'close' nunca chega e a Promise ficaria
+      // pendente PARA SEMPRE — o turno do agente trava e o botão de parar vira
+      // no-op (o segundo abort é ignorado porque o sinal já foi abortado).
+      // Após SETTLE_GRACE_MS, resolve mesmo assim: registra o processo ainda
+      // vivo no gerenciador (vira visível e terminável no painel de processos)
+      // e devolve a saída parcial com um aviso explícito.
+      let settleTimer: NodeJS.Timeout | undefined
+      const armSettleWatchdog = () => {
+        if (settleTimer) return
+        settleTimer = setTimeout(() => {
+          if (child.exitCode !== null && child.exitCode !== undefined) return
+          child.stdout.removeListener('data', append)
+          child.stderr.removeListener('data', append)
+          child.removeAllListeners('close')
+          child.removeAllListeners('error')
+          abort.removeEventListener('abort', onAbort)
+          const truncated = output.length >= MAX_OUTPUT ? '\n… (saída truncada)' : ''
+          if (pid == null) {
+            resolve({ output: output.slice(0, MAX_OUTPUT) + truncated, exitCode: null })
+            return
+          }
+          const background = registerProcess(child, {
+            label: makeLabel(command),
+            command,
+            cwd,
+            pid,
+            initialOutput: output.slice(0, MAX_OUTPUT),
+            sessionId,
+          })
+          console.warn(
+            `[shell] kill não confirmado após ${SETTLE_GRACE_MS / 1000}s — PID ${pid} ainda vivo; ` +
+              'registrado como background (acompanhe/encerre pelo painel de processos)',
+          )
+          resolve({ output: output.slice(0, MAX_OUTPUT) + truncated, exitCode: null, background })
+        }, SETTLE_GRACE_MS)
+      }
 
       // Timeout promove o comando para background em vez de matar: dev servers
       // (npm run dev) e builds longos continuam vivos, e a tool retorna já com
@@ -93,16 +145,19 @@ function runShell(command: string, cwd: string, timeout: number, abort: AbortSig
         clearTimeout(timer)
         abort.removeEventListener('abort', onAbort)
         kill()
+        armSettleWatchdog()
       }
       abort.addEventListener('abort', onAbort)
 
       child.on('error', (err) => {
         clearTimeout(timer)
+        if (settleTimer) clearTimeout(settleTimer)
         abort.removeEventListener('abort', onAbort)
         reject(err)
       })
       child.on('close', (exitCode) => {
         clearTimeout(timer)
+        if (settleTimer) clearTimeout(settleTimer)
         abort.removeEventListener('abort', onAbort)
         const truncated = output.length >= MAX_OUTPUT ? '\n… (saída truncada)' : ''
         resolve({ output: output.slice(0, MAX_OUTPUT) + truncated, exitCode })

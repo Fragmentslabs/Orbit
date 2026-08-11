@@ -192,6 +192,7 @@
     "scheduleMessage": "Schedule message",
     "sendToSidePanel": "Send to side chat",
     "stop": "Stop",
+    "cancelling": "Stopping…",
     "scheduleDialog": {
       "chooseTime": "Pick a time",
       "customDateTime": "Or set a custom date/time",
