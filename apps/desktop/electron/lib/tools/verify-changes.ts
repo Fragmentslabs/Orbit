@@ -1,16 +1,8 @@
 import { tool } from 'ai'
-import { execFile } from 'node:child_process'
-import crypto from 'node:crypto'
-import path from 'node:path'
-import { promisify } from 'node:util'
 import { z } from 'zod'
-import { app } from 'electron'
-import { capture } from '../snapshot'
+import { capture, snapshotGit } from '../snapshot'
 import { errorToText } from '../errors'
 import type { ToolContext } from './context'
-
-const execFileAsync = promisify(execFile)
-const MAX_BUFFER = 50 * 1024 * 1024
 
 /**
  * Tool verify_changes: verificação pós-escrita do turno em andamento. O
@@ -21,24 +13,12 @@ const MAX_BUFFER = 50 * 1024 * 1024
  *
  * Sem snapshot (modo chat, captura falhou ou ainda não rodou) → changes vazio
  * com observação, para o modelo não inventar arquivos.
+ *
+ * A invocação do git é a MESMA do engine de snapshots (--git-dir em
+ * userData/snapshots/<hash> com --work-tree no projeto, binário e PATH
+ * resolvidos no load — snapshotGit em electron/lib/snapshot/index.ts): fonte
+ * única, sem duplicar gitDirFor nem a resolução do binário (B3).
  */
-
-// O repositório auxiliar de snapshots é o mesmo do engine em
-// electron/lib/snapshot/index.ts (--git-dir em userData/snapshots/<hash> com
-// --work-tree no projeto). Replicamos só o endereço — a manutenção do repo
-// (ensureRepo/add/write-tree) continua centralizada no snapshot engine.
-function gitDirFor(directory: string): string {
-  const hash = crypto.createHash('sha1').update(path.resolve(directory)).digest('hex').slice(0, 16)
-  return path.join(app.getPath('userData'), 'snapshots', hash)
-}
-
-function git(directory: string, args: string[]): Promise<string> {
-  return execFileAsync(
-    'git',
-    ['--git-dir', gitDirFor(directory), '--work-tree', directory, ...args],
-    { cwd: directory, maxBuffer: MAX_BUFFER },
-  ).then(({ stdout }) => stdout)
-}
 
 export function createVerifyChangesTool(ctx: ToolContext) {
   return tool({
@@ -60,7 +40,7 @@ export function createVerifyChangesTool(ctx: ToolContext) {
         if (end === turn.start) return { changes: [] }
         // --name-status dá o status por arquivo (A/M/D); o patch de cada
         // arquivo é medido separadamente para o patchSize individual.
-        const statusLines = (await git(ctx.directory, ['diff', '--name-status', turn.start, end]))
+        const statusLines = (await snapshotGit(ctx.directory, ['diff', '--name-status', turn.start, end]))
           .split('\n')
           .filter(Boolean)
         if (statusLines.length === 0) return { changes: [] }
@@ -75,7 +55,7 @@ export function createVerifyChangesTool(ctx: ToolContext) {
           const state = status === 'A' ? 'created' : status === 'D' ? 'removed' : 'edited'
           let patchSize = 0
           try {
-            patchSize = (await git(ctx.directory, ['diff', turn.start, end, '--', file])).length
+            patchSize = (await snapshotGit(ctx.directory, ['diff', turn.start, end, '--', file])).length
           } catch {
             // patchSize é informativo — não derruba a verificação
           }

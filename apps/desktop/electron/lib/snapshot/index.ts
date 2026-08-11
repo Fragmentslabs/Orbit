@@ -67,7 +67,10 @@ function resolveGit(): { binary: string; env: NodeJS.ProcessEnv } {
   return { binary: 'git', env }
 }
 
-const gitBinary = resolveGit()
+/** Binário do git e PATH resolvidos no load — exportado para ferramentas
+ * externas (ex.: verify_changes) que precisem invocar git com a mesma
+ * resolução (B3: Finder/PATH mínimo) sem duplicá-la. */
+export const gitBinary = resolveGit()
 
 /** Excludes padrão além do .gitignore do projeto (projetos sem .gitignore) */
 const DEFAULT_EXCLUDES = ['node_modules/', '.git/', 'dist/', 'dist-electron/', 'build/', 'out/', '.next/', 'target/']
@@ -80,7 +83,14 @@ function gitDirFor(directory: string): string {
   return path.join(app.getPath('userData'), 'snapshots', hash)
 }
 
-async function git(directory: string, args: string[]): Promise<string> {
+/**
+ * Executa git no repositório auxiliar de snapshots (--git-dir em
+ * userData/snapshots/<hash> + --work-tree no projeto) usando o binário e o
+ * PATH resolvidos no load. Único ponto de verdade da invocação — exportado
+ * para ferramentas externas (ex.: verify_changes) não duplicarem gitDirFor
+ * nem a resolução do binário.
+ */
+export async function snapshotGit(directory: string, args: string[]): Promise<string> {
   const { stdout } = await execFileAsync(
     gitBinary.binary,
     ['--git-dir', gitDirFor(directory), '--work-tree', directory, ...args],
@@ -110,7 +120,7 @@ function maybeGc(directory: string) {
   const last = lastGc.get(key) ?? 0
   if (Date.now() - last < GC_INTERVAL) return
   lastGc.set(key, Date.now())
-  void git(directory, ['gc', '--quiet', '--prune=7.days']).catch(() => {})
+  void snapshotGit(directory, ['gc', '--quiet', '--prune=7.days']).catch(() => {})
 }
 
 /** Captura o estado atual do worktree como tree hash. */
@@ -122,8 +132,8 @@ export async function capture(directory: string): Promise<string> {
   // restore — comportamento intencional. Não usamos -f de propósito: ele
   // quebraria os excludes de node_modules/ etc. e incharia o repositório
   // auxiliar com lixo que não devemos restaurar.
-  await git(directory, ['add', '--all'])
-  const tree = (await git(directory, ['write-tree'])).trim()
+  await snapshotGit(directory, ['add', '--all'])
+  const tree = (await snapshotGit(directory, ['write-tree'])).trim()
   maybeGc(directory)
   return tree
 }
@@ -135,8 +145,8 @@ export async function capture(directory: string): Promise<string> {
  */
 export async function restore(directory: string, tree: string): Promise<void> {
   await ensureRepo(directory)
-  await git(directory, ['add', '--all'])
-  await git(directory, ['read-tree', '--reset', '-u', tree])
+  await snapshotGit(directory, ['add', '--all'])
+  await snapshotGit(directory, ['read-tree', '--reset', '-u', tree])
 }
 
 export interface SnapshotDiff {
@@ -149,13 +159,13 @@ const MAX_PATCH_CHARS = 200_000
 
 /** Diferença entre dois snapshots (tree hashes). */
 export async function diff(directory: string, from: string, to: string): Promise<SnapshotDiff> {
-  const files = (await git(directory, ['diff', '--name-only', from, to]))
+  const files = (await snapshotGit(directory, ['diff', '--name-only', from, to]))
     .split('\n')
     .map((f) => f.trim())
     .filter(Boolean)
   let patch = ''
   if (files.length > 0) {
-    patch = await git(directory, ['diff', from, to])
+    patch = await snapshotGit(directory, ['diff', from, to])
     if (patch.length > MAX_PATCH_CHARS) {
       patch = patch.slice(0, MAX_PATCH_CHARS) + '\n… (diff truncado)'
     }
