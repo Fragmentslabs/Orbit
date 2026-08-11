@@ -686,10 +686,10 @@ export async function runChat(win: BrowserWindow, input: SendMessageInput): Prom
                   ...previousResponseMessages,
                   {
                     role: 'user' as const,
-                    content: todoNudges > 0
-                      ? TODO_COMPLETION_PROMPT
-                      : verifyNudges > 0
-                        ? VERIFY_CHANGES_PROMPT
+                    content: verifyNudges > 0
+                      ? VERIFY_CHANGES_PROMPT
+                      : todoNudges > 0
+                        ? TODO_COMPLETION_PROMPT
                         : truncatedToolNames
                           ? AUTO_CONTINUE_TOOL_PROMPT(truncatedToolNames)
                           : AUTO_CONTINUE_PROMPT,
