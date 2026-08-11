@@ -29,7 +29,7 @@ import { capture, diff } from './snapshot'
 import { runProjectInit, type InitHooks } from './project-init'
 import { PROJECT_AREAS, type ProjectArea } from '@shared/memory'
 import { readJson, writeJson } from './storage'
-import { buildToolSet, type ToolContext } from './tools'
+import { buildToolSet, type ToolContext, type TurnSnapshot } from './tools'
 import { addTokenUsage, toStepUsage, toTokenUsage } from './usage'
 import { messageContextText } from './todo-context'
 import { forwardChatEvent } from './companion-server'
@@ -77,6 +77,17 @@ const AUTO_CONTINUE_TOOL_PROMPT = (toolNames: string) => `[SYSTEM: the previous 
 // com teto por turno para não virar loop.
 const MAX_TODO_NUDGES = 2
 const TODO_COMPLETION_PROMPT = `[SYSTEM: your reply ended, but the last TODO list still has items marked as "in_progress". If you actually completed them, re-send the TODO list marking those items as "completed" (do NOT repeat the work summary — just update the checklist). If they are truly still not finished, say so briefly. Do not end the turn again without resolving the TODO state.]`
+// Nudge de verificação pós-escrita: o turno terminou naturalmente ('stop')
+// mas houve escrita (edit/write/bash) e nenhuma leitura/verificação depois
+// da última — o modelo concluiu sem conferir o resultado. Re-entramos no
+// loop pedindo verify_changes (mesmo padrão do todoNudge), no máximo 1x por
+// turno para não virar loop.
+const MAX_VERIFY_NUDGES = 1
+const VERIFY_CHANGES_PROMPT = `[SYSTEM: Você usou ferramentas de escrita e não verificou o resultado. Chame verify_changes antes de concluir.]`
+// Ferramentas que alteram o filesystem vs. ferramentas que verificam — a
+// heurística do nudge de verificação pós-escrita (ver runChat).
+const WRITE_TOOLS = new Set(['edit', 'write', 'bash'])
+const VERIFY_TOOLS = new Set(['read', 'grep', 'glob', 'verify_changes'])
 const abortControllers = new Map<string, AbortController>()
 
 /** true quando a última todowrite da mensagem tem itens "in_progress" —
@@ -471,6 +482,11 @@ export async function runChat(win: BrowserWindow, input: SendMessageInput): Prom
       }
     }
 
+    // Snapshot do turno em andamento: preenchido pela captura inicial abaixo e
+    // exposto às tools via getTurnSnapshot — leitura por closure porque a
+    // captura acontece DEPOIS da criação do context (verify_changes difere o
+    // estado atual contra este start).
+    let turnSnapshot: TurnSnapshot | undefined
     const toolContext: ToolContext | null =
       input.mode === 'code' && input.directory
         ? {
@@ -478,19 +494,22 @@ export async function runChat(win: BrowserWindow, input: SendMessageInput): Prom
             directory: input.directory,
             extraDirectories: input.extraDirectories ?? [],
             abort: controller.signal,
+            getTurnSnapshot: () => turnSnapshot,
           }
         : null
 
     // Snapshot start: estado do filesystem antes do stream (revert per-message)
     if (toolContext) {
       try {
-        assistantMessage.snapshot = { start: await capture(toolContext.directory) }
+        turnSnapshot = { start: await capture(toolContext.directory) }
+        assistantMessage.snapshot = { start: turnSnapshot.start }
       } catch (err) {
         // Não esconder a falha: grava snapshot marcado como failed (sem start,
         // motivo em captureError) — o revert de filesystem fica indisponível e
         // a UI/ferramentas precisam saber por quê, em vez de um turno que
         // parece ter snapshot normalmente.
         const reason = errorToText(err)
+        turnSnapshot = { failed: true, error: reason }
         assistantMessage.snapshot = { failed: true, captureError: reason }
         console.error('[snapshot] captura inicial falhou:', reason, {
           directory: toolContext.directory,
@@ -645,6 +664,7 @@ export async function runChat(win: BrowserWindow, input: SendMessageInput): Prom
     )
     let autoContinues = 0
     let todoNudges = 0
+    let verifyNudges = 0
     let lastFinishReason: string | undefined
     let previousResponseMessages: ModelMessage[] = []
     let truncatedToolNames = ''
@@ -654,7 +674,7 @@ export async function runChat(win: BrowserWindow, input: SendMessageInput): Prom
         model,
         system: await buildSystemPrompt(input),
         messages:
-          autoContinues === 0 && todoNudges === 0
+          autoContinues === 0 && todoNudges === 0 && verifyNudges === 0
             ? initialMessages
             : normalizeMessages(
                 [
@@ -664,9 +684,11 @@ export async function runChat(win: BrowserWindow, input: SendMessageInput): Prom
                     role: 'user' as const,
                     content: todoNudges > 0
                       ? TODO_COMPLETION_PROMPT
-                      : truncatedToolNames
-                        ? AUTO_CONTINUE_TOOL_PROMPT(truncatedToolNames)
-                        : AUTO_CONTINUE_PROMPT,
+                      : verifyNudges > 0
+                        ? VERIFY_CHANGES_PROMPT
+                        : truncatedToolNames
+                          ? AUTO_CONTINUE_TOOL_PROMPT(truncatedToolNames)
+                          : AUTO_CONTINUE_PROMPT,
                   },
                 ],
                 interleavedReasoningField(provider, input.modelId),
@@ -931,6 +953,34 @@ export async function runChat(win: BrowserWindow, input: SendMessageInput): Prom
         hasTodoInProgress(assistantMessage.parts)
       ) {
         todoNudges++
+        previousResponseMessages = await result.responseMessages
+        continue
+      }
+
+      // Nudge de verificação pós-escrita: o turno terminou naturalmente
+      // ('stop') mas houve escrita (edit/write/bash executadas) e nenhuma
+      // leitura/verificação (read/grep/glob/verify_changes) depois da ÚLTIMA
+      // escrita — o modelo respondeu sem conferir o resultado. Re-entra no
+      // loop com a synthetic user message pedindo verify_changes (padrão do
+      // todoNudge), no máximo 1x por turno.
+      const doneToolIdxs = assistantMessage.parts
+        .map((p, i) => ({ p, i }))
+        .filter((x): x is { p: ToolPart; i: number } => x.p.type === 'tool' && x.p.state === 'done')
+      const lastWriteIdx = [...doneToolIdxs].reverse().find((x) => WRITE_TOOLS.has(x.p.tool))?.i ?? -1
+      const verifiedAfterLastWrite = doneToolIdxs.some(
+        (x) => x.i > lastWriteIdx && VERIFY_TOOLS.has(x.p.tool),
+      )
+      const lastPart = assistantMessage.parts[assistantMessage.parts.length - 1]
+      const lastPartIsDoneText = lastPart?.type === 'text' && lastPart.state === 'done'
+      if (
+        lastFinishReason === 'stop' &&
+        !controller.signal.aborted &&
+        verifyNudges < MAX_VERIFY_NUDGES &&
+        lastWriteIdx >= 0 &&
+        !verifiedAfterLastWrite &&
+        lastPartIsDoneText
+      ) {
+        verifyNudges++
         previousResponseMessages = await result.responseMessages
         continue
       }

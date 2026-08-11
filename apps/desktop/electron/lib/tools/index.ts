@@ -19,10 +19,11 @@ import { createQuestionTool } from './question'
 import { createBackgroundTools } from './background'
 import { createBashTool } from './shell'
 import { createTodoTool } from './todo'
+import { createVerifyChangesTool } from './verify-changes'
 import { createWebFetchTool, createWebSearchTool } from './web'
 
 export { destroyBrowserWindow } from './browser'
-export type { ToolContext } from './context'
+export type { ToolContext, TurnSnapshot } from './context'
 
 /**
  * Monta o conjunto de ferramentas de acordo com o modo, seguindo a lógica de
@@ -77,6 +78,11 @@ export function buildToolSet(input: SendMessageInput, ctx: ToolContext | null): 
     tools.glob = createGlobTool(ctx)
     tools.grep = createGrepTool(ctx)
     tools.todowrite = createTodoTool()
+    // Leitura do estado do turno: verify_changes confere o que foi escrito;
+    // session_context traz metadados dos turnos recentes. Ambas são leitura
+    // (ok no plano) e não recebem orientação extra no prompt — o modelo
+    // decide quando chamá-las.
+    tools.verify_changes = createVerifyChangesTool(ctx)
     if (!input.options.plan) {
       tools.write = createWriteTool(ctx)
       tools.edit = createEditTool(ctx)

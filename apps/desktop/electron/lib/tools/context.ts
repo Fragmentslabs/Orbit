@@ -1,5 +1,19 @@
 import path from 'node:path'
 
+/** Snapshot do turno em andamento (modo código): tree hash do filesystem
+ * capturado antes do stream começar. Preenchido pelo chat-engine DEPOIS de
+ * criar o ToolContext — por isso a leitura é via closure (getTurnSnapshot),
+ * nunca um campo fixo. Tools como verify_changes usam isso para comparar o
+ * estado atual contra o início do turno. */
+export interface TurnSnapshot {
+  /** Tree hash antes do turno começar */
+  start?: string
+  /** true quando a captura inicial falhou — sem start para comparar */
+  failed?: boolean
+  /** Motivo da falha da captura inicial */
+  error?: string
+}
+
 /** Contexto passado a todas as ferramentas de uma execução. */
 export interface ToolContext {
   sessionId: string
@@ -8,6 +22,10 @@ export interface ToolContext {
   /** Pastas adicionais anexadas pelo usuário */
   extraDirectories: string[]
   abort: AbortSignal
+  /** Snapshot do turno em andamento (modo código) — permite ler o estado do
+   * filesystem do turno atual. undefined quando o modo não captura snapshot
+   * ou a captura ainda não aconteceu. */
+  getTurnSnapshot?: () => TurnSnapshot | undefined
 }
 
 export class PathAccessError extends Error {}
