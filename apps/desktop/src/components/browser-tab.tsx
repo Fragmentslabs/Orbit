@@ -173,11 +173,16 @@ function PanelBrowserBody({ persistKey }: { persistKey?: string }) {
   const viewport = usePanelStore((s) => s.viewport)
   const webviewRef = useRef<WebviewElement | null>(null)
   const initialSrcRef = useRef(url)
+  // Estado do elemento: a montagem pode ser tardia (estado vazio → primeira URL
+  // na barra) e o <webview> do pool é re-anexado a cada volta à aba — os efeitos
+  // de ready/navegação reagem ao elemento, não a um ref fixo.
+  const [webviewEl, setWebviewEl] = useState<WebviewElement | null>(null)
 
   // O <webview> vive no pool (webview-session.ts) — aqui só guardamos a
   // referência do elemento para os comandos (loadURL, execução de JS).
   const handleWebviewRef = useCallback((el: HTMLElement | null) => {
     webviewRef.current = el as WebviewElement | null
+    setWebviewEl(el as WebviewElement | null)
   }, [])
 
   const handleConsoleMessage = useCallback((message: string) => {
@@ -189,12 +194,53 @@ function PanelBrowserBody({ persistKey }: { persistKey?: string }) {
     }
   }, [])
 
+  // Ready-gate do <webview>: os métodos (getURL/loadURL) só podem ser chamados
+  // depois de o guest estar anexado ao DOM e ter emitido dom-ready — antes
+  // disso o Electron lança "The WebView must be attached to the DOM and the
+  // dom-ready event emitted before this method can be called". Enquanto não
+  // está pronto, a URL pedida na barra fica pendente e é aplicada no primeiro
+  // dom-ready (ou imediatamente, se o guest do pool já estiver pronto —
+  // dom-ready não re-emite ao re-anexar o elemento).
+  const readyRef = useRef(false)
+  const pendingUrlRef = useRef<string | null>(null)
+
   // Navegação controlada: mudanças na barra de URL viram loadURL (sem remount)
   useEffect(() => {
-    const webview = webviewRef.current
-    if (!webview || !url) return
-    if (webview.getURL() !== url) void webview.loadURL(url).catch(() => {})
-  }, [url])
+    if (!webviewEl || !url) return
+    if (!readyRef.current) {
+      pendingUrlRef.current = url
+      return
+    }
+    pendingUrlRef.current = null
+    if (webviewEl.getURL() !== url) void webviewEl.loadURL(url).catch(() => {})
+  }, [url, webviewEl])
+
+  // Detecta o dom-ready do guest (criação ou re-anexo) e aplica a URL pendente.
+  useEffect(() => {
+    if (!webviewEl) return
+    const applyPendingUrl = () => {
+      const pending = pendingUrlRef.current
+      if (!pending) return
+      pendingUrlRef.current = null
+      try {
+        if (webviewEl.getURL() !== pending) void webviewEl.loadURL(pending).catch(() => {})
+      } catch {
+        pendingUrlRef.current = pending // ainda não pronto — próximo dom-ready aplica
+      }
+    }
+    const onReady = () => {
+      readyRef.current = true
+      applyPendingUrl()
+    }
+    webviewEl.addEventListener("dom-ready", onReady)
+    try {
+      webviewEl.getWebContentsId() // guest já pronto (pool) — dom-ready não re-emite
+      onReady()
+    } catch {
+      // guest inicializando — o dom-ready chama onReady
+    }
+    return () => webviewEl.removeEventListener("dom-ready", onReady)
+  }, [webviewEl])
 
   useEffect(() => {
     const webview = webviewRef.current
