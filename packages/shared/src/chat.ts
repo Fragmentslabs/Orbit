@@ -40,6 +40,15 @@ export interface SessionRevert {
   diff?: string
   /** Mensagens descartadas no truncamento — permite unrevert da conversa */
   discardedMessages?: ChatMessage[]
+  /** true quando o filesystem foi restaurado (revert em modo código com
+   * snapshot). false quando o filesystem não pôde ser restaurado (modo
+   * código sem snapshot para a mensagem) — a UI avisa explicitamente em
+   * vez de tratar como revert de chat. Ausente em modo chat (sem arquivos
+   * envolvidos). */
+  filesRestored?: boolean
+  /** Motivo de o filesystem não ter sido restaurado — presente quando
+   * filesRestored === false em modo código. */
+  reason?: 'no-snapshot' | 'capture-failed'
 }
 
 export interface SessionInfo {
@@ -163,7 +172,9 @@ export interface TokenUsage {
 /** Snapshots do filesystem capturados em volta de uma resposta do assistente
  * (modo código): permitem revert per-message. */
 export interface AssistantSnapshot {
-  /** Tree hash antes do stream começar */
+  /** Tree hash antes do stream começar. Ausente quando a captura inicial
+   * falhou (ver `failed`) — sinaliza que não há estado anterior para
+   * diff/revert. */
   start?: string
   /** Tree hash depois de todas as tools executarem */
   end?: string
@@ -171,6 +182,12 @@ export interface AssistantSnapshot {
   files?: string[]
   /** Diff unificado entre start e end (truncado em ~200kB) */
   patch?: string
+  /** true quando o rastreamento do filesystem falhou neste turno (start/end
+   *  não capturados) — a UI avisa que as alterações não foram registradas. */
+  failed?: boolean
+  /** Motivo da falha da captura inicial (start) — para diagnóstico e a UI
+   * explicar por que não há diff/revert disponível. */
+  captureError?: string
 }
 
 /**

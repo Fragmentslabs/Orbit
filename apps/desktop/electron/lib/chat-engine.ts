@@ -486,7 +486,15 @@ export async function runChat(win: BrowserWindow, input: SendMessageInput): Prom
       try {
         assistantMessage.snapshot = { start: await capture(toolContext.directory) }
       } catch (err) {
-        console.error('[snapshot] captura inicial falhou:', err)
+        // Não esconder a falha: grava snapshot marcado como failed (sem start,
+        // motivo em captureError) — o revert de filesystem fica indisponível e
+        // a UI/ferramentas precisam saber por quê, em vez de um turno que
+        // parece ter snapshot normalmente.
+        const reason = errorToText(err)
+        assistantMessage.snapshot = { failed: true, captureError: reason }
+        console.error('[snapshot] captura inicial falhou:', reason, {
+          directory: toolContext.directory,
+        })
       }
     }
 

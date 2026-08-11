@@ -870,6 +870,7 @@
     "filesRevertedOne": "1 arquivo revertido",
     "filesRevertedMany": "{{n}} arquivos revertidos",
     "conversationReverted": "Conversa revertida até este ponto",
+    "filesNotRestored": "A conversa foi truncada, mas as alterações de arquivo NÃO puderam ser desfeitas (snapshot indisponível para esta mensagem).",
     "continueFromHere": "nova mensagem continua deste ponto",
     "diff": "Diff",
     "unrevert": "Desfazer"

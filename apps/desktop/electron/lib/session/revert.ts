@@ -66,7 +66,21 @@ export async function revert(sessionId: string, messageId: string): Promise<Sess
   broadcastChatEvent({ type: 'messages', sessionId, messages: truncated })
 
   const start = startSnapshotFor(messages, targetIdx)
-  if (session.directory && start) {
+  if (session.directory) {
+    if (!start) {
+      // Modo código sem snapshot para esta mensagem: não há como restaurar o
+      // filesystem. Em vez do fallback silencioso para "modo chat", sinaliza
+      // explicitamente que os arquivos não puderam ser desfeitos.
+      const revertState: SessionRevert = {
+        messageId,
+        filesRestored: false,
+        reason: 'no-snapshot',
+        discardedMessages: discarded,
+      }
+      await saveSession({ ...session, revert: revertState })
+      return revertState
+    }
+
     // Modo código: também restaura o filesystem para o snapshot da mensagem
     const current = await capture(session.directory)
     await restore(session.directory, start)
@@ -77,6 +91,7 @@ export async function revert(sessionId: string, messageId: string): Promise<Sess
       snapshot: current,
       files: changes.files,
       diff: changes.patch,
+      filesRestored: true,
       discardedMessages: discarded,
     }
     await saveSession({ ...session, revert: revertState })

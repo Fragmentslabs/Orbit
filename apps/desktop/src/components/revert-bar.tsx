@@ -1,6 +1,6 @@
 import { useState } from "react"
 import { useTranslation } from "react-i18next"
-import { ChevronDown, History, Undo2, MessageSquareText, X } from "lucide-react"
+import { AlertTriangle, ChevronDown, History, Undo2, MessageSquareText, X } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
@@ -10,6 +10,8 @@ import { useSessionStore } from "@/src/stores/session-store"
 /**
  * Barra exibida acima do input enquanto um revert está ativo:
  * - Modo código: resumo dos arquivos alterados desfeitos + "Desfazer" (unrevert).
+ * - Modo código sem snapshot: aviso de que a conversa foi truncada, mas os
+ *   arquivos não puderam ser desfeitos (filesRestored === false).
  * - Modo chat: indica que a conversa foi truncada até o ponto revertido.
  * Pode ser fechada com o X (não desfaz o revert, só esconde a barra).
  */
@@ -23,20 +25,27 @@ export function RevertBar({ session }: { session: SessionInfo }) {
 
   const isCode = Boolean(revert.files || revert.diff)
   const count = revert.files?.length ?? 0
-  const label = isCode
-    ? count === 0
-      ? t("revert.filesRevertedNone")
-      : count === 1
-        ? t("revert.filesRevertedOne")
-        : t("revert.filesRevertedMany", { n: count })
-    : t("revert.conversationReverted")
+  // Modo código sem snapshot: o truncamento aconteceu, mas o filesystem não
+  // pôde ser restaurado — aviso explícito em vez de tratar como revert de chat.
+  const filesNotRestored = Boolean(session.directory) && revert.filesRestored === false
+  const label = filesNotRestored
+    ? t("revert.filesNotRestored")
+    : isCode
+      ? count === 0
+        ? t("revert.filesRevertedNone")
+        : count === 1
+          ? t("revert.filesRevertedOne")
+          : t("revert.filesRevertedMany", { n: count })
+      : t("revert.conversationReverted")
 
   return (
     <div className="rounded-lg border bg-muted/40 text-xs">
       <div className="flex items-center gap-2 px-3 py-2">
-        {isCode
-          ? <History className="size-3.5 shrink-0 text-muted-foreground" />
-          : <MessageSquareText className="size-3.5 shrink-0 text-muted-foreground" />
+        {filesNotRestored
+          ? <AlertTriangle className="size-3.5 shrink-0 text-amber-500" />
+          : isCode
+            ? <History className="size-3.5 shrink-0 text-muted-foreground" />
+            : <MessageSquareText className="size-3.5 shrink-0 text-muted-foreground" />
         }
         <span className="flex-1 truncate">
           {label}
