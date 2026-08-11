@@ -1,5 +1,6 @@
 import { execFile } from 'node:child_process'
 import crypto from 'node:crypto'
+import { accessSync, constants } from 'node:fs'
 import fs from 'node:fs/promises'
 import path from 'node:path'
 import { promisify } from 'node:util'
@@ -15,6 +16,59 @@ import { app } from 'electron'
 const execFileAsync = promisify(execFile)
 const MAX_BUFFER = 50 * 1024 * 1024
 
+/**
+ * B3 — Resolução do binário do git no carregamento do módulo.
+ *
+ * Quando o app é aberto via Finder/dock (não pelo terminal), o PATH do
+ * processo pode ser mínimo (ex.: sem /opt/homebrew/bin), fazendo `git`
+ * falhar com ENOENT silencioso no execFile. Estratégia, em ordem:
+ *   1. `which git` (scan do PATH, equivalente ao which do shell);
+ *   2. caminhos conhecidos de instalação no macOS;
+ *   3. fallback: `git` com PATH injetado (PATH padrão do macOS mesclado ao
+ *      PATH atual) no env do execFile.
+ */
+const KNOWN_GIT_PATHS = ['/usr/bin/git', '/opt/homebrew/bin/git', '/usr/local/bin/git']
+const DEFAULT_PATH = '/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin:/usr/local/bin'
+
+function findGitInPath(pathValue: string): string | undefined {
+  for (const dir of pathValue.split(':').filter(Boolean)) {
+    const candidate = path.join(dir, 'git')
+    try {
+      accessSync(candidate, constants.X_OK)
+      return candidate
+    } catch {
+      // candidato não executável; segue para o próximo diretório
+    }
+  }
+  return undefined
+}
+
+function resolveGit(): { binary: string; env: NodeJS.ProcessEnv } {
+  const env = { ...process.env }
+  const currentPath = env.PATH ?? ''
+  env.PATH = currentPath ? `${currentPath}:${DEFAULT_PATH}` : DEFAULT_PATH
+
+  // 1. `which git` via scan do PATH completo (PATH atual tem precedência)
+  const fromPath = findGitInPath(env.PATH)
+  if (fromPath) return { binary: fromPath, env }
+
+  // 2. Caminhos conhecidos de instalação do git no macOS
+  for (const candidate of KNOWN_GIT_PATHS) {
+    try {
+      accessSync(candidate, constants.X_OK)
+      return { binary: candidate, env }
+    } catch {
+      // caminho não existe ou não é executável; segue
+    }
+  }
+
+  // 3. Fallback: deixa o PATH injetado decidir (ainda resolve em ambientes
+  //    não-macOS onde o git esteja em outro diretório do PATH)
+  return { binary: 'git', env }
+}
+
+const gitBinary = resolveGit()
+
 /** Excludes padrão além do .gitignore do projeto (projetos sem .gitignore) */
 const DEFAULT_EXCLUDES = ['node_modules/', '.git/', 'dist/', 'dist-electron/', 'build/', 'out/', '.next/', 'target/']
 
@@ -28,9 +82,9 @@ function gitDirFor(directory: string): string {
 
 async function git(directory: string, args: string[]): Promise<string> {
   const { stdout } = await execFileAsync(
-    'git',
+    gitBinary.binary,
     ['--git-dir', gitDirFor(directory), '--work-tree', directory, ...args],
-    { cwd: directory, maxBuffer: MAX_BUFFER },
+    { cwd: directory, env: gitBinary.env, maxBuffer: MAX_BUFFER },
   )
   return stdout
 }
@@ -41,7 +95,10 @@ async function ensureRepo(directory: string): Promise<void> {
     await fs.access(path.join(gitDir, 'HEAD'))
   } catch {
     await fs.mkdir(gitDir, { recursive: true })
-    await execFileAsync('git', ['--git-dir', gitDir, 'init', '--quiet'], { cwd: directory })
+    await execFileAsync(gitBinary.binary, ['--git-dir', gitDir, 'init', '--quiet'], {
+      cwd: directory,
+      env: gitBinary.env,
+    })
     await fs.mkdir(path.join(gitDir, 'info'), { recursive: true })
     await fs.writeFile(path.join(gitDir, 'info', 'exclude'), DEFAULT_EXCLUDES.join('\n') + '\n', 'utf8')
   }
@@ -59,6 +116,12 @@ function maybeGc(directory: string) {
 /** Captura o estado atual do worktree como tree hash. */
 export async function capture(directory: string): Promise<string> {
   await ensureRepo(directory)
+  // B4 — Limitação documentada: `git add --all` NÃO versiona arquivos
+  // ignorados pelo .gitignore do projeto (nem pelos excludes deste módulo).
+  // Logo, esses arquivos nunca entram no snapshot e não são revertidos pelo
+  // restore — comportamento intencional. Não usamos -f de propósito: ele
+  // quebraria os excludes de node_modules/ etc. e incharia o repositório
+  // auxiliar com lixo que não devemos restaurar.
   await git(directory, ['add', '--all'])
   const tree = (await git(directory, ['write-tree'])).trim()
   maybeGc(directory)
