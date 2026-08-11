@@ -1407,5 +1407,13 @@
       "optional": "(optional)",
       "apiKeyPlaceholder": "Leave blank to keep the current one"
     }
+  },
+  "messageFooter": {
+    "title": "Files changed in this turn:",
+    "created": "created",
+    "deleted": "deleted",
+    "diffCount_one": "{{count}} diff",
+    "diffCount_other": "{{count}} diffs",
+    "failed": "Could not track changes made in this turn."
   }
 }

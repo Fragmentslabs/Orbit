@@ -1407,5 +1407,13 @@
       "optional": "(opcional)",
       "apiKeyPlaceholder": "Deixe em branco para manter a atual"
     }
+  },
+  "messageFooter": {
+    "title": "Arquivos alterados neste turno:",
+    "created": "criado",
+    "deleted": "excluído",
+    "diffCount_one": "{{count}} diff",
+    "diffCount_other": "{{count}} diffs",
+    "failed": "As alterações deste turno não puderam ser rastreadas."
   }
 }

@@ -30,6 +30,7 @@ import {
   MessageTruncated,
   ReasoningPartView,
 } from "@/src/components/messages/shared"
+import { MessageSnapshotFooter } from "@/src/components/messages/message-footer"
 
 /**
  * Mensagem do assistente no modo código: ferramentas agrupadas em Tasks
@@ -307,6 +308,7 @@ export function CodeAssistantMessage({ message, sessionId, isLast, isBusy, onRet
           <ImagePartView key={segment.id} part={segment.part} />
         ) : null,
       )}
+      {message.snapshot && <MessageSnapshotFooter snapshot={message.snapshot} />}
       {message.error && (
         <MessageError
           sessionId={sessionId}
