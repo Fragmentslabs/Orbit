@@ -1350,8 +1350,6 @@
     "bottomModes": {
       "title": "Modos na barra inferior",
       "hint": "Quais modos aparecem como toggles abaixo do input. O menu \"+\" sempre mostra todos.",
-      "all": "Selecionar todos",
-      "none": "Limpar",
       "entry": "Modos e exibição",
       "visibleModes": "Modos visíveis",
       "modeGroups": {

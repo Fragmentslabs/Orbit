@@ -17,7 +17,7 @@ import {
 } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import { useTheme } from "@/components/theme-provider"
-import { MODE_IDS, useAppearanceStore, type ModeId, type ModeLabelStyle, type TabClosePosition } from "@/src/stores/appearance-store"
+import { useAppearanceStore, type ModeId, type ModeLabelStyle, type TabClosePosition } from "@/src/stores/appearance-store"
 
 type ThemePref = "light" | "dark" | "system"
 type View = "main" | "visible"
@@ -144,23 +144,6 @@ export function AppearancePanel() {
         <div>
           <p className="text-sm font-semibold">{t("appearance.bottomModes.visibleModes")}</p>
           <p className="mt-0.5 text-xs text-muted-foreground">{t("appearance.bottomModes.hint")}</p>
-        </div>
-
-        <div className="flex gap-2">
-          <button
-            type="button"
-            onClick={() => setModesInRow([...MODE_IDS])}
-            className="flex-1 rounded-lg border border-input bg-background px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent/50 hover:text-foreground"
-          >
-            {t("appearance.bottomModes.all")}
-          </button>
-          <button
-            type="button"
-            onClick={() => setModesInRow([])}
-            className="flex-1 rounded-lg border border-input bg-background px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent/50 hover:text-foreground"
-          >
-            {t("appearance.bottomModes.none")}
-          </button>
         </div>
 
         {MODE_GROUPS.map((group) => (

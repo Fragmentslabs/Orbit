@@ -1350,8 +1350,6 @@
     "bottomModes": {
       "title": "Modes in the bottom bar",
       "hint": "Which modes appear as toggles below the input. The \"+\" menu always shows all modes.",
-      "all": "Select all",
-      "none": "Clear",
       "entry": "Modes and display",
       "visibleModes": "Visible modes",
       "modeGroups": {
