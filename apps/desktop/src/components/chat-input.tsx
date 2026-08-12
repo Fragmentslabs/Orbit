@@ -171,7 +171,7 @@ export function ChatInput({ onSubmit, status, onStop, sessionId }: {
             <QuickSettingsMenu sessionId={sessionId} />
           </div>
           <div className="flex items-center gap-1">
-            <div className="hidden @md:flex items-center gap-1">
+            <div className="hidden @xl:flex items-center gap-1">
               {model?.variants && model.variants.length > 0 && (
                 <ReasoningPicker
                   variants={model.variants}

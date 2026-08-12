@@ -40,7 +40,7 @@ export function ModeToggle({
               onClick={onToggle}
               aria-label={iconOnly ? label : undefined}
               className={cn(
-                "flex items-center rounded-md transition-colors",
+                "flex items-center rounded-md text-xs transition-colors",
                 iconOnly ? "size-7 justify-center px-0" : "gap-1 px-1.5 py-1",
                 active
                   ? "text-foreground bg-muted"
@@ -52,7 +52,7 @@ export function ModeToggle({
         >
           <Icon className="size-3.5" />
           {!iconOnly && (
-            <span className="hidden @lg:inline shrink-0 whitespace-nowrap">{label}</span>
+            <span className="hidden @xl:inline shrink-0 whitespace-nowrap">{label}</span>
           )}
         </TooltipTrigger>
         <TooltipContent side="top" align="center" sideOffset={6}>
