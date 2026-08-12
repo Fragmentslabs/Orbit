@@ -1331,6 +1331,7 @@
   "appearance": {
     "title": "Aparência",
     "description": "Personalize a visualização do Orbit.",
+    "back": "Voltar",
     "theme": {
       "title": "Tema",
       "light": "Claro",
@@ -1350,7 +1351,14 @@
       "title": "Modos na barra inferior",
       "hint": "Quais modos aparecem como toggles abaixo do input. O menu \"+\" sempre mostra todos.",
       "all": "Selecionar todos",
-      "none": "Limpar"
+      "none": "Limpar",
+      "entry": "Modos e exibição",
+      "visibleModes": "Modos visíveis",
+      "modeGroups": {
+        "both": "Chat e código",
+        "chat": "Somente chat",
+        "code": "Somente código"
+      }
     },
     "modeLabelStyle": {
       "title": "Exibição da barra inferior",
@@ -1418,13 +1426,5 @@
       "optional": "(opcional)",
       "apiKeyPlaceholder": "Deixe em branco para manter a atual"
     }
-  },
-  "messageFooter": {
-    "title": "Arquivos alterados neste turno:",
-    "created": "criado",
-    "deleted": "excluído",
-    "diffCount_one": "{{count}} diff",
-    "diffCount_other": "{{count}} diffs",
-    "failed": "As alterações deste turno não puderam ser rastreadas."
   }
 }

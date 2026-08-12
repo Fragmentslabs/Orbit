@@ -59,7 +59,7 @@ export const useAppearanceStore = create<AppearanceState>((set) => ({
     localStorage.setItem(MODES_IN_ROW_KEY, JSON.stringify(modes))
     set({ modesInRow: modes })
   },
-  modeLabelStyle: (localStorage.getItem(MODE_LABEL_STYLE_KEY) as ModeLabelStyle) ?? "label",
+  modeLabelStyle: (localStorage.getItem(MODE_LABEL_STYLE_KEY) as ModeLabelStyle) ?? "icon",
   setModeLabelStyle: (style) => {
     localStorage.setItem(MODE_LABEL_STYLE_KEY, style)
     set({ modeLabelStyle: style })

@@ -1331,6 +1331,7 @@
   "appearance": {
     "title": "Appearance",
     "description": "Customize how Orbit looks.",
+    "back": "Back",
     "theme": {
       "title": "Theme",
       "light": "Light",
@@ -1350,7 +1351,14 @@
       "title": "Modes in the bottom bar",
       "hint": "Which modes appear as toggles below the input. The \"+\" menu always shows all modes.",
       "all": "Select all",
-      "none": "Clear"
+      "none": "Clear",
+      "entry": "Modes and display",
+      "visibleModes": "Visible modes",
+      "modeGroups": {
+        "both": "Chat and code",
+        "chat": "Chat only",
+        "code": "Code only"
+      }
     },
     "modeLabelStyle": {
       "title": "Bottom bar display",
@@ -1418,13 +1426,5 @@
       "optional": "(optional)",
       "apiKeyPlaceholder": "Leave blank to keep the current one"
     }
-  },
-  "messageFooter": {
-    "title": "Files changed in this turn:",
-    "created": "created",
-    "deleted": "deleted",
-    "diffCount_one": "{{count}} diff",
-    "diffCount_other": "{{count}} diffs",
-    "failed": "Could not track changes made in this turn."
   }
 }
