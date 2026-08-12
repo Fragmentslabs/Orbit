@@ -24,7 +24,6 @@ import {
   MessageTruncated,
   ReasoningPartView,
 } from "@/src/components/messages/shared"
-import { MessageSnapshotFooter } from "@/src/components/messages/message-footer"
 
 /**
  * Mensagem do assistente no modo chat: reasoning colapsável, pesquisa
@@ -179,7 +178,6 @@ export function ChatAssistantMessage({ message, sessionId, isLast, isBusy, onRet
           />
         ),
       )}
-      {message.snapshot && <MessageSnapshotFooter snapshot={message.snapshot} />}
       {message.error && (
         <MessageError
           sessionId={sessionId}

@@ -1,5 +1,6 @@
-import { useMemo } from "react"
+import { useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
+import { ChevronDownIcon } from "lucide-react"
 import type { ChatMessage } from "@shared/chat"
 import { useSessionStore } from "@/src/stores/session-store"
 import { cn } from "@/lib/utils"
@@ -73,47 +74,61 @@ function parsePatch(patch: string): FileDiff[] {
 }
 
 function FileDiffSection({ file }: { file: FileDiff }) {
+  const [open, setOpen] = useState(false)
+  const label = file.oldPath === file.newPath ? file.oldPath : `${file.oldPath} → ${file.newPath}`
   return (
-    <div className="mb-4">
-      <div className="flex items-center gap-2 rounded-t-md bg-muted/50 px-3 py-1.5 font-mono text-xs text-muted-foreground">
-        <span className="truncate">{file.oldPath === file.newPath ? file.oldPath : `${file.oldPath} → ${file.newPath}`}</span>
-        <span className="ml-auto flex items-center gap-2 text-[11px]">
+    <div className="mb-3 overflow-hidden rounded-md border border-border/50">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        aria-expanded={open}
+        className="flex w-full items-center gap-2 bg-muted/50 px-3 py-1.5 font-mono text-xs text-muted-foreground transition-colors hover:bg-accent/50"
+      >
+        <ChevronDownIcon className={cn("size-3.5 shrink-0 transition-transform", open ? "rotate-0" : "-rotate-90")} />
+        <span className="min-w-0 truncate" title={label}>
+          {label}
+        </span>
+        <span className="ml-auto flex shrink-0 items-center gap-2 text-[11px]">
           {file.added > 0 && <span className="text-emerald-500">+{file.added}</span>}
           {file.removed > 0 && <span className="text-red-500">-{file.removed}</span>}
         </span>
-      </div>
-      {file.hunks.map((hunk, hi) => {
-        let oldLine = hunk.oldStart
-        let newLine = hunk.newStart
-        return (
-          <div key={hi} className="border-x border-border/50">
-            <div className="bg-accent/30 px-3 py-1 font-mono text-[11px] text-muted-foreground">
-              @@ -{hunk.oldStart},{hunk.oldLines} +{hunk.newStart},{hunk.newLines} @@{hunk.header && ` ${hunk.header}`}
-            </div>
-            {hunk.lines.map((line, li) => {
-              const lineNum = line.kind === "add" ? `  ${newLine}` : line.kind === "del" ? `${oldLine}  ` : `${oldLine} →${newLine}`
-              if (line.kind !== "del") newLine++
-              if (line.kind !== "add") oldLine++
-              return (
-                <div
-                  key={li}
-                  className={cn(
-                    "flex font-mono text-[11px] leading-relaxed",
-                    line.kind === "add" && "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400",
-                    line.kind === "del" && "bg-red-500/10 text-red-700 dark:text-red-400",
-                  )}
-                >
-                  <span className="w-14 shrink-0 select-none text-right text-[10px] text-muted-foreground/40 tabular-nums">
-                    {lineNum}
-                  </span>
-                  <span className="w-4 shrink-0 select-none text-center text-muted-foreground/50">{line.kind === "add" ? "+" : line.kind === "del" ? "-" : " "}</span>
-                  <span className="min-w-0 flex-1 whitespace-pre-wrap break-all px-1">{line.text}</span>
+      </button>
+      {open && (
+        <div className="border-t border-border/50">
+          {file.hunks.map((hunk, hi) => {
+            let oldLine = hunk.oldStart
+            let newLine = hunk.newStart
+            return (
+              <div key={hi} className="border-b border-border/50 last:border-b-0">
+                <div className="bg-accent/30 px-3 py-1 font-mono text-[11px] text-muted-foreground">
+                  @@ -{hunk.oldStart},{hunk.oldLines} +{hunk.newStart},{hunk.newLines} @@{hunk.header && ` ${hunk.header}`}
                 </div>
-              )
-            })}
-          </div>
-        )
-      })}
+                {hunk.lines.map((line, li) => {
+                  const lineNum = line.kind === "add" ? `  ${newLine}` : line.kind === "del" ? `${oldLine}  ` : `${oldLine} →${newLine}`
+                  if (line.kind !== "del") newLine++
+                  if (line.kind !== "add") oldLine++
+                  return (
+                    <div
+                      key={li}
+                      className={cn(
+                        "flex font-mono text-[11px] leading-relaxed",
+                        line.kind === "add" && "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400",
+                        line.kind === "del" && "bg-red-500/10 text-red-700 dark:text-red-400",
+                      )}
+                    >
+                      <span className="w-14 shrink-0 select-none text-right text-[10px] text-muted-foreground/40 tabular-nums">
+                        {lineNum}
+                      </span>
+                      <span className="w-4 shrink-0 select-none text-center text-muted-foreground/50">{line.kind === "add" ? "+" : line.kind === "del" ? "-" : " "}</span>
+                      <span className="min-w-0 flex-1 whitespace-pre-wrap break-all px-1">{line.text}</span>
+                    </div>
+                  )
+                })}
+              </div>
+            )
+          })}
+        </div>
+      )}
     </div>
   )
 }
@@ -156,6 +171,9 @@ export function DiffTab({ sessionId, messageId }: {
     return parsePatch(message.snapshot.patch)
   }, [message])
 
+  const session = useSessionStore((s) => s.sessions.find((s) => s.id === resolvedSessionId))
+  const isAuto = !sessionId
+
   if (!message) {
     return (
       <div className="flex h-full items-center justify-center text-xs text-muted-foreground">
@@ -172,8 +190,6 @@ export function DiffTab({ sessionId, messageId }: {
     )
   }
 
-  const isAuto = !sessionId
-  const session = useSessionStore((s) => s.sessions.find((s) => s.id === resolvedSessionId))
   const totalAdded = files.reduce((s, f) => s + f.added, 0)
   const totalRemoved = files.reduce((s, f) => s + f.removed, 0)
 
@@ -187,7 +203,7 @@ export function DiffTab({ sessionId, messageId }: {
         {totalAdded > 0 && <span className="text-emerald-500">+{totalAdded}</span>}
         {totalRemoved > 0 && <span className="text-red-500">-{totalRemoved}</span>}
       </div>
-      <div className="flex-1 overflow-y-auto rounded-lg border border-border/50">
+      <div className="flex-1 overflow-y-auto pr-0.5">
         {files.map((file, i) => (
           <FileDiffSection key={i} file={file} />
         ))}
