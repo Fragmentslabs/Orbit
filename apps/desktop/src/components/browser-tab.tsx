@@ -192,30 +192,24 @@ function PanelBrowserBody({ persistKey }: { persistKey?: string }) {
     }
   }, [])
 
-  // Ready-gate do <webview>: os métodos (getURL/loadURL) só podem ser chamados
-  // depois de o guest estar anexado ao DOM e ter emitido dom-ready — antes
-  // disso o Electron lança "The WebView must be attached to the DOM and the
-  // dom-ready event emitted before this method can be called". Enquanto não
+  // Ready-gate do <webview>: os métodos (getURL/loadURL/reload) só podem ser
+  // chamados depois de o guest estar anexado ao DOM e ter emitido dom-ready —
+  // antes disso o Electron lança "The WebView must be attached to the DOM and
+  // the dom-ready event emitted before this method can be called". Enquanto não
   // está pronto, a URL pedida na barra fica pendente e é aplicada no primeiro
   // dom-ready (ou imediatamente, se o guest do pool já estiver pronto —
   // dom-ready não re-emite ao re-anexar o elemento).
   const readyRef = useRef(false)
   const pendingUrlRef = useRef<string | null>(null)
 
-  // Navegação controlada: mudanças na barra de URL viram loadURL (sem remount)
-  useEffect(() => {
-    if (!webviewEl || !url) return
-    if (!readyRef.current) {
-      pendingUrlRef.current = url
-      return
-    }
-    pendingUrlRef.current = null
-    if (webviewEl.getURL() !== url) void webviewEl.loadURL(url).catch(() => {})
-  }, [url, webviewEl])
-
-  // Detecta o dom-ready do guest (criação ou re-anexo) e aplica a URL pendente.
+  // Gate declarado ANTES do efeito de navegação: a cada troca de elemento
+  // (remount por key, re-anexo do pool) o readyRef é resetado para "não pronto"
+  // antes de qualquer getURL/loadURL rodar no mesmo flush. Sem esse reset, o
+  // readyRef do guest antigo (morto) faria o getURL() acertar um guest ainda
+  // sem dom-ready → exceção não tratada em efeito → árvore inteira desmontada.
   useEffect(() => {
     if (!webviewEl) return
+    readyRef.current = false // elemento novo/re-anexado — guest (ainda) não pronto
     const applyPendingUrl = () => {
       const pending = pendingUrlRef.current
       if (!pending) return
@@ -230,7 +224,11 @@ function PanelBrowserBody({ persistKey }: { persistKey?: string }) {
       readyRef.current = true
       applyPendingUrl()
       // Toggle de seleção feito antes do dom-ready não se perde
-      void webviewEl.executeJavaScript(usePanelStore.getState().selectMode ? SELECT_ON : SELECT_OFF).catch(() => {})
+      try {
+        void webviewEl.executeJavaScript(usePanelStore.getState().selectMode ? SELECT_ON : SELECT_OFF).catch(() => {})
+      } catch {
+        // guest ainda não pronto — o próximo dom-ready re-aplica
+      }
     }
     webviewEl.addEventListener("dom-ready", onReady)
     try {
@@ -242,11 +240,33 @@ function PanelBrowserBody({ persistKey }: { persistKey?: string }) {
     return () => webviewEl.removeEventListener("dom-ready", onReady)
   }, [webviewEl])
 
+  // Navegação controlada: mudanças na barra de URL viram loadURL (sem remount).
+  // Roda DEPOIS do ready-gate — o readyRef já corresponde ao elemento atual.
+  useEffect(() => {
+    if (!webviewEl || !url) return
+    if (!readyRef.current) {
+      pendingUrlRef.current = url
+      return
+    }
+    pendingUrlRef.current = null
+    try {
+      if (webviewEl.getURL() !== url) void webviewEl.loadURL(url).catch(() => {})
+    } catch {
+      // guest trocado entre o render e o efeito — volta para pendente
+      readyRef.current = false
+      pendingUrlRef.current = url
+    }
+  }, [url, webviewEl])
+
   // Modo seleção (clique vira badge no input): só roda com o guest pronto; se o
   // toggle vier antes, o onReady re-aplica com o estado atual do store.
   useEffect(() => {
     if (!webviewEl || !readyRef.current) return
-    void webviewEl.executeJavaScript(selectMode ? SELECT_ON : SELECT_OFF).catch(() => {})
+    try {
+      void webviewEl.executeJavaScript(selectMode ? SELECT_ON : SELECT_OFF).catch(() => {})
+    } catch {
+      // guest não pronto — o onReady re-aplica quando o dom-ready chegar
+    }
   }, [selectMode, webviewEl])
 
   // Botão reload: recarrega no MESMO webview (a página persistida não é
