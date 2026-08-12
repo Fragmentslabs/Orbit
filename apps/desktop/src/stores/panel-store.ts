@@ -60,6 +60,8 @@ interface PanelState {
   browserUrl?: string
   /** Sessão de chat que originou o pedido de abrir o browser do painel. */
   browserRequestSessionId?: string
+  /** Link clicado no terminal: abre uma NOVA aba de browser com a URL, na sessão do terminal. */
+  openTerminalLink: (sessionId: string, url: string) => void
   selectMode: boolean
   setSelectMode: (value: boolean) => void
   selections: BrowserSelection[]
@@ -170,6 +172,22 @@ export const usePanelStore = create<PanelState>((set, get) => {
     browserRequestId: 0,
     browserUrl: undefined,
     browserRequestSessionId: undefined,
+
+    // Cada clique em link no terminal cria uma aba própria (semântica de
+    // "nova aba", como um browser de verdade) — não reusa a aba do agente.
+    openTerminalLink: (sessionId, url) =>
+      set((state) => {
+        const id = `browser-${nextTabId()}`
+        const tabs = state.tabsBySession[sessionId] ?? []
+        return {
+          rightPanelOpen: true,
+          tabsBySession: {
+            ...state.tabsBySession,
+            [sessionId]: [...tabs, { id, type: "browser", title: "Browser", url }],
+          },
+          activeTabBySession: { ...state.activeTabBySession, [sessionId]: id },
+        }
+      }),
     selectMode: false,
     setSelectMode: (value) => set({ selectMode: value }),
     selections: [],

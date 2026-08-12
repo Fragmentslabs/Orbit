@@ -122,7 +122,7 @@ function ChatTabHeader({ sessionId }: { sessionId?: string }) {
   )
 }
 
-function TerminalTabContent({ tabId }: { tabId: string }) {
+function TerminalTabContent({ tabId, sessionId }: { tabId: string; sessionId?: string }) {
   const { t } = useTranslation()
   const terminalEntry = useTerminalStore((s) => s.entries[tabId])
   if (!terminalEntry) {
@@ -134,7 +134,7 @@ function TerminalTabContent({ tabId }: { tabId: string }) {
   }
   return (
     <div className="flex flex-1 flex-col overflow-hidden">
-      <ManagedTerminalTab ptyId={terminalEntry.ptyId} />
+      <ManagedTerminalTab ptyId={terminalEntry.ptyId} sessionId={sessionId} />
     </div>
   )
 }
@@ -152,7 +152,7 @@ function TabContent({ tab, sessionId, onUpdateTab }: { tab: PanelTab; sessionId?
         </div>
       )
     case "terminal":
-      return <TerminalTabContent tabId={tab.id} />
+      return <TerminalTabContent tabId={tab.id} sessionId={sessionId} />
     case "folders":
       return (
         <div className="flex min-w-0 flex-1 flex-col overflow-hidden">

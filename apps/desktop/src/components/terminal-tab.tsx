@@ -1,10 +1,14 @@
 import { useEffect, useRef } from "react"
 import { Terminal } from "@xterm/xterm"
 import { FitAddon } from "@xterm/addon-fit"
+import { WebLinksAddon } from "@xterm/addon-web-links"
 import "@xterm/xterm/css/xterm.css"
+import { usePanelStore } from "@/src/stores/panel-store"
 
 interface ManagedTerminalTabProps {
   ptyId: string
+  /** Sessão de chat dona da aba — os links do terminal abrem o browser nela. */
+  sessionId?: string
 }
 
 /**
@@ -21,7 +25,10 @@ interface ManagedTerminalTabProps {
  * chega enquanto a aba está fora continua sendo gravado no buffer (o listener
  * fica registrado no módulo), então nada se perde.
  */
-const terminalSessions = new Map<string, { term: Terminal; fitAddon: FitAddon; host: HTMLDivElement }>()
+const terminalSessions = new Map<
+  string,
+  { term: Terminal; fitAddon: FitAddon; host: HTMLDivElement; sessionId?: string }
+>()
 
 function getTerminalSession(ptyId: string) {
   const existing = terminalSessions.get(ptyId)
@@ -68,6 +75,26 @@ function getTerminalSession(ptyId: string) {
   const fitAddon = new FitAddon()
   term.loadAddon(fitAddon)
 
+  // Links clicáveis: um `npm run dev` imprime http://localhost:5173 e
+  // Ctrl+Clique (Windows/Linux) ou Cmd+Clique (macOS) abre uma NOVA aba de
+  // browser no painel, na sessão dona do terminal. Clique simples não faz
+  // nada (evita abrir aba ao selecionar texto ou clicar por acidente). Sem
+  // sessão (órfão) ou esquema fora de http(s), cai no browser do sistema
+  // (setWindowOpenHandler do main). O handler substitui o default do addon
+  // (window.open cru) — funciona igual no Windows e no macOS, é tudo renderer.
+  term.loadAddon(
+    new WebLinksAddon((event, uri) => {
+      if (event.button !== 0) return
+      if (!(event.ctrlKey || event.metaKey)) return
+      const sessionId = terminalSessions.get(ptyId)?.sessionId
+      if (/^https?:\/\//i.test(uri) && sessionId) {
+        usePanelStore.getState().openTerminalLink(sessionId, uri)
+        return
+      }
+      window.open(uri, "_blank")
+    }),
+  )
+
   const host = document.createElement("div")
   host.className = "absolute inset-0 px-2 py-1"
   term.open(host)
@@ -107,12 +134,12 @@ function getTerminalSession(ptyId: string) {
   window.ipcRenderer.on("terminal:output", onOutput)
   window.ipcRenderer.on("terminal:exit", onExit)
 
-  const session = { term, fitAddon, host }
+  const session: { term: Terminal; fitAddon: FitAddon; host: HTMLDivElement; sessionId?: string } = { term, fitAddon, host }
   terminalSessions.set(ptyId, session)
   return session
 }
 
-export function ManagedTerminalTab({ ptyId }: ManagedTerminalTabProps) {
+export function ManagedTerminalTab({ ptyId, sessionId }: ManagedTerminalTabProps) {
   const containerRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -120,6 +147,10 @@ export function ManagedTerminalTab({ ptyId }: ManagedTerminalTabProps) {
     if (!container) return
 
     const session = getTerminalSession(ptyId)
+    // Sessão dona do terminal: o xterm vive no módulo (fora do React), então o
+    // handler de links lê a sessão daqui no momento do clique — a aba pertence
+    // à sessão que a criou e o sessionKey não muda durante a vida dela.
+    session.sessionId = sessionId
     // Reanexa o host com o buffer intacto (move o elemento, não recria o xterm)
     container.appendChild(session.host)
 
