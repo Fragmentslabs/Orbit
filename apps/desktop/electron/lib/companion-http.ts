@@ -12,9 +12,11 @@
  */
 
 import { createServer, type IncomingMessage, type ServerResponse, type Server } from 'http'
+import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto'
 import { hostname } from 'node:os'
 import path from 'node:path'
 import fs from 'node:fs/promises'
+import fsSync from 'node:fs'
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 import { app, BrowserWindow } from 'electron'
@@ -26,6 +28,7 @@ import { importSkillSelection } from './skills/import'
 import { sanitizeSlug, serializeSkill } from './skills/parser'
 import { approvePendingSkill, discardPendingSkill, listPendingSkills } from './skills/pending'
 import { listMcpStatus, readMcpConfig, reconnectMcp, saveMcpConfig } from './mcp'
+import { readMedia } from './media'
 
 const execFileAsync = promisify(execFile)
 
@@ -59,6 +62,57 @@ function validateAuth(
 
   // Fallback: PIN (5 min TTL)
   return Promise.resolve(validatePin(credential, ip))
+}
+
+// ─── Media Tokens ─────────────────────────────────────────────────────────────
+// O <Image> do React Native não envia header Authorization de forma confiável
+// (Android ignora headers no componente Image), então o companion-server assina
+// as URLs de mídia com um token HMAC na query string. TTL de 24h: longo o
+// bastante para o cache do app sobreviver a scroll/re-render/reabrir sem
+// refetch de token, curto o bastante para uma URL vazada não valer para sempre.
+
+const MEDIA_TOKEN_TTL_MS = 24 * 60 * 60 * 1000
+
+/** Segredo persistido em orbit-data/media-secret — tokens assinados sobrevivem a
+ *  restarts do desktop (senão toda imagem já entregue ao mobile viraria 401 ao
+ *  reiniciar o app). Leitura síncrona: precisa estar pronto antes do 1º token. */
+function loadMediaSecret(): string {
+  const file = path.join(app.getPath('userData'), 'orbit-data', 'media-secret')
+  try {
+    const existing = fsSync.readFileSync(file, 'utf8').trim()
+    if (existing.length === 64) return existing
+  } catch {
+    /* ainda não existe — gera abaixo */
+  }
+  const secret = randomBytes(32).toString('hex')
+  try {
+    fsSync.mkdirSync(path.dirname(file), { recursive: true })
+    fsSync.writeFileSync(file, secret, { mode: 0o600 })
+  } catch {
+    console.warn('[CompanionHTTP] Não foi possível persistir o segredo de mídia — tokens não sobrevivem a restart')
+  }
+  return secret
+}
+
+const mediaSecret = loadMediaSecret()
+
+/** Assina o id de uma imagem — chamado pelo companion-server ao reescrever URLs. */
+export function createMediaToken(id: string): string {
+  const exp = Date.now() + MEDIA_TOKEN_TTL_MS
+  const sig = createHmac('sha256', mediaSecret).update(`${id}:${exp}`).digest('hex')
+  return `${exp}.${sig}`
+}
+
+function validateMediaToken(id: string, token: string | null): boolean {
+  if (!token) return false
+  const dot = token.indexOf('.')
+  if (dot <= 0) return false
+  const exp = Number(token.slice(0, dot))
+  const sig = token.slice(dot + 1)
+  if (!Number.isFinite(exp) || exp < Date.now()) return false
+  const expected = createHmac('sha256', mediaSecret).update(`${id}:${exp}`).digest('hex')
+  if (expected.length !== sig.length) return false
+  return timingSafeEqual(Buffer.from(expected), Buffer.from(sig))
 }
 
 // ─── Response Helpers ─────────────────────────────────────────────────────────
@@ -245,6 +299,32 @@ async function handleGetStatus(_req: IncomingMessage, res: ServerResponse) {
     version: app.getVersion(),
   }
   jsonResponse(res, 200, status)
+}
+
+// ─── Media Handler ────────────────────────────────────────────────────────────
+
+/** Serve imagens do assistente (orbit-media://) para o app mobile, que não tem
+ *  acesso ao protocolo registrado no Electron. Auth via token assinado na query
+ *  (?t=) — o <Image> do React Native não envia headers, então o Bearer padrão
+ *  não é aceito nesta rota (ela roda antes do bloqueio global de auth). */
+async function handleGetMedia(req: IncomingMessage, res: ServerResponse, id: string) {
+  const url = new URL(req.url ?? '/', `http://${req.headers.host ?? 'localhost'}`)
+  if (!validateMediaToken(id, url.searchParams.get('t'))) {
+    jsonResponse(res, 401, { error: 'Token inválido ou expirado' })
+    return
+  }
+  const media = await readMedia(id)
+  if (!media) {
+    jsonResponse(res, 404, { error: 'Imagem não encontrada' })
+    return
+  }
+  res.writeHead(200, {
+    'Content-Type': media.contentType,
+    'Content-Length': media.buffer.length,
+    'Cache-Control': 'private, max-age=86400',
+    'Access-Control-Allow-Origin': '*',
+  })
+  res.end(media.buffer)
 }
 
 // ─── Skills Handlers ──────────────────────────────────────────────────────────
@@ -464,6 +544,16 @@ function createRouter(
         wsPort: 3847,
         ...(pairingPin ? { pin: pairingPin } : {}),
       })
+      return
+    }
+
+    // Mídia do assistente — auth via token assinado na query (o <Image> do
+    // React Native não envia header), por isso fica ANTES do bloqueio global
+    // de auth (que exige header Bearer). Rota simples GET /api/media/:id.
+    const mediaKey = routeKey(req.method ?? 'GET', req.url ?? '/')
+    const mediaMatch = /^GET \/api\/media\/([^/]+)$/.exec(mediaKey)
+    if (mediaMatch) {
+      await handleGetMedia(req, res, mediaMatch[1])
       return
     }
 

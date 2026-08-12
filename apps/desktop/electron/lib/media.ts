@@ -25,6 +25,28 @@ export async function saveMedia(buffer: Buffer, ext: string): Promise<string> {
   return `${SCHEME}://${id}`
 }
 
+const CONTENT_TYPES: Record<string, string> = {
+  png: 'image/png',
+  jpg: 'image/jpeg',
+  jpeg: 'image/jpeg',
+  webp: 'image/webp',
+  gif: 'image/gif',
+}
+
+/** Lê um arquivo de mídia persistido — usado pelo servidor HTTP do companion
+ *  (que não tem acesso ao protocolo orbit-media:// do Electron). Valida o id
+ *  com SAFE_ID (nada de path traversal). */
+export async function readMedia(id: string): Promise<{ buffer: Buffer; contentType: string } | null> {
+  if (!SAFE_ID.test(id)) return null
+  try {
+    const buffer = await fsp.readFile(path.join(mediaDir(), id))
+    const ext = id.split('.').pop() ?? ''
+    return { buffer, contentType: CONTENT_TYPES[ext] ?? 'application/octet-stream' }
+  } catch {
+    return null
+  }
+}
+
 /** Registra o protocolo (chamar após app.whenReady). */
 export function registerMediaProtocol(): void {
   protocol.handle(SCHEME, (request) => {

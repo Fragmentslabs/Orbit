@@ -28,7 +28,7 @@ import type {
   ApiResponse,
   StatusUpdate,
 } from '@shared/companion'
-import type { ChatEvent, SessionInfo, FolderInfo, ChatMessage, SendMessageInput } from '@shared/chat'
+import type { ChatEvent, SessionInfo, FolderInfo, ChatMessage, MessagePart, SendMessageInput } from '@shared/chat'
 import { StorageKeys } from '@shared/chat'
 import { readJson, writeJson, removeJson, listKeys } from './storage'
 import { searchSessions } from './search-sessions'
@@ -53,6 +53,7 @@ import {
   stopCompanionHttpServer,
   isCompanionHttpRunning,
   HTTP_PORT as COMPANION_HTTP_PORT,
+  createMediaToken,
 } from './companion-http'
 
 const PORT = 3847
@@ -66,6 +67,9 @@ interface ConnectedClient {
   authenticated: boolean
   deviceName: string
   connectedAt: number
+  /** Hostname/IP que o client usou para conectar — base das URLs de mídia
+   *  reescritas (o celular só alcança o desktop pelo IP que ele mesmo usou). */
+  mediaHost: string
 }
 
 let server: Server | null = null
@@ -245,6 +249,53 @@ function broadcastSessionEvent(event: ChatEvent) {
 
 function forkId(): string {
   return crypto.randomUUID().replace(/-/g, '').slice(0, 21)
+}
+
+// ─── Media URL Rewriting ─────────────────────────────────────────────────────
+// O app mobile não tem acesso ao protocolo orbit-media:// (registrado só no
+// processo principal do Electron), então as URLs de imagem são reescritas para
+// http://<host-do-client>:3848/api/media/<id>?t=<token assinado> na entrega —
+// tanto no histórico (messages:get) quanto no streaming (chat:event). A URL é
+// montada com o host que o próprio client usou para conectar, que é o único
+// endereço que o celular consegue alcançar.
+
+const MEDIA_URL_RE = /^orbit-media:\/\/([a-zA-Z0-9_-]+\.(png|jpg|jpeg|webp|gif))$/
+
+function mediaBaseUrl(client: ConnectedClient): string {
+  return `http://${client.mediaHost}:${COMPANION_HTTP_PORT}`
+}
+
+function rewriteImagePart(part: MessagePart, base: string): MessagePart | null {
+  if (part.type !== 'image') return null
+  const id = MEDIA_URL_RE.exec(part.src)?.[1]
+  if (!id) return null
+  return { ...part, src: `${base}/api/media/${id}?t=${createMediaToken(id)}` }
+}
+
+function rewriteMessage(msg: ChatMessage, base: string): ChatMessage | null {
+  let changed = false
+  const parts = msg.parts.map((p) => {
+    const rewritten = rewriteImagePart(p, base)
+    if (rewritten) {
+      changed = true
+      return rewritten
+    }
+    return p
+  })
+  return changed ? { ...msg, parts } : null
+}
+
+function rewriteMessages(msgs: ChatMessage[], base: string): ChatMessage[] | null {
+  let changed = false
+  const out = msgs.map((m) => {
+    const rewritten = rewriteMessage(m, base)
+    if (rewritten) {
+      changed = true
+      return rewritten
+    }
+    return m
+  })
+  return changed ? out : null
 }
 
 // ─── Request Handlers ────────────────────────────────────────────────────────
@@ -599,7 +650,7 @@ async function handleRequest(client: ConnectedClient, requestId: string, req: Co
         const done = await unrevertSession(req.sessionId)
         if (done) {
           const messages = (await readJson<ChatMessage[]>(StorageKeys.messages(req.sessionId))) ?? []
-          sendResponse(ws, requestId, true, { messages })
+          sendResponse(ws, requestId, true, { messages: rewriteMessages(messages, mediaBaseUrl(client)) ?? messages })
         } else {
           sendResponse(ws, requestId, false, undefined, 'Nada para desfazer')
         }
@@ -873,6 +924,21 @@ function getIp(ws: WebSocket): string {
   return (ws as any)._socket?.remoteAddress ?? 'unknown'
 }
 
+/** Hostname/IP que o client usou para conectar (header Host do handshake WS).
+ *  Fallback: IP local — cobre clientes que omitem o header. */
+function clientHostFromReq(req: IncomingMessage): string {
+  const host = req.headers.host
+  if (host) {
+    try {
+      const hostname = new URL(`http://${host}`).hostname
+      if (hostname) return hostname
+    } catch {
+      /* host malformado — usa fallback */
+    }
+  }
+  return getLocalIp()
+}
+
 // ─── Event Forwarding (Desktop → Companion) ──────────────────────────────────
 
 /**
@@ -880,11 +946,21 @@ function getIp(ws: WebSocket): string {
  * todos os companions autenticados.
  */
 export function forwardChatEvent(event: ChatEvent): void {
-  const payload = wrap({ type: 'chat:event', event } as CompanionEvent)
   for (const client of clients) {
-    if (client.authenticated && client.ws.readyState === WebSocket.OPEN) {
-      client.ws.send(payload)
+    if (!client.authenticated || client.ws.readyState !== WebSocket.OPEN) continue
+    const base = mediaBaseUrl(client)
+    let out: ChatEvent = event
+    if (event.type === 'message') {
+      const rewritten = rewriteMessage(event.message, base)
+      if (rewritten) out = { ...event, message: rewritten }
+    } else if (event.type === 'messages') {
+      const rewritten = rewriteMessages(event.messages, base)
+      if (rewritten) out = { ...event, messages: rewritten }
+    } else if (event.type === 'part') {
+      const rewritten = rewriteImagePart(event.part, base)
+      if (rewritten) out = { ...event, part: rewritten }
     }
+    client.ws.send(wrap({ type: 'chat:event', event: out } as CompanionEvent))
   }
 }
 
@@ -963,12 +1039,13 @@ export function startCompanionServer(): { port: number; ip: string; pin: string;
   // Iniciar servidor HTTP REST junto com o WS
   startCompanionHttpServer(validatePin, getPairingPin, validateDeviceToken)
 
-  wss.on('connection', (ws: WebSocket, _req: IncomingMessage) => {
+  wss.on('connection', (ws: WebSocket, req: IncomingMessage) => {
     const client: ConnectedClient = {
       ws,
       authenticated: false,
       deviceName: '',
       connectedAt: Date.now(),
+      mediaHost: clientHostFromReq(req),
     }
     clients.add(client)
 
