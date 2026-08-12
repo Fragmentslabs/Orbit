@@ -273,7 +273,7 @@ export const WebPreviewBody = ({
   onConsoleMessage,
   ...props
 }: WebPreviewBodyProps) => {
-  const { url, refreshKey, setUrl, syncUrl } = useWebPreview()
+  const { url, setUrl, syncUrl } = useWebPreview()
   const { t } = useTranslation()
   const [localUrl, setLocalUrl] = useState("")
   const containerRef = useRef<HTMLDivElement | null>(null)
@@ -405,7 +405,6 @@ export const WebPreviewBody = ({
     >
       {/* @ts-ignore webview is an electron specific tag */}
       <webview
-        key={refreshKey}
         ref={onWebviewRef as never}
         className={cn("bg-white", viewport ? "shrink-0 rounded-md border shadow-sm" : "size-full", className)}
         style={viewport ? { width: viewport.width, height: viewport.height } : undefined}

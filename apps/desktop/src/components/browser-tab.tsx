@@ -71,6 +71,7 @@ interface WebviewElement extends HTMLElement {
   getWebContentsId(): number
   getURL(): string
   loadURL(url: string): Promise<void>
+  reload(): void
   executeJavaScript(code: string): Promise<unknown>
   isLoading(): boolean
 }
@@ -269,11 +270,23 @@ function PanelBrowserBody({ persistKey }: { persistKey?: string }) {
     }
   }, [selectMode, webviewEl])
 
-  // Botão reload: recarrega no MESMO webview (a página persistida não é
-  // destruída — apenas recarregada).
+  // Botão reload: recarrega no MESMO webview, sem recriar o guest (a página
+  // não é destruída — apenas recarregada) — com pool via reloadWebview; sem
+  // pool (BrowserTab do painel), reload direto no elemento.
   useEffect(() => {
-    if (refreshKey > 0 && persistKey) reloadWebview(persistKey)
-  }, [refreshKey, persistKey])
+    if (refreshKey <= 0) return
+    if (persistKey) {
+      reloadWebview(persistKey)
+      return
+    }
+    if (webviewEl && readyRef.current) {
+      try {
+        webviewEl.reload()
+      } catch {
+        // webview não pronto — nada para recarregar ainda
+      }
+    }
+  }, [refreshKey, persistKey, webviewEl])
 
   return (
     <WebPreviewBody
