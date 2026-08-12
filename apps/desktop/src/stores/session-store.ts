@@ -121,6 +121,32 @@ function persistAutoFolderMap(map: Record<string, string>) {
   localStorage.setItem(AUTO_FOLDER_MAP_KEY, JSON.stringify(map))
 }
 
+/** Sessões cujas mensagens já foram carregadas do storage (ou criadas
+ *  localmente). Independe do buffer `messages[]`: os handlers de evento
+ *  (message/part) podem criar o buffer antes do load — ex.: reload com o
+ *  agente em execução — e isso não pode impedir a carga do histórico
+ *  persistido (o sinal de "carregada" não pode ser a chave definida). */
+const loadedMessages = new Set<string>()
+
+/** Mescla o histórico persistido com o buffer de eventos (buffer é mais
+ *  fresco por part — eventos pós-reload — mas pode não ter as parts emitidas
+ *  antes do reload; o disco preenche as lacunas). */
+function mergeMessages(persisted: ChatMessage[], buffered: ChatMessage[] | undefined): ChatMessage[] {
+  if (!buffered || buffered.length === 0) return persisted
+  const byId = new Map(persisted.map((m) => [m.id, m]))
+  for (const m of buffered) {
+    const existing = byId.get(m.id)
+    if (!existing) {
+      byId.set(m.id, m)
+      continue
+    }
+    const parts = new Map(existing.parts.map((p) => [p.id, p]))
+    for (const p of m.parts) parts.set(p.id, p)
+    byId.set(m.id, { ...existing, ...m, parts: [...parts.values()] })
+  }
+  return [...byId.values()]
+}
+
 function normalizeFolderName(directoryPath: string): string {
   const baseName = directoryPath.replace(/\\/g, "/").split("/").filter(Boolean).pop() ?? directoryPath
   return baseName
@@ -253,6 +279,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       activeIds: setActive ? { ...state.activeIds, [mode]: session.id } : state.activeIds,
       messages: { ...state.messages, [session.id]: [] },
     }))
+    loadedMessages.add(session.id)
     emitChatEvent({ type: "session", sessionId: session.id, session })
     return session
   },
@@ -284,31 +311,26 @@ export const useSessionStore = create<SessionState>((set, get) => ({
   setPendingFolder: (folderId) => set({ pendingFolderId: folderId }),
 
   ensureMessages: async (sessionId) => {
-    if (get().messages[sessionId] !== undefined) return
-    const messages = (await storage.read<ChatMessage[]>(StorageKeys.messages(sessionId))) ?? []
+    if (loadedMessages.has(sessionId)) return
+    const persisted = (await storage.read<ChatMessage[]>(StorageKeys.messages(sessionId))) ?? []
     set((state) => {
-      // Eventos do main podem chegar enquanto o read do histórico está em
-      // andamento (especialmente após reload com um turno ainda rodando).
-      // Nunca substitua esses eventos pelo snapshot possivelmente antigo do
-      // disco: mescle por ID e deixe o estado recebido ao vivo vencer.
-      const live = state.messages[sessionId] ?? []
-      const liveById = new Map(live.map((message) => [message.id, message]))
-      const merged = messages.map((message) => liveById.get(message.id) ?? message)
-      const historicalIds = new Set(messages.map((message) => message.id))
-      merged.push(...live.filter((message) => !historicalIds.has(message.id)))
-
+      // Eventos que chegaram antes do load (ex.: reload com agente rodando)
+      // não podem impedir a carga do histórico — mescla com o disco em vez
+      // de pular quando o buffer já existe.
+      const messages = mergeMessages(persisted, state.messages[sessionId])
+      loadedMessages.add(sessionId)
       // Reconciliação de status: se a última mensagem do assistente já tem
       // tokens/error (fim do stream) e o status ficou preso em
       // streaming/submitted (evento status: idle perdido durante um reload),
       // destrava a UI.
       const status = state.status
-      const lastAssistant = [...merged].reverse().find((m) => m.role === "assistant")
+      const lastAssistant = [...messages].reverse().find((m) => m.role === "assistant")
       const finished =
         lastAssistant !== undefined &&
         (lastAssistant.tokens !== undefined || lastAssistant.error !== undefined)
       const stuck = status[sessionId] === "streaming" || status[sessionId] === "submitted"
       return {
-        messages: { ...state.messages, [sessionId]: merged },
+        messages: { ...state.messages, [sessionId]: messages },
         ...(finished && stuck ? { status: { ...status, [sessionId]: "idle" as ChatStatus } } : {}),
       }
     })
@@ -417,6 +439,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       void chatApi.abort(sid)
       await storage.remove(StorageKeys.session(sid))
       await storage.remove(StorageKeys.messages(sid))
+      loadedMessages.delete(sid)
       void chatApi.closeBrowser(sid)
       useBrainPrefs.getState().setEnabled(sid, true) // limpa o override do Brain
       useSimplePrefs.getState().clear(sid)
@@ -505,6 +528,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       sessions: [fork, ...state.sessions],
       messages: { ...state.messages, [fork.id]: cloned },
     }))
+    loadedMessages.add(fork.id)
     emitChatEvent({ type: "session", sessionId: fork.id, session: fork })
     return fork
   },
@@ -522,6 +546,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       void chatApi.abort(sid)
       await storage.remove(StorageKeys.session(sid))
       await storage.remove(StorageKeys.messages(sid))
+      loadedMessages.delete(sid)
       void chatApi.closeBrowser(sid)
       useBrainPrefs.getState().setEnabled(sid, true)
       useSimplePrefs.getState().clear(sid)
@@ -907,8 +932,10 @@ case "message": {
     }
 
     case "messages":
-      // Substituição completa (ex: compactação inseriu um resumo no meio)
+      // Substituição completa (ex: compactação inseriu um resumo no meio) —
+      // o evento traz a lista inteira, então a sessão já está carregada.
       set((state) => ({ messages: { ...state.messages, [sessionId]: event.messages } }))
+      loadedMessages.add(sessionId)
       break
 
 case "title":
@@ -937,15 +964,12 @@ case "title":
         const sessions = exists
           ? state.sessions.map((s) => (s.id === event.session.id ? event.session : s))
           : [event.session, ...state.sessions]
-        // Workers/companions nascem vazios e o main emite "session" antes de
-        // iniciar o runChat deles: inicializar o buffer aqui garante que os
-        // primeiros events de message/part não sejam perdidos nem sobrescritos
-        // por um ensureMessages tardio (que vira no-op com a chave já definida).
-        // SÓ para sessões NOVAS: numa sessão que já existe em disco com
-        // histórico, pré-inicializar como [] faria o ensureMessages virar
-        // no-op e o chat abriria vazio (histórico "perdido") após um reload.
+        // Workers nascem vazios e o main emite "session" antes de iniciar o
+        // runChat deles: inicializar o buffer aqui garante que os primeiros
+        // events de message/part não sejam perdidos (um ensureMessages tardio
+        // mescla com o disco em vez de sobrescrever).
         const messages =
-          !exists && state.messages[event.session.id] === undefined
+          state.messages[event.session.id] === undefined
             ? { ...state.messages, [event.session.id]: [] }
             : state.messages
         return { sessions, messages }

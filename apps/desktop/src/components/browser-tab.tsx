@@ -49,12 +49,7 @@ import { ModelPicker } from "@/src/components/model-picker"
 import { PermissionModePicker } from "@/src/components/permission-mode-picker"
 import { visibleMessageText } from "@/src/lib/message-utils"
 import { windowApi } from "@/src/lib/ipc"
-import {
-  executeWebviewJavaScript,
-  navigateWebview,
-  reloadWebview,
-  type WebviewElement,
-} from "@/src/components/browser/webview-session"
+import { reloadWebview, type WebviewElement } from "@/src/components/browser/webview-session"
 import { usePanelStore, type Viewport } from "@/src/stores/panel-store"
 import { usePermissionPrefs } from "@/src/stores/permission-prefs"
 import {
@@ -174,13 +169,16 @@ function PanelBrowserBody({
   const { url, refreshKey } = useWebPreview()
   const selectMode = usePanelStore((s) => s.selectMode)
   const viewport = usePanelStore((s) => s.viewport)
-  const webviewRef = useRef<WebviewElement | null>(null)
   const initialSrcRef = useRef(url)
+  // Estado do elemento: a montagem pode ser tardia (estado vazio → primeira URL
+  // na barra) e o <webview> do pool é re-anexado a cada volta à aba — os efeitos
+  // de ready/navegação reagem ao elemento, não a um ref fixo.
+  const [webviewEl, setWebviewEl] = useState<WebviewElement | null>(null)
 
   // O <webview> vive no pool (webview-session.ts) — aqui só guardamos a
   // referência do elemento para os comandos (loadURL, execução de JS).
   const handleWebviewRef = useCallback((el: HTMLElement | null) => {
-    webviewRef.current = el as WebviewElement | null
+    setWebviewEl(el as WebviewElement | null)
   }, [])
 
   const handleConsoleMessage = useCallback((message: string) => {
@@ -192,39 +190,100 @@ function PanelBrowserBody({
     }
   }, [])
 
-  // Navegação controlada: mudanças na barra de URL viram loadURL (sem remount).
-  // navigateWebview é seguro: getURL()/loadURL() lançam se o guest ainda não
-  // emitiu dom-ready — num webview recém-criado um erro não capturado aqui
-  // derrubava o app inteiro (tela preta). A navegação fica agendada até o
-  // dom-ready quando necessário.
-  //
-  // A PRIMEIRA execução após montar não navega: na remontagem de uma aba com
-  // webview vivo no pool, a página real é sincronizada pelo mount
-  // (safeWebviewURL → syncUrl) — navegar aqui com a URL antiga (tab.url)
-  // jogaria a aba de volta para uma página anterior (ex.: agente navegou para
-  // Z enquanto a aba estava oculta). No webview novo, o src inicial carrega.
-  const initialNavSkipped = useRef(false)
+  // Ready-gate do <webview>: os métodos (getURL/loadURL/reload) só podem ser
+  // chamados depois de o guest estar anexado ao DOM e ter emitido dom-ready —
+  // antes disso o Electron lança "The WebView must be attached to the DOM and
+  // the dom-ready event emitted before this method can be called". Enquanto não
+  // está pronto, a URL pedida na barra fica pendente e é aplicada no primeiro
+  // dom-ready (ou imediatamente, se o guest do pool já estiver pronto —
+  // dom-ready não re-emite ao re-anexar o elemento).
+  const readyRef = useRef(false)
+  const pendingUrlRef = useRef<string | null>(null)
+
+  // Gate declarado ANTES do efeito de navegação: a cada troca de elemento
+  // (remount por key, re-anexo do pool) o readyRef é resetado para "não pronto"
+  // antes de qualquer getURL/loadURL rodar no mesmo flush. Sem esse reset, o
+  // readyRef do guest antigo (morto) faria o getURL() acertar um guest ainda
+  // sem dom-ready → exceção não tratada em efeito → árvore inteira desmontada.
   useEffect(() => {
-    const webview = webviewRef.current
-    if (!webview || !url) return
-    if (!initialNavSkipped.current) {
-      initialNavSkipped.current = true
+    if (!webviewEl) return
+    readyRef.current = false // elemento novo/re-anexado — guest (ainda) não pronto
+    const applyPendingUrl = () => {
+      const pending = pendingUrlRef.current
+      if (!pending) return
+      pendingUrlRef.current = null
+      try {
+        if (webviewEl.getURL() !== pending) void webviewEl.loadURL(pending).catch(() => {})
+      } catch {
+        pendingUrlRef.current = pending // ainda não pronto — próximo dom-ready aplica
+      }
+    }
+    const onReady = () => {
+      readyRef.current = true
+      applyPendingUrl()
+      // Toggle de seleção feito antes do dom-ready não se perde
+      try {
+        void webviewEl.executeJavaScript(usePanelStore.getState().selectMode ? SELECT_ON : SELECT_OFF).catch(() => {})
+      } catch {
+        // guest ainda não pronto — o próximo dom-ready re-aplica
+      }
+    }
+    webviewEl.addEventListener("dom-ready", onReady)
+    try {
+      webviewEl.getWebContentsId() // guest já pronto (pool) — dom-ready não re-emite
+      onReady()
+    } catch {
+      // guest inicializando — o dom-ready chama onReady
+    }
+    return () => webviewEl.removeEventListener("dom-ready", onReady)
+  }, [webviewEl])
+
+  // Navegação controlada: mudanças na barra de URL viram loadURL (sem remount).
+  // Roda DEPOIS do ready-gate — o readyRef já corresponde ao elemento atual.
+  useEffect(() => {
+    if (!webviewEl || !url) return
+    if (!readyRef.current) {
+      pendingUrlRef.current = url
       return
     }
-    navigateWebview(webview, url)
-  }, [url])
+    pendingUrlRef.current = null
+    try {
+      if (webviewEl.getURL() !== url) void webviewEl.loadURL(url).catch(() => {})
+    } catch {
+      // guest trocado entre o render e o efeito — volta para pendente
+      readyRef.current = false
+      pendingUrlRef.current = url
+    }
+  }, [url, webviewEl])
 
+  // Modo seleção (clique vira badge no input): só roda com o guest pronto; se o
+  // toggle vier antes, o onReady re-aplica com o estado atual do store.
   useEffect(() => {
-    const webview = webviewRef.current
-    if (!webview) return
-    executeWebviewJavaScript(webview, selectMode ? SELECT_ON : SELECT_OFF)
-  }, [selectMode])
+    if (!webviewEl || !readyRef.current) return
+    try {
+      void webviewEl.executeJavaScript(selectMode ? SELECT_ON : SELECT_OFF).catch(() => {})
+    } catch {
+      // guest não pronto — o onReady re-aplica quando o dom-ready chegar
+    }
+  }, [selectMode, webviewEl])
 
-  // Botão reload: recarrega no MESMO webview (a página persistida não é
-  // destruída — apenas recarregada).
+  // Botão reload: recarrega no MESMO webview, sem recriar o guest (a página
+  // não é destruída — apenas recarregada) — com pool via reloadWebview; sem
+  // pool (BrowserTab do painel), reload direto no elemento.
   useEffect(() => {
-    if (refreshKey > 0 && persistKey) reloadWebview(persistKey)
-  }, [refreshKey, persistKey])
+    if (refreshKey <= 0) return
+    if (persistKey) {
+      reloadWebview(persistKey)
+      return
+    }
+    if (webviewEl && readyRef.current) {
+      try {
+        webviewEl.reload()
+      } catch {
+        // webview não pronto — nada para recarregar ainda
+      }
+    }
+  }, [refreshKey, persistKey, webviewEl])
 
   return (
     <WebPreviewBody
