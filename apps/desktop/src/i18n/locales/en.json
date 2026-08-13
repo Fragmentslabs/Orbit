@@ -75,10 +75,6 @@
       },
       "thinking": {
         "label": "Thinking"
-      },
-      "esteira": {
-        "label": "Esteira",
-        "description": "Create tasks in a board from this conversation"
       }
     },
     "slash": {
@@ -1460,11 +1456,9 @@
     "titulo": "Esteira",
     "carregando": "Loading board...",
     "vazioTitulo": "No boards yet",
-    "vazioSubtitulo": "Create a project and a pipeline to run tasks phase by phase, without chats.",
-    "semEsteiras": "This project has no pipelines yet.",
+    "vazioSubtitulo": "Pick the repository and the phases; the pipeline runs tasks phase by phase, without chats.",
     "novaEsteira": "New pipeline",
     "criar": "Create",
-    "nomeProjeto": "Project name",
     "nomeEsteira": "Pipeline name",
     "nomeExemplo": "e.g. Features",
     "pastas": "Folders",
@@ -1520,6 +1514,12 @@
       "em_progresso": "Running",
       "pausada": "Paused",
       "concluida": "Done"
-    }
+    },
+    "subtitulo": "Pipelines that run tasks phase by phase, without chats",
+    "criarPrimeira": "Create the first pipeline",
+    "repositorioPrincipal": "Main repository",
+    "voltar": "Back to the list",
+    "adicionarTarefa": "Add task",
+    "tasksResumo": "{{concluidas}}/{{total}} tasks"
   }
 }

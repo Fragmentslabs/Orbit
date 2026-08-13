@@ -1,6 +1,14 @@
 import { tool, type ToolSet } from 'ai'
 import { z } from 'zod'
-import { carregarTudo, criarTask, iniciarTask, listarEsteiras, listarTasks } from '../esteira'
+import {
+  carregarTudo,
+  criarEsteira,
+  criarProjeto,
+  criarTask,
+  iniciarTask,
+  listarEsteiras,
+  listarTasks,
+} from '../esteira'
 
 /**
  * Tools de esteira no chat: permitem transformar o que foi discutido na
@@ -43,8 +51,51 @@ function filtrarPorNome(esteiras: EsteiraResumo[], termo: string): EsteiraResumo
   )
 }
 
-export function createEsteiraTools(sessionId: string): ToolSet {
+export function createEsteiraTools(
+  sessionId: string,
+  /** Modelo da conversa — vira o padrão das fases da esteira criada pelo agente */
+  modeloPadrao: { providerId: string; modelId: string },
+): ToolSet {
   return {
+    esteira_create: tool({
+      description: [
+        'Creates a NEW esteira (task board): a fixed pipeline of phases that runs tasks autonomously, without chats.',
+        'Ask the user for the main repository folder before calling — the pipeline has nowhere to work without it.',
+        'Phases come from system templates; the default pipeline is desenvolvimento → validacao → pronto. Only pass other ids if the user asked for something different.',
+      ].join(' '),
+      inputSchema: z.object({
+        nome: z.string().describe('Pipeline name, e.g. "Features"'),
+        pastas: z
+          .array(z.string())
+          .min(1)
+          .describe('Absolute paths; the FIRST one is the main repository'),
+        templateIds: z
+          .array(z.enum(['desenvolvimento', 'validacao', 'pronto', 'seguranca', 'revisao', 'infra']))
+          .optional()
+          .describe('Phases in order (default: desenvolvimento, validacao, pronto)'),
+        branch: z.string().optional().describe('Branch the pipeline works on (default: current)'),
+      }),
+      execute: async ({ nome, pastas, templateIds, branch }) => {
+        // O projeto (dono das pastas) nasce junto: o usuário pensa em "esteira
+        // no repositório X", não em cadastrar um projeto antes.
+        const projeto = await criarProjeto(nome, pastas)
+        const esteira = await criarEsteira({
+          projetoId: projeto.id,
+          nome,
+          templateIds: templateIds ?? ['desenvolvimento', 'validacao', 'pronto'],
+          providerId: modeloPadrao.providerId,
+          modelId: modeloPadrao.modelId,
+          branch,
+        })
+        return [
+          `Esteira "${esteira.nome}" criada — id: ${esteira.id}`,
+          `fases: ${esteira.fases.map((f) => f.nome).join(' → ')}`,
+          `repositório principal: ${pastas[0]}`,
+          'Ela aparece na página Esteira (sidebar do modo código). Use esteira_create_task para adicionar tasks.',
+        ].join('\n')
+      },
+    }),
+
     esteira_list: tool({
       description:
         'Lists the available esteiras (task boards): id, name, project, phases and working folders. Use it before creating a task when you are not sure which board the user means.',

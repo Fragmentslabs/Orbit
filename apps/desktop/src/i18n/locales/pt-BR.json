@@ -75,10 +75,6 @@
       },
       "thinking": {
         "label": "Thinking"
-      },
-      "esteira": {
-        "label": "Esteira",
-        "description": "Cria tasks em um board a partir desta conversa"
       }
     },
     "slash": {
@@ -1460,11 +1456,9 @@
     "titulo": "Esteira",
     "carregando": "Carregando board...",
     "vazioTitulo": "Nenhum board ainda",
-    "vazioSubtitulo": "Crie um projeto e uma esteira para executar tasks fase a fase, sem chats.",
-    "semEsteiras": "Este projeto ainda não tem esteiras.",
+    "vazioSubtitulo": "Escolha o repositório e as fases; a esteira executa as tasks fase a fase, sem chats.",
     "novaEsteira": "Nova esteira",
     "criar": "Criar",
-    "nomeProjeto": "Nome do projeto",
     "nomeEsteira": "Nome da esteira",
     "nomeExemplo": "ex.: Features",
     "pastas": "Pastas",
@@ -1520,6 +1514,12 @@
       "em_progresso": "Em execução",
       "pausada": "Pausada",
       "concluida": "Concluída"
-    }
+    },
+    "subtitulo": "Esteiras que executam tasks fase a fase, sem chats",
+    "criarPrimeira": "Criar a primeira esteira",
+    "repositorioPrincipal": "Repositório principal",
+    "voltar": "Voltar para a lista",
+    "adicionarTarefa": "Adicionar tarefa",
+    "tasksResumo": "{{concluidas}}/{{total}} tasks"
   }
 }

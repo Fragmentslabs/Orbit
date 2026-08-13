@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { DndContext, PointerSensor, useDroppable, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core"
-import { LayersIcon, PlayIcon, PlusIcon, SquareIcon, Trash2Icon } from "lucide-react"
+import { ArrowLeftIcon, FolderIcon, LayersIcon, PlayIcon, PlusIcon, SquareIcon, Trash2Icon } from "lucide-react"
 import type { Esteira, Task } from "@shared/esteira"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -14,52 +14,134 @@ import { TaskCard } from "./task-card"
 import { TaskModal } from "./task-modal"
 
 /**
- * Página do modo esteira: seleção de projeto/esteira, kanban por fase e o
- * rodapé de relatório.
+ * Página Esteira (modo código, na sidebar). Dois níveis:
  *
- * O kanban existe para viabilizar o drag (D8): soltar um card numa coluna de
- * fase inicia a task DAQUELA fase em diante. Um DndContext local mantém isso
- * separado do drag global do app (arrastar chats para o painel direito).
+ *   lista de esteiras  →  [abrir]  →  board da esteira (colunas por fase)
+ *
+ * Não é um modo do input: a esteira é outra forma de trabalhar — pipeline de
+ * tasks sem chat — então ela navega como página, e não como toggle de conversa.
  */
 export function EsteiraBoard() {
   const { t } = useTranslation()
-  const store = useEsteiraStore()
-  const projetos = useEsteiraStore((s) => s.projetos)
-  const esteiras = useEsteiraStore((s) => s.esteiras)
   const carregado = useEsteiraStore((s) => s.carregado)
-
-  const [projetoId, setProjetoId] = useState<string | null>(null)
-  const [esteiraId, setEsteiraId] = useState<string | null>(null)
-  const [criarAberto, setCriarAberto] = useState(false)
-  const [taskAberta, setTaskAberta] = useState<string | null>(null)
-  const [novaTask, setNovaTask] = useState("")
+  const carregar = useEsteiraStore((s) => s.carregar)
+  const [abertaId, setAbertaId] = useState<string | null>(null)
 
   useEffect(() => {
-    if (!carregado) void store.carregar()
-  }, [carregado])
+    if (!carregado) void carregar()
+  }, [carregado, carregar])
 
-  // Assina os eventos do engine: fases concluindo, tasks pausando, fila andando.
+  // Assina os eventos do engine: fases concluindo, tasks pausando, fila andando
   useEffect(() => esteiraApi.onEvent((evento) => useEsteiraStore.getState().aplicarEvento(evento)), [])
 
-  // Seleção inicial: primeiro projeto e primeira esteira, para o board nunca
-  // abrir vazio quando já existe algo configurado.
-  useEffect(() => {
-    if (!projetoId && projetos.length > 0) setProjetoId(projetos[0].id)
-  }, [projetos, projetoId])
+  const esteiras = useEsteiraStore((s) => s.esteiras)
+  const aberta = esteiras.find((e) => e.id === abertaId) ?? null
 
-  const esteirasDoProjeto = useMemo(
-    () => esteiras.filter((e) => e.projetoId === projetoId),
-    [esteiras, projetoId],
+  // Esteira removida (por aqui ou por outra janela): volta para a lista em vez
+  // de deixar a tela presa num board que não existe mais.
+  useEffect(() => {
+    if (abertaId && !aberta) setAbertaId(null)
+  }, [abertaId, aberta])
+
+  if (!carregado) {
+    return <p className="p-6 text-center text-xs text-muted-foreground">{t("esteira.carregando")}</p>
+  }
+
+  return aberta ? (
+    <BoardDaEsteira esteira={aberta} onVoltar={() => setAbertaId(null)} />
+  ) : (
+    <ListaDeEsteiras onAbrir={setAbertaId} />
   )
+}
 
-  useEffect(() => {
-    if (esteirasDoProjeto.length === 0) setEsteiraId(null)
-    else if (!esteirasDoProjeto.some((e) => e.id === esteiraId)) setEsteiraId(esteirasDoProjeto[0].id)
-  }, [esteirasDoProjeto, esteiraId])
+// ─── Nível 1: lista de esteiras ──────────────────────────────────────────────
 
-  const esteira = esteirasDoProjeto.find((e) => e.id === esteiraId) ?? null
-  const tasks = useEsteiraStore((s) => (esteiraId ? s.tasksPorEsteira[esteiraId] ?? [] : []))
-  const filaLigada = useEsteiraStore((s) => (esteiraId ? s.filasLigadas[esteiraId] ?? false : false))
+function ListaDeEsteiras({ onAbrir }: { onAbrir: (id: string) => void }) {
+  const { t } = useTranslation()
+  const esteiras = useEsteiraStore((s) => s.esteiras)
+  const projetos = useEsteiraStore((s) => s.projetos)
+  const tasksPorEsteira = useEsteiraStore((s) => s.tasksPorEsteira)
+  const [criarAberto, setCriarAberto] = useState(false)
+
+  return (
+    <div className="flex min-h-0 flex-1 flex-col">
+      <div className="flex shrink-0 items-center gap-2 pb-4">
+        <div className="min-w-0 flex-1">
+          <h2 className="text-base font-semibold text-foreground">{t("esteira.titulo")}</h2>
+          <p className="text-xs text-muted-foreground">{t("esteira.subtitulo")}</p>
+        </div>
+        <Button size="sm" onClick={() => setCriarAberto(true)}>
+          <PlusIcon className="size-4" />
+          {t("esteira.novaEsteira")}
+        </Button>
+      </div>
+
+      {esteiras.length === 0 ? (
+        <div className="flex flex-1 flex-col items-center justify-center gap-3 text-center">
+          <LayersIcon className="size-10 text-muted-foreground/50" />
+          <div>
+            <p className="text-sm font-medium">{t("esteira.vazioTitulo")}</p>
+            <p className="mx-auto max-w-sm text-xs text-muted-foreground">{t("esteira.vazioSubtitulo")}</p>
+          </div>
+          <Button size="sm" onClick={() => setCriarAberto(true)}>
+            <PlusIcon className="size-4" />
+            {t("esteira.criarPrimeira")}
+          </Button>
+        </div>
+      ) : (
+        <div className="grid min-h-0 flex-1 auto-rows-min gap-2 overflow-y-auto sm:grid-cols-2 xl:grid-cols-3">
+          {esteiras.map((esteira) => {
+            const tasks = tasksPorEsteira[esteira.id] ?? []
+            const projeto = projetos.find((p) => p.id === esteira.projetoId)
+            const emAndamento = tasks.filter((t) => t.status === "em_progresso").length
+            const concluidas = tasks.filter((t) => t.status === "concluida").length
+            return (
+              <button
+                key={esteira.id}
+                type="button"
+                onClick={() => onAbrir(esteira.id)}
+                className="flex flex-col gap-2 rounded-lg border bg-card p-3 text-left transition-colors hover:border-ring"
+              >
+                <div className="flex items-center gap-2">
+                  <LayersIcon className="size-4 shrink-0 text-muted-foreground" />
+                  <span className="min-w-0 flex-1 truncate text-sm font-medium">{esteira.nome}</span>
+                  {emAndamento > 0 && <span className="size-2 shrink-0 animate-pulse rounded-full bg-primary" />}
+                </div>
+                <p className="truncate text-[11px] text-muted-foreground">
+                  {esteira.fases.map((f) => f.nome).join(" → ")}
+                </p>
+                {projeto && projeto.pastas.length > 0 && (
+                  <p className="flex items-center gap-1 truncate text-[11px] text-muted-foreground">
+                    <FolderIcon className="size-3 shrink-0" />
+                    {projeto.pastas[0]}
+                    {projeto.pastas.length > 1 && ` +${projeto.pastas.length - 1}`}
+                  </p>
+                )}
+                <div className="mt-auto flex items-center gap-2 text-[11px] text-muted-foreground">
+                  <span>{t("esteira.tasksResumo", { total: tasks.length, concluidas })}</span>
+                  {esteira.branch && <span className="truncate">· {esteira.branch}</span>}
+                </div>
+              </button>
+            )
+          })}
+        </div>
+      )}
+
+      <EsteiraCreateDialog aberto={criarAberto} onOpenChange={setCriarAberto} onCriada={onAbrir} />
+    </div>
+  )
+}
+
+// ─── Nível 2: board da esteira ───────────────────────────────────────────────
+
+function BoardDaEsteira({ esteira, onVoltar }: { esteira: Esteira; onVoltar: () => void }) {
+  const { t } = useTranslation()
+  const store = useEsteiraStore()
+  const tasks = useEsteiraStore((s) => s.tasksPorEsteira[esteira.id] ?? [])
+  const filaLigada = useEsteiraStore((s) => s.filasLigadas[esteira.id] ?? false)
+  const [taskAberta, setTaskAberta] = useState<string | null>(null)
+  const [adicionando, setAdicionando] = useState(false)
+  const [novaTask, setNovaTask] = useState("")
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }))
 
@@ -67,7 +149,7 @@ export function EsteiraBoard() {
     (evento: DragEndEvent) => {
       const task = evento.active.data.current?.task as Task | undefined
       const destino = String(evento.over?.id ?? "")
-      if (!task || !esteira || !destino.startsWith("fase:")) return
+      if (!task || !destino.startsWith("fase:")) return
       const indice = Number(destino.slice("fase:".length))
       if (!Number.isInteger(indice) || indice < 0 || indice >= esteira.fases.length) return
       // Soltar na fase em que a task já está e rodando não tem efeito
@@ -79,161 +161,125 @@ export function EsteiraBoard() {
 
   const criarTask = async () => {
     const titulo = novaTask.trim()
-    if (!titulo || !esteira) return
+    if (!titulo) return
     setNovaTask("")
+    setAdicionando(false)
     await store.criarTask(esteira.id, titulo, "")
   }
 
-  if (!carregado) {
-    return <p className="p-6 text-center text-xs text-muted-foreground">{t("esteira.carregando")}</p>
-  }
-
-  if (projetos.length === 0) {
-    return (
-      <div className="flex flex-1 flex-col items-center justify-center gap-3 text-center">
-        <LayersIcon className="size-10 text-muted-foreground/60" />
-        <div>
-          <p className="text-sm font-medium">{t("esteira.vazioTitulo")}</p>
-          <p className="max-w-xs text-xs text-muted-foreground">{t("esteira.vazioSubtitulo")}</p>
-        </div>
-        <Button size="sm" onClick={() => setCriarAberto(true)}>
-          <PlusIcon className="size-4" />
-          {t("esteira.novaEsteira")}
-        </Button>
-        <EsteiraCreateDialog aberto={criarAberto} onOpenChange={setCriarAberto} />
-      </div>
-    )
-  }
+  const colunas = useMemo(
+    () => [
+      { id: "pendentes", titulo: t("esteira.pendentes"), tasks: tasks.filter((x) => x.status === "pendente") },
+      ...esteira.fases.map((fase, indice) => ({
+        id: `fase:${indice}`,
+        titulo: fase.nome,
+        tasks: tasks.filter(
+          (x) => x.status !== "pendente" && x.status !== "concluida" && x.faseAtual === indice,
+        ),
+      })),
+      { id: "concluidas", titulo: t("esteira.concluidas"), tasks: tasks.filter((x) => x.status === "concluida") },
+    ],
+    [esteira.fases, tasks, t],
+  )
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      {/* Seletores + controles da esteira */}
+      {/* Header da esteira: voltar + nome + controles */}
       <div className="flex shrink-0 flex-wrap items-center gap-2 pb-3">
-        <select
-          value={projetoId ?? ""}
-          onChange={(e) => setProjetoId(e.target.value)}
-          className="h-8 rounded-md border bg-background px-2 text-xs"
+        <button
+          type="button"
+          onClick={onVoltar}
+          title={t("esteira.voltar")}
+          className="flex size-8 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
         >
-          {projetos.map((p) => (
-            <option key={p.id} value={p.id}>{p.nome}</option>
-          ))}
-        </select>
+          <ArrowLeftIcon className="size-4" />
+        </button>
+        <div className="min-w-0">
+          <h2 className="truncate text-sm font-semibold text-foreground">{esteira.nome}</h2>
+          <p className="truncate text-[11px] text-muted-foreground">
+            {esteira.fases.map((f) => f.nome).join(" → ")}
+            {esteira.branch && ` · ${esteira.branch}`}
+          </p>
+        </div>
 
-        {esteirasDoProjeto.length > 0 && (
-          <select
-            value={esteiraId ?? ""}
-            onChange={(e) => setEsteiraId(e.target.value)}
-            className="h-8 rounded-md border bg-background px-2 text-xs"
+        <div className="ml-auto flex items-center gap-2">
+          <Button size="sm" onClick={() => setAdicionando(true)}>
+            <PlusIcon className="size-4" />
+            {t("esteira.adicionarTarefa")}
+          </Button>
+          <button
+            type="button"
+            onClick={() => void store.alternarFila(esteira.id, !filaLigada)}
+            title={t("esteira.filaDica")}
+            className={cn(
+              "flex h-8 items-center gap-1.5 rounded-md border px-2.5 text-xs transition-colors",
+              filaLigada ? "border-primary/50 bg-primary/10 text-primary" : "hover:bg-accent",
+            )}
           >
-            {esteirasDoProjeto.map((e) => (
-              <option key={e.id} value={e.id}>{e.nome}</option>
-            ))}
-          </select>
-        )}
-
-        <Button variant="ghost" size="sm" onClick={() => setCriarAberto(true)}>
-          <PlusIcon className="size-4" />
-          {t("esteira.novaEsteira")}
-        </Button>
-
-        {esteira && (
-          <>
-            <button
-              type="button"
-              onClick={() => void store.alternarFila(esteira.id, !filaLigada)}
-              title={t("esteira.filaDica")}
-              className={cn(
-                "flex h-8 items-center gap-1.5 rounded-md border px-2.5 text-xs transition-colors",
-                filaLigada ? "border-primary/50 bg-primary/10 text-primary" : "hover:bg-accent",
-              )}
-            >
-              {filaLigada ? <SquareIcon className="size-3.5" /> : <PlayIcon className="size-3.5" />}
-              {filaLigada ? t("esteira.filaLigada") : t("esteira.filaDesligada")}
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                if (confirm(t("esteira.confirmarRemocao", { nome: esteira.nome }))) {
-                  void store.removerEsteira(esteira.id)
-                }
-              }}
-              className="ml-auto flex size-8 items-center justify-center rounded-md text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
-              title={t("esteira.removerEsteira")}
-            >
-              <Trash2Icon className="size-3.5" />
-            </button>
-          </>
-        )}
+            {filaLigada ? <SquareIcon className="size-3.5" /> : <PlayIcon className="size-3.5" />}
+            {filaLigada ? t("esteira.filaLigada") : t("esteira.filaDesligada")}
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              if (confirm(t("esteira.confirmarRemocao", { nome: esteira.nome }))) {
+                void store.removerEsteira(esteira.id)
+                onVoltar()
+              }
+            }}
+            title={t("esteira.removerEsteira")}
+            className="flex size-8 items-center justify-center rounded-md text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+          >
+            <Trash2Icon className="size-3.5" />
+          </button>
+        </div>
       </div>
 
-      {esteira ? (
-        <>
-          {/* Entrada rápida de task */}
-          <div className="flex shrink-0 gap-2 pb-3">
-            <Input
-              value={novaTask}
-              onChange={(e) => setNovaTask(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") void criarTask()
-              }}
-              placeholder={t("esteira.novaTaskPlaceholder")}
-              className="h-8 max-w-md text-xs"
-            />
-            <Button size="sm" variant="secondary" disabled={!novaTask.trim()} onClick={() => void criarTask()}>
-              {t("esteira.adicionar")}
-            </Button>
-          </div>
-
-          <DndContext sensors={sensors} onDragEnd={aoSoltar}>
-            <div className="flex min-h-0 flex-1 gap-3 overflow-x-auto pb-2">
-              <Coluna
-                id="pendentes"
-                titulo={t("esteira.pendentes")}
-                tasks={tasks.filter((t) => t.status === "pendente")}
-                esteira={esteira}
-                onAbrir={setTaskAberta}
-              />
-              {esteira.fases.map((fase, indice) => (
-                <Coluna
-                  key={fase.id}
-                  id={`fase:${indice}`}
-                  titulo={fase.nome}
-                  tasks={tasks.filter((t) => t.status !== "pendente" && t.status !== "concluida" && t.faseAtual === indice)}
-                  esteira={esteira}
-                  onAbrir={setTaskAberta}
-                />
-              ))}
-              <Coluna
-                id="concluidas"
-                titulo={t("esteira.concluidas")}
-                tasks={tasks.filter((t) => t.status === "concluida")}
-                esteira={esteira}
-                onAbrir={setTaskAberta}
-              />
-            </div>
-          </DndContext>
-
-          <EsteiraFooter esteira={esteira} tasks={tasks} />
-        </>
-      ) : (
-        <div className="flex flex-1 flex-col items-center justify-center gap-2 text-center">
-          <p className="text-sm text-muted-foreground">{t("esteira.semEsteiras")}</p>
-          <Button size="sm" onClick={() => setCriarAberto(true)}>
-            <PlusIcon className="size-4" />
-            {t("esteira.novaEsteira")}
+      {adicionando && (
+        <div className="flex shrink-0 gap-2 pb-3">
+          <Input
+            autoFocus
+            value={novaTask}
+            onChange={(e) => setNovaTask(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") void criarTask()
+              if (e.key === "Escape") setAdicionando(false)
+            }}
+            placeholder={t("esteira.novaTaskPlaceholder")}
+            className="h-8 max-w-md text-xs"
+          />
+          <Button size="sm" variant="secondary" disabled={!novaTask.trim()} onClick={() => void criarTask()}>
+            {t("esteira.adicionar")}
+          </Button>
+          <Button size="sm" variant="ghost" onClick={() => setAdicionando(false)}>
+            {t("common.cancel")}
           </Button>
         </div>
       )}
 
-      <EsteiraCreateDialog aberto={criarAberto} onOpenChange={setCriarAberto} projetoId={projetoId ?? undefined} />
-      {esteira && (
-        <TaskModal
-          esteira={esteira}
-          task={tasks.find((t) => t.id === taskAberta) ?? null}
-          aberto={!!taskAberta}
-          onOpenChange={(aberto) => !aberto && setTaskAberta(null)}
-        />
-      )}
+      <DndContext sensors={sensors} onDragEnd={aoSoltar}>
+        <div className="flex min-h-0 flex-1 gap-3 overflow-x-auto pb-2">
+          {colunas.map((coluna) => (
+            <Coluna
+              key={coluna.id}
+              id={coluna.id}
+              titulo={coluna.titulo}
+              tasks={coluna.tasks}
+              esteira={esteira}
+              onAbrir={setTaskAberta}
+            />
+          ))}
+        </div>
+      </DndContext>
+
+      <EsteiraFooter esteira={esteira} tasks={tasks} />
+
+      <TaskModal
+        esteira={esteira}
+        task={tasks.find((x) => x.id === taskAberta) ?? null}
+        aberto={!!taskAberta}
+        onOpenChange={(aberto) => !aberto && setTaskAberta(null)}
+      />
     </div>
   )
 }

@@ -54,6 +54,7 @@ const NATIVE_TOOLS = new Set([
   'bash_kill',
   'bash_output',
   // Esteira (board de tasks)
+  'esteira_create',
   'esteira_list',
   'esteira_create_task',
   'esteira_task_status',

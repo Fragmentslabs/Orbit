@@ -21,18 +21,20 @@ export function EsteiraCreateDialog({
   aberto,
   onOpenChange,
   projetoId,
+  onCriada,
 }: {
   aberto: boolean
   onOpenChange: (aberto: boolean) => void
-  /** Projeto existente; ausente = o modal também cria o projeto */
+  /** Projeto existente; ausente = o projeto é criado junto com a esteira */
   projetoId?: string
+  /** Abre a esteira recém-criada direto no board */
+  onCriada?: (esteiraId: string) => void
 }) {
   const { t } = useTranslation()
   const store = useEsteiraStore()
   const templates = useEsteiraStore((s) => s.templates)
   const catalog = useProviderStore((s) => s.catalog)
 
-  const [nomeProjeto, setNomeProjeto] = useState("")
   const [nome, setNome] = useState("")
   const [pastas, setPastas] = useState<string[]>([])
   const [providerId, setProviderId] = useState("")
@@ -50,7 +52,7 @@ export function EsteiraCreateDialog({
   useEffect(() => {
     if (!aberto) return
     setNome("")
-    setNomeProjeto("")
+
     setPastas(projetoExistente?.pastas ?? [])
     setSelecionadas(templates.filter((tpl) => tpl.padrao).map((tpl) => tpl.id))
     setRetryCount(3)
@@ -101,18 +103,19 @@ export function EsteiraCreateDialog({
     })
   }
 
-  const podeCriar =
-    nome.trim().length > 0 &&
-    selecionadas.length > 0 &&
-    modelId.length > 0 &&
-    (projetoId ? true : nomeProjeto.trim().length > 0 && pastas.length > 0)
+  // Pasta é obrigatória: sem repositório principal não há onde a esteira
+  // trabalhar, e a task só falharia na primeira fase.
+  const podeCriar = nome.trim().length > 0 && selecionadas.length > 0 && modelId.length > 0 && pastas.length > 0
 
   const criar = async () => {
     if (!podeCriar || salvando) return
     setSalvando(true)
     try {
-      const alvo = projetoId ?? (await store.criarProjeto(nomeProjeto.trim(), pastas)).id
-      await store.criarEsteira({
+      // O projeto (D1) é o dono das pastas. Como o fluxo do usuário é "criar
+      // esteira e escolher o repositório", ele nasce junto, com o mesmo nome —
+      // sem obrigar a cadastrar um projeto antes de fazer qualquer coisa.
+      const alvo = projetoId ?? (await store.criarProjeto(nome.trim(), pastas)).id
+      const esteira = await store.criarEsteira({
         projetoId: alvo,
         nome: nome.trim(),
         templateIds: selecionadas,
@@ -123,6 +126,7 @@ export function EsteiraCreateDialog({
         pushAoFinal,
       })
       onOpenChange(false)
+      onCriada?.(esteira.id)
     } finally {
       setSalvando(false)
     }
@@ -134,18 +138,17 @@ export function EsteiraCreateDialog({
         <DialogTitle>{t("esteira.novaEsteira")}</DialogTitle>
 
         <div className="max-h-[70vh] space-y-4 overflow-y-auto pr-1">
-          {!projetoId && (
-            <Campo rotulo={t("esteira.nomeProjeto")}>
-              <Input value={nomeProjeto} onChange={(e) => setNomeProjeto(e.target.value)} className="h-8 text-sm" />
-            </Campo>
-          )}
-
           <Campo rotulo={t("esteira.nomeEsteira")}>
             <Input value={nome} onChange={(e) => setNome(e.target.value)} className="h-8 text-sm" placeholder={t("esteira.nomeExemplo")} />
           </Campo>
 
           <Campo rotulo={t("esteira.pastas")} dica={t("esteira.pastasDica")}>
             <FolderSelector folders={pastas} onFoldersChange={setPastas} />
+            {pastas.length > 0 && (
+              <p className="mt-1 truncate text-[11px] text-muted-foreground">
+                {t("esteira.repositorioPrincipal")}: <span className="text-foreground">{pastas[0]}</span>
+              </p>
+            )}
           </Campo>
 
           <Campo rotulo={t("esteira.modeloPadrao")} dica={t("esteira.modeloDica")}>
