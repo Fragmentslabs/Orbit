@@ -47,6 +47,8 @@ export interface ContextoFase {
   /** Tentativa atual (1-based) — >1 injeta o aviso da falha anterior */
   tentativa: number
   erroAnterior?: string
+  /** A execução anterior desta fase foi abortada no meio (pausa forçada) */
+  interrompidaAntes?: boolean
   abort: AbortSignal
   /** Feed ao vivo do texto do agente (UI mostra no card) */
   onTexto?: (delta: string) => void
@@ -184,6 +186,16 @@ function montarMensagem(ctx: ContextoFase): string {
       `\n## Screenshots of the result (enabled for this pipeline)\n` +
         `If this task changed anything visible in a UI, capture it: open the app with panel_navigate and use show_image({ fromPanel: true }), or run_browser_script / capture_batch for several screens or viewports at once.\n` +
         `Attach the screenshots to your note (the media URLs from the manifest) and say what each one shows. If the change is not visible in a UI, say so in the note instead of capturing something unrelated.`,
+    )
+  }
+
+  // Retomada depois de uma pausa forçada: a fase recomeça do zero, mas o
+  // repositório pode ter ficado no meio do caminho — esconder isso faria o
+  // agente reimplementar por cima do que já existe.
+  if (ctx.interrompidaAntes) {
+    partes.push(
+      `\n## Restarting this phase\nA previous run of THIS phase was interrupted before finishing. You are starting it over from the beginning.\n` +
+        `The working tree may already contain partial changes from that attempt: check the current state of the files before writing anything, and continue from reality instead of assuming a clean start.`,
     )
   }
 

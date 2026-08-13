@@ -148,6 +148,12 @@ export interface Task {
   faseAtual: number | null
   pausaMotivo?: 'manual' | 'erro'
   erro?: string
+  /**
+   * A fase corrente foi abortada no meio (pausa forçada). Ao retomar, ela roda
+   * DO ZERO — e recebe o aviso de que o repositório pode ter mudanças parciais
+   * da tentativa interrompida.
+   */
+  faseInterrompida?: boolean
   /** Tasks que precisam concluir antes desta iniciar */
   dependeDe: string[]
   anotacoes: AnotacaoFase[]

@@ -17,6 +17,20 @@ import { atualizarTask, listarEsteiras, listarProjetos, listarTasks, salvarTasks
 
 /** Execuções vivas por task: permite pausar/abortar e evita rodar duas vezes. */
 const emExecucao = new Map<string, AbortController>()
+/**
+ * Promessa da execução em andamento por task. Sem isso, pausar e retomar em
+ * seguida cai numa corrida: o retomar chega antes de a execução abortada
+ * limpar `emExecucao`, `executarTask` sai na guarda inicial e a task fica
+ * "em_progresso" com ninguém executando.
+ */
+const execucoes = new Map<string, Promise<void>>()
+
+/** Aborta a execução da task (se houver) e espera ela realmente terminar. */
+async function pararEsperando(taskId: string): Promise<void> {
+  emExecucao.get(taskId)?.abort()
+  const pendente = execucoes.get(taskId)
+  if (pendente) await pendente.catch(() => {})
+}
 /** Esteiras com a fila automática ligada. */
 const filasAtivas = new Set<string>()
 /** Pausa pedida pelo usuário: a task para ao terminar a fase corrente. */
@@ -61,8 +75,18 @@ export { criaCiclo, dependenciasPendentes } from './contrato'
  * tentada até retryCount vezes; esgotado, a task pausa com motivo 'erro' e
  * espera intervenção humana (§9).
  */
-async function executarTask(esteiraId: string, taskId: string): Promise<void> {
+async function executarTask(esteiraId: string, taskId: string, retomandoInterrompida = false): Promise<void> {
   if (emExecucao.has(taskId)) return
+  const execucao = rodarTask(esteiraId, taskId, retomandoInterrompida)
+  execucoes.set(taskId, execucao)
+  try {
+    await execucao
+  } finally {
+    if (execucoes.get(taskId) === execucao) execucoes.delete(taskId)
+  }
+}
+
+async function rodarTask(esteiraId: string, taskId: string, retomandoInterrompida: boolean): Promise<void> {
   const contexto = await carregarContexto(esteiraId)
   if (!contexto) return
   const { esteira, projeto } = contexto
@@ -126,6 +150,8 @@ async function executarTask(esteiraId: string, taskId: string): Promise<void> {
         indiceFase: indice,
         pastas: projeto.pastas,
         tentativa: 1,
+        // Só na primeira fase depois de retomar: a interrupção foi nela.
+        interrompidaAntes: retomandoInterrompida && task.anotacoes.length === indice,
         abort: controller.signal,
         onTexto: (texto) =>
           emitir({ type: 'fase-progresso', esteiraId, taskId, faseIndice: indice, texto }),
@@ -196,8 +222,9 @@ async function executarTask(esteiraId: string, taskId: string): Promise<void> {
       }))
       if (ultimaFase || !atualizada) break
 
-      // Pausa pedida durante a fase: só agora, com a fase fechada, para não
-      // perder o trabalho no meio (§6.1).
+      // Parada SUAVE — hoje só o desligar da fila automática passa por aqui
+      // (§6.2): a task termina a fase corrente e só então pausa, sem perder o
+      // trabalho. O botão de pausar é o oposto: aborta na hora (pausarTask).
       if (pausaSolicitada.has(taskId)) {
         pausaSolicitada.delete(taskId)
         await persistir(esteiraId, taskId, (t) => ({
@@ -211,6 +238,21 @@ async function executarTask(esteiraId: string, taskId: string): Promise<void> {
     }
   } finally {
     emExecucao.delete(taskId)
+    // Abortada no meio da fase: sem isto a task ficaria "em_progresso" para
+    // sempre, com o card girando sem ninguém executando nada.
+    if (controller.signal.aborted) {
+      await persistir(esteiraId, taskId, (t) =>
+        t.status === 'em_progresso'
+          ? {
+              ...t,
+              status: 'pausada',
+              pausaMotivo: 'manual',
+              faseInterrompida: true,
+              tempoTrabalhoMs: t.tempoTrabalhoMs + (Date.now() - inicioExecucao),
+            }
+          : t,
+      )
+    }
     pausaSolicitada.delete(taskId)
     // A fila automática só anda quando uma task termina — é o "uma por vez".
     if (filasAtivas.has(esteiraId)) void avancarFila(esteiraId)
@@ -275,6 +317,7 @@ export function filaLigada(esteiraId: string): boolean {
  * anteriores entram como 'pulada' para o histórico não sugerir que rodaram.
  */
 export async function iniciarTask(esteiraId: string, taskId: string, faseInicial = 0): Promise<void> {
+  await pararEsperando(taskId)
   const contexto = await carregarContexto(esteiraId)
   if (!contexto) return
   const { esteira } = contexto
@@ -304,28 +347,43 @@ export async function iniciarTask(esteiraId: string, taskId: string, faseInicial
   void executarTask(esteiraId, taskId)
 }
 
+/**
+ * Pausa AGORA: aborta o que a fase está fazendo (modelo e tools recebem o
+ * abort) e marca a task como pausada.
+ *
+ * A versão anterior só marcava e esperava a fase fechar — do lado do usuário
+ * isso é indistinguível de um botão quebrado, porque uma fase leva minutos.
+ * O preço é perder o trabalho da fase corrente: ao retomar, ela roda de novo
+ * do zero (as fases anteriores já entregaram as anotações, e o repositório
+ * pode ter mudanças parciais — o retomar avisa a fase disso).
+ */
 export async function pausarTask(esteiraId: string, taskId: string): Promise<void> {
-  if (emExecucao.has(taskId)) {
-    // Marca para pausar ao fechar a fase; o abort imediato perderia o trabalho.
-    pausaSolicitada.add(taskId)
-    return
-  }
-  await persistir(esteiraId, taskId, (t) => ({ ...t, status: 'pausada', pausaMotivo: 'manual' }))
+  const controller = emExecucao.get(taskId)
+  pausaSolicitada.add(taskId)
+  controller?.abort()
+  await persistir(esteiraId, taskId, (t) =>
+    t.status === 'em_progresso'
+      ? { ...t, status: 'pausada', pausaMotivo: 'manual', faseInterrompida: !!controller }
+      : t,
+  )
 }
 
 /** Retomar reinicia a MESMA fase e zera o contador de retries (§9.5). */
 export async function retomarTask(esteiraId: string, taskId: string): Promise<void> {
+  await pararEsperando(taskId)
   const tasks = await listarTasks(esteiraId)
   const task = tasks.find((t) => t.id === taskId)
   if (!task) return
+  const interrompida = task.faseInterrompida === true
   await persistir(esteiraId, taskId, (t) => ({
     ...t,
     status: 'em_progresso',
     pausaMotivo: undefined,
     erro: undefined,
     faseAtual: t.faseAtual ?? 0,
+    faseInterrompida: undefined,
   }))
-  void executarTask(esteiraId, taskId)
+  void executarTask(esteiraId, taskId, interrompida)
 }
 
 export function taskEmExecucao(taskId: string): boolean {
