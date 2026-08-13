@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { DndContext, PointerSensor, useDroppable, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core"
-import { ArrowLeftIcon, FolderIcon, LayersIcon, MoreHorizontalIcon, PencilIcon, PlayIcon, PlusIcon, SquareIcon, Trash2Icon } from "lucide-react"
+import { ArrowLeftIcon, FolderIcon, LayersIcon, Loader2, MoreHorizontalIcon, PencilIcon, PlayIcon, PlusIcon, SquareIcon, Trash2Icon } from "lucide-react"
 import type { Esteira, Task } from "@shared/esteira"
 import { Button } from "@/components/ui/button"
 import { esteiraApi } from "@/src/lib/ipc"
@@ -102,6 +102,7 @@ function ListaDeEsteiras({ onAbrir }: { onAbrir: (id: string) => void }) {
             const projeto = projetos.find((p) => p.id === esteira.projetoId)
             const emAndamento = tasks.filter((t) => t.status === "em_progresso").length
             const concluidas = tasks.filter((t) => t.status === "concluida").length
+            const comErro = tasks.some((t) => t.pausaMotivo === "erro")
             return (
               <button
                 key={esteira.id}
@@ -112,7 +113,23 @@ function ListaDeEsteiras({ onAbrir }: { onAbrir: (id: string) => void }) {
                 <div className="flex items-center gap-2">
                   <LayersIcon className="size-4 shrink-0 text-muted-foreground" />
                   <span className="min-w-0 flex-1 truncate text-sm font-medium">{esteira.nome}</span>
-                  {emAndamento > 0 && <span className="size-2 shrink-0 animate-pulse rounded-full bg-primary" />}
+                  {emAndamento > 0 && (
+                    <span title={t("esteira.emAndamento")}>
+                      <Loader2 className="size-3 shrink-0 animate-spin text-primary" />
+                    </span>
+                  )}
+                  {concluidas > 0 && (
+                    <span
+                      className="size-1.5 shrink-0 rounded-full bg-yellow-500"
+                      title={t("esteira.tasksResumo", { total: tasks.length, concluidas })}
+                    />
+                  )}
+                  {comErro && (
+                    <span
+                      className="size-1.5 shrink-0 rounded-full bg-destructive"
+                      title={t("esteira.erro")}
+                    />
+                  )}
                 </div>
                 <p className="truncate text-[11px] text-muted-foreground">
                   {esteira.fases.map((f) => f.nome).join(" → ")}
