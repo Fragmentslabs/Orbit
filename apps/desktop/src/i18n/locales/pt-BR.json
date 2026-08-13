@@ -586,6 +586,10 @@
       "diff": {
         "label": "Diff",
         "description": "Alterações das ferramentas"
+      },
+      "media": {
+        "label": "Mídia",
+        "description": "Imagens produzidas pelo agente"
       }
     }
   },
@@ -731,8 +735,6 @@
     "agentUsingBrowser": "Orbit está usando o navegador",
     "browserActivity": "Atividade do navegador",
     "emptyActivity": "As ações do agente aparecem aqui.",
-    "composerPlaceholder": "Peça algo ao Orbit sobre esta página…",
-    "composerPlaceholderNoFolder": "Selecione uma pasta no modo código para pedir à IA",
     "chatFeed": "Conversa",
     "showChatFeed": "Mostrar conversa",
     "hideChatFeed": "Ocultar conversa",
@@ -1423,6 +1425,31 @@
       "apiKey": "Chave de API",
       "optional": "(opcional)",
       "apiKeyPlaceholder": "Deixe em branco para manter a atual"
+    }
+  },
+  "media": {
+    "searchPlaceholder": "Buscar por nome ou tarefa",
+    "refresh": "Atualizar",
+    "loading": "Carregando imagens...",
+    "empty": "Nenhuma imagem por aqui ainda.",
+    "delete": "Excluir",
+    "openInChat": "Abrir no chat",
+    "selectedCount": "{{count}} selecionada(s)",
+    "usage": "{{count}} imagens · {{size}}",
+    "cleanupScripts": "Limpar imagens de scripts",
+    "cleanupScriptsHint": "Apaga imagens capturadas por scripts/lotes que nunca foram mostradas em um chat",
+    "source": {
+      "all": "Todas",
+      "chat": "Chat",
+      "screenshot": "Screenshot",
+      "script": "Script",
+      "batch": "Lote"
+    },
+    "period": {
+      "all": "Qualquer data",
+      "today": "24h",
+      "week": "7 dias",
+      "month": "30 dias"
     }
   }
 }

@@ -1,6 +1,6 @@
 import { create } from "zustand"
 
-export type TabType = "chat" | "terminal" | "folders" | "browser" | "diff"
+export type TabType = "chat" | "terminal" | "folders" | "browser" | "diff" | "media"
 
 export interface PanelTab {
   id: string

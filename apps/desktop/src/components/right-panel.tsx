@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { useDroppable, useDndContext } from "@dnd-kit/core"
-import { FileCode, Globe, Folder, MessageSquare, Terminal, X, PlusIcon, Bot, LoaderIcon, Loader2, XCircleIcon, Trash2, GripVertical } from "lucide-react"
+import { FileCode, Globe, Folder, Images, MessageSquare, Terminal, X, PlusIcon, Bot, LoaderIcon, Loader2, XCircleIcon, Trash2, GripVertical } from "lucide-react"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -18,6 +18,7 @@ import { BrowserTab } from "@/src/components/browser-tab"
 import { destroyWebview } from "@/src/components/browser/webview-session"
 import { FoldersTab } from "@/src/components/folders-tab"
 import { DiffTab } from "@/src/components/diff-tab"
+import { MediaGallery } from "@/src/components/media-gallery"
 import { ProcessOutputDialog } from "@/src/components/process-output-dialog"
 import { useWorkspace } from "@/lib/workspace-context"
 import { usePanelStore, nextTabId, type TabType, type PanelTab } from "@/src/stores/panel-store"
@@ -42,6 +43,7 @@ function useTabMeta(): Record<TabType, TabMeta> {
     folders: { icon: Folder, label: t("panel.tabs.folders.label"), description: t("panel.tabs.folders.description") },
     browser: { icon: Globe, label: t("panel.tabs.browser.label"), description: t("panel.tabs.browser.description") },
     diff: { icon: FileCode, label: t("panel.tabs.diff.label"), description: t("panel.tabs.diff.description") },
+    media: { icon: Images, label: t("panel.tabs.media.label"), description: t("panel.tabs.media.description") },
   }
 }
 
@@ -176,6 +178,12 @@ function TabContent({ tab, sessionId, onUpdateTab }: { tab: PanelTab; sessionId?
       return (
         <div className="flex flex-1 flex-col overflow-hidden p-4">
           <DiffTab sessionId={tab.sessionId} messageId={tab.messageId} />
+        </div>
+      )
+    case "media":
+      return (
+        <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
+          <MediaGallery />
         </div>
       )
   }

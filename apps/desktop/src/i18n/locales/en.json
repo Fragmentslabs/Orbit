@@ -586,6 +586,10 @@
       "diff": {
         "label": "Diff",
         "description": "Changes made by tools"
+      },
+      "media": {
+        "label": "Media",
+        "description": "Images produced by the agent"
       }
     }
   },
@@ -731,8 +735,6 @@
     "agentUsingBrowser": "Orbit is using the browser",
     "browserActivity": "Browser activity",
     "emptyActivity": "Agent actions will appear here.",
-    "composerPlaceholder": "Ask Orbit about this page…",
-    "composerPlaceholderNoFolder": "Select a folder in code mode to ask the AI",
     "chatFeed": "Conversation",
     "showChatFeed": "Show conversation",
     "hideChatFeed": "Hide conversation",
@@ -1423,6 +1425,31 @@
       "apiKey": "API Key",
       "optional": "(optional)",
       "apiKeyPlaceholder": "Leave blank to keep the current one"
+    }
+  },
+  "media": {
+    "searchPlaceholder": "Search by name or task",
+    "refresh": "Refresh",
+    "loading": "Loading images...",
+    "empty": "No images here yet.",
+    "delete": "Delete",
+    "openInChat": "Open in chat",
+    "selectedCount": "{{count}} selected",
+    "usage": "{{count}} images · {{size}}",
+    "cleanupScripts": "Clear script images",
+    "cleanupScriptsHint": "Deletes images captured by scripts/batches that were never shown in a chat",
+    "source": {
+      "all": "All",
+      "chat": "Chat",
+      "screenshot": "Screenshot",
+      "script": "Script",
+      "batch": "Batch"
+    },
+    "period": {
+      "all": "Any time",
+      "today": "24h",
+      "week": "7 days",
+      "month": "30 days"
     }
   }
 }
