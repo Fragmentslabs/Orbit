@@ -30,6 +30,7 @@ import { runProjectInit, type InitHooks } from './project-init'
 import { PROJECT_AREAS, type ProjectArea } from '@shared/memory'
 import { readJson, writeJson } from './storage'
 import { buildToolSet, type ToolContext, type TurnSnapshot } from './tools'
+import { verifyTurnChanges, type VerifyChangesResult } from './tools/verify-changes'
 import { addTokenUsage, toStepUsage, toTokenUsage } from './usage'
 import { messageContextText } from './todo-context'
 import { forwardChatEvent } from './companion-server'
@@ -77,17 +78,31 @@ const AUTO_CONTINUE_TOOL_PROMPT = (toolNames: string) => `[SYSTEM: the previous 
 // com teto por turno para não virar loop.
 const MAX_TODO_NUDGES = 2
 const TODO_COMPLETION_PROMPT = `[SYSTEM: your reply ended, but the last TODO list still has items marked as "in_progress". If you actually completed them, re-send the TODO list marking those items as "completed" (do NOT repeat the work summary — just update the checklist). If they are truly still not finished, say so briefly. Do not end the turn again without resolving the TODO state.]`
-// Nudge de verificação pós-escrita: o turno terminou naturalmente ('stop')
-// mas houve escrita (edit/write/bash) e nenhuma leitura/verificação depois
-// da última — o modelo concluiu sem conferir o resultado. Re-entramos no
-// loop pedindo verify_changes (mesmo padrão do todoNudge), no máximo 1x por
-// turno para não virar loop.
+// Verificação pós-escrita FORÇADA: quando o turno termina naturalmente
+// ('stop') com (a) escrita (edit/write/bash) sem leitura/verificação depois
+// da última, ou (b) NENHUMA tool chamada — o modelo respondeu "feito" sem
+// tocar no filesystem (overclaim) — o ENGINE executa verify_changes por
+// conta própria (sem depender de o modelo chamá-la), injeta o tool part na
+// mensagem e re-entra no loop com o RESULTADO REAL na synthetic user
+// message. O antigo nudge por prompt não era confiável: o modelo o ignorava
+// e concluía mesmo assim. No máximo 1x por turno para não virar loop.
 const MAX_VERIFY_NUDGES = 1
-const VERIFY_CHANGES_PROMPT = `[SYSTEM: Você usou ferramentas de escrita e não verificou o resultado. Chame verify_changes antes de concluir.]`
+const VERIFY_RESULT_PROMPT = (result: string) =>
+  `[SYSTEM: Verificação pós-escrita executada pelo motor — estado REAL do filesystem, não declaração do modelo:\n${result}\n\nAjuste sua resposta final com base NESTE resultado: se houve alterações, confirme o que foi gravado; se NÃO houve nenhuma alteração gravada, diga isso explicitamente — nunca afirme ter feito algo que não foi persistido. Não chame verify_changes novamente; apenas corrija ou confirme a sua resposta.]`
 // Ferramentas que alteram o filesystem vs. ferramentas que verificam — a
-// heurística do nudge de verificação pós-escrita (ver runChat).
+// heurística da verificação pós-escrita (ver runChat).
 const WRITE_TOOLS = new Set(['edit', 'write', 'bash'])
 const VERIFY_TOOLS = new Set(['read', 'grep', 'glob', 'verify_changes'])
+
+/** Resumo legível do resultado de verify_changes para a synthetic user message. */
+function formatVerifyResult(result: VerifyChangesResult): string {
+  const base =
+    result.changes.length === 0
+      ? 'Nenhuma alteração foi gravada neste turno.'
+      : `Arquivos alterados neste turno (${result.changes.length}):\n` +
+        result.changes.map((c) => `- ${c.state}: ${c.path} (patchSize ${c.patchSize} chars)`).join('\n')
+  return result.note ? `${base} Nota do engine: ${result.note}` : base
+}
 const abortControllers = new Map<string, AbortController>()
 // Comando bash ativo por sessão (diagnóstico): preenchido no tool-call e
 // limpo no tool-result/error — o abortChat loga o comando que estava rodando
@@ -677,6 +692,10 @@ export async function runChat(win: BrowserWindow, input: SendMessageInput): Prom
     let autoContinues = 0
     let todoNudges = 0
     let verifyNudges = 0
+    // Resultado da verificação forçada do turno (formatado) — quando presente,
+    // a próxima iteração do loop recebe o RESULTADO REAL (em vez de um pedido
+    // para chamar a tool) e a resposta final fica ancorada no que foi gravado.
+    let verifyResultText: string | null = null
     let lastFinishReason: string | undefined
     let previousResponseMessages: ModelMessage[] = []
     let truncatedToolNames = ''
@@ -694,8 +713,8 @@ export async function runChat(win: BrowserWindow, input: SendMessageInput): Prom
                   ...previousResponseMessages,
                   {
                     role: 'user' as const,
-                    content: verifyNudges > 0
-                      ? VERIFY_CHANGES_PROMPT
+                    content: verifyResultText
+                      ? VERIFY_RESULT_PROMPT(verifyResultText)
                       : todoNudges > 0
                         ? TODO_COMPLETION_PROMPT
                         : truncatedToolNames
@@ -976,33 +995,63 @@ export async function runChat(win: BrowserWindow, input: SendMessageInput): Prom
         continue
       }
 
-      // Nudge de verificação pós-escrita: o turno terminou naturalmente
-      // ('stop') mas houve escrita (edit/write/bash executadas) e nenhuma
-      // leitura/verificação (read/grep/glob/verify_changes) depois da ÚLTIMA
-      // escrita — o modelo respondeu sem conferir o resultado. Re-entra no
-      // loop com a synthetic user message pedindo verify_changes (padrão do
-      // todoNudge), no máximo 1x por turno.
+      // Verificação pós-escrita FORÇADA (anti-overclaim): o turno terminou
+      // naturalmente ('stop') mas (a) houve escrita — edit/write/bash
+      // executadas OU que falharam — sem leitura/verificação
+      // (read/grep/glob/verify_changes) depois da última, ou (b) nenhuma
+      // tool foi chamada no turno inteiro: o modelo pode estar afirmando
+      // trabalho que não aconteceu. O nudge por prompt não é confiável, então
+      // o ENGINE executa verify_changes aqui mesmo, injeta o tool part na
+      // mensagem (a UI mostra o card) e re-entra no loop com o resultado real
+      // na synthetic user message — a resposta final fica ancorada no estado
+      // de fato gravado. No máximo 1x por turno.
       const doneToolIdxs = assistantMessage.parts
         .map((p, i) => ({ p, i }))
         .filter((x): x is { p: ToolPart; i: number } => x.p.type === 'tool' && x.p.state === 'done')
-      const lastWriteIdx = [...doneToolIdxs].reverse().find((x) => WRITE_TOOLS.has(x.p.tool))?.i ?? -1
+      // Tentativas de escrita que falharam (erro/negada) também contam como
+      // escrita: o modelo pode afirmar sucesso mesmo assim — a verificação
+      // mostra a realidade, o diff não muda com a intenção.
+      const writeToolIdxs = assistantMessage.parts
+        .map((p, i) => ({ p, i }))
+        .filter(
+          (x): x is { p: ToolPart; i: number } =>
+            x.p.type === 'tool' && (x.p.state === 'done' || x.p.state === 'error') && WRITE_TOOLS.has(x.p.tool),
+        )
+        .map((x) => x.i)
+      const lastWriteIdx = writeToolIdxs.length > 0 ? Math.max(...writeToolIdxs) : -1
       const verifiedAfterLastWrite = doneToolIdxs.some(
         (x) => x.i > lastWriteIdx && VERIFY_TOOLS.has(x.p.tool),
       )
+      const anyToolRan = assistantMessage.parts.some((p) => p.type === 'tool')
       const lastPart = assistantMessage.parts[assistantMessage.parts.length - 1]
       const lastPartIsDoneText = lastPart?.type === 'text' && lastPart.state === 'done'
       if (
         lastFinishReason === 'stop' &&
         !controller.signal.aborted &&
         verifyNudges < MAX_VERIFY_NUDGES &&
-        lastWriteIdx >= 0 &&
-        !verifiedAfterLastWrite &&
-        lastPartIsDoneText
+        lastPartIsDoneText &&
+        toolContext !== null &&
+        !input.options.plan &&
+        (lastWriteIdx >= 0 ? !verifiedAfterLastWrite : !anyToolRan)
       ) {
         verifyNudges++
+        // 1) Verificação determinística — não depende de o modelo chamar a tool
+        const verifyResult = await verifyTurnChanges(toolContext)
+        // 2) Injeta o tool part na mensagem: a UI mostra o card com o resultado
+        upsertPart({
+          id: newId('call'),
+          type: 'tool',
+          tool: 'verify_changes',
+          state: 'done',
+          input: {},
+          output: JSON.stringify(verifyResult, null, 2),
+        })
+        // 3) Re-entra no loop com o RESULTADO real (não um pedido para verificar)
+        verifyResultText = formatVerifyResult(verifyResult)
         previousResponseMessages = await result.responseMessages
         continue
       }
+
       break
     }
 

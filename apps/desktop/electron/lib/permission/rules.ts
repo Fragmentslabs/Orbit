@@ -51,6 +51,12 @@ const NATIVE_TOOLS = new Set([
   'bash_output',
   // Skills
   'create_skill',
+  // Estado do turno (leitura, first-party): verify_changes confere o que foi
+  // escrito no turno; session_context traz metadados dos turnos recentes.
+  // Caíam no catch-all de MCP ("verify"/"session") e pediam permissão em
+  // toda chamada — o que fazia o modelo pular a verificação.
+  'verify_changes',
+  'session_context',
 ])
 
 const USER_RULES_FILE = () => path.join(dataDir(), 'permissions.json')
