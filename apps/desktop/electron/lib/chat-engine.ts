@@ -21,6 +21,7 @@ import { buildSystemPrompt } from './prompts'
 import { buildProviderOptions, interleavedReasoningField, normalizeMessages } from './reasoning'
 import { resolveModel } from './providers'
 import { attachMediaMessage } from './media'
+import { claimsCompletion } from './overclaim'
 import { extractPdfText } from './pdf'
 import { extractSpreadsheetText } from './xlsx'
 import { extractDocxText } from './docx'
@@ -84,11 +85,29 @@ const TODO_COMPLETION_PROMPT = `[SYSTEM: your reply ended, but the last TODO lis
 // loop pedindo verify_changes (mesmo padrão do todoNudge), no máximo 1x por
 // turno para não virar loop.
 const MAX_VERIFY_NUDGES = 1
-const VERIFY_CHANGES_PROMPT = `[SYSTEM: Você usou ferramentas de escrita e não verificou o resultado. Chame verify_changes antes de concluir.]`
+// Injeções de sistema são SEMPRE em inglês, como o resto do contexto sintético
+// (todo-context.ts) — não seguem o idioma do usuário.
+const VERIFY_CHANGES_PROMPT = `[SYSTEM: you used write tools and did not verify the result. Call verify_changes before concluding.]`
 // Ferramentas que alteram o filesystem vs. ferramentas que verificam — a
 // heurística do nudge de verificação pós-escrita (ver runChat).
 const WRITE_TOOLS = new Set(['edit', 'write', 'bash'])
 const VERIFY_TOOLS = new Set(['read', 'grep', 'glob', 'verify_changes'])
+
+/**
+ * Nudge de overclaim: o turno terminou afirmando trabalho feito, mas o
+ * snapshot prova que NENHUM arquivo mudou. É o buraco que o nudge de
+ * verificação acima não cobre — aquele exige que uma tool de escrita tenha
+ * rodado, e o overclaim clássico é justamente o turno que não chamou write
+ * nenhuma e mesmo assim relata conclusão.
+ */
+const MAX_OVERCLAIM_NUDGES = 1
+const NO_CHANGES_PROMPT = `[SYSTEM: automatic verification — NO file was modified in this turn. The filesystem snapshot taken before your response is identical to the one taken now; this is measured by the engine, not inferred. If your reply claims you created, edited, fixed, removed or refactored anything, that claim is false. Either do the work now with the write/edit tools, or correct your reply and state plainly what was NOT done and why.]`
+
+/** Veredito da comparação de snapshots do turno (ver verifyTurn em runChat). */
+type TurnVerification =
+  | { state: 'changed'; end: string; files: string[]; patch: string }
+  | { state: 'unchanged' }
+  | { state: 'unknown'; error?: string }
 const abortControllers = new Map<string, AbortController>()
 // Comando bash ativo por sessão (diagnóstico): preenchido no tool-call e
 // limpo no tool-result/error — o abortChat loga o comando que estava rodando
@@ -636,19 +655,30 @@ export async function runChat(win: BrowserWindow, input: SendMessageInput): Prom
       return
     }
 
-    // Snapshot end: estado após todas as tools + lista de arquivos alterados + diff
-    const captureEndSnapshot = async (): Promise<{ end: string; files: string[]; patch: string } | undefined> => {
+    /**
+     * Verificação de fim de turno: compara o filesystem contra o snapshot
+     * inicial. O resultado é DISCRIMINADO de propósito — antes, "nada mudou" e
+     * "a captura falhou" retornavam ambos undefined, e um erro de git ficava
+     * indistinguível de um turno que não escreveu nada. Como isso agora
+     * alimenta o registro enviado ao modelo, confundir os dois faria o engine
+     * afirmar "nenhum arquivo alterado" sem ter verificado.
+     */
+    const verifyTurn = async (): Promise<TurnVerification> => {
       const start = assistantMessage.snapshot?.start
-      if (!toolContext || !start) return
+      if (!toolContext || !start) return { state: 'unknown' }
       try {
         const end = await capture(toolContext.directory)
-        if (end === start) return
+        if (end === start) return { state: 'unchanged' }
         const changes = await diff(toolContext.directory, start, end)
-        return { end, files: changes.files, patch: changes.patch }
+        return { state: 'changed', end, files: changes.files, patch: changes.patch }
       } catch (err) {
         console.error('[snapshot] captura final falhou:', err)
+        return { state: 'unknown', error: errorToText(err) }
       }
     }
+    /** Veredito da última iteração do loop — reaproveitado após o break para
+     *  não capturar o snapshot duas vezes. */
+    let verification: TurnVerification | null = null
 
     const mode: PermissionMode = input.options.permissionMode ?? 'ask'
     const toolApproval = supportsTools
@@ -678,6 +708,7 @@ export async function runChat(win: BrowserWindow, input: SendMessageInput): Prom
     let autoContinues = 0
     let todoNudges = 0
     let verifyNudges = 0
+    let overclaimNudges = 0
     let lastFinishReason: string | undefined
     let previousResponseMessages: ModelMessage[] = []
     let truncatedToolNames = ''
@@ -687,7 +718,7 @@ export async function runChat(win: BrowserWindow, input: SendMessageInput): Prom
         model,
         system: await buildSystemPrompt(input),
         messages:
-          autoContinues === 0 && todoNudges === 0 && verifyNudges === 0
+          autoContinues === 0 && todoNudges === 0 && verifyNudges === 0 && overclaimNudges === 0
             ? initialMessages
             : normalizeMessages(
                 [
@@ -695,7 +726,9 @@ export async function runChat(win: BrowserWindow, input: SendMessageInput): Prom
                   ...previousResponseMessages,
                   {
                     role: 'user' as const,
-                    content: verifyNudges > 0
+                    content: overclaimNudges > 0
+                      ? NO_CHANGES_PROMPT
+                      : verifyNudges > 0
                       ? VERIFY_CHANGES_PROMPT
                       : todoNudges > 0
                         ? TODO_COMPLETION_PROMPT
@@ -1008,6 +1041,33 @@ export async function runChat(win: BrowserWindow, input: SendMessageInput): Prom
         previousResponseMessages = await result.responseMessages
         continue
       }
+
+      // Nudge de overclaim: a resposta afirma ter feito algo e o snapshot
+      // prova que nada foi escrito. Diferente do nudge acima, este NÃO exige
+      // que uma tool de escrita tenha rodado — cobre exatamente o caso em que
+      // o agente relata conclusão sem ter tocado em nenhum arquivo.
+      //
+      // O veredito é calculado aqui (e não depois do loop) para poder cobrar a
+      // correção ainda dentro do turno; fica guardado em `verification` e é
+      // reaproveitado no fim, sem capturar o snapshot duas vezes.
+      // Em modo plano a escrita está desligada e o entregável (PLAN.md) é
+      // gravado fora do turno — "escrevi o plano" ali não é overclaim.
+      if (lastFinishReason === 'stop' && !controller.signal.aborted && toolContext) {
+        verification = await verifyTurn()
+        if (
+          verification.state === 'unchanged' &&
+          !input.options.plan &&
+          overclaimNudges < MAX_OVERCLAIM_NUDGES &&
+          lastPartIsDoneText &&
+          claimsCompletion(partText(assistantMessage.parts, 'text'))
+        ) {
+          console.warn('[overclaim] turno alegou conclusão sem alterar arquivos', { sessionId })
+          overclaimNudges++
+          verification = null // o turno continua: o veredito atual não é o final
+          previousResponseMessages = await result.responseMessages
+          continue
+        }
+      }
       break
     }
 
@@ -1023,10 +1083,16 @@ export async function runChat(win: BrowserWindow, input: SendMessageInput): Prom
     if (hasTodoInProgress(assistantMessage.parts)) assistantMessage.todoReminder = true
     // Persiste a mensagem primeiro para que o usuário a veja o quanto antes
     await saveMessages(sessionId, history)
-    // Captura snapshot final (git diff) e salva de novo se houver mudanças
-    const endSnapshot = await captureEndSnapshot()
-    if (endSnapshot) {
-      assistantMessage.snapshot = { ...assistantMessage.snapshot!, ...endSnapshot }
+    // Veredito do turno: reaproveita o que o loop já calculou (só recaptura se
+    // o turno saiu por outro caminho — abort, teto de passos).
+    const endSnapshot = verification ?? (await verifyTurn())
+    if (assistantMessage.snapshot) {
+      assistantMessage.snapshot.verified = endSnapshot.state
+      if (endSnapshot.state === 'changed') {
+        assistantMessage.snapshot.end = endSnapshot.end
+        assistantMessage.snapshot.files = endSnapshot.files
+        assistantMessage.snapshot.patch = endSnapshot.patch
+      }
       await saveMessages(sessionId, history)
     }
 
