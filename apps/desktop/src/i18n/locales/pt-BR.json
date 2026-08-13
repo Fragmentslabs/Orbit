@@ -1473,8 +1473,6 @@
     "falhas": "Falhas",
     "commits": "Commits",
     "tempoTotal": "Tempo total",
-    "novaTaskPlaceholder": "Título da nova task...",
-    "adicionar": "Adicionar",
     "iniciar": "Iniciar",
     "pausar": "Pausar",
     "retomar": "Retomar",
@@ -1525,8 +1523,6 @@
     "faseCapacidades": "Capacidades",
     "salvarComoPadrao": "Salvar como padrão",
     "salvarNestaEsteira": "Salvar nesta esteira",
-    "pushLigado": "Faz push da branch ao final",
-    "pushDesligado": "Não faz push ao final (commits locais)",
     "capacidade": {
       "leitura": "Leitura",
       "edit": "Edição",
@@ -1534,9 +1530,6 @@
       "browser": "Browser",
       "memoria": "Memória"
     },
-    "faseFixaDica": "Sempre a última fase — é ela que escreve o relatório final da task",
-    "printsLigado": "Captura prints do resultado visual",
-    "printsDesligado": "Não captura prints do resultado",
     "arquivosAlterados_one": "{{count}} arquivo alterado",
     "arquivosAlterados_other": "{{count}} arquivos alterados",
     "fase": {
@@ -1564,6 +1557,22 @@
         "nome": "Infra",
         "descricao": "Checklist de deploy e ambiente"
       }
-    }
+    },
+    "push": "Fazer push ao finalizar",
+    "prints": "Capturar prints do resultado",
+    "editarEsteira": "Editar esteira",
+    "salvar": "Salvar",
+    "novaTask": "Nova task",
+    "criarTask": "Criar task",
+    "taskTitulo": "Título",
+    "taskTituloExemplo": "ex.: Corrigir login no mobile",
+    "taskDescricao": "Descrição",
+    "taskDescricaoDica": "O briefing completo que as fases recebem — a task roda sem chat, então o que não estiver aqui não chega ao agente.",
+    "taskDependencias": "Depende de",
+    "taskDependenciasDica": "Esta task só inicia depois que as selecionadas concluírem.",
+    "selecioneDependencias": "Nenhuma — inicia livremente",
+    "semTasksParaDependencia": "Ainda não há outra task nesta esteira",
+    "buscarTask": "Buscar task...",
+    "nenhumaTask": "Nenhuma task encontrada"
   }
 }

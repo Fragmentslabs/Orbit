@@ -1,14 +1,20 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { DndContext, PointerSensor, useDroppable, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core"
-import { ArrowLeftIcon, FolderIcon, LayersIcon, PlayIcon, PlusIcon, SquareIcon, Trash2Icon } from "lucide-react"
+import { ArrowLeftIcon, FolderIcon, LayersIcon, MoreHorizontalIcon, PencilIcon, PlayIcon, PlusIcon, SquareIcon, Trash2Icon } from "lucide-react"
 import type { Esteira, Task } from "@shared/esteira"
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
 import { esteiraApi } from "@/src/lib/ipc"
 import { SEM_TASKS, useEsteiraStore } from "@/src/stores/esteira-store"
 import { cn } from "@/lib/utils"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import { EsteiraCreateDialog } from "./esteira-create-dialog"
+import { TaskCreateDialog } from "./task-create-dialog"
 import { EsteiraFooter } from "./esteira-footer"
 import { TaskCard } from "./task-card"
 import { TaskModal } from "./task-modal"
@@ -144,8 +150,8 @@ function BoardDaEsteira({ esteira, onVoltar }: { esteira: Esteira; onVoltar: () 
   const tasks = useEsteiraStore((s) => s.tasksPorEsteira[esteira.id] ?? SEM_TASKS)
   const filaLigada = useEsteiraStore((s) => s.filasLigadas[esteira.id] ?? false)
   const [taskAberta, setTaskAberta] = useState<string | null>(null)
-  const [adicionando, setAdicionando] = useState(false)
-  const [novaTask, setNovaTask] = useState("")
+  const [criarTaskAberto, setCriarTaskAberto] = useState(false)
+  const [editarAberto, setEditarAberto] = useState(false)
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }))
 
@@ -163,13 +169,6 @@ function BoardDaEsteira({ esteira, onVoltar }: { esteira: Esteira; onVoltar: () 
     [esteira, iniciarTask],
   )
 
-  const criarTask = async () => {
-    const titulo = novaTask.trim()
-    if (!titulo) return
-    setNovaTask("")
-    setAdicionando(false)
-    await criarTaskNoStore(esteira.id, titulo, "")
-  }
 
   const colunas = useMemo(
     () => [
@@ -207,7 +206,7 @@ function BoardDaEsteira({ esteira, onVoltar }: { esteira: Esteira; onVoltar: () 
         </div>
 
         <div className="ml-auto flex items-center gap-2">
-          <Button size="sm" onClick={() => setAdicionando(true)}>
+          <Button size="sm" onClick={() => setCriarTaskAberto(true)}>
             <PlusIcon className="size-4" />
             {t("esteira.adicionarTarefa")}
           </Button>
@@ -223,43 +222,31 @@ function BoardDaEsteira({ esteira, onVoltar }: { esteira: Esteira; onVoltar: () 
             {filaLigada ? <SquareIcon className="size-3.5" /> : <PlayIcon className="size-3.5" />}
             {filaLigada ? t("esteira.filaLigada") : t("esteira.filaDesligada")}
           </button>
-          <button
-            type="button"
-            onClick={() => {
-              if (confirm(t("esteira.confirmarRemocao", { nome: esteira.nome }))) {
-                void removerEsteira(esteira.id)
-                onVoltar()
-              }
-            }}
-            title={t("esteira.removerEsteira")}
-            className="flex size-8 items-center justify-center rounded-md text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
-          >
-            <Trash2Icon className="size-3.5" />
-          </button>
+          <DropdownMenu>
+            <DropdownMenuTrigger className="flex size-8 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground">
+              <MoreHorizontalIcon className="size-4" />
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="min-w-40">
+              <DropdownMenuItem onClick={() => setEditarAberto(true)}>
+                <PencilIcon className="size-3.5" />
+                {t("esteira.editarEsteira")}
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                variant="destructive"
+                onClick={() => {
+                  if (confirm(t("esteira.confirmarRemocao", { nome: esteira.nome }))) {
+                    void removerEsteira(esteira.id)
+                    onVoltar()
+                  }
+                }}
+              >
+                <Trash2Icon className="size-3.5" />
+                {t("esteira.removerEsteira")}
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </div>
-
-      {adicionando && (
-        <div className="flex shrink-0 gap-2 pb-3">
-          <Input
-            autoFocus
-            value={novaTask}
-            onChange={(e) => setNovaTask(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") void criarTask()
-              if (e.key === "Escape") setAdicionando(false)
-            }}
-            placeholder={t("esteira.novaTaskPlaceholder")}
-            className="h-8 max-w-md text-xs"
-          />
-          <Button size="sm" variant="secondary" disabled={!novaTask.trim()} onClick={() => void criarTask()}>
-            {t("esteira.adicionar")}
-          </Button>
-          <Button size="sm" variant="ghost" onClick={() => setAdicionando(false)}>
-            {t("common.cancel")}
-          </Button>
-        </div>
-      )}
 
       <DndContext sensors={sensors} onDragEnd={aoSoltar}>
         <div className="flex min-h-0 flex-1 gap-3 overflow-x-auto pb-2">
@@ -277,6 +264,21 @@ function BoardDaEsteira({ esteira, onVoltar }: { esteira: Esteira; onVoltar: () 
       </DndContext>
 
       <EsteiraFooter esteira={esteira} tasks={tasks} />
+
+      <TaskCreateDialog
+        aberto={criarTaskAberto}
+        onOpenChange={setCriarTaskAberto}
+        tasks={tasks}
+        onCriar={({ titulo, descricao, dependeDe }) =>
+          criarTaskNoStore(esteira.id, titulo, descricao, dependeDe).then(() => undefined)
+        }
+      />
+
+      <EsteiraCreateDialog
+        aberto={editarAberto}
+        onOpenChange={setEditarAberto}
+        editando={esteira}
+      />
 
       <TaskModal
         esteira={esteira}

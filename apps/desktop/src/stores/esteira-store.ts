@@ -41,7 +41,7 @@ interface EsteiraState {
   atualizarEsteira: (id: string, patch: Partial<Esteira>) => Promise<void>
   removerEsteira: (id: string) => Promise<void>
 
-  criarTask: (esteiraId: string, titulo: string, descricao: string) => Promise<Task>
+  criarTask: (esteiraId: string, titulo: string, descricao: string, dependeDe?: string[]) => Promise<Task>
   atualizarTask: (esteiraId: string, taskId: string, patch: Partial<Task>) => Promise<void>
   removerTask: (esteiraId: string, taskId: string) => Promise<void>
   iniciarTask: (esteiraId: string, taskId: string, fase?: number) => Promise<void>
@@ -170,7 +170,8 @@ export const useEsteiraStore = create<EsteiraState>((set, get) => ({
     })
   },
 
-  criarTask: (esteiraId, titulo, descricao) => esteiraApi.criarTask({ esteiraId, titulo, descricao }),
+  criarTask: (esteiraId, titulo, descricao, dependeDe) =>
+    esteiraApi.criarTask({ esteiraId, titulo, descricao, dependeDe }),
   atualizarTask: async (esteiraId, taskId, patch) => {
     await esteiraApi.atualizarTask(esteiraId, taskId, patch)
   },

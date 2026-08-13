@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { DndContext, PointerSensor, useDraggable, useDroppable, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core"
-import { GripVerticalIcon, LockIcon, PencilIcon, PlusIcon, XIcon } from "lucide-react"
-import type { FaseEscolhida, FaseTemplate } from "@shared/esteira"
+import { GripVerticalIcon, PencilIcon, PlusIcon, XIcon } from "lucide-react"
+import type { Esteira, FaseEscolhida, FaseTemplate } from "@shared/esteira"
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
+import { Switch } from "@/components/ui/switch"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -35,6 +36,7 @@ export function EsteiraCreateDialog({
   onOpenChange,
   projetoId,
   onCriada,
+  editando: esteiraEmEdicao,
 }: {
   aberto: boolean
   onOpenChange: (aberto: boolean) => void
@@ -42,6 +44,8 @@ export function EsteiraCreateDialog({
   projetoId?: string
   /** Abre a esteira recém-criada direto no board */
   onCriada?: (esteiraId: string) => void
+  /** Esteira existente — o mesmo modal vira edição */
+  editando?: Esteira | null
 }) {
   const { t } = useTranslation()
   const criarProjeto = useEsteiraStore((s) => s.criarProjeto)
@@ -58,7 +62,11 @@ export function EsteiraCreateDialog({
   const [salvando, setSalvando] = useState(false)
   const [editando, setEditando] = useState<{ indice: number | null; fase: FaseEscolhida | null } | null>(null)
 
-  const projetoExistente = useEsteiraStore((s) => s.projetos.find((p) => p.id === projetoId))
+  const atualizarEsteira = useEsteiraStore((s) => s.atualizarEsteira)
+  const atualizarProjeto = useEsteiraStore((s) => s.atualizarProjeto)
+  const esteiraEditando = esteiraEmEdicao ?? null
+  const projetoAlvo = esteiraEditando?.projetoId ?? projetoId
+  const projetoExistente = useEsteiraStore((s) => s.projetos.find((p) => p.id === projetoAlvo))
 
   // Fases embutidas tem nome/descricao traduzidos (o prompt segue em ingles,
   // como o resto dos prompts do app). As do usuario usam o que ele escreveu.
@@ -78,18 +86,35 @@ export function EsteiraCreateDialog({
   // atrás do "+" para o modal não abrir com uma parede de opções.
   useEffect(() => {
     if (!aberto) return
-    setNome("")
     setPastas(projetoExistente?.pastas ?? [])
+    if (esteiraEditando) {
+      setNome(esteiraEditando.nome)
+      setPushAoFinal(esteiraEditando.pushAoFinal)
+      setPrints(!!esteiraEditando.printsDoResultado)
+      // Edição parte das fases REAIS da esteira (já são cópias, D4), não dos
+      // templates: o usuário pode tê-las editado só para esta pipeline.
+      setFases(
+        esteiraEditando.fases
+          .filter((f) => !templates.some((tpl) => tpl.fixa && tpl.nome === f.nome))
+          .map((f) => ({
+            templateId: templates.find((tpl) => tpl.nome === f.nome)?.id,
+            nome: f.nome,
+            descricao: f.descricao,
+            prompt: f.prompt,
+            tools: [...f.tools],
+          })),
+      )
+      return
+    }
+    setNome("")
     setPushAoFinal(false)
     setPrints(false)
     setFases(templates.filter((tpl) => tpl.padrao && !tpl.fixa).map(doTemplate))
-  }, [aberto, templates, projetoExistente])
+  }, [aberto, templates, projetoExistente, esteiraEditando])
 
   const disponiveis = templates.filter(
     (tpl) => !tpl.fixa && !fases.some((f) => f.templateId === tpl.id),
   )
-  /** Fase obrigatória de fechamento: mostrada travada, sempre por último. */
-  const fixa = templates.find((tpl) => tpl.fixa)
 
   const mover = useCallback((de: number, para: number) => {
     setFases((atual) => {
@@ -134,6 +159,32 @@ export function EsteiraCreateDialog({
     if (!podeCriar || salvando || !modelo) return
     setSalvando(true)
     try {
+      if (esteiraEditando) {
+        // Edição não recria a esteira: mantém id, tasks e histórico. As fases
+        // viram FaseConfig preservando o modelo já configurado por fase.
+        await atualizarEsteira(esteiraEditando.id, {
+          nome: nome.trim(),
+          pushAoFinal,
+          printsDoResultado: prints,
+          fases: fases.map((fase, ordem) => {
+            const anterior = esteiraEditando.fases[ordem]
+            return {
+              id: anterior?.id ?? `fase_${ordem}_${Date.now().toString(36)}`,
+              nome: fase.nome,
+              descricao: fase.descricao,
+              prompt: fase.prompt,
+              providerId: anterior?.providerId ?? modelo.providerId,
+              modelId: anterior?.modelId ?? modelo.modelId,
+              thinkingNivel: anterior?.thinkingNivel ?? 0,
+              tools: [...fase.tools],
+              ordem,
+            }
+          }),
+        })
+        if (projetoAlvo) await atualizarProjeto(projetoAlvo, { pastas })
+        onOpenChange(false)
+        return
+      }
       // O projeto (D1) é o dono das pastas. Como o fluxo é "criar esteira e
       // escolher o repositório", ele nasce junto, com o mesmo nome.
       const alvo = projetoId ?? (await criarProjeto(nome.trim(), pastas)).id
@@ -162,7 +213,7 @@ export function EsteiraCreateDialog({
     <>
       <Dialog open={aberto} onOpenChange={onOpenChange}>
         <DialogContent className="max-w-2xl">
-          <DialogTitle>{t("esteira.novaEsteira")}</DialogTitle>
+          <DialogTitle>{esteiraEditando ? t("esteira.editarEsteira") : t("esteira.novaEsteira")}</DialogTitle>
 
           <div className="max-h-[70vh] space-y-4 overflow-y-auto pr-1">
             <Campo rotulo={t("esteira.nomeEsteira")}>
@@ -207,16 +258,6 @@ export function EsteiraCreateDialog({
                 </div>
               </DndContext>
 
-              {fixa && (
-                <div className="mt-1 flex items-center gap-2 rounded-md border border-dashed px-2 py-1.5 opacity-80">
-                  <LockIcon className="size-3 shrink-0 text-muted-foreground" />
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-xs font-medium">{rotulo(fixa).nome}</p>
-                    <p className="truncate text-[11px] text-muted-foreground">{t("esteira.faseFixaDica")}</p>
-                  </div>
-                </div>
-              )}
-
               <div className="mt-1.5">
                 <DropdownMenu>
                   <DropdownMenuTrigger
@@ -229,8 +270,8 @@ export function EsteiraCreateDialog({
                     {disponiveis.map((tpl) => (
                       <DropdownMenuItem key={tpl.id} onClick={() => setFases((atual) => [...atual, doTemplate(tpl)])}>
                         <div className="min-w-0">
-                          <p className="truncate text-xs">{tpl.nome}</p>
-                          <p className="truncate text-[10px] text-muted-foreground">{tpl.descricao}</p>
+                          <p className="truncate text-xs">{rotulo(tpl).nome}</p>
+                          <p className="truncate text-[10px] text-muted-foreground">{rotulo(tpl).descricao}</p>
                         </div>
                       </DropdownMenuItem>
                     ))}
@@ -245,18 +286,14 @@ export function EsteiraCreateDialog({
             </Campo>
 
             <div className="space-y-2">
-              <div className="flex items-center gap-2">
-                <Switch ativo={pushAoFinal} onToggle={() => setPushAoFinal((v) => !v)} />
-                <span className="text-xs text-foreground">
-                  {pushAoFinal ? t("esteira.pushLigado") : t("esteira.pushDesligado")}
-                </span>
-              </div>
-              <div className="flex items-center gap-2">
-                <Switch ativo={prints} onToggle={() => setPrints((v) => !v)} />
-                <span className="text-xs text-foreground">
-                  {prints ? t("esteira.printsLigado") : t("esteira.printsDesligado")}
-                </span>
-              </div>
+              <label className="flex cursor-pointer items-center gap-2">
+                <Switch checked={pushAoFinal} onCheckedChange={setPushAoFinal} />
+                <span className="text-xs text-foreground">{t("esteira.push")}</span>
+              </label>
+              <label className="flex cursor-pointer items-center gap-2">
+                <Switch checked={prints} onCheckedChange={setPrints} />
+                <span className="text-xs text-foreground">{t("esteira.prints")}</span>
+              </label>
             </div>
           </div>
 
@@ -265,7 +302,7 @@ export function EsteiraCreateDialog({
               {t("common.cancel")}
             </Button>
             <Button size="sm" disabled={!podeCriar || salvando} onClick={() => void criar()}>
-              {t("esteira.criar")}
+              {esteiraEditando ? t("esteira.salvar") : t("esteira.criar")}
             </Button>
           </div>
         </DialogContent>
@@ -289,29 +326,6 @@ function Campo({ rotulo, dica, children }: { rotulo: string; dica?: string; chil
       {dica && <p className="text-[11px] text-muted-foreground">{dica}</p>}
       {children}
     </div>
-  )
-}
-
-/** Switch simples — não há componente de switch no design system do app. */
-function Switch({ ativo, onToggle }: { ativo: boolean; onToggle: () => void }) {
-  return (
-    <button
-      type="button"
-      role="switch"
-      aria-checked={ativo}
-      onClick={onToggle}
-      className={cn(
-        "relative h-4 w-7 shrink-0 rounded-full transition-colors",
-        ativo ? "bg-primary" : "bg-muted-foreground/30",
-      )}
-    >
-      <span
-        className={cn(
-          "absolute top-0.5 size-3 rounded-full bg-background transition-transform",
-          ativo ? "translate-x-3.5" : "translate-x-0.5",
-        )}
-      />
-    </button>
   )
 }
 

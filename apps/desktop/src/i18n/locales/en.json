@@ -1473,8 +1473,6 @@
     "falhas": "Failed",
     "commits": "Commits",
     "tempoTotal": "Total time",
-    "novaTaskPlaceholder": "New task title...",
-    "adicionar": "Add",
     "iniciar": "Start",
     "pausar": "Pause",
     "retomar": "Resume",
@@ -1525,8 +1523,6 @@
     "faseCapacidades": "Capabilities",
     "salvarComoPadrao": "Save as default",
     "salvarNestaEsteira": "Save in this pipeline",
-    "pushLigado": "Pushes the branch at the end",
-    "pushDesligado": "Does not push at the end (local commits)",
     "capacidade": {
       "leitura": "Read",
       "edit": "Edit",
@@ -1534,9 +1530,6 @@
       "browser": "Browser",
       "memoria": "Memory"
     },
-    "faseFixaDica": "Always the last phase — it writes the task's final report",
-    "printsLigado": "Captures screenshots of the visual result",
-    "printsDesligado": "Does not capture screenshots of the result",
     "arquivosAlterados_one": "{{count}} file changed",
     "arquivosAlterados_other": "{{count}} files changed",
     "fase": {
@@ -1564,6 +1557,22 @@
         "nome": "Infra",
         "descricao": "Deploy and environment checklist"
       }
-    }
+    },
+    "push": "Push the branch when finishing",
+    "prints": "Capture screenshots of the result",
+    "editarEsteira": "Edit pipeline",
+    "salvar": "Save",
+    "novaTask": "New task",
+    "criarTask": "Create task",
+    "taskTitulo": "Title",
+    "taskTituloExemplo": "e.g. Fix login on mobile",
+    "taskDescricao": "Description",
+    "taskDescricaoDica": "The full brief the phases receive — the task runs without a chat, so what is not here never reaches the agent.",
+    "taskDependencias": "Depends on",
+    "taskDependenciasDica": "This task only starts after the selected ones are done.",
+    "selecioneDependencias": "None — starts right away",
+    "semTasksParaDependencia": "No other task in this pipeline yet",
+    "buscarTask": "Search task...",
+    "nenhumaTask": "No task found"
   }
 }
