@@ -853,7 +853,7 @@ function FolderItem({ folder, sessions, childrenByParent = {} }: {
 }) {
   const { t } = useTranslation()
   const [expanded, setExpanded] = useState(() => loadExpandedFolders()[folder.id] ?? false)
-  const { mode, setFolders } = useWorkspace()
+  const { mode, setFolders, setView } = useWorkspace()
   const renameFolder = useSessionStore((s) => s.renameFolder)
   const toggleFolderPin = useSessionStore((s) => s.toggleFolderPin)
   const deleteFolder = useSessionStore((s) => s.deleteFolder)
@@ -913,9 +913,10 @@ function FolderItem({ folder, sessions, childrenByParent = {} }: {
           <button
             onClick={(e) => {
               e.stopPropagation()
-              // Novo chat na pasta: a sessão só é criada ao enviar a 1ª mensagem.
-              // Herda as pastas de trabalho do chat mais recente da pasta e guarda
-              // a pasta para a criação futura (evita a "Nova sessão de código" em branco).
+              // Novo chat na pasta: volta para a tela de conversa (o "+" também
+              // é clicável fora do chat, ex.: na página Esteira) e a sessão só é
+              // criada ao enviar a 1ª mensagem.
+              setView("chat")
               const mostRecent = sessions
                 .filter((s) => s.folderId === folder.id)
                 .reduce<SessionInfo | undefined>(
