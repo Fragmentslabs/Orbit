@@ -32,6 +32,10 @@ const NATIVE_TOOLS = new Set([
   'panel_resize',
   'panel_screenshot',
   'show_image',
+  // Automação em lote na engine oculta (mesmo threat model do bash: o agente
+  // já executa código arbitrário; o script roda isolado num utilityProcess)
+  'run_browser_script',
+  'capture_batch',
   // Browser do modo chat (toggle "Browser") — tools nativas do toggle,
   // não MCP; caíam no catch-all "_" e pediam permissão como servidor "browser"
   'browser_open',

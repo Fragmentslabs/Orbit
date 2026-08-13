@@ -2,6 +2,7 @@ import type { ToolSet } from 'ai'
 import type { SendMessageInput } from '@shared/chat'
 import { getMcpTools } from '../mcp'
 import { createBrowserLinksTool, createBrowserOpenTool } from './browser'
+import { createBrowserScriptTools } from './browser-script'
 import type { ToolContext } from './context'
 import {
   createEditTool,
@@ -96,6 +97,8 @@ export function buildToolSet(input: SendMessageInput, ctx: ToolContext | null): 
   // Workers ficam de fora — o painel é um recurso único e visível.
   if (ctx && input.orchestrationRole !== 'worker') {
     Object.assign(tools, createPanelBrowserTools(ctx))
+    // Automação em lote: roda numa janela oculta, sem disputar o painel.
+    Object.assign(tools, createBrowserScriptTools(ctx))
   }
   if (allowBrain && ctx) {
     Object.assign(tools, createCodeMemoryTools(input, ctx))

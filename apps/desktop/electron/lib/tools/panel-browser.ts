@@ -2,9 +2,11 @@ import { tool, type ToolSet } from 'ai'
 import fsp from 'node:fs/promises'
 import path from 'node:path'
 import { z } from 'zod'
-import { saveMedia } from '../media'
+import { getMediaEntry, mediaIdFromUrl, saveMedia } from '../media'
+import { captureUrl } from '../browser-script'
 import {
   panelClick,
+  panelCurrentUrl,
   panelNavigate,
   panelRead,
   panelResize,
@@ -32,7 +34,7 @@ const VIEWPORT_PRESETS: Record<string, { width: number | null; height: number | 
  * por toolCallId para não inflar o histórico persistido.
  */
 
-const screenshotStash = new Map<string, string>()
+const screenshotStash = new Map<string, { base64: string; format: 'webp' | 'png' }>()
 
 export function createPanelBrowserTools(ctx: ToolContext): ToolSet {
   return {
@@ -95,44 +97,81 @@ export function createPanelBrowserTools(ctx: ToolContext): ToolSet {
     }),
     panel_screenshot: tool({
       description:
-        'Takes a screenshot of the panel page and SEES it as an image. With savePath, also saves the WebP to the working folder (e.g.: docs/login/screen.webp) — use in documentation mode. With fullscreen, expands to full screen, captures the whole screen, and returns to the side view.',
+        'Takes a screenshot of the panel page and SEES it as an image. With savePath, also saves it to the working folder (e.g.: docs/login/screen.webp) — use in documentation mode. With fullscreen, expands to full screen, captures, and returns to the side view. With fullPage, captures the WHOLE page (beyond the viewport) in a hidden window, without touching the panel; format: png gives a high-resolution image for documentation.',
       inputSchema: z.object({
         savePath: z
           .string()
           .optional()
-          .describe('Path relative to the working folder to save the WebP (optional)'),
+          .describe('Path relative to the working folder to save the image (optional)'),
         fullscreen: z
           .boolean()
           .optional()
           .describe('Captures full screen (bigger shot) and returns to the side view'),
+        fullPage: z
+          .boolean()
+          .optional()
+          .describe('Captures the whole page (scroll included) in a hidden window'),
+        format: z.enum(['webp', 'png']).optional().describe('Default webp; png for documentation'),
+        maxWidth: z
+          .number()
+          .int()
+          .min(320)
+          .max(3840)
+          .optional()
+          .describe('Maximum width in px (default 1024 — raise it only for documentation)'),
       }) as any,
-      execute: async ({ savePath, fullscreen }, { toolCallId }) => {
-        const webp = await panelScreenshot(ctx.sessionId, fullscreen === true)
-        screenshotStash.set(toolCallId, webp.toString('base64'))
+      execute: async ({ savePath, fullscreen, fullPage, format, maxWidth }, { toolCallId }) => {
+        const outFormat: 'webp' | 'png' = format === 'png' ? 'png' : 'webp'
+        let image: Buffer
+        if (fullPage) {
+          // Página inteira: nunca redimensionamos o webview visível (piscaria a
+          // UI). Capturamos numa janela oculta com a MESMA URL e sessão.
+          const url = panelCurrentUrl(ctx.sessionId)
+          if (!url) return 'O browser do painel não tem uma página aberta — use panel_navigate antes.'
+          image = await captureUrl({
+            url,
+            sessionId: ctx.sessionId,
+            fullPage: true,
+            format: outFormat,
+            maxWidth,
+          })
+        } else {
+          image = await panelScreenshot(ctx.sessionId, fullscreen === true, {
+            format: outFormat,
+            maxWidth,
+          })
+        }
+        screenshotStash.set(toolCallId, { base64: image.toString('base64'), format: outFormat })
+        await saveMedia(image, outFormat, {
+          source: 'screenshot',
+          sessionId: ctx.sessionId,
+          name: savePath ?? (fullPage ? 'fullPage' : 'panel'),
+        })
         let saved = ''
         if (savePath) {
-          const saveName = savePath.replace(/\.[^/.]+$/, '') + '.webp'
+          const saveName = savePath.replace(/\.[^/.]+$/, '') + `.${outFormat}`
           const target = resolveSafePath(ctx, saveName)
           await fsp.mkdir(path.dirname(target), { recursive: true })
-          await fsp.writeFile(target, webp)
+          await fsp.writeFile(target, image)
           saved = ` Salvo em ${saveName}.`
         }
-        return `Screenshot capturado (${Math.round(webp.length / 1024)}KB).${saved}`
+        return `Screenshot capturado (${Math.round(image.length / 1024)}KB${fullPage ? ', página inteira' : ''}).${saved}`
       },
       toModelOutput: ({ toolCallId, output }) => {
-        const base64 = screenshotStash.get(toolCallId)
+        const stashed = screenshotStash.get(toolCallId)
         screenshotStash.delete(toolCallId)
-        if (!base64) return { type: 'text', value: String(output) }
+        if (!stashed) return { type: 'text', value: String(output) }
+        const { base64, format } = stashed
         const raw = Buffer.from(base64, 'base64')
         const parts: ({ type: 'text'; text: string } | { type: 'image-data'; data: string; mediaType: string })[] = [
           { type: 'text', text: String(output) },
         ]
         if (raw.length <= MAX_MODEL_IMAGE_BYTES) {
-          parts.push({ type: 'image-data', data: base64, mediaType: 'image/webp' })
+          parts.push({ type: 'image-data', data: base64, mediaType: `image/${format}` })
         } else {
           parts.push({
             type: 'text',
-            text: `[Screenshot omitido: ${Math.round(raw.length / 1024)}KB — excede o limite de ${Math.round(MAX_MODEL_IMAGE_BYTES / 1024)}KB. O print foi salvo em disco se savePath foi informado.]`,
+            text: `[Screenshot omitido: ${Math.round(raw.length / 1024)}KB — excede o limite de ${Math.round(MAX_MODEL_IMAGE_BYTES / 1024)}KB. A imagem está salva na galeria de mídia (e em disco, se savePath foi informado).]`,
           })
         }
         return { type: 'content', value: parts }
@@ -140,16 +179,32 @@ export function createPanelBrowserTools(ctx: ToolContext): ToolSet {
     }),
     show_image: tool({
       description:
-        'Includes an image IN YOUR RESPONSE, visible to the user in the chat. Use fromPanel to attach a current screenshot of the panel browser, or path for an image in the working folder (e.g.: docs/login/screen.webp). The image appears at the point in the response where the tool was called — don\'t over-describe it afterward.',
+        'Includes an image IN YOUR RESPONSE, visible to the user in the chat. Use fromPanel to attach a current screenshot of the panel browser, media for an image already captured by run_browser_script/capture_batch (orbit-media:// URL from the manifest), or path for an image in the working folder (e.g.: docs/login/screen.webp). The image appears at the point in the response where the tool was called — don\'t over-describe it afterward.',
       inputSchema: z.object({
         fromPanel: z.boolean().optional().describe('Captures the panel browser now and attaches it'),
+        media: z
+          .string()
+          .optional()
+          .describe('orbit-media:// URL returned by run_browser_script/capture_batch'),
         path: z
           .string()
           .optional()
           .describe('Relative path to an existing image in the working folder (png/jpg/webp/gif)'),
         alt: z.string().optional().describe('Short caption shown under the image'),
       }),
-      execute: async ({ fromPanel, path: imagePath, alt }) => {
+      execute: async ({ fromPanel, media, path: imagePath, alt }) => {
+        // Imagem já registrada (capturada por script/lote): reaproveita a URL,
+        // sem duplicar o arquivo no disco.
+        if (media) {
+          const entry = mediaIdFromUrl(media)
+          if (!entry) return `URL de mídia inválida: ${media}`
+          if (!(await getMediaEntry(entry))) return `Imagem não encontrada no registro: ${media}`
+          return {
+            mediaUrl: `orbit-media://${entry}`,
+            alt: alt ?? '',
+            message: 'Imagem anexada à resposta — o usuário já a vê no chat.',
+          }
+        }
         let buffer: Buffer
         let ext: string
         if (fromPanel) {
@@ -162,9 +217,13 @@ export function createPanelBrowserTools(ctx: ToolContext): ToolSet {
           }
           buffer = await fsp.readFile(resolveSafePath(ctx, imagePath))
         } else {
-          return 'Informe fromPanel ou path.'
+          return 'Informe fromPanel, media ou path.'
         }
-        const mediaUrl = await saveMedia(buffer, ext)
+        const mediaUrl = await saveMedia(buffer, ext, {
+          source: 'chat',
+          sessionId: ctx.sessionId,
+          name: alt || (imagePath ? path.basename(imagePath) : 'panel'),
+        })
         return {
           mediaUrl,
           alt: alt ?? '',
