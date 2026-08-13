@@ -106,7 +106,7 @@ export async function panelResize(
   label: string,
 ): Promise<string> {
   await ensurePanelBrowser(sessionId)
-  activity(`Redimensionando para ${label}`)
+  activity(`Redimensionando para ${label}`, sessionId)
   broadcastPanelEvent({ type: 'resize', width, height, label })
   await delay(700) // deixa o layout refluir na nova largura
   return width
@@ -122,7 +122,7 @@ export async function panelFullscreen(on: boolean): Promise<void> {
 
 export async function panelNavigate(sessionId: string, url: string): Promise<{ title: string; url: string }> {
   const wc = await ensurePanelBrowser(sessionId, url)
-  activity(`Navegando para ${url}`)
+  activity(`Navegando para ${url}`, sessionId)
   try {
     await Promise.race([wc.loadURL(url), delay(LOAD_TIMEOUT_MS)])
   } catch (err) {
@@ -171,7 +171,7 @@ const READ_SCRIPT = `(() => {
 
 export async function panelRead(sessionId: string): Promise<string> {
   const wc = await ensurePanelBrowser(sessionId)
-  activity('Lendo a página')
+  activity('Lendo a página', sessionId)
   const result = (await wc.executeJavaScript(READ_SCRIPT)) as {
     title: string
     url: string
@@ -217,7 +217,7 @@ export async function panelType(
   pressEnter?: boolean,
 ): Promise<string> {
   const wc = await ensurePanelBrowser(sessionId)
-  activity('Digitando…')
+  activity('Digitando…', sessionId)
   const outcome = (await wc.executeJavaScript(`(() => {
     const el = ${findScript(ref, selector)}
     if (!el) return null
@@ -257,7 +257,7 @@ export async function panelScreenshot(
   options?: { format?: 'webp' | 'png'; maxWidth?: number },
 ): Promise<Buffer> {
   const wc = await ensurePanelBrowser(sessionId)
-  activity('Capturando a tela')
+  activity('Capturando a tela', sessionId)
   const capture = async (defaultWidth: number) => {
     const maxWidth = options?.maxWidth ?? defaultWidth
     const image = await wc.capturePage()

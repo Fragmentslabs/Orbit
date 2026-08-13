@@ -1491,6 +1491,8 @@
     "confirmarRemocao": "Delete the pipeline \"{{nome}}\" and its tasks?",
     "descricao": "Description",
     "semAnotacao": "This phase has not run yet.",
+    "executando": "Running…",
+    "iniciando": "Starting the phase…",
     "comandosControlados": "Recorded commands",
     "criadaEm": "Created",
     "concluidaEm": "Finished",

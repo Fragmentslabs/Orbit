@@ -1,11 +1,13 @@
 import { useEffect, useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
-import { AlertTriangleIcon, CheckIcon, FileDiffIcon, PauseIcon, PlayIcon, PlusIcon, Trash2Icon, XIcon } from "lucide-react"
+import { AlertTriangleIcon, CheckIcon, FileDiffIcon, LoaderIcon, PauseIcon, PlayIcon, PlusIcon, Trash2Icon, XIcon } from "lucide-react"
 import type { Esteira, Task } from "@shared/esteira"
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog"
 import { ConfirmDialog } from "@/components/ui/alert-dialog"
 import { Input } from "@/components/ui/input"
-import { AssistantMarkdown } from "@/src/components/messages/shared"
+import { AssistantMarkdown, GenericToolView, ReasoningPartView } from "@/src/components/messages/shared"
+import { Shimmer } from "@/src/components/ai/shimmer"
+import { BrowserTestChip } from "@/src/components/browser-test-chip"
 import { MediaEmbed } from "./media-embed"
 import { SEM_TASKS, useEsteiraStore } from "@/src/stores/esteira-store"
 import { usePanelStore } from "@/src/stores/panel-store"
@@ -200,6 +202,12 @@ export function TaskModal({
               {(() => {
                 const fase = esteira.fases[faseAtiva]
                 const anotacao = fase ? anotacaoPorFase.get(fase.id) : undefined
+                // Fase em execução: mostra o agente rodando ao vivo (pensamento,
+                // ferramentas, browser) em vez do placeholder.
+                const executando = fase && task.status === "em_progresso" && task.faseAtual === faseAtiva
+                if (executando) {
+                  return <ExecucaoViva taskId={task.id} faseIndice={faseAtiva} />
+                }
                 if (!anotacao) {
                   return <p className="text-xs text-muted-foreground">{t("esteira.semAnotacao")}</p>
                 }
@@ -325,6 +333,60 @@ export function TaskModal({
         />
       </DialogContent>
     </Dialog>
+  )
+}
+
+/**
+ * Execução ao vivo da fase (modal): chips de status (Executando + browser do
+ * agente), pensamento (reasoning) em streaming e as chamadas de ferramenta —
+ * o mesmo vocabulário visual da conversa. Ao concluir, a task atualiza e o
+ * modal volta a mostrar a anotação (resposta final).
+ */
+function ExecucaoViva({ taskId, faseIndice }: { taskId: string; faseIndice: number }) {
+  const { t } = useTranslation()
+  const atividade = useEsteiraStore((s) => s.atividade[taskId])
+  const atual = atividade && atividade.faseIndice === faseIndice ? atividade : null
+
+  const vazio = !atual || (atual.pensando.length === 0 && atual.tools.length === 0)
+
+  return (
+    <div className="flex flex-col gap-2">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="inline-flex items-center gap-1.5 self-start rounded-full border border-primary/30 bg-background/90 px-2.5 py-1 text-[11px] font-medium text-primary shadow-sm">
+          <LoaderIcon className="size-3.5 shrink-0 animate-spin" />
+          <Shimmer>{t("esteira.executando")}</Shimmer>
+        </span>
+        <BrowserTestChip sessionId={`esteira_${taskId}`} />
+      </div>
+
+      {vazio && <p className="text-xs text-muted-foreground">{t("esteira.iniciando")}</p>}
+
+      {atual && atual.pensando.length > 0 && (
+        <ReasoningPartView
+          part={{ id: "pensando", type: "reasoning", text: atual.pensando, state: "streaming" }}
+        />
+      )}
+
+      {atual?.tools.map((ferramenta) => (
+        <GenericToolView
+          key={ferramenta.toolCallId}
+          part={{
+            id: ferramenta.toolCallId,
+            type: "tool",
+            tool: ferramenta.tool,
+            state:
+              ferramenta.estado === "rodando"
+                ? "running"
+                : ferramenta.estado === "erro"
+                  ? "error"
+                  : "done",
+            error: ferramenta.detalhe,
+          }}
+          label={ferramenta.tool}
+          subtitle={ferramenta.resumo || undefined}
+        />
+      ))}
+    </div>
   )
 }
 

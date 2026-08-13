@@ -6,7 +6,7 @@ import { ESTEIRA_RETRY_PADRAO } from '@shared/esteira'
 import { capture, diff } from '../snapshot'
 import { userShellEnv } from '../shell-env'
 import { criaCiclo, dependenciasPendentes } from './contrato'
-import { executarFase } from './runner'
+import { executarFase, type ToolProgress } from './runner'
 import { atualizarTask, listarEsteiras, listarProjetos, listarTasks, salvarTasks } from './repo'
 
 const execFileAsync = promisify(execFile)
@@ -148,6 +148,26 @@ async function rodarTask(esteiraId: string, taskId: string, retomandoInterrompid
       }
 
       const iniciadoEm = agora()
+      // Feed ao vivo da fase: texto, pensamento e ferramentas vão para a UI
+      // pelo mesmo canal dos eventos de estado (o modal mostra a execução).
+      const progresso = (faseIndice: number) => ({
+        onTexto: (texto: string) =>
+          emitir({ type: 'fase-progresso', esteiraId, taskId, faseIndice, texto }),
+        onPensando: (texto: string) =>
+          emitir({ type: 'fase-pensando', esteiraId, taskId, faseIndice, texto }),
+        onFerramenta: (t: ToolProgress) =>
+          emitir({
+            type: 'fase-tool',
+            esteiraId,
+            taskId,
+            faseIndice,
+            toolCallId: t.toolCallId,
+            tool: t.tool,
+            estado: t.estado,
+            resumo: t.resumo,
+            detalhe: t.detalhe,
+          }),
+      })
       let resultado = await executarFase({
         esteira,
         task,
@@ -158,8 +178,7 @@ async function rodarTask(esteiraId: string, taskId: string, retomandoInterrompid
         // Só na primeira fase depois de retomar: a interrupção foi nela.
         interrompidaAntes: retomandoInterrompida && task.anotacoes.length === indice,
         abort: controller.signal,
-        onTexto: (texto) =>
-          emitir({ type: 'fase-progresso', esteiraId, taskId, faseIndice: indice, texto }),
+        ...progresso(indice),
       })
 
       // Retry: cada tentativa recebe o erro da anterior para atacar a causa.
@@ -174,8 +193,7 @@ async function rodarTask(esteiraId: string, taskId: string, retomandoInterrompid
           tentativa,
           erroAnterior: resultado.erro,
           abort: controller.signal,
-          onTexto: (texto) =>
-            emitir({ type: 'fase-progresso', esteiraId, taskId, faseIndice: indice, texto }),
+          ...progresso(indice),
         })
       }
 

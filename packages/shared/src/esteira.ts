@@ -202,6 +202,20 @@ export type EsteiraEvent =
   | { type: 'projetos'; projetos: Projeto[] }
   /** Progresso textual da fase em execução (feed ao vivo no card) */
   | { type: 'fase-progresso'; esteiraId: string; taskId: string; faseIndice: number; texto: string }
+  /** Pensamento do modelo (reasoning) da fase em execução, delta por delta */
+  | { type: 'fase-pensando'; esteiraId: string; taskId: string; faseIndice: number; texto: string }
+  /** Chamada de ferramenta da fase em execução (início e fim) */
+  | {
+      type: 'fase-tool'
+      esteiraId: string
+      taskId: string
+      faseIndice: number
+      toolCallId: string
+      tool: string
+      estado: 'rodando' | 'concluida' | 'erro'
+      resumo: string
+      detalhe?: string
+    }
 
 /** Entrada de criação de task — usada pela UI e pelas tools de chat. */
 export interface NovaTaskInput {

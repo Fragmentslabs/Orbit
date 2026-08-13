@@ -21,6 +21,8 @@ interface EsteiraState {
   filasLigadas: Record<string, boolean>
   /** Texto ao vivo da fase em execução, por task */
   progresso: Record<string, string>
+  /** Execução ao vivo por task: pensamento (reasoning) + ferramentas */
+  atividade: Record<string, AtividadeTask>
   carregado: boolean
   /** Esteira aberta no board (null = lista). O header do app lê daqui para
    *  só mostrar pasta/branch depois que uma esteira foi escolhida. */
@@ -62,6 +64,20 @@ interface EsteiraState {
  */
 export const SEM_TASKS: Task[] = []
 
+interface AtividadeTool {
+  toolCallId: string
+  tool: string
+  estado: "rodando" | "concluida" | "erro"
+  resumo: string
+  detalhe?: string
+}
+
+interface AtividadeTask {
+  faseIndice: number
+  pensando: string
+  tools: AtividadeTool[]
+}
+
 export const useEsteiraStore = create<EsteiraState>((set, get) => ({
   projetos: [],
   esteiras: [],
@@ -69,6 +85,7 @@ export const useEsteiraStore = create<EsteiraState>((set, get) => ({
   templates: [],
   filasLigadas: {},
   progresso: {},
+  atividade: {},
   carregado: false,
   abertaId: null,
   setAberta: (id) => set({ abertaId: id }),
@@ -103,6 +120,12 @@ export const useEsteiraStore = create<EsteiraState>((set, get) => ({
         set((state) => {
           const atuais = state.tasksPorEsteira[evento.esteiraId] ?? []
           const existe = atuais.some((t) => t.id === evento.task.id)
+          // Task parou de rodar (concluída/pausada): a atividade ao vivo
+          // perde o sentido — o modal volta a mostrar as anotações.
+          const atividade =
+            evento.task.status !== "em_progresso" && state.atividade[evento.task.id]
+              ? Object.fromEntries(Object.entries(state.atividade).filter(([id]) => id !== evento.task.id))
+              : state.atividade
           return {
             tasksPorEsteira: {
               ...state.tasksPorEsteira,
@@ -110,6 +133,7 @@ export const useEsteiraStore = create<EsteiraState>((set, get) => ({
                 ? atuais.map((t) => (t.id === evento.task.id ? evento.task : t))
                 : [...atuais, evento.task],
             },
+            atividade,
           }
         })
         break
@@ -127,6 +151,44 @@ export const useEsteiraStore = create<EsteiraState>((set, get) => ({
             ...Object.fromEntries(Object.entries(state.progresso).filter(([id]) => id !== evento.taskId)),
           },
         }))
+        break
+      case "fase-pensando":
+        set((state) => {
+          const atual = state.atividade[evento.taskId]
+          const base = atual && atual.faseIndice === evento.faseIndice ? atual : { faseIndice: evento.faseIndice, pensando: "", tools: [] }
+          return {
+            atividade: {
+              ...state.atividade,
+              [evento.taskId]: {
+                ...base,
+                pensando: (base.pensando + evento.texto).slice(-1200),
+              },
+            },
+          }
+        })
+        break
+      case "fase-tool":
+        set((state) => {
+          const atual = state.atividade[evento.taskId]
+          const base = atual && atual.faseIndice === evento.faseIndice ? atual : { faseIndice: evento.faseIndice, pensando: "", tools: [] }
+          const tools = [...base.tools]
+          const indice = tools.findIndex((t) => t.toolCallId === evento.toolCallId)
+          const nova: AtividadeTool = {
+            toolCallId: evento.toolCallId,
+            tool: evento.tool,
+            estado: evento.estado,
+            resumo: evento.resumo,
+            detalhe: evento.detalhe,
+          }
+          if (indice >= 0) tools[indice] = nova
+          else tools.push(nova)
+          return {
+            atividade: {
+              ...state.atividade,
+              [evento.taskId]: { ...base, tools: tools.slice(-40) },
+            },
+          }
+        })
         break
     }
   },

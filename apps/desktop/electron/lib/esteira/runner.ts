@@ -52,6 +52,18 @@ export interface ContextoFase {
   abort: AbortSignal
   /** Feed ao vivo do texto do agente (UI mostra no card) */
   onTexto?: (delta: string) => void
+  /** Feed ao vivo do pensamento (reasoning) do modelo, delta por delta */
+  onPensando?: (delta: string) => void
+  /** Feed ao vivo das chamadas de ferramenta (início e conclusão) */
+  onFerramenta?: (progresso: ToolProgress) => void
+}
+
+export interface ToolProgress {
+  toolCallId: string
+  tool: string
+  estado: 'rodando' | 'concluida' | 'erro'
+  resumo: string
+  detalhe?: string
 }
 
 export interface ResultadoFase {
@@ -217,6 +229,51 @@ function montarMensagem(ctx: ContextoFase): string {
   return partes.join('\n')
 }
 
+/** Resumo curto do input de uma tool para o feed ao vivo do modal. */
+function resumirTool(tool: string, input: unknown): string {
+  const args = (input ?? {}) as Record<string, unknown>
+  const curto = (v: unknown): string => {
+    const s = typeof v === 'string' ? v : JSON.stringify(v)
+    if (!s) return ''
+    return s.length > 80 ? `${s.slice(0, 77)}…` : s
+  }
+  switch (tool) {
+    case 'bash':
+      return `$ ${curto(args.command)}`
+    case 'read':
+    case 'write':
+    case 'edit':
+      return curto(args.filePath)
+    case 'glob':
+    case 'grep':
+      return curto(args.pattern)
+    case 'ls':
+      return curto(args.dirPath)
+    case 'panel_navigate':
+      return curto(args.url)
+    case 'panel_click':
+      return args.ref != null ? `ref ${args.ref}` : curto(args.selector)
+    case 'panel_type':
+      return args.ref != null ? `ref ${args.ref}: ${curto(args.text)}` : curto(args.selector)
+    case 'panel_resize':
+      return curto(args.preset ?? (args.width ? `${args.width}×${args.height}` : 'fit'))
+    case 'panel_screenshot':
+      if (args.fullPage === true) return 'página inteira'
+      if (typeof args.savePath === 'string') return curto(args.savePath)
+      return args.ver === true ? 'ver: true' : ''
+    case 'capture_batch': {
+      const steps = Array.isArray(args.steps) ? args.steps.length : 0
+      return `${steps} captura(s)`
+    }
+    case 'run_browser_script':
+      return curto(args.taskId)
+    case 'commit':
+      return curto(args.message)
+    default:
+      return curto(args)
+  }
+}
+
 export async function executarFase(ctx: ContextoFase): Promise<ResultadoFase> {
   const comandosControlados: string[] = []
   const provider = await getProvider(ctx.fase.providerId)
@@ -258,6 +315,28 @@ export async function executarFase(ctx: ContextoFase): Promise<ResultadoFase> {
       if (parte.type === 'text-delta') {
         texto += parte.text
         ctx.onTexto?.(parte.text)
+      } else if (parte.type === 'reasoning-delta') {
+        ctx.onPensando?.(parte.text)
+      } else if (parte.type === 'tool-call') {
+        ctx.onFerramenta?.({
+          toolCallId: parte.toolCallId,
+          tool: parte.toolName,
+          estado: 'rodando',
+          resumo: resumirTool(parte.toolName, parte.input),
+        })
+      } else if (parte.type === 'tool-result') {
+        const comErro = (parte as { isError?: boolean }).isError === true
+        ctx.onFerramenta?.({
+          toolCallId: parte.toolCallId,
+          tool: parte.toolName,
+          estado: comErro ? 'erro' : 'concluida',
+          resumo: resumirTool(parte.toolName, (parte as { args?: unknown }).args),
+          detalhe: comErro
+            ? typeof parte.output === 'string'
+              ? parte.output
+              : JSON.stringify(parte.output, null, 2)
+            : undefined,
+        })
       } else if (parte.type === 'error') {
         const detalhe = parte.error instanceof Error ? parte.error.message : String(parte.error)
         return { texto, comandosControlados, tokens: 0, custo: 0, erro: detalhe }

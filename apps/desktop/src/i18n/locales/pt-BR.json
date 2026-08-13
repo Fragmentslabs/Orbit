@@ -1491,6 +1491,8 @@
     "confirmarRemocao": "Excluir a esteira \"{{nome}}\" e suas tasks?",
     "descricao": "Descrição",
     "semAnotacao": "Esta fase ainda não rodou.",
+    "executando": "Executando…",
+    "iniciando": "Iniciando a fase…",
     "comandosControlados": "Comandos registrados",
     "criadaEm": "Criada em",
     "concluidaEm": "Concluída em",
