@@ -15,6 +15,7 @@ import { ChatHeader } from "@/src/components/chat-header"
 import { ChatView } from "@/src/components/chat-view"
 import { MemoriesView } from "@/src/components/memories/memories-view"
 import { ModelsView } from "@/src/components/models/models-view"
+import { EsteiraBoard } from "@/src/components/esteira/esteira-board"
 import { RightPanel, RightPanelDropZone } from "@/src/components/right-panel"
 import { TitleBar } from "@/src/components/titlebar"
 import { ChatSearch } from "@/src/components/chat-search"
@@ -241,7 +242,9 @@ function Layout() {
                       ? t("sidebar.memories")
                       : view === "models"
                         ? t("header.models")
-                        : activeSession?.title ?? (workspaceMode === "chat" ? t("header.newChat") : t("header.newCode"))
+                        : view === "esteira"
+                          ? t("esteira.titulo")
+                          : activeSession?.title ?? (workspaceMode === "chat" ? t("header.newChat") : t("header.newCode"))
                   }
                   hasMenu={view === "chat" && workspaceMode === "chat" && !!activeSession}
                   session={view === "chat" && workspaceMode === "chat" ? activeSession : undefined}
@@ -255,7 +258,15 @@ function Layout() {
                   onFoldersChange={workspaceMode === "code" ? setFolders : undefined}
                 />
                 <div className="flex min-w-0 flex-1 flex-col overflow-hidden p-4" style={{ '--panel-bg': 'var(--background)' } as React.CSSProperties}>
-                  {view === "memories" ? <MemoriesView /> : view === "models" ? <ModelsView /> : <ChatView />}
+                  {view === "memories" ? (
+                    <MemoriesView />
+                  ) : view === "models" ? (
+                    <ModelsView />
+                  ) : view === "esteira" ? (
+                    <EsteiraBoard />
+                  ) : (
+                    <ChatView />
+                  )}
                 </div>
               </main>
           </Panel>

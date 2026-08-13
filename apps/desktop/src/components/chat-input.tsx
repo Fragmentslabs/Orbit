@@ -1,6 +1,6 @@
 import { useCallback, useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
-import { AlignLeft, BrainCircuit, Globe, PlusIcon, Search } from "lucide-react"
+import { AlignLeft, BrainCircuit, Globe, Layers, PlusIcon, Search } from "lucide-react"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -57,6 +57,8 @@ export function ChatInput({ onSubmit, status, onStop, sessionId }: {
   const { t } = useTranslation()
   const [search, setSearch] = useState(false)
   const [browser, setBrowser] = useState(false)
+  // Esteira: expõe as tools de board (criar task a partir do que foi discutido)
+  const [esteira, setEsteira] = useState(false)
   const simple = useSimpleMode(sessionId)
   const setSimple = useSimplePrefs((s) => s.setEnabled)
   const brain = useBrainEnabled(sessionId)
@@ -87,16 +89,18 @@ export function ChatInput({ onSubmit, status, onStop, sessionId }: {
     { icon: Globe, label: t("input.modes.browser.label"), active: browser, onChange: (v: boolean) => setBrowser(v) },
     { icon: AlignLeft, label: t("input.modes.simple.label"), active: simple, onChange: (v: boolean) => setSimple(sessionId, v) },
     { icon: BrainCircuit, label: t("input.modes.brain.label"), active: brain, onChange: (v: boolean) => setBrainEnabled(sessionId, v) },
-  ], [search, browser, simple, brain, sessionId, setBrainEnabled, setSimple, t])
+    { icon: Layers, label: t("input.modes.esteira.label"), active: esteira, onChange: (v: boolean) => setEsteira(v) },
+  ], [search, browser, simple, brain, esteira, sessionId, setBrainEnabled, setSimple, t])
 
   const buildOptions = useCallback((): SendMessageOptions => ({
     research: search,
     browser,
     simple,
     brain,
+    esteira,
     brainContext: brainContext === "all" ? true : brainContext === "memory" ? brain : false,
     reasoning: { enabled: thinking, variantId },
-  }), [search, browser, simple, brain, brainContext, thinking, variantId])
+  }), [search, browser, simple, brain, esteira, brainContext, thinking, variantId])
 
   const slashCommands = useMemo<SlashCommand[]>(() => {
     const toggle = (fn: () => void) => ({ setText }: { setText: (t: string) => void }) => {

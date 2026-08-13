@@ -6,6 +6,7 @@
 export * from './analytics'
 export * from './chat'
 export * from './companion'
+export * from './esteira'
 export * from './mcp'
 export * from './media'
 export * from './memory'

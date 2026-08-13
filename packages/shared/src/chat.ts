@@ -327,6 +327,9 @@ export interface SendMessageOptions {
   subagents?: boolean
   /** Modo Brain: memória persistente (ferramentas memory_* ) */
   brain?: boolean
+  /** Modo Esteira: expõe as tools de board (listar esteiras, criar task).
+   *  Segue a regra do chat — capacidade só aparece com o toggle ligado. */
+  esteira?: boolean
   /** Injeta memórias relevantes automaticamente no prompt */
   brainContext?: boolean
   /** Modo Orchestra: divide em plano de tarefas + workers em sessões filhas */

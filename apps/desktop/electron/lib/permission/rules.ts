@@ -53,6 +53,10 @@ const NATIVE_TOOLS = new Set([
   'bash_list',
   'bash_kill',
   'bash_output',
+  // Esteira (board de tasks)
+  'esteira_list',
+  'esteira_create_task',
+  'esteira_task_status',
   // Skills
   'create_skill',
 ])

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
-import { AlignLeft, Bot, BrainCircuit, FileText, MousePointerClick, Network, PlusIcon, RefreshCw, Search, X } from "lucide-react"
+import { AlignLeft, Bot, BrainCircuit, FileText, Layers, MousePointerClick, Network, PlusIcon, RefreshCw, Search, X } from "lucide-react"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -74,6 +74,8 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId }: 
   const [subagents, setSubagents] = useState(false)
   const [orchestra, setOrchestra] = useState(false)
   const [loop, setLoop] = useState(false)
+  // Esteira: tools de board (criar task a partir do que foi discutido no chat)
+  const [esteira, setEsteira] = useState(false)
   const { mode } = useWorkspace()
   // Orquestração é exclusiva do modo code
   useEffect(() => { if (mode === "chat") setOrchestra(false) }, [mode])
@@ -115,13 +117,14 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId }: 
     research: search,
     simple,
     brain,
+    esteira,
     brainContext: brainContext === "all" ? true : brainContext === "memory" ? brain : false,
     permissionMode,
     reasoning: { enabled: thinking, variantId },
     subagents,
     orchestrate: orchestra && mode === "code" ? {} : undefined,
     loop,
-  }), [plan, search, simple, brain, brainContext, permissionMode, thinking, variantId, subagents, orchestra, loop])
+  }), [plan, search, simple, brain, esteira, brainContext, permissionMode, thinking, variantId, subagents, orchestra, loop])
 
   const getDirs = useCallback(() => {
     const [directory, ...extraDirectories] = folders
@@ -135,6 +138,7 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId }: 
     { icon: FileText, label: t("codeInput.modes.plan.label"), active: plan, onChange: (v: boolean) => setPlan(v) },
     { icon: AlignLeft, label: t("input.modes.simple.label"), active: simple, onChange: (v: boolean) => setSimple(sessionId, v) },
     { icon: BrainCircuit, label: t("input.modes.brain.label"), active: brain, onChange: (v: boolean) => setBrainEnabled(sessionId, v) },
+    { icon: Layers, label: t("input.modes.esteira.label"), active: esteira, onChange: (v: boolean) => setEsteira(v) },
   ], [search, plan, simple, brain, sessionId, setBrainEnabled, setSimple, t])
 
   const handleSubmit = useCallback((message: { text?: string; files?: { mediaType?: string; filename?: string; url?: string }[] }) => {

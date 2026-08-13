@@ -22,6 +22,7 @@ import {
   Undo2,
   X,
   ClipboardPaste,
+  Layers,
 } from "lucide-react"
 
 import {
@@ -165,6 +166,10 @@ function HamburgerMenu() {
             <DropdownMenuItem onClick={() => setView("models")}>
               <PanelRightOpen className="size-4" />
               {t("header.models")}
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => setView("esteira")}>
+              <Layers className="size-4" />
+              {t("esteira.titulo")}
             </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem onClick={() => windowApi.toggleFullscreen()}>

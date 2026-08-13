@@ -75,6 +75,10 @@
       },
       "thinking": {
         "label": "Thinking"
+      },
+      "esteira": {
+        "label": "Esteira",
+        "description": "Create tasks in a board from this conversation"
       }
     },
     "slash": {
@@ -1450,6 +1454,72 @@
       "today": "24h",
       "week": "7 days",
       "month": "30 days"
+    }
+  },
+  "esteira": {
+    "titulo": "Esteira",
+    "carregando": "Loading board...",
+    "vazioTitulo": "No boards yet",
+    "vazioSubtitulo": "Create a project and a pipeline to run tasks phase by phase, without chats.",
+    "semEsteiras": "This project has no pipelines yet.",
+    "novaEsteira": "New pipeline",
+    "criar": "Create",
+    "nomeProjeto": "Project name",
+    "nomeEsteira": "Pipeline name",
+    "nomeExemplo": "e.g. Features",
+    "pastas": "Folders",
+    "pastasDica": "Working folders, same as in chat",
+    "modeloPadrao": "Default model",
+    "modeloDica": "Propagated to every phase; each phase can be changed later",
+    "fases": "Phases",
+    "fasesDica": "Copied from the system templates — editing the pipeline never changes the master",
+    "branch": "Branch",
+    "branchDica": "All tasks in this pipeline work on this branch",
+    "branchAtual": "Current branch",
+    "retries": "Retries",
+    "retriesDica": "Attempts per phase before pausing",
+    "push": "Push",
+    "pushDica": "Off by default: commits stay local",
+    "pushAoFinal": "Push at the end",
+    "pendentes": "Pending",
+    "concluidas": "Done",
+    "emAndamento": "Running",
+    "falhas": "Failed",
+    "commits": "Commits",
+    "tempoTotal": "Total time",
+    "novaTaskPlaceholder": "New task title...",
+    "adicionar": "Add",
+    "iniciar": "Start",
+    "pausar": "Pause",
+    "retomar": "Resume",
+    "pausada": "Paused",
+    "erro": "Error",
+    "pausadaPorErro": "Task paused after failing the phase",
+    "filaLigada": "Auto queue on",
+    "filaDesligada": "Auto queue off",
+    "filaDica": "Runs pending tasks one at a time, respecting dependencies",
+    "removerEsteira": "Delete pipeline",
+    "confirmarRemocao": "Delete the pipeline \"{{nome}}\" and its tasks?",
+    "descricao": "Description",
+    "semAnotacao": "This phase has not run yet.",
+    "comandosControlados": "Recorded commands",
+    "criadaEm": "Created",
+    "concluidaEm": "Finished",
+    "tempoTrabalho": "Work time",
+    "tokens": "Tokens",
+    "custo": "Cost",
+    "dependenciasTitulo": "Dependencies",
+    "semDependencias": "None",
+    "adicionarDependencia": "add dependency",
+    "selecioneTask": "Select a task...",
+    "dependencias_one": "{{count}} dependency",
+    "dependencias_other": "{{count}} dependencies",
+    "excluirTask": "Delete task",
+    "status": {
+      "pendente": "Pending",
+      "em_progresso": "Running",
+      "pausada": "Paused",
+      "concluida": "Done"
     }
   }
 }

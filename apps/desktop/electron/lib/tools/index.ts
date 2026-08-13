@@ -3,6 +3,7 @@ import type { SendMessageInput } from '@shared/chat'
 import { getMcpTools } from '../mcp'
 import { createBrowserLinksTool, createBrowserOpenTool } from './browser'
 import { createBrowserScriptTools } from './browser-script'
+import { createEsteiraTools } from './esteira'
 import type { ToolContext } from './context'
 import {
   createEditTool,
@@ -58,6 +59,8 @@ export function buildToolSet(input: SendMessageInput, ctx: ToolContext | null): 
       tools.browser_links = createBrowserLinksTool(input.sessionId)
     }
     if (allowBrain) Object.assign(tools, createChatMemoryTools(input))
+    // Esteira: transformar o que foi discutido no chat em task de um board.
+    if (input.options.esteira) Object.assign(tools, createEsteiraTools(input.sessionId))
     if (allowDelegation) tools.subagent = createSubagentTool(input, ctx)
     // Fluxo explícito /create-skill: habilita só a tool de propor skill
     if (input.orchestrationRole !== 'worker' && input.text.trimStart().startsWith('/create-skill')) {
@@ -104,6 +107,7 @@ export function buildToolSet(input: SendMessageInput, ctx: ToolContext | null): 
     Object.assign(tools, createCodeMemoryTools(input, ctx))
     tools.memory_graph = createGraphTool(input, ctx)
   }
+  if (input.options.esteira) Object.assign(tools, createEsteiraTools(input.sessionId))
   if (allowQuestion) tools.question = createQuestionTool(input, ctx?.abort)
   if (allowDelegation) tools.subagent = createSubagentTool(input, ctx)
 
