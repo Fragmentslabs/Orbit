@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { cn } from "@/lib/utils"
+import { MediaEmbed } from "./media-embed"
 
 /**
  * Modal de nova task: título, descrição e dependências.
@@ -76,6 +77,7 @@ export function TaskCreateDialog({
               rows={6}
               className="w-full resize-y rounded-md border bg-transparent px-2 py-1.5 text-xs outline-none focus-visible:border-ring"
             />
+            <MediaEmbed texto={descricao} />
           </div>
 
           <div className="space-y-1">

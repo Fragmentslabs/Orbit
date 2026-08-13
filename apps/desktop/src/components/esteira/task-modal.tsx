@@ -5,6 +5,7 @@ import type { Esteira, Task } from "@shared/esteira"
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { AssistantMarkdown } from "@/src/components/messages/shared"
+import { MediaEmbed } from "./media-embed"
 import { SEM_TASKS, useEsteiraStore } from "@/src/stores/esteira-store"
 import { usePanelStore } from "@/src/stores/panel-store"
 import { cn } from "@/lib/utils"
@@ -103,7 +104,7 @@ export function TaskModal({
             <button
               type="button"
               onClick={() => void retomarTask(esteira.id, task.id)}
-              className="shrink-0 rounded-md bg-destructive px-2.5 py-1 text-[11px] font-medium text-destructive-foreground hover:bg-destructive/90"
+              className="shrink-0 rounded-md bg-destructive px-3 py-1.5 text-[11px] font-medium text-destructive-foreground hover:bg-destructive/90"
             >
               {t("esteira.retomar")}
             </button>
@@ -115,7 +116,7 @@ export function TaskModal({
             value={titulo}
             onChange={(e) => setTitulo(e.target.value)}
             onBlur={() => titulo !== task.titulo && salvarCampo({ titulo })}
-            className="h-8 flex-1 border-0 bg-transparent px-0 text-base font-semibold shadow-none focus-visible:ring-0"
+            className="h-8 flex-1 border-0 bg-transparent px-1.5 text-base font-semibold shadow-none focus-visible:ring-0"
           />
           <span className="shrink-0 rounded-full bg-muted px-2 py-0.5 text-[11px] text-muted-foreground">
             {t(`esteira.status.${task.status}`)}
@@ -152,6 +153,9 @@ export function TaskModal({
                 rows={3}
                 className="w-full resize-none rounded-md border bg-transparent px-2 py-1.5 text-xs outline-none focus-visible:border-ring"
               />
+              {/* URLs orbit-media:// coladas na descrição viram imagens (o texto
+                  continua sendo a fonte de verdade para as fases) */}
+              <MediaEmbed texto={descricao} />
             </div>
 
             <div className="flex shrink-0 gap-1 overflow-x-auto border-b">
@@ -291,7 +295,7 @@ export function TaskModal({
               void removerTask(esteira.id, task.id)
               onOpenChange(false)
             }}
-            className="ml-auto flex items-center gap-1 rounded-md px-2 py-1 text-xs text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+            className="ml-auto flex items-center gap-1 rounded-md px-3 py-1.5 text-xs text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
           >
             <Trash2Icon className="size-3.5" />
             {t("esteira.excluirTask")}
@@ -316,7 +320,7 @@ function BotaoAcao({ icone, rotulo, onClick }: { icone: React.ReactNode; rotulo:
     <button
       type="button"
       onClick={onClick}
-      className="flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-xs hover:bg-accent"
+      className="flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-xs hover:bg-accent"
     >
       {icone}
       {rotulo}
