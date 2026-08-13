@@ -50,7 +50,7 @@ import type { ChatEvent } from '@shared/chat'
 import { StorageKeys } from '@shared/chat'
 import * as esteira from './lib/esteira'
 import type { MediaFilter } from '@shared/media'
-import type { NovaTaskInput } from '@shared/esteira'
+import type { FaseTemplate, NovaTaskInput } from '@shared/esteira'
 import type { Memory, MemoryEvent } from '@shared/memory'
 
 const execFileAsync = promisify(execFile)
@@ -1136,6 +1136,8 @@ app.whenReady().then(() => {
   // As mutações voltam ao renderer por 'esteira:event' (o engine emite).
   ipcMain.handle('esteira:carregar', () => esteira.carregarTudo())
   ipcMain.handle('esteira:templates', () => esteira.listarTemplates())
+  ipcMain.handle('esteira:salvarTemplate', (_e, template: FaseTemplate) => esteira.salvarTemplate(template))
+  ipcMain.handle('esteira:removerTemplate', (_e, id: string) => esteira.removerTemplate(id))
   ipcMain.handle('esteira:criarProjeto', (_e, nome: string, pastas: string[]) =>
     esteira.criarProjeto(nome, pastas),
   )

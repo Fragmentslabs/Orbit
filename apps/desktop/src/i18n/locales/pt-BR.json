@@ -1467,14 +1467,6 @@
     "modeloDica": "Propagado para todas as fases; cada fase pode ser trocada depois",
     "fases": "Fases",
     "fasesDica": "Copiadas dos templates do sistema — editar a esteira não altera o mestre",
-    "branch": "Branch",
-    "branchDica": "Todas as tasks da esteira trabalham nesta branch",
-    "branchAtual": "Branch atual",
-    "retries": "Retries",
-    "retriesDica": "Tentativas por fase antes de pausar",
-    "push": "Push",
-    "pushDica": "Desligado por padrão: os commits ficam locais",
-    "pushAoFinal": "Push ao final",
     "pendentes": "Pendentes",
     "concluidas": "Concluídas",
     "emAndamento": "Em andamento",
@@ -1520,6 +1512,27 @@
     "repositorioPrincipal": "Repositório principal",
     "voltar": "Voltar para a lista",
     "adicionarTarefa": "Adicionar tarefa",
-    "tasksResumo": "{{concluidas}}/{{total}} tasks"
+    "tasksResumo": "{{concluidas}}/{{total}} tasks",
+    "adicionarFase": "Adicionar fase",
+    "criarFase": "Criar minha própria fase",
+    "editarFase": "Editar fase",
+    "novaFase": "Nova fase",
+    "faseNome": "Nome",
+    "faseDescricao": "Descrição",
+    "faseDescricaoDica": "Uma linha — aparece na lista da esteira",
+    "fasePrompt": "Prompt",
+    "fasePromptDica": "Instruções para o agente nesta fase, incluindo o que ele deve registrar na anotação.",
+    "faseCapacidades": "Capacidades",
+    "salvarComoPadrao": "Salvar como padrão",
+    "salvarNestaEsteira": "Salvar nesta esteira",
+    "pushLigado": "Faz push da branch ao final",
+    "pushDesligado": "Não faz push ao final (commits locais)",
+    "capacidade": {
+      "leitura": "Leitura",
+      "edit": "Edição",
+      "shell": "Shell",
+      "browser": "Browser",
+      "memoria": "Memória"
+    }
   }
 }

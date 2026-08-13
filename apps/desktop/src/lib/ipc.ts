@@ -11,6 +11,7 @@ import type { MediaEntry, MediaFilter, MediaUsage } from "@shared/media"
 import type {
   Esteira,
   EsteiraEvent,
+  FaseEscolhida,
   FaseTemplate,
   NovaTaskInput,
   Projeto,
@@ -226,6 +227,10 @@ export const esteiraApi = {
       tasksPorEsteira: Record<string, Task[]>
     }>,
   templates: () => window.ipcRenderer.invoke("esteira:templates") as Promise<FaseTemplate[]>,
+  salvarTemplate: (template: FaseTemplate) =>
+    window.ipcRenderer.invoke("esteira:salvarTemplate", template) as Promise<FaseTemplate[]>,
+  removerTemplate: (id: string) =>
+    window.ipcRenderer.invoke("esteira:removerTemplate", id) as Promise<FaseTemplate[]>,
   criarProjeto: (nome: string, pastas: string[]) =>
     window.ipcRenderer.invoke("esteira:criarProjeto", nome, pastas) as Promise<Projeto>,
   atualizarProjeto: (id: string, patch: Partial<Pick<Projeto, "nome" | "pastas">>) =>
@@ -260,13 +265,15 @@ export const esteiraApi = {
 export interface NovaEsteiraInput {
   projetoId: string
   nome: string
-  templateIds: string[]
+  /** Fases resolvidas (podem ter sido editadas só para esta esteira) */
+  fases?: FaseEscolhida[]
+  /** Alternativa simples: ids de template na ordem desejada */
+  templateIds?: string[]
   providerId: string
   modelId: string
   thinkingNivel?: number
   branch?: string
   worktree?: string
-  retryCount?: number
   pushAoFinal?: boolean
   modoOperacao?: "manual" | "automatico"
 }

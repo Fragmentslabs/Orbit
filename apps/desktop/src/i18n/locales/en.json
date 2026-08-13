@@ -1467,14 +1467,6 @@
     "modeloDica": "Propagated to every phase; each phase can be changed later",
     "fases": "Phases",
     "fasesDica": "Copied from the system templates — editing the pipeline never changes the master",
-    "branch": "Branch",
-    "branchDica": "All tasks in this pipeline work on this branch",
-    "branchAtual": "Current branch",
-    "retries": "Retries",
-    "retriesDica": "Attempts per phase before pausing",
-    "push": "Push",
-    "pushDica": "Off by default: commits stay local",
-    "pushAoFinal": "Push at the end",
     "pendentes": "Pending",
     "concluidas": "Done",
     "emAndamento": "Running",
@@ -1520,6 +1512,27 @@
     "repositorioPrincipal": "Main repository",
     "voltar": "Back to the list",
     "adicionarTarefa": "Add task",
-    "tasksResumo": "{{concluidas}}/{{total}} tasks"
+    "tasksResumo": "{{concluidas}}/{{total}} tasks",
+    "adicionarFase": "Add phase",
+    "criarFase": "Create my own phase",
+    "editarFase": "Edit phase",
+    "novaFase": "New phase",
+    "faseNome": "Name",
+    "faseDescricao": "Description",
+    "faseDescricaoDica": "One line — shown in the pipeline list",
+    "fasePrompt": "Prompt",
+    "fasePromptDica": "Instructions for the agent in this phase, including what it must record in the note.",
+    "faseCapacidades": "Capabilities",
+    "salvarComoPadrao": "Save as default",
+    "salvarNestaEsteira": "Save in this pipeline",
+    "pushLigado": "Pushes the branch at the end",
+    "pushDesligado": "Does not push at the end (local commits)",
+    "capacidade": {
+      "leitura": "Read",
+      "edit": "Edit",
+      "shell": "Shell",
+      "browser": "Browser",
+      "memoria": "Memory"
+    }
   }
 }

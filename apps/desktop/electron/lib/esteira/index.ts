@@ -1,12 +1,12 @@
 import type {
   Esteira,
   FaseConfig,
+  FaseEscolhida,
   FaseTemplate,
   Projeto,
   RelatorioEsteira,
   Task,
 } from '@shared/esteira'
-import { ESTEIRA_RETRY_PADRAO } from '@shared/esteira'
 import {
   atualizarTaskCampos,
   criarTask,
@@ -24,9 +24,11 @@ import {
   listarEsteiras,
   listarProjetos,
   listarTasks,
+  listarTemplatesCustom,
   removerTasks,
   salvarEsteiras,
   salvarProjetos,
+  salvarTemplatesCustom,
 } from './repo'
 import { FASE_TEMPLATES, POLITICA_PADRAO, templatesPadrao } from './templates'
 
@@ -61,8 +63,35 @@ function agora(): string {
   return new Date().toISOString()
 }
 
-export function listarTemplates(): FaseTemplate[] {
-  return FASE_TEMPLATES
+/**
+ * Templates disponíveis: os embutidos + os do usuário. Quando o id coincide, o
+ * do usuário vence (é uma sobrescrita do embutido). Guardar separado permite
+ * que uma atualização do Orbit melhore os prompts de fábrica sem apagar o que
+ * o usuário escreveu.
+ */
+export async function listarTemplates(): Promise<FaseTemplate[]> {
+  const custom = await listarTemplatesCustom()
+  const porId = new Map(FASE_TEMPLATES.map((t) => [t.id, t]))
+  for (const t of custom) porId.set(t.id, { ...t, custom: true })
+  return [...porId.values()]
+}
+
+/** Cria ou sobrescreve um template ("salvar como padrão" no editor de fase). */
+export async function salvarTemplate(template: FaseTemplate): Promise<FaseTemplate[]> {
+  const custom = await listarTemplatesCustom()
+  const proximo: FaseTemplate = { ...template, custom: true }
+  const indice = custom.findIndex((t) => t.id === template.id)
+  if (indice >= 0) custom[indice] = proximo
+  else custom.push(proximo)
+  await salvarTemplatesCustom(custom)
+  return listarTemplates()
+}
+
+/** Remove um template do usuário. Embutido volta a valer no lugar da sobrescrita. */
+export async function removerTemplate(id: string): Promise<FaseTemplate[]> {
+  const custom = await listarTemplatesCustom()
+  await salvarTemplatesCustom(custom.filter((t) => t.id !== id))
+  return listarTemplates()
 }
 
 // ─── Projetos ────────────────────────────────────────────────────────────────
@@ -109,35 +138,42 @@ export async function removerProjeto(id: string): Promise<void> {
 export interface NovaEsteiraInput {
   projetoId: string
   nome: string
-  /** ids dos templates de fase, na ordem desejada */
-  templateIds: string[]
+  /** Fases já resolvidas (podem ter sido editadas só para esta esteira). */
+  fases?: FaseEscolhida[]
+  /** Alternativa simples (tools do chat): ids de template, na ordem desejada. */
+  templateIds?: string[]
   providerId: string
   modelId: string
   thinkingNivel?: number
   branch?: string
   worktree?: string
-  retryCount?: number
   pushAoFinal?: boolean
   modoOperacao?: 'manual' | 'automatico'
 }
 
-/** Fases da esteira = CÓPIA dos templates (D4): editar a esteira não toca no mestre. */
-function copiarFases(input: NovaEsteiraInput): FaseConfig[] {
-  const escolhidos = input.templateIds.length > 0 ? input.templateIds : templatesPadrao().map((t) => t.id)
-  return escolhidos
-    .map((id) => FASE_TEMPLATES.find((t) => t.id === id))
-    .filter((t): t is FaseTemplate => !!t)
-    .map((template, ordem) => ({
-      id: novoId('fase_'),
-      nome: template.nome,
-      descricao: template.descricao,
-      prompt: template.prompt,
-      providerId: input.providerId,
-      modelId: input.modelId,
-      thinkingNivel: input.thinkingNivel ?? 0,
-      tools: [...template.tools],
-      ordem,
-    }))
+/** Fases da esteira = CÓPIA do que foi escolhido (D4): editar a esteira depois
+ *  nunca toca no template mestre. */
+async function copiarFases(input: NovaEsteiraInput): Promise<FaseConfig[]> {
+  let escolhidas = input.fases
+  if (!escolhidas?.length) {
+    const disponiveis = await listarTemplates()
+    const ids = input.templateIds?.length ? input.templateIds : templatesPadrao().map((t) => t.id)
+    escolhidas = ids
+      .map((id) => disponiveis.find((t) => t.id === id))
+      .filter((t): t is FaseTemplate => !!t)
+      .map((t) => ({ templateId: t.id, nome: t.nome, descricao: t.descricao, prompt: t.prompt, tools: t.tools }))
+  }
+  return escolhidas.map((fase, ordem) => ({
+    id: novoId('fase_'),
+    nome: fase.nome,
+    descricao: fase.descricao,
+    prompt: fase.prompt,
+    providerId: input.providerId,
+    modelId: input.modelId,
+    thinkingNivel: input.thinkingNivel ?? 0,
+    tools: [...fase.tools],
+    ordem,
+  }))
 }
 
 export async function criarEsteira(input: NovaEsteiraInput): Promise<Esteira> {
@@ -145,14 +181,13 @@ export async function criarEsteira(input: NovaEsteiraInput): Promise<Esteira> {
     id: novoId('est_'),
     projetoId: input.projetoId,
     nome: input.nome,
-    fases: copiarFases(input),
+    fases: await copiarFases(input),
     branch: input.branch,
     worktree: input.worktree,
     modoOperacao: input.modoOperacao ?? 'manual',
-    retryCount: input.retryCount ?? ESTEIRA_RETRY_PADRAO,
     pushAoFinal: input.pushAoFinal ?? false,
     politicaComandos: { bloqueados: [...POLITICA_PADRAO.bloqueados], controlados: [...POLITICA_PADRAO.controlados] },
-    templateId: input.templateIds.join(','),
+    templateId: input.fases?.map((f) => f.templateId ?? 'custom').join(',') ?? input.templateIds?.join(','),
     criadoEm: agora(),
   }
   const esteiras = await listarEsteiras()

@@ -30,6 +30,9 @@ interface EsteiraState {
   atualizarProjeto: (id: string, patch: Partial<Pick<Projeto, "nome" | "pastas">>) => Promise<void>
   removerProjeto: (id: string) => Promise<void>
 
+  salvarTemplate: (template: FaseTemplate) => Promise<void>
+  removerTemplate: (id: string) => Promise<void>
+
   criarEsteira: (input: NovaEsteiraInput) => Promise<Esteira>
   atualizarEsteira: (id: string, patch: Partial<Esteira>) => Promise<void>
   removerEsteira: (id: string) => Promise<void>
@@ -129,6 +132,13 @@ export const useEsteiraStore = create<EsteiraState>((set, get) => ({
       esteiras: state.esteiras.filter((e) => e.projetoId !== id),
       projetos: state.projetos.filter((p) => p.id !== id),
     }))
+  },
+
+  salvarTemplate: async (template) => {
+    set({ templates: await esteiraApi.salvarTemplate(template) })
+  },
+  removerTemplate: async (id) => {
+    set({ templates: await esteiraApi.removerTemplate(id) })
   },
 
   criarEsteira: async (input) => {

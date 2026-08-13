@@ -54,8 +54,21 @@ export interface FaseTemplate {
   descricao: string
   prompt: string
   tools: ToolPermitida[]
-  /** true nas fases que compõem o template "Padrão" de uma esteira nova */
+  /** true nas fases sugeridas de cara numa esteira nova (as demais entram pelo "+") */
   padrao: boolean
+  /** Criado ou sobrescrito pelo usuário ("salvar como padrão") */
+  custom?: boolean
+}
+
+/** Fase já resolvida no modal de criação — pode ter sido editada só para esta
+ *  esteira, sem virar padrão. */
+export interface FaseEscolhida {
+  /** Template de origem (ausente em fase criada do zero) */
+  templateId?: string
+  nome: string
+  descricao: string
+  prompt: string
+  tools: ToolPermitida[]
 }
 
 // ─── Política de comandos ────────────────────────────────────────────────────
@@ -86,8 +99,6 @@ export interface Esteira {
   /** Caminho do worktree dedicado, quando usado */
   worktree?: string
   modoOperacao: ModoOperacao
-  /** Tentativas por fase antes de pausar a task (padrão 3) */
-  retryCount: number
   /** A fase final faz push (padrão false — commit local) */
   pushAoFinal: boolean
   politicaComandos: PoliticaComandos
@@ -172,4 +183,10 @@ export interface NovaTaskInput {
   origemSessionId?: string
 }
 
+/**
+ * Tentativas por fase antes de pausar a task com erro. É parâmetro interno do
+ * Orbit, igual para todas as esteiras — não configurável por esteira: quem
+ * está montando um pipeline não tem como calibrar esse número, e expô-lo só
+ * daria mais uma decisão sem resposta certa.
+ */
 export const ESTEIRA_RETRY_PADRAO = 3

@@ -1,5 +1,6 @@
 import { BrowserWindow } from 'electron'
 import type { AnotacaoFase, Esteira, EsteiraEvent, Projeto, Task } from '@shared/esteira'
+import { ESTEIRA_RETRY_PADRAO } from '@shared/esteira'
 import { criaCiclo, dependenciasPendentes } from './contrato'
 import { executarFase } from './runner'
 import { atualizarTask, listarEsteiras, listarProjetos, listarTasks, salvarTasks } from './repo'
@@ -99,7 +100,7 @@ async function executarTask(esteiraId: string, taskId: string): Promise<void> {
       })
 
       // Retry: cada tentativa recebe o erro da anterior para atacar a causa.
-      for (let tentativa = 2; resultado.erro && tentativa <= esteira.retryCount; tentativa++) {
+      for (let tentativa = 2; resultado.erro && tentativa <= ESTEIRA_RETRY_PADRAO; tentativa++) {
         if (controller.signal.aborted) break
         resultado = await executarFase({
           esteira,

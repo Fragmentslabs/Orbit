@@ -1,7 +1,7 @@
 import { app } from 'electron'
 import fsp from 'node:fs/promises'
 import path from 'node:path'
-import type { Esteira, Projeto, Task } from '@shared/esteira'
+import type { Esteira, FaseTemplate, Projeto, Task } from '@shared/esteira'
 
 /**
  * Persistência do modo esteira: JSON na pasta de dados do app (§15), sem banco
@@ -73,6 +73,22 @@ export function listarEsteiras(): Promise<Esteira[]> {
 
 export function salvarEsteiras(esteiras: Esteira[]): Promise<void> {
   return comLock('esteiras.json', () => escrever('esteiras.json', esteiras))
+}
+
+// ─── Templates de fase editados pelo usuário ─────────────────────────────────
+
+/**
+ * Templates que o usuário criou ou sobrescreveu ("salvar como padrão"). Ficam
+ * separados dos embutidos: assim uma atualização do Orbit pode melhorar os
+ * prompts de fábrica sem apagar o que o usuário escreveu, e o id em comum
+ * indica qual embutido está sobrescrito.
+ */
+export function listarTemplatesCustom(): Promise<FaseTemplate[]> {
+  return ler<FaseTemplate[]>('templates.json', [])
+}
+
+export function salvarTemplatesCustom(templates: FaseTemplate[]): Promise<void> {
+  return comLock('templates.json', () => escrever('templates.json', templates))
 }
 
 // ─── Tasks (um arquivo por esteira) ──────────────────────────────────────────
