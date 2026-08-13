@@ -343,26 +343,34 @@ async function tentarPush(raiz: string, signal: AbortSignal): Promise<string | u
 // ─── Fila automática (D9) ────────────────────────────────────────────────────
 
 /**
- * Uma task por vez: só dispara se nenhuma task DA FILA estiver rodando. Tasks
- * iniciadas manualmente rodam em paralelo de propósito e não bloqueiam a fila.
+ * Uma task por vez: a fila só dispara a próxima quando a task automática atual
+ * concluiu TODAS as fases. A guarda usa o estado PERSISTIDO (campo `auto` da
+ * Task), não um registro em memória — pausa, erro, retomada manual ou
+ * desligar/religar a fila nunca fazem a fila avançar com a anterior no meio.
+ * Tasks iniciadas manualmente (`auto` ausente) rodam em paralelo de propósito
+ * e não bloqueiam nem são bloqueadas pela fila.
  */
-const filaEmAndamento = new Map<string, string>()
+const filaRodando = new Set<string>()
 
 async function avancarFila(esteiraId: string): Promise<void> {
-  if (!filasAtivas.has(esteiraId)) return
-  const atual = filaEmAndamento.get(esteiraId)
-  if (atual && emExecucao.has(atual)) return
-  filaEmAndamento.delete(esteiraId)
-
-  const tasks = await listarTasks(esteiraId)
-  const candidatas = tasks
-    .filter((t) => t.status === 'pendente' && dependenciasPendentes(t, tasks).length === 0)
-    .sort((a, b) => a.criadoEm.localeCompare(b.criadoEm))
-
-  const proxima = candidatas[0]
-  if (!proxima) return
-  filaEmAndamento.set(esteiraId, proxima.id)
-  await iniciarTask(esteiraId, proxima.id, 0)
+  if (!filasAtivas.has(esteiraId) || filaRodando.has(esteiraId)) return
+  filaRodando.add(esteiraId)
+  try {
+    const tasks = await listarTasks(esteiraId)
+    // Automática não-concluída (rodando, pausada ou com erro) segura a fila:
+    // a próxima só entra quando a atual percorreu tudo. Cabe ao usuário
+    // resolver (retomar, remover ou desligar a fila).
+    const automaticaNaoConcluida = tasks.some((t) => t.auto === true && t.status !== 'concluida')
+    if (automaticaNaoConcluida) return
+    const candidatas = tasks
+      .filter((t) => t.status === 'pendente' && dependenciasPendentes(t, tasks).length === 0)
+      .sort((a, b) => a.criadoEm.localeCompare(b.criadoEm))
+    const proxima = candidatas[0]
+    if (!proxima) return
+    await iniciarTask(esteiraId, proxima.id, 0, true)
+  } finally {
+    filaRodando.delete(esteiraId)
+  }
 }
 
 export function ligarFila(esteiraId: string): void {
@@ -373,9 +381,11 @@ export function ligarFila(esteiraId: string): void {
 /** Desligar não mata o que está rodando: a task termina a fase e pausa (§6.2). */
 export function desligarFila(esteiraId: string): void {
   filasAtivas.delete(esteiraId)
-  const atual = filaEmAndamento.get(esteiraId)
-  if (atual) pausaSolicitada.add(atual)
-  filaEmAndamento.delete(esteiraId)
+  void (async () => {
+    const tasks = await listarTasks(esteiraId)
+    const atual = tasks.find((t) => t.auto === true && t.status === 'em_progresso')
+    if (atual) pausaSolicitada.add(atual.id)
+  })()
 }
 
 export function filaLigada(esteiraId: string): boolean {
@@ -387,8 +397,9 @@ export function filaLigada(esteiraId: string): boolean {
 /**
  * Inicia a task na fase indicada. `faseInicial > 0` vem do drag: as fases
  * anteriores entram como 'pulada' para o histórico não sugerir que rodaram.
+ * `auto` marca a task como iniciada pela fila automática (uma por vez).
  */
-export async function iniciarTask(esteiraId: string, taskId: string, faseInicial = 0): Promise<void> {
+export async function iniciarTask(esteiraId: string, taskId: string, faseInicial = 0, auto = false): Promise<void> {
   await pararEsperando(taskId)
   const contexto = await carregarContexto(esteiraId)
   if (!contexto) return
@@ -413,6 +424,7 @@ export async function iniciarTask(esteiraId: string, taskId: string, faseInicial
     pausaMotivo: undefined,
     erro: undefined,
     iniciadoEm: t.iniciadoEm ?? agora(),
+    auto: auto ? true : t.auto,
     // Retomada mantém as anotações; início do zero registra as puladas
     anotacoes: t.anotacoes.length > 0 ? t.anotacoes : puladas,
   }))
@@ -467,7 +479,7 @@ export function abortarTudo(): void {
   for (const controller of emExecucao.values()) controller.abort()
   emExecucao.clear()
   filasAtivas.clear()
-  filaEmAndamento.clear()
+  filaRodando.clear()
 }
 
 // ─── CRUD de tasks ───────────────────────────────────────────────────────────
@@ -526,4 +538,6 @@ export async function removerTask(esteiraId: string, taskId: string): Promise<vo
     .map((t) => (t.dependeDe.includes(taskId) ? { ...t, dependeDe: t.dependeDe.filter((d) => d !== taskId) } : t))
   await salvarTasks(esteiraId, restantes)
   emitir({ type: 'tasks', esteiraId, tasks: restantes })
+  // Remover a automática que segurava a fila (pausada/erro) destrava a próxima.
+  if (filasAtivas.has(esteiraId)) void avancarFila(esteiraId)
 }

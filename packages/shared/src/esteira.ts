@@ -166,6 +166,12 @@ export interface Task {
   /** Origem da task, quando criada pelo agente a partir de um chat */
   origemSessionId?: string
   /**
+   * Task iniciada pela FILA AUTOMÁTICA (uma por vez): a fila só dispara a
+   * próxima quando a automática atual conclui TODAS as fases. Tasks sem este
+   * campo foram iniciadas manualmente e rodam em paralelo de propósito.
+   */
+  auto?: boolean
+  /**
    * Diff acumulado da task (snapshot do filesystem antes da primeira fase x
    * estado atual). É o que a UI mostra no badge de arquivos alterados e abre
    * no painel — o mesmo caminho do diff por mensagem no chat.
