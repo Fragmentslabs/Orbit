@@ -77,7 +77,7 @@ function ListaDeEsteiras({ onAbrir }: { onAbrir: (id: string) => void }) {
           <h2 className="text-base font-semibold text-foreground">{t("esteira.titulo")}</h2>
           <p className="text-xs text-muted-foreground">{t("esteira.subtitulo")}</p>
         </div>
-        <Button size="sm" onClick={() => setCriarAberto(true)}>
+        <Button size="lg" onClick={() => setCriarAberto(true)}>
           <PlusIcon className="size-4" />
           {t("esteira.novaEsteira")}
         </Button>
@@ -90,7 +90,7 @@ function ListaDeEsteiras({ onAbrir }: { onAbrir: (id: string) => void }) {
             <p className="text-sm font-medium">{t("esteira.vazioTitulo")}</p>
             <p className="mx-auto max-w-sm text-xs text-muted-foreground">{t("esteira.vazioSubtitulo")}</p>
           </div>
-          <Button size="sm" onClick={() => setCriarAberto(true)}>
+          <Button size="lg" onClick={() => setCriarAberto(true)}>
             <PlusIcon className="size-4" />
             {t("esteira.criarPrimeira")}
           </Button>
@@ -206,7 +206,7 @@ function BoardDaEsteira({ esteira, onVoltar }: { esteira: Esteira; onVoltar: () 
         </div>
 
         <div className="ml-auto flex items-center gap-2">
-          <Button size="sm" onClick={() => setCriarTaskAberto(true)}>
+          <Button size="lg" onClick={() => setCriarTaskAberto(true)}>
             <PlusIcon className="size-4" />
             {t("esteira.adicionarTarefa")}
           </Button>
