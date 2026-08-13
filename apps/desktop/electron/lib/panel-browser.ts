@@ -49,6 +49,19 @@ function activity(label: string): void {
   broadcastPanelEvent({ type: 'activity', label })
 }
 
+/** Mesmo feed, para quem captura fora do painel (engine oculta de scripts). */
+export function panelActivity(label: string): void {
+  activity(label)
+}
+
+/** URL atual do browser do painel — vazia quando a sessão não tem webview. */
+export function panelCurrentUrl(sessionId: string): string {
+  const wc = getWc(sessionId)
+  if (!wc) return ''
+  const url = wc.getURL()
+  return url === 'about:blank' ? '' : url
+}
+
 function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms))
 }
@@ -223,18 +236,31 @@ export async function panelType(
 }
 
 /**
- * Screenshot do viewport, reduzido para ≤1024px de largura (economia de tokens).
- * Com fullscreen, entra em tela cheia para capturar a tela toda e volta à visão
+ * Screenshot do viewport, reduzido para ≤1024px de largura por padrão
+ * (economia de tokens — `maxWidth` sobe isso para documentação). Com
+ * fullscreen, entra em tela cheia para capturar a tela toda e volta à visão
  * lateral logo depois (o print sai maior e a UI retorna ao normal).
+ *
+ * Para a PÁGINA INTEIRA (além do viewport) o caminho é outro: captureUrl em
+ * browser-script.ts, numa janela oculta — redimensionar o webview visível
+ * faria a UI piscar.
  */
-export async function panelScreenshot(sessionId: string, fullscreen = false): Promise<Buffer> {
+export async function panelScreenshot(
+  sessionId: string,
+  fullscreen = false,
+  options?: { format?: 'webp' | 'png'; maxWidth?: number },
+): Promise<Buffer> {
   const wc = await ensurePanelBrowser(sessionId)
   activity('Capturando a tela')
-  const capture = async (maxWidth: number) => {
+  const capture = async (defaultWidth: number) => {
+    const maxWidth = options?.maxWidth ?? defaultWidth
     const image = await wc.capturePage()
     const { width } = image.getSize()
     const resized = width > maxWidth ? image.resize({ width: maxWidth }) : image
-    return await sharp(resized.toPNG()).webp({ quality: 80 }).toBuffer()
+    const pipeline = sharp(resized.toPNG())
+    return options?.format === 'png'
+      ? await pipeline.png().toBuffer()
+      : await pipeline.webp({ quality: 80 }).toBuffer()
   }
   if (!fullscreen) return capture(1024)
   await panelFullscreen(true)

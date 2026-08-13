@@ -586,6 +586,10 @@
       "diff": {
         "label": "Diff",
         "description": "Alterações das ferramentas"
+      },
+      "media": {
+        "label": "Mídia",
+        "description": "Imagens produzidas pelo agente"
       }
     }
   },
@@ -731,8 +735,6 @@
     "agentUsingBrowser": "Orbit está usando o navegador",
     "browserActivity": "Atividade do navegador",
     "emptyActivity": "As ações do agente aparecem aqui.",
-    "composerPlaceholder": "Peça algo ao Orbit sobre esta página…",
-    "composerPlaceholderNoFolder": "Selecione uma pasta no modo código para pedir à IA",
     "chatFeed": "Conversa",
     "showChatFeed": "Mostrar conversa",
     "hideChatFeed": "Ocultar conversa",
@@ -1424,5 +1426,153 @@
       "optional": "(opcional)",
       "apiKeyPlaceholder": "Deixe em branco para manter a atual"
     }
+  },
+  "media": {
+    "searchPlaceholder": "Buscar por nome ou tarefa",
+    "refresh": "Atualizar",
+    "loading": "Carregando imagens...",
+    "empty": "Nenhuma imagem por aqui ainda.",
+    "delete": "Excluir",
+    "openInChat": "Abrir no chat",
+    "selectedCount": "{{count}} selecionada(s)",
+    "usage": "{{count}} imagens · {{size}}",
+    "cleanupScripts": "Limpar imagens de scripts",
+    "cleanupScriptsHint": "Apaga imagens capturadas por scripts/lotes que nunca foram mostradas em um chat",
+    "source": {
+      "all": "Todas",
+      "chat": "Chat",
+      "screenshot": "Screenshot",
+      "script": "Script",
+      "batch": "Lote"
+    },
+    "period": {
+      "all": "Qualquer data",
+      "today": "24h",
+      "week": "7 dias",
+      "month": "30 dias"
+    }
+  },
+  "esteira": {
+    "titulo": "Esteira",
+    "carregando": "Carregando board...",
+    "vazioTitulo": "Nenhum board ainda",
+    "vazioSubtitulo": "Escolha o repositório e as fases; a esteira executa as tasks fase a fase, sem chats.",
+    "novaEsteira": "Nova esteira",
+    "criar": "Criar",
+    "nomeEsteira": "Nome da esteira",
+    "nomeExemplo": "ex.: Features",
+    "pastas": "Pastas",
+    "pastasDica": "Pastas de trabalho, como no chat",
+    "modeloPadrao": "Modelo padrão",
+    "modeloDica": "Propagado para todas as fases; cada fase pode ser trocada depois",
+    "fases": "Fases",
+    "fasesDica": "Copiadas dos templates do sistema — editar a esteira não altera o mestre",
+    "pendentes": "Pendentes",
+    "concluidas": "Concluídas",
+    "emAndamento": "Em andamento",
+    "falhas": "Falhas",
+    "commits": "Commits",
+    "tempoTotal": "Tempo total",
+    "iniciar": "Iniciar",
+    "pausar": "Pausar",
+    "retomar": "Retomar",
+    "pausada": "Pausada",
+    "erro": "Erro",
+    "pausadaPorErro": "Task pausada após falhar na fase",
+    "filaLigada": "Fila automática ligada",
+    "filaDesligada": "Fila automática desligada",
+    "filaDica": "Executa as tasks pendentes uma por vez, respeitando dependências",
+    "removerEsteira": "Excluir esteira",
+    "confirmarRemocao": "Excluir a esteira \"{{nome}}\" e suas tasks?",
+    "descricao": "Descrição",
+    "semAnotacao": "Esta fase ainda não rodou.",
+    "comandosControlados": "Comandos registrados",
+    "criadaEm": "Criada em",
+    "concluidaEm": "Concluída em",
+    "tempoTrabalho": "Tempo de trabalho",
+    "tokens": "Tokens",
+    "custo": "Custo",
+    "dependenciasTitulo": "Dependências",
+    "semDependencias": "Nenhuma",
+    "adicionarDependencia": "adicionar dependência",
+    "selecioneTask": "Selecione uma task...",
+    "dependencias_one": "{{count}} dependência",
+    "dependencias_other": "{{count}} dependências",
+    "excluirTask": "Excluir task",
+    "status": {
+      "pendente": "Pendente",
+      "em_progresso": "Em execução",
+      "pausada": "Pausada",
+      "concluida": "Concluída"
+    },
+    "subtitulo": "Esteiras que executam tasks fase a fase, sem chats",
+    "criarPrimeira": "Criar a primeira esteira",
+    "repositorioPrincipal": "Repositório principal",
+    "voltar": "Voltar para a lista",
+    "adicionarTarefa": "Adicionar tarefa",
+    "tasksResumo": "{{concluidas}}/{{total}} tasks",
+    "adicionarFase": "Adicionar fase",
+    "criarFase": "Criar minha própria fase",
+    "editarFase": "Editar fase",
+    "novaFase": "Nova fase",
+    "faseNome": "Nome",
+    "faseDescricao": "Descrição",
+    "faseDescricaoDica": "Uma linha — aparece na lista da esteira",
+    "fasePrompt": "Prompt",
+    "fasePromptDica": "Instruções para o agente nesta fase, incluindo o que ele deve registrar na anotação.",
+    "faseCapacidades": "Capacidades",
+    "salvarComoPadrao": "Salvar como padrão",
+    "salvarNestaEsteira": "Salvar nesta esteira",
+    "capacidade": {
+      "leitura": "Leitura",
+      "edit": "Edição",
+      "shell": "Shell",
+      "browser": "Browser",
+      "memoria": "Memória"
+    },
+    "arquivosAlterados_one": "{{count}} arquivo alterado",
+    "arquivosAlterados_other": "{{count}} arquivos alterados",
+    "fase": {
+      "desenvolvimento": {
+        "nome": "Desenvolvimento",
+        "descricao": "Implementa a task seguindo as convenções do projeto"
+      },
+      "validacao": {
+        "nome": "Validação",
+        "descricao": "Valida a implementação: build, testes e revisão do diff"
+      },
+      "relatorio": {
+        "nome": "Relatório",
+        "descricao": "Fecha a task e descreve o que foi feito"
+      },
+      "seguranca": {
+        "nome": "Segurança",
+        "descricao": "Auditoria de dependências, segredos e permissões"
+      },
+      "revisao": {
+        "nome": "Revisão de código",
+        "descricao": "Code review de qualidade e estilo"
+      },
+      "infra": {
+        "nome": "Infra",
+        "descricao": "Checklist de deploy e ambiente"
+      }
+    },
+    "push": "Fazer push ao finalizar",
+    "prints": "Capturar prints do resultado",
+    "editarEsteira": "Editar esteira",
+    "salvar": "Salvar",
+    "novaTask": "Nova task",
+    "criarTask": "Criar task",
+    "taskTitulo": "Título",
+    "taskTituloExemplo": "ex.: Corrigir login no mobile",
+    "taskDescricao": "Descrição",
+    "taskDescricaoDica": "O briefing completo que as fases recebem — a task roda sem chat, então o que não estiver aqui não chega ao agente.",
+    "taskDependencias": "Depende de",
+    "taskDependenciasDica": "Esta task só inicia depois que as selecionadas concluírem.",
+    "selecioneDependencias": "Nenhuma — inicia livremente",
+    "semTasksParaDependencia": "Ainda não há outra task nesta esteira",
+    "buscarTask": "Buscar task...",
+    "nenhumaTask": "Nenhuma task encontrada"
   }
 }

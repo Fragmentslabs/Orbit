@@ -32,6 +32,10 @@ const NATIVE_TOOLS = new Set([
   'panel_resize',
   'panel_screenshot',
   'show_image',
+  // Automação em lote na engine oculta (mesmo threat model do bash: o agente
+  // já executa código arbitrário; o script roda isolado num utilityProcess)
+  'run_browser_script',
+  'capture_batch',
   // Browser do modo chat (toggle "Browser") — tools nativas do toggle,
   // não MCP; caíam no catch-all "_" e pediam permissão como servidor "browser"
   'browser_open',
@@ -49,6 +53,11 @@ const NATIVE_TOOLS = new Set([
   'bash_list',
   'bash_kill',
   'bash_output',
+  // Esteira (board de tasks)
+  'esteira_create',
+  'esteira_list',
+  'esteira_create_task',
+  'esteira_task_status',
   // Skills
   'create_skill',
   // Estado do turno (leitura, first-party): verify_changes confere o que foi

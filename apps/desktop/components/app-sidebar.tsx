@@ -9,6 +9,7 @@ import {
   Bot,
   Boxes,
   BrainCircuit,
+  Layers,
   Check,
   CheckSquare,
   ChevronDown,
@@ -205,6 +206,31 @@ function NewChatButton() {
     >
       <Plus className="size-4" />
       {mode === "chat" ? t("sidebar.newChat") : t("sidebar.newSession")}
+    </Button>
+  )
+}
+
+/**
+ * Esteira: página do modo código, logo abaixo de "nova sessão". Não é um
+ * toggle do input — é outra forma de trabalhar (pipeline de tasks, sem chat),
+ * então vive na navegação, não entre os modos de uma conversa.
+ */
+function EsteiraButton() {
+  const { t } = useTranslation()
+  const { mode, view, setView } = useWorkspace()
+  const active = view === "esteira"
+  if (mode !== "code") return null
+  return (
+    <Button
+      variant="ghost"
+      className={cn(
+        "w-full justify-start gap-2 text-sm",
+        active && "bg-sidebar-accent text-sidebar-accent-foreground",
+      )}
+      onClick={() => setView(active ? "chat" : "esteira")}
+    >
+      <Layers className="size-4" />
+      {t("esteira.titulo")}
     </Button>
   )
 }
@@ -1219,6 +1245,7 @@ export function AppSidebar() {
               <NewChatButton />
             </div>
             <div className="space-y-1 px-2 pb-2">
+              <EsteiraButton />
               <MemoriesButton />
               <ModelsButton />
               <UsageButton />

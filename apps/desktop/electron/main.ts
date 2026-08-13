@@ -23,7 +23,14 @@ import { initMcp, listMcpStatus, readMcpConfig, reconnectMcp, saveMcpConfig } fr
 import { loadTrustRules } from './lib/permission/trust-rules'
 import { clearSessionTrust } from './lib/permission'
 import { savePlanFile, deletePlanFile, readPlanFile } from './lib/plan-file'
-import { registerMediaProtocol } from './lib/media'
+import {
+  backfillMedia,
+  cleanupScriptMedia,
+  deleteManyMedia,
+  listMedia,
+  mediaDiskUsage,
+  registerMediaProtocol,
+} from './lib/media'
 import { startCompanionServer, getCompanionStatus, setPairingMode, forwardChatEvent } from './lib/companion-server'
 import { readJson as readStorageJson } from './lib/storage'
 import { registerPanelWebContents } from './lib/panel-browser'
@@ -41,6 +48,9 @@ import { destroyBrowserWindow } from './lib/tools'
 import type { SendMessageInput, SessionInfo } from '@shared/chat'
 import type { ChatEvent } from '@shared/chat'
 import { StorageKeys } from '@shared/chat'
+import * as esteira from './lib/esteira'
+import type { MediaFilter } from '@shared/media'
+import type { FaseTemplate, NovaTaskInput } from '@shared/esteira'
 import type { Memory, MemoryEvent } from '@shared/memory'
 
 const execFileAsync = promisify(execFile)
@@ -1122,6 +1132,55 @@ app.whenReady().then(() => {
   // Imagens das respostas do assistente (orbit-media://)
   registerMediaProtocol()
 
+  // Modo esteira: board de projetos/esteiras/tasks e o engine de execução.
+  // As mutações voltam ao renderer por 'esteira:event' (o engine emite).
+  ipcMain.handle('esteira:carregar', () => esteira.carregarTudo())
+  ipcMain.handle('esteira:templates', () => esteira.listarTemplates())
+  ipcMain.handle('esteira:salvarTemplate', (_e, template: FaseTemplate) => esteira.salvarTemplate(template))
+  ipcMain.handle('esteira:removerTemplate', (_e, id: string) => esteira.removerTemplate(id))
+  ipcMain.handle('esteira:criarProjeto', (_e, nome: string, pastas: string[]) =>
+    esteira.criarProjeto(nome, pastas),
+  )
+  ipcMain.handle('esteira:atualizarProjeto', (_e, id: string, patch: Record<string, unknown>) =>
+    esteira.atualizarProjeto(id, patch),
+  )
+  ipcMain.handle('esteira:removerProjeto', (_e, id: string) => esteira.removerProjeto(id))
+  ipcMain.handle('esteira:criar', (_e, input: esteira.NovaEsteiraInput) => esteira.criarEsteira(input))
+  ipcMain.handle('esteira:atualizar', (_e, id: string, patch: Record<string, unknown>) =>
+    esteira.atualizarEsteira(id, patch),
+  )
+  ipcMain.handle('esteira:remover', (_e, id: string) => esteira.removerEsteira(id))
+  ipcMain.handle('esteira:criarTask', (_e, input: NovaTaskInput) => esteira.criarTask(input))
+  ipcMain.handle('esteira:atualizarTask', (_e, esteiraId: string, taskId: string, patch: Record<string, unknown>) =>
+    esteira.atualizarTaskCampos(esteiraId, taskId, patch),
+  )
+  ipcMain.handle('esteira:removerTask', (_e, esteiraId: string, taskId: string) =>
+    esteira.removerTask(esteiraId, taskId),
+  )
+  ipcMain.handle('esteira:iniciarTask', (_e, esteiraId: string, taskId: string, fase?: number) =>
+    esteira.iniciarTask(esteiraId, taskId, fase ?? 0),
+  )
+  ipcMain.handle('esteira:pausarTask', (_e, esteiraId: string, taskId: string) =>
+    esteira.pausarTask(esteiraId, taskId),
+  )
+  ipcMain.handle('esteira:retomarTask', (_e, esteiraId: string, taskId: string) =>
+    esteira.retomarTask(esteiraId, taskId),
+  )
+  ipcMain.handle('esteira:ligarFila', (_e, esteiraId: string, ligar: boolean) => {
+    if (ligar) esteira.ligarFila(esteiraId)
+    else esteira.desligarFila(esteiraId)
+    return esteira.filaLigada(esteiraId)
+  })
+  ipcMain.handle('esteira:relatorio', (_e, esteiraId: string) => esteira.relatorio(esteiraId))
+
+  // Galeria de mídia (aba "Mídia" do painel direito)
+  ipcMain.handle('media:list', (_event, filter?: MediaFilter) => listMedia(filter))
+  ipcMain.handle('media:usage', () => mediaDiskUsage())
+  ipcMain.handle('media:delete', (_event, ids: string[]) => deleteManyMedia(ids))
+  ipcMain.handle('media:cleanupScripts', () => cleanupScriptMedia())
+  // Indexa imagens anteriores ao registry (roda na primeira abertura da galeria)
+  ipcMain.handle('media:backfill', () => backfillMedia())
+
   // Memória Brain — a UI fala com o service; mutações chegam de volta via memory:event
   ipcMain.handle('memory:list', () => memoryService.list())
   ipcMain.handle('memory:get', (_event, id: string) => memoryService.getFull(id))
@@ -1340,7 +1399,12 @@ app.whenReady().then(() => {
   ipcMain.handle('process:kill', (_event, pid: number, sessionId?: string) => killProcess(pid, sessionId))
   ipcMain.handle('process:output', (_event, pid: number, sessionId?: string) => getProcessOutput(pid, sessionId))
 
-  app.on('before-quit', () => killAllProcesses())
+  app.on('before-quit', () => {
+    killAllProcesses()
+    // Esteira roda fora de qualquer sessão: sem isto, uma fase em execução
+    // continuaria escrevendo no repositório com o app fechando.
+    esteira.abortarTudo()
+  })
 
   // Provedores locais pré-cadastrados (Ollama, LM Studio)
   void ensureCustomProvidersSeeded()

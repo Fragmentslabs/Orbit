@@ -35,6 +35,8 @@ interface ChatHeaderProps {
   onRequestAgentAction?: (instruction: string) => void
   folders?: string[]
   onFoldersChange?: (folders: string[]) => void
+  /** Conteúdo extra à esquerda do botão do painel (ex.: modelo da esteira) */
+  extra?: React.ReactNode
 }
 
 function RenameDialog({ open, onOpenChange, initialValue, onSubmit }: {
@@ -77,7 +79,7 @@ function RenameDialog({ open, onOpenChange, initialValue, onSubmit }: {
   )
 }
 
-export function ChatHeader({ title, hasMenu, session, rightPanelOpen, onToggleSidebar, onToggleRightPanel, repoPath, workspaceMode, onRequestAgentAction, folders, onFoldersChange }: ChatHeaderProps) {
+export function ChatHeader({ title, hasMenu, session, rightPanelOpen, onToggleSidebar, onToggleRightPanel, repoPath, workspaceMode, onRequestAgentAction, folders, onFoldersChange, extra }: ChatHeaderProps) {
   const { t } = useTranslation()
   const [menuOpen, setMenuOpen] = useState(false)
   const [renaming, setRenaming] = useState(false)
@@ -133,6 +135,7 @@ export function ChatHeader({ title, hasMenu, session, rightPanelOpen, onToggleSi
           </DropdownMenu>
         )}
       </div>
+      {extra}
       {onToggleRightPanel && (
         <Button variant="ghost" size="icon-sm" className="size-7 shrink-0" onClick={onToggleRightPanel}>
           {rightPanelOpen ? <PanelRightClose className="size-4" /> : <PanelRightOpen className="size-4" />}

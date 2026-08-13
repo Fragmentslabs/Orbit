@@ -1,6 +1,6 @@
 import { create } from "zustand"
 
-export type TabType = "chat" | "terminal" | "folders" | "browser" | "diff"
+export type TabType = "chat" | "terminal" | "folders" | "browser" | "diff" | "media"
 
 export interface PanelTab {
   id: string
@@ -8,6 +8,9 @@ export interface PanelTab {
   title: string
   sessionId?: string
   messageId?: string
+  /** Aba Diff de uma task da esteira (em vez de mensagem de chat) */
+  esteiraId?: string
+  taskId?: string
   pending?: boolean
   /** URL inicial da aba Browser (ausente = abre a tela padrão com busca). */
   url?: string
@@ -55,6 +58,10 @@ interface PanelState {
   getActiveTabId: (sessionId: string) => string | null
   /** Atualiza o título das abas de chat que apontam para uma sessão (ex.: agente nomeou o chat). */
   renameChatTabs: (sessionId: string, title: string) => void
+  /** URL atual de uma aba de browser — chamada pelo pool a cada navegação,
+   *  inclusive com a aba desmontada (agente navegando em background). É o que
+   *  faz a aba voltar na mesma página ao sair e entrar do chat. */
+  setTabUrl: (sessionId: string, tabId: string, url: string) => void
 
   browserRequestId: number
   browserUrl?: string
@@ -87,9 +94,13 @@ interface PanelState {
   setPendingInput: (val: { sessionId: string; text: string } | null) => void
 
   openDiff: (sessionId: string, messageId: string, title: string) => void
+  /** Diff de uma task da esteira — mesmo painel, outra fonte do patch */
+  openTaskDiff: (esteiraId: string, taskId: string, title: string) => void
   pendingDiff: number
   pendingDiffSessionId?: string
   pendingDiffMessageId?: string
+  pendingDiffEsteiraId?: string
+  pendingDiffTaskId?: string
   pendingDiffTitle?: string
 }
 
@@ -167,6 +178,17 @@ export const usePanelStore = create<PanelState>((set, get) => {
           tabsBySession[sk] = next
         }
         return changed ? { tabsBySession } : state
+      }),
+
+    setTabUrl: (sessionId, tabId, url) =>
+      set((state) => {
+        const tabs = state.tabsBySession[sessionId]
+        if (!tabs) return state
+        const index = tabs.findIndex((t) => t.id === tabId)
+        if (index < 0 || tabs[index].url === url) return state
+        const next = [...tabs]
+        next[index] = { ...next[index], url }
+        return { tabsBySession: { ...state.tabsBySession, [sessionId]: next } }
       }),
 
     browserRequestId: 0,
@@ -267,6 +289,19 @@ export const usePanelStore = create<PanelState>((set, get) => {
         pendingDiff: state.pendingDiff + 1,
         pendingDiffSessionId: sessionId,
         pendingDiffMessageId: messageId,
+        pendingDiffEsteiraId: undefined,
+        pendingDiffTaskId: undefined,
+        pendingDiffTitle: title,
+      })),
+
+    openTaskDiff: (esteiraId, taskId, title) =>
+      set((state) => ({
+        rightPanelOpen: true,
+        pendingDiff: state.pendingDiff + 1,
+        pendingDiffSessionId: undefined,
+        pendingDiffMessageId: undefined,
+        pendingDiffEsteiraId: esteiraId,
+        pendingDiffTaskId: taskId,
         pendingDiffTitle: title,
       })),
     pendingDiff: 0,

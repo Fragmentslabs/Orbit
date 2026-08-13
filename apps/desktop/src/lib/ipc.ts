@@ -7,6 +7,17 @@ import type {
   SessionRevert,
 } from "@shared/chat"
 import type { McpConfig, McpServerStatus } from "@shared/mcp"
+import type { MediaEntry, MediaFilter, MediaUsage } from "@shared/media"
+import type {
+  Esteira,
+  EsteiraEvent,
+  FaseEscolhida,
+  FaseTemplate,
+  NovaTaskInput,
+  Projeto,
+  RelatorioEsteira,
+  Task,
+} from "@shared/esteira"
 import type { ModelsSnapshot } from "@shared/models"
 import type { InitEvent, InitStatus, Memory, MemoryEvent } from "@shared/memory"
 import type { Skill, SkillProposal } from "@shared/skills"
@@ -205,6 +216,78 @@ export const panelApi = {
     const wrapper = window.ipcRenderer.on("panel:event", (event) => listener(event as PanelEvent))
     return () => window.ipcRenderer.off("panel:event", wrapper)
   },
+}
+
+/** Modo esteira — board de projetos/esteiras/tasks (orbit-data/esteira). */
+export const esteiraApi = {
+  carregar: () =>
+    window.ipcRenderer.invoke("esteira:carregar") as Promise<{
+      projetos: Projeto[]
+      esteiras: Esteira[]
+      tasksPorEsteira: Record<string, Task[]>
+    }>,
+  templates: () => window.ipcRenderer.invoke("esteira:templates") as Promise<FaseTemplate[]>,
+  salvarTemplate: (template: FaseTemplate) =>
+    window.ipcRenderer.invoke("esteira:salvarTemplate", template) as Promise<FaseTemplate[]>,
+  removerTemplate: (id: string) =>
+    window.ipcRenderer.invoke("esteira:removerTemplate", id) as Promise<FaseTemplate[]>,
+  criarProjeto: (nome: string, pastas: string[]) =>
+    window.ipcRenderer.invoke("esteira:criarProjeto", nome, pastas) as Promise<Projeto>,
+  atualizarProjeto: (id: string, patch: Partial<Pick<Projeto, "nome" | "pastas">>) =>
+    window.ipcRenderer.invoke("esteira:atualizarProjeto", id, patch) as Promise<Projeto | null>,
+  removerProjeto: (id: string) => window.ipcRenderer.invoke("esteira:removerProjeto", id) as Promise<void>,
+  criar: (input: NovaEsteiraInput) => window.ipcRenderer.invoke("esteira:criar", input) as Promise<Esteira>,
+  atualizar: (id: string, patch: Partial<Esteira>) =>
+    window.ipcRenderer.invoke("esteira:atualizar", id, patch) as Promise<Esteira | null>,
+  remover: (id: string) => window.ipcRenderer.invoke("esteira:remover", id) as Promise<void>,
+  criarTask: (input: NovaTaskInput) => window.ipcRenderer.invoke("esteira:criarTask", input) as Promise<Task>,
+  atualizarTask: (esteiraId: string, taskId: string, patch: Partial<Task>) =>
+    window.ipcRenderer.invoke("esteira:atualizarTask", esteiraId, taskId, patch) as Promise<Task | null>,
+  removerTask: (esteiraId: string, taskId: string) =>
+    window.ipcRenderer.invoke("esteira:removerTask", esteiraId, taskId) as Promise<void>,
+  iniciarTask: (esteiraId: string, taskId: string, fase?: number) =>
+    window.ipcRenderer.invoke("esteira:iniciarTask", esteiraId, taskId, fase) as Promise<void>,
+  pausarTask: (esteiraId: string, taskId: string) =>
+    window.ipcRenderer.invoke("esteira:pausarTask", esteiraId, taskId) as Promise<void>,
+  retomarTask: (esteiraId: string, taskId: string) =>
+    window.ipcRenderer.invoke("esteira:retomarTask", esteiraId, taskId) as Promise<void>,
+  ligarFila: (esteiraId: string, ligar: boolean) =>
+    window.ipcRenderer.invoke("esteira:ligarFila", esteiraId, ligar) as Promise<boolean>,
+  relatorio: (esteiraId: string) =>
+    window.ipcRenderer.invoke("esteira:relatorio", esteiraId) as Promise<RelatorioEsteira>,
+  onEvent: (listener: (event: EsteiraEvent) => void) => {
+    const wrapper = window.ipcRenderer.on("esteira:event", (event) => listener(event as EsteiraEvent))
+    return () => window.ipcRenderer.off("esteira:event", wrapper)
+  },
+}
+
+/** Entrada de criação de esteira (espelha NovaEsteiraInput do main). */
+export interface NovaEsteiraInput {
+  projetoId: string
+  nome: string
+  /** Fases resolvidas (podem ter sido editadas só para esta esteira) */
+  fases?: FaseEscolhida[]
+  /** Alternativa simples: ids de template na ordem desejada */
+  templateIds?: string[]
+  providerId: string
+  modelId: string
+  thinkingNivel?: number
+  branch?: string
+  worktree?: string
+  pushAoFinal?: boolean
+  /** Instrui as fases a capturarem prints do resultado visual */
+  printsDoResultado?: boolean
+  modoOperacao?: "manual" | "automatico"
+}
+
+/** Galeria de mídia — imagens produzidas pelo agente (orbit-data/media). */
+export const mediaApi = {
+  list: (filter?: MediaFilter) => window.ipcRenderer.invoke("media:list", filter) as Promise<MediaEntry[]>,
+  usage: () => window.ipcRenderer.invoke("media:usage") as Promise<MediaUsage>,
+  remove: (ids: string[]) => window.ipcRenderer.invoke("media:delete", ids) as Promise<number>,
+  cleanupScripts: () => window.ipcRenderer.invoke("media:cleanupScripts") as Promise<number>,
+  /** Indexa imagens anteriores ao registry — idempotente, roda na 1ª abertura. */
+  backfill: () => window.ipcRenderer.invoke("media:backfill") as Promise<number>,
 }
 
 export const initApi = {

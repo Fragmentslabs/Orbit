@@ -4,7 +4,6 @@ import {
   ArrowLeftIcon,
   ArrowRightIcon,
   ExternalLinkIcon,
-  Loader2Icon,
   Maximize2Icon,
   MessagesSquareIcon,
   Minimize2Icon,
@@ -13,12 +12,9 @@ import {
   PinIcon,
   PinOffIcon,
   RefreshCcwIcon,
-  SendIcon,
   SmartphoneIcon,
   SparklesIcon,
-  SquareIcon,
   TabletIcon,
-  X,
 } from "lucide-react"
 import {
   DropdownMenu,
@@ -26,9 +22,8 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { useWorkspace } from "@/lib/workspace-context"
 import { cn } from "@/lib/utils"
-import type { ChatMessage } from "@shared/chat"
+import type { ChatMessage, FilePart, SendMessageOptions } from "@shared/chat"
 import {
   WebPreview,
   WebPreviewBody,
@@ -45,13 +40,15 @@ import { Message, MessageContent } from "@/src/components/ai/message"
 import { AskCard } from "@/src/components/ask-card"
 import { AskCardBatch } from "@/src/components/ask-card-batch"
 import { CodeAssistantMessage } from "@/src/components/messages/code-message"
-import { ModelPicker } from "@/src/components/model-picker"
-import { PermissionModePicker } from "@/src/components/permission-mode-picker"
+import { CodeInput } from "@/src/components/code-input"
 import { visibleMessageText } from "@/src/lib/message-utils"
 import { windowApi } from "@/src/lib/ipc"
-import { reloadWebview, type WebviewElement } from "@/src/components/browser/webview-session"
+import {
+  applySelectMode,
+  navigateWebview,
+  reloadWebview,
+} from "@/src/components/browser/webview-session"
 import { usePanelStore, type Viewport } from "@/src/stores/panel-store"
-import { usePermissionPrefs } from "@/src/stores/permission-prefs"
 import {
   useActiveSession,
   useSessionStatus,
@@ -66,61 +63,6 @@ import {
  * - modo seleção: clique em um elemento vira badge/anexo no input do code mode
  * - viewport (responsividade), tela cheia com feed de atividade e composer p/ IA
  */
-
-const SELECT_PREFIX = "__ORBIT_SELECT__"
-
-const SELECT_ON = `(() => {
-  if (window.__orbitSelectCleanup) window.__orbitSelectCleanup()
-  let last = null
-  const restore = () => { if (last) { last.style.outline = last.__orbitOutline || ''; last = null } }
-  const over = (e) => {
-    restore()
-    last = e.target
-    last.__orbitOutline = last.style.outline
-    last.style.outline = '2px solid #22c55e'
-  }
-  const cssPath = (el) => {
-    const parts = []
-    let node = el
-    while (node && node.nodeType === 1 && parts.length < 5) {
-      if (node.id) { parts.unshift('#' + node.id); break }
-      let part = node.tagName.toLowerCase()
-      const cls = [...node.classList].slice(0, 2).join('.')
-      if (cls) part += '.' + cls
-      const parent = node.parentElement
-      if (parent) {
-        const siblings = [...parent.children].filter((c) => c.tagName === node.tagName)
-        if (siblings.length > 1) part += ':nth-of-type(' + (siblings.indexOf(node) + 1) + ')'
-      }
-      parts.unshift(part)
-      node = node.parentElement
-    }
-    return parts.join(' > ')
-  }
-  const click = (e) => {
-    e.preventDefault()
-    e.stopPropagation()
-    const el = e.target
-    console.log('${SELECT_PREFIX}' + JSON.stringify({
-      tag: el.tagName.toLowerCase(),
-      selector: cssPath(el),
-      text: (el.innerText || el.value || '').trim().replace(/\\s+/g, ' ').slice(0, 200),
-      html: el.outerHTML.slice(0, 1500),
-      url: location.href,
-    }))
-    window.__orbitSelectCleanup()
-  }
-  document.addEventListener('mouseover', over, true)
-  document.addEventListener('click', click, true)
-  window.__orbitSelectCleanup = () => {
-    document.removeEventListener('mouseover', over, true)
-    document.removeEventListener('click', click, true)
-    restore()
-    window.__orbitSelectCleanup = null
-  }
-})()`
-
-const SELECT_OFF = `window.__orbitSelectCleanup && window.__orbitSelectCleanup()`
 
 const VIEWPORT_PRESETS: { icon: typeof MonitorIcon; labelKey: string; viewport: Viewport | null }[] = [
   { icon: MonitorIcon, labelKey: "browser.viewportFit", viewport: null },
@@ -159,6 +101,12 @@ function useEdgeHover() {
   return { hovered, handleEnter, handleLeave }
 }
 
+/**
+ * Corpo da aba: só orquestra intenções (navegar, recarregar, ligar seleção).
+ * Quem fala com o `<webview>` é o pool (webview-session.ts) — nenhuma API do
+ * guest é chamada daqui, porque o guest é recriado a cada re-parent e uma
+ * chamada fora de hora lança e derruba a árvore React inteira.
+ */
 function PanelBrowserBody({
   persistKey,
   onUrlChange,
@@ -170,126 +118,27 @@ function PanelBrowserBody({
   const selectMode = usePanelStore((s) => s.selectMode)
   const viewport = usePanelStore((s) => s.viewport)
   const initialSrcRef = useRef(url)
-  // Estado do elemento: a montagem pode ser tardia (estado vazio → primeira URL
-  // na barra) e o <webview> do pool é re-anexado a cada volta à aba — os efeitos
-  // de ready/navegação reagem ao elemento, não a um ref fixo.
-  const [webviewEl, setWebviewEl] = useState<WebviewElement | null>(null)
 
-  // O <webview> vive no pool (webview-session.ts) — aqui só guardamos a
-  // referência do elemento para os comandos (loadURL, execução de JS).
-  const handleWebviewRef = useCallback((el: HTMLElement | null) => {
-    setWebviewEl(el as WebviewElement | null)
-  }, [])
-
-  const handleConsoleMessage = useCallback((message: string) => {
-    if (!message.startsWith(SELECT_PREFIX)) return
-    try {
-      usePanelStore.getState().addSelection(JSON.parse(message.slice(SELECT_PREFIX.length)))
-    } catch {
-      // payload malformado — ignora
-    }
-  }, [])
-
-  // Ready-gate do <webview>: os métodos (getURL/loadURL/reload) só podem ser
-  // chamados depois de o guest estar anexado ao DOM e ter emitido dom-ready —
-  // antes disso o Electron lança "The WebView must be attached to the DOM and
-  // the dom-ready event emitted before this method can be called". Enquanto não
-  // está pronto, a URL pedida na barra fica pendente e é aplicada no primeiro
-  // dom-ready (ou imediatamente, se o guest do pool já estiver pronto —
-  // dom-ready não re-emite ao re-anexar o elemento).
-  const readyRef = useRef(false)
-  const pendingUrlRef = useRef<string | null>(null)
-
-  // Gate declarado ANTES do efeito de navegação: a cada troca de elemento
-  // (remount por key, re-anexo do pool) o readyRef é resetado para "não pronto"
-  // antes de qualquer getURL/loadURL rodar no mesmo flush. Sem esse reset, o
-  // readyRef do guest antigo (morto) faria o getURL() acertar um guest ainda
-  // sem dom-ready → exceção não tratada em efeito → árvore inteira desmontada.
+  // Navegação controlada: a barra de URL pede, o pool aplica quando der.
   useEffect(() => {
-    if (!webviewEl) return
-    readyRef.current = false // elemento novo/re-anexado — guest (ainda) não pronto
-    const applyPendingUrl = () => {
-      const pending = pendingUrlRef.current
-      if (!pending) return
-      pendingUrlRef.current = null
-      try {
-        if (webviewEl.getURL() !== pending) void webviewEl.loadURL(pending).catch(() => {})
-      } catch {
-        pendingUrlRef.current = pending // ainda não pronto — próximo dom-ready aplica
-      }
-    }
-    const onReady = () => {
-      readyRef.current = true
-      applyPendingUrl()
-      // Toggle de seleção feito antes do dom-ready não se perde
-      try {
-        void webviewEl.executeJavaScript(usePanelStore.getState().selectMode ? SELECT_ON : SELECT_OFF).catch(() => {})
-      } catch {
-        // guest ainda não pronto — o próximo dom-ready re-aplica
-      }
-    }
-    webviewEl.addEventListener("dom-ready", onReady)
-    try {
-      webviewEl.getWebContentsId() // guest já pronto (pool) — dom-ready não re-emite
-      onReady()
-    } catch {
-      // guest inicializando — o dom-ready chama onReady
-    }
-    return () => webviewEl.removeEventListener("dom-ready", onReady)
-  }, [webviewEl])
+    if (!persistKey || !url) return
+    navigateWebview(persistKey, url)
+  }, [url, persistKey])
 
-  // Navegação controlada: mudanças na barra de URL viram loadURL (sem remount).
-  // Roda DEPOIS do ready-gate — o readyRef já corresponde ao elemento atual.
+  // Modo seleção — o pool também re-injeta a cada guest novo (dom-ready).
   useEffect(() => {
-    if (!webviewEl || !url) return
-    if (!readyRef.current) {
-      pendingUrlRef.current = url
-      return
-    }
-    pendingUrlRef.current = null
-    try {
-      if (webviewEl.getURL() !== url) void webviewEl.loadURL(url).catch(() => {})
-    } catch {
-      // guest trocado entre o render e o efeito — volta para pendente
-      readyRef.current = false
-      pendingUrlRef.current = url
-    }
-  }, [url, webviewEl])
+    if (!persistKey) return
+    applySelectMode(persistKey, selectMode)
+  }, [selectMode, persistKey])
 
-  // Modo seleção (clique vira badge no input): só roda com o guest pronto; se o
-  // toggle vier antes, o onReady re-aplica com o estado atual do store.
   useEffect(() => {
-    if (!webviewEl || !readyRef.current) return
-    try {
-      void webviewEl.executeJavaScript(selectMode ? SELECT_ON : SELECT_OFF).catch(() => {})
-    } catch {
-      // guest não pronto — o onReady re-aplica quando o dom-ready chegar
-    }
-  }, [selectMode, webviewEl])
-
-  // Botão reload: recarrega no MESMO webview, sem recriar o guest (a página
-  // não é destruída — apenas recarregada) — com pool via reloadWebview; sem
-  // pool (BrowserTab do painel), reload direto no elemento.
-  useEffect(() => {
-    if (refreshKey <= 0) return
-    if (persistKey) {
-      reloadWebview(persistKey)
-      return
-    }
-    if (webviewEl && readyRef.current) {
-      try {
-        webviewEl.reload()
-      } catch {
-        // webview não pronto — nada para recarregar ainda
-      }
-    }
-  }, [refreshKey, persistKey, webviewEl])
+    if (refreshKey <= 0 || !persistKey) return
+    reloadWebview(persistKey)
+  }, [refreshKey, persistKey])
 
   return (
     <WebPreviewBody
       src={initialSrcRef.current || undefined}
-      onWebviewRef={handleWebviewRef}
-      onConsoleMessage={handleConsoleMessage}
       onNavigate={onUrlChange}
       viewport={viewport}
       persistKey={persistKey}
@@ -666,116 +515,52 @@ function FullscreenChatFeed({ pinned, onTogglePin }: { pinned: boolean; onToggle
   )
 }
 
-/** Composer para pedir algo à IA sem sair da tela cheia (envia ao chat de código). */
+/**
+ * Composer da tela cheia: é o MESMO input do chat de código (CodeInput) — com
+ * modelo, modo de permissão, toggles, comandos "/", anexos e os badges de
+ * elemento selecionado. Antes era um textarea próprio, que ia ficando para trás
+ * a cada recurso novo do input principal.
+ */
 function FullscreenComposer({ onSent }: { onSent?: () => void }) {
-  const { folders } = useWorkspace()
   const activeSession = useActiveSession("code")
+  const sessionId = activeSession?.id
   const sendMessage = useSessionStore((s) => s.sendMessage)
   const stopStreaming = useSessionStore((s) => s.stopStreaming)
-  const permissionMode = usePermissionPrefs((s) => s.mode)
-  const status = useSessionStatus(activeSession?.id)
-  const isBusy = status === "submitted" || status === "streaming" || status === "cancelling"
-  const { t } = useTranslation()
-  const [text, setText] = useState("")
-  const [sending, setSending] = useState(false)
-  const selections = usePanelStore((s) => s.selections)
-  const removeSelection = usePanelStore((s) => s.removeSelection)
+  const status = useSessionStatus(sessionId)
+  const messages = useSessionStore((s) => (sessionId ? s.messages[sessionId] ?? NO_MSGS : NO_MSGS))
 
-  const disabled = folders.length === 0
-  const submit = async () => {
-    const base = text.trim()
-    if (!base || disabled || sending) return
-    setSending(true)
-    const [directory, ...extraDirectories] = folders
-    // Elementos selecionados no browser seguem na mensagem, como no input principal
-    let value = base
-    if (selections.length > 0) {
-      value += `\n\n${selections
-        .map(
-          (sel) =>
-            `[Elemento selecionado no browser do painel — <${sel.tag}> em ${sel.url}]\nselector: ${sel.selector}\ntexto: ${sel.text || "(sem texto)"}\nhtml: ${sel.html}`,
-        )
-        .join("\n\n")}`
-    }
-    try {
-      await sendMessage("code", value, {
-        options: { permissionMode, brain: true },
-        directory,
-        extraDirectories,
-        sessionId: activeSession?.id,
-      })
-      if (selections.length > 0) usePanelStore.getState().clearSelections()
-      setText("")
+  const handleSubmit = useCallback(
+    (
+      text: string,
+      options: SendMessageOptions,
+      directory: string,
+      extraDirectories: string[],
+      files?: FilePart[],
+    ) => {
+      void sendMessage("code", text, { options, directory, extraDirectories, sessionId, files })
       // Abre o feed de conversa para o usuário acompanhar a resposta
       onSent?.()
-    } finally {
-      setSending(false)
-    }
-  }
+    },
+    [sendMessage, sessionId, onSent],
+  )
+
+  const handleStop = useCallback(() => {
+    if (sessionId) stopStreaming(sessionId)
+  }, [sessionId, stopStreaming])
 
   return (
     <div className="absolute bottom-4 left-1/2 z-20 w-full max-w-2xl -translate-x-1/2 px-4">
-      <div className="rounded-xl border-2 border-sidebar-border bg-background/95 shadow-lg backdrop-blur">
-        <div className="flex items-center gap-1 border-b border-border/60 px-2 py-1.5">
-          <ModelPicker sessionId={activeSession?.id} />
-          <PermissionModePicker />
-        </div>
-        {selections.length > 0 && (
-          <div className="flex flex-wrap items-center gap-1.5 border-b border-border/60 px-2 py-1.5">
-            {selections.map((sel) => (
-              <span
-                key={sel.id}
-                title={`${sel.selector}\n"${sel.text}"`}
-                className="flex items-center gap-1 rounded-md border border-emerald-500/30 bg-emerald-500/10 px-1.5 py-0.5 text-[11px] text-emerald-600 dark:text-emerald-400"
-              >
-                <MousePointerClickIcon className="size-3" />
-                {"<"}{sel.tag}{">"} {sel.text ? `"${sel.text.slice(0, 24)}${sel.text.length > 24 ? "…" : ""}"` : t("codeInput.selected")}
-                <button
-                  type="button"
-                  onClick={() => removeSelection(sel.id)}
-                  className="ml-0.5 rounded-sm hover:bg-emerald-500/20"
-                >
-                  <X className="size-3" />
-                </button>
-              </span>
-            ))}
-          </div>
-        )}
-        <div className="flex items-end gap-2 p-1.5">
-          <textarea
-            value={text}
-            onChange={(e) => setText(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && !e.shiftKey) {
-                e.preventDefault()
-                void submit()
-              }
-            }}
-            rows={1}
-            placeholder={disabled ? t("browser.composerPlaceholderNoFolder") : t("browser.composerPlaceholder")}
-            disabled={disabled}
-            className="max-h-32 min-h-9 flex-1 resize-none bg-transparent px-2 py-1.5 text-sm outline-none placeholder:text-muted-foreground disabled:opacity-60"
-          />
-          {isBusy ? (
-            <button
-              type="button"
-              onClick={() => activeSession?.id && stopStreaming(activeSession.id)}
-              title={t("send.stop")}
-              className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-destructive text-destructive-foreground transition-colors hover:bg-destructive/90"
-            >
-              <SquareIcon className="size-4" />
-            </button>
-          ) : (
-            <button
-              type="button"
-              onClick={() => void submit()}
-              disabled={disabled || sending || !text.trim()}
-              className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground disabled:opacity-40"
-            >
-              {sending ? <Loader2Icon className="size-4 animate-spin" /> : <SendIcon className="size-4" />}
-            </button>
-          )}
-        </div>
+      {/* Fundo opaco próprio: o InputGroup do CodeInput é semitransparente e,
+          sobre a página em tela cheia, ficaria ilegível. Sem borda aqui — a do
+          input já existe e duas viram moldura dupla. */}
+      <div className="rounded-xl bg-background/95 px-3 pt-3 shadow-lg backdrop-blur">
+        <CodeInput
+          onSubmit={handleSubmit}
+          status={status}
+          onStop={handleStop}
+          hasMessages={messages.length > 0}
+          sessionId={sessionId}
+        />
       </div>
     </div>
   )

@@ -188,7 +188,8 @@
     "hiddenActions_one": "+{{count}} hidden action — show all",
     "hiddenActions_other": "+{{count}} hidden actions — show all",
     "sourcesConsulted_one": "{{count}} Source Consulted",
-    "sourcesConsulted_other": "{{count}} Sources Consulted"
+    "sourcesConsulted_other": "{{count}} Sources Consulted",
+    "imageUnavailable": "Image unavailable"
   },
   "askCard": {
     "permissionRequired": "Permission required",

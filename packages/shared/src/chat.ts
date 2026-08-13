@@ -188,6 +188,19 @@ export interface AssistantSnapshot {
   /** Motivo da falha da captura inicial (start) — para diagnóstico e a UI
    * explicar por que não há diff/revert disponível. */
   captureError?: string
+  /**
+   * Veredito da verificação de fim de turno, calculado pelo engine comparando
+   * os snapshots (não é afirmação do modelo):
+   * - `changed`: arquivos alterados (files/patch preenchidos)
+   * - `unchanged`: o turno não escreveu NADA no filesystem
+   * - `unknown`: sem snapshot ou a captura falhou — não dá para afirmar nada
+   *
+   * É a única evidência dura do que o turno fez que sobrevive para os turnos
+   * seguintes: ToolParts nunca voltam ao modelo (ver todo-context.ts), então
+   * sem isto o histórico guarda só a NARRATIVA do agente sobre o próprio
+   * trabalho — e uma alegação falsa vira "fato" nos turnos posteriores.
+   */
+  verified?: 'changed' | 'unchanged' | 'unknown'
 }
 
 /**

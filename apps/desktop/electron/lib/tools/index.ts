@@ -2,6 +2,8 @@ import type { ToolSet } from 'ai'
 import type { SendMessageInput } from '@shared/chat'
 import { getMcpTools } from '../mcp'
 import { createBrowserLinksTool, createBrowserOpenTool } from './browser'
+import { createBrowserScriptTools } from './browser-script'
+import { createEsteiraTools } from './esteira'
 import type { ToolContext } from './context'
 import {
   createEditTool,
@@ -57,6 +59,13 @@ export function buildToolSet(input: SendMessageInput, ctx: ToolContext | null): 
       tools.browser_links = createBrowserLinksTool(input.sessionId)
     }
     if (allowBrain) Object.assign(tools, createChatMemoryTools(input))
+    // Esteira: transformar o que foi discutido no chat em esteira/task de um
+    // board. Fica sempre disponível (não é toggle): a esteira é outra forma de
+    // trabalhar, não um modo da conversa — o chat só empurra trabalho pra lá.
+    // Workers ficam de fora: quem decide o que vira task é a sessão principal.
+    if (input.orchestrationRole !== 'worker') {
+      Object.assign(tools, createEsteiraTools(input.sessionId, input))
+    }
     if (allowDelegation) tools.subagent = createSubagentTool(input, ctx)
     // Fluxo explícito /create-skill: habilita só a tool de propor skill
     if (input.orchestrationRole !== 'worker' && input.text.trimStart().startsWith('/create-skill')) {
@@ -96,10 +105,15 @@ export function buildToolSet(input: SendMessageInput, ctx: ToolContext | null): 
   // Workers ficam de fora — o painel é um recurso único e visível.
   if (ctx && input.orchestrationRole !== 'worker') {
     Object.assign(tools, createPanelBrowserTools(ctx))
+    // Automação em lote: roda numa janela oculta, sem disputar o painel.
+    Object.assign(tools, createBrowserScriptTools(ctx))
   }
   if (allowBrain && ctx) {
     Object.assign(tools, createCodeMemoryTools(input, ctx))
     tools.memory_graph = createGraphTool(input, ctx)
+  }
+  if (input.orchestrationRole !== 'worker') {
+    Object.assign(tools, createEsteiraTools(input.sessionId, input))
   }
   if (allowQuestion) tools.question = createQuestionTool(input, ctx?.abort)
   if (allowDelegation) tools.subagent = createSubagentTool(input, ctx)

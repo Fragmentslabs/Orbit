@@ -1,25 +1,34 @@
 import { panelApi } from "@/src/lib/ipc"
+import { usePanelStore } from "@/src/stores/panel-store"
 
 /**
- * Pool de `<webview>` persistentes do painel direito.
+ * Pool de `<webview>` do painel direito — um por `sessionId:tabId`.
  *
- * O elemento `<webview>` de cada aba Browser é criado UMA vez por
- * `sessionId:tabId` e vive fora do ciclo de vida do React — quando a aba é
- * desmontada (troca de chat/aba) o elemento é apenas MOVIDO para um host
- * oculto fora da tela, mantendo a página viva (DOM, JS, scroll, histórico).
+ * IMPORTANTE (medido, não suposto): o Electron DESTRÓI e RECRIA o guest toda
+ * vez que o elemento `<webview>` muda de pai no DOM. A cada re-parent o
+ * webContentsId muda, `dom-ready` dispara de novo e a página é recarregada a
+ * partir do atributo `src` — o estado JS da página NÃO sobrevive. Não existe
+ * "mover o elemento e manter a página viva".
  *
- * Isso permite:
- * - voltar a uma sessão e encontrar o browser exatamente onde estava;
- * - o agente continuar navegando em background via tools panel_* (o WebContents
- *   segue registrado no main durante o "detach").
+ * Por isso o pool guarda a URL ATUAL de cada aba (`currentUrl`, alimentada
+ * pelos eventos de navegação, inclusive quando quem navega é o agente) e a
+ * restaura assim que o guest renasce. O que persiste de fato:
+ * - a URL da aba (volta na mesma página ao trocar de aba/chat);
+ * - cookies, logins e localStorage (partition `persist:` — sobrevive até a
+ *   reinicialização do app);
+ * - o modo seleção, re-injetado a cada guest novo.
  *
- * O host oculto não usa display:none porque o guest precisa de viewport para
- * continuar renderizando e permitir capturePage — fica off-screen com
- * opacity:0, tamanho fixo razoável, fora do fluxo de interação.
+ * O que não persiste é o estado em memória da página (formulário preenchido,
+ * scroll, SPA state) — limitação do `<webview>`, não uma escolha nossa.
  */
+
+/** Sessão persistente do browser do painel: cookies/logins/localStorage em
+ *  disco, compartilhada com a janela oculta de captura (browser-script.ts). */
+export const BROWSER_PARTITION = "persist:orbit-browser"
 
 export interface WebviewElement extends HTMLElement {
   src: string
+  partition: string
   getWebContentsId(): number
   getURL(): string
   loadURL(url: string): Promise<void>
@@ -31,8 +40,16 @@ export interface WebviewElement extends HTMLElement {
 interface WebviewRecord {
   key: string
   el: WebviewElement
+  /** URL autoritativa da aba — sobrevive à recriação do guest. */
+  currentUrl: string
+  /** URL que já pedimos para este guest. Impede que o restauro se repita
+   *  quando a URL carregada não bate exatamente com a pedida (o Chromium
+   *  normaliza URLs) — sem esse trava, dom-ready e loadURL se realimentam num
+   *  laço infinito de ERR_ABORTED. Zerado a cada guest novo (mount/unmount). */
+  requestedUrl: string | null
+  /** true quando o elemento está no container visível de uma aba. */
+  mounted: boolean
   onNavigate?: (url: string) => void
-  onConsoleMessage?: (message: string) => void
 }
 
 /** Tamanho do host oculto — só importa enquanto a aba está "desmontada". */
@@ -41,16 +58,121 @@ const HIDDEN_HEIGHT = 800
 
 const records = new Map<string, WebviewRecord>()
 
-/** `<webview>`s que já emitiram `dom-ready`. Antes disso, chamar getURL()/
- *  loadURL() lança "The WebView must be attached to the DOM and the dom-ready
- *  event emitted before this method can be called" — um erro não capturado
- *  num useEffect derrubava o app inteiro (tela preta) ao montar um webview
- *  novo. Só chamamos essas APIs com o guest pronto. */
-const readyEls = new WeakSet<WebviewElement>()
-/** loadURL agendado para quando o guest ficar pronto (última vitória). */
-const pendingNav = new WeakMap<WebviewElement, string>()
-/** Scripts aguardando o dom-ready — evita rejeição fatal no renderer. */
-const pendingScripts = new WeakMap<WebviewElement, string[]>()
+// ─── Modo seleção ────────────────────────────────────────────────────────────
+
+/** Prefixo do payload de seleção que a página manda por console.log. */
+const SELECT_PREFIX = "__ORBIT_SELECT__"
+
+/**
+ * Injetado na página quando o modo seleção está ligado. É de UM tiro: ao
+ * clicar, envia o payload e se desarma sozinho — o store espelha isso
+ * (addSelection zera selectMode), então o botão nunca fica aceso sem os
+ * listeners estarem de fato ativos.
+ */
+const SELECT_ON = `(() => {
+  if (window.__orbitSelectCleanup) window.__orbitSelectCleanup()
+  let last = null
+  const restore = () => { if (last) { last.style.outline = last.__orbitOutline || ''; last = null } }
+  const over = (e) => {
+    restore()
+    last = e.target
+    last.__orbitOutline = last.style.outline
+    last.style.outline = '2px solid #22c55e'
+  }
+  const cssPath = (el) => {
+    const parts = []
+    let node = el
+    while (node && node.nodeType === 1 && parts.length < 5) {
+      if (node.id) { parts.unshift('#' + node.id); break }
+      let part = node.tagName.toLowerCase()
+      const cls = [...node.classList].slice(0, 2).join('.')
+      if (cls) part += '.' + cls
+      const parent = node.parentElement
+      if (parent) {
+        const siblings = [...parent.children].filter((c) => c.tagName === node.tagName)
+        if (siblings.length > 1) part += ':nth-of-type(' + (siblings.indexOf(node) + 1) + ')'
+      }
+      parts.unshift(part)
+      node = node.parentElement
+    }
+    return parts.join(' > ')
+  }
+  const click = (e) => {
+    e.preventDefault()
+    e.stopPropagation()
+    const el = e.target
+    console.log('${SELECT_PREFIX}' + JSON.stringify({
+      tag: el.tagName.toLowerCase(),
+      selector: cssPath(el),
+      text: (el.innerText || el.value || '').trim().replace(/\\s+/g, ' ').slice(0, 200),
+      html: el.outerHTML.slice(0, 1500),
+      url: location.href,
+    }))
+    window.__orbitSelectCleanup()
+  }
+  document.addEventListener('mouseover', over, true)
+  document.addEventListener('click', click, true)
+  window.__orbitSelectCleanup = () => {
+    document.removeEventListener('mouseover', over, true)
+    document.removeEventListener('click', click, true)
+    restore()
+    window.__orbitSelectCleanup = null
+  }
+})()`
+
+const SELECT_OFF = `window.__orbitSelectCleanup && window.__orbitSelectCleanup()`
+
+// ─── Acesso seguro ao guest ──────────────────────────────────────────────────
+
+/**
+ * true quando o guest está anexado e já emitiu dom-ready. É uma verificação AO
+ * VIVO: `getWebContentsId()` lança exatamente enquanto essas condições não
+ * valem. Um cache (WeakSet "já ficou pronto") mentiria depois de cada
+ * re-parent, que é quando o guest é recriado — foi essa mentira que derrubava
+ * a árvore React com "The WebView must be attached to the DOM...".
+ */
+export function isWebviewReady(el: WebviewElement): boolean {
+  try {
+    return el.getWebContentsId() > 0
+  } catch {
+    return false
+  }
+}
+
+/** getURL() que nunca lança: "" enquanto o guest não estiver pronto. */
+export function safeWebviewURL(el: WebviewElement): string {
+  if (!isWebviewReady(el)) return ""
+  try {
+    return el.getURL()
+  } catch {
+    return ""
+  }
+}
+
+function run(el: WebviewElement, code: string): void {
+  if (!isWebviewReady(el)) return
+  try {
+    void el.executeJavaScript(code).catch(() => {})
+  } catch {
+    // guest morreu entre o check e a chamada — o próximo dom-ready re-aplica
+  }
+}
+
+/** A chave é `${sessionId}:${tabId}` — extrai o sessionId (nanoid, sem ":"). */
+function sessionIdOf(key: string): string {
+  const idx = key.indexOf(":")
+  return idx >= 0 ? key.slice(0, idx) : key
+}
+
+/** A chave é `${sessionId}:${tabId}` — extrai o tabId. */
+function tabIdOf(key: string): string {
+  const idx = key.indexOf(":")
+  return idx >= 0 ? key.slice(idx + 1) : key
+}
+
+function isRealUrl(url: string | undefined): url is string {
+  return !!url && url !== "about:blank"
+}
 
 let hiddenHost: HTMLDivElement | null = null
 
@@ -65,193 +187,200 @@ function getHiddenHost(): HTMLDivElement {
   return hiddenHost
 }
 
-function createWebview(src: string): WebviewElement {
+/**
+ * O `src` fica FIXO em about:blank pelo resto da vida do elemento. Ele é o que
+ * o guest recriado carrega a cada re-parent: se apontasse para uma página real,
+ * toda troca de aba recarregaria a página ANTIGA antes de irmos para a atual —
+ * e mexer em `src` com o elemento anexado dispara uma navegação, que realimenta
+ * o handler de navegação num laço. Quem manda na página é `currentUrl`, via
+ * restoreGuest.
+ */
+function createWebview(): WebviewElement {
   const el = document.createElement("webview") as WebviewElement
-  el.src = src || "about:blank"
+  // partition precisa ser definida ANTES de anexar ao DOM (depois é imutável)
+  el.partition = BROWSER_PARTITION
+  el.src = "about:blank"
   el.style.cssText = "width: 100%; height: 100%; display: flex; background: white; border: 0;"
   return el
 }
 
-function navigateUrl(event: Event): string | undefined {
-  const url = (event as Event & { url?: string }).url
-  return url && url !== "about:blank" ? url : undefined
-}
+// ─── Ciclo de vida ───────────────────────────────────────────────────────────
 
-/** A chave é `${sessionId}:${tabId}` — extrai o sessionId (nanoid, sem ":"). */
-function sessionIdOf(key: string): string {
-  const idx = key.indexOf(":")
-  return idx >= 0 ? key.slice(0, idx) : key
-}
+/** Aplica no guest o estado que precisa sobreviver à recriação: URL e seleção. */
+function restoreGuest(record: WebviewRecord): void {
+  const { el } = record
+  if (!isWebviewReady(el)) return
 
-/** Garante o listener de dom-ready (idempotente) — cobre também `<webview>`s
- *  renderizados pelo React fora do pool (ex.: aba Browser do painel direito). */
-function trackReady(el: WebviewElement) {
-  if (readyEls.has(el)) return
-  el.addEventListener("dom-ready", () => {
-    readyEls.add(el)
-    const pending = pendingNav.get(el)
-    if (pending !== undefined) {
-      pendingNav.delete(el)
-      void el.loadURL(pending).catch(() => {})
+  // Só a aba visível pode ser alvo das tools panel_* do agente — sem isso, o
+  // dom-ready de um webview movido para o host oculto roubaria o registro.
+  if (record.mounted) {
+    try {
+      const wcId = el.getWebContentsId()
+      if (wcId > 0) panelApi.register(sessionIdOf(record.key), wcId)
+    } catch {
+      // o próximo dom-ready registra
     }
-    const scripts = pendingScripts.get(el)
-    if (scripts?.length) {
-      pendingScripts.delete(el)
-      for (const code of scripts) void el.executeJavaScript(code).catch(() => {})
+  }
+
+  const target = record.currentUrl
+  if (isRealUrl(target) && record.requestedUrl !== target && safeWebviewURL(el) !== target) {
+    record.requestedUrl = target
+    try {
+      void el.loadURL(target).catch(() => {})
+    } catch {
+      record.requestedUrl = null
     }
-  })
+  }
+
+  run(el, usePanelStore.getState().selectMode ? SELECT_ON : SELECT_OFF)
 }
 
-/** true quando o guest já emitiu dom-ready (getURL/loadURL são seguros). */
-export function isWebviewReady(el: WebviewElement): boolean {
-  trackReady(el)
-  return readyEls.has(el)
+/** Registra a URL como a atual da aba e propaga para a UI e para o store. */
+function reportUrl(record: WebviewRecord, url: string): void {
+  if (!isRealUrl(url) || record.currentUrl === url) return
+  // Redirect do servidor durante um restauro também passa por aqui: a URL que
+  // o guest realmente carregou vira a atual da aba.
+  record.currentUrl = url
+  record.onNavigate?.(url)
+  // Persiste na aba mesmo com o componente desmontado (agente navegando em
+  // background) — é o que faz a URL sobreviver a sair e voltar do chat.
+  usePanelStore.getState().setTabUrl(sessionIdOf(record.key), tabIdOf(record.key), url)
 }
 
-/** getURL() que nunca lança: retorna "" enquanto o guest não estiver pronto. */
-export function safeWebviewURL(el: WebviewElement): string {
-  if (!isWebviewReady(el)) return ""
+function handleConsoleMessage(message: string): void {
+  if (!message.startsWith(SELECT_PREFIX)) return
   try {
-    return el.getURL()
+    usePanelStore.getState().addSelection(JSON.parse(message.slice(SELECT_PREFIX.length)))
   } catch {
-    return ""
-  }
-}
-
-/** loadURL() que nunca lança: navega agora se pronto; senão agenda para o
- *  dom-ready. Se o src inicial já é o URL desejado, não agenda (o próprio
- *  load do guest resolve). */
-/** Executa JS apenas depois de o guest estar anexado e pronto. */
-export function executeWebviewJavaScript(el: WebviewElement, code: string): void {
-  if (!isWebviewReady(el)) {
-    const queued = pendingScripts.get(el) ?? []
-    queued.push(code)
-    pendingScripts.set(el, queued)
-    return
-  }
-  try {
-    void el.executeJavaScript(code).catch(() => {})
-  } catch {
-    const queued = pendingScripts.get(el) ?? []
-    queued.push(code)
-    pendingScripts.set(el, queued)
-  }
-}
-
-export function navigateWebview(el: WebviewElement, url: string): void {
-  if (!isWebviewReady(el)) {
-    if (el.src !== url) pendingNav.set(el, url)
-    return
-  }
-  try {
-    if (el.getURL() !== url) void el.loadURL(url).catch(() => {})
-  } catch {
-    pendingNav.set(el, url)
+    // payload malformado — ignora
   }
 }
 
 /**
  * Garante que o webview da chave existe (criando no host oculto se preciso).
- * Callbacks são atualizados a cada chamada — o componente montado define o
- * callback do momento; desmontado, ficam undefined.
+ * O callback de navegação é atualizado a cada chamada — o componente montado
+ * define o do momento; desmontado, fica undefined.
  */
 export function ensureWebview(
   key: string,
   src?: string,
   onNavigate?: (url: string) => void,
-  onConsoleMessage?: (message: string) => void,
 ): WebviewElement {
-  let record = records.get(key)
-  if (!record) {
-    const el = createWebview(src ?? "")
-    const rec: WebviewRecord = { key, el, onNavigate, onConsoleMessage }
-    record = rec
-    records.set(key, rec)
-
-    el.addEventListener("dom-ready", () => {
-      // O listener de trackReady pode ser instalado durante este mesmo evento;
-      // marcar diretamente aqui garante que efeitos React posteriores vejam o
-      // guest como pronto e não tentem chamar APIs cedo demais.
-      readyEls.add(el)
-      // Descarrega navegação/script agendados antes do guest iniciar
-      const pending = pendingNav.get(el)
-      if (pending !== undefined) {
-        pendingNav.delete(el)
-        void el.loadURL(pending).catch(() => {})
-      }
-      try {
-        const wcId = el.getWebContentsId()
-        if (wcId > 0) panelApi.register(sessionIdOf(key), wcId)
-      } catch {
-        // guest ainda não pronto — o próximo dom-ready registra
-      }
-    })
-    const syncUrl = (event: Event) => {
-      const url = navigateUrl(event)
-      if (url) rec.onNavigate?.(url)
-    }
-    el.addEventListener("did-navigate", syncUrl)
-    el.addEventListener("did-navigate-in-page", syncUrl)
-    el.addEventListener("console-message", (event) => {
-      const message = (event as Event & { message?: string }).message
-      if (message) rec.onConsoleMessage?.(message)
-    })
-    getHiddenHost().appendChild(el)
-  } else {
-    record.onNavigate = onNavigate
-    record.onConsoleMessage = onConsoleMessage
+  const existing = records.get(key)
+  if (existing) {
+    existing.onNavigate = onNavigate
+    return existing.el
   }
-  return record.el
-}
 
-/** reforça o registro quando a aba foi re-montada — mantém o main apontando pra cá. */
-function reRegister(el: WebviewElement, sessionId: string): void {
-  try {
-    const wcId = el.getWebContentsId()
-    if (wcId > 0) panelApi.register(sessionId, wcId)
-  } catch {
-    // o dom-ready tratará
+  const el = createWebview()
+  const record: WebviewRecord = {
+    key,
+    el,
+    currentUrl: isRealUrl(src) ? src : "",
+    requestedUrl: null,
+    mounted: false,
+    onNavigate,
   }
+  records.set(key, record)
+
+  // dom-ready dispara a cada attach/re-attach (guest novo) — é o gancho para
+  // devolver o guest ao estado da aba.
+  el.addEventListener("dom-ready", () => restoreGuest(record))
+
+  const syncUrl = (event: Event) => {
+    const url = (event as Event & { url?: string }).url
+    if (url) reportUrl(record, url)
+  }
+  el.addEventListener("did-navigate", syncUrl)
+  el.addEventListener("did-navigate-in-page", syncUrl)
+  el.addEventListener("console-message", (event) => {
+    const message = (event as Event & { message?: string }).message
+    if (message) handleConsoleMessage(message)
+  })
+
+  getHiddenHost().appendChild(el)
+  return el
 }
 
 /**
- * Monta o webview da chave no container visível da aba (move do host oculto,
- * não recria). Retorna o elemento para o componente usar (loadURL, JS...).
+ * Monta o webview da chave no container visível da aba. Isso RECRIA o guest
+ * (limitação do Electron) — o restoreGuest do dom-ready devolve a página.
  */
 export function mountWebview(
   key: string,
   container: HTMLElement,
   src?: string,
   onNavigate?: (url: string) => void,
-  onConsoleMessage?: (message: string) => void,
 ): WebviewElement {
-  const el = ensureWebview(key, src, onNavigate, onConsoleMessage)
-  if (el.parentElement !== container) container.appendChild(el)
-  reRegister(el, sessionIdOf(key))
+  const el = ensureWebview(key, src, onNavigate)
+  const record = records.get(key)!
+  record.mounted = true
+  if (el.parentElement !== container) {
+    // Guest novo a caminho: o restauro desta geração ainda não foi tentado.
+    record.requestedUrl = null
+    container.appendChild(el)
+  }
+  // Guest já vivo (mesmo container): reaplica o estado sem esperar dom-ready.
+  restoreGuest(record)
   return el
 }
 
-/** Desmonta: devolve ao host oculto — página, estado e registro continuam vivos. */
+/** Desmonta: devolve ao host oculto. A página é recarregada ao voltar. */
 export function unmountWebview(key: string): void {
   const record = records.get(key)
   if (!record) return
   record.onNavigate = undefined
+  record.mounted = false
   const hidden = getHiddenHost()
-  if (record.el.parentElement !== hidden) hidden.appendChild(record.el)
+  if (record.el.parentElement !== hidden) {
+    record.requestedUrl = null
+    hidden.appendChild(record.el)
+  }
 }
 
 export function getWebview(key: string): WebviewElement | null {
   return records.get(key)?.el ?? null
 }
 
-export function reloadWebview(key: string): void {
-  const el = records.get(key)?.el
-  if (!el) return
-  try {
-    el.reload()
-  } catch {
-    // webview não pronto
+/** URL atual conhecida da aba — não toca no guest, então nunca lança. */
+export function getWebviewUrl(key: string): string {
+  return records.get(key)?.currentUrl ?? ""
+}
+
+/** Navega a aba. Guest não pronto: a URL fica como atual e o dom-ready aplica. */
+export function navigateWebview(key: string, url: string): void {
+  const record = records.get(key)
+  if (!record || !isRealUrl(url) || record.currentUrl === url) return
+  record.currentUrl = url
+  if (!isWebviewReady(record.el)) {
+    // Guest não pronto: o dom-ready leva para a URL nova.
+    record.requestedUrl = null
+    return
   }
+  record.requestedUrl = url
+  try {
+    void record.el.loadURL(url).catch(() => {})
+  } catch {
+    record.requestedUrl = null // dom-ready seguinte restaura
+  }
+}
+
+/** Recarrega a página da aba, sem recriar o elemento. */
+export function reloadWebview(key: string): void {
+  const record = records.get(key)
+  if (!record || !isWebviewReady(record.el)) return
+  try {
+    record.el.reload()
+  } catch {
+    // guest trocado entre o check e a chamada — nada a recarregar
+  }
+}
+
+/** Liga/desliga o modo seleção na página da aba (re-aplicado a cada guest novo). */
+export function applySelectMode(key: string, on: boolean): void {
+  const record = records.get(key)
+  if (!record) return
+  run(record.el, on ? SELECT_ON : SELECT_OFF)
 }
 
 /** Destrói o webview da chave (fecho da aba) — limpa o registro no main. */

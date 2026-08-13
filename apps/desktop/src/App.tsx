@@ -10,11 +10,15 @@ import { WorkspaceProvider, useWorkspace } from "@/lib/workspace-context"
 import { FolderOpen } from "lucide-react"
 import { fsApi, panelApi, windowApi } from "@/src/lib/ipc"
 import { usePanelStore } from "@/src/stores/panel-store"
+import { useEsteiraStore } from "@/src/stores/esteira-store"
+import { useProviderStore } from "@/src/stores/provider-store"
+import { Boxes } from "lucide-react"
 import { useActiveSession, useSessionStore } from "@/src/stores/session-store"
 import { ChatHeader } from "@/src/components/chat-header"
 import { ChatView } from "@/src/components/chat-view"
 import { MemoriesView } from "@/src/components/memories/memories-view"
 import { ModelsView } from "@/src/components/models/models-view"
+import { EsteiraBoard } from "@/src/components/esteira/esteira-board"
 import { RightPanel, RightPanelDropZone } from "@/src/components/right-panel"
 import { TitleBar } from "@/src/components/titlebar"
 import { ChatSearch } from "@/src/components/chat-search"
@@ -26,6 +30,9 @@ const SIDEBAR_SHOW_DELAY = 100
 const STORAGE_KEY = "sidebar-mode"
 
 type SidebarMode = "hover" | "pinned"
+
+/** Referência estável: `?? []` num seletor zustand vira loop de render. */
+const SEM_PASTAS: string[] = []
 
 function loadMode(): SidebarMode {
   const stored = localStorage.getItem(STORAGE_KEY)
@@ -196,6 +203,21 @@ function Layout() {
     }
   }, [workspaceMode])
 
+  // Esteira ABERTA (na lista não há nenhuma): o header do modo esteira reflete
+  // o contexto dela — pastas, branch e o modelo que as fases usam.
+  const esteiraAberta = useEsteiraStore((s) =>
+    s.abertaId ? s.esteiras.find((e) => e.id === s.abertaId) : undefined,
+  )
+  const pastasDaEsteira = useEsteiraStore((s) => {
+    const esteira = s.abertaId ? s.esteiras.find((e) => e.id === s.abertaId) : undefined
+    return esteira ? s.projetos.find((p) => p.id === esteira.projetoId)?.pastas ?? SEM_PASTAS : SEM_PASTAS
+  })
+  const modeloDaEsteira = useProviderStore((s) => {
+    const fase = esteiraAberta?.fases[0]
+    if (!fase) return undefined
+    return s.catalog[fase.providerId]?.models[fase.modelId]?.name ?? fase.modelId
+  })
+
   const onRequestAgentAction = useCallback((instruction: string) => {
     const activeId = useSessionStore.getState().activeIds["code"]
     if (!activeId) return
@@ -241,21 +263,45 @@ function Layout() {
                       ? t("sidebar.memories")
                       : view === "models"
                         ? t("header.models")
-                        : activeSession?.title ?? (workspaceMode === "chat" ? t("header.newChat") : t("header.newCode"))
+                        : view === "esteira"
+                          ? t("esteira.titulo")
+                          : activeSession?.title ?? (workspaceMode === "chat" ? t("header.newChat") : t("header.newCode"))
                   }
                   hasMenu={view === "chat" && workspaceMode === "chat" && !!activeSession}
                   session={view === "chat" && workspaceMode === "chat" ? activeSession : undefined}
                   rightPanelOpen={rightPanelOpen}
                   onToggleSidebar={handleToggleSidebar}
                   onToggleRightPanel={workspaceMode === "code" || workspaceMode === "chat" ? () => setRightPanelOpen(!rightPanelOpen) : undefined}
-                  repoPath={folders[0]}
+                  repoPath={view === "esteira" ? pastasDaEsteira[0] : folders[0]}
                   workspaceMode={workspaceMode}
                   onRequestAgentAction={onRequestAgentAction}
-                  folders={workspaceMode === "code" ? folders : undefined}
-                  onFoldersChange={workspaceMode === "code" ? setFolders : undefined}
+                  // Na página Esteira o header segue a esteira ABERTA, não as
+                  // pastas do chat: na lista não há esteira escolhida ainda, e
+                  // mostrar pasta/branch ali sugeriria um contexto que não existe.
+                  folders={view === "esteira" ? (pastasDaEsteira.length ? pastasDaEsteira : undefined) : workspaceMode === "code" ? folders : undefined}
+                  onFoldersChange={view === "esteira" ? undefined : workspaceMode === "code" ? setFolders : undefined}
+                  extra={
+                    view === "esteira" && modeloDaEsteira ? (
+                      <span
+                        title={t("esteira.modeloPadrao")}
+                        className="flex shrink-0 items-center gap-1.5 rounded-md px-2 py-1 text-xs text-muted-foreground"
+                      >
+                        <Boxes className="size-3.5" />
+                        <span className="max-w-40 truncate">{modeloDaEsteira}</span>
+                      </span>
+                    ) : undefined
+                  }
                 />
                 <div className="flex min-w-0 flex-1 flex-col overflow-hidden p-4" style={{ '--panel-bg': 'var(--background)' } as React.CSSProperties}>
-                  {view === "memories" ? <MemoriesView /> : view === "models" ? <ModelsView /> : <ChatView />}
+                  {view === "memories" ? (
+                    <MemoriesView />
+                  ) : view === "models" ? (
+                    <ModelsView />
+                  ) : view === "esteira" ? (
+                    <EsteiraBoard />
+                  ) : (
+                    <ChatView />
+                  )}
                 </div>
               </main>
           </Panel>

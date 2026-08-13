@@ -28,6 +28,9 @@ export const COMPACT_PROMPT = `You compact a conversation's history to free up c
 2. Decisions made and their reasoning.
 3. Files, functions, commands, and values cited (exact paths).
 4. Pending items, open errors, and preferences expressed by the user.
+
+For item 1, "what's been done" MUST be grounded in the "[Verified record: ...]" lines, which are measured by the engine from filesystem snapshots — not in the assistant's own prose. Where they disagree, the verified record wins. Copy those lines verbatim into the summary; never merge a turn marked "NO file was modified" into a list of completed work.
+
 Omit greetings, discarded attempts, and repetition. Reply with ONLY the summary, no preamble.`
 
 export function findLastSummaryIndex(history: ChatMessage[]): number {

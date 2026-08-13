@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next"
 import { ChevronDownIcon } from "lucide-react"
 import type { ChatMessage } from "@shared/chat"
 import { useSessionStore } from "@/src/stores/session-store"
+import { SEM_TASKS, useEsteiraStore } from "@/src/stores/esteira-store"
 import { cn } from "@/lib/utils"
 
 /** Parseia um unified diff em hunks com metadados por arquivo. */
@@ -151,14 +152,22 @@ function useLastCodeMessage(): { sessionId: string; message: ChatMessage } | nul
   }, [sessions, allMessages])
 }
 
-export function DiffTab({ sessionId, messageId }: {
+/**
+ * Aba Diff: mostra o patch de uma mensagem do chat OU de uma task da esteira.
+ * As duas fontes existem porque a esteira não cria mensagens (D12) — o patch
+ * dela é medido pelo engine e vive na própria task.
+ */
+export function DiffTab({ sessionId, messageId, esteiraId, taskId }: {
   sessionId?: string
   messageId?: string
+  esteiraId?: string
+  taskId?: string
 }) {
   const { t } = useTranslation()
   const auto = useLastCodeMessage()
-  const resolvedSessionId = sessionId ?? auto?.sessionId ?? ""
-  const resolvedMessageId = messageId ?? auto?.message.id ?? ""
+  const daEsteira = !!(esteiraId && taskId)
+  const resolvedSessionId = daEsteira ? "" : sessionId ?? auto?.sessionId ?? ""
+  const resolvedMessageId = daEsteira ? "" : messageId ?? auto?.message.id ?? ""
 
   const messages = useSessionStore((s) => s.messages[resolvedSessionId])
   const message: ChatMessage | undefined = useMemo(
@@ -166,15 +175,19 @@ export function DiffTab({ sessionId, messageId }: {
     [messages, resolvedMessageId],
   )
 
-  const files = useMemo(() => {
-    if (!message?.snapshot?.patch) return null
-    return parsePatch(message.snapshot.patch)
-  }, [message])
+  const task = useEsteiraStore((s) =>
+    esteiraId && taskId ? (s.tasksPorEsteira[esteiraId] ?? SEM_TASKS).find((x) => x.id === taskId) : undefined,
+  )
+
+  const patch = daEsteira ? task?.diff?.patch : message?.snapshot?.patch
+  const totalArquivos = daEsteira ? task?.diff?.arquivos?.length : message?.snapshot?.files?.length
+
+  const files = useMemo(() => (patch ? parsePatch(patch) : null), [patch])
 
   const session = useSessionStore((s) => s.sessions.find((s) => s.id === resolvedSessionId))
-  const isAuto = !sessionId
+  const isAuto = !daEsteira && !sessionId
 
-  if (!message) {
+  if (daEsteira ? !task : !message) {
     return (
       <div className="flex h-full items-center justify-center text-xs text-muted-foreground">
         {t("diff.noChanges")}
@@ -199,7 +212,7 @@ export function DiffTab({ sessionId, messageId }: {
         {isAuto && session && (
           <span className="truncate font-medium text-foreground">{session.title}</span>
         )}
-        <span>{t("diff.filesCount", { count: message.snapshot!.files?.length ?? files.length })}</span>
+        <span>{t("diff.filesCount", { count: totalArquivos ?? files.length })}</span>
         {totalAdded > 0 && <span className="text-emerald-500">+{totalAdded}</span>}
         {totalRemoved > 0 && <span className="text-red-500">-{totalRemoved}</span>}
       </div>

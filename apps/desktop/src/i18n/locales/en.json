@@ -586,6 +586,10 @@
       "diff": {
         "label": "Diff",
         "description": "Changes made by tools"
+      },
+      "media": {
+        "label": "Media",
+        "description": "Images produced by the agent"
       }
     }
   },
@@ -731,8 +735,6 @@
     "agentUsingBrowser": "Orbit is using the browser",
     "browserActivity": "Browser activity",
     "emptyActivity": "Agent actions will appear here.",
-    "composerPlaceholder": "Ask Orbit about this page…",
-    "composerPlaceholderNoFolder": "Select a folder in code mode to ask the AI",
     "chatFeed": "Conversation",
     "showChatFeed": "Show conversation",
     "hideChatFeed": "Hide conversation",
@@ -1424,5 +1426,153 @@
       "optional": "(optional)",
       "apiKeyPlaceholder": "Leave blank to keep the current one"
     }
+  },
+  "media": {
+    "searchPlaceholder": "Search by name or task",
+    "refresh": "Refresh",
+    "loading": "Loading images...",
+    "empty": "No images here yet.",
+    "delete": "Delete",
+    "openInChat": "Open in chat",
+    "selectedCount": "{{count}} selected",
+    "usage": "{{count}} images · {{size}}",
+    "cleanupScripts": "Clear script images",
+    "cleanupScriptsHint": "Deletes images captured by scripts/batches that were never shown in a chat",
+    "source": {
+      "all": "All",
+      "chat": "Chat",
+      "screenshot": "Screenshot",
+      "script": "Script",
+      "batch": "Batch"
+    },
+    "period": {
+      "all": "Any time",
+      "today": "24h",
+      "week": "7 days",
+      "month": "30 days"
+    }
+  },
+  "esteira": {
+    "titulo": "Esteira",
+    "carregando": "Loading board...",
+    "vazioTitulo": "No boards yet",
+    "vazioSubtitulo": "Pick the repository and the phases; the pipeline runs tasks phase by phase, without chats.",
+    "novaEsteira": "New pipeline",
+    "criar": "Create",
+    "nomeEsteira": "Pipeline name",
+    "nomeExemplo": "e.g. Features",
+    "pastas": "Folders",
+    "pastasDica": "Working folders, same as in chat",
+    "modeloPadrao": "Default model",
+    "modeloDica": "Propagated to every phase; each phase can be changed later",
+    "fases": "Phases",
+    "fasesDica": "Copied from the system templates — editing the pipeline never changes the master",
+    "pendentes": "Pending",
+    "concluidas": "Done",
+    "emAndamento": "Running",
+    "falhas": "Failed",
+    "commits": "Commits",
+    "tempoTotal": "Total time",
+    "iniciar": "Start",
+    "pausar": "Pause",
+    "retomar": "Resume",
+    "pausada": "Paused",
+    "erro": "Error",
+    "pausadaPorErro": "Task paused after failing the phase",
+    "filaLigada": "Auto queue on",
+    "filaDesligada": "Auto queue off",
+    "filaDica": "Runs pending tasks one at a time, respecting dependencies",
+    "removerEsteira": "Delete pipeline",
+    "confirmarRemocao": "Delete the pipeline \"{{nome}}\" and its tasks?",
+    "descricao": "Description",
+    "semAnotacao": "This phase has not run yet.",
+    "comandosControlados": "Recorded commands",
+    "criadaEm": "Created",
+    "concluidaEm": "Finished",
+    "tempoTrabalho": "Work time",
+    "tokens": "Tokens",
+    "custo": "Cost",
+    "dependenciasTitulo": "Dependencies",
+    "semDependencias": "None",
+    "adicionarDependencia": "add dependency",
+    "selecioneTask": "Select a task...",
+    "dependencias_one": "{{count}} dependency",
+    "dependencias_other": "{{count}} dependencies",
+    "excluirTask": "Delete task",
+    "status": {
+      "pendente": "Pending",
+      "em_progresso": "Running",
+      "pausada": "Paused",
+      "concluida": "Done"
+    },
+    "subtitulo": "Pipelines that run tasks phase by phase, without chats",
+    "criarPrimeira": "Create the first pipeline",
+    "repositorioPrincipal": "Main repository",
+    "voltar": "Back to the list",
+    "adicionarTarefa": "Add task",
+    "tasksResumo": "{{concluidas}}/{{total}} tasks",
+    "adicionarFase": "Add phase",
+    "criarFase": "Create my own phase",
+    "editarFase": "Edit phase",
+    "novaFase": "New phase",
+    "faseNome": "Name",
+    "faseDescricao": "Description",
+    "faseDescricaoDica": "One line — shown in the pipeline list",
+    "fasePrompt": "Prompt",
+    "fasePromptDica": "Instructions for the agent in this phase, including what it must record in the note.",
+    "faseCapacidades": "Capabilities",
+    "salvarComoPadrao": "Save as default",
+    "salvarNestaEsteira": "Save in this pipeline",
+    "capacidade": {
+      "leitura": "Read",
+      "edit": "Edit",
+      "shell": "Shell",
+      "browser": "Browser",
+      "memoria": "Memory"
+    },
+    "arquivosAlterados_one": "{{count}} file changed",
+    "arquivosAlterados_other": "{{count}} files changed",
+    "fase": {
+      "desenvolvimento": {
+        "nome": "Development",
+        "descricao": "Implements the task following the project's conventions"
+      },
+      "validacao": {
+        "nome": "Validation",
+        "descricao": "Validates the implementation: build, tests and diff review"
+      },
+      "relatorio": {
+        "nome": "Report",
+        "descricao": "Closes the task and describes what was done"
+      },
+      "seguranca": {
+        "nome": "Security",
+        "descricao": "Audit of dependencies, secrets and permissions"
+      },
+      "revisao": {
+        "nome": "Code review",
+        "descricao": "Quality and style review"
+      },
+      "infra": {
+        "nome": "Infra",
+        "descricao": "Deploy and environment checklist"
+      }
+    },
+    "push": "Push the branch when finishing",
+    "prints": "Capture screenshots of the result",
+    "editarEsteira": "Edit pipeline",
+    "salvar": "Save",
+    "novaTask": "New task",
+    "criarTask": "Create task",
+    "taskTitulo": "Title",
+    "taskTituloExemplo": "e.g. Fix login on mobile",
+    "taskDescricao": "Description",
+    "taskDescricaoDica": "The full brief the phases receive — the task runs without a chat, so what is not here never reaches the agent.",
+    "taskDependencias": "Depends on",
+    "taskDependenciasDica": "This task only starts after the selected ones are done.",
+    "selecioneDependencias": "None — starts right away",
+    "semTasksParaDependencia": "No other task in this pipeline yet",
+    "buscarTask": "Search task...",
+    "nenhumaTask": "No task found"
   }
 }

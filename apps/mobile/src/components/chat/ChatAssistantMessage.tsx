@@ -503,6 +503,43 @@ function SourcesBlock({ sources }: { sources: any[] }) {
   )
 }
 
+// ─── Imagem da resposta ──────────────────────────────────────────────────────
+
+/**
+ * Imagem que o assistente anexou (show_image). O arquivo pode ter sido
+ * excluído depois na galeria do desktop — quando a carga falha, mostramos um
+ * placeholder no lugar do quadro vazio.
+ */
+function AssistantImage({ part }: { part: ImagePart }) {
+  const { t } = useTranslation()
+  const tokens = getThemeTokens(useThemeStore((s) => s.resolved))
+  const [failed, setFailed] = useState(false)
+
+  if (failed) {
+    return (
+      <View
+        className="mt-2 flex-row items-center gap-2 rounded-lg px-3 py-2"
+        style={{ borderWidth: 1, borderStyle: 'dashed', borderColor: tokens.border }}
+      >
+        <Text className="text-xs" style={{ color: tokens.mutedForeground }}>
+          {t('chatAssistant.imageUnavailable')}{part.alt ? ` — ${part.alt}` : ''}
+        </Text>
+      </View>
+    )
+  }
+
+  return (
+    <View className="mt-2 rounded-lg overflow-hidden" style={{ borderWidth: 1, borderColor: tokens.border }}>
+      <Image
+        source={part.src}
+        style={{ width: 240, height: 180 }}
+        contentFit="contain"
+        onError={() => setFailed(true)}
+      />
+    </View>
+  )
+}
+
 // ─── Segment Parts helper ────────────────────────────────────────────────────
 
 const SPECIAL_TOOLS = new Set(['subagent', 'todowrite', 'create_skill', 'show_image'])
@@ -595,15 +632,7 @@ export function ChatAssistantMessage({ message, compact, isLast, isBusy, onRever
           case 'agent':
             return <AgentPartView key={part.id} part={part} />
           case 'image':
-            return (
-              <View key={part.id} className="mt-2 rounded-lg overflow-hidden" style={{ borderWidth: 1, borderColor: tokens.border }}>
-                <Image
-                  source={part.src}
-                  style={{ width: 240, height: 180 }}
-                  contentFit="contain"
-                />
-              </View>
-            )
+            return <AssistantImage key={part.id} part={part} />
           case 'file':
             return (
               <View key={part.id} className="mt-1 w-full">
