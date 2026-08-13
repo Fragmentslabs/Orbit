@@ -75,7 +75,7 @@ function NewChatTab({ onCreated }: { onCreated: (sessionId: string) => void }) {
           <p className="text-sm text-muted-foreground">{t("panel.newChat.subtitle")}</p>
         </div>
       </div>
-      <ChatInput onSubmit={handleSubmit} />
+      <ChatInput onSubmit={handleSubmit} draftKey="panel" />
     </div>
   )
 }

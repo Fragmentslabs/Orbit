@@ -47,12 +47,14 @@ import { toFileParts } from "@/src/lib/message-utils"
 import { resolveSlashAction } from "@/src/lib/slash-actions"
 import { useAppearanceStore } from "@/src/stores/appearance-store"
 
-export function ChatInput({ onSubmit, status, onStop, sessionId }: {
+export function ChatInput({ onSubmit, status, onStop, sessionId, draftKey }: {
   onSubmit: (text: string, options: SendMessageOptions, files?: FilePart[]) => void
   status?: ChatStatus
   onStop?: () => void
   /** Sessão ativa — o toggle Brain é por chat (undefined = chat novo) */
   sessionId?: string
+  /** Chave de rascunho própria (ex.: painel lateral, para não misturar com o chat novo do painel principal) */
+  draftKey?: string
 }) {
   const { t } = useTranslation()
   const [search, setSearch] = useState(false)
@@ -119,7 +121,7 @@ export function ChatInput({ onSubmit, status, onStop, sessionId }: {
     <PromptInputProvider>
     <SlashPalette commands={slashCommands}>
     <DraftInputBridge sessionId={sessionId} />
-    <ChatInputDraft sessionId={sessionId} />
+    <ChatInputDraft sessionId={sessionId} draftKey={draftKey} />
     <div className="w-full max-w-2xl mx-auto pb-4 @container">
       <QueueIndicator sessionId={sessionId} />
       <PromptInput
