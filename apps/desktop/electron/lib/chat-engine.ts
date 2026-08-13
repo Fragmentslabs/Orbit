@@ -20,6 +20,7 @@ import { classifyProviderError, errorToText } from './errors'
 import { buildSystemPrompt } from './prompts'
 import { buildProviderOptions, interleavedReasoningField, normalizeMessages } from './reasoning'
 import { resolveModel } from './providers'
+import { attachMediaMessage } from './media'
 import { extractPdfText } from './pdf'
 import { extractSpreadsheetText } from './xlsx'
 import { extractDocxText } from './docx'
@@ -842,6 +843,10 @@ export async function runChat(win: BrowserWindow, input: SendMessageInput): Prom
                   src: output.mediaUrl,
                   alt: output.alt || undefined,
                 })
+                // Completa o registro de mídia: a tool não conhece o id da
+                // mensagem (roda no meio do turno) — a galeria usa esse
+                // vínculo para o "abrir no chat".
+                void attachMediaMessage(output.mediaUrl, assistantMessage.id, sessionId)
               }
             }
             break

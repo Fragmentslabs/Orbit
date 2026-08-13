@@ -7,6 +7,7 @@ import type {
   SessionRevert,
 } from "@shared/chat"
 import type { McpConfig, McpServerStatus } from "@shared/mcp"
+import type { MediaEntry, MediaFilter, MediaUsage } from "@shared/media"
 import type { ModelsSnapshot } from "@shared/models"
 import type { InitEvent, InitStatus, Memory, MemoryEvent } from "@shared/memory"
 import type { Skill, SkillProposal } from "@shared/skills"
@@ -205,6 +206,16 @@ export const panelApi = {
     const wrapper = window.ipcRenderer.on("panel:event", (event) => listener(event as PanelEvent))
     return () => window.ipcRenderer.off("panel:event", wrapper)
   },
+}
+
+/** Galeria de mídia — imagens produzidas pelo agente (orbit-data/media). */
+export const mediaApi = {
+  list: (filter?: MediaFilter) => window.ipcRenderer.invoke("media:list", filter) as Promise<MediaEntry[]>,
+  usage: () => window.ipcRenderer.invoke("media:usage") as Promise<MediaUsage>,
+  remove: (ids: string[]) => window.ipcRenderer.invoke("media:delete", ids) as Promise<number>,
+  cleanupScripts: () => window.ipcRenderer.invoke("media:cleanupScripts") as Promise<number>,
+  /** Indexa imagens anteriores ao registry — idempotente, roda na 1ª abertura. */
+  backfill: () => window.ipcRenderer.invoke("media:backfill") as Promise<number>,
 }
 
 export const initApi = {

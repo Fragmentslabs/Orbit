@@ -23,7 +23,14 @@ import { initMcp, listMcpStatus, readMcpConfig, reconnectMcp, saveMcpConfig } fr
 import { loadTrustRules } from './lib/permission/trust-rules'
 import { clearSessionTrust } from './lib/permission'
 import { savePlanFile, deletePlanFile, readPlanFile } from './lib/plan-file'
-import { registerMediaProtocol } from './lib/media'
+import {
+  backfillMedia,
+  cleanupScriptMedia,
+  deleteManyMedia,
+  listMedia,
+  mediaDiskUsage,
+  registerMediaProtocol,
+} from './lib/media'
 import { startCompanionServer, getCompanionStatus, setPairingMode, forwardChatEvent } from './lib/companion-server'
 import { readJson as readStorageJson } from './lib/storage'
 import { registerPanelWebContents } from './lib/panel-browser'
@@ -41,6 +48,7 @@ import { destroyBrowserWindow } from './lib/tools'
 import type { SendMessageInput, SessionInfo } from '@shared/chat'
 import type { ChatEvent } from '@shared/chat'
 import { StorageKeys } from '@shared/chat'
+import type { MediaFilter } from '@shared/media'
 import type { Memory, MemoryEvent } from '@shared/memory'
 
 const execFileAsync = promisify(execFile)
@@ -1121,6 +1129,14 @@ app.whenReady().then(() => {
 
   // Imagens das respostas do assistente (orbit-media://)
   registerMediaProtocol()
+
+  // Galeria de mídia (aba "Mídia" do painel direito)
+  ipcMain.handle('media:list', (_event, filter?: MediaFilter) => listMedia(filter))
+  ipcMain.handle('media:usage', () => mediaDiskUsage())
+  ipcMain.handle('media:delete', (_event, ids: string[]) => deleteManyMedia(ids))
+  ipcMain.handle('media:cleanupScripts', () => cleanupScriptMedia())
+  // Indexa imagens anteriores ao registry (roda na primeira abertura da galeria)
+  ipcMain.handle('media:backfill', () => backfillMedia())
 
   // Memória Brain — a UI fala com o service; mutações chegam de volta via memory:event
   ipcMain.handle('memory:list', () => memoryService.list())
