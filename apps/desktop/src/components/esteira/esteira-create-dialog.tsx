@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { DndContext, PointerSensor, useDraggable, useDroppable, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core"
-import { GripVerticalIcon, PencilIcon, PlusIcon, XIcon } from "lucide-react"
+import { GripVerticalIcon, LockIcon, PencilIcon, PlusIcon, XIcon } from "lucide-react"
 import type { FaseEscolhida, FaseTemplate } from "@shared/esteira"
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
@@ -44,7 +44,9 @@ export function EsteiraCreateDialog({
   onCriada?: (esteiraId: string) => void
 }) {
   const { t } = useTranslation()
-  const store = useEsteiraStore()
+  const criarProjeto = useEsteiraStore((s) => s.criarProjeto)
+  const criarEsteira = useEsteiraStore((s) => s.criarEsteira)
+  const salvarTemplate = useEsteiraStore((s) => s.salvarTemplate)
   const templates = useEsteiraStore((s) => s.templates)
   const modelo = useSessionModel(CHAVE_MODELO)
 
@@ -52,15 +54,22 @@ export function EsteiraCreateDialog({
   const [pastas, setPastas] = useState<string[]>([])
   const [fases, setFases] = useState<FaseEscolhida[]>([])
   const [pushAoFinal, setPushAoFinal] = useState(false)
+  const [prints, setPrints] = useState(false)
   const [salvando, setSalvando] = useState(false)
   const [editando, setEditando] = useState<{ indice: number | null; fase: FaseEscolhida | null } | null>(null)
 
   const projetoExistente = useEsteiraStore((s) => s.projetos.find((p) => p.id === projetoId))
 
+  // Fases embutidas tem nome/descricao traduzidos (o prompt segue em ingles,
+  // como o resto dos prompts do app). As do usuario usam o que ele escreveu.
+  const rotulo = (tpl: FaseTemplate) =>
+    tpl.i18nKey && !tpl.custom
+      ? { nome: t(`esteira.fase.${tpl.i18nKey}.nome`), descricao: t(`esteira.fase.${tpl.i18nKey}.descricao`) }
+      : { nome: tpl.nome, descricao: tpl.descricao }
+
   const doTemplate = (tpl: FaseTemplate): FaseEscolhida => ({
     templateId: tpl.id,
-    nome: tpl.nome,
-    descricao: tpl.descricao,
+    ...rotulo(tpl),
     prompt: tpl.prompt,
     tools: [...tpl.tools],
   })
@@ -72,12 +81,15 @@ export function EsteiraCreateDialog({
     setNome("")
     setPastas(projetoExistente?.pastas ?? [])
     setPushAoFinal(false)
-    setFases(templates.filter((tpl) => tpl.padrao).map(doTemplate))
+    setPrints(false)
+    setFases(templates.filter((tpl) => tpl.padrao && !tpl.fixa).map(doTemplate))
   }, [aberto, templates, projetoExistente])
 
   const disponiveis = templates.filter(
-    (tpl) => !fases.some((f) => f.templateId === tpl.id),
+    (tpl) => !tpl.fixa && !fases.some((f) => f.templateId === tpl.id),
   )
+  /** Fase obrigatória de fechamento: mostrada travada, sempre por último. */
+  const fixa = templates.find((tpl) => tpl.fixa)
 
   const mover = useCallback((de: number, para: number) => {
     setFases((atual) => {
@@ -101,7 +113,7 @@ export function EsteiraCreateDialog({
     const indice = editando?.indice ?? null
     setFases((atual) => (indice == null ? [...atual, fase] : atual.map((f, i) => (i === indice ? fase : f))))
     if (comoPadrao && fase.templateId) {
-      await store.salvarTemplate({
+      await salvarTemplate({
         id: fase.templateId,
         nome: fase.nome,
         descricao: fase.descricao,
@@ -124,14 +136,15 @@ export function EsteiraCreateDialog({
     try {
       // O projeto (D1) é o dono das pastas. Como o fluxo é "criar esteira e
       // escolher o repositório", ele nasce junto, com o mesmo nome.
-      const alvo = projetoId ?? (await store.criarProjeto(nome.trim(), pastas)).id
-      const esteira = await store.criarEsteira({
+      const alvo = projetoId ?? (await criarProjeto(nome.trim(), pastas)).id
+      const esteira = await criarEsteira({
         projetoId: alvo,
         nome: nome.trim(),
         fases,
         providerId: modelo.providerId,
         modelId: modelo.modelId,
         pushAoFinal,
+        printsDoResultado: prints,
       })
       // Recentes são globais e compartilhados com os chats. O modelo entra na
       // lista aqui, e não ao ser escolhido: o critério do app é "usado de
@@ -194,6 +207,16 @@ export function EsteiraCreateDialog({
                 </div>
               </DndContext>
 
+              {fixa && (
+                <div className="mt-1 flex items-center gap-2 rounded-md border border-dashed px-2 py-1.5 opacity-80">
+                  <LockIcon className="size-3 shrink-0 text-muted-foreground" />
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-xs font-medium">{rotulo(fixa).nome}</p>
+                    <p className="truncate text-[11px] text-muted-foreground">{t("esteira.faseFixaDica")}</p>
+                  </div>
+                </div>
+              )}
+
               <div className="mt-1.5">
                 <DropdownMenu>
                   <DropdownMenuTrigger
@@ -221,11 +244,19 @@ export function EsteiraCreateDialog({
               </div>
             </Campo>
 
-            <div className="flex items-center gap-2">
-              <Switch ativo={pushAoFinal} onToggle={() => setPushAoFinal((v) => !v)} />
-              <span className="text-xs text-foreground">
-                {pushAoFinal ? t("esteira.pushLigado") : t("esteira.pushDesligado")}
-              </span>
+            <div className="space-y-2">
+              <div className="flex items-center gap-2">
+                <Switch ativo={pushAoFinal} onToggle={() => setPushAoFinal((v) => !v)} />
+                <span className="text-xs text-foreground">
+                  {pushAoFinal ? t("esteira.pushLigado") : t("esteira.pushDesligado")}
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                <Switch ativo={prints} onToggle={() => setPrints((v) => !v)} />
+                <span className="text-xs text-foreground">
+                  {prints ? t("esteira.printsLigado") : t("esteira.printsDesligado")}
+                </span>
+              </div>
             </div>
           </div>
 

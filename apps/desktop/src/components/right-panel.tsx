@@ -178,7 +178,12 @@ function TabContent({ tab, sessionId, onUpdateTab }: { tab: PanelTab; sessionId?
     case "diff":
       return (
         <div className="flex flex-1 flex-col overflow-hidden p-4">
-          <DiffTab sessionId={tab.sessionId} messageId={tab.messageId} />
+          <DiffTab
+            sessionId={tab.sessionId}
+            messageId={tab.messageId}
+            esteiraId={tab.esteiraId}
+            taskId={tab.taskId}
+          />
         </div>
       )
     case "media":
@@ -538,18 +543,43 @@ export function RightPanel() {
   const pendingDiff = usePanelStore((s) => s.pendingDiff)
   const pendingDiffSessionId = usePanelStore((s) => s.pendingDiffSessionId)
   const pendingDiffMessageId = usePanelStore((s) => s.pendingDiffMessageId)
+  const pendingDiffEsteiraId = usePanelStore((s) => s.pendingDiffEsteiraId)
+  const pendingDiffTaskId = usePanelStore((s) => s.pendingDiffTaskId)
   const pendingDiffTitle = usePanelStore((s) => s.pendingDiffTitle)
   useEffect(() => {
-    if (pendingDiff > 0 && pendingDiffSessionId && pendingDiffMessageId && activeSessionId) {
-      const id = `diff-${pendingDiffSessionId}-${pendingDiffMessageId}`
-      const exists = tabs.some((t) => t.id === id)
-      if (!exists) {
-        addTabToStore(activeSessionId, { id, type: "diff", title: pendingDiffTitle ?? "Diff", sessionId: pendingDiffSessionId, messageId: pendingDiffMessageId })
-      }
-      setActiveTabInStore(activeSessionId, id)
-      usePanelStore.setState({ pendingDiff: 0, pendingDiffSessionId: undefined, pendingDiffMessageId: undefined, pendingDiffTitle: undefined })
+    if (pendingDiff === 0) return
+    // A esteira não tem sessão de chat: as abas dela ficam na chave órfã, que
+    // é a mesma usada quando nenhum chat está ativo.
+    const daEsteira = !!(pendingDiffEsteiraId && pendingDiffTaskId)
+    const chave = daEsteira ? activeSessionId ?? "__orphan__" : activeSessionId
+    if (!chave) return
+    if (!daEsteira && !(pendingDiffSessionId && pendingDiffMessageId)) return
+
+    const id = daEsteira
+      ? `diff-task-${pendingDiffTaskId}`
+      : `diff-${pendingDiffSessionId}-${pendingDiffMessageId}`
+    const atuais = usePanelStore.getState().tabsBySession[chave] ?? []
+    if (!atuais.some((t) => t.id === id)) {
+      addTabToStore(chave, {
+        id,
+        type: "diff",
+        title: pendingDiffTitle ?? "Diff",
+        sessionId: pendingDiffSessionId,
+        messageId: pendingDiffMessageId,
+        esteiraId: pendingDiffEsteiraId,
+        taskId: pendingDiffTaskId,
+      })
     }
-  }, [pendingDiff, pendingDiffSessionId, pendingDiffMessageId, pendingDiffTitle, activeSessionId])
+    setActiveTabInStore(chave, id)
+    usePanelStore.setState({
+      pendingDiff: 0,
+      pendingDiffSessionId: undefined,
+      pendingDiffMessageId: undefined,
+      pendingDiffEsteiraId: undefined,
+      pendingDiffTaskId: undefined,
+      pendingDiffTitle: undefined,
+    })
+  }, [pendingDiff, pendingDiffSessionId, pendingDiffMessageId, pendingDiffEsteiraId, pendingDiffTaskId, pendingDiffTitle, activeSessionId])
 
   // Workers da orquestração em execução abrem tabs automaticamente
   useEffect(() => {

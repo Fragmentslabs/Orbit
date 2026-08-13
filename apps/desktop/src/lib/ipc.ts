@@ -275,6 +275,8 @@ export interface NovaEsteiraInput {
   branch?: string
   worktree?: string
   pushAoFinal?: boolean
+  /** Instrui as fases a capturarem prints do resultado visual */
+  printsDoResultado?: boolean
   modoOperacao?: "manual" | "automatico"
 }
 

@@ -22,6 +22,10 @@ interface EsteiraState {
   /** Texto ao vivo da fase em execução, por task */
   progresso: Record<string, string>
   carregado: boolean
+  /** Esteira aberta no board (null = lista). O header do app lê daqui para
+   *  só mostrar pasta/branch depois que uma esteira foi escolhida. */
+  abertaId: string | null
+  setAberta: (id: string | null) => void
 
   carregar: () => Promise<void>
   aplicarEvento: (evento: EsteiraEvent) => void
@@ -49,7 +53,14 @@ interface EsteiraState {
   esteirasDe: (projetoId: string) => Esteira[]
 }
 
-const SEM_TASKS: Task[] = []
+/**
+ * Array vazio ESTÁVEL para os seletores. `s.tasksPorEsteira[id] ?? []` cria um
+ * array novo a cada chamada do seletor: o zustand compara o snapshot por
+ * identidade, conclui que mudou, re-renderiza, chama o seletor de novo... e o
+ * React derruba a árvore com "Maximum update depth exceeded". Aparecia ao
+ * criar a esteira, que é exatamente quando ainda não existe a chave.
+ */
+export const SEM_TASKS: Task[] = []
 
 export const useEsteiraStore = create<EsteiraState>((set, get) => ({
   projetos: [],
@@ -59,6 +70,8 @@ export const useEsteiraStore = create<EsteiraState>((set, get) => ({
   filasLigadas: {},
   progresso: {},
   carregado: false,
+  abertaId: null,
+  setAberta: (id) => set({ abertaId: id }),
 
   carregar: async () => {
     const [dados, templates] = await Promise.all([esteiraApi.carregar(), esteiraApi.templates()])

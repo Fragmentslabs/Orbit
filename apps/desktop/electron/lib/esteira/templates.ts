@@ -28,6 +28,7 @@ Never claim work you did not do: if something could not be finished, say so plai
 export const FASE_TEMPLATES: FaseTemplate[] = [
   {
     id: 'desenvolvimento',
+    i18nKey: 'desenvolvimento',
     nome: 'Desenvolvimento',
     descricao: 'Implementa a task seguindo as convenções do projeto',
     tools: ['leitura', 'edit', 'shell', 'memoria'],
@@ -44,6 +45,7 @@ Record: what was done, files changed, the commit hash, and any decision a review
   },
   {
     id: 'validacao',
+    i18nKey: 'validacao',
     nome: 'Validação',
     descricao: 'Valida a implementação: build, testes e revisão do diff',
     tools: ['leitura', 'edit', 'shell', 'browser'],
@@ -59,11 +61,15 @@ Record: what was done, files changed, the commit hash, and any decision a review
 Record: checks executed and their result, problems found, what you fixed, and your verdict (approved / paused with reason).${CONTRATO}`,
   },
   {
-    id: 'pronto',
-    nome: 'Pronto',
-    descricao: 'Fecha a task: confere o repo e escreve o resumo final',
+    id: 'relatorio',
+    nome: 'Relatório',
+    descricao: 'Fecha a task e descreve o que foi feito',
     tools: ['leitura', 'shell'],
     padrao: true,
+    // Obrigatória: é a fase que produz a descrição do que aconteceu. Sem ela
+    // a task terminaria sem relato, e o board viraria uma caixa preta.
+    fixa: true,
+    i18nKey: 'relatorio',
     prompt: `You close the task.
 
 1. Check the final state of the repository (branch/worktree of this esteira): status clean, commits present.
@@ -75,6 +81,7 @@ The note IS the task's final summary — it is what the user reads to know what 
   },
   {
     id: 'seguranca',
+    i18nKey: 'seguranca',
     nome: 'Segurança',
     descricao: 'Auditoria de dependências, segredos e permissões',
     tools: ['leitura', 'shell'],
@@ -91,6 +98,7 @@ Record: what was audited, findings by severity, what you fixed, what needs a hum
   },
   {
     id: 'revisao',
+    i18nKey: 'revisao',
     nome: 'Revisão de código',
     descricao: 'Code review de qualidade e estilo',
     tools: ['leitura', 'edit', 'shell'],
@@ -104,6 +112,7 @@ Record: what you reviewed, what you changed, what you are flagging without chang
   },
   {
     id: 'infra',
+    i18nKey: 'infra',
     nome: 'Infra',
     descricao: 'Checklist de deploy e ambiente',
     tools: ['leitura', 'shell'],

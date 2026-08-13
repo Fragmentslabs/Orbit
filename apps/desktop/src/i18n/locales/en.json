@@ -1533,6 +1533,37 @@
       "shell": "Shell",
       "browser": "Browser",
       "memoria": "Memory"
+    },
+    "faseFixaDica": "Always the last phase — it writes the task's final report",
+    "printsLigado": "Captures screenshots of the visual result",
+    "printsDesligado": "Does not capture screenshots of the result",
+    "arquivosAlterados_one": "{{count}} file changed",
+    "arquivosAlterados_other": "{{count}} files changed",
+    "fase": {
+      "desenvolvimento": {
+        "nome": "Development",
+        "descricao": "Implements the task following the project's conventions"
+      },
+      "validacao": {
+        "nome": "Validation",
+        "descricao": "Validates the implementation: build, tests and diff review"
+      },
+      "relatorio": {
+        "nome": "Report",
+        "descricao": "Closes the task and describes what was done"
+      },
+      "seguranca": {
+        "nome": "Security",
+        "descricao": "Audit of dependencies, secrets and permissions"
+      },
+      "revisao": {
+        "nome": "Code review",
+        "descricao": "Quality and style review"
+      },
+      "infra": {
+        "nome": "Infra",
+        "descricao": "Deploy and environment checklist"
+      }
     }
   }
 }

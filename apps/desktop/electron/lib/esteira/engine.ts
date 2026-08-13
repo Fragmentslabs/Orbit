@@ -1,6 +1,7 @@
 import { BrowserWindow } from 'electron'
 import type { AnotacaoFase, Esteira, EsteiraEvent, Projeto, Task } from '@shared/esteira'
 import { ESTEIRA_RETRY_PADRAO } from '@shared/esteira'
+import { capture, diff } from '../snapshot'
 import { criaCiclo, dependenciasPendentes } from './contrato'
 import { executarFase } from './runner'
 import { atualizarTask, listarEsteiras, listarProjetos, listarTasks, salvarTasks } from './repo'
@@ -69,6 +70,37 @@ async function executarTask(esteiraId: string, taskId: string): Promise<void> {
   const controller = new AbortController()
   emExecucao.set(taskId, controller)
   const inicioExecucao = Date.now()
+  const raiz = esteira.worktree || projeto.pastas[0]
+
+  /**
+   * Snapshot do filesystem antes da primeira fase desta execução. O diff da
+   * task é medido contra ele — é o mesmo mecanismo do diff por mensagem do
+   * chat, e não depende do agente relatar o que mexeu.
+   */
+  const inicioDiff = await (async () => {
+    const existente = (await listarTasks(esteiraId)).find((t) => t.id === taskId)?.diff?.inicio
+    if (existente) return existente // retomada: mantém a base original da task
+    try {
+      return raiz ? await capture(raiz) : undefined
+    } catch (err) {
+      console.error('[esteira] snapshot inicial falhou:', err)
+      return undefined
+    }
+  })()
+
+  /** Recalcula o diff acumulado da task contra o snapshot inicial. */
+  const medirDiff = async (): Promise<Task['diff'] | undefined> => {
+    if (!inicioDiff || !raiz) return undefined
+    try {
+      const fim = await capture(raiz)
+      if (fim === inicioDiff) return { inicio: inicioDiff, arquivos: [], patch: '' }
+      const mudancas = await diff(raiz, inicioDiff, fim)
+      return { inicio: inicioDiff, arquivos: mudancas.files, patch: mudancas.patch }
+    } catch (err) {
+      console.error('[esteira] diff da task falhou:', err)
+      return undefined
+    }
+  }
 
   try {
     for (;;) {
@@ -132,11 +164,13 @@ async function executarTask(esteiraId: string, taskId: string): Promise<void> {
       }
 
       if (resultado.erro) {
+        const diffAtual = await medirDiff()
         await persistir(esteiraId, taskId, (t) => ({
           ...t,
           status: 'pausada',
           pausaMotivo: 'erro',
           erro: resultado.erro,
+          diff: diffAtual ?? t.diff,
           anotacoes: [...t.anotacoes, anotacao],
           tokens: t.tokens + resultado.tokens,
           custo: t.custo + resultado.custo,
@@ -146,8 +180,10 @@ async function executarTask(esteiraId: string, taskId: string): Promise<void> {
       }
 
       const ultimaFase = indice >= esteira.fases.length - 1
+      const diffAtual = await medirDiff()
       const atualizada = await persistir(esteiraId, taskId, (t) => ({
         ...t,
+        diff: diffAtual ?? t.diff,
         anotacoes: [...t.anotacoes, anotacao],
         tokens: t.tokens + resultado.tokens,
         custo: t.custo + resultado.custo,

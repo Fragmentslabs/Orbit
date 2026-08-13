@@ -16,6 +16,7 @@ import {
   createWriteTool,
 } from '../tools/files'
 import { createPanelBrowserTools } from '../tools/panel-browser'
+import { createBrowserScriptTools } from '../tools/browser-script'
 import { createChatMemoryTools } from '../tools/memory'
 import { createVerifyChangesTool } from '../tools/verify-changes'
 import { toTokenUsage } from '../usage'
@@ -83,10 +84,13 @@ function montarTools(ctx: ContextoFase, toolCtx: ToolContext, registrarComando: 
   if (permitidas.has('shell')) {
     tools.bash = comPoliticaDeComandos(createBashTool(toolCtx), ctx, registrarComando)
   }
-  if (permitidas.has('browser')) {
+  // Com prints ligados, a fase ganha browser mesmo sem ter pedido: a
+  // instrução de capturar seria impossível de cumprir sem as tools.
+  if (permitidas.has('browser') || ctx.esteira.printsDoResultado) {
     // O browser do painel é por sessão; a esteira usa o id sintético da task,
     // então cada task tem o seu e não disputa o painel de um chat aberto.
     Object.assign(tools, createPanelBrowserTools(toolCtx))
+    Object.assign(tools, createBrowserScriptTools(toolCtx))
   }
   if (permitidas.has('memoria')) {
     Object.assign(tools, createChatMemoryTools(sendInputSintetico(ctx)))
@@ -172,6 +176,16 @@ function montarMensagem(ctx: ContextoFase): string {
       `- Allowed but recorded: ${controlados.join(', ') || '(none)'}\n` +
       `- Anything else: free. A refused command counts as a phase failure — work around it.`,
   )
+
+  // Prints do resultado: instrução explícita, senão o agente descreve a
+  // mudança visual em texto e o usuário não vê o que saiu na tela.
+  if (ctx.esteira.printsDoResultado) {
+    partes.push(
+      `\n## Screenshots of the result (enabled for this pipeline)\n` +
+        `If this task changed anything visible in a UI, capture it: open the app with panel_navigate and use show_image({ fromPanel: true }), or run_browser_script / capture_batch for several screens or viewports at once.\n` +
+        `Attach the screenshots to your note (the media URLs from the manifest) and say what each one shows. If the change is not visible in a UI, say so in the note instead of capturing something unrelated.`,
+    )
+  }
 
   if (ctx.tentativa > 1) {
     partes.push(

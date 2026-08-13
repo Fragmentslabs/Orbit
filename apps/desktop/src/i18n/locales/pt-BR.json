@@ -1533,6 +1533,37 @@
       "shell": "Shell",
       "browser": "Browser",
       "memoria": "Memória"
+    },
+    "faseFixaDica": "Sempre a última fase — é ela que escreve o relatório final da task",
+    "printsLigado": "Captura prints do resultado visual",
+    "printsDesligado": "Não captura prints do resultado",
+    "arquivosAlterados_one": "{{count}} arquivo alterado",
+    "arquivosAlterados_other": "{{count}} arquivos alterados",
+    "fase": {
+      "desenvolvimento": {
+        "nome": "Desenvolvimento",
+        "descricao": "Implementa a task seguindo as convenções do projeto"
+      },
+      "validacao": {
+        "nome": "Validação",
+        "descricao": "Valida a implementação: build, testes e revisão do diff"
+      },
+      "relatorio": {
+        "nome": "Relatório",
+        "descricao": "Fecha a task e descreve o que foi feito"
+      },
+      "seguranca": {
+        "nome": "Segurança",
+        "descricao": "Auditoria de dependências, segredos e permissões"
+      },
+      "revisao": {
+        "nome": "Revisão de código",
+        "descricao": "Code review de qualidade e estilo"
+      },
+      "infra": {
+        "nome": "Infra",
+        "descricao": "Checklist de deploy e ambiente"
+      }
     }
   }
 }

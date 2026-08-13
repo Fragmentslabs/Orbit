@@ -148,21 +148,42 @@ export interface NovaEsteiraInput {
   branch?: string
   worktree?: string
   pushAoFinal?: boolean
+  /** Instrui as fases a capturarem prints do resultado visual */
+  printsDoResultado?: boolean
   modoOperacao?: 'manual' | 'automatico'
 }
 
 /** Fases da esteira = CÓPIA do que foi escolhido (D4): editar a esteira depois
  *  nunca toca no template mestre. */
 async function copiarFases(input: NovaEsteiraInput): Promise<FaseConfig[]> {
+  const disponiveis = await listarTemplates()
+  const comoEscolhida = (t: FaseTemplate): FaseEscolhida => ({
+    templateId: t.id,
+    nome: t.nome,
+    descricao: t.descricao,
+    prompt: t.prompt,
+    tools: t.tools,
+  })
+
   let escolhidas = input.fases
   if (!escolhidas?.length) {
-    const disponiveis = await listarTemplates()
     const ids = input.templateIds?.length ? input.templateIds : templatesPadrao().map((t) => t.id)
     escolhidas = ids
       .map((id) => disponiveis.find((t) => t.id === id))
       .filter((t): t is FaseTemplate => !!t)
-      .map((t) => ({ templateId: t.id, nome: t.nome, descricao: t.descricao, prompt: t.prompt, tools: t.tools }))
+      .map(comoEscolhida)
   }
+
+  // Fases fixas (Relatório) entram sempre e por último, venham ou não na
+  // escolha: são elas que produzem a descrição do que foi feito. Deduplicar
+  // aqui evita a fase repetida quando o chamador já a incluiu.
+  const fixas = disponiveis.filter((t) => t.fixa)
+  const semFixas = escolhidas.filter((f) => !fixas.some((t) => t.id === f.templateId))
+  escolhidas = [
+    ...semFixas,
+    ...fixas.map((t) => escolhidas!.find((f) => f.templateId === t.id) ?? comoEscolhida(t)),
+  ]
+
   return escolhidas.map((fase, ordem) => ({
     id: novoId('fase_'),
     nome: fase.nome,
@@ -186,6 +207,7 @@ export async function criarEsteira(input: NovaEsteiraInput): Promise<Esteira> {
     worktree: input.worktree,
     modoOperacao: input.modoOperacao ?? 'manual',
     pushAoFinal: input.pushAoFinal ?? false,
+    printsDoResultado: input.printsDoResultado ?? false,
     politicaComandos: { bloqueados: [...POLITICA_PADRAO.bloqueados], controlados: [...POLITICA_PADRAO.controlados] },
     templateId: input.fases?.map((f) => f.templateId ?? 'custom').join(',') ?? input.templateIds?.join(','),
     criadoEm: agora(),

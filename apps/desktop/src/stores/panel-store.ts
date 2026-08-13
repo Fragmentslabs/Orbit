@@ -8,6 +8,9 @@ export interface PanelTab {
   title: string
   sessionId?: string
   messageId?: string
+  /** Aba Diff de uma task da esteira (em vez de mensagem de chat) */
+  esteiraId?: string
+  taskId?: string
   pending?: boolean
   /** URL inicial da aba Browser (ausente = abre a tela padrão com busca). */
   url?: string
@@ -91,9 +94,13 @@ interface PanelState {
   setPendingInput: (val: { sessionId: string; text: string } | null) => void
 
   openDiff: (sessionId: string, messageId: string, title: string) => void
+  /** Diff de uma task da esteira — mesmo painel, outra fonte do patch */
+  openTaskDiff: (esteiraId: string, taskId: string, title: string) => void
   pendingDiff: number
   pendingDiffSessionId?: string
   pendingDiffMessageId?: string
+  pendingDiffEsteiraId?: string
+  pendingDiffTaskId?: string
   pendingDiffTitle?: string
 }
 
@@ -282,6 +289,19 @@ export const usePanelStore = create<PanelState>((set, get) => {
         pendingDiff: state.pendingDiff + 1,
         pendingDiffSessionId: sessionId,
         pendingDiffMessageId: messageId,
+        pendingDiffEsteiraId: undefined,
+        pendingDiffTaskId: undefined,
+        pendingDiffTitle: title,
+      })),
+
+    openTaskDiff: (esteiraId, taskId, title) =>
+      set((state) => ({
+        rightPanelOpen: true,
+        pendingDiff: state.pendingDiff + 1,
+        pendingDiffSessionId: undefined,
+        pendingDiffMessageId: undefined,
+        pendingDiffEsteiraId: esteiraId,
+        pendingDiffTaskId: taskId,
         pendingDiffTitle: title,
       })),
     pendingDiff: 0,

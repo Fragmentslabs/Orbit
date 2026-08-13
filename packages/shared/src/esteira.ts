@@ -56,8 +56,16 @@ export interface FaseTemplate {
   tools: ToolPermitida[]
   /** true nas fases sugeridas de cara numa esteira nova (as demais entram pelo "+") */
   padrao: boolean
+  /**
+   * Fase obrigatória de fechamento: entra SEMPRE, como última, e não aparece
+   * na lista de escolha. É ela que produz a descrição do que foi feito — sem
+   * isso a task poderia terminar sem ninguém saber o que aconteceu.
+   */
+  fixa?: boolean
   /** Criado ou sobrescrito pelo usuário ("salvar como padrão") */
   custom?: boolean
+  /** Chave de i18n do nome/descrição (fases embutidas). Ausente nas do usuário. */
+  i18nKey?: string
 }
 
 /** Fase já resolvida no modal de criação — pode ter sido editada só para esta
@@ -101,6 +109,11 @@ export interface Esteira {
   modoOperacao: ModoOperacao
   /** A fase final faz push (padrão false — commit local) */
   pushAoFinal: boolean
+  /**
+   * Instrui as fases a capturarem prints do resultado visual das mudanças
+   * (run_browser_script / panel_screenshot) e a anexá-los na anotação.
+   */
+  printsDoResultado?: boolean
   politicaComandos: PoliticaComandos
   templateId?: string
   criadoEm: string
@@ -147,6 +160,17 @@ export interface Task {
   custo: number
   /** Origem da task, quando criada pelo agente a partir de um chat */
   origemSessionId?: string
+  /**
+   * Diff acumulado da task (snapshot do filesystem antes da primeira fase x
+   * estado atual). É o que a UI mostra no badge de arquivos alterados e abre
+   * no painel — o mesmo caminho do diff por mensagem no chat.
+   */
+  diff?: {
+    /** Tree hash antes da primeira fase */
+    inicio: string
+    arquivos: string[]
+    patch: string
+  }
 }
 
 // ─── Relatório ───────────────────────────────────────────────────────────────

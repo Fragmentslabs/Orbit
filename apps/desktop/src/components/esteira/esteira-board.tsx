@@ -6,7 +6,7 @@ import type { Esteira, Task } from "@shared/esteira"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { esteiraApi } from "@/src/lib/ipc"
-import { useEsteiraStore } from "@/src/stores/esteira-store"
+import { SEM_TASKS, useEsteiraStore } from "@/src/stores/esteira-store"
 import { cn } from "@/lib/utils"
 import { EsteiraCreateDialog } from "./esteira-create-dialog"
 import { EsteiraFooter } from "./esteira-footer"
@@ -25,7 +25,8 @@ export function EsteiraBoard() {
   const { t } = useTranslation()
   const carregado = useEsteiraStore((s) => s.carregado)
   const carregar = useEsteiraStore((s) => s.carregar)
-  const [abertaId, setAbertaId] = useState<string | null>(null)
+  const abertaId = useEsteiraStore((s) => s.abertaId)
+  const setAbertaId = useEsteiraStore((s) => s.setAberta)
 
   useEffect(() => {
     if (!carregado) void carregar()
@@ -136,8 +137,11 @@ function ListaDeEsteiras({ onAbrir }: { onAbrir: (id: string) => void }) {
 
 function BoardDaEsteira({ esteira, onVoltar }: { esteira: Esteira; onVoltar: () => void }) {
   const { t } = useTranslation()
-  const store = useEsteiraStore()
-  const tasks = useEsteiraStore((s) => s.tasksPorEsteira[esteira.id] ?? [])
+  const iniciarTask = useEsteiraStore((s) => s.iniciarTask)
+  const criarTaskNoStore = useEsteiraStore((s) => s.criarTask)
+  const removerEsteira = useEsteiraStore((s) => s.removerEsteira)
+  const alternarFila = useEsteiraStore((s) => s.alternarFila)
+  const tasks = useEsteiraStore((s) => s.tasksPorEsteira[esteira.id] ?? SEM_TASKS)
   const filaLigada = useEsteiraStore((s) => s.filasLigadas[esteira.id] ?? false)
   const [taskAberta, setTaskAberta] = useState<string | null>(null)
   const [adicionando, setAdicionando] = useState(false)
@@ -154,9 +158,9 @@ function BoardDaEsteira({ esteira, onVoltar }: { esteira: Esteira; onVoltar: () 
       if (!Number.isInteger(indice) || indice < 0 || indice >= esteira.fases.length) return
       // Soltar na fase em que a task já está e rodando não tem efeito
       if (task.status === "em_progresso" && task.faseAtual === indice) return
-      void store.iniciarTask(esteira.id, task.id, indice)
+      void iniciarTask(esteira.id, task.id, indice)
     },
-    [esteira, store],
+    [esteira, iniciarTask],
   )
 
   const criarTask = async () => {
@@ -164,7 +168,7 @@ function BoardDaEsteira({ esteira, onVoltar }: { esteira: Esteira; onVoltar: () 
     if (!titulo) return
     setNovaTask("")
     setAdicionando(false)
-    await store.criarTask(esteira.id, titulo, "")
+    await criarTaskNoStore(esteira.id, titulo, "")
   }
 
   const colunas = useMemo(
@@ -209,7 +213,7 @@ function BoardDaEsteira({ esteira, onVoltar }: { esteira: Esteira; onVoltar: () 
           </Button>
           <button
             type="button"
-            onClick={() => void store.alternarFila(esteira.id, !filaLigada)}
+            onClick={() => void alternarFila(esteira.id, !filaLigada)}
             title={t("esteira.filaDica")}
             className={cn(
               "flex h-8 items-center gap-1.5 rounded-md border px-2.5 text-xs transition-colors",
@@ -223,7 +227,7 @@ function BoardDaEsteira({ esteira, onVoltar }: { esteira: Esteira; onVoltar: () 
             type="button"
             onClick={() => {
               if (confirm(t("esteira.confirmarRemocao", { nome: esteira.nome }))) {
-                void store.removerEsteira(esteira.id)
+                void removerEsteira(esteira.id)
                 onVoltar()
               }
             }}
@@ -297,7 +301,9 @@ function Coluna({
   esteira: Esteira
   onAbrir: (taskId: string) => void
 }) {
-  const store = useEsteiraStore()
+  const iniciarTask = useEsteiraStore((s) => s.iniciarTask)
+  const pausarTask = useEsteiraStore((s) => s.pausarTask)
+  const retomarTask = useEsteiraStore((s) => s.retomarTask)
   const progresso = useEsteiraStore((s) => s.progresso)
   const { setNodeRef, isOver } = useDroppable({ id })
   const aceitaDrop = id.startsWith("fase:")
@@ -322,9 +328,9 @@ function Coluna({
             esteira={esteira}
             progresso={progresso[task.id]}
             onAbrir={() => onAbrir(task.id)}
-            onIniciar={() => void store.iniciarTask(esteira.id, task.id)}
-            onPausar={() => void store.pausarTask(esteira.id, task.id)}
-            onRetomar={() => void store.retomarTask(esteira.id, task.id)}
+            onIniciar={() => void iniciarTask(esteira.id, task.id)}
+            onPausar={() => void pausarTask(esteira.id, task.id)}
+            onRetomar={() => void retomarTask(esteira.id, task.id)}
           />
         ))}
       </div>

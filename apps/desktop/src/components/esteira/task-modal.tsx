@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
-import { AlertTriangleIcon, CheckIcon, PauseIcon, PlayIcon, PlusIcon, Trash2Icon, XIcon } from "lucide-react"
+import { AlertTriangleIcon, CheckIcon, FileDiffIcon, PauseIcon, PlayIcon, PlusIcon, Trash2Icon, XIcon } from "lucide-react"
 import type { Esteira, Task } from "@shared/esteira"
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { AssistantMarkdown } from "@/src/components/messages/shared"
-import { useEsteiraStore } from "@/src/stores/esteira-store"
+import { SEM_TASKS, useEsteiraStore } from "@/src/stores/esteira-store"
+import { usePanelStore } from "@/src/stores/panel-store"
 import { cn } from "@/lib/utils"
 import { formatarCusto, formatarDuracao } from "./task-card"
 
@@ -26,8 +27,12 @@ export function TaskModal({
   onOpenChange: (aberto: boolean) => void
 }) {
   const { t, i18n } = useTranslation()
-  const store = useEsteiraStore()
-  const tasks = useEsteiraStore((s) => s.tasksPorEsteira[esteira.id] ?? [])
+  const atualizarTask = useEsteiraStore((s) => s.atualizarTask)
+  const removerTask = useEsteiraStore((s) => s.removerTask)
+  const iniciarTask = useEsteiraStore((s) => s.iniciarTask)
+  const pausarTask = useEsteiraStore((s) => s.pausarTask)
+  const retomarTask = useEsteiraStore((s) => s.retomarTask)
+  const tasks = useEsteiraStore((s) => s.tasksPorEsteira[esteira.id] ?? SEM_TASKS)
   const [titulo, setTitulo] = useState("")
   const [descricao, setDescricao] = useState("")
   const [faseAtiva, setFaseAtiva] = useState(0)
@@ -47,6 +52,17 @@ export function TaskModal({
     return mapa
   }, [task?.anotacoes])
 
+  // +/- do patch, como no rodapé das mensagens do chat
+  const linhasDoDiff = useMemo(() => {
+    let adicionadas = 0
+    let removidas = 0
+    for (const linha of (task?.diff?.patch ?? "").split("\n")) {
+      if (linha.startsWith("+") && !linha.startsWith("+++")) adicionadas++
+      else if (linha.startsWith("-") && !linha.startsWith("---")) removidas++
+    }
+    return { adicionadas, removidas }
+  }, [task?.diff?.patch])
+
   if (!task) return null
 
   const comErro = task.pausaMotivo === "erro"
@@ -56,13 +72,13 @@ export function TaskModal({
   const candidatasDep = tasks.filter((t) => t.id !== task.id && !task.dependeDe.includes(t.id))
 
   const salvarCampo = (patch: Partial<Task>) => {
-    void store.atualizarTask(esteira.id, task.id, patch)
+    void atualizarTask(esteira.id, task.id, patch)
   }
 
   const alterarDependencias = async (proximas: string[]) => {
     setErroDep(null)
     try {
-      await store.atualizarTask(esteira.id, task.id, { dependeDe: proximas })
+      await atualizarTask(esteira.id, task.id, { dependeDe: proximas })
     } catch (err) {
       // Ciclo é validado no main — a mensagem vem de lá
       setErroDep(err instanceof Error ? err.message : String(err))
@@ -86,7 +102,7 @@ export function TaskModal({
             </div>
             <button
               type="button"
-              onClick={() => void store.retomarTask(esteira.id, task.id)}
+              onClick={() => void retomarTask(esteira.id, task.id)}
               className="shrink-0 rounded-md bg-destructive px-2.5 py-1 text-[11px] font-medium text-destructive-foreground hover:bg-destructive/90"
             >
               {t("esteira.retomar")}
@@ -105,6 +121,24 @@ export function TaskModal({
             {t(`esteira.status.${task.status}`)}
           </span>
         </div>
+
+        {/* Arquivos alterados: medido pelo engine (snapshot), não relatado pelo
+            agente. Clique abre o diff no painel, igual ao chat. */}
+        {(task.diff?.arquivos.length ?? 0) > 0 && (
+          <button
+            type="button"
+            onClick={() => {
+              usePanelStore.getState().openTaskDiff(esteira.id, task.id, task.titulo)
+              onOpenChange(false)
+            }}
+            className="mx-4 mt-2 flex w-fit items-center gap-2 rounded-md border px-2 py-1 text-[11px] text-muted-foreground transition-colors hover:border-ring hover:text-foreground"
+          >
+            <FileDiffIcon className="size-3.5" />
+            {t("esteira.arquivosAlterados", { count: task.diff!.arquivos.length })}
+            {linhasDoDiff.adicionadas > 0 && <span className="text-emerald-500">+{linhasDoDiff.adicionadas}</span>}
+            {linhasDoDiff.removidas > 0 && <span className="text-red-500">-{linhasDoDiff.removidas}</span>}
+          </button>
+        )}
 
         <div className="flex min-h-0 gap-4 px-4 pb-4 pt-3">
           {/* Esquerda: descrição + tabs de fases */}
@@ -239,22 +273,22 @@ export function TaskModal({
 
         <div className="flex items-center gap-2 border-t px-4 py-2.5">
           {task.status === "em_progresso" ? (
-            <BotaoAcao icone={<PauseIcon className="size-3.5" />} rotulo={t("esteira.pausar")} onClick={() => void store.pausarTask(esteira.id, task.id)} />
+            <BotaoAcao icone={<PauseIcon className="size-3.5" />} rotulo={t("esteira.pausar")} onClick={() => void pausarTask(esteira.id, task.id)} />
           ) : task.status !== "concluida" ? (
             <BotaoAcao
               icone={<PlayIcon className="size-3.5" />}
               rotulo={task.status === "pausada" ? t("esteira.retomar") : t("esteira.iniciar")}
               onClick={() =>
                 task.status === "pausada"
-                  ? void store.retomarTask(esteira.id, task.id)
-                  : void store.iniciarTask(esteira.id, task.id)
+                  ? void retomarTask(esteira.id, task.id)
+                  : void iniciarTask(esteira.id, task.id)
               }
             />
           ) : null}
           <button
             type="button"
             onClick={() => {
-              void store.removerTask(esteira.id, task.id)
+              void removerTask(esteira.id, task.id)
               onOpenChange(false)
             }}
             className="ml-auto flex items-center gap-1 rounded-md px-2 py-1 text-xs text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
