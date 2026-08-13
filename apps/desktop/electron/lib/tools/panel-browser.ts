@@ -28,12 +28,13 @@ const VIEWPORT_PRESETS: Record<string, { width: number | null; height: number | 
 }
 
 /**
- * Ferramentas do browser do painel direito (modo código). O painel abre
- * sozinho quando o agente usa qualquer uma. O screenshot por padrão volta
- * apenas como URL (orbit-media://) — a imagem só é carregada no modelo via
- * toModelOutput (content file) quando o agente pede `ver: true` num modelo
- * com visão; o base64 fica num stash por toolCallId para não inflar o
- * histórico persistido.
+ * Ferramentas do browser do painel direito (modo código). O browser roda no
+ * webview da sessão — visível na aba Browser ou NO HOST OCULTO quando o painel
+ * está fechado (a UI nunca abre sozinha; o usuário clica no indicador
+ * "testando…" para ver). O screenshot por padrão volta apenas como URL
+ * (orbit-media://) — a imagem só é carregada no modelo via toModelOutput
+ * (content file) quando o agente pede `ver: true` num modelo com visão; o
+ * base64 fica num stash por toolCallId para não inflar o histórico persistido.
  */
 
 const screenshotStash = new Map<string, { base64: string; format: 'webp' | 'png' }>()
@@ -42,7 +43,7 @@ export function createPanelBrowserTools(ctx: ToolContext): ToolSet {
   return {
     panel_navigate: tool({
       description:
-        'Opens a URL in the Orbit right panel browser (the panel opens on its own). Use it to test web apps — local servers (http://localhost:...) included.',
+        'Opens a URL in the agent\'s browser (it runs in the background — the side panel does NOT open on its own; the user can click the "testing…" indicator to watch). Use it to test web apps — local servers (http://localhost:...) included.',
       inputSchema: z.object({
         url: z.string().describe('Full URL (http/https)'),
       }),

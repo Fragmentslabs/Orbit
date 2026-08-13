@@ -20,6 +20,7 @@ import { MemoriesView } from "@/src/components/memories/memories-view"
 import { ModelsView } from "@/src/components/models/models-view"
 import { EsteiraBoard } from "@/src/components/esteira/esteira-board"
 import { RightPanel, RightPanelDropZone } from "@/src/components/right-panel"
+import { ensureAgentBrowser } from "@/src/components/browser/webview-session"
 import { TitleBar } from "@/src/components/titlebar"
 import { ChatSearch } from "@/src/components/chat-search"
 import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels"
@@ -60,9 +61,17 @@ function Layout() {
   const setRightPanelOpen = usePanelStore((s) => s.setRightPanelOpen)
   const hideTimer = useRef<ReturnType<typeof setTimeout>>()
   const showTimer = useRef<ReturnType<typeof setTimeout>>()
-  // Eventos do main (tools panel_*): abre o painel/aba Browser automaticamente
+  // Eventos do main (tools panel_*): o agente pediu o browser — registra no
+  // store e garante o webview NO HOST OCULTO, sem abrir o painel (a UI só
+  // aparece quando o usuário clica no indicador "testando…").
   useEffect(() => {
-    return panelApi.onEvent((event) => usePanelStore.getState().applyEvent(event))
+    return panelApi.onEvent((event) => {
+      const store = usePanelStore.getState()
+      store.applyEvent(event)
+      if (event.type === "ensure") {
+        ensureAgentBrowser(event.sessionId, event.url)
+      }
+    })
   }, [])
 
   // ─── Abertura de pasta no modo código ─────────────────────────────────────

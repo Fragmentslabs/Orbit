@@ -211,15 +211,16 @@ function restoreGuest(record: WebviewRecord): void {
   const { el } = record
   if (!isWebviewReady(el)) return
 
-  // Só a aba visível pode ser alvo das tools panel_* do agente — sem isso, o
-  // dom-ready de um webview movido para o host oculto roubaria o registro.
-  if (record.mounted) {
-    try {
-      const wcId = el.getWebContentsId()
-      if (wcId > 0) panelApi.register(sessionIdOf(record.key), wcId)
-    } catch {
-      // o próximo dom-ready registra
-    }
+  // Registra SEMPRE, montado ou não: com o painel fechado o guest vive no host
+  // oculto e continua sendo o alvo das tools panel_* do agente (é o browser em
+  // segundo plano). Quando há mais de um guest da mesma sessão, o último
+  // dom-ready vence — na troca de abas o guest visível é sempre o último a
+  // renascer (unmount → mount), então ele mantém o registro.
+  try {
+    const wcId = el.getWebContentsId()
+    if (wcId > 0) panelApi.register(sessionIdOf(record.key), wcId)
+  } catch {
+    // o próximo dom-ready registra
   }
 
   const target = record.currentUrl
@@ -345,6 +346,24 @@ export function getWebview(key: string): WebviewElement | null {
 /** URL atual conhecida da aba — não toca no guest, então nunca lança. */
 export function getWebviewUrl(key: string): string {
   return records.get(key)?.currentUrl ?? ""
+}
+
+/** Chave canônica do browser do agente numa sessão (chat/task). */
+function agentKey(sessionId: string): string {
+  return `${sessionId}:browser-agent`
+}
+
+/**
+ * Garante o webview do AGENTE da sessão existindo no host OCULTO (sem abrir a
+ * UI). Usado quando o agente precisa do browser com o painel fechado: o guest
+ * nasce escondido, registra no main no dom-ready e as tools panel_* passam a
+ * agir nele. A aba da UI (se existir) reanexa o MESMO webview ao ser montada.
+ */
+export function ensureAgentBrowser(sessionId: string, url?: string): void {
+  if (!sessionId) return
+  const key = agentKey(sessionId)
+  ensureWebview(key, url)
+  if (url) navigateWebview(key, url)
 }
 
 /** Navega a aba. Guest não pronto: a URL fica como atual e o dom-ready aplica. */

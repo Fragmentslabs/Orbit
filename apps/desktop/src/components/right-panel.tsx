@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { useDroppable, useDndContext } from "@dnd-kit/core"
 import { FileCode, Globe, Folder, Images, MessageSquare, Terminal, X, PlusIcon, Bot, LoaderIcon, Loader2, XCircleIcon, Trash2, GripVertical } from "lucide-react"
@@ -488,40 +488,10 @@ export function RightPanel() {
     )
   }, [activeSessionId])
 
-  // Agente pediu o browser (tools panel_*): garante/ativa a aba Browser — só
-  // na sessão que pediu, e só nesse pedido específico (não a cada troca de
-  // chat: sem o guard de "já tratado", browserRequestId!==0 permaneceria
-  // verdadeiro pra sempre e reabriria a aba em qualquer sessão visitada depois).
-  const browserRequestId = usePanelStore((s) => s.browserRequestId)
-  const browserRequestSessionId = usePanelStore((s) => s.browserRequestSessionId)
-  const lastHandledBrowserRequestId = useRef(0)
-  useEffect(() => {
-    if (browserRequestId === 0 || browserRequestId === lastHandledBrowserRequestId.current) return
-    lastHandledBrowserRequestId.current = browserRequestId
-    if (!browserRequestSessionId) return
-
-    const id = "browser-agent"
-    const sessionTabs = usePanelStore.getState().tabsBySession[browserRequestSessionId] ?? []
-    const { browserUrl } = usePanelStore.getState()
-    const existing = sessionTabs.find((t) => t.id === id)
-    if (!existing) {
-      addTabToStore(browserRequestSessionId, { id, type: "browser", title: "Browser", url: browserUrl })
-    } else if (existing.url !== browserUrl) {
-      // Re-montagem (troca de aba) usa a URL do pedido mais recente do agente.
-      usePanelStore.getState().setTabsForSession(
-        browserRequestSessionId,
-        sessionTabs.map((t) => (t.id === id ? { ...t, url: browserUrl } : t)),
-        usePanelStore.getState().getActiveTabId(browserRequestSessionId),
-      )
-    }
-    setActiveTabInStore(browserRequestSessionId, id)
-
-    // Só traz o painel pra frente se o usuário já está olhando essa sessão —
-    // sessões em background (workers, outros chats) não devem roubar o foco.
-    if (browserRequestSessionId === activeSessionId) {
-      usePanelStore.getState().setRightPanelOpen(true)
-    }
-  }, [browserRequestId, browserRequestSessionId, activeSessionId, addTabToStore, setActiveTabInStore])
+  // O browser do agente NÃO abre o painel sozinho: o evento 'ensure' cria o
+  // webview no host oculto (App.tsx) e a aba no store (ensureAgentBrowserTab).
+  // Aqui o painel só mostra a aba quando o usuário abre — clicando no
+  // indicador "testando…" (openAgentBrowser) ou no toggle manual.
 
   // "Enviar para chat lateral" vindo do input: abre aba de chat
   const pendingChatTab = usePanelStore((s) => s.pendingChatTab)

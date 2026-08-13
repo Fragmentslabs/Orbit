@@ -613,6 +613,10 @@
     "researchDone_one": "Pesquisa concluída · {{count}} etapa",
     "researchDone_other": "Pesquisa concluída · {{count}} etapas",
     "thinking": "Pensando…",
+    "browser": {
+      "testing": "Testando…",
+      "viewAgentBrowser": "Ver o browser do agente"
+    },
     "steps": {
       "websearch": "Pesquisando",
       "webfetch": "Lendo página",

@@ -38,10 +38,21 @@ export interface ActivityEntry {
 }
 
 export type PanelEvent =
-  | { type: "open"; url?: string; sessionId: string }
+  | { type: "ensure"; url?: string; sessionId: string }
   | { type: "resize"; width: number | null; height: number | null; label: string }
   | { type: "fullscreen"; on: boolean }
-  | { type: "activity"; label: string }
+  | { type: "activity"; label: string; sessionId?: string }
+
+/** Registro do browser do agente por sessão de chat/task. */
+export interface AgentBrowserEntry {
+  /** Última URL que o agente abriu/está vendo. */
+  url: string
+  /** Último instante em que o agente mexeu no browser (mantém o indicador fresco). */
+  at: number
+}
+
+/** Janela de "recentemente usado" do indicador de browser do agente (ms). */
+export const AGENT_BROWSER_FRESH_MS = 30_000
 
 interface PanelState {
   rightPanelOpen: boolean
@@ -63,10 +74,14 @@ interface PanelState {
    *  faz a aba voltar na mesma página ao sair e entrar do chat. */
   setTabUrl: (sessionId: string, tabId: string, url: string) => void
 
-  browserRequestId: number
-  browserUrl?: string
-  /** Sessão de chat que originou o pedido de abrir o browser do painel. */
-  browserRequestSessionId?: string
+  /** Browser do agente por sessão (chat/task): URL atual + último uso. Alimenta
+   *  o indicador "testando…" no header e na conversa. A entrada só some quando
+   *  a sessão é encerrada; a frescura é medida por `at` + AGENT_BROWSER_FRESH_MS. */
+  agentBrowser: Record<string, AgentBrowserEntry>
+  /** Garante a aba Browser do agente na sessão (cria/atualiza), sem abrir o painel. */
+  ensureAgentBrowserTab: (sessionId: string, url?: string) => void
+  /** Abre o painel lateral com o browser do agente da sessão (clique do usuário). */
+  openAgentBrowser: (sessionId: string) => void
   /** Link clicado no terminal: abre uma NOVA aba de browser com a URL, na sessão do terminal. */
   openTerminalLink: (sessionId: string, url: string) => void
   selectMode: boolean
@@ -191,9 +206,34 @@ export const usePanelStore = create<PanelState>((set, get) => {
         return { tabsBySession: { ...state.tabsBySession, [sessionId]: next } }
       }),
 
-    browserRequestId: 0,
-    browserUrl: undefined,
-    browserRequestSessionId: undefined,
+    agentBrowser: {},
+
+    ensureAgentBrowserTab: (sessionId, url) => {
+      if (!sessionId) return
+      set((state) => {
+        const tabs = state.tabsBySession[sessionId] ?? []
+        const id = "browser-agent"
+        const existing = tabs.find((t) => t.id === id)
+        let nextTabs = tabs
+        if (!existing) {
+          nextTabs = [...tabs, { id, type: "browser", title: "Browser", url }]
+        } else if (url && existing.url !== url) {
+          nextTabs = tabs.map((t) => (t.id === id ? { ...t, url } : t))
+        }
+        const activeId = state.activeTabBySession[sessionId] ?? id
+        return {
+          tabsBySession: { ...state.tabsBySession, [sessionId]: nextTabs },
+          activeTabBySession: { ...state.activeTabBySession, [sessionId]: activeId },
+        }
+      })
+    },
+
+    openAgentBrowser: (sessionId) => {
+      if (!sessionId) return
+      const { agentBrowser } = get()
+      get().ensureAgentBrowserTab(sessionId, agentBrowser[sessionId]?.url)
+      set({ rightPanelOpen: true })
+    },
 
     // Cada clique em link no terminal cria uma aba própria (semântica de
     // "nova aba", como um browser de verdade) — não reusa a aba do agente.
@@ -242,17 +282,23 @@ export const usePanelStore = create<PanelState>((set, get) => {
 
     applyEvent: (event) => {
       switch (event.type) {
-        case "open":
+        case "ensure": {
           markActive()
-          // Não força rightPanelOpen aqui: quem decide se abre a UI é o
-          // RightPanel, que sabe se essa sessão é a que está ativa agora —
-          // senão o painel "vaza" pra qualquer chat que o usuário abrir depois.
+          // Nunca abre o painel: só registra o browser do agente da sessão e
+          // garante a aba (o webview em si é criado pelo App.tsx, no host
+          // oculto). A UI aparece quando o usuário clica no indicador.
           set((state) => ({
-            browserRequestId: state.browserRequestId + 1,
-            browserUrl: event.url ?? state.browserUrl,
-            browserRequestSessionId: event.sessionId,
+            agentBrowser: {
+              ...state.agentBrowser,
+              [event.sessionId]: {
+                url: event.url ?? state.agentBrowser[event.sessionId]?.url ?? "",
+                at: Date.now(),
+              },
+            },
           }))
+          get().ensureAgentBrowserTab(event.sessionId, event.url)
           break
+        }
         case "resize":
           markActive()
           set({
@@ -266,9 +312,23 @@ export const usePanelStore = create<PanelState>((set, get) => {
           markActive()
           set({ fullscreen: event.on })
           break
-        case "activity":
+        case "activity": {
           usePanelStore.getState().pushActivity(event.label)
+          // Mantém o indicador da sessão fresco enquanto o agente mexe no browser.
+          const activitySessionId = event.sessionId
+          if (activitySessionId) {
+            set((state) => ({
+              agentBrowser: {
+                ...state.agentBrowser,
+                [activitySessionId]: {
+                  url: state.agentBrowser[activitySessionId]?.url ?? "",
+                  at: Date.now(),
+                },
+              },
+            }))
+          }
           break
+        }
       }
     },
 

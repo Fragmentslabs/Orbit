@@ -33,10 +33,10 @@ function getWc(sessionId: string): WebContents | null {
 }
 
 export type PanelEvent =
-  | { type: 'open'; url?: string; sessionId: string }
+  | { type: 'ensure'; url?: string; sessionId: string }
   | { type: 'resize'; width: number | null; height: number | null; label: string }
   | { type: 'fullscreen'; on: boolean }
-  | { type: 'activity'; label: string }
+  | { type: 'activity'; label: string; sessionId?: string }
 
 function broadcastPanelEvent(event: PanelEvent): void {
   for (const win of BrowserWindow.getAllWindows()) {
@@ -44,9 +44,14 @@ function broadcastPanelEvent(event: PanelEvent): void {
   }
 }
 
-/** Anuncia à UI o que o agente está fazendo no browser (feed de atividade). */
-function activity(label: string): void {
-  broadcastPanelEvent({ type: 'activity', label })
+/**
+ * Anuncia à UI o que o agente está fazendo no browser (feed de atividade).
+ * `sessionId` identifica de qual chat veio — o renderer usa para manter o
+ * indicador "testando…" fresco naquela sessão (badge do header e chip na
+ * conversa).
+ */
+function activity(label: string, sessionId?: string): void {
+  broadcastPanelEvent({ type: 'activity', label, sessionId })
 }
 
 /** Mesmo feed, para quem captura fora do painel (engine oculta de scripts). */
@@ -67,16 +72,17 @@ function delay(ms: number): Promise<void> {
 }
 
 /**
- * Garante o webview da sessão montado (abre o painel se preciso) e retorna o
- * WebContents DAQUELA sessão. `sessionId` identifica de qual chat veio o
- * pedido — a UI usa isso pra abrir a aba Browser só naquela sessão, sem vazar
- * pra outros chats abertos depois, e o registro por sessão garante que as
- * tools de um agente nunca agem no browser de outro chat.
+ * Garante o webview da sessão registrado (criando-o no host oculto se
+ * preciso) e retorna o WebContents DAQUELA sessão. `sessionId` identifica de
+ * qual chat/task veio o pedido — o renderer cria o <webview> escondido e o
+ * registro por sessão garante que as tools de um agente nunca agem no browser
+ * de outro chat. O painel NUNCA abre sozinho: a UI só mostra o browser quando
+ * o usuário clica no indicador.
  */
 export async function ensurePanelBrowser(sessionId: string, url?: string): Promise<WebContents> {
   const existing = getWc(sessionId)
   if (existing) return existing
-  broadcastPanelEvent({ type: 'open', url, sessionId })
+  broadcastPanelEvent({ type: 'ensure', url, sessionId })
   const deadline = Date.now() + REGISTER_TIMEOUT_MS
   while (Date.now() < deadline) {
     const wc = getWc(sessionId)
@@ -190,7 +196,7 @@ function findScript(ref?: number, selector?: string): string {
 
 export async function panelClick(sessionId: string, ref?: number, selector?: string): Promise<string> {
   const wc = await ensurePanelBrowser(sessionId)
-  activity(`Clicando em ${ref != null ? `ref ${ref}` : selector}`)
+  activity(`Clicando em ${ref != null ? `ref ${ref}` : selector}`, sessionId)
   const outcome = (await wc.executeJavaScript(`(() => {
     const el = ${findScript(ref, selector)}
     if (!el) return null
