@@ -32,7 +32,6 @@ import { runProjectInit, type InitHooks } from './project-init'
 import { PROJECT_AREAS, type ProjectArea } from '@shared/memory'
 import { readJson, writeJson } from './storage'
 import { buildToolSet, type ToolContext, type TurnSnapshot } from './tools'
-import { verifyTurnChanges, type VerifyChangesResult } from './tools/verify-changes'
 import { addTokenUsage, toStepUsage, toTokenUsage } from './usage'
 import { messageContextText } from './todo-context'
 import { forwardChatEvent } from './companion-server'
@@ -80,40 +79,11 @@ const AUTO_CONTINUE_TOOL_PROMPT = (toolNames: string) => `[SYSTEM: the previous 
 // com teto por turno para não virar loop.
 const MAX_TODO_NUDGES = 2
 const TODO_COMPLETION_PROMPT = `[SYSTEM: your reply ended, but the last TODO list still has items marked as "in_progress". If you actually completed them, re-send the TODO list marking those items as "completed" (do NOT repeat the work summary — just update the checklist). If they are truly still not finished, say so briefly. Do not end the turn again without resolving the TODO state.]`
-// Verificação pós-escrita FORÇADA: quando o turno termina naturalmente
-// ('stop') com (a) escrita (edit/write/bash) sem leitura/verificação depois
-// da última, ou (b) NENHUMA tool chamada — o modelo respondeu "feito" sem
-// tocar no filesystem (overclaim) — o ENGINE executa verify_changes por
-// conta própria (sem depender de o modelo chamá-la), injeta o tool part na
-// mensagem e re-entra no loop com o RESULTADO REAL na synthetic user
-// message. O antigo nudge por prompt não era confiável: o modelo o ignorava
-// e concluía mesmo assim. No máximo 1x por turno para não virar loop.
-const MAX_VERIFY_NUDGES = 1
-// Injeções de sistema são SEMPRE em inglês, como o resto do contexto sintético
-// (todo-context.ts) — não seguem o idioma do usuário.
-const VERIFY_RESULT_PROMPT = (result: string) =>
-  `[SYSTEM: post-write verification executed by the engine — REAL filesystem state, not the model's claims:\n${result}\n\nAdjust your final reply based on THIS result: if there were changes, confirm what was written; if NO change was persisted, say so explicitly — never claim work that was not persisted. Do not call verify_changes again; just correct or confirm your reply.]`
-// Ferramentas que alteram o filesystem vs. ferramentas que verificam — a
-// heurística da verificação pós-escrita (ver runChat).
-const WRITE_TOOLS = new Set(['edit', 'write', 'bash'])
-const VERIFY_TOOLS = new Set(['read', 'grep', 'glob', 'verify_changes'])
-
-/** Resumo legível do resultado de verify_changes para a synthetic user message. */
-function formatVerifyResult(result: VerifyChangesResult): string {
-  const base =
-    result.changes.length === 0
-      ? 'Nenhuma alteração foi gravada neste turno.'
-      : `Arquivos alterados neste turno (${result.changes.length}):\n` +
-        result.changes.map((c) => `- ${c.state}: ${c.path} (patchSize ${c.patchSize} chars)`).join('\n')
-  return result.note ? `${base} Nota do engine: ${result.note}` : base
-}
-
 /**
  * Nudge de overclaim: o turno terminou afirmando trabalho feito, mas o
- * snapshot prova que NENHUM arquivo mudou. É o buraco que o nudge de
- * verificação acima não cobre — aquele exige que uma tool de escrita tenha
- * rodado, e o overclaim clássico é justamente o turno que não chamou write
- * nenhuma e mesmo assim relata conclusão.
+ * snapshot prova que NENHUM arquivo mudou — o overclaim clássico é o turno
+ * que relata conclusão sem ter chamado write/editar nenhum e mesmo assim
+ * afirma ter feito algo.
  */
 const MAX_OVERCLAIM_NUDGES = 1
 const NO_CHANGES_PROMPT = `[SYSTEM: automatic verification — NO file was modified in this turn. The filesystem snapshot taken before your response is identical to the one taken now; this is measured by the engine, not inferred. If your reply claims you created, edited, fixed, removed or refactored anything, that claim is false. Either do the work now with the write/edit tools, or correct your reply and state plainly what was NOT done and why.]`
@@ -724,11 +694,6 @@ export async function runChat(win: BrowserWindow, input: SendMessageInput): Prom
     )
     let autoContinues = 0
     let todoNudges = 0
-    let verifyNudges = 0
-    // Resultado da verificação forçada do turno (formatado) — quando presente,
-    // a próxima iteração do loop recebe o RESULTADO REAL (em vez de um pedido
-    // para chamar a tool) e a resposta final fica ancorada no que foi gravado.
-    let verifyResultText: string | null = null
     let overclaimNudges = 0
     let lastFinishReason: string | undefined
     let previousResponseMessages: ModelMessage[] = []
@@ -739,7 +704,7 @@ export async function runChat(win: BrowserWindow, input: SendMessageInput): Prom
         model,
         system: await buildSystemPrompt(input),
         messages:
-          autoContinues === 0 && todoNudges === 0 && verifyNudges === 0 && overclaimNudges === 0
+          autoContinues === 0 && todoNudges === 0 && overclaimNudges === 0
             ? initialMessages
             : normalizeMessages(
                 [
@@ -747,9 +712,8 @@ export async function runChat(win: BrowserWindow, input: SendMessageInput): Prom
                   ...previousResponseMessages,
                   {
                     role: 'user' as const,
-                    content: verifyResultText
-                      ? VERIFY_RESULT_PROMPT(verifyResultText)
-                      : overclaimNudges > 0
+                    content:
+                      overclaimNudges > 0
                         ? NO_CHANGES_PROMPT
                         : todoNudges > 0
                         ? TODO_COMPLETION_PROMPT
@@ -1035,67 +999,14 @@ export async function runChat(win: BrowserWindow, input: SendMessageInput): Prom
         continue
       }
 
-      // Verificação pós-escrita FORÇADA (anti-overclaim): o turno terminou
-      // naturalmente ('stop') mas (a) houve escrita — edit/write/bash
-      // executadas OU que falharam — sem leitura/verificação
-      // (read/grep/glob/verify_changes) depois da última, ou (b) nenhuma
-      // tool foi chamada no turno inteiro: o modelo pode estar afirmando
-      // trabalho que não aconteceu. O nudge por prompt não é confiável, então
-      // o ENGINE executa verify_changes aqui mesmo, injeta o tool part na
-      // mensagem (a UI mostra o card) e re-entra no loop com o resultado real
-      // na synthetic user message — a resposta final fica ancorada no estado
-      // de fato gravado. No máximo 1x por turno.
-      const doneToolIdxs = assistantMessage.parts
-        .map((p, i) => ({ p, i }))
-        .filter((x): x is { p: ToolPart; i: number } => x.p.type === 'tool' && x.p.state === 'done')
-      // Tentativas de escrita que falharam (erro/negada) também contam como
-      // escrita: o modelo pode afirmar sucesso mesmo assim — a verificação
-      // mostra a realidade, o diff não muda com a intenção.
-      const writeToolIdxs = assistantMessage.parts
-        .map((p, i) => ({ p, i }))
-        .filter(
-          (x): x is { p: ToolPart; i: number } =>
-            x.p.type === 'tool' && (x.p.state === 'done' || x.p.state === 'error') && WRITE_TOOLS.has(x.p.tool),
-        )
-        .map((x) => x.i)
-      const lastWriteIdx = writeToolIdxs.length > 0 ? Math.max(...writeToolIdxs) : -1
-      const verifiedAfterLastWrite = doneToolIdxs.some(
-        (x) => x.i > lastWriteIdx && VERIFY_TOOLS.has(x.p.tool),
-      )
-      const anyToolRan = assistantMessage.parts.some((p) => p.type === 'tool')
+      // Sinal de que a última parte é um texto concluído — usado pelo nudge
+      // de overclaim abaixo.
       const lastPart = assistantMessage.parts[assistantMessage.parts.length - 1]
       const lastPartIsDoneText = lastPart?.type === 'text' && lastPart.state === 'done'
-      if (
-        lastFinishReason === 'stop' &&
-        !controller.signal.aborted &&
-        verifyNudges < MAX_VERIFY_NUDGES &&
-        lastPartIsDoneText &&
-        toolContext !== null &&
-        !input.options.plan &&
-        (lastWriteIdx >= 0 ? !verifiedAfterLastWrite : !anyToolRan)
-      ) {
-        verifyNudges++
-        // 1) Verificação determinística — não depende de o modelo chamar a tool
-        const verifyResult = await verifyTurnChanges(toolContext)
-        // 2) Injeta o tool part na mensagem: a UI mostra o card com o resultado
-        upsertPart({
-          id: newId('call'),
-          type: 'tool',
-          tool: 'verify_changes',
-          state: 'done',
-          input: {},
-          output: JSON.stringify(verifyResult, null, 2),
-        })
-        // 3) Re-entra no loop com o RESULTADO real (não um pedido para verificar)
-        verifyResultText = formatVerifyResult(verifyResult)
-        previousResponseMessages = await result.responseMessages
-        continue
-      }
 
       // Nudge de overclaim: a resposta afirma ter feito algo e o snapshot
-      // prova que nada foi escrito. Diferente do nudge acima, este NÃO exige
-      // que uma tool de escrita tenha rodado — cobre exatamente o caso em que
-      // o agente relata conclusão sem ter tocado em nenhum arquivo.
+      // prova que nada foi escrito — cobre o caso em que o agente relata
+      // conclusão sem ter tocado em nenhum arquivo.
       //
       // O veredito é calculado aqui (e não depois do loop) para poder cobrar a
       // correção ainda dentro do turno; fica guardado em `verification` e é
