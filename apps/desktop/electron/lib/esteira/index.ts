@@ -174,16 +174,6 @@ async function copiarFases(input: NovaEsteiraInput): Promise<FaseConfig[]> {
       .map(comoEscolhida)
   }
 
-  // Fases fixas (Relatório) entram sempre e por último, venham ou não na
-  // escolha: são elas que produzem a descrição do que foi feito. Deduplicar
-  // aqui evita a fase repetida quando o chamador já a incluiu.
-  const fixas = disponiveis.filter((t) => t.fixa)
-  const semFixas = escolhidas.filter((f) => !fixas.some((t) => t.id === f.templateId))
-  escolhidas = [
-    ...semFixas,
-    ...fixas.map((t) => escolhidas!.find((f) => f.templateId === t.id) ?? comoEscolhida(t)),
-  ]
-
   return escolhidas.map((fase, ordem) => ({
     id: novoId('fase_'),
     nome: fase.nome,

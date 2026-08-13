@@ -102,6 +102,15 @@ export function TaskCard({
             {t("esteira.erro")}
           </span>
         )}
+        {task.pushFalha && (
+          <span
+            title={task.pushFalha}
+            className="flex items-center gap-1 rounded-full bg-yellow-500/15 px-1.5 py-0.5 text-yellow-600 dark:text-yellow-400"
+          >
+            <AlertTriangleIcon className="size-2.5" />
+            {t("esteira.pushFalhou")}
+          </span>
+        )}
         {task.status === "pausada" && !comErro && (
           <span className="flex items-center gap-1 rounded-full bg-muted px-1.5 py-0.5">
             <PauseIcon className="size-2.5" />

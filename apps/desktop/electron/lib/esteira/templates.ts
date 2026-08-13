@@ -61,25 +61,6 @@ Record: what was done, files changed, the commit hash, and any decision a review
 Record: checks executed and their result, problems found, what you fixed, and your verdict (approved / paused with reason).${CONTRATO}`,
   },
   {
-    id: 'relatorio',
-    nome: 'Relatório',
-    descricao: 'Fecha a task e descreve o que foi feito',
-    tools: ['leitura', 'shell'],
-    padrao: true,
-    // Obrigatória: é a fase que produz a descrição do que aconteceu. Sem ela
-    // a task terminaria sem relato, e o board viraria uma caixa preta.
-    fixa: true,
-    i18nKey: 'relatorio',
-    prompt: `You close the task.
-
-1. Check the final state of the repository (branch/worktree of this esteira): status clean, commits present.
-2. Write the task's final summary: what was delivered, which commits, what was validated, anything left open.
-3. If this esteira is configured to push at the end, push the branch. Otherwise leave the commits local.
-
-## Note contract
-The note IS the task's final summary — it is what the user reads to know what happened.${CONTRATO}`,
-  },
-  {
     id: 'seguranca',
     i18nKey: 'seguranca',
     nome: 'Segurança',

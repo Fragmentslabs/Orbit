@@ -1478,6 +1478,7 @@
     "retomar": "Retomar",
     "pausada": "Pausada",
     "erro": "Erro",
+    "pushFalhou": "Push falhou",
     "pausadaPorErro": "Task pausada após falhar na fase",
     "filaLigada": "Fila automática ligada",
     "filaDesligada": "Fila automática desligada",
@@ -1499,6 +1500,8 @@
     "dependencias_one": "{{count}} dependência",
     "dependencias_other": "{{count}} dependências",
     "excluirTask": "Excluir task",
+    "confirmarExclusaoTask": "Excluir a task \"{{titulo}}\"?",
+    "exclusaoTaskDescricao": "Essa ação não pode ser desfeita — a task e as anotações das fases serão perdidas.",
     "status": {
       "pendente": "Pendente",
       "em_progresso": "Em execução",
@@ -1540,10 +1543,6 @@
       "validacao": {
         "nome": "Validação",
         "descricao": "Valida a implementação: build, testes e revisão do diff"
-      },
-      "relatorio": {
-        "nome": "Relatório",
-        "descricao": "Fecha a task e descreve o que foi feito"
       },
       "seguranca": {
         "nome": "Segurança",

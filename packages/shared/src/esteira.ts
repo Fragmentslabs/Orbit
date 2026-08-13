@@ -56,12 +56,6 @@ export interface FaseTemplate {
   tools: ToolPermitida[]
   /** true nas fases sugeridas de cara numa esteira nova (as demais entram pelo "+") */
   padrao: boolean
-  /**
-   * Fase obrigatória de fechamento: entra SEMPRE, como última, e não aparece
-   * na lista de escolha. É ela que produz a descrição do que foi feito — sem
-   * isso a task poderia terminar sem ninguém saber o que aconteceu.
-   */
-  fixa?: boolean
   /** Criado ou sobrescrito pelo usuário ("salvar como padrão") */
   custom?: boolean
   /** Chave de i18n do nome/descrição (fases embutidas). Ausente nas do usuário. */
@@ -107,7 +101,7 @@ export interface Esteira {
   /** Caminho do worktree dedicado, quando usado */
   worktree?: string
   modoOperacao: ModoOperacao
-  /** A fase final faz push (padrão false — commit local) */
+  /** O engine faz push do branch ao concluir a última fase (padrão false — commit local) */
   pushAoFinal: boolean
   /**
    * Instrui as fases a capturarem prints do resultado visual das mudanças
@@ -164,6 +158,11 @@ export interface Task {
   tempoTrabalhoMs: number
   tokens: number
   custo: number
+  /**
+   * Push final falhou (pushAoFinal ligado): a task foi concluída, mas o branch
+   * não subiu — o erro fica aqui para o usuário resolver (a task não pausa).
+   */
+  pushFalha?: string
   /** Origem da task, quando criada pelo agente a partir de um chat */
   origemSessionId?: string
   /**

@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next"
 import { AlertTriangleIcon, CheckIcon, FileDiffIcon, PauseIcon, PlayIcon, PlusIcon, Trash2Icon, XIcon } from "lucide-react"
 import type { Esteira, Task } from "@shared/esteira"
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog"
+import { ConfirmDialog } from "@/components/ui/alert-dialog"
 import { Input } from "@/components/ui/input"
 import { AssistantMarkdown } from "@/src/components/messages/shared"
 import { MediaEmbed } from "./media-embed"
@@ -39,6 +40,7 @@ export function TaskModal({
   const [faseAtiva, setFaseAtiva] = useState(0)
   const [adicionandoDep, setAdicionandoDep] = useState(false)
   const [erroDep, setErroDep] = useState<string | null>(null)
+  const [confirmandoExclusao, setConfirmandoExclusao] = useState(false)
 
   useEffect(() => {
     if (!task) return
@@ -108,6 +110,16 @@ export function TaskModal({
             >
               {t("esteira.retomar")}
             </button>
+          </div>
+        )}
+
+        {task.pushFalha && (
+          <div className="flex items-start gap-2 rounded-t-lg border-b border-yellow-500/30 bg-yellow-500/10 px-4 py-2.5">
+            <AlertTriangleIcon className="mt-0.5 size-4 shrink-0 text-yellow-600 dark:text-yellow-400" />
+            <div className="min-w-0 flex-1">
+              <p className="text-xs font-medium text-yellow-700 dark:text-yellow-300">{t("esteira.pushFalhou")}</p>
+              <p className="mt-0.5 break-all text-[11px] text-yellow-700/80 dark:text-yellow-300/80">{task.pushFalha}</p>
+            </div>
           </div>
         )}
 
@@ -291,16 +303,26 @@ export function TaskModal({
           ) : null}
           <button
             type="button"
-            onClick={() => {
-              void removerTask(esteira.id, task.id)
-              onOpenChange(false)
-            }}
+            onClick={() => setConfirmandoExclusao(true)}
             className="ml-auto flex items-center gap-1 rounded-md px-3 py-1.5 text-xs text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
           >
             <Trash2Icon className="size-3.5" />
             {t("esteira.excluirTask")}
           </button>
         </div>
+
+        <ConfirmDialog
+          open={confirmandoExclusao}
+          onOpenChange={setConfirmandoExclusao}
+          title={t("esteira.confirmarExclusaoTask", { titulo: task.titulo })}
+          description={t("esteira.exclusaoTaskDescricao")}
+          confirmLabel={t("esteira.excluirTask")}
+          destructive
+          onConfirm={() => {
+            void removerTask(esteira.id, task.id)
+            onOpenChange(false)
+          }}
+        />
       </DialogContent>
     </Dialog>
   )

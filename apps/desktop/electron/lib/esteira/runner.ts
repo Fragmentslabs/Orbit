@@ -168,7 +168,9 @@ function montarMensagem(ctx: ContextoFase): string {
   const repo: string[] = [`Working folders: ${ctx.pastas.join(', ') || '(none)'}`]
   if (ctx.esteira.branch) repo.push(`Branch: ${ctx.esteira.branch}`)
   if (ctx.esteira.worktree) repo.push(`Worktree: ${ctx.esteira.worktree}`)
-  repo.push(`Push at the end: ${ctx.esteira.pushAoFinal ? 'yes' : 'no (local commits only)'}`)
+  repo.push(
+    `Push at the end: ${ctx.esteira.pushAoFinal ? 'yes — the engine runs git push when the last phase succeeds, do not push yourself' : 'no (local commits only)'}`,
+  )
   partes.push(`\n## Repository\n${repo.join('\n')}`)
 
   const { bloqueados, controlados } = ctx.esteira.politicaComandos
@@ -180,12 +182,20 @@ function montarMensagem(ctx: ContextoFase): string {
   )
 
   // Prints do resultado: instrução explícita, senão o agente descreve a
-  // mudança visual em texto e o usuário não vê o que saiu na tela.
+  // mudança visual em texto e o usuário não vê o que saiu na tela. As regras
+  // de limite existem porque captura em excesso é o maior desperdício de
+  // tokens da esteira: a imagem entra no contexto (ver:true) e permanece no
+  // histórico por todos os turnos seguintes da fase.
   if (ctx.esteira.printsDoResultado) {
     partes.push(
       `\n## Screenshots of the result (enabled for this pipeline)\n` +
-        `If this task changed anything visible in a UI, capture it: open the app with panel_navigate and use show_image({ fromPanel: true }), or run_browser_script / capture_batch for several screens or viewports at once.\n` +
-        `Attach the screenshots to your note (the media URLs from the manifest) and say what each one shows. If the change is not visible in a UI, say so in the note instead of capturing something unrelated.`,
+        `If this task changed anything visible in a UI, capture the MINIMUM evidence needed (a few images, not a series):\n` +
+        `- Static screens of known URLs/viewports: capture_batch — one call, the images stay out of your context.\n` +
+        `- Timing/state (animations, waiting for a render, resizing): run_browser_script with waitFor/wait/resize — one call too.\n` +
+        `- Interacting with the app (click, type, inspect): use the panel browser (panel_navigate / panel_read / panel_click / panel_type). panel_screenshot returns a media URL WITHOUT loading the image into your context; pass ver:true only when you must see the capture yourself, at most once or twice per phase.\n` +
+        `- If a previous phase already attached screenshots of this change and nothing visible changed since, do NOT recapture — say so in your note.\n` +
+        `Attach the screenshots to your note with their orbit-media:// URLs and say what each one shows. Keep it short — the user reads the note, not a photo album.\n` +
+        `If the change is not visible in a UI, say so in the note instead of capturing something unrelated.`,
     )
   }
 

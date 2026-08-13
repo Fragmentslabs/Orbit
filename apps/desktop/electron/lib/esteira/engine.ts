@@ -1,10 +1,15 @@
 import { BrowserWindow } from 'electron'
+import { execFile } from 'node:child_process'
+import { promisify } from 'node:util'
 import type { AnotacaoFase, Esteira, EsteiraEvent, Projeto, Task } from '@shared/esteira'
 import { ESTEIRA_RETRY_PADRAO } from '@shared/esteira'
 import { capture, diff } from '../snapshot'
+import { userShellEnv } from '../shell-env'
 import { criaCiclo, dependenciasPendentes } from './contrato'
 import { executarFase } from './runner'
 import { atualizarTask, listarEsteiras, listarProjetos, listarTasks, salvarTasks } from './repo'
+
+const execFileAsync = promisify(execFile)
 
 /**
  * Máquina de estados e fila do modo esteira (§5, §6, §9 do plano).
@@ -206,6 +211,9 @@ async function rodarTask(esteiraId: string, taskId: string, retomandoInterrompid
       }
 
       const ultimaFase = indice >= esteira.fases.length - 1
+      // Push final determinístico: a fase Relatório (que fazia isso) não
+      // existe mais — ninguém vai subir o branch se o engine não fizer.
+      const pushFalha = ultimaFase && esteira.pushAoFinal ? await tentarPush(raiz, controller.signal) : undefined
       const diffAtual = await medirDiff()
       const atualizada = await persistir(esteiraId, taskId, (t) => ({
         ...t,
@@ -213,6 +221,7 @@ async function rodarTask(esteiraId: string, taskId: string, retomandoInterrompid
         anotacoes: [...t.anotacoes, anotacao],
         tokens: t.tokens + resultado.tokens,
         custo: t.custo + resultado.custo,
+        pushFalha,
         faseAtual: ultimaFase ? t.faseAtual : indice + 1,
         status: ultimaFase ? 'concluida' : t.status,
         concluidoEm: ultimaFase ? agora() : t.concluidoEm,
@@ -266,6 +275,39 @@ async function concluir(esteiraId: string, taskId: string, inicioExecucao: numbe
     concluidoEm: agora(),
     tempoTrabalhoMs: t.tempoTrabalhoMs + (Date.now() - inicioExecucao),
   }))
+}
+
+// ─── Push final ──────────────────────────────────────────────────────────────
+
+/**
+ * Push determinístico do branch quando `pushAoFinal` está ligado. Antes isso
+ * era instrução do prompt da fase Relatório (removida): o modelo podia
+ * esquecer ou falhar, e o push era mais um custo de LLM. Agora o engine
+ * executa ao concluir a última fase e registra o resultado.
+ *
+ * Falha NÃO reverte a conclusão da task: o trabalho está feito, o push é
+ * entrega — o erro vai para `task.pushFalha` para o usuário resolver. Primeiro
+ * `git push`; se falhar sem upstream, tenta `git push -u origin HEAD`.
+ */
+async function tentarPush(raiz: string, signal: AbortSignal): Promise<string | undefined> {
+  const tentativas: string[][] = [
+    ['git', 'push'],
+    ['git', 'push', '-u', 'origin', 'HEAD'],
+  ]
+  let ultimoErro = 'git push falhou sem detalhes.'
+  for (const args of tentativas) {
+    try {
+      await execFileAsync('git', args, { cwd: raiz, env: userShellEnv(), timeout: 120_000, signal })
+      return undefined
+    } catch (err) {
+      // Pausa no meio do push: a task vai ser pausada de qualquer forma, não
+      // faz sentido registrar falha de push no estado.
+      if (signal.aborted) return undefined
+      const e = err as { stderr?: string; stdout?: string; message?: string }
+      ultimoErro = e.stderr?.trim() || e.stdout?.trim() || e.message || String(err)
+    }
+  }
+  return ultimoErro
 }
 
 // ─── Fila automática (D9) ────────────────────────────────────────────────────

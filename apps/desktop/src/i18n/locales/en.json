@@ -1478,6 +1478,7 @@
     "retomar": "Resume",
     "pausada": "Paused",
     "erro": "Error",
+    "pushFalhou": "Push failed",
     "pausadaPorErro": "Task paused after failing the phase",
     "filaLigada": "Auto queue on",
     "filaDesligada": "Auto queue off",
@@ -1499,6 +1500,8 @@
     "dependencias_one": "{{count}} dependency",
     "dependencias_other": "{{count}} dependencies",
     "excluirTask": "Delete task",
+    "confirmarExclusaoTask": "Delete task \"{{titulo}}\"?",
+    "exclusaoTaskDescricao": "This action cannot be undone — the task and its phase notes will be lost.",
     "status": {
       "pendente": "Pending",
       "em_progresso": "Running",
@@ -1540,10 +1543,6 @@
       "validacao": {
         "nome": "Validation",
         "descricao": "Validates the implementation: build, tests and diff review"
-      },
-      "relatorio": {
-        "nome": "Report",
-        "descricao": "Closes the task and describes what was done"
       },
       "seguranca": {
         "nome": "Security",

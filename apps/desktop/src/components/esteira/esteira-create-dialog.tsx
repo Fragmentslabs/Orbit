@@ -94,26 +94,24 @@ export function EsteiraCreateDialog({
       // Edição parte das fases REAIS da esteira (já são cópias, D4), não dos
       // templates: o usuário pode tê-las editado só para esta pipeline.
       setFases(
-        esteiraEditando.fases
-          .filter((f) => !templates.some((tpl) => tpl.fixa && tpl.nome === f.nome))
-          .map((f) => ({
-            templateId: templates.find((tpl) => tpl.nome === f.nome)?.id,
-            nome: f.nome,
-            descricao: f.descricao,
-            prompt: f.prompt,
-            tools: [...f.tools],
-          })),
+        esteiraEditando.fases.map((f) => ({
+          templateId: templates.find((tpl) => tpl.nome === f.nome)?.id,
+          nome: f.nome,
+          descricao: f.descricao,
+          prompt: f.prompt,
+          tools: [...f.tools],
+        })),
       )
       return
     }
     setNome("")
     setPushAoFinal(false)
     setPrints(false)
-    setFases(templates.filter((tpl) => tpl.padrao && !tpl.fixa).map(doTemplate))
+    setFases(templates.filter((tpl) => tpl.padrao).map(doTemplate))
   }, [aberto, templates, projetoExistente, esteiraEditando])
 
   const disponiveis = templates.filter(
-    (tpl) => !tpl.fixa && !fases.some((f) => f.templateId === tpl.id),
+    (tpl) => !fases.some((f) => f.templateId === tpl.id),
   )
 
   const mover = useCallback((de: number, para: number) => {
