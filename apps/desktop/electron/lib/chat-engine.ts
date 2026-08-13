@@ -13,7 +13,7 @@ import type {
   ToolPart,
 } from '@shared/chat'
 import { StorageKeys } from '@shared/chat'
-import { getProvider } from './catalog'
+import { getProvider, modelSupportsVision } from './catalog'
 import { compactHistory, findLastSummaryIndex, shouldCompact } from './compaction'
 import { createToolApproval, takeDenialReason } from './permission'
 import { classifyProviderError, errorToText } from './errors'
@@ -542,6 +542,8 @@ export async function runChat(win: BrowserWindow, input: SendMessageInput): Prom
             extraDirectories: input.extraDirectories ?? [],
             abort: controller.signal,
             getTurnSnapshot: () => turnSnapshot,
+            // Visão do modelo: decide se o panel_screenshot oferece `ver`
+            modelVision: modelSupportsVision(provider, input.modelId),
           }
         : null
 

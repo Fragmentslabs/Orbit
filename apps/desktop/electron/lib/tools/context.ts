@@ -26,6 +26,10 @@ export interface ToolContext {
    * filesystem do turno atual. undefined quando o modo não captura snapshot
    * ou a captura ainda não aconteceu. */
   getTurnSnapshot?: () => TurnSnapshot | undefined
+  /** O modelo desta execução aceita imagens (visão)? Controla a flag `ver` do
+   * panel_screenshot: false/undefined = a tool retorna só a URL, sem carregar
+   * a imagem no contexto. Preenchido por quem monta as tools. */
+  modelVision?: boolean
 }
 
 export class PathAccessError extends Error {}

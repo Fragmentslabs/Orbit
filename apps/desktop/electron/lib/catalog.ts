@@ -100,6 +100,19 @@ export async function getProvider(providerId: string): Promise<CatalogProvider |
   return catalog[providerId]
 }
 
+/**
+ * O modelo aceita imagens como input? Usa as modalidades do models.dev
+ * (input inclui 'image'); sem modalidades, cai no flag `attachment`. Controla
+ * se a flag `ver` do panel_screenshot é oferecida ao modelo.
+ */
+export function modelSupportsVision(provider: CatalogProvider | undefined, modelId: string): boolean {
+  const model = provider?.models[modelId]
+  if (!model) return false
+  const input = model.modalities?.input
+  if (input && input.length > 0) return input.includes('image')
+  return model.attachment === true
+}
+
 export async function ensureCustomProvidersSeeded(): Promise<void> {
   await seedCustomProviders()
 }

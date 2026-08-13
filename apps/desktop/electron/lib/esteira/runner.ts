@@ -1,6 +1,6 @@
 import { stepCountIs, streamText, type ToolSet } from 'ai'
 import type { Esteira, FaseConfig, Task } from '@shared/esteira'
-import { getProvider } from '../catalog'
+import { getProvider, modelSupportsVision } from '../catalog'
 import { classificarComando, mensagemBloqueio } from './command-policy'
 import { extrairAnotacao, extrairCommit } from './contrato'
 import { resolveModel } from '../providers'
@@ -209,18 +209,20 @@ function montarMensagem(ctx: ContextoFase): string {
 
 export async function executarFase(ctx: ContextoFase): Promise<ResultadoFase> {
   const comandosControlados: string[] = []
+  const provider = await getProvider(ctx.fase.providerId)
   const toolCtx: ToolContext = {
     sessionId: `esteira_${ctx.task.id}`,
     directory: ctx.esteira.worktree || ctx.pastas[0] || '',
     extraDirectories: ctx.pastas.slice(1),
     abort: ctx.abort,
+    // Visão do modelo da fase: controla se o panel_screenshot oferece `ver`
+    modelVision: modelSupportsVision(provider, ctx.fase.modelId),
   }
   if (!toolCtx.directory) {
     return { texto: '', comandosControlados, tokens: 0, custo: 0, erro: 'Projeto sem pasta de trabalho definida.' }
   }
 
   const input = sendInputSintetico(ctx)
-  const provider = await getProvider(ctx.fase.providerId)
   const model = await resolveModel(ctx.fase.providerId, ctx.fase.modelId)
   const tools = montarTools(ctx, toolCtx, (cmd) => comandosControlados.push(cmd))
 

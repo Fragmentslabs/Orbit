@@ -29,9 +29,11 @@ const VIEWPORT_PRESETS: Record<string, { width: number | null; height: number | 
 
 /**
  * Ferramentas do browser do painel direito (modo código). O painel abre
- * sozinho quando o agente usa qualquer uma. O screenshot volta como IMAGEM
- * para o modelo (toModelOutput com content file) — o base64 fica num stash
- * por toolCallId para não inflar o histórico persistido.
+ * sozinho quando o agente usa qualquer uma. O screenshot por padrão volta
+ * apenas como URL (orbit-media://) — a imagem só é carregada no modelo via
+ * toModelOutput (content file) quando o agente pede `ver: true` num modelo
+ * com visão; o base64 fica num stash por toolCallId para não inflar o
+ * histórico persistido.
  */
 
 const screenshotStash = new Map<string, { base64: string; format: 'webp' | 'png' }>()
@@ -97,30 +99,43 @@ export function createPanelBrowserTools(ctx: ToolContext): ToolSet {
     }),
     panel_screenshot: tool({
       description:
-        'Takes a screenshot of the panel page and SEES it as an image. With savePath, also saves it to the working folder (e.g.: docs/login/screen.webp) — use in documentation mode. With fullscreen, expands to full screen, captures, and returns to the side view. With fullPage, captures the WHOLE page (beyond the viewport) in a hidden window, without touching the panel; format: png gives a high-resolution image for documentation.',
-      inputSchema: z.object({
-        savePath: z
-          .string()
-          .optional()
-          .describe('Path relative to the working folder to save the image (optional)'),
-        fullscreen: z
-          .boolean()
-          .optional()
-          .describe('Captures full screen (bigger shot) and returns to the side view'),
-        fullPage: z
-          .boolean()
-          .optional()
-          .describe('Captures the whole page (scroll included) in a hidden window'),
-        format: z.enum(['webp', 'png']).optional().describe('Default webp; png for documentation'),
-        maxWidth: z
-          .number()
-          .int()
-          .min(320)
-          .max(3840)
-          .optional()
-          .describe('Maximum width in px (default 1024 — raise it only for documentation)'),
-      }) as any,
-      execute: async ({ savePath, fullscreen, fullPage, format, maxWidth }, { toolCallId }) => {
+        'Takes a screenshot of the panel page. By default it returns only the media URL (orbit-media://...) — the image is NOT loaded into your context (saves image tokens). Pass ver: true to load the image so you can actually SEE it (only available to vision models). With savePath, also saves it to the working folder (e.g.: docs/login/screen.webp) — use in documentation mode. With fullscreen, expands to full screen, captures, and returns to the side view. With fullPage, captures the WHOLE page (beyond the viewport) in a hidden window, without touching the panel; format: png gives a high-resolution image for documentation.',
+      inputSchema: z.object(
+        (() => {
+          const fields: Record<string, z.ZodTypeAny> = {
+            savePath: z
+              .string()
+              .optional()
+              .describe('Path relative to the working folder to save the image (optional)'),
+            fullscreen: z
+              .boolean()
+              .optional()
+              .describe('Captures full screen (bigger shot) and returns to the side view'),
+            fullPage: z
+              .boolean()
+              .optional()
+              .describe('Captures the whole page (scroll included) in a hidden window'),
+            format: z.enum(['webp', 'png']).optional().describe('Default webp; png for documentation'),
+            maxWidth: z
+              .number()
+              .int()
+              .min(320)
+              .max(3840)
+              .optional()
+              .describe('Maximum width in px (default 1024 — raise it only for documentation)'),
+          }
+          if (ctx.modelVision) {
+            fields.ver = z
+              .boolean()
+              .optional()
+              .describe(
+                'Loads the image into your context so you can SEE it. Default false — returns only the media URL (no image tokens). Use true when you actually need to see the screen.',
+              )
+          }
+          return fields
+        })(),
+      ) as any,
+      execute: async ({ savePath, fullscreen, fullPage, format, maxWidth, ver }, { toolCallId }) => {
         const outFormat: 'webp' | 'png' = format === 'png' ? 'png' : 'webp'
         let image: Buffer
         if (fullPage) {
@@ -141,12 +156,20 @@ export function createPanelBrowserTools(ctx: ToolContext): ToolSet {
             maxWidth,
           })
         }
-        screenshotStash.set(toolCallId, { base64: image.toString('base64'), format: outFormat })
-        await saveMedia(image, outFormat, {
+        const mediaUrl = await saveMedia(image, outFormat, {
           source: 'screenshot',
           sessionId: ctx.sessionId,
           name: savePath ?? (fullPage ? 'fullPage' : 'panel'),
         })
+        let loaded = ''
+        if (ver === true) {
+          if (ctx.modelVision) {
+            screenshotStash.set(toolCallId, { base64: image.toString('base64'), format: outFormat })
+            loaded = ' Imagem carregada no seu contexto (ver: true).'
+          } else {
+            loaded = ' (ver: true ignorado — este modelo não tem visão; a imagem NÃO foi carregada no contexto.)'
+          }
+        }
         let saved = ''
         if (savePath) {
           const saveName = savePath.replace(/\.[^/.]+$/, '') + `.${outFormat}`
@@ -155,7 +178,7 @@ export function createPanelBrowserTools(ctx: ToolContext): ToolSet {
           await fsp.writeFile(target, image)
           saved = ` Salvo em ${saveName}.`
         }
-        return `Screenshot capturado (${Math.round(image.length / 1024)}KB${fullPage ? ', página inteira' : ''}).${saved}`
+        return `Screenshot capturado (${Math.round(image.length / 1024)}KB${fullPage ? ', página inteira' : ''}). Mídia: ${mediaUrl}${saved}${loaded}`
       },
       toModelOutput: ({ toolCallId, output }) => {
         const stashed = screenshotStash.get(toolCallId)
