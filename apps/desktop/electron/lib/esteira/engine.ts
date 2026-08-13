@@ -233,6 +233,12 @@ async function rodarTask(esteiraId: string, taskId: string, retomandoInterrompid
       // existe mais — ninguém vai subir o branch se o engine não fizer.
       const pushFalha = ultimaFase && esteira.pushAoFinal ? await tentarPush(raiz, controller.signal) : undefined
       const diffAtual = await medirDiff()
+      // Pausa caiu DEPOIS do modelo terminar (durante o push/diff): a fase
+      // ainda não conta como concluída — o retomar roda ela de novo do zero,
+      // como qualquer fase interrompida. Sem este check, o persist abaixo
+      // sobrescrevia a pausa com 'concluida' na última fase (corrida entre
+      // pausarTask e a gravação de conclusão).
+      if (controller.signal.aborted) break
       const atualizada = await persistir(esteiraId, taskId, (t) => ({
         ...t,
         diff: diffAtual ?? t.diff,
@@ -241,8 +247,9 @@ async function rodarTask(esteiraId: string, taskId: string, retomandoInterrompid
         custo: t.custo + resultado.custo,
         pushFalha,
         faseAtual: ultimaFase ? t.faseAtual : indice + 1,
-        status: ultimaFase ? 'concluida' : t.status,
-        concluidoEm: ultimaFase ? agora() : t.concluidoEm,
+        // Guarda extra: se a pausa venceu esta gravação, não conclui.
+        status: ultimaFase && t.status === 'em_progresso' ? 'concluida' : t.status,
+        concluidoEm: ultimaFase && t.status === 'em_progresso' ? agora() : t.concluidoEm,
         tempoTrabalhoMs: ultimaFase
           ? t.tempoTrabalhoMs + (Date.now() - inicioExecucao)
           : t.tempoTrabalhoMs,
@@ -287,12 +294,17 @@ async function rodarTask(esteiraId: string, taskId: string, retomandoInterrompid
 }
 
 async function concluir(esteiraId: string, taskId: string, inicioExecucao: number): Promise<void> {
-  await persistir(esteiraId, taskId, (t) => ({
-    ...t,
-    status: 'concluida',
-    concluidoEm: agora(),
-    tempoTrabalhoMs: t.tempoTrabalhoMs + (Date.now() - inicioExecucao),
-  }))
+  await persistir(esteiraId, taskId, (t) =>
+    // Pausa pode ter vencido esta gravação — não conclui quem foi pausado.
+    t.status !== 'em_progresso'
+      ? t
+      : {
+          ...t,
+          status: 'concluida',
+          concluidoEm: agora(),
+          tempoTrabalhoMs: t.tempoTrabalhoMs + (Date.now() - inicioExecucao),
+        },
+  )
 }
 
 // ─── Push final ──────────────────────────────────────────────────────────────
