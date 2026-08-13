@@ -33,7 +33,12 @@ function DropdownMenuContent({
   return (
     <MenuPrimitive.Portal>
       <MenuPrimitive.Positioner
-        className="isolate z-50 outline-none"
+        // z acima do dialog (z-[80]): o Positioner cria contexto de empilhamento
+        // com `isolate`, então o z-50 antigo prendia QUALQUER dropdown aberto
+        // dentro de um modal atrás dele — e o className do Content só alcança o
+        // Popup, já dentro desse contexto. Popup sempre acima da superfície que
+        // o abriu.
+        className="isolate z-[90] outline-none"
         align={align}
         alignOffset={alignOffset}
         side={side}

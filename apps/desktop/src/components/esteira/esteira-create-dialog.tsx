@@ -17,7 +17,7 @@ import { FolderSelector } from "@/src/components/folder-selector"
 import { BranchSelector } from "@/src/components/branch-selector"
 import { ModelPicker } from "@/src/components/model-picker"
 import { useEsteiraStore } from "@/src/stores/esteira-store"
-import { useSessionModel } from "@/src/stores/session-model-prefs"
+import { useSessionModel, useSessionModelPrefs } from "@/src/stores/session-model-prefs"
 import { cn } from "@/lib/utils"
 import { FaseEditor } from "./fase-editor"
 
@@ -133,6 +133,11 @@ export function EsteiraCreateDialog({
         modelId: modelo.modelId,
         pushAoFinal,
       })
+      // Recentes são globais e compartilhados com os chats. O modelo entra na
+      // lista aqui, e não ao ser escolhido: o critério do app é "usado de
+      // verdade" (nos chats, ao concluir uma resposta) — criar a esteira é o
+      // momento em que ele passa a ser o modelo das fases.
+      useSessionModelPrefs.getState().markUsed(modelo.providerId, modelo.modelId)
       onOpenChange(false)
       onCriada?.(esteira.id)
     } finally {
