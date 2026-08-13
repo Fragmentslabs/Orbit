@@ -15,11 +15,16 @@ import { panelActivity } from './panel-browser'
  * infinito ou um throw do script não derruba o app — basta matar o processo no
  * timeout.
  *
- * A janela oculta usa a sessão do `<webview>` do painel direito — cookies e
- * logins são compartilhados: o que está logado no painel está logado aqui.
+ * A janela oculta usa a MESMA partition persistente do `<webview>` do painel
+ * direito (BROWSER_PARTITION) — cookies, logins e localStorage são
+ * compartilhados: o que está logado no painel está logado aqui.
  *
  * Playwright não entra no bundle: a engine é o próprio Chromium do Electron.
  */
+
+/** Sessão persistente compartilhada com o `<webview>` do painel (cookies/logins).
+ *  Precisa ser idêntica à BROWSER_PARTITION do renderer (webview-session.ts). */
+const BROWSER_PARTITION = 'persist:orbit-browser'
 
 /** Altura máxima de uma captura fullPage (evita estourar memória em páginas infinitas). */
 const MAX_FULL_PAGE_HEIGHT = 8000
@@ -177,6 +182,7 @@ function createHiddenWindow(viewport: { width: number; height: number }): Browse
     // capturePage volta em branco/preto (o caso clássico do macOS).
     paintWhenInitiallyHidden: true,
     webPreferences: {
+      partition: BROWSER_PARTITION,
       nodeIntegration: false,
       contextIsolation: true,
       sandbox: true,

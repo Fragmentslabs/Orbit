@@ -17,7 +17,7 @@ import { Input } from "@/components/ui/input"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { cn } from "@/lib/utils"
 import { formatTime } from "@/src/lib/format"
-import { mountWebview, safeWebviewURL, unmountWebview } from "@/src/components/browser/webview-session"
+import { getWebviewUrl, mountWebview, unmountWebview } from "@/src/components/browser/webview-session"
 
 export interface WebPreviewContextValue {
   url: string
@@ -251,16 +251,12 @@ export const WebPreviewUrl = ({ value, onChange, onKeyDown, ...props }: WebPrevi
 
 export type WebPreviewBodyProps = ComponentProps<"iframe"> & {
   loading?: ReactNode
-  /** Recebe o elemento <webview> montado (controle programático do painel) */
-  onWebviewRef?: (el: HTMLElement | null) => void
   /** Dimensões fixas do viewport (responsividade). Ausente = preenche o container. */
   viewport?: { width: number; height: number } | null
-  /** Chave de persistência do <webview> no pool (sessionId:tabId). Quando
-   *  presente, o webview sobrevive a desmontagens do componente (troca de
-   *  chat/aba) e a página continua viva — e o agente pode navegar em background. */
+  /** Chave do <webview> no pool (sessionId:tabId). O pool é o dono do guest:
+   *  navegação, reload, modo seleção e URL da aba passam por ele — o
+   *  componente nunca chama a API do <webview> direto. */
   persistKey?: string
-  /** Mensagens de console do webview persistido (ex.: payloads do modo seleção). */
-  onConsoleMessage?: (message: string) => void
   /** Notifica navegações do guest (did-navigate), além do syncUrl interno. */
   onNavigate?: (url: string) => void
 }
@@ -269,10 +265,8 @@ export const WebPreviewBody = ({
   className,
   loading,
   src,
-  onWebviewRef,
   viewport,
   persistKey,
-  onConsoleMessage,
   onNavigate,
   ...props
 }: WebPreviewBodyProps) => {
@@ -282,40 +276,26 @@ export const WebPreviewBody = ({
   const containerRef = useRef<HTMLDivElement | null>(null)
   const syncUrlRef = useRef(syncUrl)
   syncUrlRef.current = syncUrl
-  const onWebviewRefRef = useRef(onWebviewRef)
-  onWebviewRefRef.current = onWebviewRef
-  const onConsoleMessageRef = useRef(onConsoleMessage)
-  onConsoleMessageRef.current = onConsoleMessage
   const onNavigateRef = useRef(onNavigate)
   onNavigateRef.current = onNavigate
 
-  // Webview persistente (pool): o elemento <webview> sobrevive ao unmount do
-  // componente — voltar a esta aba reexibe a página exatamente onde estava.
+  // Webview do pool: o ELEMENTO sobrevive ao unmount do componente (o guest é
+  // recriado pelo Electron a cada re-parent, e o pool o devolve à URL da aba).
   useEffect(() => {
     if (!persistKey) return
     const container = containerRef.current
     if (!container) return
-    const el = mountWebview(
-      persistKey,
-      container,
-      src ?? url ?? undefined,
-      (navUrl) => {
-        syncUrlRef.current(navUrl)
-        onNavigateRef.current?.(navUrl)
-      },
-      (message) => onConsoleMessageRef.current?.(message),
-    )
-    onWebviewRefRef.current?.(el)
-    // Aba já tinha página carregada (de um ciclo anterior)? Espelha na barra.
-    // safeWebviewURL não lança antes do dom-ready — o did-navigate sincroniza.
-    const currentUrl = safeWebviewURL(el)
-    if (currentUrl && currentUrl !== "about:blank") syncUrlRef.current(currentUrl)
-    return () => {
-      onWebviewRefRef.current?.(null)
-      unmountWebview(persistKey)
-    }
-    // monta/desmonta conforme a chave: a navegação é feita por loadURL (efeito
-    // do PanelBrowserBody) ou pelo agente — nunca recria o webview.
+    mountWebview(persistKey, container, src ?? url ?? undefined, (navUrl) => {
+      syncUrlRef.current(navUrl)
+      onNavigateRef.current?.(navUrl)
+    })
+    // Aba já tinha página (ciclo anterior ou agente navegando em background):
+    // espelha na barra. Vem do registro do pool, sem tocar no guest.
+    const known = getWebviewUrl(persistKey)
+    if (known) syncUrlRef.current(known)
+    return () => unmountWebview(persistKey)
+    // monta/desmonta conforme a chave: a navegação é feita pelo pool
+    // (navigateWebview) ou pelo agente — nunca recriando o elemento.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [persistKey])
 
@@ -410,7 +390,6 @@ export const WebPreviewBody = ({
     >
       {/* @ts-ignore webview is an electron specific tag */}
       <webview
-        ref={onWebviewRef as never}
         className={cn("bg-white", viewport ? "shrink-0 rounded-md border shadow-sm" : "size-full", className)}
         style={viewport ? { width: viewport.width, height: viewport.height } : undefined}
         src={(src ?? url) || undefined}

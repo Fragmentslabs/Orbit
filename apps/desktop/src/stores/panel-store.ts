@@ -55,6 +55,10 @@ interface PanelState {
   getActiveTabId: (sessionId: string) => string | null
   /** Atualiza o título das abas de chat que apontam para uma sessão (ex.: agente nomeou o chat). */
   renameChatTabs: (sessionId: string, title: string) => void
+  /** URL atual de uma aba de browser — chamada pelo pool a cada navegação,
+   *  inclusive com a aba desmontada (agente navegando em background). É o que
+   *  faz a aba voltar na mesma página ao sair e entrar do chat. */
+  setTabUrl: (sessionId: string, tabId: string, url: string) => void
 
   browserRequestId: number
   browserUrl?: string
@@ -167,6 +171,17 @@ export const usePanelStore = create<PanelState>((set, get) => {
           tabsBySession[sk] = next
         }
         return changed ? { tabsBySession } : state
+      }),
+
+    setTabUrl: (sessionId, tabId, url) =>
+      set((state) => {
+        const tabs = state.tabsBySession[sessionId]
+        if (!tabs) return state
+        const index = tabs.findIndex((t) => t.id === tabId)
+        if (index < 0 || tabs[index].url === url) return state
+        const next = [...tabs]
+        next[index] = { ...next[index], url }
+        return { tabsBySession: { ...state.tabsBySession, [sessionId]: next } }
       }),
 
     browserRequestId: 0,

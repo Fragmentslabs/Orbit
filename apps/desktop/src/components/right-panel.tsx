@@ -166,10 +166,11 @@ function TabContent({ tab, sessionId, onUpdateTab }: { tab: PanelTab; sessionId?
         <div className="flex flex-1 flex-col overflow-hidden">
           <BrowserTab
             initialUrl={tab.url}
-            // Webview persistente no pool (webview-session.ts): a página da aba
-            // sobrevive a trocas de aba/chat — voltar reexibe onde estava, e o
-            // agente continua controlando o browser em background.
-            persistKey={sessionId ? `${sessionId}:${tab.id}` : undefined}
+            // Chave do webview no pool (webview-session.ts). Uma por aba e por
+            // chat: cada aba tem sua própria página, e voltar ao chat retoma a
+            // URL de onde parou. Sempre definida — é o pool que trata console,
+            // navegação e modo seleção.
+            persistKey={`${sessionId ?? "__orphan__"}:${tab.id}`}
             onUrlChange={(url) => onUpdateTab(tab.id, { url })}
           />
         </div>
@@ -461,10 +462,10 @@ export function RightPanel() {
     if (tab?.type === "terminal") {
       useTerminalStore.getState().killTerminal(id)
     }
-    if (tab?.type === "browser" && activeSessionId) {
+    if (tab?.type === "browser") {
       // Fechou a aba: destrói o webview do pool e desregistra no main (senão a
       // página continuaria viva no host oculto e o agente navegaria um browser órfão).
-      destroyWebview(`${activeSessionId}:${id}`)
+      destroyWebview(`${activeSessionId ?? "__orphan__"}:${id}`)
     }
     removeTabFromStore(sk, id)
   }, [activeSessionId, tabs, removeTabFromStore])
