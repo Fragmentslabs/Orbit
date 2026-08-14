@@ -616,6 +616,7 @@
     "researching": "Researching…",
     "researchDone_one": "Research done · {{count}} step",
     "researchDone_other": "Research done · {{count}} steps",
+    "analyzingImage": "Analyzing image…",
     "thinking": "Thinking…",
     "browser": {
       "testing": "Testing…",

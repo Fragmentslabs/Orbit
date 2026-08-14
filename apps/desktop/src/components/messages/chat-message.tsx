@@ -24,6 +24,7 @@ import {
   MessageError,
   MessageTruncated,
   ReasoningPartView,
+  VisionWorkingRow,
 } from "@/src/components/messages/shared"
 
 /**
@@ -156,9 +157,13 @@ export function ChatAssistantMessage({ message, sessionId, isLast, isBusy, onRet
         segment.kind === "research" ? (
           <ResearchBlock key={segment.id} parts={segment.parts} />
         ) : segment.part.type === "text" ? (
-          <AssistantMarkdown key={segment.id} muted={index < lastTextIndex}>
-            {segment.part.text}
-          </AssistantMarkdown>
+          segment.part.source === "vision" ? (
+            <VisionWorkingRow key={segment.id} />
+          ) : (
+            <AssistantMarkdown key={segment.id} muted={index < lastTextIndex}>
+              {segment.part.text}
+            </AssistantMarkdown>
+          )
         ) : segment.part.type === "reasoning" ? (
           <ReasoningPartView key={segment.id} part={segment.part} />
         ) : segment.part.type === "image" ? (

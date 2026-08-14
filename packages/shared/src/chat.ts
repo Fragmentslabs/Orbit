@@ -92,8 +92,10 @@ export interface TextPart {
    * não digitado pelo usuário. O modelo ainda recebe esse texto normalmente
    * (toModelMessages/partText não filtram por origem) — só a bolha visível
    * do chat esconde essas parts, mostrando apenas o que a pessoa escreveu.
+   * "vision" = indicador transitório do modo Visão ("Analisando imagem…"),
+   * emitido enquanto o modelo de visão descreve um anexo; nunca persiste.
    */
-  source?: "attachment"
+  source?: "attachment" | "vision"
 }
 
 export interface ReasoningPart {
@@ -135,6 +137,14 @@ export interface FilePart {
   filename?: string
   /** Data URL com o conteúdo do arquivo */
   url: string
+  /**
+   * Chip de UI: anexo já pré-processado pelo engine (conteúdo extraído como
+   * texto no TextPart irmão ou descrito pelo modelo de visão). O modelo NÃO
+   * recebe o arquivo (toModelMessages ignora chips). Em imagens, `url`
+   * carrega um thumbnail reduzido só para a bolha do chat; nos demais
+   * formatos fica vazio.
+   */
+  chip?: boolean
 }
 
 /** Agente do pipeline /init exibido como acordeon (estilo thinking): o

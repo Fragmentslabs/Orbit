@@ -10,6 +10,7 @@ import type {
   ReasoningPart,
   SendMessageInput,
   SessionInfo,
+  TextPart,
   ToolPart,
 } from '@shared/chat'
 import { StorageKeys } from '@shared/chat'
@@ -21,6 +22,7 @@ import { buildSystemPrompt } from './prompts'
 import { buildProviderOptions, interleavedReasoningField, normalizeMessages } from './reasoning'
 import { resolveModel } from './providers'
 import { attachMediaMessage } from './media'
+import sharp from 'sharp'
 import { claimsCompletion } from './overclaim'
 import { extractPdfText } from './pdf'
 import { extractSpreadsheetText } from './xlsx'
@@ -185,12 +187,39 @@ function fileToModelContent(file: FilePart, modelVision: boolean): Exclude<UserC
   return { type: 'text', text: `[Arquivo anexado não suportado: ${file.filename ?? file.mime}]` }
 }
 
-/** Chip de anexo sem o data URL (evita duplicar bytes grandes no histórico —
- * o conteúdo já vai como texto no TextPart que acompanha este chip). Mantém
- * `url` vazio de propósito: é o que `toModelMessages` usa para reconhecer e
- * pular este FilePart ao montar o conteúdo do modelo (o texto já cobre isso). */
-function attachmentChip(file: FilePart): FilePart {
-  return { id: file.id, type: 'file', mime: file.mime, filename: file.filename, url: '' }
+/** Chip de anexo sem o data URL original (evita duplicar bytes grandes no
+ * histórico — o conteúdo já vai como texto no TextPart que acompanha este
+ * chip). Em imagens, `thumbUrl` traz um thumbnail reduzido só para a bolha do
+ * chat (o modelo continua não recebendo o arquivo: toModelMessages ignora
+ * chips pela flag `chip`). */
+function attachmentChip(file: FilePart, thumbUrl?: string): FilePart {
+  return {
+    id: file.id,
+    type: 'file',
+    mime: file.mime,
+    filename: file.filename,
+    url: thumbUrl ?? '',
+    chip: true,
+  }
+}
+
+/** Thumbnail (WebP, máx 320px) de um data URL de imagem — só para exibição na
+ * bolha do chat; o histórico guarda o thumbnail em vez dos bytes originais.
+ * Falha silenciosa → undefined (o chip fica sem url, como antes). */
+async function imageThumbDataUrl(url: string): Promise<string | undefined> {
+  try {
+    const bytes = decodeDataUrlBytes(url)
+    if (!bytes) return undefined
+    const out = await sharp(bytes)
+      .rotate()
+      .resize({ width: 320, height: 320, fit: 'inside', withoutEnlargement: true })
+      .webp({ quality: 75 })
+      .toBuffer()
+    return `data:image/webp;base64,${out.toString('base64')}`
+  } catch (err) {
+    console.error('[attachment] thumbnail falhou:', err)
+    return undefined
+  }
 }
 
 /** Pré-processa um anexo NOVO antes de persistir: PDF, planilha e skill viram
@@ -289,6 +318,9 @@ async function preprocessAttachment(
   // modo ativo: visão nativa mantém o image part; sem visão e sem modelo,
   // avisa no histórico que o anexo não foi visto (a UI também mostra o card).
   if (file.mime.startsWith('image/')) {
+    // Thumbnail só para a bolha do chat: o chip não leva os bytes originais
+    // (o histórico não duplica imagens inteiras), mas a UI mostra a imagem.
+    const thumbUrl = await imageThumbDataUrl(file.url)
     if (deps.visionModel) {
       const filename = file.filename ?? ''
       const desc = await describeImage({
@@ -301,14 +333,14 @@ async function preprocessAttachment(
         ? `[Imagem anexada: ${filename || 'sem nome'}]\n\nDescrição gerada pelo modelo de visão (${deps.visionModel.modelId}):\n${desc}`
         : `[Imagem anexada: ${filename || 'sem nome'}] — o modelo de visão configurado não conseguiu descrever esta imagem.`
       return [
-        attachmentChip(file),
+        attachmentChip(file, thumbUrl),
         { id: newId('prt'), type: 'text', text, state: 'done', source: 'attachment' },
       ]
     }
     if (deps.modelVision) return [file]
     const filename = file.filename ?? ''
     return [
-      attachmentChip(file),
+      attachmentChip(file, thumbUrl),
       {
         id: newId('prt'),
         type: 'text',
@@ -336,10 +368,13 @@ export function toModelMessages(history: ChatMessage[], modelVision = true): Mod
     // truncamento como texto — ToolParts em si nunca são reenviados ao
     // modelo fora do streaming da própria chamada que os gerou.
     const text = messageContextText(message, partText(message.parts, 'text'))
-    // Chips sem dados (url === '') são só decoração da UI — o conteúdo real
-    // já está no TextPart irmão extraído em preprocessAttachment; incluí-los
-    // aqui duplicaria uma nota vazia no lugar do texto já extraído.
-    const files = message.parts.filter((p): p is FilePart => p.type === 'file' && p.url !== '')
+    // Chips (flag `chip`) são só decoração da UI — o conteúdo real já está no
+    // TextPart irmão extraído em preprocessAttachment; incluí-los aqui
+    // duplicaria uma nota vazia no lugar do texto já extraído. O `url !== ''`
+    // cobre chips antigos persistidos antes da flag existir.
+    const files = message.parts.filter(
+      (p): p is FilePart => p.type === 'file' && !p.chip && p.url !== '',
+    )
     if (message.role === 'user' && files.length > 0) {
       const content: UserContent = files.map((file) => fileToModelContent(file, modelVision))
       if (text.trim()) content.push({ type: 'text', text })
@@ -477,31 +512,22 @@ export async function runChat(win: BrowserWindow, input: SendMessageInput): Prom
     return
   }
 
-  // Extrai texto de anexos (PDF, planilha, skill) antes de persistir — evita
-  // data URLs enormes no histórico e dá ao agente acesso ao conteúdo real,
-  // independente da pasta de trabalho selecionada (as tools read/glob/bash só
-  // enxergam o filesystem, nunca os anexos do chat — por isso o conteúdo
-  // precisa entrar como texto na própria mensagem). Imagens: modelo sem visão
-  // delega para o modelo de visão configurado (modo Visão) ou vira aviso.
-  const provider = await getProvider(input.providerId)
-  const modelVision = modelSupportsVision(provider, input.modelId)
-  const processedParts: MessagePart[] = []
-  for (const file of input.files ?? []) {
-    processedParts.push(...(await preprocessAttachment(file, {
-      modelVision,
-      visionModel: input.visionModel,
-      language: input.language,
-      focus: input.text,
-    })))
+  // A mensagem do usuário é emitida ANTES do pré-processamento dos anexos:
+  // o preprocess de imagem com o modo Visão chama o modelo de visão (rede,
+  // pode levar dezenas de segundos) — emitir só depois deixava a UI muda
+  // (chat novo preso na tela vazia, chat existente sem a mensagem) até o
+  // agente responder. O primeiro emit traz os anexos originais (data URL), o
+  // segundo (após o preprocess) substitui pelos chips processados.
+  const textPart: TextPart = {
+    id: newId('prt'),
+    type: 'text',
+    text: input.text,
+    state: 'done',
   }
-
   const userMessage: ChatMessage = {
     id: newId('msg'),
     role: 'user',
-    parts: [
-      ...processedParts,
-      { id: newId('prt'), type: 'text', text: input.text, state: 'done' },
-    ],
+    parts: [...(input.files ?? []), textPart],
     createdAt: Date.now(),
     // Metadados do turno persistidos na mensagem do usuário — a tool
     // session_context os lê para responder "o que foi alterado no turno X?"
@@ -523,6 +549,59 @@ export async function runChat(win: BrowserWindow, input: SendMessageInput): Prom
   history.push(assistantMessage)
   await saveMessages(sessionId, history)
   emit(win, { type: 'message', sessionId, message: assistantMessage })
+
+  // Extrai texto de anexos (PDF, planilha, skill) antes de persistir — evita
+  // data URLs enormes no histórico e dá ao agente acesso ao conteúdo real,
+  // independente da pasta de trabalho selecionada (as tools read/glob/bash só
+  // enxergam o filesystem, nunca os anexos do chat — por isso o conteúdo
+  // precisa entrar como texto na própria mensagem). Imagens: modelo sem visão
+  // delega para o modelo de visão configurado (modo Visão) ou vira aviso.
+  const files = input.files ?? []
+  const provider = await getProvider(input.providerId)
+  const modelVision = modelSupportsVision(provider, input.modelId)
+  if (files.length > 0) {
+    // Indicador transitório "Analisando imagem" (part com source 'vision'):
+    // a UI mostra o ícone do modo Visão enquanto o modelo de visão descreve
+    // o anexo. Só o evento é emitido — a part nunca entra na mensagem em
+    // memória nem no histórico, e some quando a mensagem é re-emitida abaixo.
+    const analyzingImages = files.some((f) => f.mime.startsWith('image/')) && !!input.visionModel
+    if (analyzingImages) {
+      emit(win, {
+        type: 'part',
+        sessionId,
+        messageId: assistantMessage.id,
+        part: {
+          id: newId('prt'),
+          type: 'text',
+          // Texto localizado de propósito: o desktop renderiza o próprio i18n
+          // (source 'vision'), o mobile exibe part.text.
+          text: input.language?.toLowerCase().startsWith('portuguese')
+            ? 'Analisando imagem…'
+            : 'Analyzing image…',
+          state: 'streaming',
+          source: 'vision',
+        },
+      })
+    }
+
+    const processedParts: MessagePart[] = []
+    for (const file of files) {
+      processedParts.push(...(await preprocessAttachment(file, {
+        modelVision,
+        visionModel: input.visionModel,
+        language: input.language,
+        focus: input.text,
+      })))
+    }
+    // Substitui a mensagem do usuário (objeto NOVO — o MessageItem é memoizado
+    // por referência) pelos anexos processados e re-emite; junto, a re-emissão
+    // da mensagem do assistente remove o indicador de visão da UI.
+    const processedUserMessage: ChatMessage = { ...userMessage, parts: [...processedParts, textPart] }
+    history[history.indexOf(userMessage)] = processedUserMessage
+    await saveMessages(sessionId, history)
+    emit(win, { type: 'message', sessionId, message: processedUserMessage })
+    if (analyzingImages) emit(win, { type: 'message', sessionId, message: assistantMessage })
+  }
 
   const upsertPart = (part: MessagePart) => {
     const idx = assistantMessage.parts.findIndex((p) => p.id === part.id)

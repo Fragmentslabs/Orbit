@@ -5,6 +5,7 @@ import {
   CheckIcon,
   ChevronDownIcon,
   CopyIcon,
+  Eye,
   LoaderIcon,
   RefreshCwIcon,
   RotateCwIcon,
@@ -103,6 +104,16 @@ export function AssistantMarkdown({ children, muted = false }: {
       )}
     >
       <MessageResponse components={markdownComponents}>{children}</MessageResponse>
+    </div>
+  )
+}
+
+export function VisionWorkingRow() {
+  const { t } = useTranslation()
+  return (
+    <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
+      <Eye className="size-3.5" />
+      <Shimmer>{t("chat.analyzingImage")}</Shimmer>
     </div>
   )
 }
