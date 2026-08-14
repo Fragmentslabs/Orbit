@@ -375,6 +375,7 @@ function TaskGroup({ parts }: { parts: ToolPart[] }) {
         activeOpacity={0.7}
         style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 2 }}
       >
+        <Terminal size={13} color={tokens.mutedForeground} />
         {working ? (
           <Shimmer className="text-xs font-semibold">{title}</Shimmer>
         ) : (
@@ -591,6 +592,17 @@ export function ChatAssistantMessage({ message, compact, isLast, isBusy, onRever
 
   const waiting = message.role === 'assistant' && isLast && isBusy && message.parts.length === 0
 
+  // Agente navegando no browser (browser_open/browser_links em execução) —
+  // paridade com o BrowserTestChip do desktop ("testando…"), aqui inline na
+  // conversa (o mobile não tem painel lateral).
+  const usingBrowser = useMemo(
+    () =>
+      message.parts.some(
+        (p) => p.type === 'tool' && (p.tool === 'browser_open' || p.tool === 'browser_links') && p.state === 'running',
+      ),
+    [message.parts],
+  )
+
   const handleCopy = useCallback(async () => {
     await Clipboard.setStringAsync(messageText(message))
   }, [message])
@@ -602,8 +614,16 @@ export function ChatAssistantMessage({ message, compact, isLast, isBusy, onRever
   return (
     <View className="self-start w-full py-2 my-1 items-start">
       {waiting && (
-        <View className="py-1">
+        <View className="flex-row items-center gap-1.5 py-1">
+          <Brain size={14} color={tokens.mutedForeground} />
           <Shimmer className="text-sm font-semibold">{t('chatAssistant.thinking')}</Shimmer>
+        </View>
+      )}
+
+      {usingBrowser && (
+        <View className="w-full flex-row items-center gap-1.5 py-0.5">
+          <Globe size={14} color={tokens.primary} />
+          <Shimmer className="text-sm">{t('chatAssistant.usingBrowser')}</Shimmer>
         </View>
       )}
 

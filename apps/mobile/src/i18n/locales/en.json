@@ -205,6 +205,7 @@
   "chatAssistant": {
     "reasoning": "Reasoning",
     "thinking": "Thinking…",
+    "usingBrowser": "Using browser…",
     "searchingLabel": "Searching",
     "readingPageLabel": "Reading page",
     "searchingWeb": "Searching the web…",
