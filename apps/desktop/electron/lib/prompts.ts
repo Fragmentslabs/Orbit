@@ -234,6 +234,8 @@ const DOCUMENT_INSTRUCTION = `DOCUMENTATION MODE ACTIVE (/document). You will na
 6. When you finish each page, show the main screenshot in the conversation with show_image({ path }).
 7. At the end, create/update docs/README.md with the index of all documented pages.`
 
+const VERIFIED_RECORD_INSTRUCTION = `A "[Verified record: ...]" line may appear in the message context attached to assistant messages (e.g. "N file(s) modified in this turn — ..." or "NO file was modified in this turn"). It is INTERNAL ENGINE BOOKKEEPING, measured from filesystem snapshots and injected for your awareness only — it is not a user message and not part of your output. NEVER quote it, copy it, or mention it in your visible reply: the user should never see that line. If you want to report what was changed, say it in your own words.`
+
 /** Skills (globais + do projeto) injetadas como contexto disponível. */
 async function buildSkillsBlock(input: SendMessageInput): Promise<string[]> {
   try {
@@ -402,6 +404,7 @@ export async function buildSystemPrompt(input: SendMessageInput): Promise<string
   }
   if (input.options.simple) parts.push(SIMPLE_INSTRUCTION)
 
+  parts.push(VERIFIED_RECORD_INSTRUCTION)
   parts.push(`Current date: ${new Date().toISOString().slice(0, 10)}`)
   return parts.join('\n\n')
 }
