@@ -450,7 +450,10 @@
     "camera": "Câmera",
     "photos": "Fotos",
     "files": "Arquivos",
-    "openWith": "Abrir com…"
+    "openWith": "Abrir com…",
+    "image": "Imagem",
+    "enlarge": "Ampliar imagem",
+    "close": "Fechar"
   },
   "memoryMeta": {
     "kind": {

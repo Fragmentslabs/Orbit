@@ -31,6 +31,7 @@ import { AssistantMarkdown } from './AssistantMarkdown'
 import { TodoChecklist } from './TodoChecklist'
 import { MessageActions } from './MessageActions'
 import { MessageAttachment } from './Attachment'
+import { ImageLightbox } from './ImageLightbox'
 import { SkillProposalCard } from './SkillProposalCard'
 import { Shimmer } from '~/components/ai/Shimmer'
 import { SubAgentCard } from '~/components/chat/SubAgentCard'
@@ -515,6 +516,7 @@ function AssistantImage({ part }: { part: ImagePart }) {
   const { t } = useTranslation()
   const tokens = getThemeTokens(useThemeStore((s) => s.resolved))
   const [failed, setFailed] = useState(false)
+  const [lightboxOpen, setLightboxOpen] = useState(false)
 
   if (failed) {
     return (
@@ -530,14 +532,19 @@ function AssistantImage({ part }: { part: ImagePart }) {
   }
 
   return (
-    <View className="mt-2 rounded-lg overflow-hidden" style={{ borderWidth: 1, borderColor: tokens.border }}>
-      <Image
-        source={part.src}
-        style={{ width: 240, height: 180 }}
-        contentFit="contain"
-        onError={() => setFailed(true)}
-      />
-    </View>
+    <>
+      <View className="mt-2 rounded-lg overflow-hidden" style={{ borderWidth: 1, borderColor: tokens.border }}>
+        <Pressable onPress={() => setLightboxOpen(true)} accessibilityLabel={t('attachment.enlarge')}>
+          <Image
+            source={part.src}
+            style={{ width: 240, height: 180 }}
+            contentFit="contain"
+            onError={() => setFailed(true)}
+          />
+        </Pressable>
+      </View>
+      <ImageLightbox src={part.src} alt={part.alt} open={lightboxOpen} onOpenChange={setLightboxOpen} />
+    </>
   )
 }
 

@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { View, Text, Pressable, StyleSheet } from 'react-native'
 import { Image } from 'expo-image'
 import { Paperclip, X } from 'lucide-react-native'
@@ -6,25 +7,36 @@ import type { FilePart } from '@orbit/shared'
 import { openFilePart } from '~/lib/attachments'
 import { getThemeTokens } from '~/lib/theme-tokens'
 import { useThemeStore } from '~/stores/theme-store'
+import { ImageLightbox } from './ImageLightbox'
 
 export function InputAttachment({ file, onRemove }: { file: FilePart; onRemove: () => void }) {
   const { t } = useTranslation()
   const tokens = getThemeTokens(useThemeStore((s) => s.resolved))
   const isImage = file.mime.startsWith('image/')
+  const [lightboxOpen, setLightboxOpen] = useState(false)
   return (
-    <Pressable onPress={() => void openFilePart(file)} style={[s.inputChip, { borderColor: tokens.border, backgroundColor: tokens.border }]}>
-      {isImage ? (
-        <Image source={file.url} style={s.inputThumb} contentFit="cover" />
-      ) : (
-        <Paperclip size={13} color={tokens.mutedForeground} />
-      )}
-      <Text style={[s.inputChipText, { color: tokens.foreground }]} numberOfLines={1}>
-        {file.filename ?? t('attachment.defaultFilename')}
-      </Text>
-      <Pressable onPress={onRemove} hitSlop={8} style={[s.removeBtn, { backgroundColor: tokens.muted }]}>
-        <X size={11} color={tokens.mutedForeground} />
+    <>
+      <Pressable
+        onPress={() => (isImage ? setLightboxOpen(true) : void openFilePart(file))}
+        accessibilityLabel={isImage ? t('attachment.enlarge') : t('attachment.defaultFilename')}
+        style={[s.inputChip, { borderColor: tokens.border, backgroundColor: tokens.border }]}
+      >
+        {isImage ? (
+          <Image source={file.url} style={s.inputThumb} contentFit="cover" />
+        ) : (
+          <Paperclip size={13} color={tokens.mutedForeground} />
+        )}
+        <Text style={[s.inputChipText, { color: tokens.foreground }]} numberOfLines={1}>
+          {file.filename ?? t('attachment.defaultFilename')}
+        </Text>
+        <Pressable onPress={onRemove} hitSlop={8} style={[s.removeBtn, { backgroundColor: tokens.muted }]}>
+          <X size={11} color={tokens.mutedForeground} />
+        </Pressable>
       </Pressable>
-    </Pressable>
+      {isImage && file.url && (
+        <ImageLightbox src={file.url} alt={file.filename} open={lightboxOpen} onOpenChange={setLightboxOpen} />
+      )}
+    </>
   )
 }
 
@@ -32,12 +44,22 @@ export function MessageAttachment({ file }: { file: FilePart }) {
   const { t } = useTranslation()
   const tokens = getThemeTokens(useThemeStore((s) => s.resolved))
   const isImage = file.mime.startsWith('image/')
+  const [lightboxOpen, setLightboxOpen] = useState(false)
 
   if (isImage) {
     return (
-      <Pressable onPress={() => void openFilePart(file)} style={[s.imageWrap, { borderColor: tokens.border }]}>
-        <Image source={file.url} style={s.image} contentFit="cover" />
-      </Pressable>
+      <>
+        <Pressable
+          onPress={() => setLightboxOpen(true)}
+          accessibilityLabel={t('attachment.enlarge')}
+          style={[s.imageWrap, { borderColor: tokens.border }]}
+        >
+          <Image source={file.url} style={s.image} contentFit="cover" />
+        </Pressable>
+        {file.url && (
+          <ImageLightbox src={file.url} alt={file.filename} open={lightboxOpen} onOpenChange={setLightboxOpen} />
+        )}
+      </>
     )
   }
 
