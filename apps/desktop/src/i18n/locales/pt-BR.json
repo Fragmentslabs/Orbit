@@ -1238,6 +1238,17 @@
         "description": "Controle de segurança sobre ações do agente.",
         "detail": "Três níveis: Ask (pergunta antes de cada ação crítica), Approve (mostra resumo para aprovação), Full (executa automaticamente). Configurável no modal de Preferências ou diretamente no input.",
         "combo": []
+      },
+      {
+        "id": "vision",
+        "label": "Visão",
+        "modes": [
+          "Chat",
+          "Código"
+        ],
+        "description": "Delega a visão para um modelo específico.",
+        "detail": "Com o modo ativo, imagens (screenshots e anexos) são descritas por um modelo de visão configurado e apenas a descrição em texto entra no contexto do agente — nunca a imagem em si. É benéfico mesmo em modelos com visão nativa: em conversas longas, a imagem não fica sendo recarregada no contexto a cada turno, economizando tokens e mantendo o contexto enxuto.",
+        "combo": []
       }
     ],
     "combos": [

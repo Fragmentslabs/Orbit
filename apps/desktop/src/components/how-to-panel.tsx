@@ -1,5 +1,5 @@
 import { useTranslation } from "react-i18next"
-import { AlignLeft, Bot, Brain, BrainCircuit, FileText, Globe, KeyRound, Network, RefreshCw, Search, Shield } from "lucide-react"
+import { AlignLeft, Bot, Brain, BrainCircuit, Eye, FileText, Globe, KeyRound, Network, RefreshCw, Search, Shield } from "lucide-react"
 
 interface ModeInfo {
   id: string
@@ -27,6 +27,7 @@ const MODE_ICONS: Record<string, typeof Shield> = {
   loop: RefreshCw,
   plan: FileText,
   permissions: KeyRound,
+  vision: Eye,
 }
 
 export function HowToPanel() {

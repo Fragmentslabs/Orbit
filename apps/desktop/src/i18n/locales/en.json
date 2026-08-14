@@ -1238,6 +1238,17 @@
         "description": "Security control over the agent's actions.",
         "detail": "Three levels: Ask (asks before each critical action), Approve (shows a summary for approval), Full (executes automatically). Configurable in the Preferences modal or directly in the input.",
         "combo": []
+      },
+      {
+        "id": "vision",
+        "label": "Vision",
+        "modes": [
+          "Chat",
+          "Code"
+        ],
+        "description": "Delegates vision to a dedicated model.",
+        "detail": "With the mode on, images (screenshots and attachments) are described by a configured vision model and only the text description enters the agent's context — never the raw image. Beneficial even for models with native vision: in long conversations, the image isn't reloaded into the context every turn, saving tokens and keeping the context lean.",
+        "combo": []
       }
     ],
     "combos": [
