@@ -1,10 +1,10 @@
 /**
  * Registry de mídia: toda imagem produzida pelo agente (show_image,
- * screenshots, scripts de browser) ganha um registro em
- * orbit-data/media/index.json. A galeria do painel direito lê daqui.
+ * screenshots, scripts de browser) ou colada pelo usuário ganha um registro
+ * em orbit-data/media/index.json. A galeria do painel direito lê daqui.
  */
 
-export type MediaSource = "chat" | "screenshot" | "script" | "batch"
+export type MediaSource = "chat" | "user" | "screenshot" | "script" | "batch"
 
 export interface MediaEntry {
   /** Nome do arquivo em orbit-data/media (também é a URL: orbit-media://<id>) */

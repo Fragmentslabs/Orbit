@@ -593,7 +593,7 @@
       },
       "media": {
         "label": "Media",
-        "description": "Images produced by the agent"
+        "description": "Chat images, screenshots and captures"
       }
     }
   },
@@ -1474,6 +1474,7 @@
     "cleanupScriptsHint": "Deletes images captured by scripts/batches that were never shown in a chat",
     "source": {
       "all": "All",
+      "user": "User",
       "chat": "Chat",
       "screenshot": "Screenshot",
       "script": "Script",

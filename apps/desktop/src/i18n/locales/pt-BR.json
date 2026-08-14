@@ -593,7 +593,7 @@
       },
       "media": {
         "label": "Mídia",
-        "description": "Imagens produzidas pelo agente"
+        "description": "Imagens do chat, screenshots e capturas"
       }
     }
   },
@@ -1474,6 +1474,7 @@
     "cleanupScriptsHint": "Apaga imagens capturadas por scripts/lotes que nunca foram mostradas em um chat",
     "source": {
       "all": "Todas",
+      "user": "Usuário",
       "chat": "Chat",
       "screenshot": "Screenshot",
       "script": "Script",

@@ -21,7 +21,7 @@ import { classifyProviderError, errorToText } from './errors'
 import { buildSystemPrompt } from './prompts'
 import { buildProviderOptions, interleavedReasoningField, normalizeMessages } from './reasoning'
 import { resolveModel } from './providers'
-import { attachMediaMessage } from './media'
+import { attachMediaMessage, saveMedia } from './media'
 import sharp from 'sharp'
 import { claimsCompletion } from './overclaim'
 import { extractPdfText } from './pdf'
@@ -222,6 +222,48 @@ async function imageThumbDataUrl(url: string): Promise<string | undefined> {
   }
 }
 
+const IMAGE_MIME_EXT: Record<string, string> = {
+  'image/png': 'png',
+  'image/jpeg': 'jpg',
+  'image/webp': 'webp',
+  'image/gif': 'gif',
+}
+
+/** Extensão de arquivo para persistir uma imagem anexada (mime → ext, com
+ * fallback pelo filename e, por fim, png). */
+function imageExt(file: FilePart): string {
+  const fromMime = IMAGE_MIME_EXT[file.mime]
+  if (fromMime) return fromMime
+  const match = /\.(png|jpe?g|webp|gif)$/i.exec(file.filename ?? '')
+  if (match) {
+    const ext = match[1].toLowerCase()
+    return ext === 'jpeg' ? 'jpg' : ext
+  }
+  return 'png'
+}
+
+/**
+ * Registra a print colada pelo usuário na galeria de mídia (source 'user'):
+ * o original ganha arquivo em disco + registro no índice — com o modo Visão,
+ * hoje os bytes originais se perdem (o histórico guarda só o thumbnail).
+ * Melhor esforço: falha silenciosa — o envio da mensagem nunca quebra por
+ * causa do registro.
+ */
+async function saveUserImage(file: FilePart, sessionId?: string, messageId?: string): Promise<void> {
+  try {
+    const bytes = decodeDataUrlBytes(file.url)
+    if (!bytes) return
+    await saveMedia(bytes, imageExt(file), {
+      source: 'user',
+      sessionId,
+      messageId,
+      name: file.filename,
+    })
+  } catch (err) {
+    console.error('[attachment] registro da imagem na galeria falhou:', err)
+  }
+}
+
 /** Pré-processa um anexo NOVO antes de persistir: PDF, planilha e skill viram
  * texto extraído (evita data URLs enormes no histórico) + um chip sem dados
  * pra UI continuar mostrando o anexo; imagem continua nativa (o modelo lê
@@ -237,6 +279,9 @@ async function preprocessAttachment(
     language?: string
     /** Texto da mensagem do usuário — foco da descrição quando há delegação */
     focus?: string
+    /** Sessão/mensagem de origem — a print vira registro na galeria de mídia */
+    sessionId?: string
+    messageId?: string
   },
 ): Promise<MessagePart[]> {
   const filename = file.filename ?? ''
@@ -318,6 +363,10 @@ async function preprocessAttachment(
   // modo ativo: visão nativa mantém o image part; sem visão e sem modelo,
   // avisa no histórico que o anexo não foi visto (a UI também mostra o card).
   if (file.mime.startsWith('image/')) {
+    // A print colada pelo usuário também entra na galeria de mídia: o
+    // original é persistido em disco (source 'user') — o histórico não muda,
+    // a mensagem continua com o data URL/thumb de sempre.
+    await saveUserImage(file, deps.sessionId, deps.messageId)
     // Thumbnail só para a bolha do chat: o chip não leva os bytes originais
     // (o histórico não duplica imagens inteiras), mas a UI mostra a imagem.
     const thumbUrl = await imageThumbDataUrl(file.url)
@@ -591,6 +640,8 @@ export async function runChat(win: BrowserWindow, input: SendMessageInput): Prom
         visionModel: input.visionModel,
         language: input.language,
         focus: input.text,
+        sessionId,
+        messageId: userMessage.id,
       })))
     }
     // Substitui a mensagem do usuário (objeto NOVO — o MessageItem é memoizado

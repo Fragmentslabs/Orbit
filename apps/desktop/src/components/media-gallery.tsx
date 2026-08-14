@@ -10,9 +10,13 @@ import { useWorkspace } from "@/lib/workspace-context"
 import { cn } from "@/lib/utils"
 
 /**
- * Galeria de mídia: página dedicada (aba do painel direito) com todas as
- * imagens que o agente produziu — show_image, screenshots e capturas de
- * scripts/lotes. Lê o registry do main (orbit-data/media/index.json).
+ * Galeria de mídia: página dedicada (aba do painel direito) com as imagens
+ * que o agente produziu — show_image, screenshots e capturas de
+ * scripts/lotes — e as prints coladas pelo usuário. Lê o registry do main
+ * (orbit-data/media/index.json).
+ *
+ * Escopada por modo: no modo chat mostra só mídia de sessões de chat; no
+ * modo código, só de sessões de código.
  *
  * Não é um card no chat: aqui o usuário revisita, abre no chat de origem,
  * exclui em lote e enxerga o espaço em disco.
@@ -114,7 +118,8 @@ function Thumb({ entry, selected, selecting, onToggle, onOpen }: {
 
 export function MediaGallery() {
   const { t, i18n } = useTranslation()
-  const { setMode } = useWorkspace()
+  const { mode, setMode } = useWorkspace()
+  const sessions = useSessionStore((s) => s.sessions)
   const [entries, setEntries] = useState<MediaEntry[]>([])
   const [usage, setUsage] = useState({ count: 0, bytes: 0 })
   const [loading, setLoading] = useState(true)
@@ -150,16 +155,25 @@ export function MediaGallery() {
     return () => { mounted.current = false }
   }, [refresh])
 
+  /** Sessões do modo atual — escopo da galeria (chat mostra só chat, etc). */
+  const modeSessionIds = useMemo(
+    () => new Set(sessions.filter((s) => s.mode === mode).map((s) => s.id)),
+    [sessions, mode],
+  )
+
   const visible = useMemo(() => {
     const needle = query.trim().toLowerCase()
     const since = period === "all" ? 0 : Date.now() - PERIOD_MS[period]
     return entries.filter((entry) => {
       if (source !== "all" && entry.source !== source) return false
+      // Entradas sem sessão conhecida (órfãs do backfill) aparecem nos dois
+      // modos; com sessão, só no modo da sessão.
+      if (entry.sessionId && !modeSessionIds.has(entry.sessionId)) return false
       if (entry.createdAt < since) return false
       if (!needle) return true
       return `${entry.name ?? ""} ${entry.taskId ?? ""} ${entry.id}`.toLowerCase().includes(needle)
     })
-  }, [entries, source, period, query])
+  }, [entries, source, period, query, modeSessionIds])
 
   const toggle = useCallback((id: string) => {
     setSelected((prev) => {
@@ -200,7 +214,7 @@ export function MediaGallery() {
     }
   }, [setMode])
 
-  const sourceFilters: SourceFilter[] = ["all", "chat", "screenshot", "script", "batch"]
+  const sourceFilters: SourceFilter[] = ["all", "user", "chat", "screenshot", "script", "batch"]
   const periodFilters: PeriodFilter[] = ["all", "today", "week", "month"]
 
   return (
