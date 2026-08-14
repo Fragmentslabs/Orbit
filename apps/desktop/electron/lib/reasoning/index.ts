@@ -13,14 +13,19 @@ export { generateVariants, isAlwaysOnModel, toModelInput, variantLabel } from '.
 
 /**
  * Namespace de providerOptions lido por cada SDK empacotado. Provedores que
- * caem no adaptador openai-compatible usam o id do provedor como namespace
- * (createOpenAICompatible({ name: provider.id }) em providers.ts).
+ * caem no adaptador openai-compatible usam o camelCase do id do provedor como
+ * namespace (createOpenAICompatible({ name: provider.id }) em providers.ts) —
+ * a forma crua (ex: "opencode-go") ainda é aceita pelo SDK, mas emite
+ * DeprecationWarning. A regra é a mesma do to-camel-case.ts do adaptador.
  */
 const SDK_NAMESPACES: Record<string, string> = {
   '@ai-sdk/anthropic': 'anthropic',
   '@ai-sdk/google': 'google',
   '@ai-sdk/openai': 'openai',
 }
+
+/** Espelha o toCamelCase do @ai-sdk/openai-compatible: "-x"/"_x" → "X". */
+const toCamelCase = (s: string): string => s.replace(/[_-]([a-z])/g, (g) => g[1].toUpperCase())
 
 /**
  * Constrói o providerOptions da requisição a partir da configuração de
@@ -49,7 +54,7 @@ export async function buildProviderOptions(
   const merged = mergeOptions(base, variantPayload)
   if (Object.keys(merged).length === 0) return undefined
 
-  const namespace = SDK_NAMESPACES[modelInput.npm] ?? input.providerId
+  const namespace = SDK_NAMESPACES[modelInput.npm] ?? toCamelCase(input.providerId)
   return { [namespace]: merged as Record<string, JSONValue> }
 }
 
