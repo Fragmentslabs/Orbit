@@ -6,6 +6,7 @@
  */
 
 import type { ConnectionConfig } from './types'
+import type { MediaEntry, MediaUsage } from '@orbit/shared'
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -138,6 +139,26 @@ export class CompanionHttp {
 
   async getStatus(): Promise<HttpResult<{ online: boolean; activeSessions: number; pendingAsks: number; uptime: number }>> {
     return this.get('/api/status')
+  }
+
+  // ─── Media ───────────────────────────────────────────────────────────────
+  // O registry de mídia vive no desktop (orbit-data/media). O servidor devolve
+  // as entradas com `url` já assinada (token na query) para o <Image> nativo.
+
+  async listMedia(): Promise<HttpResult<MediaEntry[]>> {
+    return this.get('/api/media')
+  }
+
+  async mediaUsage(): Promise<HttpResult<MediaUsage>> {
+    return this.get('/api/media/usage')
+  }
+
+  async deleteMedia(id: string): Promise<HttpResult<{ deleted: boolean }>> {
+    return this.request('DELETE', `/api/media/${encodeURIComponent(id)}`)
+  }
+
+  async deleteManyMedia(ids: string[]): Promise<HttpResult<{ removed: number }>> {
+    return this.request('POST', '/api/media/delete', { ids })
   }
 
   // ─── Internals ──────────────────────────────────────────────────────────

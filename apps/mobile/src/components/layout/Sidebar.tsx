@@ -12,6 +12,7 @@ import {
   BarChart3,
   Bot,
   Puzzle,
+  Images,
   Settings,
   LogOut,
   Plus,
@@ -331,6 +332,7 @@ export function Sidebar() {
 
   const topItems: NavItem[] = [
     { label: t('sidebar.memories'), icon: BrainCircuit, view: 'memories' },
+    { label: t('sidebar.media'), icon: Images, view: 'media' },
     { label: t('sidebar.usageLimits'), icon: BarChart3, view: 'usage' },
     { label: t('sidebar.tools'), icon: Puzzle, view: 'tools', codeOnly: true },
   ]

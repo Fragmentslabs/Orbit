@@ -28,7 +28,7 @@ import { importSkillSelection } from './skills/import'
 import { sanitizeSlug, serializeSkill } from './skills/parser'
 import { approvePendingSkill, discardPendingSkill, listPendingSkills } from './skills/pending'
 import { listMcpStatus, readMcpConfig, reconnectMcp, saveMcpConfig } from './mcp'
-import { readMedia } from './media'
+import { readMedia, listMedia, mediaDiskUsage, deleteMedia, deleteManyMedia } from './media'
 
 const execFileAsync = promisify(execFile)
 
@@ -327,6 +327,41 @@ async function handleGetMedia(req: IncomingMessage, res: ServerResponse, id: str
   res.end(media.buffer)
 }
 
+// ─── Media Registry Handlers ──────────────────────────────────────────────────
+// A galeria do app mobile lê o registry de mídia do desktop por aqui. As URLs
+// dos thumbs já saem assinadas (token na query) para o <Image> do React Native
+// carregar sem header Authorization.
+
+function mediaUrlFor(req: IncomingMessage, id: string): string {
+  const base = `http://${req.headers.host ?? 'localhost'}`
+  return `${base}/api/media/${id}?t=${createMediaToken(id)}`
+}
+
+async function handleListMedia(req: IncomingMessage, res: ServerResponse) {
+  const entries = await listMedia()
+  jsonResponse(res, 200, entries.map((entry) => ({ ...entry, url: mediaUrlFor(req, entry.id) })))
+}
+
+async function handleMediaUsage(_req: IncomingMessage, res: ServerResponse) {
+  jsonResponse(res, 200, await mediaDiskUsage())
+}
+
+async function handleDeleteMedia(_req: IncomingMessage, res: ServerResponse, id: string) {
+  jsonResponse(res, 200, { deleted: await deleteMedia(id) })
+}
+
+async function handleDeleteManyMedia(req: IncomingMessage, res: ServerResponse) {
+  try {
+    const body = await readBody(req)
+    const ids = Array.isArray(body.ids)
+      ? body.ids.filter((id): id is string => typeof id === 'string')
+      : []
+    jsonResponse(res, 200, { removed: await deleteManyMedia(ids) })
+  } catch (err) {
+    jsonResponse(res, 400, { error: (err as Error).message })
+  }
+}
+
 // ─── Skills Handlers ──────────────────────────────────────────────────────────
 
 async function handleCreateSkill(req: IncomingMessage, res: ServerResponse) {
@@ -505,6 +540,8 @@ function createRouter(
     { pattern: /^GET \/api\/skills\/pending$/, paramNames: [], handler: handleGetPendingSkills },
     { pattern: /^GET \/api\/mcp\/status$/, paramNames: [], handler: handleGetMcpStatus },
     { pattern: /^GET \/api\/mcp\/config$/, paramNames: [], handler: handleGetMcpConfig },
+    { pattern: /^GET \/api\/media$/, paramNames: [], handler: handleListMedia },
+    { pattern: /^GET \/api\/media\/usage$/, paramNames: [], handler: handleMediaUsage },
 
     // Mutation endpoints
     { pattern: /^PATCH \/api\/preferences$/, paramNames: [], handler: handlePatchPreferences },
@@ -515,6 +552,8 @@ function createRouter(
     { pattern: /^POST \/api\/skills\/([^/]+)\/approve$/, paramNames: ['slug'], handler: handleApproveSkill },
     { pattern: /^POST \/api\/skills\/([^/]+)\/discard$/, paramNames: ['slug'], handler: handleDiscardSkill },
     { pattern: /^PUT \/api\/mcp\/config$/, paramNames: [], handler: handlePutMcpConfig },
+    { pattern: /^DELETE \/api\/media\/([^/]+)$/, paramNames: ['id'], handler: handleDeleteMedia },
+    { pattern: /^POST \/api\/media\/delete$/, paramNames: [], handler: handleDeleteManyMedia },
     { pattern: /^POST \/api\/mcp\/servers\/([^/]+)\/reconnect$/, paramNames: ['name'], handler: handleReconnectMcp },
     { pattern: /^POST \/api\/mcp\/servers\/reconnect$/, paramNames: [], handler: (_r, res) => handleReconnectMcp(_r, res, undefined) },
     { pattern: /^POST \/api\/git\/branches$/, paramNames: [], handler: handleGetBranches },
@@ -552,7 +591,8 @@ function createRouter(
     // de auth (que exige header Bearer). Rota simples GET /api/media/:id.
     const mediaKey = routeKey(req.method ?? 'GET', req.url ?? '/')
     const mediaMatch = /^GET \/api\/media\/([^/]+)$/.exec(mediaKey)
-    if (mediaMatch) {
+    // 'usage' é um endpoint do registry (listado abaixo), não um id de arquivo.
+    if (mediaMatch && mediaMatch[1] !== 'usage') {
       await handleGetMedia(req, res, mediaMatch[1])
       return
     }

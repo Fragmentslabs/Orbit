@@ -9,6 +9,9 @@ export type MediaSource = "chat" | "user" | "screenshot" | "script" | "batch"
 export interface MediaEntry {
   /** Nome do arquivo em orbit-data/media (também é a URL: orbit-media://<id>) */
   id: string
+  /** URL pronta para exibir. No desktop é orbit-media://<id>; no companion o
+   *  servidor preenche com http://host/api/media/<id>?t=<token assinado>. */
+  url?: string
   /** Caminho absoluto no disco */
   path: string
   size: number

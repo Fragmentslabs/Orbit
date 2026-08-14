@@ -82,6 +82,7 @@
     "newChat": "Novo Chat",
     "newSession": "Nova Sessão",
     "memories": "Memórias",
+    "media": "Mídia",
     "usageLimits": "Uso e Limites",
     "tools": "Ferramentas",
     "settings": "Configurações",
@@ -116,6 +117,31 @@
     "navigation": "Navegação",
     "sessions": "Sessões",
     "theme": "Tema"
+  },
+  "media": {
+    "title": "Mídia",
+    "searchPlaceholder": "Buscar por nome ou tarefa",
+    "refresh": "Atualizar",
+    "loading": "Carregando imagens...",
+    "empty": "Nenhuma imagem por aqui ainda.",
+    "delete": "Excluir",
+    "openInChat": "Abrir no chat",
+    "selectedCount": "{{count}} selecionada(s)",
+    "usage": "{{count}} imagens · {{size}}",
+    "source": {
+      "all": "Todas",
+      "user": "Usuário",
+      "chat": "Chat",
+      "screenshot": "Screenshot",
+      "script": "Script",
+      "batch": "Lote"
+    },
+    "period": {
+      "all": "Qualquer data",
+      "today": "24h",
+      "week": "7 dias",
+      "month": "30 dias"
+    }
   },
   "chatHeader": {
     "fork": "Fork",
