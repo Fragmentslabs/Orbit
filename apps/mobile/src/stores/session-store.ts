@@ -783,11 +783,16 @@ export const useSessionStore = create<SessionState>((set, get) => ({
             ? { ...state.status, [sessionId]: 'idle' as ChatStatus }
             : state.status
 
-          // Incrementa contador de não lidas se a sessão não está ativa
+          // Incrementa contador de não lidas se a sessão não está ativa.
+          // Placeholder vazio emitido pelo engine antes do stream (e re-emitido
+          // ao trocar anexos pós-preprocess) não conta — a primeira part ou a
+          // mensagem final contam.
           const isInbound = m.role === 'assistant'
+          const placeholder =
+            isInbound && m.parts.length === 0 && m.tokens === undefined && m.error === undefined
           const activeId = state.activeSessionId
           const unreadCounts =
-            isInbound && sessionId !== activeId
+            isInbound && !placeholder && sessionId !== activeId
               ? { ...state.unreadCounts, [sessionId]: (state.unreadCounts[sessionId] ?? 0) + 1 }
               : state.unreadCounts
 

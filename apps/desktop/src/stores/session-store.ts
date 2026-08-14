@@ -861,9 +861,17 @@ case "message": {
         const next = idx >= 0 ? list.map((m, i) => (i === idx ? inbound : m)) : [...list, inbound]
 
         const isInbound = inbound.role === "assistant"
+        // Placeholder vazio que o engine emite antes do stream (e re-emite ao
+        // trocar anexos pós-preprocess) não conta como não-lida — a primeira
+        // part ou a mensagem final contam.
+        const placeholder =
+          isInbound &&
+          inbound.parts.length === 0 &&
+          inbound.tokens === undefined &&
+          inbound.error === undefined
         const activeId = state.activeIds["chat"] ?? state.activeIds["code"] ?? null
         const unreadCounts =
-          isInbound && sessionId !== activeId
+          isInbound && !placeholder && sessionId !== activeId
             ? { ...state.unreadCounts, [sessionId]: (state.unreadCounts[sessionId] ?? 0) + 1 }
             : state.unreadCounts
 
