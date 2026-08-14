@@ -1,6 +1,6 @@
 import { View, Text, ScrollView, Pressable, StyleSheet } from 'react-native'
 import { useRouter } from 'expo-router'
-import { ArrowLeft, Search, Globe, Brain, AlignLeft, BrainCircuit, Bot, Network, RefreshCw, FileText, KeyRound, BookOpen } from 'lucide-react-native'
+import { ArrowLeft, Search, Globe, Brain, AlignLeft, BrainCircuit, Bot, Network, RefreshCw, FileText, KeyRound, Eye, BookOpen } from 'lucide-react-native'
 import { useTranslation } from 'react-i18next'
 import { getThemeTokens } from '~/lib/theme-tokens'
 import { useThemeStore } from '~/stores/theme-store'

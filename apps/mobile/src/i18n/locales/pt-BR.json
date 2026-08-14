@@ -131,7 +131,8 @@
       "plan": "Modo Plano",
       "subagents": "Subagentes",
       "orchestra": "Orquestração",
-      "loop": "Loop"
+      "loop": "Loop",
+      "vision": "Visão"
     }
   },
   "chatScreen": {
@@ -219,6 +220,8 @@
     "orchestration": "Orquestração",
     "loop": "Loop",
     "loopHint": "Agente revisa e itera até completar a tarefa.",
+    "vision": "Visão",
+    "visionHint": "Imagens anexadas são descritas pelo modelo de visão configurado.",
     "useSameModel": "Usar o mesmo modelo do chat"
   },
   "planReview": {
@@ -385,6 +388,21 @@
     "searchPlaceholder": "Pesquisar modelos…",
     "thinkingOnWorker": "Thinking no worker"
   },
+  "visionConfig": {
+    "title": "Modo Visão",
+    "explainer": "Com o modo ativo, imagens anexadas são descritas pelo modelo de visão abaixo — a imagem não entra no contexto, apenas a descrição.",
+    "visionModel": "Modelo de visão",
+    "disabled": "Desligado — modo visão desativado",
+    "noModels": "Nenhum modelo com suporte a imagem conectado.",
+    "noSelectionHint": "Apenas modelos que aceitam imagem são listados. Sem seleção, o comportamento é nativo: modelos com visão recebem a imagem; modelos sem visão não a veem.",
+    "disable": "Desativar visão",
+    "done": "Concluir"
+  },
+  "vision": {
+    "hint": "Seu modelo atual não tem visão e o modo Visão está desligado — imagens anexadas não são vistas pelo agente.",
+    "configure": "Configurar visão",
+    "dismiss": "Dispensar"
+  },
   "modelPickerModal": {
     "title": "Selecionar Modelo",
     "searchPlaceholder": "Pesquisar modelos…",
@@ -480,7 +498,7 @@
     "sectionCombos": "Combinações Recomendadas",
     "combinesWellWith": "Combina bem com: {{items}}",
     "tipTitle": "Dica",
-    "tipText": "Use os toggles abaixo do input para ativar/desativar modos rapidamente, ou o botão \"+\" para acessar configurações avançadas de Subagents, Orchestra e Loop.",
+    "tipText": "Use os toggles abaixo do input para ativar/desativar modos rapidamente, ou o botão \"+\" para acessar configurações avançadas de Subagents, Visão, Orchestra e Loop.",
     "modes": [
       {
         "label": "Pesquisa",
@@ -598,6 +616,16 @@
         ],
         "description": "Controle de segurança sobre ações do agente.",
         "detail": "Três níveis: Ask (pergunta), Approve (resumo), Full (automático).",
+        "combo": []
+      },
+      {
+        "label": "Visão",
+        "modes": [
+          "Chat",
+          "Código"
+        ],
+        "description": "Delega a visão para um modelo específico.",
+        "detail": "Com o modo ativo, imagens anexadas são descritas por um modelo de visão configurado e apenas a descrição em texto entra no contexto do agente — nunca a imagem em si.",
         "combo": []
       }
     ],

@@ -131,7 +131,8 @@
       "plan": "Plan mode",
       "subagents": "Subagents",
       "orchestra": "Orchestration",
-      "loop": "Loop"
+      "loop": "Loop",
+      "vision": "Vision"
     }
   },
   "chatScreen": {
@@ -219,6 +220,8 @@
     "orchestration": "Orchestration",
     "loop": "Loop",
     "loopHint": "Agent reviews and iterates until the task is complete.",
+    "vision": "Vision",
+    "visionHint": "Attached images are described by the configured vision model.",
     "useSameModel": "Use the same model as the chat"
   },
   "planReview": {
@@ -385,6 +388,21 @@
     "searchPlaceholder": "Search models…",
     "thinkingOnWorker": "Thinking on worker"
   },
+  "visionConfig": {
+    "title": "Vision mode",
+    "explainer": "While active, attached images are described by the vision model below — the image itself never enters the context, only the description.",
+    "visionModel": "Vision model",
+    "disabled": "Off — vision mode disabled",
+    "noModels": "No connected model with image support.",
+    "noSelectionHint": "Only models that accept images are listed. Without a selection, behavior is native: models with vision receive the image; models without vision don't see it.",
+    "disable": "Disable vision",
+    "done": "Done"
+  },
+  "vision": {
+    "hint": "Your current model has no vision and Vision mode is off — attached images are not seen by the agent.",
+    "configure": "Configure vision",
+    "dismiss": "Dismiss"
+  },
   "modelPickerModal": {
     "title": "Select Model",
     "searchPlaceholder": "Search models…",
@@ -480,7 +498,7 @@
     "sectionCombos": "Recommended combinations",
     "combinesWellWith": "Pairs well with: {{items}}",
     "tipTitle": "Tip",
-    "tipText": "Use the toggles below the input to quickly turn modes on/off, or the \"+\" button for advanced settings for Subagents, Orchestra, and Loop.",
+    "tipText": "Use the toggles below the input to quickly turn modes on/off, or the \"+\" button for advanced settings for Subagents, Vision, Orchestra, and Loop.",
     "modes": [
       {
         "label": "Research",
@@ -598,6 +616,16 @@
         ],
         "description": "Security control over the agent's actions.",
         "detail": "Three levels: Ask, Approve (summary), Full (automatic).",
+        "combo": []
+      },
+      {
+        "label": "Vision",
+        "modes": [
+          "Chat",
+          "Code"
+        ],
+        "description": "Delegates vision to a specific model.",
+        "detail": "While active, attached images are described by a configured vision model and only the text description enters the agent's context — never the image itself.",
         "combo": []
       }
     ],
