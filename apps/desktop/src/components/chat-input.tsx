@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from "react"
+import { useCallback, useMemo } from "react"
 import { useTranslation } from "react-i18next"
 import { AlignLeft, BrainCircuit, Eye, Globe, PlusIcon, Search } from "lucide-react"
 import {
@@ -36,10 +36,13 @@ import { useReferenceCommands, useSlashActionCommands, type SlashCommand } from 
 import { useWorkspace } from "@/lib/workspace-context"
 import { useBrainEnabled, useBrainPrefs, useChatContext } from "@/src/stores/brain-prefs"
 import { useMessageQueueStore } from "@/src/stores/message-queue-store"
+import { useModeActive, useModeOverrides } from "@/src/stores/mode-overrides"
 import { usePanelStore } from "@/src/stores/panel-store"
 import { useSessionStore } from "@/src/stores/session-store"
 import { useSettingsUi } from "@/src/stores/settings-ui"
+import { useModelModePrefs } from "@/src/stores/model-mode-prefs"
 import { useProviderStore } from "@/src/stores/provider-store"
+import { useModelConfigPrompt } from "@/src/lib/use-model-config-prompt"
 import { useSessionModel } from "@/src/stores/session-model-prefs"
 import { useReasoningPrefs } from "@/src/stores/reasoning-prefs"
 import { useSimpleMode, useSimplePrefs } from "@/src/stores/simple-prefs"
@@ -58,24 +61,37 @@ export function ChatInput({ onSubmit, status, onStop, sessionId, draftKey }: {
   draftKey?: string
 }) {
   const { t } = useTranslation()
-  const [search, setSearch] = useState(false)
-  const [browser, setBrowser] = useState(false)
-  const simple = useSimpleMode(sessionId)
+  const chatActiveModes = useModelModePrefs((s) => s.chatActiveModes)
+  const search = useModeActive("search", sessionId, chatActiveModes.search)
+  const browser = useModeActive("browser", sessionId, chatActiveModes.browser)
+  const setModeActive = useModeOverrides((s) => s.setMode)
+  const simple = useSimpleMode(sessionId, chatActiveModes.simple)
   const setSimple = useSimplePrefs((s) => s.setEnabled)
-  const brain = useBrainEnabled(sessionId)
+  const brain = useBrainEnabled(sessionId, chatActiveModes.brain)
   const setBrainEnabled = useBrainPrefs((s) => s.setEnabled)
   const brainContext = useChatContext()
   const selected = useSessionModel(sessionId)
   const catalog = useProviderStore((s) => s.catalog)
   const model = selected ? catalog[selected.providerId]?.models[selected.modelId] : undefined
   const { enabled, variantId, update } = useReasoningPrefs(selected?.providerId, selected?.modelId)
-  const thinking = enabled || !!model?.reasoningAlwaysOn
+  // Thinking: o chip das preferências define o default; reasoning do modelo e
+  // modelos com reasoningAlwaysOn continuam valendo como antes
+  const thinking = chatActiveModes.thinking || enabled || !!model?.reasoningAlwaysOn
   const busy = status === "submitted" || status === "streaming" || status === "cancelling"
 
   const visionModel = useProviderStore((s) => s.visionModel)
-  const setVisionModel = useProviderStore((s) => s.setVisionModel)
-  const visionConfigOpen = useProviderStore((s) => s.visionConfigOpen)
+  const vision = useModeActive("vision", sessionId, chatActiveModes.vision)
   const setVisionConfigOpen = useProviderStore((s) => s.setVisionConfigOpen)
+  const visionConfigOpen = useProviderStore((s) => s.visionConfigOpen)
+  // Modo ativo por default nas preferências sem modelo configurado → abre o
+  // modal de configuração (mesmo comportamento do toggle, sem clique explícito)
+  useModelConfigPrompt({
+    sessionId,
+    vision,
+    visionConfigured: visionModel != null,
+    onOpenVision: () => setVisionConfigOpen(true),
+    visionDialogOpen: visionConfigOpen,
+  })
 
   const { mode } = useWorkspace()
   const selectSession = useSessionStore((s) => s.selectSession)
@@ -91,21 +107,23 @@ export function ChatInput({ onSubmit, status, onStop, sessionId, draftKey }: {
   const actionCommands = useSlashActionCommands("chat")
 
   const modeToggleItems = useMemo<ModeToggleDef[]>(() => [
-    { icon: Search, label: t("input.modes.search.label"), active: search, onChange: (v: boolean) => setSearch(v) },
-    { icon: Globe, label: t("input.modes.browser.label"), active: browser, onChange: (v: boolean) => setBrowser(v) },
+    { icon: Search, label: t("input.modes.search.label"), active: search, onChange: (v: boolean) => setModeActive("search", sessionId, v) },
+    { icon: Globe, label: t("input.modes.browser.label"), active: browser, onChange: (v: boolean) => setModeActive("browser", sessionId, v) },
     { icon: AlignLeft, label: t("input.modes.simple.label"), active: simple, onChange: (v: boolean) => setSimple(sessionId, v) },
     { icon: BrainCircuit, label: t("input.modes.brain.label"), active: brain, onChange: (v: boolean) => setBrainEnabled(sessionId, v) },
     {
       icon: Eye,
       label: t("input.modes.vision.label"),
-      active: !!visionModel,
+      active: vision,
       onChange: (v: boolean) => {
-        if (v && !visionModel) setVisionConfigOpen(true) // ligar sem modelo → primeira configuração
-        else if (!v) setVisionModel(null)
+        // Primeira ativação sem modelo configurado → abre a configuração;
+        // depois disso o toggle só liga/desliga (a configuração fica guardada)
+        if (v && !visionModel) setVisionConfigOpen(true)
+        else setModeActive("vision", sessionId, v)
       },
       onConfig: () => setVisionConfigOpen(true),
     },
-  ], [search, browser, simple, brain, visionModel, sessionId, setBrainEnabled, setSimple, setVisionModel, setVisionConfigOpen, t])
+  ], [search, browser, simple, brain, vision, visionModel, sessionId, setBrainEnabled, setSimple, setModeActive, setVisionConfigOpen, t])
 
   const buildOptions = useCallback((): SendMessageOptions => ({
     research: search,
@@ -122,8 +140,8 @@ export function ChatInput({ onSubmit, status, onStop, sessionId, draftKey }: {
       setText("")
     }
     return [
-      { id: "pesquisa", label: t("input.modes.search.label"), description: t("input.slash.searchDescription"), keywords: ["web", "search"], group: "Modos" as const, active: search, run: toggle(() => setSearch((v) => !v)) },
-      { id: "browser", label: t("input.modes.browser.label"), description: t("input.slash.browserDescription"), keywords: ["navegador", "web"], group: "Modos" as const, active: browser, run: toggle(() => setBrowser((v) => !v)) },
+      { id: "pesquisa", label: t("input.modes.search.label"), description: t("input.slash.searchDescription"), keywords: ["web", "search"], group: "Modos" as const, active: search, run: toggle(() => setModeActive("search", sessionId, !search)) },
+      { id: "browser", label: t("input.modes.browser.label"), description: t("input.slash.browserDescription"), keywords: ["navegador", "web"], group: "Modos" as const, active: browser, run: toggle(() => setModeActive("browser", sessionId, !browser)) },
       { id: "simples", label: t("input.modes.simple.label"), description: t("input.slash.simpleDescription"), keywords: ["texto", "plain"], group: "Modos" as const, active: simple, run: toggle(() => setSimple(sessionId, !simple)) },
       { id: "brain", label: t("input.slash.brainLabel"), description: t("input.slash.brainDescription"), keywords: ["memoria", "brain"], group: "Modos" as const, active: brain, run: toggle(() => setBrainEnabled(sessionId, !brain)) },
       ...actionCommands,
@@ -131,7 +149,7 @@ export function ChatInput({ onSubmit, status, onStop, sessionId, draftKey }: {
       { id: "novo-chat", label: t("input.slash.newChat"), description: t("input.slash.newChatDescription"), keywords: ["clear", "limpar", "novo"], group: "Ações" as const, run: toggle(() => void selectSession(mode, null)) },
       { id: "settings", label: t("input.slash.settings"), description: t("input.slash.settingsDescription"), keywords: ["settings", "config"], group: "Ações" as const, run: toggle(() => openSettings()) },
     ]
-  }, [search, browser, simple, brain, sessionId, setBrainEnabled, setSimple, actionCommands, referenceCommands, selectSession, mode, openSettings, t])
+  }, [search, browser, simple, brain, sessionId, setBrainEnabled, setSimple, setModeActive, actionCommands, referenceCommands, selectSession, mode, openSettings, t])
 
   return (
     <PromptInputProvider>
@@ -235,7 +253,7 @@ export function ChatInput({ onSubmit, status, onStop, sessionId, draftKey }: {
               label={t("input.modes.search.label")}
               description={t("input.modes.search.description")}
               active={search}
-              onToggle={() => setSearch((v) => !v)}
+              onToggle={() => setModeActive("search", sessionId, !search)}
               iconOnly={modeLabelStyle === "icon"}
             />
           )}
@@ -245,7 +263,7 @@ export function ChatInput({ onSubmit, status, onStop, sessionId, draftKey }: {
               label={t("input.modes.browser.label")}
               description={t("input.modes.browser.description")}
               active={browser}
-              onToggle={() => setBrowser((v) => !v)}
+              onToggle={() => setModeActive("browser", sessionId, !browser)}
               iconOnly={modeLabelStyle === "icon"}
             />
           )}
@@ -274,9 +292,10 @@ export function ChatInput({ onSubmit, status, onStop, sessionId, draftKey }: {
               icon={Eye}
               label={t("input.modes.vision.label")}
               description={t("input.modes.vision.description")}
-              active={!!visionModel}
+              active={vision}
               onToggle={() => {
-                if (visionModel) setVisionModel(null)
+                if (vision) setModeActive("vision", sessionId, false)
+                else if (visionModel) setModeActive("vision", sessionId, true)
                 else setVisionConfigOpen(true)
               }}
               iconOnly={modeLabelStyle === "icon"}
@@ -288,7 +307,7 @@ export function ChatInput({ onSubmit, status, onStop, sessionId, draftKey }: {
         </div>
       </PromptInputTools>
     </div>
-    <VisionConfigDialog open={visionConfigOpen} onOpenChange={setVisionConfigOpen} />
+    <VisionConfigDialog open={visionConfigOpen} onOpenChange={setVisionConfigOpen} targetSession={sessionId} />
     </SlashPalette>
     </PromptInputProvider>
   )

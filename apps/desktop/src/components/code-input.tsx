@@ -41,9 +41,12 @@ import { FolderSelector } from "@/src/components/folder-selector"
 import { useWorkspace } from "@/lib/workspace-context"
 import { useBrainEnabled, useBrainPrefs, useCodeContext } from "@/src/stores/brain-prefs"
 import { useMessageQueueStore } from "@/src/stores/message-queue-store"
+import { useModeActive, useModeOverrides } from "@/src/stores/mode-overrides"
 import { usePanelStore } from "@/src/stores/panel-store"
 import { usePermissionPrefs } from "@/src/stores/permission-prefs"
+import { useModelModePrefs } from "@/src/stores/model-mode-prefs"
 import { useProviderStore } from "@/src/stores/provider-store"
+import { useModelConfigPrompt } from "@/src/lib/use-model-config-prompt"
 import { useSessionModel } from "@/src/stores/session-model-prefs"
 import { useSettingsUi } from "@/src/stores/settings-ui"
 import { useReasoningPrefs } from "@/src/stores/reasoning-prefs"
@@ -70,19 +73,21 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId }: 
   sessionId?: string
 }) {
   const { t } = useTranslation()
-  const [plan, setPlan] = useState(false)
-  const [search, setSearch] = useState(false)
-  const [subagents, setSubagents] = useState(false)
-  const [orchestra, setOrchestra] = useState(false)
+  const codeActiveModes = useModelModePrefs((s) => s.codeActiveModes)
+  const plan = useModeActive("plan", sessionId, codeActiveModes.plan)
+  const search = useModeActive("search", sessionId, codeActiveModes.search)
+  const subagents = useModeActive("subagents", sessionId, codeActiveModes.subagents)
+  const orchestra = useModeActive("orchestra", sessionId, codeActiveModes.orchestra)
+  const setModeActive = useModeOverrides((s) => s.setMode)
   const [loop, setLoop] = useState(false)
   const { mode } = useWorkspace()
   // Orquestração é exclusiva do modo code
-  useEffect(() => { if (mode === "chat") setOrchestra(false) }, [mode])
+  useEffect(() => { if (mode === "chat") setModeActive("orchestra", sessionId, false) }, [mode, sessionId, setModeActive])
   const [configOpen, setConfigOpen] = useState(false)
   const [loopConfigOpen, setLoopConfigOpen] = useState(false)
-  const simple = useSimpleMode(sessionId)
+  const simple = useSimpleMode(sessionId, codeActiveModes.simple)
   const setSimple = useSimplePrefs((s) => s.setEnabled)
-  const brain = useBrainEnabled(sessionId)
+  const brain = useBrainEnabled(sessionId, codeActiveModes.brain)
   const setBrainEnabled = useBrainPrefs((s) => s.setEnabled)
   const brainContext = useCodeContext()
   const permissionMode = usePermissionPrefs((s) => s.mode)
@@ -97,7 +102,9 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId }: 
   const catalog = useProviderStore((s) => s.catalog)
   const model = selected ? catalog[selected.providerId]?.models[selected.modelId] : undefined
   const { enabled, variantId, update } = useReasoningPrefs(selected?.providerId, selected?.modelId)
-  const thinking = enabled || !!model?.reasoningAlwaysOn
+  // Thinking: o chip das preferências define o default; reasoning do modelo e
+  // modelos com reasoningAlwaysOn continuam valendo como antes
+  const thinking = codeActiveModes.thinking || enabled || !!model?.reasoningAlwaysOn
   const busy = status === "submitted" || status === "streaming" || status === "cancelling"
   const openSettings = useSettingsUi((s) => s.openSettings)
   const enqueueForSend = useMessageQueueStore((s) => s.enqueueForSend)
@@ -107,10 +114,24 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId }: 
   const openChatTab = usePanelStore((s) => s.openChatTab)
   const sessionDir = useSessionStore((s) => sessionId ? s.sessions.find(x => x.id === sessionId)?.directory : undefined)
   const visionModel = useProviderStore((s) => s.visionModel)
-  const setVisionModel = useProviderStore((s) => s.setVisionModel)
-  const workerModel = useProviderStore((s) => s.workerModel)
-  const visionConfigOpen = useProviderStore((s) => s.visionConfigOpen)
+  const vision = useModeActive("vision", sessionId, codeActiveModes.vision)
   const setVisionConfigOpen = useProviderStore((s) => s.setVisionConfigOpen)
+  const visionConfigOpen = useProviderStore((s) => s.visionConfigOpen)
+  const workerModel = useProviderStore((s) => s.workerModel)
+  // Modos ativos por default nas preferências sem modelo configurado → abre o
+  // modal de configuração (mesmo comportamento do toggle/dropdown, sem clique)
+  useModelConfigPrompt({
+    sessionId,
+    subagents,
+    orchestra: orchestra && mode === "code",
+    vision,
+    workerConfigured: workerModel != null,
+    visionConfigured: visionModel != null,
+    onOpenWorker: () => setConfigOpen(true),
+    onOpenVision: () => setVisionConfigOpen(true),
+    workerDialogOpen: configOpen,
+    visionDialogOpen: visionConfigOpen,
+  })
   const modesInRow = useAppearanceStore((s) => s.modesInRow)
   const modeLabelStyle = useAppearanceStore((s) => s.modeLabelStyle)
   const referenceCommands = useReferenceCommands()
@@ -137,21 +158,23 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId }: 
   const removeSelection = usePanelStore((s) => s.removeSelection)
 
   const modeToggleItems = useMemo<ModeToggleDef[]>(() => [
-    { icon: Search, label: t("input.modes.search.label"), active: search, onChange: (v: boolean) => setSearch(v) },
-    { icon: FileText, label: t("codeInput.modes.plan.label"), active: plan, onChange: (v: boolean) => setPlan(v) },
+    { icon: Search, label: t("input.modes.search.label"), active: search, onChange: (v: boolean) => setModeActive("search", sessionId, v) },
+    { icon: FileText, label: t("codeInput.modes.plan.label"), active: plan, onChange: (v: boolean) => setModeActive("plan", sessionId, v) },
     { icon: AlignLeft, label: t("input.modes.simple.label"), active: simple, onChange: (v: boolean) => setSimple(sessionId, v) },
     { icon: BrainCircuit, label: t("input.modes.brain.label"), active: brain, onChange: (v: boolean) => setBrainEnabled(sessionId, v) },
     {
       icon: Eye,
       label: t("input.modes.vision.label"),
-      active: !!visionModel,
+      active: vision,
       onChange: (v: boolean) => {
-        if (v && !visionModel) setVisionConfigOpen(true) // ligar sem modelo → primeira configuração
-        else if (!v) setVisionModel(null)
+        // Primeira ativação sem modelo configurado → abre a configuração;
+        // depois disso o toggle só liga/desliga (a configuração fica guardada)
+        if (v && !visionModel) setVisionConfigOpen(true)
+        else setModeActive("vision", sessionId, v)
       },
       onConfig: () => setVisionConfigOpen(true),
     },
-  ], [search, plan, simple, brain, visionModel, sessionId, setBrainEnabled, setSimple, setVisionModel, setVisionConfigOpen, t])
+  ], [search, plan, simple, brain, vision, visionModel, sessionId, setBrainEnabled, setSimple, setModeActive, setVisionConfigOpen, t])
 
   const handleSubmit = useCallback((message: { text?: string; files?: { mediaType?: string; filename?: string; url?: string }[] }) => {
     const files = toFileParts(message.files ?? [])
@@ -224,12 +247,12 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId }: 
       run: toggle(() => setPermissionMode(id)),
     })
     return [
-      { id: "pesquisa", label: t("input.modes.search.label"), description: t("codeInput.slash.searchDescription"), keywords: ["web", "search"], group: "Modos" as const, active: search, run: toggle(() => setSearch((v) => !v)) },
-      { id: "plano", label: t("codeInput.modes.plan.label"), description: t("codeInput.slash.planDescription"), keywords: ["plan", "leitura"], group: "Modos" as const, active: plan, run: toggle(() => setPlan((v) => !v)) },
+      { id: "pesquisa", label: t("input.modes.search.label"), description: t("codeInput.slash.searchDescription"), keywords: ["web", "search"], group: "Modos" as const, active: search, run: toggle(() => setModeActive("search", sessionId, !search)) },
+      { id: "plano", label: t("codeInput.modes.plan.label"), description: t("codeInput.slash.planDescription"), keywords: ["plan", "leitura"], group: "Modos" as const, active: plan, run: toggle(() => setModeActive("plan", sessionId, !plan)) },
       { id: "simples", label: t("input.modes.simple.label"), description: t("input.slash.simpleDescription"), keywords: ["texto", "plain"], group: "Modos" as const, active: simple, run: toggle(() => setSimple(sessionId, !simple)) },
       { id: "brain", label: t("input.slash.brainLabel"), description: t("codeInput.slash.brainDescription"), keywords: ["memoria", "brain"], group: "Modos" as const, active: brain, run: toggle(() => setBrainEnabled(sessionId, !brain)) },
-      { id: "subagents", label: t("codeInput.slash.subagentsLabel"), description: t("codeInput.slash.subagentsDescription"), keywords: ["worker", "delegar"], group: "Modos" as const, active: subagents, run: toggle(() => setSubagents((v) => !v)) },
-      ...(mode === "code" ? [{ id: "orchestra", label: t("codeInput.slash.orchestraLabel"), description: t("codeInput.slash.orchestraDescription"), keywords: ["workers", "plano"], group: "Modos" as const, active: orchestra, run: toggle(() => setOrchestra((v) => !v)) }] : []),
+      { id: "subagents", label: t("codeInput.slash.subagentsLabel"), description: t("codeInput.slash.subagentsDescription"), keywords: ["worker", "delegar"], group: "Modos" as const, active: subagents, run: toggle(() => setModeActive("subagents", sessionId, !subagents)) },
+      ...(mode === "code" ? [{ id: "orchestra", label: t("codeInput.slash.orchestraLabel"), description: t("codeInput.slash.orchestraDescription"), keywords: ["workers", "plano"], group: "Modos" as const, active: orchestra, run: toggle(() => setModeActive("orchestra", sessionId, !orchestra)) }] : []),
       permission("ask", t("codeInput.slash.permAsk"), t("codeInput.slash.permAskDescription")),
       permission("approve", t("codeInput.slash.permApprove"), t("codeInput.slash.permApproveDescription")),
       permission("full", t("codeInput.slash.permFull"), t("codeInput.slash.permFullDescription")),
@@ -240,7 +263,7 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId }: 
       { id: "document", label: t("codeInput.slash.documentApp"), description: t("codeInput.slash.documentAppDescription"), keywords: ["docs", "documentacao", "screenshot"], group: "Ações" as const, run: ({ setText }) => setText("/document ") },
       { id: "settings", label: t("input.slash.settings"), description: t("input.slash.settingsDescription"), keywords: ["settings", "config"], group: "Ações" as const, run: toggle(() => openSettings()) },
     ]
-  }, [search, plan, simple, brain, subagents, orchestra, permissionMode, sessionId, setBrainEnabled, setSimple, setPermissionMode, actionCommands, referenceCommands, mode, openSettings, t])
+  }, [search, plan, simple, brain, subagents, orchestra, permissionMode, sessionId, setBrainEnabled, setSimple, setModeActive, setPermissionMode, actionCommands, referenceCommands, mode, openSettings, t])
 
   return (
     <PromptInputProvider>
@@ -305,17 +328,17 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId }: 
                     orchestra={orchestra}
                     loop={loop}
                     onSubagentsChange={(v) => {
-                      setSubagents(v)
+                      setModeActive("subagents", sessionId, v)
                       if (v) {
-                        setOrchestra(false)
+                        setModeActive("orchestra", sessionId, false)
                         // Primeira ativação sem worker configurado → abre a configuração
                         if (!workerModel) setConfigOpen(true)
                       }
                     }}
                     onOrchestraChange={(v) => {
-                      setOrchestra(v)
+                      setModeActive("orchestra", sessionId, v)
                       if (v) {
-                        setSubagents(false)
+                        setModeActive("subagents", sessionId, false)
                         // Primeira ativação sem worker configurado → abre a configuração
                         if (!workerModel) setConfigOpen(true)
                       }
@@ -388,7 +411,7 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId }: 
               label={t("input.modes.search.label")}
               description={t("codeInput.modes.search.description")}
               active={search}
-              onToggle={() => setSearch((v) => !v)}
+              onToggle={() => setModeActive("search", sessionId, !search)}
               iconOnly={modeLabelStyle === "icon"}
             />
           )}
@@ -398,7 +421,7 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId }: 
               label={t("codeInput.modes.plan.label")}
               description={t("codeInput.modes.plan.description")}
               active={plan}
-              onToggle={() => setPlan((v) => !v)}
+              onToggle={() => setModeActive("plan", sessionId, !plan)}
               iconOnly={modeLabelStyle === "icon"}
             />
           )}
@@ -430,9 +453,9 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId }: 
               active={subagents}
               onToggle={() => {
                 const next = !subagents
-                setSubagents(next)
+                setModeActive("subagents", sessionId, next)
                 if (next) {
-                  setOrchestra(false)
+                  setModeActive("orchestra", sessionId, false)
                   // Primeira ativação sem worker configurado → abre a configuração
                   if (!workerModel) setConfigOpen(true)
                 }
@@ -448,9 +471,9 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId }: 
               active={orchestra}
               onToggle={() => {
                 const next = !orchestra
-                setOrchestra(next)
+                setModeActive("orchestra", sessionId, next)
                 if (next) {
-                  setSubagents(false)
+                  setModeActive("subagents", sessionId, false)
                   // Primeira ativação sem worker configurado → abre a configuração
                   if (!workerModel) setConfigOpen(true)
                 }
@@ -473,9 +496,10 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId }: 
               icon={Eye}
               label={t("input.modes.vision.label")}
               description={t("input.modes.vision.description")}
-              active={!!visionModel}
+              active={vision}
               onToggle={() => {
-                if (visionModel) setVisionModel(null)
+                if (vision) setModeActive("vision", sessionId, false)
+                else if (visionModel) setModeActive("vision", sessionId, true)
                 else setVisionConfigOpen(true)
               }}
               iconOnly={modeLabelStyle === "icon"}
@@ -488,7 +512,7 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId }: 
       </PromptInputTools>
         <OrchestrationConfigDialog open={configOpen} onOpenChange={setConfigOpen} />
         <LoopConfigDialog open={loopConfigOpen} onOpenChange={setLoopConfigOpen} />
-        <VisionConfigDialog open={visionConfigOpen} onOpenChange={setVisionConfigOpen} />
+        <VisionConfigDialog open={visionConfigOpen} onOpenChange={setVisionConfigOpen} targetSession={sessionId} />
       </div>
       </SlashPalette>
       </FilePalette>
