@@ -473,7 +473,8 @@
       "folders": "Folders",
       "chats": "Chats",
       "archived": "Archived",
-      "noChats": "No chats yet"
+      "noChats": "No chats yet",
+      "routines": "Routines"
     },
     "account": {
       "localAssistant": "Local assistant",
@@ -1621,5 +1622,129 @@
     "semTasksParaDependencia": "No other task in this pipeline yet",
     "buscarTask": "Search task...",
     "nenhumaTask": "No task found"
+  },
+  "rotinas": {
+    "titulo": "Routines",
+    "subtitulo": "Sessions that come back on their own: the agent runs the same prompt on schedule.",
+    "carregando": "Loading routines…",
+    "abas": {
+      "criar": "Create",
+      "minhas": "My routines"
+    },
+    "criar": {
+      "descreverDica": "Describe it in plain words. The model turns it into a title, prompt, schedule and modes — you review everything in the next step.",
+      "placeholder": "E.g.: every day at 9am, review yesterday's commits in this repository and write a summary of what changed, with any risks you find.",
+      "modelo": "Model",
+      "gerar": "Generate",
+      "gerando": "Generating…",
+      "semModelo": "Pick a model to generate the routine.",
+      "titulo": "New routine"
+    },
+    "revisar": {
+      "titulo": "Review routine",
+      "subtitulo": "The agent suggested it — confirm or adjust before creating.",
+      "voltar": "Back",
+      "campoTitulo": "Title",
+      "campoPrompt": "Routine prompt",
+      "campoPromptDica": "This is what the agent receives on every run. It must be self-contained: there is nobody to answer questions.",
+      "agenda": "When to run",
+      "modos": "Modes",
+      "modosDica": "The agent suggested these based on the work described. Toggle them freely.",
+      "sugerido": "suggested",
+      "pastas": "Working folders",
+      "pastasDica": "Inherited from the current workspace — the routine always runs in them.",
+      "semPastas": "No folder open. Open a folder in code mode before creating the routine.",
+      "criar": "Create routine"
+    },
+    "agenda": {
+      "modo": {
+        "diario": "Every day",
+        "semanal": "Days of the week",
+        "intervalo": "Every N days"
+      },
+      "horario": "at",
+      "dia": {
+        "0": "S",
+        "1": "M",
+        "2": "T",
+        "3": "W",
+        "4": "T",
+        "5": "F",
+        "6": "S"
+      },
+      "uteis": "Mon to Fri",
+      "fimDeSemana": "Weekend",
+      "aCada": "Every",
+      "dias": "days",
+      "resumoDiario": "Every day at {{horario}}",
+      "resumoDias": "{{dias}} at {{horario}}",
+      "resumoIntervalo": "Every {{dias}} days at {{horario}}",
+      "diaAbrev": {
+        "0": "Sun",
+        "1": "Mon",
+        "2": "Tue",
+        "3": "Wed",
+        "4": "Thu",
+        "5": "Fri",
+        "6": "Sat"
+      },
+      "resumoUteis": "Mon to Fri at {{horario}}",
+      "resumoFimDeSemana": "Weekends at {{horario}}"
+    },
+    "modos": {
+      "loop": {
+        "nome": "Loop",
+        "descricao": "The agent reviews its own work and iterates until done."
+      },
+      "subagents": {
+        "nome": "Subagents",
+        "descricao": "Can delegate parallel investigations to ephemeral workers."
+      },
+      "orchestrate": {
+        "nome": "Orchestra",
+        "descricao": "Splits into a task plan and workers. Implies loop and subagents."
+      },
+      "brain": {
+        "nome": "Memory",
+        "descricao": "Persistent memory — this is what makes the routine remember earlier runs."
+      },
+      "browser": {
+        "nome": "Browser",
+        "descricao": "Opens and inspects pages in the panel browser."
+      },
+      "plan": {
+        "nome": "Plan mode",
+        "descricao": "Plans only, never executes. The routine waits for approval."
+      },
+      "simple": {
+        "nome": "Simple",
+        "descricao": "Direct plain-text answer, no formatting."
+      },
+      "permissaoAviso": "The routine fires on its own: on \"Ask\" it stops at the first sensitive action and waits for you to answer in the run's session."
+    },
+    "lista": {
+      "vazioTitulo": "No routines yet",
+      "vazioSubtitulo": "A routine is a session that comes back on its own — a daily report, a weekly sweep, a check after every deploy.",
+      "criarPrimeira": "Create the first routine",
+      "ativa": "Active",
+      "pausada": "Paused",
+      "proxima": "Next: {{quando}}",
+      "executarAgora": "Run now",
+      "editar": "Edit",
+      "salvar": "Save",
+      "excluir": "Delete",
+      "excluirTitulo": "Delete routine",
+      "excluirDescricao": "\"{{titulo}}\" and ALL the sessions it produced will be deleted. This cannot be undone.",
+      "nova": "New routine"
+    },
+    "runs": {
+      "titulo": "Sessions",
+      "vazio": "It hasn't run yet.",
+      "abrirChat": "Open session",
+      "rodando": "Running…",
+      "ok": "Done",
+      "erro": "Failed",
+      "tokens": "{{valor}} tokens"
+    }
   }
 }

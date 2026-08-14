@@ -10,7 +10,7 @@ import {
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
-import { formatDateTime } from "@/src/lib/format"
+import { formatDateTimeShort } from "@/src/lib/format"
 import { useLocaleStore } from "@/src/stores/locale-store"
 import { cn } from "@/lib/utils"
 
@@ -102,7 +102,7 @@ export type CommitTimestampProps = HTMLAttributes<HTMLTimeElement> & {
 
 export const CommitTimestamp = ({ date, className, children, ...props }: CommitTimestampProps) => {
   const locale = useLocaleStore((s) => s.activeLocale)
-  const formatted = formatDateTime(date.getTime(), locale)
+  const formatted = formatDateTimeShort(date.getTime(), locale)
 
   return (
     <time

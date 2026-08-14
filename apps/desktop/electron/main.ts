@@ -50,8 +50,10 @@ import type { SendMessageInput, SessionInfo } from '@shared/chat'
 import type { ChatEvent } from '@shared/chat'
 import { StorageKeys } from '@shared/chat'
 import * as esteira from './lib/esteira'
+import * as rotinas from './lib/rotinas'
 import type { MediaFilter } from '@shared/media'
 import type { FaseTemplate, NovaTaskInput } from '@shared/esteira'
+import type { NovaRotinaInput, Rotina, RotinaModelo } from '@shared/rotinas'
 import type { Memory, MemoryEvent } from '@shared/memory'
 
 const execFileAsync = promisify(execFile)
@@ -554,14 +556,17 @@ async function getGitLog(repoPath: string): Promise<{ ok: true; commits: CommitE
     try {
       const { stdout: refsOut } = await execFileAsync(
         'git',
-        ['for-each-ref', '--format=%(refname)%1F%(objectname)', 'refs/heads', 'refs/remotes', 'refs/tags'],
+        ['for-each-ref', '--format=%(refname)%1F%(objectname)%1F%(*objectname)', 'refs/heads', 'refs/remotes', 'refs/tags'],
         { cwd: repoPath, maxBuffer: 10 * 1024 * 1024 },
       )
       for (const line of refsOut.split('\n')) {
-        const sep = line.indexOf('\x1f')
-        if (sep <= 0) continue
-        const ref = line.slice(0, sep)
-        const hash = line.slice(sep + 1).trim()
+        const parts = line.split('\x1f')
+        if (parts.length < 2 || !parts[0]) continue
+        const ref = parts[0]
+        // Tags anotadas: %(objectname) é o objeto da tag; %(*objectname) é o
+        // commit alvo (peeled). Para branches/remotes/lightweight tags o
+        // peeled vem vazio e usamos o objectname direto.
+        const hash = (parts[2] || parts[1]).trim()
         if (!hash) continue
         const arr = refsByHash.get(hash) ?? []
         arr.push(ref)
@@ -1181,6 +1186,27 @@ app.whenReady().then(() => {
     return esteira.filaLigada(esteiraId)
   })
   ipcMain.handle('esteira:relatorio', (_e, esteiraId: string) => esteira.relatorio(esteiraId))
+  // `emExecucao` do engine vive em memória: uma task deixada em progresso por
+  // um fechamento abrupto continuaria "rodando" no board para sempre.
+  void esteira.reconciliarExecucoes().catch((err) => console.error('[esteira] reconciliação falhou:', err))
+
+  // Rotinas: chats agendados do modo código. O CRUD vive em
+  // orbit-data/rotinas; o disparo reusa o caminho do 'chat:send' acima, e as
+  // mutações voltam ao renderer por 'rotinas:event'.
+  ipcMain.handle('rotinas:carregar', () => rotinas.carregarTudo())
+  ipcMain.handle('rotinas:criar', (_e, input: NovaRotinaInput) => rotinas.criarRotina(input))
+  ipcMain.handle('rotinas:atualizar', (_e, id: string, patch: Partial<Rotina>) =>
+    rotinas.atualizarRotinaCampos(id, patch),
+  )
+  ipcMain.handle('rotinas:remover', (_e, id: string) => rotinas.removerRotinaCompleta(id))
+  ipcMain.handle('rotinas:executarAgora', (_e, id: string) => rotinas.executarAgora(id))
+  ipcMain.handle('rotinas:podarRuns', (_e, sessionIds: string[]) => rotinas.podarRunsOrfaos(sessionIds))
+  ipcMain.handle(
+    'rotinas:gerar',
+    (_e, descricao: string, modelo: RotinaModelo, pastas: string[], idioma?: string) =>
+      rotinas.gerarRotina(descricao, modelo, pastas, idioma),
+  )
+  rotinas.iniciarScheduler()
 
   // Galeria de mídia (aba "Mídia" do painel direito)
   ipcMain.handle('media:list', (_event, filter?: MediaFilter) => listMedia(filter))
@@ -1413,6 +1439,7 @@ app.whenReady().then(() => {
     // Esteira roda fora de qualquer sessão: sem isto, uma fase em execução
     // continuaria escrevendo no repositório com o app fechando.
     esteira.abortarTudo()
+    rotinas.pararScheduler()
   })
 
   // Provedores locais pré-cadastrados (Ollama, LM Studio)

@@ -235,7 +235,7 @@ function SelectorScreen({ onSelect, onOpenWorker }: {
 }) {
   const { t } = useTranslation()
   const tabMeta = useTabMeta()
-  const { mode } = useWorkspace()
+  const { mode, folders } = useWorkspace()
   const activeId = useSessionStore((s) => s.activeIds[mode])
   const sessions = useSessionStore((s) => s.sessions)
   const statusMap = useSessionStore((s) => s.status)
@@ -269,7 +269,9 @@ function SelectorScreen({ onSelect, onOpenWorker }: {
         <p className="text-sm font-medium text-foreground">{t("panel.selector.title")}</p>
         <div className={cn("grid gap-3 w-full max-w-xs", availableTabs.length === 1 ? "grid-cols-1 justify-items-center" : "grid-cols-2")}>
           {availableTabs.map(([type, { icon: Icon, label, description }]) => {
-            const isDisabled = !activeId && (type === "folders" || type === "diff")
+            // Pastas e diff seguem o repositório selecionado no workspace: sem
+            // chat ativo ainda é possível abrir (novo chat), desde que haja projeto.
+            const isDisabled = folders.length === 0 && (type === "folders" || type === "diff")
             return (
               <button
                 key={type}
@@ -426,7 +428,9 @@ export function RightPanel() {
   )
 
   const addTab = useCallback(async (type: TabType, sessionId?: string, title?: string) => {
-    if ((type === "folders" || type === "diff") && !activeSessionId) return
+    // Pastas e diff seguem o repositório selecionado no workspace: só ficam
+    // bloqueados quando não há projeto selecionado (mesmo sem chat ativo).
+    if ((type === "folders" || type === "diff") && folders.length === 0) return
 
     if (sessionId) {
       const id = `chat-${sessionId}`
@@ -645,7 +649,7 @@ export function RightPanel() {
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="min-w-32">
               {availableTabs.map(([type, { icon: Icon, label }]) => {
-                const isDisabled = !activeSessionId && (type === "folders" || type === "diff")
+                const isDisabled = folders.length === 0 && (type === "folders" || type === "diff")
                 return (
                   <DropdownMenuItem key={type} disabled={isDisabled} onClick={() => addTab(type)}>
                     <Icon className="size-4" />

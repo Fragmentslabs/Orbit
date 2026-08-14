@@ -66,6 +66,9 @@ export interface SessionInfo {
   orchestration?: SessionOrchestration
   /** Sessão-pai na árvore da sidebar (atalho de orchestration.parentSessionId) */
   parentId?: string
+  /** Execução de uma rotina agendada: a sessão vive no grupo "Rotinas" da
+   *  sidebar (nunca em pasta) e é excluída junto com a rotina. */
+  routineId?: string
   /** Revert ativo (modo código) — limpo ao desfazer ou enviar nova mensagem */
   revert?: SessionRevert
   createdAt: number

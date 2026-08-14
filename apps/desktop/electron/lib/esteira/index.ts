@@ -53,7 +53,7 @@ export {
   listarProjetos,
   listarEsteiras,
 }
-export { abortarTudo } from './engine'
+export { abortarTudo, reconciliarExecucoes } from './engine'
 
 function novoId(prefixo: string): string {
   return `${prefixo}${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`

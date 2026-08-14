@@ -33,6 +33,14 @@ export function formatDateTime(ts: number, locale: string): string {
   return `${date} ${connector} ${time}`
 }
 
+/** Data (dia, mês e ano, sem o nome do dia da semana) + horário (ex.: pt "6 de agosto de 2026 às 14:00"). */
+export function formatDateTimeShort(ts: number, locale: string): string {
+  const date = new Date(ts).toLocaleDateString(locale, { dateStyle: "long" })
+  const time = formatTime(ts, locale)
+  const connector = locale.toLowerCase().startsWith("pt") ? "às" : "at"
+  return `${date} ${connector} ${time}`
+}
+
 /** Duração legível (ex.: "3s", "1m 12s", "2h 05m") a partir de um intervalo em ms. */
 export function formatDuration(ms: number): string {
   const totalSeconds = Math.max(0, Math.round(ms / 1000))

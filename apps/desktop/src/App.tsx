@@ -19,6 +19,7 @@ import { ChatView } from "@/src/components/chat-view"
 import { MemoriesView } from "@/src/components/memories/memories-view"
 import { ModelsView } from "@/src/components/models/models-view"
 import { EsteiraBoard } from "@/src/components/esteira/esteira-board"
+import { RotinasView } from "@/src/components/rotinas/rotinas-view"
 import { RightPanel, RightPanelDropZone } from "@/src/components/right-panel"
 import { ensureAgentBrowser, evictInactiveWebviews } from "@/src/components/browser/webview-session"
 import { TitleBar } from "@/src/components/titlebar"
@@ -281,7 +282,9 @@ function Layout() {
                         ? t("header.models")
                         : view === "esteira"
                           ? t("esteira.titulo")
-                          : activeSession?.title ?? (workspaceMode === "chat" ? t("header.newChat") : t("header.newCode"))
+                          : view === "rotinas"
+                            ? t("rotinas.titulo")
+                            : activeSession?.title ?? (workspaceMode === "chat" ? t("header.newChat") : t("header.newCode"))
                   }
                   hasMenu={view === "chat" && workspaceMode === "chat" && !!activeSession}
                   session={view === "chat" && workspaceMode === "chat" ? activeSession : undefined}
@@ -315,6 +318,8 @@ function Layout() {
                     <ModelsView />
                   ) : view === "esteira" ? (
                     <EsteiraBoard />
+                  ) : view === "rotinas" ? (
+                    <RotinasView />
                   ) : (
                     <ChatView />
                   )}

@@ -474,6 +474,30 @@ export function taskEmExecucao(taskId: string): boolean {
   return emExecucao.has(taskId)
 }
 
+/**
+ * Tasks gravadas como "em_progresso" sem ninguém executando: o app foi fechado
+ * (ou caiu) no meio de uma fase. `emExecucao` vive só em memória, então o
+ * estado do disco sobrevive ao processo — e o card ficava girando para sempre,
+ * como se o agente ainda estivesse trabalhando.
+ *
+ * Fecha como pausa interrompida, exatamente igual ao abort: retomar roda a
+ * fase DO ZERO e o agente é avisado de que a árvore pode ter mudanças parciais.
+ * Roda no boot, antes de qualquer execução nova.
+ */
+export async function reconciliarExecucoes(): Promise<void> {
+  for (const esteira of await listarEsteiras()) {
+    for (const task of await listarTasks(esteira.id)) {
+      if (task.status !== 'em_progresso' || emExecucao.has(task.id)) continue
+      console.log(`[esteira] task "${task.titulo}" ficou em progresso sem execução — marcando como pausada`)
+      await persistir(esteira.id, task.id, (t) =>
+        t.status === 'em_progresso'
+          ? { ...t, status: 'pausada', pausaMotivo: 'manual', faseInterrompida: true }
+          : t,
+      )
+    }
+  }
+}
+
 /** Aborta tudo (fechamento do app). */
 export function abortarTudo(): void {
   for (const controller of emExecucao.values()) controller.abort()

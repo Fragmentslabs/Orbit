@@ -221,7 +221,25 @@ const REF_PRIORITY: Record<RefKind, number> = {
   other: 5,
 };
 
-const MAX_REF_BADGES = 3;
+const MAX_BRANCH_BADGES = 3;
+const MAX_TAG_BADGES = 2;
+
+function RefBadge({ kind, name }: { kind: RefKind; name: string }) {
+  return (
+    <span
+      title={name}
+      className={cn(
+        "inline-flex max-w-32 items-center gap-1 truncate rounded-full border px-1.5 py-px text-[9px] font-medium",
+        REF_BADGE_STYLES[kind],
+      )}
+    >
+      {kind === "tag" && <TagIcon className="size-2.5 shrink-0" />}
+      {kind === "remote" && <CloudIcon className="size-2.5 shrink-0" />}
+      {kind === "current" && <GitBranchIcon className="size-2.5 shrink-0" />}
+      <span className="truncate">{name}</span>
+    </span>
+  );
+}
 
 function CommitRefBadges({
   refs,
@@ -233,34 +251,35 @@ function CommitRefBadges({
   defaultBranch?: string | null;
 }) {
   if (!refs.length) return null;
-  const badges = refs
-    .map((ref) => classifyRef(ref, current, defaultBranch))
+  const classified = refs.map((ref) => classifyRef(ref, current, defaultBranch));
+  // Branches e tags em grupos independentes: tags sempre aparecem ao lado
+  // das branches, sem serem descartadas pelo limite de badges de branch.
+  const branches = classified
+    .filter((b) => b.kind !== "tag")
     .sort((a, b) => REF_PRIORITY[a.kind] - REF_PRIORITY[b.kind]);
-  const visible = badges.slice(0, MAX_REF_BADGES);
-  const rest = badges.length - visible.length;
+  const tags = classified
+    .filter((b) => b.kind === "tag")
+    .sort((a, b) => a.name.localeCompare(b.name));
+  const visibleBranches = branches.slice(0, MAX_BRANCH_BADGES);
+  const visibleTags = tags.slice(0, MAX_TAG_BADGES);
+  const rest = [
+    ...branches.slice(MAX_BRANCH_BADGES),
+    ...tags.slice(MAX_TAG_BADGES),
+  ];
   return (
     <div className="flex flex-wrap items-center gap-1 pt-1.5">
-      {visible.map((b) => (
-        <span
-          key={b.name}
-          title={b.name}
-          className={cn(
-            "inline-flex max-w-32 items-center gap-1 truncate rounded-full border px-1.5 py-px text-[9px] font-medium",
-            REF_BADGE_STYLES[b.kind],
-          )}
-        >
-          {b.kind === "tag" && <TagIcon className="size-2.5 shrink-0" />}
-          {b.kind === "remote" && <CloudIcon className="size-2.5 shrink-0" />}
-          {b.kind === "current" && <GitBranchIcon className="size-2.5 shrink-0" />}
-          <span className="truncate">{b.name}</span>
-        </span>
+      {visibleBranches.map((b) => (
+        <RefBadge key={b.name} kind={b.kind} name={b.name} />
       ))}
-      {rest > 0 && (
+      {visibleTags.map((b) => (
+        <RefBadge key={b.name} kind={b.kind} name={b.name} />
+      ))}
+      {rest.length > 0 && (
         <span
-          title={badges.slice(MAX_REF_BADGES).map((b) => b.name).join(", ")}
+          title={rest.map((b) => b.name).join(", ")}
           className="inline-flex shrink-0 items-center rounded-full border border-border bg-muted px-1.5 py-px text-[9px] font-medium text-muted-foreground"
         >
-          +{rest}
+          +{rest.length}
         </span>
       )}
     </div>
