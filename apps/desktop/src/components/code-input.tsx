@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
-import { AlignLeft, Bot, BrainCircuit, FileText, MousePointerClick, Network, PlusIcon, RefreshCw, Search, X } from "lucide-react"
+import { AlignLeft, Bot, BrainCircuit, Eye, FileText, MousePointerClick, Network, PlusIcon, RefreshCw, Search, X } from "lucide-react"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -20,6 +20,7 @@ import {
 } from "@/src/components/ai/prompt-input"
 import { DelegationMenuItems } from "@/src/components/delegation-menu"
 import { ModeMenuItems, type ModeToggleDef } from "@/src/components/mode-menu-items"
+import { VisionConfigDialog } from "@/src/components/vision-config-dialog"
 import { LoopConfigDialog } from "@/src/components/loop-config-dialog"
 import { ModelPicker } from "@/src/components/model-picker"
 import { ModeToggle } from "@/src/components/mode-toggle"
@@ -105,6 +106,10 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId }: 
   const createSession = useSessionStore((s) => s.createSession)
   const openChatTab = usePanelStore((s) => s.openChatTab)
   const sessionDir = useSessionStore((s) => sessionId ? s.sessions.find(x => x.id === sessionId)?.directory : undefined)
+  const visionModel = useProviderStore((s) => s.visionModel)
+  const setVisionModel = useProviderStore((s) => s.setVisionModel)
+  const visionConfigOpen = useProviderStore((s) => s.visionConfigOpen)
+  const setVisionConfigOpen = useProviderStore((s) => s.setVisionConfigOpen)
   const modesInRow = useAppearanceStore((s) => s.modesInRow)
   const modeLabelStyle = useAppearanceStore((s) => s.modeLabelStyle)
   const referenceCommands = useReferenceCommands()
@@ -135,7 +140,17 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId }: 
     { icon: FileText, label: t("codeInput.modes.plan.label"), active: plan, onChange: (v: boolean) => setPlan(v) },
     { icon: AlignLeft, label: t("input.modes.simple.label"), active: simple, onChange: (v: boolean) => setSimple(sessionId, v) },
     { icon: BrainCircuit, label: t("input.modes.brain.label"), active: brain, onChange: (v: boolean) => setBrainEnabled(sessionId, v) },
-  ], [search, plan, simple, brain, sessionId, setBrainEnabled, setSimple, t])
+    {
+      icon: Eye,
+      label: t("input.modes.vision.label"),
+      active: !!visionModel,
+      onChange: (v: boolean) => {
+        if (v && !visionModel) setVisionConfigOpen(true) // ligar sem modelo → primeira configuração
+        else if (!v) setVisionModel(null)
+      },
+      onConfig: () => setVisionConfigOpen(true),
+    },
+  ], [search, plan, simple, brain, visionModel, sessionId, setBrainEnabled, setSimple, setVisionModel, setVisionConfigOpen, t])
 
   const handleSubmit = useCallback((message: { text?: string; files?: { mediaType?: string; filename?: string; url?: string }[] }) => {
     const files = toFileParts(message.files ?? [])
@@ -430,6 +445,19 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId }: 
               iconOnly={modeLabelStyle === "icon"}
             />
           )}
+          {modesInRow.includes("vision") && (
+            <ModeToggle
+              icon={Eye}
+              label={t("input.modes.vision.label")}
+              description={t("input.modes.vision.description")}
+              active={!!visionModel}
+              onToggle={() => {
+                if (visionModel) setVisionModel(null)
+                else setVisionConfigOpen(true)
+              }}
+              iconOnly={modeLabelStyle === "icon"}
+            />
+          )}
         </div>
         <div className="ml-auto mt-2">
           <ContextMeter sessionId={sessionId} />
@@ -437,6 +465,7 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId }: 
       </PromptInputTools>
         <OrchestrationConfigDialog open={configOpen} onOpenChange={setConfigOpen} />
         <LoopConfigDialog open={loopConfigOpen} onOpenChange={setLoopConfigOpen} />
+        <VisionConfigDialog open={visionConfigOpen} onOpenChange={setVisionConfigOpen} />
       </div>
       </SlashPalette>
       </FilePalette>

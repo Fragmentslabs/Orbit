@@ -30,6 +30,10 @@ export interface ToolContext {
    * panel_screenshot: false/undefined = a tool retorna só a URL, sem carregar
    * a imagem no contexto. Preenchido por quem monta as tools. */
   modelVision?: boolean
+  /** Modelo de visão delegado (modo Visão): quando o modelo principal não tem
+   * visão, o panel_screenshot descreve a imagem com este modelo e devolve o
+   * texto no lugar da imagem. Preenchido por quem monta as tools. */
+  visionModel?: { providerId: string; modelId: string }
 }
 
 export class PathAccessError extends Error {}

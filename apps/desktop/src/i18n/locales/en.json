@@ -75,6 +75,10 @@
       },
       "thinking": {
         "label": "Thinking"
+      },
+      "vision": {
+        "label": "Vision",
+        "description": "When ON, images and screenshots are described by the vision model — the image never enters the context, only the description."
       }
     },
     "slash": {
@@ -834,6 +838,20 @@
     "autoReview": "Auto review",
     "autoReviewHint": "If off, asks before each new iteration",
     "done": "Done"
+  },
+  "visionConfig": {
+    "title": "Vision mode",
+    "explainer": "When ON, images and screenshots (ver: true) are described by the vision model below — even if your main model has native vision, the image never enters the context, only the description. Without a selection, behavior falls back to native: vision models receive the image, non-vision models don't see it.",
+    "visionModel": "Vision model",
+    "disabled": "Disabled — vision mode off",
+    "noSelectionHint": "Only models that accept image input are listed. Without a selection, behavior is native: vision models receive the image; non-vision models don't see it.",
+    "disable": "Disable vision",
+    "done": "Done"
+  },
+  "vision": {
+    "hint": "Your current model has no vision and vision mode is off — attached images are not seen by the agent.",
+    "configure": "Configure vision",
+    "dismiss": "Dismiss"
   },
   "orchestrationConfig": {
     "title": "Configure workers",

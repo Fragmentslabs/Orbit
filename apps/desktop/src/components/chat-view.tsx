@@ -8,6 +8,7 @@ import { AskCard } from "@/src/components/ask-card"
 import { AskCardBatch } from "@/src/components/ask-card-batch"
 import { ChatInput } from "@/src/components/chat-input"
 import { CodeInput } from "@/src/components/code-input"
+import { VisionHintCard } from "@/src/components/vision-hint-card"
 import { Persona, type PersonaState } from "@/src/components/ai/persona"
 import { useAppearanceStore } from "@/src/stores/appearance-store"
 import { Conversation, ConversationContent, ConversationScrollButton } from "@/src/components/ai/conversation"
@@ -546,6 +547,8 @@ export function ChatView({ sessionId }: { sessionId?: string } = {}) {
           />
         </div>
       )}
+      {/* Imagem anexada com modelo sem visão e modo Visão desligado */}
+      <VisionHintCard sessionId={session?.id} />
       {/* Pedidos aguardando resposta (permissão / question), inline acima do input.
           Itens com batchId (workers em lote) agrupam num card único de submit único. */}
       {pendingAsks.length > 0 && (

@@ -21,6 +21,7 @@ export const MODE_IDS = [
   "subagents",
   "orchestra",
   "loop",
+  "vision",
 ] as const
 export type ModeId = (typeof MODE_IDS)[number]
 export const DEFAULT_MODES_IN_ROW: ModeId[] = [...MODE_IDS]

@@ -378,6 +378,8 @@ export interface SendMessageInput {
   extraDirectories?: string[]
   /** Modelo dos workers (subagents/orchestra), vindo do modal de configuração */
   workerModel?: WorkerModelConfig
+  /** Modelo de visão delegado (modo Visão) — descreve imagens para modelos sem visão */
+  visionModel?: WorkerModelConfig
   /** Preenchido pelo main process em execuções de worker — nunca pelo renderer */
   orchestrationRole?: "orchestrator" | "worker"
   /** Sessão do orquestrador que criou este worker (preenchido pelo main) */
@@ -461,6 +463,16 @@ export interface CatalogProvider {
 }
 
 export type Catalog = Record<string, CatalogProvider>
+
+/** O modelo aceita imagens como input? Usa as modalidades do models.dev
+ * (input inclui 'image'); sem modalidades, cai no flag `attachment`. */
+export function modelSupportsVision(provider: CatalogProvider | undefined, modelId: string): boolean {
+  const model = provider?.models[modelId]
+  if (!model) return false
+  const input = model.modalities?.input
+  if (input && input.length > 0) return input.includes('image')
+  return model.attachment === true
+}
 
 export interface ProviderCredential {
   type: "api"

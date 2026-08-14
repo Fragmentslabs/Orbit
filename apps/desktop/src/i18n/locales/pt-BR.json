@@ -75,6 +75,10 @@
       },
       "thinking": {
         "label": "Thinking"
+      },
+      "vision": {
+        "label": "Visão",
+        "description": "Com o modo ativo, imagens e screenshots são descritas pelo modelo de visão — a imagem não entra no contexto, apenas a descrição."
       }
     },
     "slash": {
@@ -834,6 +838,20 @@
     "autoReview": "Revisão automática",
     "autoReviewHint": "Se desligado, pergunta antes de cada nova iteração",
     "done": "Concluir"
+  },
+  "visionConfig": {
+    "title": "Modo Visão",
+    "explainer": "Com o modo ativo, imagens e screenshots (ver: true) são descritas pelo modelo de visão abaixo — mesmo que seu modelo principal tenha visão nativa, a imagem não entra no contexto, apenas a descrição. Sem seleção, o comportamento volta ao nativo: modelos com visão recebem a imagem, modelos sem visão não a veem.",
+    "visionModel": "Modelo de visão",
+    "disabled": "Desligado — modo visão desativado",
+    "noSelectionHint": "Apenas modelos que aceitam imagem são listados. Sem seleção, o comportamento é nativo: modelos com visão recebem a imagem; modelos sem visão não a veem.",
+    "disable": "Desativar visão",
+    "done": "Concluir"
+  },
+  "vision": {
+    "hint": "Seu modelo atual não tem visão e o modo Visão está desligado — imagens anexadas não são vistas pelo agente.",
+    "configure": "Configurar visão",
+    "dismiss": "Dispensar"
   },
   "orchestrationConfig": {
     "title": "Configurar workers",

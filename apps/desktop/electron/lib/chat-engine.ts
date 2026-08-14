@@ -26,6 +26,7 @@ import { extractPdfText } from './pdf'
 import { extractSpreadsheetText } from './xlsx'
 import { extractDocxText } from './docx'
 import { describeSkillAttachment } from './skills/import'
+import { describeImage } from './vision'
 import { cleanupRevert } from './session/revert'
 import { capture, diff } from './snapshot'
 import { runProjectInit, type InitHooks } from './project-init'
@@ -165,9 +166,12 @@ const SKILL_LIKE_EXT = /\.(skill|md|markdown)$/i
  * arquivos de texto viram texto inline; o resto vira só uma nota. Usado só
  * para HISTÓRICO já persistido — anexos novos são pré-processados em
  * `preprocessAttachment` antes de chegar aqui (ver runChat). */
-function fileToModelContent(file: FilePart): Exclude<UserContent, string>[number] {
+function fileToModelContent(file: FilePart, modelVision: boolean): Exclude<UserContent, string>[number] {
   if (file.mime.startsWith('image/')) {
-    return { type: 'image', image: file.url, mediaType: file.mime }
+    if (modelVision) return { type: 'image', image: file.url, mediaType: file.mime }
+    // Modelo sem visão (histórico): nota de texto — a descrição, quando
+    // existe, já está no TextPart irmão gerado em preprocessAttachment.
+    return { type: 'text', text: `[Imagem anexada anteriormente: ${file.filename ?? 'imagem'}]` }
   }
   if (file.mime === 'application/pdf' || PDF_EXT.test(file.filename ?? '')) {
     return { type: 'text', text: `[PDF anexado anteriormente: ${file.filename ?? 'documento'}]` }
@@ -194,7 +198,18 @@ function attachmentChip(file: FilePart): FilePart {
  * pra UI continuar mostrando o anexo; imagem continua nativa (o modelo lê
  * melhor via image part). Espelha o mesmo padrão para cada tipo — extrai,
  * embrulha em TextPart, nunca falha o envio da mensagem. */
-async function preprocessAttachment(file: FilePart): Promise<MessagePart[]> {
+async function preprocessAttachment(
+  file: FilePart,
+  deps: {
+    /** O modelo desta execução tem visão nativa? */
+    modelVision: boolean
+    /** Modelo de visão delegado (modo Visão) — usado quando modelVision é false */
+    visionModel?: { providerId: string; modelId: string }
+    language?: string
+    /** Texto da mensagem do usuário — foco da descrição quando há delegação */
+    focus?: string
+  },
+): Promise<MessagePart[]> {
   const filename = file.filename ?? ''
 
   if (file.mime === 'application/pdf' || PDF_EXT.test(filename)) {
@@ -268,6 +283,42 @@ async function preprocessAttachment(file: FilePart): Promise<MessagePart[]> {
     }
   }
 
+  // Imagem: com o modo Visão ativo (visionModel configurado), descreve SEMPRE
+  // via modelo de visão — mesmo com visão nativa — e injeta a descrição como
+  // texto (a imagem não entra no contexto; o foco é o texto da mensagem). Sem
+  // modo ativo: visão nativa mantém o image part; sem visão e sem modelo,
+  // avisa no histórico que o anexo não foi visto (a UI também mostra o card).
+  if (file.mime.startsWith('image/')) {
+    if (deps.visionModel) {
+      const filename = file.filename ?? ''
+      const desc = await describeImage({
+        model: deps.visionModel,
+        imageDataUrl: file.url,
+        language: deps.language,
+        focus: deps.focus,
+      })
+      const text = desc
+        ? `[Imagem anexada: ${filename || 'sem nome'}]\n\nDescrição gerada pelo modelo de visão (${deps.visionModel.modelId}):\n${desc}`
+        : `[Imagem anexada: ${filename || 'sem nome'}] — o modelo de visão configurado não conseguiu descrever esta imagem.`
+      return [
+        attachmentChip(file),
+        { id: newId('prt'), type: 'text', text, state: 'done', source: 'attachment' },
+      ]
+    }
+    if (deps.modelVision) return [file]
+    const filename = file.filename ?? ''
+    return [
+      attachmentChip(file),
+      {
+        id: newId('prt'),
+        type: 'text',
+        text: `[Imagem anexada: ${filename || 'sem nome'}] — o modelo atual não tem visão e nenhum modelo de visão está configurado; a imagem não foi enviada ao modelo.`,
+        state: 'done',
+        source: 'attachment',
+      },
+    ]
+  }
+
   return [file]
 }
 
@@ -276,7 +327,7 @@ async function preprocessAttachment(file: FilePart): Promise<MessagePart[]> {
  * anexos do usuário). Havendo compactação, corta no último resumo: envia
  * resumo + mensagens posteriores; o histórico completo continua no storage.
  */
-export function toModelMessages(history: ChatMessage[]): ModelMessage[] {
+export function toModelMessages(history: ChatMessage[], modelVision = true): ModelMessage[] {
   const lastSummary = findLastSummaryIndex(history)
   const window = lastSummary >= 0 ? history.slice(lastSummary) : history
   const result: ModelMessage[] = []
@@ -290,7 +341,7 @@ export function toModelMessages(history: ChatMessage[]): ModelMessage[] {
     // aqui duplicaria uma nota vazia no lugar do texto já extraído.
     const files = message.parts.filter((p): p is FilePart => p.type === 'file' && p.url !== '')
     if (message.role === 'user' && files.length > 0) {
-      const content: UserContent = files.map(fileToModelContent)
+      const content: UserContent = files.map((file) => fileToModelContent(file, modelVision))
       if (text.trim()) content.push({ type: 'text', text })
       result.push({ role: 'user', content })
       continue
@@ -430,10 +481,18 @@ export async function runChat(win: BrowserWindow, input: SendMessageInput): Prom
   // data URLs enormes no histórico e dá ao agente acesso ao conteúdo real,
   // independente da pasta de trabalho selecionada (as tools read/glob/bash só
   // enxergam o filesystem, nunca os anexos do chat — por isso o conteúdo
-  // precisa entrar como texto na própria mensagem).
+  // precisa entrar como texto na própria mensagem). Imagens: modelo sem visão
+  // delega para o modelo de visão configurado (modo Visão) ou vira aviso.
+  const provider = await getProvider(input.providerId)
+  const modelVision = modelSupportsVision(provider, input.modelId)
   const processedParts: MessagePart[] = []
   for (const file of input.files ?? []) {
-    processedParts.push(...(await preprocessAttachment(file)))
+    processedParts.push(...(await preprocessAttachment(file, {
+      modelVision,
+      visionModel: input.visionModel,
+      language: input.language,
+      focus: input.text,
+    })))
   }
 
   const userMessage: ChatMessage = {
@@ -474,7 +533,6 @@ export async function runChat(win: BrowserWindow, input: SendMessageInput): Prom
 
   try {
     const model = await resolveModel(input.providerId, input.modelId)
-    const provider = await getProvider(input.providerId)
     const supportsTools = provider?.models[input.modelId]?.tool_call !== false
 
     // Compactação automática: os tokens reais da última resposta indicam que o
@@ -512,8 +570,10 @@ export async function runChat(win: BrowserWindow, input: SendMessageInput): Prom
             extraDirectories: input.extraDirectories ?? [],
             abort: controller.signal,
             getTurnSnapshot: () => turnSnapshot,
-            // Visão do modelo: decide se o panel_screenshot oferece `ver`
-            modelVision: modelSupportsVision(provider, input.modelId),
+            // Visão do modelo: decide se o panel_screenshot oferece `ver`;
+            // visionModel delega a descrição quando o modelo não tem visão
+            modelVision,
+            visionModel: input.visionModel,
           }
         : null
 
@@ -689,7 +749,7 @@ export async function runChat(win: BrowserWindow, input: SendMessageInput): Prom
     // opencode: injetar uma "synthetic user message" e re-entrar no loop,
     // com teto de tentativas por turno).
     const initialMessages = normalizeMessages(
-      toModelMessages(history.slice(0, -1)),
+      toModelMessages(history.slice(0, -1), modelVision),
       interleavedReasoningField(provider, input.modelId),
     )
     let autoContinues = 0

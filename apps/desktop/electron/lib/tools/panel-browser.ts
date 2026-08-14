@@ -14,6 +14,7 @@ import {
   panelType,
 } from '../panel-browser'
 import { resolveSafePath, type ToolContext } from './context'
+import { describeImage } from '../vision'
 
 const IMAGE_EXTENSIONS = new Set(['png', 'jpg', 'jpeg', 'webp', 'gif'])
 /** Limite de tamanho para imagem enviada ao modelo via toModelOutput (300KB). */
@@ -37,7 +38,11 @@ const VIEWPORT_PRESETS: Record<string, { width: number | null; height: number | 
  * base64 fica num stash por toolCallId para não inflar o histórico persistido.
  */
 
-const screenshotStash = new Map<string, { base64: string; format: 'webp' | 'png' }>()
+const screenshotStash = new Map<
+  string,
+  | { base64: string; format: 'webp' | 'png' }
+  | { text: string }
+>()
 
 export function createPanelBrowserTools(ctx: ToolContext): ToolSet {
   return {
@@ -100,7 +105,7 @@ export function createPanelBrowserTools(ctx: ToolContext): ToolSet {
     }),
     panel_screenshot: tool({
       description:
-        'Takes a screenshot of the panel page. By default it returns only the media URL (orbit-media://...) — the image is NOT loaded into your context (saves image tokens). Pass ver: true to load the image so you can actually SEE it (only available to vision models). With savePath, also saves it to the working folder (e.g.: docs/login/screen.webp) — use in documentation mode. With fullscreen, expands to full screen, captures, and returns to the side view. With fullPage, captures the WHOLE page (beyond the viewport) in a hidden window, without touching the panel; format: png gives a high-resolution image for documentation.',
+        'Takes a screenshot of the panel page. By default it returns only the media URL (orbit-media://...) — the image is NOT loaded into your context (saves image tokens). Pass ver: true to load the image so you can actually SEE it — natively if you have vision, or via the configured vision model when the Vision mode is ON (in that case the vision model DESCRIBES the image and only the description enters your context, even if you have native vision). With savePath, also saves it to the working folder (e.g.: docs/login/screen.webp) — use in documentation mode. With fullscreen, expands to full screen, captures, and returns to the side view. With fullPage, captures the WHOLE page (beyond the viewport) in a hidden window, without touching the panel; format: png gives a high-resolution image for documentation.',
       inputSchema: z.object(
         (() => {
           const fields: Record<string, z.ZodTypeAny> = {
@@ -125,12 +130,12 @@ export function createPanelBrowserTools(ctx: ToolContext): ToolSet {
               .optional()
               .describe('Maximum width in px (default 1024 — raise it only for documentation)'),
           }
-          if (ctx.modelVision) {
+          if (ctx.modelVision || ctx.visionModel) {
             fields.ver = z
               .boolean()
               .optional()
               .describe(
-                'Loads the image into your context so you can SEE it. Default false — returns only the media URL (no image tokens). Use true when you actually need to see the screen.',
+                'Loads the image into your context so you can SEE it — natively if you have vision, or via the configured vision model description when the Vision mode is ON (the raw image never enters your context in that case). Default false — returns only the media URL (no image tokens). Use true when you actually need to see the screen.',
               )
           }
           return fields
@@ -164,7 +169,22 @@ export function createPanelBrowserTools(ctx: ToolContext): ToolSet {
         })
         let loaded = ''
         if (ver === true) {
-          if (ctx.modelVision) {
+          if (ctx.visionModel) {
+            // Modo Visão ativo: delega SEMPRE (mesmo para modelo com visão
+            // nativa) — apenas a descrição entra no contexto, a imagem nunca
+            // (economia de tokens no histórico; o agente não muda de jeito).
+            const desc = await describeImage({
+              model: ctx.visionModel,
+              imageDataUrl: `data:image/${outFormat};base64,${image.toString('base64')}`,
+            })
+            if (desc) {
+              screenshotStash.set(toolCallId, { text: desc })
+              loaded = ` Descrição gerada pelo modelo de visão (${ctx.visionModel.modelId}) carregada no seu contexto (ver: true).`
+            } else {
+              loaded = ' (ver: true — o modelo de visão configurado não conseguiu descrever a imagem; nenhuma descrição foi carregada.)'
+            }
+          } else if (ctx.modelVision) {
+            // Visão nativa, modo Visão desligado: imagem no contexto.
             screenshotStash.set(toolCallId, { base64: image.toString('base64'), format: outFormat })
             loaded = ' Imagem carregada no seu contexto (ver: true).'
           } else {
@@ -185,6 +205,10 @@ export function createPanelBrowserTools(ctx: ToolContext): ToolSet {
         const stashed = screenshotStash.get(toolCallId)
         screenshotStash.delete(toolCallId)
         if (!stashed) return { type: 'text', value: String(output) }
+        if ('text' in stashed) {
+          // Delegação de visão: a descrição entra como texto, sem imagem
+          return { type: 'text', value: `${String(output)}\n\n[Descrição da imagem (modelo de visão)]: ${stashed.text}` }
+        }
         const { base64, format } = stashed
         const raw = Buffer.from(base64, 'base64')
         const parts: ({ type: 'text'; text: string } | { type: 'image-data'; data: string; mediaType: string })[] = [

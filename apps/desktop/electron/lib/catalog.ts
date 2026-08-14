@@ -1,6 +1,7 @@
 import fs from 'node:fs/promises'
 import path from 'node:path'
 import type { Catalog, CatalogProvider } from '@shared/chat'
+import { modelSupportsVision } from '@shared/chat'
 import { generateVariants, isAlwaysOnModel, toModelInput, variantLabel } from './reasoning/variants'
 import { dataDir } from './storage'
 import { listCustomProviders, seedCustomProviders } from './custom-providers'
@@ -105,13 +106,7 @@ export async function getProvider(providerId: string): Promise<CatalogProvider |
  * (input inclui 'image'); sem modalidades, cai no flag `attachment`. Controla
  * se a flag `ver` do panel_screenshot é oferecida ao modelo.
  */
-export function modelSupportsVision(provider: CatalogProvider | undefined, modelId: string): boolean {
-  const model = provider?.models[modelId]
-  if (!model) return false
-  const input = model.modalities?.input
-  if (input && input.length > 0) return input.includes('image')
-  return model.attachment === true
-}
+export { modelSupportsVision }
 
 export async function ensureCustomProvidersSeeded(): Promise<void> {
   await seedCustomProviders()

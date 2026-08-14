@@ -1,6 +1,6 @@
 import { useCallback, useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
-import { AlignLeft, BrainCircuit, Globe, PlusIcon, Search } from "lucide-react"
+import { AlignLeft, BrainCircuit, Eye, Globe, PlusIcon, Search } from "lucide-react"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -19,6 +19,7 @@ import {
   PromptInputTools,
 } from "@/src/components/ai/prompt-input"
 import { ModeMenuItems, type ModeToggleDef } from "@/src/components/mode-menu-items"
+import { VisionConfigDialog } from "@/src/components/vision-config-dialog"
 import { ModelPicker } from "@/src/components/model-picker"
 import { ModeToggle } from "@/src/components/mode-toggle"
 
@@ -71,6 +72,11 @@ export function ChatInput({ onSubmit, status, onStop, sessionId, draftKey }: {
   const thinking = enabled || !!model?.reasoningAlwaysOn
   const busy = status === "submitted" || status === "streaming" || status === "cancelling"
 
+  const visionModel = useProviderStore((s) => s.visionModel)
+  const setVisionModel = useProviderStore((s) => s.setVisionModel)
+  const visionConfigOpen = useProviderStore((s) => s.visionConfigOpen)
+  const setVisionConfigOpen = useProviderStore((s) => s.setVisionConfigOpen)
+
   const { mode } = useWorkspace()
   const selectSession = useSessionStore((s) => s.selectSession)
   const openSettings = useSettingsUi((s) => s.openSettings)
@@ -89,7 +95,17 @@ export function ChatInput({ onSubmit, status, onStop, sessionId, draftKey }: {
     { icon: Globe, label: t("input.modes.browser.label"), active: browser, onChange: (v: boolean) => setBrowser(v) },
     { icon: AlignLeft, label: t("input.modes.simple.label"), active: simple, onChange: (v: boolean) => setSimple(sessionId, v) },
     { icon: BrainCircuit, label: t("input.modes.brain.label"), active: brain, onChange: (v: boolean) => setBrainEnabled(sessionId, v) },
-  ], [search, browser, simple, brain, sessionId, setBrainEnabled, setSimple, t])
+    {
+      icon: Eye,
+      label: t("input.modes.vision.label"),
+      active: !!visionModel,
+      onChange: (v: boolean) => {
+        if (v && !visionModel) setVisionConfigOpen(true) // ligar sem modelo → primeira configuração
+        else if (!v) setVisionModel(null)
+      },
+      onConfig: () => setVisionConfigOpen(true),
+    },
+  ], [search, browser, simple, brain, visionModel, sessionId, setBrainEnabled, setSimple, setVisionModel, setVisionConfigOpen, t])
 
   const buildOptions = useCallback((): SendMessageOptions => ({
     research: search,
@@ -253,12 +269,26 @@ export function ChatInput({ onSubmit, status, onStop, sessionId, draftKey }: {
               iconOnly={modeLabelStyle === "icon"}
             />
           )}
+          {modesInRow.includes("vision") && (
+            <ModeToggle
+              icon={Eye}
+              label={t("input.modes.vision.label")}
+              description={t("input.modes.vision.description")}
+              active={!!visionModel}
+              onToggle={() => {
+                if (visionModel) setVisionModel(null)
+                else setVisionConfigOpen(true)
+              }}
+              iconOnly={modeLabelStyle === "icon"}
+            />
+          )}
         </div>
         <div className="ml-auto mt-2">
           <ContextMeter sessionId={sessionId} />
         </div>
       </PromptInputTools>
     </div>
+    <VisionConfigDialog open={visionConfigOpen} onOpenChange={setVisionConfigOpen} />
     </SlashPalette>
     </PromptInputProvider>
   )

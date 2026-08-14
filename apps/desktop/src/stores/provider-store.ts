@@ -1,10 +1,12 @@
 import { create } from "zustand"
 import type { Catalog, CatalogModel, CatalogProvider, ReasoningConfig } from "@shared/chat"
+import { modelSupportsVision } from "@shared/chat"
 import { authApi, catalogApi, customProvidersApi } from "@/src/lib/ipc"
 
 const SELECTED_MODEL_KEY = "orbit-selected-model"
 const WORKER_MODEL_KEY = "orbit-worker-model"
 const WORKER_REASONING_KEY = "orbit-worker-reasoning"
+const VISION_MODEL_KEY = "orbit-vision-model"
 
 export interface SelectedModel {
   providerId: string
@@ -31,6 +33,11 @@ interface ProviderState {
   selectedModel: SelectedModel | null
   workerModel: SelectedModel | null
   workerReasoning: ReasoningConfig | null
+  /** Modelo de visão delegado (modo Visão) — descreve imagens/screenshots
+   * para modelos sem visão; null = modo desligado */
+  visionModel: SelectedModel | null
+  /** Dialog de configuração do modo Visão (aberto pelo toggle, pelo gear ou pelo card de aviso) */
+  visionConfigOpen: boolean
   loading: boolean
   /** Mensagem de erro da última inicialização */
   error: string | null
@@ -41,6 +48,8 @@ interface ProviderState {
   selectModel: (providerId: string, modelId: string) => void
   setWorkerModel: (model: SelectedModel | null) => void
   setWorkerReasoning: (reasoning: ReasoningConfig | null) => void
+  setVisionModel: (model: SelectedModel | null) => void
+  setVisionConfigOpen: (open: boolean) => void
   getModel: (providerId: string, modelId: string) => CatalogModel | undefined
   addCustomProvider: (id: string, name: string, baseURL: string, apiKey?: string) => Promise<void>
   updateCustomProvider: (id: string, patch: { name?: string; baseURL?: string; apiKey?: string }) => Promise<void>
@@ -63,6 +72,8 @@ export const useProviderStore = create<ProviderState>((set, get) => ({
   selectedModel: loadSelectedModel(),
   workerModel: loadJson<SelectedModel>(WORKER_MODEL_KEY),
   workerReasoning: loadJson<ReasoningConfig>(WORKER_REASONING_KEY),
+  visionModel: loadJson<SelectedModel>(VISION_MODEL_KEY),
+  visionConfigOpen: false,
   loading: true,
   error: null,
 
@@ -85,6 +96,19 @@ export const useProviderStore = create<ProviderState>((set, get) => ({
         } else if (workerReasoning && !workerCatalogModel.reasoning) {
           get().setWorkerReasoning(null)
         }
+      }
+
+      // Modo Visão: modelo configurado precisa existir, estar conectado e ter
+      // visão — senão o modo desliga sozinho (evita delegação quebrada).
+      const { visionModel } = get()
+      if (visionModel) {
+        const visionProvider = merged[visionModel.providerId]
+        const visionCatalogModel = visionProvider?.models[visionModel.modelId]
+        const valid =
+          visionCatalogModel &&
+          connectedProviders.includes(visionModel.providerId) &&
+          modelSupportsVision(visionProvider, visionModel.modelId)
+        if (!valid) get().setVisionModel(null)
       }
 
       const { selectedModel } = get()
@@ -140,6 +164,14 @@ export const useProviderStore = create<ProviderState>((set, get) => ({
     else localStorage.removeItem(WORKER_REASONING_KEY)
     set({ workerReasoning: reasoning })
   },
+
+  setVisionModel: (model) => {
+    if (model) localStorage.setItem(VISION_MODEL_KEY, JSON.stringify(model))
+    else localStorage.removeItem(VISION_MODEL_KEY)
+    set({ visionModel: model })
+  },
+
+  setVisionConfigOpen: (open) => set({ visionConfigOpen: open }),
 
   getModel: (providerId, modelId) => get().catalog[providerId]?.models[modelId],
 
