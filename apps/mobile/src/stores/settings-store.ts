@@ -8,6 +8,8 @@ const PROVIDERS_CACHE_KEY = 'orbit_providers_cache'
 const SELECTED_MODEL_CACHE_KEY = 'orbit_selected_model_cache'
 const WORKER_MODEL_KEY = 'orbit_worker_model'
 const WORKER_REASONING_KEY = 'orbit_worker_reasoning'
+const VISION_MODEL_KEY = 'orbit_vision_model'
+const VISION_ENABLED_KEY = 'orbit_vision_enabled'
 const LOOP_CONFIG_KEY = 'orbit_loop_config'
 const AUTO_FOLDERS_KEY = 'orbit_auto_folders'
 
@@ -67,6 +69,19 @@ interface SettingsState {
   /** Define (ou limpa) o thinking dos workers. */
   setWorkerReasoning: (reasoning: ReasoningConfig | null) => Promise<void>
 
+  /** Modelo de visão delegado (modo Visão) — descreve imagens no desktop. */
+  visionModel: WorkerModelConfig | null
+  /** Define (ou limpa) o modelo de visão. */
+  setVisionModel: (model: WorkerModelConfig | null) => Promise<void>
+  /** Modo Visão ativo (envia visionModel nas mensagens com imagem). */
+  visionEnabled: boolean
+  /** Define o toggle do modo Visão. */
+  setVisionEnabled: (value: boolean) => Promise<void>
+  /** Modal de configuração do modelo de visão aberto. */
+  visionConfigOpen: boolean
+  /** Abre/fecha o modal de configuração do modo Visão. */
+  setVisionConfigOpen: (open: boolean) => void
+
   /** Configuração do modo loop. */
   loopConfig: LoopConfig
   /** Define a configuração do loop. */
@@ -91,6 +106,9 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
   loading: false,
   workerModel: null,
   workerReasoning: null,
+  visionModel: null,
+  visionEnabled: false,
+  visionConfigOpen: false,
   loopConfig: DEFAULT_LOOP_CONFIG,
   autoCreateFolders: false,
 
@@ -157,6 +175,14 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
       if (rawReasoning && !get().workerReasoning) {
         set({ workerReasoning: JSON.parse(rawReasoning) as ReasoningConfig })
       }
+      const rawVisionModel = await Storage.getItem(VISION_MODEL_KEY)
+      if (rawVisionModel && !get().visionModel) {
+        set({ visionModel: JSON.parse(rawVisionModel) as WorkerModelConfig })
+      }
+      const rawVisionEnabled = await Storage.getItem(VISION_ENABLED_KEY)
+      if (rawVisionEnabled) {
+        set({ visionEnabled: JSON.parse(rawVisionEnabled) as boolean })
+      }
       const rawAutoFolders = await Storage.getItem(AUTO_FOLDERS_KEY)
       if (rawAutoFolders) {
         set({ autoCreateFolders: JSON.parse(rawAutoFolders) as boolean })
@@ -182,6 +208,28 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
     } else {
       await Storage.removeItem(WORKER_REASONING_KEY)
     }
+  },
+
+  setVisionModel: async (model) => {
+    set({ visionModel: model })
+    if (model) {
+      await Storage.setItem(VISION_MODEL_KEY, JSON.stringify(model))
+    } else {
+      await Storage.removeItem(VISION_MODEL_KEY)
+    }
+  },
+
+  setVisionEnabled: async (value) => {
+    set({ visionEnabled: value })
+    if (value) {
+      await Storage.setItem(VISION_ENABLED_KEY, JSON.stringify(true))
+    } else {
+      await Storage.removeItem(VISION_ENABLED_KEY)
+    }
+  },
+
+  setVisionConfigOpen: (open) => {
+    set({ visionConfigOpen: open })
   },
 
   setLoopConfig: async (config) => {

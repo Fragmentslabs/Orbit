@@ -428,6 +428,12 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     const workerModel = usesWorkers && settings.workerModel
       ? { ...settings.workerModel, reasoning: settings.workerReasoning ?? undefined }
       : undefined
+    // Modo Visão: envia o modelo de visão configurado quando ativo. O engine
+    // do desktop usa para descrever imagens (preprocess) — mesmo caminho do
+    // desktop, onde o visionModel chega via SendMessageInput.
+    const visionModel = settings.visionEnabled && settings.visionModel
+      ? { ...settings.visionModel }
+      : undefined
     const loopConfig = config?.options?.loop ? settings.loopConfig : undefined
     try {
       await wsClient.send({
@@ -439,6 +445,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
         options: config?.options,
         files: config?.files,
         workerModel,
+        visionModel,
         loopConfig,
         directory: config?.directory,
         extraDirectories: config?.extraDirectories,
