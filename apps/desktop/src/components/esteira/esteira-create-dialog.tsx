@@ -80,6 +80,7 @@ export function EsteiraCreateDialog({
     ...rotulo(tpl),
     prompt: tpl.prompt,
     tools: [...tpl.tools],
+    tipo: tpl.tipo,
   })
 
   // Estado inicial a cada abertura: só as fases padrão entram; as demais ficam
@@ -100,6 +101,7 @@ export function EsteiraCreateDialog({
           descricao: f.descricao,
           prompt: f.prompt,
           tools: [...f.tools],
+          tipo: f.tipo ?? "generico",
         })),
       )
       return
@@ -142,6 +144,7 @@ export function EsteiraCreateDialog({
         descricao: fase.descricao,
         prompt: fase.prompt,
         tools: fase.tools,
+        tipo: fase.tipo,
         // Mantém a fase entre as sugeridas se já era, para o padrão não sumir
         padrao: templates.find((tpl) => tpl.id === fase.templateId)?.padrao ?? false,
       })
@@ -175,6 +178,7 @@ export function EsteiraCreateDialog({
               modelId: anterior?.modelId ?? modelo.modelId,
               thinkingNivel: anterior?.thinkingNivel ?? 0,
               tools: [...fase.tools],
+              tipo: fase.tipo,
               ordem,
             }
           }),

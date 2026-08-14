@@ -43,7 +43,7 @@ import { useModelModePrefs } from '~/stores/model-mode-prefs'
 import { useModeActive, useModeOverrides } from '~/stores/mode-overrides'
 import { useSimpleMode, useSimplePrefs } from '~/stores/simple-prefs'
 import { useBrainEnabled, useBrainPrefs } from '~/stores/brain-prefs'
-import { useModelConfigPrompt } from '~/hooks/use-model-config-prompt'
+import { Storage } from '~/lib/storage'
 import { getThemeTokens } from '~/lib/theme-tokens'
 import { useThemeStore } from '~/stores/theme-store'
 import { SendButtonGroup } from './SendButtonGroup'
@@ -67,6 +67,10 @@ interface PromptInputProps {
 async function fileToFilePart(asset: any): Promise<FilePart> {
   return uriToFilePart(asset.uri, asset.mimeType, asset.name)
 }
+
+// Aviso da primeira vez (workers): modal só abre na 1ª ativação do modo agente
+// sem worker configurado; "usar o mesmo modelo do chat" é válido (persistido)
+const WORKER_CONFIG_PROMPTED_KEY = 'orbit_worker_config_prompted'
 
 export function PromptInput({
   onSend,
@@ -221,21 +225,24 @@ export function PromptInput({
     if (id === 'brain') return setBrainEnabled(sessionId, !brain)
   }, [vision, visionModel, sessionId, search, browser, simple, brain, setModeActive, setSimple, setBrainEnabled, setVisionConfigOpen])
 
-  // Gate de configuração (espelho do useModelConfigPrompt do desktop): modos
-  // ativos por default nas preferências sem modelo configurado abrem o modal
-  // de configuração automaticamente, uma vez por chat.
-  useModelConfigPrompt({
-    sessionId,
-    subagents: workspaceMode === 'code' ? subagents : false,
-    orchestra: workspaceMode === 'code' ? orchestra : false,
-    vision,
-    workerConfigured: workerModel != null,
-    visionConfigured: visionModel != null,
-    onOpenWorker: () => setWorkerConfigOpen(true),
-    onOpenVision: () => setVisionConfigOpen(true),
-    workerDialogOpen: workerConfigOpen,
-    visionDialogOpen: visionConfigOpen,
-  })
+  // Gate de configuração: só abre o modal quando o usuário ATIVA o modo.
+  // Workers: aviso da primeira vez — abre só na 1ª ativação sem worker
+  // configurado ("usar o mesmo modelo" é válido); depois nunca mais.
+  const [workerConfigPrompted, setWorkerConfigPrompted] = useState(false)
+  useEffect(() => {
+    Storage.getItem(WORKER_CONFIG_PROMPTED_KEY)
+      .then((v) => { if (v === '1') setWorkerConfigPrompted(true) })
+      .catch(() => {})
+  }, [])
+
+  const toggleWorkerMode = useCallback((id: 'subagents' | 'orchestra', next: boolean) => {
+    setModeActive(id, sessionId, next)
+    if (next && !workerModel && !workerConfigPrompted) {
+      setWorkerConfigPrompted(true)
+      Storage.setItem(WORKER_CONFIG_PROMPTED_KEY, '1').catch(() => {})
+      setWorkerConfigOpen(true)
+    }
+  }, [workerModel, workerConfigPrompted, sessionId, setModeActive])
 
   const handlePickFiles = async () => {
     setPlusOpen(false)
@@ -580,8 +587,8 @@ export function PromptInput({
             orchestra={orchestra}
             loop={loop}
             onTogglePlan={() => setModeActive('plan', sessionId, !plan)}
-            onToggleSubagents={() => setModeActive('subagents', sessionId, !subagents)}
-            onToggleOrchestra={() => setModeActive('orchestra', sessionId, !orchestra)}
+            onToggleSubagents={() => toggleWorkerMode('subagents', !subagents)}
+            onToggleOrchestra={() => toggleWorkerMode('orchestra', !orchestra)}
             onToggleLoop={() => setLoop((v) => !v)}
             tokens={tokens}
           />
@@ -607,8 +614,8 @@ export function PromptInput({
         configModes={[
           ...(workspaceMode === 'code' ? [{ id: 'plan', icon: FileText, label: t('promptInput.modes.plan'), active: plan, onToggle: () => setModeActive('plan', sessionId, !plan) }] : []),
           { id: 'vision', icon: Eye, label: t('promptInput.modes.vision'), active: vision, onToggle: () => toggleMode('vision'), onConfigure: () => { setPlusOpen(false); setVisionConfigOpen(true) } },
-          { id: 'subagents', icon: Bot, label: t('promptInput.modes.subagents'), active: subagents, onToggle: () => setModeActive('subagents', sessionId, !subagents), onConfigure: () => { setPlusOpen(false); setWorkerConfigOpen(true) } },
-          ...(workspaceMode === 'code' ? [{ id: 'orchestra', icon: Network, label: t('promptInput.modes.orchestra'), active: orchestra, onToggle: () => setModeActive('orchestra', sessionId, !orchestra), onConfigure: () => { setPlusOpen(false); setWorkerConfigOpen(true) } }] : []),
+          { id: 'subagents', icon: Bot, label: t('promptInput.modes.subagents'), active: subagents, onToggle: () => toggleWorkerMode('subagents', !subagents), onConfigure: () => { setPlusOpen(false); setWorkerConfigOpen(true) } },
+          ...(workspaceMode === 'code' ? [{ id: 'orchestra', icon: Network, label: t('promptInput.modes.orchestra'), active: orchestra, onToggle: () => toggleWorkerMode('orchestra', !orchestra), onConfigure: () => { setPlusOpen(false); setWorkerConfigOpen(true) } }] : []),
           { id: 'loop', icon: RefreshCw, label: t('promptInput.modes.loop'), active: loop, onToggle: () => setLoop((v) => !v), onConfigure: () => { setPlusOpen(false); setLoopConfigOpen(true) } },
         ]}
         displayMode={displayMode}
@@ -626,9 +633,9 @@ export function PromptInput({
         onReasoningSelect={(id) => update({ enabled: true, variantId: id })}
         reasoningAlwaysOn={model?.reasoningAlwaysOn}
         subagents={subagents}
-        onSubagentsToggle={() => setModeActive('subagents', sessionId, !subagents)}
+        onSubagentsToggle={() => toggleWorkerMode('subagents', !subagents)}
         orchestra={orchestra}
-        onOrchestraToggle={() => setModeActive('orchestra', sessionId, !orchestra)}
+        onOrchestraToggle={() => toggleWorkerMode('orchestra', !orchestra)}
         loop={loop}
         onLoopToggle={() => setLoop((prev) => !prev)}
         workerModelLabel={workerModelLabel}

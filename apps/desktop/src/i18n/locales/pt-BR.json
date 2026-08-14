@@ -1560,6 +1560,8 @@
     "faseNome": "Nome",
     "faseDescricao": "Descrição",
     "faseDescricaoDica": "Uma linha — aparece na lista da esteira",
+    "faseTipo": "Papel",
+    "faseTipoDica": "Define o que a fase faz (e o que ela deixa para as próximas), independentemente do nome",
     "fasePrompt": "Prompt",
     "fasePromptDica": "Instruções para o agente nesta fase, incluindo o que ele deve registrar na anotação.",
     "faseCapacidades": "Capacidades",
@@ -1571,6 +1573,14 @@
       "shell": "Shell",
       "browser": "Browser",
       "memoria": "Memória"
+    },
+    "tipo": {
+      "desenvolvimento": "Desenvolvimento",
+      "validacao": "Validação",
+      "seguranca": "Segurança",
+      "revisao": "Revisão de código",
+      "infra": "Infra",
+      "generico": "Genérica"
     },
     "arquivosAlterados_one": "{{count}} arquivo alterado",
     "arquivosAlterados_other": "{{count}} arquivos alterados",

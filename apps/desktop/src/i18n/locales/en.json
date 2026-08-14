@@ -1560,6 +1560,8 @@
     "faseNome": "Name",
     "faseDescricao": "Description",
     "faseDescricaoDica": "One line — shown in the pipeline list",
+    "faseTipo": "Role",
+    "faseTipoDica": "Defines what the phase does (and what it leaves to the next ones), regardless of its name",
     "fasePrompt": "Prompt",
     "fasePromptDica": "Instructions for the agent in this phase, including what it must record in the note.",
     "faseCapacidades": "Capabilities",
@@ -1571,6 +1573,14 @@
       "shell": "Shell",
       "browser": "Browser",
       "memoria": "Memory"
+    },
+    "tipo": {
+      "desenvolvimento": "Development",
+      "validacao": "Validation",
+      "seguranca": "Security",
+      "revisao": "Code review",
+      "infra": "Infra",
+      "generico": "Generic"
     },
     "arquivosAlterados_one": "{{count}} file changed",
     "arquivosAlterados_other": "{{count}} files changed",

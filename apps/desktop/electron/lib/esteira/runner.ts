@@ -37,6 +37,21 @@ import type { SendMessageInput } from '@shared/chat'
 
 const MAX_STEPS = 60
 
+/**
+ * Preâmbulo de precedência injetado ANTES do prompt da fase. É ele que garante
+ * que instruções da descrição da task (como commitar, não commitar, como
+ * validar) vençam o que o prompt da fase manda por padrão — porque o prompt da
+ * fase vive no `system`, que muitos modelos tratam como mais forte que a
+ * mensagem do usuário. Sem isso, um "não crie commit" na descrição poderia ser
+ * atropelado por um "commit locally" do template.
+ *
+ * O que NÃO é negociável é o escopo: a fase continua fazendo só o trabalho
+ * dela (validação não implementa, dev não dá push), independente do que a
+ * descrição peça. Precedência da descrição vale para o COMO fazer o próprio
+ * trabalho, não para o QUE é o trabalho de cada fase.
+ */
+const PRECEDENCIA = `The task description in the user message is your PRIMARY brief and takes precedence over this phase prompt. Where the two conflict — including how to commit, whether to create a commit at all, or how to validate — follow the task description, not this prompt. This precedence does NOT change your scope: you still do only your phase's job as defined here, and never push (the engine pushes).`
+
 export interface ContextoFase {
   esteira: Esteira
   task: Task
@@ -150,18 +165,61 @@ function sendInputSintetico(ctx: ContextoFase): SendMessageInput {
 }
 
 /**
+ * Índice da fase responsável por validar. A validação é exclusiva da fase de
+ * validação quando ela existe; sem ela, a responsabilidade cai para a fase de
+ * desenvolvimento (ou, na ausência desta, para a última fase — a "próxima" do
+ * que o usuário descreveu, última chance antes de fechar).
+ */
+function faseValidadora(fases: FaseConfig[]): number {
+  const idx = fases.findIndex((f) => (f.tipo ?? 'generico') === 'validacao')
+  if (idx >= 0) return idx
+  const dev = fases.findIndex((f) => (f.tipo ?? 'generico') === 'desenvolvimento')
+  if (dev >= 0) return dev
+  return fases.length - 1
+}
+
+/**
  * Contexto de entrada da fase (§7): descrição da task, anotações anteriores e
  * estado do repo. É o que substitui o histórico de conversa.
+ *
+ * A descrição da task é a BASE comum a todas as fases. O que muda é o escopo:
+ * cada fase recebe a lista completa do pipeline para saber o que é dela e o que
+ * deve deixar para a próxima.
  */
 function montarMensagem(ctx: ContextoFase): string {
   const partes: string[] = []
   partes.push(`# Task: ${ctx.task.titulo}`)
   if (ctx.task.descricao.trim()) partes.push(ctx.task.descricao.trim())
 
+  const fases = ctx.esteira.fases
+  const indice = ctx.indiceFase
+  const listaFases = fases
+    .map((f, i) => {
+      const marcador = i === indice ? ' ← YOU ARE HERE' : i < indice ? ' (done)' : ''
+      return `${i + 1}. ${f.nome} — ${f.descricao}${marcador}`
+    })
+    .join('\n')
+
   partes.push(
-    `\n## Pipeline\nPhase ${ctx.indiceFase + 1} of ${ctx.esteira.fases.length}: **${ctx.fase.nome}**.\n` +
-      `Phases run in a fixed order and never go back. Everything the following phases will know about your work comes from your note.`,
+    `\n## Pipeline\n` +
+      `This task runs through ${fases.length} phases in a fixed order, without going back. You are phase ${indice + 1}: **${ctx.fase.nome}**.\n\n` +
+      `${listaFases}\n\n` +
+      `Each phase does only its own job. Do NOT do the work of a later phase — leave it to them.\n\n` +
+      `The task description above is your PRIMARY brief. Its instructions OVERRIDE this phase's default behavior wherever they conflict — including how to commit, whether to commit, how to validate, etc. ` +
+      `Follow the parts that belong to your phase and ignore instructions meant for other phases in the Pipeline. ` +
+      `The notes from previous phases (below) are context for what already happened, not new instructions.`,
   )
+
+  // Fallback de validação: sem uma fase de validação, quem valida é a fase
+  // apontada por faseValidadora — mas só injeta o aviso quando ela não é uma
+  // fase de validação (a fase de validação já carrega isso no próprio prompt).
+  const validadora = faseValidadora(fases)
+  if (validadora === indice && (ctx.fase.tipo ?? 'generico') !== 'validacao') {
+    partes.push(
+      `\n## No dedicated validation phase\n` +
+        `This pipeline has no validation phase, so validating is also your responsibility before you finish: run the applicable checks (build/typecheck/lint/tests), review the diff, and fix small problems. Record the result in your note.`,
+    )
+  }
 
   const anteriores = ctx.task.anotacoes.filter((a) => a.status !== 'pulada')
   if (anteriores.length > 0) {
@@ -297,7 +355,7 @@ export async function executarFase(ctx: ContextoFase): Promise<ResultadoFase> {
   try {
     const stream = streamText({
       model,
-      system: ctx.fase.prompt,
+      system: `${PRECEDENCIA}\n\n${ctx.fase.prompt}`,
       messages: normalizeMessages(
         [{ role: 'user', content: montarMensagem(ctx) }],
         interleavedReasoningField(provider, ctx.fase.modelId),
