@@ -16,6 +16,7 @@ import {
   Square,
   Settings2,
   RefreshCw,
+  Eye,
 } from 'lucide-react-native'
 import { Image } from 'expo-image'
 import { useTranslation } from 'react-i18next'
@@ -26,6 +27,7 @@ import { ContextMeter } from './ContextMeter'
 import { ModelPicker } from './ModelPicker'
 import { AttachmentSheet } from './AttachmentSheet'
 import { WorkerModelModal } from './WorkerModelModal'
+import { VisionConfigModal } from './VisionConfigModal'
 import { LoopConfigModal } from './LoopConfigModal'
 import { InputAttachment } from './Attachment'
 import { ConfigSheet } from './ConfigSheet'
@@ -43,6 +45,7 @@ import { SendButtonGroup } from './SendButtonGroup'
 import { QueueIndicator } from './QueueIndicator'
 import { ScheduleSheet } from './ScheduleSheet'
 import { useMessageQueueStore } from '~/stores/message-queue-store'
+import { useSessionStore } from '~/stores/session-store'
 import { useDraftInput } from '~/stores/draft-input-store'
 import { setInputDraft, getInputDraft } from '~/stores/chat-draft-store'
 
@@ -81,6 +84,13 @@ export function PromptInput({
   const prevSessionIdRef = useRef(sessionId)
   const textRef = useRef(text)
   textRef.current = text
+
+  // Plano aceito → desliga o toggle de modo plano: a próxima mensagem não
+  // deve gerar outro plano.
+  const planReview = useSessionStore((s) => (sessionId ? s.planReviews[sessionId] : undefined))
+  useEffect(() => {
+    if (planReview?.status === 'implementing') setPlan(false)
+  }, [planReview])
 
   // Restaura texto do input ao trocar de chat (per-chat draft)
   useEffect(() => {
@@ -148,6 +158,11 @@ export function PromptInput({
   const workerModelLabel = workerModel && catalog
     ? catalog[workerModel.providerId]?.models[workerModel.modelId]?.name ?? `${workerModel.providerId}/${workerModel.modelId}`
     : null
+  const visionEnabled = useSettingsStore((s) => s.visionEnabled)
+  const visionModel = useSettingsStore((s) => s.visionModel)
+  const visionConfigOpen = useSettingsStore((s) => s.visionConfigOpen)
+  const setVisionEnabled = useSettingsStore((s) => s.setVisionEnabled)
+  const setVisionConfigOpen = useSettingsStore((s) => s.setVisionConfigOpen)
   const displayMode = useAppearanceStore((s) => s.displayMode)
 
   useEffect(() => {
@@ -178,8 +193,28 @@ export function PromptInput({
   const inputRef = useRef<TextInput>(null)
 
   const toggleMode = useCallback((id: string) => {
+    // Modo Visão vive na settings-store (não no activeModes local) — ativar
+    // sem modelo configurado abre a configuração (mesmo gate do desktop).
+    if (id === 'vision') {
+      const st = useSettingsStore.getState()
+      const next = !st.visionEnabled
+      if (next && !st.visionModel) {
+        setVisionConfigOpen(true)
+        return
+      }
+      void setVisionEnabled(next)
+      return
+    }
     setActiveModes((prev) => ({ ...prev, [id]: !prev[id] }))
-  }, [])
+  }, [setVisionConfigOpen, setVisionEnabled])
+
+  // Gate de configuração (espelho do useModelConfigPrompt do desktop): se o
+  // modo está ativo sem modelo, abre a configuração automaticamente.
+  useEffect(() => {
+    if (visionEnabled && !visionModel && !visionConfigOpen) {
+      setVisionConfigOpen(true)
+    }
+  }, [visionEnabled, visionModel, visionConfigOpen, setVisionConfigOpen])
 
   const handlePickFiles = async () => {
     setPlusOpen(false)
@@ -510,7 +545,7 @@ export function PromptInput({
             </Pressable>
           )}
           {modesList.map((mode) => {
-            const isActive = activeModes[mode.id] ?? false
+            const isActive = mode.id === 'vision' ? visionEnabled : activeModes[mode.id] ?? false
             const IconComponent = mode.icon
             return (
               <Pressable
@@ -562,6 +597,7 @@ export function PromptInput({
         ]}
         configModes={[
           ...(workspaceMode === 'code' ? [{ id: 'plan', icon: FileText, label: t('promptInput.modes.plan'), active: plan, onToggle: () => setPlan((v) => !v) }] : []),
+          { id: 'vision', icon: Eye, label: t('promptInput.modes.vision'), active: visionEnabled, onToggle: () => toggleMode('vision'), onConfigure: () => { setPlusOpen(false); setVisionConfigOpen(true) } },
           { id: 'subagents', icon: Bot, label: t('promptInput.modes.subagents'), active: subagents, onToggle: () => setSubagents((v) => !v), onConfigure: () => { setPlusOpen(false); setWorkerConfigOpen(true) } },
           ...(workspaceMode === 'code' ? [{ id: 'orchestra', icon: Network, label: t('promptInput.modes.orchestra'), active: orchestra, onToggle: () => setOrchestra((v) => !v), onConfigure: () => { setPlusOpen(false); setWorkerConfigOpen(true) } }] : []),
           { id: 'loop', icon: RefreshCw, label: t('promptInput.modes.loop'), active: loop, onToggle: () => setLoop((v) => !v), onConfigure: () => { setPlusOpen(false); setLoopConfigOpen(true) } },
@@ -591,6 +627,12 @@ export function PromptInput({
           setConfigOpen(false)
           setWorkerConfigOpen(true)
         }}
+        vision={visionEnabled}
+        onVisionToggle={() => toggleMode('vision')}
+        onConfigureVision={() => {
+          setConfigOpen(false)
+          setVisionConfigOpen(true)
+        }}
         onConfigureLoop={() => {
           setConfigOpen(false)
           setLoopConfigOpen(true)
@@ -604,6 +646,7 @@ export function PromptInput({
       />
 
       <WorkerModelModal visible={workerConfigOpen} onClose={() => setWorkerConfigOpen(false)} />
+      <VisionConfigModal visible={visionConfigOpen} onClose={() => setVisionConfigOpen(false)} />
       <LoopConfigModal visible={loopConfigOpen} onClose={() => setLoopConfigOpen(false)} />
       <ScheduleSheet
         visible={scheduleSheetVisible}

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Modal, View, Text, Pressable, Animated, Switch, StyleSheet, ScrollView, Dimensions, ActivityIndicator } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
-import { Shield, ShieldCheck, ShieldOff, Brain, Check, Bot, Network, FileText, RefreshCw, ChevronRight, Settings2, GitBranch } from 'lucide-react-native'
+import { Shield, ShieldCheck, ShieldOff, Brain, Check, Bot, Network, FileText, RefreshCw, ChevronRight, Settings2, GitBranch, Eye } from 'lucide-react-native'
 import type { LucideIcon } from 'lucide-react-native'
 import { useTranslation } from 'react-i18next'
 import type { ModelVariant } from '@orbit/shared'
@@ -42,6 +42,9 @@ interface Props {
   mode?: "chat" | "code"
   workerModelLabel: string | null
   onConfigureWorkers: () => void
+  vision: boolean
+  onVisionToggle: () => void
+  onConfigureVision: () => void
   onConfigureLoop?: () => void
   displayMode?: DisplayMode
   gitBranches?: string[]
@@ -71,6 +74,9 @@ export function ConfigSheet({
   onLoopToggle,
   workerModelLabel,
   onConfigureWorkers,
+  vision,
+  onVisionToggle,
+  onConfigureVision,
   onConfigureLoop,
   displayMode,
   mode,
@@ -283,6 +289,36 @@ export function ConfigSheet({
                 </Text>
                 <ChevronRight size={14} color={tokens.mutedForeground} />
               </Pressable>
+            )}
+          </View>
+          )}
+
+          {/* Visão — só no modo toggles */}
+          {displayMode === 'toggles' && (
+          <View style={[s.card, { borderColor: tokens.border }]}>
+            <View style={s.cardRow}>
+              <View style={s.cardRowLeft}>
+                <Eye size={18} color={tokens.mutedForeground} />
+                <Text style={[s.cardLabel, { color: tokens.foreground }]}>{t('configSheet.vision')}</Text>
+              </View>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                {vision && (
+                  <Pressable onPress={onConfigureVision} hitSlop={8} style={[s.gearBtn, { backgroundColor: tokens.muted }]}>
+                    <Settings2 size={16} color={tokens.mutedForeground} />
+                  </Pressable>
+                )}
+                <Switch
+                  value={vision}
+                  onValueChange={onVisionToggle}
+                  trackColor={{ false: tokens.muted, true: tokens.primary }}
+                  thumbColor={tokens.foreground}
+                />
+              </View>
+            </View>
+            {vision && (
+              <Text style={[s.hint, { color: tokens.mutedForeground }]}>
+                {t('configSheet.visionHint')}
+              </Text>
             )}
           </View>
           )}
