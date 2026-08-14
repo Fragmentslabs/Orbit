@@ -554,14 +554,17 @@ async function getGitLog(repoPath: string): Promise<{ ok: true; commits: CommitE
     try {
       const { stdout: refsOut } = await execFileAsync(
         'git',
-        ['for-each-ref', '--format=%(refname)%1F%(objectname)', 'refs/heads', 'refs/remotes', 'refs/tags'],
+        ['for-each-ref', '--format=%(refname)%1F%(objectname)%1F%(*objectname)', 'refs/heads', 'refs/remotes', 'refs/tags'],
         { cwd: repoPath, maxBuffer: 10 * 1024 * 1024 },
       )
       for (const line of refsOut.split('\n')) {
-        const sep = line.indexOf('\x1f')
-        if (sep <= 0) continue
-        const ref = line.slice(0, sep)
-        const hash = line.slice(sep + 1).trim()
+        const parts = line.split('\x1f')
+        if (parts.length < 2 || !parts[0]) continue
+        const ref = parts[0]
+        // Tags anotadas: %(objectname) é o objeto da tag; %(*objectname) é o
+        // commit alvo (peeled). Para branches/remotes/lightweight tags o
+        // peeled vem vazio e usamos o objectname direto.
+        const hash = (parts[2] || parts[1]).trim()
         if (!hash) continue
         const arr = refsByHash.get(hash) ?? []
         arr.push(ref)
