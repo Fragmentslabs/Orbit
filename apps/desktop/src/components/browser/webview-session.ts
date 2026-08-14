@@ -54,9 +54,24 @@ interface WebviewRecord {
   lastUsed: number
 }
 
-/** Tamanho do host oculto — só importa enquanto a aba está "desmontada". */
+/** Tamanho do host oculto quando NÃO há viewport definido (equivale ao painel
+ *  aberto preenchendo o container). */
 const HIDDEN_WIDTH = 1280
 const HIDDEN_HEIGHT = 800
+
+/**
+ * Tamanho efetivo do host oculto: quando o agente define um viewport
+ * (panel_resize), o browser em segundo plano renderiza nele — o screenshot
+ * sai no tamanho escolhido MESMO com o painel fechado (teste de
+ * responsividade em background de verdade). Sem viewport, assume o tamanho
+ * padrão do painel.
+ */
+function hiddenHostSize(): { width: number; height: number } {
+  const viewport = usePanelStore.getState().viewport
+  return viewport
+    ? { width: viewport.width, height: viewport.height }
+    : { width: HIDDEN_WIDTH, height: HIDDEN_HEIGHT }
+}
 
 /**
  * TTL de webviews desmontados (aba fechada e browser do agente ocioso): depois
@@ -188,14 +203,35 @@ let hiddenHost: HTMLDivElement | null = null
 
 function getHiddenHost(): HTMLDivElement {
   if (!hiddenHost) {
+    const size = hiddenHostSize()
     hiddenHost = document.createElement("div")
     hiddenHost.style.cssText =
-      `position: fixed; top: -10000px; left: -10000px; width: ${HIDDEN_WIDTH}px; height: ${HIDDEN_HEIGHT}px;` +
+      `position: fixed; top: -10000px; left: -10000px; width: ${size.width}px; height: ${size.height}px;` +
       "opacity: 0; pointer-events: none; z-index: -1;"
     document.body.appendChild(hiddenHost)
   }
   return hiddenHost
 }
+
+/**
+ * Mantém o host oculto no tamanho do viewport do store (panel_resize do
+ * agente). A UI visível já é dimensionada pelo wrapper do web-preview.tsx —
+ * aqui é o equivalente para o browser em segundo plano com o painel fechado:
+ * sem isso, o print sairia sempre em 1280×800, ignorando o viewport.
+ */
+function applyHiddenHostSize(): void {
+  if (!hiddenHost) return
+  const { width, height } = hiddenHostSize()
+  if (hiddenHost.style.width !== `${width}px`) hiddenHost.style.width = `${width}px`
+  if (hiddenHost.style.height !== `${height}px`) hiddenHost.style.height = `${height}px`
+}
+
+// O host oculto segue o viewport do store. Se o resize chegar antes de
+// qualquer webview existir, o getHiddenHost() já cria no tamanho atual — o
+// subscribe só precisa atualizar quando o host já foi criado.
+usePanelStore.subscribe((state, prev) => {
+  if (state.viewport !== prev.viewport) applyHiddenHostSize()
+})
 
 /**
  * O `src` fica FIXO em about:blank pelo resto da vida do elemento. Ele é o que

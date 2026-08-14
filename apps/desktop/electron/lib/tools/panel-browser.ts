@@ -5,8 +5,10 @@ import { z } from 'zod'
 import { getMediaEntry, mediaIdFromUrl, saveMedia } from '../media'
 import { captureUrl } from '../browser-script'
 import {
+  PanelCaptureError,
   panelClick,
   panelCurrentUrl,
+  panelLastViewport,
   panelNavigate,
   panelRead,
   panelResize,
@@ -19,6 +21,9 @@ import { describeImage } from '../vision'
 const IMAGE_EXTENSIONS = new Set(['png', 'jpg', 'jpeg', 'webp', 'gif'])
 /** Limite de tamanho para imagem enviada ao modelo via toModelOutput (300KB). */
 const MAX_MODEL_IMAGE_BYTES = 300_000
+/** Timeout total da tool (captura + descrição de visão + save): a tool nunca
+ *  pode travar o turno — sem `ver`, não há chamada de LLM nenhuma. */
+const SCREENSHOT_TIMEOUT_MS = 45_000
 
 /** Presets de viewport para teste de responsividade. */
 const VIEWPORT_PRESETS: Record<string, { width: number | null; height: number | null; label: string }> = {
@@ -43,6 +48,10 @@ const screenshotStash = new Map<
   | { base64: string; format: 'webp' | 'png' }
   | { text: string }
 >()
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
 
 export function createPanelBrowserTools(ctx: ToolContext): ToolSet {
   return {
@@ -143,63 +152,95 @@ export function createPanelBrowserTools(ctx: ToolContext): ToolSet {
       ) as any,
       execute: async ({ savePath, fullscreen, fullPage, format, maxWidth, ver }, { toolCallId }) => {
         const outFormat: 'webp' | 'png' = format === 'png' ? 'png' : 'webp'
-        let image: Buffer
-        if (fullPage) {
-          // Página inteira: nunca redimensionamos o webview visível (piscaria a
-          // UI). Capturamos numa janela oculta com a MESMA URL e sessão.
-          const url = panelCurrentUrl(ctx.sessionId)
-          if (!url) return 'O browser do painel não tem uma página aberta — use panel_navigate antes.'
-          image = await captureUrl({
-            url,
-            sessionId: ctx.sessionId,
-            fullPage: true,
-            format: outFormat,
-            maxWidth,
-          })
-        } else {
-          image = await panelScreenshot(ctx.sessionId, fullscreen === true, {
-            format: outFormat,
-            maxWidth,
-          })
-        }
-        const mediaUrl = await saveMedia(image, outFormat, {
-          source: 'screenshot',
-          sessionId: ctx.sessionId,
-          name: savePath ?? (fullPage ? 'fullPage' : 'panel'),
-        })
-        let loaded = ''
-        if (ver === true) {
-          if (ctx.visionModel) {
-            // Modo Visão ativo: delega SEMPRE (mesmo para modelo com visão
-            // nativa) — apenas a descrição entra no contexto, a imagem nunca
-            // (economia de tokens no histórico; o agente não muda de jeito).
-            const desc = await describeImage({
-              model: ctx.visionModel,
-              imageDataUrl: `data:image/${outFormat};base64,${image.toString('base64')}`,
+        const run = async (): Promise<string> => {
+          let image: Buffer
+          let fallbackNote = ''
+          if (fullPage) {
+            // Página inteira: nunca redimensionamos o webview visível (piscaria a
+            // UI). Capturamos numa janela oculta com a MESMA URL e sessão — e no
+            // mesmo viewport do panel_resize (responsividade vale também aqui).
+            const url = panelCurrentUrl(ctx.sessionId)
+            if (!url) return 'O browser do painel não tem uma página aberta — use panel_navigate antes.'
+            image = await captureUrl({
+              url,
+              sessionId: ctx.sessionId,
+              fullPage: true,
+              format: outFormat,
+              maxWidth,
+              viewport: panelLastViewport() ?? undefined,
             })
-            if (desc) {
-              screenshotStash.set(toolCallId, { text: desc })
-              loaded = ` Descrição gerada pelo modelo de visão (${ctx.visionModel.modelId}) carregada no seu contexto (ver: true).`
-            } else {
-              loaded = ' (ver: true — o modelo de visão configurado não conseguiu descrever a imagem; nenhuma descrição foi carregada.)'
-            }
-          } else if (ctx.modelVision) {
-            // Visão nativa, modo Visão desligado: imagem no contexto.
-            screenshotStash.set(toolCallId, { base64: image.toString('base64'), format: outFormat })
-            loaded = ' Imagem carregada no seu contexto (ver: true).'
           } else {
-            loaded = ' (ver: true ignorado — este modelo não tem visão; a imagem NÃO foi carregada no contexto.)'
+            try {
+              image = await panelScreenshot(ctx.sessionId, fullscreen === true, {
+                format: outFormat,
+                maxWidth,
+              })
+            } catch (err) {
+              if (!(err instanceof PanelCaptureError)) throw err
+              // Webview do painel sem pintura (oculto/0×0) ou travado: em vez de
+              // falhar a tool, captura a MESMA URL na janela oculta (que pinta
+              // mesmo escondida) — o print sai do mesmo jeito, no mesmo viewport.
+              const url = panelCurrentUrl(ctx.sessionId)
+              if (!url || url.startsWith('about:')) throw err
+              image = await captureUrl({
+                url,
+                sessionId: ctx.sessionId,
+                format: outFormat,
+                maxWidth,
+                viewport: panelLastViewport() ?? undefined,
+              })
+              fallbackNote =
+                ' (webview do painel sem pintura — capturado na janela oculta com a mesma URL; o estado pode diferir levemente)'
+            }
           }
+          const mediaUrl = await saveMedia(image, outFormat, {
+            source: 'screenshot',
+            sessionId: ctx.sessionId,
+            name: savePath ?? (fullPage ? 'fullPage' : 'panel'),
+          })
+          let loaded = ''
+          if (ver === true) {
+            if (ctx.visionModel) {
+              // Modo Visão ativo: delega SEMPRE (mesmo para modelo com visão
+              // nativa) — apenas a descrição entra no contexto, a imagem nunca
+              // (economia de tokens no histórico; o agente não muda de jeito).
+              const desc = await describeImage({
+                model: ctx.visionModel,
+                imageDataUrl: `data:image/${outFormat};base64,${image.toString('base64')}`,
+              })
+              if (desc) {
+                screenshotStash.set(toolCallId, { text: desc })
+                loaded = ` Descrição gerada pelo modelo de visão (${ctx.visionModel.modelId}) carregada no seu contexto (ver: true).`
+              } else {
+                loaded = ' (ver: true — o modelo de visão configurado não conseguiu descrever a imagem; nenhuma descrição foi carregada.)'
+              }
+            } else if (ctx.modelVision) {
+              // Visão nativa, modo Visão desligado: imagem no contexto.
+              screenshotStash.set(toolCallId, { base64: image.toString('base64'), format: outFormat })
+              loaded = ' Imagem carregada no seu contexto (ver: true).'
+            } else {
+              loaded = ' (ver: true ignorado — este modelo não tem visão; a imagem NÃO foi carregada no contexto.)'
+            }
+          }
+          let saved = ''
+          if (savePath) {
+            const saveName = savePath.replace(/\.[^/.]+$/, '') + `.${outFormat}`
+            const target = resolveSafePath(ctx, saveName)
+            await fsp.mkdir(path.dirname(target), { recursive: true })
+            await fsp.writeFile(target, image)
+            saved = ` Salvo em ${saveName}.`
+          }
+          return `Screenshot capturado (${Math.round(image.length / 1024)}KB${fullPage ? ', página inteira' : ''}). Mídia: ${mediaUrl}${saved}${loaded}${fallbackNote}`
         }
-        let saved = ''
-        if (savePath) {
-          const saveName = savePath.replace(/\.[^/.]+$/, '') + `.${outFormat}`
-          const target = resolveSafePath(ctx, saveName)
-          await fsp.mkdir(path.dirname(target), { recursive: true })
-          await fsp.writeFile(target, image)
-          saved = ` Salvo em ${saveName}.`
+        const SCREENSHOT_TIMED_OUT = Symbol('screenshotTimedOut')
+        const outcome = await Promise.race([
+          run(),
+          delay(SCREENSHOT_TIMEOUT_MS).then(() => SCREENSHOT_TIMED_OUT),
+        ])
+        if (outcome === SCREENSHOT_TIMED_OUT) {
+          return `A captura excedeu ${Math.round(SCREENSHOT_TIMEOUT_MS / 1000)}s e foi abandonada (o browser pode estar travado). Tente de novo; se persistir, use run_browser_script/capture_batch, que rodam numa janela oculta independente.`
         }
-        return `Screenshot capturado (${Math.round(image.length / 1024)}KB${fullPage ? ', página inteira' : ''}). Mídia: ${mediaUrl}${saved}${loaded}`
+        return outcome
       },
       toModelOutput: ({ toolCallId, output }) => {
         const stashed = screenshotStash.get(toolCallId)

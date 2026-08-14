@@ -1,4 +1,4 @@
-import { BrowserWindow, webContents, type WebContents } from 'electron'
+import { BrowserWindow, webContents, type NativeImage, type WebContents } from 'electron'
 import sharp from 'sharp'
 
 /**
@@ -16,8 +16,39 @@ import sharp from 'sharp'
 
 const REGISTER_TIMEOUT_MS = 10_000
 const LOAD_TIMEOUT_MS = 20_000
+/** Tempo máximo que um capturePage pode levar (renderer ocupado/travado). */
+const CAPTURE_TIMEOUT_MS = 10_000
+/** Tentativas de captura antes de desistir (o webview pode estar em repaint). */
+const CAPTURE_ATTEMPTS = 3
+const CAPTURE_RETRY_DELAY_MS = 500
+
+/**
+ * Falha de captura do webview do painel (vazio ou timeout). A tool
+ * panel_screenshot usa o `reason` para decidir o fallback (janela oculta).
+ */
+export class PanelCaptureError extends Error {
+  constructor(
+    message: string,
+    readonly reason: 'empty' | 'timeout',
+  ) {
+    super(message)
+  }
+}
 
 const panelWcs = new Map<string, number>()
+
+/**
+ * Último viewport pedido pelo agente (panel_resize). O renderer aplica no
+ * host oculto do webview; aqui serve para as capturas de FALLBACK na janela
+ * oculta (captureUrl) saírem no MESMO tamanho — sem isso, um print mobile
+ * viraria desktop quando o webview do painel falha. null = "preenche o
+ * painel" (janela oculta usa o default 1280×800).
+ */
+let lastViewport: { width: number; height: number } | null = null
+
+export function panelLastViewport(): { width: number; height: number } | null {
+  return lastViewport
+}
 
 export function registerPanelWebContents(sessionId: string | null, id: number | null): void {
   if (!sessionId) return
@@ -107,6 +138,7 @@ export async function panelResize(
 ): Promise<string> {
   await ensurePanelBrowser(sessionId)
   activity(`Redimensionando para ${label}`, sessionId)
+  lastViewport = width && height ? { width, height } : null
   broadcastPanelEvent({ type: 'resize', width, height, label })
   await delay(700) // deixa o layout refluir na nova largura
   return width
@@ -258,16 +290,45 @@ export async function panelScreenshot(
 ): Promise<Buffer> {
   const wc = await ensurePanelBrowser(sessionId)
   activity('Capturando a tela', sessionId)
+
+  /**
+   * Captura com proteções: o capturePage do webview oculto do painel devolve
+   * imagem VAZIA quando o webview não está pintado (host oculto, 0×0 após
+   * resize) e pode nunca resolver quando o renderer está ocupado — os dois
+   * casos viravam "Input buffer is empty" do sharp ou travavam a tool.
+   */
   const capture = async (defaultWidth: number) => {
     const maxWidth = options?.maxWidth ?? defaultWidth
-    const image = await wc.capturePage()
-    const { width } = image.getSize()
-    const resized = width > maxWidth ? image.resize({ width: maxWidth }) : image
-    const pipeline = sharp(resized.toPNG())
-    return options?.format === 'png'
-      ? await pipeline.png().toBuffer()
-      : await pipeline.webp({ quality: 80 }).toBuffer()
+    const CAPTURE_TIMED_OUT = Symbol('captureTimedOut')
+    let timedOut = false
+    for (let attempt = 1; attempt <= CAPTURE_ATTEMPTS; attempt += 1) {
+      const outcome = await Promise.race<NativeImage | typeof CAPTURE_TIMED_OUT>([
+        wc.capturePage(),
+        delay(CAPTURE_TIMEOUT_MS).then(() => CAPTURE_TIMED_OUT),
+      ])
+      if (outcome !== CAPTURE_TIMED_OUT) {
+        const png = outcome.toPNG()
+        if (!outcome.isEmpty() && png.length > 0) {
+          const { width } = outcome.getSize()
+          const resized = width > maxWidth ? outcome.resize({ width: maxWidth }) : outcome
+          const pipeline = sharp(resized.toPNG())
+          return options?.format === 'png'
+            ? await pipeline.png().toBuffer()
+            : await pipeline.webp({ quality: 80 }).toBuffer()
+        }
+      } else {
+        timedOut = true
+      }
+      if (attempt < CAPTURE_ATTEMPTS) await delay(CAPTURE_RETRY_DELAY_MS)
+    }
+    throw new PanelCaptureError(
+      timedOut
+        ? 'O webview do painel não respondeu à captura a tempo — o browser pode estar ocupado ou travado; tente de novo (ou panel_navigate) e, se persistir, abra o painel.'
+        : 'O webview do painel está oculto ou sem pintura (captura vazia) — o browser precisa estar visível; tente panel_resize desktop ou abra o painel e capture de novo.',
+      timedOut ? 'timeout' : 'empty',
+    )
   }
+
   if (!fullscreen) return capture(1024)
   await panelFullscreen(true)
   try {
