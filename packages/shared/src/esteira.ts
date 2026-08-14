@@ -30,6 +30,13 @@ export interface Projeto {
  */
 export type ToolPermitida = 'leitura' | 'edit' | 'shell' | 'browser' | 'memoria'
 
+/**
+ * Papel da fase no pipeline. Define o que a fase faz — e o que ela deixa para
+ * as próximas — independentemente do nome que o usuário der a ela. É o que
+ * permite rotear responsabilidades (ex.: validar) mesmo em fases customizadas.
+ */
+export type FaseTipo = 'desenvolvimento' | 'validacao' | 'seguranca' | 'revisao' | 'infra' | 'generico'
+
 export interface FaseConfig {
   id: string
   nome: string
@@ -44,6 +51,11 @@ export interface FaseConfig {
   tools: ToolPermitida[]
   /** Posição na sequência — a execução segue a ordem crescente, sem pular */
   ordem: number
+  /**
+   * Papel da fase no pipeline. Opcional por retrocompatibilidade: esteiras
+   * gravadas antes deste campo lêem como 'generico' no consumo.
+   */
+  tipo?: FaseTipo
 }
 
 /** Template de fases do sistema: as fases são COPIADAS ao criar a esteira,
@@ -60,6 +72,8 @@ export interface FaseTemplate {
   custom?: boolean
   /** Chave de i18n do nome/descrição (fases embutidas). Ausente nas do usuário. */
   i18nKey?: string
+  /** Papel da fase no pipeline (define responsabilidades além do nome/prompt). */
+  tipo: FaseTipo
 }
 
 /** Fase já resolvida no modal de criação — pode ter sido editada só para esta
@@ -71,6 +85,8 @@ export interface FaseEscolhida {
   descricao: string
   prompt: string
   tools: ToolPermitida[]
+  /** Papel da fase no pipeline. */
+  tipo: FaseTipo
 }
 
 // ─── Política de comandos ────────────────────────────────────────────────────

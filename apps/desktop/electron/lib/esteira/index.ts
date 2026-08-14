@@ -72,7 +72,11 @@ function agora(): string {
 export async function listarTemplates(): Promise<FaseTemplate[]> {
   const custom = await listarTemplatesCustom()
   const porId = new Map(FASE_TEMPLATES.map((t) => [t.id, t]))
-  for (const t of custom) porId.set(t.id, { ...t, custom: true })
+  for (const t of custom) {
+    // Templates antigos (gravados antes do campo `tipo`) herdam o papel do
+    // embutido de mesmo id; fases novas do usuário caem em 'generico'.
+    porId.set(t.id, { ...t, tipo: t.tipo ?? porId.get(t.id)?.tipo ?? 'generico', custom: true })
+  }
   return [...porId.values()]
 }
 
@@ -163,6 +167,7 @@ async function copiarFases(input: NovaEsteiraInput): Promise<FaseConfig[]> {
     descricao: t.descricao,
     prompt: t.prompt,
     tools: t.tools,
+    tipo: t.tipo,
   })
 
   let escolhidas = input.fases
@@ -183,6 +188,7 @@ async function copiarFases(input: NovaEsteiraInput): Promise<FaseConfig[]> {
     modelId: input.modelId,
     thinkingNivel: input.thinkingNivel ?? 0,
     tools: [...fase.tools],
+    tipo: fase.tipo,
     ordem,
   }))
 }

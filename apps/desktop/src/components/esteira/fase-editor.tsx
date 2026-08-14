@@ -1,12 +1,13 @@
 import { useEffect, useState } from "react"
 import { useTranslation } from "react-i18next"
-import type { FaseEscolhida, ToolPermitida } from "@shared/esteira"
+import type { FaseEscolhida, FaseTipo, ToolPermitida } from "@shared/esteira"
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 
 const CAPACIDADES: ToolPermitida[] = ["leitura", "edit", "shell", "browser", "memoria"]
+const TIPOS: FaseTipo[] = ["desenvolvimento", "validacao", "seguranca", "revisao", "infra", "generico"]
 
 /**
  * Editor de fase: nome, descrição, prompt e capacidades.
@@ -35,6 +36,7 @@ export function FaseEditor({
   const [descricao, setDescricao] = useState("")
   const [prompt, setPrompt] = useState("")
   const [tools, setTools] = useState<ToolPermitida[]>(["leitura"])
+  const [tipo, setTipo] = useState<FaseTipo>("generico")
 
   useEffect(() => {
     if (!aberto) return
@@ -42,6 +44,7 @@ export function FaseEditor({
     setDescricao(fase?.descricao ?? "")
     setPrompt(fase?.prompt ?? "")
     setTools(fase?.tools ?? ["leitura", "edit", "shell"])
+    setTipo(fase?.tipo ?? "generico")
   }, [aberto, fase])
 
   const alternarTool = (tool: ToolPermitida) => {
@@ -59,6 +62,7 @@ export function FaseEditor({
         descricao: descricao.trim(),
         prompt: prompt.trim(),
         tools,
+        tipo,
       },
       comoPadrao,
     )
@@ -84,6 +88,22 @@ export function FaseEditor({
               className="h-8 text-sm"
               placeholder={t("esteira.faseDescricaoDica")}
             />
+          </div>
+
+          <div className="space-y-1">
+            <p className="text-xs font-medium">{t("esteira.faseTipo")}</p>
+            <p className="text-[11px] text-muted-foreground">{t("esteira.faseTipoDica")}</p>
+            <select
+              value={tipo}
+              onChange={(e) => setTipo(e.target.value as FaseTipo)}
+              className="h-8 w-full rounded-md border bg-transparent px-2 text-sm outline-none focus-visible:border-ring"
+            >
+              {TIPOS.map((tipoOpcao) => (
+                <option key={tipoOpcao} value={tipoOpcao} className="bg-popover text-popover-foreground">
+                  {t(`esteira.tipo.${tipoOpcao}`)}
+                </option>
+              ))}
+            </select>
           </div>
 
           <div className="space-y-1">
