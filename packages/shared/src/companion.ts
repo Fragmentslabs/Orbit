@@ -55,6 +55,8 @@ export interface SendMessageRequest {
   files?: FilePart[]
   /** Modelo dos workers (subagentes/orquestração), configurado no app. */
   workerModel?: WorkerModelConfig
+  /** Modelo de visão delegado (modo Visão), configurado no app. */
+  visionModel?: WorkerModelConfig
   /** Pasta principal (modo código) — persiste na sessão ao enviar. */
   directory?: string
   /** Pastas adicionais (modo código). */

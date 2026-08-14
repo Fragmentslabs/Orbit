@@ -434,6 +434,7 @@ async function handleRequest(client: ConnectedClient, requestId: string, req: Co
           directory: req.directory ?? session.directory,
           extraDirectories: req.extraDirectories ?? session.extraDirectories,
           workerModel: req.workerModel,
+          visionModel: req.visionModel,
         }
 
         void runChat(win, input)
