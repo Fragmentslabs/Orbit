@@ -22,7 +22,7 @@ function shortUrl(url: string): string {
   }
 }
 
-export function BrowserTestChip({ sessionId, className }: { sessionId?: string; className?: string }) {
+export function BrowserTestChip({ sessionId, className, compact }: { sessionId?: string; className?: string; compact?: boolean }) {
   const { t } = useTranslation()
   const entry = usePanelStore((s) => (sessionId ? s.agentBrowser[sessionId] : undefined))
   const [, setTick] = useState(0)
@@ -37,10 +37,12 @@ export function BrowserTestChip({ sessionId, className }: { sessionId?: string; 
   if (!sessionId || !entry) return null
   if (Date.now() - entry.at > AGENT_BROWSER_FRESH_MS) return null
 
+  const label = compact && entry.url ? `${t("chat.browser.viewAgentBrowser")} — ${entry.url}` : t("chat.browser.viewAgentBrowser")
+
   return (
     <button
       type="button"
-      title={t("chat.browser.viewAgentBrowser")}
+      title={label}
       onClick={() => usePanelStore.getState().openAgentBrowser(sessionId)}
       className={cn(
         "group inline-flex max-w-full items-center gap-1.5 self-start rounded-full border border-emerald-500/30 bg-background/90 px-2.5 py-1 text-[11px] font-medium text-emerald-600 shadow-sm backdrop-blur transition-colors hover:bg-emerald-500/10 dark:text-emerald-400",
@@ -49,8 +51,8 @@ export function BrowserTestChip({ sessionId, className }: { sessionId?: string; 
     >
       <GlobeIcon className="size-3.5 shrink-0" />
       <Shimmer>{t("chat.browser.testing")}</Shimmer>
-      {entry.url && <span className="max-w-40 truncate font-mono text-emerald-600/70 dark:text-emerald-400/70">{shortUrl(entry.url)}</span>}
-      <ChevronRightIcon className="size-3.5 shrink-0 text-emerald-600/50 transition-transform group-hover:translate-x-0.5 dark:text-emerald-400/50" />
+      {!compact && entry.url && <span className="max-w-40 truncate font-mono text-emerald-600/70 dark:text-emerald-400/70">{shortUrl(entry.url)}</span>}
+      {!compact && <ChevronRightIcon className="size-3.5 shrink-0 text-emerald-600/50 transition-transform group-hover:translate-x-0.5 dark:text-emerald-400/50" />}
     </button>
   )
 }

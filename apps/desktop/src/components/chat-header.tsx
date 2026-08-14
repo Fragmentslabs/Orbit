@@ -1,5 +1,5 @@
-import { Archive, ArchiveRestore, Ellipsis, GlobeIcon, PanelLeft, PanelRightClose, PanelRightOpen, Pencil, Pin, PinOff, Search, Trash2 } from "lucide-react"
-import { useEffect, useState } from "react"
+import { Archive, ArchiveRestore, Ellipsis, PanelLeft, PanelRightClose, PanelRightOpen, Pencil, Pin, PinOff, Search, Trash2 } from "lucide-react"
+import { useState } from "react"
 import { useTranslation } from "react-i18next"
 import {
   DropdownMenu,
@@ -19,10 +19,10 @@ import {
 import { Input } from "@/components/ui/input"
 import type { SessionInfo } from "@shared/chat"
 import { BranchSelector } from "@/src/components/branch-selector"
+import { BrowserTestChip } from "@/src/components/browser-test-chip"
 import { FolderSelector } from "@/src/components/folder-selector"
 import { useSessionStore } from "@/src/stores/session-store"
 import { useChatSearchStore } from "@/src/stores/chat-search-store"
-import { AGENT_BROWSER_FRESH_MS, usePanelStore } from "@/src/stores/panel-store"
 
 interface ChatHeaderProps {
   title?: string
@@ -88,17 +88,6 @@ export function ChatHeader({ title, hasMenu, session, sessionId, rightPanelOpen,
   const [renaming, setRenaming] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
   const toggleChatSearch = useChatSearchStore((s) => s.toggle)
-  const agentBrowserEntry = usePanelStore((s) => (sessionId ? s.agentBrowser[sessionId] : undefined))
-  const [, setTick] = useState(0)
-
-  // Tic a cada 2s: o badge some sozinho quando o browser do agente esfria.
-  useEffect(() => {
-    if (!agentBrowserEntry) return
-    const timer = setInterval(() => setTick((v) => v + 1), 2_000)
-    return () => clearInterval(timer)
-  }, [agentBrowserEntry])
-
-  const agentBrowserFresh = !!agentBrowserEntry && Date.now() - agentBrowserEntry.at <= AGENT_BROWSER_FRESH_MS
 
   return (
     <div className="flex h-12 items-center gap-2 px-4">
@@ -150,22 +139,7 @@ export function ChatHeader({ title, hasMenu, session, sessionId, rightPanelOpen,
         )}
       </div>
       {extra}
-      {sessionId && agentBrowserFresh && (
-        <button
-          type="button"
-          title={t("chat.browser.viewAgentBrowser")}
-          onClick={() => usePanelStore.getState().openAgentBrowser(sessionId)}
-          className="flex size-7 shrink-0 items-center justify-center rounded-full border border-emerald-500/30 bg-emerald-500/10 text-emerald-600 transition-colors hover:bg-emerald-500/20 dark:text-emerald-400"
-        >
-          <span className="relative flex items-center justify-center">
-            <GlobeIcon className="size-3.5" />
-            <span className="absolute -right-1 -top-1 flex size-1.5">
-              <span className="absolute inline-flex size-full animate-ping rounded-full bg-emerald-500 opacity-75" />
-              <span className="relative inline-flex size-1.5 rounded-full bg-emerald-500" />
-            </span>
-          </span>
-        </button>
-      )}
+      {sessionId && <BrowserTestChip sessionId={sessionId} compact className="self-center" />}
       {onToggleRightPanel && (
         <Button variant="ghost" size="icon-sm" className="size-7 shrink-0" onClick={onToggleRightPanel}>
           {rightPanelOpen ? <PanelRightClose className="size-4" /> : <PanelRightOpen className="size-4" />}

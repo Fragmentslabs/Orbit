@@ -16,7 +16,6 @@ import { SubAgentCard } from "@/src/components/ai/sub-agent-card"
 import { ImagePartView } from "@/src/components/ai/image"
 import { Source, Sources, SourcesContent, SourcesTrigger } from "@/src/components/ai/sources"
 import { SkillProposalCard } from "@/src/components/skill-proposal-card"
-import { BrowserTestChip } from "@/src/components/browser-test-chip"
 import {
   AgentPartView,
   AssistantMarkdown,
@@ -152,7 +151,6 @@ export function ChatAssistantMessage({ message, sessionId, isLast, isBusy, onRet
   return (
     <div className="flex w-full flex-col gap-1">
       {waiting && <Shimmer className="text-sm">{t("chat.thinking")}</Shimmer>}
-      {isLast && isBusy && <BrowserTestChip sessionId={sessionId} />}
       {segments.map((segment, index) =>
         segment.kind === "research" ? (
           <ResearchBlock key={segment.id} parts={segment.parts} />

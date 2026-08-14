@@ -31,7 +31,6 @@ import {
   ReasoningPartView,
   VisionWorkingRow,
 } from "@/src/components/messages/shared"
-import { BrowserTestChip } from "@/src/components/browser-test-chip"
 
 /**
  * Mensagem do assistente no modo código: ferramentas agrupadas em Tasks
@@ -285,7 +284,6 @@ export function CodeAssistantMessage({ message, sessionId, isLast, isBusy, onRet
   return (
     <div className="flex w-full flex-col gap-1">
       {waiting && <Shimmer className="text-sm">{t("chat.code.analyzing")}</Shimmer>}
-      {isLast && isBusy && <BrowserTestChip sessionId={sessionId} />}
       {segments.map((segment, index) =>
         segment.kind === "task" ? (
           <TaskGroup
