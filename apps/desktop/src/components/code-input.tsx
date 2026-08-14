@@ -46,7 +46,6 @@ import { usePanelStore } from "@/src/stores/panel-store"
 import { usePermissionPrefs } from "@/src/stores/permission-prefs"
 import { useModelModePrefs } from "@/src/stores/model-mode-prefs"
 import { useProviderStore } from "@/src/stores/provider-store"
-import { useModelConfigPrompt } from "@/src/lib/use-model-config-prompt"
 import { useSessionModel } from "@/src/stores/session-model-prefs"
 import { useSettingsUi } from "@/src/stores/settings-ui"
 import { useReasoningPrefs } from "@/src/stores/reasoning-prefs"
@@ -62,6 +61,20 @@ const RECENT_FOLDERS_KEY = "orbit-recent-folders"
 
 function saveRecentFolders(folders: string[]) {
   localStorage.setItem(RECENT_FOLDERS_KEY, JSON.stringify(folders))
+}
+
+// Aviso da primeira vez (workers): o modal de configuração só abre na 1ª
+// ativação do modo agente sem worker configurado. "Usar o modelo principal"
+// é uma configuração válida (fallback para o modelo do chat) — depois do
+// aviso, não reabre mais, nem em chat novo (persistido).
+const WORKER_CONFIG_PROMPTED_KEY = "orbit-worker-config-prompted"
+
+function workerConfigPrompted() {
+  return localStorage.getItem(WORKER_CONFIG_PROMPTED_KEY) === "1"
+}
+
+function markWorkerConfigPrompted() {
+  localStorage.setItem(WORKER_CONFIG_PROMPTED_KEY, "1")
 }
 
 export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId }: {
@@ -118,20 +131,13 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId }: 
   const setVisionConfigOpen = useProviderStore((s) => s.setVisionConfigOpen)
   const visionConfigOpen = useProviderStore((s) => s.visionConfigOpen)
   const workerModel = useProviderStore((s) => s.workerModel)
-  // Modos ativos por default nas preferências sem modelo configurado → abre o
-  // modal de configuração (mesmo comportamento do toggle/dropdown, sem clique)
-  useModelConfigPrompt({
-    sessionId,
-    subagents,
-    orchestra: orchestra && mode === "code",
-    vision,
-    workerConfigured: workerModel != null,
-    visionConfigured: visionModel != null,
-    onOpenWorker: () => setConfigOpen(true),
-    onOpenVision: () => setVisionConfigOpen(true),
-    workerDialogOpen: configOpen,
-    visionDialogOpen: visionConfigOpen,
-  })
+  // Aviso da primeira vez: só abre na 1ª ativação do modo agente sem worker
+  // configurado; depois disso o toggle só liga/desliga (padrão = modelo principal)
+  const maybePromptWorkerConfig = useCallback(() => {
+    if (workerModel || workerConfigPrompted()) return
+    markWorkerConfigPrompted()
+    setConfigOpen(true)
+  }, [workerModel])
   const modesInRow = useAppearanceStore((s) => s.modesInRow)
   const modeLabelStyle = useAppearanceStore((s) => s.modeLabelStyle)
   const referenceCommands = useReferenceCommands()
@@ -251,8 +257,14 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId }: 
       { id: "plano", label: t("codeInput.modes.plan.label"), description: t("codeInput.slash.planDescription"), keywords: ["plan", "leitura"], group: "Modos" as const, active: plan, run: toggle(() => setModeActive("plan", sessionId, !plan)) },
       { id: "simples", label: t("input.modes.simple.label"), description: t("input.slash.simpleDescription"), keywords: ["texto", "plain"], group: "Modos" as const, active: simple, run: toggle(() => setSimple(sessionId, !simple)) },
       { id: "brain", label: t("input.slash.brainLabel"), description: t("codeInput.slash.brainDescription"), keywords: ["memoria", "brain"], group: "Modos" as const, active: brain, run: toggle(() => setBrainEnabled(sessionId, !brain)) },
-      { id: "subagents", label: t("codeInput.slash.subagentsLabel"), description: t("codeInput.slash.subagentsDescription"), keywords: ["worker", "delegar"], group: "Modos" as const, active: subagents, run: toggle(() => setModeActive("subagents", sessionId, !subagents)) },
-      ...(mode === "code" ? [{ id: "orchestra", label: t("codeInput.slash.orchestraLabel"), description: t("codeInput.slash.orchestraDescription"), keywords: ["workers", "plano"], group: "Modos" as const, active: orchestra, run: toggle(() => setModeActive("orchestra", sessionId, !orchestra)) }] : []),
+      { id: "subagents", label: t("codeInput.slash.subagentsLabel"), description: t("codeInput.slash.subagentsDescription"), keywords: ["worker", "delegar"], group: "Modos" as const, active: subagents, run: toggle(() => {
+        setModeActive("subagents", sessionId, !subagents)
+        if (!subagents) maybePromptWorkerConfig()
+      }) },
+      ...(mode === "code" ? [{ id: "orchestra", label: t("codeInput.slash.orchestraLabel"), description: t("codeInput.slash.orchestraDescription"), keywords: ["workers", "plano"], group: "Modos" as const, active: orchestra, run: toggle(() => {
+        setModeActive("orchestra", sessionId, !orchestra)
+        if (!orchestra) maybePromptWorkerConfig()
+      }) }] : []),
       permission("ask", t("codeInput.slash.permAsk"), t("codeInput.slash.permAskDescription")),
       permission("approve", t("codeInput.slash.permApprove"), t("codeInput.slash.permApproveDescription")),
       permission("full", t("codeInput.slash.permFull"), t("codeInput.slash.permFullDescription")),
@@ -263,7 +275,7 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId }: 
       { id: "document", label: t("codeInput.slash.documentApp"), description: t("codeInput.slash.documentAppDescription"), keywords: ["docs", "documentacao", "screenshot"], group: "Ações" as const, run: ({ setText }) => setText("/document ") },
       { id: "settings", label: t("input.slash.settings"), description: t("input.slash.settingsDescription"), keywords: ["settings", "config"], group: "Ações" as const, run: toggle(() => openSettings()) },
     ]
-  }, [search, plan, simple, brain, subagents, orchestra, permissionMode, sessionId, setBrainEnabled, setSimple, setModeActive, setPermissionMode, actionCommands, referenceCommands, mode, openSettings, t])
+  }, [search, plan, simple, brain, subagents, orchestra, permissionMode, sessionId, setBrainEnabled, setSimple, setModeActive, setPermissionMode, actionCommands, referenceCommands, mode, openSettings, maybePromptWorkerConfig, t])
 
   return (
     <PromptInputProvider>
@@ -331,16 +343,16 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId }: 
                       setModeActive("subagents", sessionId, v)
                       if (v) {
                         setModeActive("orchestra", sessionId, false)
-                        // Primeira ativação sem worker configurado → abre a configuração
-                        if (!workerModel) setConfigOpen(true)
+                        // Aviso da primeira vez (só na 1ª ativação sem worker)
+                        maybePromptWorkerConfig()
                       }
                     }}
                     onOrchestraChange={(v) => {
                       setModeActive("orchestra", sessionId, v)
                       if (v) {
                         setModeActive("subagents", sessionId, false)
-                        // Primeira ativação sem worker configurado → abre a configuração
-                        if (!workerModel) setConfigOpen(true)
+                        // Aviso da primeira vez (só na 1ª ativação sem worker)
+                        maybePromptWorkerConfig()
                       }
                     }}
                     onLoopChange={setLoop}
@@ -456,8 +468,8 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId }: 
                 setModeActive("subagents", sessionId, next)
                 if (next) {
                   setModeActive("orchestra", sessionId, false)
-                  // Primeira ativação sem worker configurado → abre a configuração
-                  if (!workerModel) setConfigOpen(true)
+                  // Aviso da primeira vez (só na 1ª ativação sem worker)
+                  maybePromptWorkerConfig()
                 }
               }}
               iconOnly={modeLabelStyle === "icon"}
@@ -474,8 +486,8 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId }: 
                 setModeActive("orchestra", sessionId, next)
                 if (next) {
                   setModeActive("subagents", sessionId, false)
-                  // Primeira ativação sem worker configurado → abre a configuração
-                  if (!workerModel) setConfigOpen(true)
+                  // Aviso da primeira vez (só na 1ª ativação sem worker)
+                  maybePromptWorkerConfig()
                 }
               }}
               iconOnly={modeLabelStyle === "icon"}

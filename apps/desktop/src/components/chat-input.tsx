@@ -42,7 +42,6 @@ import { useSessionStore } from "@/src/stores/session-store"
 import { useSettingsUi } from "@/src/stores/settings-ui"
 import { useModelModePrefs } from "@/src/stores/model-mode-prefs"
 import { useProviderStore } from "@/src/stores/provider-store"
-import { useModelConfigPrompt } from "@/src/lib/use-model-config-prompt"
 import { useSessionModel } from "@/src/stores/session-model-prefs"
 import { useReasoningPrefs } from "@/src/stores/reasoning-prefs"
 import { useSimpleMode, useSimplePrefs } from "@/src/stores/simple-prefs"
@@ -83,15 +82,6 @@ export function ChatInput({ onSubmit, status, onStop, sessionId, draftKey }: {
   const vision = useModeActive("vision", sessionId, chatActiveModes.vision)
   const setVisionConfigOpen = useProviderStore((s) => s.setVisionConfigOpen)
   const visionConfigOpen = useProviderStore((s) => s.visionConfigOpen)
-  // Modo ativo por default nas preferências sem modelo configurado → abre o
-  // modal de configuração (mesmo comportamento do toggle, sem clique explícito)
-  useModelConfigPrompt({
-    sessionId,
-    vision,
-    visionConfigured: visionModel != null,
-    onOpenVision: () => setVisionConfigOpen(true),
-    visionDialogOpen: visionConfigOpen,
-  })
 
   const { mode } = useWorkspace()
   const selectSession = useSessionStore((s) => s.selectSession)
