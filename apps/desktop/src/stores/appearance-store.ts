@@ -24,7 +24,19 @@ export const MODE_IDS = [
   "vision",
 ] as const
 export type ModeId = (typeof MODE_IDS)[number]
-export const DEFAULT_MODES_IN_ROW: ModeId[] = [...MODE_IDS]
+/** "brain" fica fora da barra por padrão: o modo Memória é ativado por
+ *  padrão nas preferências (model-mode-prefs) e continua acessível no menu
+ *  "+" e no painel de aparência — apenas não ocupa espaço como toggle. */
+export const DEFAULT_MODES_IN_ROW: ModeId[] = [
+  "search",
+  "browser",
+  "plan",
+  "simple",
+  "subagents",
+  "orchestra",
+  "loop",
+  "vision",
+]
 
 export type TabClosePosition = "left" | "right"
 
