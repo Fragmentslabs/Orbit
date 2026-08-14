@@ -31,7 +31,8 @@ import {
   mediaDiskUsage,
   registerMediaProtocol,
 } from './lib/media'
-import { startCompanionServer, getCompanionStatus, setPairingMode, forwardChatEvent } from './lib/companion-server'
+import { startCompanionServer, getCompanionStatus, setPairingMode, forwardChatEvent, broadcastSessionModels } from './lib/companion-server'
+import { setSessionModelsCache } from './lib/companion-http'
 import { readJson as readStorageJson } from './lib/storage'
 import { registerPanelWebContents } from './lib/panel-browser'
 import { setupMemoryScheduler } from './lib/memory/scheduler'
@@ -1127,6 +1128,14 @@ app.whenReady().then(() => {
       }
     }
     forwardChatEvent(chatEvent)
+  })
+
+  // Modelos por sessão: o renderer empurra o mapa (seleção em qualquer chat)
+  // e o main mantém o cache HTTP (GET /api/session-models, usado pelo mobile
+  // no connect) + repassa aos companions em tempo real ('session:model-change').
+  ipcMain.on('companion:session-models', (_event, overrides: Record<string, { providerId: string; modelId: string }>) => {
+    setSessionModelsCache(overrides)
+    broadcastSessionModels(overrides)
   })
 
   // Imagens das respostas do assistente (orbit-media://)

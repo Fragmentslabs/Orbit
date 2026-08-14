@@ -486,13 +486,16 @@ async function handleRequest(client: ConnectedClient, requestId: string, req: Co
       }
 
       case 'models:select': {
-        // A seleção de modelo é feita no renderer (localStorage) —
-        // para o companion, broadcastamos um evento para o renderer atualizar
+        // A seleção de modelo é feita no renderer (localStorage) — para o
+        // companion, broadcastamos um evento para o renderer atualizar. O
+        // sessionId faz a escolha valer por chat (override da sessão); sem
+        // sessionId vale o draft/chat novo + default global.
         for (const win of BrowserWindow.getAllWindows()) {
           if (!win.isDestroyed()) {
             win.webContents.send('companion:model-select', {
               providerId: req.providerId,
               modelId: req.modelId,
+              sessionId: req.sessionId ?? null,
             })
           }
         }
@@ -962,6 +965,17 @@ export function forwardChatEvent(event: ChatEvent): void {
       if (rewritten) out = { ...event, part: rewritten }
     }
     client.ws.send(wrap({ type: 'chat:event', event: out } as CompanionEvent))
+  }
+}
+
+/** Empurra o mapa de modelos por sessão (renderer → main) para todos os
+ *  companions — mantém o mobile com o MESMO modelo por chat do desktop. */
+export function broadcastSessionModels(
+  overrides: Record<string, { providerId: string; modelId: string }>,
+): void {
+  for (const client of clients) {
+    if (!client.authenticated || client.ws.readyState !== WebSocket.OPEN) continue
+    client.ws.send(wrap({ type: 'session:model-change', overrides } as unknown as CompanionEvent))
   }
 }
 

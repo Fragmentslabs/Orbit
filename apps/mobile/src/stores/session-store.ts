@@ -36,6 +36,7 @@ import { useModeOverrides, modeActiveFor } from './mode-overrides'
 import { useModelModePrefs } from './model-mode-prefs'
 import { useSimplePrefs } from './simple-prefs'
 import { useBrainPrefs } from './brain-prefs'
+import { sessionModelFor, useSessionModelPrefs, type SessionModelOverrides } from './session-model-prefs'
 
 // Cache keys
 const CACHE_SESSIONS_KEY = 'orbit_cache_sessions'
@@ -425,9 +426,11 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       set((state) => ({ _planReviewOutbox: { ...state._planReviewOutbox, [sessionId]: true } }))
     }
 
-    // Modelo: explícito no config, senão o selecionado no desktop
+    // Modelo: explícito no config, senão o da SESSÃO (override por chat >
+    // draft > último chat > default global do desktop) — mesmo padrão do
+    // desktop, onde o modelo segue a sessão, não o app inteiro.
     const settings = useSettingsStore.getState()
-    const selected = settings.selectedModel
+    const selected = sessionModelFor(sessionId) ?? settings.selectedModel
     const usesWorkers = config?.options?.subagents || config?.options?.orchestrate
     const workerModel = usesWorkers && settings.workerModel
       ? { ...settings.workerModel, reasoning: settings.workerReasoning ?? undefined }
@@ -493,6 +496,10 @@ export const useSessionStore = create<SessionState>((set, get) => ({
         useModeOverrides.getState().adopt(session.id)
         useSimplePrefs.getState().adopt(session.id)
         useBrainPrefs.getState().adopt(session.id)
+        // O modelo escolhido no chat novo (draft) passa a ser o da sessão;
+        // sem escolha explícita, fixa o modelo efetivamente usado (herdado do
+        // último chat) para o picker e o envio continuarem consistentes.
+        useSessionModelPrefs.getState().adopt(session.id, sessionModelFor(undefined) ?? undefined)
         return session
       }
     } catch {
@@ -887,6 +894,14 @@ export const useSessionStore = create<SessionState>((set, get) => ({
           planReviews: { ...state.planReviews, [sessionId]: event.review },
         }))
         break
+
+      case 'session:model-change' as any: {
+        // Overrides de modelo por sessão vindos do desktop (renderer → main →
+        // companions). Só entra chave que o mobile não tem localmente.
+        const overrides = (event as { overrides?: SessionModelOverrides }).overrides
+        useSessionModelPrefs.getState().applySync(overrides ?? {})
+        break
+      }
 
       case 'session':
         // Sessão criada/atualizada pelo desktop (workers da orquestração)

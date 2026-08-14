@@ -173,6 +173,24 @@ export const chatApi = {
   },
 }
 
+/** Modelo por sessão: o renderer empurra o mapa de overrides para o main
+ *  (cache HTTP + repasse aos companions) e escuta seleções vindas dos
+ *  companions (WS 'models:select' / HTTP PUT selected) para aplicá-las no
+ *  store local — mantém o mesmo modelo por chat entre desktop e mobile. */
+export const sessionModelsApi = {
+  sync: (overrides: Record<string, { providerId: string; modelId: string }>) => {
+    window.ipcRenderer?.send("companion:session-models", overrides)
+  },
+  onSelect: (
+    listener: (data: { providerId: string; modelId: string; sessionId?: string | null }) => void,
+  ) => {
+    const wrapper = window.ipcRenderer.on("companion:model-select", (data) =>
+      listener(data as { providerId: string; modelId: string; sessionId?: string | null }),
+    )
+    return () => window.ipcRenderer.off("companion:model-select", wrapper)
+  },
+}
+
 export const skillsApi = {
   list: (directory?: string) =>
     window.ipcRenderer.invoke("skills:list", directory) as Promise<Skill[]>,

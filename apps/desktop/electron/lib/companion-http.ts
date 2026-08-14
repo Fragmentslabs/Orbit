@@ -199,12 +199,14 @@ async function getSelectedModel(): Promise<SelectedModel> {
 async function saveSelectedModel(model: SelectedModel): Promise<SelectedModel> {
   await writeJson(SELECTED_MODEL_KEY, model)
 
-  // Broadcast para o renderer atualizar
+  // Broadcast para o renderer atualizar (sessionId null = chat novo/draft +
+  // default global, mesma semântica do selectModel do renderer)
   for (const win of BrowserWindow.getAllWindows()) {
     if (!win.isDestroyed()) {
       win.webContents.send('companion:model-select', {
         providerId: model.providerId,
         modelId: model.modelId,
+        sessionId: null,
       })
     }
   }
@@ -246,6 +248,24 @@ async function handlePatchPreferences(req: IncomingMessage, res: ServerResponse)
 async function handleGetSelectedModel(_req: IncomingMessage, res: ServerResponse) {
   const model = await getSelectedModel()
   jsonResponse(res, 200, model)
+}
+
+// Modelos por sessão (renderer → main): cache que o mobile consulta no
+// connect (GET /api/session-models) e recebe em tempo real via WS
+// 'session:model-change'. O renderer empurra o mapa a cada mudança (e no
+// load, repopulando o cache após reload).
+let sessionModelsCache: Record<string, SelectedModel> = {}
+
+export function setSessionModelsCache(overrides: Record<string, SelectedModel>): void {
+  sessionModelsCache = overrides ?? {}
+}
+
+export function getSessionModelsCache(): Record<string, SelectedModel> {
+  return sessionModelsCache
+}
+
+async function handleGetSessionModels(_req: IncomingMessage, res: ServerResponse) {
+  jsonResponse(res, 200, { overrides: getSessionModelsCache() })
 }
 
 async function handlePutSelectedModel(req: IncomingMessage, res: ServerResponse) {
@@ -542,6 +562,7 @@ function createRouter(
     { pattern: /^GET \/api\/mcp\/config$/, paramNames: [], handler: handleGetMcpConfig },
     { pattern: /^GET \/api\/media$/, paramNames: [], handler: handleListMedia },
     { pattern: /^GET \/api\/media\/usage$/, paramNames: [], handler: handleMediaUsage },
+    { pattern: /^GET \/api\/session-models$/, paramNames: [], handler: handleGetSessionModels },
 
     // Mutation endpoints
     { pattern: /^PATCH \/api\/preferences$/, paramNames: [], handler: handlePatchPreferences },

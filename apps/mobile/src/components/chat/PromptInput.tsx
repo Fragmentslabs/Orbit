@@ -513,7 +513,7 @@ export function PromptInput({
           {/* Model picker & controls */}
           <View className="flex-row items-center gap-2">
             {/* Model Picker */}
-            <ModelPicker />
+            <ModelPicker sessionId={sessionId} />
 
             {/* Send/Stop Button */}
             <SendButtonGroup

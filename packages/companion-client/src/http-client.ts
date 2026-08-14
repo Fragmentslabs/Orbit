@@ -63,6 +63,12 @@ export class CompanionHttp {
     return this.get('/api/catalog')
   }
 
+  /** Overrides de modelo por sessão (mapa sessionId → modelo) mantidos pelo
+   *  renderer do desktop. Usado para o mobile herdar o modelo por chat. */
+  async getSessionModels(): Promise<HttpResult<{ overrides: Record<string, { providerId: string; modelId: string }> }>> {
+    return this.get('/api/session-models')
+  }
+
   async getConnectedProviders(): Promise<HttpResult<string[]>> {
     return this.get('/api/providers/connected')
   }

@@ -88,6 +88,8 @@ export interface SelectModelRequest {
   type: 'models:select'
   providerId: string
   modelId: string
+  /** Sessão alvo da escolha — ausente/null = chat novo (draft + default global). */
+  sessionId?: string | null
 }
 
 export interface GetCatalogRequest {

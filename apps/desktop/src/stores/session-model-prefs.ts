@@ -4,6 +4,7 @@ import type { SessionInfo } from "@shared/chat"
 import type { SelectedModel } from "@/src/stores/provider-store"
 import { useProviderStore } from "@/src/stores/provider-store"
 import { useSessionStore } from "@/src/stores/session-store"
+import { sessionModelsApi } from "@/src/lib/ipc"
 
 /**
  * Modelo selecionado POR CHAT (padrão do opencode: o modelo segue a sessão,
@@ -78,6 +79,9 @@ selectModel: (sessionId, providerId, modelId) => {
     // quando é realmente usado (markUsed, no fim de uma resposta do agente).
     set({ overrides })
 
+    // Empurra o mapa para o main (cache HTTP + repasse aos companions)
+    sessionModelsApi.sync(overrides)
+
     // Chat novo (draft): o modelo escolhido vira também o default global,
     // para o próximo chat novo já abrir nele.
     if (!sessionId) useProviderStore.getState().selectModel(providerId, modelId)
@@ -97,6 +101,7 @@ selectModel: (sessionId, providerId, modelId) => {
     }
     persistRecord(overrides)
     set({ overrides })
+    sessionModelsApi.sync(overrides)
   },
 
   markUsed: (providerId, modelId) => {
@@ -118,8 +123,21 @@ selectModel: (sessionId, providerId, modelId) => {
     delete overrides[sessionId]
     persistRecord(overrides)
     set({ overrides })
+    sessionModelsApi.sync(overrides)
   },
 }))
+
+// Sincronização com companions (mobile): empurra o estado inicial para o main
+// (após reload do renderer o cache do main precisa ser repopulado) e aplica
+// seleções feitas pelos companions via WS 'models:select' / HTTP PUT selected.
+if (typeof window !== "undefined" && window.ipcRenderer) {
+  sessionModelsApi.sync(loadRecord())
+  sessionModelsApi.onSelect(({ providerId, modelId, sessionId }) => {
+    if (providerId && modelId) {
+      useSessionModelPrefs.getState().selectModel(sessionId ?? null, providerId, modelId)
+    }
+  })
+}
 
 /** Sessão mais recente não arquivada e não-worker — o modelo dela é o default
  *  do próximo chat novo. */

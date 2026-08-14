@@ -5,6 +5,7 @@ import { useMessageQueueStore } from '../stores/message-queue-store'
 import { useRecentConnectionsStore } from '~/stores/recent-connections-store'
 import { useSessionStore } from '../stores/session-store'
 import { useSettingsStore } from '../stores/settings-store'
+import { useSessionModelPrefs } from '~/stores/session-model-prefs'
 
 /**
  * Hook que orquestra a conexão WS + HTTP com o desktop.
@@ -67,6 +68,8 @@ export function useCompanion() {
         void useSettingsStore.getState().fetchPreferences()
         void useSettingsStore.getState().fetchCatalog()
         void useSettingsStore.getState().fetchConnectedProviders()
+        // Overrides de modelo por sessão (snapshot do renderer do desktop)
+        void useSessionModelPrefs.getState().hydrate()
         // Processa fila de mensagens offline
         useMessageQueueStore.getState().processAllQueues()
       } else if (state.status === 'disconnected' && state.error === 'invalid_pin') {
@@ -94,8 +97,17 @@ export function useCompanion() {
       }
     })
 
+    // session:model-change → overrides de modelo por sessão vindos do desktop
+    const unsubModels = conn.onEvent('session:model-change', (event) => {
+      const msg = event as { overrides?: Record<string, { providerId: string; modelId: string }> }
+      if (msg?.overrides) {
+        useSessionModelPrefs.getState().applySync(msg.overrides)
+      }
+    })
+
     return () => {
       unsubChat()
+      unsubModels()
     }
   }, [])
 }

@@ -5,6 +5,7 @@ import { Image } from 'expo-image'
 import { useTranslation } from 'react-i18next'
 import type { CatalogModel, CatalogProvider } from '@orbit/shared'
 import { useSettingsStore } from '~/stores/settings-store'
+import { useSessionModel, useSessionModelPrefs } from '~/stores/session-model-prefs'
 import { useThemeStore } from '~/stores/theme-store'
 import { getThemeTokens } from '~/lib/theme-tokens'
 import { hslToRgba } from '~/lib/theme'
@@ -15,6 +16,8 @@ import { cn } from '~/lib/utils'
 interface ModelPickerModalProps {
   visible: boolean
   onClose: () => void
+  /** Sessão dona da escolha — undefined/null = chat novo (draft). */
+  sessionId?: string | null
 }
 
 /** Limite de modelos por provedor ao navegar (sem busca) — espelha o desktop
@@ -130,11 +133,11 @@ function ModelRow({
   )
 }
 
-export function ModelPickerModal({ visible, onClose }: ModelPickerModalProps) {
+export function ModelPickerModal({ visible, onClose, sessionId }: ModelPickerModalProps) {
   const { t } = useTranslation()
   const catalog = useSettingsStore((s) => s.catalog)
-  const selectedModel = useSettingsStore((s) => s.selectedModel)
-  const selectModel = useSettingsStore((s) => s.selectModel)
+  const selectedModel = useSessionModel(sessionId)
+  const selectModel = useSessionModelPrefs((s) => s.selectModel)
   const connectedProviders = useSettingsStore((s) => s.connectedProviders)
   const loading = useSettingsStore((s) => s.loading)
   const fetchCatalog = useSettingsStore((s) => s.fetchCatalog)
@@ -186,7 +189,9 @@ export function ModelPickerModal({ visible, onClose }: ModelPickerModalProps) {
   }, [catalog, search, connectedProviders])
 
   const handleSelect = async (providerId: string, modelId: string) => {
-    await selectModel(providerId, modelId)
+    // Por chat: sessão existente ganha override; chat novo (sem sessão) vira
+    // o draft + default global — espelho do desktop.
+    selectModel(sessionId ?? null, providerId, modelId)
     onClose()
   }
 
