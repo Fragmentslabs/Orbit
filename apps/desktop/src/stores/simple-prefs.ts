@@ -50,10 +50,10 @@ export const useSimplePrefs = create<SimplePrefsState>((set, get) => ({
   },
 }))
 
-export function useSimpleMode(sessionId?: string | null): boolean {
-  return useSimplePrefs((s) => s.overrides[sessionId ?? DRAFT_KEY] ?? false)
+export function useSimpleMode(sessionId?: string | null, fallback = false): boolean {
+  return useSimplePrefs((s) => s.overrides[sessionId ?? DRAFT_KEY] ?? fallback)
 }
 
-export function simpleModeFor(sessionId?: string | null): boolean {
-  return useSimplePrefs.getState().overrides[sessionId ?? DRAFT_KEY] ?? false
+export function simpleModeFor(sessionId?: string | null, fallback = false): boolean {
+  return useSimplePrefs.getState().overrides[sessionId ?? DRAFT_KEY] ?? fallback
 }

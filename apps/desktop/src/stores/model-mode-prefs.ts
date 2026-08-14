@@ -10,6 +10,10 @@ const CODE_ACTIVE_MODES_KEY = "orbit-code-active-modes"
 const CHAT_PERM_MODE_KEY = "orbit-chat-perm-mode"
 const CODE_PERM_MODE_KEY = "orbit-code-perm-mode"
 const AUTO_FOLDERS_KEY = "orbit-auto-folders"
+// Chaves legadas do modo Visão global (provider-store) — usadas só na migração
+// para os defaults por modo; o modo virou per-chat (mode-overrides)
+const LEGACY_VISION_ENABLED_KEY = "orbit-vision-enabled"
+const LEGACY_VISION_MODEL_KEY = "orbit-vision-model"
 
 export interface DefaultModel {
   providerId: string
@@ -25,6 +29,26 @@ export interface ActiveModeDefaults {
   plan: boolean
   subagents: boolean
   orchestra: boolean
+  vision: boolean
+}
+
+/** Migração do modo Visão: o flag global antigo vira o default dos dois modos.
+ *  Sem flag, um modelo de visão configurado também contava como ativo. */
+function legacyVisionDefault(): boolean {
+  try {
+    const raw = localStorage.getItem(LEGACY_VISION_ENABLED_KEY)
+    if (raw !== null) return JSON.parse(raw) === true
+  } catch {
+    // ignore
+  }
+  return localStorage.getItem(LEGACY_VISION_MODEL_KEY) !== null
+}
+
+function loadModes(key: string, fallback: ActiveModeDefaults): ActiveModeDefaults {
+  const stored = loadJson<Partial<ActiveModeDefaults>>(key, fallback)
+  if (stored && typeof stored === "object" && "vision" in stored) return stored as ActiveModeDefaults
+  // Prefs gravadas antes do campo vision existir → aplica o default legado
+  return { ...fallback, ...stored, vision: legacyVisionDefault() }
 }
 
 function loadJson<T>(key: string, fallback: T): T {
@@ -45,6 +69,7 @@ const DEFAULT_CHAT_MODES: ActiveModeDefaults = {
   plan: false,
   subagents: false,
   orchestra: false,
+  vision: false,
 }
 
 const DEFAULT_CODE_MODES: ActiveModeDefaults = {
@@ -56,6 +81,7 @@ const DEFAULT_CODE_MODES: ActiveModeDefaults = {
   plan: false,
   subagents: false,
   orchestra: false,
+  vision: false,
 }
 
 interface ModelModePrefsState {
@@ -88,8 +114,8 @@ export const useModelModePrefs = create<ModelModePrefsState>((set) => ({
   codeModel: loadJson<DefaultModel | null>(CODE_MODEL_KEY, null),
   subagentModel: loadJson<DefaultModel | null>(SUBAGENT_MODEL_KEY, null),
   orchestraModel: loadJson<DefaultModel | null>(ORCHESTRA_MODEL_KEY, null),
-  chatActiveModes: loadJson<ActiveModeDefaults>(CHAT_ACTIVE_MODES_KEY, DEFAULT_CHAT_MODES),
-  codeActiveModes: loadJson<ActiveModeDefaults>(CODE_ACTIVE_MODES_KEY, DEFAULT_CODE_MODES),
+  chatActiveModes: loadModes(CHAT_ACTIVE_MODES_KEY, DEFAULT_CHAT_MODES),
+  codeActiveModes: loadModes(CODE_ACTIVE_MODES_KEY, DEFAULT_CODE_MODES),
   chatPermissionMode: loadJson<"ask" | "approve" | "full">(CHAT_PERM_MODE_KEY, "ask"),
   codePermissionMode: loadJson<"ask" | "approve" | "full">(CODE_PERM_MODE_KEY, "approve"),
   autoCreateFolders: loadJson<boolean>(AUTO_FOLDERS_KEY, true),

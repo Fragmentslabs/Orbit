@@ -26,6 +26,8 @@ function loadSelectedModel(): SelectedModel | null {
   return loadJson<SelectedModel>(SELECTED_MODEL_KEY)
 }
 
+const storedVisionModel = loadJson<SelectedModel>(VISION_MODEL_KEY)
+
 interface ProviderState {
   catalog: Catalog
   customProviders: CatalogProvider[]
@@ -34,7 +36,9 @@ interface ProviderState {
   workerModel: SelectedModel | null
   workerReasoning: ReasoningConfig | null
   /** Modelo de visão delegado (modo Visão) — descreve imagens/screenshots
-   * para modelos sem visão; null = modo desligado */
+   * para modelos sem visão; null = sem modelo configurado.
+   * A ATIVAÇÃO é por chat (mode-overrides): o modelo é global, o toggle é
+   * persistido por sessão com default nas preferências (model-mode-prefs) */
   visionModel: SelectedModel | null
   /** Dialog de configuração do modo Visão (aberto pelo toggle, pelo gear ou pelo card de aviso) */
   visionConfigOpen: boolean
@@ -72,7 +76,7 @@ export const useProviderStore = create<ProviderState>((set, get) => ({
   selectedModel: loadSelectedModel(),
   workerModel: loadJson<SelectedModel>(WORKER_MODEL_KEY),
   workerReasoning: loadJson<ReasoningConfig>(WORKER_REASONING_KEY),
-  visionModel: loadJson<SelectedModel>(VISION_MODEL_KEY),
+  visionModel: storedVisionModel,
   visionConfigOpen: false,
   loading: true,
   error: null,
@@ -108,7 +112,9 @@ export const useProviderStore = create<ProviderState>((set, get) => ({
           visionCatalogModel &&
           connectedProviders.includes(visionModel.providerId) &&
           modelSupportsVision(visionProvider, visionModel.modelId)
-        if (!valid) get().setVisionModel(null)
+        if (!valid) {
+          get().setVisionModel(null)
+        }
       }
 
       const { selectedModel } = get()

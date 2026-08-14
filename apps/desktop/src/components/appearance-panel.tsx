@@ -5,6 +5,7 @@ import {
   BrainCircuit,
   ChevronLeft,
   ChevronRight,
+  Eye,
   FileText,
   Globe,
   Moon,
@@ -24,7 +25,7 @@ type View = "main" | "visible"
 
 /** Agrupamento dos modos por contexto de uso nos inputs. */
 const MODE_GROUPS: { key: "both" | "chat" | "code"; ids: ModeId[] }[] = [
-  { key: "both", ids: ["search", "plan", "simple", "brain"] },
+  { key: "both", ids: ["search", "plan", "simple", "brain", "vision"] },
   { key: "code", ids: ["subagents", "orchestra", "loop"] },
   { key: "chat", ids: ["browser"] },
 ]
@@ -54,6 +55,7 @@ function useModeRowOptions(): { id: ModeId; label: string; icon: typeof Search }
     { id: "plan", label: t("codeInput.modes.plan.label"), icon: FileText },
     { id: "simple", label: t("input.modes.simple.label"), icon: AlignLeft },
     { id: "brain", label: t("input.modes.brain.label"), icon: BrainCircuit },
+    { id: "vision", label: t("input.modes.vision.label"), icon: Eye },
     { id: "subagents", label: t("codeInput.modes.subagents.label"), icon: Bot },
     { id: "orchestra", label: t("codeInput.modes.orchestra.label"), icon: Network },
     { id: "loop", label: t("codeInput.modes.loop.label"), icon: RefreshCw },

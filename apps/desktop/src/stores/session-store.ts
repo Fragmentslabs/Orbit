@@ -19,6 +19,7 @@ import { chatApi, sessionApi, storage } from "@/src/lib/ipc"
 import { visibleMessageText } from "@/src/lib/message-utils"
 import { useBrainPrefs } from "@/src/stores/brain-prefs"
 import { useSimplePrefs } from "@/src/stores/simple-prefs"
+import { modeActiveFor, useModeOverrides } from "@/src/stores/mode-overrides"
 import { useDraftInput } from "@/src/stores/draft-input"
 import { useMessageQueueStore } from "@/src/stores/message-queue-store"
 import { useModelModePrefs } from "@/src/stores/model-mode-prefs"
@@ -652,6 +653,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       // O toggle Brain do chat novo (rascunho) passa a valer para esta sessão
       useBrainPrefs.getState().adopt(sessionId)
       useSimplePrefs.getState().adopt(sessionId)
+      useModeOverrides.getState().adopt(sessionId)
       useDraftInput.getState().adopt(sessionId)
       // O modelo escolhido no chat novo (draft) passa a ser o da sessão; sem
       // escolha explícita, fixa o modelo efetivamente usado (herdado do último
@@ -701,6 +703,12 @@ export const useSessionStore = create<SessionState>((set, get) => ({
         ? { ...worker, reasoning: provider.workerReasoning ?? undefined }
         : undefined
 
+    // Modo Visão ativo = modelo configurado E modo ativo para esta sessão
+    // (toggle por chat com default nas preferências)
+    const visionPrefs = (session.mode ?? mode) === "code"
+      ? useModelModePrefs.getState().codeActiveModes
+      : useModelModePrefs.getState().chatActiveModes
+
     await chatApi.send({
       sessionId: sessionId!,
       text,
@@ -712,7 +720,10 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       directory: config.directory ?? session.directory,
       extraDirectories: config.extraDirectories ?? session.extraDirectories,
       workerModel,
-      visionModel: provider.visionModel ?? undefined,
+      visionModel:
+        provider.visionModel && modeActiveFor("vision", sessionId, visionPrefs.vision)
+          ? provider.visionModel
+          : undefined,
       language: LOCALE_PROMPT_NAME[useLocaleStore.getState().activeLocale],
       ...(config.options.loop ? { loopConfig: useLoopConfigStore.getState().config } : {}),
     })

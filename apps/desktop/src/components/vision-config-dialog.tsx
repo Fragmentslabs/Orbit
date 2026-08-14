@@ -13,21 +13,27 @@ import { ModelSelectorLogo, ModelSelectorName } from "@/src/components/ai/model-
 import { ModelPicker } from "@/src/components/model-picker"
 import { modelSupportsVision } from "@shared/chat"
 import { useProviderStore } from "@/src/stores/provider-store"
+import { useModeOverrides } from "@/src/stores/mode-overrides"
 
 /**
  * Configuração do modo Visão: escolhe o modelo de visão que DESCREVE imagens
  * para modelos sem visão (anexos e screenshots com ver: true). Só mostra
  * modelos com suporte a imagem. Sem modelo selecionado, o modo fica
  * desligado e o modelo principal não recebe imagens.
+ *
+ * O modelo é global; a ATIVAÇÃO é por chat (targetSession): escolher modelo
+ * liga o modo para a sessão que abriu o dialog (undefined = chat novo).
  */
-export function VisionConfigDialog({ open, onOpenChange }: {
+export function VisionConfigDialog({ open, onOpenChange, targetSession }: {
   open: boolean
   onOpenChange: (open: boolean) => void
+  targetSession?: string
 }) {
   const { t } = useTranslation()
   const catalog = useProviderStore((s) => s.catalog)
   const visionModel = useProviderStore((s) => s.visionModel)
   const setVisionModel = useProviderStore((s) => s.setVisionModel)
+  const setModeActive = useModeOverrides((s) => s.setMode)
   const [pickerOpen, setPickerOpen] = useState(false)
 
   return (
@@ -59,7 +65,12 @@ export function VisionConfigDialog({ open, onOpenChange }: {
             </Button>
             <ModelPicker
               value={visionModel}
-              onValueChange={setVisionModel}
+              onValueChange={(model) => {
+                // Escolher modelo configura E ativa o modo (nesta sessão);
+                // limpar desativa
+                setVisionModel(model)
+                setModeActive("vision", targetSession, model != null)
+              }}
               filter={(provider, model) => modelSupportsVision(provider, model.id)}
               nullLabel={t("visionConfig.disabled")}
               hideTrigger
@@ -77,7 +88,10 @@ export function VisionConfigDialog({ open, onOpenChange }: {
             <Button
               variant="ghost"
               className="mr-auto text-xs text-muted-foreground"
-              onClick={() => setVisionModel(null)}
+              onClick={() => {
+                setVisionModel(null)
+                setModeActive("vision", targetSession, false)
+              }}
             >
               {t("visionConfig.disable")}
             </Button>

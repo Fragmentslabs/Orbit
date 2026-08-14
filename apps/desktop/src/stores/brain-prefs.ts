@@ -90,13 +90,13 @@ export const useBrainPrefs = create<BrainPrefsState>((set, get) => ({
   },
 }))
 
-export function useBrainEnabled(sessionId?: string | null): boolean {
-  return useBrainPrefs((s) => s.overrides[sessionId ?? DRAFT_KEY] ?? true)
+export function useBrainEnabled(sessionId?: string | null, fallback = true): boolean {
+  return useBrainPrefs((s) => s.overrides[sessionId ?? DRAFT_KEY] ?? fallback)
 }
 
 /** Leitura fora de componentes React (callbacks de envio) */
-export function brainEnabledFor(sessionId?: string | null): boolean {
-  return useBrainPrefs.getState().overrides[sessionId ?? DRAFT_KEY] ?? true
+export function brainEnabledFor(sessionId?: string | null, fallback = true): boolean {
+  return useBrainPrefs.getState().overrides[sessionId ?? DRAFT_KEY] ?? fallback
 }
 
 export function useChatContext(): BrainContextMode {

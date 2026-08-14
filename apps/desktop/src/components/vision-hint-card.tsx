@@ -4,6 +4,8 @@ import { Eye, X } from "lucide-react"
 import { modelSupportsVision } from "@shared/chat"
 import { useSessionModel } from "@/src/stores/session-model-prefs"
 import { useProviderStore } from "@/src/stores/provider-store"
+import { useModeActive } from "@/src/stores/mode-overrides"
+import { useModelModePrefs } from "@/src/stores/model-mode-prefs"
 import { useSessionStore } from "@/src/stores/session-store"
 import { useWorkspace } from "@/lib/workspace-context"
 import type { ChatMessage, FilePart } from "@shared/chat"
@@ -20,7 +22,8 @@ export function VisionHintCard({ sessionId }: { sessionId?: string }) {
 
   const selected = useSessionModel(sessionId)
   const catalog = useProviderStore((s) => s.catalog)
-  const visionModel = useProviderStore((s) => s.visionModel)
+  const modeDefaults = useModelModePrefs((s) => (mode === "code" ? s.codeActiveModes : s.chatActiveModes))
+  const visionEnabled = useModeActive("vision", sessionId, modeDefaults.vision)
   const setVisionConfigOpen = useProviderStore((s) => s.setVisionConfigOpen)
   const activeSessionId = useSessionStore((s) => s.activeIds[mode])
   const messages = useSessionStore((s) => (sessionId ? s.messages[sessionId] : undefined))
@@ -29,7 +32,7 @@ export function VisionHintCard({ sessionId }: { sessionId?: string }) {
   const isActive = !sessionId || sessionId === activeSessionId
   const modelVision = selected ? modelSupportsVision(catalog[selected.providerId], selected.modelId) : true
 
-  const lastImage = isActive && !modelVision && !visionModel && !dismissed && messages
+  const lastImage = isActive && !modelVision && !visionEnabled && !dismissed && messages
     ? [...messages].reverse().find((m): m is ChatMessage & { parts: (FilePart | { type: string })[] } =>
         m.role === "user" && m.parts.some((p) => p.type === "file" && (p as FilePart).mime.startsWith("image/")),
       )

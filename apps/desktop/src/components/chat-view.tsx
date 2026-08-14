@@ -31,6 +31,7 @@ import { messageText, visibleMessageText } from "@/src/lib/message-utils"
 import { useActiveSession, useSessionStatus, useSessionStore, type SendConfig } from "@/src/stores/session-store"
 import { brainEnabledFor } from "@/src/stores/brain-prefs"
 import { useProviderStore } from "@/src/stores/provider-store"
+import { useModelModePrefs } from "@/src/stores/model-mode-prefs"
 import { useSimpleMode } from "@/src/stores/simple-prefs"
 
 // Referências estáveis para seletores do zustand (evita loop de getSnapshot)
@@ -303,7 +304,9 @@ export function ChatView({ sessionId }: { sessionId?: string } = {}) {
   const stopStreaming = useSessionStore((s) => s.stopStreaming)
   const selectSession = useSessionStore((s) => s.selectSession)
   const initializeProviders = useProviderStore((s) => s.initialize)
-  const simpleMode = useSimpleMode(session?.id)
+  // Default de brain/simple vem das preferências de modos ativos do modo atual
+  const modeDefaults = useModelModePrefs((s) => (viewMode === "code" ? s.codeActiveModes : s.chatActiveModes))
+  const simpleMode = useSimpleMode(session?.id, modeDefaults.simple)
   const chatSearchOpen = useChatSearchStore((s) => s.open)
 
   useEffect(() => {
@@ -427,7 +430,7 @@ export function ChatView({ sessionId }: { sessionId?: string } = {}) {
   const handleSuggestion = useCallback(
     (suggestion: string) => {
       if (viewMode === "chat") {
-        handleChatSend(suggestion, { simple: simpleMode, brain: brainEnabledFor(session?.id) })
+        handleChatSend(suggestion, { simple: simpleMode, brain: brainEnabledFor(session?.id, useModelModePrefs.getState().chatActiveModes.brain) })
       }
     },
     [viewMode, handleChatSend, simpleMode, session?.id],

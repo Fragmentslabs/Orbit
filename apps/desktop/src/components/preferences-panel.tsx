@@ -1,6 +1,21 @@
 import { useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
-import { BrainIcon, ChevronDownIcon, FolderIcon, LanguagesIcon, SettingsIcon } from "lucide-react"
+import {
+  AlignLeft,
+  Bot,
+  BrainCircuit,
+  BrainIcon,
+  ChevronDownIcon,
+  Eye,
+  FileText,
+  FolderIcon,
+  Globe,
+  LanguagesIcon,
+  Network,
+  Search,
+  SettingsIcon,
+  Sparkles,
+} from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
   ModelSelector,
@@ -148,32 +163,34 @@ function ActiveModesSection({
   isCode: boolean
 }) {
   const { t } = useTranslation()
-  const items: Array<{ key: keyof ActiveModeDefaults; label: string }> = [
-    { key: "simple", label: t("preferences.modes.simple") },
-    { key: "brain", label: t("preferences.modes.brain") },
-    { key: "thinking", label: t("preferences.modes.thinking") },
-    { key: "search", label: t("preferences.modes.search") },
-    ...(isCode ? [] : [{ key: "browser" as const, label: t("preferences.modes.browser") }]),
-    ...(isCode ? [{ key: "plan" as const, label: t("preferences.modes.plan") }] : []),
-    { key: "subagents", label: t("preferences.modes.subagents") },
-    ...(isCode ? [{ key: "orchestra" as const, label: t("preferences.modes.orchestra") }] : []),
+  const items: Array<{ key: keyof ActiveModeDefaults; label: string; icon: typeof Search }> = [
+    { key: "simple", label: t("preferences.modes.simple"), icon: AlignLeft },
+    { key: "brain", label: t("preferences.modes.brain"), icon: BrainCircuit },
+    { key: "thinking", label: t("preferences.modes.thinking"), icon: Sparkles },
+    { key: "search", label: t("preferences.modes.search"), icon: Search },
+    { key: "vision", label: t("preferences.modes.vision"), icon: Eye },
+    ...(isCode ? [] : [{ key: "browser" as const, label: t("preferences.modes.browser"), icon: Globe }]),
+    ...(isCode ? [{ key: "plan" as const, label: t("preferences.modes.plan"), icon: FileText }] : []),
+    { key: "subagents", label: t("preferences.modes.subagents"), icon: Bot },
+    ...(isCode ? [{ key: "orchestra" as const, label: t("preferences.modes.orchestra"), icon: Network }] : []),
   ]
 
   return (
     <div>
       <p className="mb-1.5 text-xs font-medium text-muted-foreground">{t("preferences.activeModes")}</p>
       <div className="flex flex-wrap gap-1.5">
-        {items.map(({ key, label }) => (
+        {items.map(({ key, label, icon: Icon }) => (
           <button
             key={key}
             type="button"
             onClick={() => onChange(key, !modes[key])}
-            className={`rounded-md border px-2 py-1 text-[10px] font-medium transition-colors ${
+            className={`inline-flex items-center gap-1.5 rounded-md border px-2 py-1 text-[10px] font-medium transition-colors ${
               modes[key]
                 ? "border-primary/30 bg-primary/10 text-primary"
                 : "border-transparent bg-muted/50 text-muted-foreground hover:bg-muted"
             }`}
           >
+            <Icon className="size-3.5" />
             {label}
           </button>
         ))}
