@@ -380,11 +380,26 @@ function EllipsisMenu({ items, groupClass = "group-hover/menu-item:opacity-100",
   const buttonRef = useRef<HTMLButtonElement>(null)
   const menuRef = useRef<HTMLDivElement>(null)
 
+  // Cartão perto do fim da sidebar: abrir sempre para baixo vazava o menu para
+  // fora da viewport, deixando os itens (e às vezes o próprio botão de trás
+  // dele) inclicáveis. O menu já está montado no DOM neste ponto (o portal
+  // renderiza no mesmo commit que abre `menuOpen`), então dá pra medir a
+  // altura real antes de decidir o lado — sem isso teríamos que abrir "cego".
   useLayoutEffect(() => {
-    if (menuOpen && buttonRef.current) {
-      const rect = buttonRef.current.getBoundingClientRect()
-      setMenuPos({ top: rect.bottom + 4, left: rect.left })
-    }
+    if (!menuOpen || !buttonRef.current) return
+    const rect = buttonRef.current.getBoundingClientRect()
+    const altura = menuRef.current?.offsetHeight ?? 0
+    const espacoAbaixo = window.innerHeight - rect.bottom
+    const espacoAcima = rect.top
+    // Prefere abrir para baixo; só vira para cima quando não cabe embaixo E lá
+    // em cima sobra mais espaço — evita trocar um vazamento pequeno por um maior.
+    const abrirAcima = espacoAbaixo < altura + 4 && espacoAcima > espacoAbaixo
+    const top = abrirAcima ? rect.top - altura - 4 : rect.bottom + 4
+    // Mesma ideia no eixo horizontal: perto da borda direita da janela (menu
+    // aberto no painel direito, por exemplo) o menu não pode vazar por ali.
+    const largura = menuRef.current?.offsetWidth ?? 192
+    const left = Math.min(rect.left, window.innerWidth - largura - 8)
+    setMenuPos({ top: Math.max(4, top), left: Math.max(4, left) })
   }, [menuOpen])
 
   useEffect(() => {
