@@ -67,7 +67,7 @@
       },
       "simple": {
         "label": "Simple",
-        "description": "Direct plain-text replies: no formatting, citations, or tool blocks."
+        "description": "Direct, concise answers: no unnecessary tool calls or long reports. Markdown still renders when it helps readability."
       },
       "brain": {
         "label": "Memory",
@@ -84,7 +84,7 @@
     "slash": {
       "searchDescription": "Toggles web search (websearch/webfetch)",
       "browserDescription": "Toggles JavaScript navigation",
-      "simpleDescription": "Toggles plain-text replies",
+      "simpleDescription": "Toggles concise replies (fewer tool calls)",
       "brainLabel": "Memory (Brain)",
       "brainDescription": "Orbit remembers facts and preferences across conversations",
       "newChat": "New chat",
@@ -108,7 +108,7 @@
         "description": "Read-only. Produces an implementation plan without editing files."
       },
       "simple": {
-        "description": "Direct plain-text replies: no formatting or tool blocks."
+        "description": "Direct, concise answers: no unnecessary tool calls or long reports. Markdown still renders when it helps readability."
       },
       "brain": {
         "description": "Orbit remembers the project's decisions, conventions, and structure across sessions. Turn it off just for this chat if you prefer a context-free interaction."

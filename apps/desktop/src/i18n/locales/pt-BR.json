@@ -67,7 +67,7 @@
       },
       "simple": {
         "label": "Simples",
-        "description": "Respostas diretas em texto puro: sem formatação, citações ou blocos de ferramentas."
+        "description": "Respostas diretas e concisas: sem ferramentas desnecessárias nem relatórios longos. Markdown continua renderizado quando ajuda a leitura."
       },
       "brain": {
         "label": "Memória",
@@ -84,7 +84,7 @@
     "slash": {
       "searchDescription": "Alterna busca web (websearch/webfetch)",
       "browserDescription": "Alterna navegação com JavaScript",
-      "simpleDescription": "Alterna respostas em texto puro",
+      "simpleDescription": "Alterna respostas diretas e concisas",
       "brainLabel": "Memória (Brain)",
       "brainDescription": "Orbit lembra fatos e preferências entre conversas",
       "newChat": "Nova conversa",
@@ -108,7 +108,7 @@
         "description": "Somente leitura. Produz um plano de implementação sem editar arquivos."
       },
       "simple": {
-        "description": "Respostas diretas em texto puro: sem formatação nem blocos de ferramentas."
+        "description": "Respostas diretas e concisas: sem ferramentas desnecessárias nem relatórios longos. Markdown continua renderizado quando ajuda a leitura."
       },
       "brain": {
         "description": "Orbit lembra decisões, convenções e estrutura do projeto entre sessões. Desative apenas neste chat se preferir uma interação sem contexto."
