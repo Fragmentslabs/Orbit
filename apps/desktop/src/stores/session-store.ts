@@ -364,6 +364,9 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     const updated: PlanReview = { ...review, status: "implementing", permissionMode }
     set((state) => ({ planReviews: { ...state.planReviews, [sessionId]: updated } }))
     void storage.write(StorageKeys.planReview(sessionId), updated)
+    // Plano aceito → desliga o toggle de modo plano: a próxima mensagem não
+    // deve gerar outro plano.
+    useModeOverrides.getState().setMode("plan", sessionId, false)
     const session = get().sessions.find((s) => s.id === sessionId)
     const mode = session?.mode ?? "code"
     void get().sendMessage(mode, "Implemente o plano acima.", {
