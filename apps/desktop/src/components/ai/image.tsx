@@ -49,18 +49,34 @@ export function Image({ src, alt, className }: {
         )}
       </figure>
 
-      <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="max-w-5xl p-2">
-          <DialogTitle className="sr-only">{alt ?? t("images.assistantImage")}</DialogTitle>
-          <img
-            src={src}
-            alt={alt ?? t("images.assistantImage")}
-            className="max-h-[82vh] w-full rounded-md object-contain"
-          />
-          {alt && <p className="px-1 pb-1 text-center text-xs text-muted-foreground">{alt}</p>}
-        </DialogContent>
-      </Dialog>
+      <ImageLightbox src={src} alt={alt} open={open} onOpenChange={setOpen} />
     </>
+  )
+}
+
+/**
+ * Lightbox de imagem em dialog — mesmo padrão da galeria de mídia (painel
+ * lateral). Usado pelas imagens do assistente e pelos anexos do chat/input.
+ */
+export function ImageLightbox({ src, alt, open, onOpenChange }: {
+  src: string
+  alt?: string
+  open: boolean
+  onOpenChange: (open: boolean) => void
+}) {
+  const { t } = useTranslation()
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-5xl p-2">
+        <DialogTitle className="sr-only">{alt ?? t("images.assistantImage")}</DialogTitle>
+        <img
+          src={src}
+          alt={alt ?? t("images.assistantImage")}
+          className="max-h-[76vh] w-full rounded-md object-contain"
+        />
+        {alt && <p className="px-1 pb-1 text-center text-xs text-muted-foreground">{alt}</p>}
+      </DialogContent>
+    </Dialog>
   )
 }
 

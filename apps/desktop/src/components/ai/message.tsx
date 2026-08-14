@@ -8,6 +8,7 @@ import { Streamdown } from "streamdown"
 import { Button } from "~/components/ui/button"
 import { ButtonGroup, ButtonGroupText } from "~/components/ui/button-group"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "~/components/ui/tooltip"
+import { ImageLightbox } from "~/src/components/ai/image"
 import { cn } from "~/lib/utils"
 
 const streamdownPlugins = { code }
@@ -287,33 +288,42 @@ export type MessageAttachmentProps = HTMLAttributes<HTMLDivElement> & {
 
 export function MessageAttachment({ data, className, onRemove, ...props }: MessageAttachmentProps) {
   const { t } = useTranslation()
+  const [lightboxOpen, setLightboxOpen] = useState(false)
   const filename = data.filename || ""
   const mediaType = data.mediaType?.startsWith("image/") && data.url ? "image" : "file"
   const isImage = mediaType === "image"
   const attachmentLabel = filename || (isImage ? t("attachments.image") : t("attachments.file"))
 
   return (
-    <div className={cn("group relative size-24 overflow-hidden rounded-lg", className)} {...props}>
-      {isImage ? (
-        <>
-          <img
-            alt={filename || t("attachments.attachment")}
-            className="size-full object-cover"
-            height={100}
-            src={data.url}
-            width={100}
-          />
-          {onRemove && (
-            <Button
-              aria-label={t("attachments.remove")}
-              className="absolute top-2 right-2 size-6 rounded-full bg-background/80 p-0 opacity-0 backdrop-blur-sm transition-opacity hover:bg-background group-hover:opacity-100 [&>svg]:size-3"
-              onClick={e => {
-                e.stopPropagation()
-                onRemove()
-              }}
+    <>
+      <div className={cn("group relative size-24 overflow-hidden rounded-lg", className)} {...props}>
+        {isImage ? (
+          <>
+            <button
               type="button"
-              variant="ghost"
+              onClick={() => setLightboxOpen(true)}
+              title={t("images.enlarge")}
+              className="block size-full cursor-zoom-in"
             >
+              <img
+                alt={filename || t("attachments.attachment")}
+                className="size-full object-cover"
+                height={100}
+                src={data.url}
+                width={100}
+              />
+            </button>
+            {onRemove && (
+              <Button
+                aria-label={t("attachments.remove")}
+                className="pointer-events-none absolute top-2 right-2 size-6 rounded-full bg-background/80 p-0 opacity-0 backdrop-blur-sm transition-opacity hover:bg-background group-hover:pointer-events-auto group-hover:opacity-100 [&>svg]:size-3"
+                onClick={e => {
+                  e.stopPropagation()
+                  onRemove()
+                }}
+                type="button"
+                variant="ghost"
+              >
               <XIcon />
               <span className="sr-only">{t("attachments.remove")}</span>
             </Button>
@@ -344,7 +354,11 @@ export function MessageAttachment({ data, className, onRemove, ...props }: Messa
           )}
         </>
       )}
-    </div>
+      </div>
+      {isImage && data.url && (
+        <ImageLightbox src={data.url} alt={filename} open={lightboxOpen} onOpenChange={setLightboxOpen} />
+      )}
+    </>
   )
 }
 

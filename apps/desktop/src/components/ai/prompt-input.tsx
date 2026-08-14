@@ -35,6 +35,7 @@ import {
   useState,
 } from "react"
 import { Button } from "@/components/ui/button"
+import { ImageLightbox } from "@/src/components/ai/image"
 import {
   Command,
   CommandEmpty,
@@ -269,6 +270,7 @@ export type PromptInputAttachmentProps = HTMLAttributes<HTMLDivElement> & {
 export function PromptInputAttachment({ data, className, ...props }: PromptInputAttachmentProps) {
   const attachments = usePromptInputAttachments()
   const { t } = useTranslation()
+  const [lightboxOpen, setLightboxOpen] = useState(false)
 
   const filename = data.filename || ""
 
@@ -278,40 +280,41 @@ export function PromptInputAttachment({ data, className, ...props }: PromptInput
   const attachmentLabel = filename || (isImage ? t("attachments.image") : t("attachments.file"))
 
   return (
-    <PromptInputHoverCard>
-      <HoverCardTrigger render={<div className={cn(
-                      "group relative flex h-8 cursor-pointer select-none items-center gap-1.5 rounded-md border border-border px-1.5 font-medium text-sm transition-all hover:bg-accent hover:text-accent-foreground dark:hover:bg-accent/50",
-                      className,
-                    )} key={data.id} {...props} />}><div className="relative size-5 shrink-0">
-                      <div className="absolute inset-0 flex size-5 items-center justify-center overflow-hidden rounded bg-background transition-opacity group-hover:opacity-0">
-                        {isImage ? (
-                          <img
-                            alt={filename || t("attachments.attachment")}
-                            className="size-5 object-cover"
-                            height={20}
-                            src={data.url}
-                            width={20}
-                          />
-                        ) : (
-                          <div className="flex size-5 items-center justify-center text-muted-foreground">
-                            <PaperclipIcon className="size-3" />
-                          </div>
-                        )}
-                      </div>
-                      <Button
-                        aria-label={t("attachments.remove")}
-                        className="absolute inset-0 size-5 cursor-pointer rounded p-0 opacity-0 transition-opacity group-hover:pointer-events-auto group-hover:opacity-100 [&>svg]:size-2.5"
-                        onClick={e => {
-                          e.stopPropagation()
-                          attachments.remove(data.id)
-                        }}
-                        type="button"
-                        variant="ghost"
-                      >
-                        <XIcon />
-                        <span className="sr-only">{t("attachments.remove")}</span>
-                      </Button>
-                    </div><span className="flex-1 truncate">{attachmentLabel}</span></HoverCardTrigger>
+    <>
+      <PromptInputHoverCard>
+        <HoverCardTrigger render={<div className={cn(
+                        "group relative flex h-8 cursor-pointer select-none items-center gap-1.5 rounded-md border border-border px-1.5 font-medium text-sm transition-all hover:bg-accent hover:text-accent-foreground dark:hover:bg-accent/50",
+                        className,
+                      )} key={data.id} {...props} onClick={(e) => { props.onClick?.(e); if (isImage) setLightboxOpen(true) }} />}><div className="relative size-5 shrink-0">
+                        <div className="absolute inset-0 flex size-5 items-center justify-center overflow-hidden rounded bg-background transition-opacity group-hover:opacity-0">
+                          {isImage ? (
+                            <img
+                              alt={filename || t("attachments.attachment")}
+                              className="size-5 object-cover"
+                              height={20}
+                              src={data.url}
+                              width={20}
+                            />
+                          ) : (
+                            <div className="flex size-5 items-center justify-center text-muted-foreground">
+                              <PaperclipIcon className="size-3" />
+                            </div>
+                          )}
+                        </div>
+                        <Button
+                          aria-label={t("attachments.remove")}
+                          className="pointer-events-none absolute inset-0 size-5 cursor-pointer rounded p-0 opacity-0 transition-opacity group-hover:pointer-events-auto group-hover:opacity-100 [&>svg]:size-2.5"
+                          onClick={e => {
+                            e.stopPropagation()
+                            attachments.remove(data.id)
+                          }}
+                          type="button"
+                          variant="ghost"
+                        >
+                          <XIcon />
+                          <span className="sr-only">{t("attachments.remove")}</span>
+                        </Button>
+                      </div><span className="flex-1 truncate">{attachmentLabel}</span></HoverCardTrigger>
       <PromptInputHoverCardContent className="w-auto p-2">
         <div className="w-auto space-y-3">
           {isImage && (
@@ -337,7 +340,11 @@ export function PromptInputAttachment({ data, className, ...props }: PromptInput
           </div>
         </div>
       </PromptInputHoverCardContent>
-    </PromptInputHoverCard>
+      </PromptInputHoverCard>
+      {isImage && data.url && (
+        <ImageLightbox src={data.url} alt={filename} open={lightboxOpen} onOpenChange={setLightboxOpen} />
+      )}
+    </>
   )
 }
 
