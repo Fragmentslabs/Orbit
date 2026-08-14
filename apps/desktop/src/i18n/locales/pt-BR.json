@@ -473,7 +473,8 @@
       "folders": "Pastas",
       "chats": "Conversas",
       "archived": "Arquivados",
-      "noChats": "Nenhuma conversa ainda"
+      "noChats": "Nenhuma conversa ainda",
+      "routines": "Rotinas"
     },
     "account": {
       "localAssistant": "Assistente local",
@@ -1611,5 +1612,129 @@
     "semTasksParaDependencia": "Ainda não há outra task nesta esteira",
     "buscarTask": "Buscar task...",
     "nenhumaTask": "Nenhuma task encontrada"
+  },
+  "rotinas": {
+    "titulo": "Rotinas",
+    "subtitulo": "Sessões que voltam sozinhas: o agente roda o mesmo prompt na hora marcada.",
+    "carregando": "Carregando rotinas…",
+    "abas": {
+      "criar": "Criar",
+      "minhas": "Minhas rotinas"
+    },
+    "criar": {
+      "descreverDica": "Descreva em texto corrido. O modelo transforma isso em título, prompt, agenda e modos — você revisa tudo na etapa seguinte.",
+      "placeholder": "Ex.: todo dia às 9h, revise os commits do dia anterior neste repositório e escreva um resumo do que mudou, com os riscos que você encontrar.",
+      "modelo": "Modelo",
+      "gerar": "Gerar",
+      "gerando": "Gerando…",
+      "semModelo": "Escolha um modelo para gerar a rotina.",
+      "titulo": "Nova rotina"
+    },
+    "revisar": {
+      "titulo": "Revisar rotina",
+      "subtitulo": "O agente sugeriu — confirme ou ajuste antes de criar.",
+      "voltar": "Voltar",
+      "campoTitulo": "Título",
+      "campoPrompt": "Prompt da rotina",
+      "campoPromptDica": "É o que o agente recebe a cada execução. Precisa ser autocontido: não há ninguém para responder perguntas.",
+      "agenda": "Quando executar",
+      "modos": "Modos",
+      "modosDica": "O agente sugeriu com base no trabalho descrito. Marque ou desmarque à vontade.",
+      "sugerido": "sugerido",
+      "pastas": "Pastas de trabalho",
+      "pastasDica": "Herdadas do workspace atual — a rotina sempre roda nelas.",
+      "semPastas": "Nenhuma pasta aberta. Abra uma pasta no modo código antes de criar a rotina.",
+      "criar": "Criar rotina"
+    },
+    "agenda": {
+      "modo": {
+        "diario": "Todo dia",
+        "semanal": "Dias da semana",
+        "intervalo": "A cada N dias"
+      },
+      "horario": "às",
+      "dia": {
+        "0": "D",
+        "1": "S",
+        "2": "T",
+        "3": "Q",
+        "4": "Q",
+        "5": "S",
+        "6": "S"
+      },
+      "uteis": "Seg a Sex",
+      "fimDeSemana": "Fim de semana",
+      "aCada": "A cada",
+      "dias": "dias",
+      "resumoDiario": "Todo dia às {{horario}}",
+      "resumoDias": "{{dias}} às {{horario}}",
+      "resumoIntervalo": "A cada {{dias}} dias às {{horario}}",
+      "diaAbrev": {
+        "0": "Dom",
+        "1": "Seg",
+        "2": "Ter",
+        "3": "Qua",
+        "4": "Qui",
+        "5": "Sex",
+        "6": "Sáb"
+      },
+      "resumoUteis": "Seg a Sex às {{horario}}",
+      "resumoFimDeSemana": "Fim de semana às {{horario}}"
+    },
+    "modos": {
+      "loop": {
+        "nome": "Loop",
+        "descricao": "O agente revisa o próprio trabalho e itera até concluir."
+      },
+      "subagents": {
+        "nome": "Subagentes",
+        "descricao": "Pode delegar investigações paralelas a workers efêmeros."
+      },
+      "orchestrate": {
+        "nome": "Orquestra",
+        "descricao": "Divide em plano de tarefas e workers. Implica loop e subagentes."
+      },
+      "brain": {
+        "nome": "Memória",
+        "descricao": "Memória persistente — é o que faz a rotina lembrar das execuções anteriores."
+      },
+      "browser": {
+        "nome": "Browser",
+        "descricao": "Abre e inspeciona páginas no navegador do painel."
+      },
+      "plan": {
+        "nome": "Modo Plano",
+        "descricao": "Só planeja, sem executar. A rotina fica esperando aprovação."
+      },
+      "simple": {
+        "nome": "Simples",
+        "descricao": "Resposta direta em texto puro, sem formatação."
+      },
+      "permissaoAviso": "A rotina dispara sozinha: em \"Perguntar\" ela para na primeira ação sensível e fica esperando você responder na sessão da execução."
+    },
+    "lista": {
+      "vazioTitulo": "Nenhuma rotina ainda",
+      "vazioSubtitulo": "Uma rotina é uma sessão que volta sozinha — um relatório diário, uma varredura semanal, uma verificação depois do deploy.",
+      "criarPrimeira": "Criar a primeira rotina",
+      "ativa": "Ativa",
+      "pausada": "Pausada",
+      "proxima": "Próxima: {{quando}}",
+      "executarAgora": "Executar agora",
+      "editar": "Editar",
+      "salvar": "Salvar",
+      "excluir": "Excluir",
+      "excluirTitulo": "Excluir rotina",
+      "excluirDescricao": "\"{{titulo}}\" e TODAS as sessões que ela gerou serão apagadas. Não dá para desfazer.",
+      "nova": "Nova rotina"
+    },
+    "runs": {
+      "titulo": "Sessões",
+      "vazio": "Ainda não rodou nenhuma vez.",
+      "abrirChat": "Abrir sessão",
+      "rodando": "Rodando…",
+      "ok": "Concluída",
+      "erro": "Falhou",
+      "tokens": "{{valor}} tokens"
+    }
   }
 }

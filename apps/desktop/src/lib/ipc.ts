@@ -19,6 +19,14 @@ import type {
   Task,
 } from "@shared/esteira"
 import type { ModelsSnapshot } from "@shared/models"
+import type {
+  NovaRotinaInput,
+  ResultadoGeracao,
+  Rotina,
+  RotinaEvent,
+  RotinaModelo,
+  RotinaRun,
+} from "@shared/rotinas"
 import type { InitEvent, InitStatus, Memory, MemoryEvent } from "@shared/memory"
 import type { Skill, SkillProposal } from "@shared/skills"
 import type { AnalyticsSummary, AnalyticsRange } from "@shared/analytics"
@@ -296,6 +304,27 @@ export interface NovaEsteiraInput {
   /** Instrui as fases a capturarem prints do resultado visual */
   printsDoResultado?: boolean
   modoOperacao?: "manual" | "automatico"
+}
+
+/** Rotinas — chats agendados do modo código (orbit-data/rotinas). */
+export const rotinasApi = {
+  carregar: () =>
+    window.ipcRenderer.invoke("rotinas:carregar") as Promise<{ rotinas: Rotina[]; runs: RotinaRun[] }>,
+  criar: (input: NovaRotinaInput) => window.ipcRenderer.invoke("rotinas:criar", input) as Promise<Rotina>,
+  atualizar: (id: string, patch: Partial<Rotina>) =>
+    window.ipcRenderer.invoke("rotinas:atualizar", id, patch) as Promise<Rotina | null>,
+  remover: (id: string) => window.ipcRenderer.invoke("rotinas:remover", id) as Promise<void>,
+  executarAgora: (id: string) =>
+    window.ipcRenderer.invoke("rotinas:executarAgora", id) as Promise<string | null>,
+  /** Descarta métricas de execuções cujo chat já foi excluído. */
+  podarRuns: (sessionIds: string[]) =>
+    window.ipcRenderer.invoke("rotinas:podarRuns", sessionIds) as Promise<number>,
+  gerar: (descricao: string, modelo: RotinaModelo, pastas: string[], idioma?: string) =>
+    window.ipcRenderer.invoke("rotinas:gerar", descricao, modelo, pastas, idioma) as Promise<ResultadoGeracao>,
+  onEvent: (listener: (event: RotinaEvent) => void) => {
+    const wrapper = window.ipcRenderer.on("rotinas:event", (event) => listener(event as RotinaEvent))
+    return () => window.ipcRenderer.off("rotinas:event", wrapper)
+  },
 }
 
 /** Galeria de mídia — imagens produzidas pelo agente (orbit-data/media). */

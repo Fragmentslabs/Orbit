@@ -9,6 +9,7 @@ import {
   Bot,
   Boxes,
   BrainCircuit,
+  CalendarClock,
   Layers,
   Check,
   CheckSquare,
@@ -231,6 +232,27 @@ function EsteiraButton() {
     >
       <Layers className="size-4" />
       {t("esteira.titulo")}
+    </Button>
+  )
+}
+
+/** Rotinas: chats agendados. Mesma lógica de navegação da esteira. */
+function RotinasButton() {
+  const { t } = useTranslation()
+  const { mode, view, setView } = useWorkspace()
+  const active = view === "rotinas"
+  if (mode !== "code") return null
+  return (
+    <Button
+      variant="ghost"
+      className={cn(
+        "w-full justify-start gap-2 text-sm",
+        active && "bg-sidebar-accent text-sidebar-accent-foreground",
+      )}
+      onClick={() => setView(active ? "chat" : "rotinas")}
+    >
+      <CalendarClock className="size-4" />
+      {t("rotinas.titulo")}
     </Button>
   )
 }
@@ -1018,8 +1040,21 @@ function ChatHistory() {
     exitSelectionMode()
   }
 
+  // Chats de rotina saem da listagem normal: eles vivem no grupo "Rotinas"
+  // logo abaixo, e apareceriam duplicados (e afogariam os recentes) se também
+  // entrassem em "Conversas" ou nas pastas.
   const modeSessions = useMemo(
-    () => sessions.filter((s) => s.mode === mode).sort((a, b) => b.updatedAt - a.updatedAt),
+    () =>
+      sessions
+        .filter((s) => s.mode === mode && !s.routineId)
+        .sort((a, b) => b.updatedAt - a.updatedAt),
+    [sessions, mode],
+  )
+  // Sem filtro de arquivado: os chats de rotina não entram no grupo
+  // "Arquivados" (que sai de modeSessions), então arquivar um faria ele sumir
+  // da sidebar inteira.
+  const routineSessions = useMemo(
+    () => (mode === "code" ? sessions.filter((s) => !!s.routineId).sort((a, b) => b.updatedAt - a.updatedAt) : []),
     [sessions, mode],
   )
   // Workers ficam agrupados sob o orquestrador (independente do modo do worker)
@@ -1115,6 +1150,23 @@ function ChatHistory() {
           )}
         </SidebarMenu>
       </AccordionGroup>
+
+      {/* Expandido por padrão: é aqui que aparecem o spinner da execução em
+          curso e os pontos de "terminou e não foi lido" / erro — colapsado, a
+          rotina rodaria sem nenhum sinal na tela. */}
+      {routineSessions.length > 0 && (
+        <AccordionGroup label={t("sidebar.groups.routines")}>
+          <SidebarMenu>
+            {routineSessions.map((session) => (
+              <SessionItem
+                key={session.id}
+                session={session}
+                childSessions={childrenByParent[session.id]}
+              />
+            ))}
+          </SidebarMenu>
+        </AccordionGroup>
+      )}
 
       {archived.length > 0 && (
         <AccordionGroup label={t("sidebar.groups.archived")} defaultExpanded={false}>
@@ -1247,6 +1299,7 @@ export function AppSidebar() {
             </div>
             <div className="space-y-1 px-2 pb-2">
               <EsteiraButton />
+              <RotinasButton />
               <MemoriesButton />
               <ModelsButton />
               <UsageButton />
