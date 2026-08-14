@@ -16,7 +16,8 @@ import {
 } from "@/src/components/ai/model-selector"
 import { SettingsDialog } from "@/src/components/settings-dialog"
 import { ModalityIcons } from "@/src/components/ai/modality-icons"
-import { useProviderStore } from "@/src/stores/provider-store"
+import type { CatalogModel, CatalogProvider } from "@shared/chat"
+import { useProviderStore, type SelectedModel } from "@/src/stores/provider-store"
 import { useSessionModel, useSessionModelPrefs } from "@/src/stores/session-model-prefs"
 
 const MAX_MODELS_PER_PROVIDER = 40
@@ -26,14 +27,25 @@ const MAX_MODELS_PER_PROVIDER = 40
  * (catálogo models.dev), agrupados por provedor, com indicador de reasoning.
  * O modelo é POR CHAT: `sessionId` decide qual override ler/escrever
  * (undefined = chat novo, usa o draft até o primeiro envio).
+ *
+ * Modo controlado (dialogs — ex.: worker/visão): quando `value` é passado,
+ * a seleção vem de props, recents da sessão são ocultados e `filter` pode
+ * restringir os modelos listados (ex.: só visão, só tool_call).
  */
-export function ModelPicker({ sessionId, open: openProp, onOpenChange: onOpenChangeProp, hideTrigger }: {
+export function ModelPicker({ sessionId, open: openProp, onOpenChange: onOpenChangeProp, hideTrigger, value, onValueChange, filter, nullLabel }: {
   sessionId?: string
   /** Controle externo do diálogo (usado pelo menu de configurações rápidas) */
   open?: boolean
   onOpenChange?: (open: boolean) => void
   /** Oculta o trigger — útil quando outro elemento abre o diálogo */
   hideTrigger?: boolean
+  /** Modo controlado: seleção vinda de props (dialogs de configuração) */
+  value?: SelectedModel | null
+  onValueChange?: (model: SelectedModel | null) => void
+  /** Filtro por modelo (ex.: apenas modelos com visão) */
+  filter?: (provider: CatalogProvider, model: CatalogModel) => boolean
+  /** Rótulo do item "nenhum" no topo (só no modo controlado) */
+  nullLabel?: string
 }) {
   const { t } = useTranslation()
   const [internalOpen, setInternalOpen] = useState(false)
@@ -43,41 +55,56 @@ export function ModelPicker({ sessionId, open: openProp, onOpenChange: onOpenCha
   const onOpenChange = onOpenChangeProp ?? setInternalOpen
   const catalog = useProviderStore((s) => s.catalog)
   const connectedProviders = useProviderStore((s) => s.connectedProviders)
-  const selected = useSessionModel(sessionId)
-const recents = useSessionModelPrefs((s) => s.recents)
+  const sessionSelected = useSessionModel(sessionId)
+  const recents = useSessionModelPrefs((s) => s.recents)
   const selectModel = useSessionModelPrefs((s) => s.selectModel)
   const removeRecent = useSessionModelPrefs((s) => s.removeRecent)
   const loading = useProviderStore((s) => s.loading)
   const error = useProviderStore((s) => s.error)
 
+  const controlled = value !== undefined
+  const selected = controlled ? value : sessionSelected
+
   const groups = useMemo(
     () =>
       connectedProviders
         .filter((id) => catalog[id])
-        .map((id) => ({
-          provider: catalog[id],
-          models: Object.values(catalog[id].models)
-            .sort((a, b) => (b.release_date ?? "").localeCompare(a.release_date ?? ""))
-            .slice(0, MAX_MODELS_PER_PROVIDER),
-        })),
-    [catalog, connectedProviders],
+        .map((id) => {
+          const provider = catalog[id]
+          return {
+            provider,
+            models: Object.values(provider.models)
+              .filter((model) => (filter ? filter(provider, model) : true))
+              .sort((a, b) => (b.release_date ?? "").localeCompare(a.release_date ?? ""))
+              .slice(0, MAX_MODELS_PER_PROVIDER),
+          }
+        })
+        .filter((g) => g.models.length > 0),
+    [catalog, connectedProviders, filter],
   )
 
   // Recents: só modelos ainda no catálogo e de provedores conectados
+  // (ocultos no modo controlado — a escolha ali é de worker/visão, não do chat)
   const recentModels = useMemo(
     () =>
-      recents
-        .map((r) => ({ recent: r, provider: catalog[r.providerId], model: catalog[r.providerId]?.models[r.modelId] }))
-        .filter((entry): entry is { recent: NonNullable<typeof entry.recent>; provider: NonNullable<typeof entry.provider>; model: NonNullable<typeof entry.model> } =>
-          connectedProviders.includes(entry.recent.providerId) && !!entry.provider && !!entry.model,
-        ),
-    [recents, catalog, connectedProviders],
+      controlled
+        ? []
+        : recents
+            .map((r) => ({ recent: r, provider: catalog[r.providerId], model: catalog[r.providerId]?.models[r.modelId] }))
+            .filter((entry): entry is { recent: NonNullable<typeof entry.recent>; provider: NonNullable<typeof entry.provider>; model: NonNullable<typeof entry.model> } =>
+              connectedProviders.includes(entry.recent.providerId) && !!entry.provider && !!entry.model,
+            ),
+    [recents, catalog, connectedProviders, controlled],
   )
 
   const selectedModel = selected ? catalog[selected.providerId]?.models[selected.modelId] : undefined
 
   const pick = (providerId: string, modelId: string) => {
-    selectModel(sessionId, providerId, modelId)
+    if (controlled) {
+      onValueChange?.({ providerId, modelId })
+    } else {
+      selectModel(sessionId, providerId, modelId)
+    }
     onOpenChange(false)
   }
 
@@ -97,6 +124,19 @@ const recents = useSessionModelPrefs((s) => s.recents)
           <ModelSelectorInput placeholder={t("preferences.searchModels")} />
           <ModelSelectorList>
             <ModelSelectorEmpty>{t("preferences.noModelsFound")}</ModelSelectorEmpty>
+            {nullLabel && (
+              <ModelSelectorItem
+                onSelect={() => {
+                  onValueChange?.(null)
+                  onOpenChange(false)
+                }}
+                value="__none__"
+                className={selected === null ? "bg-primary/10" : undefined}
+              >
+                <XIcon className="size-3.5 shrink-0 text-muted-foreground" />
+                <ModelSelectorName>{nullLabel}</ModelSelectorName>
+              </ModelSelectorItem>
+            )}
             {recentModels.length > 0 && (
               <ModelSelectorGroup heading={t("modelPicker.recent")}>
                 {recentModels.map(({ recent, provider, model }) => (

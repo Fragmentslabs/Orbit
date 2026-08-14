@@ -108,6 +108,7 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId }: 
   const sessionDir = useSessionStore((s) => sessionId ? s.sessions.find(x => x.id === sessionId)?.directory : undefined)
   const visionModel = useProviderStore((s) => s.visionModel)
   const setVisionModel = useProviderStore((s) => s.setVisionModel)
+  const workerModel = useProviderStore((s) => s.workerModel)
   const visionConfigOpen = useProviderStore((s) => s.visionConfigOpen)
   const setVisionConfigOpen = useProviderStore((s) => s.setVisionConfigOpen)
   const modesInRow = useAppearanceStore((s) => s.modesInRow)
@@ -303,8 +304,22 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId }: 
                     subagents={subagents}
                     orchestra={orchestra}
                     loop={loop}
-                    onSubagentsChange={setSubagents}
-                    onOrchestraChange={setOrchestra}
+                    onSubagentsChange={(v) => {
+                      setSubagents(v)
+                      if (v) {
+                        setOrchestra(false)
+                        // Primeira ativação sem worker configurado → abre a configuração
+                        if (!workerModel) setConfigOpen(true)
+                      }
+                    }}
+                    onOrchestraChange={(v) => {
+                      setOrchestra(v)
+                      if (v) {
+                        setSubagents(false)
+                        // Primeira ativação sem worker configurado → abre a configuração
+                        if (!workerModel) setConfigOpen(true)
+                      }
+                    }}
                     onLoopChange={setLoop}
                     onOpenConfig={() => setConfigOpen(true)}
                     onOpenLoopConfig={() => setLoopConfigOpen(true)}
@@ -416,7 +431,11 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId }: 
               onToggle={() => {
                 const next = !subagents
                 setSubagents(next)
-                if (next) setOrchestra(false)
+                if (next) {
+                  setOrchestra(false)
+                  // Primeira ativação sem worker configurado → abre a configuração
+                  if (!workerModel) setConfigOpen(true)
+                }
               }}
               iconOnly={modeLabelStyle === "icon"}
             />
@@ -430,7 +449,11 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId }: 
               onToggle={() => {
                 const next = !orchestra
                 setOrchestra(next)
-                if (next) setSubagents(false)
+                if (next) {
+                  setSubagents(false)
+                  // Primeira ativação sem worker configurado → abre a configuração
+                  if (!workerModel) setConfigOpen(true)
+                }
               }}
               iconOnly={modeLabelStyle === "icon"}
             />

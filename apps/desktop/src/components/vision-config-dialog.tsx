@@ -1,6 +1,6 @@
-import { useMemo } from "react"
+import { useState } from "react"
 import { useTranslation } from "react-i18next"
-import { Eye } from "lucide-react"
+import { ChevronDownIcon, Eye } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -9,19 +9,10 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import {
-  Select,
-  SelectContent,
-  SelectGroup,
-  SelectItem,
-  SelectLabel,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
+import { ModelSelectorLogo, ModelSelectorName } from "@/src/components/ai/model-selector"
+import { ModelPicker } from "@/src/components/model-picker"
 import { modelSupportsVision } from "@shared/chat"
 import { useProviderStore } from "@/src/stores/provider-store"
-
-const MAX_MODELS_PER_PROVIDER = 20
 
 /**
  * Configuração do modo Visão: escolhe o modelo de visão que DESCREVE imagens
@@ -35,24 +26,9 @@ export function VisionConfigDialog({ open, onOpenChange }: {
 }) {
   const { t } = useTranslation()
   const catalog = useProviderStore((s) => s.catalog)
-  const connectedProviders = useProviderStore((s) => s.connectedProviders)
   const visionModel = useProviderStore((s) => s.visionModel)
   const setVisionModel = useProviderStore((s) => s.setVisionModel)
-
-  const groups = useMemo(
-    () =>
-      connectedProviders
-        .filter((id) => catalog[id])
-        .map((id) => ({
-          provider: catalog[id],
-          models: Object.values(catalog[id].models)
-            .filter((model) => modelSupportsVision(catalog[id], model.id))
-            .sort((a, b) => (b.release_date ?? "").localeCompare(a.release_date ?? ""))
-            .slice(0, MAX_MODELS_PER_PROVIDER),
-        }))
-        .filter((g) => g.models.length > 0),
-    [catalog, connectedProviders],
-  )
+  const [pickerOpen, setPickerOpen] = useState(false)
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -68,30 +44,28 @@ export function VisionConfigDialog({ open, onOpenChange }: {
           </div>
           <div className="flex flex-col gap-1.5">
             <p className="text-xs font-medium text-muted-foreground">{t("visionConfig.visionModel")}</p>
-            <Select
-              value={visionModel ? `${visionModel.providerId}/${visionModel.modelId}` : null}
-              onValueChange={(value) => {
-                if (typeof value !== "string") return
-                const [providerId, ...rest] = value.split("/")
-                setVisionModel({ providerId, modelId: rest.join("/") })
-              }}
+            <Button
+              variant="outline"
+              className="h-8 w-full justify-start gap-1.5 px-2 text-xs font-normal"
+              onClick={() => setPickerOpen(true)}
             >
-              <SelectTrigger className="w-full">
-                <SelectValue placeholder={t("visionConfig.disabled")} />
-              </SelectTrigger>
-              <SelectContent alignItemWithTrigger={false}>
-                {groups.map(({ provider, models }) => (
-                  <SelectGroup key={provider.id}>
-                    <SelectLabel>{provider.name}</SelectLabel>
-                    {models.map((model) => (
-                      <SelectItem key={`${provider.id}/${model.id}`} value={`${provider.id}/${model.id}`}>
-                        {model.name}
-                      </SelectItem>
-                    ))}
-                  </SelectGroup>
-                ))}
-              </SelectContent>
-            </Select>
+              <ModelSelectorLogo provider={visionModel?.providerId ?? "openai"} />
+              <ModelSelectorName>
+                {visionModel
+                  ? (catalog[visionModel.providerId]?.models[visionModel.modelId]?.name ?? visionModel.modelId)
+                  : t("visionConfig.disabled")}
+              </ModelSelectorName>
+              <ChevronDownIcon className="ml-auto size-3 text-muted-foreground" />
+            </Button>
+            <ModelPicker
+              value={visionModel}
+              onValueChange={setVisionModel}
+              filter={(provider, model) => modelSupportsVision(provider, model.id)}
+              nullLabel={t("visionConfig.disabled")}
+              hideTrigger
+              open={pickerOpen}
+              onOpenChange={setPickerOpen}
+            />
             <p className="text-[11px] text-muted-foreground">
               {t("visionConfig.noSelectionHint")}
             </p>

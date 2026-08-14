@@ -13,12 +13,15 @@ interface ModeToggleDef {
   onConfig?: () => void
 }
 
-function Gear({ onClick }: { onClick: () => void }) {
+function Gear({ onClick, active }: { onClick: () => void; active: boolean }) {
   const { t } = useTranslation()
   return (
     <button
       type="button"
-      className="absolute top-1/2 -translate-y-1/2 right-2 flex size-5 items-center justify-center rounded text-muted-foreground hover:bg-foreground/10 hover:text-foreground"
+      className={cn(
+        "absolute top-1/2 -translate-y-1/2 flex size-5 items-center justify-center rounded text-muted-foreground hover:bg-foreground/10 hover:text-foreground",
+        active ? "right-8" : "right-2",
+      )}
       onPointerDown={(e) => e.stopPropagation()}
       onClick={(e) => {
         e.preventDefault()
@@ -40,11 +43,11 @@ export function ModeMenuItems({ items }: { items: ModeToggleDef[] }) {
           key={label}
           checked={active}
           onCheckedChange={(checked) => onChange(checked)}
-          className={cn(onConfig && "pr-9")}
+          className={cn(onConfig && (active ? "pr-14" : "pr-9"))}
         >
           <Icon className="size-4" />
           {label}
-          {onConfig && <Gear onClick={onConfig} />}
+          {onConfig && <Gear onClick={onConfig} active={active} />}
         </DropdownMenuCheckboxItem>
       ))}
     </>

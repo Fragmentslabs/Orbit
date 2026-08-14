@@ -1,6 +1,6 @@
-import { useMemo } from "react"
+import { useState } from "react"
 import { useTranslation } from "react-i18next"
-import { BrainIcon } from "lucide-react"
+import { BrainIcon, ChevronDownIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -9,19 +9,10 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import {
-  Select,
-  SelectContent,
-  SelectGroup,
-  SelectItem,
-  SelectLabel,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
+import { ModelSelectorLogo, ModelSelectorName } from "@/src/components/ai/model-selector"
+import { ModelPicker } from "@/src/components/model-picker"
 import { ReasoningPicker } from "@/src/components/reasoning-picker"
 import { useProviderStore } from "@/src/stores/provider-store"
-
-const MAX_MODELS_PER_PROVIDER = 20
 
 /**
  * Modal de configuração dos workers, compartilhado entre Subagents e Orchestra:
@@ -34,24 +25,11 @@ export function OrchestrationConfigDialog({ open, onOpenChange }: {
 }) {
   const { t } = useTranslation()
   const catalog = useProviderStore((s) => s.catalog)
-  const connectedProviders = useProviderStore((s) => s.connectedProviders)
   const workerModel = useProviderStore((s) => s.workerModel)
   const workerReasoning = useProviderStore((s) => s.workerReasoning)
   const setWorkerModel = useProviderStore((s) => s.setWorkerModel)
   const setWorkerReasoning = useProviderStore((s) => s.setWorkerReasoning)
-
-  const groups = useMemo(
-    () =>
-      connectedProviders
-        .filter((id) => catalog[id])
-        .map((id) => ({
-          provider: catalog[id],
-          models: Object.values(catalog[id].models)
-            .sort((a, b) => (b.release_date ?? "").localeCompare(a.release_date ?? ""))
-            .slice(0, MAX_MODELS_PER_PROVIDER),
-        })),
-    [catalog, connectedProviders],
-  )
+  const [pickerOpen, setPickerOpen] = useState(false)
 
   const selectedCatalogModel = workerModel
     ? catalog[workerModel.providerId]?.models[workerModel.modelId]
@@ -71,36 +49,31 @@ export function OrchestrationConfigDialog({ open, onOpenChange }: {
           </div>
           <div className="flex flex-col gap-1.5">
             <p className="text-xs font-medium text-muted-foreground">{t("orchestrationConfig.workerModel")}</p>
-            <Select
-              value={workerModel ? `${workerModel.providerId}/${workerModel.modelId}` : null}
-              onValueChange={(value) => {
-                if (typeof value !== "string") return
-                const [providerId, ...rest] = value.split("/")
-                setWorkerModel({ providerId, modelId: rest.join("/") })
+            <Button
+              variant="outline"
+              className="h-8 w-full justify-start gap-1.5 px-2 text-xs font-normal"
+              onClick={() => setPickerOpen(true)}
+            >
+              <ModelSelectorLogo provider={workerModel?.providerId ?? "openai"} />
+              <ModelSelectorName>
+                {workerModel
+                  ? (catalog[workerModel.providerId]?.models[workerModel.modelId]?.name ?? workerModel.modelId)
+                  : t("orchestrationConfig.useMainModel")}
+              </ModelSelectorName>
+              <ChevronDownIcon className="ml-auto size-3 text-muted-foreground" />
+            </Button>
+            <ModelPicker
+              value={workerModel}
+              onValueChange={(model) => {
+                setWorkerModel(model)
                 setWorkerReasoning(null)
               }}
-            >
-              <SelectTrigger className="w-full">
-                <SelectValue placeholder={t("orchestrationConfig.useMainModel")} />
-              </SelectTrigger>
-              <SelectContent alignItemWithTrigger={false}>
-                {groups.map(({ provider, models }) => (
-                  <SelectGroup key={provider.id}>
-                    <SelectLabel>{provider.name}</SelectLabel>
-                    {models.map((model) => (
-                      <SelectItem
-                        key={`${provider.id}/${model.id}`}
-                        value={`${provider.id}/${model.id}`}
-                        disabled={model.tool_call === false}
-                      >
-                        {model.name}
-                        {model.tool_call === false ? ` (${t("orchestrationConfig.noTools")})` : ""}
-                      </SelectItem>
-                    ))}
-                  </SelectGroup>
-                ))}
-              </SelectContent>
-            </Select>
+              filter={(_provider, model) => model.tool_call !== false}
+              nullLabel={t("orchestrationConfig.useMainModel")}
+              hideTrigger
+              open={pickerOpen}
+              onOpenChange={setPickerOpen}
+            />
             <p className="text-[11px] text-muted-foreground">
               {t("orchestrationConfig.noSelectionHint")}
             </p>
