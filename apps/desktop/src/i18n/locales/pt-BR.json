@@ -1642,7 +1642,7 @@
       "modosDica": "O agente sugeriu com base no trabalho descrito. Marque ou desmarque à vontade.",
       "sugerido": "sugerido",
       "pastas": "Pastas de trabalho",
-      "pastasDica": "Herdadas do workspace atual — a rotina sempre roda nelas.",
+      "pastasDica": "Escolhidas nesta etapa — a rotina sempre roda nelas.",
       "semPastas": "Nenhuma pasta aberta. Abra uma pasta no modo código antes de criar a rotina.",
       "criar": "Criar rotina"
     },

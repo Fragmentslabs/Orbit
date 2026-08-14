@@ -9,7 +9,8 @@ import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Skeleton } from "@/components/ui/skeleton"
 import { useWorkspace } from "@/lib/workspace-context"
-import { cn } from "@/lib/utils"
+import { BranchSelector } from "@/src/components/branch-selector"
+import { FolderSelector } from "@/src/components/folder-selector"
 import { ModelPicker } from "@/src/components/model-picker"
 import { LOCALE_PROMPT_NAME, useLocaleStore } from "@/src/stores/locale-store"
 import type { SelectedModel } from "@/src/stores/provider-store"
@@ -38,13 +39,19 @@ export function CriarRotinaDialog({
   onCriada?: (rotinaId: string) => void
 }) {
   const { t } = useTranslation()
-  const { folders } = useWorkspace()
+  const { folders: pastasDoWorkspace } = useWorkspace()
   const rotinas = useRotinasStore((s) => s.rotinas)
   const gerar = useRotinasStore((s) => s.gerar)
   const criar = useRotinasStore((s) => s.criar)
 
   const [descricao, setDescricao] = useState("")
   const [modelo, setModelo] = useState<SelectedModel | null>(null)
+  // A pasta é escolhida NA ETAPA 1, junto com o modelo — a geração já usa essas
+  // pastas como contexto do prompt. Semeada do workspace atual (o cenário mais
+  // comum é rotina para o repositório que já está aberto), mas independente
+  // dele dali em diante: trocar de pasta no chat por trás não pode mudar a
+  // rotina que está sendo criada.
+  const [pastas, setPastas] = useState<string[]>([])
   const [gerando, setGerando] = useState(false)
   const [erro, setErro] = useState<string | null>(null)
   const [sugestao, setSugestao] = useState<RotinaSugestao | null>(null)
@@ -78,6 +85,8 @@ export function CriarRotinaDialog({
     setErro(null)
     setGerando(false)
     setModelo(padrao)
+    setPastas(pastasDoWorkspace)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [aberto, padrao])
 
   const podeGerar = descricao.trim().length > 0 && !!modelo && !gerando
@@ -88,7 +97,7 @@ export function CriarRotinaDialog({
     setErro(null)
     try {
       const idioma = LOCALE_PROMPT_NAME[useLocaleStore.getState().activeLocale]
-      const resultado = await gerar(descricao.trim(), modelo, folders, idioma)
+      const resultado = await gerar(descricao.trim(), modelo, pastas, idioma)
       if (!resultado.ok) {
         setErro(resultado.erro)
         return
@@ -105,8 +114,16 @@ export function CriarRotinaDialog({
     }
   }
 
+  // Pasta é obrigatória: o scheduler recusa disparar uma rotina sem pasta de
+  // trabalho (electron/lib/rotinas/scheduler.ts) — sem essa checagem aqui, a
+  // rotina seria criada e nunca rodaria, sem nenhum aviso na hora.
   const podeCriar =
-    !!modelo && titulo.trim().length > 0 && prompt.trim().length > 0 && !!parseHorario(agenda.horario) && !salvando
+    !!modelo &&
+    titulo.trim().length > 0 &&
+    prompt.trim().length > 0 &&
+    !!parseHorario(agenda.horario) &&
+    pastas.length > 0 &&
+    !salvando
 
   const handleCriar = async () => {
     if (!podeCriar || !modelo) return
@@ -118,7 +135,7 @@ export function CriarRotinaDialog({
         agenda,
         modelo,
         modos,
-        pastas: folders,
+        pastas,
         ativa: true,
       })
       // Recentes são globais e compartilhados com os chats. O modelo entra na
@@ -179,11 +196,11 @@ export function CriarRotinaDialog({
               </Campo>
 
               <Campo rotulo={t("rotinas.revisar.pastas")} dica={t("rotinas.revisar.pastasDica")}>
-                {folders.length === 0 ? (
+                {pastas.length === 0 ? (
                   <p className="text-[11px] text-destructive">{t("rotinas.revisar.semPastas")}</p>
                 ) : (
                   <ul className="space-y-0.5">
-                    {folders.map((pasta) => (
+                    {pastas.map((pasta) => (
                       <li key={pasta} className="flex items-center gap-1.5 truncate text-[11px] text-muted-foreground">
                         <FolderIcon className="size-3 shrink-0" />
                         <span className="truncate">{pasta}</span>
@@ -229,10 +246,17 @@ export function CriarRotinaDialog({
               </div>
             )}
 
-            <div className={cn("mt-3 flex flex-wrap items-center gap-2 border-t pt-3")}>
+            <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t pt-3">
+              <div className="flex flex-wrap items-center gap-2">
+                <FolderSelector folders={pastas} onFoldersChange={setPastas} />
+                {pastas[0] && <BranchSelector repoPath={pastas[0]} />}
+              </div>
               <ModelPicker value={modelo} onValueChange={setModelo} />
-              {!modelo && <span className="text-[11px] text-muted-foreground">{t("rotinas.criar.semModelo")}</span>}
-              <Button size="sm" className="ml-auto" disabled={!podeGerar} onClick={() => void handleGerar()}>
+            </div>
+            {!modelo && <p className="mt-1.5 text-[11px] text-muted-foreground">{t("rotinas.criar.semModelo")}</p>}
+
+            <div className="mt-2 flex justify-end">
+              <Button size="sm" disabled={!podeGerar} onClick={() => void handleGerar()}>
                 <SparklesIcon className="size-3.5" />
                 {gerando ? t("rotinas.criar.gerando") : t("rotinas.criar.gerar")}
               </Button>

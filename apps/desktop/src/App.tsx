@@ -291,14 +291,33 @@ function Layout() {
                   rightPanelOpen={rightPanelOpen}
                   onToggleSidebar={handleToggleSidebar}
                   onToggleRightPanel={workspaceMode === "code" || workspaceMode === "chat" ? () => setRightPanelOpen(!rightPanelOpen) : undefined}
-                  repoPath={view === "esteira" ? pastasDaEsteira[0] : folders[0]}
+                  repoPath={view === "esteira" ? pastasDaEsteira[0] : view === "rotinas" ? undefined : folders[0]}
                   workspaceMode={workspaceMode}
                   onRequestAgentAction={onRequestAgentAction}
                   // Na página Esteira o header segue a esteira ABERTA, não as
                   // pastas do chat: na lista não há esteira escolhida ainda, e
                   // mostrar pasta/branch ali sugeriria um contexto que não existe.
-                  folders={view === "esteira" ? (pastasDaEsteira.length ? pastasDaEsteira : undefined) : workspaceMode === "code" ? folders : undefined}
-                  onFoldersChange={view === "esteira" ? undefined : workspaceMode === "code" ? setFolders : undefined}
+                  // Na página Rotinas a pasta é escolhida DENTRO do modal de
+                  // criação (uma por rotina) — o header não tem nenhuma pasta
+                  // "da tela" para mostrar.
+                  folders={
+                    view === "esteira"
+                      ? pastasDaEsteira.length
+                        ? pastasDaEsteira
+                        : undefined
+                      : view === "rotinas"
+                        ? undefined
+                        : workspaceMode === "code"
+                          ? folders
+                          : undefined
+                  }
+                  onFoldersChange={
+                    view === "esteira" || view === "rotinas"
+                      ? undefined
+                      : workspaceMode === "code"
+                        ? setFolders
+                        : undefined
+                  }
                   extra={
                     view === "esteira" && modeloDaEsteira ? (
                       <span
