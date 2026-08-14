@@ -5,6 +5,7 @@ import { Image } from 'expo-image'
 import { useTranslation } from 'react-i18next'
 import { modelSupportsVision } from '@orbit/shared'
 import { useSettingsStore } from '~/stores/settings-store'
+import { useModeOverrides } from '~/stores/mode-overrides'
 import { getThemeTokens } from '~/lib/theme-tokens'
 import { useThemeStore } from '~/stores/theme-store'
 import { hslToRgba } from '~/lib/theme'
@@ -13,6 +14,8 @@ import { ModalityIcons } from '~/components/ui/modality-icons'
 interface VisionConfigModalProps {
   visible: boolean
   onClose: () => void
+  /** Sessão (ou chat novo, undefined) que terá o modo Visão ativado/desativado. */
+  targetSession?: string
 }
 
 /**
@@ -21,14 +24,14 @@ interface VisionConfigModalProps {
  * modelos com suporte a imagem (modelSupportsVision). Escolher um modelo
  * configura E ativa o modo; "Desativar visão" limpa a seleção e desliga.
  */
-export function VisionConfigModal({ visible, onClose }: VisionConfigModalProps) {
+export function VisionConfigModal({ visible, onClose, targetSession }: VisionConfigModalProps) {
   const { t } = useTranslation()
   const tokens = getThemeTokens(useThemeStore((s) => s.resolved))
   const catalog = useSettingsStore((s) => s.catalog)
   const connectedProviders = useSettingsStore((s) => s.connectedProviders)
   const visionModel = useSettingsStore((s) => s.visionModel)
   const setVisionModel = useSettingsStore((s) => s.setVisionModel)
-  const setVisionEnabled = useSettingsStore((s) => s.setVisionEnabled)
+  const setModeActive = useModeOverrides((s) => s.setMode)
 
   const [search, setSearch] = useState('')
 
@@ -60,14 +63,14 @@ export function VisionConfigModal({ visible, onClose }: VisionConfigModalProps) 
   }, [catalog, search, connectedProviders])
 
   const selectModel = (providerId: string, modelId: string) => {
-    // Escolher modelo configura E ativa o modo (como no desktop)
+    // Escolher modelo configura E ativa o modo (nesta sessão), como no desktop
     void setVisionModel({ providerId, modelId })
-    void setVisionEnabled(true)
+    setModeActive('vision', targetSession, true)
   }
 
   const disableVision = () => {
     void setVisionModel(null)
-    void setVisionEnabled(false)
+    setModeActive('vision', targetSession, false)
   }
 
   return (

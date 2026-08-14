@@ -18,6 +18,10 @@ import { useThemeStore, hydrateThemePreference } from "../stores/theme-store";
 import { useAppearanceStore, hydratePersonaVisible } from "../stores/appearance-store";
 import { useLocaleStore, hydrateLocale } from "../stores/locale-store";
 import { startMessageScheduler } from "../stores/message-queue-store";
+import { useModelModePrefs } from "../stores/model-mode-prefs";
+import { useModeOverrides } from "../stores/mode-overrides";
+import { useSimplePrefs } from "../stores/simple-prefs";
+import { useBrainPrefs } from "../stores/brain-prefs";
 
 SplashScreen.preventAutoHideAsync();
 
@@ -67,6 +71,11 @@ export default function RootLayout() {
     hydrateLocale().then((locale) => {
       useLocaleStore.getState().setLocale(locale);
     });
+    // Hidrata os defaults/overrides de modos ativos (por chat) ao montar
+    void useModelModePrefs.getState().hydrate();
+    void useModeOverrides.getState().hydrate();
+    void useSimplePrefs.getState().hydrate();
+    void useBrainPrefs.getState().hydrate();
   }, []);
 
   // Sincroniza mudanças do theme-store com o Appearance API (NativeWind v5)

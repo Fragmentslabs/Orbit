@@ -32,6 +32,10 @@ import { useDraftInput } from './draft-input-store'
 import { useMessageQueueStore, __setSessionDeps } from './message-queue-store'
 import { useSettingsStore } from './settings-store'
 import { useChatStore, loadCachedAsks, CACHE_ASKS_PREFIX } from './chat-store'
+import { useModeOverrides, modeActiveFor } from './mode-overrides'
+import { useModelModePrefs } from './model-mode-prefs'
+import { useSimplePrefs } from './simple-prefs'
+import { useBrainPrefs } from './brain-prefs'
 
 // Cache keys
 const CACHE_SESSIONS_KEY = 'orbit_cache_sessions'
@@ -428,10 +432,17 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     const workerModel = usesWorkers && settings.workerModel
       ? { ...settings.workerModel, reasoning: settings.workerReasoning ?? undefined }
       : undefined
-    // Modo Visão: envia o modelo de visão configurado quando ativo. O engine
-    // do desktop usa para descrever imagens (preprocess) — mesmo caminho do
+    // Modo Visão: envia o modelo de visão configurado quando ativo para ESTA
+    // sessão (toggle por chat com default nas preferências). O engine do
+    // desktop usa para descrever imagens (preprocess) — mesmo caminho do
     // desktop, onde o visionModel chega via SendMessageInput.
-    const visionModel = settings.visionEnabled && settings.visionModel
+    const session = get().sessions.find((s) => s.id === sessionId)
+    const sessionMode = session?.mode ?? 'chat'
+    const visionPrefs =
+      sessionMode === 'code'
+        ? useModelModePrefs.getState().codeActiveModes
+        : useModelModePrefs.getState().chatActiveModes
+    const visionModel = settings.visionModel && modeActiveFor('vision', sessionId, visionPrefs.vision)
       ? { ...settings.visionModel }
       : undefined
     const loopConfig = config?.options?.loop ? settings.loopConfig : undefined
@@ -476,6 +487,12 @@ export const useSessionStore = create<SessionState>((set, get) => ({
                 : state.messages,
           }
         })
+        // O draft (chat novo) passa a valer para esta sessão: overrides de
+        // modos ativos (pesquisa/browser/plano/subagentes/orquestra/visão),
+        // simples e brain.
+        useModeOverrides.getState().adopt(session.id)
+        useSimplePrefs.getState().adopt(session.id)
+        useBrainPrefs.getState().adopt(session.id)
         return session
       }
     } catch {

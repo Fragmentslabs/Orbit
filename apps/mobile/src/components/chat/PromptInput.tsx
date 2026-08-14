@@ -39,6 +39,11 @@ import { useWorkspaceStore } from '~/stores/workspace-store'
 import { useSettingsStore } from '~/stores/settings-store'
 import { useAppearanceStore } from '~/stores/appearance-store'
 import { useReasoningPrefs } from '~/stores/reasoning-prefs'
+import { useModelModePrefs } from '~/stores/model-mode-prefs'
+import { useModeActive, useModeOverrides } from '~/stores/mode-overrides'
+import { useSimpleMode, useSimplePrefs } from '~/stores/simple-prefs'
+import { useBrainEnabled, useBrainPrefs } from '~/stores/brain-prefs'
+import { useModelConfigPrompt } from '~/hooks/use-model-config-prompt'
 import { getThemeTokens } from '~/lib/theme-tokens'
 import { useThemeStore } from '~/stores/theme-store'
 import { SendButtonGroup } from './SendButtonGroup'
@@ -73,13 +78,25 @@ export function PromptInput({
   onNavigateToSession,
 }: PromptInputProps) {
   const { t } = useTranslation()
+  // Modos ativos por chat: override (mode-overrides/simple/brain) ?? default
+  // (model-mode-prefs, separado por modo chat/code) — espelho do desktop.
+  const workspaceMode = useWorkspaceStore((s) => s.mode)
+  const modeDefaults = useModelModePrefs((s) =>
+    workspaceMode === 'code' ? s.codeActiveModes : s.chatActiveModes,
+  )
+  const search = useModeActive('search', sessionId, modeDefaults.search)
+  const browser = useModeActive('browser', sessionId, modeDefaults.browser)
+  const simple = useSimpleMode(sessionId, modeDefaults.simple)
+  const brain = useBrainEnabled(sessionId, modeDefaults.brain)
+  const plan = useModeActive('plan', sessionId, modeDefaults.plan)
+  const subagents = useModeActive('subagents', sessionId, modeDefaults.subagents)
+  const orchestra = useModeActive('orchestra', sessionId, modeDefaults.orchestra)
+  const vision = useModeActive('vision', sessionId, modeDefaults.vision)
+  const setModeActive = useModeOverrides((s) => s.setMode)
+  const setSimple = useSimplePrefs((s) => s.setEnabled)
+  const setBrainEnabled = useBrainPrefs((s) => s.setEnabled)
+
   const [text, setText] = useState('')
-  const [activeModes, setActiveModes] = useState<Record<string, boolean>>({
-    brain: true,
-  })
-  const [plan, setPlan] = useState(false)
-  const [subagents, setSubagents] = useState(false)
-  const [orchestra, setOrchestra] = useState(false)
   const [loop, setLoop] = useState(false)
   const prevSessionIdRef = useRef(sessionId)
   const textRef = useRef(text)
@@ -89,8 +106,8 @@ export function PromptInput({
   // deve gerar outro plano.
   const planReview = useSessionStore((s) => (sessionId ? s.planReviews[sessionId] : undefined))
   useEffect(() => {
-    if (planReview?.status === 'implementing') setPlan(false)
-  }, [planReview])
+    if (planReview?.status === 'implementing') setModeActive('plan', sessionId, false)
+  }, [planReview, sessionId, setModeActive])
 
   // Restaura texto do input ao trocar de chat (per-chat draft)
   useEffect(() => {
@@ -109,12 +126,6 @@ export function PromptInput({
   const [workerConfigOpen, setWorkerConfigOpen] = useState(false)
   const [loopConfigOpen, setLoopConfigOpen] = useState(false)
   const [isFocused, setIsFocused] = useState(false)
-  // Modo lido sem assinatura (snapshot no render): o PromptInput não precisa
-  // re-renderizar quando a aba chat/código troca — os únicos trechos que
-  // dependem do modo (toggles avançados e comandos "/") vivem em componentes
-  // filhos que assinam o modo eles mesmos. Isso segura o memo do ChatInput e
-  // elimina o delay da troca de aba.
-  const workspaceMode = useWorkspaceStore.getState().mode
   const tokens = getThemeTokens(useThemeStore((s) => s.resolved))
   const [permissionMode, setPermissionMode] = useState<'ask' | 'approve' | 'full'>('ask')
   const [scheduleSheetVisible, setScheduleSheetVisible] = useState(false)
@@ -153,15 +164,15 @@ export function PromptInput({
     ? catalog[selected.providerId]?.models[selected.modelId]
     : undefined
   const { enabled, variantId, update, hydrate, hydrated } = useReasoningPrefs(selected?.providerId, selected?.modelId)
-  const thinking = enabled || !!model?.reasoningAlwaysOn
+  // Thinking: o default das preferências define o default; reasoning do modelo
+  // e modelos com reasoningAlwaysOn continuam valendo como antes
+  const thinking = modeDefaults.thinking || enabled || !!model?.reasoningAlwaysOn
   const workerModel = useSettingsStore((s) => s.workerModel)
   const workerModelLabel = workerModel && catalog
     ? catalog[workerModel.providerId]?.models[workerModel.modelId]?.name ?? `${workerModel.providerId}/${workerModel.modelId}`
     : null
-  const visionEnabled = useSettingsStore((s) => s.visionEnabled)
   const visionModel = useSettingsStore((s) => s.visionModel)
   const visionConfigOpen = useSettingsStore((s) => s.visionConfigOpen)
-  const setVisionEnabled = useSettingsStore((s) => s.setVisionEnabled)
   const setVisionConfigOpen = useSettingsStore((s) => s.setVisionConfigOpen)
   const displayMode = useAppearanceStore((s) => s.displayMode)
 
@@ -193,28 +204,38 @@ export function PromptInput({
   const inputRef = useRef<TextInput>(null)
 
   const toggleMode = useCallback((id: string) => {
-    // Modo Visão vive na settings-store (não no activeModes local) — ativar
-    // sem modelo configurado abre a configuração (mesmo gate do desktop).
+    // Modo Visão é per-chat (mode-overrides); ativar sem modelo configurado
+    // abre a configuração (mesmo gate do desktop).
     if (id === 'vision') {
-      const st = useSettingsStore.getState()
-      const next = !st.visionEnabled
-      if (next && !st.visionModel) {
+      const next = !vision
+      if (next && !visionModel) {
         setVisionConfigOpen(true)
         return
       }
-      void setVisionEnabled(next)
+      setModeActive('vision', sessionId, next)
       return
     }
-    setActiveModes((prev) => ({ ...prev, [id]: !prev[id] }))
-  }, [setVisionConfigOpen, setVisionEnabled])
+    if (id === 'research') return setModeActive('search', sessionId, !search)
+    if (id === 'browser') return setModeActive('browser', sessionId, !browser)
+    if (id === 'simple') return setSimple(sessionId, !simple)
+    if (id === 'brain') return setBrainEnabled(sessionId, !brain)
+  }, [vision, visionModel, sessionId, search, browser, simple, brain, setModeActive, setSimple, setBrainEnabled, setVisionConfigOpen])
 
-  // Gate de configuração (espelho do useModelConfigPrompt do desktop): se o
-  // modo está ativo sem modelo, abre a configuração automaticamente.
-  useEffect(() => {
-    if (visionEnabled && !visionModel && !visionConfigOpen) {
-      setVisionConfigOpen(true)
-    }
-  }, [visionEnabled, visionModel, visionConfigOpen, setVisionConfigOpen])
+  // Gate de configuração (espelho do useModelConfigPrompt do desktop): modos
+  // ativos por default nas preferências sem modelo configurado abrem o modal
+  // de configuração automaticamente, uma vez por chat.
+  useModelConfigPrompt({
+    sessionId,
+    subagents: workspaceMode === 'code' ? subagents : false,
+    orchestra: workspaceMode === 'code' ? orchestra : false,
+    vision,
+    workerConfigured: workerModel != null,
+    visionConfigured: visionModel != null,
+    onOpenWorker: () => setWorkerConfigOpen(true),
+    onOpenVision: () => setVisionConfigOpen(true),
+    workerDialogOpen: workerConfigOpen,
+    visionDialogOpen: visionConfigOpen,
+  })
 
   const handlePickFiles = async () => {
     setPlusOpen(false)
@@ -290,10 +311,10 @@ export function PromptInput({
   const buildOptions = useCallback(() => {
     const modeNow = useWorkspaceStore.getState().mode
     return {
-      research: activeModes.research ?? false,
-      browser: activeModes.browser ?? false,
-      simple: activeModes.simple ?? false,
-      brain: activeModes.brain ?? false,
+      research: search,
+      browser,
+      simple,
+      brain,
       reasoning: { enabled: thinking, variantId },
       plan: modeNow === 'code' ? plan : undefined,
       subagents,
@@ -301,7 +322,7 @@ export function PromptInput({
       loop,
       permissionMode: modeNow === 'code' ? permissionMode : undefined,
     } satisfies SendMessageOptions
-  }, [activeModes, thinking, variantId, plan, subagents, orchestra, loop, permissionMode])
+  }, [search, browser, simple, brain, thinking, variantId, plan, subagents, orchestra, loop, permissionMode])
 
   const enqueueForSend = useMessageQueueStore((s) => s.enqueueForSend)
   const enqueueScheduled = useMessageQueueStore((s) => s.enqueueScheduled)
@@ -346,19 +367,7 @@ export function PromptInput({
     }
 
     const modeNow = useWorkspaceStore.getState().mode
-
-    const options: SendMessageOptions = {
-      research: activeModes.research ?? false,
-      browser: activeModes.browser ?? false,
-      simple: activeModes.simple ?? false,
-      brain: activeModes.brain ?? false,
-      reasoning: { enabled: thinking, variantId },
-      plan: modeNow === 'code' ? plan : undefined,
-      subagents,
-      orchestrate: orchestra && modeNow === 'code' ? {} : undefined,
-      loop,
-      permissionMode: modeNow === 'code' ? permissionMode : undefined,
-    }
+    const options: SendMessageOptions = buildOptions()
 
     // Comandos "/" viram o prompt do pipeline correspondente
     const resolved = resolveSlashAction(trimmed, modeNow)
@@ -368,7 +377,7 @@ export function PromptInput({
     setText('')
     setAttachments([])
     setPlusOpen(false)
-  }, [text, isStreaming, disabled, onSend, handleQueue, sessionId, activeModes, plan, subagents, orchestra, loop, attachments, permissionMode, thinking, variantId])
+  }, [text, isStreaming, disabled, onSend, handleQueue, sessionId, buildOptions, attachments])
 
   const handleSchedule = useCallback(() => {
     setScheduleSheetVisible(true)
@@ -404,13 +413,13 @@ export function PromptInput({
     { id: 'brain', icon: BrainCircuit, label: t('promptInput.modes.brain') },
   ]
 
-  const toggleSheetMode = useCallback((id: string) => {
-    if (id === 'subagents') return setSubagents((prev) => !prev)
-    if (id === 'orchestra') return setOrchestra((prev) => !prev)
-    if (id === 'plan') return setPlan((prev) => !prev)
-    if (id === 'loop') return setLoop((prev) => !prev)
-    toggleMode(id)
-  }, [toggleMode])
+  // Estado efetivo dos toggles simples (modos do row principal + sheet)
+  const simpleActive: Record<string, boolean> = {
+    research: search,
+    browser,
+    simple,
+    brain,
+  }
 
   return (
     <View className="px-3 py-1.5 relative overflow-visible"
@@ -545,7 +554,7 @@ export function PromptInput({
             </Pressable>
           )}
           {modesList.map((mode) => {
-            const isActive = mode.id === 'vision' ? visionEnabled : activeModes[mode.id] ?? false
+            const isActive = simpleActive[mode.id] ?? false
             const IconComponent = mode.icon
             return (
               <Pressable
@@ -570,9 +579,9 @@ export function PromptInput({
             subagents={subagents}
             orchestra={orchestra}
             loop={loop}
-            onTogglePlan={() => setPlan((v) => !v)}
-            onToggleSubagents={() => setSubagents((v) => !v)}
-            onToggleOrchestra={() => setOrchestra((v) => !v)}
+            onTogglePlan={() => setModeActive('plan', sessionId, !plan)}
+            onToggleSubagents={() => setModeActive('subagents', sessionId, !subagents)}
+            onToggleOrchestra={() => setModeActive('orchestra', sessionId, !orchestra)}
             onToggleLoop={() => setLoop((v) => !v)}
             tokens={tokens}
           />
@@ -589,17 +598,17 @@ export function PromptInput({
         onPhotos={handlePickPhotos}
         onFiles={handlePickFiles}
         simpleModes={[
-          { id: 'research', icon: Search, label: t('promptInput.modes.research'), active: activeModes.research ?? false, onToggle: () => toggleMode('research') },
-          { id: 'browser', icon: Globe, label: t('promptInput.modes.browser'), active: activeModes.browser ?? false, onToggle: () => toggleMode('browser') },
-          { id: 'simple', icon: AlignLeft, label: t('promptInput.modes.simple'), active: activeModes.simple ?? false, onToggle: () => toggleMode('simple') },
-          { id: 'brain', icon: BrainCircuit, label: t('promptInput.modes.brain'), active: activeModes.brain ?? false, onToggle: () => toggleMode('brain') },
+          { id: 'research', icon: Search, label: t('promptInput.modes.research'), active: search, onToggle: () => toggleMode('research') },
+          { id: 'browser', icon: Globe, label: t('promptInput.modes.browser'), active: browser, onToggle: () => toggleMode('browser') },
+          { id: 'simple', icon: AlignLeft, label: t('promptInput.modes.simple'), active: simple, onToggle: () => toggleMode('simple') },
+          { id: 'brain', icon: BrainCircuit, label: t('promptInput.modes.brain'), active: brain, onToggle: () => toggleMode('brain') },
           ...(model?.reasoning ? [{ id: 'thinking', icon: Brain, label: t('promptInput.modes.thinking'), active: thinking, onToggle: () => update({ enabled: !enabled, variantId }) }] : []),
         ]}
         configModes={[
-          ...(workspaceMode === 'code' ? [{ id: 'plan', icon: FileText, label: t('promptInput.modes.plan'), active: plan, onToggle: () => setPlan((v) => !v) }] : []),
-          { id: 'vision', icon: Eye, label: t('promptInput.modes.vision'), active: visionEnabled, onToggle: () => toggleMode('vision'), onConfigure: () => { setPlusOpen(false); setVisionConfigOpen(true) } },
-          { id: 'subagents', icon: Bot, label: t('promptInput.modes.subagents'), active: subagents, onToggle: () => setSubagents((v) => !v), onConfigure: () => { setPlusOpen(false); setWorkerConfigOpen(true) } },
-          ...(workspaceMode === 'code' ? [{ id: 'orchestra', icon: Network, label: t('promptInput.modes.orchestra'), active: orchestra, onToggle: () => setOrchestra((v) => !v), onConfigure: () => { setPlusOpen(false); setWorkerConfigOpen(true) } }] : []),
+          ...(workspaceMode === 'code' ? [{ id: 'plan', icon: FileText, label: t('promptInput.modes.plan'), active: plan, onToggle: () => setModeActive('plan', sessionId, !plan) }] : []),
+          { id: 'vision', icon: Eye, label: t('promptInput.modes.vision'), active: vision, onToggle: () => toggleMode('vision'), onConfigure: () => { setPlusOpen(false); setVisionConfigOpen(true) } },
+          { id: 'subagents', icon: Bot, label: t('promptInput.modes.subagents'), active: subagents, onToggle: () => setModeActive('subagents', sessionId, !subagents), onConfigure: () => { setPlusOpen(false); setWorkerConfigOpen(true) } },
+          ...(workspaceMode === 'code' ? [{ id: 'orchestra', icon: Network, label: t('promptInput.modes.orchestra'), active: orchestra, onToggle: () => setModeActive('orchestra', sessionId, !orchestra), onConfigure: () => { setPlusOpen(false); setWorkerConfigOpen(true) } }] : []),
           { id: 'loop', icon: RefreshCw, label: t('promptInput.modes.loop'), active: loop, onToggle: () => setLoop((v) => !v), onConfigure: () => { setPlusOpen(false); setLoopConfigOpen(true) } },
         ]}
         displayMode={displayMode}
@@ -617,9 +626,9 @@ export function PromptInput({
         onReasoningSelect={(id) => update({ enabled: true, variantId: id })}
         reasoningAlwaysOn={model?.reasoningAlwaysOn}
         subagents={subagents}
-        onSubagentsToggle={() => setSubagents((prev) => !prev)}
+        onSubagentsToggle={() => setModeActive('subagents', sessionId, !subagents)}
         orchestra={orchestra}
-        onOrchestraToggle={() => setOrchestra((prev) => !prev)}
+        onOrchestraToggle={() => setModeActive('orchestra', sessionId, !orchestra)}
         loop={loop}
         onLoopToggle={() => setLoop((prev) => !prev)}
         workerModelLabel={workerModelLabel}
@@ -627,7 +636,7 @@ export function PromptInput({
           setConfigOpen(false)
           setWorkerConfigOpen(true)
         }}
-        vision={visionEnabled}
+        vision={vision}
         onVisionToggle={() => toggleMode('vision')}
         onConfigureVision={() => {
           setConfigOpen(false)
@@ -646,7 +655,7 @@ export function PromptInput({
       />
 
       <WorkerModelModal visible={workerConfigOpen} onClose={() => setWorkerConfigOpen(false)} />
-      <VisionConfigModal visible={visionConfigOpen} onClose={() => setVisionConfigOpen(false)} />
+      <VisionConfigModal visible={visionConfigOpen} onClose={() => setVisionConfigOpen(false)} targetSession={sessionId} />
       <LoopConfigModal visible={loopConfigOpen} onClose={() => setLoopConfigOpen(false)} />
       <ScheduleSheet
         visible={scheduleSheetVisible}

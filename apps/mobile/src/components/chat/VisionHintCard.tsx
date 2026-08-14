@@ -6,6 +6,9 @@ import { modelSupportsVision } from '@orbit/shared'
 import type { FilePart } from '@orbit/shared'
 import { useSessionStore } from '~/stores/session-store'
 import { useSettingsStore } from '~/stores/settings-store'
+import { useModeActive } from '~/stores/mode-overrides'
+import { useModelModePrefs } from '~/stores/model-mode-prefs'
+import { useWorkspaceStore } from '~/stores/workspace-store'
 import { getThemeTokens } from '~/lib/theme-tokens'
 import { useThemeStore } from '~/stores/theme-store'
 import { hslToRgba } from '~/lib/theme'
@@ -32,7 +35,11 @@ export function VisionHintCard({ sessionId }: { sessionId?: string }) {
 
   const selected = useSettingsStore((s) => s.selectedModel)
   const catalog = useSettingsStore((s) => s.catalog)
-  const visionEnabled = useSettingsStore((s) => s.visionEnabled)
+  const workspaceMode = useWorkspaceStore((s) => s.mode)
+  const modeDefaults = useModelModePrefs((s) =>
+    workspaceMode === 'code' ? s.codeActiveModes : s.chatActiveModes,
+  )
+  const visionEnabled = useModeActive('vision', sessionId, modeDefaults.vision)
   const setVisionConfigOpen = useSettingsStore((s) => s.setVisionConfigOpen)
   const messages = useSessionStore((s) => (sessionId ? s.messages[sessionId] : undefined))
 
