@@ -252,7 +252,7 @@ function SelectorScreen({ onSelect, onOpenWorker }: {
   )
 
   const availableTabs = useMemo(
-    () => (Object.entries(tabMeta) as [TabType, TabMeta][]).filter(([type]) => mode !== "chat" || type === "chat"),
+    () => (Object.entries(tabMeta) as [TabType, TabMeta][]).filter(([type]) => mode !== "chat" || type === "chat" || type === "media"),
     [mode, tabMeta],
   )
 
@@ -398,7 +398,7 @@ export function RightPanel() {
   const isDragging = dndContext.active !== null
 
   const availableTabs = useMemo(
-    () => (Object.entries(tabMeta) as [TabType, TabMeta][]).filter(([type]) => mode !== "chat" || type === "chat"),
+    () => (Object.entries(tabMeta) as [TabType, TabMeta][]).filter(([type]) => mode !== "chat" || type === "chat" || type === "media"),
     [mode, tabMeta],
   )
 
