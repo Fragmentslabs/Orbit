@@ -12,6 +12,7 @@ import {
   Bot,
   Sparkles,
   Terminal,
+  Eye,
 } from 'lucide-react-native'
 import { Image } from 'expo-image'
 import * as Clipboard from 'expo-clipboard'
@@ -610,6 +611,16 @@ export function ChatAssistantMessage({ message, compact, isLast, isBusy, onRever
         const part = segment.part
         switch (part.type) {
           case 'text':
+            // Indicador transitório do modo Visão ("Analisando imagem…") —
+            // paridade com o VisionWorkingRow do desktop: ícone Eye + shimmer.
+            if (part.source === 'vision') {
+              return (
+                <View key={part.id} className="w-full flex-row items-center gap-1.5 py-0.5">
+                  <Eye size={14} color={tokens.primary} />
+                  <Shimmer className="text-sm">{part.text}</Shimmer>
+                </View>
+              )
+            }
             return (
               <View key={part.id} className="w-full">
                 <AssistantMarkdown text={part.text} streaming={part.state === 'streaming'} />

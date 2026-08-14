@@ -18,6 +18,7 @@ import { MessageList, type MessageListHandle } from '~/components/chat/MessageLi
 import { ChatMessageSearchBar } from '~/components/chat/ChatMessageSearchBar'
 import { ChatInput } from '~/components/chat/ChatInput'
 import { AskCard } from '~/components/chat/AskCard'
+import { VisionHintCard } from '~/components/chat/VisionHintCard'
 import { Suggestions } from '~/components/chat/Suggestion'
 import { RevertBar } from '~/components/chat/RevertBar'
 import { ChatHeader } from '~/components/chat/ChatHeader'
@@ -447,6 +448,9 @@ export function ChatScreen({ sessionId }: ChatScreenProps) {
             <RevertBar session={session} onUnrevert={handleUnrevert} onDismiss={handleDismissRevert} />
           </View>
         )}
+
+        {/* Aviso do modo Visão: imagem anexada + modelo sem visão + modo off */}
+        {sessionId && <VisionHintCard sessionId={sessionId} />}
 
         <ChatInput
           onSend={handleSend}
