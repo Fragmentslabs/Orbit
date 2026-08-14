@@ -47,7 +47,21 @@
       "full": "Full"
     },
     "autoFolders": "Automatic folders",
-    "autoFoldersDescription": "Groups new code chats into folders by directory name"
+    "autoFoldersDescription": "Groups new code chats into folders by directory name",
+    "activeModes": "Active modes by default",
+    "chatDefaults": "Chat",
+    "codeDefaults": "Code",
+    "modes": {
+      "simple": "Simple",
+      "brain": "Memory",
+      "thinking": "Thinking",
+      "search": "Research",
+      "vision": "Vision",
+      "browser": "Browser",
+      "plan": "Plan mode",
+      "subagents": "Subagents",
+      "orchestra": "Orchestration"
+    }
   },
   "notificationsScreen": {
     "title": "Notifications",

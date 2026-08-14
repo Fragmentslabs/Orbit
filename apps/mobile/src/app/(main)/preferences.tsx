@@ -1,9 +1,24 @@
 import { useEffect } from 'react'
 import { View, Text, Pressable, ScrollView, StyleSheet, Switch } from 'react-native'
 import { useRouter } from 'expo-router'
-import { ArrowLeft, BrainCircuit, Brain, AlignLeft, Shield, Folder } from 'lucide-react-native'
+import {
+  ArrowLeft,
+  BrainCircuit,
+  Brain,
+  AlignLeft,
+  Shield,
+  Folder,
+  Search,
+  Globe,
+  Eye,
+  FileText,
+  Bot,
+  Network,
+  Sparkles,
+} from 'lucide-react-native'
 import { useTranslation } from 'react-i18next'
 import { useSettingsStore } from '~/stores/settings-store'
+import { useModelModePrefs, type ActiveModeDefaults } from '~/stores/model-mode-prefs'
 import { getThemeTokens } from '~/lib/theme-tokens'
 import { useThemeStore } from '~/stores/theme-store'
 import { SafeScreen } from '~/components/layout/SafeScreen'
@@ -47,6 +62,13 @@ export default function PreferencesScreen() {
   const fetchPreferences = useSettingsStore((s) => s.fetchPreferences)
   const autoCreateFolders = useSettingsStore((s) => s.autoCreateFolders)
   const setAutoCreateFolders = useSettingsStore((s) => s.setAutoCreateFolders)
+
+  // Defaults configuráveis dos modos ativos, por modo (chat/código) — espelho
+  // do ActiveModesSection do desktop.
+  const chatActiveModes = useModelModePrefs((s) => s.chatActiveModes)
+  const codeActiveModes = useModelModePrefs((s) => s.codeActiveModes)
+  const setChatActiveMode = useModelModePrefs((s) => s.setChatActiveMode)
+  const setCodeActiveMode = useModelModePrefs((s) => s.setCodeActiveMode)
 
   useEffect(() => {
     void fetchPreferences()
@@ -155,8 +177,70 @@ export default function PreferencesScreen() {
             onChange={setAutoCreateFolders}
           />
         </View>
+
+        <View style={[s.card, s.modesCard, { borderColor: tokens.border, backgroundColor: tokens.card }]}>
+          <Text style={[s.modesHeader, { color: tokens.foreground }]}>
+            {t('preferencesScreen.activeModes')}
+          </Text>
+          <ActiveModesSection modes={chatActiveModes} onChange={setChatActiveMode} isCode={false} />
+          <ActiveModesSection modes={codeActiveModes} onChange={setCodeActiveMode} isCode={true} />
+        </View>
       </ScrollView>
     </SafeScreen>
+  )
+}
+
+function ActiveModesSection({
+  modes,
+  onChange,
+  isCode,
+}: {
+  modes: ActiveModeDefaults
+  onChange: (key: keyof ActiveModeDefaults, value: boolean) => void
+  isCode: boolean
+}) {
+  const { t } = useTranslation()
+  const tokens = getThemeTokens(useThemeStore((s) => s.resolved))
+
+  const items: { key: keyof ActiveModeDefaults; label: string; icon: typeof Search }[] = [
+    { key: 'simple', label: t('preferencesScreen.modes.simple'), icon: AlignLeft },
+    { key: 'brain', label: t('preferencesScreen.modes.brain'), icon: BrainCircuit },
+    { key: 'thinking', label: t('preferencesScreen.modes.thinking'), icon: Sparkles },
+    { key: 'search', label: t('preferencesScreen.modes.search'), icon: Search },
+    { key: 'vision', label: t('preferencesScreen.modes.vision'), icon: Eye },
+    ...(isCode ? [] : [{ key: 'browser' as const, label: t('preferencesScreen.modes.browser'), icon: Globe }]),
+    ...(isCode ? [{ key: 'plan' as const, label: t('preferencesScreen.modes.plan'), icon: FileText }] : []),
+    { key: 'subagents', label: t('preferencesScreen.modes.subagents'), icon: Bot },
+    ...(isCode ? [{ key: 'orchestra' as const, label: t('preferencesScreen.modes.orchestra'), icon: Network }] : []),
+  ]
+
+  return (
+    <View style={s.modesSection}>
+      <Text style={[s.modesSubtitle, { color: tokens.mutedForeground }]}>
+        {isCode ? t('preferencesScreen.codeDefaults') : t('preferencesScreen.chatDefaults')}
+      </Text>
+      <View style={s.chipsWrap}>
+        {items.map(({ key, label, icon: Icon }) => {
+          const active = modes[key]
+          return (
+            <Pressable
+              key={key}
+              onPress={() => onChange(key, !active)}
+              style={[
+                s.chip,
+                { borderColor: tokens.border },
+                active && { backgroundColor: tokens.muted, borderColor: tokens.primary },
+              ]}
+            >
+              <Icon size={13} color={active ? tokens.primary : tokens.mutedForeground} />
+              <Text style={[s.chipLabel, { color: active ? tokens.primary : tokens.mutedForeground }]}>
+                {label}
+              </Text>
+            </Pressable>
+          )
+        })}
+      </View>
+    </View>
   )
 }
 
@@ -230,4 +314,20 @@ const s = StyleSheet.create({
   },
   segment: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8 },
   segmentText: { fontSize: 12, fontWeight: '500' },
+
+  modesCard: { marginTop: 16, padding: 16 },
+  modesHeader: { fontSize: 13, fontWeight: '600', marginBottom: 12 },
+  modesSection: { marginBottom: 12 },
+  modesSubtitle: { fontSize: 11, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 8 },
+  chipsWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  chip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  chipLabel: { fontSize: 12, fontWeight: '500' },
 })

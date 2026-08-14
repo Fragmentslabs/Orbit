@@ -47,7 +47,21 @@
       "full": "Total"
     },
     "autoFolders": "Pastas automáticas",
-    "autoFoldersDescription": "Agrupa novos chats de código em pastas pelo nome do diretório"
+    "autoFoldersDescription": "Agrupa novos chats de código em pastas pelo nome do diretório",
+    "activeModes": "Modos ativos por padrão",
+    "chatDefaults": "Chat",
+    "codeDefaults": "Código",
+    "modes": {
+      "simple": "Simples",
+      "brain": "Memória",
+      "thinking": "Thinking",
+      "search": "Pesquisa",
+      "vision": "Visão",
+      "browser": "Browser",
+      "plan": "Modo Plano",
+      "subagents": "Subagentes",
+      "orchestra": "Orquestra"
+    }
   },
   "notificationsScreen": {
     "title": "Notificações",
