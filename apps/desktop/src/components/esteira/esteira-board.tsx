@@ -187,6 +187,25 @@ function BoardDaEsteira({ esteira, onVoltar }: { esteira: Esteira; onVoltar: () 
   )
 
 
+  // "Próxima da fila": a primeira pendente sem dependências pendentes (FIFO
+  // por criação, mesma regra do engine). Só faz sentido com a fila ligada.
+  const proximaId = filaLigada
+    ? tasks
+        .filter(
+          (x) => x.status === "pendente" && x.dependeDe.every((id) => tasks.some((t) => t.id === id && t.status === "concluida")),
+        )
+        .sort((a, b) => a.criadoEm.localeCompare(b.criadoEm))[0]?.id
+    : undefined
+
+  // Título da dependência que bloqueia a task (mostrado no card, com tooltip).
+  const aguardandoTitulo = (task: Task): string | undefined => {
+    for (const id of task.dependeDe) {
+      const dep = tasks.find((t) => t.id === id)
+      if (dep && dep.status !== "concluida") return dep.titulo
+    }
+    return undefined
+  }
+
   const colunas = useMemo(
     () => [
       { id: "pendentes", titulo: t("esteira.pendentes"), tasks: tasks.filter((x) => x.status === "pendente") },
@@ -274,6 +293,8 @@ function BoardDaEsteira({ esteira, onVoltar }: { esteira: Esteira; onVoltar: () 
               titulo={coluna.titulo}
               tasks={coluna.tasks}
               esteira={esteira}
+              proximaId={proximaId}
+              aguardandoTitulo={aguardandoTitulo}
               onAbrir={setTaskAberta}
             />
           ))}
@@ -312,12 +333,18 @@ function Coluna({
   titulo,
   tasks,
   esteira,
+  proximaId,
+  aguardandoTitulo,
   onAbrir,
 }: {
   id: string
   titulo: string
   tasks: Task[]
   esteira: Esteira
+  /** Id da task que a fila vai disparar (só a coluna de pendentes usa). */
+  proximaId?: string
+  /** Título da dependência que bloqueia cada task pendente. */
+  aguardandoTitulo: (task: Task) => string | undefined
   onAbrir: (taskId: string) => void
 }) {
   const iniciarTask = useEsteiraStore((s) => s.iniciarTask)
@@ -346,6 +373,8 @@ function Coluna({
             task={task}
             esteira={esteira}
             progresso={progresso[task.id]}
+            aguardandoTitulo={aguardandoTitulo(task)}
+            eProxima={proximaId === task.id}
             onAbrir={() => onAbrir(task.id)}
             onIniciar={() => void iniciarTask(esteira.id, task.id)}
             onPausar={() => void pausarTask(esteira.id, task.id)}

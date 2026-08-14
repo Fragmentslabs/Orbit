@@ -20,7 +20,7 @@ import { MemoriesView } from "@/src/components/memories/memories-view"
 import { ModelsView } from "@/src/components/models/models-view"
 import { EsteiraBoard } from "@/src/components/esteira/esteira-board"
 import { RightPanel, RightPanelDropZone } from "@/src/components/right-panel"
-import { ensureAgentBrowser } from "@/src/components/browser/webview-session"
+import { ensureAgentBrowser, evictInactiveWebviews } from "@/src/components/browser/webview-session"
 import { TitleBar } from "@/src/components/titlebar"
 import { ChatSearch } from "@/src/components/chat-search"
 import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels"
@@ -72,6 +72,13 @@ function Layout() {
         ensureAgentBrowser(event.sessionId, event.url)
       }
     })
+  }, [])
+
+  // Eviction de webviews desmontados/inativos (browser do agente em segundo
+  // plano de chats fechados) — roda a cada 5min, TTL de 10min.
+  useEffect(() => {
+    const timer = setInterval(() => evictInactiveWebviews(), 5 * 60 * 1000)
+    return () => clearInterval(timer)
   }, [])
 
   // ─── Abertura de pasta no modo código ─────────────────────────────────────

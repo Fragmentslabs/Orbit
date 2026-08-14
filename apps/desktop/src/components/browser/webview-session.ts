@@ -50,11 +50,21 @@ interface WebviewRecord {
   /** true quando o elemento está no container visível de uma aba. */
   mounted: boolean
   onNavigate?: (url: string) => void
+  /** Último acesso conhecido — base do eviction de webviews desmontados. */
+  lastUsed: number
 }
 
 /** Tamanho do host oculto — só importa enquanto a aba está "desmontada". */
 const HIDDEN_WIDTH = 1280
 const HIDDEN_HEIGHT = 800
+
+/**
+ * TTL de webviews desmontados (aba fechada e browser do agente ocioso): depois
+ * deste tempo sem uso, o guest é destruído e o registro no main é limpo. O
+ * custo de destruir é zero — a próxima tool de browser recria o webview e
+ * navega para a URL que ela pede (o store guarda a última URL da aba).
+ */
+export const EVICT_TTL_MS = 10 * 60 * 1000
 
 const records = new Map<string, WebviewRecord>()
 
@@ -270,6 +280,7 @@ export function ensureWebview(
   const existing = records.get(key)
   if (existing) {
     existing.onNavigate = onNavigate
+    existing.lastUsed = Date.now()
     return existing.el
   }
 
@@ -281,6 +292,7 @@ export function ensureWebview(
     requestedUrl: null,
     mounted: false,
     onNavigate,
+    lastUsed: Date.now(),
   }
   records.set(key, record)
 
@@ -315,6 +327,7 @@ export function mountWebview(
 ): WebviewElement {
   const el = ensureWebview(key, src, onNavigate)
   const record = records.get(key)!
+  record.lastUsed = Date.now()
   record.mounted = true
   if (el.parentElement !== container) {
     // Guest novo a caminho: o restauro desta geração ainda não foi tentado.
@@ -340,7 +353,9 @@ export function unmountWebview(key: string): void {
 }
 
 export function getWebview(key: string): WebviewElement | null {
-  return records.get(key)?.el ?? null
+  const record = records.get(key)
+  if (record) record.lastUsed = Date.now()
+  return record?.el ?? null
 }
 
 /** URL atual conhecida da aba — não toca no guest, então nunca lança. */
@@ -370,6 +385,7 @@ export function ensureAgentBrowser(sessionId: string, url?: string): void {
 export function navigateWebview(key: string, url: string): void {
   const record = records.get(key)
   if (!record || !isRealUrl(url) || record.currentUrl === url) return
+  record.lastUsed = Date.now()
   record.currentUrl = url
   if (!isWebviewReady(record.el)) {
     // Guest não pronto: o dom-ready leva para a URL nova.
@@ -388,6 +404,7 @@ export function navigateWebview(key: string, url: string): void {
 export function reloadWebview(key: string): void {
   const record = records.get(key)
   if (!record || !isWebviewReady(record.el)) return
+  record.lastUsed = Date.now()
   try {
     record.el.reload()
   } catch {
@@ -399,7 +416,31 @@ export function reloadWebview(key: string): void {
 export function applySelectMode(key: string, on: boolean): void {
   const record = records.get(key)
   if (!record) return
+  record.lastUsed = Date.now()
   run(record.el, on ? SELECT_ON : SELECT_OFF)
+}
+
+/**
+ * Destrói webviews desmontados e inativos. Pula:
+ * - abas montadas (visíveis na UI);
+ * - sessões cujo agente usou o browser recentemente (o browser em segundo
+ *   plano NÃO pode morrer no meio do trabalho do agente — `agentBrowser.at`
+ *   é atualizado pelo main a cada tool de browser).
+ * Chamado periodicamente pelo App. Retorna quantos destruiu.
+ */
+export function evictInactiveWebviews(now = Date.now()): number {
+  const agentBrowser = usePanelStore.getState().agentBrowser
+  let removidos = 0
+  for (const [key, record] of records) {
+    if (record.mounted) continue
+    if (now - record.lastUsed < EVICT_TTL_MS) continue
+    const sId = sessionIdOf(key)
+    const entry = agentBrowser[sId]
+    if (entry && now - entry.at < EVICT_TTL_MS) continue
+    destroyWebview(key)
+    removidos++
+  }
+  return removidos
 }
 
 /** Destrói o webview da chave (fecho da aba) — limpa o registro no main. */

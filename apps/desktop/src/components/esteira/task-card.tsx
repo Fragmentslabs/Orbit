@@ -1,8 +1,10 @@
 import { useDraggable } from "@dnd-kit/core"
+import { useEffect, useState } from "react"
 import { useTranslation } from "react-i18next"
-import { AlertTriangleIcon, ClockIcon, Loader2Icon, PauseIcon, PlayIcon } from "lucide-react"
+import { AlertTriangleIcon, ClockIcon, GlobeIcon, Loader2Icon, PauseIcon, PlayIcon } from "lucide-react"
 import type { Esteira, Task } from "@shared/esteira"
 import { cn } from "@/lib/utils"
+import { AGENT_BROWSER_FRESH_MS, usePanelStore } from "@/src/stores/panel-store"
 
 /** Formata milissegundos como "12min" / "1h 05min". */
 export function formatarDuracao(ms: number): string {
@@ -24,6 +26,8 @@ export function TaskCard({
   task,
   esteira,
   progresso,
+  aguardandoTitulo,
+  eProxima,
   onAbrir,
   onIniciar,
   onPausar,
@@ -32,6 +36,10 @@ export function TaskCard({
   task: Task
   esteira: Esteira
   progresso?: string
+  /** Título da dependência que bloqueia a task (pendente aguardando). */
+  aguardandoTitulo?: string
+  /** Task que a fila automática vai disparar quando a atual concluir. */
+  eProxima?: boolean
   onAbrir: () => void
   onIniciar: () => void
   onPausar: () => void
@@ -46,6 +54,18 @@ export function TaskCard({
   const emExecucao = task.status === "em_progresso"
   const comErro = task.pausaMotivo === "erro"
   const faseNome = task.faseAtual != null ? esteira.fases[task.faseAtual]?.nome : undefined
+
+  // Browser do agente da task em uso (em segundo plano) — mesma mecânica do
+  // chip "testando…" do chat: tick de 2s para o indicador sumir ao expirar.
+  const browserSessionId = `esteira_${task.id}`
+  const browserEntry = usePanelStore((s) => s.agentBrowser[browserSessionId])
+  const [, setTick] = useState(0)
+  useEffect(() => {
+    if (!browserEntry) return
+    const timer = setInterval(() => setTick((v) => v + 1), 2_000)
+    return () => clearInterval(timer)
+  }, [browserEntry])
+  const browserAtivo = !!browserEntry && Date.now() - browserEntry.at <= AGENT_BROWSER_FRESH_MS
 
   return (
     <div
@@ -90,6 +110,35 @@ export function TaskCard({
       </div>
 
       <div className="mt-1.5 flex flex-wrap items-center gap-1.5 text-[10px] text-muted-foreground">
+        {aguardandoTitulo && (
+          <span
+            title={t("esteira.aguardandoTitulo", { titulo: aguardandoTitulo })}
+            className="flex max-w-full items-center gap-1 rounded-full bg-muted px-1.5 py-0.5"
+          >
+            <ClockIcon className="size-2.5 shrink-0" />
+            <span className="truncate">{t("esteira.aguardando", { titulo: aguardandoTitulo })}</span>
+          </span>
+        )}
+        {eProxima && (
+          <span className="flex items-center gap-1 rounded-full bg-primary/10 px-1.5 py-0.5 text-primary">
+            <PlayIcon className="size-2.5" />
+            {t("esteira.proxima")}
+          </span>
+        )}
+        {browserAtivo && (
+          <button
+            type="button"
+            title={t("esteira.browserEmUso")}
+            onClick={(e) => {
+              e.stopPropagation()
+              usePanelStore.getState().openAgentBrowser(browserSessionId)
+            }}
+            className="flex items-center gap-1 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-1.5 py-0.5 text-emerald-600 transition-colors hover:bg-emerald-500/20 dark:text-emerald-400"
+          >
+            <GlobeIcon className="size-2.5" />
+            {t("chat.browser.testing")}
+          </button>
+        )}
         {emExecucao && (
           <span className="flex items-center gap-1 rounded-full bg-primary/10 px-1.5 py-0.5 text-primary">
             <Loader2Icon className="size-2.5 animate-spin" />
