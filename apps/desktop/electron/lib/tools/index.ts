@@ -23,6 +23,7 @@ import { createBashTool } from './shell'
 import { createTodoTool } from './todo'
 import { createSessionContextTool } from './session-context'
 import { createVerifyChangesTool } from './verify-changes'
+import { createDescribeImageTool } from './describe-image'
 import { createWebFetchTool, createWebSearchTool } from './web'
 
 export { destroyBrowserWindow } from './browser'
@@ -67,6 +68,9 @@ export function buildToolSet(input: SendMessageInput, ctx: ToolContext | null): 
       Object.assign(tools, createEsteiraTools(input.sessionId, input))
     }
     if (allowDelegation) tools.subagent = createSubagentTool(input, ctx)
+    // Modo Visão: ver as imagens anexadas é decisão do agente — a tool
+    // describe_image descreve sob demanda (com o contexto que ele passar).
+    if (input.visionModel) tools.describe_image = createDescribeImageTool(input)
     // Fluxo explícito /create-skill: habilita só a tool de propor skill
     if (input.orchestrationRole !== 'worker' && input.text.trimStart().startsWith('/create-skill')) {
       tools.create_skill = createSkillTool()
@@ -117,6 +121,9 @@ export function buildToolSet(input: SendMessageInput, ctx: ToolContext | null): 
   }
   if (allowQuestion) tools.question = createQuestionTool(input, ctx?.abort)
   if (allowDelegation) tools.subagent = createSubagentTool(input, ctx)
+  // Modo Visão: ver as imagens anexadas é decisão do agente — a tool
+  // describe_image descreve sob demanda (com o contexto que ele passar).
+  if (input.visionModel) tools.describe_image = createDescribeImageTool(input)
 
   return tools
 }

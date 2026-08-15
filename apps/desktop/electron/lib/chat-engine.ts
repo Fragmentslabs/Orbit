@@ -29,7 +29,12 @@ import { extractPdfText } from './pdf'
 import { extractSpreadsheetText } from './xlsx'
 import { extractDocxText } from './docx'
 import { describeSkillAttachment } from './skills/import'
-import { describeImage } from './vision'
+import {
+  clearTurnImages,
+  getTurnImages,
+  registerTurnImages,
+  type TurnImage,
+} from './vision'
 import { cleanupRevert } from './session/revert'
 import { capture, diff } from './snapshot'
 import { runProjectInit, type InitHooks } from './project-init'
@@ -293,11 +298,11 @@ async function preprocessAttachment(
     /** Modelo de visão delegado (modo Visão) — usado quando modelVision é false */
     visionModel?: { providerId: string; modelId: string }
     language?: string
-    /** Texto da mensagem do usuário — foco da descrição quando há delegação */
-    focus?: string
     /** Sessão/mensagem de origem — a print vira registro na galeria de mídia */
     sessionId?: string
     messageId?: string
+    /** Registro do turno (modo Visão): onde as imagens ficam para a tool describe_image */
+    turnImages?: TurnImage[]
   },
 ): Promise<MessagePart[]> {
   const filename = file.filename ?? ''
@@ -373,11 +378,12 @@ async function preprocessAttachment(
     }
   }
 
-  // Imagem: com o modo Visão ativo (visionModel configurado), descreve SEMPRE
-  // via modelo de visão — mesmo com visão nativa — e injeta a descrição como
-  // texto (a imagem não entra no contexto; o foco é o texto da mensagem). Sem
-  // modo ativo: visão nativa mantém o image part; sem visão e sem modelo,
-  // avisa no histórico que o anexo não foi visto (a UI também mostra o card).
+  // Imagem: com o modo Visão ativo (visionModel configurado), a imagem NÃO
+  // entra no contexto e não é descrita automaticamente — o agente decide ver
+  // (tool describe_image, com o contexto que ele quiser passar) e a descrição
+  // retornada substitui este placeholder no histórico. Sem modo ativo: visão
+  // nativa mantém o image part; sem visão e sem modelo, avisa no histórico que
+  // o anexo não foi visto (a UI também mostra o card).
   if (file.mime.startsWith('image/')) {
     // A print colada pelo usuário também entra na galeria de mídia: o
     // original é persistido em disco (source 'user') — o histórico não muda,
@@ -388,18 +394,21 @@ async function preprocessAttachment(
     const thumbUrl = await imageThumbDataUrl(file.url)
     if (deps.visionModel) {
       const filename = file.filename ?? ''
-      const desc = await describeImage({
-        model: deps.visionModel,
-        imageDataUrl: file.url,
-        language: deps.language,
-        focus: deps.focus,
-      })
-      const text = desc
-        ? `[Imagem anexada: ${filename || 'sem nome'}]\n\nDescrição gerada pelo modelo de visão (${deps.visionModel.modelId}):\n${desc}`
-        : `[Imagem anexada: ${filename || 'sem nome'}] — o modelo de visão configurado não conseguiu descrever esta imagem.`
+      const ref = (deps.turnImages?.length ?? 0) + 1
+      const partId = newId('prt')
+      deps.turnImages?.push({ url: file.url, filename: file.filename, partId })
       return [
         attachmentChip(file, thumbUrl),
-        { id: newId('prt'), type: 'text', text, state: 'done', source: 'attachment' },
+        {
+          id: partId,
+          type: 'text',
+          text:
+            `[Imagem anexada: ${filename || 'sem nome'} — ref #${ref}]\n\n` +
+            `(Modo Visão: a imagem não é descrita automaticamente — use a ferramenta describe_image com ref #${ref} ` +
+            'para vê-la; em "focus" diga o que precisa saber e, se depender do contexto da conversa, inclua o contexto necessário no pedido.)',
+          state: 'done',
+          source: 'attachment',
+        },
       ]
     }
     if (deps.modelVision) return [file]
@@ -417,6 +426,40 @@ async function preprocessAttachment(
   }
 
   return [file]
+}
+
+/**
+ * Modo Visão (agent-driven): persiste a descrição retornada pela tool
+ * describe_image no TextPart placeholder da mensagem do usuário. A ToolPart da
+ * chamada nunca é reenviada em turnos futuros (ver toModelMessages) — o texto
+ * aqui deixa o histórico autossuficiente, como no fluxo antigo de descrição
+ * automática. Usa objeto NOVO (o MessageItem é memoizado por referência na UI).
+ */
+async function persistImageDescription(opts: {
+  sessionId: string
+  ref: number
+  text: string
+  history: ChatMessage[]
+  win: BrowserWindow
+}): Promise<void> {
+  const entry = getTurnImages(opts.sessionId)?.[opts.ref - 1]
+  if (!entry?.partId || !opts.text.trim()) return
+  const userMsg = [...opts.history].reverse().find((m) => m.role === 'user')
+  if (!userMsg) return
+  const idx = userMsg.parts.findIndex((p) => p.id === entry.partId)
+  const part = userMsg.parts[idx]
+  if (idx < 0 || part.type !== 'text') return
+  const text = entry.persisted
+    ? `${part.text}\n\n[Informação adicional sobre a imagem]\n${opts.text}`
+    : `[Imagem anexada: ${entry.filename || 'sem nome'}]\n\nDescrição gerada pelo modelo de visão:\n${opts.text}`
+  entry.persisted = true
+  const updated: ChatMessage = {
+    ...userMsg,
+    parts: userMsg.parts.map((p, i) => (i === idx ? { ...p, text } : p)),
+  }
+  opts.history[opts.history.indexOf(userMsg)] = updated
+  await saveMessages(opts.sessionId, opts.history)
+  emit(opts.win, { type: 'message', sessionId: opts.sessionId, message: updated })
 }
 
 /**
@@ -639,54 +682,35 @@ export async function runChat(win: BrowserWindow, input: SendMessageInput): Prom
   // independente da pasta de trabalho selecionada (as tools read/glob/bash só
   // enxergam o filesystem, nunca os anexos do chat — por isso o conteúdo
   // precisa entrar como texto na própria mensagem). Imagens: modelo sem visão
-  // delega para o modelo de visão configurado (modo Visão) ou vira aviso.
+  // delega para o modelo de visão configurado (modo Visão) — sob demanda, via
+  // tool describe_image — ou vira aviso.
   const files = input.files ?? []
   const provider = await getProvider(input.providerId)
   const modelVision = modelSupportsVision(provider, input.modelId)
+  // Registro das imagens do turno (modo Visão): a tool describe_image lê
+  // daqui sob demanda; vive só durante o turno (limpo no finally).
+  const turnImages: TurnImage[] = []
   if (files.length > 0) {
-    // Indicador transitório "Analisando imagem" (part com source 'vision'):
-    // a UI mostra o ícone do modo Visão enquanto o modelo de visão descreve
-    // o anexo. Só o evento é emitido — a part nunca entra na mensagem em
-    // memória nem no histórico, e some quando a mensagem é re-emitida abaixo.
-    const analyzingImages = files.some((f) => f.mime.startsWith('image/')) && !!input.visionModel
-    if (analyzingImages) {
-      emit(win, {
-        type: 'part',
-        sessionId,
-        messageId: assistantMessage.id,
-        part: {
-          id: newId('prt'),
-          type: 'text',
-          // Texto localizado de propósito: o desktop renderiza o próprio i18n
-          // (source 'vision'), o mobile exibe part.text.
-          text: input.language?.toLowerCase().startsWith('portuguese')
-            ? 'Analisando imagem…'
-            : 'Analyzing image…',
-          state: 'streaming',
-          source: 'vision',
-        },
-      })
-    }
-
     const processedParts: MessagePart[] = []
     for (const file of files) {
       processedParts.push(...(await preprocessAttachment(file, {
         modelVision,
         visionModel: input.visionModel,
         language: input.language,
-        focus: input.text,
         sessionId,
         messageId: userMessage.id,
+        turnImages,
       })))
     }
     // Substitui a mensagem do usuário (objeto NOVO — o MessageItem é memoizado
-    // por referência) pelos anexos processados e re-emite; junto, a re-emissão
-    // da mensagem do assistente remove o indicador de visão da UI.
+    // por referência) pelos anexos processados e re-emite.
     const processedUserMessage: ChatMessage = { ...userMessage, parts: [...processedParts, textPart] }
     history[history.indexOf(userMessage)] = processedUserMessage
     await saveMessages(sessionId, history)
     emit(win, { type: 'message', sessionId, message: processedUserMessage })
-    if (analyzingImages) emit(win, { type: 'message', sessionId, message: assistantMessage })
+  }
+  if (input.visionModel && turnImages.length > 0) {
+    registerTurnImages(sessionId, turnImages)
   }
 
   const upsertPart = (part: MessagePart) => {
@@ -1087,6 +1111,21 @@ export async function runChat(win: BrowserWindow, input: SendMessageInput): Prom
               output: typeof part.output === 'string' ? part.output : JSON.stringify(part.output, null, 2),
             })
             if (part.toolName === 'bash') activeBashCommands.delete(sessionId)
+            // Modo Visão: a descrição da imagem vira texto no histórico (a
+            // ToolPart não é reenviada em turnos futuros — o placeholder na
+            // mensagem do usuário é substituído pela descrição real).
+            if (part.toolName === 'describe_image') {
+              const input = existing?.input as { ref?: number } | undefined
+              if (typeof input?.ref === 'number') {
+                await persistImageDescription({
+                  sessionId,
+                  ref: input.ref,
+                  text: typeof part.output === 'string' ? part.output : JSON.stringify(part.output, null, 2),
+                  history,
+                  win,
+                })
+              }
+            }
             // show_image: a imagem vira parte da resposta (renderizada pelo ai/image)
             if (part.toolName === 'show_image') {
               const output = part.output as { mediaUrl?: string; alt?: string } | string
@@ -1347,6 +1386,7 @@ export async function runChat(win: BrowserWindow, input: SendMessageInput): Prom
       error: aborted ? undefined : message,
     })
   } finally {
+    clearTurnImages(sessionId)
     if (abortControllers.get(sessionId) === controller) abortControllers.delete(sessionId)
     const activeCmd = activeBashCommands.get(sessionId)
     activeBashCommands.delete(sessionId)

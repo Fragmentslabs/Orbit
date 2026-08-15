@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Modal, View, Text, TextInput, Pressable, SectionList, Platform } from 'react-native'
 import { X, Search, Check, Brain, RefreshCw } from 'lucide-react-native'
-import { Image } from 'expo-image'
 import { useTranslation } from 'react-i18next'
 import type { CatalogModel, CatalogProvider } from '@orbit/shared'
 import { useSettingsStore } from '~/stores/settings-store'
@@ -11,6 +10,7 @@ import { getThemeTokens } from '~/lib/theme-tokens'
 import { hslToRgba } from '~/lib/theme'
 import { Spin } from '~/components/ui/spin'
 import { ModalityIcons } from '~/components/ui/modality-icons'
+import { ProviderLogo } from '~/components/ui/provider-logo'
 import { cn } from '~/lib/utils'
 
 interface ModelPickerModalProps {
@@ -67,7 +67,6 @@ function ModelRow({
   index,
   count,
   isSelected,
-  dark,
   tokens,
   onPress,
 }: {
@@ -76,7 +75,6 @@ function ModelRow({
   index: number
   count: number
   isSelected: boolean
-  dark: boolean
   tokens: Record<string, string>
   onPress: (providerId: string, modelId: string) => void
 }) {
@@ -113,12 +111,7 @@ function ModelRow({
       })}
     >
       {/* Provider Logo */}
-      <Image
-        source={`https://models.dev/logos/${provider.id}.svg`}
-        style={{ width: 16, height: 16 }}
-        contentFit="contain"
-        className={dark ? 'invert' : ''}
-      />
+      <ProviderLogo providerId={provider.id} size={16} color={tokens.mutedForeground} />
 
       {/* Model Info */}
       <View className="flex-1">
@@ -322,7 +315,6 @@ export function ModelPickerModal({
                     selectedModel?.providerId === section.provider.id &&
                     selectedModel?.modelId === item.model.id
                   }
-                  dark={resolved === 'dark'}
                   tokens={tokens}
                   onPress={handleSelect}
                 />

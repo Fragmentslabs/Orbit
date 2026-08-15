@@ -1,12 +1,12 @@
 import { useState } from 'react'
 import { Text, Pressable } from 'react-native'
 import { ChevronDown, Brain } from 'lucide-react-native'
-import { Image } from 'expo-image'
 import { useSettingsStore } from '~/stores/settings-store'
 import { useSessionModel } from '~/stores/session-model-prefs'
 import { useThemeStore } from '~/stores/theme-store'
 import { getThemeTokens } from '~/lib/theme-tokens'
 import { ModelPickerModal } from './ModelPickerModal'
+import { ProviderLogo } from '~/components/ui/provider-logo'
 
 export function ModelPicker({ sessionId }: { sessionId?: string | null }) {
   const [modalVisible, setModalVisible] = useState(false)
@@ -29,12 +29,7 @@ export function ModelPicker({ sessionId }: { sessionId?: string | null }) {
         style={({ pressed }) => pressed ? { backgroundColor: tokens.muted } : undefined}
       >
         {selected?.providerId ? (
-          <Image
-            source={`https://models.dev/logos/${selected.providerId}.svg`}
-            style={{ width: 14, height: 14 }}
-            contentFit="contain"
-            className={resolved === 'dark' ? 'invert' : ''}
-          />
+          <ProviderLogo providerId={selected.providerId} size={14} color={tokens.mutedForeground} />
         ) : (
           <Brain size={14} className="text-muted-foreground" />
         )}

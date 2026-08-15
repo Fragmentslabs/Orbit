@@ -58,6 +58,10 @@ const NATIVE_TOOLS = new Set([
   'esteira_list',
   'esteira_create_task',
   'esteira_task_status',
+  // Modo Visão: descreve imagens anexadas com o modelo de visão configurado
+  // (leitura pura, first-party) — caía no catch-all de MCP como servidor
+  // "describe" e pedia permissão em toda chamada.
+  'describe_image',
   // Skills
   'create_skill',
   // Estado do turno (leitura, first-party): verify_changes confere o que foi

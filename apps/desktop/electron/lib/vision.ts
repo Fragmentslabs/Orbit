@@ -15,7 +15,7 @@ const DESCRIBE_PROMPT = (language?: string, focus?: string) =>
   'Describe this image in detail and factually, in ' +
   (language ?? 'the user\'s language') +
   '. Include: layout and structure, UI elements and their state, all visible text (verbatim when short), colors/icons/visual details, and anything notable that could matter for the task at hand. Be precise and objective — do not speculate about what is not visible. Aim for a compact but complete description (200-600 words).' +
-  (focus ? `\n\nThe user\'s message focuses on: "${focus}". Prioritize the details that answer it, but keep the overall description too.` : '')
+  (focus ? `\n\nThe user's message focuses on: "${focus}". Prioritize the details that answer it, but keep the overall description too.` : '')
 
 export async function describeImage(opts: {
   model: WorkerModelConfig
@@ -47,4 +47,33 @@ export async function describeImage(opts: {
     console.error('[vision] describeImage falhou:', err)
     return null
   }
+}
+
+/** Imagem anexada à mensagem atual, disponível para a tool describe_image. */
+export interface TurnImage {
+  url: string
+  filename?: string
+  /** Id do TextPart placeholder na mensagem do usuário — a descrição é persistida nele */
+  partId?: string
+  /** A primeira descrição já foi persistida no placeholder? (as seguintes são anexadas) */
+  persisted?: boolean
+}
+
+/**
+ * Registry por sessão das imagens do turno em andamento (modo Visão): a tool
+ * describe_image lê daqui sob demanda e o runChat limpa no finally. Uma sessão
+ * roda um turno por vez, então a chave é o sessionId.
+ */
+const turnImages = new Map<string, TurnImage[]>()
+
+export function registerTurnImages(sessionId: string, images: TurnImage[]): void {
+  turnImages.set(sessionId, images)
+}
+
+export function getTurnImages(sessionId: string): TurnImage[] | undefined {
+  return turnImages.get(sessionId)
+}
+
+export function clearTurnImages(sessionId: string): void {
+  turnImages.delete(sessionId)
 }
