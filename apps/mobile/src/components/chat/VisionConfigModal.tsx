@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { Modal, View, Text, TextInput, Pressable, ScrollView, StyleSheet } from 'react-native'
 import { X, Search, Check, Eye } from 'lucide-react-native'
-import { Image } from 'expo-image'
+import { ProviderLogo } from '~/components/ui/provider-logo'
 import { useTranslation } from 'react-i18next'
 import { modelSupportsVision } from '@orbit/shared'
 import { useSettingsStore } from '~/stores/settings-store'
@@ -139,11 +139,7 @@ export function VisionConfigModal({ visible, onClose, targetSession }: VisionCon
                           isSelected && { backgroundColor: rowSelectedBg },
                         ]}
                       >
-                        <Image
-                          source={`https://models.dev/logos/${provider.id}.svg`}
-                          style={{ width: 16, height: 16 }}
-                          contentFit="contain"
-                        />
+                        <ProviderLogo providerId={provider.id} size={16} color={tokens.mutedForeground} />
                         <View style={{ flex: 1 }}>
                           <Text style={[s.modelName, { color: tokens.foreground }]}>{model.name}</Text>
                           <Text style={[s.modelId, { color: tokens.mutedForeground }]} numberOfLines={1}>{model.id}</Text>

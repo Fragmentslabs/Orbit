@@ -2,7 +2,7 @@ import { Fragment, useEffect } from 'react'
 import { View, Text, Pressable, ScrollView, StyleSheet } from 'react-native'
 import { useRouter } from 'expo-router'
 import { ArrowLeft, Check, Cpu } from 'lucide-react-native'
-import { Image } from 'expo-image'
+import { ProviderLogo } from '~/components/ui/provider-logo'
 import { useTranslation } from 'react-i18next'
 import { useSettingsStore } from '~/stores/settings-store'
 import { getThemeTokens } from '~/lib/theme-tokens'
@@ -65,11 +65,7 @@ export default function ProvidersScreen() {
               <Fragment key={id}>
                 {i > 0 && <View style={[s.divider, { backgroundColor: tokens.border }]} />}
                 <View style={s.row}>
-                  <Image
-                    source={`https://models.dev/logos/${id}.svg`}
-                    style={{ width: 18, height: 18 }}
-                    contentFit="contain"
-                  />
+                  <ProviderLogo providerId={id} size={18} color={tokens.mutedForeground} />
                   <Text style={[s.rowName, { color: tokens.foreground }]}>{catalog?.[id]?.name ?? id}</Text>
                   <Check size={16} color={tokens.mutedForeground} />
                 </View>

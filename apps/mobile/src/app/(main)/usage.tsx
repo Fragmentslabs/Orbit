@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { View, Text, Pressable, ScrollView, RefreshControl, StyleSheet } from 'react-native'
 import { useRouter } from 'expo-router'
-import { Image } from 'expo-image'
+import { ProviderLogo } from '~/components/ui/provider-logo'
 import {
   ArrowLeft,
   BarChart3,
@@ -144,11 +144,7 @@ export default function UsageScreen() {
                   key={`${model.providerId}/${model.modelId}`}
                   style={[s.modelRow, index < topModels.length - 1 && { borderBottomWidth: 1, borderBottomColor: tokens.border }]}
                 >
-                  <Image
-                    source={`https://models.dev/logos/${model.providerId}.svg`}
-                    style={{ width: 16, height: 16 }}
-                    contentFit="contain"
-                  />
+                  <ProviderLogo providerId={model.providerId} size={16} color={tokens.mutedForeground} />
                   <View style={{ flex: 1, gap: 4 }}>
                     <View style={s.modelTopRow}>
                       <Text style={[s.modelName, { color: tokens.foreground }]} numberOfLines={1}>{name}</Text>
