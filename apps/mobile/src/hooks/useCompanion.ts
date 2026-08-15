@@ -1,11 +1,12 @@
 import { useEffect } from 'react'
-import type { ChatEventMessage } from '@orbit/shared'
+import type { ChatEventMessage, RotinaEventMessage } from '@orbit/shared'
 import { useConnectionStore } from '../stores/connection-store'
 import { useMessageQueueStore } from '../stores/message-queue-store'
 import { useRecentConnectionsStore } from '~/stores/recent-connections-store'
 import { useSessionStore } from '../stores/session-store'
 import { useSettingsStore } from '../stores/settings-store'
 import { useSessionModelPrefs } from '~/stores/session-model-prefs'
+import { useRotinasStore } from '~/stores/rotinas-store'
 
 /**
  * Hook que orquestra a conexão WS + HTTP com o desktop.
@@ -105,9 +106,18 @@ export function useCompanion() {
       }
     })
 
+    // rotinas:event → rotinas store (criar/editar/excluir/execução pelo scheduler)
+    const unsubRotinas = conn.onEvent('rotinas:event', (event) => {
+      const msg = event as RotinaEventMessage
+      if (msg?.event) {
+        useRotinasStore.getState().aplicarEvento(msg.event)
+      }
+    })
+
     return () => {
       unsubChat()
       unsubModels()
+      unsubRotinas()
     }
   }, [])
 }

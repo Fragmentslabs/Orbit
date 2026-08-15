@@ -18,3 +18,11 @@ export function formatDateTime(ts: number, locale: string): string {
   const connector = locale.toLowerCase().startsWith('pt') ? 'às' : 'at'
   return `${date} ${connector} ${time}`
 }
+
+/** Data longa + horário (ex.: pt "6 de agosto de 2026 às 14:00") — usado nas rotinas. */
+export function formatDateTimeShort(ts: number, locale: string): string {
+  const date = new Date(ts).toLocaleDateString(locale, { dateStyle: 'long' })
+  const time = formatTime(ts, locale)
+  const connector = locale.toLowerCase().startsWith('pt') ? 'às' : 'at'
+  return `${date} ${connector} ${time}`
+}

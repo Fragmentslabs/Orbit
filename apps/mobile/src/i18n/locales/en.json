@@ -82,6 +82,7 @@
     "newChat": "New Chat",
     "newSession": "New Session",
     "memories": "Memories",
+    "rotinas": "Routines",
     "media": "Media",
     "usageLimits": "Usage & Limits",
     "tools": "Tools",
@@ -836,6 +837,113 @@
     "light": "Light",
     "dark": "Dark",
     "system": "System"
+  },
+  "rotinas": {
+    "titulo": "Routines",
+    "subtitulo": "Sessions that come back on their own: the agent runs the same prompt at the scheduled time.",
+    "subtituloChat": "Chat sessions that come back on their own — no working folders, just conversation and chat tools.",
+    "modo": {
+      "chat": "Chat mode",
+      "code": "Code mode"
+    },
+    "criar": {
+      "titulo": "New routine",
+      "descreverDica": "Describe it in plain text. The model turns that into a title, prompt, schedule and modes — you review everything in the next step.",
+      "placeholder": "E.g.: every day at 9am, review yesterday's commits in this repository and write a summary of what changed, with any risks you find.",
+      "placeholderChat": "E.g.: every day at 8am, put together a morning briefing with the day's tech news and a summary of my recent memories.",
+      "modelo": "Model",
+      "gerar": "Generate",
+      "gerando": "Generating…",
+      "semModelo": "Choose a model to generate the routine.",
+      "modoChatDica": "Chat mode: the routine runs without working folders — just conversation and chat tools."
+    },
+    "revisar": {
+      "voltar": "Back",
+      "campoTitulo": "Title",
+      "campoPrompt": "Routine prompt",
+      "campoPromptDica": "This is what the agent receives on every run. It must be self-contained: there is no one to answer questions.",
+      "agenda": "When to run",
+      "modos": "Modes",
+      "modosDica": "The agent suggested these based on the described work. Toggle them freely.",
+      "pastas": "Working folders",
+      "pastasDica": "Picked in this step — the routine always runs in them.",
+      "semPastas": "No folder open. Open a folder in code mode before creating the routine.",
+      "criar": "Create routine"
+    },
+    "agenda": {
+      "modo": {
+        "diario": "Every day",
+        "semanal": "Weekdays",
+        "intervalo": "Every N days"
+      },
+      "horario": "at",
+      "dia": {
+        "0": "S",
+        "1": "M",
+        "2": "T",
+        "3": "W",
+        "4": "T",
+        "5": "F",
+        "6": "S"
+      },
+      "uteis": "Mon-Fri",
+      "fimDeSemana": "Weekend",
+      "aCada": "Every",
+      "dias": "days",
+      "resumoDiario": "Every day at {{horario}}",
+      "resumoDias": "{{dias}} at {{horario}}",
+      "resumoIntervalo": "Every {{dias}} days at {{horario}}",
+      "diaAbrev": {
+        "0": "Sun",
+        "1": "Mon",
+        "2": "Tue",
+        "3": "Wed",
+        "4": "Thu",
+        "5": "Fri",
+        "6": "Sat"
+      },
+      "resumoUteis": "Mon-Fri at {{horario}}",
+      "resumoFimDeSemana": "Weekend at {{horario}}"
+    },
+    "modos": {
+      "loop": { "nome": "Loop" },
+      "subagents": { "nome": "Subagents" },
+      "orchestrate": { "nome": "Orchestrate" },
+      "brain": { "nome": "Memory" },
+      "browser": { "nome": "Browser" },
+      "plan": { "nome": "Plan mode" },
+      "simple": { "nome": "Simple" },
+      "search": { "nome": "Search" },
+      "vision": { "nome": "Vision" },
+      "permissao": "Permissions",
+      "permissaoAviso": "The routine fires on its own: in \"Ask\" it stops at the first sensitive action and waits for you to reply in the run's session."
+    },
+    "lista": {
+      "nova": "New routine",
+      "vazioTitulo": "No routines yet",
+      "vazioSubtitulo": "A routine is a session that comes back on its own — a daily report, a weekly sweep, a post-deploy check.",
+      "vazioSubtituloChat": "A chat routine is a session that comes back on its own — a daily briefing, a memory digest, a news check.",
+      "criarPrimeira": "Create your first routine",
+      "ativa": "Active",
+      "pausada": "Paused",
+      "proxima": "Next: {{quando}}",
+      "executarAgora": "Run now",
+      "editar": "Edit",
+      "salvar": "Save",
+      "salvando": "Saving…",
+      "excluir": "Delete",
+      "excluirTitulo": "Delete routine",
+      "excluirDescricao": "\"{{titulo}}\" and ALL sessions it generated will be deleted. This cannot be undone."
+    },
+    "runs": {
+      "titulo": "Runs",
+      "vazio": "It hasn't run yet.",
+      "abrirChat": "Open session",
+      "rodando": "Running…",
+      "ok": "Completed",
+      "erro": "Failed",
+      "tokens": "{{valor}} tokens"
+    }
   },
   "memoriesScreen": {
     "title": "Memories",

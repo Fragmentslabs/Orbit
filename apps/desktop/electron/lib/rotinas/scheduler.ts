@@ -6,7 +6,7 @@ import { opcoesDaRotina, proximaExecucao, ROTINA_SESSION_PREFIX } from '@shared/
 import { runChat } from '../chat-engine'
 import { runChatWithLoop } from '../loop-engine'
 import { runOrchestration } from '../orchestrator'
-import { broadcastChatEvent } from '../broadcast'
+import { broadcastChatEvent, broadcastRotinaEvent } from '../broadcast'
 import { readJson, writeJson } from '../storage'
 import { atualizarRotina, listarRotinas, listarRuns, salvarRun } from './repo'
 
@@ -38,9 +38,7 @@ let timer: ReturnType<typeof setInterval> | null = null
 const emExecucao = new Set<string>()
 
 export function emitir(evento: RotinaEvent): void {
-  for (const win of BrowserWindow.getAllWindows()) {
-    if (!win.isDestroyed()) win.webContents.send('rotinas:event', evento)
-  }
+  broadcastRotinaEvent(evento)
 }
 
 // ─── Sessão da execução ──────────────────────────────────────────────────────

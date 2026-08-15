@@ -5,6 +5,7 @@
  */
 
 import type { SendMessageOptions, SessionMode, FilePart, WorkerModelConfig, PermissionMode } from './chat'
+import type { NovaRotinaInput, Rotina, RotinaEvent, RotinaModelo } from './rotinas'
 
 // ─── Handshake ───────────────────────────────────────────────────────────────
 
@@ -222,6 +223,50 @@ export interface UnrevertSessionRequest {
   sessionId: string
 }
 
+// ─── Rotinas ─────────────────────────────────────────────────────────────────
+
+export interface ListRotinasRequest {
+  type: 'rotinas:list'
+}
+
+export interface CreateRotinaRequest {
+  type: 'rotinas:create'
+  input: NovaRotinaInput
+}
+
+export interface UpdateRotinaRequest {
+  type: 'rotinas:update'
+  id: string
+  patch: Partial<Rotina>
+}
+
+export interface DeleteRotinaRequest {
+  type: 'rotinas:delete'
+  id: string
+}
+
+/** "Executar agora" — mesma execução do scheduler, sem mexer na agenda. */
+export interface RunRotinaRequest {
+  type: 'rotinas:run'
+  id: string
+}
+
+/** Descarta métricas de execuções cujo chat não existe mais. */
+export interface PruneRotinasRequest {
+  type: 'rotinas:prune-runs'
+  sessionIds: string[]
+}
+
+export interface GenerateRotinaRequest {
+  type: 'rotinas:generate'
+  descricao: string
+  modelo: RotinaModelo
+  pastas: string[]
+  idioma?: string
+  modo?: 'chat' | 'code'
+  visionDisponivel?: boolean
+}
+
 // ─── Plan Review (Modo Plano) ─────────────────────────────────────────────────
 
 export interface ReadPlanFileRequest {
@@ -299,6 +344,13 @@ export type CompanionRequest =
   | DeleteMemoryRequest
   | PromoteMemoryRequest
   | GetMemoryDocRequest
+  | ListRotinasRequest
+  | CreateRotinaRequest
+  | UpdateRotinaRequest
+  | DeleteRotinaRequest
+  | RunRotinaRequest
+  | PruneRotinasRequest
+  | GenerateRotinaRequest
   | RevertSessionRequest
   | UnrevertSessionRequest
   | ReadPlanFileRequest
@@ -339,6 +391,12 @@ export interface ChatEventMessage {
   event: unknown // ChatEvent do shared/chat.ts
 }
 
+/** Evento de rotina retransmitido do desktop (espelhos dos RotinaEvent). */
+export interface RotinaEventMessage {
+  type: 'rotinas:event'
+  event: RotinaEvent
+}
+
 /** Notificação de nova permissão/question pendente. */
 export interface PendingAskNotification {
   type: 'notify:pending-ask'
@@ -371,6 +429,7 @@ export type CompanionEvent =
   | AuthErrorResponse
   | ApiResponse
   | ChatEventMessage
+  | RotinaEventMessage
   | PendingAskNotification
   | NewMessageNotification
   | StatusUpdate

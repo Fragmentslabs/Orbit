@@ -29,6 +29,7 @@ import type {
   StatusUpdate,
 } from '@shared/companion'
 import type { ChatEvent, SessionInfo, FolderInfo, ChatMessage, MessagePart, SendMessageInput } from '@shared/chat'
+import type { RotinaEvent } from '@shared/rotinas'
 import { StorageKeys } from '@shared/chat'
 import { readJson, writeJson, removeJson, listKeys } from './storage'
 import { searchSessions } from './search-sessions'
@@ -48,6 +49,7 @@ import {
   promote as promoteMemory,
   getFull as getMemoryFull,
 } from './memory/service'
+import * as rotinas from './rotinas'
 import {
   startCompanionHttpServer,
   stopCompanionHttpServer,
@@ -716,6 +718,56 @@ async function handleRequest(client: ConnectedClient, requestId: string, req: Co
         break
       }
 
+      case 'rotinas:list': {
+        const dados = await rotinas.carregarTudo()
+        sendResponse(ws, requestId, true, dados)
+        break
+      }
+
+      case 'rotinas:create': {
+        const rotina = await rotinas.criarRotina(req.input)
+        sendResponse(ws, requestId, true, rotina)
+        break
+      }
+
+      case 'rotinas:update': {
+        const rotina = await rotinas.atualizarRotinaCampos(req.id, req.patch)
+        if (rotina) sendResponse(ws, requestId, true, rotina)
+        else sendResponse(ws, requestId, false, undefined, 'Rotina não encontrada')
+        break
+      }
+
+      case 'rotinas:delete': {
+        await rotinas.removerRotinaCompleta(req.id)
+        sendResponse(ws, requestId, true)
+        break
+      }
+
+      case 'rotinas:run': {
+        const sessionId = await rotinas.executarAgora(req.id)
+        sendResponse(ws, requestId, true, sessionId)
+        break
+      }
+
+      case 'rotinas:prune-runs': {
+        await rotinas.podarRunsOrfaos(req.sessionIds)
+        sendResponse(ws, requestId, true)
+        break
+      }
+
+      case 'rotinas:generate': {
+        const resultado = await rotinas.gerarRotina(
+          req.descricao,
+          req.modelo,
+          req.pastas,
+          req.idioma,
+          req.modo,
+          req.visionDisponivel,
+        )
+        sendResponse(ws, requestId, true, resultado)
+        break
+      }
+
       case 'folders:list': {
         const folders = (await readJson<FolderInfo[]>(StorageKeys.folders)) ?? []
         sendResponse(ws, requestId, true, folders)
@@ -925,7 +977,7 @@ function countPendingAsks(): number {
 }
 
 function getIp(ws: WebSocket): string {
-  return (ws as any)._socket?.remoteAddress ?? 'unknown'
+  return (ws as unknown as { _socket?: { remoteAddress?: string } })._socket?.remoteAddress ?? 'unknown'
 }
 
 /** Hostname/IP que o client usou para conectar (header Host do handshake WS).
@@ -965,6 +1017,14 @@ export function forwardChatEvent(event: ChatEvent): void {
       if (rewritten) out = { ...event, part: rewritten }
     }
     client.ws.send(wrap({ type: 'chat:event', event: out } as CompanionEvent))
+  }
+}
+
+/** Retransmite um RotinaEvent para todos os companions autenticados. */
+export function forwardRotinaEvent(event: RotinaEvent): void {
+  for (const client of clients) {
+    if (!client.authenticated || client.ws.readyState !== WebSocket.OPEN) continue
+    client.ws.send(wrap({ type: 'rotinas:event', event } as CompanionEvent))
   }
 }
 
@@ -1069,7 +1129,7 @@ export function startCompanionServer(): { port: number; ip: string; pin: string;
     ws.on('message', (data: Buffer) => {
       try {
         const msg = JSON.parse(data.toString()) as WsMessage
-        if (msg.payload && typeof (msg.payload as any).type === 'string') {
+        if (msg.payload && typeof (msg.payload as { type?: unknown }).type === 'string') {
           void handleRequest(client, msg.id, msg.payload as CompanionRequest)
         }
       } catch (err) {

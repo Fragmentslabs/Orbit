@@ -18,6 +18,12 @@ interface ModelPickerModalProps {
   onClose: () => void
   /** Sessão dona da escolha — undefined/null = chat novo (draft). */
   sessionId?: string | null
+  /** Seleção exibida (override do modelo por sessão) — usado pelas rotinas,
+   *  que guardam o próprio modelo. undefined = segue o sessionId. */
+  selected?: { providerId: string; modelId: string } | null
+  /** Callback de seleção — quando presente, substitui o selectModel por
+   *  sessão (o dono da escolha decide o que fazer com ela). */
+  onSelect?: (providerId: string, modelId: string) => void
 }
 
 /** Limite de modelos por provedor ao navegar (sem busca) — espelha o desktop
@@ -133,10 +139,19 @@ function ModelRow({
   )
 }
 
-export function ModelPickerModal({ visible, onClose, sessionId }: ModelPickerModalProps) {
+export function ModelPickerModal({
+  visible,
+  onClose,
+  sessionId,
+  selected: selectedOverride,
+  onSelect,
+}: ModelPickerModalProps) {
   const { t } = useTranslation()
   const catalog = useSettingsStore((s) => s.catalog)
-  const selectedModel = useSessionModel(sessionId)
+  const sessionModel = useSessionModel(sessionId)
+  // undefined = segue o modelo da sessão (chat); null = nada selecionado;
+  // objeto = modelo do dono da escolha (rotina).
+  const selectedModel = selectedOverride === undefined ? sessionModel : selectedOverride
   const selectModel = useSessionModelPrefs((s) => s.selectModel)
   const connectedProviders = useSettingsStore((s) => s.connectedProviders)
   const loading = useSettingsStore((s) => s.loading)
@@ -189,6 +204,11 @@ export function ModelPickerModal({ visible, onClose, sessionId }: ModelPickerMod
   }, [catalog, search, connectedProviders])
 
   const handleSelect = async (providerId: string, modelId: string) => {
+    if (onSelect) {
+      onSelect(providerId, modelId)
+      onClose()
+      return
+    }
     // Por chat: sessão existente ganha override; chat novo (sem sessão) vira
     // o draft + default global — espelho do desktop.
     selectModel(sessionId ?? null, providerId, modelId)

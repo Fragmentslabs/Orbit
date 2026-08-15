@@ -28,6 +28,11 @@ export default function MainLayout() {
             <Stack.Screen name="memories" />
             <Stack.Screen name="media" />
 
+            <Stack.Screen name="rotinas/index" />
+            <Stack.Screen name="rotinas/nova" />
+            <Stack.Screen name="rotinas/[id]" />
+            <Stack.Screen name="rotinas/editar/[id]" />
+
             <Stack.Screen name="usage" />
             <Stack.Screen name="tools" />
             <Stack.Screen name="settings" />
