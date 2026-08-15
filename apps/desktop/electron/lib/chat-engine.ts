@@ -1,4 +1,5 @@
 import { generateText, stepCountIs, streamText, type ModelMessage, type UserContent } from 'ai'
+import { basename } from 'node:path'
 import type { BrowserWindow } from 'electron'
 import type {
   AgentPart,
@@ -472,18 +473,37 @@ function truncateTitle(text: string): string {
 
 async function generateTitle(input: SendMessageInput, win: BrowserWindow) {
   try {
+    const session = await readJson<SessionInfo>(StorageKeys.session(input.sessionId))
+    // Só nomeia sessões que ainda estão com o título padrão: não sobrescreve
+    // renomeações do usuário nem sessões de rotina (que nascem com
+    // "<rotina> — <horário>").
+    if (!session || session.routineId) return
+    const isDefaultTitle =
+      session.title === 'Nova conversa' || session.title === 'Nova sessão de código'
+    if (!isDefaultTitle) return
+
     const model = await resolveModel(input.providerId, input.modelId)
+    const isCommand = input.text.trim().startsWith('/')
+    const projectName = input.directory ? basename(input.directory) : null
     const { text } = await generateText({
       model,
       system:
         'Gere um título curto e descritivo para a conversa, em texto puro, no idioma da mensagem do usuário. ' +
         'Regras: sem negrito, sem asteriscos, sem aspas, sem emojis e sem formatação de qualquer tipo; no máximo 50 caracteres. ' +
         'Responda APENAS com o título final, nada mais.',
-      prompt: input.text.slice(0, 2000),
+      prompt: isCommand
+        ? `A sessão de código começou com um comando (${input.text.trim().slice(0, 100)}) — não use o comando como título. ` +
+          `Gere um título genérico curto em ${input.language ?? 'português'}${projectName ? ` para o projeto "${projectName}"` : ''}, ` +
+          'como "Análise do projeto". Responda apenas com o título.'
+        : input.text.slice(0, 2000),
     })
     const title = truncateTitle(text)
     if (!title) return
 
+    // Persiste no disco ANTES de propagar: os eventos "session" seguintes
+    // (bumpSessionActivity) leem a sessão do disco — sem esta escrita o título
+    // gerado reverte para o padrão na troca seguinte.
+    await writeJson(StorageKeys.session(input.sessionId), { ...session, title })
     await bumpSessionActivity(win, input.sessionId)
     emit(win, { type: 'title', sessionId: input.sessionId, title })
   } catch {
