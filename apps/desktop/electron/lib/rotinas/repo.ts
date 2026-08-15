@@ -57,7 +57,10 @@ const RUNS = 'runs.json'
 // ─── Rotinas ─────────────────────────────────────────────────────────────────
 
 export function listarRotinas(): Promise<Rotina[]> {
-  return ler<Rotina[]>(ROTINAS, [])
+  return ler<Rotina[]>(ROTINAS, []).then((rotinas) =>
+    // Migração: rotinas criadas antes do campo `mode` explícito são de código.
+    rotinas.map((rotina) => ({ ...rotina, mode: rotina.mode ?? 'code' })),
+  )
 }
 
 export function salvarRotinas(rotinas: Rotina[]): Promise<void> {

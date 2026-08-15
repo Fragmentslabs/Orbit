@@ -54,18 +54,20 @@ function carimbo(quando: number): string {
 /**
  * Cada execução nasce numa sessão própria — é o que dá o histórico de chats da
  * rotina. `folderId` fica null de propósito: os chats de rotina vivem só no
- * grupo "Rotinas" da sidebar, nunca dentro de uma pasta.
+ * grupo "Rotinas" da sidebar, nunca dentro de uma pasta. A sessão herda o modo
+ * da rotina: é o que faz a sidebar separar rotinas de chat das de código.
  */
 async function criarSessao(rotina: Rotina, quando: number): Promise<SessionInfo> {
+  const chat = rotina.mode === 'chat'
   const session: SessionInfo = {
     id: `${ROTINA_SESSION_PREFIX}${rotina.id}_${quando.toString(36)}`,
     title: `${rotina.titulo} — ${carimbo(quando)}`,
-    mode: 'code',
+    mode: rotina.mode,
     pinned: false,
     archived: false,
     folderId: null,
-    directory: rotina.pastas[0],
-    extraDirectories: rotina.pastas.slice(1),
+    directory: chat ? undefined : rotina.pastas[0],
+    extraDirectories: chat ? undefined : rotina.pastas.slice(1),
     routineId: rotina.id,
     createdAt: quando,
     updatedAt: quando,
@@ -119,7 +121,9 @@ export async function executarRotina(rotina: Rotina, motivo: 'agenda' | 'manual'
   if (emExecucao.has(rotina.id)) return null
   const win = BrowserWindow.getAllWindows().find((w) => !w.isDestroyed())
   if (!win) return null
-  if (!rotina.pastas[0]) {
+  // Pasta de trabalho só é obrigatória no modo código: a rotina de chat roda
+  // sem projeto, usando apenas as ferramentas do modo chat.
+  if (rotina.mode !== 'chat' && !rotina.pastas[0]) {
     console.warn(`[rotinas] "${rotina.titulo}" sem pasta de trabalho — execução ignorada`)
     return null
   }
@@ -145,18 +149,31 @@ export async function executarRotina(rotina: Rotina, motivo: 'agenda' | 'manual'
   if (atualizada) emitir({ type: 'rotina', rotina: atualizada })
 
   const options = opcoesDaRotina(rotina.modos)
+  // Rotina de chat só conhece os modos do chat: nem um rotinas.json editado à
+  // mão deve conseguir ligar orquestração/loop/subagentes/plano num modo que
+  // não os suporta (o orquestrador, por exemplo, fixa sessões worker em
+  // mode 'code' — a orquestração simplesmente não roda em chat).
+  if (rotina.mode === 'chat') {
+    options.orchestrate = undefined
+    options.loop = undefined
+    options.subagents = undefined
+    options.plan = undefined
+  }
   const input: SendMessageInput = {
     sessionId: session.id,
     text: rotina.prompt,
     providerId: rotina.modelo.providerId,
     modelId: rotina.modelo.modelId,
-    mode: 'code',
+    mode: rotina.mode,
     options,
     directory: session.directory,
     extraDirectories: session.extraDirectories,
     // Subagentes/orquestração precisam de um modelo de worker; a rotina usa o
     // próprio, que é o único modelo que ela conhece.
     ...(options.subagents || options.orchestrate ? { workerModel: rotina.modelo } : {}),
+    // Modo Visão: a rotina carrega o modelo de visão que tinha na criação
+    // (o main não lê o localStorage do renderer).
+    ...(rotina.modos.vision && rotina.visionModel ? { visionModel: rotina.visionModel } : {}),
     isFirstExchange: true,
     ...(options.loop ? { loopConfig: { maxIterations: 3, maxTokensPerIter: 4000, autoReview: true } } : {}),
   }

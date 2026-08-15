@@ -1638,7 +1638,9 @@
       "gerar": "Gerar",
       "gerando": "Gerando…",
       "semModelo": "Escolha um modelo para gerar a rotina.",
-      "titulo": "Nova rotina"
+      "titulo": "Nova rotina",
+      "placeholderChat": "Ex.: todo dia às 8h, monte um briefing matinal com as notícias de tecnologia do dia e um resumo das minhas memórias recentes.",
+      "modoChatDica": "Modo chat: a rotina roda sem pastas de trabalho — só a conversa e as ferramentas do chat."
     },
     "revisar": {
       "titulo": "Revisar rotina",
@@ -1720,7 +1722,15 @@
         "nome": "Simples",
         "descricao": "Resposta direta em texto puro, sem formatação."
       },
-      "permissaoAviso": "A rotina dispara sozinha: em \"Perguntar\" ela para na primeira ação sensível e fica esperando você responder na sessão da execução."
+      "permissaoAviso": "A rotina dispara sozinha: em \"Perguntar\" ela para na primeira ação sensível e fica esperando você responder na sessão da execução.",
+      "search": {
+        "nome": "Pesquisa",
+        "descricao": "Pesquisa aprofundada na web com ferramentas de busca."
+      },
+      "vision": {
+        "nome": "Visão",
+        "descricao": "Imagens e screenshots são descritas pelo modelo de visão configurado."
+      }
     },
     "lista": {
       "vazioTitulo": "Nenhuma rotina ainda",
@@ -1735,7 +1745,8 @@
       "excluir": "Excluir",
       "excluirTitulo": "Excluir rotina",
       "excluirDescricao": "\"{{titulo}}\" e TODAS as sessões que ela gerou serão apagadas. Não dá para desfazer.",
-      "nova": "Nova rotina"
+      "nova": "Nova rotina",
+      "vazioSubtituloChat": "Uma rotina de chat é uma sessão que volta sozinha — um briefing diário, um resumo de memórias, uma checagem de notícias."
     },
     "runs": {
       "titulo": "Sessões",
@@ -1745,6 +1756,11 @@
       "ok": "Concluída",
       "erro": "Falhou",
       "tokens": "{{valor}} tokens"
-    }
+    },
+    "modo": {
+      "chat": "Modo chat",
+      "code": "Modo código"
+    },
+    "subtituloChat": "Sessões de chat que voltam sozinhas — sem pastas de trabalho, só conversa e as ferramentas do chat."
   }
 }

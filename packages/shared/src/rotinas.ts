@@ -1,5 +1,5 @@
 /**
- * Rotinas do modo código — chats que voltam sozinhos.
+ * Rotinas — chats que voltam sozinhos, nos modos chat e código.
  *
  * Uma rotina é um prompt + uma agenda. Na hora marcada o scheduler do main
  * cria uma sessão de chat nova e despacha pelo MESMO caminho do `chat:send`
@@ -10,6 +10,13 @@
  * não uma conversa única que cresce: é o que permite o histórico de runs no
  * painel e a exclusão individual pela sidebar. O "lembrar do dia anterior"
  * fica por conta do Brain, ligado nos modos da rotina.
+ *
+ * O campo `mode` separa os dois universos:
+ *   - 'code': roda dentro das `pastas` de trabalho; pode usar todos os modos.
+ *   - 'chat': não tem pastas (só conversa e ferramentas do chat); os modos
+ *     ficam restritos ao subconjunto do modo chat (ROTINA_MODOS_CHAT).
+ * A sessão de cada execução herda o modo da rotina, e a sidebar só mostra o
+ * grupo "Rotinas" do modo correspondente.
  *
  * Os nomes do domínio ficam em português porque são o vocabulário do produto
  * (como no modo esteira); o resto do código segue a convenção do repo.
@@ -51,6 +58,10 @@ export interface RotinaModos {
   simple?: boolean
   plan?: boolean
   browser?: boolean
+  /** Pesquisa aprofundada na web (options.research do chat:send) */
+  search?: boolean
+  /** Delega a descrição de imagens ao modelo de visão (input.visionModel) */
+  vision?: boolean
   /** Padrão "approve" (Autonomia), o mesmo default de um chat de código. */
   permissionMode?: PermissionMode
 }
@@ -64,6 +75,20 @@ export const ROTINA_MODOS: (keyof Omit<RotinaModos, 'permissionMode'>)[] = [
   'browser',
   'plan',
   'simple',
+  'search',
+  'vision',
+]
+
+/**
+ * Modos disponíveis numa rotina de chat — espelha os toggles do modo chat
+ * (chat-input.tsx). Loop, subagentes, orquestração e plano não existem lá.
+ */
+export const ROTINA_MODOS_CHAT: (keyof Omit<RotinaModos, 'permissionMode'>)[] = [
+  'search',
+  'browser',
+  'simple',
+  'brain',
+  'vision',
 ]
 
 /** Modos de permissão oferecidos à rotina, na ordem exibida. */
@@ -82,6 +107,9 @@ export function opcoesDaRotina(modos: RotinaModos): SendMessageOptions {
   if (modos.brain) options.brain = true
   if (modos.browser) options.browser = true
   if (modos.simple) options.simple = true
+  if (modos.search) options.research = true
+  // vision não entra nas options: é o input.visionModel do scheduler (a rotina
+  // guarda o próprio modelo de visão, como guarda o modelo principal).
   if (modos.orchestrate) {
     // Orquestração desativa plano e liga loop/subagentes, como no chat:send
     options.orchestrate = {}
@@ -110,8 +138,18 @@ export interface Rotina {
   agenda: Agenda
   modelo: RotinaModelo
   modos: RotinaModos
-  /** Pastas de trabalho, herdadas do workspace no momento da criação */
+  /**
+   * Modo da rotina: 'code' roda dentro das pastas de trabalho; 'chat' roda sem
+   * pastas, com os modos restritos ao subconjunto do chat.
+   */
+  mode: 'chat' | 'code'
+  /** Pastas de trabalho, herdadas do workspace no momento da criação (só code) */
   pastas: string[]
+  /**
+   * Modelo de visão guardado na criação quando o modo Visão está ligado — o
+   * main não lê o localStorage do renderer, então a rotina é autocontida.
+   */
+  visionModel?: RotinaModelo
   ativa: boolean
   criadoEm: number
   ultimaExecucao?: number
@@ -124,7 +162,10 @@ export interface NovaRotinaInput {
   agenda: Agenda
   modelo: RotinaModelo
   modos: RotinaModos
+  /** Ausente = 'code' (rotinas antigas e chamadas externas) */
+  mode?: 'chat' | 'code'
   pastas: string[]
+  visionModel?: RotinaModelo
   ativa?: boolean
 }
 

@@ -35,7 +35,14 @@ interface RotinasState {
   carregar: () => Promise<void>
   aplicarEvento: (evento: RotinaEvent) => void
 
-  gerar: (descricao: string, modelo: RotinaModelo, pastas: string[], idioma?: string) => Promise<ResultadoGeracao>
+  gerar: (
+    descricao: string,
+    modelo: RotinaModelo,
+    pastas: string[],
+    idioma?: string,
+    modo?: "chat" | "code",
+    visionDisponivel?: boolean,
+  ) => Promise<ResultadoGeracao>
   criar: (input: NovaRotinaInput) => Promise<Rotina>
   atualizar: (id: string, patch: Partial<Rotina>) => Promise<void>
   remover: (id: string) => Promise<void>
@@ -98,7 +105,8 @@ export const useRotinasStore = create<RotinasState>((set, get) => ({
     }
   },
 
-  gerar: (descricao, modelo, pastas, idioma) => rotinasApi.gerar(descricao, modelo, pastas, idioma),
+  gerar: (descricao, modelo, pastas, idioma, modo, visionDisponivel) =>
+    rotinasApi.gerar(descricao, modelo, pastas, idioma, modo, visionDisponivel),
 
   criar: async (input) => {
     const rotina = await rotinasApi.criar(input)

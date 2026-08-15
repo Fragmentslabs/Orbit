@@ -236,12 +236,13 @@ function EsteiraButton() {
   )
 }
 
-/** Rotinas: chats agendados. Mesma lógica de navegação da esteira. */
+/** Rotinas: chats agendados, dos modos chat e código. A página herda o modo
+ *  ativo (a de chat lista/cria só rotinas de chat), então o botão existe nos
+ *  dois modos — mesma lógica de navegação da esteira. */
 function RotinasButton() {
   const { t } = useTranslation()
-  const { mode, view, setView } = useWorkspace()
+  const { view, setView } = useWorkspace()
   const active = view === "rotinas"
-  if (mode !== "code") return null
   return (
     <Button
       variant="ghost"
@@ -1065,11 +1066,16 @@ function ChatHistory() {
         .sort((a, b) => b.updatedAt - a.updatedAt),
     [sessions, mode],
   )
-  // Sem filtro de arquivado: os chats de rotina não entram no grupo
-  // "Arquivados" (que sai de modeSessions), então arquivar um faria ele sumir
-  // da sidebar inteira.
+  // Grupo "Rotinas" do modo ativo: a sessão de cada execução herda o modo da
+  // rotina (scheduler.ts), então a sidebar de chat só lista as rotinas de
+  // chat e a de código só as de código. Sem filtro de arquivado: os chats de
+  // rotina não entram no grupo "Arquivados" (que sai de modeSessions), então
+  // arquivar um faria ele sumir da sidebar inteira.
   const routineSessions = useMemo(
-    () => (mode === "code" ? sessions.filter((s) => !!s.routineId).sort((a, b) => b.updatedAt - a.updatedAt) : []),
+    () =>
+      sessions
+        .filter((s) => s.mode === mode && !!s.routineId)
+        .sort((a, b) => b.updatedAt - a.updatedAt),
     [sessions, mode],
   )
   // Workers ficam agrupados sob o orquestrador (independente do modo do worker)

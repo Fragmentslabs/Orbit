@@ -1190,7 +1190,7 @@ app.whenReady().then(() => {
   // um fechamento abrupto continuaria "rodando" no board para sempre.
   void esteira.reconciliarExecucoes().catch((err) => console.error('[esteira] reconciliação falhou:', err))
 
-  // Rotinas: chats agendados do modo código. O CRUD vive em
+  // Rotinas: chats agendados (modos chat e código). O CRUD vive em
   // orbit-data/rotinas; o disparo reusa o caminho do 'chat:send' acima, e as
   // mutações voltam ao renderer por 'rotinas:event'.
   ipcMain.handle('rotinas:carregar', () => rotinas.carregarTudo())
@@ -1203,8 +1203,8 @@ app.whenReady().then(() => {
   ipcMain.handle('rotinas:podarRuns', (_e, sessionIds: string[]) => rotinas.podarRunsOrfaos(sessionIds))
   ipcMain.handle(
     'rotinas:gerar',
-    (_e, descricao: string, modelo: RotinaModelo, pastas: string[], idioma?: string) =>
-      rotinas.gerarRotina(descricao, modelo, pastas, idioma),
+    (_e, descricao: string, modelo: RotinaModelo, pastas: string[], idioma?: string, modo?: 'chat' | 'code', visionDisponivel?: boolean) =>
+      rotinas.gerarRotina(descricao, modelo, pastas, idioma, modo, visionDisponivel),
   )
   rotinas.iniciarScheduler()
 

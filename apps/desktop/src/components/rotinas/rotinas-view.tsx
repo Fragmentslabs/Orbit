@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react"
 import { useTranslation } from "react-i18next"
-import { PlusIcon } from "lucide-react"
+import { MessageSquareIcon, PlusIcon, TerminalIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { useWorkspace } from "@/lib/workspace-context"
 import { rotinasApi } from "@/src/lib/ipc"
 import { useRotinasStore } from "@/src/stores/rotinas-store"
 import { useSessionStore } from "@/src/stores/session-store"
@@ -9,16 +10,20 @@ import { CriarRotinaDialog } from "./criar-rotina-dialog"
 import { DetalheDaRotina, ListaDeRotinas } from "./minhas-rotinas"
 
 /**
- * Página Rotinas (modo código, na sidebar). Dois níveis, como a esteira:
+ * Página Rotinas (na sidebar, dos modos chat e código). Dois níveis, como a
+ * esteira:
  *
  *   lista de rotinas  →  [abrir]  →  detalhe da rotina (sessões executadas)
  *
- * A criação é um MODAL, não uma aba: a página é a lista, e criar é uma ação
- * sobre ela. No detalhe o header da listagem some — quem está ali está dentro
- * de UMA rotina, e o header é o dela.
+ * A página herda o modo do workspace: no chat ela lista/cria só rotinas de
+ * chat, no código só as de código. A criação é um MODAL, não uma aba: a
+ * página é a lista, e criar é uma ação sobre ela. No detalhe o header da
+ * listagem some — quem está ali está dentro de UMA rotina, e o header é o
+ * dela.
  */
 export function RotinasView() {
   const { t } = useTranslation()
+  const { mode } = useWorkspace()
   const carregado = useRotinasStore((s) => s.carregado)
   const carregar = useRotinasStore((s) => s.carregar)
   const rotinas = useRotinasStore((s) => s.rotinas)
@@ -29,7 +34,8 @@ export function RotinasView() {
   const sessoesCarregadas = useSessionStore((s) => s.initialized)
   const [criarAberto, setCriarAberto] = useState(false)
 
-  const aberta = abertaId ? rotinas.find((r) => r.id === abertaId) : undefined
+  const aberta = abertaId ? rotinas.find((r) => r.id === abertaId && r.mode === mode) : undefined
+  const doModo = rotinas.filter((r) => r.mode === mode)
 
   useEffect(() => {
     if (!carregado) void carregar()
@@ -71,11 +77,19 @@ export function RotinasView() {
     <div className="flex min-h-0 flex-1 flex-col">
       {/* Sem rotina nenhuma a tela é só o estado vazio com a chamada para
           criar — um header com botão em cima de "nada aqui" seria redundante. */}
-      {rotinas.length > 0 && (
+      {doModo.length > 0 && (
         <div className="flex shrink-0 items-center gap-2 pb-4">
           <div className="min-w-0 flex-1">
-            <h2 className="text-base font-semibold text-foreground">{t("rotinas.titulo")}</h2>
-            <p className="text-xs text-muted-foreground">{t("rotinas.subtitulo")}</p>
+            <h2 className="flex items-center gap-2 text-base font-semibold text-foreground">
+              {t("rotinas.titulo")}
+              <span className="inline-flex items-center gap-1 rounded-md border border-transparent bg-muted/50 px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
+                {mode === "chat" ? <MessageSquareIcon className="size-3" /> : <TerminalIcon className="size-3" />}
+                {mode === "chat" ? t("rotinas.modo.chat") : t("rotinas.modo.code")}
+              </span>
+            </h2>
+            <p className="text-xs text-muted-foreground">
+              {mode === "chat" ? t("rotinas.subtituloChat") : t("rotinas.subtitulo")}
+            </p>
           </div>
           <Button size="lg" onClick={() => setCriarAberto(true)}>
             <PlusIcon className="size-4" />
@@ -84,12 +98,13 @@ export function RotinasView() {
         </div>
       )}
 
-      <ListaDeRotinas onCriarNova={() => setCriarAberto(true)} />
+      <ListaDeRotinas modo={mode} onCriarNova={() => setCriarAberto(true)} />
 
       <CriarRotinaDialog
         aberto={criarAberto}
         onOpenChange={setCriarAberto}
         onCriada={(id) => setAberta(id)}
+        modoPadrao={mode}
       />
     </div>
   )

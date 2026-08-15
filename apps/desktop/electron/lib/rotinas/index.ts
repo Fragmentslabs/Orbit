@@ -41,7 +41,9 @@ export async function criarRotina(input: NovaRotinaInput): Promise<Rotina> {
     agenda: input.agenda,
     modelo: input.modelo,
     modos: input.modos,
+    mode: input.mode ?? 'code',
     pastas: [...input.pastas],
+    visionModel: input.visionModel,
     ativa: input.ativa ?? true,
     criadoEm: Date.now(),
   }

@@ -1,5 +1,5 @@
 import { useTranslation } from "react-i18next"
-import { AlignLeft, Bot, BrainCircuit, FileText, Globe, Network, RefreshCw } from "lucide-react"
+import { AlignLeft, Bot, BrainCircuit, Eye, FileText, Globe, Network, RefreshCw, Search } from "lucide-react"
 import type { PermissionMode } from "@shared/chat"
 import type { Agenda, RotinaModos } from "@shared/rotinas"
 import { parseHorario, ROTINA_MODOS, ROTINA_PERMISSAO_PADRAO, ROTINA_PERMISSOES } from "@shared/rotinas"
@@ -145,18 +145,32 @@ const MODO_ICONE: Record<(typeof ROTINA_MODOS)[number], typeof Bot> = {
   browser: Globe,
   plan: FileText,
   simple: AlignLeft,
+  search: Search,
+  vision: Eye,
 }
+
+/** Chaves de modo editáveis — o subconjunto depende do modo da rotina. */
+type ChaveDeModo = (typeof ROTINA_MODOS)[number]
 
 /**
  * Modos como badges clicáveis, no mesmo padrão de "modos ativos por padrão"
  * das preferências: ligado fica dourado (primary), desligado fica ghost. O
  * agente SUGERE na criação — quem confirma é o usuário, num clique.
  */
-export function ModosEditor({ modos, onChange }: { modos: RotinaModos; onChange: (modos: RotinaModos) => void }) {
+export function ModosEditor({
+  modos,
+  onChange,
+  disponiveis = ROTINA_MODOS,
+}: {
+  modos: RotinaModos
+  onChange: (modos: RotinaModos) => void
+  /** Modos exibidos — rotina de chat recebe ROTINA_MODOS_CHAT. */
+  disponiveis?: ChaveDeModo[]
+}) {
   const { t } = useTranslation()
   const permissao = modos.permissionMode ?? ROTINA_PERMISSAO_PADRAO
 
-  const alternar = (chave: (typeof ROTINA_MODOS)[number]) => {
+  const alternar = (chave: ChaveDeModo) => {
     const ligado = modos[chave] !== true
     const proximo: RotinaModos = { ...modos, [chave]: ligado || undefined }
     // Orquestração implica loop + subagentes e é incompatível com plano —
@@ -174,7 +188,7 @@ export function ModosEditor({ modos, onChange }: { modos: RotinaModos; onChange:
   return (
     <div className="space-y-2.5">
       <div className="flex flex-wrap gap-1.5">
-        {ROTINA_MODOS.map((chave) => {
+        {disponiveis.map((chave) => {
           const Icon = MODO_ICONE[chave]
           const ativo = modos[chave] === true
           return (
@@ -226,9 +240,19 @@ export function ModosEditor({ modos, onChange }: { modos: RotinaModos; onChange:
 }
 
 /** Badges compactas (só leitura) dos modos ligados — cartão e detalhe. */
-export function ModosBadges({ modos, permissao }: { modos: RotinaModos; permissao?: boolean }) {
+export function ModosBadges({
+  modos,
+  permissao,
+  disponiveis = ROTINA_MODOS,
+}: {
+  modos: RotinaModos
+  permissao?: boolean
+  /** Modos considerados — rotina de chat não exibe loop/orquestra mesmo se o
+   *  rotinas.json editado à mão tiver o campo (o scheduler ignora de todo). */
+  disponiveis?: ChaveDeModo[]
+}) {
   const { t } = useTranslation()
-  const ativos = ROTINA_MODOS.filter((chave) => modos[chave] === true)
+  const ativos = disponiveis.filter((chave) => modos[chave] === true)
   const modoPermissao: PermissionMode = modos.permissionMode ?? ROTINA_PERMISSAO_PADRAO
   if (ativos.length === 0 && !permissao) return null
   return (

@@ -306,7 +306,7 @@ export interface NovaEsteiraInput {
   modoOperacao?: "manual" | "automatico"
 }
 
-/** Rotinas — chats agendados do modo código (orbit-data/rotinas). */
+/** Rotinas — chats agendados dos modos chat e código (orbit-data/rotinas). */
 export const rotinasApi = {
   carregar: () =>
     window.ipcRenderer.invoke("rotinas:carregar") as Promise<{ rotinas: Rotina[]; runs: RotinaRun[] }>,
@@ -319,8 +319,15 @@ export const rotinasApi = {
   /** Descarta métricas de execuções cujo chat já foi excluído. */
   podarRuns: (sessionIds: string[]) =>
     window.ipcRenderer.invoke("rotinas:podarRuns", sessionIds) as Promise<number>,
-  gerar: (descricao: string, modelo: RotinaModelo, pastas: string[], idioma?: string) =>
-    window.ipcRenderer.invoke("rotinas:gerar", descricao, modelo, pastas, idioma) as Promise<ResultadoGeracao>,
+  gerar: (
+    descricao: string,
+    modelo: RotinaModelo,
+    pastas: string[],
+    idioma?: string,
+    modo?: "chat" | "code",
+    visionDisponivel?: boolean,
+  ) =>
+    window.ipcRenderer.invoke("rotinas:gerar", descricao, modelo, pastas, idioma, modo, visionDisponivel) as Promise<ResultadoGeracao>,
   onEvent: (listener: (event: RotinaEvent) => void) => {
     const wrapper = window.ipcRenderer.on("rotinas:event", (event) => listener(event as RotinaEvent))
     return () => window.ipcRenderer.off("rotinas:event", wrapper)

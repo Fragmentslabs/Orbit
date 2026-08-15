@@ -13,9 +13,12 @@ import { interleavedReasoningField, normalizeMessages } from '../reasoning'
  * ciclo aqui é uma pergunta e uma resposta em JSON, não uma conversa. O
  * usuário confirma tudo na tela de revisão — nada do que sai daqui vai direto
  * para o disco.
+ *
+ * O SYSTEM muda com o modo da rotina: no modo chat não há pastas de trabalho e
+ * os modos ficam restritos ao subconjunto do chat (ROTINA_MODOS_CHAT).
  */
 
-const SYSTEM = `You design scheduled routines for Orbit's CODE mode: a routine is a prompt that an autonomous coding agent runs by itself, on a schedule, inside the user's working folders.
+const SYSTEM_CODE = `You design scheduled routines for Orbit's CODE mode: a routine is a prompt that an autonomous coding agent runs by itself, on a schedule, inside the user's working folders.
 
 From the user's description, produce ONE routine.
 
@@ -32,10 +35,35 @@ Rules:
   - orchestrate: only for large tasks that need a plan and several workers; it implies loop + subagents.
   - brain: the routine should remember previous runs (daily reports, follow-ups, anything cumulative).
   - browser: the routine has to look at a running web UI.
+  - search: the routine needs up-to-date web research (deep research with search tools).
+  - vision: the routine inspects images/screenshots — only when a vision model is available.
   - plan and simple: leave false unless the user clearly asked for a plan-only or plain-text routine.
 
 Answer with JSON ONLY — no prose, no markdown fences:
-{"titulo":"...","prompt":"...","agenda":{"horario":"09:00","dias":[1,2,3,4,5]},"modos":{"loop":true,"subagents":false,"orchestrate":false,"brain":true,"browser":false,"plan":false,"simple":false}}`
+{"titulo":"...","prompt":"...","agenda":{"horario":"09:00","dias":[1,2,3,4,5]},"modos":{"loop":true,"subagents":false,"orchestrate":false,"brain":true,"browser":false,"search":false,"vision":false,"plan":false,"simple":false}}`
+
+const SYSTEM_CHAT = `You design scheduled routines for Orbit's CHAT mode: a routine is a prompt that an autonomous chat agent runs by itself, on a schedule. It has NO working folders — it cannot create, modify or delete files. Its whole world is the conversation and the chat tools (web search, browser, memory).
+
+From the user's description, produce ONE routine.
+
+Rules:
+- The prompt must be SELF-CONTAINED: the agent that runs it has no memory of this conversation and no one to ask. State the goal, what to look up, and what a finished run looks like.
+- Write titulo and prompt in the SAME LANGUAGE as the user's description (a Portuguese description yields a Portuguese prompt — never switch to English unless asked).
+- The result is a chat message the user reads: the prompt just answers in the chat — it must NOT touch files or the filesystem in any way.
+- The routine runs unattended: never ask the user questions in the prompt, never require an approval step.
+- agenda.horario is "HH:MM" (24h, local time). agenda.dias is 0-6 with 0 = Sunday; omit dias for every day. Use intervaloDias only when the user asks for "every N days".
+- If the user gave no time, pick a sensible one and say so in the title context, not in the prompt.
+- Suggest modes conservatively, from the CHAT-ONLY set:
+  - brain: the routine should remember previous runs (daily briefings, follow-ups, anything cumulative).
+  - simple: plain-text answer, no formatting.
+  - browser: the routine has to look at a live web page in the panel browser.
+  - search: the routine needs up-to-date web research (deep research with search tools).
+  - vision: only when the user mentions images/screenshots AND a vision model is available.
+  - NEVER suggest loop, subagents, orchestrate or plan — they do not exist in chat mode.
+- Leave every other mode key as false.
+
+Answer with JSON ONLY — no prose, no markdown fences:
+{"titulo":"...","prompt":"...","agenda":{"horario":"09:00","dias":[1,2,3,4,5]},"modos":{"brain":true,"simple":false,"browser":false,"search":false,"vision":false}}`
 
 const MAX_SAIDA = 20_000
 
@@ -67,16 +95,28 @@ function normalizarAgenda(bruta: unknown): Agenda {
   return agenda
 }
 
-function normalizarModos(bruto: unknown): RotinaModos {
+function normalizarModos(bruto: unknown, modo: 'chat' | 'code', visionDisponivel: boolean): RotinaModos {
   const obj = (bruto ?? {}) as Record<string, unknown>
   const bool = (chave: string) => obj[chave] === true
   const modos: RotinaModos = { permissionMode: ROTINA_PERMISSAO_PADRAO }
+  // Rotina de chat ignora os modos que o chat não tem: mesmo que o modelo
+  // escape um loop/subagentes no JSON, a sugestão sai limpa para a revisão.
+  if (modo === 'chat') {
+    if (bool('brain')) modos.brain = true
+    if (bool('browser')) modos.browser = true
+    if (bool('simple')) modos.simple = true
+    if (bool('search')) modos.search = true
+    if (bool('vision') && visionDisponivel) modos.vision = true
+    return modos
+  }
   if (bool('loop')) modos.loop = true
   if (bool('subagents')) modos.subagents = true
   if (bool('orchestrate')) modos.orchestrate = true
   if (bool('brain')) modos.brain = true
   if (bool('browser')) modos.browser = true
   if (bool('simple')) modos.simple = true
+  if (bool('search')) modos.search = true
+  if (bool('vision') && visionDisponivel) modos.vision = true
   // Plano é incompatível com execução sozinha (ficaria parado esperando
   // aprovação) e com orquestração — o gerador não pode ligá-lo por engano.
   if (bool('plan') && !modos.orchestrate) modos.plan = true
@@ -88,13 +128,19 @@ export async function gerarRotina(
   modelo: RotinaModelo,
   pastas: string[],
   idioma?: string,
+  modo: 'chat' | 'code' = 'code',
+  visionDisponivel = true,
 ): Promise<ResultadoGeracao> {
   const texto = descricao.trim()
   if (!texto) return { ok: false, erro: 'Descreva a rotina antes de gerar.' }
 
   const provider = await getProvider(modelo.providerId)
   const contexto = [
-    pastas.length ? `Working folders: ${pastas.join(', ')}` : 'Working folders: (none selected)',
+    modo === 'chat'
+      ? 'Mode: CHAT — no working folders, the agent only chats and uses chat tools.'
+      : pastas.length
+        ? `Working folders: ${pastas.join(', ')}`
+        : 'Working folders: (none selected)',
     idioma ? `User language: ${idioma}` : null,
     `Today: ${new Date().toISOString().slice(0, 10)} (${new Date().toLocaleDateString('en-US', { weekday: 'long' })})`,
   ]
@@ -106,7 +152,7 @@ export async function gerarRotina(
     const model = await resolveModel(modelo.providerId, modelo.modelId)
     const stream = streamText({
       model,
-      system: SYSTEM,
+      system: modo === 'chat' ? SYSTEM_CHAT : SYSTEM_CODE,
       messages: normalizeMessages(
         [{ role: 'user', content: `${contexto}\n\n## Routine described by the user\n${texto}` }],
         interleavedReasoningField(provider, modelo.modelId),
@@ -140,7 +186,7 @@ export async function gerarRotina(
     titulo: (typeof bruto.titulo === 'string' && bruto.titulo.trim()) || texto.slice(0, 60),
     prompt,
     agenda: normalizarAgenda(bruto.agenda),
-    modos: normalizarModos(bruto.modos),
+    modos: normalizarModos(bruto.modos, modo, visionDisponivel),
   }
   return { ok: true, sugestao }
 }

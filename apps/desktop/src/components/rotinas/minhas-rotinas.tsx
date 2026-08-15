@@ -15,7 +15,7 @@ import {
 } from "lucide-react"
 import type { SessionInfo } from "@shared/chat"
 import type { Agenda, Rotina, RotinaModos, RotinaRun } from "@shared/rotinas"
-import { parseHorario, proximaExecucaoDaRotina } from "@shared/rotinas"
+import { parseHorario, proximaExecucaoDaRotina, ROTINA_MODOS_CHAT } from "@shared/rotinas"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
@@ -47,12 +47,17 @@ import { AgendaEditor, AtivaSwitch, ModosBadges, ModosEditor } from "./agenda-ed
 
 // ─── Lista ───────────────────────────────────────────────────────────────────
 
-export function ListaDeRotinas({ onCriarNova }: { onCriarNova: () => void }) {
+export function ListaDeRotinas({ modo, onCriarNova }: { modo: "chat" | "code"; onCriarNova: () => void }) {
   const { t } = useTranslation()
   const rotinas = useRotinasStore((s) => s.rotinas)
   const setAberta = useRotinasStore((s) => s.setAberta)
 
-  const ordenadas = useMemo(() => [...rotinas].sort((a, b) => b.criadoEm - a.criadoEm), [rotinas])
+  // A página é do modo que a abriu: a de chat lista só rotinas de chat e a de
+  // código só as de código (a sidebar separa as sessões do mesmo jeito).
+  const ordenadas = useMemo(
+    () => rotinas.filter((r) => r.mode === modo).sort((a, b) => b.criadoEm - a.criadoEm),
+    [rotinas, modo],
+  )
 
   if (ordenadas.length === 0) {
     return (
@@ -60,7 +65,9 @@ export function ListaDeRotinas({ onCriarNova }: { onCriarNova: () => void }) {
         <CalendarClockIcon className="size-10 text-muted-foreground/50" />
         <div>
           <p className="text-sm font-medium">{t("rotinas.lista.vazioTitulo")}</p>
-          <p className="mx-auto max-w-sm text-xs text-muted-foreground">{t("rotinas.lista.vazioSubtitulo")}</p>
+          <p className="mx-auto max-w-sm text-xs text-muted-foreground">
+            {t(modo === "chat" ? "rotinas.lista.vazioSubtituloChat" : "rotinas.lista.vazioSubtitulo")}
+          </p>
         </div>
         <Button size="lg" onClick={onCriarNova}>
           <CalendarClockIcon className="size-4" />
@@ -107,7 +114,7 @@ function CartaoDaRotina({ rotina, onAbrir }: { rotina: Rotina; onAbrir: () => vo
       <button type="button" onClick={onAbrir} className="min-w-0 space-y-1.5 text-left">
         <p className="truncate text-[11px] text-muted-foreground">{descreverAgenda(rotina.agenda, t)}</p>
         <p className="line-clamp-2 text-[11px] text-muted-foreground/80">{rotina.prompt}</p>
-        <ModosBadges modos={rotina.modos} permissao />
+        <ModosBadges modos={rotina.modos} permissao disponiveis={rotina.mode === "chat" ? ROTINA_MODOS_CHAT : undefined} />
         <p className="truncate text-[11px] text-muted-foreground">{nomeModelo}</p>
         <p className="truncate text-[11px] text-muted-foreground">
           {proxima
@@ -187,7 +194,11 @@ function EditarRotinaDialog({
           </div>
           <div className="space-y-1">
             <p className="text-xs font-medium">{t("rotinas.revisar.modos")}</p>
-            <ModosEditor modos={modos} onChange={setModos} />
+            <ModosEditor
+              modos={modos}
+              onChange={setModos}
+              disponiveis={rotina.mode === "chat" ? ROTINA_MODOS_CHAT : undefined}
+            />
           </div>
           <div className="space-y-1">
             <p className="text-xs font-medium">{t("rotinas.criar.modelo")}</p>
@@ -283,7 +294,14 @@ export function DetalheDaRotina({ rotina, onVoltar }: { rotina: Rotina; onVoltar
 
       <div className="shrink-0 space-y-1.5 rounded-lg border bg-card p-3">
         <p className="whitespace-pre-wrap text-[11px] text-muted-foreground">{rotina.prompt}</p>
-        <ModosBadges modos={rotina.modos} permissao />
+        <span className="flex flex-wrap items-center gap-1">
+          <ModosBadges modos={rotina.modos} permissao disponiveis={rotina.mode === "chat" ? ROTINA_MODOS_CHAT : undefined} />
+          {rotina.mode === "chat" && (
+            <span className="inline-flex items-center rounded-md border border-transparent bg-muted/50 px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
+              {t("rotinas.modo.chat")}
+            </span>
+          )}
+        </span>
         <p className="truncate text-[11px] text-muted-foreground">{nomeModelo}</p>
         {rotina.pastas.length > 0 && (
           <p className="flex items-center gap-1.5 truncate text-[11px] text-muted-foreground">
@@ -321,7 +339,7 @@ export function DetalheDaRotina({ rotina, onVoltar }: { rotina: Rotina; onVoltar
 
 function LinhaDoRun({ session, run }: { session: SessionInfo; run?: RotinaRun }) {
   const { t, i18n } = useTranslation()
-  const { setView, setFolders } = useWorkspace()
+  const { mode, setMode, setView, setFolders } = useWorkspace()
   // O status ao vivo vem do store de sessões — é a mesma fonte do spinner da
   // sidebar. `run` só tem a foto final (tokens, custo, duração).
   const statusSessao = useSessionStore((s) => s.status[session.id])
@@ -329,10 +347,13 @@ function LinhaDoRun({ session, run }: { session: SessionInfo; run?: RotinaRun })
   const status = rodando ? "rodando" : (run?.status ?? "ok")
 
   const abrirChat = () => {
-    // Mesmo caminho do SessionItem da sidebar: ativa a sessão no modo código e
-    // sai da página de rotinas para a conversa.
+    // Mesmo caminho do SessionRow da sidebar: ativa a sessão no modo dela (a
+    // rotina de chat abre no chat; a de código abre no código) e sai da
+    // página de rotinas para a conversa.
+    const targetMode = session.mode
+    if (targetMode !== mode) setMode(targetMode)
     if (session.directory) setFolders([session.directory, ...(session.extraDirectories ?? [])])
-    void useSessionStore.getState().selectSession("code", session.id)
+    void useSessionStore.getState().selectSession(targetMode, session.id)
     setView("chat")
   }
 

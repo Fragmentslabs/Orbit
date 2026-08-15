@@ -1638,7 +1638,9 @@
       "gerar": "Generate",
       "gerando": "Generating…",
       "semModelo": "Pick a model to generate the routine.",
-      "titulo": "New routine"
+      "titulo": "New routine",
+      "placeholderChat": "E.g.: every day at 8am, put together a morning briefing with the day's tech news and a summary of my recent memories.",
+      "modoChatDica": "Chat mode: the routine runs with no working folders — just the conversation and the chat tools."
     },
     "revisar": {
       "titulo": "Review routine",
@@ -1720,7 +1722,15 @@
         "nome": "Simple",
         "descricao": "Direct plain-text answer, no formatting."
       },
-      "permissaoAviso": "The routine fires on its own: on \"Ask\" it stops at the first sensitive action and waits for you to answer in the run's session."
+      "permissaoAviso": "The routine fires on its own: on \"Ask\" it stops at the first sensitive action and waits for you to answer in the run's session.",
+      "search": {
+        "nome": "Research",
+        "descricao": "In-depth web research with search tools."
+      },
+      "vision": {
+        "nome": "Vision",
+        "descricao": "Images and screenshots are described by the configured vision model."
+      }
     },
     "lista": {
       "vazioTitulo": "No routines yet",
@@ -1735,7 +1745,8 @@
       "excluir": "Delete",
       "excluirTitulo": "Delete routine",
       "excluirDescricao": "\"{{titulo}}\" and ALL the sessions it produced will be deleted. This cannot be undone.",
-      "nova": "New routine"
+      "nova": "New routine",
+      "vazioSubtituloChat": "A chat routine is a session that comes back on its own — a daily briefing, a memory digest, a news check."
     },
     "runs": {
       "titulo": "Sessions",
@@ -1745,6 +1756,11 @@
       "ok": "Done",
       "erro": "Failed",
       "tokens": "{{valor}} tokens"
-    }
+    },
+    "modo": {
+      "chat": "Chat mode",
+      "code": "Code mode"
+    },
+    "subtituloChat": "Chat sessions that come back on their own — no working folders, just conversation and the chat tools."
   }
 }
