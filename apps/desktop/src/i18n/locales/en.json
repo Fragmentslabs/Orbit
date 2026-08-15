@@ -1652,7 +1652,7 @@
       "modosDica": "The agent suggested these based on the work described. Toggle them freely.",
       "sugerido": "suggested",
       "pastas": "Working folders",
-      "pastasDica": "Inherited from the current workspace — the routine always runs in them.",
+      "pastasDica": "Chosen in this step — the routine always runs in them.",
       "semPastas": "No folder open. Open a folder in code mode before creating the routine.",
       "criar": "Create routine"
     },
