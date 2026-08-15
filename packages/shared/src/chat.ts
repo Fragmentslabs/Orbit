@@ -97,8 +97,16 @@ export interface TextPart {
    * do chat esconde essas parts, mostrando apenas o que a pessoa escreveu.
    * "vision" = indicador transitório do modo Visão ("Analisando imagem…"),
    * emitido enquanto o modelo de visão descreve um anexo; nunca persiste.
+   * "nudge" = texto gerado numa continuação INTERNA do engine (nudge de
+   * verificação/anti-overclaim — ver NO_CHANGES_PROMPT em chat-engine.ts),
+   * não em resposta direta ao usuário. A UI renderiza sempre em cor apagada
+   * (nunca como resposta final branca); o engine promove a normal quando o
+   * turno de fato grava arquivos depois do nudge.
+   * "internal" = texto do nudge que terminou como confirmação de que não
+   * havia nada a corrigir (falso positivo do gatilho): é verificação interna
+   * pura — a UI NÃO o renderiza de forma alguma.
    */
-  source?: "attachment" | "vision"
+  source?: "attachment" | "vision" | "nudge" | "internal"
 }
 
 export interface ReasoningPart {

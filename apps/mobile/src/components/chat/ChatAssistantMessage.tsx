@@ -638,6 +638,12 @@ export function ChatAssistantMessage({ message, compact, isLast, isBusy, onRever
         const part = segment.part
         switch (part.type) {
           case 'text':
+            // Nudge de overclaim que terminou como "nada a corrigir": o
+            // engine marca como 'internal' e a UI não renderiza (verificação
+            // interna, não conteúdo para o usuário).
+            if (part.source === 'internal') {
+              return null
+            }
             // Indicador transitório do modo Visão ("Analisando imagem…") —
             // paridade com o VisionWorkingRow do desktop: ícone Eye + shimmer.
             if (part.source === 'vision') {
@@ -650,7 +656,14 @@ export function ChatAssistantMessage({ message, compact, isLast, isBusy, onRever
             }
             return (
               <View key={part.id} className="w-full">
-                <AssistantMarkdown text={part.text} streaming={part.state === 'streaming'} />
+                <AssistantMarkdown
+                  text={part.text}
+                  streaming={part.state === 'streaming'}
+                  // Texto de nudge do engine (verificação anti-overclaim):
+                  // pensamento interno, sempre em cor apagada — paridade com
+                  // o muted do desktop.
+                  muted={part.source === 'nudge'}
+                />
               </View>
             )
           case 'reasoning':

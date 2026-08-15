@@ -24,7 +24,7 @@ import { buildProviderOptions, interleavedReasoningField, normalizeMessages } fr
 import { resolveModel } from './providers'
 import { attachMediaMessage, saveMedia } from './media'
 import sharp from 'sharp'
-import { claimsCompletion } from './overclaim'
+import { claimsCompletion, isNoCorrectionReply } from './overclaim'
 import { extractPdfText } from './pdf'
 import { extractSpreadsheetText } from './xlsx'
 import { extractDocxText } from './docx'
@@ -90,7 +90,22 @@ const TODO_COMPLETION_PROMPT = `[SYSTEM: your reply ended, but the last TODO lis
  * afirma ter feito algo.
  */
 const MAX_OVERCLAIM_NUDGES = 1
-const NO_CHANGES_PROMPT = `[SYSTEM: automatic verification — NO file was modified in this turn. The filesystem snapshot taken before your response is identical to the one taken now; this is measured by the engine, not inferred. If your reply claims you created, edited, fixed, removed or refactored anything, that claim is false. Either do the work now with the write/edit tools, or correct your reply and state plainly what was NOT done and why.]`
+const NO_CHANGES_PROMPT = `[SYSTEM: automatic verification — NO file was modified in this turn. The filesystem snapshot taken before your response is identical to the one taken now; this is measured by the engine, not inferred. If your reply claims you created, edited, fixed, removed or refactored anything, that claim is false. Either do the work now with the write/edit tools (then end with your normal final answer), or correct the claim briefly in 1-2 sentences starting with "Correção:". Do not repeat the full answer and do not produce a new concluding text unless you actually changed files. If your reply made no false claim (e.g. it only described work from previous turns or answered a question), reply ONLY with the single line: Nada a corrigir. — nothing else.]`
+
+/**
+ * Ferramentas que podem gravar no diretório de trabalho — o snapshot do
+ * verifyTurn cobre esse diretório, então só faz sentido cobrar overclaim em
+ * turnos que as usaram. Texto de conclusão num turno sem nenhuma delas (ex.:
+ * pergunta informativa respondida só com leitura ou texto puro) descreve
+ * trabalho de turnos anteriores, não deste — cobrar seria ruído. MCP entra
+ * por conservadorismo: o engine não conhece as capacidades de cada servidor.
+ */
+const WRITE_TOOL_NAMES = new Set(['write', 'edit', 'bash', 'bash_background', 'panel_screenshot'])
+function usedFileWritingTools(parts: MessagePart[]): boolean {
+  return parts.some(
+    (p) => p.type === 'tool' && (WRITE_TOOL_NAMES.has(p.tool) || p.tool.startsWith('mcp__')),
+  )
+}
 
 /** Veredito da comparação de snapshots do turno (ver verifyTurn em runChat). */
 type TurnVerification =
@@ -982,7 +997,18 @@ export async function runChat(win: BrowserWindow, input: SendMessageInput): Prom
             stepCount++
             break
           case 'text-start':
-            upsertPart({ id: part.id, type: 'text', text: '', state: 'streaming' })
+            // Textos gerados na continuação do nudge de overclaim nascem
+            // marcados como internos ('nudge'): a UI os renderiza em cor
+            // apagada, nunca como resposta final. No fim do loop: arquivos
+            // alterados → marcador removido (a última resposta vale como
+            // final); só "nada a corrigir" → vira 'internal' e some do chat.
+            upsertPart({
+              id: part.id,
+              type: 'text',
+              text: '',
+              state: 'streaming',
+              source: overclaimNudges > 0 ? 'nudge' : undefined,
+            })
             break
           case 'text-delta': {
             const existing = assistantMessage.parts.find((p) => p.id === part.id)
@@ -1218,6 +1244,11 @@ export async function runChat(win: BrowserWindow, input: SendMessageInput): Prom
       // prova que nada foi escrito — cobre o caso em que o agente relata
       // conclusão sem ter tocado em nenhum arquivo.
       //
+      // Só cobra em turnos que USARAM ferramentas de escrita: sem nenhuma
+      // delas (pergunta informativa respondida só com leitura/texto), verbos
+      // de conclusão descrevem trabalho de turnos anteriores — o usuário
+      // pediu explicitamente que essa verificação não vire resposta final.
+      //
       // O veredito é calculado aqui (e não depois do loop) para poder cobrar a
       // correção ainda dentro do turno; fica guardado em `verification` e é
       // reaproveitado no fim, sem capturar o snapshot duas vezes.
@@ -1230,6 +1261,7 @@ export async function runChat(win: BrowserWindow, input: SendMessageInput): Prom
           !input.options.plan &&
           overclaimNudges < MAX_OVERCLAIM_NUDGES &&
           lastPartIsDoneText &&
+          usedFileWritingTools(assistantMessage.parts) &&
           claimsCompletion(partText(assistantMessage.parts, 'text'))
         ) {
           console.warn('[overclaim] turno alegou conclusão sem alterar arquivos', { sessionId })
@@ -1257,6 +1289,27 @@ export async function runChat(win: BrowserWindow, input: SendMessageInput): Prom
     // Veredito do turno: reaproveita o que o loop já calculou (só recaptura se
     // o turno saiu por outro caminho — abort, teto de passos).
     const endSnapshot = verification ?? (await verifyTurn())
+    // Textos do nudge de overclaim: se o modelo de fato gravou arquivos depois
+    // do aviso, deixam de ser internos — a última resposta volta a ser a
+    // resposta final (branca). Sem alterações, dois desfechos: a resposta ao
+    // nudge foi só a confirmação de que não havia nada a corrigir (falso
+    // positivo do gatilho — ex.: o texto descrevia trabalho de um turno
+    // anterior) → vira 'internal' e a UI nem renderiza; ou houve uma correção
+    // real ("Correção: …") → permanece 'nudge', visível em cor apagada.
+    if (endSnapshot.state === 'changed') {
+      for (const part of assistantMessage.parts) {
+        if (part.type === 'text' && part.source === 'nudge') part.source = undefined
+      }
+    } else if (overclaimNudges > 0) {
+      const lastNudgeText = [...assistantMessage.parts]
+        .reverse()
+        .find((p): p is TextPart => p.type === 'text' && p.source === 'nudge')
+      if (lastNudgeText && isNoCorrectionReply(lastNudgeText.text)) {
+        for (const part of assistantMessage.parts) {
+          if (part.type === 'text' && part.source === 'nudge') part.source = 'internal'
+        }
+      }
+    }
     if (assistantMessage.snapshot) {
       assistantMessage.snapshot.verified = endSnapshot.state
       if (endSnapshot.state === 'changed') {

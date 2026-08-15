@@ -271,8 +271,17 @@ export function CodeAssistantMessage({ message, sessionId, isLast, isBusy, onRet
   // Só o último texto da mensagem é a resposta final (branca); os anteriores
   // são narração intermediária do agente e ficam em cor apagada — inclusive
   // se alguma ação (read, bash etc.) chegar depois do texto final no stream.
+  // Textos de nudge do engine (verificação anti-overclaim) NUNCA contam como
+  // resposta final: ficam sempre apagados, como pensamento interno do agente.
+  // 'internal' é o nudge que terminou como "nada a corrigir": nem aparece.
   const lastTextIndex = segments.reduce(
-    (last, segment, i) => (segment.kind === "part" && segment.part.type === "text" ? i : last),
+    (last, segment, i) =>
+      segment.kind === "part" &&
+      segment.part.type === "text" &&
+      segment.part.source !== "nudge" &&
+      segment.part.source !== "internal"
+        ? i
+        : last,
     -1,
   )
 
@@ -294,10 +303,13 @@ export function CodeAssistantMessage({ message, sessionId, isLast, isBusy, onRet
             messageId={message.id}
           />
         ) : segment.part.type === "text" ? (
-          segment.part.source === "vision" ? (
+          segment.part.source === "internal" ? null : segment.part.source === "vision" ? (
             <VisionWorkingRow key={segment.id} />
           ) : (
-            <AssistantMarkdown key={segment.id} muted={index < lastTextIndex}>
+            <AssistantMarkdown
+              key={segment.id}
+              muted={index < lastTextIndex || segment.part.source === "nudge"}
+            >
               {segment.part.text}
             </AssistantMarkdown>
           )
