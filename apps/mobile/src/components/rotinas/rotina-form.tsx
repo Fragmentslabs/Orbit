@@ -198,19 +198,9 @@ export function RotinaForm({
           )}
 
           <View style={s.etapa1Row}>
-            {mode === 'chat' ? (
-              <View style={s.modoDica}>
-                <MessageSquare size={14} color={tokens.mutedForeground} />
-                <Text style={[s.dica, { color: tokens.mutedForeground, flex: 1 }]}>{t('rotinas.criar.modoChatDica')}</Text>
-              </View>
-            ) : (
+            {mode === 'code' && (
               <View style={{ flex: 1 }}>
                 <FolderSelector folders={pastas} onFoldersChange={setPastas} />
-                {pastas.length === 0 && (
-                  <Text style={[s.dica, { color: tokens.mutedForeground, marginTop: 6 }]}>
-                    {t('rotinas.revisar.semPastas')}
-                  </Text>
-                )}
               </View>
             )}
             <RotinaModelPicker value={modelo} onChange={setModelo} />
@@ -231,6 +221,20 @@ export function RotinaForm({
               {gerando ? t('rotinas.criar.gerando') : t('rotinas.criar.gerar')}
             </Text>
           </Pressable>
+
+          {/* Dica do modo fica abaixo do botão, ocupando a largura toda. */}
+          {mode === 'chat' ? (
+            <View style={s.modoDica}>
+              <MessageSquare size={14} color={tokens.mutedForeground} />
+              <Text style={[s.dica, { color: tokens.mutedForeground, flex: 1 }]}>{t('rotinas.criar.modoChatDica')}</Text>
+            </View>
+          ) : (
+            pastas.length === 0 && (
+              <Text style={[s.dica, { color: tokens.mutedForeground }]}>
+                {t('rotinas.revisar.semPastas')}
+              </Text>
+            )
+          )}
         </>
       ) : (
         <>
