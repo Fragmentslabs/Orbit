@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { Eye, X } from "lucide-react"
 import { modelSupportsVision } from "@shared/chat"
@@ -7,13 +7,15 @@ import { useProviderStore } from "@/src/stores/provider-store"
 import { useModeActive } from "@/src/stores/mode-overrides"
 import { useModelModePrefs } from "@/src/stores/model-mode-prefs"
 import { useSessionStore } from "@/src/stores/session-store"
+import { usePendingAttachmentsStore } from "@/src/stores/pending-attachments"
 import { useWorkspace } from "@/lib/workspace-context"
 import type { ChatMessage, FilePart } from "@shared/chat"
 
 /**
- * Card de aviso: o usuário anexou uma imagem e o modelo atual não tem visão
- * e o modo Visão não está configurado — a imagem não chega ao modelo. Oferece
- * o atalho para abrir a configuração do modo Visão. Descartável por sessão.
+ * Card de aviso: o usuário anexou uma imagem (pendente no input OU já enviada)
+ * e o modelo atual não tem visão e o modo Visão não está configurado — a
+ * imagem não chega ao modelo. Oferece o atalho para abrir a configuração do
+ * modo Visão. Descartável por sessão (uma nova imagem anexada reexibe o aviso).
  */
 export function VisionHintCard({ sessionId }: { sessionId?: string }) {
   const { t } = useTranslation()
@@ -27,17 +29,26 @@ export function VisionHintCard({ sessionId }: { sessionId?: string }) {
   const setVisionConfigOpen = useProviderStore((s) => s.setVisionConfigOpen)
   const activeSessionId = useSessionStore((s) => s.activeIds[mode])
   const messages = useSessionStore((s) => (sessionId ? s.messages[sessionId] : undefined))
+  // Imagem anexada no input, ainda não enviada (sync feito pelo PendingAttachmentSync)
+  const hasPendingImage = usePendingAttachmentsStore((s) => !!s.imagesByKey[sessionId ?? "draft"])
 
   // Só avalia a sessão ativa do modo (cards do painel lateral não mostram o aviso)
   const isActive = !sessionId || sessionId === activeSessionId
   const modelVision = selected ? modelSupportsVision(catalog[selected.providerId], selected.modelId) : true
 
-  const lastImage = isActive && !modelVision && !visionEnabled && !dismissed && messages
+  const lastImage = isActive && messages
     ? [...messages].reverse().find((m): m is ChatMessage & { parts: (FilePart | { type: string })[] } =>
         m.role === "user" && m.parts.some((p) => p.type === "file" && (p as FilePart).mime.startsWith("image/")),
       )
     : undefined
-  if (!lastImage) return null
+
+  // Aviso descartado só vale para a imagem atual: anexar uma nova reexibe o card
+  useEffect(() => {
+    if (hasPendingImage) setDismissed(false)
+  }, [hasPendingImage])
+
+  const showCard = isActive && !modelVision && !visionEnabled && !dismissed && (hasPendingImage || lastImage)
+  if (!showCard) return null
 
   return (
     <div className="mx-auto w-full max-w-2xl pb-2">

@@ -27,6 +27,7 @@ import { ReasoningPicker } from "@/src/components/reasoning-picker"
 import { QuickSettingsMenu } from "@/src/components/quick-settings-menu"
 import { DraftInputBridge } from "@/src/components/draft-input-bridge"
 import { ChatInputDraft } from "@/src/components/chat-input-draft"
+import { PendingAttachmentSync } from "@/src/components/pending-attachment-sync"
 import { clearInputDraft } from "@/src/stores/chat-draft"
 import { QueueIndicator } from "@/src/components/queue-indicator"
 import { ContextMeter } from "@/src/components/context-meter"
@@ -146,6 +147,7 @@ export function ChatInput({ onSubmit, status, onStop, sessionId, draftKey }: {
     <SlashPalette commands={slashCommands}>
     <DraftInputBridge sessionId={sessionId} />
     <ChatInputDraft sessionId={sessionId} draftKey={draftKey} />
+    <PendingAttachmentSync sessionId={sessionId} draftKey={draftKey} />
     <div className="w-full max-w-2xl mx-auto pb-4 @container">
       <QueueIndicator sessionId={sessionId} />
       <PromptInput

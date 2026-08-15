@@ -125,7 +125,7 @@ export function QuickSettingsMenu({ sessionId, showPermission }: { sessionId?: s
             </DropdownMenuSub>
           )}
           <DropdownMenuItem
-            onSelect={() => {
+            onClick={() => {
               // Aguarda o menu fechar (animação ~100ms) antes de abrir o diálogo
               // de modelo, para evitar conflito de foco com o input autofocus.
               setTimeout(() => setModelOpen(true), 120)
