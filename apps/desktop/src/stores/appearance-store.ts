@@ -24,9 +24,9 @@ export const MODE_IDS = [
   "vision",
 ] as const
 export type ModeId = (typeof MODE_IDS)[number]
-/** "brain" fica fora da barra por padrão: o modo Memória é ativado por
- *  padrão nas preferências (model-mode-prefs) e continua acessível no menu
- *  "+" e no painel de aparência — apenas não ocupa espaço como toggle. */
+/** "brain" fica fora da barra por padrão: o modo Memória também vem
+ *  desativado por padrão nas preferências (model-mode-prefs) — só entra na
+ *  barra se o usuário ativá-lo aqui ou no menu "+". */
 export const DEFAULT_MODES_IN_ROW: ModeId[] = [
   "search",
   "browser",

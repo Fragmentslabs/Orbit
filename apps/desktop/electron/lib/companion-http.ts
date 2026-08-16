@@ -163,7 +163,7 @@ interface SelectedModel {
 }
 
 const DEFAULT_PREFS: CompanionPreferences = {
-  brain: true,
+  brain: false,
   brainContext: true,
   permissionMode: 'ask',
   reasoning: false,

@@ -2,9 +2,10 @@ import { create } from 'zustand'
 import { Storage } from '~/lib/storage'
 
 /**
- * Preferência do modo Brain (memória persistente): ativo por padrão em todo
- * chat, nos dois modos; o usuário pode desativar por chat. Só as desativações
- * são persistidas (Storage) — ausência de override = ativo.
+ * Preferência do modo Brain (memória persistente): o valor efetivo é
+ * `override ?? default` — o default (agora desativado para novos usuários)
+ * vem do model-mode-prefs; só os overrides por chat são persistidos aqui
+ * (Storage) — ausência de override = segue o default.
  *
  * Chats novos (sem sessão) usam a chave "draft"; quando a sessão é criada no
  * primeiro envio, o session-store chama adopt() para transferir o override.
@@ -39,7 +40,7 @@ export const useBrainPrefs = create<BrainPrefsState>((set, get) => ({
         }
       }
     } catch {
-      // prefs corrompidas — volta ao default (tudo ativo)
+      // prefs corrompidas — volta ao default (vem do model-mode-prefs)
     }
     set({ hydrated: true })
   },

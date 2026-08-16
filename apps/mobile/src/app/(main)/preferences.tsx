@@ -93,7 +93,7 @@ export default function PreferencesScreen() {
           <SwitchRow
             icon={BrainCircuit}
             label={t('preferencesScreen.brain')}
-            value={preferences?.brain ?? true}
+            value={preferences?.brain ?? false}
             onChange={(v) => setPref({ brain: v })}
           />
           <RowDivider />
