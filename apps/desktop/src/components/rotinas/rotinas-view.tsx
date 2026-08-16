@@ -3,7 +3,6 @@ import { useTranslation } from "react-i18next"
 import { MessageSquareIcon, PlusIcon, TerminalIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { useWorkspace } from "@/lib/workspace-context"
-import { rotinasApi } from "@/src/lib/ipc"
 import { useRotinasStore } from "@/src/stores/rotinas-store"
 import { useSessionStore } from "@/src/stores/session-store"
 import { CriarRotinaDialog } from "./criar-rotina-dialog"
@@ -41,9 +40,9 @@ export function RotinasView() {
     if (!carregado) void carregar()
   }, [carregado, carregar])
 
-  // Eventos do scheduler: execução começando/terminando, ultimaExecucao
-  // avançando, rotina criada ou excluída em outra janela.
-  useEffect(() => rotinasApi.onEvent((evento) => useRotinasStore.getState().aplicarEvento(evento)), [])
+  // A assinatura dos eventos do scheduler é GLOBAL (main.tsx): o store espelha
+  // o main mesmo com a view fechada (execuções terminando, rotina criada em
+  // outra janela ou no app mobile).
 
   // Rotina removida (aqui ou em outra janela): volta para a lista em vez de
   // deixar a tela presa num detalhe que não existe mais.

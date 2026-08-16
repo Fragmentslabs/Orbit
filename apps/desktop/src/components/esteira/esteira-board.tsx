@@ -4,7 +4,6 @@ import { DndContext, PointerSensor, useDroppable, useSensor, useSensors, type Dr
 import { ArrowLeftIcon, FolderIcon, LayersIcon, Loader2, MoreHorizontalIcon, PencilIcon, PlayIcon, PlusIcon, SquareIcon, Trash2Icon } from "lucide-react"
 import type { Esteira, Task } from "@shared/esteira"
 import { Button } from "@/components/ui/button"
-import { esteiraApi } from "@/src/lib/ipc"
 import { SEM_TASKS, useEsteiraStore } from "@/src/stores/esteira-store"
 import { cn } from "@/lib/utils"
 import {
@@ -38,8 +37,9 @@ export function EsteiraBoard() {
     if (!carregado) void carregar()
   }, [carregado, carregar])
 
-  // Assina os eventos do engine: fases concluindo, tasks pausando, fila andando
-  useEffect(() => esteiraApi.onEvent((evento) => useEsteiraStore.getState().aplicarEvento(evento)), [])
+  // A assinatura dos eventos do engine é GLOBAL (main.tsx): esteira e rotinas
+  // continuam espelhando o main mesmo com a view fechada (mudanças vindas de
+  // outra janela ou do app mobile não podem se perder).
 
   const esteiras = useEsteiraStore((s) => s.esteiras)
   const aberta = esteiras.find((e) => e.id === abertaId) ?? null
