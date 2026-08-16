@@ -1,7 +1,8 @@
-import { View, Text, Pressable, ScrollView, StyleSheet, Switch } from 'react-native'
+import { View, Text, Pressable, ScrollView, StyleSheet } from 'react-native'
 import { useRouter } from 'expo-router'
 import { ArrowLeft, Search, Globe, FileText, AlignLeft, BrainCircuit, Eye, Bot, Network, RefreshCw } from 'lucide-react-native'
 import { useTranslation } from 'react-i18next'
+import { Switch } from '~/components/ui/switch'
 import { useAppearanceStore, type ModeId } from '~/stores/appearance-store'
 import { getThemeTokens } from '~/lib/theme-tokens'
 import { useThemeStore } from '~/stores/theme-store'
@@ -76,12 +77,7 @@ export default function ModesScreen() {
                         <Icon size={18} color={tokens.mutedForeground} />
                         <Text style={{ flex: 1, fontSize: 14, color: tokens.foreground }}>{option.label}</Text>
                       </View>
-                      <Switch
-                        value={checked}
-                        onValueChange={() => toggleMode(id)}
-                        trackColor={{ false: tokens.muted, true: tokens.primary }}
-                        thumbColor={tokens.foreground}
-                      />
+                      <Switch checked={checked} onCheckedChange={() => toggleMode(id)} />
                     </View>
                   </View>
                 )
