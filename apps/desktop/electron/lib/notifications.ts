@@ -3,6 +3,7 @@ import type { AskItem, ChatMessage } from '@shared/chat'
 import { StorageKeys } from '@shared/chat'
 import { readJson } from './storage'
 import { somCustomDisponivel, tocarSom } from './sound'
+import { notifyCompanionMessage } from './companion-server'
 
 /**
  * Notificações nativas do desktop.
@@ -130,6 +131,9 @@ export async function notifyNewMessage(sessionId: string, mensagem: ChatMessage)
     body: preview,
     sessionId,
   })
+  // Companions (mobile) também são avisados — as prefs do mobile decidem se
+  // exibem; o canal é local, independente das prefs do desktop.
+  notifyCompanionMessage(sessionId, titulo, preview)
 }
 
 /** Erro de chat (fallha do provider, não aborto manual). */

@@ -2,6 +2,7 @@ import type { AskItem } from '@shared/chat'
 import { ask, newRequestId } from './ask-broker'
 import { broadcastChatEvent } from './broadcast'
 import { notifyPendingAsk, notifyPendingAskBatch } from './notifications'
+import { notifyCompanionAsk } from './companion-server'
 
 /**
  * Camada de emissão dos pedidos (acima do ask-broker, que permanece puro):
@@ -23,6 +24,15 @@ const batches = new Map<string, PendingBatch>()
 
 function emitSingle(target: string, item: AskItem): void {
   void notifyPendingAsk(target, item)
+  notifyCompanionAsk(
+    target,
+    item.requestId,
+    item.kind === 'permission' ? 'permission' : 'question',
+    item.kind === 'permission'
+      ? (item.claim?.title ?? 'O agente quer executar uma ação')
+      : (item.questions?.[0]?.text ?? 'Pergunta pendente do Orbit'),
+    item.questions,
+  )
   broadcastChatEvent(
     item.kind === 'permission'
       ? {
@@ -52,6 +62,16 @@ function flushBatch(target: string): void {
     return
   }
   void notifyPendingAskBatch(target, batch.items)
+  const primeiro = batch.items[0]
+  notifyCompanionAsk(
+    target,
+    primeiro.requestId,
+    primeiro.kind === 'permission' ? 'permission' : 'question',
+    primeiro.kind === 'permission'
+      ? (primeiro.claim?.title ?? 'O agente quer executar uma ação')
+      : (primeiro.questions?.[0]?.text ?? 'Pergunta pendente do Orbit'),
+    primeiro.questions,
+  )
   broadcastChatEvent({ type: 'ask:batch', sessionId: target, batchId: newRequestId(), items: batch.items })
 }
 
