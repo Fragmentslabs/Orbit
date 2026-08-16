@@ -1,4 +1,3 @@
-import { BrowserWindow } from 'electron'
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 import type { AnotacaoFase, Esteira, EsteiraEvent, Projeto, Task } from '@shared/esteira'
@@ -8,6 +7,7 @@ import { userShellEnv } from '../shell-env'
 import { criaCiclo, dependenciasPendentes } from './contrato'
 import { executarFase, type ToolProgress } from './runner'
 import { atualizarTask, listarEsteiras, listarProjetos, listarTasks, salvarTasks } from './repo'
+import { broadcastEsteiraEvent } from '../broadcast'
 
 const execFileAsync = promisify(execFile)
 
@@ -49,10 +49,12 @@ function novoId(prefixo: string): string {
   return `${prefixo}${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`
 }
 
+/**
+ * Funnel único dos eventos de esteira: janelas (renderer) + companions (app
+ * mobile) — o mobile espelha o board inteiro por este canal.
+ */
 export function emitir(evento: EsteiraEvent): void {
-  for (const win of BrowserWindow.getAllWindows()) {
-    if (!win.isDestroyed()) win.webContents.send('esteira:event', evento)
-  }
+  broadcastEsteiraEvent(evento)
 }
 
 async function carregarContexto(esteiraId: string): Promise<{ esteira: Esteira; projeto: Projeto } | null> {

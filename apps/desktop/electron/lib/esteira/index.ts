@@ -3,6 +3,7 @@ import type {
   FaseConfig,
   FaseEscolhida,
   FaseTemplate,
+  NovaEsteiraInput,
   Projeto,
   RelatorioEsteira,
   Task,
@@ -138,24 +139,6 @@ export async function removerProjeto(id: string): Promise<void> {
 }
 
 // ─── Esteiras ────────────────────────────────────────────────────────────────
-
-export interface NovaEsteiraInput {
-  projetoId: string
-  nome: string
-  /** Fases já resolvidas (podem ter sido editadas só para esta esteira). */
-  fases?: FaseEscolhida[]
-  /** Alternativa simples (tools do chat): ids de template, na ordem desejada. */
-  templateIds?: string[]
-  providerId: string
-  modelId: string
-  thinkingNivel?: number
-  branch?: string
-  worktree?: string
-  pushAoFinal?: boolean
-  /** Instrui as fases a capturarem prints do resultado visual */
-  printsDoResultado?: boolean
-  modoOperacao?: 'manual' | 'automatico'
-}
 
 /** Fases da esteira = CÓPIA do que foi escolhido (D4): editar a esteira depois
  *  nunca toca no template mestre. */

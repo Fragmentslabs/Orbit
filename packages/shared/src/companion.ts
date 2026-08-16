@@ -6,6 +6,15 @@
 
 import type { SendMessageOptions, SessionMode, FilePart, WorkerModelConfig, PermissionMode } from './chat'
 import type { NovaRotinaInput, Rotina, RotinaEvent, RotinaModelo } from './rotinas'
+import type {
+  Esteira,
+  EsteiraEvent,
+  FaseTemplate,
+  NovaEsteiraInput,
+  NovaTaskInput,
+  Projeto,
+  Task,
+} from './esteira'
 
 // ─── Handshake ───────────────────────────────────────────────────────────────
 
@@ -267,6 +276,92 @@ export interface GenerateRotinaRequest {
   visionDisponivel?: boolean
 }
 
+// ─── Esteira ─────────────────────────────────────────────────────────────────
+
+/** Snapshot completo para o app abrir a tela de esteira numa tacada só. */
+export interface ListEsteiraRequest {
+  type: 'esteira:list'
+}
+
+export interface CreateEsteiraRequest {
+  type: 'esteira:create'
+  input: NovaEsteiraInput
+}
+
+export interface UpdateEsteiraRequest {
+  type: 'esteira:update'
+  id: string
+  patch: Partial<Esteira>
+}
+
+export interface DeleteEsteiraRequest {
+  type: 'esteira:delete'
+  id: string
+}
+
+/** Cria um projeto (dono das pastas) — o fluxo "nova esteira" cria os dois. */
+export interface CreateEsteiraProjetoRequest {
+  type: 'esteira:create-projeto'
+  nome: string
+  pastas: string[]
+}
+
+export interface UpdateEsteiraProjetoRequest {
+  type: 'esteira:update-projeto'
+  id: string
+  patch: Partial<Pick<Projeto, 'nome' | 'pastas'>>
+}
+
+export interface CreateEsteiraTaskRequest {
+  type: 'esteira:create-task'
+  input: NovaTaskInput
+}
+
+export interface UpdateEsteiraTaskRequest {
+  type: 'esteira:update-task'
+  esteiraId: string
+  taskId: string
+  patch: Partial<Pick<Task, 'titulo' | 'descricao' | 'dependeDe' | 'anotacoes'>>
+}
+
+export interface DeleteEsteiraTaskRequest {
+  type: 'esteira:delete-task'
+  esteiraId: string
+  taskId: string
+}
+
+/** Inicia a task na fase indicada — `fase > 0` = início manual por drag (D8). */
+export interface StartEsteiraTaskRequest {
+  type: 'esteira:start-task'
+  esteiraId: string
+  taskId: string
+  fase?: number
+}
+
+export interface PauseEsteiraTaskRequest {
+  type: 'esteira:pause-task'
+  esteiraId: string
+  taskId: string
+}
+
+export interface ResumeEsteiraTaskRequest {
+  type: 'esteira:resume-task'
+  esteiraId: string
+  taskId: string
+}
+
+export interface ToggleEsteiraFilaRequest {
+  type: 'esteira:toggle-fila'
+  esteiraId: string
+  ligar: boolean
+}
+
+/** "Salvar como padrão" do editor de fase — grava/sobrescreve o template. */
+export interface SaveEsteiraTemplateRequest {
+  type: 'esteira:save-template'
+  template: FaseTemplate
+}
+
 // ─── Plan Review (Modo Plano) ─────────────────────────────────────────────────
 
 export interface ReadPlanFileRequest {
@@ -351,6 +446,20 @@ export type CompanionRequest =
   | RunRotinaRequest
   | PruneRotinasRequest
   | GenerateRotinaRequest
+  | ListEsteiraRequest
+  | CreateEsteiraRequest
+  | UpdateEsteiraRequest
+  | DeleteEsteiraRequest
+  | CreateEsteiraProjetoRequest
+  | UpdateEsteiraProjetoRequest
+  | CreateEsteiraTaskRequest
+  | UpdateEsteiraTaskRequest
+  | DeleteEsteiraTaskRequest
+  | StartEsteiraTaskRequest
+  | PauseEsteiraTaskRequest
+  | ResumeEsteiraTaskRequest
+  | ToggleEsteiraFilaRequest
+  | SaveEsteiraTemplateRequest
   | RevertSessionRequest
   | UnrevertSessionRequest
   | ReadPlanFileRequest
@@ -397,6 +506,13 @@ export interface RotinaEventMessage {
   event: RotinaEvent
 }
 
+/** Evento de esteira retransmitido do desktop (espelhos dos EsteiraEvent):
+ *  tasks concluindo, fases avançando, progresso/pensamento/tools ao vivo. */
+export interface EsteiraEventMessage {
+  type: 'esteira:event'
+  event: EsteiraEvent
+}
+
 /** Notificação de nova permissão/question pendente. */
 export interface PendingAskNotification {
   type: 'notify:pending-ask'
@@ -430,6 +546,7 @@ export type CompanionEvent =
   | ApiResponse
   | ChatEventMessage
   | RotinaEventMessage
+  | EsteiraEventMessage
   | PendingAskNotification
   | NewMessageNotification
   | StatusUpdate

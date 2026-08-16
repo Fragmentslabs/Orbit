@@ -1,7 +1,8 @@
 import { BrowserWindow } from 'electron'
 import type { ChatEvent } from '@shared/chat'
 import type { RotinaEvent } from '@shared/rotinas'
-import { forwardChatEvent, forwardRotinaEvent } from './companion-server'
+import type { EsteiraEvent } from '@shared/esteira'
+import { forwardChatEvent, forwardRotinaEvent, forwardEsteiraEvent } from './companion-server'
 
 /**
  * Emite um ChatEvent para todas as janelas + companions conectados.
@@ -27,4 +28,16 @@ export function broadcastRotinaEvent(event: RotinaEvent): void {
     if (!win.isDestroyed()) win.webContents.send('rotinas:event', event)
   }
   forwardRotinaEvent(event)
+}
+
+/**
+ * Emite um EsteiraEvent para todas as janelas + companions conectados — é o
+ * funnel ÚNICO do engine (engine.ts `emitir`): o app mobile reflete o board
+ * inteiro por aqui (tasks, fases, fila, progresso ao vivo).
+ */
+export function broadcastEsteiraEvent(event: EsteiraEvent): void {
+  for (const win of BrowserWindow.getAllWindows()) {
+    if (!win.isDestroyed()) win.webContents.send('esteira:event', event)
+  }
+  forwardEsteiraEvent(event)
 }

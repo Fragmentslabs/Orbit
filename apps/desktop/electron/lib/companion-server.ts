@@ -30,6 +30,7 @@ import type {
 } from '@shared/companion'
 import type { ChatEvent, SessionInfo, FolderInfo, ChatMessage, MessagePart, SendMessageInput } from '@shared/chat'
 import type { RotinaEvent } from '@shared/rotinas'
+import type { EsteiraEvent } from '@shared/esteira'
 import { StorageKeys } from '@shared/chat'
 import { readJson, writeJson, removeJson, listKeys } from './storage'
 import { searchSessions } from './search-sessions'
@@ -50,6 +51,7 @@ import {
   getFull as getMemoryFull,
 } from './memory/service'
 import * as rotinas from './rotinas'
+import * as esteira from './esteira'
 import {
   startCompanionHttpServer,
   stopCompanionHttpServer,
@@ -769,6 +771,99 @@ async function handleRequest(client: ConnectedClient, requestId: string, req: Co
         break
       }
 
+      case 'esteira:list': {
+        const [dados, templates] = await Promise.all([esteira.carregarTudo(), esteira.listarTemplates()])
+        sendResponse(ws, requestId, true, { ...dados, templates })
+        break
+      }
+
+      case 'esteira:create': {
+        const criada = await esteira.criarEsteira(req.input)
+        sendResponse(ws, requestId, true, criada)
+        break
+      }
+
+      case 'esteira:update': {
+        const atualizada = await esteira.atualizarEsteira(req.id, req.patch)
+        if (atualizada) sendResponse(ws, requestId, true, atualizada)
+        else sendResponse(ws, requestId, false, undefined, 'Esteira não encontrada')
+        break
+      }
+
+      case 'esteira:delete': {
+        await esteira.removerEsteira(req.id)
+        sendResponse(ws, requestId, true)
+        break
+      }
+
+      case 'esteira:create-projeto': {
+        const projeto = await esteira.criarProjeto(req.nome, req.pastas)
+        sendResponse(ws, requestId, true, projeto)
+        break
+      }
+
+      case 'esteira:update-projeto': {
+        const projeto = await esteira.atualizarProjeto(req.id, req.patch)
+        if (projeto) sendResponse(ws, requestId, true, projeto)
+        else sendResponse(ws, requestId, false, undefined, 'Projeto não encontrado')
+        break
+      }
+
+      case 'esteira:create-task': {
+        const task = await esteira.criarTask(req.input)
+        sendResponse(ws, requestId, true, task)
+        break
+      }
+
+      case 'esteira:update-task': {
+        // Ciclo de dependência é rejeitado no main — a mensagem volta ao app.
+        try {
+          const task = await esteira.atualizarTaskCampos(req.esteiraId, req.taskId, req.patch)
+          if (task) sendResponse(ws, requestId, true, task)
+          else sendResponse(ws, requestId, false, undefined, 'Task não encontrada')
+        } catch (err) {
+          sendResponse(ws, requestId, false, undefined, (err as Error).message)
+        }
+        break
+      }
+
+      case 'esteira:delete-task': {
+        await esteira.removerTask(req.esteiraId, req.taskId)
+        sendResponse(ws, requestId, true)
+        break
+      }
+
+      case 'esteira:start-task': {
+        await esteira.iniciarTask(req.esteiraId, req.taskId, req.fase ?? 0)
+        sendResponse(ws, requestId, true)
+        break
+      }
+
+      case 'esteira:pause-task': {
+        await esteira.pausarTask(req.esteiraId, req.taskId)
+        sendResponse(ws, requestId, true)
+        break
+      }
+
+      case 'esteira:resume-task': {
+        await esteira.retomarTask(req.esteiraId, req.taskId)
+        sendResponse(ws, requestId, true)
+        break
+      }
+
+      case 'esteira:toggle-fila': {
+        if (req.ligar) esteira.ligarFila(req.esteiraId)
+        else esteira.desligarFila(req.esteiraId)
+        sendResponse(ws, requestId, true, req.ligar)
+        break
+      }
+
+      case 'esteira:save-template': {
+        const templates = await esteira.salvarTemplate(req.template)
+        sendResponse(ws, requestId, true, templates)
+        break
+      }
+
       case 'folders:list': {
         const folders = (await readJson<FolderInfo[]>(StorageKeys.folders)) ?? []
         sendResponse(ws, requestId, true, folders)
@@ -1026,6 +1121,14 @@ export function forwardRotinaEvent(event: RotinaEvent): void {
   for (const client of clients) {
     if (!client.authenticated || client.ws.readyState !== WebSocket.OPEN) continue
     client.ws.send(wrap({ type: 'rotinas:event', event } as CompanionEvent))
+  }
+}
+
+/** Retransmite um EsteiraEvent para todos os companions autenticados. */
+export function forwardEsteiraEvent(event: EsteiraEvent): void {
+  for (const client of clients) {
+    if (!client.authenticated || client.ws.readyState !== WebSocket.OPEN) continue
+    client.ws.send(wrap({ type: 'esteira:event', event } as CompanionEvent))
   }
 }
 

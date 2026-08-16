@@ -52,7 +52,7 @@ import { StorageKeys } from '@shared/chat'
 import * as esteira from './lib/esteira'
 import * as rotinas from './lib/rotinas'
 import type { MediaFilter } from '@shared/media'
-import type { FaseTemplate, NovaTaskInput } from '@shared/esteira'
+import type { FaseTemplate, NovaEsteiraInput, NovaTaskInput } from '@shared/esteira'
 import type { NovaRotinaInput, Rotina, RotinaModelo } from '@shared/rotinas'
 import type { Memory, MemoryEvent } from '@shared/memory'
 
@@ -1159,7 +1159,7 @@ app.whenReady().then(() => {
     esteira.atualizarProjeto(id, patch),
   )
   ipcMain.handle('esteira:removerProjeto', (_e, id: string) => esteira.removerProjeto(id))
-  ipcMain.handle('esteira:criar', (_e, input: esteira.NovaEsteiraInput) => esteira.criarEsteira(input))
+  ipcMain.handle('esteira:criar', (_e, input: NovaEsteiraInput) => esteira.criarEsteira(input))
   ipcMain.handle('esteira:atualizar', (_e, id: string, patch: Record<string, unknown>) =>
     esteira.atualizarEsteira(id, patch),
   )
