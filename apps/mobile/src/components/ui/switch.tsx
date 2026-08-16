@@ -1,28 +1,44 @@
-import { Platform } from "react-native";
 import * as SwitchPrimitive from "@rn-primitives/switch";
-import { cn } from "~/lib/utils";
+import { getThemeTokens } from "~/lib/theme-tokens";
+import { useThemeStore } from "~/stores/theme-store";
 
-function Switch({
-  className,
-  ...props
-}: React.ComponentPropsWithoutRef<typeof SwitchPrimitive.Root>) {
+/**
+ * Switch com estilos explícitos (track 44×24, thumb 20×20).
+ *
+ * Não depende das variantes data-[state=*] do NativeWind: elas não eram
+ * aplicadas no dev client e o track ficava transparente (só o thumb
+ * aparecia, parecendo um círculo). As cores vêm dos tokens do tema.
+ */
+function Switch(props: React.ComponentPropsWithoutRef<typeof SwitchPrimitive.Root>) {
+  const tokens = getThemeTokens(useThemeStore((s) => s.resolved));
+  const ativo = !!props.checked;
+  const { style: _style, ...rest } = props;
   return (
     <SwitchPrimitive.Root
-      className={cn(
-        "peer flex h-6 w-11 shrink-0 items-center rounded-full border-2 border-transparent",
-        "web:cursor-pointer web:transition-colors",
-        "data-[state=checked]:bg-primary data-[state=unchecked]:bg-input",
-        "disabled:cursor-not-allowed disabled:opacity-50",
-        className
-      )}
-      {...props}
+      {...rest}
+      style={{
+        width: 44,
+        height: 24,
+        borderRadius: 12,
+        paddingHorizontal: 2,
+        justifyContent: "center",
+        backgroundColor: ativo ? tokens.primary : tokens.mutedForeground,
+        opacity: props.disabled ? 0.5 : 1,
+      }}
     >
       <SwitchPrimitive.Thumb
-        className={cn(
-          "pointer-events-none rounded-full bg-background shadow-lg ring-0",
-          "h-5 w-5",
-          "data-[state=checked]:translate-x-5 data-[state=unchecked]:translate-x-0"
-        )}
+        style={{
+          width: 20,
+          height: 20,
+          borderRadius: 10,
+          backgroundColor: tokens.background,
+          transform: [{ translateX: ativo ? 20 : 0 }],
+          shadowColor: "#000",
+          shadowOpacity: 0.25,
+          shadowRadius: 2,
+          shadowOffset: { width: 0, height: 1 },
+          elevation: 2,
+        }}
       />
     </SwitchPrimitive.Root>
   );
