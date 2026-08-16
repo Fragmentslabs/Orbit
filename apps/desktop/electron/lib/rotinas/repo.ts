@@ -56,11 +56,24 @@ const RUNS = 'runs.json'
 
 // ─── Rotinas ─────────────────────────────────────────────────────────────────
 
+/** Migração: rotinas criadas antes do campo `mode` explícito são de código. */
+function migrarRotina(rotina: Rotina): Rotina {
+  return { ...rotina, mode: rotina.mode ?? 'code' }
+}
+
+/**
+ * Leitura de rotinas SEMPRE com a migração aplicada — inclusive nos caminhos
+ * de escrita: um `atualizarRotina` lendo o JSON cru emitiria no evento uma
+ * rotina sem `mode`, e o renderer a filtra para fora da listagem do modo
+ * (`r.mode === modo`) — a rotina "some" ao ser desativada. Aplicar a migração
+ * aqui também autocura o arquivo na próxima escrita.
+ */
+async function lerRotinas(): Promise<Rotina[]> {
+  return (await ler<Rotina[]>(ROTINAS, [])).map(migrarRotina)
+}
+
 export function listarRotinas(): Promise<Rotina[]> {
-  return ler<Rotina[]>(ROTINAS, []).then((rotinas) =>
-    // Migração: rotinas criadas antes do campo `mode` explícito são de código.
-    rotinas.map((rotina) => ({ ...rotina, mode: rotina.mode ?? 'code' })),
-  )
+  return lerRotinas()
 }
 
 export function salvarRotinas(rotinas: Rotina[]): Promise<void> {
@@ -77,7 +90,7 @@ export function atualizarRotina(
   patch: (rotina: Rotina) => Rotina,
 ): Promise<Rotina | null> {
   return comLock(ROTINAS, async () => {
-    const rotinas = await ler<Rotina[]>(ROTINAS, [])
+    const rotinas = await lerRotinas()
     const indice = rotinas.findIndex((r) => r.id === id)
     if (indice < 0) return null
     const atualizada = patch(rotinas[indice])
