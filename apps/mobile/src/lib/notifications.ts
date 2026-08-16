@@ -65,7 +65,7 @@ export async function scheduleLocalNotification(
       title: payload.title,
       body: payload.body,
       data: payload.data ?? {},
-      sound: true,
+      sound: 'notif.wav',
     },
     trigger: null, // imediato
   })

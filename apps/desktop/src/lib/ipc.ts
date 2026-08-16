@@ -85,6 +85,11 @@ export const openWithApi = {
     window.ipcRenderer.invoke("openwith:unregister") as Promise<{ ok: boolean; error?: string }>,
 }
 
+export const sound = {
+  play: (name: string) =>
+    (window.ipcRenderer?.invoke("sound:play", name) ?? Promise.resolve(false)) as Promise<boolean>,
+}
+
 export const storage = {
   read: <T>(key: string) => window.ipcRenderer.invoke("storage:read", key) as Promise<T | null>,
   write: (key: string, value: unknown) => window.ipcRenderer.invoke("storage:write", key, value),

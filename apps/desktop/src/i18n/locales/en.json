@@ -1357,6 +1357,15 @@
     "autoFolders": {
       "title": "Automatic folders",
       "description": "Automatically groups new chats into folders named after the project directory."
+    },
+    "notifications": {
+      "title": "Notifications",
+      "pendingAskTitle": "Questions and permissions",
+      "pendingAskDescription": "Native notification (with system sound) when the agent asks for permission or asks a question.",
+      "newMessageTitle": "New message",
+      "newMessageDescription": "Native notification when the assistant finishes a reply in a session you are not viewing.",
+      "chatErrorTitle": "Chat error",
+      "chatErrorDescription": "Native notification when a reply fails."
     }
   },
   "common": {

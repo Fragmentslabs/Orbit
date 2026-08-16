@@ -27,6 +27,12 @@
     "node_modules/pdfjs-dist/**/*",
     "node_modules/@napi-rs/canvas*/**/*"
   ],
+  "extraResources": [
+    {
+      "from": "assets/sounds",
+      "to": "sounds"
+    }
+  ],
   "mac": {
     "target": [
       "dmg"

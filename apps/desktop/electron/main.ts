@@ -45,6 +45,7 @@ import { approvePendingSkill, discardPendingSkill, listPendingSkills } from './l
 import { dataDir, listKeys, readJson, removeJson, writeJson } from './lib/storage'
 import { loginShellArgs, userShellEnv } from './lib/shell-env'
 import { searchSessions } from './lib/search-sessions'
+import { tocarSom } from './lib/sound'
 import { destroyBrowserWindow } from './lib/tools'
 import type { SendMessageInput, SessionInfo } from '@shared/chat'
 import type { ChatEvent } from '@shared/chat'
@@ -1009,6 +1010,9 @@ app.whenReady().then(() => {
       return { ok: false as const, ...gitError(err) }
     }
   })
+
+  // Sons do produto (entrada do app, notificações) — player do SO
+  ipcMain.handle('sound:play', (_event, nome: string) => tocarSom(nome))
 
   // Storage genérico (sessões, mensagens, pastas) — padrão opencode
   ipcMain.handle('storage:read', (_event, key: string) => readJson(key))

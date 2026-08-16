@@ -28,6 +28,7 @@ import { ChatMessageSearchBar } from "@/src/components/chat-message-search-bar"
 import { useChatSearchStore } from "@/src/stores/chat-search-store"
 import { Actions } from "@/src/components/ai/actions"
 import { messageText, visibleMessageText } from "@/src/lib/message-utils"
+import { sound } from "@/src/lib/ipc"
 import { useActiveSession, useSessionStatus, useSessionStore, type SendConfig } from "@/src/stores/session-store"
 import { brainEnabledFor } from "@/src/stores/brain-prefs"
 import { useProviderStore } from "@/src/stores/provider-store"
@@ -273,6 +274,10 @@ function ChatMessages({ messages, isBusy, mode, sessionId, sendMessage, planIds,
   )
 }
 
+// Som de entrada do app: toca UMA vez por carregamento da janela (primeira
+// abertura), junto da aparição da persona. Tabs laterais (sessionId) não disparam.
+let entranceSoundPlayed = false
+
 export function ChatView({ sessionId }: { sessionId?: string } = {}) {
   const { mode, setMode, folders, setFolders } = useWorkspace()
   const activeSession = useActiveSession(mode)
@@ -320,6 +325,14 @@ export function ChatView({ sessionId }: { sessionId?: string } = {}) {
   useEffect(() => {
     if (session?.id) void useSessionStore.getState().ensureMessages(session.id)
   }, [session?.id])
+
+  // Som de entrada: só na view principal, uma única vez por janela
+  useEffect(() => {
+    if (sessionId || entranceSoundPlayed) return
+    entranceSoundPlayed = true
+    const timer = setTimeout(() => void sound.play("entrance"), 400)
+    return () => clearTimeout(timer)
+  }, [sessionId])
 
   // Fecha a busca ao trocar de sessão para não deixar resultados obsoletos visíveis
   useEffect(() => {

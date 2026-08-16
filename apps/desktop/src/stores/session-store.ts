@@ -1021,6 +1021,13 @@ case "title":
       set(() => ({ folders: event.folders }))
       break
 
+    case "notifications:open": {
+      // Clique numa notificação nativa → abre a sessão correspondente
+      const session = get().sessions.find((s) => s.id === event.sessionId)
+      if (session) void get().selectSession(session.mode, session.id)
+      break
+    }
+
     case "permission":
     case "question": {
       const ask: PendingAskUI =

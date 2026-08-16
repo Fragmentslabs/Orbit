@@ -1357,6 +1357,15 @@
     "autoFolders": {
       "title": "Pastas automáticas",
       "description": "Agrupa automaticamente novos chats em pastas com o nome do diretório do projeto."
+    },
+    "notifications": {
+      "title": "Notificações",
+      "pendingAskTitle": "Perguntas e permissões",
+      "pendingAskDescription": "Notificação nativa (com som do sistema) quando o agente pedir permissão ou fizer uma pergunta.",
+      "newMessageTitle": "Nova mensagem",
+      "newMessageDescription": "Notificação nativa quando o assistente concluir uma resposta em uma sessão que você não está vendo.",
+      "chatErrorTitle": "Erro no chat",
+      "chatErrorDescription": "Notificação nativa quando uma resposta falhar."
     }
   },
   "common": {

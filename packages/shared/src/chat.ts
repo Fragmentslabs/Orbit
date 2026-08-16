@@ -449,6 +449,8 @@ export type ChatEvent =
   | { type: "session:deleted"; sessionId: string }
   /** Lista de pastas mudou (criada/renomeada/fixada/removida) — substituição completa */
   | { type: "folders"; folders: FolderInfo[] }
+  /** Clique numa notificação nativa — o renderer abre a sessão correspondente */
+  | { type: "notifications:open"; sessionId: string }
 
 /** Modalidades suportadas por um modelo (models.dev): text, image, audio, video, pdf */
 export interface ModelModalities {

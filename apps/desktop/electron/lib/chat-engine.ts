@@ -40,6 +40,7 @@ import { capture, diff } from './snapshot'
 import { runProjectInit, type InitHooks } from './project-init'
 import { PROJECT_AREAS, type ProjectArea } from '@shared/memory'
 import { readJson, writeJson } from './storage'
+import { notifyChatError, notifyNewMessage } from './notifications'
 import { buildToolSet, type ToolContext, type TurnSnapshot } from './tools'
 import { addTokenUsage, toStepUsage, toTokenUsage } from './usage'
 import { messageContextText } from './todo-context'
@@ -1363,6 +1364,8 @@ export async function runChat(win: BrowserWindow, input: SendMessageInput): Prom
 
     emit(win, { type: 'message', sessionId, message: assistantMessage })
     emit(win, { type: 'status', sessionId, status: 'idle' })
+    // Notificação nativa (janela fora de foco + prefs habilitada)
+    void notifyNewMessage(sessionId, assistantMessage)
 
     // Workers já nascem com título (task.title) — não sobrescrever
     if (isFirstExchange && input.orchestrationRole !== 'worker') void generateTitle(input, win)
@@ -1385,6 +1388,8 @@ export async function runChat(win: BrowserWindow, input: SendMessageInput): Prom
       status: aborted ? 'idle' : 'error',
       error: aborted ? undefined : message,
     })
+    // Falha real (não aborto manual) → notificação nativa de erro
+    if (!aborted) void notifyChatError(sessionId, message ?? 'erro inesperado')
   } finally {
     clearTurnImages(sessionId)
     if (abortControllers.get(sessionId) === controller) abortControllers.delete(sessionId)
