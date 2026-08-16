@@ -344,14 +344,14 @@ export function Sidebar() {
   }, [selectionMode, toggleSelected, closeSidebar, router])
 
   const topItems: NavItem[] = [
-    { label: t('sidebar.memories'), icon: BrainCircuit, view: 'memories' },
+    // Esteira só existe no modo código (pipeline de tasks sem chat).
+    { label: t('sidebar.esteira'), icon: Layers, view: 'esteira', codeOnly: true },
     // Rotinas existe nos dois modos — a tela lista/cria só as do modo ativo
     // (mesma lógica da esteira/rotinas do desktop).
     { label: t('sidebar.rotinas'), icon: CalendarClock, view: 'rotinas' },
-    // Esteira só existe no modo código (pipeline de tasks sem chat).
-    { label: t('sidebar.esteira'), icon: Layers, view: 'esteira', codeOnly: true },
-    { label: t('sidebar.media'), icon: Images, view: 'media' },
+    { label: t('sidebar.memories'), icon: BrainCircuit, view: 'memories' },
     { label: t('sidebar.usageLimits'), icon: BarChart3, view: 'usage' },
+    { label: t('sidebar.media'), icon: Images, view: 'media' },
     { label: t('sidebar.tools'), icon: Puzzle, view: 'tools', codeOnly: true },
   ]
 
