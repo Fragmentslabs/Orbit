@@ -8,6 +8,7 @@ const Textarea = ({ className, ...props }: TextInputProps) => {
   return (
     <TextInput
       multiline
+      style={{ fontSize: 14 }}
       className={cn(
         "flex min-h-[80px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground",
         "web:ring-offset-background",
