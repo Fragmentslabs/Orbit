@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { View, Text, Pressable, ScrollView, StyleSheet, ActivityIndicator } from 'react-native'
+import { View, Text, Pressable, ScrollView, StyleSheet, ActivityIndicator, KeyboardAvoidingView, Platform } from 'react-native'
 import { useTranslation } from 'react-i18next'
 import { AlertCircle, ArrowLeft, Folder, MessageSquare, Sparkles } from 'lucide-react-native'
 import type { Agenda, Rotina, RotinaModelo, RotinaModos, RotinaSugestao } from '@orbit/shared'
@@ -164,11 +164,12 @@ export function RotinaForm({
   const destaqueErro = { backgroundColor: hslToRgba(tokens.destructive.replace(/hsla?\(|\)/g, '').replace(/,/g, ''), 0.1) }
 
   return (
-    <ScrollView
-      style={{ flex: 1 }}
-      contentContainerStyle={{ padding: 16, gap: 14, paddingBottom: 40 }}
-      keyboardShouldPersistTaps="handled"
-    >
+    <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+      <ScrollView
+        style={{ flex: 1 }}
+        contentContainerStyle={{ padding: 16, gap: 14, paddingBottom: 64 }}
+        keyboardShouldPersistTaps="handled"
+      >
       {!naRevisao ? (
         <>
           <Text style={[s.dica, { color: tokens.mutedForeground }]}>{t('rotinas.criar.descreverDica')}</Text>
@@ -315,7 +316,8 @@ export function RotinaForm({
           </Pressable>
         </>
       )}
-    </ScrollView>
+      </ScrollView>
+    </KeyboardAvoidingView>
   )
 }
 
