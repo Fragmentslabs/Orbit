@@ -33,6 +33,13 @@ export default function MainLayout() {
             <Stack.Screen name="rotinas/[id]" />
             <Stack.Screen name="rotinas/editar/[id]" />
 
+            <Stack.Screen name="esteira/index" />
+            <Stack.Screen name="esteira/nova" />
+            <Stack.Screen name="esteira/[id]/index" />
+            <Stack.Screen name="esteira/[id]/editar" />
+            <Stack.Screen name="esteira/[id]/task/nova" />
+            <Stack.Screen name="esteira/[id]/task/[taskId]" />
+
             <Stack.Screen name="usage" />
             <Stack.Screen name="tools" />
             <Stack.Screen name="settings" />

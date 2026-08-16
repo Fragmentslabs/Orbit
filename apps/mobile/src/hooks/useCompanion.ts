@@ -1,5 +1,5 @@
 import { useEffect } from 'react'
-import type { ChatEventMessage, RotinaEventMessage } from '@orbit/shared'
+import type { ChatEventMessage, EsteiraEventMessage, RotinaEventMessage } from '@orbit/shared'
 import { useConnectionStore } from '../stores/connection-store'
 import { useMessageQueueStore } from '../stores/message-queue-store'
 import { useRecentConnectionsStore } from '~/stores/recent-connections-store'
@@ -7,6 +7,7 @@ import { useSessionStore } from '../stores/session-store'
 import { useSettingsStore } from '../stores/settings-store'
 import { useSessionModelPrefs } from '~/stores/session-model-prefs'
 import { useRotinasStore } from '~/stores/rotinas-store'
+import { useEsteiraStore } from '~/stores/esteira-store'
 
 /**
  * Hook que orquestra a conexão WS + HTTP com o desktop.
@@ -114,10 +115,19 @@ export function useCompanion() {
       }
     })
 
+    // esteira:event → esteira store (tasks, fases, fila, progresso ao vivo)
+    const unsubEsteira = conn.onEvent('esteira:event', (event) => {
+      const msg = event as EsteiraEventMessage
+      if (msg?.event) {
+        useEsteiraStore.getState().aplicarEvento(msg.event)
+      }
+    })
+
     return () => {
       unsubChat()
       unsubModels()
       unsubRotinas()
+      unsubEsteira()
     }
   }, [])
 }

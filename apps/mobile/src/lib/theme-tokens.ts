@@ -47,3 +47,8 @@ const light: ThemeTokens = {
 export function getThemeTokens(resolved: ResolvedTheme): ThemeTokens {
   return resolved === 'dark' ? dark : light
 }
+
+/** Converte `hsl(...)` em `hsla(...)` com a opacidade dada — fundos translúcidos estilo `bg-primary/10` do desktop. */
+export function withAlpha(cor: string, alpha: number): string {
+  return cor.replace('hsl(', 'hsla(').replace(')', `, ${alpha})`)
+}

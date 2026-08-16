@@ -1,5 +1,6 @@
 export { Avatar } from "./avatar";
 export { Badge } from "./badge";
+export { BottomSheet } from "./bottom-sheet";
 export { Button } from "./button";
 export { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "./card";
 export {

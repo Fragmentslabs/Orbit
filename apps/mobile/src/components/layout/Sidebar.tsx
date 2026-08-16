@@ -32,6 +32,7 @@ import {
   ChevronRight,
   Search,
   CalendarClock,
+  Layers,
 } from 'lucide-react-native'
 import { useWorkspaceStore } from '~/stores/workspace-store'
 import { useConnectionStore } from '~/stores/connection-store'
@@ -347,6 +348,8 @@ export function Sidebar() {
     // Rotinas existe nos dois modos — a tela lista/cria só as do modo ativo
     // (mesma lógica da esteira/rotinas do desktop).
     { label: t('sidebar.rotinas'), icon: CalendarClock, view: 'rotinas' },
+    // Esteira só existe no modo código (pipeline de tasks sem chat).
+    { label: t('sidebar.esteira'), icon: Layers, view: 'esteira', codeOnly: true },
     { label: t('sidebar.media'), icon: Images, view: 'media' },
     { label: t('sidebar.usageLimits'), icon: BarChart3, view: 'usage' },
     { label: t('sidebar.tools'), icon: Puzzle, view: 'tools', codeOnly: true },
