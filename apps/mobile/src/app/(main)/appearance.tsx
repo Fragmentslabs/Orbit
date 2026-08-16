@@ -1,10 +1,10 @@
 import { View, Text, Pressable, ScrollView, StyleSheet, Switch } from 'react-native'
 import { useRouter } from 'expo-router'
-import { ArrowLeft, Sun, Moon, Monitor, List, Square, Layers, Smile } from 'lucide-react-native'
+import { ArrowLeft, Sun, Moon, Monitor, ChevronRight, Smile } from 'lucide-react-native'
 import { Appearance, useColorScheme } from 'react-native'
 import { useTranslation } from 'react-i18next'
 import { useThemeStore, type ThemePreference } from '~/stores/theme-store'
-import { useAppearanceStore, type DisplayMode } from '~/stores/appearance-store'
+import { useAppearanceStore } from '~/stores/appearance-store'
 import { getThemeTokens } from '~/lib/theme-tokens'
 import { useThemeStore as useThemeTokensStore } from '~/stores/theme-store'
 import { SafeScreen } from '~/components/layout/SafeScreen'
@@ -16,8 +16,6 @@ export default function AppearanceScreen() {
   const systemIsDark = systemScheme !== 'light'
   const themePref = useThemeStore((s) => s.preference)
   const setThemePref = useThemeStore((s) => s.setPreference)
-  const displayMode = useAppearanceStore((s) => s.displayMode)
-  const setDisplayMode = useAppearanceStore((s) => s.setDisplayMode)
   const personaVisible = useAppearanceStore((s) => s.personaVisible)
   const setPersonaVisible = useAppearanceStore((s) => s.setPersonaVisible)
   const tokens = getThemeTokens(useThemeTokensStore((s) => s.resolved))
@@ -31,12 +29,6 @@ export default function AppearanceScreen() {
     { value: 'light', label: t('appearanceScreen.themeLight'), icon: Sun },
     { value: 'dark', label: t('appearanceScreen.themeDark'), icon: Moon },
     { value: 'system', label: t('appearanceScreen.themeSystem'), icon: Monitor },
-  ]
-
-  const modeChips: { value: DisplayMode; label: string; icon: typeof List; hint: string }[] = [
-    { value: 'toggles', label: t('appearanceScreen.displayModeToggles'), icon: List, hint: t('appearanceScreen.displayModeTogglesHint') },
-    { value: 'actions', label: t('appearanceScreen.displayModeActions'), icon: Square, hint: t('appearanceScreen.displayModeActionsHint') },
-    { value: 'both', label: t('appearanceScreen.displayModeBoth'), icon: Layers, hint: t('appearanceScreen.displayModeBothHint') },
   ]
 
   return (
@@ -77,35 +69,20 @@ export default function AppearanceScreen() {
           </View>
         </View>
 
-        <Text style={[s.sectionTitle, { color: tokens.mutedForeground, marginTop: 24 }]}>{t('appearanceScreen.displayModesSection')}</Text>
+        <Text style={[s.sectionTitle, { color: tokens.mutedForeground, marginTop: 24 }]}>{t('appearanceScreen.bottomModes.title')}</Text>
 
-        <View style={[s.card, { borderColor: tokens.border, backgroundColor: tokens.card }]}>
-          <View style={s.chipRow}>
-            {modeChips.map(({ value, label, icon: Icon, hint }) => {
-              const active = displayMode === value
-              return (
-                <Pressable
-                  key={value}
-                  onPress={() => setDisplayMode(value)}
-                  style={[
-                    s.chip,
-                    active
-                      ? { backgroundColor: tokens.background, borderColor: tokens.border }
-                      : { backgroundColor: tokens.muted, borderColor: tokens.border },
-                  ]}
-                >
-                  <Icon size={16} color={active ? tokens.primary : tokens.mutedForeground} />
-                  <Text style={[s.chipLabel, { color: active ? tokens.primary : tokens.mutedForeground }]}>
-                    {label}
-                  </Text>
-                </Pressable>
-              )
-            })}
+        <Pressable
+          onPress={() => router.push('/(main)/modes')}
+          style={[s.card, s.rowCard, { borderColor: tokens.border, backgroundColor: tokens.card }]}
+        >
+          <View style={{ flex: 1 }}>
+            <Text style={{ fontSize: 14, color: tokens.foreground }}>{t('appearanceScreen.bottomModes.entry')}</Text>
+            <Text style={[s.hint, { color: tokens.mutedForeground, marginTop: 4 }]}>
+              {t('appearanceScreen.bottomModes.hint')}
+            </Text>
           </View>
-          <Text style={[s.hint, { color: tokens.mutedForeground }]}>
-            {modeChips.find((c) => c.value === displayMode)?.hint}
-          </Text>
-        </View>
+          <ChevronRight size={18} color={tokens.mutedForeground} />
+        </Pressable>
 
         <Text style={[s.sectionTitle, { color: tokens.mutedForeground, marginTop: 24 }]}>{t('appearanceScreen.personaSection')}</Text>
 
@@ -132,6 +109,7 @@ const s = StyleSheet.create({
   headerTitle: { fontSize: 16, fontWeight: '600' },
   sectionTitle: { fontSize: 11, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 8 },
   card: { borderRadius: 14, borderWidth: 1, padding: 14, marginBottom: 4 },
+  rowCard: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   chipRow: { flexDirection: 'row', gap: 6 },
   chip: {
     flexDirection: 'row',

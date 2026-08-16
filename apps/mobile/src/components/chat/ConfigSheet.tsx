@@ -1,14 +1,12 @@
 import { useEffect, useState } from 'react'
 import { Modal, View, Text, Pressable, Animated, Switch, StyleSheet, ScrollView, Dimensions, ActivityIndicator } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
-import { Shield, ShieldCheck, ShieldOff, Brain, Check, Bot, Network, FileText, RefreshCw, ChevronRight, Settings2, GitBranch, Eye } from 'lucide-react-native'
+import { Shield, ShieldCheck, ShieldOff, Brain, Check, GitBranch } from 'lucide-react-native'
 import type { LucideIcon } from 'lucide-react-native'
 import { useTranslation } from 'react-i18next'
 import type { ModelVariant } from '@orbit/shared'
 import { getThemeTokens } from '~/lib/theme-tokens'
 import { useThemeStore } from '~/stores/theme-store'
-import { hslToRgba } from '~/lib/theme'
-import type { DisplayMode } from '~/stores/appearance-store'
 
 type PermissionModeValue = 'ask' | 'approve' | 'full'
 
@@ -46,7 +44,6 @@ interface Props {
   onVisionToggle: () => void
   onConfigureVision: () => void
   onConfigureLoop?: () => void
-  displayMode?: DisplayMode
   gitBranches?: string[]
   gitCurrent?: string
   onGitBranchChange?: (branch: string) => void
@@ -78,7 +75,6 @@ export function ConfigSheet({
   onVisionToggle,
   onConfigureVision,
   onConfigureLoop,
-  displayMode,
   mode,
   gitBranches,
   gitCurrent,
@@ -108,10 +104,6 @@ export function ConfigSheet({
   }, [visible, slideAnim, backdropAnim])
 
   const currentPerm = PERMISSION_MODES.find((m) => m.id === permissionMode) ?? PERMISSION_MODES[0]
-  const rowSelectedBg = hslToRgba(
-    tokens.primary.replace(/hsla?\(|\)/g, '').replace(/,/g, ''),
-    0.08,
-  )
 
   return (
     <Modal visible={visible} transparent animationType="none" onRequestClose={onClose}>
@@ -239,119 +231,9 @@ export function ConfigSheet({
             </View>
           )}
 
-          {/* Subagentes — só no modo toggles */}
-          {displayMode === 'toggles' && (
-          <View style={[s.card, { borderColor: tokens.border }]}>
-            <View style={s.cardRow}>
-              <View style={s.cardRowLeft}>
-                <Bot size={18} color={tokens.mutedForeground} />
-                <Text style={[s.cardLabel, { color: tokens.foreground }]}>{t('configSheet.subagents')}</Text>
-              </View>
-              <Switch
-                value={subagents}
-                onValueChange={onSubagentsToggle}
-                trackColor={{ false: tokens.muted, true: tokens.primary }}
-                thumbColor={tokens.foreground}
-              />
-            </View>
-            {subagents && (
-              <Pressable onPress={onConfigureWorkers} style={[s.modelCard, { backgroundColor: rowSelectedBg, borderColor: tokens.border }]}>
-                <Bot size={16} color={tokens.primary} />
-                <Text style={[s.modelCardLabel, { color: tokens.foreground }]}>
-                  {workerModelLabel ?? t('configSheet.useSameModel')}
-                </Text>
-                <ChevronRight size={14} color={tokens.mutedForeground} />
-              </Pressable>
-            )}
-          </View>
-          )}
+          {/* Subagentes, Orquestração, Visão e Loop ficam no botão "+" (AttachmentSheet) —
+              o gear mantém permissões, thinking/reasoning e branch */}
 
-          {/* Orquestração — só no modo code + toggles */}
-          {displayMode === 'toggles' && mode === 'code' && (
-          <View style={[s.card, { borderColor: tokens.border }]}>
-            <View style={s.cardRow}>
-              <View style={s.cardRowLeft}>
-                <Network size={18} color={tokens.mutedForeground} />
-                <Text style={[s.cardLabel, { color: tokens.foreground }]}>{t('configSheet.orchestration')}</Text>
-              </View>
-              <Switch
-                value={orchestra}
-                onValueChange={onOrchestraToggle}
-                trackColor={{ false: tokens.muted, true: tokens.primary }}
-                thumbColor={tokens.foreground}
-              />
-            </View>
-            {orchestra && (
-              <Pressable onPress={onConfigureWorkers} style={[s.modelCard, { backgroundColor: rowSelectedBg, borderColor: tokens.border }]}>
-                <Network size={16} color={tokens.primary} />
-                <Text style={[s.modelCardLabel, { color: tokens.foreground }]}>
-                  {workerModelLabel ?? t('configSheet.useSameModel')}
-                </Text>
-                <ChevronRight size={14} color={tokens.mutedForeground} />
-              </Pressable>
-            )}
-          </View>
-          )}
-
-          {/* Visão — só no modo toggles */}
-          {displayMode === 'toggles' && (
-          <View style={[s.card, { borderColor: tokens.border }]}>
-            <View style={s.cardRow}>
-              <View style={s.cardRowLeft}>
-                <Eye size={18} color={tokens.mutedForeground} />
-                <Text style={[s.cardLabel, { color: tokens.foreground }]}>{t('configSheet.vision')}</Text>
-              </View>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                {vision && (
-                  <Pressable onPress={onConfigureVision} hitSlop={8} style={[s.gearBtn, { backgroundColor: tokens.muted }]}>
-                    <Settings2 size={16} color={tokens.mutedForeground} />
-                  </Pressable>
-                )}
-                <Switch
-                  value={vision}
-                  onValueChange={onVisionToggle}
-                  trackColor={{ false: tokens.muted, true: tokens.primary }}
-                  thumbColor={tokens.foreground}
-                />
-              </View>
-            </View>
-            {vision && (
-              <Text style={[s.hint, { color: tokens.mutedForeground }]}>
-                {t('configSheet.visionHint')}
-              </Text>
-            )}
-          </View>
-          )}
-
-          {/* Loop — só no modo toggles */}
-          {displayMode === 'toggles' && (
-          <View style={[s.card, { borderColor: tokens.border }]}>
-            <View style={s.cardRow}>
-              <View style={s.cardRowLeft}>
-                <RefreshCw size={18} color={tokens.mutedForeground} />
-                <Text style={[s.cardLabel, { color: tokens.foreground }]}>{t('configSheet.loop')}</Text>
-              </View>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                {loop && onConfigureLoop && (
-                  <Pressable onPress={onConfigureLoop} hitSlop={8} style={[s.gearBtn, { backgroundColor: tokens.muted }]}>
-                    <Settings2 size={16} color={tokens.mutedForeground} />
-                  </Pressable>
-                )}
-                <Switch
-                  value={loop}
-                  onValueChange={onLoopToggle}
-                  trackColor={{ false: tokens.muted, true: tokens.primary }}
-                  thumbColor={tokens.foreground}
-                />
-              </View>
-            </View>
-            {loop && (
-              <Text style={[s.hint, { color: tokens.mutedForeground }]}>
-                {t('configSheet.loopHint')}
-              </Text>
-            )}
-          </View>
-          )}
         </ScrollView>
       </Animated.View>
     </Modal>
@@ -433,21 +315,4 @@ const s = StyleSheet.create({
   },
   levelChipLabel: { fontSize: 13, fontWeight: '500' },
   hint: { fontSize: 11, opacity: 0.7 },
-  modelCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    borderWidth: 1,
-  },
-  modelCardLabel: { fontSize: 13, fontWeight: '500', flex: 1 },
-  gearBtn: {
-    width: 32,
-    height: 32,
-    borderRadius: 8,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
 })

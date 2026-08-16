@@ -37,7 +37,7 @@ import { useConnectionStore } from '~/stores/connection-store'
 import { uriToFilePart } from '~/lib/attachments'
 import { useWorkspaceStore } from '~/stores/workspace-store'
 import { useSettingsStore } from '~/stores/settings-store'
-import { useAppearanceStore } from '~/stores/appearance-store'
+import { useAppearanceStore, type ModeId } from '~/stores/appearance-store'
 import { useReasoningPrefs } from '~/stores/reasoning-prefs'
 import { useModelModePrefs } from '~/stores/model-mode-prefs'
 import { useModeActive, useModeOverrides } from '~/stores/mode-overrides'
@@ -178,7 +178,7 @@ export function PromptInput({
   const visionModel = useSettingsStore((s) => s.visionModel)
   const visionConfigOpen = useSettingsStore((s) => s.visionConfigOpen)
   const setVisionConfigOpen = useSettingsStore((s) => s.setVisionConfigOpen)
-  const displayMode = useAppearanceStore((s) => s.displayMode)
+  const modesInRow = useAppearanceStore((s) => s.modesInRow)
 
   useEffect(() => {
     if (!hydrated) hydrate()
@@ -424,7 +424,19 @@ export function PromptInput({
     { id: 'browser', icon: Globe, label: t('promptInput.modes.browser') },
     { id: 'simple', icon: AlignLeft, label: t('promptInput.modes.simple') },
     { id: 'brain', icon: BrainCircuit, label: t('promptInput.modes.brain') },
+    { id: 'vision', icon: Eye, label: t('promptInput.modes.vision') },
   ]
+
+  // Mapeia o id da row para o id do modesInRow (espelho do desktop) — a row
+  // mostra só os modos marcados nas preferências; o "+" sempre mostra todos.
+  const ROW_TO_MODE_ID: Record<string, ModeId> = {
+    research: 'search',
+    browser: 'browser',
+    simple: 'simple',
+    brain: 'brain',
+    vision: 'vision',
+  }
+  const visibleModes = modesList.filter((m) => modesInRow.includes(ROW_TO_MODE_ID[m.id]))
 
   // Estado efetivo dos toggles simples (modos do row principal + sheet)
   const simpleActive: Record<string, boolean> = {
@@ -432,6 +444,7 @@ export function PromptInput({
     browser,
     simple,
     brain,
+    vision,
   }
 
   return (
@@ -544,8 +557,7 @@ export function PromptInput({
       </View>
       </SlashPaletteShell>
 
-      {/* Mode Toggles Row — oculto em modo "actions" */}
-      {displayMode !== 'actions' && (
+      {/* Mode Toggles Row — sempre visível no mobile (toggles + "+" fixos) */}
       <View className="flex-row items-center justify-between px-1">
         <View className="flex-row items-center gap-2">
           {/* Thinking toggle — mostrado apenas se o modelo suporta reasoning */}
@@ -566,7 +578,7 @@ export function PromptInput({
               />
             </Pressable>
           )}
-          {modesList.map((mode) => {
+          {visibleModes.map((mode) => {
             const isActive = simpleActive[mode.id] ?? false
             const IconComponent = mode.icon
             return (
@@ -601,7 +613,6 @@ export function PromptInput({
         </View>
         <ContextMeter sessionId={sessionId} />
       </View>
-      )}
 
       {/* Bottom sheet */}
       <AttachmentSheet
@@ -624,7 +635,6 @@ export function PromptInput({
           ...(workspaceMode === 'code' ? [{ id: 'orchestra', icon: Network, label: t('promptInput.modes.orchestra'), active: orchestra, onToggle: () => toggleWorkerMode('orchestra', !orchestra), onConfigure: () => { setPlusOpen(false); setWorkerConfigOpen(true) } }] : []),
           { id: 'loop', icon: RefreshCw, label: t('promptInput.modes.loop'), active: loop, onToggle: () => setLoop((v) => !v), onConfigure: () => { setPlusOpen(false); setLoopConfigOpen(true) } },
         ]}
-        displayMode={displayMode}
       />
 
       <ConfigSheet
@@ -659,7 +669,6 @@ export function PromptInput({
           setConfigOpen(false)
           setLoopConfigOpen(true)
         }}
-        displayMode={displayMode}
         mode={workspaceMode}
         gitBranches={gitBranches}
         gitCurrent={gitCurrent}
@@ -711,20 +720,21 @@ const AdvancedModesRow = memo(function AdvancedModesRow({
   tokens: any
 }) {
   const workspaceMode = useWorkspaceStore((s) => s.mode)
+  const modesInRow = useAppearanceStore((s) => s.modesInRow)
   if (workspaceMode === 'code') {
     return (
       <View className="flex-row items-center gap-2" style={{ borderLeftWidth: 1, borderLeftColor: tokens.border, paddingLeft: 6 }}>
-        <AdvancedToggle icon={FileText} active={plan} onPress={onTogglePlan} tokens={tokens} />
-        <AdvancedToggle icon={Bot} active={subagents} onPress={onToggleSubagents} tokens={tokens} />
-        <AdvancedToggle icon={Network} active={orchestra} onPress={onToggleOrchestra} tokens={tokens} />
-        <AdvancedToggle icon={RefreshCw} active={loop} onPress={onToggleLoop} tokens={tokens} />
+        {modesInRow.includes('plan') && <AdvancedToggle icon={FileText} active={plan} onPress={onTogglePlan} tokens={tokens} />}
+        {modesInRow.includes('subagents') && <AdvancedToggle icon={Bot} active={subagents} onPress={onToggleSubagents} tokens={tokens} />}
+        {modesInRow.includes('orchestra') && <AdvancedToggle icon={Network} active={orchestra} onPress={onToggleOrchestra} tokens={tokens} />}
+        {modesInRow.includes('loop') && <AdvancedToggle icon={RefreshCw} active={loop} onPress={onToggleLoop} tokens={tokens} />}
       </View>
     )
   }
   return (
     <View className="flex-row items-center gap-2" style={{ borderLeftWidth: 1, borderLeftColor: tokens.border, paddingLeft: 6 }}>
-      <AdvancedToggle icon={Bot} active={subagents} onPress={onToggleSubagents} tokens={tokens} />
-      <AdvancedToggle icon={RefreshCw} active={loop} onPress={onToggleLoop} tokens={tokens} />
+      {modesInRow.includes('subagents') && <AdvancedToggle icon={Bot} active={subagents} onPress={onToggleSubagents} tokens={tokens} />}
+      {modesInRow.includes('loop') && <AdvancedToggle icon={RefreshCw} active={loop} onPress={onToggleLoop} tokens={tokens} />}
     </View>
   )
 })

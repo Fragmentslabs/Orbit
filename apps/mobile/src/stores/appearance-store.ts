@@ -2,15 +2,43 @@ import { create } from 'zustand'
 import { Storage } from '~/lib/storage'
 import { useThemeStore, type ThemePreference } from './theme-store'
 
-const DISPLAY_MODE_KEY = 'orbit_display_mode'
-const DEFAULT_DISPLAY_MODE: DisplayMode = 'both'
+const MODES_IN_ROW_KEY = 'orbit_modes_in_row'
 const PERSONA_VISIBLE_KEY = 'orbit_persona_visible'
 
-export type DisplayMode = 'toggles' | 'actions' | 'both'
+/** Modos que podem aparecer como toggles na barra inferior do input.
+ *  "thinking" não está na lista: para modelos com reasoning ele é sempre
+ *  ativo e o nível (ou o desligar, quando suportado) é controlado pelo
+ *  seletor de reasoning — não é um modo. */
+export const MODE_IDS = [
+  'search',
+  'browser',
+  'plan',
+  'simple',
+  'brain',
+  'subagents',
+  'orchestra',
+  'loop',
+  'vision',
+] as const
+export type ModeId = (typeof MODE_IDS)[number]
+/** "brain" fica fora da barra por padrão: o modo Memória também vem
+ *  desativado por padrão nas preferências (model-mode-prefs) — só entra na
+ *  barra se o usuário ativá-lo aqui ou no menu "+". */
+export const DEFAULT_MODES_IN_ROW: ModeId[] = [
+  'search',
+  'browser',
+  'plan',
+  'simple',
+  'subagents',
+  'orchestra',
+  'loop',
+  'vision',
+]
 
 interface AppearanceState {
-  displayMode: DisplayMode
-  setDisplayMode: (mode: DisplayMode) => Promise<void>
+  /** Modos visíveis como toggles na barra inferior (o menu "+" mostra todos) */
+  modesInRow: ModeId[]
+  setModesInRow: (modes: ModeId[]) => Promise<void>
   personaVisible: boolean
   setPersonaVisible: (visible: boolean) => Promise<void>
   /** Define tema e persiste (delega ao theme-store). */
@@ -18,12 +46,12 @@ interface AppearanceState {
 }
 
 export const useAppearanceStore = create<AppearanceState>((set) => ({
-  displayMode: DEFAULT_DISPLAY_MODE,
+  modesInRow: DEFAULT_MODES_IN_ROW,
   personaVisible: true,
 
-  setDisplayMode: async (mode) => {
-    set({ displayMode: mode })
-    await Storage.setItem(DISPLAY_MODE_KEY, mode)
+  setModesInRow: async (modes) => {
+    set({ modesInRow: modes })
+    await Storage.setItem(MODES_IN_ROW_KEY, JSON.stringify(modes))
   },
 
   setPersonaVisible: async (visible) => {
@@ -37,12 +65,18 @@ export const useAppearanceStore = create<AppearanceState>((set) => ({
 }))
 
 /** Carrega preferência persistida (chamar no root). */
-export async function hydrateDisplayMode(): Promise<DisplayMode> {
+export async function hydrateModesInRow(): Promise<ModeId[]> {
   try {
-    const raw = await Storage.getItem(DISPLAY_MODE_KEY)
-    if (raw === 'toggles' || raw === 'actions' || raw === 'both') return raw
+    const raw = await Storage.getItem(MODES_IN_ROW_KEY)
+    if (raw) {
+      const parsed = JSON.parse(raw) as unknown
+      if (Array.isArray(parsed)) {
+        const valid = parsed.filter((m): m is ModeId => MODE_IDS.includes(m as ModeId))
+        if (valid.length > 0) return valid
+      }
+    }
   } catch { /* ignore */ }
-  return DEFAULT_DISPLAY_MODE
+  return DEFAULT_MODES_IN_ROW
 }
 
 export async function hydratePersonaVisible(): Promise<boolean> {

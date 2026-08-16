@@ -49,6 +49,7 @@ export default function MainLayout() {
             <Stack.Screen name="language" />
             <Stack.Screen name="howto" />
             <Stack.Screen name="appearance" />
+            <Stack.Screen name="modes" />
           </Stack>
         </View>
 

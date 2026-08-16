@@ -15,7 +15,7 @@ import { useConnectionStore } from "../stores/connection-store";
 import { useNotificationPrefsStore } from "../stores/notification-prefs-store";
 import { useSessionStore } from "../stores/session-store";
 import { useThemeStore, hydrateThemePreference } from "../stores/theme-store";
-import { useAppearanceStore, hydratePersonaVisible } from "../stores/appearance-store";
+import { useAppearanceStore, hydratePersonaVisible, hydrateModesInRow } from "../stores/appearance-store";
 import { useLocaleStore, hydrateLocale } from "../stores/locale-store";
 import { startMessageScheduler } from "../stores/message-queue-store";
 import { useModelModePrefs } from "../stores/model-mode-prefs";
@@ -67,6 +67,9 @@ export default function RootLayout() {
     });
     hydratePersonaVisible().then((visible) => {
       useAppearanceStore.getState().setPersonaVisible(visible);
+    });
+    hydrateModesInRow().then((modes) => {
+      useAppearanceStore.getState().setModesInRow(modes);
     });
     hydrateLocale().then((locale) => {
       useLocaleStore.getState().setLocale(locale);

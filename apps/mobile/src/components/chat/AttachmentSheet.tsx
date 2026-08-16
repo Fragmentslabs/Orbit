@@ -5,7 +5,6 @@ import { Camera, Image as ImageIcon, Paperclip, Settings2 } from 'lucide-react-n
 import { useTranslation } from 'react-i18next'
 import { getThemeTokens } from '~/lib/theme-tokens'
 import { useThemeStore } from '~/stores/theme-store'
-import type { DisplayMode } from '~/stores/appearance-store'
 
 export interface ModeItem {
   id: string
@@ -24,10 +23,9 @@ interface AttachmentSheetProps {
   onFiles: () => void
   simpleModes?: ModeItem[]
   configModes?: ModeItem[]
-  displayMode?: DisplayMode
 }
 
-const SHEET_HEIGHT = 200
+const SHEET_HEIGHT = 500
 
 export function AttachmentSheet({
   visible,
@@ -37,7 +35,6 @@ export function AttachmentSheet({
   onFiles,
   simpleModes,
   configModes,
-  displayMode,
 }: AttachmentSheetProps) {
   const { t } = useTranslation()
   const tokens = getThemeTokens(useThemeStore((s) => s.resolved))
@@ -45,15 +42,15 @@ export function AttachmentSheet({
   const [slideAnim] = useState(() => new Animated.Value(SHEET_HEIGHT))
   const [backdropAnim] = useState(() => new Animated.Value(0))
 
-  const showModes = displayMode === 'actions' || displayMode === 'both'
-  const hasSimple = showModes && simpleModes && simpleModes.length > 0
-  const hasConfig = showModes && configModes && configModes.length > 0
-  const sheetHeight = showModes ? 500 : 200
+  // O mobile mostra SEMPRE os modos no "+" (toggles da barra + avançados),
+  // além dos anexos — comportamento fixo, sem opção de ocultar.
+  const hasSimple = simpleModes && simpleModes.length > 0
+  const hasConfig = configModes && configModes.length > 0
 
   useEffect(() => {
     Animated.parallel([
       Animated.timing(slideAnim, {
-        toValue: visible ? 0 : sheetHeight,
+        toValue: visible ? 0 : SHEET_HEIGHT,
         duration: 250,
         useNativeDriver: true,
       }),
@@ -63,7 +60,7 @@ export function AttachmentSheet({
         useNativeDriver: true,
       }),
     ]).start()
-  }, [visible, slideAnim, backdropAnim, sheetHeight])
+  }, [visible, slideAnim, backdropAnim])
 
   return (
     <Modal visible={visible} transparent animationType="none" onRequestClose={onClose}>

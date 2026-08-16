@@ -524,18 +524,21 @@
   "appearanceScreen": {
     "title": "Appearance",
     "themeSection": "Theme",
-    "displayModesSection": "Display modes",
     "personaSection": "Persona",
     "showPersona": "Show persona",
     "themeLight": "Light",
     "themeDark": "Dark",
     "themeSystem": "System",
-    "displayModeToggles": "Toggles",
-    "displayModeActions": "Actions",
-    "displayModeBoth": "Both",
-    "displayModeTogglesHint": "Modes as inline toggles. Advanced settings in the gear (⚙️).",
-    "displayModeActionsHint": "No inline toggles. All modes in the \"+\" button.",
-    "displayModeBothHint": "Inline toggles + advanced modes also in the \"+\" button."
+    "bottomModes": {
+      "title": "Modes in the bar",
+      "entry": "Modes visible below the input",
+      "hint": "Which modes appear as toggles below the input. The \"+\" button always shows all of them.",
+      "modeGroups": {
+        "both": "Both modes",
+        "chat": "Chat mode",
+        "code": "Code mode"
+      }
+    }
   },
   "howtoScreen": {
     "title": "How it works",
