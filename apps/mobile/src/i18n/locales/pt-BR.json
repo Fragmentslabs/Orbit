@@ -903,18 +903,37 @@
         "6": "Sáb"
       },
       "resumoUteis": "Seg a Sex às {{horario}}",
-      "resumoFimDeSemana": "Fim de semana às {{horario}}"
+      "resumoFimDeSemana": "Fim de semana às {{horario}}",
+      "selecionarHorario": "Horário"
     },
     "modos": {
-      "loop": { "nome": "Loop" },
-      "subagents": { "nome": "Subagentes" },
-      "orchestrate": { "nome": "Orquestra" },
-      "brain": { "nome": "Memória" },
-      "browser": { "nome": "Browser" },
-      "plan": { "nome": "Modo Plano" },
-      "simple": { "nome": "Simples" },
-      "search": { "nome": "Pesquisa" },
-      "vision": { "nome": "Visão" },
+      "loop": {
+        "nome": "Loop"
+      },
+      "subagents": {
+        "nome": "Subagentes"
+      },
+      "orchestrate": {
+        "nome": "Orquestra"
+      },
+      "brain": {
+        "nome": "Memória"
+      },
+      "browser": {
+        "nome": "Browser"
+      },
+      "plan": {
+        "nome": "Modo Plano"
+      },
+      "simple": {
+        "nome": "Simples"
+      },
+      "search": {
+        "nome": "Pesquisa"
+      },
+      "vision": {
+        "nome": "Visão"
+      },
       "permissao": "Permissões",
       "permissaoAviso": "A rotina dispara sozinha: em \"Perguntar\" ela para na primeira ação sensível e fica esperando você responder na sessão da execução."
     },

@@ -1,4 +1,7 @@
-import { View, Text, Pressable, TextInput, StyleSheet } from 'react-native'
+import { Component, useState, type ReactNode } from 'react'
+import { View, Text, Pressable, TextInput, StyleSheet, Modal, Platform } from 'react-native'
+import DateTimePicker from '@react-native-community/datetimepicker'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useTranslation } from 'react-i18next'
 import {
   AlignLeft,
@@ -28,9 +31,195 @@ import { descreverAgenda, diasCurtos, modoDaAgenda, type ModoAgenda } from '~/li
 const UTEIS = [1, 2, 3, 4, 5]
 const FIM_DE_SEMANA = [0, 6]
 
+/**
+ * Modal centralizado de seleção de horário — estrutura compartilhada pelo
+ * seletor nativo e pelo fallback manual: overlay escuro (tocar fora fecha
+ * sem aplicar), view com fundo muted e cantos arredondados, controle no
+ * centro e Cancelar/OK no rodapé do próprio modal.
+ */
+function TelaHorario({
+  onCancelar,
+  onOk,
+  children,
+}: {
+  onCancelar: () => void
+  onOk: () => void
+  children: ReactNode
+}) {
+  const { t } = useTranslation()
+  const tokens = getThemeTokens(useThemeStore((s) => s.resolved))
+  return (
+    <Modal visible animationType="fade" transparent onRequestClose={onCancelar}>
+      <Pressable style={s.modalBackdrop} onPress={onCancelar} accessibilityLabel={t('scheduleSheet.cancel')}>
+        <View style={[s.modalCaixa, { backgroundColor: tokens.muted }]}>
+          <Text style={[s.modalTitulo, { color: tokens.foreground }]}>{t('rotinas.agenda.selecionarHorario')}</Text>
+          <View style={s.modalConteudo}>{children}</View>
+          <View style={[s.modalRodape, { borderTopColor: tokens.border }]}>
+            <Pressable onPress={onCancelar} style={s.modalBotao} hitSlop={4}>
+              <Text style={{ color: tokens.primary, fontSize: 16 }}>{t('scheduleSheet.cancel')}</Text>
+            </Pressable>
+            <View style={[s.modalDivisor, { backgroundColor: tokens.border }]} />
+            <Pressable onPress={onOk} style={s.modalBotao} hitSlop={4}>
+              <Text style={{ color: tokens.primary, fontSize: 16, fontWeight: '600' }}>{t('scheduleSheet.ok')}</Text>
+            </Pressable>
+          </View>
+        </View>
+      </Pressable>
+    </Modal>
+  )
+}
+
+/**
+ * Seletor de horário manual (fallback): grade de horas e minutos em tela
+ * cheia, com o mesmo visual do seletor nativo. Só é usado quando o binário
+ * não tem o módulo nativo do datetimepicker (build antigo / Expo Go) — o
+ * caminho normal é o ModalSeletorHorario.
+ */
+function SeletorHorarioManual({
+  valor,
+  onSelecionar,
+  onFechar,
+}: {
+  valor: string
+  onSelecionar: (horario: string) => void
+  onFechar: () => void
+}) {
+  const tokens = getThemeTokens(useThemeStore((s) => s.resolved))
+  const inicial = parseHorario(valor)
+  const [hora, setHora] = useState(inicial?.hora ?? 9)
+  const [minuto, setMinuto] = useState(inicial?.minuto ?? 0)
+  const p = (n: number) => String(n).padStart(2, '0')
+  const chip = (selecionado: boolean) => ({
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: 'transparent',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    backgroundColor: selecionado ? tokens.primary : tokens.muted,
+  })
+  const chipText = (selecionado: boolean) => ({
+    fontSize: 12,
+    color: selecionado ? tokens.primaryForeground : tokens.mutedForeground,
+  })
+  return (
+    <TelaHorario
+      onCancelar={onFechar}
+      onOk={() => {
+        onSelecionar(`${p(hora)}:${p(minuto)}`)
+        onFechar()
+      }}
+    >
+      <Text style={{ color: tokens.foreground, fontSize: 28, fontWeight: '700', marginBottom: 16 }}>
+        {p(hora)}:{p(minuto)}
+      </Text>
+      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, justifyContent: 'center', maxWidth: 280 }}>
+        {Array.from({ length: 24 }, (_, h) => (
+          <Pressable key={h} onPress={() => setHora(h)} style={chip(h === hora)}>
+            <Text style={chipText(h === hora)}>{p(h)}</Text>
+          </Pressable>
+        ))}
+      </View>
+      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, justifyContent: 'center', maxWidth: 280, marginTop: 8 }}>
+        {Array.from({ length: 12 }, (_, i) => i * 5).map((m) => (
+          <Pressable key={m} onPress={() => setMinuto(m)} style={chip(m === minuto)}>
+            <Text style={chipText(m === minuto)}>{p(m)}</Text>
+          </Pressable>
+        ))}
+      </View>
+    </TelaHorario>
+  )
+}
+
 /** Fundo do primary com alpha (ex.: primary a 10% — como bg-primary/10). */
 function primaryBg(tokens: ThemeTokens, alpha: number): string {
   return hslToRgba(tokens.primary.replace(/hsla?\(|\)/g, '').replace(/,/g, ''), alpha)
+}
+
+/** Converte "HH:MM" em Date (hoje, no horário dado) para o picker nativo. */
+function horarioParaDate(horario: string): Date {
+  const p = parseHorario(horario)
+  const d = new Date()
+  d.setHours(p?.hora ?? 9, p?.minuto ?? 0, 0, 0)
+  return d
+}
+
+function formatarData(d: Date): string {
+  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
+}
+
+/**
+ * Seletor de horário nativo, aberto por um único toque no horário.
+ * iOS: modal centralizado com o spinner nativo (as rodas do sistema) já
+ * aberto — o controle compacto do sistema exigiria um segundo toque para
+ * abrir o popover, então usamos o modal, que é o padrão do iOS para
+ * horário. Android: dialog nativo. Requer o módulo nativo no binário.
+ */
+function ModalSeletorHorario({
+  valor,
+  onChange,
+  onFechar,
+}: {
+  valor: string
+  onChange: (horario: string) => void
+  onFechar: () => void
+}) {
+  const tema = useThemeStore((s) => s.resolved)
+  const [temporario, setTemporario] = useState(() => horarioParaDate(valor))
+
+  if (Platform.OS === 'android') {
+    return (
+      <DateTimePicker
+        mode="time"
+        value={temporario}
+        is24Hour
+        onChange={(evento, data) => {
+          if (evento.type === 'set' && data) onChange(formatarData(data))
+          onFechar()
+        }}
+      />
+    )
+  }
+
+  return (
+    <TelaHorario
+      onCancelar={onFechar}
+      onOk={() => {
+        onChange(formatarData(temporario))
+        onFechar()
+      }}
+    >
+      {/* O UIPickerView nativo tem altura fixa (216pt) mas pode desenhar o
+          conteúdo deslocado dentro dela; o container flex centraliza as
+          rodas verticalmente no espaço restante da tela. */}
+      <DateTimePicker
+        mode="time"
+        display="spinner"
+        value={temporario}
+        themeVariant={tema === 'dark' ? 'dark' : 'light'}
+        onChange={(evento, data) => {
+          if (evento.type === 'set' && data) setTemporario(data)
+        }}
+      />
+    </TelaHorario>
+  )
+}
+
+/**
+ * Boundary para builds sem o módulo nativo: se o datetimepicker lançar
+ * (Native module cannot be null), cai no seletor manual em vez de derrubar a
+ * tela. Depois de um erro, o manual passa a ser usado direto.
+ */
+class ErroNativoBoundary extends Component<{ fallback: ReactNode; onErro: () => void; children: ReactNode }, { erro: boolean }> {
+  state = { erro: false }
+  static getDerivedStateFromError() {
+    return { erro: true }
+  }
+  componentDidCatch() {
+    this.props.onErro()
+  }
+  render() {
+    return this.state.erro ? this.props.fallback : this.props.children
+  }
 }
 
 export function AgendaEditor({ agenda, onChange }: { agenda: Agenda; onChange: (agenda: Agenda) => void }) {
@@ -39,6 +228,10 @@ export function AgendaEditor({ agenda, onChange }: { agenda: Agenda; onChange: (
   const modo = modoDaAgenda(agenda)
   const nomes = diasCurtos(t)
   const horarioValido = !!parseHorario(agenda.horario)
+  const [mostrarPicker, setMostrarPicker] = useState(false)
+  /** Binário sem o módulo nativo (build antigo) → usa o seletor manual. */
+  const [modoNativo, setModoNativo] = useState(true)
+  const fecharPicker = () => setMostrarPicker(false)
 
   const trocarModo = (proximo: ModoAgenda) => {
     if (proximo === 'diario') onChange({ horario: agenda.horario })
@@ -73,18 +266,45 @@ export function AgendaEditor({ agenda, onChange }: { agenda: Agenda; onChange: (
             </Text>
           </Pressable>
         ))}
-        <View style={[s.horarioBox, { borderColor: horarioValido ? tokens.border : tokens.destructive }]}>
-          <Text style={[s.horarioLabel, { color: tokens.mutedForeground }]}>{t('rotinas.agenda.horario')}</Text>
-          <TextInput
-            value={agenda.horario}
-            onChangeText={(horario) => onChange({ ...agenda, horario })}
-            placeholder="HH:MM"
-            placeholderTextColor={tokens.mutedForeground}
-            style={[s.horarioInput, { color: tokens.foreground }]}
-            autoCapitalize="none"
-            autoCorrect={false}
-          />
-        </View>
+        <Text style={[s.horarioLabel, { color: tokens.mutedForeground }]}>{t('rotinas.agenda.horario')}</Text>
+        {mostrarPicker ? (
+          modoNativo ? (
+            <ErroNativoBoundary
+              fallback={
+                <SeletorHorarioManual
+                  valor={agenda.horario}
+                  onSelecionar={(horario) => {
+                    onChange({ ...agenda, horario })
+                    fecharPicker()
+                  }}
+                  onFechar={fecharPicker}
+                />
+              }
+              onErro={() => setModoNativo(false)}
+            >
+              <ModalSeletorHorario
+                valor={agenda.horario}
+                onChange={(horario) => onChange({ ...agenda, horario })}
+                onFechar={fecharPicker}
+              />
+            </ErroNativoBoundary>
+          ) : (
+            <SeletorHorarioManual
+              valor={agenda.horario}
+              onSelecionar={(horario) => {
+                onChange({ ...agenda, horario })
+                fecharPicker()
+              }}
+              onFechar={fecharPicker}
+            />
+          )
+        ) : (
+          <Pressable onPress={() => setMostrarPicker(true)} hitSlop={8}>
+            <Text style={[s.horarioInput, { color: horarioValido ? tokens.foreground : tokens.destructive }]}>
+              {agenda.horario}
+            </Text>
+          </Pressable>
+        )}
       </View>
 
       {modo === 'semanal' && (
@@ -215,7 +435,7 @@ export function ModosEditor({
               style={[s.chip, permissao === op ? chipAtivo : chipInativo]}
             >
               <Text style={[s.chipText, { color: permissao === op ? tokens.primary : tokens.mutedForeground }]}>
-                {t(`permissionModes.${op}`)}
+                {t(`permissionModePicker.${op}`)}
               </Text>
             </Pressable>
           ))}
@@ -259,7 +479,7 @@ export function ModosBadges({
       })}
       {permissao && (
         <View style={[s.badge, { borderColor: 'transparent', backgroundColor: tokens.muted }]}>
-          <Text style={[s.badgeText, { color: tokens.mutedForeground }]}>{t(`permissionModes.${modoPermissao}`)}</Text>
+          <Text style={[s.badgeText, { color: tokens.mutedForeground }]}>{t(`permissionModePicker.${modoPermissao}`)}</Text>
         </View>
       )}
     </View>
@@ -280,6 +500,31 @@ export function AtivaSwitch({ ativa, onChange }: { ativa: boolean; onChange: (v:
 
 const s = StyleSheet.create({
   rowWrap: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 6 },
+  modalBackdrop: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    padding: 24,
+  },
+  modalCaixa: {
+    width: '100%',
+    maxWidth: 340,
+    borderRadius: 16,
+    paddingTop: 18,
+    alignItems: 'center',
+    overflow: 'hidden',
+  },
+  modalTitulo: { fontSize: 16, fontWeight: '600', marginBottom: 12 },
+  modalConteudo: { alignItems: 'center', paddingHorizontal: 20 },
+  modalRodape: {
+    flexDirection: 'row',
+    borderTopWidth: StyleSheet.hairlineWidth,
+    marginTop: 16,
+    alignSelf: 'stretch',
+  },
+  modalBotao: { flex: 1, alignItems: 'center', paddingVertical: 14 },
+  modalDivisor: { width: StyleSheet.hairlineWidth, alignSelf: 'stretch' },
   chip: {
     borderRadius: 8,
     borderWidth: 1,
@@ -296,17 +541,8 @@ const s = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 6,
   },
-  horarioBox: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    borderRadius: 8,
-    borderWidth: 1,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-  },
   horarioLabel: { fontSize: 12 },
-  horarioInput: { fontSize: 12, fontFamily: 'monospace', minWidth: 44, padding: 0 },
+  horarioInput: { fontSize: 12, fontWeight: '500' },
   dayChip: {
     width: 30,
     height: 30,

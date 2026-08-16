@@ -9,6 +9,7 @@
     "@expo/ui": "~57.0.4",
     "@orbit/companion-client": "*",
     "@orbit/shared": "*",
+    "@react-native-community/datetimepicker": "9.1.0",
     "@rive-app/react-webgl2": "^4.29.5",
     "@rn-primitives/avatar": "^1.5.2",
     "@rn-primitives/checkbox": "^1.5.2",
@@ -76,8 +77,8 @@
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4.3.2",
-    "babel-preset-expo": "~57.0.5",
     "@types/react": "~19.2.2",
+    "babel-preset-expo": "~57.0.5",
     "eslint": "^9.0.0",
     "eslint-config-expo": "~57.0.0",
     "eslint-import-resolver-typescript": "^3.10.1",

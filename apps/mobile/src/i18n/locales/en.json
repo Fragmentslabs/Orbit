@@ -903,18 +903,37 @@
         "6": "Sat"
       },
       "resumoUteis": "Mon-Fri at {{horario}}",
-      "resumoFimDeSemana": "Weekend at {{horario}}"
+      "resumoFimDeSemana": "Weekend at {{horario}}",
+      "selecionarHorario": "Time"
     },
     "modos": {
-      "loop": { "nome": "Loop" },
-      "subagents": { "nome": "Subagents" },
-      "orchestrate": { "nome": "Orchestrate" },
-      "brain": { "nome": "Memory" },
-      "browser": { "nome": "Browser" },
-      "plan": { "nome": "Plan mode" },
-      "simple": { "nome": "Simple" },
-      "search": { "nome": "Search" },
-      "vision": { "nome": "Vision" },
+      "loop": {
+        "nome": "Loop"
+      },
+      "subagents": {
+        "nome": "Subagents"
+      },
+      "orchestrate": {
+        "nome": "Orchestrate"
+      },
+      "brain": {
+        "nome": "Memory"
+      },
+      "browser": {
+        "nome": "Browser"
+      },
+      "plan": {
+        "nome": "Plan mode"
+      },
+      "simple": {
+        "nome": "Simple"
+      },
+      "search": {
+        "nome": "Search"
+      },
+      "vision": {
+        "nome": "Vision"
+      },
       "permissao": "Permissions",
       "permissaoAviso": "The routine fires on its own: in \"Ask\" it stops at the first sensitive action and waits for you to reply in the run's session."
     },
