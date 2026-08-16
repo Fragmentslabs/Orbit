@@ -4,7 +4,7 @@ import { X, Search, Check, Brain, RefreshCw } from 'lucide-react-native'
 import { useTranslation } from 'react-i18next'
 import type { CatalogModel, CatalogProvider } from '@orbit/shared'
 import { useSettingsStore } from '~/stores/settings-store'
-import { useSessionModel, useSessionModelPrefs } from '~/stores/session-model-prefs'
+import { useSessionModel, useSessionModelPrefs, type SelectedModel } from '~/stores/session-model-prefs'
 import { useThemeStore } from '~/stores/theme-store'
 import { getThemeTokens } from '~/lib/theme-tokens'
 import { hslToRgba } from '~/lib/theme'
@@ -51,10 +51,16 @@ interface ModelRowItem {
   model: CatalogModel
 }
 
-interface ModelSection {
+interface RecentRowItem {
+  key: string
+  model: CatalogModel
   provider: CatalogProvider
-  data: ModelRowItem[]
+  recent: SelectedModel
 }
+
+type ModelSection =
+  | { kind: 'recents'; data: RecentRowItem[] }
+  | { kind: 'provider'; provider: CatalogProvider; data: ModelRowItem[] }
 
 /**
  * Linha de modelo. Como a SectionList virtualiza as linhas, cada linha desenha
@@ -69,6 +75,8 @@ function ModelRow({
   isSelected,
   tokens,
   onPress,
+  subtitle,
+  onRemove,
 }: {
   provider: CatalogProvider
   model: CatalogModel
@@ -77,6 +85,10 @@ function ModelRow({
   isSelected: boolean
   tokens: Record<string, string>
   onPress: (providerId: string, modelId: string) => void
+  /** Texto abaixo do nome (padrão: id do modelo; recentes: nome do provedor) */
+  subtitle?: string
+  /** Botão "x" de remover (recentes) — não dispara a seleção da linha */
+  onRemove?: () => void
 }) {
   const isFirst = index === 0
   const isLast = index === count - 1
@@ -117,7 +129,7 @@ function ModelRow({
       <View className="flex-1">
         <Text className="text-sm font-medium" style={{ color: tokens.foreground }}>{model.name}</Text>
         <Text className="text-xs" style={{ color: tokens.mutedForeground }} numberOfLines={1}>
-          {model.id}
+          {subtitle ?? model.id}
         </Text>
       </View>
 
@@ -128,6 +140,20 @@ function ModelRow({
       )}
 
       {isSelected && <Check size={16} color={tokens.primary} />}
+
+      {onRemove && (
+        <Pressable
+          onPress={onRemove}
+          hitSlop={8}
+          style={({ pressed }) => ({
+            padding: 4,
+            borderRadius: 6,
+            backgroundColor: pressed ? tokens.muted : 'transparent',
+          })}
+        >
+          <X size={14} color={tokens.mutedForeground} />
+        </Pressable>
+      )}
     </Pressable>
   )
 }
@@ -146,6 +172,8 @@ export function ModelPickerModal({
   // objeto = modelo do dono da escolha (rotina).
   const selectedModel = selectedOverride === undefined ? sessionModel : selectedOverride
   const selectModel = useSessionModelPrefs((s) => s.selectModel)
+  const recents = useSessionModelPrefs((s) => s.recents)
+  const removeRecent = useSessionModelPrefs((s) => s.removeRecent)
   const connectedProviders = useSettingsStore((s) => s.connectedProviders)
   const loading = useSettingsStore((s) => s.loading)
   const fetchCatalog = useSettingsStore((s) => s.fetchCatalog)
@@ -166,19 +194,42 @@ export function ModelPickerModal({
     if (!catalog) return []
 
     const q = search.toLowerCase().trim()
+    const matches = (model: CatalogModel, provider: CatalogProvider) =>
+      !q ||
+      model.name.toLowerCase().includes(q) ||
+      model.id.toLowerCase().includes(q) ||
+      provider.name.toLowerCase().includes(q)
 
-    return Object.values(catalog)
+    // Recentes: só modelos ainda no catálogo e de provedores conectados;
+    // ocultos no modo controlado (rotinas) — a escolha ali é da rotina, não
+    // do chat (mesmo critério do desktop).
+    const recentRows: RecentRowItem[] = onSelect
+      ? []
+      : recents
+          .map((recent) => ({
+            recent,
+            provider: catalog[recent.providerId],
+            model: catalog[recent.providerId]?.models[recent.modelId],
+          }))
+          .filter(
+            (e): e is { recent: SelectedModel; provider: CatalogProvider; model: CatalogModel } =>
+              !!e.provider &&
+              !!e.model &&
+              connectedProviders.includes(e.recent.providerId) &&
+              matches(e.model, e.provider),
+          )
+          .map((e) => ({
+            key: `recent-${e.recent.providerId}/${e.recent.modelId}`,
+            model: e.model,
+            provider: e.provider,
+            recent: e.recent,
+          }))
+
+    const providerSections: ModelSection[] = Object.values(catalog)
       .filter((provider) => connectedProviders.includes(provider.id))
       .map((provider) => {
         const models = Object.values(provider.models)
-          .filter((model) => {
-            if (!q) return true
-            return (
-              model.name.toLowerCase().includes(q) ||
-              model.id.toLowerCase().includes(q) ||
-              provider.name.toLowerCase().includes(q)
-            )
-          })
+          .filter((model) => matches(model, provider))
           .sort((a, b) => {
             if (a.release_date && b.release_date) {
               return b.release_date.localeCompare(a.release_date)
@@ -189,12 +240,18 @@ export function ModelPickerModal({
         const visibleModels = q ? models : models.slice(0, MAX_MODELS_PER_PROVIDER)
 
         return {
+          kind: 'provider' as const,
           provider,
           data: visibleModels.map((model) => ({ key: `${provider.id}/${model.id}`, model })),
         }
       })
       .filter((section) => section.data.length > 0)
-  }, [catalog, search, connectedProviders])
+
+    return [
+      ...(recentRows.length > 0 ? [{ kind: 'recents' as const, data: recentRows }] : []),
+      ...providerSections,
+    ]
+  }, [catalog, search, connectedProviders, recents, onSelect])
 
   const handleSelect = async (providerId: string, modelId: string) => {
     if (onSelect) {
@@ -305,23 +362,45 @@ export function ModelPickerModal({
               contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 8, paddingBottom: 16 }}
               sections={sections}
               keyExtractor={(item) => item.key}
-              renderItem={({ item, index, section }) => (
-                <ModelRow
-                  provider={section.provider}
-                  model={item.model}
-                  index={index}
-                  count={section.data.length}
-                  isSelected={
-                    selectedModel?.providerId === section.provider.id &&
-                    selectedModel?.modelId === item.model.id
-                  }
-                  tokens={tokens}
-                  onPress={handleSelect}
-                />
-              )}
+              renderItem={({ item, index, section }) => {
+                if (section.kind === 'recents') {
+                  const row = item as RecentRowItem
+                  return (
+                    <ModelRow
+                      provider={row.provider}
+                      model={row.model}
+                      index={index}
+                      count={section.data.length}
+                      isSelected={
+                        selectedModel?.providerId === row.recent.providerId &&
+                        selectedModel?.modelId === row.recent.modelId
+                      }
+                      tokens={tokens}
+                      subtitle={row.provider.name}
+                      onRemove={() => removeRecent(row.recent.providerId, row.recent.modelId)}
+                      onPress={handleSelect}
+                    />
+                  )
+                }
+                const row = item as ModelRowItem
+                return (
+                  <ModelRow
+                    provider={section.provider}
+                    model={row.model}
+                    index={index}
+                    count={section.data.length}
+                    isSelected={
+                      selectedModel?.providerId === section.provider.id &&
+                      selectedModel?.modelId === row.model.id
+                    }
+                    tokens={tokens}
+                    onPress={handleSelect}
+                  />
+                )
+              }}
               renderSectionHeader={({ section }) => (
                 <Text className="text-xs font-semibold uppercase tracking-wider mb-2 pt-1 pl-1" style={{ color: tokens.mutedForeground }}>
-                  {section.provider.name}
+                  {section.kind === 'recents' ? t('modelPickerModal.recent') : section.provider.name}
                 </Text>
               )}
               SectionSeparatorComponent={() => <View className="h-4" />}

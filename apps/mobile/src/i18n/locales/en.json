@@ -451,7 +451,9 @@
     "searchPlaceholder": "Search models…",
     "noModelsAvailable": "No models available.",
     "configureProviderHint": "Please configure a provider's credentials in Orbit Desktop's settings.",
-    "trySearchHint": "Try searching for a different model name."
+    "trySearchHint": "Try searching for a different model name.",
+    "recent": "Recent",
+    "removeRecent": "Remove from recents"
   },
   "scheduleSheet": {
     "title": "Schedule message",

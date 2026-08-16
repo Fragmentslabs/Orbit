@@ -10,7 +10,8 @@ import { useSettingsStore } from './settings-store'
  * sessão, não o app inteiro). `overrides` guarda o modelo escolhido de cada
  * sessão; chat novo usa a chave DRAFT até a criação da sessão (adopt). Sem
  * override, vale o último chat usado e, por fim, o default global (que é o
- * modelo selecionado no desktop, sincronizado via HTTP).
+ * modelo selecionado no desktop, sincronizado via HTTP). `recents` é global
+ * (últimos 5 modelos de fato usados em qualquer chat) — espelho do desktop.
  *
  * Sincronização com o desktop: o desktop é a fonte de verdade dos overrides —
  * o renderer dele empurra o mapa para o main (que repassa aos companions via
@@ -21,7 +22,9 @@ import { useSettingsStore } from './settings-store'
  */
 
 const STORAGE_KEY = 'orbit_session_models'
+const RECENTS_KEY = 'orbit_recent_models'
 const DRAFT_KEY = 'draft'
+const MAX_RECENTS = 5
 
 export interface SelectedModel {
   providerId: string
@@ -30,8 +33,23 @@ export interface SelectedModel {
 
 export type SessionModelOverrides = Record<string, SelectedModel>
 
+async function loadRecents(): Promise<SelectedModel[]> {
+  try {
+    const raw = await Storage.getItem(RECENTS_KEY)
+    if (raw) {
+      const parsed = JSON.parse(raw) as SelectedModel[]
+      if (Array.isArray(parsed)) return parsed.slice(0, MAX_RECENTS)
+    }
+  } catch {
+    // recents corrompidos — recomeça vazio
+  }
+  return []
+}
+
 interface SessionModelPrefsState {
   overrides: SessionModelOverrides
+  /** Últimos modelos usados (global, mais recente primeiro, máx. 5) */
+  recents: SelectedModel[]
   hydrated: boolean
   /** Aplica um snapshot vindo do desktop (HTTP ou WS). Só entra chave que o
    *  mobile não tem localmente — escolha local vence em conflito. */
@@ -40,11 +58,17 @@ interface SessionModelPrefsState {
   selectModel: (sessionId: string | null | undefined, providerId: string, modelId: string) => void
   /** Move o override do draft (chat novo) para a sessão criada no 1º envio */
   adopt: (sessionId: string, fallback?: SelectedModel) => void
+  /** Registra um modelo como "usado" (entra nos recentes). Chamado apenas
+   *  quando o agente concluiu uma resposta de fato — nunca em falha. */
+  markUsed: (providerId?: string, modelId?: string) => void
+  /** Remove um modelo dos recentes (botão "x" no seletor). */
+  removeRecent: (providerId: string, modelId: string) => void
   clear: (sessionId: string) => void
 }
 
 export const useSessionModelPrefs = create<SessionModelPrefsState>((set, get) => ({
   overrides: {},
+  recents: [],
   hydrated: false,
 
   applySync: (remote) => {
@@ -69,9 +93,9 @@ export const useSessionModelPrefs = create<SessionModelPrefsState>((set, get) =>
       if (raw) set({ overrides: JSON.parse(raw) as SessionModelOverrides })
     } catch {
       // prefs corrompidas — segue vazio
-    } finally {
-      set({ hydrated: true })
     }
+    set({ recents: await loadRecents() })
+    set({ hydrated: true })
 
     // Snapshot dos overrides por sessão do desktop (renderer → main → HTTP)
     const { http } = useConnectionStore.getState()
@@ -125,6 +149,20 @@ export const useSessionModelPrefs = create<SessionModelPrefsState>((set, get) =>
     }
     void Storage.setItem(STORAGE_KEY, JSON.stringify(overrides))
     set({ overrides })
+  },
+
+  markUsed: (providerId, modelId) => {
+    if (!providerId || !modelId) return
+    if (get().recents.some((r) => r.providerId === providerId && r.modelId === modelId)) return
+    const recents = [{ providerId, modelId }, ...get().recents].slice(0, MAX_RECENTS)
+    void Storage.setItem(RECENTS_KEY, JSON.stringify(recents))
+    set({ recents })
+  },
+
+  removeRecent: (providerId, modelId) => {
+    const recents = get().recents.filter((r) => !(r.providerId === providerId && r.modelId === modelId))
+    void Storage.setItem(RECENTS_KEY, JSON.stringify(recents))
+    set({ recents })
   },
 
   clear: (sessionId) => {

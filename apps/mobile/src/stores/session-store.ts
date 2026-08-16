@@ -829,6 +829,21 @@ export const useSessionStore = create<SessionState>((set, get) => ({
 
           return { messages: { ...state.messages, [sessionId]: next }, status, unreadCounts }
         })
+        // Um modelo só entra nos "recentes" quando foi de fato usado: a
+        // resposta final do agente (completedAt) chegou completa, com
+        // conteúdo real e sem erro — mesmo critério do desktop. markUsed é
+        // idempotente (dedup nos recents).
+        const done = event.message
+        if (
+          done.role === 'assistant' &&
+          done.completedAt &&
+          !done.error &&
+          done.parts.some(
+            (p) => p.type === 'text' || p.type === 'tool' || p.type === 'image' || p.type === 'agent',
+          )
+        ) {
+          useSessionModelPrefs.getState().markUsed(done.providerId, done.modelId)
+        }
         break
 
       case 'part':

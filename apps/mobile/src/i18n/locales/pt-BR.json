@@ -451,7 +451,9 @@
     "searchPlaceholder": "Pesquisar modelos…",
     "noModelsAvailable": "Nenhum modelo disponível.",
     "configureProviderHint": "Por favor, configure as credenciais de um provedor nas configurações do desktop.",
-    "trySearchHint": "Tente pesquisar por outro nome de modelo."
+    "trySearchHint": "Tente pesquisar por outro nome de modelo.",
+    "recent": "Recentes",
+    "removeRecent": "Remover dos recentes"
   },
   "scheduleSheet": {
     "title": "Agendar mensagem",
