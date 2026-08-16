@@ -27,6 +27,10 @@
         "label": "Aparência",
         "description": "Tema e modos de exibição."
       },
+      "notifications": {
+        "label": "Notificações",
+        "description": "Avisos e sons quando o Orbit está em segundo plano."
+      },
       "system": {
         "label": "Sistema",
         "description": "Integrações com o sistema operacional."

@@ -1,6 +1,6 @@
 import { memo, useEffect, useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
-import { BarChart3, BookOpen, Database, KeyRound, Palette, Puzzle, Settings2, Shield, Trash2, Check, Plus, Wifi, WifiOff, RefreshCw, Server, X, Pencil } from "lucide-react"
+import { BarChart3, Bell, BookOpen, Database, KeyRound, Palette, Puzzle, Settings2, Shield, Trash2, Check, Plus, Wifi, WifiOff, RefreshCw, Server, X, Pencil } from "lucide-react"
 import {
   Dialog,
   DialogContent,
@@ -19,6 +19,7 @@ import { DataPanel } from "@/src/components/data-panel"
 import { HowToPanel } from "@/src/components/how-to-panel"
 import { AppearancePanel } from "@/src/components/appearance-panel"
 import { SystemPanel } from "@/src/components/system-panel"
+import { NotificationsPanel } from "@/src/components/notifications-panel"
 import { useProviderStore } from "@/src/stores/provider-store"
 import { customProvidersApi } from "@/src/lib/ipc"
 import { cn } from "@/lib/utils"
@@ -42,6 +43,7 @@ function useTabs(): TabDef[] {
     { id: "howto", label: t("settings.tabs.howto.label"), icon: BookOpen, description: t("settings.tabs.howto.description") },
     { id: "analytics", label: t("settings.tabs.analytics.label"), icon: BarChart3, description: t("settings.tabs.analytics.description") },
     { id: "appearance", label: t("settings.tabs.appearance.label"), icon: Palette, description: t("settings.tabs.appearance.description") },
+    { id: "notifications", label: t("settings.tabs.notifications.label"), icon: Bell, description: t("settings.tabs.notifications.description") },
     { id: "system", label: t("settings.tabs.system.label"), icon: Settings2, description: t("settings.tabs.system.description") },
     { id: "data", label: t("settings.tabs.data.label"), icon: Database, description: t("settings.tabs.data.description") },
   ]
@@ -477,7 +479,7 @@ export function SettingsDialog({ open, onOpenChange, initialTab = "providers" }:
               <p className="text-[11px] text-muted-foreground">{active.description}</p>
             </div>
             <div className="h-[520px] min-w-0">
-              {tab === "providers" ? <ProvidersTab searchInputRef={providerSearchRef} /> : tab === "autonomy" ? <PreferencesPanel /> : tab === "mcp-skills" ? <McpSkillsPanel /> : tab === "appearance" ? <AppearancePanel /> : tab === "system" ? <SystemPanel /> : tab === "howto" ? <HowToPanel /> : tab === "analytics" ? <AnalyticsPanel /> : <DataPanel />}
+              {tab === "providers" ? <ProvidersTab searchInputRef={providerSearchRef} /> : tab === "autonomy" ? <PreferencesPanel /> : tab === "mcp-skills" ? <McpSkillsPanel /> : tab === "appearance" ? <AppearancePanel /> : tab === "notifications" ? <NotificationsPanel /> : tab === "system" ? <SystemPanel /> : tab === "howto" ? <HowToPanel /> : tab === "analytics" ? <AnalyticsPanel /> : <DataPanel />}
             </div>
           </div>
         </div>

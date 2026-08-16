@@ -27,6 +27,10 @@
         "label": "Appearance",
         "description": "Theme and display modes."
       },
+      "notifications": {
+        "label": "Notifications",
+        "description": "Alerts and sounds when Orbit is in the background."
+      },
       "system": {
         "label": "System",
         "description": "Operating system integrations."
