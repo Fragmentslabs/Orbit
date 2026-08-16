@@ -6,7 +6,7 @@ import { capture, diff } from '../snapshot'
 import { userShellEnv } from '../shell-env'
 import { criaCiclo, dependenciasPendentes } from './contrato'
 import { executarFase, type ToolProgress } from './runner'
-import { atualizarTask, listarEsteiras, listarProjetos, listarTasks, salvarTasks } from './repo'
+import { atualizarTask, listarEsteiras, listarProjetos, listarTasks, modificarTasks } from './repo'
 import { broadcastEsteiraEvent } from '../broadcast'
 
 const execFileAsync = promisify(execFile)
@@ -517,7 +517,6 @@ export async function criarTask(input: {
   dependeDe?: string[]
   origemSessionId?: string
 }): Promise<Task> {
-  const tasks = await listarTasks(input.esteiraId)
   const task: Task = {
     id: novoId('task_'),
     esteiraId: input.esteiraId,
@@ -533,7 +532,10 @@ export async function criarTask(input: {
     custo: 0,
     origemSessionId: input.origemSessionId,
   }
-  await salvarTasks(input.esteiraId, [...tasks, task])
+  // Append dentro do lock (modificarTasks): criações concorrentes não se perdem.
+  await modificarTasks(input.esteiraId, (tasks) => {
+    tasks.push(task)
+  })
   emitir({ type: 'task', esteiraId: input.esteiraId, task })
   // Task nova entra na fila automática sem esperar a próxima conclusão.
   if (filasAtivas.has(input.esteiraId)) void avancarFila(input.esteiraId)
@@ -556,13 +558,15 @@ export async function atualizarTaskCampos(
 
 export async function removerTask(esteiraId: string, taskId: string): Promise<void> {
   emExecucao.get(taskId)?.abort()
-  const tasks = await listarTasks(esteiraId)
-  const restantes = tasks
-    .filter((t) => t.id !== taskId)
-    // Remove a referência nas dependências, senão a fila trava esperando uma
-    // task que não existe mais.
-    .map((t) => (t.dependeDe.includes(taskId) ? { ...t, dependeDe: t.dependeDe.filter((d) => d !== taskId) } : t))
-  await salvarTasks(esteiraId, restantes)
+  // Filtra + limpa as dependências DENTRO do lock: remoção concorrente com
+  // criação não ressuscita tasks nem deixa referência órfã.
+  const restantes = await modificarTasks(esteiraId, (tasks) => {
+    const filtradas = tasks
+      .filter((t) => t.id !== taskId)
+      .map((t) => (t.dependeDe.includes(taskId) ? { ...t, dependeDe: t.dependeDe.filter((d) => d !== taskId) } : t))
+    tasks.splice(0, tasks.length, ...filtradas)
+    return filtradas
+  })
   emitir({ type: 'tasks', esteiraId, tasks: restantes })
   // Remover a automática que segurava a fila (pausada/erro) destrava a próxima.
   if (filasAtivas.has(esteiraId)) void avancarFila(esteiraId)

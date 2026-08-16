@@ -102,9 +102,28 @@ export function listarTasks(esteiraId: string): Promise<Task[]> {
   return ler<Task[]>(arquivoTasks(esteiraId), [])
 }
 
-export function salvarTasks(esteiraId: string, tasks: Task[]): Promise<void> {
+/**
+ * Lê-modifica-grava ATÔMICO das tasks de uma esteira: a leitura e a escrita
+ * ficam DENTRO do mesmo lock serial por arquivo. Antes, `criarTask`/`removerTask`
+ * liam fora do lock e só a escrita era serial — duas chamadas concorrentes liam
+ * o mesmo snapshot, cada uma gravava "snapshot + sua mudança", e a última
+ * escrita vencia: tasks sumiam ao criar em paralelo (ex.: tools de chat).
+ *
+ * `fn` recebe a lista atual e a muta (push/filter/splice); o resultado da fn é
+ * devolvido e a lista mutada é gravada. Nunca confie em `salvarTasks` + leitura
+ * separada: use este helper.
+ */
+export function modificarTasks<T>(
+  esteiraId: string,
+  fn: (tasks: Task[]) => T | Promise<T>,
+): Promise<T> {
   const arquivo = arquivoTasks(esteiraId)
-  return comLock(arquivo, () => escrever(arquivo, tasks))
+  return comLock(arquivo, async () => {
+    const tasks = await ler<Task[]>(arquivo, [])
+    const resultado = await fn(tasks)
+    await escrever(arquivo, tasks)
+    return resultado
+  })
 }
 
 export async function removerTasks(esteiraId: string): Promise<void> {
