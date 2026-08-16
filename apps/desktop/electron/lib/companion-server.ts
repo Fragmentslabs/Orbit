@@ -372,6 +372,7 @@ async function handleRequest(client: ConnectedClient, requestId: string, req: Co
           archived: s.archived,
           folderId: s.folderId,
           parentId: s.parentId,
+          routineId: s.routineId,
           createdAt: s.createdAt,
           updatedAt: s.updatedAt,
           orchestration: s.orchestration,
