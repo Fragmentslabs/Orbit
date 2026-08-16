@@ -11,16 +11,25 @@ import {
 import { InputGroupButton } from "@/components/ui/input-group";
 import { usePromptInputController } from "@/src/components/ai/prompt-input";
 import { ScheduleMessageDialog } from "@/src/components/schedule-message-dialog";
+import { blobUrlsToDataUrls } from "@/src/lib/message-utils";
 import { cn } from "@/lib/utils";
+
+/** Anexo do input no momento do clique (url já em data URL, pronta para a
+ *  fila/agendamento — blob URLs morrem quando o input é limpo). */
+export interface QueueAttachment {
+  mediaType?: string;
+  filename?: string;
+  url?: string;
+}
 
 interface SendButtonGroupProps {
   busy: boolean;
   /** Fase de cancelamento: o abort foi pedido mas o engine ainda não confirmou */
   cancelling?: boolean;
-  onQueue: (text: string) => void;
-  onStopAndSend: (text: string) => void;
-  onSchedule: (text: string, timestamp: number) => void;
-  onSendToSidePanel: (text: string) => void;
+  onQueue: (text: string, files?: QueueAttachment[]) => void;
+  onStopAndSend: (text: string, files?: QueueAttachment[]) => void;
+  onSchedule: (text: string, timestamp: number, files?: QueueAttachment[]) => void;
+  onSendToSidePanel: (text: string, files?: QueueAttachment[]) => void;
   onStop: () => void;
   disabled?: boolean;
 }
@@ -38,36 +47,50 @@ export function SendButtonGroup({
   const { t } = useTranslation();
   const [scheduleOpen, setScheduleOpen] = useState(false);
   const [pendingText, setPendingText] = useState<string | null>(null);
-  const textInput = usePromptInputController().textInput;
+  const [pendingFiles, setPendingFiles] = useState<QueueAttachment[] | null>(null);
+  const { textInput, attachments } = usePromptInputController();
   const text = textInput.value.trim();
   const hasText = text.length > 0;
 
-  const withClear = useCallback(
-    (fn: (text: string) => void) => {
+  /**
+   * Envia o texto + anexos do input. Converte blob URLs → data URLs ANTES de
+   * limpar (texto e chips): o clear revoga os blob URLs, e a fila/agendamento
+   * guardam a mensagem para enviar depois — sem a conversão o anexo vira um
+   * blob URL morto e a mensagem sai da fila sem o arquivo.
+   */
+  const withAttachments = useCallback(
+    async (fn: (text: string, files?: QueueAttachment[]) => void) => {
       const current = textInput.value.trim();
       if (!current) return;
-      fn(current);
+      const files = await blobUrlsToDataUrls(attachments.files);
+      fn(current, files.length > 0 ? files : undefined);
       textInput.clear();
+      attachments.clear();
     },
-    [textInput],
+    [textInput, attachments],
   );
 
-  const handleScheduleOpen = useCallback(() => {
+  const handleScheduleOpen = useCallback(async () => {
     const current = textInput.value.trim();
     if (!current) return;
+    const files = await blobUrlsToDataUrls(attachments.files);
+    setPendingFiles(files);
     setPendingText(current);
     textInput.clear();
     setScheduleOpen(true);
-  }, [textInput]);
+  }, [textInput, attachments]);
 
   const handleScheduleConfirm = useCallback(
     (timestamp: number) => {
       if (!pendingText) return;
-      onSchedule(pendingText, timestamp);
+      onSchedule(pendingText, timestamp, pendingFiles ?? undefined);
+      // A conversão já aconteceu no open — seguro revogar os blob URLs agora
+      if (pendingFiles && pendingFiles.length > 0) attachments.clear();
       setPendingText(null);
+      setPendingFiles(null);
       setScheduleOpen(false);
     },
-    [pendingText, onSchedule],
+    [pendingText, pendingFiles, onSchedule, attachments],
   );
 
   // Apenas botão de parar (sem texto, agente rodando)
@@ -98,7 +121,7 @@ export function SendButtonGroup({
             variant="default"
             type="button"
             className="rounded-r-none h-7 border border-primary"
-            onClick={() => withClear(onQueue)}
+            onClick={() => void withAttachments(onQueue)}
           >
             <ListPlus className="size-4 mr-1" />
             {t("send.addToQueue")}
@@ -106,9 +129,9 @@ export function SendButtonGroup({
           <Select
             value=""
             onValueChange={(value) => {
-              if (value === "side-panel") withClear(onSendToSidePanel);
-              else if (value === "stop-send") withClear(onStopAndSend);
-              else if (value === "schedule") handleScheduleOpen();
+              if (value === "side-panel") void withAttachments(onSendToSidePanel);
+              else if (value === "stop-send") void withAttachments(onStopAndSend);
+              else if (value === "schedule") void handleScheduleOpen();
             }}
           >
             <SelectTrigger
@@ -158,8 +181,8 @@ export function SendButtonGroup({
         <Select
           value=""
           onValueChange={(value) => {
-            if (value === "schedule") handleScheduleOpen();
-            else if (value === "side-panel") withClear(onSendToSidePanel);
+            if (value === "schedule") void handleScheduleOpen();
+            else if (value === "side-panel") void withAttachments(onSendToSidePanel);
           }}
         >
           <SelectTrigger

@@ -216,21 +216,21 @@ export function ChatInput({ onSubmit, status, onStop, sessionId, draftKey }: {
               cancelling={status === "cancelling"}
               disabled={false}
               onStop={() => onStop?.()}
-              onQueue={(text) => {
-                if (sessionId) enqueueForSend(sessionId, text, buildOptions(), mode)
+              onQueue={(text, files) => {
+                if (sessionId) enqueueForSend(sessionId, text, buildOptions(), mode, { files: toFileParts(files ?? []) })
               }}
-              onStopAndSend={(text) => {
+              onStopAndSend={(text, files) => {
                 onStop?.()
-                if (sessionId) enqueueForSend(sessionId, text, buildOptions(), mode)
+                if (sessionId) enqueueForSend(sessionId, text, buildOptions(), mode, { files: toFileParts(files ?? []) })
               }}
-              onSchedule={(text, timestamp) => {
-                if (sessionId) enqueueScheduled(sessionId, text, buildOptions(), mode, timestamp)
+              onSchedule={(text, timestamp, files) => {
+                if (sessionId) enqueueScheduled(sessionId, text, buildOptions(), mode, timestamp, { files: toFileParts(files ?? []) })
               }}
-              onSendToSidePanel={async (text) => {
+              onSendToSidePanel={async (text, files) => {
                 // Novo chat na mesma pasta da sessão atual (se ela estiver em uma)
                 const current = useSessionStore.getState().sessions.find((s) => s.id === sessionId)
                 const newSession = await createSession(mode, { setActive: false, folderId: current?.folderId ?? null })
-                await sendMessage(mode, text, { options: buildOptions(), sessionId: newSession.id })
+                await sendMessage(mode, text, { options: buildOptions(), sessionId: newSession.id, files: toFileParts(files ?? []) })
                 openChatTab(newSession.id, newSession.title)
               }}
             />

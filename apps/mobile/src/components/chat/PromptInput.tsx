@@ -339,10 +339,12 @@ export function PromptInput({
     if (!trimmed || !sessionId) return
     const modeNow = useWorkspaceStore.getState().mode
     const resolved = resolveSlashAction(trimmed, modeNow)
-    enqueueForSend(sessionId, resolved?.prompt ?? trimmed, buildOptions(), modeNow)
+    enqueueForSend(sessionId, resolved?.prompt ?? trimmed, buildOptions(), modeNow, {
+      files: attachments.length > 0 ? attachments : undefined,
+    })
     setText('')
     setAttachments([])
-  }, [text, sessionId, enqueueForSend, buildOptions])
+  }, [text, sessionId, enqueueForSend, buildOptions, attachments])
 
   const handleStopAndSend = useCallback(() => {
     const trimmed = text.trim()
@@ -350,10 +352,12 @@ export function PromptInput({
     const modeNow = useWorkspaceStore.getState().mode
     const resolved = resolveSlashAction(trimmed, modeNow)
     onAbort()
-    enqueueForSend(sessionId, resolved?.prompt ?? trimmed, buildOptions(), modeNow)
+    enqueueForSend(sessionId, resolved?.prompt ?? trimmed, buildOptions(), modeNow, {
+      files: attachments.length > 0 ? attachments : undefined,
+    })
     setText('')
     setAttachments([])
-  }, [text, sessionId, onAbort, enqueueForSend, buildOptions])
+  }, [text, sessionId, onAbort, enqueueForSend, buildOptions, attachments])
 
   const handleSend = useCallback(() => {
     const trimmed = text.trim()
@@ -406,11 +410,13 @@ export function PromptInput({
 
       const modeNow = useWorkspaceStore.getState().mode
       const resolved = resolveSlashAction(trimmed, modeNow)
-      enqueueScheduled(sid, resolved?.prompt ?? trimmed, buildOptions(), modeNow, timestamp)
+      enqueueScheduled(sid, resolved?.prompt ?? trimmed, buildOptions(), modeNow, timestamp, {
+        files: attachments.length > 0 ? attachments : undefined,
+      })
       setText('')
       setAttachments([])
     },
-    [text, sessionId, onCreateSession, onNavigateToSession, enqueueScheduled, buildOptions],
+    [text, sessionId, onCreateSession, onNavigateToSession, enqueueScheduled, buildOptions, attachments],
   )
 
   const modesList = [

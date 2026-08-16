@@ -1,5 +1,31 @@
 import type { ChatMessage, FilePart, MessagePart, ToolPart } from "@shared/chat"
 
+/** Converte blob URLs dos anexos do input em data URLs estáveis. O input
+ * trabalha com blob URLs (URL.createObjectURL) e os REVOGA ao limpar — a fila
+ * e o agendamento guardam a mensagem para enviar depois, então precisam da
+ * data URL (blob URL revogado vira anexo morto). O envio imediato também usa
+ * este caminho (handleSubmit do PromptInput), pela mesma razão: clear() roda
+ * antes do submit. */
+export async function blobUrlsToDataUrls<T extends { url?: string }>(files: T[]): Promise<T[]> {
+  return Promise.all(
+    files.map(async (item) => {
+      if (!item.url?.startsWith("blob:")) return item
+      try {
+        const blob = await (await fetch(item.url)).blob()
+        const dataUrl = await new Promise<string | null>((resolve) => {
+          const reader = new FileReader()
+          reader.onloadend = () => resolve(reader.result as string)
+          reader.onerror = () => resolve(null)
+          reader.readAsDataURL(blob)
+        })
+        return { ...item, url: dataUrl ?? item.url }
+      } catch {
+        return item
+      }
+    }),
+  )
+}
+
 /** Ferramentas que tocam a web — alimentam chain-of-thought e fontes. */
 export const WEB_TOOLS = new Set(["websearch", "webfetch", "browser_open", "browser_links"])
 

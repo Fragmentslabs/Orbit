@@ -389,28 +389,28 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId }: 
                 cancelling={status === "cancelling"}
                 disabled={folders.length === 0}
                 onStop={() => onStop?.()}
-                onQueue={(text) => {
+                onQueue={(text, files) => {
                   if (!sessionId) return
                   const { directory, extraDirectories } = getDirs()
-                  enqueueForSend(sessionId, text, buildOptions(), mode, { directory, extraDirectories })
+                  enqueueForSend(sessionId, text, buildOptions(), mode, { directory, extraDirectories, files: toFileParts(files ?? []) })
                 }}
-                onStopAndSend={(text) => {
+                onStopAndSend={(text, files) => {
                   onStop?.()
                   if (!sessionId) return
                   const { directory, extraDirectories } = getDirs()
-                  enqueueForSend(sessionId, text, buildOptions(), mode, { directory, extraDirectories })
+                  enqueueForSend(sessionId, text, buildOptions(), mode, { directory, extraDirectories, files: toFileParts(files ?? []) })
                 }}
-                onSchedule={(text, timestamp) => {
+                onSchedule={(text, timestamp, files) => {
                   if (!sessionId) return
                   const { directory, extraDirectories } = getDirs()
-                  enqueueScheduled(sessionId, text, buildOptions(), mode, timestamp, { directory, extraDirectories })
+                  enqueueScheduled(sessionId, text, buildOptions(), mode, timestamp, { directory, extraDirectories, files: toFileParts(files ?? []) })
                 }}
-                onSendToSidePanel={async (text) => {
+                onSendToSidePanel={async (text, files) => {
                   const { directory, extraDirectories } = getDirs()
                   // Novo chat na mesma pasta da sessão atual (se ela estiver em uma)
                   const current = useSessionStore.getState().sessions.find((s) => s.id === sessionId)
                   const newSession = await createSession(mode, { setActive: false, directory, extraDirectories, folderId: current?.folderId ?? null })
-                  await sendMessage(mode, text, { options: buildOptions(), sessionId: newSession.id, directory, extraDirectories })
+                  await sendMessage(mode, text, { options: buildOptions(), sessionId: newSession.id, directory, extraDirectories, files: toFileParts(files ?? []) })
                   openChatTab(newSession.id, newSession.title)
                 }}
               />

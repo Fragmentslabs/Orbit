@@ -66,6 +66,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { cn } from "@/lib/utils"
+import { blobUrlsToDataUrls } from "@/src/lib/message-utils"
 
 // ============================================================================
 // Provider Context & Types
@@ -641,21 +642,6 @@ export const PromptInput = ({
     event.currentTarget.value = ""
   }
 
-  const convertBlobUrlToDataUrl = async (url: string): Promise<string | null> => {
-    try {
-      const response = await fetch(url)
-      const blob = await response.blob()
-      return new Promise(resolve => {
-        const reader = new FileReader()
-        reader.onloadend = () => resolve(reader.result as string)
-        reader.onerror = () => resolve(null)
-        reader.readAsDataURL(blob)
-      })
-    } catch {
-      return null
-    }
-  }
-
   const ctx = useMemo<AttachmentsContext>(
     () => ({
       files: files.map(item => ({ ...item, id: item.id })),
@@ -690,19 +676,7 @@ export const PromptInput = ({
     }
 
     // Convert blob URLs to data URLs asynchronously
-    Promise.all(
-      files.map(async ({ id, ...item }) => {
-        if (item.url?.startsWith("blob:")) {
-          const dataUrl = await convertBlobUrlToDataUrl(item.url)
-          // If conversion failed, keep the original blob URL
-          return {
-            ...item,
-            url: dataUrl ?? item.url,
-          }
-        }
-        return item
-      }),
-    ).then((convertedFiles: FileUIPart[]) => {
+    blobUrlsToDataUrls(files).then((convertedFiles: FileUIPart[]) => {
       // Conversão concluída — agora é seguro revogar os blob URLs e limpar os
       // chips de anexo do input.
       clear()
