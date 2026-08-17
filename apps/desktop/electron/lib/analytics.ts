@@ -1,7 +1,9 @@
+import path from 'node:path'
 import type { ChatMessage, SessionInfo, TokenUsage } from '@shared/chat'
 import { StorageKeys } from '@shared/chat'
-import type { AnalyticsDay, AnalyticsRange, AnalyticsSummary, ModelDayBreakdown } from '@shared/analytics'
+import type { AnalyticsDay, AnalyticsRange, AnalyticsSummary, ModelDayBreakdown, ProjectBreakdown } from '@shared/analytics'
 import { listKeys, readJson } from './storage'
+import { projectIdOf } from './memory/domain'
 
 function computeRange(range: AnalyticsRange): { since: number } {
   const now = Date.now()
@@ -18,6 +20,9 @@ function computeRange(range: AnalyticsRange): { since: number } {
       return { since: 0 }
   }
 }
+
+/** Sessões sem pasta de trabalho (modo chat) ficam neste bucket. */
+const NO_PROJECT_ID = '__chat__'
 
 function getDateKey(ts: number): string {
   const d = new Date(ts)
@@ -112,12 +117,31 @@ export async function computeAnalytics(range: AnalyticsRange): Promise<Analytics
 
   const dayMap = new Map<string, AnalyticsDay>()
   const modelTotals = new Map<string, ModelDayBreakdown>()
+  const projectTotals = new Map<string, ProjectBreakdown>()
   let totalMessages = 0
   let totalTokensVal = 0
 
   for (const session of sessions) {
     const messages = await readJson<ChatMessage[]>(StorageKeys.messages(session.id))
     if (!messages) continue
+
+    // Projeto da sessão: directory do modo código; chat sem pasta = bucket próprio
+    const projectId = session.directory ? projectIdOf(session.directory) : NO_PROJECT_ID
+    let pt = projectTotals.get(projectId)
+    if (!pt) {
+      pt = {
+        projectId,
+        name: session.directory ? path.basename(session.directory) : '',
+        directory: session.directory,
+        hours: 0,
+        tokens: 0,
+        messages: 0,
+        cost: 0,
+        sessions: 0,
+      }
+      projectTotals.set(projectId, pt)
+    }
+    pt.sessions++
 
     // Group messages by day for hours estimation
     const msgsByDay = new Map<string, ChatMessage[]>()
@@ -146,6 +170,10 @@ export async function computeAnalytics(range: AnalyticsRange): Promise<Analytics
         totalTokensVal += tokens
         entry.totalMessages++
         totalMessages++
+
+        pt.tokens += tokens
+        pt.messages++
+        pt.cost += cost
 
         const modelKey = `${msg.providerId ?? 'unknown'}::${msg.modelId ?? 'unknown'}`
         let mb = entry.byModel.find((m) => `${m.providerId}::${m.modelId}` === modelKey)
@@ -177,6 +205,7 @@ export async function computeAnalytics(range: AnalyticsRange): Promise<Analytics
       if (!entry) continue // dia sem nenhuma mensagem (não deveria acontecer)
       const hours = segment.ms / 3_600_000
       entry.totalHours += hours
+      pt.hours += hours
 
       const modelKey = `${segment.providerId}::${segment.modelId}`
       let mb = entry.byModel.find((m) => `${m.providerId}::${m.modelId}` === modelKey)
@@ -199,6 +228,7 @@ export async function computeAnalytics(range: AnalyticsRange): Promise<Analytics
 
   const days = [...dayMap.values()].sort((a, b) => a.date.localeCompare(b.date))
   const byModel = [...modelTotals.values()].sort((a, b) => b.tokens - a.tokens)
+  const byProject = [...projectTotals.values()].sort((a, b) => b.hours - a.hours)
 
   // Stats
   const activeDays = days.filter((d) => d.totalMessages > 0).length
@@ -222,6 +252,7 @@ export async function computeAnalytics(range: AnalyticsRange): Promise<Analytics
   return {
     days,
     byModel,
+    byProject,
     totalSessions: sessions.length,
     totalMessages,
     totalTokens: totalTokensVal,

@@ -16,9 +16,23 @@ export interface AnalyticsDay {
   byModel: ModelDayBreakdown[]
 }
 
+export interface ProjectBreakdown {
+  /** projectIdOf(directory) das memórias; "__chat__" para sessões sem pasta */
+  projectId: string
+  /** Nome da pasta do projeto (basename do directory) */
+  name: string
+  directory?: string
+  hours: number
+  tokens: number
+  messages: number
+  cost: number
+  sessions: number
+}
+
 export interface AnalyticsSummary {
   days: AnalyticsDay[]
   byModel: ModelDayBreakdown[]
+  byProject: ProjectBreakdown[]
   totalSessions: number
   totalMessages: number
   totalTokens: number
