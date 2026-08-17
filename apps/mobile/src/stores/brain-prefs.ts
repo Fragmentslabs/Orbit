@@ -3,7 +3,7 @@ import { Storage } from '~/lib/storage'
 
 /**
  * Preferência do modo Brain (memória persistente): o valor efetivo é
- * `override ?? default` — o default (agora desativado para novos usuários)
+ * `override ?? default` — o default fica ativo para novos usuários
  * vem do model-mode-prefs; só os overrides por chat são persistidos aqui
  * (Storage) — ausência de override = segue o default.
  *

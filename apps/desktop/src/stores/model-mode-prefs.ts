@@ -62,7 +62,7 @@ function loadJson<T>(key: string, fallback: T): T {
 
 const DEFAULT_CHAT_MODES: ActiveModeDefaults = {
   simple: false,
-  brain: false,
+  brain: true,
   thinking: false,
   search: false,
   browser: false,
@@ -74,7 +74,7 @@ const DEFAULT_CHAT_MODES: ActiveModeDefaults = {
 
 const DEFAULT_CODE_MODES: ActiveModeDefaults = {
   simple: false,
-  brain: false,
+  brain: true,
   thinking: false,
   search: false,
   browser: false,
