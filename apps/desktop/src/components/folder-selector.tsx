@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
-import { Folder, Plus, X } from "lucide-react"
+import { Check, ChevronDown, Folder, Plus, X } from "lucide-react"
 
 const RECENT_FOLDERS_KEY = "orbit-recent-folders"
 
@@ -8,7 +8,9 @@ function loadRecentFolders(): string[] {
   try {
     const stored = localStorage.getItem(RECENT_FOLDERS_KEY)
     if (stored) return JSON.parse(stored)
-  } catch {}
+  } catch {
+    return []
+  }
   return []
 }
 
@@ -74,95 +76,85 @@ export function FolderSelector({ folders, onFoldersChange, compact }: FolderSele
     return parts[parts.length - 1] || path
   }
 
-  return (
-    <div className="flex flex-wrap items-center gap-1.5">
-      {compact ? (
-        <span className="flex h-7 items-center gap-1 rounded-md border border-border/50 px-2 text-xs font-medium text-muted-foreground">
-          <Folder className="size-3 shrink-0" />
-          <span className="truncate max-w-24">{getFolderName(folders[0])}</span>
-        </span>
-      ) : (
-        <div className="relative" ref={recentRef}>
-          <button
-            onClick={() => setRecentOpen(v => !v)}
-            className="group relative flex h-8 cursor-pointer select-none items-center gap-1.5 rounded-md border border-border px-1.5 font-medium text-sm transition-all hover:bg-accent hover:text-accent-foreground dark:hover:bg-accent/50"
-          >
-            <div className="relative size-5 shrink-0">
-              <div className="absolute inset-0 flex size-5 items-center justify-center overflow-hidden rounded">
-                <Folder className="size-3 text-sidebar-foreground/60" />
-              </div>
-            </div>
-            <span className="flex-1 truncate">
-              {folders.length === 0 ? t("folderSelector.associate") : getFolderName(folders[0])}
-            </span>
-          </button>
-          {recentOpen && (
-            <div className="absolute bottom-full left-0 mb-1 z-50 w-56 rounded-lg border bg-popover/70 p-1 text-popover-foreground shadow-md ring-1 ring-foreground/10 backdrop-blur-2xl backdrop-saturate-150">
-              {recentFolders.length > 0 && (
-                <div className="mb-1 border-b border-border pb-1">
-                  <p className="px-2 py-1 text-[10px] font-medium text-muted-foreground uppercase tracking-wider">
-                    {t("folderSelector.recent")}
-                  </p>
-                  {recentFolders.map((folder) => (
-                    <button
-                      key={folder}
-                      onClick={() => setPrimaryFolder(folder)}
-                      className="flex w-full min-h-7 items-center gap-2 rounded-md px-2 py-1 text-xs hover:bg-foreground/10"
-                    >
-                      <Folder className="size-3.5 shrink-0 text-sidebar-foreground/60" />
-                      <span className="truncate">{getFolderName(folder)}</span>
-                    </button>
-                  ))}
-                </div>
-              )}
-              <button
-                onClick={() => setPrimaryFolder()}
-                className="flex w-full min-h-7 items-center gap-2 rounded-md px-2 py-1 text-xs hover:bg-foreground/10"
-              >
-                <Folder className="size-3.5" />
-                {t("folderSelector.newFolder")}
-              </button>
-            </div>
-          )}
-        </div>
-      )}
-      {folders.slice(1).map((folder) => {
-        const btnClass = compact
-          ? "group relative flex h-7 cursor-default select-none items-center gap-1 rounded-md border border-border/50 px-1.5 text-xs transition-all hover:bg-accent hover:text-accent-foreground dark:hover:bg-accent/50"
-          : "group relative flex h-8 cursor-default select-none items-center gap-1.5 rounded-md border border-border px-1.5 font-medium text-sm transition-all hover:bg-accent hover:text-accent-foreground dark:hover:bg-accent/50"
+  const folderMenu = recentOpen && (
+    <div className="absolute bottom-full left-0 z-50 mb-1 w-56 rounded-lg border bg-popover/70 p-1 text-popover-foreground shadow-md ring-1 ring-foreground/10 backdrop-blur-2xl backdrop-saturate-150">
+      <button
+        onClick={() => addAdditionalFolder()}
+        className="flex min-h-7 w-full items-center gap-2 rounded-md px-2 py-1 text-xs font-medium hover:bg-foreground/10"
+      >
+        <Plus className="size-3.5" />
+        {t("folderSelector.newFolder")}
+      </button>
+      {(recentFolders.length > 0 || folders.length > 0) && <div className="my-1 border-t border-border" />}
+      {recentFolders.map((folder) => {
+        const active = folders[0] === folder
         return (
-          <div key={folder} className={btnClass}>
-            <div className="relative size-4 shrink-0">
-              <div className="absolute inset-0 flex size-4 items-center justify-center overflow-hidden rounded text-sidebar-foreground/60 transition-opacity group-hover:opacity-0">
-                <Folder className="size-2.5" />
-              </div>
-              <button
-                onClick={(e) => removeFolder(folder, e)}
-                className="absolute inset-0 flex size-4 cursor-pointer items-center justify-center rounded p-0 opacity-0 transition-opacity group-hover:pointer-events-auto group-hover:opacity-100 hover:bg-foreground/10"
-              >
+          <button
+            key={folder}
+            onClick={() => setPrimaryFolder(folder)}
+            className="flex min-h-7 w-full items-center gap-2 rounded-md px-2 py-1 text-xs hover:bg-foreground/10"
+          >
+            <Folder className="size-3.5 shrink-0 text-sidebar-foreground/60" />
+            <span className="truncate">{getFolderName(folder)}</span>
+            {active && <Check className="ml-auto size-3.5 shrink-0 text-primary" />}
+          </button>
+        )
+      })}
+      {folders.map((folder) => {
+        if (recentFolders.includes(folder)) return null
+        return (
+          <button
+            key={folder}
+            onClick={() => setPrimaryFolder(folder)}
+            className="flex min-h-7 w-full items-center gap-2 rounded-md px-2 py-1 text-xs hover:bg-foreground/10"
+          >
+            <Folder className="size-3.5 shrink-0 text-sidebar-foreground/60" />
+            <span className="truncate">{getFolderName(folder)}</span>
+            {folders[0] === folder && <Check className="ml-auto size-3.5 shrink-0 text-primary" />}
+          </button>
+        )
+      })}
+    </div>
+  )
+
+  return (
+    <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+      <div className="relative min-w-0" ref={recentRef}>
+        <button
+          onClick={() => setRecentOpen(v => !v)}
+          className={compact
+            ? "group flex h-7 min-w-0 max-w-28 cursor-pointer select-none items-center gap-1 rounded-md border border-border/50 px-1.5 text-xs transition-all hover:bg-accent hover:text-accent-foreground dark:hover:bg-accent/50 sm:max-w-40"
+            : "group flex h-8 min-w-0 max-w-40 cursor-pointer select-none items-center gap-1.5 rounded-md border border-border px-1.5 text-sm font-medium transition-all hover:bg-accent hover:text-accent-foreground dark:hover:bg-accent/50"
+          }
+        >
+          <Folder className="size-3 shrink-0 text-sidebar-foreground/60" />
+          <span className="truncate">{folders.length === 0 ? t("folderSelector.associate") : getFolderName(folders[0])}</span>
+          <ChevronDown className="size-3 shrink-0 text-muted-foreground" />
+        </button>
+        {folderMenu}
+      </div>
+      <div className="hidden min-w-0 items-center gap-1.5 sm:flex">
+        {folders.slice(1).map((folder) => {
+          const btnClass = compact
+            ? "group relative flex h-7 max-w-28 cursor-default select-none items-center gap-1 rounded-md border border-border/50 px-1.5 text-xs transition-all hover:bg-accent hover:text-accent-foreground dark:hover:bg-accent/50 sm:max-w-40"
+            : "group relative flex h-8 max-w-40 cursor-default select-none items-center gap-1.5 rounded-md border border-border px-1.5 text-sm font-medium transition-all hover:bg-accent hover:text-accent-foreground dark:hover:bg-accent/50"
+          return (
+            <div key={folder} className={btnClass}>
+              <Folder className="size-2.5 shrink-0 text-sidebar-foreground/60" />
+              <span className="truncate">{getFolderName(folder)}</span>
+              <button onClick={(e) => removeFolder(folder, e)} className="flex size-4 shrink-0 cursor-pointer items-center justify-center rounded opacity-60 hover:bg-foreground/10 hover:opacity-100">
                 <X className="size-2" />
                 <span className="sr-only">{t("folderSelector.remove")}</span>
               </button>
             </div>
-            <span className="flex-1 truncate max-w-24">{getFolderName(folder)}</span>
-          </div>
-        )
-      })}
-      {folders.length > 0 && (
-        <button
-          onClick={() => addAdditionalFolder()}
-          className={compact
-            ? "group relative flex h-7 cursor-pointer select-none items-center gap-1 rounded-md border border-border/50 px-1.5 text-xs transition-all hover:bg-accent hover:text-accent-foreground dark:hover:bg-accent/50"
-            : "group relative flex h-8 cursor-pointer select-none items-center gap-1.5 rounded-md border border-border px-1.5 font-medium text-sm transition-all hover:bg-accent hover:text-accent-foreground dark:hover:bg-accent/50"
-          }
-        >
-          <div className="relative size-4 shrink-0">
-            <div className="absolute inset-0 flex size-4 items-center justify-center overflow-hidden rounded">
-              <Plus className="size-2.5" />
-            </div>
-          </div>
-        </button>
-      )}
+          )
+        })}
+        {folders.length > 0 && (
+          <button onClick={() => addAdditionalFolder()} className={compact ? "flex h-7 size-7 shrink-0 cursor-pointer items-center justify-center rounded-md border border-border/50 text-xs hover:bg-accent" : "flex h-8 size-8 shrink-0 cursor-pointer items-center justify-center rounded-md border border-border text-sm hover:bg-accent"}>
+            <Plus className="size-2.5" />
+          </button>
+        )}
+      </div>
     </div>
   )
 }
