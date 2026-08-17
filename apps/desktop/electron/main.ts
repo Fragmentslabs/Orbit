@@ -5,6 +5,7 @@ import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 import fs from 'node:fs/promises'
 import { chmodSync } from 'node:fs'
+import os from 'node:os'
 import path from 'node:path'
 import type * as NodePty from 'node-pty'
 import { listCredentialProviders, removeCredential, setCredential } from './lib/auth'
@@ -1438,6 +1439,29 @@ app.whenReady().then(() => {
   ipcMain.handle('mcp:status', () => listMcpStatus())
   ipcMain.handle('mcp:save', (_event, config) => saveMcpConfig(config))
   ipcMain.handle('mcp:reconnect', (_event, name?: string) => reconnectMcp(name))
+  ipcMain.handle('nodara:discover', async () => {
+    const configPath = path.join(os.homedir(), '.nodara', 'mcp.json')
+    let config: { status?: string; mcpUrl?: string; token?: string }
+    try {
+      config = JSON.parse(await fs.readFile(configPath, 'utf8')) as { status?: string; mcpUrl?: string; token?: string }
+    } catch {
+      return { state: 'not-installed' as const }
+    }
+
+    if (!config.mcpUrl) return { state: 'installed' as const }
+    try {
+      const response = await fetch(`${new URL(config.mcpUrl).origin}/health`)
+      const health = (await response.json()) as { app?: string; ok?: boolean }
+      if (health.app !== 'Nodara') return { state: 'installed' as const }
+      return {
+        state: health.ok ? 'connected' as const : 'installed' as const,
+        mcpUrl: config.mcpUrl,
+        token: config.token,
+      }
+    } catch {
+      return { state: 'installed' as const, mcpUrl: config.mcpUrl, token: config.token }
+    }
+  })
   void initMcp()
   void loadTrustRules()
 

@@ -1,6 +1,6 @@
 import { memo, useEffect, useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
-import { BarChart3, Bell, BookOpen, Database, KeyRound, Palette, Puzzle, Settings2, Shield, Trash2, Check, Plus, Wifi, WifiOff, RefreshCw, Server, X, Pencil } from "lucide-react"
+import { BarChart3, Bell, BookOpen, Database, KeyRound, Palette, Settings2, Shield, Trash2, Check, Plus, Wifi, WifiOff, RefreshCw, Server, X, Pencil } from "lucide-react"
 import {
   Dialog,
   DialogContent,
@@ -13,7 +13,6 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { ModelSelectorLogo } from "@/src/components/ai/model-selector"
 import { PreferencesPanel } from "@/src/components/preferences-panel"
-import { McpSkillsPanel } from "@/src/components/mcp-skills-panel"
 import { AnalyticsPanel } from "@/src/components/analytics-panel"
 import { DataPanel } from "@/src/components/data-panel"
 import { HowToPanel } from "@/src/components/how-to-panel"
@@ -39,7 +38,6 @@ function useTabs(): TabDef[] {
   return [
     { id: "providers", label: t("settings.tabs.providers.label"), icon: KeyRound, description: t("settings.tabs.providers.description") },
     { id: "autonomy", label: t("settings.tabs.autonomy.label"), icon: Shield, description: t("settings.tabs.autonomy.description") },
-    { id: "mcp-skills", label: t("settings.tabs.mcp-skills.label"), icon: Puzzle, description: t("settings.tabs.mcp-skills.description") },
     { id: "howto", label: t("settings.tabs.howto.label"), icon: BookOpen, description: t("settings.tabs.howto.description") },
     { id: "analytics", label: t("settings.tabs.analytics.label"), icon: BarChart3, description: t("settings.tabs.analytics.description") },
     { id: "appearance", label: t("settings.tabs.appearance.label"), icon: Palette, description: t("settings.tabs.appearance.description") },
@@ -426,11 +424,11 @@ interface SettingsDialogProps {
 export function SettingsDialog({ open, onOpenChange, initialTab = "providers" }: SettingsDialogProps) {
   const { t } = useTranslation()
   const TABS = useTabs()
-  const [tab, setTab] = useState<SettingsTab>(initialTab)
+  const [tab, setTab] = useState<Exclude<SettingsTab, "mcp-skills">>(initialTab === "mcp-skills" ? "providers" : initialTab)
   const providerSearchRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
-    if (open) setTab(initialTab)
+    if (open) setTab(initialTab === "mcp-skills" ? "providers" : initialTab)
   }, [initialTab, open])
 
   const active = TABS.find((tb) => tb.id === tab) ?? TABS[0]
@@ -455,7 +453,7 @@ export function SettingsDialog({ open, onOpenChange, initialTab = "providers" }:
                 <li key={id}>
                   <button
                     type="button"
-                    onClick={() => setTab(id)}
+                    onClick={() => { if (id !== "mcp-skills") setTab(id) }}
                     title={description}
                     className={cn(
                       "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs transition-colors",
@@ -479,7 +477,7 @@ export function SettingsDialog({ open, onOpenChange, initialTab = "providers" }:
               <p className="text-[11px] text-muted-foreground">{active.description}</p>
             </div>
             <div className="h-[520px] min-w-0">
-              {tab === "providers" ? <ProvidersTab searchInputRef={providerSearchRef} /> : tab === "autonomy" ? <PreferencesPanel /> : tab === "mcp-skills" ? <McpSkillsPanel /> : tab === "appearance" ? <AppearancePanel /> : tab === "notifications" ? <NotificationsPanel /> : tab === "system" ? <SystemPanel /> : tab === "howto" ? <HowToPanel /> : tab === "analytics" ? <AnalyticsPanel /> : <DataPanel />}
+              {tab === "providers" ? <ProvidersTab searchInputRef={providerSearchRef} /> : tab === "autonomy" ? <PreferencesPanel /> : tab === "appearance" ? <AppearancePanel /> : tab === "notifications" ? <NotificationsPanel /> : tab === "system" ? <SystemPanel /> : tab === "howto" ? <HowToPanel /> : tab === "analytics" ? <AnalyticsPanel /> : <DataPanel />}
             </div>
           </div>
         </div>

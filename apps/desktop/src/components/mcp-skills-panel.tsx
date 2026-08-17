@@ -43,11 +43,10 @@ import {
 } from "@/components/ui/select"
 import { cn } from "@/lib/utils"
 import { useWorkspace } from "@/lib/workspace-context"
-import { mcpApi, skillsApi } from "@/src/lib/ipc"
+import { mcpApi, nodaraApi, skillsApi } from "@/src/lib/ipc"
 import { AssistantMarkdown } from "@/src/components/messages/shared"
 import { useDraftInput } from "@/src/stores/draft-input"
 import { useSessionStore } from "@/src/stores/session-store"
-import { useSettingsUi } from "@/src/stores/settings-ui"
 import { useSkillsStore } from "@/src/stores/skills-store"
 import type { McpServerConfig } from "@shared/mcp"
 import type { Skill } from "@shared/skills"
@@ -531,14 +530,43 @@ export function McpSkillsPanel() {
   const [skillEdit, setSkillEdit] = useState<Skill | undefined>()
   const [importError, setImportError] = useState("")
   const [viewContentSlug, setViewContent] = useState<string | null>(null)
+  const [nodaraState, setNodaraState] = useState<"not-installed" | "installed" | "connected" | null>(null)
+  const [nodaraConnecting, setNodaraConnecting] = useState(false)
   const viewSkill = viewContentSlug ? skills.find((s) => s.slug === viewContentSlug) ?? null : null
 
   const { setMode, setView } = useWorkspace()
-  const setSettingsOpen = useSettingsUi((s) => s.setOpen)
 
   useEffect(() => {
     void refresh()
+    void nodaraApi.discover().then((result) => setNodaraState(result.state)).catch(() => setNodaraState("not-installed"))
   }, [refresh])
+
+  const connectNodara = async () => {
+    setNodaraConnecting(true)
+    try {
+      const discovered = await nodaraApi.discover()
+      if (discovered.mcpUrl) {
+        const config = await mcpApi.config()
+        const existing = config.servers.find((server) => server.name === "Nodara")
+        const entry: McpServerConfig = {
+          ...(existing ?? {}),
+          name: "Nodara",
+          type: "http",
+          url: discovered.mcpUrl,
+          enabled: true,
+          ...(discovered.token ? { headers: { Authorization: `Bearer ${discovered.token}` } } : {}),
+        }
+        const index = config.servers.findIndex((server) => server.name === "Nodara")
+        if (index >= 0) config.servers[index] = entry
+        else config.servers.push(entry)
+        await mcpApi.save(config)
+        await refresh()
+        setNodaraState("connected")
+      }
+    } finally {
+      setNodaraConnecting(false)
+    }
+  }
 
   const importSkill = async () => {
     setImportError("")
@@ -547,10 +575,9 @@ export function McpSkillsPanel() {
     if (result.imported) await refresh()
   }
 
-  // Fecha as settings e abre um chat novo com "/create-skill " pré-preenchido
+  // Abre um chat novo com "/create-skill " pré-preenchido
   const askOrbitToCreate = () => {
     useDraftInput.getState().setDraft("draft", "/create-skill ")
-    setSettingsOpen(false)
     setMode("chat")
     setView("chat")
     void useSessionStore.getState().selectSession("chat", null)
@@ -558,6 +585,39 @@ export function McpSkillsPanel() {
 
   return (
     <div className="flex h-full flex-col gap-4 overflow-y-auto pr-1">
+      {/* Integrações oficiais */}
+      <div>
+        <div className="mb-2">
+          <p className="text-sm font-semibold">{t("mcp.integrations.title")}</p>
+          <p className="mt-0.5 text-xs text-muted-foreground">{t("mcp.integrations.description")}</p>
+        </div>
+        <div className="flex items-center gap-3 rounded-lg border p-3">
+          <img src="/nodara-logo.png" alt="" className="size-8 shrink-0 rounded-full object-cover" />
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-medium">Nodara</span>
+              {nodaraState === "connected" && <StatusBadge state="connected" />}
+              {nodaraState === "installed" && <span className="text-[10px] font-medium text-amber-500">{t("mcp.integrations.installed")}</span>}
+            </div>
+            <p className="mt-0.5 text-[11px] text-muted-foreground">{t("mcp.integrations.nodaraDescription")}</p>
+          </div>
+          {nodaraState === "connected" ? (
+            <span className="text-[11px] text-emerald-500">{t("mcp.integrations.connected")}</span>
+          ) : (
+            <Button
+              size="sm"
+              variant="outline"
+              className="shrink-0 gap-1"
+              disabled={nodaraConnecting}
+              onClick={() => nodaraState === "installed" ? void connectNodara() : window.open("https://nodaraapp.com", "_blank")}
+            >
+              {nodaraConnecting ? <LoaderCircle className="size-3 animate-spin" /> : <ExternalLink className="size-3" />}
+              {nodaraState === "installed" ? t("mcp.integrations.connect") : t("mcp.integrations.download")}
+            </Button>
+          )}
+        </div>
+      </div>
+
       {/* Servidores MCP */}
       <div>
         <div className="mb-2 flex items-center justify-between">

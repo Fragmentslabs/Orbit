@@ -975,6 +975,15 @@
       "value": "Valor",
       "add": "Adicionar"
     },
+    "integrations": {
+      "title": "Integrações oficiais",
+      "description": "Conecte o Orbit a ferramentas oficiais do ecossistema Fragments.",
+      "nodaraDescription": "Controle dispositivos Android pelo Orbit usando MCP.",
+      "download": "Baixar Nodara",
+      "connect": "Conectar",
+      "installed": "Instalado",
+      "connected": "Conectado"
+    },
     "servers": {
       "title": "Servidores MCP",
       "description": "Conecte-se a servidores MCP para adicionar ferramentas dinâmicas ao Orbit.",

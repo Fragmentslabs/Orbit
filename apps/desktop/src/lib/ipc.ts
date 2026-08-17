@@ -225,6 +225,16 @@ export const skillsApi = {
   },
 }
 
+export interface NodaraDiscovery {
+  state: "not-installed" | "installed" | "connected"
+  mcpUrl?: string
+  token?: string
+}
+
+export const nodaraApi = {
+  discover: () => window.ipcRenderer.invoke("nodara:discover") as Promise<NodaraDiscovery>,
+}
+
 export const mcpApi = {
   config: () => window.ipcRenderer.invoke("mcp:config") as Promise<McpConfig>,
   status: () => window.ipcRenderer.invoke("mcp:status") as Promise<McpServerStatus[]>,

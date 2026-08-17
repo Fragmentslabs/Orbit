@@ -297,14 +297,17 @@ function ModelsButton() {
 
 function McpSkillsButton() {
   const { t } = useTranslation()
-  const { mode } = useWorkspace()
-  const openSettings = useSettingsUi((s) => s.openSettings)
+  const { mode, view, setView } = useWorkspace()
   if (mode !== "code") return null
+  const active = view === "tools"
   return (
     <Button
       variant="ghost"
-      className="w-full justify-start gap-2 text-sm"
-      onClick={() => openSettings("mcp-skills")}
+      className={cn(
+        "w-full justify-start gap-2 text-sm",
+        active && "bg-sidebar-accent text-sidebar-accent-foreground",
+      )}
+      onClick={() => setView(active ? "chat" : "tools")}
     >
       <Puzzle className="size-4" />
       {t("sidebar.tools")}
