@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
-import { Check, ChevronDown, Folder, Plus, X } from "lucide-react"
+import { Check, Folder, Plus, X } from "lucide-react"
 
 const RECENT_FOLDERS_KEY = "orbit-recent-folders"
 
@@ -31,10 +31,8 @@ export function getFolderName(path: string): string {
 interface FolderSelectorProps {
   folders: string[]
   onFoldersChange: (folders: string[]) => void
-  /** Header em telas grandes: só um botão que troca a pasta principal direto
-   * pelo seletor nativo, sem dropdown (o dropdown completo fica reservado pro
-   * CompactWorkspaceSelector, em telas pequenas). Fora disso (ex.: seletor
-   * acima do input em NewChatTab) mantém o dropdown de sempre. */
+  /** Estilo menor do trigger (usado no header). Não muda o comportamento —
+   * ver hideTrigger para onde o dropdown completo é usado. */
   compact?: boolean
   /** Controla a abertura do dropdown externamente (uso combinado com hideTrigger) */
   open?: boolean
@@ -51,11 +49,13 @@ export function FolderSelector({ folders, onFoldersChange, compact, open: openPr
   const recentRef = useRef<HTMLDivElement>(null)
   const [recentFolders] = useState<string[]>(loadRecentFolders)
 
-  // compact (sem hideTrigger) não abre dropdown nenhum — só hideTrigger e o
-  // seletor não-compacto (acima do input) precisam fechar por clique fora.
-  const manualClose = hideTrigger || !compact
+  // O dropdown completo (seções, trocar/adicionar/remover) só existe no modo
+  // hideTrigger — usado pelo CompactWorkspaceSelector no header em telas
+  // pequenas. Fora dele (header em telas grandes, ou o seletor acima do
+  // input) o trigger nunca abre dropdown, então não precisa fechar por
+  // clique fora.
   useEffect(() => {
-    if (!manualClose) return
+    if (!hideTrigger) return
     function handleClickOutside(e: MouseEvent) {
       if (recentRef.current && !recentRef.current.contains(e.target as Node)) {
         setRecentOpen(false)
@@ -65,7 +65,7 @@ export function FolderSelector({ folders, onFoldersChange, compact, open: openPr
       document.addEventListener("mousedown", handleClickOutside)
       return () => document.removeEventListener("mousedown", handleClickOutside)
     }
-  }, [manualClose, recentOpen, setRecentOpen])
+  }, [hideTrigger, recentOpen, setRecentOpen])
 
   const setPrimaryFolder = useCallback(async (path?: string) => {
     let folderPath: string | undefined = path
@@ -151,14 +151,6 @@ export function FolderSelector({ folders, onFoldersChange, compact, open: openPr
     ? "group flex h-7 min-w-0 max-w-28 cursor-pointer select-none items-center gap-1 rounded-md border border-border/50 px-1.5 text-xs transition-all hover:bg-accent hover:text-accent-foreground dark:hover:bg-accent/50 sm:max-w-40"
     : "group flex h-8 min-w-0 max-w-40 cursor-pointer select-none items-center gap-1.5 rounded-md border border-border px-1.5 text-sm font-medium transition-all hover:bg-accent hover:text-accent-foreground dark:hover:bg-accent/50"
 
-  const triggerContent = (
-    <>
-      <Folder className="size-3 shrink-0 text-sidebar-foreground/60" />
-      <span className="truncate">{folders.length === 0 ? t("folderSelector.associate") : getFolderName(folders[0])}</span>
-      <ChevronDown className="size-3 shrink-0 text-muted-foreground" />
-    </>
-  )
-
   return (
     <div className="flex min-w-0 flex-wrap items-center gap-1.5">
       {hideTrigger ? (
@@ -169,27 +161,14 @@ export function FolderSelector({ folders, onFoldersChange, compact, open: openPr
             </div>
           )}
         </div>
-      ) : compact ? (
-        // Em telas grandes o header mostra branch + pasta lado a lado — aqui
-        // não há espaço/necessidade de um dropdown: o clique troca a pasta
-        // principal direto pelo seletor nativo, como era antes de existir o
-        // dropdown. O menu completo (trocar/adicionar/remover) só aparece em
-        // telas pequenas, dentro do CompactWorkspaceSelector.
+      ) : (
+        // Sem dropdown fora do header em telas pequenas (hideTrigger, acima):
+        // o clique troca a pasta principal direto pelo seletor nativo, como
+        // era antes de existir o dropdown.
         <button type="button" onClick={() => setPrimaryFolder()} className={triggerClassName}>
           <Folder className="size-3 shrink-0 text-sidebar-foreground/60" />
           <span className="truncate">{folders.length === 0 ? t("folderSelector.associate") : getFolderName(folders[0])}</span>
         </button>
-      ) : (
-        <div className="relative min-w-0" ref={recentRef}>
-          <button onClick={() => setRecentOpen(!recentOpen)} className={triggerClassName}>
-            {triggerContent}
-          </button>
-          {recentOpen && (
-            <div className="absolute left-0 top-full z-[60] mt-1 w-56 rounded-lg border bg-popover/70 p-1 text-popover-foreground shadow-md ring-1 ring-foreground/10 backdrop-blur-2xl backdrop-saturate-150">
-              {folderItems}
-            </div>
-          )}
-        </div>
       )}
       {/* No modo compact a gestão de pastas extras (adicionar/remover) já vive
           inteira dentro do dropdown acima — essa fileira full-size só faz
