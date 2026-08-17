@@ -85,6 +85,14 @@ process.env.VITE_PUBLIC = VITE_DEV_SERVER_URL ? path.join(process.env.APP_ROOT, 
 
 let win: BrowserWindow | null
 
+// Som de entrada do app: toca uma única vez por processo, independente do
+// carregamento do renderer.
+function tocarSomDeEntrada() {
+  void tocarSom('entrance').then((ok) => {
+    if (!ok) console.warn('[som] som de entrada não pôde ser reproduzido')
+  })
+}
+
 // ─── "Abrir com Orbit" (menu de contexto do Explorer) ───────────────────────
 // Registra em HKCU (sem admin) as entradas que fazem o botão direito em uma
 // pasta oferecer "Abrir com Orbit". Ao clicar, o Windows lança o app com o
@@ -1474,6 +1482,10 @@ app.whenReady().then(() => {
   void findFolderArg(process.argv).then((dir) => {
     if (dir) queueOpenFolder(dir)
   })
+
+  // O playback não depende do renderer: Cmd+Q encerra o processo e uma nova
+  // instância sempre reproduz o som durante a inicialização do app.
+  tocarSomDeEntrada()
 
   // Mantém o menu de contexto do Explorer sempre apontando para o exe atual
   // (o caminho muda a cada instalação/atualização).

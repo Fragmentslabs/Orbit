@@ -28,7 +28,6 @@ import { ChatMessageSearchBar } from "@/src/components/chat-message-search-bar"
 import { useChatSearchStore } from "@/src/stores/chat-search-store"
 import { Actions } from "@/src/components/ai/actions"
 import { messageText, visibleMessageText } from "@/src/lib/message-utils"
-import { sound } from "@/src/lib/ipc"
 import { useActiveSession, useSessionStatus, useSessionStore, type SendConfig } from "@/src/stores/session-store"
 import { brainEnabledFor } from "@/src/stores/brain-prefs"
 import { useProviderStore } from "@/src/stores/provider-store"
@@ -274,9 +273,10 @@ function ChatMessages({ messages, isBusy, mode, sessionId, sendMessage, planIds,
   )
 }
 
-// Som de entrada do app: toca UMA vez por carregamento da janela (primeira
-// abertura), junto da aparição da persona. Tabs laterais (sessionId) não disparam.
-let entranceSoundPlayed = false
+// Abertura do app: a persona central nasce dormindo e acorda junto do som de
+// entrada (tocado pelo main no did-finish-load). O flag é por módulo/processo
+// — trocas de tela seguintes (novo chat manual etc.) usam a transição normal.
+let entranceWakeDone = false
 
 export function ChatView({ sessionId }: { sessionId?: string } = {}) {
   const { mode, setMode, folders, setFolders } = useWorkspace()
@@ -326,14 +326,6 @@ export function ChatView({ sessionId }: { sessionId?: string } = {}) {
     if (session?.id) void useSessionStore.getState().ensureMessages(session.id)
   }, [session?.id])
 
-  // Som de entrada: só na view principal, uma única vez por janela
-  useEffect(() => {
-    if (sessionId || entranceSoundPlayed) return
-    entranceSoundPlayed = true
-    const timer = setTimeout(() => void sound.play("entrance"), 400)
-    return () => clearTimeout(timer)
-  }, [sessionId])
-
   // Fecha a busca ao trocar de sessão para não deixar resultados obsoletos visíveis
   useEffect(() => {
     useChatSearchStore.getState().close()
@@ -358,9 +350,7 @@ export function ChatView({ sessionId }: { sessionId?: string } = {}) {
   const isBusyRef = useRef(isBusy)
   isBusyRef.current = isBusy
 
-  const [displayCenterState, setDisplayCenterState] = useState<PersonaState>(
-    hasChat ? "asleep" : "idle",
-  )
+  const [displayCenterState, setDisplayCenterState] = useState<PersonaState>("asleep")
   const [displayTopState, setDisplayTopState] = useState<PersonaState>(
     hasChat ? (isBusy ? "thinking" : "idle") : "asleep",
   )
@@ -412,7 +402,15 @@ export function ChatView({ sessionId }: { sessionId?: string } = {}) {
       // o estado final: tudo do centro visível, topo oculto e persona acordada.
       setCenterVisible(true)
       setCenterPersonaVisible(true)
-      setDisplayCenterState("idle")
+      if (!entranceWakeDone) {
+        // Abertura do app: a persona nasce dormindo e acorda junto do som de
+        // entrada (o main toca aos ~600ms do did-finish-load) — a transição
+        // sleep → idle só acontece na primeira montagem do processo.
+        entranceWakeDone = true
+        timers.push(setTimeout(() => setDisplayCenterState("idle"), 650))
+      } else {
+        setDisplayCenterState("idle")
+      }
       setTopVisible(false)
     }
 
