@@ -9,11 +9,12 @@ import { formatCost, formatTokens } from "@/src/lib/format"
 interface HeatmapProps {
   days: AnalyticsDay[]
   className?: string
+  cellSize?: string
 }
 
 const TOTAL_WEEKS = 30
 
-export function ActivityHeatmap({ days, className }: HeatmapProps) {
+export function ActivityHeatmap({ days, className, cellSize = "size-3" }: HeatmapProps) {
   const { t, i18n } = useTranslation()
   const [tooltip, setTooltip] = useState<{
     day: AnalyticsDay
@@ -76,7 +77,7 @@ export function ActivityHeatmap({ days, className }: HeatmapProps) {
                 return (
                   <div
                     key={cell.date}
-                    className="relative size-3 rounded-[1.5px]"
+                    className={cn("relative rounded-[1.5px]", cellSize)}
                     style={{
                       backgroundColor:
                         lvl === 0
@@ -106,14 +107,14 @@ export function ActivityHeatmap({ days, className }: HeatmapProps) {
           {[0, 1, 2, 3].map((i) => (
             <div
               key={i}
-              className="size-3 rounded-[1.5px]"
+              className={cn("rounded-[1.5px]", cellSize)}
               style={{ backgroundColor: `oklch(from var(--primary) l c h / ${OPACITIES[i]})` }}
             />
           ))}
           <span>{t("analytics.heatmap.more")}</span>
         </div>
         <div className="flex items-center gap-1">
-          <div className="size-3 rounded-[1.5px]" style={{ backgroundColor: "oklch(from var(--muted-foreground) l c h / 0.12)" }} />
+          <div className={cn("rounded-[1.5px]", cellSize)} style={{ backgroundColor: "oklch(from var(--muted-foreground) l c h / 0.12)" }} />
           <span>{t("analytics.heatmap.noActivity")}</span>
         </div>
       </div>

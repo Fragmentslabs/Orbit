@@ -584,7 +584,7 @@ export function McpSkillsPanel() {
   }
 
   return (
-    <div className="flex h-full flex-col gap-4 overflow-y-auto pr-1">
+    <div className="flex h-full flex-col gap-3 overflow-y-auto pr-1">
       {/* Integrações oficiais */}
       <div>
         <div className="mb-2">

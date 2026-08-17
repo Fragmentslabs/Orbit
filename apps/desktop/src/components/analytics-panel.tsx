@@ -9,7 +9,7 @@ import {
   ResponsiveContainer,
   Cell,
 } from "recharts";
-import { Clock, Hash, Zap } from "lucide-react";
+import { Clock, Folder, Hash, Zap } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 import {
@@ -25,7 +25,7 @@ import { formatCost, formatTokens } from "@/src/lib/format";
 import { useAnalyticsStore } from "@/src/stores/analytics-store";
 import { ModelSelectorLogo } from "@/src/components/ai/model-selector";
 import { ActivityHeatmap } from "@/src/components/activity-heatmap";
-import type { AnalyticsRange, AnalyticsSummary } from "@shared/analytics";
+import type { AnalyticsRange, AnalyticsSummary, ProjectBreakdown } from "@shared/analytics";
 
 const RANGE_ORDER: AnalyticsRange[] = ["total", "30d", "7d", "today"];
 
@@ -199,6 +199,54 @@ function ModelBarChart({ data }: { data: AnalyticsSummary }) {
   );
 }
 
+function ProjectHoursList({ data }: { data: AnalyticsSummary }) {
+  const { t } = useTranslation();
+  const projects = useMemo(
+    () => [...data.byProject].sort((a, b) => b.hours - a.hours),
+    [data],
+  );
+  const maxHours = Math.max(...projects.map((p) => p.hours), 1);
+  const fmtHours = (h: number) => (h >= 100 ? `${Math.round(h)}h` : `${Math.round(h * 10) / 10}h`);
+
+  if (projects.length === 0) return null;
+
+  return (
+    <div className="rounded-lg border p-3">
+      <p className="mb-3 text-xs font-medium text-muted-foreground">
+        {t("analytics.hoursByProject")}
+      </p>
+      <div className="flex flex-col gap-2">
+        {projects.map((p: ProjectBreakdown) => (
+          <div key={p.projectId} className="flex items-center gap-3">
+            <div className="flex min-w-0 flex-1 items-center gap-2">
+              <Folder className="size-3.5 shrink-0 text-muted-foreground" />
+              <span
+                className="truncate text-xs font-medium text-foreground"
+                title={p.directory ?? t("analytics.noProject")}
+              >
+                {p.directory ? p.name : t("analytics.noProject")}
+              </span>
+              <span className="hidden shrink-0 text-[10px] text-muted-foreground sm:inline">
+                {t("analytics.messagesShort", { count: p.messages })} ·{" "}
+                {formatTokens(p.tokens)}
+              </span>
+            </div>
+            <div className="hidden h-1.5 w-28 shrink-0 overflow-hidden rounded-full bg-muted sm:block">
+              <div
+                className="h-full rounded-full bg-primary/60"
+                style={{ width: `${Math.max((p.hours / maxHours) * 100, 2)}%` }}
+              />
+            </div>
+            <span className="w-14 shrink-0 text-right text-xs font-semibold tabular-nums">
+              {fmtHours(p.hours)}
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function StatsGrid({ data }: { data: AnalyticsSummary }) {
   const { t } = useTranslation();
   const stats = useMemo(
@@ -217,15 +265,15 @@ function StatsGrid({ data }: { data: AnalyticsSummary }) {
   );
 
   return (
-    <div className="grid grid-cols-2 gap-1.5">
+    <div className="grid grid-cols-2 gap-2">
       {stats.map((s) => (
         <div
           key={s.label}
-          className="flex items-center gap-2 rounded-lg border px-2.5 py-2"
+          className="flex items-center gap-3 rounded-lg border px-4 py-3.5"
         >
           <div className="min-w-0">
-            <p className="text-[10px] text-muted-foreground">{s.label}</p>
-            <p className="truncate text-xs font-medium tabular-nums">
+            <p className="text-[11px] text-muted-foreground">{s.label}</p>
+            <p className="truncate text-base font-semibold tabular-nums">
               {s.value}
             </p>
           </div>
@@ -305,7 +353,6 @@ export function AnalyticsPanel() {
 
   return (
     <div className="flex h-full min-w-0 flex-col gap-3 overflow-y-auto overflow-x-hidden pr-1">
-      {/* Top bar: title (left) ─ toggle (center, separated) ─ limits (right) */}
       <div className="flex items-center justify-between gap-2">
         <p className="text-sm font-semibold shrink-0">{t("analytics.title")}</p>
         <div className="flex gap-2">
@@ -336,44 +383,52 @@ export function AnalyticsPanel() {
         </div>
       ) : data ? (
         <>
-          <div className="w-full flex justify-between">
-            {/* Stats grid (left side) */}
-            <StatsGrid data={data} />
-
-            <div className="flex flex-col gap-4">
-              {/* Heatmap (full width, no card wrapper) */}
-              <ActivityHeatmap days={data.days} />
-
+          {/* Stats (left) + heatmap/totals (right) */}
+          <div className="flex flex-col gap-4 xl:flex-row">
+            <div className="xl:flex-1">
+              <StatsGrid data={data} />
+            </div>
+            <div className="flex flex-col gap-3 xl:items-end">
+              <ActivityHeatmap days={data.days} cellSize="size-4" />
               {/* Totals */}
-              <div className="flex justify-end gap-3 text-xs">
-                <div className="flex items-center gap-1.5 rounded-lg border px-3 py-1.5">
-                  <Hash className="size-3.5 text-muted-foreground" />
-                  <span className="text-muted-foreground">{t("analytics.tokens")}:</span>
-                  <span className="font-medium tabular-nums text-foreground">
+              <div className="flex justify-end gap-3">
+                <div className="flex min-w-[110px] flex-col items-end justify-center rounded-lg border px-4 py-2">
+                  <span className="flex items-center gap-1 text-[10px] text-muted-foreground">
+                    <Hash className="size-3" />
+                    {t("analytics.tokens")}
+                  </span>
+                  <span className="text-sm font-semibold tabular-nums text-foreground">
                     {formatTokens(data.totalTokens)}
                   </span>
                 </div>
-                <div className="flex items-center gap-1.5 rounded-lg border px-3 py-1.5">
-                  <Clock className="size-3.5 text-muted-foreground" />
-                  <span className="text-muted-foreground">{t("analytics.hours")}:</span>
-                  <span className="font-medium tabular-nums text-foreground">
+                <div className="flex min-w-[110px] flex-col items-end justify-center rounded-lg border px-4 py-2">
+                  <span className="flex items-center gap-1 text-[10px] text-muted-foreground">
+                    <Clock className="size-3" />
+                    {t("analytics.hours")}
+                  </span>
+                  <span className="text-sm font-semibold tabular-nums text-foreground">
                     {data.totalHours.toFixed(1)}h
                   </span>
                 </div>
-                <div className="flex items-center gap-1.5 rounded-lg border px-3 py-1.5">
-                  <span className="font-medium tabular-nums text-foreground">
+                <div className="flex min-w-[110px] flex-col items-end justify-center rounded-lg border px-4 py-2">
+                  <span className="flex items-center gap-1 text-[10px] text-muted-foreground">
+                    {t("analytics.spent")}
+                  </span>
+                  <span className="text-sm font-semibold tabular-nums text-foreground">
                     {formatCost(data.totalCost)}
                   </span>
-                  <span className="text-muted-foreground">{t("analytics.spent")}</span>
                 </div>
               </div>
             </div>
           </div>
-          
+
           {/* Full-width bar chart */}
           <div className="rounded-lg border p-3">
             <ModelBarChart data={data} />
           </div>
+
+          {/* Hours worked per project */}
+          <ProjectHoursList data={data} />
 
         </>
       ) : null}
