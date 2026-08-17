@@ -44,4 +44,11 @@ export interface AnalyticsSummary {
   peakHour: number
 }
 
-export type AnalyticsRange = 'total' | '30d' | '7d' | 'today'
+/** Período escolhido no date range picker (ms, limites já no começo/fim do dia). */
+export interface CustomAnalyticsRange {
+  type: 'custom'
+  from: number
+  to: number
+}
+
+export type AnalyticsRange = 'total' | '30d' | '7d' | 'today' | CustomAnalyticsRange

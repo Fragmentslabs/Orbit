@@ -9,8 +9,18 @@ import {
   ResponsiveContainer,
   Cell,
 } from "recharts";
-import { Clock, Folder, Hash, Zap } from "lucide-react";
+import { CalendarIcon, Clock, Folder, Hash, Zap } from "lucide-react";
+import { format } from "date-fns";
+import { enUS, ptBR as dfPtBR } from "date-fns/locale";
+import type { DateRange } from "react-day-picker";
+import { enUS as rdpEnUS, ptBR as rdpPtBR } from "react-day-picker/locale";
 import { Button } from "@/components/ui/button";
+import { Calendar } from "@/components/ui/calendar";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 import {
   Dialog,
@@ -27,9 +37,11 @@ import { ModelSelectorLogo } from "@/src/components/ai/model-selector";
 import { ActivityHeatmap } from "@/src/components/activity-heatmap";
 import type { AnalyticsRange, AnalyticsSummary, ProjectBreakdown } from "@shared/analytics";
 
-const RANGE_ORDER: AnalyticsRange[] = ["total", "30d", "7d", "today"];
+type PresetRange = "total" | "30d" | "7d" | "today";
 
-function useRangeLabels(): Record<AnalyticsRange, string> {
+const RANGE_ORDER: PresetRange[] = ["total", "30d", "7d", "today"];
+
+function useRangeLabels(): Record<PresetRange, string> {
   const { t } = useTranslation();
   return {
     total: t("analytics.ranges.total"),
@@ -342,14 +354,40 @@ function LimitsDialog({
 }
 
 export function AnalyticsPanel() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { data, range, loading, load, setRange } = useAnalyticsStore();
   const [limitsOpen, setLimitsOpen] = useState(false);
+  const [customOpen, setCustomOpen] = useState(false);
+  const [customDraft, setCustomDraft] = useState<DateRange | undefined>();
   const rangeLabels = useRangeLabels();
+
+  const isPt = i18n.language?.startsWith("pt") ?? true;
+  const rangeIsCustom = typeof range === "object" && range.type === "custom";
 
   useEffect(() => {
     void load();
   }, [load]);
+
+  const customLabel = useMemo(() => {
+    if (!rangeIsCustom) return t("analytics.ranges.custom");
+    const locale = isPt ? dfPtBR : enUS;
+    return `${format(new Date(range.from), "dd MMM", { locale })} – ${format(
+      new Date(range.to),
+      "dd MMM",
+      { locale },
+    )}`;
+  }, [rangeIsCustom, range, t, isPt]);
+
+  const handleRangeSelect = (next?: DateRange) => {
+    setCustomDraft(next);
+    if (!next?.from || !next.to) return;
+    const from = new Date(next.from);
+    from.setHours(0, 0, 0, 0);
+    const to = new Date(next.to);
+    to.setHours(23, 59, 59, 999);
+    setRange({ type: "custom", from: from.getTime(), to: to.getTime() });
+    setCustomOpen(false);
+  };
 
   return (
     <div className="flex h-full min-w-0 flex-col gap-3 overflow-y-auto overflow-x-hidden pr-1">
@@ -357,23 +395,61 @@ export function AnalyticsPanel() {
         <p className="text-sm font-semibold shrink-0">{t("analytics.title")}</p>
         <div className="flex gap-2">
           <SegmentedControl
-          options={RANGE_ORDER.map((r) => ({
-            value: r,
-            label: rangeLabels[r],
-          }))}
-          value={range}
-          onChange={(v) => setRange(v as AnalyticsRange)}
-          size="xs"
-        />
-        <Button
-          size="sm"
-          variant="outline"
-          className="gap-1 shrink-0 h-7 px-2"
-          onClick={() => setLimitsOpen(true)}
-        >
-          <Zap className="size-3" />
-          <span className="text-[11px]">{t("analytics.limits.button")}</span>
-        </Button>
+            options={RANGE_ORDER.map((r) => ({
+              value: r,
+              label: rangeLabels[r],
+            }))}
+            value={
+              (typeof range === "string" ? range : RANGE_ORDER[0]) as PresetRange
+            }
+            onChange={(v) => setRange(v as AnalyticsRange)}
+            size="xs"
+          />
+          <Popover
+            open={customOpen}
+            onOpenChange={(open) => {
+              setCustomOpen(open);
+              if (open) {
+                setCustomDraft(
+                  rangeIsCustom
+                    ? { from: new Date(range.from), to: new Date(range.to) }
+                    : undefined,
+                );
+              }
+            }}
+          >
+            <PopoverTrigger
+              render={
+                <Button
+                  size="sm"
+                  variant={rangeIsCustom ? "secondary" : "outline"}
+                  className="h-7 shrink-0 gap-1 px-2"
+                >
+                  <CalendarIcon className="size-3" />
+                  <span className="text-[11px]">{customLabel}</span>
+                </Button>
+              }
+            />
+            <PopoverContent className="w-auto p-0" align="end">
+              <Calendar
+                mode="range"
+                selected={customDraft}
+                onSelect={handleRangeSelect}
+                defaultMonth={customDraft?.from ?? new Date()}
+                numberOfMonths={2}
+                locale={isPt ? rdpPtBR : rdpEnUS}
+              />
+            </PopoverContent>
+          </Popover>
+          <Button
+            size="sm"
+            variant="outline"
+            className="gap-1 shrink-0 h-7 px-2"
+            onClick={() => setLimitsOpen(true)}
+          >
+            <Zap className="size-3" />
+            <span className="text-[11px]">{t("analytics.limits.button")}</span>
+          </Button>
         </div>
       </div>
 

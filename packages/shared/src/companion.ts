@@ -5,6 +5,7 @@
  */
 
 import type { SendMessageOptions, SessionMode, FilePart, WorkerModelConfig, PermissionMode } from './chat'
+import type { AnalyticsRange } from './analytics'
 import type { NovaRotinaInput, Rotina, RotinaEvent, RotinaModelo } from './rotinas'
 import type {
   Esteira,
@@ -108,7 +109,8 @@ export interface GetCatalogRequest {
 
 export interface GetAnalyticsRequest {
   type: 'analytics:summary'
-  range?: 'total' | '30d' | '7d' | 'today'
+  /** Presets ou intervalo customizado (type: 'custom', from/to em ms). */
+  range?: AnalyticsRange
 }
 
 export interface GetStatusRequest {

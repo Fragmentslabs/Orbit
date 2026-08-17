@@ -13,14 +13,17 @@ import {
   Layers,
 } from 'lucide-react-native'
 import { useTranslation } from 'react-i18next'
-import type { AnalyticsSummary, AnalyticsRange } from '@orbit/shared'
+import type { AnalyticsSummary, AnalyticsRange, CustomAnalyticsRange } from '@orbit/shared'
 import { useConnectionStore } from '~/stores/connection-store'
 import { useSettingsStore } from '~/stores/settings-store'
 import { getThemeTokens } from '~/lib/theme-tokens'
 import { useThemeStore } from '~/stores/theme-store'
 import { SafeScreen } from '~/components/layout/SafeScreen'
+import { CustomRangeModal, rotuloPeriodo } from '~/components/usage/custom-range-modal'
 
-function useRanges(): { id: AnalyticsRange; label: string }[] {
+type PresetRange = 'today' | '7d' | '30d' | 'total'
+
+function useRanges(): { id: PresetRange; label: string }[] {
   const { t } = useTranslation()
   return [
     { id: 'today', label: t('usageScreen.rangeToday') },
@@ -49,7 +52,7 @@ function formatHours(hours: number): string {
 }
 
 export default function UsageScreen() {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
   const RANGES = useRanges()
   const router = useRouter()
   const wsClient = useConnectionStore((s) => s.wsClient)
@@ -59,6 +62,10 @@ export default function UsageScreen() {
   const [range, setRange] = useState<AnalyticsRange>('7d')
   const [summary, setSummary] = useState<AnalyticsSummary | null>(null)
   const [loading, setLoading] = useState(false)
+  const [customModalOpen, setCustomModalOpen] = useState(false)
+
+  const rangeIsCustom = typeof range === 'object' && range.type === 'custom'
+  const customRange = rangeIsCustom ? (range as CustomAnalyticsRange) : null
 
   const fetchSummary = useCallback(
     async (target: AnalyticsRange) => {
@@ -106,7 +113,33 @@ export default function UsageScreen() {
             <Text style={[s.rangeText, { color: range === r.id ? tokens.foreground : tokens.mutedForeground }]}>{r.label}</Text>
           </Pressable>
         ))}
+        <Pressable
+          onPress={() => setCustomModalOpen(true)}
+          style={[
+            s.rangeBtn,
+            s.rangeBtnCustom,
+            rangeIsCustom && { backgroundColor: tokens.background, borderWidth: 1, borderColor: tokens.muted },
+          ]}
+        >
+          <CalendarDays size={12} color={rangeIsCustom ? tokens.foreground : tokens.mutedForeground} />
+          <Text
+            style={[s.rangeText, { color: rangeIsCustom ? tokens.foreground : tokens.mutedForeground }]}
+            numberOfLines={1}
+          >
+            {customRange ? rotuloPeriodo(customRange, i18n.language) : t('usageScreen.rangeCustom')}
+          </Text>
+        </Pressable>
       </View>
+
+      <CustomRangeModal
+        visivel={customModalOpen}
+        valorAtual={customRange}
+        onCancelar={() => setCustomModalOpen(false)}
+        onConfirmar={(next) => {
+          setRange(next)
+          setCustomModalOpen(false)
+        }}
+      />
 
       <ScrollView
         style={{ flex: 1 }}
@@ -229,6 +262,7 @@ const s = StyleSheet.create({
     padding: 3,
   },
   rangeBtn: { flex: 1, alignItems: 'center', borderRadius: 9, paddingVertical: 7 },
+  rangeBtnCustom: { flexDirection: 'row', gap: 4, justifyContent: 'center' },
   rangeText: { fontSize: 12, fontWeight: '500' },
 
   grid: {

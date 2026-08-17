@@ -5,8 +5,11 @@ import type { AnalyticsDay, AnalyticsRange, AnalyticsSummary, ModelDayBreakdown,
 import { listKeys, readJson } from './storage'
 import { projectIdOf } from './memory/domain'
 
-function computeRange(range: AnalyticsRange): { since: number } {
+function computeRange(range: AnalyticsRange): { since: number; until?: number } {
   const now = Date.now()
+  if (typeof range === 'object' && range.type === 'custom') {
+    return { since: range.from, until: range.to }
+  }
   switch (range) {
     case 'today':
       const startOfDay = new Date()
@@ -17,6 +20,7 @@ function computeRange(range: AnalyticsRange): { since: number } {
     case '30d':
       return { since: now - 30 * 24 * 60 * 60 * 1000 }
     case 'total':
+    default:
       return { since: 0 }
   }
 }
@@ -103,14 +107,14 @@ function computeSessionSegments(messages: ChatMessage[]): WorkSegment[] {
 }
 
 export async function computeAnalytics(range: AnalyticsRange): Promise<AnalyticsSummary> {
-  const { since } = computeRange(range)
+  const { since, until } = computeRange(range)
 
   const sessionKeys = await listKeys(StorageKeys.sessionPrefix)
   const sessions: SessionInfo[] = []
 
   for (const key of sessionKeys) {
     const session = await readJson<SessionInfo>(key)
-    if (session && session.createdAt >= since) {
+    if (session && session.createdAt >= since && (!until || session.createdAt <= until)) {
       sessions.push(session)
     }
   }

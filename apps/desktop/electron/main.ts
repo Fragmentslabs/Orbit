@@ -42,6 +42,7 @@ import { globalSkillsDir, loadSkills, notifySkillsChanged, setupSkillsWatcher } 
 import { importSkillSelection } from './lib/skills/import'
 import { sanitizeSlug, serializeSkill } from './lib/skills/parser'
 import { computeAnalytics } from './lib/analytics'
+import type { AnalyticsRange } from '@shared/analytics'
 import { approvePendingSkill, discardPendingSkill, listPendingSkills } from './lib/skills/pending'
 import { dataDir, listKeys, readJson, removeJson, writeJson } from './lib/storage'
 import { loginShellArgs, userShellEnv } from './lib/shell-env'
@@ -1432,7 +1433,7 @@ app.whenReady().then(() => {
   })
 
   // Analytics: resumo de uso
-  ipcMain.handle('analytics:summary', (_event, range: 'total' | '30d' | '7d' | 'today') => computeAnalytics(range))
+  ipcMain.handle('analytics:summary', (_event, range: AnalyticsRange) => computeAnalytics(range))
 
   // MCP: config + status + reconexão (as tools entram via buildToolSet)
   ipcMain.handle('mcp:config', () => readMcpConfig())
