@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { Check, ChevronDown, Folder, Plus, X } from "lucide-react"
-import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 
 const RECENT_FOLDERS_KEY = "orbit-recent-folders"
 
@@ -32,10 +31,10 @@ export function getFolderName(path: string): string {
 interface FolderSelectorProps {
   folders: string[]
   onFoldersChange: (folders: string[]) => void
-  /** Header em containers estreitos: menu via Menu do design system (portal,
-   * sempre acima de overlays do chat) + fileira de pastas extras escondida
-   * (o dropdown já cobre add/trocar/remover). Fora disso (ex.: seletor acima
-   * do input em NewChatTab) mantém o dropdown simples e a fileira inline. */
+  /** Header em telas grandes: só um botão que troca a pasta principal direto
+   * pelo seletor nativo, sem dropdown (o dropdown completo fica reservado pro
+   * CompactWorkspaceSelector, em telas pequenas). Fora disso (ex.: seletor
+   * acima do input em NewChatTab) mantém o dropdown de sempre. */
   compact?: boolean
   /** Controla a abertura do dropdown externamente (uso combinado com hideTrigger) */
   open?: boolean
@@ -52,10 +51,8 @@ export function FolderSelector({ folders, onFoldersChange, compact, open: openPr
   const recentRef = useRef<HTMLDivElement>(null)
   const [recentFolders] = useState<string[]>(loadRecentFolders)
 
-  // Só o dropdown compacto usa o Menu do design system (Base UI): ele precisa
-  // de um trigger visível pra ancorar, o que não existe em hideTrigger, e o
-  // seletor não-compacto (acima do input) mantém o comportamento original —
-  // por isso só esses dois casos precisam fechar por clique fora manualmente.
+  // compact (sem hideTrigger) não abre dropdown nenhum — só hideTrigger e o
+  // seletor não-compacto (acima do input) precisam fechar por clique fora.
   const manualClose = hideTrigger || !compact
   useEffect(() => {
     if (!manualClose) return
@@ -124,25 +121,23 @@ export function FolderSelector({ folders, onFoldersChange, compact, open: openPr
 
   const folderItems = (
     <>
-      <button
-        onClick={() => addAdditionalFolder()}
-        className="flex min-h-7 w-full items-center gap-2 rounded-md px-2 py-1 text-xs font-medium hover:bg-foreground/10"
-      >
-        <Plus className="size-3.5" />
-        {t("folderSelector.newFolder")}
-      </button>
       {primaryFolder && (
-        <div className="mt-1 border-t border-border pt-1">
+        <div className="pt-1">
           {sectionLabel(t("folderSelector.primary"))}
           {folderRow(primaryFolder, { active: true })}
         </div>
       )}
-      {otherFolders.length > 0 && (
-        <div className="mt-1 border-t border-border pt-1">
-          {sectionLabel(t("folderSelector.others"))}
-          {otherFolders.map((folder) => folderRow(folder, { removable: true }))}
-        </div>
-      )}
+      <div className={primaryFolder ? "mt-1 border-t border-border pt-1" : "pt-1"}>
+        {sectionLabel(t("folderSelector.others"))}
+        {otherFolders.map((folder) => folderRow(folder, { removable: true }))}
+        <button
+          onClick={() => addAdditionalFolder()}
+          className="flex min-h-7 w-full items-center gap-2 rounded-md px-2 py-1 text-xs font-medium hover:bg-foreground/10"
+        >
+          <Plus className="size-3.5" />
+          {t("folderSelector.newFolder")}
+        </button>
+      </div>
       {recentUnassociated.length > 0 && (
         <div className="mt-1 border-t border-border pt-1">
           {sectionLabel(t("folderSelector.recent"))}
@@ -175,14 +170,15 @@ export function FolderSelector({ folders, onFoldersChange, compact, open: openPr
           )}
         </div>
       ) : compact ? (
-        <DropdownMenu open={recentOpen} onOpenChange={setRecentOpen}>
-          <DropdownMenuTrigger render={<button className={triggerClassName} />}>
-            {triggerContent}
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-56 p-1">
-            {folderItems}
-          </DropdownMenuContent>
-        </DropdownMenu>
+        // Em telas grandes o header mostra branch + pasta lado a lado — aqui
+        // não há espaço/necessidade de um dropdown: o clique troca a pasta
+        // principal direto pelo seletor nativo, como era antes de existir o
+        // dropdown. O menu completo (trocar/adicionar/remover) só aparece em
+        // telas pequenas, dentro do CompactWorkspaceSelector.
+        <button type="button" onClick={() => setPrimaryFolder()} className={triggerClassName}>
+          <Folder className="size-3 shrink-0 text-sidebar-foreground/60" />
+          <span className="truncate">{folders.length === 0 ? t("folderSelector.associate") : getFolderName(folders[0])}</span>
+        </button>
       ) : (
         <div className="relative min-w-0" ref={recentRef}>
           <button onClick={() => setRecentOpen(!recentOpen)} className={triggerClassName}>
