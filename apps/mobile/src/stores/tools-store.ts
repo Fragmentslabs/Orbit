@@ -6,11 +6,14 @@ import { useConnectionStore } from './connection-store'
 const SKILLS_CACHE_KEY = 'orbit_skills_cache'
 const MCP_CACHE_KEY = 'orbit_mcp_cache'
 const PENDING_CACHE_KEY = 'orbit_skills_pending_cache'
+const DISCARDED_CACHE_KEY = 'orbit_skills_discarded_cache'
 
 interface ToolsState {
   skills: Skill[]
   mcpServers: McpServerStatus[]
   pending: SkillProposal[]
+  /** Slugs recusados pelo usuário (não inferidos pela ausência em pending) */
+  discarded: string[]
   loading: boolean
 
   fetchSkills: (directory?: string) => Promise<void>
@@ -32,6 +35,7 @@ export const useToolsStore = create<ToolsState>((set, get) => ({
   skills: [],
   mcpServers: [],
   pending: [],
+  discarded: [],
   loading: false,
 
   fetchSkills: async (directory) => {
@@ -80,14 +84,16 @@ export const useToolsStore = create<ToolsState>((set, get) => ({
 
   hydrateCache: async () => {
     try {
-      const [rawSkills, rawMcp, rawPending] = await Promise.all([
+      const [rawSkills, rawMcp, rawPending, rawDiscarded] = await Promise.all([
         Storage.getItem(SKILLS_CACHE_KEY),
         Storage.getItem(MCP_CACHE_KEY),
         Storage.getItem(PENDING_CACHE_KEY),
+        Storage.getItem(DISCARDED_CACHE_KEY),
       ])
       if (rawSkills) set({ skills: JSON.parse(rawSkills) as Skill[] })
       if (rawMcp) set({ mcpServers: JSON.parse(rawMcp) as McpServerStatus[] })
       if (rawPending) set({ pending: JSON.parse(rawPending) as SkillProposal[] })
+      if (rawDiscarded) set({ discarded: JSON.parse(rawDiscarded) as string[] })
     } catch {
     }
   },
@@ -124,7 +130,11 @@ export const useToolsStore = create<ToolsState>((set, get) => ({
     if (!http) return
     const res = await http.approveSkill(slug)
     if (res.ok) {
-      set((s) => ({ pending: s.pending.filter((p) => p.slug !== slug) }))
+      set((s) => ({
+        pending: s.pending.filter((p) => p.slug !== slug),
+        discarded: s.discarded.filter((d) => d !== slug),
+      }))
+      void Storage.setItem(DISCARDED_CACHE_KEY, JSON.stringify(get().discarded))
       await get().fetchSkills()
     }
   },
@@ -134,7 +144,11 @@ export const useToolsStore = create<ToolsState>((set, get) => ({
     if (!http) return
     const res = await http.discardSkill(slug)
     if (res.ok) {
-      set((s) => ({ pending: s.pending.filter((p) => p.slug !== slug) }))
+      set((s) => ({
+        pending: s.pending.filter((p) => p.slug !== slug),
+        discarded: [...new Set([...s.discarded, slug])],
+      }))
+      void Storage.setItem(DISCARDED_CACHE_KEY, JSON.stringify(get().discarded))
     }
   },
 

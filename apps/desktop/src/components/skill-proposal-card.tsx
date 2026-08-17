@@ -24,14 +24,22 @@ function slugOf(part: ToolPart): string | null {
 export function SkillProposalCard({ part }: { part: ToolPart }) {
   const { t } = useTranslation()
   const initialize = useSkillsStore((s) => s.initialize)
+  const refresh = useSkillsStore((s) => s.refresh)
   const pending = useSkillsStore((s) => s.pending)
   const skills = useSkillsStore((s) => s.skills)
+  const discarded = useSkillsStore((s) => s.discarded)
   const approve = useSkillsStore((s) => s.approve)
   const discard = useSkillsStore((s) => s.discard)
 
   useEffect(() => {
     void initialize()
   }, [initialize])
+
+  // A proposta é estagiada DURANTE a execução da tool; quando ela termina,
+  // re-sincroniza com o disco sem depender do evento skills:changed.
+  useEffect(() => {
+    if (part.state === "done") void refresh()
+  }, [part.state, refresh])
 
   if (part.state === "running") {
     return <Shimmer className="text-sm">{t("skillProposal.building")}</Shimmer>
@@ -43,8 +51,12 @@ export function SkillProposalCard({ part }: { part: ToolPart }) {
 
   const proposal = pending.find((p) => p.slug === slug)
   const installed = skills.some((s) => s.slug === slug)
-  const name = (part.input?.name as string) ?? slug
-  const description = (part.input?.description as string) ?? ""
+  const wasDiscarded = discarded.includes(slug)
+  // Botões sempre que a skill não está instalada e o usuário não recusou —
+  // "dispensada" só aparece com recusa real registrada no store.
+  const actionable = !installed && (proposal !== undefined || !wasDiscarded)
+  const name = (part.input?.name as string) ?? proposal?.name ?? slug
+  const description = (part.input?.description as string) ?? proposal?.description ?? ""
   const files = proposal?.files ?? (part.input?.files as Array<{ path: string }> | undefined)?.map((f) => f.path) ?? []
 
   return (
@@ -78,7 +90,7 @@ export function SkillProposalCard({ part }: { part: ToolPart }) {
         <p className="flex items-center gap-1.5 text-xs text-emerald-500">
           <Check className="size-3.5" /> {t("skillProposal.installed", { slug })}
         </p>
-      ) : proposal ? (
+      ) : actionable ? (
         <div className="flex justify-end gap-2">
           <Button size="sm" variant="outline" onClick={() => void discard(slug)}>
             {t("skillProposal.discard")}

@@ -1,34 +1,52 @@
+import { useEffect } from 'react'
 import { View, Text, Pressable, ActivityIndicator, StyleSheet } from 'react-native'
 import { Sparkles, Check, X } from 'lucide-react-native'
 import { useTranslation } from 'react-i18next'
 import { useToolsStore } from '~/stores/tools-store'
 import { getThemeTokens } from '~/lib/theme-tokens'
 import { useThemeStore } from '~/stores/theme-store'
-import type { ToolPart } from '@orbit/shared'
+import type { SkillProposal, ToolPart } from '@orbit/shared'
 
 interface SkillProposalCardProps {
   part: ToolPart
 }
 
 /**
+ * Mesma regra do desktop: o output da tool confirma o slug sanitizado
+ * ("Skill @<slug> proposta…"); nunca usar o output inteiro como slug.
+ */
+function slugOf(part: ToolPart): string | null {
+  const fromOutput = (part.output as string)?.match(/@([a-z0-9_]+)/)?.[1]
+  if (fromOutput) return fromOutput
+  const input = part.input as { slug?: string; name?: string } | undefined
+  const raw = input?.slug ?? input?.name
+  return raw ? raw.trim().toLowerCase().replace(/[^a-z0-9_]+/g, '_') : null
+}
+
+/**
  * Card de proposta de skill (tool create_skill) exibido inline na mensagem.
- * Espelha o SkillProposalCard do desktop.
+ * Espelha o SkillProposalCard do desktop: botões sempre que a skill não
+ * está instalada e o usuário não recusou — "dispensada" só com recusa real.
  */
 export function SkillProposalCard({ part }: SkillProposalCardProps) {
   const { t } = useTranslation()
   const tokens = getThemeTokens(useThemeStore((s) => s.resolved))
   const pending = useToolsStore((s) => s.pending)
   const skills = useToolsStore((s) => s.skills)
+  const discarded = useToolsStore((s) => s.discarded)
   const approveSkill = useToolsStore((s) => s.approveSkill)
   const discardSkill = useToolsStore((s) => s.discardSkill)
+  const fetchPending = useToolsStore((s) => s.fetchPending)
+  const fetchSkills = useToolsStore((s) => s.fetchSkills)
 
-  const slug =
-    (part.output as string)?.trim() ??
-    ((part.input as { slug?: string })?.slug ?? '').trim()
+  // Re-sincroniza com o companion a cada card que monta: a proposta foi
+  // estagiada durante a execução da tool e pode não estar no cache local.
+  useEffect(() => {
+    void fetchSkills()
+    void fetchPending()
+  }, [fetchSkills, fetchPending])
+
   const isRunning = part.state === 'running'
-  const installed = skills.some((s) => s.slug === slug)
-  const proposal = pending.find((p) => p.slug === slug)
-
   if (isRunning) {
     return (
       <View style={[s.card, { borderColor: tokens.border, backgroundColor: tokens.card }]}>
@@ -37,6 +55,28 @@ export function SkillProposalCard({ part }: SkillProposalCardProps) {
       </View>
     )
   }
+
+  const slug = slugOf(part)
+  if (part.state === 'error' || !slug) return null
+
+  const installed = skills.some((sk) => sk.slug === slug)
+  const proposal = pending.find((p) => p.slug === slug)
+  // Sem a proposta no store, usa os dados do próprio tool part para manter
+  // os botões visíveis até a sincronização chegar.
+  const data: SkillProposal =
+    proposal ??
+    ({
+      slug,
+      name: ((part.input as { name?: string } | undefined)?.name as string) ?? slug,
+      description: ((part.input as { description?: string } | undefined)?.description as string) ?? '',
+      content: '',
+      files: (((part.input as { files?: { path: string }[] } | undefined)?.files as
+        | { path: string }[]
+        | undefined) ?? []
+      ).map((f) => f.path),
+    } satisfies SkillProposal)
+  const wasDiscarded = discarded.includes(slug)
+  const actionable = !installed && (proposal !== undefined || !wasDiscarded)
 
   if (installed) {
     return (
@@ -52,7 +92,7 @@ export function SkillProposalCard({ part }: SkillProposalCardProps) {
     )
   }
 
-  if (!proposal) {
+  if (!actionable) {
     return (
       <View style={[s.card, { borderColor: tokens.border, backgroundColor: tokens.card }]}>
         <View style={[s.iconWrap, { backgroundColor: tokens.muted }]}>
@@ -70,23 +110,23 @@ export function SkillProposalCard({ part }: SkillProposalCardProps) {
           <Sparkles size={16} color="#818cf8" />
         </View>
         <View style={{ flex: 1 }}>
-          <Text style={[s.title, { color: tokens.foreground }]}>{proposal.name}</Text>
-          {proposal.description && (
-            <Text style={[s.desc, { color: tokens.mutedForeground }]} numberOfLines={2}>{proposal.description}</Text>
+          <Text style={[s.title, { color: tokens.foreground }]}>{data.name}</Text>
+          {data.description && (
+            <Text style={[s.desc, { color: tokens.mutedForeground }]} numberOfLines={2}>{data.description}</Text>
           )}
-          <Text style={[s.slug, { color: tokens.mutedForeground }]}>@{proposal.slug}</Text>
+          <Text style={[s.slug, { color: tokens.mutedForeground }]}>@{data.slug}</Text>
         </View>
       </View>
-      {proposal.files && proposal.files.length > 0 && (
+      {data.files && data.files.length > 0 && (
         <Text style={[s.files, { color: tokens.mutedForeground }]}>
-          {t('skillProposal.extraFiles', { count: proposal.files.length })}
+          {t('skillProposal.extraFiles', { count: data.files.length })}
         </Text>
       )}
       <View style={[s.actions, { borderTopColor: tokens.border }]}>
-        <Pressable onPress={() => void discardSkill(proposal.slug)} style={[s.btn, { borderColor: tokens.border }]}>
+        <Pressable onPress={() => void discardSkill(data.slug)} style={[s.btn, { borderColor: tokens.border }]}>
           <Text style={[s.btnText, { color: tokens.foreground }]}>{t('skillProposal.dismiss')}</Text>
         </Pressable>
-        <Pressable onPress={() => void approveSkill(proposal.slug)} style={[s.btn, { backgroundColor: tokens.primary }]}>
+        <Pressable onPress={() => void approveSkill(data.slug)} style={[s.btn, { backgroundColor: tokens.primary }]}>
           <Text style={[s.btnText, { color: '#fff' }]}>{t('skillProposal.addSkill')}</Text>
         </Pressable>
       </View>
