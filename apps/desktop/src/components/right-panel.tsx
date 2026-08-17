@@ -12,6 +12,7 @@ import { ChatView } from "@/src/components/chat-view"
 import { ChatInput } from "@/src/components/chat-input"
 import { BranchSelector } from "@/src/components/branch-selector"
 import { FolderSelector } from "@/src/components/folder-selector"
+import { CompactWorkspaceSelector } from "@/src/components/workspace-selector-compact"
 import type { SendMessageOptions, FilePart } from "@shared/chat"
 import { ManagedTerminalTab } from "@/src/components/terminal-tab"
 import { BrowserTab } from "@/src/components/browser-tab"
@@ -105,21 +106,27 @@ function ChatTabHeader({ sessionId }: { sessionId?: string }) {
 
   const isCode = session.mode === "code" && !!session.directory
 
+  const handleFoldersChange = (next: string[]) => {
+    setSessionDirectories(session.id, next[0], next.slice(1))
+    // Mantém o workspace sincronizado (o input do painel envia com as pastas do workspace)
+    setFolders(next)
+  }
+
   return (
-    <div className="flex items-center gap-2 px-1 pb-2">
+    <div className="@container flex min-w-0 items-center gap-2 px-1 pb-2">
       <span className="min-w-0 truncate text-sm font-medium text-foreground">{session.title}</span>
-      {isCode && session.directory && <BranchSelector repoPath={session.directory} onRequestAgentAction={handleAgentAction} />}
-      {folders.length > 0 && (
-        <FolderSelector
+      <div className="hidden min-w-0 items-center gap-2 @sm:flex">
+        {isCode && session.directory && <BranchSelector repoPath={session.directory} onRequestAgentAction={handleAgentAction} />}
+        {folders.length > 0 && <FolderSelector folders={folders} onFoldersChange={handleFoldersChange} compact />}
+      </div>
+      <div className="flex min-w-0 items-center @sm:hidden">
+        <CompactWorkspaceSelector
+          repoPath={isCode ? session.directory : undefined}
           folders={folders}
-          onFoldersChange={(next) => {
-            setSessionDirectories(session.id, next[0], next.slice(1))
-            // Mantém o workspace sincronizado (o input do painel envia com as pastas do workspace)
-            setFolders(next)
-          }}
-          compact
+          onFoldersChange={handleFoldersChange}
+          onRequestAgentAction={handleAgentAction}
         />
-      )}
+      </div>
     </div>
   )
 }

@@ -10,9 +10,14 @@ import { cn } from "@/lib/utils"
 interface BranchSelectorProps {
   repoPath: string
   onRequestAgentAction?: (instruction: string) => void
+  /** Controla a abertura do dropdown externamente (uso combinado com hideTrigger) */
+  open?: boolean
+  onOpenChange?: (open: boolean) => void
+  /** Omite o botão gatilho — usado quando outro componente abre este dropdown */
+  hideTrigger?: boolean
 }
 
-export function BranchSelector({ repoPath, onRequestAgentAction }: BranchSelectorProps) {
+export function BranchSelector({ repoPath, onRequestAgentAction, open: openProp, onOpenChange, hideTrigger }: BranchSelectorProps) {
   const { t } = useTranslation()
   const byDir = useBranchStore((s) => s.byDir[repoPath])
   const loading = useBranchStore((s) => s.loading)
@@ -20,7 +25,9 @@ export function BranchSelector({ repoPath, onRequestAgentAction }: BranchSelecto
   const checkoutBranch = useBranchStore((s) => s.checkoutBranch)
   const createBranch = useBranchStore((s) => s.createBranch)
   const commitChanges = useBranchStore((s) => s.commitChanges)
-  const [open, setOpen] = useState(false)
+  const [uncontrolledOpen, setUncontrolledOpen] = useState(false)
+  const open = openProp ?? uncontrolledOpen
+  const setOpen = onOpenChange ?? setUncontrolledOpen
   const [checkoutLoading, setCheckoutLoading] = useState(false)
   const [conflictError, setConflictError] = useState<string | null>(null)
   const [pendingBranch, setPendingBranch] = useState<string | null>(null)
@@ -44,7 +51,7 @@ export function BranchSelector({ repoPath, onRequestAgentAction }: BranchSelecto
     }
     document.addEventListener("mousedown", handler)
     return () => document.removeEventListener("mousedown", handler)
-  }, [open])
+  }, [open, setOpen])
 
   const retryCheckout = useCallback(async (branch: string) => {
     setCheckoutLoading(true)
@@ -66,7 +73,7 @@ export function BranchSelector({ repoPath, onRequestAgentAction }: BranchSelecto
       setConflictError(result.error ?? t("branch.unknownError"))
       setPendingBranch(branch)
     }
-  }, [byDir, checkoutBranch, repoPath, t])
+  }, [byDir, checkoutBranch, repoPath, t, setOpen])
 
   const handleCommitAndSwitch = useCallback(async () => {
     if (!pendingBranch || !commitMessage.trim()) return
@@ -96,7 +103,7 @@ export function BranchSelector({ repoPath, onRequestAgentAction }: BranchSelecto
     setBranchName("")
     setCreateError(null)
     setCreateDialogOpen(true)
-  }, [])
+  }, [setOpen])
 
   const handleCreate = useCallback(async () => {
     const name = branchName.trim()
@@ -119,19 +126,21 @@ export function BranchSelector({ repoPath, onRequestAgentAction }: BranchSelecto
   return (
     <>
       <div className="relative" ref={ref}>
-        <button
-          type="button"
-          onClick={() => setOpen((v) => !v)}
-          disabled={loading || checkoutLoading}
-          className="flex h-7 items-center gap-1 rounded-md border border-border px-1.5 text-xs transition-colors hover:bg-accent hover:text-accent-foreground"
-        >
-          {loading || checkoutLoading ? (
-            <LoaderIcon className="size-3 animate-spin" />
-          ) : (
-            <GitBranch className="size-3 text-muted-foreground" />
-          )}
-          <span className="max-w-20 truncate">{data.current || t("branch.detached")}</span>
-        </button>
+        {!hideTrigger && (
+          <button
+            type="button"
+            onClick={() => setOpen(!open)}
+            disabled={loading || checkoutLoading}
+            className="flex h-7 items-center gap-1 rounded-md border border-border px-1.5 text-xs transition-colors hover:bg-accent hover:text-accent-foreground"
+          >
+            {loading || checkoutLoading ? (
+              <LoaderIcon className="size-3 animate-spin" />
+            ) : (
+              <GitBranch className="size-3 text-muted-foreground" />
+            )}
+            <span className="max-w-20 truncate">{data.current || t("branch.detached")}</span>
+          </button>
+        )}
 
         {open && (
           <div className="absolute left-0 top-full mt-1 z-50 w-44 rounded-lg border bg-popover/70 p-1 text-popover-foreground shadow-md ring-1 ring-foreground/10 backdrop-blur-2xl backdrop-saturate-150">

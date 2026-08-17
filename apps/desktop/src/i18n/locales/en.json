@@ -804,6 +804,7 @@
     "wipDefault": "wip: changes before switching to {{branch}}",
     "committing": "Committing…",
     "commitAndSwitch": "Commit and switch",
+    "title": "Branch",
     "newBranch": "New branch",
     "createTitle": "Create branch",
     "createDesc": "Name of the branch to create. You'll be switched to it right away.",
@@ -821,6 +822,7 @@
     "loading": "Loading..."
   },
   "folderSelector": {
+    "title": "Folders",
     "associate": "Associate folder",
     "recent": "Recent",
     "newFolder": "New folder",

@@ -21,6 +21,7 @@ import type { SessionInfo } from "@shared/chat"
 import { BranchSelector } from "@/src/components/branch-selector"
 import { BrowserTestChip } from "@/src/components/browser-test-chip"
 import { FolderSelector } from "@/src/components/folder-selector"
+import { CompactWorkspaceSelector } from "@/src/components/workspace-selector-compact"
 import { useSessionStore } from "@/src/stores/session-store"
 import { useChatSearchStore } from "@/src/stores/chat-search-store"
 
@@ -97,11 +98,27 @@ export function ChatHeader({ title, hasMenu, session, sessionId, rightPanelOpen,
           <span className="sr-only">{t("header.toggleSidebar")}</span>
         </Button>
       )}
-      <div className="flex items-center gap-1 min-w-0 flex-1">
+      <div className="@container flex items-center gap-1 min-w-0 flex-1">
         <span className="truncate text-sm font-medium text-foreground">{title ?? t("header.newChat")}</span>
-        {workspaceMode === 'code' && repoPath && <BranchSelector repoPath={repoPath} onRequestAgentAction={onRequestAgentAction} />}
-        {workspaceMode === 'code' && folders && folders.length > 0 && onFoldersChange && (
-          <FolderSelector folders={folders} onFoldersChange={onFoldersChange} compact />
+        {workspaceMode === 'code' && (
+          <>
+            <div className="hidden min-w-0 items-center gap-1 @sm:flex">
+              {repoPath && <BranchSelector repoPath={repoPath} onRequestAgentAction={onRequestAgentAction} />}
+              {folders && folders.length > 0 && onFoldersChange && (
+                <FolderSelector folders={folders} onFoldersChange={onFoldersChange} compact />
+              )}
+            </div>
+            {(repoPath || (folders && folders.length > 0)) && onFoldersChange && (
+              <div className="flex min-w-0 items-center @sm:hidden">
+                <CompactWorkspaceSelector
+                  repoPath={repoPath}
+                  folders={folders ?? []}
+                  onFoldersChange={onFoldersChange}
+                  onRequestAgentAction={onRequestAgentAction}
+                />
+              </div>
+            )}
+          </>
         )}
         {hasMenu && (
           <DropdownMenu open={menuOpen} onOpenChange={setMenuOpen}>

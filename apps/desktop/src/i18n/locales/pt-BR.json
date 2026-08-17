@@ -804,6 +804,7 @@
     "wipDefault": "wip: mudanças antes de trocar para {{branch}}",
     "committing": "Commitando…",
     "commitAndSwitch": "Commitar e trocar",
+    "title": "Branch",
     "newBranch": "Nova branch",
     "createTitle": "Criar branch",
     "createDesc": "Nome da branch a criar. Você será trocado para ela imediatamente.",
@@ -821,6 +822,7 @@
     "loading": "Carregando..."
   },
   "folderSelector": {
+    "title": "Pastas",
     "associate": "Associar pasta",
     "recent": "Recentes",
     "newFolder": "Nova pasta",
