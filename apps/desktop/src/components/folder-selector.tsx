@@ -32,6 +32,10 @@ export function getFolderName(path: string): string {
 interface FolderSelectorProps {
   folders: string[]
   onFoldersChange: (folders: string[]) => void
+  /** Header em containers estreitos: menu via Menu do design system (portal,
+   * sempre acima de overlays do chat) + fileira de pastas extras escondida
+   * (o dropdown já cobre add/trocar/remover). Fora disso (ex.: seletor acima
+   * do input em NewChatTab) mantém o dropdown simples e a fileira inline. */
   compact?: boolean
   /** Controla a abertura do dropdown externamente (uso combinado com hideTrigger) */
   open?: boolean
@@ -48,12 +52,13 @@ export function FolderSelector({ folders, onFoldersChange, compact, open: openPr
   const recentRef = useRef<HTMLDivElement>(null)
   const [recentFolders] = useState<string[]>(loadRecentFolders)
 
-  // hideTrigger não tem um <button> visível para o Base UI Menu ancorar — só
-  // esse caso (composição via CompactWorkspaceSelector) usa o dropdown manual
-  // com fechamento por clique fora; o caso normal usa o Menu (portal, z acima
-  // de qualquer overlay do chat, alinhamento nativo).
+  // Só o dropdown compacto usa o Menu do design system (Base UI): ele precisa
+  // de um trigger visível pra ancorar, o que não existe em hideTrigger, e o
+  // seletor não-compacto (acima do input) mantém o comportamento original —
+  // por isso só esses dois casos precisam fechar por clique fora manualmente.
+  const manualClose = hideTrigger || !compact
   useEffect(() => {
-    if (!hideTrigger) return
+    if (!manualClose) return
     function handleClickOutside(e: MouseEvent) {
       if (recentRef.current && !recentRef.current.contains(e.target as Node)) {
         setRecentOpen(false)
@@ -63,10 +68,9 @@ export function FolderSelector({ folders, onFoldersChange, compact, open: openPr
       document.addEventListener("mousedown", handleClickOutside)
       return () => document.removeEventListener("mousedown", handleClickOutside)
     }
-  }, [hideTrigger, recentOpen, setRecentOpen])
+  }, [manualClose, recentOpen, setRecentOpen])
 
   const setPrimaryFolder = useCallback(async (path?: string) => {
-    if (compact) return
     let folderPath: string | undefined = path
     if (!folderPath) {
       const picked = await pickFolder()
@@ -75,8 +79,8 @@ export function FolderSelector({ folders, onFoldersChange, compact, open: openPr
     }
     setRecentOpen(false)
     if (folders[0] === folderPath) return
-    onFoldersChange([folderPath, ...folders.slice(1)])
-  }, [folders, onFoldersChange, compact, setRecentOpen])
+    onFoldersChange([folderPath, ...folders.filter((f) => f !== folderPath)])
+  }, [folders, onFoldersChange, setRecentOpen])
 
   const addAdditionalFolder = useCallback(async () => {
     const picked = await pickFolder()
@@ -89,7 +93,34 @@ export function FolderSelector({ folders, onFoldersChange, compact, open: openPr
     onFoldersChange(folders.filter(f => f !== path))
   }, [folders, onFoldersChange])
 
-  const associatedRemovable = (folder: string) => folders.includes(folder) && folder !== folders[0]
+  const sectionLabel = (label: string) => (
+    <p className="px-2 pt-1.5 pb-1 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">{label}</p>
+  )
+
+  const folderRow = (folder: string, { active, removable }: { active?: boolean; removable?: boolean }) => (
+    <button
+      key={folder}
+      onClick={() => setPrimaryFolder(folder)}
+      className="group flex min-h-7 w-full items-center gap-2 rounded-md px-2 py-1 text-xs hover:bg-foreground/10"
+    >
+      <Folder className="size-3.5 shrink-0 text-sidebar-foreground/60" />
+      <span className="truncate">{getFolderName(folder)}</span>
+      {active && <Check className="ml-auto size-3.5 shrink-0 text-primary" />}
+      {removable && (
+        <span
+          role="button"
+          onClick={(e) => removeFolder(folder, e)}
+          className="ml-auto flex size-4 shrink-0 items-center justify-center rounded opacity-0 hover:bg-foreground/10 group-hover:opacity-60 hover:opacity-100"
+        >
+          <X className="size-2.5" />
+        </span>
+      )}
+    </button>
+  )
+
+  const primaryFolder = folders[0]
+  const otherFolders = folders.slice(1)
+  const recentUnassociated = recentFolders.filter((f) => !folders.includes(f))
 
   const folderItems = (
     <>
@@ -100,53 +131,24 @@ export function FolderSelector({ folders, onFoldersChange, compact, open: openPr
         <Plus className="size-3.5" />
         {t("folderSelector.newFolder")}
       </button>
-      {(recentFolders.length > 0 || folders.length > 0) && <div className="my-1 border-t border-border" />}
-      {recentFolders.map((folder) => {
-        const active = folders[0] === folder
-        return (
-          <button
-            key={folder}
-            onClick={() => setPrimaryFolder(folder)}
-            className="group flex min-h-7 w-full items-center gap-2 rounded-md px-2 py-1 text-xs hover:bg-foreground/10"
-          >
-            <Folder className="size-3.5 shrink-0 text-sidebar-foreground/60" />
-            <span className="truncate">{getFolderName(folder)}</span>
-            {active && <Check className="ml-auto size-3.5 shrink-0 text-primary" />}
-            {associatedRemovable(folder) && (
-              <span
-                role="button"
-                onClick={(e) => removeFolder(folder, e)}
-                className="ml-auto flex size-4 shrink-0 items-center justify-center rounded opacity-0 hover:bg-foreground/10 group-hover:opacity-60 hover:opacity-100"
-              >
-                <X className="size-2.5" />
-              </span>
-            )}
-          </button>
-        )
-      })}
-      {folders.map((folder) => {
-        if (recentFolders.includes(folder)) return null
-        return (
-          <button
-            key={folder}
-            onClick={() => setPrimaryFolder(folder)}
-            className="group flex min-h-7 w-full items-center gap-2 rounded-md px-2 py-1 text-xs hover:bg-foreground/10"
-          >
-            <Folder className="size-3.5 shrink-0 text-sidebar-foreground/60" />
-            <span className="truncate">{getFolderName(folder)}</span>
-            {folders[0] === folder && <Check className="ml-auto size-3.5 shrink-0 text-primary" />}
-            {associatedRemovable(folder) && (
-              <span
-                role="button"
-                onClick={(e) => removeFolder(folder, e)}
-                className="ml-auto flex size-4 shrink-0 items-center justify-center rounded opacity-0 hover:bg-foreground/10 group-hover:opacity-60 hover:opacity-100"
-              >
-                <X className="size-2.5" />
-              </span>
-            )}
-          </button>
-        )
-      })}
+      {primaryFolder && (
+        <div className="mt-1 border-t border-border pt-1">
+          {sectionLabel(t("folderSelector.primary"))}
+          {folderRow(primaryFolder, { active: true })}
+        </div>
+      )}
+      {otherFolders.length > 0 && (
+        <div className="mt-1 border-t border-border pt-1">
+          {sectionLabel(t("folderSelector.others"))}
+          {otherFolders.map((folder) => folderRow(folder, { removable: true }))}
+        </div>
+      )}
+      {recentUnassociated.length > 0 && (
+        <div className="mt-1 border-t border-border pt-1">
+          {sectionLabel(t("folderSelector.recent"))}
+          {recentUnassociated.map((folder) => folderRow(folder, {}))}
+        </div>
+      )}
     </>
   )
 
@@ -172,7 +174,7 @@ export function FolderSelector({ folders, onFoldersChange, compact, open: openPr
             </div>
           )}
         </div>
-      ) : (
+      ) : compact ? (
         <DropdownMenu open={recentOpen} onOpenChange={setRecentOpen}>
           <DropdownMenuTrigger render={<button className={triggerClassName} />}>
             {triggerContent}
@@ -181,13 +183,24 @@ export function FolderSelector({ folders, onFoldersChange, compact, open: openPr
             {folderItems}
           </DropdownMenuContent>
         </DropdownMenu>
+      ) : (
+        <div className="relative min-w-0" ref={recentRef}>
+          <button onClick={() => setRecentOpen(!recentOpen)} className={triggerClassName}>
+            {triggerContent}
+          </button>
+          {recentOpen && (
+            <div className="absolute left-0 top-full z-[60] mt-1 w-56 rounded-lg border bg-popover/70 p-1 text-popover-foreground shadow-md ring-1 ring-foreground/10 backdrop-blur-2xl backdrop-saturate-150">
+              {folderItems}
+            </div>
+          )}
+        </div>
       )}
       {/* No modo compact a gestão de pastas extras (adicionar/remover) já vive
           inteira dentro do dropdown acima — essa fileira full-size só faz
           sentido no seletor não-compacto (ex.: NewChatTab), senão duplica o
           "+ Nova pasta" e os itens que o menu já lista. */}
       {!compact && (
-        <div className={hideTrigger ? "hidden" : "hidden min-w-0 items-center gap-1.5 sm:flex"}>
+        <div className="hidden min-w-0 items-center gap-1.5 sm:flex">
           {folders.slice(1).map((folder) => (
             <div key={folder} className="group relative flex h-8 max-w-40 cursor-default select-none items-center gap-1.5 rounded-md border border-border px-1.5 text-sm font-medium transition-all hover:bg-accent hover:text-accent-foreground dark:hover:bg-accent/50">
               <Folder className="size-2.5 shrink-0 text-sidebar-foreground/60" />
