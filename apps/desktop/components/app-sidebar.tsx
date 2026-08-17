@@ -317,12 +317,16 @@ function McpSkillsButton() {
 
 function UsageButton() {
   const { t } = useTranslation()
-  const openSettings = useSettingsUi((s) => s.openSettings)
+  const { view, setView } = useWorkspace()
+  const active = view === "analytics"
   return (
     <Button
       variant="ghost"
-      className="w-full justify-start gap-2 text-sm"
-      onClick={() => openSettings("analytics")}
+      className={cn(
+        "w-full justify-start gap-2 text-sm",
+        active && "bg-sidebar-accent text-sidebar-accent-foreground",
+      )}
+      onClick={() => setView(active ? "chat" : "analytics")}
     >
       <BarChart3 className="size-4" />
       {t("sidebar.usage")}

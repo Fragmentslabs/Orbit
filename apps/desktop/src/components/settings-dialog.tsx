@@ -1,6 +1,6 @@
 import { memo, useEffect, useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
-import { BarChart3, Bell, BookOpen, Database, KeyRound, Palette, Settings2, Shield, Trash2, Check, Plus, Wifi, WifiOff, RefreshCw, Server, X, Pencil } from "lucide-react"
+import { Bell, BookOpen, Database, KeyRound, Palette, Settings2, Shield, Trash2, Check, Plus, Wifi, WifiOff, RefreshCw, Server, X, Pencil } from "lucide-react"
 import {
   Dialog,
   DialogContent,
@@ -13,7 +13,6 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { ModelSelectorLogo } from "@/src/components/ai/model-selector"
 import { PreferencesPanel } from "@/src/components/preferences-panel"
-import { AnalyticsPanel } from "@/src/components/analytics-panel"
 import { DataPanel } from "@/src/components/data-panel"
 import { HowToPanel } from "@/src/components/how-to-panel"
 import { AppearancePanel } from "@/src/components/appearance-panel"
@@ -39,7 +38,6 @@ function useTabs(): TabDef[] {
     { id: "providers", label: t("settings.tabs.providers.label"), icon: KeyRound, description: t("settings.tabs.providers.description") },
     { id: "autonomy", label: t("settings.tabs.autonomy.label"), icon: Shield, description: t("settings.tabs.autonomy.description") },
     { id: "howto", label: t("settings.tabs.howto.label"), icon: BookOpen, description: t("settings.tabs.howto.description") },
-    { id: "analytics", label: t("settings.tabs.analytics.label"), icon: BarChart3, description: t("settings.tabs.analytics.description") },
     { id: "appearance", label: t("settings.tabs.appearance.label"), icon: Palette, description: t("settings.tabs.appearance.description") },
     { id: "notifications", label: t("settings.tabs.notifications.label"), icon: Bell, description: t("settings.tabs.notifications.description") },
     { id: "system", label: t("settings.tabs.system.label"), icon: Settings2, description: t("settings.tabs.system.description") },
@@ -477,7 +475,7 @@ export function SettingsDialog({ open, onOpenChange, initialTab = "providers" }:
               <p className="text-[11px] text-muted-foreground">{active.description}</p>
             </div>
             <div className="h-[520px] min-w-0">
-              {tab === "providers" ? <ProvidersTab searchInputRef={providerSearchRef} /> : tab === "autonomy" ? <PreferencesPanel /> : tab === "appearance" ? <AppearancePanel /> : tab === "notifications" ? <NotificationsPanel /> : tab === "system" ? <SystemPanel /> : tab === "howto" ? <HowToPanel /> : tab === "analytics" ? <AnalyticsPanel /> : <DataPanel />}
+              {tab === "providers" ? <ProvidersTab searchInputRef={providerSearchRef} /> : tab === "autonomy" ? <PreferencesPanel /> : tab === "appearance" ? <AppearancePanel /> : tab === "notifications" ? <NotificationsPanel /> : tab === "system" ? <SystemPanel /> : tab === "howto" ? <HowToPanel /> : <DataPanel />}
             </div>
           </div>
         </div>
