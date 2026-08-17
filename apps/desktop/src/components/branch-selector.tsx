@@ -143,7 +143,7 @@ export function BranchSelector({ repoPath, onRequestAgentAction, open: openProp,
         )}
 
         {open && (
-          <div className="absolute left-0 top-full mt-1 z-50 w-44 rounded-lg border bg-popover/70 p-1 text-popover-foreground shadow-md ring-1 ring-foreground/10 backdrop-blur-2xl backdrop-saturate-150">
+          <div className="absolute left-0 top-full mt-1 z-[60] w-44 rounded-lg border bg-popover/70 p-1 text-popover-foreground shadow-md ring-1 ring-foreground/10 backdrop-blur-2xl backdrop-saturate-150">
             {data.branches.map((branch) => {
               const active = branch === data.current
               return (

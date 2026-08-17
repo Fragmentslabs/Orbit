@@ -55,7 +55,7 @@ export function CompactWorkspaceSelector({
       </button>
 
       {menuOpen && (
-        <div className="absolute left-0 top-full z-50 mt-1 w-48 rounded-lg border bg-popover/70 p-1 text-popover-foreground shadow-md ring-1 ring-foreground/10 backdrop-blur-2xl backdrop-saturate-150">
+        <div className="absolute left-0 top-full z-[60] mt-1 w-48 rounded-lg border bg-popover/70 p-1 text-popover-foreground shadow-md ring-1 ring-foreground/10 backdrop-blur-2xl backdrop-saturate-150">
           {repoPath && hasBranches && (
             <button
               type="button"
