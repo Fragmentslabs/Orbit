@@ -46,10 +46,14 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
     localStorage.setItem(RECENT_FOLDERS_KEY, JSON.stringify(folders))
   }, [folders])
 
-  // Trocar de modo sempre volta para a view de chat
+  // Trocar de modo sempre volta para a view de chat e persiste o modo: na
+  // próxima abertura do app, abre no mesmo modo (chat ou código).
   const setMode = (next: WorkspaceMode) => {
     setModeState(next)
     setView("chat")
+    try {
+      localStorage.setItem("orbit-default-mode", JSON.stringify(next))
+    } catch {}
   }
 
   return (
