@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react"
 import { useTranslation, Trans } from "react-i18next"
 import { GitBranch, Check, LoaderIcon, PlusIcon } from "lucide-react"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { useBranchStore } from "@/src/stores/branch-store"
@@ -44,14 +45,18 @@ export function BranchSelector({ repoPath, onRequestAgentAction, open: openProp,
     fetchBranches(repoPath)
   }, [repoPath, fetchBranches])
 
+  // hideTrigger não tem um <button> visível para o Base UI Menu ancorar — só
+  // esse caso (composição via CompactWorkspaceSelector) usa o dropdown manual
+  // com fechamento por clique fora; o caso normal usa o Menu (portal, z acima
+  // de qualquer overlay do chat, alinhamento nativo).
   useEffect(() => {
-    if (!open) return
+    if (!hideTrigger || !open) return
     const handler = (e: MouseEvent) => {
       if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
     }
     document.addEventListener("mousedown", handler)
     return () => document.removeEventListener("mousedown", handler)
-  }, [open, setOpen])
+  }, [hideTrigger, open, setOpen])
 
   const retryCheckout = useCallback(async (branch: string) => {
     setCheckoutLoading(true)
@@ -123,15 +128,59 @@ export function BranchSelector({ repoPath, onRequestAgentAction, open: openProp,
   const data = byDir
   if (!data || data.branches.length === 0) return null
 
+  const branchItems = (
+    <>
+      {data.branches.map((branch) => {
+        const active = branch === data.current
+        return (
+          <button
+            key={branch}
+            type="button"
+            onClick={() => handleSelect(branch)}
+            className={cn(
+              "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-xs transition-colors",
+              active ? "bg-primary/10 text-primary" : "hover:bg-foreground/10",
+            )}
+          >
+            <GitBranch className="size-3 shrink-0" />
+            <span className="flex-1 truncate">{branch}</span>
+            {active && <Check className="size-3 shrink-0" />}
+          </button>
+        )
+      })}
+      <div className="mt-1 border-t border-foreground/10 pt-1">
+        <button
+          type="button"
+          onClick={openCreateDialog}
+          className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-foreground/10 hover:text-foreground"
+        >
+          <PlusIcon className="size-3.5 shrink-0" />
+          {t("branch.newBranch")}
+        </button>
+      </div>
+    </>
+  )
+
   return (
     <>
-      <div className="relative" ref={ref}>
-        {!hideTrigger && (
-          <button
-            type="button"
-            onClick={() => setOpen(!open)}
-            disabled={loading || checkoutLoading}
-            className="flex h-7 items-center gap-1 rounded-md border border-border px-1.5 text-xs transition-colors hover:bg-accent hover:text-accent-foreground"
+      {hideTrigger ? (
+        <div className="relative" ref={ref}>
+          {open && (
+            <div className="absolute left-0 top-full mt-1 z-[60] w-44 rounded-lg border bg-popover/70 p-1 text-popover-foreground shadow-md ring-1 ring-foreground/10 backdrop-blur-2xl backdrop-saturate-150">
+              {branchItems}
+            </div>
+          )}
+        </div>
+      ) : (
+        <DropdownMenu open={open} onOpenChange={setOpen}>
+          <DropdownMenuTrigger
+            render={
+              <button
+                type="button"
+                disabled={loading || checkoutLoading}
+                className="flex h-7 items-center gap-1 rounded-md border border-border px-1.5 text-xs transition-colors hover:bg-accent hover:text-accent-foreground"
+              />
+            }
           >
             {loading || checkoutLoading ? (
               <LoaderIcon className="size-3 animate-spin" />
@@ -139,42 +188,12 @@ export function BranchSelector({ repoPath, onRequestAgentAction, open: openProp,
               <GitBranch className="size-3 text-muted-foreground" />
             )}
             <span className="max-w-20 truncate">{data.current || t("branch.detached")}</span>
-          </button>
-        )}
-
-        {open && (
-          <div className="absolute left-0 top-full mt-1 z-[60] w-44 rounded-lg border bg-popover/70 p-1 text-popover-foreground shadow-md ring-1 ring-foreground/10 backdrop-blur-2xl backdrop-saturate-150">
-            {data.branches.map((branch) => {
-              const active = branch === data.current
-              return (
-                <button
-                  key={branch}
-                  type="button"
-                  onClick={() => handleSelect(branch)}
-                  className={cn(
-                    "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-xs transition-colors",
-                    active ? "bg-primary/10 text-primary" : "hover:bg-foreground/10",
-                  )}
-                >
-                  <GitBranch className="size-3 shrink-0" />
-                  <span className="flex-1 truncate">{branch}</span>
-                  {active && <Check className="size-3 shrink-0" />}
-                </button>
-              )
-            })}
-            <div className="mt-1 border-t border-foreground/10 pt-1">
-              <button
-                type="button"
-                onClick={openCreateDialog}
-                className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-foreground/10 hover:text-foreground"
-              >
-                <PlusIcon className="size-3.5 shrink-0" />
-                {t("branch.newBranch")}
-              </button>
-            </div>
-          </div>
-        )}
-      </div>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-44 p-1">
+            {branchItems}
+          </DropdownMenuContent>
+        </DropdownMenu>
+      )}
 
       {/* Conflict dialog */}
       <Dialog open={conflictError !== null} onOpenChange={(v) => { if (!v) { setConflictError(null); setPendingBranch(null) } }}>

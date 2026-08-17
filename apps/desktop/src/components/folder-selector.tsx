@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { Check, ChevronDown, Folder, Plus, X } from "lucide-react"
+import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 
 const RECENT_FOLDERS_KEY = "orbit-recent-folders"
 
@@ -47,7 +48,12 @@ export function FolderSelector({ folders, onFoldersChange, compact, open: openPr
   const recentRef = useRef<HTMLDivElement>(null)
   const [recentFolders] = useState<string[]>(loadRecentFolders)
 
+  // hideTrigger não tem um <button> visível para o Base UI Menu ancorar — só
+  // esse caso (composição via CompactWorkspaceSelector) usa o dropdown manual
+  // com fechamento por clique fora; o caso normal usa o Menu (portal, z acima
+  // de qualquer overlay do chat, alinhamento nativo).
   useEffect(() => {
+    if (!hideTrigger) return
     function handleClickOutside(e: MouseEvent) {
       if (recentRef.current && !recentRef.current.contains(e.target as Node)) {
         setRecentOpen(false)
@@ -57,7 +63,7 @@ export function FolderSelector({ folders, onFoldersChange, compact, open: openPr
       document.addEventListener("mousedown", handleClickOutside)
       return () => document.removeEventListener("mousedown", handleClickOutside)
     }
-  }, [recentOpen, setRecentOpen])
+  }, [hideTrigger, recentOpen, setRecentOpen])
 
   const setPrimaryFolder = useCallback(async (path?: string) => {
     if (compact) return
@@ -85,8 +91,8 @@ export function FolderSelector({ folders, onFoldersChange, compact, open: openPr
 
   const associatedRemovable = (folder: string) => folders.includes(folder) && folder !== folders[0]
 
-  const folderMenu = recentOpen && (
-    <div className="absolute left-0 top-full z-[60] mt-1 w-56 rounded-lg border bg-popover/70 p-1 text-popover-foreground shadow-md ring-1 ring-foreground/10 backdrop-blur-2xl backdrop-saturate-150">
+  const folderItems = (
+    <>
       <button
         onClick={() => addAdditionalFolder()}
         className="flex min-h-7 w-full items-center gap-2 rounded-md px-2 py-1 text-xs font-medium hover:bg-foreground/10"
@@ -141,27 +147,41 @@ export function FolderSelector({ folders, onFoldersChange, compact, open: openPr
           </button>
         )
       })}
-    </div>
+    </>
+  )
+
+  const triggerClassName = compact
+    ? "group flex h-7 min-w-0 max-w-28 cursor-pointer select-none items-center gap-1 rounded-md border border-border/50 px-1.5 text-xs transition-all hover:bg-accent hover:text-accent-foreground dark:hover:bg-accent/50 sm:max-w-40"
+    : "group flex h-8 min-w-0 max-w-40 cursor-pointer select-none items-center gap-1.5 rounded-md border border-border px-1.5 text-sm font-medium transition-all hover:bg-accent hover:text-accent-foreground dark:hover:bg-accent/50"
+
+  const triggerContent = (
+    <>
+      <Folder className="size-3 shrink-0 text-sidebar-foreground/60" />
+      <span className="truncate">{folders.length === 0 ? t("folderSelector.associate") : getFolderName(folders[0])}</span>
+      <ChevronDown className="size-3 shrink-0 text-muted-foreground" />
+    </>
   )
 
   return (
     <div className="flex min-w-0 flex-wrap items-center gap-1.5">
-      <div className="relative min-w-0" ref={recentRef}>
-        {!hideTrigger && (
-          <button
-            onClick={() => setRecentOpen(!recentOpen)}
-            className={compact
-              ? "group flex h-7 min-w-0 max-w-28 cursor-pointer select-none items-center gap-1 rounded-md border border-border/50 px-1.5 text-xs transition-all hover:bg-accent hover:text-accent-foreground dark:hover:bg-accent/50 sm:max-w-40"
-              : "group flex h-8 min-w-0 max-w-40 cursor-pointer select-none items-center gap-1.5 rounded-md border border-border px-1.5 text-sm font-medium transition-all hover:bg-accent hover:text-accent-foreground dark:hover:bg-accent/50"
-            }
-          >
-            <Folder className="size-3 shrink-0 text-sidebar-foreground/60" />
-            <span className="truncate">{folders.length === 0 ? t("folderSelector.associate") : getFolderName(folders[0])}</span>
-            <ChevronDown className="size-3 shrink-0 text-muted-foreground" />
-          </button>
-        )}
-        {folderMenu}
-      </div>
+      {hideTrigger ? (
+        <div className="relative min-w-0" ref={recentRef}>
+          {recentOpen && (
+            <div className="absolute left-0 top-full z-[60] mt-1 w-56 rounded-lg border bg-popover/70 p-1 text-popover-foreground shadow-md ring-1 ring-foreground/10 backdrop-blur-2xl backdrop-saturate-150">
+              {folderItems}
+            </div>
+          )}
+        </div>
+      ) : (
+        <DropdownMenu open={recentOpen} onOpenChange={setRecentOpen}>
+          <DropdownMenuTrigger render={<button className={triggerClassName} />}>
+            {triggerContent}
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-56 p-1">
+            {folderItems}
+          </DropdownMenuContent>
+        </DropdownMenu>
+      )}
       {/* No modo compact a gestão de pastas extras (adicionar/remover) já vive
           inteira dentro do dropdown acima — essa fileira full-size só faz
           sentido no seletor não-compacto (ex.: NewChatTab), senão duplica o

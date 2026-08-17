@@ -1,6 +1,7 @@
-import { useEffect, useRef, useState } from "react"
+import { useState } from "react"
 import { useTranslation } from "react-i18next"
 import { ChevronDown, ChevronRight, Folder, GitBranch } from "lucide-react"
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { BranchSelector } from "@/src/components/branch-selector"
 import { FolderSelector, getFolderName } from "@/src/components/folder-selector"
 import { useBranchStore } from "@/src/stores/branch-store"
@@ -29,42 +30,27 @@ export function CompactWorkspaceSelector({
   const [menuOpen, setMenuOpen] = useState(false)
   const [branchOpen, setBranchOpen] = useState(false)
   const [folderOpen, setFolderOpen] = useState(false)
-  const ref = useRef<HTMLDivElement>(null)
-
-  useEffect(() => {
-    if (!menuOpen) return
-    const handler = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setMenuOpen(false)
-    }
-    document.addEventListener("mousedown", handler)
-    return () => document.removeEventListener("mousedown", handler)
-  }, [menuOpen])
 
   if (!repoPath && folders.length === 0) return null
 
   return (
-    <div className="relative" ref={ref}>
-      <button
-        type="button"
-        onClick={() => setMenuOpen((v) => !v)}
-        className="flex h-7 min-w-0 max-w-32 items-center gap-1 rounded-md border border-border/50 px-1.5 text-xs transition-colors hover:bg-accent hover:text-accent-foreground"
-      >
-        <Folder className="size-3 shrink-0 text-sidebar-foreground/60" />
-        <span className="truncate">{folders.length === 0 ? t("folderSelector.associate") : getFolderName(folders[0])}</span>
-        <ChevronDown className="size-3 shrink-0 text-muted-foreground" />
-      </button>
-
-      {menuOpen && (
-        <div className="absolute left-0 top-full z-[60] mt-1 w-48 rounded-lg border bg-popover/70 p-1 text-popover-foreground shadow-md ring-1 ring-foreground/10 backdrop-blur-2xl backdrop-saturate-150">
-          {repoPath && hasBranches && (
+    <div className="relative">
+      <DropdownMenu open={menuOpen} onOpenChange={setMenuOpen}>
+        <DropdownMenuTrigger
+          render={
             <button
               type="button"
-              onClick={() => {
-                setMenuOpen(false)
-                setBranchOpen(true)
-              }}
-              className="flex w-full items-center justify-between rounded-md px-2 py-1.5 text-xs hover:bg-foreground/10"
-            >
+              className="flex h-7 min-w-0 max-w-32 items-center gap-1 rounded-md border border-border/50 px-1.5 text-xs transition-colors hover:bg-accent hover:text-accent-foreground"
+            />
+          }
+        >
+          <Folder className="size-3 shrink-0 text-sidebar-foreground/60" />
+          <span className="truncate">{folders.length === 0 ? t("folderSelector.associate") : getFolderName(folders[0])}</span>
+          <ChevronDown className="size-3 shrink-0 text-muted-foreground" />
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" className="w-48 p-1">
+          {repoPath && hasBranches && (
+            <DropdownMenuItem onClick={() => setBranchOpen(true)} className="justify-between">
               <span className="flex items-center gap-2">
                 <GitBranch className="size-3.5" />
                 {t("branch.title")}
@@ -73,24 +59,17 @@ export function CompactWorkspaceSelector({
                 <span className="max-w-16 truncate">{byDir?.current}</span>
                 <ChevronRight className="size-3" />
               </span>
-            </button>
+            </DropdownMenuItem>
           )}
-          <button
-            type="button"
-            onClick={() => {
-              setMenuOpen(false)
-              setFolderOpen(true)
-            }}
-            className="flex w-full items-center justify-between rounded-md px-2 py-1.5 text-xs hover:bg-foreground/10"
-          >
+          <DropdownMenuItem onClick={() => setFolderOpen(true)} className="justify-between">
             <span className="flex items-center gap-2">
               <Folder className="size-3.5" />
               {t("folderSelector.title")}
             </span>
             <ChevronRight className="size-3 text-muted-foreground" />
-          </button>
-        </div>
-      )}
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
 
       {repoPath && (
         <BranchSelector
