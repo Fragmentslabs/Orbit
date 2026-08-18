@@ -294,6 +294,10 @@ function Layout() {
                   }
                   hasMenu={view === "chat" && workspaceMode === "chat" && !!activeSession}
                   session={view === "chat" && workspaceMode === "chat" ? activeSession : undefined}
+                  // Indicador do browser do agente: vale nos dois modos da
+                  // conversa (chat e código), já que as tools de browser são
+                  // chaveadas pelo id da sessão, não pelo modo.
+                  sessionId={view === "chat" ? activeSession?.id : undefined}
                   rightPanelOpen={rightPanelOpen}
                   onToggleSidebar={handleToggleSidebar}
                   onToggleRightPanel={workspaceMode === "code" || workspaceMode === "chat" ? () => setRightPanelOpen(!rightPanelOpen) : undefined}

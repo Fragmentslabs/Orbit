@@ -37,12 +37,17 @@ export function BrowserTestChip({ sessionId, className, compact }: { sessionId?:
   if (!sessionId || !entry) return null
   if (Date.now() - entry.at > AGENT_BROWSER_FRESH_MS) return null
 
-  const label = compact && entry.url ? `${t("chat.browser.viewAgentBrowser")} — ${entry.url}` : t("chat.browser.viewAgentBrowser")
+  // No compact o texto pode estar escondido (header estreito): o title carrega
+  // o estado junto, senão sobra um globo sem explicação.
+  const label = compact
+    ? [`${t("chat.browser.testing")} — ${t("chat.browser.viewAgentBrowser")}`, entry.url].filter(Boolean).join(" — ")
+    : t("chat.browser.viewAgentBrowser")
 
   return (
     <button
       type="button"
       title={label}
+      aria-label={label}
       onClick={() => usePanelStore.getState().openAgentBrowser(sessionId)}
       className={cn(
         "group inline-flex max-w-full items-center gap-1.5 self-start rounded-full border border-emerald-500/30 bg-background/90 px-2.5 py-1 text-[11px] font-medium text-emerald-600 shadow-sm backdrop-blur transition-colors hover:bg-emerald-500/10 dark:text-emerald-400",
@@ -50,7 +55,9 @@ export function BrowserTestChip({ sessionId, className, compact }: { sessionId?:
       )}
     >
       <GlobeIcon className="size-3.5 shrink-0" />
-      <Shimmer>{t("chat.browser.testing")}</Shimmer>
+      {/* Header estreito (sidebar + painel abertos): só o globo, com o texto
+          no title. O @lg mede o container do header, não o viewport. */}
+      <Shimmer className={cn(compact && "hidden @lg:inline-block")}>{t("chat.browser.testing")}</Shimmer>
       {!compact && entry.url && <span className="max-w-40 truncate font-mono text-emerald-600/70 dark:text-emerald-400/70">{shortUrl(entry.url)}</span>}
       {!compact && <ChevronRightIcon className="size-3.5 shrink-0 text-emerald-600/50 transition-transform group-hover:translate-x-0.5 dark:text-emerald-400/50" />}
     </button>
