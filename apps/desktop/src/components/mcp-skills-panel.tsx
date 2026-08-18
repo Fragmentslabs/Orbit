@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
+import type { TFunction } from "i18next"
 import {
   Cable,
   ChevronDown,
@@ -49,6 +50,7 @@ import { useDraftInput } from "@/src/stores/draft-input"
 import { useSessionStore } from "@/src/stores/session-store"
 import { useSkillsStore } from "@/src/stores/skills-store"
 import type { McpServerConfig } from "@shared/mcp"
+import type { NodaraStatus } from "@shared/nodara"
 import type { Skill } from "@shared/skills"
 import nodaraLogo from "@/src/assets/nodara-logo.png"
 
@@ -519,6 +521,140 @@ function StatusBadge({ state, error }: { state: string; error?: string }) {
 }
 
 /* ------------------------------------------------------------------ */
+/*  Integração oficial: Nodara                                          */
+/* ------------------------------------------------------------------ */
+
+const NODARA_SITE = "https://nodaraapp.com"
+/** Enquanto o card está aberto, reflete o app Nodara abrindo/fechando. */
+const NODARA_POLL_MS = 15_000
+
+/** Cor do selo por estado: verde só quando as tools estão de fato no agente. */
+const NODARA_BADGE_TONE: Record<NodaraStatus["state"], string> = {
+  connected: "text-emerald-500",
+  installed: "text-amber-500",
+  error: "text-destructive",
+  stopped: "text-muted-foreground",
+  disabled: "text-muted-foreground",
+  "not-installed": "text-muted-foreground",
+}
+
+/** Códigos que o main devolve normalizados (o 401 cru não ajuda ninguém). */
+const NODARA_ERROR_KEYS: Record<string, string> = {
+  "nodara-unauthorized": "mcp.integrations.nodaraError.unauthorized",
+  "nodara-unreachable": "mcp.integrations.nodaraError.unreachable",
+  "nodara-not-running": "mcp.integrations.nodaraError.notRunning",
+  "nodara-not-found": "mcp.integrations.nodaraError.notFound",
+  "nodara-no-token": "mcp.integrations.nodaraError.noToken",
+}
+
+/** Mensagem do estado atual — o card mostra sempre o que falta pra conectar. */
+function nodaraHint(status: NodaraStatus, t: TFunction): string {
+  if (status.state === "connected") {
+    return t("mcp.integrations.nodaraTools", { count: status.toolCount })
+  }
+  if (status.tokenStale) return t("mcp.integrations.nodaraStaleToken")
+  if (status.error) {
+    const key = NODARA_ERROR_KEYS[status.error]
+    return key ? t(key) : status.error
+  }
+  return t(`mcp.integrations.nodaraHint.${status.state}`)
+}
+
+function NodaraCard({ onChanged }: { onChanged: () => Promise<void> | void }) {
+  const { t } = useTranslation()
+  const [status, setStatus] = useState<NodaraStatus | null>(null)
+  const [busy, setBusy] = useState(false)
+
+  useEffect(() => {
+    let alive = true
+    const load = async () => {
+      const next = await nodaraApi.discover().catch(() => null)
+      if (alive && next) setStatus(next)
+    }
+    void load()
+    const timer = setInterval(() => void load(), NODARA_POLL_MS)
+    return () => {
+      alive = false
+      clearInterval(timer)
+    }
+  }, [])
+
+  // Conectar cobre também o reparo: o main reescreve URL e token a partir do
+  // ~/.nodara/mcp.json antes de reconectar, então um 401 por token vencido se
+  // resolve no mesmo botão.
+  const run = async (action: () => Promise<NodaraStatus>) => {
+    setBusy(true)
+    try {
+      setStatus(await action())
+      await onChanged()
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const state = status?.state ?? "not-installed"
+  const connected = state === "connected"
+  const canConnect = state === "installed" || state === "error"
+  // "stopped"/"disabled" dependem de uma ação do usuário dentro do Nodara —
+  // o botão só re-checa o estado.
+  const canRetry = state === "stopped" || state === "disabled"
+  const actionLabel = canConnect
+    ? t(state === "installed" ? "mcp.integrations.connect" : "mcp.integrations.reconnect")
+    : canRetry
+      ? t("mcp.integrations.retry")
+      : t("mcp.integrations.download")
+
+  return (
+    <div className="flex items-center gap-3 rounded-lg border p-3">
+      <img src={nodaraLogo} alt="" className="size-8 shrink-0 rounded-lg object-cover" />
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-2">
+          <span className="text-sm font-medium">Nodara</span>
+          {status && (
+            <span className={cn("text-[10px] font-medium", NODARA_BADGE_TONE[state])}>
+              {t(`mcp.integrations.state.${state}`)}
+            </span>
+          )}
+        </div>
+        <p className="mt-0.5 text-[11px] text-muted-foreground">{t("mcp.integrations.nodaraDescription")}</p>
+        {status && <p className="mt-0.5 truncate text-[11px] text-muted-foreground/80">{nodaraHint(status, t)}</p>}
+      </div>
+      <div className="flex shrink-0 items-center gap-1">
+        {connected && (
+          <Button size="sm" variant="ghost" className="gap-1" disabled={busy} onClick={() => void run(nodaraApi.disconnect)}>
+            {t("mcp.integrations.disconnect")}
+          </Button>
+        )}
+        {!connected && (
+          <Button
+            size="sm"
+            variant="outline"
+            className="gap-1"
+            disabled={busy}
+            onClick={() => {
+              if (canConnect) return void run(nodaraApi.connect)
+              if (canRetry) return void run(nodaraApi.discover)
+              window.open(NODARA_SITE, "_blank")
+            }}
+          >
+            {busy ? (
+              <LoaderCircle className="size-3 animate-spin" />
+            ) : canConnect ? (
+              <Cable className="size-3" />
+            ) : canRetry ? (
+              <RefreshCw className="size-3" />
+            ) : (
+              <ExternalLink className="size-3" />
+            )}
+            {actionLabel}
+          </Button>
+        )}
+      </div>
+    </div>
+  )
+}
+
+/* ------------------------------------------------------------------ */
 /*  Panel principal                                                     */
 /* ------------------------------------------------------------------ */
 
@@ -531,43 +667,13 @@ export function McpSkillsPanel() {
   const [skillEdit, setSkillEdit] = useState<Skill | undefined>()
   const [importError, setImportError] = useState("")
   const [viewContentSlug, setViewContent] = useState<string | null>(null)
-  const [nodaraState, setNodaraState] = useState<"not-installed" | "installed" | "connected" | null>(null)
-  const [nodaraConnecting, setNodaraConnecting] = useState(false)
   const viewSkill = viewContentSlug ? skills.find((s) => s.slug === viewContentSlug) ?? null : null
 
   const { setMode, setView } = useWorkspace()
 
   useEffect(() => {
     void refresh()
-    void nodaraApi.discover().then((result) => setNodaraState(result.state)).catch(() => setNodaraState("not-installed"))
   }, [refresh])
-
-  const connectNodara = async () => {
-    setNodaraConnecting(true)
-    try {
-      const discovered = await nodaraApi.discover()
-      if (discovered.mcpUrl) {
-        const config = await mcpApi.config()
-        const existing = config.servers.find((server) => server.name === "Nodara")
-        const entry: McpServerConfig = {
-          ...(existing ?? {}),
-          name: "Nodara",
-          type: "http",
-          url: discovered.mcpUrl,
-          enabled: true,
-          ...(discovered.token ? { headers: { Authorization: `Bearer ${discovered.token}` } } : {}),
-        }
-        const index = config.servers.findIndex((server) => server.name === "Nodara")
-        if (index >= 0) config.servers[index] = entry
-        else config.servers.push(entry)
-        await mcpApi.save(config)
-        await refresh()
-        setNodaraState("connected")
-      }
-    } finally {
-      setNodaraConnecting(false)
-    }
-  }
 
   const importSkill = async () => {
     setImportError("")
@@ -592,31 +698,7 @@ export function McpSkillsPanel() {
           <p className="text-sm font-semibold">{t("mcp.integrations.title")}</p>
           <p className="mt-0.5 text-xs text-muted-foreground">{t("mcp.integrations.description")}</p>
         </div>
-        <div className="flex items-center gap-3 rounded-lg border p-3">
-          <img src={nodaraLogo} alt="" className="size-8 shrink-0 rounded-lg object-cover" />
-          <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-2">
-              <span className="text-sm font-medium">Nodara</span>
-              {nodaraState === "connected" && <StatusBadge state="connected" />}
-              {nodaraState === "installed" && <span className="text-[10px] font-medium text-amber-500">{t("mcp.integrations.installed")}</span>}
-            </div>
-            <p className="mt-0.5 text-[11px] text-muted-foreground">{t("mcp.integrations.nodaraDescription")}</p>
-          </div>
-          {nodaraState === "connected" ? (
-            <span className="text-[11px] text-emerald-500">{t("mcp.integrations.connected")}</span>
-          ) : (
-            <Button
-              size="sm"
-              variant="outline"
-              className="shrink-0 gap-1"
-              disabled={nodaraConnecting}
-              onClick={() => nodaraState === "installed" ? void connectNodara() : window.open("https://nodaraapp.com", "_blank")}
-            >
-              {nodaraConnecting ? <LoaderCircle className="size-3 animate-spin" /> : <ExternalLink className="size-3" />}
-              {nodaraState === "installed" ? t("mcp.integrations.connect") : t("mcp.integrations.download")}
-            </Button>
-          )}
-        </div>
+        <NodaraCard onChanged={refresh} />
       </div>
 
       {/* Servidores MCP */}

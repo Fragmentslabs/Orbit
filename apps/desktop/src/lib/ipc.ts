@@ -19,6 +19,7 @@ import type {
   Task,
 } from "@shared/esteira"
 import type { ModelsSnapshot } from "@shared/models"
+import type { NodaraStatus } from "@shared/nodara"
 import type {
   NovaRotinaInput,
   ResultadoGeracao,
@@ -225,14 +226,11 @@ export const skillsApi = {
   },
 }
 
-export interface NodaraDiscovery {
-  state: "not-installed" | "installed" | "connected"
-  mcpUrl?: string
-  token?: string
-}
-
 export const nodaraApi = {
-  discover: () => window.ipcRenderer.invoke("nodara:discover") as Promise<NodaraDiscovery>,
+  discover: () => window.ipcRenderer.invoke("nodara:discover") as Promise<NodaraStatus>,
+  /** Registra/repara o servidor MCP do Nodara e devolve o estado pós-conexão */
+  connect: () => window.ipcRenderer.invoke("nodara:connect") as Promise<NodaraStatus>,
+  disconnect: () => window.ipcRenderer.invoke("nodara:disconnect") as Promise<NodaraStatus>,
 }
 
 export const mcpApi = {

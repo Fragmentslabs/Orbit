@@ -985,8 +985,35 @@
       "nodaraDescription": "Control Android devices from Orbit using MCP.",
       "download": "Download Nodara",
       "connect": "Connect",
+      "reconnect": "Reconnect",
+      "disconnect": "Disconnect",
+      "retry": "Check again",
       "installed": "Installed",
-      "connected": "Connected"
+      "connected": "Connected",
+      "nodaraTools_one": "{{count}} tool available in Code mode",
+      "nodaraTools_other": "{{count}} tools available in Code mode",
+      "nodaraStaleToken": "Stale token — reconnect to refresh the authorization.",
+      "nodaraError": {
+        "unauthorized": "Nodara refused the authorization — reconnect to refresh the token.",
+        "unreachable": "Could not reach Nodara's local server.",
+        "notRunning": "Open Nodara: its local server is not responding.",
+        "notFound": "Nodara was not found on this machine.",
+        "noToken": "Nodara published no token — enable the MCP bridge in its settings."
+      },
+      "state": {
+        "not-installed": "Not installed",
+        "stopped": "Closed",
+        "disabled": "Disabled",
+        "installed": "Installed",
+        "error": "Error",
+        "connected": "Connected"
+      },
+      "nodaraHint": {
+        "not-installed": "Install Nodara to control Android devices from Orbit.",
+        "stopped": "Nodara is installed but closed — open the app to connect.",
+        "disabled": "The MCP bridge is off — enable it in Nodara's settings.",
+        "installed": "Nodara is running. Connect to expose its tools to the agent."
+      }
     },
     "servers": {
       "title": "MCP Servers",
