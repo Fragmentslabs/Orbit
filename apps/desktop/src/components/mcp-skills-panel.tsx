@@ -50,6 +50,7 @@ import { useSessionStore } from "@/src/stores/session-store"
 import { useSkillsStore } from "@/src/stores/skills-store"
 import type { McpServerConfig } from "@shared/mcp"
 import type { Skill } from "@shared/skills"
+import nodaraLogo from "@/src/assets/nodara-logo.png"
 
 /** Regex de slug válido: apenas minúsculas, números e underscores */
 const SLUG_REGEX = /^[a-z0-9_]+$/
@@ -592,7 +593,7 @@ export function McpSkillsPanel() {
           <p className="mt-0.5 text-xs text-muted-foreground">{t("mcp.integrations.description")}</p>
         </div>
         <div className="flex items-center gap-3 rounded-lg border p-3">
-          <img src="/nodara-logo.png" alt="" className="size-8 shrink-0 rounded-full object-cover" />
+          <img src={nodaraLogo} alt="" className="size-8 shrink-0 rounded-lg object-cover" />
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2">
               <span className="text-sm font-medium">Nodara</span>
