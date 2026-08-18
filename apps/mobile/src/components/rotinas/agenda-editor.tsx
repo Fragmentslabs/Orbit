@@ -1,6 +1,6 @@
-import { Component, useState, type ReactNode } from 'react'
+import { Component, useState, type ComponentType, type ReactNode } from 'react'
 import { View, Text, Pressable, TextInput, StyleSheet, Modal, Platform } from 'react-native'
-import DateTimePicker from '@react-native-community/datetimepicker'
+import type { DateTimePickerEvent } from '@react-native-community/datetimepicker'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useTranslation } from 'react-i18next'
 import {
@@ -21,6 +21,19 @@ import { getThemeTokens, type ThemeTokens } from '~/lib/theme-tokens'
 import { useThemeStore } from '~/stores/theme-store'
 import { hslToRgba } from '~/lib/theme'
 import { descreverAgenda, diasCurtos, modoDaAgenda, type ModoAgenda } from '~/lib/agenda'
+
+// O pacote do datetimepicker chama TurboModuleRegistry.getEnforcing no load do
+// módulo e LANÇA em binários sem o módulo nativo (build desatualizado / Expo
+// Go antigo). Por isso o require é lazy e protegido: um import estático
+// derrubaria a rota no carregamento (default export nunca registrado). Com o
+// módulo ausente, a UI cai no seletor manual (SeletorHorarioManual).
+const PickerNativo: ComponentType<any> | null = (() => {
+  try {
+    return require('@react-native-community/datetimepicker').default
+  } catch {
+    return null
+  }
+})()
 
 /**
  * Edição da agenda e dos modos — compartilhada pela criação e pela edição de
@@ -166,13 +179,17 @@ function ModalSeletorHorario({
   const tema = useThemeStore((s) => s.resolved)
   const [temporario, setTemporario] = useState(() => horarioParaDate(valor))
 
+  // Sem o módulo nativo, o caller (AgendaEditor) nem chega a renderizar este
+  // modal — cai no SeletorHorarioManual antes.
+  if (!PickerNativo) return null
+
   if (Platform.OS === 'android') {
     return (
-      <DateTimePicker
+      <PickerNativo
         mode="time"
         value={temporario}
         is24Hour
-        onChange={(evento, data) => {
+        onChange={(evento: DateTimePickerEvent, data?: Date) => {
           if (evento.type === 'set' && data) onChange(formatarData(data))
           onFechar()
         }}
@@ -191,12 +208,12 @@ function ModalSeletorHorario({
       {/* O UIPickerView nativo tem altura fixa (216pt) mas pode desenhar o
           conteúdo deslocado dentro dela; o container flex centraliza as
           rodas verticalmente no espaço restante da tela. */}
-      <DateTimePicker
+      <PickerNativo
         mode="time"
         display="spinner"
         value={temporario}
         themeVariant={tema === 'dark' ? 'dark' : 'light'}
-        onChange={(evento, data) => {
+        onChange={(evento: DateTimePickerEvent, data?: Date) => {
           if (evento.type === 'set' && data) setTemporario(data)
         }}
       />
@@ -230,7 +247,7 @@ export function AgendaEditor({ agenda, onChange }: { agenda: Agenda; onChange: (
   const horarioValido = !!parseHorario(agenda.horario)
   const [mostrarPicker, setMostrarPicker] = useState(false)
   /** Binário sem o módulo nativo (build antigo) → usa o seletor manual. */
-  const [modoNativo, setModoNativo] = useState(true)
+  const [modoNativo, setModoNativo] = useState(!!PickerNativo)
   const fecharPicker = () => setMostrarPicker(false)
 
   const trocarModo = (proximo: ModoAgenda) => {

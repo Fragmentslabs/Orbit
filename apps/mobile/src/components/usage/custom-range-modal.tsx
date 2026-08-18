@@ -1,11 +1,24 @@
-import { Component, useState, type ReactNode } from 'react'
+import { Component, useState, type ComponentType, type ReactNode } from 'react'
 import { View, Text, Pressable, Modal, Platform, TextInput, StyleSheet } from 'react-native'
-import DateTimePicker from '@react-native-community/datetimepicker'
+import type { DateTimePickerEvent } from '@react-native-community/datetimepicker'
 import { CalendarDays } from 'lucide-react-native'
 import { useTranslation } from 'react-i18next'
 import type { CustomAnalyticsRange } from '@orbit/shared'
 import { getThemeTokens } from '~/lib/theme-tokens'
 import { useThemeStore } from '~/stores/theme-store'
+
+// O pacote do datetimepicker chama TurboModuleRegistry.getEnforcing no load do
+// módulo e LANÇA em binários sem o módulo nativo (build desatualizado / Expo
+// Go antigo). Por isso o require é lazy e protegido: um import estático
+// derrubaria esta rota no carregamento (default export nunca registrado). Com
+// o módulo ausente, a UI cai no fallback manual (CampoDataManual).
+const PickerNativo: ComponentType<any> | null = (() => {
+  try {
+    return require('@react-native-community/datetimepicker').default
+  } catch {
+    return null
+  }
+})()
 
 /**
  * Seleção de período personalizado da tela de uso — espelho do date range
@@ -96,7 +109,7 @@ export function CustomRangeModal({
   const [ate, setAte] = useState(() => (valorAtual ? new Date(valorAtual.to) : new Date()))
   const [campo, setCampo] = useState<'de' | 'ate'>('de')
   const [campoAberto, setCampoAberto] = useState<'de' | 'ate' | null>(null)
-  const [modoNativo, setModoNativo] = useState(true)
+  const [modoNativo, setModoNativo] = useState(!!PickerNativo)
 
   const valorDoCampo = campo === 'de' ? de : ate
   const definirValor = campo === 'de' ? setDe : setAte
@@ -118,15 +131,15 @@ export function CustomRangeModal({
     backgroundColor: ativo ? tokens.background : tokens.muted,
   })
 
-  const seletorNativo = (
-    <DateTimePicker
+  const seletorNativo = PickerNativo ? (
+    <PickerNativo
       mode="date"
       display={Platform.OS === 'ios' ? 'inline' : 'default'}
       value={valorDoCampo}
       maximumDate={new Date()}
       locale={i18n.language}
       themeVariant={tema === 'dark' ? 'dark' : 'light'}
-      onChange={(evento, data) => {
+      onChange={(evento: DateTimePickerEvent, data?: Date) => {
         if (Platform.OS === 'android') {
           setCampoAberto(null)
           if (evento.type === 'set' && data) definirValor(data)
@@ -135,7 +148,7 @@ export function CustomRangeModal({
         }
       }}
     />
-  )
+  ) : null
 
   return (
     <Modal visible={visivel} animationType="fade" transparent onRequestClose={onCancelar}>
