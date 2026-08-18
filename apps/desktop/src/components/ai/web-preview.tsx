@@ -172,7 +172,9 @@ export const WebPreviewNavigationButton = ({
   <TooltipProvider>
     <Tooltip>
       <TooltipTrigger render={<Button className="h-8 w-8 p-0 hover:text-foreground" disabled={disabled} onClick={onClick} size="sm" variant="ghost" {...props} />}>{children}</TooltipTrigger>
-      <TooltipContent>
+      {/* z-[80]: o tooltip é portaled ao body (z-50 base) e ficaria atrás do
+          overlay do browser em tela cheia (z-[70]), cortando a dica no header */}
+      <TooltipContent positionerClassName="z-[80]">
         <p>{tooltip}</p>
       </TooltipContent>
     </Tooltip>
