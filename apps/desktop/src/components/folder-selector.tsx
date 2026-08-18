@@ -68,15 +68,19 @@ export function FolderSelector({ folders, onFoldersChange, compact, open: openPr
   }, [hideTrigger, recentOpen, setRecentOpen])
 
   const setPrimaryFolder = useCallback(async (path?: string) => {
-    let folderPath: string | undefined = path
-    if (!folderPath) {
-      const picked = await pickFolder()
-      if (!picked) return
-      folderPath = picked
-    }
+    const folderPath = path ?? (await pickFolder())
+    if (!folderPath) return
     setRecentOpen(false)
     if (folders[0] === folderPath) return
-    onFoldersChange([folderPath, ...folders.filter((f) => f !== folderPath)])
+    onFoldersChange(
+      folders.includes(folderPath)
+        // Já associada (escolhida na lista): vira a principal e a antiga desce
+        // para as extras.
+        ? [folderPath, ...folders.filter((f) => f !== folderPath)]
+        // Pasta nova pelo seletor: troca o repositório principal, preservando
+        // as extras já associadas.
+        : [folderPath, ...folders.slice(1)],
+    )
   }, [folders, onFoldersChange, setRecentOpen])
 
   const addAdditionalFolder = useCallback(async () => {
@@ -94,10 +98,13 @@ export function FolderSelector({ folders, onFoldersChange, compact, open: openPr
     <p className="px-2 pt-1.5 pb-1 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">{label}</p>
   )
 
-  const folderRow = (folder: string, { active, removable }: { active?: boolean; removable?: boolean }) => (
+  const folderRow = (
+    folder: string,
+    { active, removable, onSelect }: { active?: boolean; removable?: boolean; onSelect?: () => void },
+  ) => (
     <button
       key={folder}
-      onClick={() => setPrimaryFolder(folder)}
+      onClick={onSelect ?? (() => setPrimaryFolder(folder))}
       className="group flex min-h-7 w-full items-center gap-2 rounded-md px-2 py-1 text-xs hover:bg-foreground/10"
     >
       <Folder className="size-3.5 shrink-0 text-sidebar-foreground/60" />
@@ -124,7 +131,9 @@ export function FolderSelector({ folders, onFoldersChange, compact, open: openPr
       {primaryFolder && (
         <div className="pt-1">
           {sectionLabel(t("folderSelector.primary"))}
-          {folderRow(primaryFolder, { active: true })}
+          {/* Clicar na pasta principal abre o seletor nativo para trocá-la —
+              selecionar a que já é principal não faria nada. */}
+          {folderRow(primaryFolder, { active: true, onSelect: () => void setPrimaryFolder() })}
         </div>
       )}
       <div className={primaryFolder ? "mt-1 border-t border-border pt-1" : "pt-1"}>
