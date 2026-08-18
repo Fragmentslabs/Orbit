@@ -725,7 +725,7 @@ export function McpSkillsPanel() {
             {mcpServers.map((server) => {
               const active = server.state === "connected"
               return (
-                <div key={server.config.name} className="flex items-center gap-3 rounded-lg border p-3">
+                <div key={server.config.name} className="flex items-start gap-3 rounded-lg border p-3">
                   <div className={cn("flex size-8 items-center justify-center rounded-full", active ? "bg-emerald-500/10" : "bg-muted")}>
                     <Server className={cn("size-4", active ? "text-emerald-500" : "text-muted-foreground/50")} />
                   </div>
