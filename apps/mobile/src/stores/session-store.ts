@@ -36,7 +36,47 @@ import { useModeOverrides, modeActiveFor } from './mode-overrides'
 import { useModelModePrefs } from './model-mode-prefs'
 import { useSimplePrefs } from './simple-prefs'
 import { useBrainPrefs } from './brain-prefs'
-import { sessionModelFor, useSessionModelPrefs, type SessionModelOverrides } from './session-model-prefs'
+import { DRAFT_KEY, useSessionModelPrefs, type SelectedModel, type SessionModelOverrides } from './session-model-prefs'
+
+// ─── Modelo efetivo da sessão ────────────────────────────────────────────────
+// Mistura três regras (override por chat > draft > último chat > default
+// global). Vive no session-store — e não no session-model-prefs — porque
+// depende da lista de sessões; isso evita o require cycle entre os dois
+// stores (session-model-prefs só guarda os overrides).
+
+/** Sessão mais recente não arquivada e não-worker — o modelo dela é o default
+ *  do próximo chat novo. */
+function latestSession(sessions: SessionInfo[]): SessionInfo | undefined {
+  return sessions.filter((s) => !s.archived && !s.parentId).sort((a, b) => b.updatedAt - a.updatedAt)[0]
+}
+
+/** Modelo efetivo da sessão: override por chat > default global. Chat novo
+ *  (draft) sem escolha explícita herda o modelo do último chat usado antes de
+ *  cair no default global. */
+export function sessionModelFor(sessionId?: string | null): SelectedModel | null {
+  const prefs = useSessionModelPrefs.getState()
+  const override = prefs.overrides[sessionId ?? DRAFT_KEY]
+  if (override) return override
+  if (!sessionId) {
+    const latest = latestSession(useSessionStore.getState().sessions)
+    const latestOverride = latest ? prefs.overrides[latest.id] : undefined
+    if (latestOverride) return latestOverride
+  }
+  return useSettingsStore.getState().selectedModel
+}
+
+/** Hook reativo do modelo efetivo da sessão (reage a override, a default e à
+ *  sessão mais recente — para o chat novo acompanhar o último modelo usado). */
+export function useSessionModel(sessionId?: string | null): SelectedModel | null {
+  const overrides = useSessionModelPrefs((s) => s.overrides)
+  const globalModel = useSettingsStore((s) => s.selectedModel)
+  const sessions = useSessionStore((s) => s.sessions)
+  const override = sessionId ? overrides[sessionId] : overrides[DRAFT_KEY]
+  if (override) return override
+  if (sessionId) return globalModel
+  const latest = latestSession(sessions)
+  return (latest && overrides[latest.id]) ?? globalModel
+}
 
 // Cache keys
 const CACHE_SESSIONS_KEY = 'orbit_cache_sessions'
