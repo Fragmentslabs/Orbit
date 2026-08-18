@@ -113,7 +113,9 @@ function ChatTabHeader({ sessionId }: { sessionId?: string }) {
   }
 
   return (
-    <div className="@container flex min-w-0 items-center gap-2 px-1 pb-2">
+    // z-20: o `@container` cria stacking context (layout containment), então
+    // sem ele o dropdown de pastas fica preso abaixo do degrade do topo do chat
+    <div className="@container relative z-20 flex min-w-0 items-center gap-2 px-1 pb-2">
       <span className="min-w-0 truncate text-sm font-medium text-foreground">{session.title}</span>
       <div className="hidden min-w-0 items-center gap-2 @xl:flex">
         {isCode && session.directory && <BranchSelector repoPath={session.directory} onRequestAgentAction={handleAgentAction} />}

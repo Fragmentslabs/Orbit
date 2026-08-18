@@ -98,7 +98,11 @@ export function ChatHeader({ title, hasMenu, session, sessionId, rightPanelOpen,
           <span className="sr-only">{t("header.toggleSidebar")}</span>
         </Button>
       )}
-      <div className="@container flex items-center gap-1 min-w-0 flex-1">
+      {/* `@container` aplica layout containment, que cria um stacking context:
+          sem um z-index explícito aqui, o z-[60] do dropdown de pastas fica
+          preso dentro dele e o degrade do topo do chat (z-10, num irmão
+          posterior) passa por cima do header inteiro. */}
+      <div className="@container relative z-20 flex items-center gap-1 min-w-0 flex-1">
         <span className="truncate text-sm font-medium text-foreground">{title ?? t("header.newChat")}</span>
         {workspaceMode === 'code' && (
           <>
