@@ -170,14 +170,21 @@ export function FolderSelector({ folders, onFoldersChange, compact, open: openPr
           <span className="truncate">{folders.length === 0 ? t("folderSelector.associate") : getFolderName(folders[0])}</span>
         </button>
       )}
-      {/* No modo compact a gestão de pastas extras (adicionar/remover) já vive
-          inteira dentro do dropdown acima — essa fileira full-size só faz
-          sentido no seletor não-compacto (ex.: NewChatTab), senão duplica o
-          "+ Nova pasta" e os itens que o menu já lista. */}
-      {!compact && (
-        <div className="hidden min-w-0 items-center gap-1.5 sm:flex">
+      {/* Pastas extras + "+" ao lado do trigger. No header (compact) quem
+          esconde essa fileira em telas pequenas é o container query do
+          próprio header — lá ela é substituída pelo CompactWorkspaceSelector,
+          que traz tudo isso dentro do dropdown. Só o hideTrigger (o dropdown
+          em si) nunca mostra a fileira. */}
+      {!hideTrigger && (
+        <div className={compact ? "flex min-w-0 items-center gap-1.5" : "hidden min-w-0 items-center gap-1.5 sm:flex"}>
           {folders.slice(1).map((folder) => (
-            <div key={folder} className="group relative flex h-8 max-w-40 cursor-default select-none items-center gap-1.5 rounded-md border border-border px-1.5 text-sm font-medium transition-all hover:bg-accent hover:text-accent-foreground dark:hover:bg-accent/50">
+            <div
+              key={folder}
+              className={compact
+                ? "group relative flex h-7 max-w-28 cursor-default select-none items-center gap-1 rounded-md border border-border/50 px-1.5 text-xs transition-all hover:bg-accent hover:text-accent-foreground dark:hover:bg-accent/50 sm:max-w-40"
+                : "group relative flex h-8 max-w-40 cursor-default select-none items-center gap-1.5 rounded-md border border-border px-1.5 text-sm font-medium transition-all hover:bg-accent hover:text-accent-foreground dark:hover:bg-accent/50"
+              }
+            >
               <Folder className="size-2.5 shrink-0 text-sidebar-foreground/60" />
               <span className="truncate">{getFolderName(folder)}</span>
               <button onClick={(e) => removeFolder(folder, e)} className="flex size-4 shrink-0 cursor-pointer items-center justify-center rounded opacity-60 hover:bg-foreground/10 hover:opacity-100">
@@ -187,7 +194,13 @@ export function FolderSelector({ folders, onFoldersChange, compact, open: openPr
             </div>
           ))}
           {folders.length > 0 && (
-            <button onClick={() => addAdditionalFolder()} className="flex h-8 size-8 shrink-0 cursor-pointer items-center justify-center rounded-md border border-border text-sm hover:bg-accent">
+            <button
+              onClick={() => addAdditionalFolder()}
+              className={compact
+                ? "flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-md border border-border/50 text-xs hover:bg-accent"
+                : "flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-md border border-border text-sm hover:bg-accent"
+              }
+            >
               <Plus className="size-2.5" />
             </button>
           )}

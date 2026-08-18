@@ -115,11 +115,11 @@ function ChatTabHeader({ sessionId }: { sessionId?: string }) {
   return (
     <div className="@container flex min-w-0 items-center gap-2 px-1 pb-2">
       <span className="min-w-0 truncate text-sm font-medium text-foreground">{session.title}</span>
-      <div className="hidden min-w-0 items-center gap-2 @sm:flex">
+      <div className="hidden min-w-0 items-center gap-2 @xl:flex">
         {isCode && session.directory && <BranchSelector repoPath={session.directory} onRequestAgentAction={handleAgentAction} />}
         {folders.length > 0 && <FolderSelector folders={folders} onFoldersChange={handleFoldersChange} compact />}
       </div>
-      <div className="flex min-w-0 items-center @sm:hidden">
+      <div className="flex min-w-0 items-center @xl:hidden">
         <CompactWorkspaceSelector
           repoPath={isCode ? session.directory : undefined}
           folders={folders}

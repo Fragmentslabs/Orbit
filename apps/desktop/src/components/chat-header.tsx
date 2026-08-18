@@ -102,14 +102,14 @@ export function ChatHeader({ title, hasMenu, session, sessionId, rightPanelOpen,
         <span className="truncate text-sm font-medium text-foreground">{title ?? t("header.newChat")}</span>
         {workspaceMode === 'code' && (
           <>
-            <div className="hidden min-w-0 items-center gap-1 @sm:flex">
+            <div className="hidden min-w-0 items-center gap-1 @xl:flex">
               {repoPath && <BranchSelector repoPath={repoPath} onRequestAgentAction={onRequestAgentAction} />}
               {folders && folders.length > 0 && onFoldersChange && (
                 <FolderSelector folders={folders} onFoldersChange={onFoldersChange} compact />
               )}
             </div>
             {(repoPath || (folders && folders.length > 0)) && onFoldersChange && (
-              <div className="flex min-w-0 items-center @sm:hidden">
+              <div className="flex min-w-0 items-center @xl:hidden">
                 <CompactWorkspaceSelector
                   repoPath={repoPath}
                   folders={folders ?? []}
