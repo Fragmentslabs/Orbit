@@ -38,7 +38,19 @@
       "data": {
         "label": "Dados",
         "description": "Exportar e importar seus dados."
+      },
+      "about": {
+        "label": "Sobre",
+        "description": "Versão, créditos e apoio."
       }
+    },
+    "about": {
+      "title": "Sobre o Orbit",
+      "intro": "O Orbit é um ambiente de trabalho para agentes de IA, criado para transformar ideias em trabalho executável. Converse, escreva código, pesquise, teste aplicações e acompanhe tarefas longas em um único lugar. Com memória, Browser integrado, ferramentas, Skills e Esteiras, o Orbit ajuda você a delegar trabalhos complexos sem perder o controle do processo.",
+      "fraglab": "A Fragments Labs é um laboratório independente de software que cria ferramentas práticas para desenvolvedores, criadores e pequenas equipes. Entre seus projetos estão ferramentas como o Orbit e o Nodara, cada uma criada para tornar o trabalho técnico mais acessível, automatizado e eficiente.",
+      "support": "Apoie o desenvolvimento do Orbit",
+      "website": "fragmentslabs.com",
+      "github": "GitHub"
     }
   },
   "system": {
@@ -482,6 +494,7 @@
     },
     "account": {
       "localAssistant": "Assistente local",
+    "byFragmentsLabs": "por Fragments Labs",
       "myAccount": "Minha Conta",
       "profile": "Perfil",
       "settings": "Configurações",

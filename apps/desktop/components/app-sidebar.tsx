@@ -1241,7 +1241,15 @@ function AccountDropdown({ onOpenSettings }: { onOpenSettings: () => void }) {
         </Avatar>
         <div className="flex flex-1 flex-col truncate">
           <span className="truncate font-medium">Orbit</span>
-          <span className="truncate text-sidebar-foreground/60">{t("sidebar.account.localAssistant")}</span>
+          <a
+            href="https://fragmentslabs.com"
+            target="_blank"
+            rel="noreferrer"
+            className="truncate text-sidebar-foreground/60 hover:text-sidebar-foreground hover:underline"
+            onClick={(event) => event.stopPropagation()}
+          >
+            {t("sidebar.account.byFragmentsLabs")}
+          </a>
         </div>
       </DropdownMenuTrigger>
       <DropdownMenuContent

@@ -5,7 +5,7 @@ import { create } from "zustand"
  * (menu da sidebar, engrenagem do PermissionModePicker) já na aba certa.
  */
 
-export type SettingsTab = "providers" | "autonomy" | "mcp-skills" | "data" | "howto" | "appearance" | "notifications" | "system"
+export type SettingsTab = "providers" | "autonomy" | "mcp-skills" | "data" | "howto" | "appearance" | "notifications" | "system" | "about"
 
 interface SettingsUiState {
   open: boolean
