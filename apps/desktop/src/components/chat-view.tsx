@@ -274,9 +274,12 @@ function ChatMessages({ messages, isBusy, mode, sessionId, sendMessage, planIds,
 }
 
 // Abertura do app: a persona central nasce dormindo e acorda junto do som de
-// entrada (tocado pelo main no did-finish-load). O flag é por módulo/processo
-// — trocas de tela seguintes (novo chat manual etc.) usam a transição normal.
+// entrada — ambos disparados aqui no renderer aos ~650ms da primeira montagem,
+// com a UI já na tela (antes o main tocava o som no início do processo, ainda
+// durante o carregamento). Os flags são por módulo/processo — trocas de tela
+// seguintes (novo chat manual etc.) usam a transição normal.
 let entranceWakeDone = false
+let entranceSoundDone = false
 
 export function ChatView({ sessionId }: { sessionId?: string } = {}) {
   const { mode, setMode, folders, setFolders } = useWorkspace()
@@ -317,6 +320,20 @@ export function ChatView({ sessionId }: { sessionId?: string } = {}) {
   useEffect(() => {
     void initializeProviders()
   }, [initializeProviders])
+
+  // Som de entrada do app: toca no mesmo instante do despertar da persona
+  // (650ms após a primeira montagem, UI já visível). O flag é marcado dentro
+  // do timer para o StrictMode (dev) não perder o disparo na dupla-montagem.
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (entranceSoundDone) return
+      entranceSoundDone = true
+      if (window.ipcRenderer) {
+        void window.ipcRenderer.invoke("sound:play", "entrance").catch(() => {})
+      }
+    }, 650)
+    return () => clearTimeout(timer)
+  }, [])
 
   // Carrega o histórico tanto para views explícitas (workers/painel) quanto
   // para a sessão principal. Após um reload do renderer, o status pode voltar
@@ -404,10 +421,13 @@ export function ChatView({ sessionId }: { sessionId?: string } = {}) {
       setCenterPersonaVisible(true)
       if (!entranceWakeDone) {
         // Abertura do app: a persona nasce dormindo e acorda junto do som de
-        // entrada (o main toca aos ~600ms do did-finish-load) — a transição
-        // sleep → idle só acontece na primeira montagem do processo.
-        entranceWakeDone = true
-        timers.push(setTimeout(() => setDisplayCenterState("idle"), 650))
+        // entrada — a transição sleep → idle só acontece na primeira montagem
+        // do processo. O flag é marcado dentro do timer para a dupla-montagem
+        // do StrictMode (dev) não pular a animação de entrada.
+        timers.push(setTimeout(() => {
+          entranceWakeDone = true
+          setDisplayCenterState("idle")
+        }, 650))
       } else {
         setDisplayCenterState("idle")
       }

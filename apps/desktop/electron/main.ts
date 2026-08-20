@@ -87,14 +87,6 @@ process.env.VITE_PUBLIC = VITE_DEV_SERVER_URL ? path.join(process.env.APP_ROOT, 
 
 let win: BrowserWindow | null
 
-// Som de entrada do app: toca uma única vez por processo, independente do
-// carregamento do renderer.
-function tocarSomDeEntrada() {
-  void tocarSom('entrance').then((ok) => {
-    if (!ok) console.warn('[som] som de entrada não pôde ser reproduzido')
-  })
-}
-
 // ─── "Abrir com Orbit" (menu de contexto do Explorer) ───────────────────────
 // Registra em HKCU (sem admin) as entradas que fazem o botão direito em uma
 // pasta oferecer "Abrir com Orbit". Ao clicar, o Windows lança o app com o
@@ -205,7 +197,13 @@ function createWindow() {
     icon: path.join(process.env.VITE_PUBLIC, 'logo.png'),
     minWidth: 720,
     minHeight: 480,
-    backgroundColor: '#00000000',
+    // Nasce escondida e só aparece no primeiro frame do renderer (ready-to-
+    // show): o flash branco vinha do conteúdo não pintado + tema claro padrão
+    // do CSS antes de o React aplicar a classe dark.
+    show: false,
+    // Fundo nativo escuro (zinc-950, o --background do tema dark): cobre a
+    // janela antes do primeiro paint e durante resize, nada de branco aparece.
+    backgroundColor: '#09090b',
     ...(process.platform === 'darwin'
       ? { titleBarStyle: 'hiddenInset' as const, trafficLightPosition: { x: 16, y: 10 } as const }
       : { frame: false }),
@@ -221,6 +219,15 @@ function createWindow() {
 
   // Frame customizado: some o menu nativo (Alt ainda o invocaria em win/linux)
   win.setMenuBarVisibility(false)
+
+  // Mostra a janela só quando o renderer já pintou o primeiro frame — sem
+  // flash branco de inicialização. O setTimeout é uma guarda para o caso raro
+  // de ready-to-show não disparar: a janela nunca ficaria invisível.
+  const showWindow = () => {
+    if (win && !win.isDestroyed() && !win.isVisible()) win.show()
+  }
+  win.once('ready-to-show', showWindow)
+  setTimeout(showWindow, 5000)
 
   win.on('maximize', () => win?.webContents.send('window:maximized-change', true))
   win.on('unmaximize', () => win?.webContents.send('window:maximized-change', false))
@@ -1490,9 +1497,9 @@ app.whenReady().then(() => {
     if (dir) queueOpenFolder(dir)
   })
 
-  // O playback não depende do renderer: Cmd+Q encerra o processo e uma nova
-  // instância sempre reproduz o som durante a inicialização do app.
-  tocarSomDeEntrada()
+  // Som de entrada: removido daqui — antes tocava no início do processo, com
+  // a janela ainda carregando. Agora o renderer dispara via ipc 'sound:play'
+  // no mesmo instante do despertar da persona (UI já visível).
 
   // Mantém o menu de contexto do Explorer sempre apontando para o exe atual
   // (o caminho muda a cada instalação/atualização).

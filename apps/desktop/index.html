@@ -5,6 +5,25 @@
     <link rel="icon" type="image/png" href="/logo.png" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Orbit</title>
+    <script>
+      // Aplica o tema antes do primeiro paint: o ThemeProvider só roda depois
+      // do React montar (tarde demais) e o CSS padrão é claro — sem isso a
+      // janela pinta branca por alguns frames na abertura.
+      ;(function () {
+        try {
+          var stored = localStorage.getItem('vite-ui-theme')
+          var theme = stored === 'dark' || stored === 'light' ? stored : null
+          if (!theme) {
+            theme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
+          }
+          var root = document.documentElement
+          root.classList.add(theme)
+          root.style.backgroundColor = theme === 'dark' ? '#09090b' : '#ffffff'
+        } catch (e) {
+          /* best-effort: o ThemeProvider aplica o tema de qualquer forma */
+        }
+      })()
+    </script>
   </head>
   <body>
     <div id="root"></div>

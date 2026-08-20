@@ -33,6 +33,11 @@ export function ThemeProvider({
   useEffect(() => {
     const root = window.document.documentElement
 
+    // Limpa o fundo inline pintado pelo script de boot do index.html (só
+    // cobre o intervalo até o CSS carregar — depois disso viraria cor obsoleta
+    // na troca de tema).
+    root.style.backgroundColor = ""
+
     root.classList.remove("light", "dark")
 
     if (theme === "system") {
