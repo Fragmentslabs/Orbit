@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next"
 import { AlertTriangleIcon, CheckIcon, FileDiffIcon, LoaderIcon, PauseIcon, PlayIcon, PlusIcon, Trash2Icon, XIcon } from "lucide-react"
 import type { Esteira, Task } from "@shared/esteira"
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog"
+import { ScrollArea } from "@/components/ui/scroll-area"
 import { ConfirmDialog } from "@/components/ui/alert-dialog"
 import { Input } from "@/components/ui/input"
 import { AssistantMarkdown, GenericToolView, ReasoningPartView } from "@/src/components/messages/shared"
@@ -198,38 +199,42 @@ export function TaskModal({
               })}
             </div>
 
-            <div className="min-h-48 max-h-[46vh] overflow-y-auto rounded-md border p-3">
-              {(() => {
-                const fase = esteira.fases[faseAtiva]
-                const anotacao = fase ? anotacaoPorFase.get(fase.id) : undefined
-                // Fase em execução: mostra o agente rodando ao vivo (pensamento,
-                // ferramentas, browser) em vez do placeholder.
-                const executando = fase && task.status === "em_progresso" && task.faseAtual === faseAtiva
-                if (executando) {
-                  return <ExecucaoViva taskId={task.id} faseIndice={faseAtiva} />
-                }
-                if (!anotacao) {
-                  return <p className="text-xs text-muted-foreground">{t("esteira.semAnotacao")}</p>
-                }
-                return (
-                  <>
-                    <AssistantMarkdown>{anotacao.conteudo}</AssistantMarkdown>
-                    {anotacao.comandosControlados.length > 0 && (
-                      <div className="mt-3 rounded-md bg-muted/50 p-2">
-                        <p className="mb-1 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
-                          {t("esteira.comandosControlados")}
-                        </p>
-                        <ul className="space-y-0.5">
-                          {anotacao.comandosControlados.map((cmd, i) => (
-                            <li key={i} className="font-mono text-[10px] text-muted-foreground">{cmd}</li>
-                          ))}
-                        </ul>
-                      </div>
-                    )}
-                  </>
-                )
-              })()}
-            </div>
+            {/* Scroll como o da sidebar (ScrollArea): barra some quando parado
+                e só aparece ao rolar/hover, no lugar da scrollbar nativa. */}
+            <ScrollArea className="min-h-48 max-h-[46vh] rounded-md border">
+              <div className="p-3 [&_li]:break-words [&_p]:break-words">
+                {(() => {
+                  const fase = esteira.fases[faseAtiva]
+                  const anotacao = fase ? anotacaoPorFase.get(fase.id) : undefined
+                  // Fase em execução: mostra o agente rodando ao vivo (pensamento,
+                  // ferramentas, browser) em vez do placeholder.
+                  const executando = fase && task.status === "em_progresso" && task.faseAtual === faseAtiva
+                  if (executando) {
+                    return <ExecucaoViva taskId={task.id} faseIndice={faseAtiva} />
+                  }
+                  if (!anotacao) {
+                    return <p className="text-xs text-muted-foreground">{t("esteira.semAnotacao")}</p>
+                  }
+                  return (
+                    <>
+                      <AssistantMarkdown>{anotacao.conteudo}</AssistantMarkdown>
+                      {anotacao.comandosControlados.length > 0 && (
+                        <div className="mt-3 rounded-md bg-muted/50 p-2">
+                          <p className="mb-1 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                            {t("esteira.comandosControlados")}
+                          </p>
+                          <ul className="space-y-0.5">
+                            {anotacao.comandosControlados.map((cmd, i) => (
+                              <li key={i} className="font-mono text-[10px] text-muted-foreground">{cmd}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                    </>
+                  )
+                })()}
+              </div>
+            </ScrollArea>
           </div>
 
           {/* Direita: telemetria + dependências */}
