@@ -221,8 +221,17 @@ function createWindow() {
   win.setMenuBarVisibility(false)
 
   // Mostra a janela só quando o renderer já pintou o primeiro frame — sem
-  // flash branco de inicialização. O setTimeout é uma guarda para o caso raro
-  // de ready-to-show não disparar: a janela nunca ficaria invisível.
+  // flash branco de inicialização. O som começa no did-finish-load, antes do
+  // timer de despertar do renderer, evitando o atraso do spawn do player do SO
+  // (perceptível no app empacotado) depois que a persona aparece.
+  let entranceSoundStarted = false
+  const startEntranceSound = () => {
+    if (entranceSoundStarted) return
+    entranceSoundStarted = true
+    void tocarSom('entrance').then((ok) => {
+      if (!ok) console.warn('[som] som de entrada não pôde ser reproduzido')
+    })
+  }
   const showWindow = () => {
     if (win && !win.isDestroyed() && !win.isVisible()) win.show()
   }
@@ -234,6 +243,7 @@ function createWindow() {
 
   // Test active push message to Renderer-process.
   win.webContents.on('did-finish-load', () => {
+    startEntranceSound()
     win?.webContents.send('main-process-message', (new Date).toLocaleString())
   })
 
@@ -1497,9 +1507,8 @@ app.whenReady().then(() => {
     if (dir) queueOpenFolder(dir)
   })
 
-  // Som de entrada: removido daqui — antes tocava no início do processo, com
-  // a janela ainda carregando. Agora o renderer dispara via ipc 'sound:play'
-  // no mesmo instante do despertar da persona (UI já visível).
+  // O som de entrada é iniciado no did-finish-load, antes de a janela ser
+  // exibida e antes do timer de despertar da persona.
 
   // Mantém o menu de contexto do Explorer sempre apontando para o exe atual
   // (o caminho muda a cada instalação/atualização).
