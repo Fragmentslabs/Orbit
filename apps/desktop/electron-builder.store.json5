@@ -1,0 +1,31 @@
+// @see - https://www.electron.build/ms-windows#appx
+// Build MSIX para a Microsoft Store (Partner Center).
+// Identidade reservada: FragmentsLabs.OrbitCode (publisher CN=4E3E514F-094A-4537-AE9E-AF15CB35D52A)
+// Uso: npm run dist:store — requer Windows 10+ (no macOS exige VM Parallels com Windows)
+// Sem certificado configurado o pacote sai sem assinatura: a Store assina na ingestão.
+{
+  "$schema": "https://raw.githubusercontent.com/electron-userland/electron-builder/master/packages/app-builder-lib/scheme.json",
+  "extends": "./electron-builder.json5",
+  "win": {
+    "target": [
+      {
+        "target": "appx",
+        "arch": [
+          "x64"
+        ]
+      }
+    ],
+    "artifactName": "Orbit-${version}.${ext}"
+  },
+  "appx": {
+    "displayName": "Orbit Code",
+    "identityName": "FragmentsLabs.OrbitCode",
+    "publisher": "CN=4E3E514F-094A-4537-AE9E-AF15CB35D52A",
+    "publisherDisplayName": "Fragments Labs",
+    // Primeiro idioma = idioma padrão do pacote
+    "languages": [
+      "en-US",
+      "pt-BR"
+    ]
+  }
+}
