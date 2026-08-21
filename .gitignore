@@ -24,6 +24,9 @@ apps/*/.expo
 packages/*/node_modules
 *.tsbuildinfo
 
+# Claude local configuration
+.claude/
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
