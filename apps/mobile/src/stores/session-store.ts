@@ -887,6 +887,12 @@ export const useSessionStore = create<SessionState>((set, get) => ({
         break
 
       case 'part':
+        // O evento traz o estado COMPLETO da part (o desktop mantém o texto
+        // acumulado), então qualquer delta ainda no buffer já está contido
+        // nele — aplicar os dois duplicaria o trecho. Descartar o buffer aqui
+        // também é o que permite ao engine corrigir um texto já transmitido
+        // (ex.: o saneamento dos marcadores internos no 'text-end').
+        deltaBuffer.delete(`${sessionId}:${event.messageId}:${event.part.id}`)
         set((state) => {
           const list = state.messages[sessionId] ?? []
           const next = list.map((message) => {
