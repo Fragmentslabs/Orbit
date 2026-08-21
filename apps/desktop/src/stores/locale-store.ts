@@ -37,7 +37,7 @@ interface LocaleState {
   setLocale: (locale: AppLocale) => void
 }
 
-const initial: AppLocale = (localStorage.getItem(LOCALE_KEY) as AppLocale | null) ?? "system"
+const initial: AppLocale = (localStorage.getItem(LOCALE_KEY) as AppLocale | null) ?? "en"
 void i18n.changeLanguage(resolveActiveLocale(initial))
 
 export const useLocaleStore = create<LocaleState>((set) => ({
