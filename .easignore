@@ -8,4 +8,15 @@ docs
 release
 *.log
 bf2*
-app.json
+
+# dependências (hoisted na raiz + por app)
+node_modules
+
+# projetos nativos gerados — EAS roda prebuild (CNG); /ios e /android são gitignored
+apps/mobile/ios
+apps/mobile/android
+
+# estado local do Expo e artefatos TS
+apps/mobile/.expo
+.expo-export-check/
+*.tsbuildinfo
