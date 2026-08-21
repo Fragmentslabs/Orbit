@@ -1062,12 +1062,20 @@ export async function runChat(win: BrowserWindow, input: SendMessageInput): Prom
             // apagada, nunca como resposta final. No fim do loop: arquivos
             // alterados → marcador removido (a última resposta vale como
             // final); só "nada a corrigir" → vira 'internal' e some do chat.
+            //
+            // O nudge de fechamento da TODO ganha um marcador próprio
+            // ('todo'): o modelo responde a ele com uma linha de bookkeeping
+            // ("checklist atualizado"), e sem marcador esse texto passava a
+            // ser o ÚLTIMO da mensagem — a UI promovia a linha a resposta
+            // final e a resposta de verdade, já escrita, ficava apagada
+            // (parecia que o texto final tinha sido substituído). 'todo'
+            // nunca é promovido, nem quando o turno grava arquivos.
             upsertPart({
               id: part.id,
               type: 'text',
               text: '',
               state: 'streaming',
-              source: overclaimNudges > 0 ? 'nudge' : undefined,
+              source: overclaimNudges > 0 ? 'nudge' : todoNudges > 0 ? 'todo' : undefined,
             })
             break
           case 'text-delta': {

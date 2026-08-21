@@ -659,10 +659,11 @@ export function ChatAssistantMessage({ message, compact, isLast, isBusy, onRever
                 <AssistantMarkdown
                   text={part.text}
                   streaming={part.state === 'streaming'}
-                  // Texto de nudge do engine (verificação anti-overclaim):
+                  // Texto interno do engine — nudge de verificação
+                  // (anti-overclaim) ou fechamento da checklist ('todo'):
                   // pensamento interno, sempre em cor apagada — paridade com
                   // o muted do desktop.
-                  muted={part.source === 'nudge'}
+                  muted={part.source === 'nudge' || part.source === 'todo'}
                 />
               </View>
             )

@@ -105,8 +105,13 @@ export interface TextPart {
    * "internal" = texto do nudge que terminou como confirmação de que não
    * havia nada a corrigir (falso positivo do gatilho): é verificação interna
    * pura — a UI NÃO o renderiza de forma alguma.
+   * "todo" = texto gerado na continuação do nudge de fechamento da TODO
+   * (TODO_COMPLETION_PROMPT): bookkeeping da checklist, não a resposta ao
+   * usuário. Renderiza como o "nudge" (sempre apagado, nunca resposta final),
+   * mas nunca é promovido a normal — senão essa linha curta roubaria o lugar
+   * da resposta final que o modelo já tinha escrito.
    */
-  source?: "attachment" | "vision" | "nudge" | "internal"
+  source?: "attachment" | "vision" | "nudge" | "internal" | "todo"
 }
 
 export interface ReasoningPart {

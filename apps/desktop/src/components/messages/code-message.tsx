@@ -2,7 +2,7 @@ import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "rea
 import { useTranslation } from "react-i18next"
 import { ChevronDownIcon } from "lucide-react"
 import { cn } from "@/lib/utils"
-import type { ChatMessage, MessagePart, ToolPart } from "@shared/chat"
+import type { ChatMessage, MessagePart, TextPart, ToolPart } from "@shared/chat"
 import { usePanelStore } from "@/src/stores/panel-store"
 import {
   extractSources,
@@ -255,6 +255,14 @@ function segmentParts(parts: MessagePart[]): Segment[] {
   return segments
 }
 
+/** Texto que o engine gerou nas continuações internas do turno (nudges de
+ * verificação e de fechamento da checklist) — nunca é a resposta ao usuário,
+ * então jamais ocupa o lugar da resposta final. 'nudge'/'todo' renderizam
+ * apagados; 'internal' nem chega a renderizar. */
+function isEngineText(source: TextPart["source"]): boolean {
+  return source === "nudge" || source === "todo" || source === "internal"
+}
+
 export function CodeAssistantMessage({ message, sessionId, isLast, isBusy, onRetry }: {
   message: ChatMessage
   sessionId?: string
@@ -271,15 +279,13 @@ export function CodeAssistantMessage({ message, sessionId, isLast, isBusy, onRet
   // Só o último texto da mensagem é a resposta final (branca); os anteriores
   // são narração intermediária do agente e ficam em cor apagada — inclusive
   // se alguma ação (read, bash etc.) chegar depois do texto final no stream.
-  // Textos de nudge do engine (verificação anti-overclaim) NUNCA contam como
-  // resposta final: ficam sempre apagados, como pensamento interno do agente.
-  // 'internal' é o nudge que terminou como "nada a corrigir": nem aparece.
+  // Textos internos do engine NUNCA contam como resposta final: ficam sempre
+  // apagados, como pensamento interno do agente. 'nudge' = verificação
+  // anti-overclaim; 'todo' = linha de fechamento da checklist; 'internal' é o
+  // nudge que terminou como "nada a corrigir" e nem aparece.
   const lastTextIndex = segments.reduce(
     (last, segment, i) =>
-      segment.kind === "part" &&
-      segment.part.type === "text" &&
-      segment.part.source !== "nudge" &&
-      segment.part.source !== "internal"
+      segment.kind === "part" && segment.part.type === "text" && !isEngineText(segment.part.source)
         ? i
         : last,
     -1,
@@ -308,7 +314,7 @@ export function CodeAssistantMessage({ message, sessionId, isLast, isBusy, onRet
           ) : (
             <AssistantMarkdown
               key={segment.id}
-              muted={index < lastTextIndex || segment.part.source === "nudge"}
+              muted={index < lastTextIndex || isEngineText(segment.part.source)}
             >
               {segment.part.text}
             </AssistantMarkdown>
