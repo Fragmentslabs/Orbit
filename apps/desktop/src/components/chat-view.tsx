@@ -278,6 +278,7 @@ function ChatMessages({ messages, isBusy, mode, sessionId, sendMessage, planIds,
 // o atraso de inicialização do player não aconteça depois do despertar. Os flags
 // são por módulo/processo — trocas de tela seguintes usam a transição normal.
 let entranceWakeDone = false
+const isInitialLaunch = typeof window !== "undefined" && new URLSearchParams(window.location.search).has("entrance")
 
 export function ChatView({ sessionId }: { sessionId?: string } = {}) {
   const { mode, setMode, folders, setFolders } = useWorkspace()
@@ -403,7 +404,7 @@ export function ChatView({ sessionId }: { sessionId?: string } = {}) {
       // o estado final: tudo do centro visível, topo oculto e persona acordada.
       setCenterVisible(true)
       setCenterPersonaVisible(true)
-      if (!entranceWakeDone) {
+      if (isInitialLaunch && !entranceWakeDone) {
         // Abertura do app: o som já foi iniciado pelo main antes da janela
         // aparecer; a transição sleep → idle acontece 650ms depois da montagem
         // para alinhar com o início audível da entrada.

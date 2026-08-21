@@ -86,6 +86,8 @@ export const RENDERER_DIST = path.join(process.env.APP_ROOT, 'dist')
 process.env.VITE_PUBLIC = VITE_DEV_SERVER_URL ? path.join(process.env.APP_ROOT, 'public') : RENDERER_DIST
 
 let win: BrowserWindow | null
+let entranceSoundStarted = false
+let entranceWindowCreated = false
 
 // ─── "Abrir com Orbit" (menu de contexto do Explorer) ───────────────────────
 // Registra em HKCU (sem admin) as entradas que fazem o botão direito em uma
@@ -193,6 +195,8 @@ app.on("second-instance", (_event, argv) => {
 })
 
 function createWindow() {
+  const isInitialWindow = !entranceWindowCreated
+  entranceWindowCreated = true
   win = new BrowserWindow({
     icon: path.join(process.env.VITE_PUBLIC, 'logo.png'),
     minWidth: 720,
@@ -224,7 +228,6 @@ function createWindow() {
   // flash branco de inicialização. O som começa no did-finish-load, antes do
   // timer de despertar do renderer, evitando o atraso do spawn do player do SO
   // (perceptível no app empacotado) depois que a persona aparece.
-  let entranceSoundStarted = false
   const startEntranceSound = () => {
     if (entranceSoundStarted) return
     entranceSoundStarted = true
@@ -243,7 +246,7 @@ function createWindow() {
 
   // Test active push message to Renderer-process.
   win.webContents.on('did-finish-load', () => {
-    startEntranceSound()
+    if (isInitialWindow) startEntranceSound()
     win?.webContents.send('main-process-message', (new Date).toLocaleString())
   })
 
@@ -254,10 +257,11 @@ function createWindow() {
   })
 
   if (VITE_DEV_SERVER_URL) {
-    win.loadURL(VITE_DEV_SERVER_URL)
+    const separator = VITE_DEV_SERVER_URL.includes('?') ? '&' : '?'
+    win.loadURL(isInitialWindow ? `${VITE_DEV_SERVER_URL}${separator}entrance=1` : VITE_DEV_SERVER_URL)
   } else {
     // win.loadFile('dist/index.html')
-    win.loadFile(path.join(RENDERER_DIST, 'index.html'))
+    win.loadFile(path.join(RENDERER_DIST, 'index.html'), isInitialWindow ? { query: { entrance: '1' } } : undefined)
   }
 }
 
