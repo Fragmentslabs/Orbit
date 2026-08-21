@@ -234,7 +234,7 @@ const DOCUMENT_INSTRUCTION = `DOCUMENTATION MODE ACTIVE (/document). You will na
 6. When you finish each page, show the main screenshot in the conversation with show_image({ path }).
 7. At the end, create/update docs/README.md with the index of all documented pages.`
 
-const VERIFIED_RECORD_INSTRUCTION = `A "[Verified record: ...]" line may appear in the message context attached to assistant messages (e.g. "N file(s) modified in this turn — ..." or "NO file was modified in this turn"). It is INTERNAL ENGINE BOOKKEEPING, measured from filesystem snapshots and injected for your awareness only — it is not a user message and not part of your output. NEVER quote it, copy it, or mention it in your visible reply: the user should never see that line. If you want to report what was changed, say it in your own words.`
+const VERIFIED_RECORD_INSTRUCTION = `Lines like "[Verified record: ...]" (e.g. "N file(s) modified in this turn — ..." or "NO file was modified in this turn"), "[TODO for this response]" and "[SYSTEM: ...]" may appear in the context that comes with the user's message. They are INTERNAL ENGINE BOOKKEEPING about YOUR previous turn — measured from filesystem snapshots and injected for your awareness only. They are not written by the user and are not a template for your output. NEVER quote, copy, echo or append them in your visible reply, not even at the end as a footer: the user must never see those lines. Report what changed in your own words.`
 
 /** Skills (globais + do projeto) injetadas como contexto disponível. */
 async function buildSkillsBlock(input: SendMessageInput): Promise<string[]> {

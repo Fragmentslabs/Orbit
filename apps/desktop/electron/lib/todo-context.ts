@@ -57,11 +57,49 @@ function formatChangeLedger(message: ChatMessage): string | null {
   return `[Verified record: ${files.length} file(s) modified in this turn — ${shown}${rest}]`
 }
 
-/** Texto de uma mensagem pra enviar ao modelo ou resumir na compactação:
- * narração + (se houver) o estado mais recente da TODO e um aviso quando a
- * resposta foi cortada por atingir o teto de passos. */
-export function messageContextText(message: ChatMessage, text: string): string {
-  const parts = [text]
+/**
+ * Marcadores internos que o engine anexa ao contexto e que NUNCA podem
+ * aparecer na resposta visível: registro verificado e avisos [SYSTEM: ...].
+ * Só casam quando ocupam a linha inteira — menção em prosa ("a linha
+ * [Verified record: ...] serve para...") continua intacta.
+ */
+const ENGINE_MARKER_LINE = /^\s*\[(?:Verified record|SYSTEM):[^\]]*\]\s*$/
+const CODE_FENCE = /^\s*(?:```|~~~)/
+
+/**
+ * Rede de segurança contra o vazamento dos marcadores na resposta visível.
+ *
+ * O modelo recebe essas linhas no contexto e, num histórico longo, passa a
+ * tratá-las como parte do próprio formato de resposta — reproduzindo
+ * "[Verified record: ...]" no fim do texto que o usuário lê. O prompt já
+ * proíbe copiá-las (VERIFIED_RECORD_INSTRUCTION) e engineAnnotations já não
+ * as cola dentro do turno do assistente; isto é a garantia final.
+ *
+ * Linhas dentro de bloco de código são preservadas: este repositório
+ * discute os próprios marcadores no código e nos docs.
+ */
+export function stripEngineMarkers(text: string): string {
+  if (!text.includes('[Verified record:') && !text.includes('[SYSTEM:')) return text
+  let inFence = false
+  const kept = text.split('\n').filter((line) => {
+    if (CODE_FENCE.test(line)) {
+      inFence = !inFence
+      return true
+    }
+    return inFence || !ENGINE_MARKER_LINE.test(line)
+  })
+  return kept.join('\n').replace(/\n{3,}/g, '\n\n').trim()
+}
+
+/**
+ * Anotações do engine sobre um turno: estado da TODO, registro verificado de
+ * arquivos e avisos de truncamento/lembrete. É bookkeeping SOBRE a mensagem,
+ * não conteúdo dela — quem envia ao modelo decide onde encaixar (ver
+ * toModelMessages: vai na mensagem de usuário seguinte, nunca dentro do
+ * texto do assistente).
+ */
+export function engineAnnotations(message: ChatMessage): string {
+  const parts: string[] = []
 
   const items = todoItems(message)
   if (items?.length) parts.push(formatTodoState(items))
@@ -94,4 +132,10 @@ export function messageContextText(message: ChatMessage, text: string): string {
   }
 
   return parts.filter((p) => p.trim()).join('\n\n')
+}
+
+/** Texto de uma mensagem pra resumir na compactação: narração + as anotações
+ * do engine sobre o turno (TODO, registro verificado, avisos). */
+export function messageContextText(message: ChatMessage, text: string): string {
+  return [text, engineAnnotations(message)].filter((p) => p.trim()).join('\n\n')
 }

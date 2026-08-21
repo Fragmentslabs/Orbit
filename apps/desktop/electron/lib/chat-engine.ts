@@ -43,7 +43,7 @@ import { readJson, writeJson } from './storage'
 import { notifyChatError, notifyNewMessage } from './notifications'
 import { buildToolSet, type ToolContext, type TurnSnapshot } from './tools'
 import { addTokenUsage, toStepUsage, toTokenUsage } from './usage'
-import { messageContextText } from './todo-context'
+import { engineAnnotations, stripEngineMarkers } from './todo-context'
 import { forwardChatEvent } from './companion-server'
 
 /**
@@ -464,6 +464,15 @@ async function persistImageDescription(opts: {
 }
 
 /**
+ * Cabeçalho das anotações do engine quando elas entram na mensagem do
+ * usuário: marca a fronteira entre o que o engine mediu e o que a pessoa
+ * escreveu. Usa o prefixo "[SYSTEM:" de propósito — se o modelo copiar a
+ * linha na resposta, stripEngineMarkers a remove junto com as demais.
+ */
+const ENGINE_CONTEXT_HEADER =
+  '[SYSTEM: engine bookkeeping about YOUR previous turn — measured from filesystem snapshots, not written by the user. Context only: never quote these lines in your reply.]'
+
+/**
  * Converte o histórico persistido em mensagens para o modelo (texto +
  * anexos do usuário). Havendo compactação, corta no último resumo: envia
  * resumo + mensagens posteriores; o histórico completo continua no storage.
@@ -472,25 +481,28 @@ export function toModelMessages(history: ChatMessage[], modelVision = true): Mod
   const lastSummary = findLastSummaryIndex(history)
   const window = lastSummary >= 0 ? history.slice(lastSummary) : history
   const result: ModelMessage[] = []
+  // Anotações do engine sobre o turno anterior do assistente (estado da TODO,
+  // registro verificado de arquivos, avisos). Ficam PENDENTES aqui e entram na
+  // próxima mensagem de usuário — nunca dentro do texto do próprio assistente.
+  //
+  // Coladas no turno dele, essas linhas viram exemplo do seu próprio formato
+  // de resposta: num histórico longo o modelo passa a imitá-las e escreve
+  // "[Verified record: ...]" no texto que o usuário lê. Do lado do usuário
+  // elas são lidas pelo que são — contexto que o ambiente forneceu.
+  let pending: string[] = []
+  const takePending = () => {
+    if (pending.length === 0) return ''
+    const notes = [ENGINE_CONTEXT_HEADER, ...pending].join('\n\n')
+    pending = []
+    return notes
+  }
   for (const message of window) {
-    // messageContextText preserva o estado da TODO (todowrite) e o aviso de
-    // truncamento como texto — ToolParts em si nunca são reenviados ao
-    // modelo fora do streaming da própria chamada que os gerou.
-    const text = messageContextText(message, partText(message.parts, 'text'))
-    // Chips (flag `chip`) são só decoração da UI — o conteúdo real já está no
-    // TextPart irmão extraído em preprocessAttachment; incluí-los aqui
-    // duplicaria uma nota vazia no lugar do texto já extraído. O `url !== ''`
-    // cobre chips antigos persistidos antes da flag existir.
-    const files = message.parts.filter(
-      (p): p is FilePart => p.type === 'file' && !p.chip && p.url !== '',
-    )
-    if (message.role === 'user' && files.length > 0) {
-      const content: UserContent = files.map((file) => fileToModelContent(file, modelVision))
-      if (text.trim()) content.push({ type: 'text', text })
-      result.push({ role: 'user', content })
-      continue
-    }
     if (message.role === 'assistant') {
+      const notes = engineAnnotations(message)
+      if (notes) pending.push(notes)
+      // stripEngineMarkers cobre o histórico legado: mensagens gravadas antes
+      // deste saneamento podem trazer o marcador colado no próprio texto.
+      const text = stripEngineMarkers(partText(message.parts, 'text'))
       // Reenvia o raciocínio do assistente ao modelo: provedores com
       // reasoning_content (ex: DeepSeek) exigem o texto de volta nos turnos
       // seguintes. O campo é injetado via providerOptions por
@@ -506,9 +518,32 @@ export function toModelMessages(history: ChatMessage[], modelVision = true): Mod
       result.push({ role: 'assistant', content })
       continue
     }
+    // ToolParts nunca são reenviados ao modelo fora do streaming da chamada
+    // que os gerou — o que sobrevive do turno anterior são as anotações.
+    const text = [takePending(), partText(message.parts, 'text')]
+      .filter((p) => p.trim())
+      .join('\n\n')
+    // Chips (flag `chip`) são só decoração da UI — o conteúdo real já está no
+    // TextPart irmão extraído em preprocessAttachment; incluí-los aqui
+    // duplicaria uma nota vazia no lugar do texto já extraído. O `url !== ''`
+    // cobre chips antigos persistidos antes da flag existir.
+    const files = message.parts.filter(
+      (p): p is FilePart => p.type === 'file' && !p.chip && p.url !== '',
+    )
+    if (message.role === 'user' && files.length > 0) {
+      const content: UserContent = files.map((file) => fileToModelContent(file, modelVision))
+      if (text.trim()) content.push({ type: 'text', text })
+      result.push({ role: 'user', content })
+      continue
+    }
     if (!text.trim()) continue
     result.push({ role: message.role, content: text })
   }
+  // Janela terminada em assistente (sem turno de usuário depois para carregar
+  // as anotações): entrega como mensagem de usuário para o registro verificado
+  // não sumir — é ele que sustenta a verificação anti-overclaim.
+  const trailing = takePending()
+  if (trailing.trim()) result.push({ role: 'user', content: trailing })
   return result
 }
 
@@ -1052,7 +1087,14 @@ export async function runChat(win: BrowserWindow, input: SendMessageInput): Prom
           }
           case 'text-end': {
             const existing = assistantMessage.parts.find((p) => p.id === part.id)
-            if (existing?.type === 'text') upsertPart({ ...existing, state: 'done' })
+            // Saneamento do texto visível: o modelo às vezes copia os
+            // marcadores internos que recebeu no contexto ("[Verified
+            // record: ...]", "[SYSTEM: ...]"). Aqui a part já está completa,
+            // então o upsertPart reemite o texto inteiro limpo — o que a UI
+            // mostra e o que é persistido saem sem o marcador.
+            if (existing?.type === 'text') {
+              upsertPart({ ...existing, text: stripEngineMarkers(existing.text), state: 'done' })
+            }
             break
           }
           case 'reasoning-start':
@@ -1317,6 +1359,7 @@ export async function runChat(win: BrowserWindow, input: SendMessageInput): Prom
     // Finaliza partes que ficaram em streaming (ex.: abort)
     for (const part of assistantMessage.parts) {
       if ((part.type === 'text' || part.type === 'reasoning') && part.state === 'streaming') {
+        if (part.type === 'text') part.text = stripEngineMarkers(part.text)
         part.state = 'done'
       }
     }
@@ -1376,6 +1419,7 @@ export async function runChat(win: BrowserWindow, input: SendMessageInput): Prom
     assistantMessage.errorKind = aborted || kind === 'unknown' ? undefined : kind
     for (const part of assistantMessage.parts) {
       if ((part.type === 'text' || part.type === 'reasoning') && part.state === 'streaming') {
+        if (part.type === 'text') part.text = stripEngineMarkers(part.text)
         part.state = 'done'
       }
     }
