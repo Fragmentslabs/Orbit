@@ -462,7 +462,9 @@
       "remove": "Remover",
       "unmark": "Desmarcar",
       "mark": "Marcar",
-      "add": "Adicionar"
+      "add": "Adicionar",
+      "archive": "Arquivar pasta",
+      "unarchive": "Desarquivar pasta"
     },
     "session": {
       "unpin": "Desafixar",

@@ -101,6 +101,8 @@ interface SessionState {
   createFolder: (mode: SessionMode, name: string) => FolderInfo
   renameFolder: (id: string, name: string) => void
   toggleFolderPin: (id: string) => void
+  /** Arquiva/desarquiva a pasta e, junto, todos os chats que estão nela */
+  toggleFolderArchive: (id: string) => void
   deleteFolder: (id: string) => void
 
   sendMessage: (mode: SessionMode, text: string, config: SendConfig) => Promise<void>
@@ -264,7 +266,8 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       const existingFolder = get().folders.find((f) => f.id === existingFolderId)
 
       if (existingFolder) {
-        session.folderId = existingFolder.id
+        // Pasta arquivada não recebe chats novos: a sessão nasce solta
+        if (!existingFolder.archived) session.folderId = existingFolder.id
       } else {
         const folderName = normalizeFolderName(partial.directory)
         const folder = get().createFolder("code", folderName)
@@ -573,7 +576,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
   },
 
   createFolder: (mode, name) => {
-    const folder: FolderInfo = { id: nanoid(), name, mode, pinned: false, createdAt: Date.now() }
+    const folder: FolderInfo = { id: nanoid(), name, mode, pinned: false, archived: false, createdAt: Date.now() }
     set((state) => {
       const folders = [...state.folders, folder]
       persistFolders(folders)
@@ -598,6 +601,29 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       persistFolders(folders)
       return { folders }
     })
+    emitChatEvent({ type: "folders", folders: get().folders })
+  },
+
+  toggleFolderArchive: (id) => {
+    const folder = get().folders.find((f) => f.id === id)
+    if (!folder) return
+    const archived = !folder.archived
+    const affected: string[] = []
+    set((state) => {
+      const folders = state.folders.map((f) => (f.id === id ? { ...f, archived } : f))
+      persistFolders(folders)
+      // Os chats da pasta acompanham o estado dela; os que já estavam no
+      // estado destino não são tocados (nem re-emitidos)
+      const sessions = state.sessions.map((s) => {
+        if (s.folderId !== id || s.archived === archived) return s
+        affected.push(s.id)
+        const next = { ...s, archived }
+        persistSession(next)
+        return next
+      })
+      return { folders, sessions }
+    })
+    for (const sid of affected) emitSessionEvent(sid)
     emitChatEvent({ type: "folders", folders: get().folders })
   },
 

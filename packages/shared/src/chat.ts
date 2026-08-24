@@ -80,6 +80,10 @@ export interface FolderInfo {
   name: string
   mode: SessionMode
   pinned: boolean
+  /** Pasta arquivada: some do grupo "Pastas" e vai para "Arquivados" com seus
+   *  chats (arquivados junto). Chats removidos de uma pasta arquivada caem
+   *  para os recentes, sem desarquivar. */
+  archived: boolean
   createdAt: number
 }
 
