@@ -985,7 +985,7 @@
     "emptyCodeHint": "Work on a project with Brain enabled and Orbit memorizes decisions, conventions, and structure."
   },
   "esteira": {
-    "titulo": "Esteira",
+    "titulo": "Pipeline",
     "subtitulo": "Pipelines that run tasks phase by phase, without chats",
     "carregando": "Loading board...",
     "vazioTitulo": "No boards yet",
