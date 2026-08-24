@@ -281,7 +281,7 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId }: 
   return (
     <PromptInputProvider>
       <FilePalette directory={sessionDir ?? folders[0]}>
-      <SlashPalette commands={slashCommands}>
+      <SlashPalette commands={slashCommands} className="mx-auto w-full max-w-2xl">
       <DraftInputBridge sessionId={sessionId} />
       <ChatInputDraft sessionId={sessionId} />
       <PendingAttachmentSync sessionId={sessionId} />
