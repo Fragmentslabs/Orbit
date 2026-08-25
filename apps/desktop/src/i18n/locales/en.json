@@ -1012,13 +1012,15 @@
     "sucesso": "Repository {{repo}} created and commits pushed.",
     "criadoSemPush": "Repository {{repo}} created, but the push failed. The remote is already set up — try pushing again.",
     "erro": {
-      "noCredential": "Git has no GitHub credential saved on this machine. Do an authenticated push or clone once so it gets stored, or configure the remote manually.",
-      "auth": "The GitHub credential was rejected or lacks permission to create repositories. Check that the token has the \"repo\" scope.",
+      "noCredential": "Could not read the GitHub credential your git uses:",
+      "auth": "The GitHub credential was rejected or lacks permission to create repositories:",
       "nameTaken": "A repository with that name already exists in your account.",
       "invalidName": "GitHub rejected that name. Use only letters, numbers, dot, hyphen and underscore.",
       "noCommits": "This folder has no commits yet. Make the first commit before publishing.",
       "other": "Could not create the repository:"
-    }
+    },
+    "tokenLabel": "GitHub access token",
+    "tokenHint": "Paste a Personal Access Token with the \"repo\" scope. It is used only for this operation and is not saved."
   },
   "mcp": {
     "kv": {

@@ -43,6 +43,9 @@ export function CreateRemoteRepoDialog({ repoPath, open, onOpenChange, onCreated
   const [privado, setPrivado] = useState(true)
   const [criando, setCriando] = useState(false)
   const [erro, setErro] = useState<string | null>(null)
+  /** Aparece só depois de a leitura automática da credencial falhar. */
+  const [pedirToken, setPedirToken] = useState(false)
+  const [token, setToken] = useState("")
 
   useEffect(() => {
     if (!open) return
@@ -52,6 +55,8 @@ export function CreateRemoteRepoDialog({ repoPath, open, onOpenChange, onCreated
     setPrivado(true)
     setErro(null)
     setCriando(false)
+    setPedirToken(false)
+    setToken("")
   }, [open, repoPath])
 
   const nomeValido = isValidRepoName(nome.trim())
@@ -65,6 +70,7 @@ export function CreateRemoteRepoDialog({ repoPath, open, onOpenChange, onCreated
       repoPath,
       nome.trim(),
       privado,
+      token.trim() || undefined,
     )) as CreateRepoResult
     setCriando(false)
     if (result.ok) {
@@ -72,9 +78,15 @@ export function CreateRemoteRepoDialog({ repoPath, open, onOpenChange, onCreated
       onOpenChange(false)
       return
     }
-    // Cada motivo tem uma saída diferente, então a mensagem é por tipo; o
-    // detalhe cru do GitHub entra só no caso genérico.
-    const conhecido = ["noCredential", "auth", "nameTaken", "invalidName", "noCommits"]
+    // Falha de credencial não é beco sem saída: abre o campo de token para o
+    // usuário seguir agora, e mostra o motivo técnico para ele saber o que
+    // aconteceu com o helper do git.
+    if (result.kind === "noCredential" || result.kind === "auth") {
+      setPedirToken(true)
+      setErro(`${t(`createRepo.erro.${result.kind}`)}\n${result.message}`)
+      return
+    }
+    const conhecido = ["nameTaken", "invalidName", "noCommits"]
     setErro(
       conhecido.includes(result.kind)
         ? t(`createRepo.erro.${result.kind}`)
@@ -132,6 +144,23 @@ export function CreateRemoteRepoDialog({ repoPath, open, onOpenChange, onCreated
             ))}
           </div>
 
+          {pedirToken && (
+            <div>
+              <p className="mb-1 text-xs font-medium">{t("createRepo.tokenLabel")}</p>
+              <Input
+                type="password"
+                value={token}
+                onChange={(e) => setToken(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") void criar()
+                }}
+                placeholder="ghp_…"
+                disabled={criando}
+              />
+              <p className="mt-1 text-[11px] text-muted-foreground">{t("createRepo.tokenHint")}</p>
+            </div>
+          )}
+
           {erro && (
             <p className="flex items-start gap-1.5 rounded-md border border-destructive/40 bg-destructive/10 p-2 text-[11px] whitespace-pre-line text-destructive">
               <AlertCircleIcon className="mt-px size-3.5 shrink-0" />
@@ -144,7 +173,10 @@ export function CreateRemoteRepoDialog({ repoPath, open, onOpenChange, onCreated
           <Button variant="outline" disabled={criando} onClick={() => onOpenChange(false)}>
             {t("common.cancel")}
           </Button>
-          <Button disabled={!nomeValido || criando} onClick={() => void criar()}>
+          <Button
+            disabled={!nomeValido || criando || (pedirToken && token.trim() === "")}
+            onClick={() => void criar()}
+          >
             {criando ? t("createRepo.criando") : t("createRepo.criar")}
           </Button>
         </DialogFooter>

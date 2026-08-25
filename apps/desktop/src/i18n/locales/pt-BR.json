@@ -1012,13 +1012,15 @@
     "sucesso": "Repositório {{repo}} criado e commits enviados.",
     "criadoSemPush": "Repositório {{repo}} criado, mas o envio falhou. O remote já está configurado — tente enviar novamente.",
     "erro": {
-      "noCredential": "O git não tem uma credencial do GitHub salva nesta máquina. Faça um push ou clone autenticado uma vez para que ela seja registrada, ou configure o remote manualmente.",
-      "auth": "A credencial do GitHub foi recusada ou não tem permissão para criar repositórios. Verifique se o token tem o escopo \"repo\".",
+      "noCredential": "Não consegui ler a credencial do GitHub que o git usa:",
+      "auth": "A credencial do GitHub foi recusada ou não tem permissão para criar repositórios:",
       "nameTaken": "Já existe um repositório com esse nome na sua conta.",
       "invalidName": "O GitHub recusou esse nome. Use apenas letras, números, ponto, hífen e underline.",
       "noCommits": "Esta pasta ainda não tem nenhum commit. Faça o primeiro commit antes de publicar.",
       "other": "Não foi possível criar o repositório:"
-    }
+    },
+    "tokenLabel": "Token de acesso do GitHub",
+    "tokenHint": "Cole um Personal Access Token com escopo \"repo\". Ele é usado só nesta operação e não fica salvo."
   },
   "mcp": {
     "kv": {

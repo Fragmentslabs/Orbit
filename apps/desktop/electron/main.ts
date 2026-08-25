@@ -1007,8 +1007,8 @@ app.whenReady().then(() => {
 
   // Cria o repositório no GitHub quando a pasta ainda não tem remote — o
   // token vem do credential helper do git, não do usuário (ver github-repo.ts).
-  ipcMain.handle('git:createRemoteRepo', (_event, repoPath: string, name: string, isPrivate: boolean) =>
-    createRemoteRepo(repoPath, name, isPrivate))
+  ipcMain.handle('git:createRemoteRepo', (_event, repoPath: string, name: string, isPrivate: boolean, token?: string) =>
+    createRemoteRepo(repoPath, name, isPrivate, token))
 
   ipcMain.handle('git:push', async (_event, repoPath: string) => {
     try {
