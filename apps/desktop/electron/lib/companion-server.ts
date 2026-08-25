@@ -877,6 +877,7 @@ async function handleRequest(client: ConnectedClient, requestId: string, req: Co
           name: req.name,
           mode: req.mode,
           pinned: false,
+          archived: false,
           createdAt: Date.now(),
         }
         const next = [...folders, folder]

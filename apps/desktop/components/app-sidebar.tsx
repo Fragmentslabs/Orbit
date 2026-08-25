@@ -36,6 +36,7 @@ import {
   Terminal,
   Trash2,
   User,
+  Wand2,
   X,
 } from "lucide-react"
 
@@ -131,17 +132,43 @@ function SelectionProvider({ children }: { children: React.ReactNode }) {
   }, [])
 
   const toggleFolder = useCallback((id: string) => {
+    // Chats da pasta que aparecem sob ela (estado de arquivamento igual ao
+    // da pasta) acompanham a seleção — o usuário pode desmarcá-los depois.
+    const { folders, sessions } = useSessionStore.getState()
+    const folderArchived = folders.find((f) => f.id === id)?.archived ?? false
+    const chatIds = sessions
+      .filter((s) => s.folderId === id && s.archived === folderArchived)
+      .map((s) => s.id)
     setSelectedFolderIds((prev) => {
       const next = new Set(prev)
-      if (next.has(id)) next.delete(id)
-      else next.add(id)
+      const selecting = !next.has(id)
+      if (selecting) next.add(id)
+      else next.delete(id)
+      setSelectedIds((prevIds) => {
+        const nextIds = new Set(prevIds)
+        for (const cid of chatIds) {
+          if (selecting) nextIds.add(cid)
+          else nextIds.delete(cid)
+        }
+        return nextIds
+      })
       return next
     })
   }, [])
 
   const enterSelectionMode = useCallback((initialId?: string, initialFolderId?: string) => {
     setSelectionMode(true)
-    if (initialId) {
+    if (initialFolderId) {
+      const { folders, sessions } = useSessionStore.getState()
+      const folderArchived = folders.find((f) => f.id === initialFolderId)?.archived ?? false
+      setSelectedIds(
+        new Set(
+          sessions
+            .filter((s) => s.folderId === initialFolderId && s.archived === folderArchived)
+            .map((s) => s.id),
+        ),
+      )
+    } else if (initialId) {
       setSelectedIds(new Set([initialId]))
     }
     if (initialFolderId) {
@@ -530,7 +557,7 @@ function MoveToFolderDialog({ open, onOpenChange, session }: {
   session: SessionInfo
 }) {
   const { t } = useTranslation()
-  const folders = useSessionStore((s) => s.folders).filter((f) => f.mode === session.mode)
+  const folders = useSessionStore((s) => s.folders).filter((f) => f.mode === session.mode && !f.archived)
   const moveToFolder = useSessionStore((s) => s.moveToFolder)
   const createFolder = useSessionStore((s) => s.createFolder)
   const [newName, setNewName] = useState("")
@@ -901,6 +928,7 @@ function FolderItem({ folder, sessions, childrenByParent = {} }: {
   const { mode, setFolders, setView } = useWorkspace()
   const renameFolder = useSessionStore((s) => s.renameFolder)
   const toggleFolderPin = useSessionStore((s) => s.toggleFolderPin)
+  const toggleFolderArchive = useSessionStore((s) => s.toggleFolderArchive)
   const deleteFolder = useSessionStore((s) => s.deleteFolder)
   const { selectionMode, selectedFolderIds, toggleFolder, enterSelectionMode } = useSelection()
 
@@ -954,7 +982,7 @@ function FolderItem({ folder, sessions, childrenByParent = {} }: {
           {folder.pinned && <Pin className="!size-3 shrink-0 text-sidebar-foreground/40" />}
         </SidebarMenuButton>
 
-        {!selectionMode && (
+        {!selectionMode && !folder.archived && (
           <button
             onClick={(e) => {
               e.stopPropagation()
@@ -991,6 +1019,11 @@ function FolderItem({ folder, sessions, childrenByParent = {} }: {
               icon: folder.pinned ? <PinOff className="size-4" /> : <Pin className="size-4" />,
               label: folder.pinned ? t("sidebar.session.unpin") : t("sidebar.session.pin"),
               onSelect: () => toggleFolderPin(folder.id),
+            },
+            {
+              icon: folder.archived ? <ArchiveRestore className="size-4" /> : <Archive className="size-4" />,
+              label: folder.archived ? t("sidebar.folder.unarchive") : t("sidebar.folder.archive"),
+              onSelect: () => toggleFolderArchive(folder.id),
             },
             { icon: <Trash2 className="size-4" />, label: t("sidebar.folder.remove"), onSelect: () => setConfirmDelete(true) },
             selectionMode
@@ -1044,6 +1077,7 @@ function ChatHistory() {
   const sessions = useSessionStore((s) => s.sessions)
   const folders = useSessionStore((s) => s.folders)
   const createFolder = useSessionStore((s) => s.createFolder)
+  const organizeSidebar = useSessionStore((s) => s.organizeSidebar)
   const [creatingFolder, setCreatingFolder] = useState(false)
   const { selectionMode, selectedIds, selectedFolderIds, exitSelectionMode } = useSelection()
   const deleteSessions = useSessionStore((s) => s.deleteSessions)
@@ -1095,18 +1129,29 @@ function ChatHistory() {
     return map
   }, [sessions])
   const active = modeSessions.filter((s) => !s.archived && !s.parentId)
-  const archived = modeSessions.filter((s) => s.archived && !s.parentId)
+  const archivedSessions = modeSessions.filter((s) => s.archived && !s.parentId)
   const modeFolders = folders.filter((f) => f.mode === mode)
+  const activeFolders = modeFolders.filter((f) => !f.archived)
+  const archivedFolders = modeFolders.filter((f) => f.archived)
+  const archivedFolderIds = useMemo(() => new Set(archivedFolders.map((f) => f.id)), [archivedFolders])
   const folderActivity = (folderId: string) => active
     .filter((s) => s.folderId === folderId)
     .reduce((latest, s) => Math.max(latest, s.updatedAt), 0)
-  const sortedFolders = [...modeFolders].sort((a, b) => {
+  const sortedFolders = [...activeFolders].sort((a, b) => {
     if (a.pinned !== b.pinned) return a.pinned ? -1 : 1
     return folderActivity(b.id) - folderActivity(a.id)
   })
+  const sortedArchivedFolders = [...archivedFolders].sort((a, b) => {
+    if (a.pinned !== b.pinned) return a.pinned ? -1 : 1
+    return b.createdAt - a.createdAt
+  })
   const rootSessions = active
-    .filter((s) => !s.folderId || !modeFolders.some((f) => f.id === s.folderId))
+    // Só pastas ativas "seguram" chats na raiz: um chat desarquivado dentro
+    // de uma pasta arquivada cai nos recentes (a pasta continua arquivada)
+    .filter((s) => !s.folderId || !activeFolders.some((f) => f.id === s.folderId))
     .sort((a, b) => b.updatedAt - a.updatedAt)
+  // Arquivados soltos: os chats de pastas arquivadas ficam dentro da pasta
+  const archived = archivedSessions.filter((s) => !s.folderId || !archivedFolderIds.has(s.folderId))
   const pinned = rootSessions.filter((s) => s.pinned)
   const recent = rootSessions.filter((s) => !s.pinned)
 
@@ -1137,16 +1182,28 @@ function ChatHistory() {
         label={t("sidebar.groups.folders")}
         action={
           !selectionMode && (
-            <button
-              onClick={(e) => {
-                e.stopPropagation()
-                setCreatingFolder(true)
-              }}
-              className="flex size-4 items-center justify-center rounded"
-              title={t("sidebar.folder.newFolderTitle")}
-            >
-              <FolderPlus className="size-3" />
-            </button>
+            <div className="flex items-center gap-0.5">
+              <button
+                onClick={(e) => {
+                  e.stopPropagation()
+                  organizeSidebar()
+                }}
+                className="flex size-4 items-center justify-center rounded"
+                title={t("sidebar.folder.organize")}
+              >
+                <Wand2 className="size-3" />
+              </button>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation()
+                  setCreatingFolder(true)
+                }}
+                className="flex size-4 items-center justify-center rounded"
+                title={t("sidebar.folder.newFolderTitle")}
+              >
+                <FolderPlus className="size-3" />
+              </button>
+            </div>
           )
         }
       >
@@ -1196,9 +1253,17 @@ function ChatHistory() {
         </AccordionGroup>
       )}
 
-      {archived.length > 0 && (
+      {(archived.length > 0 || sortedArchivedFolders.length > 0) && (
         <AccordionGroup label={t("sidebar.groups.archived")} defaultExpanded={false}>
           <SidebarMenu>
+            {sortedArchivedFolders.map((folder) => (
+              <FolderItem
+                key={folder.id}
+                folder={folder}
+                sessions={archivedSessions.filter((s) => s.folderId === folder.id)}
+                childrenByParent={childrenByParent}
+              />
+            ))}
             {archived.map((session) => (
               <SessionItem key={session.id} session={session} />
             ))}

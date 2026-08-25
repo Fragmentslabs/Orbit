@@ -43,9 +43,10 @@ function matches(command: SlashCommand, query: string): boolean {
  * "/code-review " a paleta fecha e o usuário completa/envia. */
 const LITERAL_COMMANDS = ["/create-skill", "/document", ...SLASH_ACTION_COMMANDS.map((c) => c + " ")]
 
-export function SlashPalette({ commands, children }: {
+export function SlashPalette({ commands, children, className }: {
   commands: SlashCommand[]
   children: ReactNode
+  className?: string
 }) {
   const controller = usePromptInputController()
   const value = controller.textInput.value
@@ -104,7 +105,7 @@ export function SlashPalette({ commands, children }: {
   }, [filtered])
 
   return (
-    <div className="relative" onKeyDownCapture={handleKeyDownCapture}>
+    <div className={cn("relative", className)} onKeyDownCapture={handleKeyDownCapture}>
       {open && filtered.length > 0 && (
         <div className="absolute bottom-full left-0 right-0 z-50 mb-2 max-h-80 overflow-y-auto rounded-xl border-2 border-sidebar-border bg-popover p-1.5 text-popover-foreground shadow-lg">
           {groups.map(([group, items]) => {

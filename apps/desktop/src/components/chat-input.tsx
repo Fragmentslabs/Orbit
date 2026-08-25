@@ -144,7 +144,7 @@ export function ChatInput({ onSubmit, status, onStop, sessionId, draftKey }: {
 
   return (
     <PromptInputProvider>
-    <SlashPalette commands={slashCommands}>
+    <SlashPalette commands={slashCommands} className="mx-auto w-full max-w-2xl">
     <DraftInputBridge sessionId={sessionId} />
     <ChatInputDraft sessionId={sessionId} draftKey={draftKey} />
     <PendingAttachmentSync sessionId={sessionId} draftKey={draftKey} />

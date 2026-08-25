@@ -101,7 +101,13 @@ interface SessionState {
   createFolder: (mode: SessionMode, name: string) => FolderInfo
   renameFolder: (id: string, name: string) => void
   toggleFolderPin: (id: string) => void
+  /** Arquiva/desarquiva a pasta e, junto, todos os chats que estão nela */
+  toggleFolderArchive: (id: string) => void
   deleteFolder: (id: string) => void
+  /** Reorganiza a sidebar: mescla pastas duplicadas do mesmo projeto e move os
+   *  chats soltos (modo código, com diretório) para a pasta do projeto —
+   *  corrige pastas duplicadas quando o mapa automático foi perdido. */
+  organizeSidebar: () => void
 
   sendMessage: (mode: SessionMode, text: string, config: SendConfig) => Promise<void>
   stopStreaming: (sessionId: string) => void
@@ -154,6 +160,17 @@ function normalizeFolderName(directoryPath: string): string {
     .split(/[-_]/)
     .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
     .join(" ")
+}
+
+/** Chave de comparação de nomes de pasta: ignora caixa, espaços extras e
+ *  acentos — "Nodara", "nodara" e "Nodará" são o mesmo projeto. */
+function folderKey(name: string): string {
+  return name
+    .trim()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/\s+/g, " ")
 }
 
 function persistSession(session: SessionInfo) {
@@ -264,13 +281,27 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       const existingFolder = get().folders.find((f) => f.id === existingFolderId)
 
       if (existingFolder) {
-        session.folderId = existingFolder.id
+        // Pasta arquivada não recebe chats novos: a sessão nasce solta
+        if (!existingFolder.archived && existingFolder.mode === mode) session.folderId = existingFolder.id
       } else {
         const folderName = normalizeFolderName(partial.directory)
-        const folder = get().createFolder("code", folderName)
-        autoFolderMap[partial.directory] = folder.id
-        persistAutoFolderMap(autoFolderMap)
-        session.folderId = folder.id
+        // Mapa automático perdido (localStorage limpo/migrado) ou diretório com
+        // variação (trailing slash, case, ~ vs absoluto): antes de criar uma
+        // pasta nova, reaproveita a pasta existente do projeto pelo nome
+        // normalizado — evita duas pastas para o mesmo projeto.
+        const existing = get().folders.find(
+          (f) => f.mode === mode && !f.archived && folderKey(f.name) === folderKey(folderName),
+        )
+        if (existing) {
+          autoFolderMap[partial.directory] = existing.id
+          persistAutoFolderMap(autoFolderMap)
+          session.folderId = existing.id
+        } else {
+          const folder = get().createFolder(mode, folderName)
+          autoFolderMap[partial.directory] = folder.id
+          persistAutoFolderMap(autoFolderMap)
+          session.folderId = folder.id
+        }
       }
     }
 
@@ -573,7 +604,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
   },
 
   createFolder: (mode, name) => {
-    const folder: FolderInfo = { id: nanoid(), name, mode, pinned: false, createdAt: Date.now() }
+    const folder: FolderInfo = { id: nanoid(), name, mode, pinned: false, archived: false, createdAt: Date.now() }
     set((state) => {
       const folders = [...state.folders, folder]
       persistFolders(folders)
@@ -598,6 +629,29 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       persistFolders(folders)
       return { folders }
     })
+    emitChatEvent({ type: "folders", folders: get().folders })
+  },
+
+  toggleFolderArchive: (id) => {
+    const folder = get().folders.find((f) => f.id === id)
+    if (!folder) return
+    const archived = !folder.archived
+    const affected: string[] = []
+    set((state) => {
+      const folders = state.folders.map((f) => (f.id === id ? { ...f, archived } : f))
+      persistFolders(folders)
+      // Os chats da pasta acompanham o estado dela; os que já estavam no
+      // estado destino não são tocados (nem re-emitidos)
+      const sessions = state.sessions.map((s) => {
+        if (s.folderId !== id || s.archived === archived) return s
+        affected.push(s.id)
+        const next = { ...s, archived }
+        persistSession(next)
+        return next
+      })
+      return { folders, sessions }
+    })
+    for (const sid of affected) emitSessionEvent(sid)
     emitChatEvent({ type: "folders", folders: get().folders })
   },
 
@@ -626,6 +680,108 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     })
     for (const sid of affected) emitSessionEvent(sid)
     emitChatEvent({ type: "folders", folders: get().folders })
+  },
+
+  organizeSidebar: () => {
+    const { sessions, folders } = get()
+
+    // ——— 1) Pastas do mesmo projeto (mesmo modo e estado de arquivamento) → mescla ———
+    const byKey = new Map<string, FolderInfo[]>()
+    for (const f of folders) {
+      const key = `${f.mode}|${f.archived}|${folderKey(f.name)}`
+      const list = byKey.get(key) ?? []
+      list.push(f)
+      byKey.set(key, list)
+    }
+    // absorvida → canônica; canônica = pasta com mais chats (empate → mais antiga)
+    const remap = new Map<string, string>()
+    for (const list of byKey.values()) {
+      if (list.length < 2) continue
+      const count = (id: string) => sessions.filter((s) => s.folderId === id).length
+      const canonical = [...list].sort((a, b) => count(b.id) - count(a.id) || a.createdAt - b.createdAt)[0]
+      for (const dup of list) {
+        if (dup.id !== canonical.id) remap.set(dup.id, canonical.id)
+      }
+    }
+    if (remap.size > 0) {
+      // Reaponta entradas do mapa automático das pastas absorvidas
+      const autoFolderMap = loadAutoFolderMap()
+      for (const [dir, fid] of Object.entries(autoFolderMap)) {
+        const target = remap.get(fid)
+        if (target) autoFolderMap[dir] = target
+      }
+      persistAutoFolderMap(autoFolderMap)
+      // Aplicado ANTES da etapa 2: createFolder (abaixo) persiste `state.folders`
+      // e não pode re-incluir as pastas absorvidas.
+      const foldersNext = folders.filter((f) => !remap.has(f.id))
+      set({ folders: foldersNext })
+      persistFolders(foldersNext)
+      emitChatEvent({ type: "folders", folders: foldersNext })
+    }
+
+    // ——— 2) Chats soltos (código, com diretório) → pasta do projeto ———
+    const { sessions: current, folders: currentFolders } = get()
+    const folderById = new Map(currentFolders.map((f) => [f.id, f]))
+    const folderByKey = new Map<string, FolderInfo>()
+    for (const f of currentFolders) {
+      if (f.archived) continue
+      const key = `${f.mode}|${folderKey(f.name)}`
+      if (!folderByKey.has(key)) folderByKey.set(key, f)
+    }
+    const autoFolderMap = loadAutoFolderMap()
+    let mapDirty = false
+    const moves = new Map<string, string>() // sessionId → folderId
+    // Sessões de pastas absorvidas passam para a canônica (camada 1)
+    for (const s of current) {
+      if (s.folderId && remap.has(s.folderId)) moves.set(s.id, remap.get(s.folderId)!)
+    }
+    const loose = current
+      .filter((s) => s.mode === "code" && !s.folderId && !s.archived && !s.parentId && !s.routineId && !!s.directory)
+      .sort((a, b) => b.updatedAt - a.updatedAt)
+    for (const s of loose) {
+      if (moves.has(s.id)) continue
+      const mapped = autoFolderMap[s.directory as string]
+      if (mapped) {
+        const folder = folderById.get(mapped)
+        // Pasta arquivada não recebe chats: o diretório continua mapeado nela
+        // (sessões futuras nascem soltas) — o chat solto tenta por nome abaixo
+        if (folder && !folder.archived) {
+          moves.set(s.id, folder.id)
+          continue
+        }
+      }
+      const match = folderByKey.get(`code|${folderKey(normalizeFolderName(s.directory as string))}`)
+      if (match) {
+        // Reaproveita a pasta existente e registra o diretório no mapa
+        // automático — as próximas sessões do projeto já nascem nela.
+        autoFolderMap[s.directory as string] = match.id
+        mapDirty = true
+        moves.set(s.id, match.id)
+        continue
+      }
+      // Projeto sem pasta: cria seguindo o padrão de nomenclatura
+      const folder = get().createFolder("code", normalizeFolderName(s.directory as string))
+      folderById.set(folder.id, folder)
+      const key = `code|${folderKey(folder.name)}`
+      if (!folderByKey.has(key)) folderByKey.set(key, folder)
+      autoFolderMap[s.directory as string] = folder.id
+      mapDirty = true
+      moves.set(s.id, folder.id)
+    }
+    if (mapDirty) persistAutoFolderMap(autoFolderMap)
+
+    if (moves.size > 0) {
+      set((state) => ({
+        sessions: state.sessions.map((s) => {
+          const folderId = moves.get(s.id)
+          if (folderId === undefined) return s
+          const next = { ...s, folderId }
+          persistSession(next)
+          return next
+        }),
+      }))
+      for (const sid of moves.keys()) emitSessionEvent(sid)
+    }
   },
 
   sendMessage: async (mode, text, config) => {
