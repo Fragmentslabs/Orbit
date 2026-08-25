@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next"
 import { FileText, X } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
+import { Skeleton } from "@/components/ui/skeleton"
 import type { Memory } from "@shared/memory"
 import { AssistantMarkdown } from "@/src/components/messages/shared"
 import { useMemoryStore } from "@/src/stores/memory-store"
@@ -70,7 +71,17 @@ export function MemoryDetailPanel({ memory, related, onSelectRelated, onClose }:
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto px-3 py-2">
           {memory.hasDoc && loadingDoc ? (
-            <p className="text-xs text-muted-foreground">{t("memories.loadingDoc")}</p>
+            // O doc vem do disco por IPC: skeleton em vez de um texto de espera,
+            // para o painel não piscar entre dois layouts diferentes.
+            <div className="flex flex-col gap-2" aria-label={t("memories.loadingDoc")}>
+              <Skeleton className="h-5 w-2/5" />
+              <Skeleton className="h-3 w-full" />
+              <Skeleton className="h-3 w-11/12" />
+              <Skeleton className="h-3 w-4/5" />
+              <Skeleton className="mt-2 h-4 w-1/3" />
+              <Skeleton className="h-3 w-full" />
+              <Skeleton className="h-3 w-3/4" />
+            </div>
           ) : doc ? (
             <div className="w-full break-words text-xs">
               <AssistantMarkdown>{doc}</AssistantMarkdown>

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { List, Network, Search } from "lucide-react"
 import { Input } from "@/components/ui/input"
@@ -22,6 +22,9 @@ import { MemoryDetailPanel } from "./memory-detail-panel"
 import { MemoryGraph } from "./memory-graph"
 import { lastActivity } from "./meta"
 
+/** Referência estável para memórias sem vizinhos — evita quebrar o memo. */
+const EMPTY_RELATED: Memory[] = []
+
 /**
  * View de Memórias: lista de cards ou árvore de conexões (SVG com zoom/pan),
  * com filtro automático pelo modo do workspace — chat mostra
@@ -33,6 +36,8 @@ import { lastActivity } from "./meta"
  */
 
 const ALL_PROJECTS = "__all__"
+/** Cards renderizados por vez — o resto entra conforme a rolagem. */
+const PAGE_SIZE = 24
 
 /**
  * Placeholder do carregamento inicial. Sem ele a tela pisca o estado vazio
@@ -144,8 +149,59 @@ export function MemoriesView() {
 
   const byId = useMemo(() => new Map(index.map((m) => [m.id, m])), [index])
   const selected = selectedId ? byId.get(selectedId) : undefined
-  const relatedOf = (memory: Memory) =>
-    memory.relatedIds.map((id) => byId.get(id)).filter((m): m is Memory => m != null)
+
+  /**
+   * Vizinhos resolvidos uma vez por índice. Antes isto era recalculado por card
+   * a cada render, criando um array novo — o que anulava o memo do MemoryCard.
+   */
+  const relatedByMemory = useMemo(() => {
+    const map = new Map<string, Memory[]>()
+    for (const memory of index) {
+      const list = memory.relatedIds
+        .map((id) => byId.get(id))
+        .filter((m): m is Memory => m != null)
+      if (list.length > 0) map.set(memory.id, list)
+    }
+    return map
+  }, [index, byId])
+  const relatedOf = useCallback(
+    (memory: Memory) => relatedByMemory.get(memory.id) ?? EMPTY_RELATED,
+    [relatedByMemory],
+  )
+
+  const handleSelect = useCallback(
+    (id: string) => setSelectedId((prev) => (prev === id ? null : id)),
+    [],
+  )
+
+  // Rolagem infinita: renderizar 300+ cards de uma vez travava a aba.
+  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE)
+  const sentinelRef = useRef<HTMLDivElement>(null)
+  const scrollRef = useRef<HTMLDivElement>(null)
+
+  // Qualquer mudança no conjunto exibido recomeça a paginação — senão uma busca
+  // nova herdaria o total já expandido da anterior.
+  useEffect(() => {
+    setVisibleCount(PAGE_SIZE)
+  }, [query, projectFilter, mode, tab])
+
+  const visible = useMemo(() => filtered.slice(0, visibleCount), [filtered, visibleCount])
+  const hasMore = visibleCount < filtered.length
+
+  useEffect(() => {
+    const el = sentinelRef.current
+    if (!el || !hasMore || tab !== "list") return
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0]?.isIntersecting) setVisibleCount((c) => c + PAGE_SIZE)
+      },
+      // O root é o container rolável, não a viewport: rootMargin só antecipa o
+      // carregamento se for medido no mesmo elemento que rola.
+      { root: scrollRef.current, rootMargin: "400px" },
+    )
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [hasMore, tab, visible.length])
 
   return (
     <div className="flex h-full min-w-0 flex-col gap-3 overflow-hidden">
@@ -203,7 +259,7 @@ export function MemoriesView() {
           </div>
         </div>
       ) : tab === "list" ? (
-        <div className="min-h-0 flex-1 overflow-y-auto pr-1">
+        <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto pr-1">
           {/* Uma coluna a menos com o painel aberto — o espaço restante não
               comporta três cards sem espremer o texto. */}
           <div
@@ -212,19 +268,28 @@ export function MemoriesView() {
               selected ? "xl:grid-cols-2" : "md:grid-cols-2 xl:grid-cols-3",
             )}
           >
-            {filtered.map((memory) => (
+            {visible.map((memory) => (
               <MemoryCard
                 key={memory.id}
                 memory={memory}
                 related={relatedOf(memory)}
                 selected={memory.id === selectedId}
-                onSelect={() => setSelectedId(memory.id === selectedId ? null : memory.id)}
+                onSelect={handleSelect}
                 // Antes isto pulava para a aba Grafo; com o painel compartilhado
                 // basta trocar a seleção, sem tirar o usuário da lista.
                 onSelectRelated={setSelectedId}
               />
             ))}
           </div>
+          {hasMore && (
+            <div ref={sentinelRef} className="grid grid-cols-1 gap-2 pt-2">
+              <div className="flex flex-col gap-2 rounded-lg border bg-card p-3">
+                <Skeleton className="h-4 w-full" />
+                <Skeleton className="h-4 w-4/5" />
+                <Skeleton className="h-3 w-2/3" />
+              </div>
+            </div>
+          )}
         </div>
       ) : (
         <MemoryGraph

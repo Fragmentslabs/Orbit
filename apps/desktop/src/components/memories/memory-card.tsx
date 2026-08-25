@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react"
+import { memo, useEffect, useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { ArrowLeft, ArrowUpCircle, ExternalLink, FileText, Link2, Pencil, Trash2 } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
@@ -305,14 +305,17 @@ function DocDialog({ memory, open, onOpenChange }: {
   )
 }
 
-export function MemoryCard({ memory, related, selected, onSelect, onSelectRelated }: {
+function MemoryCardImpl({ memory, related, selected, onSelect, onSelectRelated }: {
   memory: Memory
   /** Memórias em relatedIds (backlinks) já resolvidas pelo pai */
   related: Memory[]
   /** Realce de card em foco no painel lateral */
   selected?: boolean
-  /** Clique no corpo do card — abre o detalhe. Sem isto o card não é clicável. */
-  onSelect?: () => void
+  /**
+   * Clique no corpo do card — abre o detalhe. Recebe o id para o pai poder
+   * passar um callback estável (o memo abaixo depende disso).
+   */
+  onSelect?: (id: string) => void
   onSelectRelated?: (id: string) => void
 }) {
   const { t, i18n } = useTranslation()
@@ -355,7 +358,7 @@ export function MemoryCard({ memory, related, selected, onSelect, onSelectRelate
         if ((e.target as HTMLElement).closest('button, a, input, textarea, [data-slot="dialog-content"]')) {
           return
         }
-        onSelect()
+        onSelect(memory.id)
       }}
     >
       <div className="flex items-start justify-between gap-2">
@@ -471,19 +474,31 @@ export function MemoryCard({ memory, related, selected, onSelect, onSelectRelate
         </div>
       )}
 
-      <ConfirmDialog
-        open={confirmDelete}
-        onOpenChange={setConfirmDelete}
-        title={t("memories.deleteTitle")}
-        description={memory.hasDoc
-          ? t("memories.deleteDescriptionWithDoc", { text: memory.text })
-          : t("memories.deleteDescription", { text: memory.text })}
-        confirmLabel={t("memories.deleteConfirm")}
-        destructive
-        onConfirm={() => void remove(memory.id)}
-      />
-      <EditDialog memory={memory} open={editing} onOpenChange={setEditing} />
-      {memory.hasDoc && <DocDialog memory={memory} open={docOpen} onOpenChange={setDocOpen} />}
+      {/* Montados só quando abertos. O EditDialog assina o índice inteiro e
+          monta um Map de todas as memórias; mantendo um por card, cada seleção
+          reconstruía esse Map centenas de vezes e travava a lista. */}
+      {confirmDelete && (
+        <ConfirmDialog
+          open
+          onOpenChange={setConfirmDelete}
+          title={t("memories.deleteTitle")}
+          description={memory.hasDoc
+            ? t("memories.deleteDescriptionWithDoc", { text: memory.text })
+            : t("memories.deleteDescription", { text: memory.text })}
+          confirmLabel={t("memories.deleteConfirm")}
+          destructive
+          onConfirm={() => void remove(memory.id)}
+        />
+      )}
+      {editing && <EditDialog memory={memory} open onOpenChange={setEditing} />}
+      {memory.hasDoc && docOpen && <DocDialog memory={memory} open onOpenChange={setDocOpen} />}
     </div>
   )
 }
+
+/**
+ * Memoizado: selecionar uma memória mudava `selectedId` e re-renderizava a
+ * lista inteira. Depende de `related` e dos callbacks serem estáveis — a view
+ * memoiza os dois.
+ */
+export const MemoryCard = memo(MemoryCardImpl)
