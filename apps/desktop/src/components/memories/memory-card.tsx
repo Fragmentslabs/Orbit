@@ -1,6 +1,6 @@
-import { useEffect, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
-import { ArrowUpCircle, ExternalLink, FileText, Link2, Pencil, Trash2 } from "lucide-react"
+import { ArrowLeft, ArrowUpCircle, ExternalLink, FileText, Link2, Pencil, Trash2 } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { ConfirmDialog } from "@/components/ui/alert-dialog"
@@ -20,52 +20,184 @@ import type { Memory } from "@shared/memory"
 import { AssistantMarkdown } from "@/src/components/messages/shared"
 import { useMemoryStore } from "@/src/stores/memory-store"
 import { useSessionStore } from "@/src/stores/session-store"
-import { CATEGORY_LABEL, KIND_BADGE, KIND_LABEL, canPromote } from "./meta"
+import { CATEGORY_LABEL, KIND_BADGE, KIND_COLOR, KIND_LABEL, canPromote } from "./meta"
 
 function formatDate(ts: number, locale: string) {
   return new Date(ts).toLocaleDateString(locale, { day: "2-digit", month: "short", year: "numeric" })
 }
 
+/** Rascunho por memória — preserva edições ao navegar entre nós conectados. */
+interface Draft {
+  text: string
+  tags: string
+  weight: number
+}
+
+function draftOf(memory: Memory): Draft {
+  return { text: memory.text, tags: memory.tags.join(", "), weight: memory.weight }
+}
+
+function isDirty(draft: Draft, memory: Memory): boolean {
+  return (
+    draft.text !== memory.text ||
+    draft.tags !== memory.tags.join(", ") ||
+    draft.weight !== memory.weight
+  )
+}
+
+/**
+ * Painel de edição. Além dos campos, espelha os metadados do card (tipo,
+ * categoria, projeto, peso, usos, datas) e lista os nós conectados — clicar
+ * num deles passa a editar aquele nó, sem fechar o diálogo.
+ *
+ * As edições ficam num rascunho por id, então navegar de um nó para outro e
+ * voltar não perde o que foi digitado.
+ */
 function EditDialog({ memory, open, onOpenChange }: {
   memory: Memory
   open: boolean
   onOpenChange: (open: boolean) => void
 }) {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
   const update = useMemoryStore((s) => s.update)
-  const [text, setText] = useState(memory.text)
-  const [tags, setTags] = useState(memory.tags.join(", "))
-  const [weight, setWeight] = useState(memory.weight)
+  const index = useMemoryStore((s) => s.index)
 
+  const [currentId, setCurrentId] = useState(memory.id)
+  const [drafts, setDrafts] = useState<Record<string, Draft>>({})
+  /** Nós visitados a partir do original — alimenta o botão de voltar. */
+  const [trail, setTrail] = useState<string[]>([])
+
+  const byId = useMemo(() => new Map(index.map((m) => [m.id, m])), [index])
+  const current = byId.get(currentId) ?? memory
+  const draft = drafts[currentId] ?? draftOf(current)
+  const related = current.relatedIds
+    .map((id) => byId.get(id))
+    .filter((m): m is Memory => m != null)
+
+  // Reabrir sempre parte da memória do card, com os rascunhos zerados.
   useEffect(() => {
     if (open) {
-      setText(memory.text)
-      setTags(memory.tags.join(", "))
-      setWeight(memory.weight)
+      setCurrentId(memory.id)
+      setDrafts({})
+      setTrail([])
     }
-  }, [open, memory])
+  }, [open, memory.id])
+
+  const setDraft = (patch: Partial<Draft>) =>
+    setDrafts((prev) => ({ ...prev, [currentId]: { ...draft, ...patch } }))
+
+  const navigateTo = (id: string) => {
+    setDrafts((prev) => ({ ...prev, [currentId]: draft }))
+    setTrail((prev) => [...prev, currentId])
+    setCurrentId(id)
+  }
+
+  const goBack = () => {
+    setDrafts((prev) => ({ ...prev, [currentId]: draft }))
+    setTrail((prev) => {
+      const next = [...prev]
+      const previous = next.pop()
+      if (previous) setCurrentId(previous)
+      return next
+    })
+  }
+
+  /** Grava todos os rascunhos alterados, não só o nó em foco. */
+  const saveAll = () => {
+    const pending = { ...drafts, [currentId]: draft }
+    for (const [id, entry] of Object.entries(pending)) {
+      const target = byId.get(id)
+      if (!target || !entry.text.trim() || !isDirty(entry, target)) continue
+      void update(id, {
+        text: entry.text.trim(),
+        tags: entry.tags.split(",").map((tag) => tag.trim()).filter(Boolean),
+        weight: entry.weight,
+      })
+    }
+    onOpenChange(false)
+  }
+
+  const dirtyCount = Object.entries({ ...drafts, [currentId]: draft }).filter(([id, entry]) => {
+    const target = byId.get(id)
+    return target != null && isDirty(entry, target)
+  }).length
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       {/* Sem max-w o Popup assume w-full e ocupa a janela inteira — os demais
           diálogos do app definem a própria largura pelo mesmo motivo. */}
-      <DialogContent className="max-w-lg">
+      <DialogContent className="max-w-xl">
         <DialogHeader>
-          <DialogTitle>{t("memories.editTitle")}</DialogTitle>
+          <DialogTitle className="flex items-center gap-2 pr-6">
+            {trail.length > 0 && (
+              <Button
+                variant="ghost"
+                size="icon"
+                className="size-6 shrink-0"
+                title={t("memories.back")}
+                onClick={goBack}
+              >
+                <ArrowLeft className="size-3.5" />
+              </Button>
+            )}
+            {t("memories.editTitle")}
+          </DialogTitle>
         </DialogHeader>
-        <div className="flex flex-col gap-3">
+
+        <div className="flex max-h-[65vh] flex-col gap-3 overflow-y-auto pr-1">
+          {/* Mesmos metadados do card, para não precisar fechar o diálogo
+              e voltar à lista só para conferir tipo, peso ou uso. */}
+          <div className="flex flex-wrap items-center gap-1.5">
+            <Badge variant="secondary" className={cn("px-1.5 py-0 text-[10px]", KIND_BADGE[current.kind])}>
+              {t(`memories.kinds.${current.kind}`, { defaultValue: KIND_LABEL[current.kind] })}
+            </Badge>
+            {current.category && (
+              <Badge variant="outline" className="px-1.5 py-0 text-[10px]">
+                {t(`memories.categories.${current.category}`, { defaultValue: CATEGORY_LABEL[current.category] })}
+              </Badge>
+            )}
+            {(current.projectName ?? current.originProjectName) && (
+              <Badge variant="outline" className="px-1.5 py-0 text-[10px] text-muted-foreground">
+                {current.projectName ?? current.originProjectName}
+              </Badge>
+            )}
+            {current.area && (
+              <Badge variant="outline" className="px-1.5 py-0 text-[10px] text-muted-foreground">
+                {t(`memories.areas.${current.area}`, { defaultValue: current.area })}
+              </Badge>
+            )}
+            {current.hasDoc && <FileText className="size-3 text-muted-foreground" />}
+          </div>
+
           <div>
             <p className="mb-1 text-xs font-medium">{t("memories.fieldText")}</p>
-            <Textarea value={text} onChange={(e) => setText(e.target.value)} rows={5} />
+            <Textarea
+              value={draft.text}
+              onChange={(e) => setDraft({ text: e.target.value })}
+              rows={5}
+            />
           </div>
+
           <div>
             <p className="mb-1 text-xs font-medium">{t("memories.fieldTags")}</p>
             <Input
-              value={tags}
-              onChange={(e) => setTags(e.target.value)}
+              value={draft.tags}
+              onChange={(e) => setDraft({ tags: e.target.value })}
               placeholder={t("memories.tagsPlaceholder")}
             />
+            {draft.tags.trim() && (
+              <div className="mt-1.5 flex flex-wrap gap-1.5 text-[11px] text-muted-foreground">
+                {draft.tags
+                  .split(",")
+                  .map((tag) => tag.trim())
+                  .filter(Boolean)
+                  .map((tag, i) => (
+                    <span key={`${tag}:${i}`}>#{tag}</span>
+                  ))}
+              </div>
+            )}
           </div>
+
           <div>
             <p className="mb-1 text-xs font-medium">{t("memories.weight")}</p>
             <div className="flex items-center gap-3">
@@ -74,31 +206,62 @@ function EditDialog({ memory, open, onOpenChange }: {
                 min={0}
                 max={1}
                 step={0.05}
-                value={weight}
-                onChange={(e) => setWeight(Number(e.target.value))}
+                value={draft.weight}
+                onChange={(e) => setDraft({ weight: Number(e.target.value) })}
                 className="flex-1"
                 aria-label={t("memories.weight")}
               />
               <span className="w-8 text-right text-xs tabular-nums text-muted-foreground">
-                {weight.toFixed(2)}
+                {draft.weight.toFixed(2)}
               </span>
             </div>
           </div>
+
+          <div className="flex flex-wrap items-center gap-3 border-t pt-2 text-[11px] text-muted-foreground">
+            <span>{t("memories.uses", { count: current.hits })}</span>
+            <span>{t("memories.createdAt", { date: formatDate(current.createdAt, i18n.language) })}</span>
+            {current.lastHitAt != null && (
+              <span>{t("memories.lastUsed", { date: formatDate(current.lastHitAt, i18n.language) })}</span>
+            )}
+            {current.expiresAt != null && (
+              <span>{t("memories.expires", { date: formatDate(current.expiresAt, i18n.language) })}</span>
+            )}
+          </div>
+
+          {related.length > 0 && (
+            <div className="flex flex-col gap-1 border-t pt-2">
+              <span className="flex items-center gap-1 text-[11px] text-muted-foreground">
+                <Link2 className="size-3" /> {t("memories.connected")} ({related.length})
+              </span>
+              <div className="flex max-h-40 flex-col gap-0.5 overflow-y-auto pr-1">
+                {related.map((r) => {
+                  const entry = drafts[r.id]
+                  const changed = entry != null && isDirty(entry, r)
+                  return (
+                    <button
+                      key={r.id}
+                      type="button"
+                      className="flex items-center gap-1.5 rounded px-1.5 py-1 text-left text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                      onClick={() => navigateTo(r.id)}
+                    >
+                      <span
+                        className="size-1.5 shrink-0 rounded-full"
+                        style={{ backgroundColor: KIND_COLOR[r.kind] }}
+                      />
+                      <span className="truncate">{r.text}</span>
+                      {changed && <span className="shrink-0 text-[10px] text-primary">•</span>}
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+          )}
         </div>
+
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>{t("common.cancel")}</Button>
-          <Button
-            disabled={!text.trim()}
-            onClick={() => {
-              void update(memory.id, {
-                text: text.trim(),
-                tags: tags.split(",").map((tag) => tag.trim()).filter(Boolean),
-                weight,
-              })
-              onOpenChange(false)
-            }}
-          >
-            {t("memories.save")}
+          <Button disabled={!draft.text.trim() || dirtyCount === 0} onClick={saveAll}>
+            {dirtyCount > 1 ? t("memories.saveCount", { count: dirtyCount }) : t("memories.save")}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -244,20 +407,24 @@ export function MemoryCard({ memory, related, onSelectRelated }: {
       </div>
 
       {related.length > 0 && (
-        <div className="flex flex-col gap-1 border-t pt-2">
+        <div className="flex min-h-0 flex-col gap-1 border-t pt-2">
           <span className="flex items-center gap-1 text-[11px] text-muted-foreground">
-            <Link2 className="size-3" /> {t("memories.connected")}
+            <Link2 className="size-3" /> {t("memories.connected")} ({related.length})
           </span>
-          {related.map((r) => (
-            <button
-              key={r.id}
-              type="button"
-              className="truncate text-left text-xs text-muted-foreground transition-colors hover:text-foreground"
-              onClick={() => onSelectRelated?.(r.id)}
-            >
-              • {r.text}
-            </button>
-          ))}
+          {/* Teto de altura: um nó muito conectado esticava o card e quebrava o
+              alinhamento da grade. O restante fica acessível por rolagem. */}
+          <div className="flex max-h-20 flex-col overflow-y-auto pr-1">
+            {related.map((r) => (
+              <button
+                key={r.id}
+                type="button"
+                className="truncate text-left text-xs text-muted-foreground transition-colors hover:text-foreground"
+                onClick={() => onSelectRelated?.(r.id)}
+              >
+                • {r.text}
+              </button>
+            ))}
+          </div>
         </div>
       )}
 
