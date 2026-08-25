@@ -1,8 +1,12 @@
 /**
- * Grafo de memórias — porte do memory-graph do desktop: projeto no centro,
- * áreas ao redor, memórias ligadas como filhos e avulsas na periferia.
- * Mesmo layout radial (BFS em anéis, clusters em grade); zoom/pan viram
- * pinch/arrastar, e o node selecionado abre o card num overlay inferior.
+ * Grafo de memórias — porte do memory-graph do desktop. O layout vem de
+ * @orbit/shared (layoutMemoryGraph), então as duas plataformas desenham
+ * exatamente as mesmas posições: a raiz do projeto no centro e os ramos
+ * crescendo para todos os lados, com espaço mínimo garantido entre os rótulos.
+ * É uma vista única e contínua — projetos ocupam regiões distintas do canvas,
+ * sem moldura separando um do outro; quem isola um projeto é o filtro.
+ * Zoom/pan viram pinch/arrastar, e o node selecionado abre o card num overlay
+ * inferior.
  */
 import { useCallback, useMemo, useRef, useState } from 'react'
 import { View, Text, Pressable, ScrollView, StyleSheet } from 'react-native'
@@ -11,227 +15,36 @@ import Svg, { G, Line, Circle, Rect, Text as SvgText } from 'react-native-svg'
 import { Crosshair, X } from 'lucide-react-native'
 import { useTranslation } from 'react-i18next'
 import type { Memory } from '@orbit/shared'
-import { jaccard, normalizeText, PROJECT_AREAS } from '@orbit/shared'
+import {
+  LABEL_HEIGHT,
+  LABEL_OFFSET,
+  layoutMemoryGraph,
+  nodeLabelText,
+  normalizeText,
+} from '@orbit/shared'
+import type { LayoutNode } from '@orbit/shared'
 import { KIND_COLOR, kindLabel, lastActivity } from './meta'
 import { MemoryCard } from './MemoryCard'
 import { getThemeTokens } from '~/lib/theme-tokens'
 import { useThemeStore } from '~/stores/theme-store'
 
-const LEVEL_RADIUS = 150
-const CLUSTER_PAD = 90
-const LOOSE_RING_PAD = 110
 const RECENT_MS = 7 * 24 * 60 * 60 * 1000
 const STALE_MS = 30 * 24 * 60 * 60 * 1000
-const INFERRED_JACCARD = 0.5
-const MAX_INFERRED_EDGES = 30
+/** Piso do zoom — baixo o bastante para um grafo grande caber inteiro. */
+const ZOOM_MIN = 0.04
 
-interface GraphNode {
-  memory: Memory
-  x: number
-  y: number
-  r: number
-  isRoot: boolean
-}
-
-interface GraphEdge {
-  from: string
-  to: string
-  inferred: boolean
-  hits: number
-}
-
-function nodeRadius(memory: Memory, isRoot: boolean): number {
-  if (isRoot) return 30
-  if (memory.area) return 20
-  return 11 + memory.weight * 5
-}
-
-function nodeLabel(memory: Memory, isRoot: boolean): string {
-  if (isRoot && memory.projectName) return memory.projectName
-  if (memory.area) return PROJECT_AREAS[memory.area]?.label ?? memory.text
-  return memory.text.length > 34 ? `${memory.text.slice(0, 34)}…` : memory.text
-}
-
-/** Componentes conexos por relatedIds (dentro do pool visível). */
-function components(pool: Memory[]): Memory[][] {
-  const byId = new Map(pool.map((m) => [m.id, m]))
-  const seen = new Set<string>()
-  const result: Memory[][] = []
-  for (const memory of pool) {
-    if (seen.has(memory.id)) continue
-    const component: Memory[] = []
-    const queue = [memory.id]
-    while (queue.length) {
-      const id = queue.pop()!
-      if (seen.has(id)) continue
-      const node = byId.get(id)
-      if (!node) continue
-      seen.add(id)
-      component.push(node)
-      for (const rel of node.relatedIds) if (byId.has(rel) && !seen.has(rel)) queue.push(rel)
-    }
-    result.push(component)
+/**
+ * Retângulo realmente ocupado pelo nó: o círculo unido ao rótulo centrado
+ * abaixo. Enquadrar por (x, y) apenas cortaria os rótulos das bordas.
+ */
+function extentOf(node: LayoutNode) {
+  const halfW = Math.max(node.r, node.labelHalfWidth)
+  return {
+    minX: node.x - halfW,
+    maxX: node.x + halfW,
+    minY: node.y - node.r,
+    maxY: node.y + node.r + LABEL_OFFSET + LABEL_HEIGHT,
   }
-  return result
-}
-
-/** Layout radial de um cluster: root no centro, níveis BFS em anéis. */
-function layoutCluster(cluster: Memory[]): { nodes: GraphNode[]; radius: number } {
-  const root =
-    cluster.find((m) => m.area === 'overview') ??
-    [...cluster].sort((a, b) => b.weight - a.weight || a.createdAt - b.createdAt)[0]
-
-  const byId = new Map(cluster.map((m) => [m.id, m]))
-  const level = new Map<string, number>()
-  const queue = [{ id: root.id, depth: 0 }]
-  while (queue.length) {
-    const { id, depth } = queue.shift()!
-    if (level.has(id)) continue
-    level.set(id, depth)
-    for (const rel of byId.get(id)?.relatedIds ?? []) {
-      if (byId.has(rel) && !level.has(rel)) queue.push({ id: rel, depth: depth + 1 })
-    }
-  }
-  const maxKnown = Math.max(0, ...level.values())
-  for (const m of cluster) if (!level.has(m.id)) level.set(m.id, maxKnown + 1)
-
-  const byLevel = new Map<number, Memory[]>()
-  for (const m of cluster) {
-    const l = level.get(m.id)!
-    const bucket = byLevel.get(l) ?? []
-    bucket.push(m)
-    byLevel.set(l, bucket)
-  }
-
-  const nodes: GraphNode[] = []
-  for (const [depth, bucket] of byLevel) {
-    bucket.sort((a, b) => a.createdAt - b.createdAt)
-    if (depth === 0) {
-      bucket.forEach((m, i) => {
-        const angle = (i / bucket.length) * 2 * Math.PI
-        const r = bucket.length === 1 ? 0 : 40
-        nodes.push({
-          memory: m,
-          x: Math.cos(angle) * r,
-          y: Math.sin(angle) * r,
-          r: nodeRadius(m, m.id === root.id),
-          isRoot: m.id === root.id,
-        })
-      })
-      continue
-    }
-    bucket.forEach((m, i) => {
-      const angle = -Math.PI / 2 + (i / bucket.length) * 2 * Math.PI + depth * 0.35
-      nodes.push({
-        memory: m,
-        x: Math.cos(angle) * depth * LEVEL_RADIUS,
-        y: Math.sin(angle) * depth * LEVEL_RADIUS,
-        r: nodeRadius(m, false),
-        isRoot: false,
-      })
-    })
-  }
-
-  const maxLevel = Math.max(0, ...byLevel.keys())
-  return { nodes, radius: maxLevel * LEVEL_RADIUS + 60 }
-}
-
-/** Layout completo: clusters em grade, memórias avulsas num anel periférico. */
-function layoutGraph(pool: Memory[]): { nodes: GraphNode[]; edges: GraphEdge[] } {
-  const comps = components(pool)
-  const clusters = comps.filter((c) => c.length > 1).sort((a, b) => b.length - a.length)
-  const loose = comps.filter((c) => c.length === 1).map((c) => c[0])
-
-  const nodes: GraphNode[] = []
-
-  const laid = clusters.map(layoutCluster)
-  const cols = clusters.length > 1 ? 2 : 1
-  let rowY = 0
-  let rowHeight = 0
-  let contentMaxRadius = 0
-  laid.forEach((cluster, i) => {
-    const col = i % cols
-    if (col === 0 && i > 0) {
-      rowY += rowHeight * 2 + CLUSTER_PAD
-      rowHeight = 0
-    }
-    rowHeight = Math.max(rowHeight, cluster.radius)
-    const cx = col * (2 * cluster.radius + CLUSTER_PAD * 2) + (col === 0 ? 0 : cluster.radius)
-    const cy = rowY
-    for (const node of cluster.nodes) {
-      nodes.push({ ...node, x: node.x + cx, y: node.y + cy })
-    }
-    contentMaxRadius = Math.max(contentMaxRadius, Math.hypot(cx, cy) + cluster.radius)
-  })
-
-  if (loose.length > 0) {
-    const ringRadius = Math.max(contentMaxRadius + LOOSE_RING_PAD, LEVEL_RADIUS * 1.4)
-    loose.forEach((m, i) => {
-      const angle = -Math.PI / 2 + (i / loose.length) * 2 * Math.PI
-      nodes.push({
-        memory: m,
-        x: Math.cos(angle) * ringRadius,
-        y: Math.sin(angle) * ringRadius,
-        r: nodeRadius(m, false),
-        isRoot: false,
-      })
-    })
-  }
-
-  const present = new Map(nodes.map((n) => [n.memory.id, n]))
-  const edges: GraphEdge[] = []
-  const seen = new Set<string>()
-  for (const node of nodes) {
-    for (const rel of node.memory.relatedIds) {
-      if (!present.has(rel)) continue
-      const key = [node.memory.id, rel].sort().join(':')
-      if (seen.has(key)) continue
-      seen.add(key)
-      edges.push({
-        from: node.memory.id,
-        to: rel,
-        inferred: false,
-        hits: node.memory.hits + present.get(rel)!.memory.hits,
-      })
-    }
-  }
-
-  const tagIndex = new Map<string, string[]>()
-  for (const node of nodes) {
-    for (const tag of node.memory.tags) {
-      const key = normalizeText(tag)
-      if (!tagIndex.has(key)) tagIndex.set(key, [])
-      tagIndex.get(key)!.push(node.memory.id)
-    }
-  }
-
-  let inferredCount = 0
-  const compared = new Set<string>()
-  for (const node of nodes) {
-    if (inferredCount >= MAX_INFERRED_EDGES) break
-    const candidates = new Set<string>()
-    for (const tag of node.memory.tags) {
-      const key = normalizeText(tag)
-      for (const id of tagIndex.get(key) ?? []) {
-        if (id !== node.memory.id) candidates.add(id)
-      }
-    }
-    for (const candId of candidates) {
-      if (inferredCount >= MAX_INFERRED_EDGES) break
-      const pairKey = [node.memory.id, candId].sort().join(':')
-      if (seen.has(pairKey) || compared.has(pairKey)) continue
-      compared.add(pairKey)
-      const b = present.get(candId)?.memory
-      if (!b || b.tags.length === 0) continue
-      if (jaccard(node.memory.tags, b.tags) >= INFERRED_JACCARD) {
-        seen.add(pairKey)
-        edges.push({ from: node.memory.id, to: candId, inferred: true, hits: 0 })
-        inferredCount++
-      }
-    }
-  }
-
-  return { nodes, edges }
 }
 
 interface Transform {
@@ -254,7 +67,7 @@ export function MemoryGraph({ pool, allById, query, selectedId, onSelect }: {
   const gestureBase = useRef<Transform>({ x: 0, y: 0, k: 1 })
   const tokens = getThemeTokens(useThemeStore((s) => s.resolved))
 
-  const { nodes, edges } = useMemo(() => layoutGraph(pool), [pool])
+  const { nodes, edges } = useMemo(() => layoutMemoryGraph(pool, { inferEdges: true }), [pool])
   const nodeById = useMemo(() => new Map(nodes.map((n) => [n.memory.id, n])), [nodes])
 
   const queryTokens = normalizeText(query).split(' ').filter(Boolean)
@@ -272,14 +85,15 @@ export function MemoryGraph({ pool, allById, query, selectedId, onSelect }: {
   const fitView = useCallback(
     (w = size.w, h = size.h) => {
       if (!w || !h || nodes.length === 0) return
-      const xs = nodes.map((n) => n.x)
-      const ys = nodes.map((n) => n.y)
+      const boxes = nodes.map(extentOf)
       const pad = 80
-      const minX = Math.min(...xs) - pad
-      const maxX = Math.max(...xs) + pad
-      const minY = Math.min(...ys) - pad
-      const maxY = Math.max(...ys) + pad
-      const k = Math.min(w / (maxX - minX), h / (maxY - minY), 1.4)
+      const minX = Math.min(...boxes.map((b) => b.minX)) - pad
+      const maxX = Math.max(...boxes.map((b) => b.maxX)) + pad
+      const minY = Math.min(...boxes.map((b) => b.minY)) - pad
+      const maxY = Math.max(...boxes.map((b) => b.maxY)) + pad
+      // Grafos grandes ficam bem abaixo do piso do pinch — sem o clamp,
+      // "centralizar" levava a um zoom do qual o gesto não conseguia voltar.
+      const k = Math.max(ZOOM_MIN, Math.min(w / (maxX - minX), h / (maxY - minY), 1.4))
       setTransform({
         k,
         x: w / 2 - ((minX + maxX) / 2) * k,
@@ -310,7 +124,7 @@ export function MemoryGraph({ pool, allById, query, selectedId, onSelect }: {
     })
     .onUpdate((e) => {
       const base = gestureBase.current
-      const k = Math.min(3, Math.max(0.15, base.k * e.scale))
+      const k = Math.min(3, Math.max(ZOOM_MIN, base.k * e.scale))
       const fx = e.focalX
       const fy = e.focalY
       setTransform({
@@ -360,6 +174,9 @@ export function MemoryGraph({ pool, allById, query, selectedId, onSelect }: {
                 const a = nodeById.get(edge.from)
                 const b = nodeById.get(edge.to)
                 if (!a || !b) return null
+                // Todas as arestas são retas — num grafo que cresce em todas as
+                // direções, curva só embaralha. O que separa os tipos é o traço.
+                const tree = edge.kind === 'tree'
                 return (
                   <Line
                     key={`${edge.from}:${edge.to}`}
@@ -367,9 +184,16 @@ export function MemoryGraph({ pool, allById, query, selectedId, onSelect }: {
                     y1={a.y}
                     x2={b.x}
                     y2={b.y}
-                    stroke={edge.inferred ? 'rgba(138,142,153,0.25)' : 'rgba(138,142,153,0.4)'}
-                    strokeWidth={edge.inferred ? 1 : 1 + Math.min(edge.hits / 10, 2)}
-                    strokeDasharray={edge.inferred ? '4 4' : undefined}
+                    stroke={
+                      tree
+                        ? 'rgba(138,142,153,0.45)'
+                        : edge.kind === 'inferred'
+                          ? 'rgba(138,142,153,0.2)'
+                          : tokens.primary
+                    }
+                    strokeOpacity={edge.kind === 'cross' ? 0.3 : 1}
+                    strokeWidth={tree ? 1 + Math.min(edge.hits / 14, 1.4) : 1}
+                    strokeDasharray={tree ? undefined : edge.kind === 'inferred' ? '3 5' : '6 4'}
                   />
                 )
               })}
@@ -382,7 +206,7 @@ export function MemoryGraph({ pool, allById, query, selectedId, onSelect }: {
                 const isSelected = memory.id === selectedId
                 const color = KIND_COLOR[memory.kind]
                 const opacity = !matched ? 0.18 : stale ? 0.45 : 1
-                const label = nodeLabel(memory, node.isRoot)
+                const label = nodeLabelText(memory, node.isRoot)
                 return (
                   <G
                     key={memory.id}
@@ -400,49 +224,25 @@ export function MemoryGraph({ pool, allById, query, selectedId, onSelect }: {
                         opacity={isSelected ? 0.9 : 0.5}
                       />
                     )}
-                    {node.isRoot ? (
-                      <>
-                        <Rect
-                          x={-80}
-                          y={-18}
-                          width={160}
-                          height={36}
-                          rx={18}
-                          fill={color}
-                          fillOpacity={0.15}
-                          stroke={color}
-                          strokeWidth={isSelected ? 2.5 : 2}
-                        />
-                        <SvgText
-                          y={4}
-                          textAnchor="middle"
-                          fontSize={13}
-                          fontWeight="600"
-                          fill={tokens.foreground}
-                        >
-                          {label.length > 20 ? `${label.slice(0, 20)}…` : label}
-                        </SvgText>
-                      </>
-                    ) : (
-                      <>
-                        <Circle
-                          r={node.r}
-                          fill={color}
-                          fillOpacity={memory.area ? 0.12 : 0.22}
-                          stroke={color}
-                          strokeWidth={1.2}
-                        />
-                        <SvgText
-                          y={node.r + 12}
-                          textAnchor="middle"
-                          fontSize={memory.area ? 11 : 10}
-                          fontWeight={memory.area ? '600' : '400'}
-                          fill={tokens.foreground}
-                        >
-                          {label}
-                        </SvgText>
-                      </>
-                    )}
+                    {/* Círculo + rótulo centrado abaixo (estilo Obsidian). O
+                        deslocamento vertical do texto vem de LABEL_OFFSET, o
+                        mesmo valor que a colisão do layout reserva. */}
+                    <Circle
+                      r={node.r}
+                      fill={color}
+                      fillOpacity={node.isRoot ? 0.3 : memory.area ? 0.16 : 0.24}
+                      stroke={color}
+                      strokeWidth={isSelected ? 2.5 : node.isRoot ? 2 : 1.2}
+                    />
+                    <SvgText
+                      y={node.r + LABEL_OFFSET + 10}
+                      textAnchor="middle"
+                      fontSize={node.isRoot ? 13 : memory.area ? 11 : 10}
+                      fontWeight={node.isRoot ? '700' : memory.area ? '600' : '400'}
+                      fill={tokens.foreground}
+                    >
+                      {label}
+                    </SvgText>
                   </G>
                 )
               })}

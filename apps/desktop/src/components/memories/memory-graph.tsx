@@ -1,3 +1,13 @@
+/**
+ * Grafo de memórias — o layout vem de @shared/memory-layout (o mesmo que o
+ * mobile usa), então as duas plataformas desenham exatamente as mesmas
+ * posições: a raiz do projeto no centro e os ramos crescendo para todos os
+ * lados, com espaço mínimo garantido entre os rótulos. É uma vista única e
+ * contínua — projetos ocupam regiões distintas do canvas, sem moldura nem
+ * rótulo separando um do outro; quem isola um projeto é o filtro.
+ * Aqui ficam só o desenho SVG, o zoom/pan, o colapso de subárvore e as
+ * interações (selecionar, ligar com Ctrl+clique, soltar arquivo).
+ */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { BookText, BrainCircuit, Briefcase, Crosshair, Database, Eye, EyeOff, FileUp, Gauge, GraduationCap, Layers, Link2, Package, Palette, Plus, Server, Shield, SlidersHorizontal, Terminal, TestTube, ZoomIn, ZoomOut } from "lucide-react"
@@ -7,7 +17,9 @@ import type { TFunction } from "i18next"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import type { Memory } from "@shared/memory"
-import { jaccard, normalizeText, PROJECT_AREAS } from "@shared/memory"
+import { normalizeText, PROJECT_AREAS } from "@shared/memory"
+import { LABEL_HEIGHT, LABEL_OFFSET, layoutMemoryGraph, nodeLabelText } from "@shared/memory-layout"
+import type { LayoutNode } from "@shared/memory-layout"
 import { memoryApi } from "@/src/lib/ipc"
 import { MemoryCard } from "./memory-card"
 import { AREA_ICON, CATEGORY_ICON, KIND_COLOR, KIND_LABEL, lastActivity } from "./meta"
@@ -17,295 +29,46 @@ const ICON_MAP: Record<string, LucideIcon> = {
   Database, TestTube, Gauge, Package, BookText, GraduationCap,
 }
 
-const LEVEL_RADIUS = 150
-const CLUSTER_PAD = 90
-const LOOSE_RING_PAD = 110
 const RECENT_MS = 7 * 24 * 60 * 60 * 1000
 const STALE_MS = 30 * 24 * 60 * 60 * 1000
-const INFERRED_JACCARD = 0.5
-const MAX_INFERRED_EDGES = 30
 const MAX_DROP_FILE_SIZE = 512 * 1024
 const ZOOM_FACTOR = 1.3
-const ZOOM_MIN = 0.15
+const ZOOM_MIN = 0.04
 const ZOOM_MAX = 3
 
-interface GraphNode {
-  memory: Memory
-  x: number
-  y: number
-  r: number
-  isRoot: boolean
-  hasChildren: boolean
-  collapsed: boolean
-}
-
-interface GraphEdge {
-  from: string
-  to: string
-  inferred: boolean
-  hits: number
-}
-
-function nodeRadius(memory: Memory, isRoot: boolean): number {
-  if (isRoot) return 30
-  if (memory.area) return 20
-  return 11 + memory.weight * 5
-}
-
+/**
+ * Rótulo desenhado. Traduz o nome da área e delega o resto ao helper
+ * compartilhado, para o texto medido pela colisão ser o mesmo que aparece.
+ */
 function nodeLabel(memory: Memory, isRoot: boolean, t: TFunction): string {
-  if (isRoot && memory.projectName) return memory.projectName
-  if (memory.area) return t(`memories.areas.${memory.area}`, { defaultValue: PROJECT_AREAS[memory.area]?.label ?? memory.text })
-  return memory.text.length > 34 ? `${memory.text.slice(0, 34)}…` : memory.text
-}
-
-function components(pool: Memory[]): Memory[][] {
-  const byId = new Map(pool.map((m) => [m.id, m]))
-  const seen = new Set<string>()
-  const result: Memory[][] = []
-  for (const memory of pool) {
-    if (seen.has(memory.id)) continue
-    const component: Memory[] = []
-    const queue = [memory.id]
-    while (queue.length) {
-      const id = queue.pop()!
-      if (seen.has(id)) continue
-      const node = byId.get(id)
-      if (!node) continue
-      seen.add(id)
-      component.push(node)
-      for (const rel of node.relatedIds) if (byId.has(rel) && !seen.has(rel)) queue.push(rel)
-    }
-    result.push(component)
-  }
-  return result
-}
-
-function layoutCluster(cluster: Memory[]): { nodes: GraphNode[]; radius: number } {
-  const root =
-    cluster.find((m) => m.area === "overview") ??
-    [...cluster].sort((a, b) => b.weight - a.weight || a.createdAt - b.createdAt)[0]
-
-  const byId = new Map(cluster.map((m) => [m.id, m]))
-  const level = new Map<string, number>()
-  const queue = [{ id: root.id, depth: 0 }]
-  while (queue.length) {
-    const { id, depth } = queue.shift()!
-    if (level.has(id)) continue
-    level.set(id, depth)
-    for (const rel of byId.get(id)?.relatedIds ?? []) {
-      if (byId.has(rel) && !level.has(rel)) queue.push({ id: rel, depth: depth + 1 })
-    }
-  }
-  const maxKnown = Math.max(0, ...level.values())
-  for (const m of cluster) if (!level.has(m.id)) level.set(m.id, maxKnown + 1)
-
-  const byLevel = new Map<number, Memory[]>()
-  for (const m of cluster) {
-    const l = level.get(m.id)!
-    const bucket = byLevel.get(l) ?? []
-    bucket.push(m)
-    byLevel.set(l, bucket)
-  }
-
-  const nodes: GraphNode[] = []
-  for (const [depth, bucket] of byLevel) {
-    bucket.sort((a, b) => a.createdAt - b.createdAt)
-    if (depth === 0) {
-      bucket.forEach((m, i) => {
-        const angle = (i / bucket.length) * 2 * Math.PI
-        const r = bucket.length === 1 ? 0 : 40
-        nodes.push({
-          memory: m,
-          x: Math.cos(angle) * r,
-          y: Math.sin(angle) * r,
-          r: nodeRadius(m, m.id === root.id),
-          isRoot: m.id === root.id,
-          hasChildren: false,
-          collapsed: false,
-        })
-      })
-      continue
-    }
-    bucket.forEach((m, i) => {
-      const angle = -Math.PI / 2 + (i / bucket.length) * 2 * Math.PI + depth * 0.35
-      nodes.push({
-        memory: m,
-        x: Math.cos(angle) * depth * LEVEL_RADIUS,
-        y: Math.sin(angle) * depth * LEVEL_RADIUS,
-        r: nodeRadius(m, false),
-        isRoot: false,
-        hasChildren: false,
-        collapsed: false,
-      })
+  if (!isRoot && memory.area) {
+    return t(`memories.areas.${memory.area}`, {
+      defaultValue: PROJECT_AREAS[memory.area]?.label ?? memory.text,
     })
   }
-
-  const maxLevel = Math.max(0, ...byLevel.keys())
-  return { nodes, radius: maxLevel * LEVEL_RADIUS + 60 }
+  return nodeLabelText(memory, isRoot)
 }
 
-function layoutGraph(pool: Memory[], collapsedIds: Set<string>): { nodes: GraphNode[]; edges: GraphEdge[] } {
-  const comps = components(pool)
-
-  const clusters = comps.filter((c) => c.length > 1).sort((a, b) => b.length - a.length)
-  const loose = comps.filter((c) => c.length === 1).map((c) => c[0])
-
-  const nodes: GraphNode[] = []
-
-  const laid = clusters.map(layoutCluster)
-  const cols = clusters.length > 1 ? 2 : 1
-  let rowY = 0
-  let rowHeight = 0
-  let contentMaxRadius = 0
-  laid.forEach((cluster, i) => {
-    const col = i % cols
-    if (col === 0 && i > 0) {
-      rowY += rowHeight * 2 + CLUSTER_PAD
-      rowHeight = 0
-    }
-    rowHeight = Math.max(rowHeight, cluster.radius)
-    const cx = col * (2 * cluster.radius + CLUSTER_PAD * 2) + (col === 0 ? 0 : cluster.radius)
-    const cy = rowY
-    for (const node of cluster.nodes) {
-      nodes.push({ ...node, x: node.x + cx, y: node.y + cy })
-    }
-    contentMaxRadius = Math.max(contentMaxRadius, Math.hypot(cx, cy) + cluster.radius)
-  })
-
-  if (loose.length > 0) {
-    const ringRadius = Math.max(contentMaxRadius + LOOSE_RING_PAD, LEVEL_RADIUS * 1.4)
-    loose.forEach((m, i) => {
-      const angle = -Math.PI / 2 + (i / loose.length) * 2 * Math.PI
-      nodes.push({
-        memory: m,
-        x: Math.cos(angle) * ringRadius,
-        y: Math.sin(angle) * ringRadius,
-        r: nodeRadius(m, false),
-        isRoot: false,
-        hasChildren: false,
-        collapsed: false,
-      })
-    })
+/**
+ * Retângulo realmente ocupado pelo nó no canvas: o círculo unido ao rótulo
+ * centrado abaixo. Enquadrar por (x, y) apenas cortaria os rótulos das bordas.
+ */
+function extentOf(node: LayoutNode) {
+  const halfW = Math.max(node.r, node.labelHalfWidth)
+  return {
+    minX: node.x - halfW,
+    maxX: node.x + halfW,
+    minY: node.y - node.r,
+    maxY: node.y + node.r + LABEL_OFFSET + LABEL_HEIGHT,
   }
+}
 
-  // Compute hasChildren
-  // Se não tem relationTypes, assume que todos os relatedIds são filhos (compatibilidade com dados antigos)
-  const poolSet = new Set(pool.map((m) => m.id))
-  for (const node of nodes) {
-    const rt = node.memory.relationTypes
-    node.hasChildren = node.memory.relatedIds.some((relId) => {
-      if (!poolSet.has(relId)) return false
-      if (!rt) return true // sem relationTypes → tudo é filho em potencial
-      return rt[relId] === "parent"
-    })
-  }
-
-  // Filter collapsed nodes (and their tree descendants) from display
-  // Só desce na árvore seguindo relationTypes "parent" — não varre o grafo todo.
-  let visibleNodes: GraphNode[]
-  if (collapsedIds.size > 0) {
-    const hidden = new Set<string>()
-    const byId = new Map(nodes.map((n) => [n.memory.id, n]))
-    for (const cid of collapsedIds) {
-      // A memória em si fica visível; só os descendentes são ocultados
-      const queue: string[] = []
-      // Se não tem relationTypes, trata relatedIds como filhos diretos (1 nível, compatibilidade)
-      // Se tem, só desce onde relationTypes[rel] === "parent"
-      const startNode = byId.get(cid)
-      if (!startNode) continue
-      const startRt = startNode.memory.relationTypes
-      for (const rel of startNode.memory.relatedIds) {
-        if (!byId.has(rel) || hidden.has(rel)) continue
-        if (!startRt) {
-          // Sem relationTypes → filhos diretos, 1 nível apenas
-          hidden.add(rel)
-        } else if (startRt[rel] === "parent") {
-          hidden.add(rel)
-          queue.push(rel) // desce recursivamente
-        }
-      }
-      // BFS recursiva apenas para nós com relationTypes explícitos
-      while (queue.length) {
-        const id = queue.pop()!
-        const node = byId.get(id)
-        if (!node) continue
-        for (const rel of node.memory.relatedIds) {
-          if (node.memory.relationTypes?.[rel] !== "parent") continue
-          if (!byId.has(rel) || hidden.has(rel)) continue
-          hidden.add(rel)
-          queue.push(rel)
-        }
-      }
-    }
-    visibleNodes = nodes.filter((n) => !hidden.has(n.memory.id))
-  } else {
-    visibleNodes = nodes
-  }
-
-  // Mark collapsed state on visible nodes
-  const collapsedSet = new Set(collapsedIds)
-  for (const node of visibleNodes) {
-    if (collapsedSet.has(node.memory.id)) {
-      node.collapsed = true
-    }
-  }
-
-  // Edges — only between visible nodes
-  const present = new Map(visibleNodes.map((n) => [n.memory.id, n]))
-  const edges: GraphEdge[] = []
-  const seen = new Set<string>()
-  for (const node of visibleNodes) {
-    for (const rel of node.memory.relatedIds) {
-      if (!present.has(rel)) continue
-      const key = [node.memory.id, rel].sort().join(":")
-      if (seen.has(key)) continue
-      seen.add(key)
-      edges.push({
-        from: node.memory.id,
-        to: rel,
-        inferred: false,
-        hits: node.memory.hits + present.get(rel)!.memory.hits,
-      })
-    }
-  }
-
-  // Inferred edges
-  const tagIndex = new Map<string, string[]>()
-  for (const node of visibleNodes) {
-    for (const tag of node.memory.tags) {
-      const key = normalizeText(tag)
-      if (!tagIndex.has(key)) tagIndex.set(key, [])
-      tagIndex.get(key)!.push(node.memory.id)
-    }
-  }
-
-  let inferredCount = 0
-  const compared = new Set<string>()
-  for (const node of visibleNodes) {
-    if (inferredCount >= MAX_INFERRED_EDGES) break
-    const candidates = new Set<string>()
-    for (const tag of node.memory.tags) {
-      const key = normalizeText(tag)
-      for (const id of tagIndex.get(key) ?? []) {
-        if (id !== node.memory.id) candidates.add(id)
-      }
-    }
-    for (const candId of candidates) {
-      if (inferredCount >= MAX_INFERRED_EDGES) break
-      const pairKey = [node.memory.id, candId].sort().join(":")
-      if (seen.has(pairKey) || compared.has(pairKey)) continue
-      compared.add(pairKey)
-      const b = present.get(candId)?.memory
-      if (!b || b.tags.length === 0) continue
-      if (jaccard(node.memory.tags, b.tags) >= INFERRED_JACCARD) {
-        seen.add(pairKey)
-        edges.push({ from: node.memory.id, to: candId, inferred: true, hits: 0 })
-        inferredCount++
-      }
-    }
-  }
-
-  return { nodes: visibleNodes, edges }
+/** Ícone do nó, quando a memória tem área ou categoria com ícone próprio. */
+function iconNameOf(memory: Memory, isRoot: boolean): string | undefined {
+  if (isRoot) return "BrainCircuit"
+  if (memory.area) return AREA_ICON[memory.area]
+  if (memory.category) return CATEGORY_ICON[memory.category]
+  return undefined
 }
 
 interface Transform {
@@ -330,18 +93,27 @@ export function MemoryGraph({ pool, allById, query, selectedId, onSelect, projec
   const [collapsedIds, setCollapsedIds] = useState<Set<string>>(new Set())
   const drag = useRef<{ startX: number; startY: number; ox: number; oy: number; moved: boolean } | null>(null)
 
-  const { nodes, edges } = useMemo(() => layoutGraph(pool, collapsedIds), [pool, collapsedIds])
+  const { nodes, edges } = useMemo(
+    // labelOf entra na simulação: é a largura do texto TRADUZIDO que define o
+    // espaço mínimo, senão as áreas colidiriam em idiomas mais verbosos.
+    () =>
+      layoutMemoryGraph(pool, {
+        collapsedIds,
+        inferEdges: true,
+        labelOf: (memory, isRoot) => nodeLabel(memory, isRoot, t),
+      }),
+    [pool, collapsedIds, t],
+  )
   const nodeById = useMemo(() => new Map(nodes.map((n) => [n.memory.id, n])), [nodes])
 
   // Bounding box of all nodes for minimap
   const bounds = useMemo(() => {
     if (nodes.length === 0) return { minX: -200, minY: -200, maxX: 200, maxY: 200, width: 400, height: 400 }
-    const xs = nodes.map((n) => n.x)
-    const ys = nodes.map((n) => n.y)
-    const minX = Math.min(...xs) - 120
-    const maxX = Math.max(...xs) + 120
-    const minY = Math.min(...ys) - 120
-    const maxY = Math.max(...ys) + 120
+    const boxes = nodes.map(extentOf)
+    const minX = Math.min(...boxes.map((b) => b.minX)) - 120
+    const maxX = Math.max(...boxes.map((b) => b.maxX)) + 120
+    const minY = Math.min(...boxes.map((b) => b.minY)) - 120
+    const maxY = Math.max(...boxes.map((b) => b.maxY)) + 120
     return { minX, minY, maxX, maxY, width: maxX - minX, height: maxY - minY }
   }, [nodes])
 
@@ -358,16 +130,18 @@ export function MemoryGraph({ pool, allById, query, selectedId, onSelect, projec
   const fitView = useCallback(() => {
     const el = containerRef.current
     if (!el || nodes.length === 0) return
-    const xs = nodes.map((n) => n.x)
-    const ys = nodes.map((n) => n.y)
+    const boxes = nodes.map(extentOf)
     const pad = 80
-    const minX = Math.min(...xs) - pad
-    const maxX = Math.max(...xs) + pad
-    const minY = Math.min(...ys) - pad
-    const maxY = Math.max(...ys) + pad
+    const minX = Math.min(...boxes.map((b) => b.minX)) - pad
+    const maxX = Math.max(...boxes.map((b) => b.maxX)) + pad
+    const minY = Math.min(...boxes.map((b) => b.minY)) - pad
+    const maxY = Math.max(...boxes.map((b) => b.maxY)) + pad
     const w = el.clientWidth
     const h = el.clientHeight
-    const k = Math.min(w / (maxX - minX), h / (maxY - minY), 1.4)
+    const k = Math.max(
+      ZOOM_MIN,
+      Math.min(w / (maxX - minX), h / (maxY - minY), 1.4),
+    )
     setTransform({
       k,
       x: w / 2 - ((minX + maxX) / 2) * k,
@@ -596,6 +370,8 @@ export function MemoryGraph({ pool, allById, query, selectedId, onSelect, projec
                 const a = nodeById.get(edge.from)
                 const b = nodeById.get(edge.to)
                 if (!a || !b) return null
+                // Todas as arestas são retas — num grafo que cresce em todas as
+                // direções, curva só embaralha. O que separa os tipos é o traço.
                 return (
                   <line
                     key={`${edge.from}:${edge.to}`}
@@ -603,9 +379,17 @@ export function MemoryGraph({ pool, allById, query, selectedId, onSelect, projec
                     y1={a.y}
                     x2={b.x}
                     y2={b.y}
-                    strokeWidth={edge.inferred ? 1 : 1 + Math.min(edge.hits / 10, 2)}
-                    strokeDasharray={edge.inferred ? "4 4" : undefined}
-                    className={edge.inferred ? "stroke-muted-foreground/25" : "stroke-muted-foreground/40"}
+                    strokeWidth={edge.kind === "tree" ? 1 + Math.min(edge.hits / 14, 1.4) : 1}
+                    strokeDasharray={
+                      edge.kind === "tree" ? undefined : edge.kind === "inferred" ? "3 5" : "6 4"
+                    }
+                    className={
+                      edge.kind === "tree"
+                        ? "stroke-muted-foreground/45"
+                        : edge.kind === "inferred"
+                          ? "stroke-muted-foreground/20"
+                          : "stroke-primary/30"
+                    }
                   />
                 )
               })}
@@ -641,76 +425,53 @@ export function MemoryGraph({ pool, allById, query, selectedId, onSelect, projec
                         opacity={isSelected || isLinkSource ? 0.9 : 0.5}
                       />
                     )}
-                    {node.isRoot ? (
-                      <>
-                        <rect x={-80} y={-18} width={160} height={36} rx={18}
-                          fill={color} fillOpacity={0.15}
-                          stroke={isSelected || isLinkSource ? "var(--primary)" : color}
-                          strokeWidth={isSelected || isLinkSource ? 2.5 : 2} />
-                        <foreignObject x={-80} y={-18} width={160} height={36}>
-                          <div className="flex h-full items-center justify-center gap-2 px-3 text-sm font-semibold text-foreground select-none">
-                            <BrainCircuit className="size-5 shrink-0" />
-                            <span className="truncate">{memory.projectName ?? memory.text}</span>
-                          </div>
-                        </foreignObject>
-                      </>
-                    ) : memory.area ? (
-                      <>
-                        <circle r={node.r} fill={color} fillOpacity={0.12} stroke={color} strokeWidth={1.2} />
+                    {/* Círculo + rótulo centrado abaixo (estilo Obsidian). O
+                        deslocamento vertical do texto vem de LABEL_OFFSET, o
+                        mesmo valor que a colisão do layout reserva. */}
+                    <circle
+                      r={node.r}
+                      fill={color}
+                      fillOpacity={node.isRoot ? 0.3 : memory.area ? 0.16 : 0.24}
+                      stroke={isSelected || isLinkSource ? "var(--primary)" : color}
+                      strokeWidth={isSelected || isLinkSource ? 2.5 : node.isRoot ? 2 : 1.2}
+                    />
+                    {(() => {
+                      const iconName = iconNameOf(memory, node.isRoot)
+                      const Icon = iconName ? ICON_MAP[iconName] : undefined
+                      if (!Icon) return null
+                      return (
                         <foreignObject x={-node.r} y={-node.r} width={node.r * 2} height={node.r * 2}>
                           <div className="flex h-full items-center justify-center text-foreground/70 select-none">
-                            {(() => {
-                              const Icon = ICON_MAP[AREA_ICON[memory.area!]]
-                              return Icon ? <Icon className="size-[55%]" /> : null
-                            })()}
+                            <Icon className="size-[55%]" />
                           </div>
                         </foreignObject>
-                        <text y={node.r + 12} textAnchor="middle" fontSize={11} fontWeight={600}
-                          className="fill-foreground select-none">
-                          {nodeLabel(memory, false, t)}
-                        </text>
-                      </>
-                    ) : memory.category && CATEGORY_ICON[memory.category] ? (
-                      <>
-                        <circle r={node.r} fill={color} fillOpacity={0.12} stroke={color} strokeWidth={1.2} />
-                        <foreignObject x={-node.r} y={-node.r} width={node.r * 2} height={node.r * 2}>
-                          <div className="flex h-full items-center justify-center text-foreground/70 select-none">
-                            {(() => {
-                              const Icon = ICON_MAP[CATEGORY_ICON[memory.category!]!]
-                              return Icon ? <Icon className="size-[55%]" /> : null
-                            })()}
-                          </div>
-                        </foreignObject>
-                        <text y={node.r + 12} textAnchor="middle" fontSize={11} fontWeight={600}
-                          className="fill-foreground select-none">
-                          {nodeLabel(memory, false, t)}
-                        </text>
-                      </>
-                    ) : (
-                      <>
-                        <circle r={node.r} fill={color} fillOpacity={0.22} stroke={color} strokeWidth={1.2} />
-                        <text y={node.r + 12} textAnchor="middle" fontSize={10} fontWeight={400}
-                          className="fill-foreground select-none">
-                          {nodeLabel(memory, false, t)}
-                        </text>
-                      </>
-                    )}
+                      )
+                    })()}
+                    <text
+                      y={node.r + LABEL_OFFSET + 10}
+                      textAnchor="middle"
+                      fontSize={node.isRoot ? 13 : memory.area ? 11 : 10}
+                      fontWeight={node.isRoot ? 700 : memory.area ? 600 : 400}
+                      className="fill-foreground select-none"
+                    >
+                      {nodeLabel(memory, node.isRoot, t)}
+                    </text>
                     {/* Expand / Collapse toggle — só no hover do nó */}
-                    {node.hasChildren && (
+                    {node.childCount > 0 && (
                       <g
                         className="cursor-pointer opacity-0 transition-opacity group-hover:opacity-100"
                         onClick={(e) => toggleCollapse(e, memory.id)}
                         onPointerDown={(e) => e.stopPropagation()}
                       >
                         <circle
-                          cx={node.r + 10}
-                          cy={-node.r - 4}
+                          cx={-node.r - 10}
+                          cy={0}
                           r={8}
                           fill="var(--card)"
                           stroke="var(--border)"
                           strokeWidth={1}
                         />
-                        <foreignObject x={node.r + 4} y={-node.r - 11} width={14} height={14}>
+                        <foreignObject x={-node.r - 17} y={-7} width={14} height={14}>
                           <div className="flex h-full items-center justify-center select-none">
                             {node.collapsed ? (
                               <EyeOff className="size-3 text-muted-foreground" />
