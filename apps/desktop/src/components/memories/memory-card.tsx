@@ -305,10 +305,14 @@ function DocDialog({ memory, open, onOpenChange }: {
   )
 }
 
-export function MemoryCard({ memory, related, onSelectRelated }: {
+export function MemoryCard({ memory, related, selected, onSelect, onSelectRelated }: {
   memory: Memory
   /** Memórias em relatedIds (backlinks) já resolvidas pelo pai */
   related: Memory[]
+  /** Realce de card em foco no painel lateral */
+  selected?: boolean
+  /** Clique no corpo do card — abre o detalhe. Sem isto o card não é clicável. */
+  onSelect?: () => void
   onSelectRelated?: (id: string) => void
 }) {
   const { t, i18n } = useTranslation()
@@ -336,7 +340,24 @@ export function MemoryCard({ memory, related, onSelectRelated }: {
   const hiddenRelated = related.length - visibleRelated.length
 
   return (
-    <div className="group/card flex flex-col gap-2 rounded-lg border bg-card p-3 text-card-foreground">
+    <div
+      className={cn(
+        "group/card flex flex-col gap-2 rounded-lg border bg-card p-3 text-card-foreground transition-colors",
+        onSelect && "cursor-pointer hover:border-primary/40",
+        selected && "border-primary/70",
+      )}
+      onClick={(e) => {
+        if (!onSelect) return
+        // Botões e campos tratam o próprio clique; os diálogos são portais, e
+        // no React o evento sobe pela árvore de componentes, não pelo DOM —
+        // sem esta guarda, clicar num relacionado dentro do diálogo era
+        // sobrescrito pela seleção do próprio card.
+        if ((e.target as HTMLElement).closest('button, a, input, textarea, [data-slot="dialog-content"]')) {
+          return
+        }
+        onSelect()
+      }}
+    >
       <div className="flex items-start justify-between gap-2">
         <p className="min-w-0 flex-1 text-sm leading-snug line-clamp-2">{memory.text}</p>
         <div className="flex shrink-0 items-center gap-1 opacity-0 transition-opacity group-hover/card:opacity-100">

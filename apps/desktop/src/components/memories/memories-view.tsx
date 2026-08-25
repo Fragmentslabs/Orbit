@@ -11,12 +11,14 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { cn } from "@/lib/utils"
 import { useWorkspace } from "@/lib/workspace-context"
 import type { Memory, MemoryKind } from "@shared/memory"
 import { isCodeContext, searchMemories } from "@shared/memory"
 import { matchesProjectFilter } from "@shared/memory-layout"
 import { useMemoryStore } from "@/src/stores/memory-store"
 import { MemoryCard } from "./memory-card"
+import { MemoryDetailPanel } from "./memory-detail-panel"
 import { MemoryGraph } from "./memory-graph"
 import { lastActivity } from "./meta"
 
@@ -141,6 +143,7 @@ export function MemoriesView() {
   }, [pool, projectFilter, projects])
 
   const byId = useMemo(() => new Map(index.map((m) => [m.id, m])), [index])
+  const selected = selectedId ? byId.get(selectedId) : undefined
   const relatedOf = (memory: Memory) =>
     memory.relatedIds.map((id) => byId.get(id)).filter((m): m is Memory => m != null)
 
@@ -183,6 +186,7 @@ export function MemoriesView() {
         </Tabs>
       </div>
 
+      <div className="flex min-h-0 flex-1 gap-3 overflow-hidden">
       {loading ? (
         <MemoriesSkeleton graph={tab === "graph"} />
       ) : (tab === "graph" ? pool : filtered).length === 0 ? (
@@ -200,16 +204,24 @@ export function MemoriesView() {
         </div>
       ) : tab === "list" ? (
         <div className="min-h-0 flex-1 overflow-y-auto pr-1">
-          <div className="grid grid-cols-1 gap-2 md:grid-cols-2 xl:grid-cols-3">
+          {/* Uma coluna a menos com o painel aberto — o espaço restante não
+              comporta três cards sem espremer o texto. */}
+          <div
+            className={cn(
+              "grid grid-cols-1 gap-2",
+              selected ? "xl:grid-cols-2" : "md:grid-cols-2 xl:grid-cols-3",
+            )}
+          >
             {filtered.map((memory) => (
               <MemoryCard
                 key={memory.id}
                 memory={memory}
                 related={relatedOf(memory)}
-                onSelectRelated={(id) => {
-                  setSelectedId(id)
-                  setTab("graph")
-                }}
+                selected={memory.id === selectedId}
+                onSelect={() => setSelectedId(memory.id === selectedId ? null : memory.id)}
+                // Antes isto pulava para a aba Grafo; com o painel compartilhado
+                // basta trocar a seleção, sem tirar o usuário da lista.
+                onSelectRelated={setSelectedId}
               />
             ))}
           </div>
@@ -217,13 +229,23 @@ export function MemoriesView() {
       ) : (
         <MemoryGraph
           pool={pool}
-          allById={byId}
           query={query}
           selectedId={selectedId}
           onSelect={setSelectedId}
           projectDirectory={projectDirectory}
         />
       )}
+      {/* Painel único das duas abas: clicar num card ou num nó do grafo abre
+          o mesmo detalhe, com o documento preenchendo a altura restante. */}
+      {selected && (
+        <MemoryDetailPanel
+          memory={selected}
+          related={relatedOf(selected)}
+          onSelectRelated={setSelectedId}
+          onClose={() => setSelectedId(null)}
+        />
+      )}
+      </div>
     </div>
   )
 }

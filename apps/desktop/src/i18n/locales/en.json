@@ -429,6 +429,8 @@
     "uses_other": "{{count}} uses",
     "expires": "expires {{date}}",
     "connected": "Connected",
+    "attachedDoc": "Attached document",
+    "fullText": "Content",
     "moreConnected_one": "+{{count}} connection",
     "moreConnected_other": "+{{count}} connections",
     "deleteTitle": "Delete memory?",

@@ -21,7 +21,6 @@ import { normalizeText, PROJECT_AREAS } from "@shared/memory"
 import { LABEL_HEIGHT, LABEL_OFFSET, layoutMemoryGraph, nodeLabelText } from "@shared/memory-layout"
 import type { LayoutNode } from "@shared/memory-layout"
 import { memoryApi } from "@/src/lib/ipc"
-import { MemoryCard } from "./memory-card"
 import { AREA_ICON, CATEGORY_ICON, KIND_COLOR, KIND_LABEL, lastActivity } from "./meta"
 
 const ICON_MAP: Record<string, LucideIcon> = {
@@ -77,9 +76,8 @@ interface Transform {
   k: number
 }
 
-export function MemoryGraph({ pool, allById, query, selectedId, onSelect, projectDirectory }: {
+export function MemoryGraph({ pool, query, selectedId, onSelect, projectDirectory }: {
   pool: Memory[]
-  allById: Map<string, Memory>
   query: string
   selectedId: string | null
   onSelect: (id: string | null) => void
@@ -304,7 +302,6 @@ export function MemoryGraph({ pool, allById, query, selectedId, onSelect, projec
     }))
   }
 
-  const selected = selectedId ? allById.get(selectedId) : undefined
   const now = Date.now()
 
   return (
@@ -550,17 +547,7 @@ export function MemoryGraph({ pool, allById, query, selectedId, onSelect, projec
           )}
         </div>
       </div>
-      {selected && (
-        <div className="w-80 shrink-0 overflow-y-auto">
-          <MemoryCard
-            memory={selected}
-            related={selected.relatedIds
-              .map((id) => allById.get(id))
-              .filter((m): m is Memory => m != null)}
-            onSelectRelated={onSelect}
-          />
-        </div>
-      )}
+
     </div>
   )
 }
