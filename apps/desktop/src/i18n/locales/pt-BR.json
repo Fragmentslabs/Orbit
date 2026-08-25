@@ -1393,6 +1393,7 @@
     "subagentModel": "Modelo de subagentes",
     "orchestraModel": "Modelo de orquestra",
     "sameAsDefault": "Mesmo que padrão",
+    "sameAsMainModel": "Mesmo que o modelo principal",
     "none": "Nenhum",
     "searchModels": "Pesquisar modelos…",
     "noModelsFound": "Nenhum modelo encontrado.",

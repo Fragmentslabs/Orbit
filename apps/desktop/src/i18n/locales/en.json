@@ -1393,6 +1393,7 @@
     "subagentModel": "Subagent model",
     "orchestraModel": "Orchestra model",
     "sameAsDefault": "Same as default",
+    "sameAsMainModel": "Same as main model",
     "none": "None",
     "searchModels": "Search models…",
     "noModelsFound": "No models found.",

@@ -2,7 +2,6 @@ import { create } from "zustand"
 
 import type { InitStage, ProjectArea } from "@shared/memory"
 import { initApi } from "@/src/lib/ipc"
-import { useModelModePrefs } from "@/src/stores/model-mode-prefs"
 import { useProviderStore } from "@/src/stores/provider-store"
 import { LOCALE_PROMPT_NAME, useLocaleStore } from "@/src/stores/locale-store"
 
@@ -94,11 +93,10 @@ export const useInitStore = create<InitState>((set, get) => ({
       return
     }
     set((state) => ({ progress: { ...state.progress, [directory]: { stage: "scanning" } } }))
-    let worker = useProviderStore.getState().workerModel
-    if (!worker) {
-      const codeModel = useModelModePrefs.getState().codeModel
-      if (codeModel) worker = codeModel
-    }
+    // Sem worker configurado, os campos vão indefinidos e o runProjectInit cai
+    // em providerId/modelId — o modelo principal. Substituir por codeModel aqui
+    // contrariava a UI e podia apontar para um modelo indisponível.
+    const worker = useProviderStore.getState().workerModel
     await initApi.run({
       directory,
       providerId: selected.providerId,

@@ -274,7 +274,9 @@ function CodePrefs() {
   return (
     <div className="flex flex-col gap-4">
       <ModelField label={t("preferences.defaultModel")} value={codeModel} onChange={setCodeModel} />
-      <ModelField label={t("preferences.subagentModel")} value={subagentModel} nullLabel={t("preferences.sameAsDefault")} onChange={(m) => { setSubagentModel(m); setWorkerModel(m ?? codeModel) }} />
+      {/* Limpar o campo grava null, não codeModel: null é o que faz o worker
+          seguir o modelo do chat, e é o mesmo contrato do diálogo de orquestra. */}
+      <ModelField label={t("preferences.subagentModel")} value={subagentModel} nullLabel={t("preferences.sameAsMainModel")} onChange={(m) => { setSubagentModel(m); setWorkerModel(m) }} />
       <ModelField label={t("preferences.orchestraModel")} value={orchestraModel} onChange={setOrchestraModel} />
       <ActiveModesSection modes={codeActiveModes} onChange={setCodeActiveMode} isCode={true} />
       <MemoriaSection isCode={true} />

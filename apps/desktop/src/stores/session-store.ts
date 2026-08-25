@@ -854,9 +854,16 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       set((state) => ({ _planReviewOutbox: { ...state._planReviewOutbox, [sessionId!]: true } }))
     }
 
-    // Subagents, orquestra e /init usam o modelo worker configurado
+    // Subagents, orquestra e /init usam o modelo worker configurado. Sem
+    // configuração, workerModel fica undefined de propósito: o engine então cai
+    // em providerId/modelId, que são o modelo REAL desta sessão — é o que a UI
+    // promete ("sem seleção, os workers usam o mesmo modelo do chat principal").
+    // Havia aqui um `?? codeModel`, que trocava esse fallback pela preferência
+    // "Modelo padrão" — um modelo diferente, e que ninguém valida contra os
+    // provedores conectados; se estivesse obsoleto, os workers morriam com
+    // "Model is unavailable" enquanto a UI dizia estar usando o modelo principal.
     const needsWorker = config.options.subagents || config.options.orchestrate || config.options.initMode
-    const worker = provider.workerModel ?? useModelModePrefs.getState().codeModel
+    const worker = provider.workerModel
     const workerModel =
       needsWorker && worker
         ? { ...worker, reasoning: provider.workerReasoning ?? undefined }
