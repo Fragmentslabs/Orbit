@@ -12,16 +12,21 @@ import {
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { useWorkspace } from "@/lib/workspace-context"
 import type { Memory, MemoryKind } from "@shared/memory"
-import { searchMemories } from "@shared/memory"
+import { isCodeContext, searchMemories } from "@shared/memory"
+import { matchesProjectFilter } from "@shared/memory-layout"
 import { useMemoryStore } from "@/src/stores/memory-store"
 import { MemoryCard } from "./memory-card"
 import { MemoryGraph } from "./memory-graph"
 import { lastActivity } from "./meta"
 
 /**
- * View de Memórias: lista de cards ou grafo de conexões (SVG com zoom/pan),
+ * View de Memórias: lista de cards ou árvore de conexões (SVG com zoom/pan),
  * com filtro automático pelo modo do workspace — chat mostra
  * core+seasonal+general, código mostra project+general (seletor de projeto).
+ *
+ * Escolher um projeto no seletor restringe a vista ao que pertence a ele: as
+ * memórias do projeto mais as gerais criadas ali. Gerais de outros projetos
+ * ficam de fora — para vê-las, volte o seletor para "todos os projetos".
  */
 
 const ALL_PROJECTS = "__all__"
@@ -44,6 +49,11 @@ export function MemoriesView() {
     const map = new Map<string, string>()
     for (const m of index) {
       if (m.kind === "project" && m.projectId) map.set(m.projectId, m.projectName ?? m.projectId)
+      // Um projeto cujas memórias são todas gerais ainda merece entrada no
+      // seletor — senão elas ficariam inalcançáveis pelo filtro.
+      else if (m.originProjectId && !map.has(m.originProjectId)) {
+        map.set(m.originProjectId, m.originProjectName ?? m.originProjectId)
+      }
     }
     return [...map.entries()].map(([id, name]) => ({ id, name }))
   }, [index])
@@ -55,14 +65,15 @@ export function MemoriesView() {
     const now = Date.now()
     return index.filter((m) => {
       if (!kinds.includes(m.kind)) return false
+      // "general" existe nos dois modos, mas os aprendizados gravados sob ele
+      // são conhecimento de código — no chat eles não entram.
+      if (mode === "chat" && isCodeContext(m)) return false
       if (m.expiresAt != null && m.expiresAt < now) return false
-      if (
-        m.kind === "project" &&
-        projectFilter !== ALL_PROJECTS &&
-        m.projectId !== projectFilter
-      ) {
-        return false
-      }
+      // O filtro de projeto vale para TODOS os kinds, não só "project": uma
+      // memória geral criada dentro de outro projeto não pertence a esta vista.
+      // As sem origem registrada (preferências de trabalho) seguem valendo em
+      // qualquer projeto — quem decide isso é matchesProjectFilter.
+      if (projectFilter !== ALL_PROJECTS && !matchesProjectFilter(m, projectFilter)) return false
       return true
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps

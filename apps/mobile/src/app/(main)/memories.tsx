@@ -9,7 +9,7 @@ import { useRouter } from 'expo-router'
 import { ArrowLeft, RefreshCw, Search, List, Network, X } from 'lucide-react-native'
 import { useTranslation } from 'react-i18next'
 import type { Memory, MemoryKind } from '@orbit/shared'
-import { searchMemories } from '@orbit/shared'
+import { isCodeContext, matchesProjectFilter, searchMemories } from '@orbit/shared'
 import { useMemoryStore } from '~/stores/memory-store'
 import { useWorkspaceStore } from '~/stores/workspace-store'
 import { MemoryCard } from '~/components/memories/MemoryCard'
@@ -44,6 +44,9 @@ export default function MemoriesScreen() {
     const map = new Map<string, string>()
     for (const m of index) {
       if (m.kind === 'project' && m.projectId) map.set(m.projectId, m.projectName ?? m.projectId)
+      else if (m.originProjectId && !map.has(m.originProjectId)) {
+        map.set(m.originProjectId, m.originProjectName ?? m.originProjectId)
+      }
     }
     return [...map.entries()].map(([id, name]) => ({ id, name }))
   }, [index])
@@ -55,10 +58,13 @@ export default function MemoriesScreen() {
     const now = Date.now()
     return index.filter((m) => {
       if (!kinds.includes(m.kind)) return false
+      // "general" existe nos dois modos, mas os aprendizados gravados sob ele
+      // são conhecimento de código — no chat eles não entram.
+      if (mode === 'chat' && isCodeContext(m)) return false
       if (m.expiresAt != null && m.expiresAt < now) return false
-      if (m.kind === 'project' && projectFilter !== ALL_PROJECTS && m.projectId !== projectFilter) {
-        return false
-      }
+      // O filtro vale para TODOS os kinds: uma memória geral criada em outro
+      // projeto não pertence a esta vista. As sem origem seguem globais.
+      if (projectFilter !== ALL_PROJECTS && !matchesProjectFilter(m, projectFilter)) return false
       return true
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps
