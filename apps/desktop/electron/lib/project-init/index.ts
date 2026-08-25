@@ -450,7 +450,13 @@ async function saveAreaMemory(
 /** Salva lições extraídas da exploração como memórias cross-project
  * (kind="general", category="learning") — fora da árvore do projeto, para
  * reaparecerem em outros projetos com stack em comum. */
-async function saveLearnings(learnings: Learning[], area: ProjectArea, main: (t: string) => void): Promise<void> {
+async function saveLearnings(
+  learnings: Learning[],
+  area: ProjectArea,
+  main: (t: string) => void,
+  /** Pasta do projeto — vira o originProjectId do aprendizado. */
+  directory: string,
+): Promise<void> {
   for (const learning of learnings) {
     await memoryService.save({
       kind: 'general',
@@ -458,6 +464,10 @@ async function saveLearnings(learnings: Learning[], area: ProjectArea, main: (t:
       text: learning.text,
       tags: [...new Set([...learning.tags, area])],
       weight: 0.55,
+      // O aprendizado continua valendo em qualquer projeto (é por isso que é
+      // "general"), mas registrar onde nasceu é o que o ancora perto da árvore
+      // de origem no canvas em vez de cair no bolo sem projeto.
+      directory,
     })
     main(`  🎓 aprendizado registrado (reutilizável em outros projetos): ${learning.text.slice(0, 90)}…\n`)
   }
@@ -570,7 +580,7 @@ async function runScope(input: RunScopeInput): Promise<{ done: ProjectArea[]; su
             main(`  ↳ complementei **${PROJECT_AREAS[complement.area].label}** com um achado desta área.\n`)
           }
         }
-        if (refined.learnings?.length) await saveLearnings(refined.learnings, result.area, main)
+        if (refined.learnings?.length) await saveLearnings(refined.learnings, result.area, main, storageDirectory)
       } catch (err) {
         // Revisão falhou: salva o levantamento bruto para não perder o trabalho
         const fallback = fallbackParse(result.raw)
@@ -629,7 +639,7 @@ Reply with JSON (write "reason", "gap", and "mission" text values in ${outputLan
         await saveAreaMemory(storageDirectory, review.area as ProjectArea, refined, rootId, force, subproject)
         savedSummaries.set(review.area as ProjectArea, refined.summary)
         done.push(review.area as ProjectArea)
-        if (refined.learnings?.length) await saveLearnings(refined.learnings, review.area as ProjectArea, main)
+        if (refined.learnings?.length) await saveLearnings(refined.learnings, review.area as ProjectArea, main, storageDirectory)
         main(`✓ **${PROJECT_AREAS[review.area as ProjectArea].label}** (extra) consolidado.\n`)
       }
     } catch { break }
