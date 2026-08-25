@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { List, Network, Search } from "lucide-react"
 import { Input } from "@/components/ui/input"
+import { Skeleton } from "@/components/ui/skeleton"
 import {
   Select,
   SelectContent,
@@ -31,11 +32,59 @@ import { lastActivity } from "./meta"
 
 const ALL_PROJECTS = "__all__"
 
+/**
+ * Placeholder do carregamento inicial. Sem ele a tela pisca o estado vazio
+ * ("nenhuma memória") antes do índice chegar do main, o que lê como se não
+ * houvesse nada salvo.
+ */
+function MemoriesSkeleton({ graph }: { graph: boolean }) {
+  if (graph) {
+    return (
+      <div className="relative min-h-0 flex-1 overflow-hidden rounded-lg border">
+        {/* Nós esparsos, no espírito do grafo que vai aparecer */}
+        {[
+          { top: "44%", left: "48%", size: 44 },
+          { top: "26%", left: "30%", size: 26 },
+          { top: "30%", left: "68%", size: 26 },
+          { top: "62%", left: "26%", size: 22 },
+          { top: "68%", left: "62%", size: 22 },
+          { top: "16%", left: "52%", size: 18 },
+          { top: "78%", left: "44%", size: 18 },
+        ].map((node, i) => (
+          <Skeleton
+            key={i}
+            className="absolute rounded-full"
+            style={{ top: node.top, left: node.left, width: node.size, height: node.size }}
+          />
+        ))}
+      </div>
+    )
+  }
+  return (
+    <div className="min-h-0 flex-1 overflow-hidden pr-1">
+      <div className="grid grid-cols-1 gap-2 md:grid-cols-2 xl:grid-cols-3">
+        {Array.from({ length: 6 }, (_, i) => (
+          <div key={i} className="flex flex-col gap-2 rounded-lg border bg-card p-3">
+            <Skeleton className="h-4 w-full" />
+            <Skeleton className="h-4 w-4/5" />
+            <div className="flex gap-1.5">
+              <Skeleton className="h-4 w-14 rounded-full" />
+              <Skeleton className="h-4 w-20 rounded-full" />
+            </div>
+            <Skeleton className="h-3 w-2/3" />
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 export function MemoriesView() {
   const { t } = useTranslation()
   const { mode } = useWorkspace()
   const initialize = useMemoryStore((s) => s.initialize)
   const index = useMemoryStore((s) => s.index)
+  const loading = useMemoryStore((s) => s.loading)
   const [query, setQuery] = useState("")
   const [projectFilter, setProjectFilter] = useState(ALL_PROJECTS)
   const [tab, setTab] = useState<"list" | "graph">("list")
@@ -134,7 +183,9 @@ export function MemoriesView() {
         </Tabs>
       </div>
 
-      {(tab === "graph" ? pool : filtered).length === 0 ? (
+      {loading ? (
+        <MemoriesSkeleton graph={tab === "graph"} />
+      ) : (tab === "graph" ? pool : filtered).length === 0 ? (
         <div className="flex flex-1 items-center justify-center">
           <div className="flex flex-col items-center gap-1 text-center">
             <p className="text-sm font-medium">{t(query ? "memories.emptyTitleQuery" : "memories.emptyTitleNone")}</p>

@@ -10,6 +10,8 @@ import { memoryApi } from "@/src/lib/ipc"
 
 interface MemoryState {
   initialized: boolean
+  /** true até o primeiro list() responder — a view mostra skeleton nesse meio. */
+  loading: boolean
   index: Memory[]
   /** Documentos markdown carregados sob demanda, por id */
   docs: Record<string, string>
@@ -32,6 +34,7 @@ function applyEvent(event: MemoryEvent, index: Memory[]): Memory[] {
 
 export const useMemoryStore = create<MemoryState>((set, get) => ({
   initialized: false,
+  loading: true,
   index: [],
   docs: {},
 
@@ -50,8 +53,14 @@ export const useMemoryStore = create<MemoryState>((set, get) => ({
   },
 
   refresh: async () => {
-    const index = await memoryApi.list()
-    set({ index })
+    try {
+      const index = await memoryApi.list()
+      set({ index })
+    } finally {
+      // Sai do skeleton mesmo se o list falhar, senão a tela fica carregando
+      // para sempre em vez de mostrar o estado vazio.
+      set({ loading: false })
+    }
   },
 
   openDoc: async (id) => {
