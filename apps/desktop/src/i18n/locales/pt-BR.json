@@ -1620,7 +1620,6 @@
     "dependenciasTitulo": "Dependências",
     "semDependencias": "Nenhuma",
     "adicionarDependencia": "adicionar dependência",
-    "selecioneTask": "Selecione uma task...",
     "dependencias_one": "{{count}} dependência",
     "dependencias_other": "{{count}} dependências",
     "excluirTask": "Excluir task",

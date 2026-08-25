@@ -6,10 +6,12 @@ import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { ConfirmDialog } from "@/components/ui/alert-dialog"
 import { Input } from "@/components/ui/input"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { AssistantMarkdown, GenericToolView, ReasoningPartView } from "@/src/components/messages/shared"
 import { Shimmer } from "@/src/components/ai/shimmer"
 import { BrowserTestChip } from "@/src/components/browser-test-chip"
 import { MediaEmbed } from "./media-embed"
+import { ListaTasksBuscavel } from "./task-picker"
 import { SEM_TASKS, useEsteiraStore } from "@/src/stores/esteira-store"
 import { usePanelStore } from "@/src/stores/panel-store"
 import { cn } from "@/lib/utils"
@@ -249,7 +251,10 @@ export function TaskModal({
 
             <div className="border-t pt-2">
               <p className="mb-1.5 font-medium text-muted-foreground">{t("esteira.dependenciasTitulo")}</p>
-              {dependencias.length === 0 && !adicionandoDep && (
+              {/* Antes o aviso sumia enquanto o seletor estava aberto, porque
+                  ele substituía o botão. Agora o seletor é um popover à parte,
+                  então o aviso só depende de haver ou não dependências. */}
+              {dependencias.length === 0 && (
                 <p className="text-muted-foreground/70">{t("esteira.semDependencias")}</p>
               )}
               <ul className="space-y-1">
@@ -267,33 +272,32 @@ export function TaskModal({
                   </li>
                 ))}
               </ul>
-              {adicionandoDep ? (
-                <select
-                  autoFocus
-                  className="mt-1.5 w-full rounded-md border bg-background px-1.5 py-1 text-[11px]"
-                  onChange={(e) => {
-                    if (e.target.value) void alterarDependencias([...task.dependeDe, e.target.value])
-                    setAdicionandoDep(false)
-                  }}
-                  onBlur={() => setAdicionandoDep(false)}
-                  defaultValue=""
-                >
-                  <option value="">{t("esteira.selecioneTask")}</option>
-                  {candidatasDep.map((c) => (
-                    <option key={c.id} value={c.id}>{c.titulo}</option>
-                  ))}
-                </select>
-              ) : (
-                candidatasDep.length > 0 && (
-                  <button
-                    type="button"
-                    onClick={() => setAdicionandoDep(true)}
-                    className="mt-1.5 flex items-center gap-1 text-muted-foreground hover:text-foreground"
-                  >
-                    <PlusIcon className="size-3" />
-                    {t("esteira.adicionarDependencia")}
-                  </button>
-                )
+              {candidatasDep.length > 0 && (
+                <Popover open={adicionandoDep} onOpenChange={setAdicionandoDep}>
+                  <PopoverTrigger
+                    render={
+                      <button
+                        type="button"
+                        className="mt-1.5 flex items-center gap-1 text-muted-foreground hover:text-foreground"
+                      >
+                        <PlusIcon className="size-3" />
+                        {t("esteira.adicionarDependencia")}
+                      </button>
+                    }
+                  />
+                  {/* Largura fixa: o popup herda a largura da âncora, e o
+                      gatilho aqui é um botão de texto curto demais para caber
+                      a lista. */}
+                  <PopoverContent className="w-64 p-0" align="start">
+                    <ListaTasksBuscavel
+                      tasks={candidatasDep}
+                      onEscolher={(id) => {
+                        void alterarDependencias([...task.dependeDe, id])
+                        setAdicionandoDep(false)
+                      }}
+                    />
+                  </PopoverContent>
+                </Popover>
               )}
               {erroDep && <p className="mt-1 text-[10px] text-destructive">{erroDep}</p>}
             </div>
