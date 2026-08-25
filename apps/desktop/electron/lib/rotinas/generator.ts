@@ -26,9 +26,18 @@ Rules:
 - The prompt must be SELF-CONTAINED: the agent that runs it has no memory of this conversation and no one to ask. State the goal, the folders/files involved when known, what to inspect, and what a finished run looks like.
 - Write titulo and prompt in the SAME LANGUAGE as the user's description (a Portuguese description yields a Portuguese prompt — never switch to English unless asked).
 - The routine's result is a chat message the user reads: by default the prompt just answers in the chat. It must NOT create, modify or delete files, folders or scripts in the working folders, and must not commit or install anything, unless the user's description EXPLICITLY asks to persist something to disk (e.g. "save to a file", "write a JSON"). If the goal is delivering information — a greeting, the news, a summary — deliver it as plain text in the reply.
+- "Create tasks" is NOT a request to persist to disk. See the PIPELINE section below.
 - The routine runs unattended: never ask the user questions in the prompt, never require an approval step.
 - agenda.horario is "HH:MM" (24h, local time). agenda.dias is 0-6 with 0 = Sunday; omit dias for every day. Use intervaloDias only when the user asks for "every N days".
 - If the user gave no time, pick a sensible one and say so in the title context, not in the prompt.
+
+PIPELINE = ORBIT'S ESTEIRA (task board), never a file:
+- In Orbit, "pipeline", "pipeline mode", "esteira" and "modo esteira" all name the SAME feature: a board of phases (e.g. desenvolvimento → validação → code review → segurança → infra) where every task is a board item that agents pick up and run autonomously. The user may use any of these words, in any language.
+- When the description asks to create/open/add tasks, or to work "in pipeline mode", the routine must create BOARD TASKS through the esteira tools: esteira_list to find the board, then esteira_create_task once per unit of work, each with a title and a self-contained description (goal, files involved, acceptance criteria).
+- Writing a markdown or JSON file (PIPELINE.md, TASKS.md, a checklist on disk) is NOT creating tasks and must never be the routine's output for these requests. The board is the destination; the repository is only read.
+- Say all of this explicitly in the prompt you write, naming the esteira tools — the agent that runs the routine later has no access to this instruction and must not have to guess.
+- Only treat "pipeline" as something else (CI/CD, a data pipeline) when the description makes that unmistakable, e.g. it names GitHub Actions, a YAML workflow or an ETL job.
+
 - Suggest modes conservatively, based on the work:
   - loop: multi-step work that benefits from reviewing its own output before stopping.
   - subagents: work that splits into independent parallel investigations.
@@ -50,6 +59,7 @@ Rules:
 - The prompt must be SELF-CONTAINED: the agent that runs it has no memory of this conversation and no one to ask. State the goal, what to look up, and what a finished run looks like.
 - Write titulo and prompt in the SAME LANGUAGE as the user's description (a Portuguese description yields a Portuguese prompt — never switch to English unless asked).
 - The result is a chat message the user reads: the prompt just answers in the chat — it must NOT touch files or the filesystem in any way.
+- "Pipeline"/"pipeline mode"/"esteira" name Orbit's task board, not a file and not CI/CD. If the description asks to turn something into tasks, the prompt must use the esteira tools (esteira_list, then esteira_create_task per task) — never describe writing a file, which this mode cannot do anyway.
 - The routine runs unattended: never ask the user questions in the prompt, never require an approval step.
 - agenda.horario is "HH:MM" (24h, local time). agenda.dias is 0-6 with 0 = Sunday; omit dias for every day. Use intervaloDias only when the user asks for "every N days".
 - If the user gave no time, pick a sensible one and say so in the title context, not in the prompt.
