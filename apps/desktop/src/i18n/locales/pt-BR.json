@@ -429,6 +429,8 @@
     "uses_other": "{{count}} usos",
     "expires": "expira {{date}}",
     "connected": "Conectadas",
+    "moreConnected_one": "+{{count}} conexão",
+    "moreConnected_other": "+{{count}} conexões",
     "deleteTitle": "Excluir memória?",
     "deleteDescription": "\"{{text}}\" será excluída permanentemente.",
     "deleteDescriptionWithDoc": "\"{{text}}\" será excluída permanentemente, junto com o documento anexado.",

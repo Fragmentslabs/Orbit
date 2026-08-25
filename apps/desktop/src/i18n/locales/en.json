@@ -429,6 +429,8 @@
     "uses_other": "{{count}} uses",
     "expires": "expires {{date}}",
     "connected": "Connected",
+    "moreConnected_one": "+{{count}} connection",
+    "moreConnected_other": "+{{count}} connections",
     "deleteTitle": "Delete memory?",
     "deleteDescription": "\"{{text}}\" will be permanently deleted.",
     "deleteDescriptionWithDoc": "\"{{text}}\" will be permanently deleted, along with the attached document.",

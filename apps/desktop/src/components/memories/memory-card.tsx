@@ -22,6 +22,9 @@ import { useMemoryStore } from "@/src/stores/memory-store"
 import { useSessionStore } from "@/src/stores/session-store"
 import { CATEGORY_LABEL, KIND_BADGE, KIND_COLOR, KIND_LABEL, canPromote } from "./meta"
 
+/** Quantos vínculos o card mostra antes de remeter ao painel de edição. */
+const MAX_RELATED_IN_CARD = 3
+
 function formatDate(ts: number, locale: string) {
   return new Date(ts).toLocaleDateString(locale, { day: "2-digit", month: "short", year: "numeric" })
 }
@@ -321,6 +324,17 @@ export function MemoryCard({ memory, related, onSelectRelated }: {
 
   const originSession = memory.sessionId ? sessions.find((s) => s.id === memory.sessionId) : undefined
 
+  // Os mais estruturais primeiro (nós de área do /init), depois por peso — se
+  // só cabem alguns, que sejam os que mais dizem sobre a vizinhança do nó.
+  const visibleRelated = useMemo(
+    () =>
+      [...related]
+        .sort((a, b) => (a.area ? 0 : 1) - (b.area ? 0 : 1) || b.weight - a.weight)
+        .slice(0, MAX_RELATED_IN_CARD),
+    [related],
+  )
+  const hiddenRelated = related.length - visibleRelated.length
+
   return (
     <div className="group/card flex flex-col gap-2 rounded-lg border bg-card p-3 text-card-foreground">
       <div className="flex items-start justify-between gap-2">
@@ -407,24 +421,32 @@ export function MemoryCard({ memory, related, onSelectRelated }: {
       </div>
 
       {related.length > 0 && (
-        <div className="flex min-h-0 flex-col gap-1 border-t pt-2">
+        <div className="flex flex-col gap-1 border-t pt-2">
           <span className="flex items-center gap-1 text-[11px] text-muted-foreground">
             <Link2 className="size-3" /> {t("memories.connected")} ({related.length})
           </span>
-          {/* Teto de altura: um nó muito conectado esticava o card e quebrava o
-              alinhamento da grade. O restante fica acessível por rolagem. */}
-          <div className="flex max-h-20 flex-col overflow-y-auto pr-1">
-            {related.map((r) => (
-              <button
-                key={r.id}
-                type="button"
-                className="truncate text-left text-xs text-muted-foreground transition-colors hover:text-foreground"
-                onClick={() => onSelectRelated?.(r.id)}
-              >
-                • {r.text}
-              </button>
-            ))}
-          </div>
+          {/* Limita a QUANTIDADE, não a altura: espremer doze vínculos numa
+              caixa rolável de 80px deixava o texto ilegível. O excedente abre
+              no painel de edição, que lista todos e navega entre eles. */}
+          {visibleRelated.map((r) => (
+            <button
+              key={r.id}
+              type="button"
+              className="truncate text-left text-xs text-muted-foreground transition-colors hover:text-foreground"
+              onClick={() => onSelectRelated?.(r.id)}
+            >
+              • {r.text}
+            </button>
+          ))}
+          {hiddenRelated > 0 && (
+            <button
+              type="button"
+              className="self-start text-left text-[11px] font-medium text-muted-foreground transition-colors hover:text-foreground"
+              onClick={() => setEditing(true)}
+            >
+              {t("memories.moreConnected", { count: hiddenRelated })}
+            </button>
+          )}
         </div>
       )}
 
