@@ -1012,8 +1012,8 @@
     "sucesso": "Repositório {{repo}} criado e commits enviados.",
     "criadoSemPush": "Repositório {{repo}} criado, mas o envio falhou. O remote já está configurado — tente enviar novamente.",
     "erro": {
-      "noCredential": "Não consegui ler a credencial do GitHub que o git usa:",
-      "auth": "A credencial do GitHub foi recusada ou não tem permissão para criar repositórios:",
+      "noCredential": "Não há uma credencial HTTPS do GitHub nesta máquina. Se o seu git autentica por SSH, o push funciona pelas chaves — mas a API do GitHub, que cria o repositório, exige um token, e chave SSH não serve. Instale o GitHub CLI (`gh auth login`) ou cole um token abaixo. Detalhe:",
+      "auth": "O token do GitHub foi recusado ou não tem permissão para criar repositórios. Verifique se ele tem o escopo \"repo\". Detalhe:",
       "nameTaken": "Já existe um repositório com esse nome na sua conta.",
       "invalidName": "O GitHub recusou esse nome. Use apenas letras, números, ponto, hífen e underline.",
       "noCommits": "Esta pasta ainda não tem nenhum commit. Faça o primeiro commit antes de publicar.",

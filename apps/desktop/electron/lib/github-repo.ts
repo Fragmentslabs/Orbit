@@ -7,8 +7,13 @@ import { promisify } from 'node:util'
  *
  * O token NÃO é pedido ao usuário nem guardado por nós: é lido do credential
  * helper que o próprio git já usa para autenticar os pushes (Git Credential
- * Manager no Windows, keychain no macOS). Assim quem já consegue dar push
- * consegue criar o repositório, sem uma credencial nova para gerenciar.
+ * Manager no Windows, keychain no macOS) e, na falta dele, do `gh auth token`.
+ *
+ * Quem autentica por SSH não tem credencial HTTPS nenhuma — o push funciona
+ * pelas chaves, mas a API do GitHub exige token, e chave SSH não vira token.
+ * Nesse caso resta o `gh` ou o token digitado. E o remote criado segue o
+ * protocolo que a máquina sabe usar: HTTPS quando há credencial HTTPS, SSH
+ * caso contrário — senão o push logo após a criação falharia.
  */
 
 const execFileAsync = promisify(execFile)
@@ -40,8 +45,28 @@ export function isValidRepoName(name: string): boolean {
 
 interface TokenLookup {
   token: string | null
+  /**
+   * Existe credencial HTTPS no helper do git. Decide o protocolo do remote:
+   * sem ela, a máquina autentica por SSH e um origin HTTPS não daria push.
+   */
+  hasHttpsCredential: boolean
   /** Motivo legível quando não veio token — vira o detalhe do erro na UI. */
   reason: string
+}
+
+/** Token do GitHub CLI, quando instalado e autenticado. */
+async function readGhToken(cwd: string): Promise<string | null> {
+  try {
+    const { stdout } = await execFileAsync('gh', ['auth', 'token'], {
+      cwd,
+      env: process.env,
+      timeout: 10_000,
+    })
+    const token = stdout.trim()
+    return token || null
+  } catch {
+    return null
+  }
 }
 
 /**
@@ -58,7 +83,7 @@ async function readGitHubToken(cwd: string): Promise<TokenLookup> {
     try {
       child = spawn('git', ['credential', 'fill'], { cwd, env: GIT_ENV })
     } catch (err) {
-      resolve({ token: null, reason: `spawn falhou: ${err instanceof Error ? err.message : String(err)}` })
+      resolve({ token: null, hasHttpsCredential: false, reason: `spawn falhou: ${err instanceof Error ? err.message : String(err)}` })
       return
     }
 
@@ -74,7 +99,7 @@ async function readGitHubToken(cwd: string): Promise<TokenLookup> {
     // 20s: o Git Credential Manager é uma app .NET e a primeira invocação num
     // processo frio passa dos 10s que eu usava antes.
     const timer = setTimeout(
-      () => finish({ token: null, reason: 'o helper de credencial do git não respondeu em 20s' }),
+      () => finish({ token: null, hasHttpsCredential: false, reason: 'o helper de credencial do git não respondeu em 20s' }),
       20_000,
     )
 
@@ -86,7 +111,7 @@ async function readGitHubToken(cwd: string): Promise<TokenLookup> {
     })
     child.on('error', (err) => {
       clearTimeout(timer)
-      finish({ token: null, reason: `não foi possível executar "git credential fill": ${err.message}` })
+      finish({ token: null, hasHttpsCredential: false, reason: `não foi possível executar "git credential fill": ${err.message}` })
     })
     child.on('close', (code) => {
       clearTimeout(timer)
@@ -96,15 +121,19 @@ async function readGitHubToken(cwd: string): Promise<TokenLookup> {
         ?.slice('password='.length)
         .trim()
       if (password) {
-        finish({ token: password, reason: '' })
+        finish({ token: password, hasHttpsCredential: true, reason: '' })
         return
       }
+      // Qualquer saída sem `password=` significa a mesma coisa: não há
+      // credencial HTTPS. Numa máquina só-SSH o git chega a tentar perguntar
+      // o usuário e sai 128 com "terminal prompts disabled" — o detalhe cru
+      // sozinho confundiria, então a conclusão vem primeiro e ele fica depois.
       const detalhe = errOut.trim().split(/\r?\n/).slice(-2).join(' ').slice(0, 300)
+      const base = `sem credencial HTTPS para github.com (git saiu com ${code})`
       finish({
         token: null,
-        reason: detalhe
-          ? `o helper não devolveu credencial (git saiu com ${code}): ${detalhe}`
-          : `o helper não devolveu credencial (git saiu com ${code})`,
+        hasHttpsCredential: false,
+        reason: detalhe ? `${base}: ${detalhe}` : base,
       })
     })
 
@@ -114,7 +143,10 @@ async function readGitHubToken(cwd: string): Promise<TokenLookup> {
 }
 
 interface GitHubRepo {
+  /** HTTPS */
   clone_url: string
+  /** git@github.com:owner/name.git */
+  ssh_url: string
   full_name: string
   html_url: string
 }
@@ -192,22 +224,28 @@ export async function createRemoteRepo(
     return { ok: false, kind: 'noCommits', message: 'HEAD ausente' }
   }
 
-  let token = tokenManual?.trim() || null
+  // A leitura roda mesmo com token manual: é ela que diz se a máquina tem
+  // credencial HTTPS, e disso depende o protocolo do remote.
+  const lido = await readGitHubToken(repoPath)
+  let token = tokenManual?.trim() || lido.token
   if (!token) {
-    const lido = await readGitHubToken(repoPath)
-    if (!lido.token) {
-      // O motivo técnico vai junto: "sem credencial" sozinho não diz se o
-      // helper não existe, se estourou o tempo ou se o git nem foi encontrado.
-      return { ok: false, kind: 'noCredential', message: lido.reason }
-    }
-    token = lido.token
+    // Sem credencial HTTPS (típico de quem usa SSH) o gh costuma ser a fonte
+    // que resta antes de pedir o token ao usuário.
+    token = await readGhToken(repoPath)
+  }
+  if (!token) {
+    return { ok: false, kind: 'noCredential', message: lido.reason }
   }
 
   const created = await createOnGitHub(trimmed, isPrivate, token)
   if (!created.ok) return created
 
+  // Protocolo que esta máquina consegue autenticar: com credencial HTTPS vai
+  // de HTTPS; sem ela o push só funciona pelas chaves SSH.
+  const remoteUrl = lido.hasHttpsCredential ? created.repo.clone_url : created.repo.ssh_url
+
   try {
-    await execFileAsync('git', ['remote', 'add', 'origin', created.repo.clone_url], {
+    await execFileAsync('git', ['remote', 'add', 'origin', remoteUrl], {
       cwd: repoPath,
       env: GIT_ENV,
       timeout: 15_000,
