@@ -464,7 +464,8 @@
       "mark": "Marcar",
       "add": "Adicionar",
       "archive": "Arquivar pasta",
-      "unarchive": "Desarquivar pasta"
+      "unarchive": "Desarquivar pasta",
+      "organize": "Organizar chats e pastas"
     },
     "session": {
       "unpin": "Desafixar",

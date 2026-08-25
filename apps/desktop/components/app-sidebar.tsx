@@ -36,6 +36,7 @@ import {
   Terminal,
   Trash2,
   User,
+  Wand2,
   X,
 } from "lucide-react"
 
@@ -1076,6 +1077,7 @@ function ChatHistory() {
   const sessions = useSessionStore((s) => s.sessions)
   const folders = useSessionStore((s) => s.folders)
   const createFolder = useSessionStore((s) => s.createFolder)
+  const organizeSidebar = useSessionStore((s) => s.organizeSidebar)
   const [creatingFolder, setCreatingFolder] = useState(false)
   const { selectionMode, selectedIds, selectedFolderIds, exitSelectionMode } = useSelection()
   const deleteSessions = useSessionStore((s) => s.deleteSessions)
@@ -1180,16 +1182,28 @@ function ChatHistory() {
         label={t("sidebar.groups.folders")}
         action={
           !selectionMode && (
-            <button
-              onClick={(e) => {
-                e.stopPropagation()
-                setCreatingFolder(true)
-              }}
-              className="flex size-4 items-center justify-center rounded"
-              title={t("sidebar.folder.newFolderTitle")}
-            >
-              <FolderPlus className="size-3" />
-            </button>
+            <div className="flex items-center gap-0.5">
+              <button
+                onClick={(e) => {
+                  e.stopPropagation()
+                  organizeSidebar()
+                }}
+                className="flex size-4 items-center justify-center rounded"
+                title={t("sidebar.folder.organize")}
+              >
+                <Wand2 className="size-3" />
+              </button>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation()
+                  setCreatingFolder(true)
+                }}
+                className="flex size-4 items-center justify-center rounded"
+                title={t("sidebar.folder.newFolderTitle")}
+              >
+                <FolderPlus className="size-3" />
+              </button>
+            </div>
           )
         }
       >

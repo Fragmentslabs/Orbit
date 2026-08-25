@@ -464,7 +464,8 @@
       "mark": "Mark",
       "add": "Add",
       "archive": "Archive folder",
-      "unarchive": "Unarchive folder"
+      "unarchive": "Unarchive folder",
+      "organize": "Organize chats and folders"
     },
     "session": {
       "unpin": "Unpin",
