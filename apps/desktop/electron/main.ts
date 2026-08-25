@@ -15,6 +15,7 @@ import { killAll as killAllProcesses, listProcesses, killProcess, getProcessOutp
 import { getModelsSnapshot, invalidateModelsSnapshot } from './lib/models'
 import { revert as revertSession, unrevert as unrevertSession } from './lib/session/revert'
 import { abortProjectInit, getInitStatus, runProjectInit, type RunInitInput } from './lib/project-init'
+import { createRemoteRepo } from './lib/github-repo'
 import { abortChat, compactSession, getRunningSessionIds, runChat } from './lib/chat-engine'
 import { runChatWithLoop, abortLoop, getLoopRunningSessionIds } from './lib/loop-engine'
 import { reply as askReply, rejectSession as rejectSessionAsks } from './lib/ask-broker'
@@ -1003,6 +1004,11 @@ app.whenReady().then(() => {
       return { ok: false as const, ...gitError(err) }
     }
   })
+
+  // Cria o repositório no GitHub quando a pasta ainda não tem remote — o
+  // token vem do credential helper do git, não do usuário (ver github-repo.ts).
+  ipcMain.handle('git:createRemoteRepo', (_event, repoPath: string, name: string, isPrivate: boolean) =>
+    createRemoteRepo(repoPath, name, isPrivate))
 
   ipcMain.handle('git:push', async (_event, repoPath: string) => {
     try {

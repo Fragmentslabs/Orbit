@@ -41,6 +41,7 @@ import { useTheme } from "@/components/theme-provider";
 import { highlightLines, type HighlightedToken } from "@/lib/code-highlighter";
 import { FolderSelector } from "@/src/components/folder-selector";
 import { useBranchStore, type BranchSyncInfo, type SyncResult } from "@/src/stores/branch-store";
+import { CreateRemoteRepoDialog } from "@/src/components/create-remote-repo-dialog";
 import {
   FileTree,
   FileTreeFile,
@@ -664,6 +665,8 @@ const openLiveFile = useCallback(async (filePath: string) => {
     }
   }, [folders, syncBusyDir, pullChanges, reloadRootDir, syncErrorMessage, t]);
 
+  const [criarRepoOpen, setCriarRepoOpen] = useState(false);
+
   const handlePush = useCallback(async () => {
     const repo = folders[0];
     if (!repo || syncBusyDir) return;
@@ -675,9 +678,15 @@ const openLiveFile = useCallback(async (filePath: string) => {
         kind: "info",
         text: result.created ? t("folders.pushedCreated") : t("folders.pushedOk"),
       });
-    } else {
-      setSyncStatus({ kind: "error", text: syncErrorMessage(result) });
+      return;
     }
+    // Sem remote não é erro do usuário, é um passo que falta: o modal oferece
+    // criar o repositório em vez de só informar que não dá para enviar.
+    if (result.kind === "noRemote") {
+      setCriarRepoOpen(true);
+      return;
+    }
+    setSyncStatus({ kind: "error", text: syncErrorMessage(result) });
   }, [folders, syncBusyDir, pushChanges, syncErrorMessage, t]);
 
   useEffect(() => {
@@ -1149,6 +1158,23 @@ const openLiveFile = useCallback(async (filePath: string) => {
             <FolderQuickSwitch folders={folders} onFoldersChange={setFolders} />
           </div>
         </Panel>
+      )}
+      {folders[0] && (
+        <CreateRemoteRepoDialog
+          repoPath={folders[0]}
+          open={criarRepoOpen}
+          onOpenChange={setCriarRepoOpen}
+          onCreated={(result) => {
+            setCommitsReload((n) => n + 1);
+            void refreshInfo(folders[0]);
+            setSyncStatus({
+              kind: result.pushed ? "info" : "error",
+              text: result.pushed
+                ? t("createRepo.sucesso", { repo: result.fullName })
+                : t("createRepo.criadoSemPush", { repo: result.fullName }),
+            });
+          }}
+        />
       )}
     </PanelGroup>
   );

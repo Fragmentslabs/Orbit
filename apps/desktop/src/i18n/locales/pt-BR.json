@@ -999,6 +999,27 @@
     "localBranch": "{{branch}} (só local)",
     "imageNotAvailable": "Visualização de imagem em commits ainda não é suportada."
   },
+  "createRepo": {
+    "titulo": "Este projeto ainda não tem repositório remoto",
+    "descricao": "Não há um remote configurado, então não há para onde enviar os commits. Dá para criar um repositório no GitHub agora — usando a mesma credencial que o seu git já utiliza.",
+    "nomeLabel": "Nome do repositório",
+    "nomePlaceholder": "meu-projeto",
+    "nomeInvalido": "Use apenas letras, números, ponto, hífen e underline.",
+    "privado": "Privado",
+    "publico": "Público",
+    "criar": "Criar e enviar",
+    "criando": "Criando…",
+    "sucesso": "Repositório {{repo}} criado e commits enviados.",
+    "criadoSemPush": "Repositório {{repo}} criado, mas o envio falhou. O remote já está configurado — tente enviar novamente.",
+    "erro": {
+      "noCredential": "O git não tem uma credencial do GitHub salva nesta máquina. Faça um push ou clone autenticado uma vez para que ela seja registrada, ou configure o remote manualmente.",
+      "auth": "A credencial do GitHub foi recusada ou não tem permissão para criar repositórios. Verifique se o token tem o escopo \"repo\".",
+      "nameTaken": "Já existe um repositório com esse nome na sua conta.",
+      "invalidName": "O GitHub recusou esse nome. Use apenas letras, números, ponto, hífen e underline.",
+      "noCommits": "Esta pasta ainda não tem nenhum commit. Faça o primeiro commit antes de publicar.",
+      "other": "Não foi possível criar o repositório:"
+    }
+  },
   "mcp": {
     "kv": {
       "key": "Chave",
