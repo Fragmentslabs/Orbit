@@ -407,6 +407,8 @@
       "standards": "Padronização"
     },
     "editTitle": "Editar memória",
+    "fieldText": "Memória",
+    "fieldTags": "Tags",
     "tagsPlaceholder": "tags separadas por vírgula",
     "weight": "Peso",
     "save": "Salvar",

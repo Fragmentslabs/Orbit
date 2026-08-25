@@ -407,6 +407,8 @@
       "standards": "Standards"
     },
     "editTitle": "Edit memory",
+    "fieldText": "Memory",
+    "fieldTags": "Tags",
     "tagsPlaceholder": "tags separated by commas",
     "weight": "Weight",
     "save": "Save",

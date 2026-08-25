@@ -47,30 +47,43 @@ function EditDialog({ memory, open, onOpenChange }: {
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
+      {/* Sem max-w o Popup assume w-full e ocupa a janela inteira — os demais
+          diálogos do app definem a própria largura pelo mesmo motivo. */}
+      <DialogContent className="max-w-lg">
         <DialogHeader>
           <DialogTitle>{t("memories.editTitle")}</DialogTitle>
         </DialogHeader>
         <div className="flex flex-col gap-3">
-          <Textarea value={text} onChange={(e) => setText(e.target.value)} rows={3} />
-          <Input
-            value={tags}
-            onChange={(e) => setTags(e.target.value)}
-            placeholder={t("memories.tagsPlaceholder")}
-          />
-          <label className="flex items-center gap-3 text-xs text-muted-foreground">
-            {t("memories.weight")}
-            <input
-              type="range"
-              min={0}
-              max={1}
-              step={0.05}
-              value={weight}
-              onChange={(e) => setWeight(Number(e.target.value))}
-              className="flex-1"
+          <div>
+            <p className="mb-1 text-xs font-medium">{t("memories.fieldText")}</p>
+            <Textarea value={text} onChange={(e) => setText(e.target.value)} rows={5} />
+          </div>
+          <div>
+            <p className="mb-1 text-xs font-medium">{t("memories.fieldTags")}</p>
+            <Input
+              value={tags}
+              onChange={(e) => setTags(e.target.value)}
+              placeholder={t("memories.tagsPlaceholder")}
             />
-            <span className="w-8 text-right tabular-nums">{weight.toFixed(2)}</span>
-          </label>
+          </div>
+          <div>
+            <p className="mb-1 text-xs font-medium">{t("memories.weight")}</p>
+            <div className="flex items-center gap-3">
+              <input
+                type="range"
+                min={0}
+                max={1}
+                step={0.05}
+                value={weight}
+                onChange={(e) => setWeight(Number(e.target.value))}
+                className="flex-1"
+                aria-label={t("memories.weight")}
+              />
+              <span className="w-8 text-right text-xs tabular-nums text-muted-foreground">
+                {weight.toFixed(2)}
+              </span>
+            </div>
+          </div>
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>{t("common.cancel")}</Button>
