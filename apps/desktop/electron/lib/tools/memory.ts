@@ -15,15 +15,52 @@ import type { ToolContext } from './context'
 
 function describe(m: Memory): string {
   const kind = m.kind === 'project' ? `project/${m.category}` : m.kind
+  const area = m.area ? ` area=${m.area}` : ''
+  const sub = m.subproject ? ` sub=${m.subproject}` : ''
   const doc = m.hasDoc ? ' (doc anexado — use memory_open para ler)' : ''
   const tags = m.tags.length ? ` tags: ${m.tags.join(', ')}` : ''
-  return `#${m.id} [${kind}] (peso ${m.weight.toFixed(2)}, hits ${m.hits}) ${m.text}${tags}${doc}`
+  // A vizinhança entra no describe de propósito: é lendo daqui que o agente
+  // descobre a que nó pendurar a próxima memória, em vez de criar uma solta.
+  const links = m.relatedIds.length ? ` ligada a: ${m.relatedIds.join(', ')}` : ' SEM CONEXÕES'
+  return `#${m.id} [${kind}]${area}${sub} (peso ${m.weight.toFixed(2)}, hits ${m.hits}) ${m.text}${tags}${doc}${links}`
 }
 
 function saveReply(result: { id: string; merged: boolean; text: string }): string {
   return result.merged
     ? `Fundido com memória já existente #${result.id}: "${result.text}" — não foi criada duplicata.`
     : `Memória #${result.id} salva.`
+}
+
+/** Rótulo de um nó no esqueleto da árvore devolvido ao agente. */
+function treeLine(node: memory.TreeNodeSummary): string {
+  const indent = '  '.repeat(Math.min(node.depth, 6))
+  const tag = node.area ? `[${node.area}]` : node.category ? `[${node.category}]` : ''
+  const sub = node.subproject ? ` (${node.subproject})` : ''
+  const text = node.text.length > 70 ? `${node.text.slice(0, 70)}…` : node.text
+  return `${indent}#${node.id} ${tag}${sub} ${text}`
+}
+
+function treeReply(nodes: memory.TreeNodeSummary[]): string {
+  if (nodes.length === 0) return 'Este projeto ainda não tem árvore de memórias. Rode /init ou crie o nó raiz.'
+  return nodes.map(treeLine).join('\n')
+}
+
+/**
+ * Uma memória de projeto criada sem pai fica órfã no canvas e invisível para a
+ * navegação do grafo. Quando a árvore já existe, recusamos o save e devolvemos
+ * o esqueleto — o agente escolhe o pai e repete a chamada.
+ */
+async function requireParent(projectId: string, relatedIds: string[] | undefined): Promise<string | null> {
+  if (relatedIds && relatedIds.length > 0) return null
+  const skeleton = await memory.tree(projectId)
+  if (skeleton.length === 0) return null
+  return [
+    'Erro: memória de projeto exige relatedIds — sem pai ela fica órfã na árvore.',
+    'Escolha abaixo o nó ao qual ela pertence (use relatedTypes: { "<id>": "parent" })',
+    'ou, se já existir uma memória sobre o mesmo assunto, edite-a com memory_update.',
+    '',
+    ...skeleton.map(treeLine),
+  ].join('\n')
 }
 
 function searchReply(results: Memory[]): string {
@@ -87,9 +124,35 @@ export function createChatMemoryTools(input: SendMessageInput): ToolSet {
         const results = await memory.search({
           query,
           kinds: kind ? [kind] : ['core', 'seasonal', 'general'],
+          // O chat nunca vê conhecimento de código, mesmo quando ele está
+          // gravado como kind="general" (é o caso dos aprendizados).
+          excludeCodeContext: true,
           limit,
         })
         return searchReply(results)
+      },
+    }),
+    memory_update: tool({
+      description:
+        'Rewrites an EXISTING memory in place — the alternative to saving a near-duplicate. Use it when ' +
+        'something you already stored turns out to be incomplete, outdated or wrong. Preserves the id, ' +
+        'the links and the accumulated hits.',
+      inputSchema: z.object({
+        id: z.string().describe('Id of the memory to rewrite (from memory_search)'),
+        text: z.string().optional().describe('New full text, already incorporating the previous content'),
+        addTags: z.array(z.string()).optional().describe('Tags to add, keeping the existing ones'),
+        tags: z.array(z.string()).optional().describe('Replaces the whole tag list'),
+        weight: z.number().min(0).max(1).optional(),
+        kind: z.enum(['core', 'seasonal', 'general']).optional().describe('Reclassify (e.g. a seasonal fact that turned out to be permanent)'),
+      }),
+      execute: async ({ id, text, addTags, tags, weight, kind }) => {
+        try {
+          const updated = await memory.revise(id, { text, addTags, tags, weight, kind })
+          if (!updated) return `Memória #${id} não encontrada.`
+          return `Memória #${id} atualizada: ${describe(updated)}`
+        } catch (err) {
+          return `Erro: ${err instanceof Error ? err.message : String(err)}`
+        }
       },
     }),
     memory_link: tool({
@@ -147,29 +210,61 @@ export function createGraphTool(_input: SendMessageInput, ctx: ToolContext) {
 }
 
 export function createCodeMemoryTools(input: SendMessageInput, ctx: ToolContext): ToolSet {
+  const projectId = projectIdOf(ctx.directory)
+
   return {
     memory_save: tool({
       description:
-        'Saves a working memory. kind "project" (default): about THIS project, category required. kind "general": global work style, or (with category="learning") a lesson reusable in OTHER projects with the same stack. For extensive context, pass markdown in `document`.',
+        'Saves a working memory as a NODE IN THE PROJECT TREE. Before calling, run memory_search: ' +
+        'if a memory on the same subject already exists, use memory_update to refine it instead of ' +
+        'creating a near-duplicate. relatedIds is REQUIRED once the project has a tree — a node with ' +
+        'no parent is invisible to graph navigation. Default kind is "project"; "general" is only for ' +
+        'knowledge that is true in OTHER projects too.',
       inputSchema: z.object({
         text: z.string().describe('Short, self-contained summary (goes into the prompt and search)'),
-        kind: z.enum(['project', 'general']).optional().describe('Default: project'),
+        kind: z
+          .enum(['project', 'general'])
+          .optional()
+          .describe(
+            'Default: project. Use "general" ONLY if the fact stays true in a project that shares ' +
+            'nothing with this codebase. Anything naming this project entities, schema, routes, ' +
+            'business rules or infrastructure is kind="project", never general.',
+          ),
         category: z
           .enum(['preference', 'convention', 'structure', 'decision', 'context', 'database', 'standard', 'learning'])
           .optional()
           .describe(
-            'Required when kind=project (preference | convention | structure | decision | context | database | standard). "context" expires (weight <= 0.3). When kind=general, only "learning" is accepted — marks the memory as a lesson reusable in other projects; tag it with the technology.',
+            'Required when kind=project (preference | convention | structure | decision | context | database | standard). ' +
+            '"context" expires (weight <= 0.3). When kind=general, only "learning" is accepted: a technology-level ' +
+            'lesson (framework gotcha, library workaround) with NO reference to this project domain.',
           ),
-        weight: z.number().min(0).max(1).optional().describe('Importance 0..1'),
-        tags: z.array(z.string()).optional().describe('Keywords for future search — for category=learning, include the technology/framework name'),
-        document: z
+        area: z
+          .enum([
+            'overview', 'business', 'design', 'architecture', 'preferences', 'infrastructure',
+            'security', 'development', 'database', 'testing', 'performance', 'dependencies', 'standards',
+          ])
+          .optional()
+          .describe('Knowledge area this memory belongs to. Match the parent area node you link to.'),
+        subproject: z
           .string()
           .optional()
-          .describe('Attached markdown for extensive context'),
-        relatedIds: z.array(z.string()).optional().describe('Ids of related memories (creates links). Connect to the parent area, related decisions, etc.'),
-        relatedTypes: z.record(z.string(), z.enum(['parent', 'related'])).optional().describe('Relationship type per id. E.g.: { "mem_abc": "parent" }'),
+          .describe('Subproject inside the repo (e.g. "front", "back", "api") when the fact only applies there.'),
+        weight: z.number().min(0).max(1).optional().describe('Importance 0..1'),
+        tags: z.array(z.string()).optional().describe('Keywords for future search — for category=learning, include the technology/framework name'),
+        document: z.string().optional().describe('Attached markdown for extensive context'),
+        relatedIds: z
+          .array(z.string())
+          .optional()
+          .describe(
+            'REQUIRED for kind=project once a tree exists. Ids of the parent area node plus any related ' +
+            'memories. Get them from memory_tree or memory_search. A memory may have several parents.',
+          ),
+        relatedTypes: z
+          .record(z.string(), z.enum(['parent', 'related']))
+          .optional()
+          .describe('Relationship per id. Mark the owning area as "parent": { "mem_abc": "parent" }'),
       }),
-      execute: async ({ text, kind, category, weight, tags, document, relatedIds, relatedTypes }) => {
+      execute: async ({ text, kind, category, area, subproject, weight, tags, document, relatedIds, relatedTypes }) => {
         const resolvedKind = kind ?? 'project'
         if (resolvedKind === 'project' && !category) {
           return 'Erro: memórias de projeto exigem o campo category (preference | convention | structure | decision | context | database | standard).'
@@ -177,24 +272,84 @@ export function createCodeMemoryTools(input: SendMessageInput, ctx: ToolContext)
         if (resolvedKind === 'general' && category && category !== 'learning') {
           return 'Erro: kind=general só aceita category="learning" (ou nenhuma category).'
         }
+        if (resolvedKind === 'project') {
+          const missingParent = await requireParent(projectId, relatedIds)
+          if (missingParent) return missingParent
+        }
         const result = await memory.save({
           text,
           kind: resolvedKind,
           category,
+          area: resolvedKind === 'project' ? area : undefined,
+          subproject: resolvedKind === 'project' ? subproject : undefined,
           weight,
           tags,
           document,
           relatedIds,
           relatedTypes: relatedTypes as Record<string, 'parent' | 'related'> | undefined,
+          // Sempre enviado: define o projeto em memórias "project" e registra a
+          // origem nas "general", para o canvas ancorá-las na árvore certa.
           directory: ctx.directory,
           sessionId: input.sessionId,
         })
         return saveReply(result)
       },
     }),
+
+    memory_update: tool({
+      description:
+        'Rewrites an EXISTING memory in place — the alternative to saving a near-duplicate. Use it when ' +
+        'a new finding refines, corrects or extends something already stored, or to fix a wrong ' +
+        'classification (e.g. a project fact that was saved as kind="general"). Preserves the id, the ' +
+        'links and the accumulated hits.',
+      inputSchema: z.object({
+        id: z.string().describe('Id of the memory to rewrite (from memory_search / memory_tree)'),
+        text: z.string().optional().describe('New full text, already incorporating the previous content'),
+        addTags: z.array(z.string()).optional().describe('Tags to add, keeping the existing ones'),
+        tags: z.array(z.string()).optional().describe('Replaces the whole tag list'),
+        weight: z.number().min(0).max(1).optional(),
+        kind: z.enum(['project', 'general']).optional().describe('Reclassify. Moving to "project" attaches it to the current folder.'),
+        category: z
+          .enum(['preference', 'convention', 'structure', 'decision', 'context', 'database', 'standard', 'learning'])
+          .optional(),
+        area: z
+          .enum([
+            'overview', 'business', 'design', 'architecture', 'preferences', 'infrastructure',
+            'security', 'development', 'database', 'testing', 'performance', 'dependencies', 'standards',
+          ])
+          .optional(),
+        document: z.string().optional().describe('Replaces the attached markdown'),
+      }),
+      execute: async ({ id, text, addTags, tags, weight, kind, category, area, document }) => {
+        try {
+          const updated = await memory.revise(id, {
+            text, addTags, tags, weight, kind, category, area, document,
+            directory: ctx.directory,
+          })
+          if (!updated) return `Memória #${id} não encontrada.`
+          return `Memória #${id} atualizada: ${describe(updated)}`
+        } catch (err) {
+          // Reclassificação inválida volta como texto para o agente corrigir a
+          // chamada, em vez de derrubar o turno com uma exceção.
+          return `Erro: ${err instanceof Error ? err.message : String(err)}`
+        }
+      },
+    }),
+
+    memory_tree: tool({
+      description:
+        'Returns the memory tree skeleton of this project (id, area and text of every node, indented by ' +
+        'depth). Call it BEFORE saving to decide which node the new memory hangs from, and to spot a ' +
+        'node that should be updated rather than duplicated.',
+      inputSchema: z.object({}),
+      execute: async () => treeReply(await memory.tree(projectId)),
+    }),
+
     memory_search: tool({
       description:
-        'Searches this project\'s memories + general work preferences + lessons from other projects. Use when starting a non-trivial task to load decisions/conventions without re-analyzing the code.',
+        'Searches this project memories + general work preferences + lessons from other projects. Run it ' +
+        'at the start of a non-trivial task, and ALWAYS before memory_save — the result tells you whether ' +
+        'to create a new node or update an existing one, and gives the ids to link against.',
       inputSchema: z.object({
         query: z.string().describe('Search terms'),
         kind: z.enum(['project', 'general']).optional().describe('Restricts to one type'),
@@ -208,13 +363,29 @@ export function createCodeMemoryTools(input: SendMessageInput, ctx: ToolContext)
         const results = await memory.search({
           query,
           kinds: kind ? [kind] : ['project', 'general'],
-          projectId: projectIdOf(ctx.directory),
+          projectId,
           category,
           limit,
         })
         return searchReply(results)
       },
     }),
+
+    memory_link: tool({
+      description:
+        'Connects two existing memories. Use it to attach an orphan node to its area, or to record that ' +
+        'two memories relate. type="parent" means sourceId is the PARENT of targetId.',
+      inputSchema: z.object({
+        sourceId: z.string(),
+        targetId: z.string(),
+        type: z.enum(['parent', 'related']).optional().describe('Default: related'),
+      }),
+      execute: async ({ sourceId, targetId, type }) => {
+        const ok = await memory.link(sourceId, targetId, type)
+        return ok ? 'Memórias conectadas.' : 'Não foi possível conectar: alguma das memórias não existe.'
+      },
+    }),
+
     memory_open: createOpenTool(),
   }
 }

@@ -68,6 +68,20 @@ export const PROJECT_AREAS: Record<ProjectArea, { label: string; description: st
 }
 
 /**
+ * Memória que pertence ao contexto de CÓDIGO e nunca deve aparecer no chat.
+ *
+ * `kind="project"` é óbvio. O caso sutil é `category="learning"`: ele é
+ * gravado com `kind="general"` para poder cruzar de um projeto para outro,
+ * mas continua sendo conhecimento técnico produzido no modo código — só o
+ * modo código consegue criá-lo (o memory_save do chat nem expõe `category`).
+ * Sem esta checagem, os aprendizados vazavam para o canvas do chat, para a
+ * busca do chat e para o system prompt do chat.
+ */
+export function isCodeContext(memory: Pick<Memory, "kind" | "category">): boolean {
+  return memory.kind === "project" || memory.category === "learning"
+}
+
+/**
  * O scope é derivado do kind — não é armazenado, para não existirem
  * combinações inválidas (ex.: core com scope code).
  */
@@ -110,6 +124,14 @@ export interface Memory {
   projectId?: string
   projectName?: string
   directory?: string
+  /**
+   * Projeto em que a memória foi criada, para kinds que NÃO são "project"
+   * (general/core/seasonal). Não isola a memória — ela continua valendo em
+   * todos os projetos —, mas ancora o nó perto da árvore de origem no canvas e
+   * permite ao filtro esconder aprendizados nascidos em outros projetos.
+   */
+  originProjectId?: string
+  originProjectName?: string
   /** Subprojeto dentro do projeto (ex.: "front", "back") — undefined = escopo raiz */
   subproject?: string
   /**

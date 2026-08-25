@@ -45,9 +45,13 @@ const NATIVE_TOOLS = new Set([
   'memory_search',
   'memory_open',
   'memory_graph',
-  // memory_link existe só no modo chat (cria vínculos entre memórias);
-  // também caía no catch-all como servidor "memory"
+  // memory_link e memory_tree existem nos dois modos (vínculos entre memórias
+  // e leitura do esqueleto da árvore); também caíam no catch-all como
+  // servidor "memory"
   'memory_link',
+  'memory_tree',
+  // Revisão in-place de uma memória — mesmo threat model do memory_save
+  'memory_update',
   // Processos em background
   'bash_background',
   'bash_list',

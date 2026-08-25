@@ -1,7 +1,7 @@
 import { EventEmitter } from 'node:events'
 import path from 'node:path'
 import type { Memory, MemoryEvent, MemoryKind, ProjectArea, ProjectCategory, RelationType } from '@shared/memory'
-import { jaccard, searchMemories } from '@shared/memory'
+import { isCodeContext, jaccard, searchMemories } from '@shared/memory'
 import {
   defaultWeight,
   extendedExpiry,
@@ -58,7 +58,11 @@ export interface SaveMemoryInput {
   category?: ProjectCategory
   /** Área de conhecimento (memórias geradas pelo /init) */
   area?: ProjectArea
-  /** Obrigatório quando kind === "project" — o projectId deriva daqui */
+  /**
+   * Pasta da sessão. Obrigatória quando kind === "project" (o projectId deriva
+   * daqui) e usada nos demais kinds para registrar o projeto de ORIGEM — o que
+   * ancora a memória perto da árvore certa no canvas.
+   */
   directory?: string
   /** Subprojeto dentro do projeto (ex.: "front", "back") — só quando kind === "project" */
   subproject?: string
@@ -85,10 +89,17 @@ export async function save(input: SaveMemoryInput): Promise<SaveMemoryResult> {
 
   let projectId: string | undefined
   let projectName: string | undefined
+  let originProjectId: string | undefined
+  let originProjectName: string | undefined
   if (input.kind === 'project') {
     if (!input.directory) throw new Error('Memória de projeto exige a pasta de trabalho da sessão')
     projectId = projectIdOf(input.directory)
     projectName = path.basename(input.directory)
+  } else if (input.directory) {
+    // Memória global nascida dentro de um projeto: continua valendo em todos,
+    // mas guarda a origem para o canvas ancorá-la na árvore certa.
+    originProjectId = projectIdOf(input.directory)
+    originProjectName = path.basename(input.directory)
   }
 
   // Dedup (escudo secundário ao prompt): hash exato ou tags quase idênticas
@@ -110,6 +121,8 @@ export async function save(input: SaveMemoryInput): Promise<SaveMemoryResult> {
       weight: Math.max(existing.weight, weight),
       lastHitAt: now,
       expiresAt: extendedExpiry(existing),
+      originProjectId: existing.originProjectId ?? originProjectId,
+      originProjectName: existing.originProjectName ?? originProjectName,
     }
     if (input.document) {
       await repo.writeDoc(merged.id, input.document)
@@ -142,6 +155,8 @@ export async function save(input: SaveMemoryInput): Promise<SaveMemoryResult> {
     projectName,
     directory: input.kind === 'project' ? input.directory : undefined,
     subproject: input.kind === 'project' ? input.subproject : undefined,
+    originProjectId,
+    originProjectName,
     // "project" sempre carrega category; "general" só quando for um aprendizado
     // reutilizável entre projetos (category === "learning").
     category:
@@ -170,6 +185,12 @@ export interface SearchMemoryInput {
   /** Filtra memórias project por projeto */
   projectId?: string
   category?: ProjectCategory
+  /**
+   * Descarta conhecimento de código (kind project e category learning). O modo
+   * chat passa true: "general" abrange tanto preferências de trabalho quanto
+   * aprendizados técnicos, e só as primeiras valem numa conversa.
+   */
+  excludeCodeContext?: boolean
   limit?: number
 }
 
@@ -182,6 +203,7 @@ export async function search(input: SearchMemoryInput): Promise<Memory[]> {
     if (!input.kinds.includes(m.kind)) return false
     if (m.kind === 'project' && m.projectId !== input.projectId) return false
     if (input.category && m.category !== input.category) return false
+    if (input.excludeCodeContext && isCodeContext(m)) return false
     return true
   })
   const results = searchMemories(pool, input.query, input.limit ?? 8)
@@ -281,6 +303,150 @@ export async function update(
   return next
 }
 
+export interface ReviseMemoryInput {
+  /** Substitui o texto por inteiro (o agente reescreve incorporando o novo fato). */
+  text?: string
+  /** Substitui as tags. Para acrescentar, use `addTags`. */
+  tags?: string[]
+  /** Acrescenta tags preservando as existentes. */
+  addTags?: string[]
+  weight?: number
+  /** Reclassificação — é como um general/learning mal classificado vira project. */
+  kind?: MemoryKind
+  category?: ProjectCategory
+  area?: ProjectArea
+  /** Substitui o markdown anexado. */
+  document?: string
+  /** Pasta da sessão — necessária ao promover uma memória para kind="project". */
+  directory?: string
+}
+
+/**
+ * Revisão de uma memória existente pelo agente. É a alternativa a criar uma
+ * duplicata: quando um fato novo apenas refina algo já salvo, reescreve-se o
+ * texto no lugar. Também é o caminho para corrigir classificação — promover um
+ * "general" que na verdade era fato do projeto.
+ */
+export async function revise(id: string, input: ReviseMemoryInput): Promise<Memory | null> {
+  const memory = await repo.get(id)
+  if (!memory) return null
+
+  const kind = input.kind ?? memory.kind
+  let category = input.category ?? memory.category
+  const weight = input.weight != null ? clampWeight(input.weight) : memory.weight
+
+  // "learning" é exclusiva de kind="general". Ao promover um aprendizado mal
+  // classificado para memória de projeto, a categoria tem que vir junto — senão
+  // o nó ficaria com uma categoria que a UI e o prompt não sabem posicionar.
+  if (kind === 'project' && category === 'learning') {
+    if (!input.category || input.category === 'learning') {
+      throw new Error('Promover para kind="project" exige uma category de projeto (learning é exclusiva de general)')
+    }
+    category = input.category
+  }
+  if (kind === 'general' && category && category !== 'learning') category = undefined
+
+  const next: Memory = {
+    ...memory,
+    kind,
+    weight,
+    ...(input.text != null ? { text: input.text.trim() } : undefined),
+    ...(input.area != null ? { area: input.area } : undefined),
+    category,
+  }
+
+  if (input.tags != null) next.tags = normalizeTags(input.tags)
+  else if (input.addTags != null) next.tags = normalizeTags([...memory.tags, ...input.addTags])
+
+  // Virou memória de projeto: precisa de identidade de projeto para não sumir
+  // do filtro do canvas. A pasta da sessão manda; a origem serve de reserva.
+  if (kind === 'project' && !next.projectId) {
+    const directory = input.directory ?? memory.directory
+    if (!directory) {
+      throw new Error('Promover para kind="project" exige a pasta de trabalho da sessão')
+    }
+    next.projectId = projectIdOf(directory)
+    next.projectName = path.basename(directory)
+    next.directory = directory
+  }
+  if (kind !== 'project') {
+    // Deixou de ser memória de projeto, mas continua tendo nascido em um: a
+    // origem preserva a âncora no canvas em vez de jogá-la no grupo global.
+    next.originProjectId = memory.originProjectId ?? memory.projectId
+    next.originProjectName = memory.originProjectName ?? memory.projectName
+    next.projectId = undefined
+    next.projectName = undefined
+    next.directory = undefined
+    next.subproject = undefined
+    next.area = undefined
+  }
+
+  // A expiração é recalculada porque kind/category/weight podem ter mudado —
+  // um context promovido a decision deixa de expirar, e o caminho inverso
+  // precisa ganhar um prazo novo em vez de nascer vencido.
+  const ttl = ttlFor(kind, weight, category)
+  next.expiresAt = ttl == null ? null : (memory.expiresAt ?? Date.now() + ttl)
+
+  if (input.document != null) {
+    await repo.writeDoc(id, input.document)
+    next.hasDoc = true
+  }
+
+  await repo.put(next)
+  emit('updated', next)
+  return next
+}
+
+export interface TreeNodeSummary {
+  id: string
+  text: string
+  area?: ProjectArea
+  category?: ProjectCategory
+  subproject?: string
+  depth: number
+  childIds: string[]
+}
+
+/**
+ * Esqueleto da árvore de um projeto: cada nó com id, rótulo e filhos. É o que o
+ * agente lê antes de salvar para escolher a QUEM se conectar — sem isto ele não
+ * tem como saber que existe um node "Design System" e acaba criando um nó solto.
+ */
+export async function tree(projectId: string): Promise<TreeNodeSummary[]> {
+  const members = (await alive()).filter((m) => m.kind === 'project' && m.projectId === projectId)
+  if (members.length === 0) return []
+  const byId = new Map(members.map((m) => [m.id, m]))
+
+  const root =
+    members.find((m) => m.area === 'overview' && !m.subproject) ??
+    [...members].sort((a, b) => b.weight - a.weight)[0]
+
+  const depth = new Map<string, number>([[root.id, 0]])
+  const childrenOf = new Map<string, string[]>()
+  const queue = [root.id]
+  while (queue.length) {
+    const id = queue.shift()!
+    for (const rel of byId.get(id)?.relatedIds ?? []) {
+      if (!byId.has(rel) || depth.has(rel)) continue
+      depth.set(rel, depth.get(id)! + 1)
+      childrenOf.set(id, [...(childrenOf.get(id) ?? []), rel])
+      queue.push(rel)
+    }
+  }
+
+  return members
+    .map((m) => ({
+      id: m.id,
+      text: m.text,
+      area: m.area,
+      category: m.category,
+      subproject: m.subproject,
+      depth: depth.get(m.id) ?? 99,
+      childIds: childrenOf.get(m.id) ?? [],
+    }))
+    .sort((a, b) => a.depth - b.depth || (a.area ?? '').localeCompare(b.area ?? ''))
+}
+
 /**
  * Promove in-place: seasonal → core; project/context → decision.
  * `promotedFrom` registra a origem (kind/category anterior) para a UI.
@@ -352,7 +518,10 @@ export async function loadPromptContext(
         .sort((a, b) => b.createdAt - a.createdAt)
         .slice(0, 8),
       general: general.slice(0, 10),
-      learning: learningPool.sort(byWeight).slice(0, 5),
+      // Aprendizados são contexto de código ("Prisma no Alpine exige openssl")
+      // e não ajudam em nada numa conversa — injetá-los aqui só gastava tokens
+      // e misturava os dois contextos.
+      learning: [],
       project: [],
     }
   }

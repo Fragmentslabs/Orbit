@@ -175,41 +175,61 @@ KINDS:
   so it resurfaces when another project uses the same stack.
 
 Use weight to indicate importance (0.0-1.0). Use tags for future search.
-Trust your judgment about what to save — erring on the side of saving is better than forgetting.
+
+BEFORE SAVING: run memory_search on the subject. If a memory already covers it, use memory_update to
+rewrite that one incorporating the new detail — do NOT create a second, nearly identical memory. Only
+save a new node when the subject is genuinely absent, and connect it via relatedIds when you do.
 
 memory_search: use whenever the user references something past.
 memory_link: connect existing memories — thinking in terms of a tree (parent-child) or graph (related).`
 
-const BRAIN_CODE_PROMPT = `BRAIN MODE ACTIVE (CODE). You have memory_save / memory_search / memory_open / memory_graph,
-isolated by PROJECT (active working folder).
+const BRAIN_CODE_PROMPT = `BRAIN MODE ACTIVE (CODE). Tools: memory_tree / memory_search / memory_save /
+memory_update / memory_link / memory_open / memory_graph — all scoped to the PROJECT (active folder).
 
-Code memories document HOW TO WORK on this codebase — architecture, decisions, conventions,
-preferences. They persist across sessions so you don't have to re-analyze the project every time.
+Project memory is a TREE, not a pile of notes. Your job is to keep that tree accurate and connected,
+so future sessions read the tree instead of re-analyzing the codebase.
 
-TREE STRUCTURE:
-- The "overview" node is the root. Areas (business, design, architecture, etc.) are direct children.
-- When saving, think about where the memory fits: pass relatedIds with the ids of the areas or
-  related memories, and relatedTypes indicating "parent" (hierarchy) or "related" (free connection).
-- A memory can have multiple parents. E.g.: "We use Shadcn UI" is a child of "Design System".
-  "Light/dark theme" is a child of both "Shadcn UI" and "Style preferences".
+SHAPE OF THE TREE:
+  <project>                        <- overview node, the root
+    ├── front / back / api         <- one node per subproject, when the repo has them
+    │     ├── architecture         <- areas hanging off the subproject they describe
+    │     └── design
+    ├── business                   <- areas that span the WHOLE repo hang off the root
+    └── infrastructure
+Each area node is a parent; concrete facts (a decision, a convention, a schema) hang off the area
+they belong to. Depth is good: a fact about the login screen belongs under front > design, not under
+the root. In a repo with "Front" and "Back" folders, the root node is the project, the two
+subproject nodes are its children, everything specific hangs under the matching side, and only the
+cross-cutting knowledge (business rules, shared conventions) stays on the root.
 
-KINDS:
-1. kind="general": global work style ("atomic commits", "reply in pt"). Applies everywhere.
-   - category="learning" (optional): a lesson reusable in OTHER projects — not a fact about this
-     project, but a "how to solve X" tied to a technology (e.g. "Prisma migrations on SQLite
-     require --create-only before editing the migration"). Tag it with the technology — it
-     resurfaces automatically in future projects using the same stack. Whenever you fix a
-     non-obvious bug or framework workaround, consider saving it here.
-2. kind="project" (category REQUIRED):
-   - preference / convention / structure / decision / context
-   - database: schemas, models, migrations, data relationships
-   - standard: an EXPLICIT project rule (commit style, branching, naming) — different from
-     "preference", which is observed/personal style, not a declared rule.
+BEFORE SAVING — always, no exceptions:
+1. memory_tree — see the existing tree and pick the node the new fact belongs under.
+2. memory_search — check whether this is already written down.
+3. Then decide:
+   - Already covered and still correct -> save nothing.
+   - Already covered but incomplete or outdated -> memory_update on that id, rewriting the text to
+     incorporate the new finding. This is the DEFAULT when the subject already exists. Do not create
+     a second node saying almost the same thing.
+   - Genuinely new -> memory_save WITH relatedIds pointing at the parent node
+     (relatedTypes: { "<parent_id>": "parent" }), plus "related" links to any sibling it touches.
+A node saved without a parent is invisible to graph navigation and useless. memory_save refuses it.
 
-DOC: use document for extensive context (maps, schemas). Text remains the short summary.
+CHOOSING THE KIND — the split that actually matters:
+- kind="project" is the DEFAULT and covers the overwhelming majority. Anything that mentions this
+  codebase's entities, schema, roles, routes, plans, flows, deploy setup, or business rules is a
+  project memory, even when you learned it while fixing a generic bug.
+  category: preference | convention | structure | decision | context | database | standard
+  ("context" expires; use it for the transient state of ongoing work.)
+- kind="general" is RARE. Test it like this: would this sentence still be true and useful in a
+  project that shares NOTHING with this one except the framework? If it names an entity, a role, a
+  plan, a table or a rule of THIS product, the answer is no — save it as kind="project".
+    "Prisma on Alpine needs openssl installed via apk"  -> general/learning (framework-level)
+    "The team feature is tied to the CLINIC plan"       -> project/decision (this product's rule)
+    "Stripe webhooks arrive through an n8n relay"       -> project/decision (this architecture)
+  When it IS a general/learning, tag it with the technology so it resurfaces in other projects.
 
-Trust your judgment about what to save. Prefer creating and connecting over omitting.
-Use memory_graph to navigate the project graph. Use memory_search for text search.`
+DOC: use document for extensive context (maps, schemas). text stays the short summary.
+Use memory_graph to navigate the project graph, memory_search for text search.`
 
 const SKILLS_INSTRUCTION = `USER SKILLS. The sections below are knowledge curated by the user (conventions, patterns, permanent instructions). Apply a skill whenever the topic is relevant — you decide contextually. When the user's message references @skill-name, applying that skill is MANDATORY.`
 
