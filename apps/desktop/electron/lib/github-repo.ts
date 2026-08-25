@@ -1,5 +1,6 @@
 import { execFile, spawn } from 'node:child_process'
 import { promisify } from 'node:util'
+import { userShellEnv } from './shell-env'
 
 /**
  * Criação do repositório remoto no GitHub a partir de uma pasta que ainda não
@@ -19,7 +20,18 @@ import { promisify } from 'node:util'
 const execFileAsync = promisify(execFile)
 
 const API = 'https://api.github.com'
-const GIT_ENV = { ...process.env, GIT_TERMINAL_PROMPT: '0', GIT_EDITOR: 'true' }
+
+/**
+ * PATH completo do usuário, não o sanitizado que o macOS entrega a apps de
+ * GUI. Sem isto o `gh` do Homebrew (/opt/homebrew/bin) fica invisível — o
+ * `git` escapa porque mora em /usr/bin, que está no PATH mínimo.
+ * userShellEnv lê o disco, então o resultado é memoizado.
+ */
+let envCache: NodeJS.ProcessEnv | undefined
+function gitEnv(): NodeJS.ProcessEnv {
+  envCache ??= userShellEnv()
+  return { ...envCache, GIT_TERMINAL_PROMPT: '0', GIT_EDITOR: 'true' }
+}
 
 export type CreateRepoResult =
   | { ok: true; url: string; fullName: string; pushed: boolean }
@@ -55,17 +67,25 @@ interface TokenLookup {
 }
 
 /** Token do GitHub CLI, quando instalado e autenticado. */
-async function readGhToken(cwd: string): Promise<string | null> {
+async function readGhToken(cwd: string): Promise<{ token: string | null; reason: string }> {
   try {
     const { stdout } = await execFileAsync('gh', ['auth', 'token'], {
       cwd,
-      env: process.env,
+      env: gitEnv(),
       timeout: 10_000,
     })
     const token = stdout.trim()
-    return token || null
-  } catch {
-    return null
+    return token
+      ? { token, reason: '' }
+      : { token: null, reason: 'o gh respondeu sem token (rode `gh auth login`)' }
+  } catch (err) {
+    const e = err as { code?: string; stderr?: string }
+    // ENOENT = binário ausente; qualquer outra saída = gh existe mas recusou.
+    const reason =
+      e.code === 'ENOENT'
+        ? 'gh não encontrado no PATH'
+        : `gh falhou: ${(e.stderr ?? '').trim().slice(0, 200) || String(err).slice(0, 200)}`
+    return { token: null, reason }
   }
 }
 
@@ -81,7 +101,7 @@ async function readGitHubToken(cwd: string): Promise<TokenLookup> {
   return new Promise((resolve) => {
     let child: ReturnType<typeof spawn>
     try {
-      child = spawn('git', ['credential', 'fill'], { cwd, env: GIT_ENV })
+      child = spawn('git', ['credential', 'fill'], { cwd, env: gitEnv() })
     } catch (err) {
       resolve({ token: null, hasHttpsCredential: false, reason: `spawn falhou: ${err instanceof Error ? err.message : String(err)}` })
       return
@@ -219,7 +239,7 @@ export async function createRemoteRepo(
   // Publicar exige ao menos um commit: sem HEAD, o push não tem o que enviar e
   // o repositório remoto nasceria órfão do local.
   try {
-    await execFileAsync('git', ['rev-parse', 'HEAD'], { cwd: repoPath, env: GIT_ENV, timeout: 15_000 })
+    await execFileAsync('git', ['rev-parse', 'HEAD'], { cwd: repoPath, env: gitEnv(), timeout: 15_000 })
   } catch {
     return { ok: false, kind: 'noCommits', message: 'HEAD ausente' }
   }
@@ -231,10 +251,13 @@ export async function createRemoteRepo(
   if (!token) {
     // Sem credencial HTTPS (típico de quem usa SSH) o gh costuma ser a fonte
     // que resta antes de pedir o token ao usuário.
-    token = await readGhToken(repoPath)
-  }
-  if (!token) {
-    return { ok: false, kind: 'noCredential', message: lido.reason }
+    const gh = await readGhToken(repoPath)
+    token = gh.token
+    if (!token) {
+      // As duas tentativas entram na mensagem: saber qual delas falhou e por
+      // quê é o que permite ao usuário corrigir em vez de adivinhar.
+      return { ok: false, kind: 'noCredential', message: `${lido.reason}; ${gh.reason}` }
+    }
   }
 
   const created = await createOnGitHub(trimmed, isPrivate, token)
@@ -247,7 +270,7 @@ export async function createRemoteRepo(
   try {
     await execFileAsync('git', ['remote', 'add', 'origin', remoteUrl], {
       cwd: repoPath,
-      env: GIT_ENV,
+      env: gitEnv(),
       timeout: 15_000,
     })
   } catch (err) {
@@ -261,14 +284,14 @@ export async function createRemoteRepo(
   try {
     const { stdout } = await execFileAsync('git', ['branch', '--show-current'], {
       cwd: repoPath,
-      env: GIT_ENV,
+      env: gitEnv(),
       timeout: 15_000,
     })
     const branch = stdout.trim()
     if (!branch) throw new Error('sem branch atual')
     await execFileAsync('git', ['push', '-u', 'origin', branch], {
       cwd: repoPath,
-      env: GIT_ENV,
+      env: gitEnv(),
       timeout: 120_000,
     })
     return { ok: true, url: created.repo.html_url, fullName: created.repo.full_name, pushed: true }
