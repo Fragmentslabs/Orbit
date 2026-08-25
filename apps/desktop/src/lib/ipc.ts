@@ -369,6 +369,9 @@ export const initApi = {
   }) => window.ipcRenderer.invoke("init:run", input),
   status: (directory: string) =>
     window.ipcRenderer.invoke("init:status", directory) as Promise<InitStatus>,
+  /** Cancela a análise em andamento. Devolve false se não havia nenhuma. */
+  stop: (directory: string) =>
+    window.ipcRenderer.invoke("init:stop", directory) as Promise<boolean>,
   onEvent: (listener: (event: InitEvent) => void) => {
     const wrapper = window.ipcRenderer.on("init:event", (event) => listener(event as InitEvent))
     return () => window.ipcRenderer.off("init:event", wrapper)

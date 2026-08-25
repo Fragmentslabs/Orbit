@@ -37,7 +37,7 @@ import {
 } from './vision'
 import { cleanupRevert } from './session/revert'
 import { capture, diff } from './snapshot'
-import { runProjectInit, type InitHooks } from './project-init'
+import { isInitAborted, runProjectInit, type InitHooks } from './project-init'
 import { PROJECT_AREAS, type ProjectArea } from '@shared/memory'
 import { readJson, writeJson } from './storage'
 import { notifyChatError, notifyNewMessage } from './notifications'
@@ -893,6 +893,9 @@ export async function runChat(win: BrowserWindow, input: SendMessageInput): Prom
           force: input.text.includes('--force'),
           hooks,
           language: input.language,
+          // Sem isto o botão de parar encerrava só a UI: o pipeline continuava
+          // rodando os subagents até o fim, invisível.
+          signal: controller.signal,
         })
         mainPart.state = 'done'
         mainPart.durationMs = Date.now() - mainStart
@@ -905,19 +908,24 @@ export async function runChat(win: BrowserWindow, input: SendMessageInput): Prom
             : '## Análise concluída\n\nNenhuma memória foi gerada — o projeto pode estar vazio ou inacessível.'
         upsertPart({ id: newId('prt'), type: 'text', text: summary, state: 'done' })
       } catch (err) {
-        mainPart.state = 'error'
+        const cancelled = isInitAborted(err) || controller.signal.aborted
+        mainPart.state = cancelled ? 'done' : 'error'
         mainPart.durationMs = Date.now() - mainStart
         upsertPart(mainPart)
         for (const part of agentParts.values()) {
           if (part.state === 'running') {
-            part.state = 'error'
+            part.state = cancelled ? 'done' : 'error'
             upsertPart(part)
           }
         }
         upsertPart({
           id: newId('prt'),
           type: 'text',
-          text: `## Análise falhou\n\n${errorToText(err)}`,
+          // Cancelar é uma escolha do usuário, não uma falha — as memórias já
+          // salvas até aqui permanecem.
+          text: cancelled
+            ? '## Análise cancelada\n\nO que já foi salvo permanece; rode `/init` de novo para continuar.'
+            : `## Análise falhou\n\n${errorToText(err)}`,
           state: 'done',
         })
       }

@@ -24,6 +24,40 @@ import { describeScan, scanProject, type ProjectScan } from './scanner'
  */
 
 const running = new Set<string>()
+/**
+ * Controlador por pasta — é o que dá ao botão de parar algum efeito sobre o
+ * pipeline. Sem ele, abortar a sessão de chat encerrava só a UI e os subagents
+ * seguiam rodando até o fim.
+ */
+const initAborts = new Map<string, AbortController>()
+
+/** Erro de cancelamento — distinguido do erro real para a UI não gritar falha. */
+export class InitAbortedError extends Error {
+  constructor() {
+    super('Análise cancelada.')
+    this.name = 'InitAbortedError'
+  }
+}
+
+export function isInitAborted(err: unknown): boolean {
+  return (
+    err instanceof InitAbortedError ||
+    (err instanceof Error && (err.name === 'AbortError' || err.name === 'InitAbortedError'))
+  )
+}
+
+/** Cancela a análise em andamento de uma pasta. Idempotente. */
+export function abortProjectInit(directory: string): boolean {
+  const controller = initAborts.get(directory)
+  if (!controller) return false
+  controller.abort()
+  return true
+}
+
+/** Ponto de checagem entre fases — evita começar a próxima etapa após o stop. */
+function throwIfAborted(signal?: AbortSignal): void {
+  if (signal?.aborted) throw new InitAbortedError()
+}
 const WORKER_CONCURRENCY = 3
 const WORKER_MAX_STEPS = 12
 const WORKER_TIMEOUT_MS = 4 * 60 * 1000
@@ -110,7 +144,7 @@ interface PlannedArea {
 async function planAreasWithLLM(
   model: LanguageModel,
   scan: ProjectScan,
-  opts?: { scopeLabel?: string; isRootWithSubprojects?: boolean; language?: string },
+  opts?: { scopeLabel?: string; isRootWithSubprojects?: boolean; language?: string; signal?: AbortSignal },
 ): Promise<PlannedArea[]> {
   const scanDescription = describeScan(scan)
   const hasDocs = scan.docs.length > 0 ? `\nDocumentation found: ${scan.docs.join(', ')}` : ''
@@ -130,6 +164,7 @@ async function planAreasWithLLM(
 
   const { text } = await generateText({
     model,
+    abortSignal: opts?.signal,
     system: `You are an onboarding orchestrator. Decide which areas to investigate and define custom missions for each one.`,
     prompt: `Project scan${opts?.scopeLabel ? ` (scope: ${opts.scopeLabel})` : ''}:\n${scanDescription}${hasDocs}${hasSchemas}${hasSubprojects}${scopeInstruction}
 
@@ -161,7 +196,12 @@ Reply with JSON in the format:
       (p) => p.area in PROJECT_AREAS && typeof p.mission === 'string' && p.mission.trim().length > 10,
     )
     if (valid.length >= 3) return valid
-  } catch { /* fallback para áreas fixas */ }
+  } catch (err) {
+    // Cancelamento não pode escorregar para o fallback: sem isto, parar durante
+    // o planejamento fazia o init seguir com as áreas fixas.
+    if (opts?.signal?.aborted || isInitAborted(err)) throw new InitAbortedError()
+    /* falha real do planejador: cai nas áreas fixas abaixo */
+  }
 
   // Fallback: áreas padrão com missões enriquecidas
   const fixed = planAreas(scan)
@@ -249,9 +289,16 @@ async function exploreArea(
   workerModelId: string,
   scopeLabel?: string,
   language?: string,
+  signal?: AbortSignal,
 ): Promise<AreaResult> {
   const controller = new AbortController()
   const timeout = setTimeout(() => controller.abort(), WORKER_TIMEOUT_MS)
+  // O worker morre pelo timeout OU pelo stop do usuário — o que vier primeiro.
+  const onExternalAbort = () => controller.abort()
+  if (signal) {
+    if (signal.aborted) controller.abort()
+    else signal.addEventListener('abort', onExternalAbort, { once: true })
+  }
   const key = scopeLabel ? `${scopeLabel}:${area}` : area
   const label = scopeLabel ? `${scopeLabel} · ${PROJECT_AREAS[area].label}` : PROJECT_AREAS[area].label
   hooks.onAgentStart?.(key, label)
@@ -298,11 +345,20 @@ ${scanDescription}`,
     hooks.onAgentDone?.(key, true)
     return { area, raw: buffer, failed: false }
   } catch (err) {
+    // Stop do usuário não é falha desta área: propaga para o escopo parar
+    // de vez. Sem isto o erro era engolido e o pipeline seguia para a
+    // próxima área — era esse swallow que fazia o botão de parar não parar.
+    if (signal?.aborted) {
+      hooks.onAgentDelta?.(key, '\n_(cancelado)_')
+      hooks.onAgentDone?.(key, false)
+      throw new InitAbortedError()
+    }
     hooks.onAgentDelta?.(key, `\n_(exploração interrompida: ${errorToText(err)})_`)
     hooks.onAgentDone?.(key, false)
     return { area, raw: buffer, failed: true }
   } finally {
     clearTimeout(timeout)
+    signal?.removeEventListener('abort', onExternalAbort)
   }
 }
 
@@ -353,6 +409,7 @@ async function refineFindings(
   raw: string,
   savedSummaries: Map<ProjectArea, string>,
   language?: string,
+  signal?: AbortSignal,
 ): Promise<RefineOutput> {
   const savedList = [...savedSummaries.entries()]
     .filter(([a]) => a !== area)
@@ -384,7 +441,7 @@ Reply with JSON:
   for (let attempt = 0; attempt < 3; attempt++) {
     if (attempt > 0) await new Promise((r) => setTimeout(r, attempt * 1000))
     try {
-      const { text } = await generateText({ model, system, prompt })
+      const { text } = await generateText({ model, system, prompt, abortSignal: signal })
       const parsed = parseRefineJson(text)
       if (parsed) return parsed
       lastError = new Error('JSON inválido')
@@ -503,6 +560,12 @@ export interface RunInitInput {
   /** Idioma preferido do usuário (nome em inglês, ex.: "Portuguese") — usado
    * nos prompts internos do pipeline; cai em "Portuguese" quando ausente. */
   language?: string
+  /**
+   * Cancelamento externo. O /init roda dentro de uma sessão de chat, então o
+   * botão de parar aborta o controller da sessão — este signal é o que leva
+   * esse aborto até os workers.
+   */
+  signal?: AbortSignal
 }
 
 interface RunScopeInput {
@@ -531,19 +594,21 @@ interface RunScopeInput {
   /** Idioma preferido do usuário (nome em inglês, ex.: "Portuguese") — repassado
    * a todos os prompts internos deste escopo. */
   language?: string
+  /** Cancelamento — propagado a cada worker e checado entre as fases. */
+  signal?: AbortSignal
 }
 
 /** Planeja, explora, consolida e revisa gaps para UM escopo (raiz ou um
  * subprojeto) — cada subprojeto roda isso isoladamente, gerando sua própria
  * sub-árvore de áreas conectadas ao node do subprojeto, não direto à raiz. */
 async function runScope(input: RunScopeInput): Promise<{ done: ProjectArea[]; summaries: Map<ProjectArea, string> }> {
-  const { storageDirectory, toolDirectory, scanDescription, scan, model, workerModel, workerProviderId, workerModelId, rootId, subproject, scopeLabel, isRootWithSubprojects, force, hooks, main, language } = input
+  const { storageDirectory, toolDirectory, scanDescription, scan, model, workerModel, workerProviderId, workerModelId, rootId, subproject, scopeLabel, isRootWithSubprojects, force, hooks, main, language, signal } = input
   const savedIds = new Map<ProjectArea, string>()
   const savedSummaries = new Map<ProjectArea, string>()
   const done: ProjectArea[] = []
 
   // 1. Planejamento de áreas com LLM (autônomo, adapta-se ao escopo)
-  const plannedAreas = await planAreasWithLLM(model, scan, { scopeLabel, isRootWithSubprojects, language })
+  const plannedAreas = await planAreasWithLLM(model, scan, { scopeLabel, isRootWithSubprojects, language, signal })
   if (plannedAreas.length === 0) {
     main(`${scopeLabel ? `**${scopeLabel}**: ` : ''}Nenhuma área relevante encontrada para este escopo.\n\n`)
     return { done, summaries: savedSummaries }
@@ -567,9 +632,10 @@ async function runScope(input: RunScopeInput): Promise<{ done: ProjectArea[]; su
         main(`✗ **${label}** falhou sem levantamento — pulando. ${progress}\n`)
         return
       }
+      if (signal?.aborted) return
       main(`Revisando **${label}**… ${progress}\n`)
       try {
-        const refined = await refineFindings(model, result.area, result.raw, savedSummaries, language)
+        const refined = await refineFindings(model, result.area, result.raw, savedSummaries, language, signal)
         const id = await saveAreaMemory(storageDirectory, result.area, refined, rootId, force, subproject)
         savedIds.set(result.area, id)
         savedSummaries.set(result.area, refined.summary)
@@ -582,6 +648,10 @@ async function runScope(input: RunScopeInput): Promise<{ done: ProjectArea[]; su
         }
         if (refined.learnings?.length) await saveLearnings(refined.learnings, result.area, main, storageDirectory)
       } catch (err) {
+        // Cancelado no meio da revisão: sai sem gravar. O fallback abaixo existe
+        // para salvar trabalho perdido por falha do revisor, não para persistir
+        // um levantamento que o usuário mandou parar.
+        if (signal?.aborted || isInitAborted(err)) return
         // Revisão falhou: salva o levantamento bruto para não perder o trabalho
         const fallback = fallbackParse(result.raw)
         const id = await saveAreaMemory(storageDirectory, result.area, fallback, rootId, force, subproject)
@@ -599,19 +669,26 @@ async function runScope(input: RunScopeInput): Promise<{ done: ProjectArea[]; su
   const workers = Array.from({ length: maxWorkers }, async () => {
     while (queue.length > 0) {
       const planned = queue.shift()!
-      const result = await exploreArea(workerModel, scanDescription, toolDirectory, planned.area, planned.mission, hooks, workerProviderId, workerModelId, scopeLabel, language)
+      const result = await exploreArea(workerModel, scanDescription, toolDirectory, planned.area, planned.mission, hooks, workerProviderId, workerModelId, scopeLabel, language, signal)
       // Dispara a consolidação e segue para a próxima área sem esperar
       void consolidate(result)
     }
   })
-  await Promise.all(workers)
-  await refineChain
+  try {
+    await Promise.all(workers)
+  } finally {
+    // A cadeia de consolidação precisa assentar mesmo quando os workers
+    // abortam, senão sobra uma promise pendente rejeitando fora do fluxo.
+    await refineChain.catch(() => {})
+  }
 
   // 3. Loop de revisão: identifica gaps e cria workers adicionais se necessário
   const MAX_LOOP = 2
   for (let loopIter = 0; loopIter < MAX_LOOP; loopIter++) {
     const allSaved = [...savedSummaries.entries()].map(([a, s]) => `- ${PROJECT_AREAS[a].label}: ${s}`).join('\n')
+    throwIfAborted(signal)
     const { text: reviewText } = await generateText({
+      abortSignal: signal,
       model,
       system: `You are an onboarding reviewer. Analyze whether coverage is complete or if there are important gaps.`,
       prompt: `Consolidated areas${scopeLabel ? ` for subproject "${scopeLabel}"` : ''}:
@@ -633,9 +710,9 @@ Reply with JSON (write "reason", "gap", and "mission" text values in ${outputLan
       if (!(review.area in PROJECT_AREAS) || review.area === 'overview') break
       if (done.includes(review.area)) continue // já investigada
       main(`\n🔁 Loop ${loopIter + 1}${scopeLabel ? ` (${scopeLabel})` : ''}: gap detectado — **${review.gap}**\n`)
-      const extraResult = await exploreArea(workerModel, scanDescription, toolDirectory, review.area as Exclude<ProjectArea, 'overview'>, review.mission, hooks, workerProviderId, workerModelId, scopeLabel, language)
+      const extraResult = await exploreArea(workerModel, scanDescription, toolDirectory, review.area as Exclude<ProjectArea, 'overview'>, review.mission, hooks, workerProviderId, workerModelId, scopeLabel, language, signal)
       if (extraResult.raw.trim()) {
-        const refined = await refineFindings(model, review.area as ProjectArea, extraResult.raw, savedSummaries, language)
+        const refined = await refineFindings(model, review.area as ProjectArea, extraResult.raw, savedSummaries, language, signal)
         await saveAreaMemory(storageDirectory, review.area as ProjectArea, refined, rootId, force, subproject)
         savedSummaries.set(review.area as ProjectArea, refined.summary)
         done.push(review.area as ProjectArea)
@@ -644,6 +721,11 @@ Reply with JSON (write "reason", "gap", and "mission" text values in ${outputLan
       }
     } catch { break }
   }
+
+  // O catch acima engole qualquer erro do loop, inclusive o cancelamento — sem
+  // esta checagem o escopo retornaria "concluído" e o init seguiria para o
+  // subprojeto seguinte depois do stop.
+  throwIfAborted(signal)
 
   return { done, summaries: savedSummaries }
 }
@@ -655,6 +737,19 @@ export async function runProjectInit(input: RunInitInput): Promise<string[]> {
     throw new Error('Já existe uma análise em andamento para esta pasta.')
   }
   running.add(directory)
+
+  // Um controller próprio por pasta, encadeado ao signal externo quando existe.
+  // O externo cobre o /init disparado dentro de uma sessão de chat (o botão de
+  // parar aborta a sessão); o registro cobre o init:stop vindo do card, que
+  // roda fora de qualquer sessão.
+  const controller = new AbortController()
+  const signal = controller.signal
+  initAborts.set(directory, controller)
+  const onExternalAbort = () => controller.abort()
+  if (input.signal) {
+    if (input.signal.aborted) controller.abort()
+    else input.signal.addEventListener('abort', onExternalAbort, { once: true })
+  }
 
   const main = (text: string) => hooks.onMainDelta?.(text)
 
@@ -672,6 +767,7 @@ export async function runProjectInit(input: RunInitInput): Promise<string[]> {
           : '\n'),
     )
 
+    throwIfAborted(signal)
     const model = await resolveModel(input.providerId, input.modelId)
     const workerProviderId = input.workerProviderId ?? input.providerId
     const workerModelId = input.workerModelId ?? input.modelId
@@ -681,6 +777,7 @@ export async function runProjectInit(input: RunInitInput): Promise<string[]> {
     // áreas já se ligarem a ele; complementos o enriquecem depois
     const { text: overviewText } = await generateText({
       model,
+      abortSignal: signal,
       system:
         `You are a project analyst. Generate a concise overview in markdown: what the project is about, stack and technologies, general structure. Mention subprojects or documentation if there are any. Write it in ${outputLanguage(language)} — it becomes project memory content shown to the user.`,
       prompt: `Based on the scan below, write the project overview (in ${outputLanguage(language)}):\n\n${scanDescription}`,
@@ -690,6 +787,7 @@ export async function runProjectInit(input: RunInitInput): Promise<string[]> {
       tags: ['overview', scan.name.toLowerCase()],
       document: overviewText.trim(),
     }
+    throwIfAborted(signal)
     const rootId = await saveAreaMemory(directory, 'overview', overview, undefined, force)
     main(`✓ **${PROJECT_AREAS.overview.label}** salvo — é o node central do grafo.\n`)
 
@@ -714,6 +812,7 @@ export async function runProjectInit(input: RunInitInput): Promise<string[]> {
       hooks,
       main,
       language,
+      signal,
     })
     done.push(...rootScope.done)
 
@@ -753,6 +852,7 @@ export async function runProjectInit(input: RunInitInput): Promise<string[]> {
         hooks,
         main,
         language,
+        signal,
       })
       done.push(...spScopeResult.done)
       main(`✓ Sub-árvore de **${sp.name}**: ${spScopeResult.done.length} área(s) mapeada(s).\n`)
@@ -762,8 +862,10 @@ export async function runProjectInit(input: RunInitInput): Promise<string[]> {
     // docs) — cross-cutting, por isso fica só no escopo raiz mesmo com subprojetos.
     if (scan.docs.length > 0 || scan.schemas.length > 0 || hasSubprojects) {
       main('\nAnalisando documentação e schemas para memórias de contexto…\n')
+      throwIfAborted(signal)
       const { text: ctxPlan } = await generateText({
         model,
+        abortSignal: signal,
         system: `You are a project analyst. Based on the already-consolidated areas and the files found, decide which context memories to create (category: "context", weight <= 0.3). Contexts capture: MVP features, roadmap, references to important files. Write all JSON text field values in ${outputLanguage(language)} — they become project memory content shown to the user.`,
         prompt: `Documentation found: ${scan.docs.join(', ') || 'none'}
 Schemas: ${scan.schemas.join(', ') || 'none'}
@@ -849,10 +951,18 @@ IMPORTANT:
     emit('done', { directory, areas: done })
     return done
   } catch (err) {
+    // Cancelar não é falhar: o evento sai como "done" sem áreas para a UI
+    // encerrar o progresso em vez de exibir um erro que o usuário provocou.
+    if (isInitAborted(err) || signal.aborted) {
+      emit('done', { directory, areas: [] })
+      throw new InitAbortedError()
+    }
     emit('error', { directory, error: err instanceof Error ? err.message : String(err) })
     throw err
   } finally {
     running.delete(directory)
+    if (initAborts.get(directory) === controller) initAborts.delete(directory)
+    input.signal?.removeEventListener('abort', onExternalAbort)
   }
 }
 

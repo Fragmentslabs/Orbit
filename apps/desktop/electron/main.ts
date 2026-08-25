@@ -14,7 +14,7 @@ import { detectLocal } from './lib/detect-local'
 import { killAll as killAllProcesses, listProcesses, killProcess, getProcessOutput } from './lib/process-manager'
 import { getModelsSnapshot, invalidateModelsSnapshot } from './lib/models'
 import { revert as revertSession, unrevert as unrevertSession } from './lib/session/revert'
-import { getInitStatus, runProjectInit, type RunInitInput } from './lib/project-init'
+import { abortProjectInit, getInitStatus, runProjectInit, type RunInitInput } from './lib/project-init'
 import { abortChat, compactSession, getRunningSessionIds, runChat } from './lib/chat-engine'
 import { runChatWithLoop, abortLoop, getLoopRunningSessionIds } from './lib/loop-engine'
 import { reply as askReply, rejectSession as rejectSessionAsks } from './lib/ask-broker'
@@ -1079,6 +1079,9 @@ app.whenReady().then(() => {
     void runProjectInit(input).catch(() => {})
   })
   ipcMain.handle('init:status', (_event, directory: string) => getInitStatus(directory))
+  // Parar a análise disparada pelo card do projeto, que roda fora de qualquer
+  // sessão de chat (a do /init é cancelada junto com a sessão, em chat:abort).
+  ipcMain.handle('init:stop', (_event, directory: string) => abortProjectInit(directory))
 
   // Credenciais de provedores (as chaves nunca voltam ao renderer)
   ipcMain.handle('auth:set', (_event, providerId: string, key: string) => setCredential(providerId, key))
