@@ -811,7 +811,9 @@
     "tabQr": "QR Code",
     "tabManual": "Manual",
     "connectedDevices_one": "1 connected device",
-    "connectedDevices_other": "{{count}} connected devices"
+    "connectedDevices_other": "{{count}} connected devices",
+    "noAppTitle": "Don't have the app?",
+    "downloadLink": "Install now"
   },
   "branch": {
     "previous": "Previous branch",
@@ -1012,15 +1014,27 @@
     "sucesso": "Repository {{repo}} created and commits pushed.",
     "criadoSemPush": "Repository {{repo}} created, but the push failed. The remote is already set up — try pushing again.",
     "erro": {
-      "noCredential": "There is no GitHub HTTPS credential on this machine. If your git authenticates over SSH, pushing works through your keys — but the GitHub API, which creates the repository, requires a token, and an SSH key cannot provide one. Install the GitHub CLI (`gh auth login`) or paste a token below. Detail:",
-      "auth": "The GitHub token was rejected or lacks permission to create repositories. Check that it has the \"repo\" scope. Detail:",
+      "noCredential": "The GitHub CLI is installed but not authenticated — authenticate with the command below. One-time step: future creations won't ask for anything.",
+      "noCredentialGhMissing": "There is no GitHub HTTPS credential on this machine — expected if your git authenticates over SSH: pushing works through your keys, but the API that creates the repository requires a token, and an SSH key cannot provide one. The GitHub CLI solves this for good: install and authenticate with the commands below. One-time step — future creations won't ask for anything.",
+      "auth": "The GitHub token was rejected or lacks permission to create repositories. Refresh your authentication (`gh auth login` or your git HTTPS credentials) and make sure the \"repo\" scope is included. Detail:",
       "nameTaken": "A repository with that name already exists in your account.",
       "invalidName": "GitHub rejected that name. Use only letters, numbers, dot, hyphen and underscore.",
       "noCommits": "This folder has no commits yet. Make the first commit before publishing.",
-      "other": "Could not create the repository:"
+      "other": "Could not create the repository:",
+      "detalhe": "Detail",
+      "detalheGitExit": "no HTTPS credential for github.com (git exited with {{codigo}})",
+      "detalheGitSpawn": "could not run \"git credential fill\"",
+      "detalheGitTimeout": "the git credential helper did not respond within 20s",
+      "detalheGhAusente": "gh not found in PATH",
+      "detalheGhFalhou": "gh failed",
+      "detalheGhSemToken": "gh provided no token"
     },
-    "tokenLabel": "GitHub access token",
-    "tokenHint": "Paste a Personal Access Token with the \"repo\" scope. It is used only for this operation and is not saved."
+    "comandos": {
+      "rotulo": "Terminal",
+      "copiar": "Copy",
+      "copiado": "Copied!",
+      "outros": "Other systems and distros — see cli.github.com"
+    }
   },
   "mcp": {
     "kv": {
