@@ -6,6 +6,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Stack, useRouter } from 'expo-router'
 import { SafeScreen } from '~/components/layout/SafeScreen'
 import type { SendMessageOptions, FilePart } from '@orbit/shared'
+import { folderKey, normalizeFolderName } from '@orbit/shared'
 import { PlanReviewCard } from '~/components/chat/PlanReviewCard'
 import { TaskProgress } from '~/components/chat/TaskProgress'
 import { OrchestrationPlanCard } from '~/components/chat/OrchestrationPlanCard'
@@ -44,14 +45,6 @@ async function loadAutoFolderMap(): Promise<Record<string, string>> {
 
 async function persistAutoFolderMap(map: Record<string, string>): Promise<void> {
   await Storage.setItem(AUTO_FOLDER_MAP_KEY, JSON.stringify(map))
-}
-
-function normalizeFolderName(directoryPath: string): string {
-  const baseName = directoryPath.replace(/\\/g, '/').split('/').filter(Boolean).pop() ?? directoryPath
-  return baseName
-    .split(/[-_]/)
-    .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
-    .join(' ')
 }
 
 interface ChatScreenProps {
@@ -204,11 +197,19 @@ export function ChatScreen({ sessionId }: ChatScreenProps) {
           const existingFolder = allFolders.find((f) => f.id === existingFolderId)
 
           if (existingFolder) {
-            await useSessionStore.getState().moveToFolder(created.id, existingFolder.id)
+            // Pasta arquivada não recebe chats novos: o diretório continua
+            // mapeado nela e a sessão nasce solta — mesma regra do desktop.
+            if (!existingFolder.archived && existingFolder.mode === 'code') {
+              await useSessionStore.getState().moveToFolder(created.id, existingFolder.id)
+            }
           } else {
             const folderName = normalizeFolderName(foldersRef.current[0])
             const matchingFolder = allFolders.find(
-              (f) => f.name === folderName && f.mode === 'code' && !autoFolderMap[foldersRef.current[0]],
+              (f) =>
+                f.mode === 'code' &&
+                !f.archived &&
+                folderKey(f.name) === folderKey(folderName) &&
+                !autoFolderMap[foldersRef.current[0]],
             )
             if (matchingFolder) {
               autoFolderMap[foldersRef.current[0]] = matchingFolder.id
