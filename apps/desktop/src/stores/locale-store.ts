@@ -1,5 +1,6 @@
 import { create } from "zustand"
 import i18n from "@/src/i18n"
+import { appApi } from "@/src/lib/ipc"
 
 const LOCALE_KEY = "orbit_locale"
 
@@ -40,12 +41,29 @@ interface LocaleState {
 const initial: AppLocale = (localStorage.getItem(LOCALE_KEY) as AppLocale | null) ?? "en"
 void i18n.changeLanguage(resolveActiveLocale(initial))
 
+/**
+ * Espelha o idioma efetivo no main. Ele não lê o localStorage do renderer, e o
+ * scheduler de rotinas dispara agentes sem nenhum pedido vindo daqui — sem este
+ * espelho, esses agentes responderiam no idioma do prompt (inglês).
+ * Publicado no boot e a cada troca, então mudar o idioma vale para as rotinas
+ * já existentes.
+ */
+function publicarIdioma(locale: AppLocale): void {
+  void appApi
+    .setLanguage(LOCALE_PROMPT_NAME[resolveActiveLocale(locale)])
+    .catch(() => {
+      // Espelho é best-effort: falhar aqui não pode quebrar a troca de idioma.
+    })
+}
+publicarIdioma(initial)
+
 export const useLocaleStore = create<LocaleState>((set) => ({
   locale: initial,
   activeLocale: resolveActiveLocale(initial),
   setLocale: (locale) => {
     localStorage.setItem(LOCALE_KEY, locale)
     void i18n.changeLanguage(resolveActiveLocale(locale))
+    publicarIdioma(locale)
     set({ locale, activeLocale: resolveActiveLocale(locale) })
   },
 }))

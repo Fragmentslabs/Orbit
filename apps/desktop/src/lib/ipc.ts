@@ -357,6 +357,12 @@ export const mediaApi = {
   backfill: () => window.ipcRenderer.invoke("media:backfill") as Promise<number>,
 }
 
+/** Publica o idioma efetivo para o main — quem dispara sem o renderer no laço
+ *  (scheduler de rotinas) precisa lê-lo de algum lugar. */
+export const appApi = {
+  setLanguage: (language: string) => window.ipcRenderer.invoke("app:setLanguage", language),
+}
+
 export const initApi = {
   run: (input: {
     directory: string

@@ -8,6 +8,7 @@ import { runChatWithLoop } from '../loop-engine'
 import { runOrchestration } from '../orchestrator'
 import { broadcastChatEvent, broadcastRotinaEvent } from '../broadcast'
 import { readJson, writeJson } from '../storage'
+import { readAppLanguage } from '../app-language'
 import { atualizarRotina, listarRotinas, listarRuns, salvarRun } from './repo'
 
 /**
@@ -157,6 +158,7 @@ export async function executarRotina(rotina: Rotina, motivo: 'agenda' | 'manual'
     options.subagents = undefined
     options.plan = undefined
   }
+  const idioma = await readAppLanguage()
   const input: SendMessageInput = {
     sessionId: session.id,
     text: rotina.prompt,
@@ -172,6 +174,10 @@ export async function executarRotina(rotina: Rotina, motivo: 'agenda' | 'manual'
     // Modo Visão: a rotina carrega o modelo de visão que tinha na criação
     // (o main não lê o localStorage do renderer).
     ...(rotina.modos.vision && rotina.visionModel ? { visionModel: rotina.visionModel } : {}),
+    // Lido AGORA, não gravado na rotina: trocar o idioma do app passa a valer
+    // para as rotinas já criadas. Sem isto o agente cai no "responda no idioma
+    // do usuário" e segue o idioma do PROMPT — inglês nas rotinas de exemplo.
+    ...(idioma ? { language: idioma } : {}),
     isFirstExchange: true,
     ...(options.loop ? { loopConfig: { maxIterations: 3, maxTokensPerIter: 4000, autoReview: true } } : {}),
   }

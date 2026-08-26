@@ -1084,6 +1084,10 @@ app.whenReady().then(() => {
     // rejection não tratada quando disparado por IPC (sem sessão de chat)
     void runProjectInit(input).catch(() => {})
   })
+  // Idioma do app: o renderer publica, o main lê quando dispara algo sem
+  // pedido do renderer (rotinas agendadas).
+  ipcMain.handle('app:setLanguage', (_event, language: string) =>
+    writeJson(StorageKeys.appLanguage, language))
   ipcMain.handle('init:status', (_event, directory: string) => getInitStatus(directory))
   // Parar a análise disparada pelo card do projeto, que roda fora de qualquer
   // sessão de chat (a do /init é cancelada junto com a sessão, em chat:abort).

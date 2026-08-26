@@ -543,5 +543,8 @@ export const StorageKeys = {
   memory: (id: string) => `memory/items/${id}`,
   memoryItemsPrefix: "memory/items/",
   memoryIndex: "memory/_index",
+  /** Idioma efetivo do app, publicado pelo renderer para o main ler.
+   *  O scheduler de rotinas roda sem renderer no laço e precisa dele. */
+  appLanguage: "app-language",
   queuedMessages: "message-queue",
 } as const
