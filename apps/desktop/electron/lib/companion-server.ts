@@ -910,6 +910,31 @@ async function handleRequest(client: ConnectedClient, requestId: string, req: Co
         break
       }
 
+      case 'folders:archive': {
+        const folders = (await readJson<FolderInfo[]>(StorageKeys.folders)) ?? []
+        const next = folders.map((f) => (f.id === req.folderId ? { ...f, archived: req.archived } : f))
+        await writeJson(StorageKeys.folders, next)
+
+        // Os chats da pasta acompanham o estado dela — mesma cascata do
+        // toggleFolderArchive do desktop: quem já está no estado destino não é
+        // tocado (nem re-emitido), e updatedAt não é mexido para o chat não
+        // pular de lugar na ordenação por atividade.
+        const keys = await listKeys('session/')
+        const sessions = (await Promise.all(keys.map((k) => readJson<SessionInfo>(k)))).filter(
+          (s): s is SessionInfo => s !== null,
+        )
+        for (const s of sessions) {
+          if (s.folderId !== req.folderId || s.archived === req.archived) continue
+          const updated: SessionInfo = { ...s, archived: req.archived }
+          await writeJson(StorageKeys.session(updated.id), updated)
+          broadcastSessionEvent({ type: 'session', sessionId: updated.id, session: updated })
+        }
+
+        broadcastSessionEvent({ type: 'folders', folders: next })
+        sendResponse(ws, requestId, true, next)
+        break
+      }
+
       case 'folders:delete': {
         const folders = (await readJson<FolderInfo[]>(StorageKeys.folders)) ?? []
         const next = folders.filter((f) => f.id !== req.folderId)
@@ -930,6 +955,21 @@ async function handleRequest(client: ConnectedClient, requestId: string, req: Co
 
         broadcastSessionEvent({ type: 'folders', folders: next })
         sendResponse(ws, requestId, true, next)
+        break
+      }
+
+      case 'sidebar:organize': {
+        // Reorganizar mexe no mapa de pastas automáticas, que mora no
+        // localStorage do renderer — então quem executa é ele, pelo mesmo
+        // caminho de 'models:select'. Assim desktop e mobile rodam
+        // literalmente a mesma função.
+        const windows = BrowserWindow.getAllWindows().filter((w) => !w.isDestroyed())
+        if (windows.length === 0) {
+          sendResponse(ws, requestId, false, undefined, 'Nenhuma janela do desktop aberta')
+          break
+        }
+        for (const win of windows) win.webContents.send('companion:organize-sidebar')
+        sendResponse(ws, requestId, true)
         break
       }
 

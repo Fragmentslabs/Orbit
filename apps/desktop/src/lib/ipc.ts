@@ -427,6 +427,12 @@ export const companionApi = {
   status: () => window.ipcRenderer.invoke("companion:status") as Promise<CompanionStatus>,
   setPairingMode: (active: boolean) =>
     window.ipcRenderer.invoke("companion:setPairingMode", active) as Promise<void>,
+  /** "Organizar" disparado pelo mobile: a reorganização mora aqui (o mapa de
+   *  pastas automáticas está no localStorage), então o companion só avisa. */
+  onOrganizeSidebar: (listener: () => void) => {
+    const wrapper = window.ipcRenderer.on("companion:organize-sidebar", () => listener())
+    return () => window.ipcRenderer.off("companion:organize-sidebar", wrapper)
+  },
 }
 
 export const memoryApi = {

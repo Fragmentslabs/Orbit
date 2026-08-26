@@ -14,8 +14,10 @@ import type {
   SessionMode,
   TextPart,
 } from "@shared/chat"
-import { StorageKeys } from "@shared/chat"
-import { chatApi, sessionApi, storage } from "@/src/lib/ipc"
+// normalizeFolderName/folderKey vivem no shared: o mobile agrupa chats por
+// projeto do mesmo jeito e precisa da MESMA regra de nome.
+import { folderKey, normalizeFolderName, StorageKeys } from "@shared/chat"
+import { chatApi, companionApi, sessionApi, storage } from "@/src/lib/ipc"
 import { visibleMessageText } from "@/src/lib/message-utils"
 import { useBrainPrefs } from "@/src/stores/brain-prefs"
 import { useSimplePrefs } from "@/src/stores/simple-prefs"
@@ -154,25 +156,6 @@ function mergeMessages(persisted: ChatMessage[], buffered: ChatMessage[] | undef
   return [...byId.values()]
 }
 
-function normalizeFolderName(directoryPath: string): string {
-  const baseName = directoryPath.replace(/\\/g, "/").split("/").filter(Boolean).pop() ?? directoryPath
-  return baseName
-    .split(/[-_]/)
-    .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
-    .join(" ")
-}
-
-/** Chave de comparação de nomes de pasta: ignora caixa, espaços extras e
- *  acentos — "Nodara", "nodara" e "Nodará" são o mesmo projeto. */
-function folderKey(name: string): string {
-  return name
-    .trim()
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .replace(/\s+/g, " ")
-}
-
 function persistSession(session: SessionInfo) {
   void storage.write(StorageKeys.session(session.id), session)
 }
@@ -242,6 +225,9 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     })
 
     chatApi.onEvent((event) => applyChatEvent(event, set, get))
+
+    // "Organizar" vindo do mobile: roda a mesma função da sidebar do desktop.
+    companionApi.onOrganizeSidebar(() => get().organizeSidebar())
 
     // Após um reload do renderer, o main sabe quais sessões continuam rodando
     // (o engine vive no main process) — re-emite o status para a UI voltar a

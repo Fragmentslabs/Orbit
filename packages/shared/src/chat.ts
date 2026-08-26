@@ -87,6 +87,26 @@ export interface FolderInfo {
   createdAt: number
 }
 
+/** Nome da pasta a partir do caminho do projeto: "meu-app" → "Meu App". */
+export function normalizeFolderName(directoryPath: string): string {
+  const baseName = directoryPath.replace(/\\/g, "/").split("/").filter(Boolean).pop() ?? directoryPath
+  return baseName
+    .split(/[-_]/)
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+    .join(" ")
+}
+
+/** Chave de comparação de nomes de pasta: ignora caixa, espaços extras e
+ *  acentos — "Nodara", "nodara" e "Nodará" são o mesmo projeto. */
+export function folderKey(name: string): string {
+  return name
+    .trim()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .replace(/\s+/g, " ")
+}
+
 export type TextPartState = "streaming" | "done"
 
 export interface TextPart {

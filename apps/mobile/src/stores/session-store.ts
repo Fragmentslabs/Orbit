@@ -193,8 +193,15 @@ interface SessionState {
   renameFolder: (folderId: string, name: string) => Promise<void>
   /** Fixa/desafixa uma pasta. */
   setFolderPinned: (folderId: string, pinned: boolean) => Promise<void>
+  /** Arquiva/desarquiva uma pasta — os chats dela acompanham. */
+  setFolderArchived: (folderId: string, archived: boolean) => Promise<void>
   /** Remove uma pasta (sessões voltam pra raiz). */
   deleteFolder: (folderId: string) => Promise<void>
+  /** Reorganiza a sidebar (mescla pastas duplicadas e recolhe chats soltos
+   *  para a pasta do projeto). Executa no desktop; o resultado volta pelos
+   *  eventos de sessão/pasta. false = o desktop não pôde executar (no macOS o
+   *  app segue vivo sem janela aberta, e é a janela que reorganiza). */
+  organizeSidebar: () => Promise<boolean>
   /** Reverte sessão até uma mensagem específica (trunca msgs posteriores). */
   revertToMessage: (sessionId: string, messageId: string) => Promise<void>
   /** Desfaz o revert ativo, restaurando mensagens descartadas. */
@@ -662,6 +669,19 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     }
   },
 
+  setFolderArchived: async (folderId, archived) => {
+    const { wsClient } = useConnectionStore.getState()
+    const res = await wsClient.send({ type: 'folders:archive', folderId, archived })
+    if (res.ok && Array.isArray(res.data)) {
+      // Os chats da pasta chegam pelos eventos 'session' do broadcast, mas a
+      // cascata é aplicada aqui também para a lista não piscar no meio.
+      set((state) => ({
+        folders: res.data as FolderInfo[],
+        sessions: state.sessions.map((s) => (s.folderId === folderId ? { ...s, archived } : s)),
+      }))
+    }
+  },
+
   deleteFolder: async (folderId) => {
     const { wsClient } = useConnectionStore.getState()
     const res = await wsClient.send({ type: 'folders:delete', folderId })
@@ -671,6 +691,14 @@ export const useSessionStore = create<SessionState>((set, get) => ({
         sessions: state.sessions.map((s) => (s.folderId === folderId ? { ...s, folderId: null } : s)),
       }))
     }
+  },
+
+  organizeSidebar: async () => {
+    const { wsClient } = useConnectionStore.getState()
+    // O desktop reorganiza e emite os eventos de sessão/pasta resultantes —
+    // não há estado a aplicar aqui.
+    const res = await wsClient.send({ type: 'sidebar:organize' })
+    return res.ok
   },
 
   acceptPlanReview: async (sessionId, permissionMode, orchestrate) => {

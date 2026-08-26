@@ -33,6 +33,7 @@ import {
   Search,
   CalendarClock,
   Layers,
+  Wand2,
 } from 'lucide-react-native'
 import { useWorkspaceStore } from '~/stores/workspace-store'
 import { useConnectionStore } from '~/stores/connection-store'
@@ -79,6 +80,8 @@ type ChatListSection = SectionListData<ChatListItem> & {
     | 'rotinas'
     | 'archived-group'
     | 'archived'
+    /** Pasta ATIVA que guarda chats arquivados — agrupamento só de leitura. */
+    | 'archived-folder'
   folder?: FolderInfo
 }
 
@@ -113,7 +116,9 @@ export function Sidebar() {
   const deleteSession = useSessionStore((s) => s.deleteSession)
   const renameFolder = useSessionStore((s) => s.renameFolder)
   const setFolderPinned = useSessionStore((s) => s.setFolderPinned)
+  const setFolderArchived = useSessionStore((s) => s.setFolderArchived)
   const deleteFolder = useSessionStore((s) => s.deleteFolder)
+  const organizeSidebar = useSessionStore((s) => s.organizeSidebar)
 
   const [slideAnim] = useState(() => new Animated.Value(-DRAWER_WIDTH))
   const [backdropAnim] = useState(() => new Animated.Value(0))
@@ -300,6 +305,11 @@ export function Sidebar() {
           onPress: () => void setFolderPinned(folderMenuTarget.id, !folderMenuTarget.pinned),
         },
         {
+          icon: folderMenuTarget.archived ? ArchiveRestore : Archive,
+          label: folderMenuTarget.archived ? t('sidebar.unarchiveFolder') : t('sidebar.archiveFolder'),
+          onPress: () => void setFolderArchived(folderMenuTarget.id, !folderMenuTarget.archived),
+        },
+        {
           icon: CheckSquare,
           label: t('sidebar.select'),
           onPress: () => enterSelectionMode(undefined, folderMenuTarget.id),
@@ -363,7 +373,15 @@ export function Sidebar() {
   const filteredTopItems = topItems.filter((item) => !item.codeOnly || mode === 'code')
 
   // ─── Lista de chats agrupada: fixados / pastas / chats / rotinas / arquivados ──
-  const { pinned, folderGroups, recent, archived, routineSessions } = useMemo(() => {
+  const {
+    pinned,
+    folderGroups,
+    recent,
+    archivedFolderGroups,
+    archivedMirrorGroups,
+    archivedLoose,
+    routineSessions,
+  } = useMemo(() => {
     // Chats de rotina saem da listagem normal: eles vivem no grupo "Rotinas"
     // logo abaixo, e apareceriam duplicados (e afogariam os recentes) se
     // também entrassem em "Conversas" ou nas pastas — mesmo critério do
@@ -378,15 +396,22 @@ export function Sidebar() {
       .filter((s) => !!s.routineId)
       .sort((a, b) => b.updatedAt - a.updatedAt)
     const activeSessions = modeSessions.filter((s) => !s.archived && !s.routineId)
+    const archivedSessions = modeSessions
+      .filter((s) => s.archived && !s.routineId)
+      .sort((a, b) => b.updatedAt - a.updatedAt)
     const modeFolders = folders.filter((f) => f.mode === mode)
+    // Pasta arquivada sai do grupo "Pastas" e vai para "Arquivados" com os
+    // chats dela — mesma separação do app-sidebar do desktop.
+    const activeFolders = modeFolders.filter((f) => !f.archived)
+    const archivedFolders = modeFolders.filter((f) => f.archived)
+    const archivedFolderIds = new Set(archivedFolders.map((f) => f.id))
+    // Só pastas ATIVAS seguram chats fora da raiz: um chat desarquivado dentro
+    // de uma pasta arquivada cai nos recentes (a pasta continua arquivada).
     const rootSessions = activeSessions.filter(
-      (s) => !s.folderId || !modeFolders.some((f) => f.id === s.folderId),
+      (s) => !s.folderId || !activeFolders.some((f) => f.id === s.folderId),
     )
     const pinned = rootSessions.filter((s) => s.pinned).sort((a, b) => b.updatedAt - a.updatedAt)
     const recent = rootSessions.filter((s) => !s.pinned).sort((a, b) => b.updatedAt - a.updatedAt)
-    const archived = modeSessions
-      .filter((s) => s.archived && !s.routineId)
-      .sort((a, b) => b.updatedAt - a.updatedAt)
     // Ordem das pastas segue o desktop: fixadas primeiro, depois por atividade
     // (sessão mais recente dentro da pasta) — dentre as fixadas, mais recentes
     // primeiro.
@@ -394,7 +419,7 @@ export function Sidebar() {
       activeSessions
         .filter((s) => s.folderId === folderId)
         .reduce((latest, s) => Math.max(latest, s.updatedAt), 0)
-    const sortedFolders = [...modeFolders].sort((a, b) => {
+    const sortedFolders = [...activeFolders].sort((a, b) => {
       if (a.pinned !== b.pinned) return a.pinned ? -1 : 1
       return folderActivity(b.id) - folderActivity(a.id)
     })
@@ -404,7 +429,47 @@ export function Sidebar() {
         .filter((s) => s.folderId === folder.id)
         .sort((a, b) => b.updatedAt - a.updatedAt),
     }))
-    return { pinned, folderGroups, recent, archived, routineSessions }
+
+    // ── Arquivados ──
+    // Pastas arquivadas levam os próprios chats; chats arquivados que ainda
+    // pertencem a uma pasta ATIVA ganham um agrupamento espelho (só leitura)
+    // logo abaixo — sem ele perderiam a referência da pasta de origem; o resto
+    // fica solto.
+    const archivedFolderGroups = [...archivedFolders]
+      .sort((a, b) => {
+        if (a.pinned !== b.pinned) return a.pinned ? -1 : 1
+        return b.createdAt - a.createdAt
+      })
+      .map((folder) => ({
+        folder,
+        sessions: archivedSessions.filter((s) => s.folderId === folder.id),
+      }))
+    const archivedInActiveFolders = archivedSessions.filter(
+      (s) => s.folderId != null && !archivedFolderIds.has(s.folderId),
+    )
+    const archivedMirrorGroups = activeFolders
+      .filter((f) => archivedInActiveFolders.some((s) => s.folderId === f.id))
+      .sort((a, b) => a.name.localeCompare(b.name))
+      .map((folder) => ({
+        folder,
+        sessions: archivedInActiveFolders.filter((s) => s.folderId === folder.id),
+      }))
+    // Solto = o que não coube em nenhum agrupamento acima (inclui o caso raro
+    // de folderId apontando para pasta que não existe mais).
+    const grouped = new Set(
+      [...archivedFolderGroups, ...archivedMirrorGroups].flatMap((g) => g.sessions.map((s) => s.id)),
+    )
+    const archivedLoose = archivedSessions.filter((s) => !grouped.has(s.id))
+
+    return {
+      pinned,
+      folderGroups,
+      recent,
+      archivedFolderGroups,
+      archivedMirrorGroups,
+      archivedLoose,
+      routineSessions,
+    }
   }, [sessions, folders, mode])
 
   // ─── Subchats (workers/forks) — agrupados sob o chat pai, como o desktop
@@ -418,6 +483,13 @@ export function Sidebar() {
     for (const children of Object.values(map)) children.sort((a, b) => b.updatedAt - a.updatedAt)
     return map
   }, [sessions])
+
+  // Expansão dos espelhos de pasta em "Arquivados" — estado próprio e só em
+  // memória, como o useState(false) do ArchivedFolderGroup no desktop.
+  const [expandedMirrors, setExpandedMirrors] = useState<Record<string, boolean>>({})
+  const toggleMirror = useCallback((id: string) => {
+    setExpandedMirrors((prev) => ({ ...prev, [id]: !prev[id] }))
+  }, [])
 
   // Subchats abertos por padrão (igual ao useState(true) do desktop); estado
   // só em memória.
@@ -481,15 +553,56 @@ export function Sidebar() {
     }
 
     // ── Grupo "Arquivados" (acordeão, só quando existe conteúdo) ──
-    if (archived.length > 0) {
+    if (
+      archivedFolderGroups.length > 0 ||
+      archivedMirrorGroups.length > 0 ||
+      archivedLoose.length > 0
+    ) {
       out.push({ kind: 'archived-group', data: [] })
       if (groupsExpanded.archived) {
-        out.push({ kind: 'archived', data: archived })
+        // Pastas arquivadas primeiro — linhas de pasta de verdade (com menu de
+        // desarquivar), nos mesmos runs usados no grupo "Pastas".
+        let collapsedRun: FolderInfo[] = []
+        for (const g of archivedFolderGroups) {
+          if (expandedFolders[g.folder.id]) {
+            if (collapsedRun.length > 0) {
+              out.push({ kind: 'folders', data: collapsedRun })
+              collapsedRun = []
+            }
+            out.push({ kind: 'folder', folder: g.folder, data: g.sessions })
+          } else {
+            collapsedRun.push(g.folder)
+          }
+        }
+        if (collapsedRun.length > 0) out.push({ kind: 'folders', data: collapsedRun })
+
+        // Depois os espelhos das pastas ativas. A expansão tem estado próprio:
+        // compartilhar o do grupo "Pastas" abriria as duas de uma vez.
+        for (const g of archivedMirrorGroups) {
+          out.push({
+            kind: 'archived-folder',
+            folder: g.folder,
+            data: expandedMirrors[g.folder.id] ? g.sessions : [],
+          })
+        }
+
+        if (archivedLoose.length > 0) out.push({ kind: 'archived', data: archivedLoose })
       }
     }
 
     return out
-  }, [pinned, folderGroups, recent, archived, routineSessions, expandedFolders, groupsExpanded])
+  }, [
+    pinned,
+    folderGroups,
+    recent,
+    archivedFolderGroups,
+    archivedMirrorGroups,
+    archivedLoose,
+    routineSessions,
+    expandedFolders,
+    expandedMirrors,
+    groupsExpanded,
+  ])
 
   // Linha de subchat — mesmo visual do chat normal, mas com ícone Bot (como o
   // desktop: SessionRow com icon={Bot} nos filhos).
@@ -558,7 +671,9 @@ export function Sidebar() {
     // Subchats aparecem aninhados sob o pai — exceto em Arquivados, que segue o
     // desktop (archived renderiza SessionItem sem childSessions).
     const children =
-      listSection.kind === 'archived' ? EMPTY_CHILDREN : (childrenByParent[session.id] ?? EMPTY_CHILDREN)
+      listSection.kind === 'archived' || listSection.kind === 'archived-folder'
+        ? EMPTY_CHILDREN
+        : (childrenByParent[session.id] ?? EMPTY_CHILDREN)
     return (
       <SessionRow
         title={session.title}
@@ -566,7 +681,7 @@ export function Sidebar() {
         streaming={status[session.id] === 'streaming' || status[session.id] === 'submitted'}
         error={status[session.id] === 'error'}
         unread={unreadCounts[session.id] > 0}
-        indented={listSection.kind === 'folder'}
+        indented={listSection.kind === 'folder' || listSection.kind === 'archived-folder'}
         pinned={session.pinned}
         selectionMode={selectionMode}
         selected={selectedIds.has(session.id)}
@@ -591,14 +706,27 @@ export function Sidebar() {
           expanded={groupsExpanded.folders}
           onToggle={() => toggleGroup('folders')}
           tokens={tokens}
-          action={{
-            icon: Search,
-            label: t('sidebar.searchChats'),
-            onPress: () => {
-              closeSidebar()
-              router.push('/(main)/search')
+          actions={[
+            // Mesmo botão do desktop: mescla pastas duplicadas do projeto e
+            // recolhe os chats de código soltos para a pasta deles.
+            {
+              icon: Wand2,
+              label: t('sidebar.organize'),
+              onPress: () => {
+                void organizeSidebar().then((ok) => {
+                  if (!ok) Alert.alert(t('sidebar.organize'), t('sidebar.organizeUnavailable'))
+                })
+              },
             },
-          }}
+            {
+              icon: Search,
+              label: t('sidebar.searchChats'),
+              onPress: () => {
+                closeSidebar()
+                router.push('/(main)/search')
+              },
+            },
+          ]}
         />
       )
     }
@@ -634,6 +762,18 @@ export function Sidebar() {
     }
     if (listSection.kind === 'folder' && listSection.folder) {
       return renderFolderRow(listSection.folder, true)
+    }
+    if (listSection.kind === 'archived-folder' && listSection.folder) {
+      const folder = listSection.folder
+      return (
+        <ArchivedFolderRow
+          folder={folder}
+          count={archivedMirrorGroups.find((g) => g.folder.id === folder.id)?.sessions.length ?? 0}
+          expanded={!!expandedMirrors[folder.id]}
+          onToggle={() => toggleMirror(folder.id)}
+          tokens={tokens}
+        />
+      )
     }
     return null
   }
@@ -898,20 +1038,19 @@ const AccordionHeader = memo(function AccordionHeader({
   label,
   expanded,
   onToggle,
-  action,
+  actions,
   tokens,
 }: {
   label: string
   expanded: boolean
   onToggle: () => void
-  action?: {
+  actions?: {
     icon: typeof Search
     label: string
     onPress: () => void
-  }
+  }[]
   tokens: ThemeTokens
 }) {
-  const ActionIcon = action?.icon
   return (
     <View className="flex-row items-center px-4 pb-2 pt-3">
       <Pressable
@@ -929,16 +1068,17 @@ const AccordionHeader = memo(function AccordionHeader({
         >
           {label}
         </Text>
-        {action && ActionIcon && (
+        {actions?.map(({ icon: ActionIcon, label: actionLabel, onPress }) => (
           <Pressable
-            onPress={action.onPress}
+            key={actionLabel}
+            onPress={onPress}
             hitSlop={10}
-            accessibilityLabel={action.label}
+            accessibilityLabel={actionLabel}
             className="h-7 w-7 shrink-0 items-center justify-center rounded-md active:opacity-70"
           >
             <ActionIcon size={16} color={tokens.mutedForeground} />
           </Pressable>
-        )}
+        ))}
         {expanded ? (
           <ChevronDown size={14} color={tokens.mutedForeground} />
         ) : (
@@ -1007,6 +1147,45 @@ const FolderRow = memo(function FolderRow({
   prev.tokens === next.tokens &&
   prev.onToggle === next.onToggle
 )
+
+/** Pasta ATIVA que ainda guarda chats arquivados, mostrada dentro de
+ *  "Arquivados". Porta o ArchivedFolderGroup do desktop: é só leitura de
+ *  propósito — reusar a linha normal faria a pasta expandir junto com a do
+ *  grupo "Pastas" e ofereceria renomear/arquivar/excluir a pasta real a
+ *  partir daqui. Nenhuma pasta espelho é criada no armazenamento: o chat
+ *  mantém o folderId, então volta sozinho para o lugar ao ser desarquivado. */
+const ArchivedFolderRow = memo(function ArchivedFolderRow({
+  folder,
+  count,
+  expanded,
+  onToggle,
+  tokens,
+}: {
+  folder: FolderInfo
+  count: number
+  expanded: boolean
+  onToggle: () => void
+  tokens: ThemeTokens
+}) {
+  return (
+    <Pressable onPress={onToggle} className="mx-3 flex-row items-center gap-2 rounded-lg px-3 py-2">
+      <Folder size={14} color={tokens.mutedForeground} />
+      <View className="min-w-0 flex-1 flex-row items-center gap-1">
+        <Text className="shrink text-sm" numberOfLines={1} style={{ color: tokens.mutedForeground }}>
+          {folder.name}
+        </Text>
+        <Text className="text-[10px]" style={{ color: tokens.mutedForeground, opacity: 0.6 }}>
+          {count}
+        </Text>
+        {expanded ? (
+          <ChevronDown size={14} color={tokens.mutedForeground} style={{ flexShrink: 0 }} />
+        ) : (
+          <ChevronRight size={14} color={tokens.mutedForeground} style={{ flexShrink: 0 }} />
+        )}
+      </View>
+    </Pressable>
+  )
+})
 
 const SessionRow = memo(function SessionRow({
   title,

@@ -174,9 +174,25 @@ export interface PinFolderRequest {
   pinned: boolean
 }
 
+/** Arquiva/desarquiva a pasta. Os chats dela acompanham o estado — mesma
+ *  cascata do toggleFolderArchive do desktop. */
+export interface ArchiveFolderRequest {
+  type: 'folders:archive'
+  folderId: string
+  archived: boolean
+}
+
 export interface DeleteFolderRequest {
   type: 'folders:delete'
   folderId: string
+}
+
+/** Reorganiza a sidebar: mescla pastas duplicadas do mesmo projeto e recolhe
+ *  chats de código soltos para a pasta do projeto. Roda no renderer do
+ *  desktop (o mapa de pastas automáticas mora no localStorage dele), então o
+ *  companion-server só repassa o pedido. */
+export interface OrganizeSidebarRequest {
+  type: 'sidebar:organize'
 }
 
 // ─── Memórias (Brain) ────────────────────────────────────────────────────────
@@ -434,7 +450,9 @@ export type CompanionRequest =
   | CreateFolderRequest
   | RenameFolderRequest
   | PinFolderRequest
+  | ArchiveFolderRequest
   | DeleteFolderRequest
+  | OrganizeSidebarRequest
   | ListDirsRequest
   | ListMemoriesRequest
   | UpdateMemoryRequest
