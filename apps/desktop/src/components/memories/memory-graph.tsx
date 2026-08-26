@@ -8,7 +8,7 @@
  * Aqui ficam só o desenho SVG, o zoom/pan, o colapso de subárvore e as
  * interações (selecionar, ligar com Ctrl+clique, soltar arquivo).
  */
-import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react"
 import { useTranslation } from "react-i18next"
 import { BookText, BrainCircuit, Briefcase, Crosshair, Database, Eye, EyeOff, FileUp, Gauge, GraduationCap, Layers, Link2, Package, Palette, Plus, Server, Shield, SlidersHorizontal, Terminal, TestTube, ZoomIn, ZoomOut } from "lucide-react"
 import type { LucideIcon } from "lucide-react"
@@ -22,6 +22,8 @@ import { LABEL_HEIGHT, LABEL_OFFSET, layoutMemoryGraph, nodeLabelText } from "@s
 import type { LayoutNode } from "@shared/memory-layout"
 import { memoryApi } from "@/src/lib/ipc"
 import { AREA_ICON, CATEGORY_ICON, KIND_COLOR, KIND_LABEL, lastActivity } from "./meta"
+import { useCanvasViewport } from "./use-graph-viewport"
+import type { CanvasViewport } from "./use-graph-viewport"
 
 const ICON_MAP: Record<string, LucideIcon> = {
   BrainCircuit, Briefcase, Palette, Layers, SlidersHorizontal, Server, Shield, Terminal,
@@ -34,6 +36,8 @@ const MAX_DROP_FILE_SIZE = 512 * 1024
 const ZOOM_FACTOR = 1.3
 const ZOOM_MIN = 0.04
 const ZOOM_MAX = 3
+const MINIMAP_W = 160
+const MINIMAP_H = 120
 
 /**
  * Rótulo desenhado. Traduz o nome da área e delega o resto ao helper
@@ -70,10 +74,43 @@ function iconNameOf(memory: Memory, isRoot: boolean): string | undefined {
   return undefined
 }
 
-interface Transform {
-  x: number
-  y: number
-  k: number
+/**
+ * Rótulo do zoom. Assina o viewport em vez de receber o transform por prop:
+ * assim só ele redesenha enquanto o canvas se move, e não a cena inteira.
+ */
+function ZoomLabel({ viewport }: { viewport: CanvasViewport }) {
+  const k = useSyncExternalStore(viewport.subscribe, () => viewport.getTransform().k)
+  return (
+    <span className="min-w-[3rem] text-center text-[11px] tabular-nums text-muted-foreground">
+      {Math.round(k * 100)}%
+    </span>
+  )
+}
+
+/** Retângulo do que está visível, no minimapa. Assina pelo mesmo motivo. */
+function MinimapViewport({ viewport, bounds, containerRef }: {
+  viewport: CanvasViewport
+  bounds: { minX: number; minY: number; width: number; height: number }
+  containerRef: React.RefObject<HTMLDivElement>
+}) {
+  const t = useSyncExternalStore(viewport.subscribe, viewport.getTransform)
+  const el = containerRef.current
+  if (!el) return null
+  const vx = -t.x / t.k
+  const vy = -t.y / t.k
+  return (
+    <rect
+      x={((vx - bounds.minX) / bounds.width) * MINIMAP_W}
+      y={((vy - bounds.minY) / bounds.height) * MINIMAP_H}
+      width={(el.clientWidth / t.k / bounds.width) * MINIMAP_W}
+      height={(el.clientHeight / t.k / bounds.height) * MINIMAP_H}
+      fill="none"
+      stroke="var(--primary)"
+      strokeWidth={1.2}
+      rx={2}
+      className="pointer-events-none"
+    />
+  )
 }
 
 export function MemoryGraph({ pool, query, selectedId, onSelect, projectDirectory }: {
@@ -85,11 +122,12 @@ export function MemoryGraph({ pool, query, selectedId, onSelect, projectDirector
 }) {
   const { t } = useTranslation()
   const containerRef = useRef<HTMLDivElement>(null)
-  const [transform, setTransform] = useState<Transform>({ x: 0, y: 0, k: 1 })
+  // Pan/zoom moram fora do state do React: durante o gesto o transform vai
+  // direto para o DOM e a cena não é reconciliada. Ver use-graph-viewport.
+  const viewport = useCanvasViewport({ minZoom: ZOOM_MIN, maxZoom: ZOOM_MAX })
   const [linkSource, setLinkSource] = useState<string | null>(null)
   const [dropActive, setDropActive] = useState(false)
   const [collapsedIds, setCollapsedIds] = useState<Set<string>>(new Set())
-  const drag = useRef<{ startX: number; startY: number; ox: number; oy: number; moved: boolean } | null>(null)
 
   const { nodes, edges } = useMemo(
     // labelOf entra na simulação: é a largura do texto TRADUZIDO que define o
@@ -125,7 +163,7 @@ export function MemoryGraph({ pool, query, selectedId, onSelect, projectDirector
     [query],
   )
 
-  const fitView = useCallback(() => {
+  const fitView = useCallback((animate = true) => {
     const el = containerRef.current
     if (!el || nodes.length === 0) return
     const boxes = nodes.map(extentOf)
@@ -140,43 +178,23 @@ export function MemoryGraph({ pool, query, selectedId, onSelect, projectDirector
       ZOOM_MIN,
       Math.min(w / (maxX - minX), h / (maxY - minY), 1.4),
     )
-    setTransform({
+    viewport.setViewport({
       k,
       x: w / 2 - ((minX + maxX) / 2) * k,
       y: h / 2 - ((minY + maxY) / 2) * k,
-    })
-  }, [nodes])
+    }, animate)
+  }, [nodes, viewport])
 
+  // O primeiro enquadramento é instantâneo; os seguintes (o grafo mudou de
+  // tamanho) deslizam, que é menos abrupto do que o conteúdo saltar.
+  const framed = useRef(false)
   useEffect(() => {
-    fitView()
+    fitView(framed.current)
+    framed.current = true
   }, [nodes.length])
 
-  const zoomTo = useCallback((newK: number, centerX?: number, centerY?: number) => {
-    const el = containerRef.current
-    if (!el) return
-    const k = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, newK))
-    if (centerX != null && centerY != null) {
-      setTransform((t) => ({
-        k,
-        x: centerX - ((centerX - t.x) / t.k) * k,
-        y: centerY - ((centerY - t.y) / t.k) * k,
-      }))
-    } else {
-      setTransform((t) => {
-        const rect = el.getBoundingClientRect()
-        const cx = rect.width / 2
-        const cy = rect.height / 2
-        return {
-          k,
-          x: cx - ((cx - t.x) / t.k) * k,
-          y: cy - ((cy - t.y) / t.k) * k,
-        }
-      })
-    }
-  }, [])
-
-  const zoomIn = useCallback(() => zoomTo(transform.k * ZOOM_FACTOR), [zoomTo, transform.k])
-  const zoomOut = useCallback(() => zoomTo(transform.k / ZOOM_FACTOR), [zoomTo, transform.k])
+  const zoomIn = useCallback(() => viewport.zoomBy(ZOOM_FACTOR), [viewport])
+  const zoomOut = useCallback(() => viewport.zoomBy(1 / ZOOM_FACTOR), [viewport])
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -203,40 +221,9 @@ export function MemoryGraph({ pool, query, selectedId, onSelect, projectDirector
     return () => window.removeEventListener("keydown", handler)
   }, [zoomIn, zoomOut, fitView])
 
-  const handleWheel = (e: React.WheelEvent) => {
-    e.preventDefault()
-    const el = containerRef.current
-    if (!el) return
-    const rect = el.getBoundingClientRect()
-    const cx = e.clientX - rect.left
-    const cy = e.clientY - rect.top
-    setTransform((t) => {
-      const k = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, t.k * Math.exp(-e.deltaY * 0.0012)))
-      return { k, x: cx - ((cx - t.x) / t.k) * k, y: cy - ((cy - t.y) / t.k) * k }
-    })
-  }
-
-  const handlePointerDown = (e: React.PointerEvent) => {
-    const target = e.target as Element
-    target.setPointerCapture?.(e.pointerId)
-    drag.current = { startX: e.clientX, startY: e.clientY, ox: transform.x, oy: transform.y, moved: false }
-  }
-
-  const handlePointerMove = (e: React.PointerEvent) => {
-    const d = drag.current
-    if (!d) return
-    const dx = e.clientX - d.startX
-    const dy = e.clientY - d.startY
-    if (Math.abs(dx) + Math.abs(dy) > 3) d.moved = true
-    if (d.moved) setTransform((t) => ({ ...t, x: d.ox + dx, y: d.oy + dy }))
-  }
-
-  const handlePointerUp = () => {
-    drag.current = null
-  }
-
   const toggleCollapse = (e: React.MouseEvent, id: string) => {
     e.stopPropagation()
+    if (viewport.wasDragged()) return
     setCollapsedIds((prev) => {
       const next = new Set(prev)
       if (next.has(id)) next.delete(id)
@@ -247,7 +234,8 @@ export function MemoryGraph({ pool, query, selectedId, onSelect, projectDirector
 
   const handleNodeClick = (e: React.MouseEvent, id: string) => {
     e.stopPropagation()
-    if (drag.current?.moved) return
+    // Clique que é só o fim de um arraste não seleciona nada.
+    if (viewport.wasDragged()) return
     if (e.ctrlKey || e.metaKey) {
       if (!linkSource) {
         setLinkSource(id)
@@ -283,23 +271,16 @@ export function MemoryGraph({ pool, query, selectedId, onSelect, projectDirector
   const handleMinimapClick = (e: React.MouseEvent<SVGSVGElement>) => {
     const el = containerRef.current
     if (!el) return
-    const svg = e.currentTarget
-    const svgRect = svg.getBoundingClientRect()
-    const px = e.clientX - svgRect.left
-    const py = e.clientY - svgRect.top
-    const mmW = 160
-    const mmH = 120
-    // Map to graph bounds
-    const gx = bounds.minX + (px / mmW) * bounds.width
-    const gy = bounds.minY + (py / mmH) * bounds.height
-    // Center view on this point
-    const cx = el.clientWidth / 2
-    const cy = el.clientHeight / 2
-    setTransform((t) => ({
-      k: t.k,
-      x: cx - gx * t.k,
-      y: cy - gy * t.k,
-    }))
+    const svgRect = e.currentTarget.getBoundingClientRect()
+    // Ponto do minimapa → coordenada do grafo → centro da vista.
+    const gx = bounds.minX + ((e.clientX - svgRect.left) / MINIMAP_W) * bounds.width
+    const gy = bounds.minY + ((e.clientY - svgRect.top) / MINIMAP_H) * bounds.height
+    const { k } = viewport.getTransform()
+    viewport.setViewport({
+      k,
+      x: el.clientWidth / 2 - gx * k,
+      y: el.clientHeight / 2 - gy * k,
+    }, true)
   }
 
   const now = Date.now()
@@ -311,13 +292,11 @@ export function MemoryGraph({ pool, query, selectedId, onSelect, projectDirector
           <Button variant="outline" size="sm" className="h-7 gap-1.5 text-xs" onClick={zoomIn} title={t("memories.zoomIn")}>
             <ZoomIn className="size-3.5" />
           </Button>
-          <span className="min-w-[3rem] text-center text-[11px] tabular-nums text-muted-foreground">
-            {Math.round(transform.k * 100)}%
-          </span>
+          <ZoomLabel viewport={viewport} />
           <Button variant="outline" size="sm" className="h-7 gap-1.5 text-xs" onClick={zoomOut} title={t("memories.zoomOut")}>
             <ZoomOut className="size-3.5" />
           </Button>
-          <Button variant="outline" size="sm" className="h-7 gap-1.5 text-xs" onClick={fitView} title={t("memories.centerTitle")}>
+          <Button variant="outline" size="sm" className="h-7 gap-1.5 text-xs" onClick={() => fitView()} title={t("memories.centerTitle")}>
             <Crosshair className="size-3.5" />
             {t("memories.center")}
           </Button>
@@ -354,15 +333,15 @@ export function MemoryGraph({ pool, query, selectedId, onSelect, projectDirector
           onDrop={(e) => void handleDrop(e)}
         >
           <svg
-            className="size-full cursor-grab touch-none active:cursor-grabbing"
-            onWheel={handleWheel}
-            onPointerDown={handlePointerDown}
-            onPointerMove={handlePointerMove}
-            onPointerUp={handlePointerUp}
-            onClick={() => { if (!drag.current?.moved) onSelect(null) }}
+            ref={viewport.surfaceRef}
+            className="size-full cursor-grab touch-none select-none active:cursor-grabbing"
+            onPointerDown={viewport.onPointerDown}
+            onClick={() => { if (!viewport.wasDragged()) onSelect(null) }}
           >
-            <g transform={`translate(${transform.x}, ${transform.y}) scale(${transform.k})`}
-               style={{ transition: 'transform 0.12s ease-out' }}>
+            {/* O transform é escrito direto neste <g> pelo viewport — nada de
+                transição CSS aqui: ela reiniciava a cada evento de roda e era
+                o que fazia o zoom parecer travado. */}
+            <g ref={viewport.sceneRef}>
               {edges.map((edge) => {
                 const a = nodeById.get(edge.from)
                 const b = nodeById.get(edge.to)
@@ -407,7 +386,6 @@ export function MemoryGraph({ pool, query, selectedId, onSelect, projectDirector
                     opacity={opacity}
                     className="group cursor-pointer"
                     onClick={(e) => handleNodeClick(e, memory.id)}
-                    onPointerDown={(e) => e.stopPropagation()}
                   >
                     <title>
                       {`[${t(`memories.kinds.${memory.kind}`, { defaultValue: KIND_LABEL[memory.kind] })}${memory.area ? ` · ${t(`memories.areas.${memory.area}`, { defaultValue: PROJECT_AREAS[memory.area]?.label })}` : ""}] ${memory.text}\n${t("memories.tooltipWeight", { weight: memory.weight.toFixed(2) })} · ${t("memories.uses", { count: memory.hits })}${stale ? `\n${t("memories.tooltipStale")}` : ""}${node.collapsed ? `\n${t("memories.tooltipCollapsed")}` : ""}`}
@@ -458,7 +436,6 @@ export function MemoryGraph({ pool, query, selectedId, onSelect, projectDirector
                       <g
                         className="cursor-pointer opacity-0 transition-opacity group-hover:opacity-100"
                         onClick={(e) => toggleCollapse(e, memory.id)}
-                        onPointerDown={(e) => e.stopPropagation()}
                       >
                         <circle
                           cx={-node.r - 10}
@@ -489,16 +466,16 @@ export function MemoryGraph({ pool, query, selectedId, onSelect, projectDirector
           {nodes.length > 0 && (
             <svg
               className="absolute bottom-2 right-2 z-20 cursor-pointer rounded-lg border bg-card/90 shadow-sm"
-              width={160}
-              height={120}
-              viewBox="0 0 160 120"
+              width={MINIMAP_W}
+              height={MINIMAP_H}
+              viewBox={`0 0 ${MINIMAP_W} ${MINIMAP_H}`}
               onClick={handleMinimapClick}
             >
-              <rect width={160} height={120} rx={6} fill="var(--card)" fillOpacity={0.95} />
+              <rect width={MINIMAP_W} height={MINIMAP_H} rx={6} fill="var(--card)" fillOpacity={0.95} />
               {/* Node dots */}
               {nodes.map((node) => {
-                const px = ((node.x - bounds.minX) / bounds.width) * 160
-                const py = ((node.y - bounds.minY) / bounds.height) * 120
+                const px = ((node.x - bounds.minX) / bounds.width) * MINIMAP_W
+                const py = ((node.y - bounds.minY) / bounds.height) * MINIMAP_H
                 return (
                   <circle
                     key={node.memory.id}
@@ -511,31 +488,7 @@ export function MemoryGraph({ pool, query, selectedId, onSelect, projectDirector
                 )
               })}
               {/* Viewport indicator */}
-              {(() => {
-                const el = containerRef.current
-                if (!el) return null
-                const vw = el.clientWidth / transform.k
-                const vh = el.clientHeight / transform.k
-                const vx = (-transform.x / transform.k)
-                const vy = (-transform.y / transform.k)
-                const mmPx = (vx - bounds.minX) / bounds.width * 160
-                const mmPy = (vy - bounds.minY) / bounds.height * 120
-                const mmPw = vw / bounds.width * 160
-                const mmPh = vh / bounds.height * 120
-                return (
-                  <rect
-                    x={mmPx}
-                    y={mmPy}
-                    width={mmPw}
-                    height={mmPh}
-                    fill="none"
-                    stroke="var(--primary)"
-                    strokeWidth={1.2}
-                    rx={2}
-                    className="pointer-events-none"
-                  />
-                )
-              })()}
+              <MinimapViewport viewport={viewport} bounds={bounds} containerRef={containerRef} />
             </svg>
           )}
 
