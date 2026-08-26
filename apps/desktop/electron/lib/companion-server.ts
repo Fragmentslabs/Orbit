@@ -242,7 +242,12 @@ function sendResponse(ws: WebSocket, requestId: string, ok: boolean, data?: unkn
 /** Notifica tanto os companions autenticados quanto as janelas do desktop
  *  (mesmo canal 'chat:event' que o renderer já escuta) — mantém os dois
  *  lados em sincronia quando uma sessão/pasta muda por qualquer um deles. */
-function broadcastSessionEvent(event: ChatEvent) {
+/**
+ * Propaga mudança de sessão/pasta para todas as janelas e para os companions.
+ * Exportado porque as ferramentas de manutenção (tools/sessions.ts) mutam
+ * sessões pelo main e precisam que o renderer acompanhe.
+ */
+export function broadcastSessionEvent(event: ChatEvent) {
   forwardChatEvent(event)
   for (const win of BrowserWindow.getAllWindows()) {
     if (!win.isDestroyed()) {

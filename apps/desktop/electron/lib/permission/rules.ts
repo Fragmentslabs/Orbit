@@ -52,6 +52,17 @@ const NATIVE_TOOLS = new Set([
   'memory_tree',
   // Revisão in-place de uma memória — mesmo threat model do memory_save
   'memory_update',
+  // Manutenção de memória: listar por desuso e excluir. Nativas porque o dado
+  // é do próprio agente (resumos que ele escreveu); a trava do delete é a
+  // deliberação exigida pela tool (motivo escrito), não uma caixa de permissão.
+  'memory_list',
+  'memory_delete',
+  // Manutenção de chats — as rotinas de limpeza dependem delas. chat_delete é
+  // irreversível: a proteção mora na própria tool (recusa fixados, limite por
+  // chamada, motivo obrigatório) e na descrição, que manda preferir arquivar.
+  'chat_list',
+  'chat_archive',
+  'chat_delete',
   // Processos em background
   'bash_background',
   'bash_list',

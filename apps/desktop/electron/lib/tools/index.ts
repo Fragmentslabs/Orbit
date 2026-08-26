@@ -4,6 +4,7 @@ import { getMcpTools } from '../mcp'
 import { createBrowserLinksTool, createBrowserOpenTool } from './browser'
 import { createBrowserScriptTools } from './browser-script'
 import { createEsteiraTools } from './esteira'
+import { createSessionTools } from './sessions'
 import type { ToolContext } from './context'
 import {
   createEditTool,
@@ -66,6 +67,10 @@ export function buildToolSet(input: SendMessageInput, ctx: ToolContext | null): 
     // Workers ficam de fora: quem decide o que vira task é a sessão principal.
     if (input.orchestrationRole !== 'worker') {
       Object.assign(tools, createEsteiraTools(input.sessionId, input))
+      // Manutenção de chats (listar por inatividade, arquivar, excluir): base
+      // das rotinas de limpeza. Fora dos workers pelo mesmo motivo da esteira —
+      // quem decide o que sai da sidebar é a sessão principal.
+      Object.assign(tools, createSessionTools())
     }
     if (allowDelegation) tools.subagent = createSubagentTool(input, ctx)
     // Modo Visão: ver as imagens anexadas é decisão do agente — a tool
@@ -118,6 +123,10 @@ export function buildToolSet(input: SendMessageInput, ctx: ToolContext | null): 
   }
   if (input.orchestrationRole !== 'worker') {
     Object.assign(tools, createEsteiraTools(input.sessionId, input))
+    // Manutenção de chats (listar por inatividade, arquivar, excluir): base
+    // das rotinas de limpeza. Fora dos workers pelo mesmo motivo da esteira —
+    // quem decide o que sai da sidebar é a sessão principal.
+    Object.assign(tools, createSessionTools())
   }
   if (allowQuestion) tools.question = createQuestionTool(input, ctx?.abort)
   if (allowDelegation) tools.subagent = createSubagentTool(input, ctx)

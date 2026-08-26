@@ -2,6 +2,7 @@ import { tool, type ToolSet } from 'ai'
 import { z } from 'zod'
 import type { SendMessageInput } from '@shared/chat'
 import type { Memory } from '@shared/memory'
+import { isCodeContext } from '@shared/memory'
 import { projectIdOf } from '../memory/domain'
 import * as memory from '../memory/service'
 import type { ToolContext } from './context'
@@ -66,6 +67,120 @@ async function requireParent(projectId: string, relatedIds: string[] | undefined
 function searchReply(results: Memory[]): string {
   if (results.length === 0) return 'Nenhuma memória relevante encontrada.'
   return results.map(describe).join('\n')
+}
+
+/** Idade em dias, para os relatórios de manutenção. */
+function dias(desde: number): number {
+  return Math.floor((Date.now() - desde) / (24 * 60 * 60 * 1000))
+}
+
+/**
+ * Lista por USO, não por relevância — é o que a manutenção precisa: a busca
+ * léxica esconde justamente as memórias esquecidas, que não casam com nenhum
+ * termo. Ordena da menos usada e mais antiga para a mais viva.
+ *
+ * No modo chat (sem projectId) o conhecimento de código fica de fora por
+ * padrão, igual ao memory_search: enumerar não é o mesmo que consultar, mas o
+ * agente conversacional não deveria topar com memórias de projeto sem pedir.
+ * A rotina de consolidação pede — é ela que passa includeProjectMemories.
+ */
+function createListTool(projectId?: string) {
+  return tool({
+    description: [
+      'Lists memories ordered by DISUSE (fewest hits and oldest first), with hits, age and last use.',
+      'Use it for maintenance: memory_search ranks by lexical relevance and therefore hides exactly the',
+      'forgotten memories you are looking for. Returns ids, so it pairs with memory_update and memory_delete.',
+    ].join(' '),
+    inputSchema: z.object({
+      kind: z.enum(['core', 'seasonal', 'general', 'project']).optional().describe('Restricts to one type'),
+      category: z
+        .enum(['preference', 'convention', 'structure', 'decision', 'context', 'database', 'standard', 'learning'])
+        .optional(),
+      maxHits: z.number().int().min(0).optional().describe('Only memories used at most this many times (0 = never used)'),
+      minAgeDays: z.number().int().min(0).optional().describe('Only memories created at least this many days ago'),
+      onlyOrphans: z.boolean().optional().describe('Only memories with no connections at all'),
+      includeProjectMemories: z
+        .boolean()
+        .optional()
+        .describe(
+          'Chat mode only. Default false: project memories and cross-project learnings stay out, ' +
+          'as they do in memory_search. Set true ONLY for maintenance work that must span every project.',
+        ),
+      limit: z.number().int().min(1).max(100).optional().describe('Default: 30'),
+    }),
+    execute: async ({ kind, category, maxHits, minAgeDays, onlyOrphans, includeProjectMemories, limit }) => {
+      const todas = await memory.list()
+      const agora = Date.now()
+      const ids = new Set(todas.map((m) => m.id))
+      const filtradas = todas
+        .filter((m) => {
+          if (m.expiresAt != null && m.expiresAt < agora) return false
+          if (kind && m.kind !== kind) return false
+          if (category && m.category !== category) return false
+          // Escopo do projeto quando a ferramenta roda no modo código: sem
+          // isto a limpeza de um projeto alcançaria memórias de outro.
+          // Modo código: só o projeto atual. Modo chat: nada de código, a menos
+          // que a chamada peça explicitamente.
+          if (projectId) {
+            if (m.kind === 'project' && m.projectId !== projectId) return false
+          } else if (!includeProjectMemories && isCodeContext(m)) {
+            return false
+          }
+          if (maxHits != null && m.hits > maxHits) return false
+          if (minAgeDays != null && dias(m.createdAt) < minAgeDays) return false
+          if (onlyOrphans && m.relatedIds.some((r) => ids.has(r))) return false
+          return true
+        })
+        .sort((a, b) => a.hits - b.hits || a.createdAt - b.createdAt)
+        .slice(0, limit ?? 30)
+
+      if (filtradas.length === 0) return 'Nenhuma memória corresponde a esses critérios.'
+      return [
+        `${filtradas.length} memória(s), da menos usada para a mais usada:`,
+        ...filtradas.map((m) => {
+          const usoRecente = m.lastHitAt ? `, último uso há ${dias(m.lastHitAt)}d` : ', nunca usada'
+          return `${describe(m)} — criada há ${dias(m.createdAt)}d${usoRecente}`
+        }),
+      ].join('\n')
+    },
+  })
+}
+
+/**
+ * Exclusão de memória. Menos grave que apagar um chat (não há conteúdo do
+ * usuário aqui, só o que o agente resumiu), mas ainda é definitivo: o
+ * documento anexado e os backlinks das vizinhas vão junto.
+ */
+function createDeleteTool() {
+  return tool({
+    description: [
+      'Permanently deletes memories by id, along with any attached document and the backlinks pointing to them.',
+      'Before deleting near-duplicates, prefer memory_update: rewriting the surviving memory to absorb the other',
+      'keeps its id, its links and its accumulated hits, which deleting throws away.',
+      'Deleting is right for what is obsolete, wrong, or genuinely redundant — not for what is merely unused.',
+    ].join(' '),
+    inputSchema: z.object({
+      ids: z.array(z.string()).min(1).max(50).describe('Memory ids (from memory_list / memory_search)'),
+      motivo: z
+        .string()
+        .min(10)
+        .describe('Why these specific memories should cease to exist. Written out so the choice is deliberate.'),
+    }),
+    execute: async ({ ids, motivo }) => {
+      const linhas: string[] = []
+      let apagadas = 0
+      for (const id of ids) {
+        const existente = await memory.getFull(id)
+        if (!existente) {
+          linhas.push(`#${id}: não encontrada`)
+          continue
+        }
+        await memory.remove(id)
+        apagadas++
+      }
+      return [`${apagadas} memória(s) excluída(s). Motivo: ${motivo}`, ...linhas].join('\n')
+    },
+  })
 }
 
 function createOpenTool() {
@@ -168,6 +283,8 @@ export function createChatMemoryTools(input: SendMessageInput): ToolSet {
         return ok ? 'Memórias conectadas.' : 'Não foi possível conectar: alguma das memórias não existe.'
       },
     }),
+    memory_list: createListTool(),
+    memory_delete: createDeleteTool(),
     memory_open: createOpenTool(),
   }
 }
@@ -386,6 +503,8 @@ export function createCodeMemoryTools(input: SendMessageInput, ctx: ToolContext)
       },
     }),
 
+    memory_list: createListTool(projectId),
+    memory_delete: createDeleteTool(),
     memory_open: createOpenTool(),
   }
 }
