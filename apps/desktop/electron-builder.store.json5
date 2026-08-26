@@ -1,11 +1,22 @@
 // @see - https://www.electron.build/ms-windows#appx
 // Build MSIX para a Microsoft Store (Partner Center).
 // Identidade reservada: FragmentsLabs.OrbitCode (publisher CN=4E3E514F-094A-4537-AE9E-AF15CB35D52A)
-// Uso: npm run dist:store — requer Windows 10+ (no macOS exige VM Parallels com Windows)
+// Uso: npm run build:store — requer Windows 10+ (no macOS exige VM Parallels com Windows)
 // Sem certificado configurado o pacote sai sem assinatura: a Store assina na ingestão.
+//
+// Saída em release/store/, separada do build normal: os dois usam "win-unpacked"
+// dentro do output, e compartilhar a pasta quebrava o segundo a rodar — o
+// electron-builder reaproveitava o diretório, pulava a extração do Electron e
+// falhava ao renomear um electron.exe que a build anterior já tinha renomeado.
+//
+// O alvo appx aqui NÃO basta sozinho: "extends" concatena arrays, então o nsis
+// do pai continuaria na lista. Quem restringe é o `--win appx` do script.
 {
   "$schema": "https://raw.githubusercontent.com/electron-userland/electron-builder/master/packages/app-builder-lib/scheme.json",
   "extends": "./electron-builder.json5",
+  "directories": {
+    "output": "release/store/${version}"
+  },
   "win": {
     "target": [
       {
