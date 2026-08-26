@@ -7,7 +7,9 @@ import type {
   RotinaModelo,
   RotinaRun,
 } from "@shared/rotinas"
+import { ROTINAS_PADRAO } from "@shared/rotinas-padrao"
 import { rotinasApi } from "@/src/lib/ipc"
+import { useProviderStore } from "@/src/stores/provider-store"
 import { useSessionStore } from "@/src/stores/session-store"
 
 /**
@@ -58,6 +60,58 @@ interface RotinasState {
 /** Array vazio ESTÁVEL: `?? []` num seletor zustand vira loop de render. */
 export const SEM_RUNS: RotinaRun[] = []
 
+/** Presets já semeados — por id, para o usuário poder apagar sem que voltem. */
+const SEMEADAS_KEY = "orbit-rotinas-padrao-semeadas"
+
+function jaSemeadas(): string[] {
+  try {
+    const bruto = localStorage.getItem(SEMEADAS_KEY)
+    return bruto ? (JSON.parse(bruto) as string[]) : []
+  } catch {
+    return []
+  }
+}
+
+/**
+ * Cria as rotinas de manutenção que acompanham o produto, DESATIVADAS.
+ *
+ * Só roda quando já existe um modelo selecionado: `Rotina.modelo` é
+ * obrigatório, e semear com um modelo inventado deixaria uma rotina que
+ * quebra no primeiro uso. Sem modelo, tenta de novo no próximo carregamento.
+ *
+ * O registro do que já foi semeado é por id e fica no localStorage: quem
+ * apagar um preset não o vê renascer no próximo boot.
+ */
+async function semearRotinasPadrao(): Promise<void> {
+  const feitas = new Set(jaSemeadas())
+  const pendentes = ROTINAS_PADRAO.filter((r) => !feitas.has(r.id))
+  if (pendentes.length === 0) return
+
+  const modelo = useProviderStore.getState().selectedModel
+  if (!modelo) return
+
+  for (const preset of pendentes) {
+    try {
+      await useRotinasStore.getState().criar({
+        titulo: preset.titulo,
+        prompt: preset.prompt,
+        agenda: preset.agenda,
+        modelo: { providerId: modelo.providerId, modelId: modelo.modelId },
+        modos: preset.modos,
+        mode: preset.mode,
+        // Ambos os presets são modo chat e não leem arquivos — sem pastas.
+        pastas: [],
+        ativa: false,
+      })
+      feitas.add(preset.id)
+    } catch (err) {
+      // Falhar a semeadura nunca pode derrubar a tela de rotinas.
+      console.error("[rotinas] preset não pôde ser criado:", preset.id, err)
+    }
+  }
+  localStorage.setItem(SEMEADAS_KEY, JSON.stringify([...feitas]))
+}
+
 export const useRotinasStore = create<RotinasState>((set, get) => ({
   rotinas: [],
   runs: [],
@@ -68,6 +122,7 @@ export const useRotinasStore = create<RotinasState>((set, get) => ({
   carregar: async () => {
     const dados = await rotinasApi.carregar()
     set({ rotinas: dados.rotinas, runs: dados.runs, carregado: true })
+    await semearRotinasPadrao()
   },
 
   aplicarEvento: (evento) => {
