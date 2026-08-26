@@ -1012,15 +1012,27 @@
     "sucesso": "Repositório {{repo}} criado e commits enviados.",
     "criadoSemPush": "Repositório {{repo}} criado, mas o envio falhou. O remote já está configurado — tente enviar novamente.",
     "erro": {
-      "noCredential": "Não há uma credencial HTTPS do GitHub nesta máquina. Se o seu git autentica por SSH, o push funciona pelas chaves — mas a API do GitHub, que cria o repositório, exige um token, e chave SSH não serve. Instale o GitHub CLI (`gh auth login`) ou cole um token abaixo. Detalhe:",
-      "auth": "O token do GitHub foi recusado ou não tem permissão para criar repositórios. Verifique se ele tem o escopo \"repo\". Detalhe:",
+      "noCredential": "O GitHub CLI está instalado, mas não está autenticado — autentique com o comando abaixo. É um passo único: as próximas criações não pedirão nada.",
+      "noCredentialGhMissing": "Não há credencial HTTPS do GitHub nesta máquina — esperado se o seu git autentica por SSH: o push funciona pelas chaves, mas a API que cria o repositório exige um token, e chave SSH não vira token. O GitHub CLI resolve isso de vez: instale e autentique com os comandos abaixo. É um passo único — as próximas criações não pedirão nada.",
+      "auth": "O token do GitHub foi recusado ou não tem permissão para criar repositórios. Atualize a autenticação (`gh auth login` ou as credenciais HTTPS do seu git) e verifique se o escopo \"repo\" está incluído. Detalhe:",
       "nameTaken": "Já existe um repositório com esse nome na sua conta.",
       "invalidName": "O GitHub recusou esse nome. Use apenas letras, números, ponto, hífen e underline.",
       "noCommits": "Esta pasta ainda não tem nenhum commit. Faça o primeiro commit antes de publicar.",
-      "other": "Não foi possível criar o repositório:"
+      "other": "Não foi possível criar o repositório:",
+      "detalhe": "Detalhe",
+      "detalheGitExit": "sem credencial HTTPS para github.com (git saiu com {{codigo}})",
+      "detalheGitSpawn": "não foi possível executar \"git credential fill\"",
+      "detalheGitTimeout": "o helper de credencial do git não respondeu em 20s",
+      "detalheGhAusente": "gh não encontrado no PATH",
+      "detalheGhFalhou": "o gh falhou",
+      "detalheGhSemToken": "o gh não forneceu um token"
     },
-    "tokenLabel": "Token de acesso do GitHub",
-    "tokenHint": "Cole um Personal Access Token com escopo \"repo\". Ele é usado só nesta operação e não fica salvo."
+    "comandos": {
+      "rotulo": "Terminal",
+      "copiar": "Copiar",
+      "copiado": "Copiado!",
+      "outros": "Outros sistemas e distribuições — veja cli.github.com"
+    }
   },
   "mcp": {
     "kv": {

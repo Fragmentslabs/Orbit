@@ -33,12 +33,15 @@ function DropdownMenuContent({
   return (
     <MenuPrimitive.Portal>
       <MenuPrimitive.Positioner
-        // z acima do dialog (z-[80]): o Positioner cria contexto de empilhamento
-        // com `isolate`, então o z-50 antigo prendia QUALQUER dropdown aberto
-        // dentro de um modal atrás dele — e o className do Content só alcança o
-        // Popup, já dentro desse contexto. Popup sempre acima da superfície que
-        // o abriu.
-        className="isolate z-[90] outline-none"
+        // z acima de TUDO no app: o Positioner cria contexto de empilhamento
+        // com `isolate`, então o z do Popup interno (z-50) só vale DENTRO
+        // dele. Já subimos de z-50 → z-[90] (modais z-[80]) e ainda havia
+        // superfícies acima por posição: overlay de drag de pasta (z-[100],
+        // App.tsx) e o próprio conteúdo do painel quando o popup abre
+        // flipado/estendido sobre ele. z-[999] — o mesmo teto dos tooltips
+        // fixos (activity-heatmap) — garante o popup por cima de qualquer
+        // superfície DOM que o abriu.
+        className="isolate z-[999] outline-none"
         align={align}
         alignOffset={alignOffset}
         side={side}
