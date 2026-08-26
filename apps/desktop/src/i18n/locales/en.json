@@ -811,7 +811,9 @@
     "tabQr": "QR Code",
     "tabManual": "Manual",
     "connectedDevices_one": "1 connected device",
-    "connectedDevices_other": "{{count}} connected devices"
+    "connectedDevices_other": "{{count}} connected devices",
+    "noAppTitle": "Don't have the app?",
+    "downloadLink": "Install now"
   },
   "branch": {
     "previous": "Previous branch",

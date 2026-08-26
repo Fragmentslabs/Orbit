@@ -811,7 +811,9 @@
     "tabQr": "QR Code",
     "tabManual": "Manual",
     "connectedDevices_one": "{{count}} dispositivo conectado",
-    "connectedDevices_other": "{{count}} dispositivos conectados"
+    "connectedDevices_other": "{{count}} dispositivos conectados",
+    "noAppTitle": "Não tem o app?",
+    "downloadLink": "Instale agora"
   },
   "branch": {
     "previous": "Ramo anterior",

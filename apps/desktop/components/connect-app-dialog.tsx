@@ -10,6 +10,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { cn } from "@/lib/utils"
+import { MOBILE_DOWNLOAD_URL } from "@/src/lib/appLinks"
 import { formatTime } from "@/src/lib/format"
 import { companionApi, type CompanionStatus } from "@/src/lib/ipc"
 
@@ -197,6 +198,19 @@ export function ConnectAppDialog({ open, onOpenChange }: Props) {
               ) : null}
             </div>
           ) : null}
+
+          {/* Não tem o app? — link discreto para o smart link /mobile (baixa no celular) */}
+          <p className="text-xs text-muted-foreground">
+            {t("connectApp.noAppTitle")}{" "}
+            <a
+              href={MOBILE_DOWNLOAD_URL}
+              target="_blank"
+              rel="noreferrer"
+              className="font-medium text-primary underline-offset-2 hover:underline"
+            >
+              {t("connectApp.downloadLink")}
+            </a>
+          </p>
 
           {error ? <p className="text-xs text-destructive">{error}</p> : null}
         </div>
