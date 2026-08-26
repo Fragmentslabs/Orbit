@@ -1,7 +1,8 @@
 import { app } from 'electron'
 import path from 'node:path'
-import { execFile, spawn } from 'node:child_process'
-import { appendFileSync, existsSync, mkdirSync } from 'node:fs'
+import { spawn } from 'node:child_process'
+import { appendFileSync, existsSync, mkdirSync, statSync } from 'node:fs'
+import { userShellEnv } from './shell-env'
 
 /**
  * Reprodução de sons custom (WAV) no main process.
@@ -12,8 +13,12 @@ import { appendFileSync, existsSync, mkdirSync } from 'node:fs'
  * (`extraResources`) para `Resources/sounds`.
  *
  * Player por plataforma: macOS `afplay`, Windows SoundPlayer via PowerShell,
- * Linux `paplay`/`aplay`/`ffplay`. Quando nenhum player está disponível o
- * chamador cai no som nativo do sistema (ver notifications.ts).
+ * Linux `pw-play`/`paplay`/`aplay`/`ffplay`. Quando nenhum player está
+ * disponível o chamador cai no som nativo do sistema (ver notifications.ts).
+ *
+ * Todos os players precisam ser SÍNCRONOS: o áudio morre junto com o processo
+ * que o toca. No Windows isso significa `PlaySync()` — com `Play()`, que é
+ * assíncrono, o PowerShell saía em ~0,7s e cortava o som de entrada de 4,2s.
  */
 
 type Player = { bin: string; args: (caminho: string) => string[] }
@@ -31,10 +36,31 @@ export function logSom(msg: string): void {
 
 let playerCache: Player | null | 'unknown' = 'unknown'
 
-function existeComando(cmd: string): Promise<boolean> {
-  return new Promise((resolve) => {
-    execFile('which', [cmd], (erro, stdout) => resolve(!erro && stdout.trim().length > 0))
-  })
+/** PATH do usuário (no Linux/macOS o app de GUI herda um PATH reduzido). */
+let envCache: NodeJS.ProcessEnv | undefined
+function playerEnv(): NodeJS.ProcessEnv {
+  envCache ??= userShellEnv()
+  return envCache
+}
+
+/**
+ * Procura o binário nos diretórios do PATH lendo o disco.
+ *
+ * Antes isto chamava `which`, o que fazia a detecção inteira depender de um
+ * utilitário externo: numa imagem enxuta sem ele, NENHUM player era achado e
+ * o Linux ficava mudo. Ler o PATH não depende de nada.
+ */
+function existeComando(cmd: string): boolean {
+  const dirs = (playerEnv().PATH ?? '').split(path.delimiter).filter(Boolean)
+  for (const dir of dirs) {
+    const alvo = path.join(dir, cmd)
+    try {
+      if (statSync(alvo).isFile()) return true
+    } catch {
+      // caminho inexistente ou sem permissão — segue para o próximo
+    }
+  }
+  return false
 }
 
 async function resolverPlayer(): Promise<Player | null> {
@@ -50,12 +76,16 @@ async function resolverPlayer(): Promise<Player | null> {
       args: (p) => [
         '-NoProfile',
         '-Command',
-        `(New-Object Media.SoundPlayer '${p.replace(/'/g, "''")}').Play()`,
+        // PlaySync, não Play: Play() retorna na hora e o som morre junto com
+        // o PowerShell, tocando menos de 1s de um WAV de 4s.
+        `(New-Object Media.SoundPlayer '${p.replace(/'/g, "''")}').PlaySync()`,
       ],
     }
   } else if (process.platform === 'linux') {
-    for (const bin of ['paplay', 'aplay', 'ffplay']) {
-      if (await existeComando(bin)) {
+    // pw-play primeiro: em distros com PipeWire sem a camada de compat do
+    // PulseAudio ele é o único presente dos quatro.
+    for (const bin of ['pw-play', 'paplay', 'aplay', 'ffplay']) {
+      if (existeComando(bin)) {
         player = {
           bin,
           args: (p) => (bin === 'ffplay' ? ['-nodisp', '-autoexit', '-loglevel', 'quiet', p] : [p]),
@@ -91,7 +121,11 @@ export function tocarSom(nome: string): Promise<boolean> {
       if (!player) return logSom(`${nome}: sem player disponível`), resolve(false)
       const caminho = caminhoSom(nome)
       if (!existsSync(caminho)) return logSom(`${nome}: WAV não encontrado em ${caminho}`), resolve(false)
-      const child = spawn(player.bin, player.args(caminho), { stdio: 'ignore', windowsHide: true })
+      const child = spawn(player.bin, player.args(caminho), {
+        stdio: 'ignore',
+        windowsHide: true,
+        env: playerEnv(),
+      })
       child.on('error', (erro) => {
         logSom(`${nome}: falha ao iniciar ${player.bin} — ${erro.message}`)
         resolve(false)
