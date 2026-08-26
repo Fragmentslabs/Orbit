@@ -918,6 +918,50 @@ function SessionRowWithChildren({ session, childSessions, hasChildren }: {
   )
 }
 
+/**
+ * Pasta ATIVA aparecendo dentro de "Arquivados" só para agrupar os chats dela
+ * que foram arquivados.
+ *
+ * É somente leitura de propósito: reusar o FolderItem faria a pasta expandir
+ * junto com a de "Pastas" (o estado é guardado por folder.id) e ofereceria
+ * renomear/arquivar/excluir a pasta real a partir daqui.
+ *
+ * Nenhuma pasta espelho é criada no armazenamento: o chat mantém o folderId,
+ * então volta sozinho para o lugar ao ser desarquivado, e quando a pasta
+ * original for arquivada os chats se juntam a ela sem duplicar nome.
+ */
+function ArchivedFolderGroup({ folder, sessions }: {
+  folder: FolderInfo
+  sessions: SessionInfo[]
+}) {
+  const [expanded, setExpanded] = useState(false)
+  if (sessions.length === 0) return null
+  return (
+    <>
+      <SidebarMenuItem>
+        <SidebarMenuButton
+          className="text-sidebar-foreground/70"
+          onClick={() => setExpanded((v) => !v)}
+        >
+          <Folder className="size-4 shrink-0" />
+          <div className="flex min-w-0 flex-1 items-center gap-1 overflow-hidden">
+            <span className="truncate">{folder.name}</span>
+            <span className="shrink-0 text-[10px] text-sidebar-foreground/40">{sessions.length}</span>
+            <ChevronDown className={cn("size-3 shrink-0 transition-transform", !expanded && "-rotate-90")} />
+          </div>
+        </SidebarMenuButton>
+      </SidebarMenuItem>
+      {expanded && (
+        <div className="ml-3 border-l border-sidebar-border pl-1">
+          {sessions.map((session) => (
+            <SessionItem key={session.id} session={session} />
+          ))}
+        </div>
+      )}
+    </>
+  )
+}
+
 function FolderItem({ folder, sessions, childrenByParent = {} }: {
   folder: FolderInfo
   sessions: SessionInfo[]
@@ -1150,8 +1194,16 @@ function ChatHistory() {
     // de uma pasta arquivada cai nos recentes (a pasta continua arquivada)
     .filter((s) => !s.folderId || !activeFolders.some((f) => f.id === s.folderId))
     .sort((a, b) => b.updatedAt - a.updatedAt)
-  // Arquivados soltos: os chats de pastas arquivadas ficam dentro da pasta
-  const archived = archivedSessions.filter((s) => !s.folderId || !archivedFolderIds.has(s.folderId))
+  // Arquivados soltos: os de pasta ARQUIVADA aparecem dentro dela; os de pasta
+  // ATIVA ganham um agrupamento por nome logo abaixo — antes caíam soltos aqui
+  // e perdiam a referência da pasta a que pertencem.
+  const archivedInActiveFolders = archivedSessions.filter(
+    (s) => s.folderId != null && !archivedFolderIds.has(s.folderId),
+  )
+  const activeFoldersWithArchived = activeFolders
+    .filter((f) => archivedInActiveFolders.some((s) => s.folderId === f.id))
+    .sort((a, b) => a.name.localeCompare(b.name))
+  const archived = archivedSessions.filter((s) => !s.folderId)
   const pinned = rootSessions.filter((s) => s.pinned)
   const recent = rootSessions.filter((s) => !s.pinned)
 
@@ -1253,7 +1305,9 @@ function ChatHistory() {
         </AccordionGroup>
       )}
 
-      {(archived.length > 0 || sortedArchivedFolders.length > 0) && (
+      {(archived.length > 0 ||
+        sortedArchivedFolders.length > 0 ||
+        activeFoldersWithArchived.length > 0) && (
         <AccordionGroup label={t("sidebar.groups.archived")} defaultExpanded={false}>
           <SidebarMenu>
             {sortedArchivedFolders.map((folder) => (
@@ -1262,6 +1316,13 @@ function ChatHistory() {
                 folder={folder}
                 sessions={archivedSessions.filter((s) => s.folderId === folder.id)}
                 childrenByParent={childrenByParent}
+              />
+            ))}
+            {activeFoldersWithArchived.map((folder) => (
+              <ArchivedFolderGroup
+                key={`arch:${folder.id}`}
+                folder={folder}
+                sessions={archivedInActiveFolders.filter((s) => s.folderId === folder.id)}
               />
             ))}
             {archived.map((session) => (
