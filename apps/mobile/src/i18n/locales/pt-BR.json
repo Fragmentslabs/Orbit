@@ -806,6 +806,12 @@
     "tipLabel": "Dica:",
     "tipText": "use Tailscale para acessar seu desktop de qualquer lugar, sem configurar a rede."
   },
+  "connectionStatus": {
+    "disconnected": "Desconectado",
+    "connecting": "Conectando...",
+    "authenticating": "Autenticando...",
+    "connected": "Conectado"
+  },
   "qrScanner": {
     "preparingCamera": "Preparando câmera...",
     "permissionRequiredTitle": "Permissão de câmera necessária",
