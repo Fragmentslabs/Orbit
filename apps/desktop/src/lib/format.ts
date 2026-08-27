@@ -25,20 +25,35 @@ export function formatTime(ts: number, locale: string): string {
   })
 }
 
+/** Ligação entre data e hora: "às" em português, "at" nos demais. */
+function dateTimeConnector(locale: string): string {
+  return locale.toLowerCase().startsWith("pt") ? "às" : "at"
+}
+
 /** Data completa + horário no padrão do locale (ex.: pt "quinta-feira, 6 de agosto de 2026 às 14:00"). */
 export function formatDateTime(ts: number, locale: string): string {
   const date = new Date(ts).toLocaleDateString(locale, { dateStyle: "full" })
-  const time = formatTime(ts, locale)
-  const connector = locale.toLowerCase().startsWith("pt") ? "às" : "at"
-  return `${date} ${connector} ${time}`
+  return `${date} ${dateTimeConnector(locale)} ${formatTime(ts, locale)}`
 }
 
 /** Data (dia, mês e ano, sem o nome do dia da semana) + horário (ex.: pt "6 de agosto de 2026 às 14:00"). */
 export function formatDateTimeShort(ts: number, locale: string): string {
   const date = new Date(ts).toLocaleDateString(locale, { dateStyle: "long" })
-  const time = formatTime(ts, locale)
-  const connector = locale.toLowerCase().startsWith("pt") ? "às" : "at"
-  return `${date} ${connector} ${time}`
+  return `${date} ${dateTimeConnector(locale)} ${formatTime(ts, locale)}`
+}
+
+/**
+ * Data só em números + horário (pt "27/08/2026 às 14:30", en "08/27/2026 at
+ * 02:30 PM"). A ordem dia/mês sai do próprio locale — em inglês o mês vem na
+ * frente. Para onde o mês por extenso não cabe, como o card de commit.
+ */
+export function formatDateTimeNumeric(ts: number, locale: string): string {
+  const date = new Date(ts).toLocaleDateString(locale, {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  })
+  return `${date} ${dateTimeConnector(locale)} ${formatTime(ts, locale)}`
 }
 
 /** Duração legível (ex.: "3s", "1m 12s", "2h 05m") a partir de um intervalo em ms. */
