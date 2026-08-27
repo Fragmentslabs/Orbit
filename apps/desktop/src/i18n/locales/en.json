@@ -1612,7 +1612,7 @@
     }
   },
   "esteira": {
-    "titulo": "Pipeline",
+    "titulo": "Pipelines",
     "carregando": "Loading board...",
     "vazioTitulo": "No boards yet",
     "vazioSubtitulo": "Pick the repository and the phases; the pipeline runs tasks phase by phase, without chats.",
