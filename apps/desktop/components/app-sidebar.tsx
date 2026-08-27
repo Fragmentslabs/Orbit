@@ -1234,7 +1234,7 @@ function ChatHistory() {
         label={t("sidebar.groups.folders")}
         action={
           !selectionMode && (
-            <div className="flex items-center gap-0.5">
+            <div className="flex items-center gap-2">
               <button
                 onClick={(e) => {
                   e.stopPropagation()
@@ -1365,7 +1365,7 @@ function AccountDropdown({ onOpenSettings }: { onOpenSettings: () => void }) {
           <AvatarImage src="" />
           <AvatarFallback>OR</AvatarFallback>
         </Avatar>
-        <div className="flex flex-1 flex-col truncate">
+        <div className="flex flex-col truncate">
           <span className="truncate font-medium">Orbit</span>
           <a
             href="https://fragmentslabs.com"
