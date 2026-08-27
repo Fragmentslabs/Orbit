@@ -140,6 +140,10 @@ export function MemoryGraph({ pool, allById, query, selectedId, onSelect }: {
           panBase.current = live.current
         })
         .onUpdate((e) => {
+          // Arraste é coisa de um dedo só. O `maxPointers(1)` já reprova o
+          // gesto quando um segundo dedo encosta, mas a checagem aqui é de
+          // graça e não depende desse detalhe do RNGH.
+          if (e.numberOfPointers !== 1) return
           const base = panBase.current
           setTransform({ k: base.k, x: base.x + e.translationX, y: base.y + e.translationY })
         }),
@@ -161,6 +165,12 @@ export function MemoryGraph({ pool, allById, query, selectedId, onSelect }: {
           pinchBase.current = { t, cx: (e.focalX - t.x) / t.k, cy: (e.focalY - t.y) / t.k }
         })
         .onUpdate((e) => {
+          // Ao soltar a pinça um dedo sai antes do outro, e o foco — que é o
+          // ponto médio entre eles — colapsa em cima do que ficou. Esse update
+          // é um salto, não um gesto: aplicá-lo puxava o canvas na direção do
+          // dedo restante em vez de parar no zoom onde a pinça terminou.
+          // Ignorando, o transform fica no último estado de dois dedos.
+          if (e.numberOfPointers < 2) return
           const { t, cx, cy } = pinchBase.current
           const k = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, t.k * e.scale))
           // O ponto de ancoragem é fixo desde o início do gesto. Antes ele era
