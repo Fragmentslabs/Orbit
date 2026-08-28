@@ -480,7 +480,11 @@
     "selectFolderTitle": "Selecionar pasta no desktop",
     "useThis": "Usar esta",
     "noSubfolders": "Nenhuma subpasta aqui.",
-    "listError": "Não foi possível listar as pastas."
+    "listError": "Não foi possível listar as pastas.",
+    "extraCount_one": "+{{count}} pasta",
+    "extraCount_other": "+{{count}} pastas",
+    "extraTitle": "Pastas extras",
+    "addFolder": "Adicionar pasta"
   },
   "attachment": {
     "defaultFilename": "Arquivo",

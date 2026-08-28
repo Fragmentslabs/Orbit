@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Modal, View, Text, Pressable, ScrollView, ActivityIndicator, StyleSheet } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
-import { Folder, FolderUp, Plus, X, Check, History } from 'lucide-react-native'
+import { Folder, FolderUp, Plus, X, Check, History, Layers, ChevronDown } from 'lucide-react-native'
 import { useTranslation } from 'react-i18next'
 import type { ListDirsResponse } from '@orbit/shared'
 import { useConnectionStore } from '~/stores/connection-store'
@@ -43,6 +43,8 @@ export function FolderSelector({ folders, onFoldersChange, disabled }: FolderSel
   const tokens = getThemeTokens(useThemeStore((s) => s.resolved))
   const [browserOpen, setBrowserOpen] = useState(false)
   const [browserTarget, setBrowserTarget] = useState<'primary' | 'extra'>('primary')
+  const [extrasOpen, setExtrasOpen] = useState(false)
+  const extras = folders.slice(1)
 
   const openBrowser = (target: 'primary' | 'extra') => {
     if (disabled) return
@@ -79,26 +81,105 @@ export function FolderSelector({ folders, onFoldersChange, disabled }: FolderSel
         </Text>
       </Pressable>
 
-      {folders.slice(1).map((folder) => (
-        <View key={folder} style={[s.chip, { borderColor: tokens.border, backgroundColor: tokens.card }]}>
-          <Folder size={13} color={tokens.mutedForeground} />
-          <Text style={[s.chipText, { color: tokens.foreground }]} numberOfLines={1}>{folderName(folder)}</Text>
-          {!disabled && (
-            <Pressable onPress={() => removeFolder(folder)} hitSlop={8}>
-              <X size={12} color={tokens.mutedForeground} />
-            </Pressable>
-          )}
-        </View>
-      ))}
-
-      {folders.length > 0 && !disabled && (
-        <Pressable onPress={() => openBrowser('extra')} style={[s.addBtn, { borderColor: tokens.border }]}>
-          <Plus size={14} color={tokens.mutedForeground} />
+      {/* Com pasta extra, as chips + o "+" quebravam a linha e o X de uma chip
+          encostava no "+" da seguinte. Vira um botao so, que abre a lista —
+          mesma saida do desktop em tela estreita (CompactWorkspaceSelector). */}
+      {extras.length > 0 ? (
+        <Pressable
+          onPress={() => setExtrasOpen(true)}
+          style={[s.chip, { borderColor: tokens.border, backgroundColor: tokens.card }]}
+        >
+          <Layers size={13} color={tokens.mutedForeground} />
+          <Text style={[s.chipText, { color: tokens.foreground }]} numberOfLines={1}>
+            {t('folderSelector.extraCount', { count: extras.length })}
+          </Text>
+          <ChevronDown size={12} color={tokens.mutedForeground} />
         </Pressable>
+      ) : (
+        folders.length > 0 && !disabled && (
+          <Pressable onPress={() => openBrowser('extra')} style={[s.addBtn, { borderColor: tokens.border }]}>
+            <Plus size={14} color={tokens.mutedForeground} />
+          </Pressable>
+        )
       )}
 
       <DirBrowserModal visible={browserOpen} onClose={() => setBrowserOpen(false)} onPick={handlePicked} />
+      <ExtraFoldersSheet
+        visible={extrasOpen}
+        folders={extras}
+        disabled={disabled}
+        onClose={() => setExtrasOpen(false)}
+        onRemove={removeFolder}
+        onAdd={() => {
+          setExtrasOpen(false)
+          openBrowser('extra')
+        }}
+      />
     </View>
+  )
+}
+
+/**
+ * Pastas extras da sessao. Existe para o seletor caber numa linha so: com
+ * duas ou mais, as chips quebravam e o X de remover encostava no "+".
+ */
+function ExtraFoldersSheet({
+  visible,
+  folders,
+  disabled,
+  onClose,
+  onRemove,
+  onAdd,
+}: {
+  visible: boolean
+  folders: string[]
+  disabled?: boolean
+  onClose: () => void
+  onRemove: (path: string) => void
+  onAdd: () => void
+}) {
+  const { t } = useTranslation()
+  const tokens = getThemeTokens(useThemeStore((s) => s.resolved))
+  const insets = useSafeAreaInsets()
+
+  return (
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+      <View style={s.backdropWrap}>
+        <Pressable style={StyleSheet.absoluteFill} onPress={onClose} />
+        <View style={[s.extrasSheet, { paddingBottom: insets.bottom + 12, backgroundColor: tokens.background, borderColor: tokens.border }]}>
+          <View style={[s.handle, { backgroundColor: tokens.muted }]} />
+          <View style={s.sheetHeader}>
+            <Text style={[s.sheetTitle, { color: tokens.foreground }]}>{t('folderSelector.extraTitle')}</Text>
+            <Pressable onPress={onClose} style={{ padding: 4 }}>
+              <X size={20} color={tokens.foreground} />
+            </Pressable>
+          </View>
+
+          <ScrollView style={{ maxHeight: 280 }}>
+            {folders.map((folder) => (
+              <View key={folder} style={s.extraRow}>
+                <Folder size={16} color={tokens.mutedForeground} />
+                <Text style={[s.extraName, { color: tokens.foreground }]} numberOfLines={1}>
+                  {folderName(folder)}
+                </Text>
+                {!disabled && (
+                  <Pressable onPress={() => onRemove(folder)} hitSlop={10} style={{ padding: 4 }}>
+                    <X size={16} color={tokens.mutedForeground} />
+                  </Pressable>
+                )}
+              </View>
+            ))}
+          </ScrollView>
+
+          {!disabled && (
+            <Pressable onPress={onAdd} style={[s.extraAddRow, { borderColor: tokens.border }]}>
+              <Plus size={16} color={tokens.primary} />
+              <Text style={[s.extraName, { color: tokens.foreground }]}>{t('folderSelector.addFolder')}</Text>
+            </Pressable>
+          )}
+        </View>
+      </View>
+    </Modal>
   )
 }
 
@@ -241,6 +322,27 @@ const s = StyleSheet.create({
     borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+
+  extrasSheet: {
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    borderWidth: 1,
+    borderBottomWidth: 0,
+    paddingHorizontal: 16,
+    paddingTop: 8,
+  },
+  extraRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 8, paddingVertical: 11, borderRadius: 10 },
+  extraName: { flex: 1, fontSize: 14 },
+  extraAddRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginTop: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 11,
+    borderRadius: 10,
+    borderWidth: 1,
   },
 
   backdropWrap: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.6)' },

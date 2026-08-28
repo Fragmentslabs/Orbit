@@ -480,7 +480,11 @@
     "selectFolderTitle": "Select folder on desktop",
     "useThis": "Use this",
     "noSubfolders": "No subfolders here.",
-    "listError": "Could not list the folders."
+    "listError": "Could not list the folders.",
+    "extraCount_one": "{{count}} more folder",
+    "extraCount_other": "{{count}} more folders",
+    "extraTitle": "Extra folders",
+    "addFolder": "Add folder"
   },
   "attachment": {
     "defaultFilename": "File",
