@@ -39,3 +39,6 @@ packages/*/node_modules
 *.sw?
 
 release
+
+# Assets do AppX gerados no build:store (scripts/generate-appx-assets.mjs)
+apps/desktop/build/appx

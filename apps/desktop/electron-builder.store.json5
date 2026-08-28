@@ -28,8 +28,13 @@
     ],
     "artifactName": "Orbit-${version}.${ext}"
   },
+  // Os ladrilhos vêm de build/appx/, gerados por scripts/generate-appx-assets.mjs
+  // no build:store. Sem essa pasta o electron-builder usa os SampleAppx.*.png do
+  // vendor winCodeSign — o logo do Electron — e foi assim que a v0.1.0 subiu.
   "appx": {
     "displayName": "Orbit Code",
+    // Moldura dos ladrilhos: mesmo #18181B do fundo do icon.png (o padrão é #464646)
+    "backgroundColor": "#18181B",
     "identityName": "FragmentsLabs.OrbitCode",
     "publisher": "CN=4E3E514F-094A-4537-AE9E-AF15CB35D52A",
     "publisherDisplayName": "Fragments Labs",
