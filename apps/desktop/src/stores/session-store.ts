@@ -381,6 +381,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     const updated: PlanReview = { ...review, status: "implementing", permissionMode }
     set((state) => ({ planReviews: { ...state.planReviews, [sessionId]: updated } }))
     void storage.write(StorageKeys.planReview(sessionId), updated)
+    emitChatEvent({ type: "plan:review", sessionId, review: updated })
     // Plano aceito → desliga o toggle de modo plano: a próxima mensagem não
     // deve gerar outro plano.
     useModeOverrides.getState().setMode("plan", sessionId, false)
@@ -402,6 +403,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     const updated: PlanReview = { ...review, status: "rejected" }
     set((state) => ({ planReviews: { ...state.planReviews, [sessionId]: updated } }))
     void storage.write(StorageKeys.planReview(sessionId), updated)
+    emitChatEvent({ type: "plan:review", sessionId, review: updated })
   },
 
   dismissPlanReview: (sessionId: string) => {
@@ -419,6 +421,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     const updated: PlanReview = { ...review, status: "revising" }
     set((state) => ({ planReviews: { ...state.planReviews, [sessionId]: updated } }))
     void storage.write(StorageKeys.planReview(sessionId), updated)
+    emitChatEvent({ type: "plan:review", sessionId, review: updated })
     const session = get().sessions.find((s) => s.id === sessionId)
     const mode = session?.mode ?? "code"
     void get().sendMessage(mode, feedback, {
@@ -1250,6 +1253,9 @@ case "title":
         }
         patch.planReviews = { ...state.planReviews, [sessionId]: review }
         void storage.write(StorageKeys.planReview(sessionId), review)
+        // O mobile so descobre o plano por este evento: sem ele o card de
+        // aceite nunca aparecia la, mesmo com o plano pronto na conversa.
+        emitChatEvent({ type: "plan:review", sessionId, review })
       }
     }
     const cleanOutbox = { ...state._planReviewOutbox }
