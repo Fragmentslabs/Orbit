@@ -550,17 +550,23 @@ const STATUS_MAP: Record<string, CommitFileEntry['status']> = {
 const FIELD_SEP = '\x1f'
 const RECORD_SEP = '\x1e'
 
-async function getGitLog(repoPath: string): Promise<{ ok: true; commits: CommitEntry[] } | { ok: false; error: string }> {
+/** Tamanho de página do log de commits (paginação por --skip para o scroll infinito). */
+const GIT_LOG_PAGE_SIZE = 30
+
+async function getGitLog(
+  repoPath: string,
+  skip = 0,
+): Promise<{ ok: true; commits: CommitEntry[]; hasMore: boolean } | { ok: false; error: string }> {
   try {
     const [{ stdout: metaOut }, { stdout: filesOut }] = await Promise.all([
       execFileAsync(
         'git',
-        ['log', '-n', '30', `--pretty=format:%H${FIELD_SEP}%an${FIELD_SEP}%aI${FIELD_SEP}%s${FIELD_SEP}%b${RECORD_SEP}`],
+        ['log', '-n', String(GIT_LOG_PAGE_SIZE), '--skip', String(skip), `--pretty=format:%H${FIELD_SEP}%an${FIELD_SEP}%aI${FIELD_SEP}%s${FIELD_SEP}%b${RECORD_SEP}`],
         { cwd: repoPath, maxBuffer: 10 * 1024 * 1024 },
       ),
       execFileAsync(
         'git',
-        ['log', '-n', '30', '--name-status', '--pretty=format:COMMIT|%H'],
+        ['log', '-n', String(GIT_LOG_PAGE_SIZE), '--skip', String(skip), '--name-status', '--pretty=format:COMMIT|%H'],
         { cwd: repoPath, maxBuffer: 10 * 1024 * 1024 },
       ),
     ])
@@ -649,11 +655,13 @@ async function getGitLog(repoPath: string): Promise<{ ok: true; commits: CommitE
       }
     }
 
-    // Conjuntos de hashes alcançáveis (limite 60 cobre o log de 30)
+    // Conjuntos de hashes alcançáveis (cresce com o skip para cobrir páginas
+    // profundas do log: um commit da página atual está a, no máximo,
+    // skip + GIT_LOG_PAGE_SIZE commits de distância da ponta da branch).
     const pushedSet = new Set<string>()
     if (upstream) {
       try {
-        const { stdout } = await execFileAsync('git', ['rev-list', '-n', '60', upstream], { cwd: repoPath, maxBuffer: 10 * 1024 * 1024 })
+        const { stdout } = await execFileAsync('git', ['rev-list', '-n', String(60 + skip), upstream], { cwd: repoPath, maxBuffer: 10 * 1024 * 1024 })
         for (const h of stdout.split('\n')) pushedSet.add(h.trim())
       } catch {
         // upstream inválido
@@ -662,7 +670,7 @@ async function getGitLog(repoPath: string): Promise<{ ok: true; commits: CommitE
     const defaultSet = new Set<string>()
     if (defaultBranch) {
       try {
-        const { stdout } = await execFileAsync('git', ['rev-list', '-n', '60', defaultBranch], { cwd: repoPath, maxBuffer: 10 * 1024 * 1024 })
+        const { stdout } = await execFileAsync('git', ['rev-list', '-n', String(60 + skip), defaultBranch], { cwd: repoPath, maxBuffer: 10 * 1024 * 1024 })
         for (const h of stdout.split('\n')) defaultSet.add(h.trim())
       } catch {
         // branch principal inválida
@@ -688,7 +696,7 @@ async function getGitLog(repoPath: string): Promise<{ ok: true; commits: CommitE
         }
       })
 
-    return { ok: true, commits }
+    return { ok: true, commits, hasMore: commits.length === GIT_LOG_PAGE_SIZE }
   } catch (err) {
     return { ok: false, error: (err as Error).message }
   }
@@ -939,8 +947,8 @@ app.whenReady().then(() => {
     shell.showItemInFolder(filePath)
   })
 
-  ipcMain.handle('git:log', async (_event, repoPath: string) => {
-    return getGitLog(repoPath)
+  ipcMain.handle('git:log', async (_event, repoPath: string, skip?: number) => {
+    return getGitLog(repoPath, skip ?? 0)
   })
 
   ipcMain.handle('git:showFile', async (_event, repoPath: string, hash: string, relPath: string, deleted: boolean) => {

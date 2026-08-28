@@ -984,6 +984,7 @@
     "loadingCommits": "Carregando commits...",
     "gitHistoryError": "Não foi possível ler o histórico git desta pasta.",
     "noCommits": "Nenhum commit encontrado.",
+    "historyEnd": "Fim do histórico",
     "editMode": "Editar",
     "previewMode": "Visualizar",
     "uncommitted": "Mudanças não commitadas",

@@ -20,6 +20,7 @@ import {
   PenLineIcon,
   TagIcon,
   UploadIcon,
+  Loader2,
 } from "lucide-react";
 import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -104,7 +105,7 @@ type ReaddirResult =
   | { ok: false; error: string };
 type ReadFileResult = { content: string } | { error: string };
 type GitLogResult =
-  | { ok: true; commits: CommitEntry[] }
+  | { ok: true; commits: CommitEntry[]; hasMore: boolean }
   | { ok: false; error: string };
 
 type ViewedFile =
@@ -459,6 +460,14 @@ const [viewedFile, setViewedFile] = useState<ViewedFile>();
   const [commitsError, setCommitsError] = useState<string | null>(null);
   const [commitsLoading, setCommitsLoading] = useState(false);
   const [commitsReload, setCommitsReload] = useState(0);
+  const [commitsHasMore, setCommitsHasMore] = useState(false);
+  const [commitsLoadingMore, setCommitsLoadingMore] = useState(false);
+  // Ref de exclusão mútua síncrona (evita duas páginas simultâneas com o mesmo skip)
+  const commitsLoadingMoreRef = useRef(false);
+  // Época da carga inicial: descarta appends de uma página velha que chegue
+  // depois de um reload (pull/push/troca de pasta).
+  const commitsEpochRef = useRef(0);
+  const commitsEndRef = useRef<HTMLDivElement | null>(null);
 
   // Linhas do log com divisores de região (main vs branch atual vs remoto)
   const commitRows = useMemo<CommitRow[]>(() => {
@@ -692,8 +701,12 @@ const openLiveFile = useCallback(async (filePath: string) => {
   useEffect(() => {
     if (viewMode !== "commits" || folders.length === 0) return;
     let cancelled = false;
+    ++commitsEpochRef.current;
     setCommitsLoading(true);
     setCommitsError(null);
+    setCommitsHasMore(false);
+    setCommitsLoadingMore(false);
+    commitsLoadingMoreRef.current = false;
     void refreshInfo(folders[0]);
     window.ipcRenderer.invoke("git:log", folders[0]).then((result) => {
       if (cancelled) return;
@@ -701,8 +714,10 @@ const openLiveFile = useCallback(async (filePath: string) => {
       setCommitsLoading(false);
       if (r.ok) {
         setCommits(r.commits);
+        setCommitsHasMore(r.hasMore);
       } else {
         setCommits([]);
+        setCommitsHasMore(false);
         setCommitsError(r.error);
       }
     });
@@ -710,6 +725,49 @@ const openLiveFile = useCallback(async (filePath: string) => {
       cancelled = true;
     };
   }, [viewMode, folders, commitsReload, refreshInfo]);
+
+  const loadMoreCommits = useCallback(() => {
+    const repo = folders[0];
+    if (!repo || !commits || commitsLoading || commitsHasMore === false) return;
+    // commitsLoadingMore do estado não é síncrono: a ref garante exclusão mútua
+    // mesmo com o IntersectionObserver disparando várias vezes no mesmo tick.
+    if (commitsLoadingMoreRef.current) return;
+    commitsLoadingMoreRef.current = true;
+    const epoch = commitsEpochRef.current;
+    setCommitsLoadingMore(true);
+    void window.ipcRenderer
+      .invoke("git:log", repo, commits.length)
+      .then((result) => {
+        if (epoch !== commitsEpochRef.current) return;
+        const r = result as GitLogResult;
+        if (r.ok) {
+          setCommits((prev) => [...(prev ?? []), ...r.commits]);
+          setCommitsHasMore(r.hasMore);
+        }
+      })
+      .finally(() => {
+        commitsLoadingMoreRef.current = false;
+        setCommitsLoadingMore(false);
+      });
+  }, [folders, commits, commitsLoading, commitsHasMore]);
+
+  // Sentinela no fim da lista: quando o viewport do ScrollArea se aproxima do
+  // fim (rootMargin de 300px), carrega a próxima página -> scroll contínuo.
+  useEffect(() => {
+    const el = commitsEndRef.current;
+    if (!el) return;
+    const viewport = el.closest('[data-slot="scroll-area-viewport"]');
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((e) => e.isIntersecting)) {
+          void loadMoreCommits();
+        }
+      },
+      { root: viewport, rootMargin: "300px 0px" },
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [commits, loadMoreCommits]);
 
   useEffect(() => () => window.clearTimeout(copyTimeoutRef.current), []);
 
@@ -1151,6 +1209,24 @@ const openLiveFile = useCallback(async (filePath: string) => {
                         </Commit>
                       ),
                     )}
+                    {!commitsLoading &&
+                      !commitsError &&
+                      commits !== null &&
+                      commits.length > 0 && (
+                        <div
+                          ref={commitsEndRef}
+                          className="flex min-h-6 items-center justify-center gap-2 p-1"
+                        >
+                          {commitsLoadingMore && (
+                            <Loader2 className="size-3.5 animate-spin text-muted-foreground" />
+                          )}
+                          {!commitsLoadingMore && !commitsHasMore && (
+                            <span className="text-[10px] text-muted-foreground">
+                              {t("folders.historyEnd")}
+                            </span>
+                          )}
+                        </div>
+                      )}
                   </div>
                 </ScrollArea>
               </TabsContent>

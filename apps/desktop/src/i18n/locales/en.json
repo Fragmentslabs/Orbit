@@ -984,6 +984,7 @@
     "loadingCommits": "Loading commits...",
     "gitHistoryError": "Could not read this folder's git history.",
     "noCommits": "No commits found.",
+    "historyEnd": "End of history",
     "editMode": "Edit",
     "previewMode": "Preview",
     "uncommitted": "Uncommitted changes",
