@@ -3,7 +3,6 @@ import { View, TextInput, Pressable, Text, ScrollView, ActivityIndicator, Platfo
 import {
   Search,
   Globe,
-  Brain,
   AlignLeft,
   BrainCircuit,
   Plus,
@@ -207,6 +206,21 @@ export function PromptInput({
 
   const inputRef = useRef<TextInput>(null)
 
+  // Workers: aviso da primeira vez — abre só na 1ª ativação sem worker
+  // configurado ("usar o mesmo modelo" é válido); depois nunca mais.
+  const [workerConfigPrompted, setWorkerConfigPrompted] = useState(false)
+
+  // Declarado antes do toggleMode porque ele roteia subagents/orchestra para
+  // aqui — e ler um ref durante o render nao e permitido.
+  const toggleWorkerMode = useCallback((id: 'subagents' | 'orchestra', next: boolean) => {
+    setModeActive(id, sessionId, next)
+    if (next && !workerModel && !workerConfigPrompted) {
+      setWorkerConfigPrompted(true)
+      Storage.setItem(WORKER_CONFIG_PROMPTED_KEY, '1').catch(() => {})
+      setWorkerConfigOpen(true)
+    }
+  }, [workerModel, workerConfigPrompted, sessionId, setModeActive])
+
   const toggleMode = useCallback((id: string) => {
     // Modo Visão é per-chat (mode-overrides); ativar sem modelo configurado
     // abre a configuração (mesmo gate do desktop).
@@ -223,26 +237,19 @@ export function PromptInput({
     if (id === 'browser') return setModeActive('browser', sessionId, !browser)
     if (id === 'simple') return setSimple(sessionId, !simple)
     if (id === 'brain') return setBrainEnabled(sessionId, !brain)
-  }, [vision, visionModel, sessionId, search, browser, simple, brain, setModeActive, setSimple, setBrainEnabled, setVisionConfigOpen])
+    if (id === 'plan') return setModeActive('plan', sessionId, !plan)
+    if (id === 'subagents') return toggleWorkerMode('subagents', !subagents)
+    if (id === 'orchestra') return toggleWorkerMode('orchestra', !orchestra)
+    if (id === 'loop') return setLoop((v) => !v)
+  }, [vision, visionModel, sessionId, search, browser, simple, brain, plan, subagents, orchestra, setModeActive, setSimple, setBrainEnabled, setVisionConfigOpen, setLoop, toggleWorkerMode])
 
   // Gate de configuração: só abre o modal quando o usuário ATIVA o modo.
-  // Workers: aviso da primeira vez — abre só na 1ª ativação sem worker
-  // configurado ("usar o mesmo modelo" é válido); depois nunca mais.
-  const [workerConfigPrompted, setWorkerConfigPrompted] = useState(false)
   useEffect(() => {
     Storage.getItem(WORKER_CONFIG_PROMPTED_KEY)
       .then((v) => { if (v === '1') setWorkerConfigPrompted(true) })
       .catch(() => {})
   }, [])
 
-  const toggleWorkerMode = useCallback((id: 'subagents' | 'orchestra', next: boolean) => {
-    setModeActive(id, sessionId, next)
-    if (next && !workerModel && !workerConfigPrompted) {
-      setWorkerConfigPrompted(true)
-      Storage.setItem(WORKER_CONFIG_PROMPTED_KEY, '1').catch(() => {})
-      setWorkerConfigOpen(true)
-    }
-  }, [workerModel, workerConfigPrompted, sessionId, setModeActive])
 
   const handlePickFiles = async () => {
     setPlusOpen(false)
@@ -419,11 +426,26 @@ export function PromptInput({
     [text, sessionId, onCreateSession, onNavigateToSession, enqueueScheduled, buildOptions, attachments],
   )
 
+  // Fileira única, na MESMA ordem do code-input do desktop (search, plan,
+  // simple, brain, subagents, orchestra, loop, vision). Os avançados eram uma
+  // row separada, mas a ordem do desktop os intercala — plan vem antes de
+  // simple —, então não dá para manter dois blocos.
+  //
+  // Browser fica fora do modo código: lá ele nem existe no desktop (o browser
+  // do painel direito é outra coisa).
+  const isCodeMode = workspaceMode === 'code'
   const modesList = [
     { id: 'research', icon: Search, label: t('promptInput.modes.research') },
-    { id: 'browser', icon: Globe, label: t('promptInput.modes.browser') },
+    ...(isCodeMode
+      ? [{ id: 'plan', icon: FileText, label: t('promptInput.modes.plan'), accent: true }]
+      : [{ id: 'browser', icon: Globe, label: t('promptInput.modes.browser') }]),
     { id: 'simple', icon: AlignLeft, label: t('promptInput.modes.simple') },
     { id: 'brain', icon: BrainCircuit, label: t('promptInput.modes.brain') },
+    { id: 'subagents', icon: Bot, label: t('promptInput.modes.subagents'), accent: true },
+    ...(isCodeMode
+      ? [{ id: 'orchestra', icon: Network, label: t('promptInput.modes.orchestra'), accent: true }]
+      : []),
+    { id: 'loop', icon: RefreshCw, label: t('promptInput.modes.loop'), accent: true },
     { id: 'vision', icon: Eye, label: t('promptInput.modes.vision') },
   ]
 
@@ -432,18 +454,26 @@ export function PromptInput({
   const ROW_TO_MODE_ID: Record<string, ModeId> = {
     research: 'search',
     browser: 'browser',
+    plan: 'plan',
     simple: 'simple',
     brain: 'brain',
+    subagents: 'subagents',
+    orchestra: 'orchestra',
+    loop: 'loop',
     vision: 'vision',
   }
   const visibleModes = modesList.filter((m) => modesInRow.includes(ROW_TO_MODE_ID[m.id]))
 
-  // Estado efetivo dos toggles simples (modos do row principal + sheet)
+  // Estado efetivo de cada toggle da fileira
   const simpleActive: Record<string, boolean> = {
     research: search,
     browser,
+    plan,
     simple,
     brain,
+    subagents,
+    orchestra,
+    loop,
     vision,
   }
 
@@ -560,24 +590,8 @@ export function PromptInput({
       {/* Mode Toggles Row — sempre visível no mobile (toggles + "+" fixos) */}
       <View className="flex-row items-center justify-between px-1">
         <View className="flex-row items-center gap-2">
-          {/* Thinking toggle — mostrado apenas se o modelo suporta reasoning */}
-          {model?.reasoning && (
-            <Pressable
-              key="thinking"
-              onPress={() => update({ enabled: !enabled, variantId })}
-              disabled={isStreaming || model?.reasoningAlwaysOn}
-              className="p-2 rounded-md"
-              style={[
-                thinking ? { backgroundColor: tokens.muted } : { opacity: 0.4 },
-                model?.reasoningAlwaysOn && { opacity: 0.3 },
-              ]}
-            >
-              <Brain
-                size={17}
-                color={thinking ? tokens.foreground : tokens.mutedForeground}
-              />
-            </Pressable>
-          )}
+          {/* Thinking nao entra aqui: o controle dele (com a escolha de
+              variante) ja vive no sheet de configuracoes. */}
           {visibleModes.map((mode) => {
             const isActive = simpleActive[mode.id] ?? false
             const IconComponent = mode.icon
@@ -591,25 +605,18 @@ export function PromptInput({
               >
                 <IconComponent
                   size={17}
-                  color={isActive ? tokens.foreground : tokens.mutedForeground}
+                  // Avançados (plano, subagentes, orquestra, loop) acendem em
+                  // âmbar; os demais em branco — é o que os distingue agora que
+                  // dividem a mesma fileira.
+                  color={
+                    isActive
+                      ? mode.accent ? tokens.primary : tokens.foreground
+                      : tokens.mutedForeground
+                  }
                 />
               </Pressable>
             )
           })}
-          {/* Advanced mode toggles — plan, subagents, orchestra, loop. Componente
-              filho que assina o modo ele mesmo: trocar chat/código não precisa
-              re-renderizar o PromptInput inteiro. */}
-          <AdvancedModesRow
-            plan={plan}
-            subagents={subagents}
-            orchestra={orchestra}
-            loop={loop}
-            onTogglePlan={() => setModeActive('plan', sessionId, !plan)}
-            onToggleSubagents={() => toggleWorkerMode('subagents', !subagents)}
-            onToggleOrchestra={() => toggleWorkerMode('orchestra', !orchestra)}
-            onToggleLoop={() => setLoop((v) => !v)}
-            tokens={tokens}
-          />
         </View>
         <ContextMeter sessionId={sessionId} />
       </View>
@@ -621,15 +628,21 @@ export function PromptInput({
         onCamera={handleTakePhoto}
         onPhotos={handlePickPhotos}
         onFiles={handlePickFiles}
+        // O corte entre os dois grupos e ter ou nao engrenagem: em cima os
+        // toggles secos, embaixo os que abrem configuracao propria. Thinking
+        // fica de fora — ele vive no ConfigSheet, onde da para escolher a
+        // variante de raciocinio.
         simpleModes={[
+          ...(workspaceMode === 'code' ? [{ id: 'plan', icon: FileText, label: t('promptInput.modes.plan'), active: plan, onToggle: () => setModeActive('plan', sessionId, !plan) }] : []),
           { id: 'research', icon: Search, label: t('promptInput.modes.research'), active: search, onToggle: () => toggleMode('research') },
-          { id: 'browser', icon: Globe, label: t('promptInput.modes.browser'), active: browser, onToggle: () => toggleMode('browser') },
+          // Browser so no modo chat, igual a fileira e ao desktop.
+          ...(workspaceMode === 'code'
+            ? []
+            : [{ id: 'browser', icon: Globe, label: t('promptInput.modes.browser'), active: browser, onToggle: () => toggleMode('browser') }]),
           { id: 'simple', icon: AlignLeft, label: t('promptInput.modes.simple'), active: simple, onToggle: () => toggleMode('simple') },
           { id: 'brain', icon: BrainCircuit, label: t('promptInput.modes.brain'), active: brain, onToggle: () => toggleMode('brain') },
-          ...(model?.reasoning ? [{ id: 'thinking', icon: Brain, label: t('promptInput.modes.thinking'), active: thinking, onToggle: () => update({ enabled: !enabled, variantId }) }] : []),
         ]}
         configModes={[
-          ...(workspaceMode === 'code' ? [{ id: 'plan', icon: FileText, label: t('promptInput.modes.plan'), active: plan, onToggle: () => setModeActive('plan', sessionId, !plan) }] : []),
           { id: 'vision', icon: Eye, label: t('promptInput.modes.vision'), active: vision, onToggle: () => toggleMode('vision'), onConfigure: () => { setPlusOpen(false); setVisionConfigOpen(true) } },
           { id: 'subagents', icon: Bot, label: t('promptInput.modes.subagents'), active: subagents, onToggle: () => toggleWorkerMode('subagents', !subagents), onConfigure: () => { setPlusOpen(false); setWorkerConfigOpen(true) } },
           ...(workspaceMode === 'code' ? [{ id: 'orchestra', icon: Network, label: t('promptInput.modes.orchestra'), active: orchestra, onToggle: () => toggleWorkerMode('orchestra', !orchestra), onConfigure: () => { setPlusOpen(false); setWorkerConfigOpen(true) } }] : []),
@@ -687,57 +700,6 @@ export function PromptInput({
     </View>
   )
 }
-
-function AdvancedToggle({ icon: Icon, active, onPress, tokens }: { icon: React.ComponentType<{ size?: number; color?: string }>; active: boolean; onPress: () => void; tokens: any }) {
-  return (
-    <Pressable onPress={onPress} className="p-1.5 rounded-md" style={active ? { backgroundColor: tokens.muted } : { opacity: 0.4 }}>
-      <Icon size={15} color={active ? tokens.primary : tokens.mutedForeground} />
-    </Pressable>
-  )
-}
-
-// Folha que assina o modo workspace sozinha — só ela re-renderiza quando a aba
-// chat/código troca, sem cascata para o PromptInput (que é memo-seguro).
-const AdvancedModesRow = memo(function AdvancedModesRow({
-  plan,
-  subagents,
-  orchestra,
-  loop,
-  onTogglePlan,
-  onToggleSubagents,
-  onToggleOrchestra,
-  onToggleLoop,
-  tokens,
-}: {
-  plan: boolean
-  subagents: boolean
-  orchestra: boolean
-  loop: boolean
-  onTogglePlan: () => void
-  onToggleSubagents: () => void
-  onToggleOrchestra: () => void
-  onToggleLoop: () => void
-  tokens: any
-}) {
-  const workspaceMode = useWorkspaceStore((s) => s.mode)
-  const modesInRow = useAppearanceStore((s) => s.modesInRow)
-  if (workspaceMode === 'code') {
-    return (
-      <View className="flex-row items-center gap-2" style={{ borderLeftWidth: 1, borderLeftColor: tokens.border, paddingLeft: 6 }}>
-        {modesInRow.includes('plan') && <AdvancedToggle icon={FileText} active={plan} onPress={onTogglePlan} tokens={tokens} />}
-        {modesInRow.includes('subagents') && <AdvancedToggle icon={Bot} active={subagents} onPress={onToggleSubagents} tokens={tokens} />}
-        {modesInRow.includes('orchestra') && <AdvancedToggle icon={Network} active={orchestra} onPress={onToggleOrchestra} tokens={tokens} />}
-        {modesInRow.includes('loop') && <AdvancedToggle icon={RefreshCw} active={loop} onPress={onToggleLoop} tokens={tokens} />}
-      </View>
-    )
-  }
-  return (
-    <View className="flex-row items-center gap-2" style={{ borderLeftWidth: 1, borderLeftColor: tokens.border, paddingLeft: 6 }}>
-      {modesInRow.includes('subagents') && <AdvancedToggle icon={Bot} active={subagents} onPress={onToggleSubagents} tokens={tokens} />}
-      {modesInRow.includes('loop') && <AdvancedToggle icon={RefreshCw} active={loop} onPress={onToggleLoop} tokens={tokens} />}
-    </View>
-  )
-})
 
 // Folha que move o useSlashCommands (que assina o modo) para fora do corpo do
 // PromptInput: ao trocar a aba, só este shell re-renderiza e recomputa os

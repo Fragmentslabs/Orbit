@@ -456,9 +456,6 @@ function AssistantMarkdownInner({ text, streaming = false, muted = false, size =
             return null
         }
       })}
-      {streaming && (
-        <Text style={{ color: tokens.primary, fontSize: 14, lineHeight: 20 }}>▊</Text>
-      )}
     </View>
   )
 }

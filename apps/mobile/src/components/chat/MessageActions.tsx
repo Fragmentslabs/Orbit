@@ -58,8 +58,6 @@ export function MessageActions({ message, onCopy, onRevert }: MessageActionsProp
         gap: 4,
         marginTop: isUser ? 4 : 8,
         paddingTop: isUser ? 0 : 8,
-        borderTopWidth: isUser ? 0 : 1,
-        borderTopColor: tokens.border,
         opacity: 0.55,
       }}
     >

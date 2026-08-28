@@ -91,7 +91,9 @@ export function AttachmentSheet({
         {hasConfig && configModes && (
           <>
             <View style={[s.divider, { backgroundColor: tokens.border }]} />
-            <View style={s.modesList}>
+            {/* Sem o paddingTop do modesList: ele somaria ao margin da
+                divisoria e a folga de baixo ficava maior que a de cima. */}
+            <View style={[s.modesList, s.modesListAfterDivider]}>
               {configModes.map((mode) => <ModeRow key={mode.id} mode={mode} tokens={tokens} />)}
             </View>
           </>
@@ -173,6 +175,7 @@ const s = StyleSheet.create({
   },
   actionLabel: { fontSize: 12, fontWeight: '500' },
   modesList: { gap: 8, paddingTop: 12 },
+  modesListAfterDivider: { paddingTop: 0 },
   divider: { height: 1, marginVertical: 8 },
   modeRow: {
     flexDirection: 'row',
