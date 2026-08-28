@@ -12,6 +12,8 @@
  */
 
 import { WebSocketServer, WebSocket } from 'ws'
+import { execFile } from 'node:child_process'
+import { promisify } from 'node:util'
 import type { IncomingMessage, Server } from 'http'
 import { createServer } from 'http'
 import { app, BrowserWindow } from 'electron'
@@ -27,8 +29,10 @@ import type {
   AuthErrorResponse,
   ApiResponse,
   StatusUpdate,
+  SessionStateResponse,
+  BranchesResponse,
 } from '@shared/companion'
-import type { ChatEvent, SessionInfo, FolderInfo, ChatMessage, MessagePart, SendMessageInput } from '@shared/chat'
+import type { ChatEvent, SessionInfo, FolderInfo, ChatMessage, MessagePart, SendMessageInput, PlanReview, OrchestrationPlan } from '@shared/chat'
 import type { RotinaEvent } from '@shared/rotinas'
 import type { EsteiraEvent } from '@shared/esteira'
 import { StorageKeys } from '@shared/chat'
@@ -59,6 +63,8 @@ import {
   HTTP_PORT as COMPANION_HTTP_PORT,
   createMediaToken,
 } from './companion-http'
+
+const execFileAsync = promisify(execFile)
 
 const PORT = 3847
 const PIN_LENGTH = 6
@@ -391,6 +397,49 @@ async function handleRequest(client: ConnectedClient, requestId: string, req: Co
       case 'sessions:search': {
         const hits = await searchSessions(req.query ?? '')
         sendResponse(ws, requestId, true, hits)
+        break
+      }
+
+      case 'git:branches': {
+        // Mesmos comandos do ipcMain 'git:branches' do desktop.
+        try {
+          const [list, current] = await Promise.all([
+            execFileAsync('git', ['branch', '--list', '--format=%(refname:short)'], { cwd: req.directory }),
+            execFileAsync('git', ['branch', '--show-current'], { cwd: req.directory }),
+          ])
+          sendResponse(ws, requestId, true, {
+            branches: list.stdout.trim().split('\n').filter(Boolean),
+            current: current.stdout.trim(),
+          } satisfies BranchesResponse)
+        } catch (err) {
+          sendResponse(ws, requestId, false, undefined, (err as Error).message)
+        }
+        break
+      }
+
+      case 'git:checkout': {
+        try {
+          await execFileAsync('git', ['checkout', req.branch], { cwd: req.directory })
+          sendResponse(ws, requestId, true)
+        } catch (err) {
+          // Arvore suja: o git recusa e a mensagem dele e o que o app mostra,
+          // igual ao desktop — nao forcamos checkout por cima de alteracoes.
+          sendResponse(ws, requestId, false, undefined, (err as Error).message)
+        }
+        break
+      }
+
+      case 'session:state': {
+        // Plano e review vivem fora das mensagens; sem isto o mobile so os
+        // conhecia pelos eventos ao vivo e perdia os cards ao reabrir o chat.
+        const [planReview, plan] = await Promise.all([
+          readJson<PlanReview>(StorageKeys.planReview(req.sessionId)),
+          readJson<OrchestrationPlan>(StorageKeys.orchestration(req.sessionId)),
+        ])
+        sendResponse(ws, requestId, true, {
+          planReview: planReview ?? undefined,
+          plan: plan ?? undefined,
+        } satisfies SessionStateResponse)
         break
       }
 

@@ -4,7 +4,7 @@
  * e o handshake de autenticação.
  */
 
-import type { SendMessageOptions, SessionMode, FilePart, WorkerModelConfig, PermissionMode } from './chat'
+import type { SendMessageOptions, SessionMode, FilePart, WorkerModelConfig, PermissionMode, PlanReview, OrchestrationPlan } from './chat'
 import type { AnalyticsRange } from './analytics'
 import type { NovaRotinaInput, Rotina, RotinaEvent, RotinaModelo } from './rotinas'
 import type {
@@ -44,6 +44,21 @@ export interface ListSessionsRequest {
 export interface SearchSessionsRequest {
   type: 'sessions:search'
   query: string
+}
+
+/**
+ * Estado da sessao que nao vem nas mensagens: plano de orquestracao e review de
+ * plano. O mobile so conhecia os dois pelos eventos ao vivo, entao ao reabrir a
+ * conversa os cards sumiam mesmo com o plano ainda pendente.
+ */
+export interface GetSessionStateRequest {
+  type: 'session:state'
+  sessionId: string
+}
+
+export interface SessionStateResponse {
+  planReview?: PlanReview
+  plan?: OrchestrationPlan
 }
 
 export interface GetMessagesRequest {
@@ -239,6 +254,27 @@ export interface ListDirsResponse {
   dirs: { name: string; path: string }[]
 }
 
+// --- Git (branch da pasta de trabalho) ---------------------------------------
+
+/** Branches locais da pasta de trabalho + a atual. */
+export interface ListBranchesRequest {
+  type: 'git:branches'
+  directory: string
+}
+
+export interface BranchesResponse {
+  branches: string[]
+  current: string
+}
+
+/** Troca a branch. Falha (com a mensagem do git) se houver mudanca pendente
+ *  que o checkout sobrescreveria — o mesmo comportamento do desktop. */
+export interface CheckoutBranchRequest {
+  type: 'git:checkout'
+  directory: string
+  branch: string
+}
+
 export interface RevertSessionRequest {
   type: 'sessions:revert'
   sessionId: string
@@ -431,6 +467,7 @@ export type CompanionRequest =
   | ListSessionsRequest
   | SearchSessionsRequest
   | GetMessagesRequest
+  | GetSessionStateRequest
   | SendMessageRequest
   | CreateSessionRequest
   | AbortRequest
@@ -453,6 +490,8 @@ export type CompanionRequest =
   | ArchiveFolderRequest
   | DeleteFolderRequest
   | OrganizeSidebarRequest
+  | ListBranchesRequest
+  | CheckoutBranchRequest
   | ListDirsRequest
   | ListMemoriesRequest
   | UpdateMemoryRequest

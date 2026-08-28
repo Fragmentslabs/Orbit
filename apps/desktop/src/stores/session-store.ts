@@ -309,26 +309,28 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       // Navegar para outra sessão ou abrir um novo chat encerra o intent de pasta pendente
       pendingFolderId: null,
     }))
-    if (id) {
-      await get().ensureMessages(id)
-      if (get().orchestration[id] === undefined) {
-        const plan = await storage.read<OrchestrationPlan>(StorageKeys.orchestration(id))
-        if (plan) set((state) => ({ orchestration: { ...state.orchestration, [id]: plan } }))
-      }
-      if (get().planReviews[id] === undefined) {
-        const review = await storage.read<PlanReview>(StorageKeys.planReview(id))
-        if (review) set((state) => ({ planReviews: { ...state.planReviews, [id]: review } }))
-      }
-      if (get().pendingAsks[id] === undefined) {
-        const asks = await storage.read<PendingAskUI[]>(StorageKeys.pendingAsks(id))
-        if (asks) set((state) => ({ pendingAsks: { ...state.pendingAsks, [id]: asks } }))
-      }
-    }
+    if (id) await get().ensureMessages(id)
   },
 
   setPendingFolder: (folderId) => set({ pendingFolderId: folderId }),
 
   ensureMessages: async (sessionId) => {
+    // Plano, review e pedidos pendentes carregam aqui, e nao no selectSession:
+    // o chat-view chama ensureMessages sempre que exibe uma sessao (inclusive
+    // na que ja estava ativa no boot, que nunca passa por selectSession). Preso
+    // ao selectSession, o card de plano nao voltava ao reabrir o app.
+    if (get().orchestration[sessionId] === undefined) {
+      const plan = await storage.read<OrchestrationPlan>(StorageKeys.orchestration(sessionId))
+      if (plan) set((state) => ({ orchestration: { ...state.orchestration, [sessionId]: plan } }))
+    }
+    if (get().planReviews[sessionId] === undefined) {
+      const review = await storage.read<PlanReview>(StorageKeys.planReview(sessionId))
+      if (review) set((state) => ({ planReviews: { ...state.planReviews, [sessionId]: review } }))
+    }
+    if (get().pendingAsks[sessionId] === undefined) {
+      const asks = await storage.read<PendingAskUI[]>(StorageKeys.pendingAsks(sessionId))
+      if (asks) set((state) => ({ pendingAsks: { ...state.pendingAsks, [sessionId]: asks } }))
+    }
     if (loadedMessages.has(sessionId)) return
     const persisted = (await storage.read<ChatMessage[]>(StorageKeys.messages(sessionId))) ?? []
     set((state) => {

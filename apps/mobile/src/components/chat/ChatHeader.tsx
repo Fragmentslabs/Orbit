@@ -1,16 +1,18 @@
-import { memo, useState } from 'react'
+import { memo, useCallback, useState } from 'react'
 import { View, Animated, Pressable, Alert, StyleSheet } from 'react-native'
 import { useTranslation } from 'react-i18next'
-import { Menu, Ellipsis, Pencil, Pin, PinOff, Archive, ArchiveRestore, GitFork, Search, Trash2 } from 'lucide-react-native'
-import type { SessionInfo } from '@orbit/shared'
+import { Menu, Ellipsis, Pencil, Pin, PinOff, Archive, ArchiveRestore, GitFork, GitBranch, Search, Trash2 } from 'lucide-react-native'
+import type { SessionInfo, BranchesResponse } from '@orbit/shared'
 import { Persona, type PersonaState } from '~/components/ai/Persona'
 import { useWorkspaceStore } from '~/stores/workspace-store'
+import { useConnectionStore } from '~/stores/connection-store'
 import { useAppearanceStore } from '~/stores/appearance-store'
 import { ActionMenu } from '~/components/ui/action-menu'
 import { RenamePrompt } from '~/components/ui/rename-prompt'
 import { getThemeTokens } from '~/lib/theme-tokens'
 import { useThemeStore } from '~/stores/theme-store'
 import { useChatSearchStore } from '~/stores/chat-search-store'
+import { BranchSheet } from '~/components/chat/BranchSheet'
 
 interface ChatHeaderProps {
   /** Sessão atual — undefined enquanto o chat é um rascunho (ainda não enviado). */
@@ -45,6 +47,18 @@ export const ChatHeader = memo(function ChatHeader({
   const openSidebar = useWorkspaceStore((s) => s.openSidebar)
   const personaVisible = useAppearanceStore((s) => s.personaVisible)
   const [menuOpen, setMenuOpen] = useState(false)
+  const [branchOpen, setBranchOpen] = useState(false)
+  const [branch, setBranch] = useState<string | null>(null)
+
+  // Branch atual da pasta de trabalho, so para rotular o item do menu. Busca
+  // ao abrir o menu (e nao no mount) para nao rodar git em todo chat exibido.
+  const loadBranch = useCallback(async () => {
+    if (!session?.directory) return
+    const res = await useConnectionStore
+      .getState()
+      .wsClient.send({ type: 'git:branches', directory: session.directory })
+    if (res.ok && res.data) setBranch((res.data as BranchesResponse).current || null)
+  }, [session?.directory])
   const [renaming, setRenaming] = useState(false)
   const tokens = getThemeTokens(useThemeStore((s) => s.resolved))
   const toggleChatSearch = useChatSearchStore((s) => s.toggle)
@@ -75,7 +89,7 @@ export const ChatHeader = memo(function ChatHeader({
       )}
 
       {session ? (
-        <Pressable onPress={() => setMenuOpen(true)} style={s.iconButton}>
+        <Pressable onPress={() => { setMenuOpen(true); void loadBranch() }} style={s.iconButton}>
           <Ellipsis size={22} color={tokens.foreground} />
         </Pressable>
       ) : (
@@ -98,9 +112,22 @@ export const ChatHeader = memo(function ChatHeader({
             label: session?.archived ? t('sidebar.unarchive') : t('sidebar.archive'),
             onPress: onToggleArchive,
           },
+          ...(session?.directory
+            ? [{
+                icon: GitBranch,
+                label: branch ? t('branch.menuWith', { branch }) : t('branch.menu'),
+                onPress: () => setBranchOpen(true),
+              }]
+            : []),
           { icon: GitFork, label: t('chatHeader.fork'), onPress: onFork },
           { icon: Trash2, label: t('sidebar.delete'), destructive: true, onPress: handleDeletePress },
         ]}
+      />
+
+      <BranchSheet
+        visible={branchOpen}
+        directory={session?.directory}
+        onClose={() => { setBranchOpen(false); void loadBranch() }}
       />
 
       <RenamePrompt

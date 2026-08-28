@@ -1140,5 +1140,13 @@
     "aguardando": "Waiting for {{titulo}}",
     "aguardandoTitulo": "Waiting for: {{titulo}}",
     "proxima": "Next"
+  },
+  "branch": {
+    "title": "Branch",
+    "menu": "Branch",
+    "menuWith": "Branch: {{branch}}",
+    "none": "No local branches.",
+    "loadError": "Could not read the branches.",
+    "switchError": "Could not switch branch."
   }
 }

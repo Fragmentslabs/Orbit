@@ -23,6 +23,7 @@ import type {
   PlanReview,
   OrchestrationPlan,
   PermissionMode,
+  SessionStateResponse,
 } from '@orbit/shared'
 import { Storage } from '~/lib/storage'
 import { visibleMessageText } from '~/lib/message-utils'
@@ -377,6 +378,24 @@ export const useSessionStore = create<SessionState>((set, get) => ({
 
   fetchMessages: async (sessionId) => {
     const { wsClient } = useConnectionStore.getState()
+    // Plano e review nao vem nas mensagens: sem esta busca, reabrir a conversa
+    // perdia o card de aceite mesmo com o plano ainda pendente (o mobile so os
+    // conhecia pelos eventos ao vivo, que ja tinham passado).
+    void wsClient
+      .send({ type: 'session:state', sessionId })
+      .then((res) => {
+        if (!res.ok || !res.data) return
+        const state = res.data as SessionStateResponse
+        set((prev) => ({
+          planReviews: state.planReview
+            ? { ...prev.planReviews, [sessionId]: state.planReview }
+            : prev.planReviews,
+          orchestration: state.plan
+            ? { ...prev.orchestration, [sessionId]: state.plan }
+            : prev.orchestration,
+        }))
+      })
+      .catch(() => {})
     try {
       const res = await wsClient.send({
         type: 'messages:get',
