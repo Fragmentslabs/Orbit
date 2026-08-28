@@ -30,7 +30,12 @@ export interface McpConfig {
   servers: McpServerConfig[]
 }
 
-export type McpConnectionState = "connected" | "connecting" | "error" | "disabled"
+export type McpConnectionState =
+  | "connected"
+  | "connecting"
+  | "error"
+  | "disabled"
+  | "unauthorized"
 
 export interface McpServerStatus {
   config: McpServerConfig

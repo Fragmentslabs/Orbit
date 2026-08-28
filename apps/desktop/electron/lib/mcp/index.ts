@@ -1,12 +1,21 @@
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js'
+import { UnauthorizedError } from '@modelcontextprotocol/sdk/client/auth.js'
 import { jsonSchema, tool, type ToolSet } from 'ai'
 import fsp from 'node:fs/promises'
 import path from 'node:path'
 import type { McpConfig, McpServerConfig, McpServerStatus } from '@shared/mcp'
 import type { PermissionMode } from '@shared/chat'
 import { dataDir } from '../storage'
+import {
+  awaitPendingAuth,
+  cancelPendingAuth,
+  closeOAuthLoopback,
+  ensureOAuthLoopback,
+  getOAuthProvider,
+  setOAuthInteractive,
+} from './oauth'
 
 /**
  * Manager MCP: conecta os servidores do mcp-config.json (stdio/streamable
@@ -74,7 +83,13 @@ function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise
   ])
 }
 
-function buildTransport(config: McpServerConfig) {
+/**
+ * Monta o transport do servidor. Para HTTP, um authProvider OAuth é anexado
+ * quando o servidor não usa Authorization header próprio (senão um 401 por
+ * chave inválida viraria um fluxo OAuth indevido). No 401 sem header, o SDK
+ * chama redirectToAuthorization e lança UnauthorizedError — o connect trata.
+ */
+async function buildTransport(config: McpServerConfig) {
   if (config.type === 'http') {
     if (!config.url) throw new Error('servidor http sem url')
     const headers: Record<string, string> = {}
@@ -83,7 +98,12 @@ function buildTransport(config: McpServerConfig) {
         if (k.trim() && v) headers[k.trim()] = v
       }
     }
-    return new StreamableHTTPClientTransport(new URL(config.url), { requestInit: { headers } })
+    const useOAuth = Object.keys(headers).length === 0
+    const authProvider = useOAuth ? await getOAuthProvider(config.url) : undefined
+    return new StreamableHTTPClientTransport(new URL(config.url), {
+      requestInit: { headers },
+      authProvider,
+    })
   }
   if (!config.command) throw new Error('servidor stdio sem command')
   const env: Record<string, string> = {}
@@ -105,13 +125,40 @@ function buildTransport(config: McpServerConfig) {
   })
 }
 
-async function connect(runtime: ServerRuntime): Promise<void> {
+/**
+ * Conecta um servidor. Com `interactive` (reconnect manual / botão
+ * Autorizar), um 401 por OAuth abre o navegador e espera o code no
+ * loopback; sem `interactive` (startup), o servidor vai para o estado
+ * "unauthorized" e a UI oferece o botão Autorizar.
+ */
+async function connect(runtime: ServerRuntime, interactive = false): Promise<void> {
   runtime.state = 'connecting'
   runtime.error = undefined
   runtime.lastAttempt = Date.now()
   try {
     const client = new Client({ name: 'orbit', version: '0.1.0' })
-    await withTimeout(client.connect(buildTransport(runtime.config)), CONNECT_TIMEOUT_MS, runtime.config.name)
+    if (runtime.config.type === 'http' && runtime.config.url) {
+      await ensureOAuthLoopback()
+    }
+    const transport = await buildTransport(runtime.config)
+    if (runtime.config.type === 'http' && runtime.config.url) {
+      setOAuthInteractive(runtime.config.url, interactive)
+    }
+    try {
+      await withTimeout(client.connect(transport), CONNECT_TIMEOUT_MS, runtime.config.name)
+    } catch (err) {
+      if (!(err instanceof UnauthorizedError) || !runtime.config.url) throw err
+      // Servidor exige OAuth: aguarda o code vindo do loopback (fluxo
+      // interativo) ou sinaliza "unauthorized" para a UI (fluxo automático).
+      const code = await awaitPendingAuth(runtime.config.url)
+      if (!code) {
+        runtime.state = 'unauthorized'
+        return
+      }
+      if (!(transport instanceof StreamableHTTPClientTransport)) throw err
+      await transport.finishAuth(code)
+      await withTimeout(client.connect(transport), CONNECT_TIMEOUT_MS, runtime.config.name)
+    }
     const { tools: discovered } = await withTimeout(
       client.listTools(),
       CONNECT_TIMEOUT_MS,
@@ -155,6 +202,9 @@ async function disconnect(runtime: ServerRuntime): Promise<void> {
   }
   runtime.client = null
   runtime.tools = {}
+  if (runtime.config.type === 'http' && runtime.config.url) {
+    cancelPendingAuth(runtime.config.url)
+  }
 }
 
 /** Conecta todos os servidores habilitados da config (chamado no startup). */
@@ -169,6 +219,7 @@ export async function shutdownMcp(): Promise<void> {
   stopReconnectWatcher()
   await Promise.all([...servers.values()].map(disconnect))
   servers.clear()
+  closeOAuthLoopback()
 }
 
 /** Sincroniza runtimes com a config: remove, atualiza e conecta o necessário. */
@@ -207,12 +258,16 @@ export async function saveMcpConfig(config: McpConfig): Promise<McpServerStatus[
   return listMcpStatus()
 }
 
-export async function reconnectMcp(name?: string): Promise<McpServerStatus[]> {
+/**
+ * Reconecta (interativo: abre o navegador se o servidor exigir OAuth).
+ * Chamado pelo botão Reconectar/Autorizar da UI.
+ */
+export async function reconnectMcp(name?: string, interactive = true): Promise<McpServerStatus[]> {
   for (const runtime of servers.values()) {
     if (name && runtime.config.name !== name) continue
     if (runtime.config.enabled === false) continue
     await disconnect(runtime)
-    await connect(runtime)
+    await connect(runtime, interactive)
   }
   return listMcpStatus()
 }
