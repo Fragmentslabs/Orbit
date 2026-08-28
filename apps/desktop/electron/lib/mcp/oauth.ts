@@ -234,12 +234,15 @@ class OAuthProvider implements OAuthClientProvider {
     return callbackUrl(loopbackPort)
   }
 
-  get clientMetadata(): OAuthClientMetadata {
+get clientMetadata(): OAuthClientMetadata {
     return {
       client_name: 'Orbit',
       redirect_uris: [this.redirectUrl],
       grant_types: ['authorization_code', 'refresh_token'],
-      token_endpoint_auth_method: 'none',
+      // token_endpoint_auth_method fica de fora de propósito: o servidor de
+      // autorização decide no registro (RFC 7591) e o SDK (selectClientAuthMethod)
+      // usa o método devolvido ou o melhor suportado — fixar "none" quebra
+      // servidores que só aceitam client_secret_basic/post (ex.: o AS do Figma).
     }
   }
 
