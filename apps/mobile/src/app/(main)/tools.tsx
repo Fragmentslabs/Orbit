@@ -40,7 +40,7 @@ function ConnectionDot({ state }: { state: McpConnectionState }) {
   const tokens = getThemeTokens(useThemeStore((s) => s.resolved))
   const color =
     state === 'connected' ? '#22c55e'
-    : state === 'connecting' ? tokens.primary
+    : state === 'connecting' || state === 'unauthorized' ? '#f59e0b'
     : state === 'error' ? '#ef4444'
     : tokens.mutedForeground
   const size = 8
@@ -275,6 +275,7 @@ function stateLabel(state: McpConnectionState): string {
     case 'connecting': return i18n.t('toolsScreen.stateConnecting')
     case 'error': return i18n.t('toolsScreen.stateError')
     case 'disabled': return i18n.t('toolsScreen.stateDisabled')
+    case 'unauthorized': return i18n.t('toolsScreen.stateUnauthorized')
   }
 }
 

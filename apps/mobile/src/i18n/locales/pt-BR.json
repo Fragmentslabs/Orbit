@@ -755,6 +755,7 @@
     "stateConnecting": "Conectando",
     "stateError": "Erro",
     "stateDisabled": "Desativado",
+    "stateUnauthorized": "Autorização necessária",
     "emptyTitle": "Nenhuma ferramenta encontrada",
     "emptyDesc": "Configure Skills e servidores MCP no Orbit Desktop ou crie uma skill aqui mesmo.",
     "pendingProposals": "Propostas pendentes ({{count}})",
