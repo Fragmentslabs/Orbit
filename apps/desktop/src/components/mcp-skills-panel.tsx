@@ -8,6 +8,7 @@ import {
   FileUp,
   FileText,
   Folder,
+  KeyRound,
   LoaderCircle,
   Pencil,
   PenLine,
@@ -515,6 +516,7 @@ function StatusBadge({ state, error }: { state: string; error?: string }) {
     connecting: { label: t("mcp.servers.status.connecting"), className: "text-amber-500" },
     error: { label: error ?? t("mcp.servers.status.error"), className: "text-destructive" },
     disabled: { label: t("mcp.servers.status.disabled"), className: "text-muted-foreground" },
+    unauthorized: { label: t("mcp.servers.status.unauthorized"), className: "text-amber-500" },
   }
   const s = map[state] ?? { label: state, className: "text-muted-foreground" }
   return <span className={cn("text-[10px] font-medium", s.className)}>{s.label}</span>
@@ -751,6 +753,17 @@ export function McpSkillsPanel() {
                     )}
                   </div>
                   <div className="flex items-center gap-1">
+                    {server.state === "unauthorized" && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="gap-1"
+                        onClick={() => void mcpApi.auth(server.config.name).then(() => refresh())}
+                      >
+                        <KeyRound className="size-3" />
+                        {t("mcp.servers.authorize")}
+                      </Button>
+                    )}
                     <Button size="icon-sm" variant="ghost" title={t("mcp.servers.reconnect")} onClick={() => void mcpApi.reconnect(server.config.name).then(() => refresh())}>
                       <RefreshCw className="size-3.5" />
                     </Button>

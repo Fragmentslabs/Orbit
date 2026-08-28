@@ -1483,6 +1483,8 @@ app.whenReady().then(() => {
   ipcMain.handle('mcp:status', () => listMcpStatus())
   ipcMain.handle('mcp:save', (_event, config) => saveMcpConfig(config))
   ipcMain.handle('mcp:reconnect', (_event, name?: string) => reconnectMcp(name))
+  // Autorização OAuth: reconecta de forma interativa (abre o navegador para o login)
+  ipcMain.handle('mcp:auth', (_event, name?: string) => reconnectMcp(name, true))
   // Nodara: integração oficial — registra o servidor MCP e mantém o token em dia
   ipcMain.handle('nodara:discover', () => discoverNodara())
   ipcMain.handle('nodara:connect', () => connectNodara())

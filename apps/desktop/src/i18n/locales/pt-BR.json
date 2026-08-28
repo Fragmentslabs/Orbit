@@ -1085,11 +1085,13 @@
       "reconnect": "Reconectar",
       "edit": "Editar",
       "remove": "Remover",
+      "authorize": "Autorizar",
       "status": {
         "connected": "Conectado",
         "connecting": "Conectando…",
         "error": "Erro",
-        "disabled": "Desabilitado"
+        "disabled": "Desabilitado",
+        "unauthorized": "Autorização necessária"
       },
       "dialog": {
         "editTitle": "Editar servidor MCP",

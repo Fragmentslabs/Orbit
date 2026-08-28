@@ -240,6 +240,9 @@ export const mcpApi = {
     window.ipcRenderer.invoke("mcp:save", config) as Promise<McpServerStatus[]>,
   reconnect: (name?: string) =>
     window.ipcRenderer.invoke("mcp:reconnect", name) as Promise<McpServerStatus[]>,
+  /** Inicia o fluxo OAuth do servidor (abre o navegador e completa a autorização) */
+  auth: (name?: string) =>
+    window.ipcRenderer.invoke("mcp:auth", name) as Promise<McpServerStatus[]>,
 }
 
 export const analyticsApi = {
