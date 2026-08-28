@@ -94,10 +94,14 @@ export function ChatHeader({ title, hasMenu, session, sessionId, rightPanelOpen,
     // O `@container` da raiz mede a largura real do header (que encolhe com a
     // sidebar e o painel direito abertos, sem o viewport mudar) — é o que o
     // chip do browser usa para decidir entre ícone+texto e só o ícone. Como
-    // container cria stacking context, o `relative z-20` tem que vir junto:
+    // container cria stacking context, o z-index explícito tem que vir junto:
     // sem ele o degrade do topo do chat (z-10, num irmão posterior) passaria
     // por cima do header inteiro.
-    <div className="@container relative z-20 flex h-12 items-center gap-2 px-4">
+    //
+    // z-50 e não z-20: a persona do topo do chat é `absolute z-40` num irmão
+    // posterior, então com z-20 ela ficava por cima do header — e o dropdown de
+    // pastas, preso no stacking context do @container, abria por baixo dela.
+    <div className="@container relative z-50 flex h-12 items-center gap-2 px-4">
       {onToggleSidebar && (
         <Button variant="ghost" size="icon-sm" className="size-7 shrink-0" onClick={onToggleSidebar}>
           <PanelLeft className="size-4" />
