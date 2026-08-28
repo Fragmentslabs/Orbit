@@ -394,11 +394,17 @@ export interface OrchestrationTask {
   title: string
   /** Prompt autocontido enviado ao worker */
   prompt: string
-  mode: SessionMode
+  /** Modos escolhidos pelo orquestrador para este worker (research, browser,
+   *  plan/readonly, simple...). Nunca `orchestrate`: worker não orquestra. */
   options: SendMessageOptions
+  /** Modo Visão: fora de SendMessageOptions porque a visão é ligada pela
+   *  presença de um visionModel, não por uma flag de opção. */
+  vision?: boolean
   /** Sessão filha criada na execução */
   workerSessionId?: string
   status: ChatStatus
+  /** Quantas rodadas de revisão o orquestrador já mandou para este worker. */
+  revisions?: number
 }
 
 export interface OrchestrationPlan {
@@ -439,7 +445,7 @@ export interface SendMessageInput {
   /** True na primeira troca da sessão (sem histórico prévio). Controla injeção de conteúdo de memória. */
   isFirstExchange?: boolean
   /** Configuração do modo loop (enviada do renderer) */
-  loopConfig?: { maxIterations: number; maxTokensPerIter: number; autoReview: boolean }
+  loopConfig?: { maxIterations: number }
   /** Idioma preferido do usuário (nome em inglês, ex: "Portuguese", "English") —
    * usado nos system prompts para instruir o modelo a responder nesse idioma
    * por padrão. O modelo ainda pode seguir o idioma da própria mensagem do

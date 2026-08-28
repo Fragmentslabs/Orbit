@@ -91,12 +91,21 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId }: 
   const plan = useModeActive("plan", sessionId, codeActiveModes.plan)
   const search = useModeActive("search", sessionId, codeActiveModes.search)
   const subagents = useModeActive("subagents", sessionId, codeActiveModes.subagents)
-  const orchestra = useModeActive("orchestra", sessionId, codeActiveModes.orchestra)
+  // Worker (subchat de uma orquestracao) nunca orquestra: seria recursao, e o
+  // engine ja bloqueia isso do lado do main (allowDelegation/orchestrate). O
+  // toggle some da UI para o estado nao mentir sobre o que vai acontecer.
+  const isWorker = useSessionStore(
+    (s) => s.sessions.find((x) => x.id === sessionId)?.orchestration?.role === "worker",
+  )
+  const orchestra =
+    useModeActive("orchestra", sessionId, codeActiveModes.orchestra) && !isWorker
   const setModeActive = useModeOverrides((s) => s.setMode)
   const [loop, setLoop] = useState(false)
   const { mode } = useWorkspace()
-  // Orquestração é exclusiva do modo code
-  useEffect(() => { if (mode === "chat") setModeActive("orchestra", sessionId, false) }, [mode, sessionId, setModeActive])
+  // Orquestração é exclusiva do modo code, e nunca dentro de um worker
+  useEffect(() => {
+    if (mode === "chat" || isWorker) setModeActive("orchestra", sessionId, false)
+  }, [mode, isWorker, sessionId, setModeActive])
   const [configOpen, setConfigOpen] = useState(false)
   const [loopConfigOpen, setLoopConfigOpen] = useState(false)
   const simple = useSimpleMode(sessionId, codeActiveModes.simple)
@@ -262,7 +271,7 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId }: 
         setModeActive("subagents", sessionId, !subagents)
         if (!subagents) maybePromptWorkerConfig()
       }) },
-      ...(mode === "code" ? [{ id: "orchestra", label: t("codeInput.slash.orchestraLabel"), description: t("codeInput.slash.orchestraDescription"), keywords: ["workers", "plano"], group: "Modos" as const, active: orchestra, run: toggle(() => {
+      ...(mode === "code" && !isWorker ? [{ id: "orchestra", label: t("codeInput.slash.orchestraLabel"), description: t("codeInput.slash.orchestraDescription"), keywords: ["workers", "plano"], group: "Modos" as const, active: orchestra, run: toggle(() => {
         setModeActive("orchestra", sessionId, !orchestra)
         if (!orchestra) maybePromptWorkerConfig()
       }) }] : []),
@@ -276,7 +285,7 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId }: 
       { id: "document", label: t("codeInput.slash.documentApp"), description: t("codeInput.slash.documentAppDescription"), keywords: ["docs", "documentacao", "screenshot"], group: "Ações" as const, run: ({ setText }) => setText("/document ") },
       { id: "settings", label: t("input.slash.settings"), description: t("input.slash.settingsDescription"), keywords: ["settings", "config"], group: "Ações" as const, run: toggle(() => openSettings()) },
     ]
-  }, [search, plan, simple, brain, subagents, orchestra, permissionMode, sessionId, setBrainEnabled, setSimple, setModeActive, setPermissionMode, actionCommands, referenceCommands, mode, openSettings, maybePromptWorkerConfig, t])
+  }, [search, plan, simple, brain, subagents, orchestra, isWorker, permissionMode, sessionId, setBrainEnabled, setSimple, setModeActive, setPermissionMode, actionCommands, referenceCommands, mode, openSettings, maybePromptWorkerConfig, t])
 
   return (
     <PromptInputProvider>
@@ -477,7 +486,7 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId }: 
               iconOnly={modeLabelStyle === "icon"}
             />
           )}
-          {mode === "code" && modesInRow.includes("orchestra") && (
+          {mode === "code" && !isWorker && modesInRow.includes("orchestra") && (
             <ModeToggle
               icon={Network}
               label={t("codeInput.modes.orchestra.label")}

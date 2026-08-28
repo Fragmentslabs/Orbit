@@ -1,4 +1,4 @@
-import { generateText, stepCountIs, streamText, type ModelMessage } from 'ai'
+import { generateText, stepCountIs, streamText, type ModelMessage, type ToolSet } from 'ai'
 import type { BrowserWindow } from 'electron'
 import type {
   ChatEvent,
@@ -20,17 +20,24 @@ import { resolveModel } from './providers'
 import { buildProviderOptions, interleavedReasoningField, normalizeMessages, reasoningPrepareStep } from './reasoning'
 import { readJson, writeJson } from './storage'
 import { createSubagentTool, createTaskTool } from './tools/orchestration'
+import type { TaskModeCeiling } from './tools/orchestration'
+import { createGlobTool, createGrepTool, createListTool, createReadTool } from './tools/files'
+import { createQuestionTool } from './tools/question'
 import type { ToolContext } from './tools/context'
 import { addTokenUsage, toTokenUsage } from './usage'
-import type { LoopEngineConfig } from './loop-engine'
 
 /**
- * OrchestratorEngine (modo Orchestra), em três fases:
- * 1. Planejamento: o modelo orquestrador divide o pedido em create_task calls
- *    e o plano é proposto ao usuário (semi-auto).
+ * OrchestratorEngine (modo Orchestra), em quatro fases:
+ * 1. Triagem + planejamento: o orquestrador decide se o pedido é conversa
+ *    (responde direto), ambiguidade (usa a tool question) ou trabalho — e só
+ *    aí divide em create_task. O plano é proposto ao usuário (semi-auto).
  * 2. Execução: cada tarefa aprovada vira uma session filha real (persistida,
- *    aparece na sidebar/painel) rodando com o modelo worker em modo simples.
+ *    aparece na sidebar/painel), sempre em modo código, com os modos que o
+ *    orquestrador escolheu para ela dentro do teto da sessão do usuário.
  * 3. Síntese: o orquestrador consolida os resultados na resposta final.
+ * 4. Revisão: espera todos terminarem, relê o resultado de cada worker e manda
+ *    outra rodada para quem precisa, dentro de um orçamento GLOBAL de rodadas
+ *    (ver ORCHESTRATION_REVIEW_ROUNDS).
  */
 
 const MAX_TASKS = 8
@@ -44,12 +51,28 @@ const PLAN_SUBAGENT_MAX_STEPS = 5
 // "2-3 chamadas", mas isso é só sugestão — sem um limite de verdade em código
 // o modelo pode ignorá-lo, como aconteceu (17 chamadas para montar um plano).
 const PLAN_SUBAGENT_MAX_CALLS = 3
+/**
+ * Ele prometeu um plano e não registrou tarefa? Só então vale a cutucada.
+ * Português e inglês porque a resposta segue o idioma do usuário.
+ */
+const PROMISED_PLAN_RE =
+  /\b(create_task|vou (dividir|criar|planejar)|dividir em (tarefas|workers)|criar (as )?tarefas|I(’|')?ll (split|create|plan)|going to (split|create)|split .{0,20}into (tasks|workers))\b/i
+/**
+ * Rodadas de revisão pós-síntese, no TOTAL (não por worker) — quem decide onde
+ * gastá-las é o orquestrador, que é o único que vê o conjunto. Por worker, "3"
+ * viraria 15 rodadas num plano de 5, um multiplicador que o usuário não
+ * escolheu.
+ *
+ * Este é o teto de quem NÃO ligou o modo Loop: existe para o erro óbvio ser
+ * corrigido sem virar uma segunda rodada de trabalho. Com o Loop ligado vale o
+ * maxIterations do diálogo de Loop, que por padrão é maior.
+ */
+const ORCHESTRATION_REVIEW_ROUNDS = 2
 
 interface PendingOrchestration {
   input: SendMessageInput
   plan: OrchestrationPlan
   assistantMessageId: string
-  loopConfig?: LoopEngineConfig
 }
 
 // Planos aguardando aprovação/execução — em memória: se o app reiniciar entre
@@ -105,6 +128,15 @@ export function getOrchestrationRunningSessionIds(): string[] {
 
 /** Fase 1 — planejamento. Substitui runChat quando options.orchestrate está ativo. */
 export async function runOrchestration(win: BrowserWindow, input: SendMessageInput): Promise<void> {
+  // Todo worker roda em modo código na pasta de trabalho — sem pasta não há o
+  // que orquestrar. A UI do desktop já bloqueia o envio sem pasta, mas rotina
+  // agendada e companion não: antes o create_task rebaixava a tarefa para chat,
+  // e agora que o worker é sempre de código isso geraria sessões filhas sem
+  // ferramenta nenhuma. Cai no turno normal, que ao menos funciona.
+  if (!input.directory) {
+    await runChat(win, input)
+    return
+  }
   const { sessionId } = input
   controllers.get(sessionId)?.abort()
   const controller = new AbortController()
@@ -139,26 +171,59 @@ export async function runOrchestration(win: BrowserWindow, input: SendMessageInp
     emit(win, { type: 'status', sessionId, status: 'streaming' })
 
     const tasks: OrchestrationTask[] = []
-    const contextNote = input.directory
-      ? `\n\nContext: the user is in code mode with working folder ${input.directory}. "code" tasks will have access to that folder.`
-      : '\n\nContext: chat mode, no working folder — prefer "chat" tasks.'
-
-    // Tool context para subagent durante planejamento (pasta de trabalho disponível)
-    const planCtx: ToolContext | null = input.directory
-      ? { sessionId: input.sessionId, directory: input.directory, extraDirectories: input.extraDirectories ?? [], abort: controller.signal }
-      : null
-    const subagentTool = createSubagentTool(input, planCtx, PLAN_SUBAGENT_MAX_STEPS, PLAN_SUBAGENT_MAX_CALLS)
-    const planTools = {
-      create_task: createTaskTool(
-        (task) => {
-          if (tasks.length >= MAX_TASKS) return false
-          tasks.push(task)
-          return true
-        },
-        { allowCode: Boolean(input.directory) },
-      ),
-      subagent: subagentTool,
+    // Tool context do planejamento (leitura do projeto + subagent). Sempre
+    // existe: a guarda no topo garante a pasta de trabalho.
+    const planCtx: ToolContext = {
+      sessionId: input.sessionId,
+      directory: input.directory,
+      extraDirectories: input.extraDirectories ?? [],
+      abort: controller.signal,
     }
+    // Teto de modos dos workers: o que a sessão do usuário permite. O
+    // orquestrador escolhe dentro disso, tarefa a tarefa.
+    const ceiling: TaskModeCeiling = {
+      research: input.options.research === true,
+      browser: input.options.browser === true,
+      vision: Boolean(input.visionModel),
+      subagents: input.options.subagents === true,
+    }
+    const planTools: ToolSet = {
+      create_task: createTaskTool((task) => {
+        if (tasks.length >= MAX_TASKS) return false
+        tasks.push(task)
+        return true
+      }, ceiling),
+      // Perguntar antes de dividir: só vale quando a resposta muda o plano,
+      // mas sem a tool ele não tinha como fazer isso nem quando valia.
+      question: createQuestionTool(input, controller.signal),
+    }
+    // Leitura direta do projeto. Antes o planejamento não tinha NENHUMA tool de
+    // arquivo, então a única forma de olhar o código era gastar um subagente
+    // inteiro — daí a enxurrada de chamadas. Ler não é delegar: continua
+    // disponível mesmo com o modo Subagentes desligado.
+    planTools.read = createReadTool(planCtx)
+    planTools.ls = createListTool(planCtx)
+    planTools.glob = createGlobTool(planCtx)
+    planTools.grep = createGrepTool(planCtx)
+    // Delegar pesquisa a outro modelo é o que o modo Subagentes controla no
+    // resto do app (allowDelegation em tools/index) — a orquestração era a
+    // única exceção. Agora segue a mesma regra.
+    if (ceiling.subagents) {
+      planTools.subagent = createSubagentTool(input, planCtx, PLAN_SUBAGENT_MAX_STEPS, PLAN_SUBAGENT_MAX_CALLS)
+    }
+
+    // O teto entra no prompt: sem isso o modelo pede research/browser e só
+    // descobre que não tem no retorno da tool, tarefa por tarefa.
+    const enabled = Object.entries(ceiling).filter(([, v]) => v).map(([k]) => k)
+    const contextNote = [
+      `\n\nWorking folder: ${input.directory}. Every worker runs there, in code mode.`,
+      enabled.length > 0
+        ? `Modes the user enabled — workers may only use these: ${enabled.join(', ')}.`
+        : 'The user enabled no optional modes: workers get the working folder and nothing else. Do not request research, browser, vision or subagents.',
+      ceiling.subagents
+        ? 'You also have the subagent tool for research while planning (3 calls max).'
+        : 'You do NOT have subagents: research the project yourself with read/ls/glob/grep before splitting.',
+    ].join('\n')
     const provider = await getProvider(input.providerId)
     const baseMessages = normalizeMessages(
       toModelMessages(history.slice(0, -1)),
@@ -251,7 +316,12 @@ export async function runOrchestration(win: BrowserWindow, input: SendMessageInp
     // Rede de segurança: o orquestrador às vezes narra "vou dividir em tarefas"
     // e para sem chamar create_task (plano vazio). Damos UMA cutucada explícita
     // antes de desistir e tratar como resposta trivial.
-    if (tasks.length === 0 && firstPass.text) {
+    //
+    // Só cutuca quando ele REALMENTE prometeu um plano. Responder sem tarefas
+    // agora é resultado legítimo — é o caminho 1 do prompt (pergunta simples,
+    // ou oferta de "quer que eu implemente?"). Cutucar isso transformaria toda
+    // conversa em plano, que é exatamente o que estamos consertando.
+    if (tasks.length === 0 && firstPass.text && PROMISED_PLAN_RE.test(firstPass.text)) {
       const staleTextIds = new Set(assistantMessage.parts.filter((p) => p.type === 'text').map((p) => p.id))
       const nudgeMessages: ModelMessage[] = [
         ...baseMessages,
@@ -286,10 +356,10 @@ export async function runOrchestration(win: BrowserWindow, input: SendMessageInp
       status: 'proposed',
       usage: planUsage,
     }
-    // Loop ativado por padrão no modo orquestração (o orquestrador decide quando parar).
-    // Se o usuário explicitamente desativou loop, respeitamos.
-    const effectiveLoop = input.options.loop !== false
-    pending.set(sessionId, { input, plan, assistantMessageId: assistantMessage.id, loopConfig: effectiveLoop ? input.loopConfig ?? { maxIterations: 5, maxTokensPerIter: 8000, autoReview: true } : undefined })
+    // Sem loopConfig: a revisão não é mais um modo à parte com iterações
+    // próprias — ela sempre roda, e o toggle Loop só decide o TAMANHO do
+    // orçamento global de rodadas (ver a fase de revisão em approvePlan).
+    pending.set(sessionId, { input, plan, assistantMessageId: assistantMessage.id })
     await persistPlan(win, sessionId, plan)
     emit(win, { type: 'message', sessionId, message: assistantMessage })
     emit(win, { type: 'status', sessionId, status: 'idle' })
@@ -391,19 +461,20 @@ export async function approvePlan(
           modelId: workerModel?.modelId ?? input.modelId,
           mode: 'code',
           options: {
+            // Os modos vêm do plano: o orquestrador escolheu tarefa a tarefa,
+            // dentro do teto da sessão. Antes `subagents: true` era fixo aqui,
+            // ignorando tanto a escolha dele quanto o toggle do usuário.
             ...task.options,
-            brain: task.options.brain ?? true,
-            simple: task.options.simple ?? true,
             reasoning: workerModel?.reasoning,
-            // Workers podem usar subagentes (com limite de profundidade — o subagent tool
-            // herda orchestrationRole='worker', que bloqueia sub-orquestração)
-            subagents: true,
+            // Worker nunca orquestra — seria recursão.
             orchestrate: undefined,
             // Gatekeeping: worker herda o modo de permissões do orquestrador
             permissionMode: input.options.permissionMode,
           },
           directory: input.directory,
           extraDirectories: input.extraDirectories,
+          // Visão só quando a tarefa pediu (e o usuário tinha modelo de visão)
+          visionModel: task.vision ? input.visionModel : undefined,
           orchestrationRole: 'worker',
           parentSessionId: sessionId,
           workerTitle: task.title,
@@ -505,21 +576,33 @@ export async function approvePlan(
     await persistPlan(win, sessionId, plan)
     emit(win, { type: 'message', sessionId, message: synthesisMessage })
 
-    // ─── Loop de revisão inteligente pós-síntese ──────────────────────
+    // ─── Fase 4: revisão pós-síntese ───────────────────────────────────
     // O orquestrador é chamado a cada iteração para decidir a ação:
     //   - "message_worker": envia follow-up a um worker existente
     //   - "create_worker": cria novo worker (continuação, teste, etc.)
     //   - "done": finaliza
-    if (entry.loopConfig) {
-      const lc = entry.loopConfig
+    // Revisar passou a ser sempre parte do trabalho do orquestrador — antes só
+    // acontecia com loopConfig. O que o modo Loop muda agora é o TAMANHO do
+    // orçamento: desligado vale ORCHESTRATION_REVIEW_ROUNDS, ligado vale o
+    // maxIterations do diálogo de Loop. Em ambos o orçamento é global, e
+    // esperamos todos os workers terminarem antes de revisar — as revisões que
+    // valem são as de integração, e essas só existem com tudo pronto.
+    {
+      // Com o modo Loop ligado o orçamento vem do diálogo de Loop (default 5);
+      // sem ele, do teto próprio da orquestração (2).
+      const reviewRounds =
+        input.options.loop === true
+          ? (input.loopConfig?.maxIterations ?? ORCHESTRATION_REVIEW_ROUNDS)
+          : ORCHESTRATION_REVIEW_ROUNDS
       let iteration = 0
-      // Rastreia workers existentes para reuso
-      const workerSessions = new Map(selected.map((t) => [t.workerSessionId!, { title: t.title, taskId: t.id }]))
+      // Rastreia workers existentes para reuso; a task carrega quantas rodadas
+      // já foram gastas nele — o orçamento é global, mas mostrar o gasto por
+      // worker evita que o orquestrador martele sempre o mesmo.
+      const workerSessions = new Map(selected.map((t) => [t.workerSessionId!, { title: t.title, task: t }]))
 
-      while (iteration < lc.maxIterations) {
+      while (iteration < reviewRounds) {
         if (controller.signal.aborted) break
 
-        const hist = await loadMessages(sessionId)
         // Coleta resultados atuais de todos os workers do plano
         const workersStatus = await Promise.all(
           [...workerSessions.entries()].map(async ([wsId, info]) => {
@@ -530,20 +613,26 @@ export async function approvePlan(
               .map((p) => p.text)
               .join('\n')
               .trim() || '(no output)'
-            return { sessionId: wsId, title: info.title, text: text.slice(0, 2000), error: last?.error }
+            return {
+              sessionId: wsId,
+              title: info.title,
+              text: text.slice(0, 2000),
+              error: last?.error,
+              spent: info.task.revisions ?? 0,
+            }
           }),
         )
 
         // Orquestrador decide o que fazer
         const workersBlock = workersStatus
-          .map((w) => `## Worker "${w.title}" (sessionId: ${w.sessionId})\n${w.error ? `**ERROR**: ${w.error}\n` : ''}${w.text}`)
+          .map((w) => `## Worker "${w.title}" (sessionId: ${w.sessionId}, rounds already spent here: ${w.spent})\n${w.error ? `**ERROR**: ${w.error}\n` : ''}${w.text}`)
           .join('\n\n---\n\n')
 
         const { text: decisionText } = await generateText({
           model,
-          system: `You are the Orbit orchestrator in loop mode. Review the worker results and decide the next action.`,
+          system: `You are the Orbit orchestrator. The workers have finished. Review their results and decide the next action.`,
           messages: [
-            { role: 'user', content: `## Original request\n${input.text}\n\n## Worker results\n${workersBlock}\n\n## Current iteration\n${iteration + 1}/${lc.maxIterations}` },
+            { role: 'user', content: `## Original request\n${input.text}\n\n## Worker results\n${workersBlock}\n\n## Review round\n${iteration + 1} of ${reviewRounds} (budget shared across all workers)` },
             {
               role: 'user',
               content: `Analyze whether the goal was achieved. Reply with JSON:
@@ -559,9 +648,11 @@ export async function approvePlan(
 
 Rules:
 - "done": goal achieved, finish
-- "message_worker": reuse an existing worker with new instructions (better than creating a new one when the worker already has context)
+- "message_worker": reuse an existing worker with new instructions — always prefer this over a new worker when the worker already has the context. It continues inside that worker's own chat, so it remembers what it did.
 - "create_worker": create an additional worker to continue/expand
-- "create_test_worker": create a worker to TEST what was implemented; if it finds errors, the next loop iteration can delegate to the worker that implemented it`,
+- "create_test_worker": create a worker to TEST what was implemented; if it finds errors, the next round can delegate the fix to the worker that implemented it
+- You have a TOTAL budget of review rounds shared across all workers, and you decide where to spend it. "rounds already spent here" tells you how many went to each one — if a worker already took several and still isn't right, messaging it again is probably not the answer.
+- Don't invent work to look busy. If the request was met, say "done" — an extra round costs the user money.`,
             },
           ],
           abortSignal: controller.signal,
@@ -598,10 +689,14 @@ Rules:
         if (decision.action === 'message_worker' && decision.workerSessionId && workerSessions.has(decision.workerSessionId)) {
           // Reuso: envia nova instrução ao worker existente
           const wsInfo = workerSessions.get(decision.workerSessionId)!
+          // O orçamento é global (a condição do while) — aqui só registramos
+          // onde ele foi gasto, para o orquestrador ver na próxima decisão que
+          // já bateu neste worker N vezes e considerar outro caminho.
+          wsInfo.task.revisions = (wsInfo.task.revisions ?? 0) + 1
           const followUp: ChatMessage = {
             id: newId('msg'),
             role: 'user',
-            parts: [{ id: newId('prt'), type: 'text', text: `[Loop ${iteration}/${lc.maxIterations}] ${decision.reason}\n\n${decision.followUpPrompt ?? 'Continue o trabalho.'}`, state: 'done' }],
+            parts: [{ id: newId('prt'), type: 'text', text: `[Revisão ${iteration}] ${decision.reason}\n\n${decision.followUpPrompt ?? 'Continue o trabalho.'}`, state: 'done' }],
             createdAt: Date.now(),
           }
           const wsMsgs = await loadMessages(decision.workerSessionId)
@@ -615,9 +710,18 @@ Rules:
             providerId: input.workerModel?.providerId ?? input.providerId,
             modelId: input.workerModel?.modelId ?? input.modelId,
             mode: 'code',
-            options: { simple: true, subagents: true, orchestrate: undefined, permissionMode: input.options.permissionMode },
+            // Mesmos modos que a tarefa recebeu no plano: a revisao continua a
+            // conversa do worker, nao comeca outra. Antes era simple/subagents
+            // fixos aqui, entao o worker trocava de modo no meio do proprio chat.
+            options: {
+              ...wsInfo.task.options,
+              reasoning: input.workerModel?.reasoning,
+              orchestrate: undefined,
+              permissionMode: input.options.permissionMode,
+            },
             directory: input.directory,
             extraDirectories: input.extraDirectories,
+            visionModel: wsInfo.task.vision ? input.visionModel : undefined,
             orchestrationRole: 'worker',
             parentSessionId: sessionId,
             workerTitle: wsInfo.title,
@@ -650,7 +754,21 @@ Rules:
           }
           await writeJson(StorageKeys.session(loopWorker.id), loopWorker)
           activeWorkers.get(sessionId)?.push(loopWorker.id)
-          workerSessions.set(loopWorker.id, { title: loopWorker.title, taskId: '' })
+          // Task sintetica: existe para o worker do loop ter o mesmo contador de
+          // revisoes dos workers do plano.
+          const loopTask: OrchestrationTask = {
+            id: newId('task'),
+            title: loopWorker.title,
+            prompt: decision.workerPrompt ?? decision.reason,
+            options: {
+              subagents: input.options.subagents === true,
+              permissionMode: input.options.permissionMode,
+            },
+            status: 'idle',
+            workerSessionId: loopWorker.id,
+            revisions: 0,
+          }
+          workerSessions.set(loopWorker.id, { title: loopWorker.title, task: loopTask })
           emit(win, { type: 'session', sessionId: loopWorker.id, session: loopWorker })
 
           const wm = input.workerModel
@@ -660,7 +778,15 @@ Rules:
             providerId: wm?.providerId ?? input.providerId,
             modelId: wm?.modelId ?? input.modelId,
             mode: loopWorker.mode,
-            options: { simple: true, subagents: true, orchestrate: undefined, permissionMode: input.options.permissionMode },
+            // Sem modos extras alem do que a sessao permite — `subagents: true`
+            // fixo aqui ignorava o toggle do usuario, o mesmo problema que os
+            // workers do plano tinham.
+            options: {
+              ...loopTask.options,
+              reasoning: wm?.reasoning,
+              orchestrate: undefined,
+              permissionMode: input.options.permissionMode,
+            },
             directory: input.directory,
             extraDirectories: input.extraDirectories,
             orchestrationRole: 'worker',
@@ -680,7 +806,11 @@ Rules:
           emit(win, { type: 'part', sessionId, messageId: synthesisMessage.id, part: loopPart })
         }
 
-        await saveMessages(sessionId, hist)
+        // Salva `history`, nao um reload: as parts da revisao sao empurradas
+        // no synthesisMessage em memoria, e esse objeto vive dentro de
+        // `history`. Um loadMessages aqui traria uma COPIA sem elas, e gravar
+        // essa copia apagava do disco tudo que a revisao escreveu.
+        await saveMessages(sessionId, history)
       }
       activeWorkers.delete(sessionId)
     }

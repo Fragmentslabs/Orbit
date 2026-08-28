@@ -179,7 +179,7 @@ export async function executarRotina(rotina: Rotina, motivo: 'agenda' | 'manual'
     // do usuário" e segue o idioma do PROMPT — inglês nas rotinas de exemplo.
     ...(idioma ? { language: idioma } : {}),
     isFirstExchange: true,
-    ...(options.loop ? { loopConfig: { maxIterations: 3, maxTokensPerIter: 4000, autoReview: true } } : {}),
+    ...(options.loop ? { loopConfig: { maxIterations: 5 } } : {}),
   }
 
   console.log(`[rotinas] disparando "${rotina.titulo}" (${motivo}) na sessão ${session.id}`)

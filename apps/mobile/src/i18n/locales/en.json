@@ -301,7 +301,9 @@
     "approveAndRun": "Approve and run {{count}}",
     "research": "Research",
     "browser": "Browser",
-    "readOnly": "Read-only"
+    "readOnly": "Read-only",
+    "subagents": "subagents",
+    "vision": "vision"
   },
   "subAgentCard": {
     "defaultTask": "Delegated subtask",

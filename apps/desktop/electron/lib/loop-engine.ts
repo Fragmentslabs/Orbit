@@ -6,12 +6,10 @@ import { StorageKeys } from '@shared/chat'
 import { runChat } from './chat-engine'
 import { REVIEW_PROMPT } from './prompts'
 import { resolveModel } from './providers'
-import { readJson, writeJson } from './storage'
+import { readJson } from './storage'
 
 export interface LoopEngineConfig {
   maxIterations: number
-  maxTokensPerIter: number
-  autoReview: boolean
 }
 
 export interface ReviewResult {
@@ -20,10 +18,6 @@ export interface ReviewResult {
   followUpPrompt?: string
   /** Se replan, sugestão de nova abordagem */
   newApproach?: string
-}
-
-function newId(prefix: string) {
-  return `${prefix}_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 10)}`
 }
 
 /** Abort controllers do loop por sessão (separados dos do runChat). */
@@ -39,26 +33,16 @@ export function getLoopRunningSessionIds(): string[] {
   return [...loopControllers.keys()]
 }
 
-function emit(win: BrowserWindow, event: Record<string, unknown>) {
-  if (!win.isDestroyed()) win.webContents.send('chat:event', event)
-}
-
 async function loadMessages(sessionId: string): Promise<ChatMessage[]> {
   return (await readJson<ChatMessage[]>(StorageKeys.messages(sessionId))) ?? []
-}
-
-async function saveMessages(sessionId: string, messages: ChatMessage[]) {
-  await writeJson(StorageKeys.messages(sessionId), messages)
 }
 
 /**
  * Revisa o resultado da última iteração e decide se o objetivo foi atingido.
  */
 export async function reviewIteration(
-  _sessionId: string,
   originalInput: string,
   history: ChatMessage[],
-  _maxTokens: number,
   providerId: string,
   modelId: string,
   abortSignal?: AbortSignal,
@@ -132,10 +116,8 @@ export async function runChatWithLoop(
       if (hasNewUser) break
 
       const review = await reviewIteration(
-        input.sessionId,
         input.text,
         history,
-        config.maxTokensPerIter,
         input.providerId,
         input.modelId,
         controller.signal,
@@ -145,61 +127,18 @@ export async function runChatWithLoop(
       iteration++
       if (iteration >= config.maxIterations) break
 
-    // Replan: abordagem atual não resolve — reformula o prompt e reinicia
-    if (review.status === 'replan') {
-      const replanMsg: ChatMessage = {
-        id: newId('msg'),
-        role: 'user',
-        parts: [{
-          id: newId('prt'),
-          type: 'text',
-          text: `[Replan ${iteration}/${config.maxIterations}] ${review.reason}\n\nNova abordagem: ${review.newApproach ?? 'Reformule a estratégia de execução.'}`,
-          state: 'done',
-        }],
-        createdAt: Date.now(),
+      // A instrução da próxima iteração NÃO é gravada aqui: quem grava a
+      // mensagem do usuário é o runChat, com o input.text que recebe. Gravar
+      // dos dois lados produzia DUAS mensagens por iteração — a com o prefixo
+      // "[Loop N/M]" e, logo abaixo, o follow-up sozinho.
+      currentInput = {
+        ...currentInput,
+        text:
+          review.status === 'replan'
+            // Replan: a abordagem atual não resolve — reformula e recomeça.
+            ? `[Replan ${iteration}/${config.maxIterations}] ${review.reason}\n\nNova abordagem: ${review.newApproach ?? 'Reformule a estratégia de execução.'}`
+            : `[Loop ${iteration}/${config.maxIterations}] ${review.reason}\n\n${review.followUpPrompt ?? 'Continue o trabalho.'}`,
       }
-      history.push(replanMsg)
-      await saveMessages(input.sessionId, history)
-      emit(win, { type: 'message', sessionId: input.sessionId, message: replanMsg })
-      currentInput = { ...currentInput, text: review.newApproach ?? review.reason }
-      continue
-    }
-
-    if (!config.autoReview) {
-      const msg: ChatMessage = {
-        id: newId('msg'),
-        role: 'user',
-        parts: [{
-          id: newId('prt'),
-          type: 'text',
-          text: `[Loop ${iteration}/${config.maxIterations}] ${review.reason}\n\nDeseja continuar? (sim/não)`,
-          state: 'done',
-        }],
-        createdAt: Date.now(),
-      }
-      history.push(msg)
-      await saveMessages(input.sessionId, history)
-      emit(win, { type: 'message', sessionId: input.sessionId, message: msg })
-      currentInput = { ...currentInput, text: review.followUpPrompt ?? 'Continue.' }
-      continue
-    }
-
-    const followUp: ChatMessage = {
-      id: newId('msg'),
-      role: 'user',
-      parts: [{
-        id: newId('prt'),
-        type: 'text',
-        text: `[Loop ${iteration}/${config.maxIterations}] ${review.reason}\n\n${review.followUpPrompt ?? 'Continue o trabalho.'}`,
-        state: 'done',
-      }],
-      createdAt: Date.now(),
-    }
-    history.push(followUp)
-    await saveMessages(input.sessionId, history)
-    emit(win, { type: 'message', sessionId: input.sessionId, message: followUp })
-
-    currentInput = { ...currentInput, text: review.followUpPrompt ?? 'Continue o trabalho.' }
     }
   } finally {
     loopControllers.delete(input.sessionId)

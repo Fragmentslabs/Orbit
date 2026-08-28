@@ -6,9 +6,10 @@ import {
   CheckSquare,
   FileText,
   Globe,
-  MessageSquare,
   Search,
   Terminal,
+  Users,
+  Eye,
   X,
 } from 'lucide-react-native'
 import { useTranslation } from 'react-i18next'
@@ -22,10 +23,10 @@ interface Props {
   plan: OrchestrationPlan
 }
 
-function TaskModeIcon({ task }: { task: OrchestrationTask }) {
-  const Icon = task.mode === 'code' ? Terminal : MessageSquare
+/** Worker de orquestracao roda sempre na pasta de trabalho, em modo codigo. */
+function TaskModeIcon() {
   const tokens = getThemeTokens(useThemeStore((s) => s.resolved))
-  return <Icon size={14} color={tokens.mutedForeground} />
+  return <Terminal size={14} color={tokens.mutedForeground} />
 }
 
 function TaskChips({ task }: { task: OrchestrationTask }) {
@@ -35,6 +36,8 @@ function TaskChips({ task }: { task: OrchestrationTask }) {
   if (task.options.research) chips.push({ icon: Search, label: t('orchestrationPlan.research') })
   if (task.options.browser) chips.push({ icon: Globe, label: t('orchestrationPlan.browser') })
   if (task.options.plan) chips.push({ icon: FileText, label: t('orchestrationPlan.readOnly') })
+  if (task.options.subagents) chips.push({ icon: Users, label: t('orchestrationPlan.subagents') })
+  if (task.vision) chips.push({ icon: Eye, label: t('orchestrationPlan.vision') })
   if (chips.length === 0) return null
   return (
     <View className="flex-row items-center gap-1">
@@ -142,7 +145,7 @@ export function OrchestrationPlanCard({ sessionId, plan }: Props) {
             ) : (
               <TaskStatusIcon status={task.status} />
             )}
-            <TaskModeIcon task={task} />
+            <TaskModeIcon />
             <Text
               className="flex-1 text-xs"
               style={{ color: tokens.foreground }}

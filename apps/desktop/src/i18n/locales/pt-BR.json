@@ -507,7 +507,7 @@
     },
     "account": {
       "localAssistant": "Assistente local",
-    "byFragmentsLabs": "por Fragments Labs",
+      "byFragmentsLabs": "por Fragments Labs",
       "myAccount": "Minha Conta",
       "profile": "Perfil",
       "settings": "Configurações",
@@ -866,15 +866,9 @@
   },
   "loopConfig": {
     "title": "Configuração do Loop",
-    "description": "Limites para o modo loop: o agente revisa o próprio resultado e itera até completar a tarefa ou atingir o limite.",
-    "maxIterations": "Iterações máximas",
-    "maxIterationsHint": "Quantas vezes o agente pode revisar e refinar o resultado (1-10)",
-    "tokensPerIter": "Tokens por revisão",
-    "tokensPerIterHint": "Limite de tokens para cada chamada de revisão (1.000-20.000)",
-    "timeout": "Timeout (minutos)",
-    "timeoutHint": "Tempo máximo total do loop antes de entregar resposta parcial (1-60)",
-    "autoReview": "Revisão automática",
-    "autoReviewHint": "Se desligado, pergunta antes de cada nova iteração",
+    "description": "Limite do modo Loop: o agente revisa o próprio resultado e itera até concluir a tarefa ou bater no limite.",
+    "maxIterations": "Máximo de iterações",
+    "maxIterationsHint": "É um teto, não uma meta — o agente para assim que terminar (1-10). No modo orquestração é o total de rodadas de revisão somando todos os workers.",
     "done": "Concluir"
   },
   "visionConfig": {
@@ -912,6 +906,8 @@
     "researchChip": "pesquisa",
     "browserChip": "browser",
     "readOnlyChip": "somente leitura",
+    "subagentsChip": "subagentes",
+    "visionChip": "visão",
     "cost": "Custo desta orquestração: {{cost}} ({{tokens}} tokens)",
     "reject": "Rejeitar",
     "approveRun": "Aprovar e executar",
@@ -1298,7 +1294,7 @@
           "Código"
         ],
         "description": "Workers efêmeros em background para tarefas paralelas.",
-        "detail": "Adiciona a ferramenta subagent ao agente. Quando o agente identifica subtarefas independentes, ele pode delegá-las a workers efêmeros que rodam em background com o modelo configurado. Os workers são descartados ao fim da tarefa — não aparecem na sidebar.",
+        "detail": "Adiciona a ferramenta subagent ao agente. Quando ele identifica subtarefas independentes, pode delegá-las a workers efêmeros que rodam em background com o modelo configurado. Os workers são descartados ao fim da tarefa — não aparecem na sidebar. No modo Orquestra, este toggle também é o que libera o orquestrador a delegar pesquisa durante o planejamento: sem ele, ele investiga o projeto sozinho, lendo os arquivos.",
         "combo": [
           "Loop",
           "Orquestra"
@@ -1310,8 +1306,8 @@
         "modes": [
           "Código"
         ],
-        "description": "Divide o pedido em plano de tarefas + workers persistentes.",
-        "detail": "O agente orquestrador planeja a tarefa (criando subtarefas com create_task), propõe o plano para sua aprovação e, após aprovado, executa cada subtarefa como uma sessão filha persistente no painel direito. Os workers rodam em paralelo com o modelo worker configurado. Resultado final é sintetizado pelo orquestrador.",
+        "description": "Planeja e divide o trabalho em workers persistentes — quando o pedido pede isso.",
+        "detail": "O orquestrador primeiro decide o que o pedido é: dúvida simples ele responde na hora (e pode oferecer \"quer que eu implemente?\"), ambiguidade que mudaria a divisão ele pergunta, e só trabalho de verdade vira plano. Ao planejar, ele lê o projeto por conta própria e registra as subtarefas com create_task, propondo o plano para sua aprovação. Cada tarefa aprovada vira uma sessão filha persistente, sempre em modo código na pasta de trabalho, rodando em paralelo com o modelo worker. Os modos de cada worker são escolhidos por ele conforme a necessidade da tarefa, dentro do que você ativou nesta conversa. No fim ele sintetiza tudo e revisa: se algo ficou errado, manda outra rodada para o worker responsável, dentro do chat dele.",
         "combo": [
           "Loop",
           "Subagentes"
@@ -1324,7 +1320,7 @@
           "Código"
         ],
         "description": "Agente revisa e itera até completar a tarefa.",
-        "detail": "Após cada resposta, o sistema revisa criticamente o resultado. Se o objetivo não foi totalmente atingido, o agente continua trabalhando automaticamente (nova iteração). O número máximo de iterações e o comportamento (automático ou com confirmação) são configuráveis no gear. Ideal para tarefas complexas que exigem refinamento.",
+        "detail": "Depois de cada resposta, o resultado é revisado criticamente. Se o objetivo não foi atingido, o agente continua sozinho numa nova iteração, com o que falta descrito explicitamente. O único ajuste é o máximo de iterações (na engrenagem) — e ele é um teto, não uma meta: o loop para assim que a revisão diz que terminou. Em modo Orquestra esse mesmo número passa a valer como o total de rodadas de revisão somando todos os workers.",
         "combo": [
           "Subagentes",
           "Orquestra",
@@ -1390,7 +1386,7 @@
           "Orquestra",
           "Loop"
         ],
-        "description": "Orchestra + Loop: o orquestrador divide o problema em tarefas, workers executam em paralelo, e após a síntese o loop revisa o resultado, criando workers de continuação se necessário. O melhor dos dois mundos para problemas complexos."
+        "description": "Orquestra + Loop: sem o Loop, o orquestrador tem 2 rodadas de revisão depois da síntese — o suficiente para corrigir o erro óbvio. Com o Loop ligado, o orçamento passa a ser o máximo de iterações que você configurou (padrão 5). São rodadas no TOTAL, não por worker: quem decide onde gastá-las é o orquestrador, que é o único que vê o conjunto."
       },
       {
         "label": "Workers em múltiplas frentes",
@@ -1398,7 +1394,16 @@
           "Orquestra",
           "Subagentes"
         ],
-        "description": "Orchestra + Subagents: o orquestrador coordena tarefas de alto nível (workers persistentes na sidebar), e dentro de cada tarefa o worker pode usar subagents efêmeros para investigações pontuais. Máximo de paralelismo."
+        "description": "Orquestra + Subagentes: libera delegação nos dois níveis. No planejamento, o orquestrador pode acionar subagentes para pesquisar antes de dividir (sem o toggle, ele lê o projeto sozinho). E ele passa a poder dar subagentes próprios a um worker, quando a tarefa é ampla demais para um só."
+      },
+      {
+        "label": "Orquestra + Subagentes + Loop",
+        "items": [
+          "Orquestra",
+          "Subagentes",
+          "Loop"
+        ],
+        "description": "Orquestra + Subagentes + Loop: a configuração mais autónoma — e a mais cara. Pesquisa delegada no planejamento, workers que podem se subdividir, e o orçamento maior de revisão do Loop. Vale para tarefas grandes de verdade; confira o custo estimado no card do plano antes de aprovar."
       },
       {
         "label": "Planejamento cuidadoso",

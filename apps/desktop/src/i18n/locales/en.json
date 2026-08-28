@@ -507,7 +507,7 @@
     },
     "account": {
       "localAssistant": "Local assistant",
-    "byFragmentsLabs": "by Fragments Labs",
+      "byFragmentsLabs": "by Fragments Labs",
       "myAccount": "My Account",
       "profile": "Profile",
       "settings": "Settings",
@@ -866,15 +866,9 @@
   },
   "loopConfig": {
     "title": "Loop Configuration",
-    "description": "Limits for loop mode: the agent reviews its own result and iterates until it completes the task or hits the limit.",
+    "description": "Limit for loop mode: the agent reviews its own result and iterates until it completes the task or hits the limit.",
     "maxIterations": "Max iterations",
-    "maxIterationsHint": "How many times the agent can review and refine the result (1-10)",
-    "tokensPerIter": "Tokens per review",
-    "tokensPerIterHint": "Token limit for each review call (1,000-20,000)",
-    "timeout": "Timeout (minutes)",
-    "timeoutHint": "Maximum total loop time before returning a partial answer (1-60)",
-    "autoReview": "Auto review",
-    "autoReviewHint": "If off, asks before each new iteration",
+    "maxIterationsHint": "Ceiling, not a target — the agent stops as soon as it is done (1-10). In orchestration mode this is the total number of review rounds across all workers.",
     "done": "Done"
   },
   "visionConfig": {
@@ -912,6 +906,8 @@
     "researchChip": "research",
     "browserChip": "browser",
     "readOnlyChip": "read-only",
+    "subagentsChip": "subagents",
+    "visionChip": "vision",
     "cost": "Cost of this orchestration: {{cost}} ({{tokens}} tokens)",
     "reject": "Reject",
     "approveRun": "Approve and run",
@@ -1298,7 +1294,7 @@
           "Code"
         ],
         "description": "Ephemeral background workers for parallel tasks.",
-        "detail": "Adds the subagent tool to the agent. When the agent identifies independent subtasks, it can delegate them to ephemeral workers that run in the background with the configured model. Workers are discarded when the task ends — they don't appear in the sidebar.",
+        "detail": "Adds the subagent tool to the agent. When it spots independent subtasks, it can delegate them to ephemeral workers running in the background with the configured model. Those workers are discarded when the task ends — they never appear in the sidebar. In Orchestra mode this toggle is also what lets the orchestrator delegate research while planning: without it, it investigates the project itself by reading files.",
         "combo": [
           "Loop",
           "Orchestra"
@@ -1310,8 +1306,8 @@
         "modes": [
           "Code"
         ],
-        "description": "Splits the request into a task plan + persistent workers.",
-        "detail": "The orchestrator agent plans the task (creating subtasks with create_task), proposes the plan for your approval, and once approved, runs each subtask as a persistent child session in the right panel. Workers run in parallel with the configured worker model. The final result is synthesized by the orchestrator.",
+        "description": "Plans and splits work across persistent workers — when the request calls for it.",
+        "detail": "The orchestrator first decides what the message actually is: a simple question it answers on the spot (and may offer \"want me to implement this?\"), an ambiguity that would change the split it asks about, and only real work becomes a plan. When planning, it reads the project itself and registers subtasks with create_task, proposing the plan for your approval. Each approved task becomes a persistent child session, always in code mode in the working folder, running in parallel with the worker model. It picks each worker’s modes based on what that task needs, within what you enabled in this conversation. At the end it synthesises everything and reviews: if something came out wrong, it sends another round to the worker responsible, inside that worker’s own chat.",
         "combo": [
           "Loop",
           "Subagents"
@@ -1324,7 +1320,7 @@
           "Code"
         ],
         "description": "The agent reviews and iterates until the task is complete.",
-        "detail": "After each response, the system critically reviews the result. If the goal wasn't fully achieved, the agent keeps working automatically (a new iteration). The maximum number of iterations and the behavior (automatic or with confirmation) are configurable in the gear menu. Ideal for complex tasks that need refinement.",
+        "detail": "After each answer the result is critically reviewed. If the goal wasn’t met, the agent keeps going on its own in a new iteration, with the gap spelled out. The only setting is max iterations (in the gear) — and it is a ceiling, not a target: the loop stops as soon as the review says it is done. In Orchestra mode that same number becomes the total review rounds across all workers.",
         "combo": [
           "Subagents",
           "Orchestra",
@@ -1390,7 +1386,7 @@
           "Orchestra",
           "Loop"
         ],
-        "description": "Orchestra + Loop: the orchestrator splits the problem into tasks, workers run in parallel, and after synthesis the loop reviews the result, creating follow-up workers if needed. The best of both worlds for complex problems."
+        "description": "Orchestra + Loop: without Loop, the orchestrator gets 2 review rounds after synthesis — enough to fix the obvious mistake. With Loop on, the budget becomes the max iterations you configured (default 5). These are TOTAL rounds, not per worker: the orchestrator decides where to spend them, since it is the only one seeing the whole picture."
       },
       {
         "label": "Workers on multiple fronts",
@@ -1398,7 +1394,16 @@
           "Orchestra",
           "Subagents"
         ],
-        "description": "Orchestra + Subagents: the orchestrator coordinates high-level tasks (persistent workers in the sidebar), and within each task the worker can use ephemeral subagents for one-off investigations. Maximum parallelism."
+        "description": "Orchestra + Subagents: unlocks delegation at both levels. While planning, the orchestrator may call subagents to research before splitting (without the toggle it reads the project itself). And it can hand a worker its own subagents when a task is too broad for one."
+      },
+      {
+        "label": "Orchestra + Subagents + Loop",
+        "items": [
+          "Orchestra",
+          "Subagents",
+          "Loop"
+        ],
+        "description": "Orchestra + Subagents + Loop: the most autonomous setup — and the most expensive. Delegated research while planning, workers that can split themselves further, and Loop’s larger review budget. Worth it for genuinely large jobs; check the estimated cost on the plan card before approving."
       },
       {
         "label": "Careful planning",

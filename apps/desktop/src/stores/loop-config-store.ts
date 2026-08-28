@@ -4,16 +4,15 @@ const STORAGE_KEY = "orbit-loop-config"
 
 export interface LoopConfig {
   maxIterations: number
-  maxTokensPerIter: number
-  timeoutMinutes: number
-  autoReview: boolean
 }
 
+/**
+ * 5 e nao 3: com o modo Loop ligado a orquestracao passa a usar este numero no
+ * lugar do teto proprio dela (ORCHESTRATION_REVIEW_ROUNDS), entao o default
+ * precisa ser maior que ele para ligar o Loop significar "revise mais".
+ */
 const DEFAULTS: LoopConfig = {
-  maxIterations: 3,
-  maxTokensPerIter: 4000,
-  timeoutMinutes: 10,
-  autoReview: true,
+  maxIterations: 5,
 }
 
 function load(): LoopConfig {

@@ -554,11 +554,12 @@ export function ChatView({ sessionId }: { sessionId?: string } = {}) {
           <OrchestrationPlanCard sessionId={session.id} plan={plan} />
         </div>
       )}
-      {/* Plano de orquestração em execução/concluído — progresso das tarefas */}
+      {/* Plano de orquestração em execução/concluído — progresso das tarefas.
+          O mode é fixo: worker de orquestração roda sempre na pasta de trabalho. */}
       {session && plan && (plan.status === "approved" || plan.status === "running" || plan.status === "done") && (
         <div className="mx-auto w-full max-w-2xl pb-2">
           <TaskProgress
-            tasks={plan.tasks.map((t) => ({ id: t.id, title: t.title, status: t.status, mode: t.mode }))}
+            tasks={plan.tasks.map((t) => ({ id: t.id, title: t.title, status: t.status, mode: "code" as const }))}
             title={t("chat.orchestrationTitle")}
             defaultExpanded={plan.status !== "done"}
             onDismiss={plan.status === "done" ? () => useSessionStore.getState().dismissOrchestration(session.id) : undefined}

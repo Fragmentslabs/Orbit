@@ -3,13 +3,14 @@ import { useTranslation } from "react-i18next"
 import {
   CheckIcon,
   CheckSquareIcon,
+  EyeIcon,
   FileTextIcon,
   GlobeIcon,
   LoaderIcon,
-  MessageSquareIcon,
   SearchIcon,
   SquareIcon,
   TerminalIcon,
+  UsersIcon,
   XCircleIcon,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -25,9 +26,9 @@ import { useSessionStore } from "@/src/stores/session-store"
  * rejeitar a execução (fluxo semi-auto).
  */
 
-function TaskModeIcon({ task }: { task: OrchestrationTask }) {
-  const Icon = task.mode === "code" ? TerminalIcon : MessageSquareIcon
-  return <Icon className="size-3.5 shrink-0 text-muted-foreground" />
+/** Worker de orquestração roda sempre na pasta de trabalho, em modo código. */
+function TaskModeIcon() {
+  return <TerminalIcon className="size-3.5 shrink-0 text-muted-foreground" />
 }
 
 function TaskChips({ task, t }: { task: OrchestrationTask; t: (key: string) => string }) {
@@ -35,6 +36,8 @@ function TaskChips({ task, t }: { task: OrchestrationTask; t: (key: string) => s
   if (task.options.research) chips.push({ icon: SearchIcon, label: t("orchestration.researchChip") })
   if (task.options.browser) chips.push({ icon: GlobeIcon, label: t("orchestration.browserChip") })
   if (task.options.plan) chips.push({ icon: FileTextIcon, label: t("orchestration.readOnlyChip") })
+  if (task.options.subagents) chips.push({ icon: UsersIcon, label: t("orchestration.subagentsChip") })
+  if (task.vision) chips.push({ icon: EyeIcon, label: t("orchestration.visionChip") })
   if (chips.length === 0) return null
   return (
     <span className="flex items-center gap-1.5">
@@ -119,7 +122,7 @@ export function OrchestrationPlanCard({ sessionId, plan }: {
             ) : (
               <TaskStatusIcon status={task.status} />
             )}
-            <TaskModeIcon task={task} />
+            <TaskModeIcon />
             <span className="min-w-0 flex-1 truncate text-xs" title={task.prompt}>
               {task.title}
             </span>

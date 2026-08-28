@@ -1133,7 +1133,7 @@ app.whenReady().then(() => {
       }
       void runOrchestration(win, input)
     } else if (input.options.loop) {
-      void runChatWithLoop(win, input, input.loopConfig ?? { maxIterations: 3, maxTokensPerIter: 4000, autoReview: true })
+      void runChatWithLoop(win, input, input.loopConfig ?? { maxIterations: 5 })
     } else {
       void runChat(win, input)
     }
