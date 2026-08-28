@@ -6,6 +6,7 @@ import { Globe, History, KeyboardIcon, Loader2, Monitor, X } from 'lucide-react-
 import * as Device from 'expo-device'
 import { useTranslation } from 'react-i18next'
 import { useConnectionStore } from '~/stores/connection-store'
+import { prettyDeviceName } from '~/lib/device-name'
 import { useRecentConnectionsStore, type RecentConnection } from '~/stores/recent-connections-store'
 import { Button } from '~/components/ui/button'
 import { Input } from '~/components/ui/input'
@@ -271,7 +272,7 @@ export function ManualConnectSheet({ visible, onClose, prefill }: ManualConnectS
                       <Monitor size={16} color={tokens.mutedForeground} />
                     </View>
                     <View style={{ flex: 1 }}>
-                      <Text style={[s.fg, { color: tokens.foreground }]} numberOfLines={1}>{rc.deviceName ?? rc.host}</Text>
+                      <Text style={[s.fg, { color: tokens.foreground }]} numberOfLines={1}>{prettyDeviceName(rc.deviceName) ?? rc.host}</Text>
                       <Text style={[s.mutedFg, { color: tokens.mutedForeground }]}>{rc.host}:{rc.port}</Text>
                     </View>
                     <Pressable

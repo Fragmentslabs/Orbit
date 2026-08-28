@@ -13,6 +13,7 @@ import { useTranslation } from 'react-i18next'
 import type { ConnectionConfig } from '@orbit/companion-client'
 import * as Device from 'expo-device'
 import { useConnectionStore } from '~/stores/connection-store'
+import { prettyDeviceName } from '~/lib/device-name'
 import { useRecentConnectionsStore } from '~/stores/recent-connections-store'
 import { useDesktopDiscovery } from '~/hooks/useDesktopDiscovery'
 import { Button } from '~/components/ui/button'
@@ -163,7 +164,11 @@ export default function ConnectionScreen() {
         </View>
         <View style={{ flex: 1 }}>
           <Text style={[s.fgSemibold, { color: tokens.foreground }]}>
-            {t('connectionScreen.desktopFound', { name: found.name ? ` — ${found.name}` : '' })}
+            {/* Duas chaves em vez de interpolar " — nome": com o travessao
+                dentro do valor, a traducao nao tinha como pontuar a frase. */}
+            {prettyDeviceName(found.name)
+              ? t('connectionScreen.desktopFoundNamed', { name: prettyDeviceName(found.name) })
+              : t('connectionScreen.desktopFound')}
           </Text>
           <Text style={[s.mutedFg, { color: tokens.mutedForeground }]}>{found.host}:{found.wsPort} · {t('connectionScreen.tapToConnect')}</Text>
         </View>

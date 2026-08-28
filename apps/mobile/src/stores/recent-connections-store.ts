@@ -14,7 +14,10 @@ const MAX_RECENT = 5
 export interface RecentConnection {
   host: string
   port: number
-  /** Nome do desktop (hostname) descoberto na conexão. */
+  /** Nome do desktop (hostname cru), vindo do auth:ok. NUNCA o nome do
+   *  celular: `ConnectionConfig.deviceName` é o que ESTE aparelho envia para o
+   *  desktop exibir, e usá-lo como fallback fazia a lista de recentes mostrar
+   *  o nome do próprio celular no lugar do PC. */
   deviceName?: string
   /** Última conexão bem-sucedida (epoch ms). */
   lastConnectedAt?: number
@@ -52,7 +55,7 @@ export const useRecentConnectionsStore = create<RecentConnectionsStore>((set, ge
     const entry: RecentConnection = {
       host: config.host,
       port: config.port,
-      deviceName: deviceName ?? config.deviceName,
+      deviceName,
       lastConnectedAt: Date.now(),
       pin: config.pin,
       token: config.token,

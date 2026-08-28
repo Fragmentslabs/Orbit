@@ -61,7 +61,9 @@ export function useCompanion() {
             useConnectionStore.setState({ config })
           }
           void store.saveConfig(config)
-          void useRecentConnectionsStore.getState().addRecent(config)
+          // state.deviceName vem do auth:ok — e o nome do DESKTOP. O
+          // config.deviceName e o deste celular, que nao serve aqui.
+          void useRecentConnectionsStore.getState().addRecent(config, state.deviceName)
         }
         // Fetch initial data
         void useSessionStore.getState().fetchSessions()
