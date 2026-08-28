@@ -253,7 +253,9 @@ function ChatMessages({ messages, isBusy, mode, sessionId, sendMessage, planIds,
           )
         })}
         {planReview && planReview.status === "proposed" && sessionId && (
-          <div className="px-1">
+          // max-w-2xl para alinhar com o input: a conversa é max-w-3xl, e o
+          // card ficava mais largo que a caixa de mensagem logo abaixo dele.
+          <div className="mx-auto w-full max-w-2xl px-1">
             <PlanReviewCard sessionId={sessionId} review={planReview} />
           </div>
         )}
