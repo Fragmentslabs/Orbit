@@ -38,6 +38,7 @@ import { useWorkspaceStore } from '~/stores/workspace-store'
 import { useSettingsStore } from '~/stores/settings-store'
 import { useAppearanceStore, type ModeId } from '~/stores/appearance-store'
 import { useReasoningPrefs } from '~/stores/reasoning-prefs'
+import { usePermissionPrefs } from '~/stores/permission-prefs'
 import { useModelModePrefs } from '~/stores/model-mode-prefs'
 import { useModeActive, useModeOverrides } from '~/stores/mode-overrides'
 import { useSimpleMode, useSimplePrefs } from '~/stores/simple-prefs'
@@ -130,7 +131,10 @@ export function PromptInput({
   const [loopConfigOpen, setLoopConfigOpen] = useState(false)
   const [isFocused, setIsFocused] = useState(false)
   const tokens = getThemeTokens(useThemeStore((s) => s.resolved))
-  const [permissionMode, setPermissionMode] = useState<'ask' | 'approve' | 'full'>('ask')
+  // Global (como no desktop): o card de revisão de plano lê o mesmo modo
+  // para sugerir o aceite padrão.
+  const permissionMode = usePermissionPrefs((s) => s.mode)
+  const setPermissionMode = usePermissionPrefs((s) => s.setMode)
   const [scheduleSheetVisible, setScheduleSheetVisible] = useState(false)
 
   const http = useConnectionStore((s) => s.http)

@@ -22,6 +22,7 @@ import { useModelModePrefs } from "../stores/model-mode-prefs";
 import { useModeOverrides } from "../stores/mode-overrides";
 import { useSimplePrefs } from "../stores/simple-prefs";
 import { useBrainPrefs } from "../stores/brain-prefs";
+import { usePermissionPrefs } from "../stores/permission-prefs";
 
 SplashScreen.preventAutoHideAsync();
 
@@ -79,6 +80,7 @@ export default function RootLayout() {
     void useModeOverrides.getState().hydrate();
     void useSimplePrefs.getState().hydrate();
     void useBrainPrefs.getState().hydrate();
+    void usePermissionPrefs.getState().hydrate();
   }, []);
 
   // Sincroniza mudanças do theme-store com o Appearance API (NativeWind v5)
