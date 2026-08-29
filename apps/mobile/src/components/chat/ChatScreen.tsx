@@ -308,14 +308,14 @@ export function ChatScreen({ sessionId }: ChatScreenProps) {
   const listFooter = useMemo<React.ReactElement | undefined>(() => {
     if (planReview && planReview.status === 'proposed') {
       return (
-        <View className="px-4 pb-2">
+        <View className="pb-2">
           <PlanReviewCard sessionId={sessionId!} review={planReview} />
         </View>
       )
     }
     if (planReview && planReview.status === 'implementing') {
       return (
-        <View className="px-4 pb-2">
+        <View className="pb-2">
           <TaskProgress
             tasks={[{ id: 'plan', title: t('chatScreen.implementPlan'), status: isStreaming ? 'streaming' : 'idle' }]}
             title={t('chatScreen.plan')}

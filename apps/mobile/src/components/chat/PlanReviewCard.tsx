@@ -1,23 +1,47 @@
 import { useEffect, useState, useCallback } from 'react'
-import { View, Text, Pressable, Modal, ScrollView, ActivityIndicator, TextInput } from 'react-native'
-import { FileText, RefreshCw, X, MessageSquareText, Send } from 'lucide-react-native'
+import {
+  View,
+  Text,
+  Pressable,
+  Modal,
+  ScrollView,
+  ActivityIndicator,
+  TextInput,
+  StyleSheet,
+} from 'react-native'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
+import {
+  FileText,
+  RefreshCw,
+  X,
+  MessageSquareText,
+  Send,
+  ChevronDown,
+  Workflow,
+  ShieldCheck,
+} from 'lucide-react-native'
 import { useTranslation } from 'react-i18next'
 import type { PlanReview, PermissionMode } from '@orbit/shared'
 import { useSessionStore } from '~/stores/session-store'
+import { usePermissionPrefs } from '~/stores/permission-prefs'
 import { useConnectionStore } from '~/stores/connection-store'
-import { getThemeTokens } from '~/lib/theme-tokens'
+import { getThemeTokens, withAlpha, type ThemeTokens } from '~/lib/theme-tokens'
 import { useThemeStore } from '~/stores/theme-store'
-import { hslToRgba } from '~/lib/theme'
+import { AssistantMarkdown } from '~/components/chat/AssistantMarkdown'
 
 interface Props {
   sessionId: string
   review: PlanReview
 }
 
+/** Uma linha de texto — mesma altura do botão de enviar ao lado. */
+const REVIEW_MIN_HEIGHT = 40
+const REVIEW_MAX_HEIGHT = 120
+
 function useAllModes(): { id: PermissionMode; label: string }[] {
   const { t } = useTranslation()
   return [
-    { id: 'ask', label: t('planReview.modes.ask') },
+    { id: 'ask', label: t('planReview.modes.askLabel') },
     { id: 'approve', label: t('planReview.modes.approve') },
     { id: 'full', label: t('planReview.modes.full') },
   ]
@@ -32,6 +56,43 @@ function useModeLabel(): Record<PermissionMode, string> {
   }
 }
 
+/** Botão secundário compacto — divide a largura por igual na linha de ações. */
+function GhostButton({
+  label,
+  icon,
+  onPress,
+  active,
+  tokens,
+}: {
+  label: string
+  icon?: React.ReactNode
+  onPress: () => void
+  active?: boolean
+  tokens: ThemeTokens
+}) {
+  return (
+    <Pressable
+      onPress={onPress}
+      style={({ pressed }) => [
+        s.ghost,
+        {
+          backgroundColor: active ? withAlpha(tokens.primary, 0.15) : tokens.card,
+          borderColor: active ? tokens.primary : tokens.border,
+          opacity: pressed ? 0.7 : 1,
+        },
+      ]}
+    >
+      {icon}
+      <Text
+        style={[s.ghostLabel, { color: active ? tokens.primary : tokens.mutedForeground }]}
+        numberOfLines={1}
+      >
+        {label}
+      </Text>
+    </Pressable>
+  )
+}
+
 export function PlanReviewCard({ sessionId, review }: Props) {
   const { t } = useTranslation()
   const ALL_MODES = useAllModes()
@@ -41,11 +102,20 @@ export function PlanReviewCard({ sessionId, review }: Props) {
   const rejectPlanReview = useSessionStore((s) => s.rejectPlanReview)
   const reviewPlanReview = useSessionStore((s) => s.reviewPlanReview)
   const [dialogOpen, setDialogOpen] = useState(false)
-  const [content, setContent] = useState<string | null>(null)
+  const [modesOpen, setModesOpen] = useState(false)
+  // Conteúdo do próprio evento de plano: o PLAN.md em disco é opcional, então
+  // sem esse fallback o "ver plano" abria vazio na maioria das sessões.
+  const [content, setContent] = useState<string | null>(review.content ?? null)
   const [loading, setLoading] = useState(false)
   const [reviewOpen, setReviewOpen] = useState(false)
   const [reviewText, setReviewText] = useState('')
-  const currentMode: PermissionMode = 'ask'
+  // Começa com uma linha (mesma altura do botão de enviar) e só cresce quando
+  // o texto passa da linha ou o Enter quebra linha.
+  const [reviewHeight, setReviewHeight] = useState(REVIEW_MIN_HEIGHT)
+  // Sugere o modo de permissão selecionado agora (igual ao desktop); num
+  // plano já aceito, o modo com que ele foi aceito.
+  const activeMode = usePermissionPrefs((s) => s.mode)
+  const currentMode: PermissionMode = review.permissionMode ?? activeMode
   const otherModes = ALL_MODES.filter((m) => m.id !== currentMode)
 
   const load = useCallback(async () => {
@@ -53,13 +123,17 @@ export function PlanReviewCard({ sessionId, review }: Props) {
     try {
       const { wsClient } = useConnectionStore.getState()
       const res = await wsClient.send({ type: 'plan:read-file', sessionId })
-      if (res.ok && typeof res.data === 'string') {
+      if (res.ok && typeof res.data === 'string' && res.data.trim()) {
         setContent(res.data)
       }
     } finally {
       setLoading(false)
     }
   }, [sessionId])
+
+  useEffect(() => {
+    if (review.content) setContent(review.content)
+  }, [review.content])
 
   useEffect(() => { load() }, [review.status])
 
@@ -76,6 +150,12 @@ export function PlanReviewCard({ sessionId, review }: Props) {
     reviewPlanReview(sessionId, text)
     setReviewOpen(false)
     setReviewText('')
+    setReviewHeight(REVIEW_MIN_HEIGHT)
+  }
+
+  function handleAccept(mode: PermissionMode, orchestration?: boolean) {
+    setModesOpen(false)
+    acceptPlanReview(sessionId, mode, orchestration)
   }
 
   if (review.status === 'rejected') return null
@@ -85,124 +165,141 @@ export function PlanReviewCard({ sessionId, review }: Props) {
   return (
     <>
       <View
-        className="px-3 py-2"
-        style={{
-          borderRadius: 12,
-          borderWidth: 1,
-          borderColor: tokens.border,
-          backgroundColor: hslToRgba(hsl(tokens.muted), 0.3),
-        }}
+        style={[
+          s.card,
+          { borderColor: tokens.border, backgroundColor: withAlpha(tokens.muted, 0.35) },
+        ]}
       >
-        <View className="flex-row items-center gap-2">
-          <FileText size={16} color={tokens.primary} />
-          <Text className="font-medium text-xs flex-shrink" style={{ color: tokens.foreground }}>
+        <View style={s.header}>
+          <FileText size={15} color={tokens.primary} />
+          <Text style={[s.title, { color: tokens.foreground }]} numberOfLines={2}>
             {isProposed ? t('planReview.proposedTitle') : t('planReview.implementingTitle')}
           </Text>
           {checkboxCount > 0 && (
-            <Text className="text-xs" style={{ color: tokens.mutedForeground }}>
+            <Text style={[s.counter, { color: tokens.mutedForeground }]}>
               {checkedCount}/{checkboxCount}
             </Text>
           )}
-          <View className="flex-row items-center gap-1 ml-auto">
-            <Pressable
-              onPress={() => setDialogOpen(true)}
-              className="px-2 py-1 rounded-md"
-              style={{ backgroundColor: tokens.card }}
-            >
-              <Text className="text-xs font-medium" style={{ color: tokens.primary }}>{t('planReview.viewPlan')}</Text>
-            </Pressable>
-            {isProposed ? (
-              <>
-                <Pressable
-                  onPress={() => setReviewOpen(!reviewOpen)}
-                  className="px-2 py-1 rounded-md flex-row items-center gap-1"
-                  style={{ backgroundColor: tokens.card }}
-                >
-                  <MessageSquareText size={12} color={tokens.mutedForeground} />
-                  <Text className="text-xs" style={{ color: tokens.mutedForeground }}>{t('planReview.review')}</Text>
-                </Pressable>
-                <Pressable
-                  onPress={() => rejectPlanReview(sessionId)}
-                  className="px-2 py-1 rounded-md"
-                  style={{ backgroundColor: tokens.card }}
-                >
-                  <Text className="text-xs" style={{ color: tokens.mutedForeground }}>{t('planReview.reject')}</Text>
-                </Pressable>
-                <Pressable
-                  onPress={() => acceptPlanReview(sessionId, currentMode)}
-                  className="px-2 py-1 rounded-md"
-                  style={{ backgroundColor: tokens.primary }}
-                >
-                  <Text className="text-xs font-medium" style={{ color: '#fff' }}>
-                    {t('planReview.accept', { mode: MODE_LABEL[currentMode] })}
-                  </Text>
-                </Pressable>
-                {otherModes.length > 0 && (
-                  <View className="flex-col gap-0.5">
-                    {otherModes.slice(0, 1).map((m) => (
-                      <Pressable
-                        key={m.id}
-                        onPress={() => acceptPlanReview(sessionId, m.id)}
-                        className="px-1.5 py-0.5 rounded"
-                        style={{ backgroundColor: tokens.card }}
-                      >
-                        <Text className="text-[10px]" style={{ color: tokens.mutedForeground }}>
-                          {m.label}
-                        </Text>
-                      </Pressable>
-                    ))}
-                    <Pressable
-                      onPress={() => acceptPlanReview(sessionId, currentMode, true)}
-                      className="px-1.5 py-0.5 rounded"
-                      style={{ backgroundColor: tokens.card }}
-                    >
-                      <Text className="text-[10px]" style={{ color: tokens.mutedForeground }}>
-                        {t('planReview.orchestration')}
-                      </Text>
-                    </Pressable>
-                  </View>
-                )}
-              </>
-            ) : (
-              <Pressable onPress={load} disabled={loading} className="p-1">
+          {!isProposed && (
+            <Pressable onPress={load} disabled={loading} hitSlop={8} style={{ padding: 2 }}>
+              {loading ? (
+                <ActivityIndicator size="small" color={tokens.mutedForeground} />
+              ) : (
                 <RefreshCw size={14} color={tokens.mutedForeground} />
-              </Pressable>
-            )}
-          </View>
+              )}
+            </Pressable>
+          )}
         </View>
+
+        <View style={s.actionsRow}>
+          <GhostButton
+            label={t('planReview.viewPlan')}
+            icon={<FileText size={13} color={tokens.mutedForeground} />}
+            onPress={() => setDialogOpen(true)}
+            tokens={tokens}
+          />
+          {isProposed && (
+            <>
+              <GhostButton
+                label={t('planReview.review')}
+                icon={
+                  <MessageSquareText
+                    size={13}
+                    color={reviewOpen ? tokens.primary : tokens.mutedForeground}
+                  />
+                }
+                onPress={() => setReviewOpen((open) => !open)}
+                active={reviewOpen}
+                tokens={tokens}
+              />
+              <GhostButton
+                label={t('planReview.reject')}
+                onPress={() => rejectPlanReview(sessionId)}
+                tokens={tokens}
+              />
+            </>
+          )}
+        </View>
+
+        {isProposed && (
+          <View style={s.acceptRow}>
+            <Pressable
+              onPress={() => handleAccept(currentMode)}
+              style={({ pressed }) => [
+                s.accept,
+                { backgroundColor: tokens.primary, opacity: pressed ? 0.85 : 1 },
+              ]}
+            >
+              <Text style={[s.acceptLabel, { color: tokens.primaryForeground }]} numberOfLines={1}>
+                {t('planReview.accept', { mode: MODE_LABEL[currentMode] })}
+              </Text>
+            </Pressable>
+            <Pressable
+              onPress={() => setModesOpen(true)}
+              accessibilityLabel={t('planReview.moreOptions')}
+              style={({ pressed }) => [
+                s.acceptMore,
+                {
+                  backgroundColor: tokens.primary,
+                  borderLeftColor: withAlpha(tokens.primaryForeground, 0.25),
+                  opacity: pressed ? 0.85 : 1,
+                },
+              ]}
+            >
+              <ChevronDown size={16} color={tokens.primaryForeground} />
+            </Pressable>
+          </View>
+        )}
+
         {isProposed && reviewOpen && (
-          <View
-            className="flex-row items-center gap-2 mt-2 pt-2"
-            style={{ borderTopWidth: 1, borderTopColor: tokens.border }}
-          >
+          <View style={[s.reviewBox, { borderTopColor: tokens.border }]}>
             <TextInput
               value={reviewText}
               onChangeText={setReviewText}
               placeholder={t('planReview.reviewPlaceholder')}
               placeholderTextColor={tokens.mutedForeground}
-              style={{
-                flex: 1,
-                height: 32,
-                fontSize: 12,
-                color: tokens.foreground,
-                backgroundColor: tokens.card,
-                borderRadius: 6,
-                paddingHorizontal: 8,
-              }}
-              onSubmitEditing={handleSubmitReview}
-              returnKeyType="send"
+              multiline
+              // Enter quebra linha — o envio é só pelo botão ao lado.
+              submitBehavior="newline"
+              onContentSizeChange={(e) =>
+                setReviewHeight(
+                  Math.min(
+                    Math.max(REVIEW_MIN_HEIGHT, Math.ceil(e.nativeEvent.contentSize.height)),
+                    REVIEW_MAX_HEIGHT,
+                  ),
+                )
+              }
+              style={[
+                s.reviewInput,
+                {
+                  height: reviewHeight,
+                  color: tokens.foreground,
+                  backgroundColor: tokens.card,
+                  borderColor: tokens.border,
+                },
+              ]}
             />
             <Pressable
               onPress={handleSubmitReview}
               disabled={!reviewText.trim()}
-              className="px-2 py-1.5 rounded-md"
-              style={{ backgroundColor: tokens.primary, opacity: reviewText.trim() ? 1 : 0.5 }}
+              style={[
+                s.send,
+                { backgroundColor: tokens.primary, opacity: reviewText.trim() ? 1 : 0.4 },
+              ]}
             >
-              <Send size={14} color="#fff" />
+              <Send size={16} color={tokens.primaryForeground} />
             </Pressable>
           </View>
         )}
       </View>
+
+      <ModesSheet
+        visible={modesOpen}
+        onClose={() => setModesOpen(false)}
+        modes={otherModes}
+        onAccept={handleAccept}
+        currentMode={currentMode}
+      />
 
       <PlanDialog
         visible={dialogOpen}
@@ -214,6 +311,76 @@ export function PlanReviewCard({ sessionId, review }: Props) {
         checkedCount={checkedCount}
       />
     </>
+  )
+}
+
+/** Opções extras de aceite — em bottom sheet, que na tela estreita cabe melhor
+ *  que o dropdown do desktop (antes essas ações vazavam para fora do card). */
+function ModesSheet({
+  visible,
+  onClose,
+  modes,
+  onAccept,
+  currentMode,
+}: {
+  visible: boolean
+  onClose: () => void
+  modes: { id: PermissionMode; label: string }[]
+  onAccept: (mode: PermissionMode, orchestration?: boolean) => void
+  currentMode: PermissionMode
+}) {
+  const { t } = useTranslation()
+  const insets = useSafeAreaInsets()
+  const tokens = getThemeTokens(useThemeStore((s) => s.resolved))
+
+  return (
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+      <View style={s.backdrop}>
+        <Pressable style={StyleSheet.absoluteFill} onPress={onClose} />
+        <View
+          style={[
+            s.sheet,
+            {
+              paddingBottom: insets.bottom + 12,
+              backgroundColor: tokens.background,
+              borderColor: tokens.border,
+            },
+          ]}
+        >
+          <View style={[s.handle, { backgroundColor: tokens.muted }]} />
+          <Text style={[s.sheetTitle, { color: tokens.foreground }]}>
+            {t('planReview.moreOptions')}
+          </Text>
+          {modes.map((m) => (
+            <Pressable
+              key={m.id}
+              onPress={() => onAccept(m.id)}
+              style={({ pressed }) => [
+                s.sheetRow,
+                { backgroundColor: pressed ? tokens.muted : 'transparent' },
+              ]}
+            >
+              <ShieldCheck size={16} color={tokens.mutedForeground} />
+              <Text style={[s.sheetRowLabel, { color: tokens.foreground }]} numberOfLines={1}>
+                {t('planReview.accept', { mode: m.label })}
+              </Text>
+            </Pressable>
+          ))}
+          <Pressable
+            onPress={() => onAccept(currentMode, true)}
+            style={({ pressed }) => [
+              s.sheetRow,
+              { backgroundColor: pressed ? tokens.muted : 'transparent' },
+            ]}
+          >
+            <Workflow size={16} color={tokens.mutedForeground} />
+            <Text style={[s.sheetRowLabel, { color: tokens.foreground }]} numberOfLines={1}>
+              {t('planReview.acceptOrchestration')}
+            </Text>
+          </Pressable>
+        </View>
+      </View>
+    </Modal>
   )
 }
 
@@ -235,62 +402,151 @@ function PlanDialog({
   checkedCount: number
 }) {
   const { t } = useTranslation()
+  const insets = useSafeAreaInsets()
   const tokens = getThemeTokens(useThemeStore((s) => s.resolved))
 
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-      <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)' }}>
-        <Pressable style={{ flex: 1 }} onPress={onClose} />
-      </View>
-      <View
-        style={{
-          maxHeight: '85%',
-          borderTopLeftRadius: 20,
-          borderTopRightRadius: 20,
-          padding: 16,
-          backgroundColor: tokens.background,
-        }}
-      >
-        <View className="flex-row items-center justify-between mb-4">
-          <View className="flex-row items-center gap-2">
-            <Text className="text-base font-semibold" style={{ color: tokens.foreground }}>PLAN.md</Text>
+      <View style={s.backdrop}>
+        <Pressable style={StyleSheet.absoluteFill} onPress={onClose} />
+        <View
+          style={[
+            s.sheet,
+            s.planSheet,
+            {
+              paddingBottom: insets.bottom + 12,
+              backgroundColor: tokens.background,
+              borderColor: tokens.border,
+            },
+          ]}
+        >
+          <View style={[s.handle, { backgroundColor: tokens.muted }]} />
+          <View style={s.planHeader}>
+            <Text style={[s.sheetTitle, { color: tokens.foreground, marginBottom: 0 }]}>
+              PLAN.md
+            </Text>
             {checkboxCount > 0 && (
-              <Text className="text-sm" style={{ color: tokens.mutedForeground }}>
+              <Text style={[s.counter, { color: tokens.mutedForeground }]}>
                 {t('planReview.completedCount', { checked: checkedCount, total: checkboxCount })}
               </Text>
             )}
+            <Pressable onPress={onClose} hitSlop={8} style={{ marginLeft: 'auto', padding: 4 }}>
+              <X size={20} color={tokens.mutedForeground} />
+            </Pressable>
           </View>
-          <Pressable onPress={onClose} className="p-1">
-            <X size={20} color={tokens.mutedForeground} />
+
+          {/* flexShrink em vez de flex:1: a folha se ajusta a planos curtos e
+              para de crescer no maxHeight — com flex:1 o scroll ficava com
+              altura zero e o markdown não aparecia. */}
+          <ScrollView
+            style={{ flexShrink: 1 }}
+            contentContainerStyle={{ paddingBottom: 12 }}
+            showsVerticalScrollIndicator={false}
+          >
+            {content ? (
+              <AssistantMarkdown text={content} size={13} />
+            ) : loading ? (
+              <ActivityIndicator size="small" color={tokens.primary} style={{ marginVertical: 24 }} />
+            ) : (
+              <Text style={[s.empty, { color: tokens.mutedForeground }]}>
+                {t('planReview.notFound')}
+              </Text>
+            )}
+          </ScrollView>
+
+          <Pressable
+            onPress={onReload}
+            disabled={loading}
+            style={[s.reload, { backgroundColor: tokens.muted }]}
+          >
+            <RefreshCw size={14} color={tokens.foreground} />
+            <Text style={[s.reloadLabel, { color: tokens.foreground }]}>
+              {t('planReview.reload')}
+            </Text>
           </Pressable>
         </View>
-
-        <ScrollView className="flex-1 mb-4">
-          {loading ? (
-            <ActivityIndicator size="small" color={tokens.primary} />
-          ) : content ? (
-            <Text className="text-sm" style={{ color: tokens.foreground }} selectable>
-              {content}
-            </Text>
-          ) : (
-            <Text className="text-sm" style={{ color: tokens.mutedForeground }}>
-              {t('planReview.notFound')}
-            </Text>
-          )}
-        </ScrollView>
-
-        <Pressable
-          onPress={onReload}
-          disabled={loading}
-          className="flex-row items-center justify-center gap-2 py-2 rounded-lg"
-          style={{ backgroundColor: tokens.muted }}
-        >
-          <RefreshCw size={14} color={tokens.foreground} />
-          <Text className="text-sm font-medium" style={{ color: tokens.foreground }}>{t('planReview.reload')}</Text>
-        </Pressable>
       </View>
     </Modal>
   )
 }
 
-const hsl = (v: string) => v.replace(/hsla?\(|\)/g, '').replace(/,/g, '')
+const s = StyleSheet.create({
+  card: { borderRadius: 12, borderWidth: 1, paddingHorizontal: 12, paddingVertical: 10, gap: 8 },
+  header: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  // flex + numberOfLines: sem isso o título era espremido pelos botões e
+  // quebrava letra a letra, esticando o card por meia tela.
+  title: { flex: 1, fontSize: 12, fontWeight: '500' },
+  counter: { fontSize: 11 },
+  actionsRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  ghost: {
+    flex: 1,
+    minWidth: 0,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 8,
+  },
+  ghostLabel: { flexShrink: 1, fontSize: 12, fontWeight: '500' },
+  acceptRow: { flexDirection: 'row', alignItems: 'stretch' },
+  accept: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderTopLeftRadius: 8,
+    borderBottomLeftRadius: 8,
+  },
+  acceptLabel: { fontSize: 13, fontWeight: '600' },
+  acceptMore: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 12,
+    borderLeftWidth: 1,
+    borderTopRightRadius: 8,
+    borderBottomRightRadius: 8,
+  },
+  reviewBox: { flexDirection: 'row', alignItems: 'flex-end', gap: 8, paddingTop: 8, borderTopWidth: 1 },
+  reviewInput: {
+    flex: 1,
+    fontSize: 13,
+    lineHeight: 18,
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 10,
+    textAlignVertical: 'top',
+  },
+  send: { width: REVIEW_MIN_HEIGHT, height: REVIEW_MIN_HEIGHT, alignItems: 'center', justifyContent: 'center', borderRadius: 8 },
+
+  backdrop: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.6)' },
+  sheet: {
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    borderWidth: 1,
+    borderBottomWidth: 0,
+    paddingHorizontal: 16,
+    paddingTop: 8,
+  },
+  planSheet: { maxHeight: '85%' },
+  handle: { alignSelf: 'center', width: 36, height: 4, borderRadius: 2, marginBottom: 12 },
+  sheetTitle: { fontSize: 16, fontWeight: '600', marginBottom: 8 },
+  sheetRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 8, paddingVertical: 14, borderRadius: 10 },
+  sheetRowLabel: { flex: 1, fontSize: 14 },
+  planHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 10 },
+  empty: { fontSize: 13, paddingVertical: 24 },
+  reload: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 12,
+    borderRadius: 10,
+    marginTop: 8,
+  },
+  reloadLabel: { fontSize: 13, fontWeight: '500' },
+})

@@ -279,6 +279,8 @@
     "reject": "Reject",
     "accept": "Accept ({{mode}})",
     "orchestration": "Orchestration",
+    "moreOptions": "More options",
+    "acceptOrchestration": "Accept and orchestrate",
     "reviewPlaceholder": "Write your feedback to review the plan...",
     "completedCount": "({{checked}}/{{total}} completed)",
     "notFound": "PLAN.md not found.",
