@@ -1120,8 +1120,20 @@
         "permissionApprove": "Autonomia",
         "permissionFull": "Irrestrito",
         "autoReconnect": "Reconexão automática",
-        "autoReconnectHint": "Tenta reconectar com backoff exponencial em caso de erro"
-      }
+        "autoReconnectHint": "Tenta reconectar com backoff exponencial em caso de erro",
+        "headersHint": "Um header Authorization desliga o OAuth (o Orbit passa a usar a sua chave).",
+        "oauth": "OAuth",
+        "oauthHint": "Por padrão o Orbit se registra sozinho no servidor. Preencha abaixo só quando o provedor recusar o registro automático (erro 403 ao autorizar) — crie um app OAuth no provedor e cole as credenciais.",
+        "oauthClientId": "Client ID",
+        "oauthClientIdPlaceholder": "Deixe vazio para registro automático",
+        "oauthClientSecret": "Client Secret",
+        "oauthClientSecretPlaceholder": "Só para apps confidenciais",
+        "oauthScope": "Escopos",
+        "oauthRedirect": "Redirect URI",
+        "oauthRedirectHint": "Cadastre exatamente esta URL no app OAuth do provedor."
+      },
+      "reauthorize": "Reautorizar",
+      "authorizeHint": "Abre o navegador para entrar no provedor e liberar o acesso"
     },
     "skills": {
       "title": "Skills",

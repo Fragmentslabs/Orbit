@@ -241,8 +241,10 @@ export const mcpApi = {
   reconnect: (name?: string) =>
     window.ipcRenderer.invoke("mcp:reconnect", name) as Promise<McpServerStatus[]>,
   /** Inicia o fluxo OAuth do servidor (abre o navegador e completa a autorização) */
-  auth: (name?: string) =>
+  auth: (name: string) =>
     window.ipcRenderer.invoke("mcp:auth", name) as Promise<McpServerStatus[]>,
+  /** redirect_uri do loopback OAuth, para cadastrar no app do provedor */
+  oauthRedirect: () => window.ipcRenderer.invoke("mcp:oauth-redirect") as Promise<string>,
 }
 
 export const analyticsApi = {

@@ -1120,8 +1120,20 @@
         "permissionApprove": "Approve",
         "permissionFull": "Full",
         "autoReconnect": "Automatic reconnection",
-        "autoReconnectHint": "Tries to reconnect with exponential backoff on error"
-      }
+        "autoReconnectHint": "Tries to reconnect with exponential backoff on error",
+        "headersHint": "An Authorization header turns OAuth off (Orbit uses your key instead).",
+        "oauth": "OAuth",
+        "oauthHint": "By default Orbit registers itself with the server. Fill this in only when the provider refuses automatic registration (403 error when authorizing) — create an OAuth app with the provider and paste the credentials.",
+        "oauthClientId": "Client ID",
+        "oauthClientIdPlaceholder": "Leave empty for automatic registration",
+        "oauthClientSecret": "Client Secret",
+        "oauthClientSecretPlaceholder": "Confidential apps only",
+        "oauthScope": "Scopes",
+        "oauthRedirect": "Redirect URI",
+        "oauthRedirectHint": "Register exactly this URL in the provider's OAuth app."
+      },
+      "reauthorize": "Reauthorize",
+      "authorizeHint": "Opens the browser to sign in with the provider and grant access"
     },
     "skills": {
       "title": "Skills",

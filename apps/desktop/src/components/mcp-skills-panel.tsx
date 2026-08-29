@@ -50,7 +50,7 @@ import { AssistantMarkdown } from "@/src/components/messages/shared"
 import { useDraftInput } from "@/src/stores/draft-input"
 import { useSessionStore } from "@/src/stores/session-store"
 import { useSkillsStore } from "@/src/stores/skills-store"
-import type { McpServerConfig } from "@shared/mcp"
+import type { McpServerConfig, McpServerStatus } from "@shared/mcp"
 import type { NodaraStatus } from "@shared/nodara"
 import type { Skill } from "@shared/skills"
 import nodaraLogo from "@/src/assets/nodara-logo.png"
@@ -174,7 +174,19 @@ function McpServerDialog({ open, onOpenChange, initial }: {
   const [cwd, setCwd] = useState(initial?.cwd ?? "")
   const [permissionMode, setPermissionMode] = useState<string>(initial?.permissionMode ?? "")
   const [autoReconnect, setAutoReconnect] = useState(initial?.autoReconnect ?? true)
+  const [oauthClientId, setOauthClientId] = useState(initial?.oauth?.clientId ?? "")
+  const [oauthClientSecret, setOauthClientSecret] = useState(initial?.oauth?.clientSecret ?? "")
+  const [oauthScope, setOauthScope] = useState(initial?.oauth?.scope ?? "")
+  const [oauthOpen, setOauthOpen] = useState(Boolean(initial?.oauth?.clientId || initial?.oauth?.scope))
+  const [redirectUri, setRedirectUri] = useState("")
   const [saving, setSaving] = useState(false)
+
+  // A porta do loopback é escolhida em runtime; o usuário precisa do valor
+  // exato para cadastrar o redirect_uri no app OAuth do provedor.
+  useEffect(() => {
+    if (!oauthOpen || redirectUri) return
+    void mcpApi.oauthRedirect().then(setRedirectUri).catch(() => {})
+  }, [oauthOpen, redirectUri])
 
   useEffect(() => {
     if (open) {
@@ -188,6 +200,10 @@ function McpServerDialog({ open, onOpenChange, initial }: {
       setCwd(initial?.cwd ?? "")
       setPermissionMode(initial?.permissionMode ?? "")
       setAutoReconnect(initial?.autoReconnect ?? true)
+      setOauthClientId(initial?.oauth?.clientId ?? "")
+      setOauthClientSecret(initial?.oauth?.clientSecret ?? "")
+      setOauthScope(initial?.oauth?.scope ?? "")
+      setOauthOpen(Boolean(initial?.oauth?.clientId || initial?.oauth?.scope))
     }
   }, [open, initial])
 
@@ -221,6 +237,16 @@ function McpServerDialog({ open, onOpenChange, initial }: {
     if (cwd.trim()) entry.cwd = cwd.trim()
     if (permissionMode) entry.permissionMode = permissionMode as "ask" | "approve" | "full"
     if (autoReconnect !== true) entry.autoReconnect = false
+    if (type === "http") {
+      // clientName fica fora da UI de propósito: é o nome que aparece na tela
+      // de consentimento do provedor e não deve fingir ser outro app.
+      const oauth: NonNullable<McpServerConfig["oauth"]> = {}
+      if (oauthClientId.trim()) oauth.clientId = oauthClientId.trim()
+      if (oauthClientSecret.trim()) oauth.clientSecret = oauthClientSecret.trim()
+      if (oauthScope.trim()) oauth.scope = oauthScope.trim()
+      if (initial?.oauth?.clientName) oauth.clientName = initial.oauth.clientName
+      if (Object.keys(oauth).length > 0) entry.oauth = oauth
+    }
 
     const idx = config.servers.findIndex((s) => s.name === initial?.name)
     if (idx >= 0) {
@@ -274,6 +300,49 @@ function McpServerDialog({ open, onOpenChange, initial }: {
                   keyPlaceholder="Authorization"
                   valuePlaceholder="Bearer sk-..."
                 />
+                <p className="mt-1 text-[10px] text-muted-foreground">
+                  {t("mcp.servers.dialog.headersHint")}
+                </p>
+              </div>
+              {/* OAuth: só precisa mexer aqui quando o provedor recusa o
+                  registro dinâmico (Figma, por exemplo, responde 403). */}
+              <div className="rounded-md border">
+                <button
+                  type="button"
+                  onClick={() => setOauthOpen((v) => !v)}
+                  className="flex w-full items-center gap-1 px-3 py-2 text-left"
+                >
+                  <ChevronDown className={cn("size-3 shrink-0 transition-transform", !oauthOpen && "-rotate-90")} />
+                  <span className="text-xs font-medium">{t("mcp.servers.dialog.oauth")}</span>
+                </button>
+                {oauthOpen && (
+                  <div className="flex flex-col gap-2 border-t px-3 py-2">
+                    <p className="text-[10px] text-muted-foreground">
+                      {t("mcp.servers.dialog.oauthHint")}
+                    </p>
+                    <div>
+                      <p className="mb-1 text-xs font-medium">{t("mcp.servers.dialog.oauthClientId")}</p>
+                      <Input value={oauthClientId} onChange={(e) => setOauthClientId(e.target.value)} placeholder={t("mcp.servers.dialog.oauthClientIdPlaceholder")} />
+                    </div>
+                    <div>
+                      <p className="mb-1 text-xs font-medium">{t("mcp.servers.dialog.oauthClientSecret")}</p>
+                      <Input type="password" value={oauthClientSecret} onChange={(e) => setOauthClientSecret(e.target.value)} placeholder={t("mcp.servers.dialog.oauthClientSecretPlaceholder")} />
+                    </div>
+                    <div>
+                      <p className="mb-1 text-xs font-medium">{t("mcp.servers.dialog.oauthScope")}</p>
+                      <Input value={oauthScope} onChange={(e) => setOauthScope(e.target.value)} placeholder="mcp:connect" />
+                    </div>
+                    <div>
+                      <p className="mb-1 text-xs font-medium">{t("mcp.servers.dialog.oauthRedirect")}</p>
+                      <code className="block truncate rounded bg-muted px-2 py-1 text-[10px] font-mono text-muted-foreground">
+                        {redirectUri || "…"}
+                      </code>
+                      <p className="mt-1 text-[10px] text-muted-foreground">
+                        {t("mcp.servers.dialog.oauthRedirectHint")}
+                      </p>
+                    </div>
+                  </div>
+                )}
               </div>
             </>
           ) : (
@@ -509,6 +578,17 @@ function CreateSkillDialog({ open, onOpenChange, initial }: {
 /*  Status badge                                                        */
 /* ------------------------------------------------------------------ */
 
+/**
+ * Servidor OAuth que ainda depende do usuário: nunca foi autorizado neste
+ * dispositivo ou o servidor voltou a pedir autorização. Conectado/desabilitado
+ * não têm o que autorizar, então o botão some.
+ */
+function needsAuth(server: McpServerStatus): boolean {
+  if (!server.usesOAuth) return false
+  if (server.state === "connected" || server.state === "disabled") return false
+  return !server.authorized || server.state === "unauthorized"
+}
+
 function StatusBadge({ state, error }: { state: string; error?: string }) {
   const { t } = useTranslation()
   const map: Record<string, { label: string; className: string }> = {
@@ -670,12 +750,24 @@ export function McpSkillsPanel() {
   const [importError, setImportError] = useState("")
   const [viewContentSlug, setViewContent] = useState<string | null>(null)
   const viewSkill = viewContentSlug ? skills.find((s) => s.slug === viewContentSlug) ?? null : null
+  // Nome do servidor com ação em andamento (o OAuth espera o navegador, pode demorar)
+  const [busy, setBusy] = useState<string | null>(null)
 
   const { setMode, setView } = useWorkspace()
 
   useEffect(() => {
     void refresh()
   }, [refresh])
+
+  const runServerAction = async (name: string, action: () => Promise<unknown>) => {
+    setBusy(name)
+    try {
+      await action()
+      await refresh()
+    } finally {
+      setBusy(null)
+    }
+  }
 
   const importSkill = async () => {
     setImportError("")
@@ -736,6 +828,9 @@ export function McpSkillsPanel() {
                       <span className="text-sm font-medium">{server.config.name}</span>
                       <StatusBadge state={server.state} error={server.error} />
                     </div>
+                    {server.state === "unauthorized" && server.error && (
+                      <p className="mt-1 text-[10px] text-amber-500/90">{server.error}</p>
+                    )}
                     {active && server.toolNames.length > 0 && (
                       <details className="group mt-1">
                         <summary className="cursor-pointer text-[10px] text-muted-foreground hover:text-foreground list-none flex items-center gap-1">
@@ -753,19 +848,23 @@ export function McpSkillsPanel() {
                     )}
                   </div>
                   <div className="flex items-center gap-1">
-                    {server.state === "unauthorized" && (
+                    {needsAuth(server) && (
                       <Button
                         size="sm"
                         variant="outline"
                         className="gap-1"
-                        onClick={() => void mcpApi.auth(server.config.name).then(() => refresh())}
+                        disabled={busy === server.config.name}
+                        title={t("mcp.servers.authorizeHint")}
+                        onClick={() => void runServerAction(server.config.name, () => mcpApi.auth(server.config.name))}
                       >
-                        <KeyRound className="size-3" />
-                        {t("mcp.servers.authorize")}
+                        {busy === server.config.name
+                          ? <LoaderCircle className="size-3 animate-spin" />
+                          : <KeyRound className="size-3" />}
+                        {server.authorized ? t("mcp.servers.reauthorize") : t("mcp.servers.authorize")}
                       </Button>
                     )}
-                    <Button size="icon-sm" variant="ghost" title={t("mcp.servers.reconnect")} onClick={() => void mcpApi.reconnect(server.config.name).then(() => refresh())}>
-                      <RefreshCw className="size-3.5" />
+                    <Button size="icon-sm" variant="ghost" title={t("mcp.servers.reconnect")} disabled={busy === server.config.name} onClick={() => void runServerAction(server.config.name, () => mcpApi.reconnect(server.config.name))}>
+                      <RefreshCw className={cn("size-3.5", busy === server.config.name && "animate-spin")} />
                     </Button>
                     <Button size="icon-sm" variant="ghost" title={t("mcp.servers.edit")} onClick={() => { setMcpEdit(server.config); setMcpDialogOpen(true) }}>
                       <ExternalLink className="size-3.5" />
