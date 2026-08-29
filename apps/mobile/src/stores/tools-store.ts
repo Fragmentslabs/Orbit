@@ -29,7 +29,13 @@ interface ToolsState {
 
   saveMcpConfig: (config: McpConfig) => Promise<void>
   reconnectMcp: (name?: string) => Promise<void>
+  authorizeMcp: (name: string) => Promise<void>
 }
+
+/** Enquanto o usuário conclui o login no navegador do desktop, o servidor
+ *  fica em "connecting" — o app acompanha o desfecho por polling. */
+const AUTH_POLL_INTERVAL_MS = 3_000
+const AUTH_POLL_ATTEMPTS = 40 // ~2 minutos
 
 export const useToolsStore = create<ToolsState>((set, get) => ({
   skills: [],
@@ -168,6 +174,25 @@ export const useToolsStore = create<ToolsState>((set, get) => ({
     const res = await http.reconnectMcp(name)
     if (res.ok && res.data) {
       set({ mcpServers: res.data as McpServerStatus[] })
+    }
+  },
+
+  /**
+   * Pede ao desktop para abrir o fluxo OAuth do servidor. O navegador abre no
+   * computador (o redirect é o loopback de lá), então aqui só resta acompanhar:
+   * o desktop responde na hora e o status é consultado até sair de "connecting".
+   */
+  authorizeMcp: async (name) => {
+    const { http } = useConnectionStore.getState()
+    if (!http) return
+    const res = await http.authorizeMcp(name)
+    if (!res.ok) return
+    if (res.data) set({ mcpServers: res.data as McpServerStatus[] })
+    for (let attempt = 0; attempt < AUTH_POLL_ATTEMPTS; attempt++) {
+      await new Promise((resolve) => setTimeout(resolve, AUTH_POLL_INTERVAL_MS))
+      await get().fetchMcpStatus()
+      const server = get().mcpServers.find((s) => s.config.name === name)
+      if (server && server.state !== 'connecting') return
     }
   },
 }))

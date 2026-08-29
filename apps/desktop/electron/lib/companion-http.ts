@@ -27,7 +27,7 @@ import { globalSkillsDir, loadSkills, notifySkillsChanged } from './skills'
 import { importSkillSelection } from './skills/import'
 import { sanitizeSlug, serializeSkill } from './skills/parser'
 import { approvePendingSkill, discardPendingSkill, listPendingSkills } from './skills/pending'
-import { listMcpStatus, readMcpConfig, reconnectMcp, saveMcpConfig } from './mcp'
+import { authorizeMcp, listMcpStatus, readMcpConfig, reconnectMcp, saveMcpConfig } from './mcp'
 import { readMedia, listMedia, mediaDiskUsage, deleteMedia, deleteManyMedia } from './media'
 
 const execFileAsync = promisify(execFile)
@@ -488,6 +488,18 @@ async function handleReconnectMcp(_req: IncomingMessage, res: ServerResponse, na
   jsonResponse(res, 200, status)
 }
 
+/**
+ * Dispara o fluxo OAuth do servidor a pedido do mobile. O navegador abre no
+ * computador (o redirect_uri é o loopback do desktop) e o usuário pode levar
+ * minutos para concluir — responder na hora evita segurar a requisição do
+ * celular até o timeout. O app acompanha o desfecho pelo /api/mcp/status:
+ * o servidor fica em "connecting" enquanto o login não termina.
+ */
+async function handleAuthorizeMcp(_req: IncomingMessage, res: ServerResponse, name: string) {
+  void authorizeMcp(name)
+  jsonResponse(res, 202, listMcpStatus())
+}
+
 // ─── Git Handlers ─────────────────────────────────────────────────────────────
 
 async function handleGetBranches(req: IncomingMessage, res: ServerResponse) {
@@ -576,6 +588,7 @@ function createRouter(
     { pattern: /^DELETE \/api\/media\/([^/]+)$/, paramNames: ['id'], handler: handleDeleteMedia },
     { pattern: /^POST \/api\/media\/delete$/, paramNames: [], handler: handleDeleteManyMedia },
     { pattern: /^POST \/api\/mcp\/servers\/([^/]+)\/reconnect$/, paramNames: ['name'], handler: handleReconnectMcp },
+    { pattern: /^POST \/api\/mcp\/servers\/([^/]+)\/authorize$/, paramNames: ['name'], handler: handleAuthorizeMcp },
     { pattern: /^POST \/api\/mcp\/servers\/reconnect$/, paramNames: [], handler: (_r, res) => handleReconnectMcp(_r, res, undefined) },
     { pattern: /^POST \/api\/git\/branches$/, paramNames: [], handler: handleGetBranches },
     { pattern: /^POST \/api\/git\/checkout$/, paramNames: [], handler: handlePostCheckout },

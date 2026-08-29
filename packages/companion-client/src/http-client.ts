@@ -131,6 +131,14 @@ export class CompanionHttp {
     return this.request('POST', path)
   }
 
+  /**
+   * Dispara o fluxo OAuth do servidor no desktop. Responde na hora (202) —
+   * o navegador abre no computador e o desfecho aparece no /api/mcp/status.
+   */
+  async authorizeMcp(name: string): Promise<HttpResult> {
+    return this.request('POST', `/api/mcp/servers/${encodeURIComponent(name)}/authorize`)
+  }
+
   // ─── Git Branches ────────────────────────────────────────────────────────
 
   async getBranches(repoPath: string): Promise<HttpResult<{ branches: string[]; current: string }>> {

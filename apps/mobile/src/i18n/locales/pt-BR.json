@@ -772,7 +772,10 @@
     "cancel": "Cancelar",
     "errorTitle": "Erro",
     "deleteServerTitle": "Excluir servidor",
-    "deleteServerBody": "Excluir \"{{name}}\"?"
+    "deleteServerBody": "Excluir \"{{name}}\"?",
+    "authorize": "Autorizar",
+    "reauthorize": "Reautorizar",
+    "authorizeHint": "O navegador vai abrir no computador — conclua o login por lá."
   },
   "usageScreen": {
     "title": "Uso e Limites",

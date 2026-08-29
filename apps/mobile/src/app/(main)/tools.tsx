@@ -17,6 +17,7 @@ import {
   Pencil,
   Trash2,
   RefreshCw,
+  KeyRound,
   MoreHorizontal,
   FileUp,
   MessageSquare,
@@ -47,17 +48,30 @@ function ConnectionDot({ state }: { state: McpConnectionState }) {
   return <View style={{ width: size, height: size, borderRadius: size / 2, backgroundColor: color }} />
 }
 
+/**
+ * Servidor OAuth que ainda depende do usuário: nunca foi autorizado no desktop
+ * ou o servidor voltou a pedir autorização. Conectado/desabilitado não têm o
+ * que autorizar, então a ação some.
+ */
+function needsAuth(server: McpServerStatus): boolean {
+  if (!server.usesOAuth) return false
+  if (server.state === 'connected' || server.state === 'disabled') return false
+  return !server.authorized || server.state === 'unauthorized'
+}
+
 /** Menu "..." ancorado no trigger de cada card. */
 function McpServerCard({
   server,
   onEdit,
   onDelete,
   onReconnect,
+  onAuthorize,
 }: {
   server: McpServerStatus
   onEdit: (config: McpServerConfig) => void
   onDelete: (name: string) => void
   onReconnect: (name?: string) => void
+  onAuthorize: (name: string) => void
 }) {
   const { t } = useTranslation()
   const tokens = getThemeTokens(useThemeStore((s) => s.resolved))
@@ -72,7 +86,16 @@ function McpServerCard({
     })
   }
 
+  const authPending = needsAuth(server)
+
   const menuItems: ActionMenuItem[] = [
+    ...(authPending
+      ? [{
+          icon: KeyRound,
+          label: server.authorized ? t('toolsScreen.reauthorize') : t('toolsScreen.authorize'),
+          onPress: () => onAuthorize(server.config.name),
+        }]
+      : []),
     { icon: RefreshCw, label: t('toolsScreen.reconnect'), onPress: () => onReconnect(server.config.name) },
     { icon: Pencil, label: t('toolsScreen.edit'), onPress: () => onEdit(server.config) },
     { icon: Trash2, label: t('toolsScreen.delete'), destructive: true, onPress: () => onDelete(server.config.name) },
@@ -96,7 +119,30 @@ function McpServerCard({
         </Pressable>
       </View>
       {server.error && (
-        <Text style={[s.serverError, { color: '#ef4444' }]} numberOfLines={2}>{server.error}</Text>
+        <Text
+          style={[s.serverError, { color: server.state === 'unauthorized' ? '#f59e0b' : '#ef4444' }]}
+          numberOfLines={3}
+        >
+          {server.error}
+        </Text>
+      )}
+      {authPending && (
+        <View style={s.authRow}>
+          <Pressable
+            onPress={() => onAuthorize(server.config.name)}
+            style={[s.authBtn, { borderColor: tokens.border, backgroundColor: tokens.muted }]}
+          >
+            <KeyRound size={12} color={tokens.foreground} />
+            <Text style={[s.authBtnText, { color: tokens.foreground }]}>
+              {server.authorized ? t('toolsScreen.reauthorize') : t('toolsScreen.authorize')}
+            </Text>
+          </Pressable>
+          {/* O redirect do OAuth é o loopback do desktop: o login acontece
+              obrigatoriamente no navegador do computador. */}
+          <Text style={[s.authHint, { color: tokens.mutedForeground }]}>
+            {t('toolsScreen.authorizeHint')}
+          </Text>
+        </View>
       )}
       <View style={[s.serverMeta, { borderTopColor: tokens.border }]}>
         <View style={s.serverType}>
@@ -298,6 +344,7 @@ export default function ToolsScreen() {
   const importSkill = useToolsStore((s) => s.importSkill)
   const saveMcpConfig = useToolsStore((s) => s.saveMcpConfig)
   const reconnectMcp = useToolsStore((s) => s.reconnectMcp)
+  const authorizeMcp = useToolsStore((s) => s.authorizeMcp)
   const createSession = useSessionStore((s) => s.createSession)
 
   const [skillFormOpen, setSkillFormOpen] = useState(false)
@@ -446,6 +493,7 @@ export default function ToolsScreen() {
                   onEdit={handleEditMcp}
                   onDelete={handleDeleteMcp}
                   onReconnect={(name) => void reconnectMcp(name)}
+                  onAuthorize={(name) => void authorizeMcp(name)}
                 />
               ))}
             </View>
@@ -593,6 +641,19 @@ const s = StyleSheet.create({
   stateLabel: { fontSize: 10, fontWeight: '600' },
   menuTrigger: { padding: 2 },
   serverError: { fontSize: 11, paddingHorizontal: 12, paddingBottom: 6 },
+  authRow: { paddingHorizontal: 12, paddingBottom: 8, gap: 4 },
+  authBtn: {
+    alignSelf: 'flex-start',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  authBtnText: { fontSize: 12, fontWeight: '600' },
+  authHint: { fontSize: 10, lineHeight: 14 },
   serverMeta: {
     flexDirection: 'row',
     alignItems: 'center',
