@@ -194,16 +194,6 @@ export function PromptInput({
     if (payload.files?.length) setAttachments((prev) => [...prev, ...payload.files!])
   }, [pendingDraft, sessionId])
 
-  const handleKeyPress = (e: any) => {
-    if (e.nativeEvent.key === 'Enter') {
-      if (e.shiftKey || e.nativeEvent.shiftKey) {
-        return
-      }
-      e.preventDefault?.()
-      handleSend()
-    }
-  }
-
   const inputRef = useRef<TextInput>(null)
 
   // Workers: aviso da primeira vez — abre só na 1ª ativação sem worker
@@ -536,8 +526,7 @@ export function PromptInput({
             editable={!disabled}
             onFocus={() => setIsFocused(true)}
             onBlur={() => setIsFocused(false)}
-            onKeyPress={handleKeyPress}
-            onSubmitEditing={handleSend}
+            submitBehavior="newline"
             style={[
               { color: tokens.foreground, outlineStyle: 'none' } as any,
               Platform.OS === 'web' ? { outlineStyle: 'none' } : undefined,
