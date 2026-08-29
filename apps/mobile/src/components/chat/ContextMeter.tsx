@@ -73,7 +73,7 @@ export function ContextMeter({ sessionId }: { sessionId?: string }) {
           cy="8"
           r={R}
           fill="none"
-          stroke={atLimit ? tokens.destructive : tokens.mutedForeground}
+          stroke={atLimit ? tokens.destructive : tokens.primary}
           strokeWidth={2}
           strokeLinecap="round"
           strokeDasharray={C}
