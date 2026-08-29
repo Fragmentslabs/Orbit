@@ -12,8 +12,12 @@ import {
   awaitPendingAuth,
   cancelPendingAuth,
   closeOAuthLoopback,
+  describeOAuthError,
   ensureOAuthLoopback,
+  forgetOAuth,
   getOAuthProvider,
+  hasOAuthTokens,
+  oauthRedirectUrl,
   setOAuthInteractive,
 } from './oauth'
 
@@ -38,6 +42,8 @@ interface ServerRuntime {
   error?: string
   lastAttempt: number
   retryCount: number
+  /** http com OAuth: já existe token salvo (autorizado alguma vez neste device) */
+  authorized?: boolean
 }
 
 const servers = new Map<string, ServerRuntime>()
@@ -84,10 +90,24 @@ function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise
 }
 
 /**
+ * URL do servidor quando ele autentica via OAuth — ou undefined.
+ *
+ * Um Authorization header próprio desliga o OAuth (senão um 401 por chave
+ * inválida viraria um fluxo de autorização indevido); outros headers
+ * (versão de API, tenant…) convivem com o OAuth numa boa.
+ */
+function oauthUrl(config: McpServerConfig): string | undefined {
+  if (config.type !== 'http' || !config.url) return undefined
+  const hasAuthHeader = Object.entries(config.headers ?? {}).some(
+    ([key, value]) => key.trim().toLowerCase() === 'authorization' && value,
+  )
+  return hasAuthHeader ? undefined : config.url
+}
+
+/**
  * Monta o transport do servidor. Para HTTP, um authProvider OAuth é anexado
- * quando o servidor não usa Authorization header próprio (senão um 401 por
- * chave inválida viraria um fluxo OAuth indevido). No 401 sem header, o SDK
- * chama redirectToAuthorization e lança UnauthorizedError — o connect trata.
+ * conforme oauthUrl(). No 401, o SDK chama redirectToAuthorization e lança
+ * UnauthorizedError — o connect trata.
  */
 async function buildTransport(config: McpServerConfig) {
   if (config.type === 'http') {
@@ -98,8 +118,8 @@ async function buildTransport(config: McpServerConfig) {
         if (k.trim() && v) headers[k.trim()] = v
       }
     }
-    const useOAuth = Object.keys(headers).length === 0
-    const authProvider = useOAuth ? await getOAuthProvider(config.url) : undefined
+    const url = oauthUrl(config)
+    const authProvider = url ? await getOAuthProvider(url, config.oauth ?? {}) : undefined
     return new StreamableHTTPClientTransport(new URL(config.url), {
       requestInit: { headers },
       authProvider,
@@ -135,28 +155,34 @@ async function connect(runtime: ServerRuntime, interactive = false): Promise<voi
   runtime.state = 'connecting'
   runtime.error = undefined
   runtime.lastAttempt = Date.now()
+  const url = oauthUrl(runtime.config)
   try {
-    const client = new Client({ name: 'orbit', version: '0.1.0' })
-    if (runtime.config.type === 'http' && runtime.config.url) {
+    let client = new Client({ name: 'orbit', version: '0.1.0' })
+    if (url) {
       await ensureOAuthLoopback()
+      runtime.authorized = await hasOAuthTokens(url)
+      setOAuthInteractive(url, interactive)
     }
-    const transport = await buildTransport(runtime.config)
-    if (runtime.config.type === 'http' && runtime.config.url) {
-      setOAuthInteractive(runtime.config.url, interactive)
-    }
+    let transport = await buildTransport(runtime.config)
     try {
       await withTimeout(client.connect(transport), CONNECT_TIMEOUT_MS, runtime.config.name)
     } catch (err) {
-      if (!(err instanceof UnauthorizedError) || !runtime.config.url) throw err
+      if (!(err instanceof UnauthorizedError) || !url) throw err
       // Servidor exige OAuth: aguarda o code vindo do loopback (fluxo
       // interativo) ou sinaliza "unauthorized" para a UI (fluxo automático).
-      const code = await awaitPendingAuth(runtime.config.url)
+      const code = await awaitPendingAuth(url)
       if (!code) {
         runtime.state = 'unauthorized'
         return
       }
       if (!(transport instanceof StreamableHTTPClientTransport)) throw err
       await transport.finishAuth(code)
+      // O par client/transport da tentativa anterior já foi iniciado (e
+      // fechado no erro) — o SDK recusa reiniciar o mesmo transport. Com o
+      // token salvo pelo finishAuth, a conexão vai em instâncias novas.
+      await transport.close().catch(() => {})
+      client = new Client({ name: 'orbit', version: '0.1.0' })
+      transport = await buildTransport(runtime.config)
       await withTimeout(client.connect(transport), CONNECT_TIMEOUT_MS, runtime.config.name)
     }
     const { tools: discovered } = await withTimeout(
@@ -185,13 +211,28 @@ async function connect(runtime: ServerRuntime, interactive = false): Promise<voi
     runtime.tools = toolSet
     runtime.state = 'connected'
     runtime.retryCount = 0
+    if (url) runtime.authorized = await hasOAuthTokens(url)
   } catch (err) {
     runtime.client = null
     runtime.tools = {}
-    runtime.state = 'error'
     runtime.retryCount++
-    runtime.error = err instanceof Error ? err.message : String(err)
+    runtime.error =
+      describeOAuthError(err, Boolean(runtime.config.oauth?.clientId?.trim())) ??
+      (err instanceof Error ? err.message : String(err))
+    // Falha de autorização num servidor OAuth que nunca autorizou: vira
+    // "unauthorized" (a UI oferece Autorizar) em vez de "error" — assim o
+    // watcher não fica repetindo um fluxo que só o usuário destrava.
+    runtime.state = url && !runtime.authorized && isAuthFailure(err) ? 'unauthorized' : 'error'
+  } finally {
+    if (url) setOAuthInteractive(url, false)
   }
+}
+
+/** Erro que só o usuário resolve autorizando (401/403, OAuth, registro recusado). */
+function isAuthFailure(err: unknown): boolean {
+  if (err instanceof UnauthorizedError) return true
+  const message = err instanceof Error ? err.message : String(err ?? '')
+  return /oauth|unauthorized|invalid_client|invalid_grant|HTTP (401|403)/i.test(message)
 }
 
 async function disconnect(runtime: ServerRuntime): Promise<void> {
@@ -237,6 +278,7 @@ async function reconcile(config: McpConfig): Promise<void> {
       const changed = existing && JSON.stringify(existing.config) !== JSON.stringify(serverConfig)
       if (existing && !changed) return
       if (existing) await disconnect(existing)
+      const url = oauthUrl(serverConfig)
       const runtime: ServerRuntime = {
         config: serverConfig,
         client: null,
@@ -244,6 +286,7 @@ async function reconcile(config: McpConfig): Promise<void> {
         state: 'disabled',
         lastAttempt: 0,
         retryCount: 0,
+        authorized: url ? await hasOAuthTokens(url) : undefined,
       }
       servers.set(serverConfig.name, runtime)
       if (serverConfig.enabled !== false) await connect(runtime)
@@ -259,10 +302,10 @@ export async function saveMcpConfig(config: McpConfig): Promise<McpServerStatus[
 }
 
 /**
- * Reconecta (interativo: abre o navegador se o servidor exigir OAuth).
- * Chamado pelo botão Reconectar/Autorizar da UI.
+ * Reconecta sem abrir o navegador: um servidor OAuth sem token vai para
+ * "unauthorized" e a UI oferece o botão Autorizar. Botão Reconectar da UI.
  */
-export async function reconnectMcp(name?: string, interactive = true): Promise<McpServerStatus[]> {
+export async function reconnectMcp(name?: string, interactive = false): Promise<McpServerStatus[]> {
   for (const runtime of servers.values()) {
     if (name && runtime.config.name !== name) continue
     if (runtime.config.enabled === false) continue
@@ -272,12 +315,31 @@ export async function reconnectMcp(name?: string, interactive = true): Promise<M
   return listMcpStatus()
 }
 
+/**
+ * Inicia o fluxo OAuth interativo (abre o navegador) — botão Autorizar da UI.
+ * Quando o servidor nunca foi autorizado, descarta um registro dinâmico
+ * incompleto de tentativas anteriores para o fluxo começar limpo; tokens
+ * válidos (só precisando de refresh) são preservados.
+ */
+export async function authorizeMcp(name: string): Promise<McpServerStatus[]> {
+  const runtime = servers.get(name)
+  if (!runtime) return listMcpStatus()
+  const url = oauthUrl(runtime.config)
+  if (url && !(await hasOAuthTokens(url))) await forgetOAuth(url)
+  return reconnectMcp(name, true)
+}
+
+/** redirect_uri do loopback OAuth (para cadastrar no app do provedor). */
+export { oauthRedirectUrl }
+
 export function listMcpStatus(): McpServerStatus[] {
   return [...servers.values()].map((runtime) => ({
     config: runtime.config,
     state: runtime.config.enabled === false ? 'disabled' : runtime.state,
     error: runtime.error,
     toolNames: Object.keys(runtime.tools),
+    usesOAuth: Boolean(oauthUrl(runtime.config)),
+    authorized: runtime.authorized ?? false,
   }))
 }
 

@@ -2,24 +2,30 @@
  * OAuth 2.1 para servidores MCP HTTP (Streamable HTTP).
  *
  * Implementa o OAuthClientProvider do SDK (@modelcontextprotocol/sdk):
- * registro dinâmico de cliente (RFC 7591), PKCE (RFC 7636) e fluxo
- * authorization code com redirect loopback em http://127.0.0.1:<porta>/callback.
+ * registro dinâmico de cliente (RFC 7591) *ou* credenciais pré-registradas,
+ * PKCE (RFC 7636) e authorization code com redirect loopback em
+ * http://127.0.0.1:<porta>/callback.
  *
  * Fluxo:
  * 1. O transport HTTP recebe 401 do servidor, chama redirectToAuthorization()
  *    e lança UnauthorizedError; o provider grava um "pending flow" por URL.
- * 2. No fluxo interativo (reconnect manual / botão Autorizar) o navegador
- *    abre via shell.openExternal; no fluxo automático (startup) nada abre —
+ * 2. No fluxo interativo (botão Autorizar) o navegador abre via
+ *    shell.openExternal; no fluxo automático (startup/reconnect) nada abre —
  *    o connect sinaliza estado "unauthorized" para a UI.
  * 3. O redirect do navegador cai no servidor HTTP local (/callback), que
  *    roteia o code pelo parâmetro state e resolve o pending flow.
- * 4. O connect chama transport.finishAuth(code) e reconecta.
+ * 4. O connect chama transport.finishAuth(code) e reconecta num transport novo.
  *
- * Tokens, client info e discovery ficam persistidos em
+ * Tokens, client info, code verifier e discovery ficam persistidos em
  * orbit-data/mcp-oauth.json (por URL do servidor), permitindo reuso e
  * refresh automático entre sessões. Se a porta do loopback mudar entre
  * execuções (porta ocupada), o client info antigo é invalidado e um novo
  * registro dinâmico acontece na próxima autorização.
+ *
+ * Nem todo servidor aceita registro dinâmico: alguns (o Figma, por exemplo)
+ * respondem 403 ao /register de clientes fora de uma allowlist. Para esses,
+ * a config do servidor aceita clientId/clientSecret de um app OAuth já
+ * criado no provedor — nesse caso o registro é pulado por completo.
  */
 import { randomUUID } from 'node:crypto'
 import http from 'node:http'
@@ -35,6 +41,7 @@ import type {
   OAuthClientMetadata,
   OAuthTokens,
 } from '@modelcontextprotocol/sdk/shared/auth.js'
+import type { McpOAuthConfig } from '@shared/mcp'
 import { dataDir } from '../storage'
 
 /** Tempo máximo para o usuário concluir a autorização no navegador. */
@@ -42,12 +49,18 @@ const AUTH_TIMEOUT_MS = 5 * 60_000
 /** Portas candidatas para o loopback (a primeira livre vence; a salva tem prioridade). */
 const LOOPBACK_CANDIDATES = [38371, 39457, 40501, 42123]
 const CALLBACK_PATH = '/callback'
+/** client_name enviado no registro dinâmico quando a config não define outro. */
+const DEFAULT_CLIENT_NAME = 'Orbit'
 
 interface OAuthStoreClient {
   redirectUrl: string
   clientInformation?: OAuthClientInformationMixed
   tokens?: OAuthTokens
   discoveryState?: OAuthDiscoveryState
+  /** PKCE verifier do fluxo em andamento (sobrevive a um reload do main). */
+  codeVerifier?: string
+  /** state do fluxo em andamento (o AS do Figma exige state). */
+  state?: string
 }
 
 interface OAuthStoreFile {
@@ -134,9 +147,17 @@ function singleFlow(): PendingFlow | undefined {
 
 function handleCallback(req: http.IncomingMessage, res: http.ServerResponse): void {
   const url = new URL(req.url ?? '/', `http://127.0.0.1:${loopbackPort}`)
+  if (url.pathname !== CALLBACK_PATH) {
+    res.statusCode = 404
+    res.end()
+    return
+  }
   const state = url.searchParams.get('state')
   const code = url.searchParams.get('code')
   const error = url.searchParams.get('error')
+  const description = url.searchParams.get('error_description')
+  // Com state, casa o callback com o servidor certo; sem ele (servidores que
+  // não ecoam state) só dá para assumir quando existe um único fluxo aberto.
   const flow = state ? findFlow(state) : singleFlow()
   res.setHeader('Content-Type', 'text/html; charset=utf-8')
   res.setHeader('Cache-Control', 'no-store')
@@ -148,7 +169,7 @@ function handleCallback(req: http.IncomingMessage, res: http.ServerResponse): vo
   pendingFlows.delete(flow.serverUrl)
   clearTimeout(flow.timer)
   if (error) {
-    flow.reject(new Error(`Autorização recusada: ${error}`))
+    flow.reject(new Error(`Autorização recusada: ${description || error}`))
     res.end(HTML_ERROR)
   } else if (code) {
     flow.resolve(code)
@@ -223,7 +244,8 @@ export async function ensureOAuthLoopback(): Promise<number> {
 /* ------------------------------------------------------------------ */
 
 class OAuthProvider implements OAuthClientProvider {
-  private codeVerifierValue = ''
+  /** Config OAuth do mcp-config.json (client pré-registrado, nome, escopo). */
+  options: McpOAuthConfig = {}
 
   constructor(
     private readonly serverUrl: string,
@@ -234,11 +256,14 @@ class OAuthProvider implements OAuthClientProvider {
     return callbackUrl(loopbackPort)
   }
 
-get clientMetadata(): OAuthClientMetadata {
+  get clientMetadata(): OAuthClientMetadata {
+    const scope = this.options.scope?.trim()
     return {
-      client_name: 'Orbit',
+      client_name: this.options.clientName?.trim() || DEFAULT_CLIENT_NAME,
       redirect_uris: [this.redirectUrl],
       grant_types: ['authorization_code', 'refresh_token'],
+      response_types: ['code'],
+      ...(scope ? { scope } : {}),
       // token_endpoint_auth_method fica de fora de propósito: o servidor de
       // autorização decide no registro (RFC 7591) e o SDK (selectClientAuthMethod)
       // usa o método devolvido ou o melhor suportado — fixar "none" quebra
@@ -246,7 +271,17 @@ get clientMetadata(): OAuthClientMetadata {
     }
   }
 
+  /**
+   * Credenciais da config têm prioridade: com um client_id de app já
+   * registrado, o SDK pula o registro dinâmico (que alguns provedores
+   * bloqueiam com 403).
+   */
   clientInformation(): OAuthClientInformationMixed | undefined {
+    const clientId = this.options.clientId?.trim()
+    if (clientId) {
+      const clientSecret = this.options.clientSecret?.trim()
+      return { client_id: clientId, ...(clientSecret ? { client_secret: clientSecret } : {}) }
+    }
     return this.client.clientInformation
   }
 
@@ -261,21 +296,40 @@ get clientMetadata(): OAuthClientMetadata {
 
   saveTokens(tokens: OAuthTokens): void {
     this.client.tokens = tokens
+    delete this.client.codeVerifier
+    delete this.client.state
     persistStore()
   }
 
   saveCodeVerifier(codeVerifier: string): void {
-    this.codeVerifierValue = codeVerifier
+    this.client.codeVerifier = codeVerifier
+    persistStore()
   }
 
   codeVerifier(): string {
-    return this.codeVerifierValue
+    if (!this.client.codeVerifier) {
+      throw new Error('Fluxo OAuth sem code verifier — autorize novamente')
+    }
+    return this.client.codeVerifier
+  }
+
+  /**
+   * state do authorization request. Além do CSRF, é o que casa o callback
+   * com o servidor certo — e alguns AS o exigem (o do Figma anuncia
+   * `require_state_parameter: true`).
+   */
+  state(): string {
+    const value = `orb-${randomUUID()}`
+    this.client.state = value
+    persistStore()
+    return value
   }
 
   async redirectToAuthorization(authorizationUrl: URL): Promise<void> {
     const interactive = interactiveServers.has(this.serverUrl)
     if (!interactive) return // fluxo automático: UI mostra "Autorizar" em vez de abrir o navegador
-    const state = authorizationUrl.searchParams.get('state') ?? `orb-${randomUUID()}`
+    const state =
+      authorizationUrl.searchParams.get('state') ?? this.client.state ?? `orb-${randomUUID()}`
     this.cancelPending()
     const flow: PendingFlow = {
       state,
@@ -289,6 +343,9 @@ get clientMetadata(): OAuthClientMetadata {
       flow.resolve = resolve
       flow.reject = reject
     })
+    // Quando o timeout dispara pode não haver mais ninguém esperando (o
+    // connect já desistiu); sem este catch a rejeição vira unhandled.
+    flow.promise.catch(() => {})
     flow.timer = setTimeout(() => {
       pendingFlows.delete(this.serverUrl)
       flow.reject(new Error('Autorização não concluída no navegador (tempo esgotado)'))
@@ -315,6 +372,7 @@ get clientMetadata(): OAuthClientMetadata {
         delete this.client.clientInformation
         delete this.client.tokens
         delete this.client.discoveryState
+        delete this.client.codeVerifier
         break
       case 'client':
         delete this.client.clientInformation
@@ -326,7 +384,8 @@ get clientMetadata(): OAuthClientMetadata {
         delete this.client.discoveryState
         break
       case 'verifier':
-        break // code verifier vive só em memória (mesmo processo)
+        delete this.client.codeVerifier
+        break
     }
     persistStore()
   }
@@ -343,20 +402,56 @@ get clientMetadata(): OAuthClientMetadata {
 
 const providers = new Map<string, OAuthProvider>()
 
-/** Provider (cacheado por URL) que o transport HTTP usa para autenticar. */
-export async function getOAuthProvider(serverUrl: string): Promise<OAuthClientProvider> {
+/**
+ * Provider (cacheado por URL) que o transport HTTP usa para autenticar.
+ * `options` vem da config do servidor e é reaplicada a cada chamada — editar
+ * o servidor na UI passa a valer já na próxima conexão.
+ */
+export async function getOAuthProvider(
+  serverUrl: string,
+  options: McpOAuthConfig = {},
+): Promise<OAuthClientProvider> {
   const file = await loadStore()
   let stored = file.clients[serverUrl]
   if (!stored) {
     stored = { redirectUrl: callbackUrl(loopbackPort) }
     file.clients[serverUrl] = stored
+    persistStore()
   }
   let provider = providers.get(serverUrl)
   if (!provider) {
     provider = new OAuthProvider(serverUrl, stored)
     providers.set(serverUrl, provider)
   }
+  provider.options = options
   return provider
+}
+
+/**
+ * redirect_uri que o Orbit usa no fluxo — o usuário precisa cadastrá-lo no
+ * app OAuth criado no provedor. Sobe o loopback para saber a porta real.
+ */
+export async function oauthRedirectUrl(): Promise<string> {
+  return callbackUrl(await ensureOAuthLoopback())
+}
+
+/** true quando já existe token OAuth salvo para o servidor (autorizado alguma vez). */
+export async function hasOAuthTokens(serverUrl: string): Promise<boolean> {
+  const file = await loadStore()
+  return Boolean(file.clients[serverUrl]?.tokens?.access_token)
+}
+
+/** Esquece tokens/registro do servidor (reautorização do zero). */
+export async function forgetOAuth(serverUrl: string): Promise<void> {
+  const file = await loadStore()
+  const stored = file.clients[serverUrl]
+  if (!stored) return
+  delete stored.tokens
+  delete stored.clientInformation
+  delete stored.discoveryState
+  delete stored.codeVerifier
+  delete stored.state
+  persistStore()
 }
 
 /** Marca o próximo fluxo do servidor como interativo (abre o navegador). */
@@ -379,6 +474,32 @@ export async function awaitPendingAuth(serverUrl: string): Promise<string | null
 export function cancelPendingAuth(serverUrl: string): void {
   pendingFlows.get(serverUrl)?.resolve(null)
   pendingFlows.delete(serverUrl)
+}
+
+/**
+ * Traduz erros crus do fluxo OAuth em algo acionável na UI.
+ *
+ * O caso mais comum é o servidor recusar o registro dinâmico (RFC 7591):
+ * provedores como o Figma só aceitam /register de clientes de uma allowlist
+ * e devolvem `403 Forbidden` em texto puro, que o SDK repassa como
+ * "Invalid OAuth error response ... Raw body: Forbidden". A mensagem aqui
+ * diz o que fazer: cadastrar um client_id/client_secret próprio.
+ */
+export function describeOAuthError(err: unknown, hasStaticClient: boolean): string | undefined {
+  const message = err instanceof Error ? err.message : String(err ?? '')
+  if (!message) return undefined
+  if (/does not support dynamic client registration/i.test(message)) {
+    return 'O servidor de autorização não oferece registro dinâmico de clientes. Informe o Client ID/Client Secret de um app OAuth já criado nas opções OAuth deste servidor (botão Editar).'
+  }
+  if (
+    !hasStaticClient &&
+    /Invalid OAuth error response/i.test(message) &&
+    /HTTP (401|403)/.test(message)
+  ) {
+    const status = message.match(/HTTP (401|403)/)?.[1] ?? '403'
+    return `O servidor recusou o registro dinâmico de cliente OAuth (HTTP ${status}) — ele só aceita clientes pré-cadastrados. Crie um app OAuth no provedor e informe o Client ID/Client Secret nas opções OAuth deste servidor (botão Editar).`
+  }
+  return undefined
 }
 
 /** Fecha o loopback no shutdown (senão o event loop segura o processo). */

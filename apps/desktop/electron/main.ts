@@ -20,7 +20,7 @@ import { abortChat, compactSession, getRunningSessionIds, runChat } from './lib/
 import { runChatWithLoop, abortLoop, getLoopRunningSessionIds } from './lib/loop-engine'
 import { reply as askReply, rejectSession as rejectSessionAsks } from './lib/ask-broker'
 import { abortOrchestration, approvePlan, getOrchestrationRunningSessionIds, rejectPlan, runOrchestration } from './lib/orchestrator'
-import { initMcp, listMcpStatus, readMcpConfig, reconnectMcp, saveMcpConfig } from './lib/mcp'
+import { authorizeMcp, initMcp, listMcpStatus, oauthRedirectUrl, readMcpConfig, reconnectMcp, saveMcpConfig } from './lib/mcp'
 import { connectNodara, disconnectNodara, discoverNodara, stopWatchingNodaraBridge, watchNodaraBridge } from './lib/nodara'
 import { loadTrustRules } from './lib/permission/trust-rules'
 import { clearSessionTrust } from './lib/permission'
@@ -1483,8 +1483,10 @@ app.whenReady().then(() => {
   ipcMain.handle('mcp:status', () => listMcpStatus())
   ipcMain.handle('mcp:save', (_event, config) => saveMcpConfig(config))
   ipcMain.handle('mcp:reconnect', (_event, name?: string) => reconnectMcp(name))
-  // Autorização OAuth: reconecta de forma interativa (abre o navegador para o login)
-  ipcMain.handle('mcp:auth', (_event, name?: string) => reconnectMcp(name, true))
+  // Autorização OAuth: abre o navegador para o login e completa o fluxo
+  ipcMain.handle('mcp:auth', (_event, name: string) => authorizeMcp(name))
+  // redirect_uri do loopback — o usuário precisa cadastrá-lo no app OAuth do provedor
+  ipcMain.handle('mcp:oauth-redirect', () => oauthRedirectUrl())
   // Nodara: integração oficial — registra o servidor MCP e mantém o token em dia
   ipcMain.handle('nodara:discover', () => discoverNodara())
   ipcMain.handle('nodara:connect', () => connectNodara())
