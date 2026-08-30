@@ -157,10 +157,13 @@ export function ChatScreen({ sessionId }: ChatScreenProps) {
     setFolders(next)
   }, [])
   useEffect(() => {
-    if (session?.directory) {
-      updateFolders([session.directory, ...(session.extraDirectories ?? [])])
-    }
-  }, [session?.directory, session?.extraDirectories, updateFolders])
+    // Rascunho (sem sessão) mantém a pasta que a pessoa acabou de escolher; a
+    // sessão existente manda no seletor, inclusive quando não tem pasta.
+    if (!session) return
+    updateFolders(
+      session.directory ? [session.directory, ...(session.extraDirectories ?? [])] : [],
+    )
+  }, [sessionId, session?.directory, session?.extraDirectories, updateFolders])
 
   const isCode = (session?.mode ?? mode) === 'code'
 

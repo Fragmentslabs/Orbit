@@ -376,7 +376,10 @@ async function handleRequest(client: ConnectedClient, requestId: string, req: Co
         ).filter((s): s is SessionInfo => s !== null)
         sessions.sort((a, b) => b.updatedAt - a.updatedAt)
 
-        // Sanitizar: remover dados sensíveis
+        // Sanitizar: fora daqui ficam só os campos pesados (revert carrega
+        // diff e mensagens descartadas). As pastas do modo código entram: sem
+        // elas o mobile abre todo chat existente como se não tivesse pasta
+        // associada — e o seletor de branch, que depende do diretório, some.
         const safe = sessions.map(s => ({
           id: s.id,
           title: s.title,
@@ -384,6 +387,8 @@ async function handleRequest(client: ConnectedClient, requestId: string, req: Co
           pinned: s.pinned,
           archived: s.archived,
           folderId: s.folderId,
+          directory: s.directory,
+          extraDirectories: s.extraDirectories,
           parentId: s.parentId,
           routineId: s.routineId,
           createdAt: s.createdAt,
