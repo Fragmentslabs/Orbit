@@ -6,7 +6,7 @@ import type {
   SendMessageInput,
   SessionRevert,
 } from "@shared/chat"
-import type { ChatModeKey, SessionModeOverrides } from "@shared/companion"
+import type { ChatModeKey, SessionModeOverrides, WorkerConfigSnapshot } from "@shared/companion"
 import type { McpConfig, McpServerStatus } from "@shared/mcp"
 import type { MediaEntry, MediaFilter, MediaUsage } from "@shared/media"
 import type {
@@ -220,6 +220,21 @@ export const sessionModesApi = {
       listener(data as { mode: ChatModeKey; value: boolean; sessionId?: string | null }),
     )
     return () => window.ipcRenderer.off("companion:mode-select", wrapper)
+  },
+}
+
+/** Config dos modos delegados (modelo/thinking dos workers e modelo de visão):
+ *  global, empurrada para o main como as demais e aplicada de volta quando o
+ *  celular muda. */
+export const workerConfigApi = {
+  sync: (config: WorkerConfigSnapshot) => {
+    window.ipcRenderer?.send("companion:worker-config", config)
+  },
+  onSet: (listener: (config: WorkerConfigSnapshot) => void) => {
+    const wrapper = window.ipcRenderer.on("companion:worker-config-set", (data) =>
+      listener(data as WorkerConfigSnapshot),
+    )
+    return () => window.ipcRenderer.off("companion:worker-config-set", wrapper)
   },
 }
 

@@ -4,7 +4,7 @@
  * e o handshake de autenticação.
  */
 
-import type { SendMessageOptions, SessionMode, FilePart, WorkerModelConfig, PermissionMode, PlanReview, OrchestrationPlan } from './chat'
+import type { SendMessageOptions, SessionMode, FilePart, WorkerModelConfig, ReasoningConfig, PermissionMode, PlanReview, OrchestrationPlan } from './chat'
 import type { AnalyticsRange } from './analytics'
 import type { NovaRotinaInput, Rotina, RotinaEvent, RotinaModelo } from './rotinas'
 import type {
@@ -146,6 +146,25 @@ export interface SelectSessionModeRequest {
 export interface SessionModeChangeEvent {
   type: 'session:mode-change'
   overrides: SessionModeOverrides
+}
+
+/** Configuração global dos modos delegados: o modelo (e o thinking) dos
+ *  workers de subagentes/orquestração e o modelo do modo Visão. Diferente dos
+ *  modos, isto não é por chat — vale para o app inteiro. */
+export interface WorkerConfigSnapshot {
+  workerModel: WorkerModelConfig | null
+  workerReasoning: ReasoningConfig | null
+  visionModel: WorkerModelConfig | null
+}
+
+export interface SetWorkerConfigRequest {
+  type: 'worker-config:set'
+  config: WorkerConfigSnapshot
+}
+
+export interface WorkerConfigChangeEvent {
+  type: 'worker-config:change'
+  config: WorkerConfigSnapshot
 }
 
 export interface GetCatalogRequest {
@@ -505,6 +524,7 @@ export type CompanionRequest =
   | GetModelsRequest
   | SelectModelRequest
   | SelectSessionModeRequest
+  | SetWorkerConfigRequest
   | GetCatalogRequest
   | GetAnalyticsRequest
   | GetStatusRequest
@@ -640,6 +660,7 @@ export type CompanionEvent =
   | PendingAskNotification
   | NewMessageNotification
   | SessionModeChangeEvent
+  | WorkerConfigChangeEvent
   | StatusUpdate
 
 // ─── Wire Protocol ───────────────────────────────────────────────────────────

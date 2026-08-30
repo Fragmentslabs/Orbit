@@ -6,7 +6,7 @@
  */
 
 import type { ConnectionConfig } from './types'
-import type { MediaEntry, MediaUsage } from '@orbit/shared'
+import type { MediaEntry, MediaUsage, WorkerConfigSnapshot } from '@orbit/shared'
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -74,6 +74,12 @@ export class CompanionHttp {
    *  O mobile herda o estado do chat ao conectar. */
   async getSessionModes(): Promise<HttpResult<{ overrides: Record<string, Record<string, boolean>> }>> {
     return this.get('/api/session-modes')
+  }
+
+  /** Config global dos modos delegados (modelo/thinking dos workers de
+   *  subagentes e orquestração, e modelo do modo Visão) do desktop. */
+  async getWorkerConfig(): Promise<HttpResult<{ config: WorkerConfigSnapshot }>> {
+    return this.get('/api/worker-config')
   }
 
   async getConnectedProviders(): Promise<HttpResult<string[]>> {

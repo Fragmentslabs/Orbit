@@ -33,9 +33,9 @@ import {
   mediaDiskUsage,
   registerMediaProtocol,
 } from './lib/media'
-import type { SessionModeOverrides } from '@shared/companion'
-import { startCompanionServer, getCompanionStatus, setPairingMode, forwardChatEvent, broadcastSessionModels, broadcastSessionModes } from './lib/companion-server'
-import { setSessionModelsCache, setSessionModesCache } from './lib/companion-http'
+import type { SessionModeOverrides, WorkerConfigSnapshot } from '@shared/companion'
+import { startCompanionServer, getCompanionStatus, setPairingMode, forwardChatEvent, broadcastSessionModels, broadcastSessionModes, broadcastWorkerConfig } from './lib/companion-server'
+import { setSessionModelsCache, setSessionModesCache, setWorkerConfigCache } from './lib/companion-http'
 import { readJson as readStorageJson } from './lib/storage'
 import { registerPanelWebContents } from './lib/panel-browser'
 import { setupMemoryScheduler } from './lib/memory/scheduler'
@@ -1206,6 +1206,12 @@ app.whenReady().then(() => {
   ipcMain.on('companion:session-modes', (_event, overrides: SessionModeOverrides) => {
     setSessionModesCache(overrides)
     broadcastSessionModes(overrides)
+  })
+
+  // Config dos modos delegados (workers + visão), pelo mesmo caminho.
+  ipcMain.on('companion:worker-config', (_event, config: WorkerConfigSnapshot) => {
+    setWorkerConfigCache(config)
+    broadcastWorkerConfig(config)
   })
 
   // Imagens das respostas do assistente (orbit-media://)

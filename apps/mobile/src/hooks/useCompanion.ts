@@ -4,6 +4,7 @@ import type {
   EsteiraEventMessage,
   RotinaEventMessage,
   SessionModeOverrides,
+  WorkerConfigSnapshot,
 } from '@orbit/shared'
 import { useConnectionStore } from '../stores/connection-store'
 import { useMessageQueueStore } from '../stores/message-queue-store'
@@ -82,6 +83,8 @@ export function useCompanion() {
         void useSessionModelPrefs.getState().hydrate()
         // Modos ativos por chat (mesmo caminho: snapshot do renderer)
         void fetchSessionModes()
+        // Config de subagentes/orquestração e visão (global, mora no desktop)
+        void useSettingsStore.getState().fetchWorkerConfig()
         // Processa fila de mensagens offline
         useMessageQueueStore.getState().processAllQueues()
       } else if (state.status === 'disconnected' && state.error === 'invalid_pin') {
@@ -123,6 +126,12 @@ export function useCompanion() {
       if (msg?.overrides) applyRemoteModes(msg.overrides, true)
     })
 
+    // worker-config:change → modelo dos workers / modelo de visão do desktop
+    const unsubWorkerConfig = conn.onEvent('worker-config:change', (event) => {
+      const msg = event as { config?: WorkerConfigSnapshot }
+      if (msg?.config) useSettingsStore.getState().applyWorkerConfigSync(msg.config)
+    })
+
     // rotinas:event → rotinas store (criar/editar/excluir/execução pelo scheduler)
     const unsubRotinas = conn.onEvent('rotinas:event', (event) => {
       const msg = event as RotinaEventMessage
@@ -143,6 +152,7 @@ export function useCompanion() {
       unsubChat()
       unsubModels()
       unsubModes()
+      unsubWorkerConfig()
       unsubRotinas()
       unsubEsteira()
     }

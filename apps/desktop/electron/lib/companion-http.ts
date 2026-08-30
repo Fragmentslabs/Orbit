@@ -30,7 +30,7 @@ import { approvePendingSkill, discardPendingSkill, listPendingSkills } from './s
 import { authorizeMcp, listMcpStatus, readMcpConfig, reconnectMcp, saveMcpConfig } from './mcp'
 import { readMedia, listMedia, mediaDiskUsage, deleteMedia, deleteManyMedia } from './media'
 
-import type { SessionModeOverrides } from '@shared/companion'
+import type { SessionModeOverrides, WorkerConfigSnapshot } from '@shared/companion'
 
 const execFileAsync = promisify(execFile)
 
@@ -285,6 +285,27 @@ export function getSessionModesCache(): SessionModeOverrides {
 
 async function handleGetSessionModes(_req: IncomingMessage, res: ServerResponse) {
   jsonResponse(res, 200, { overrides: getSessionModesCache() })
+}
+
+// Config dos modos delegados (modelo dos workers + modelo de visão): também
+// vive no renderer, também empurrada de lá. Sem isto o celular rodava
+// subagentes/orquestração/visão com o que estivesse configurado no aparelho.
+let workerConfigCache: WorkerConfigSnapshot = {
+  workerModel: null,
+  workerReasoning: null,
+  visionModel: null,
+}
+
+export function setWorkerConfigCache(config: WorkerConfigSnapshot): void {
+  workerConfigCache = config ?? { workerModel: null, workerReasoning: null, visionModel: null }
+}
+
+export function getWorkerConfigCache(): WorkerConfigSnapshot {
+  return workerConfigCache
+}
+
+async function handleGetWorkerConfig(_req: IncomingMessage, res: ServerResponse) {
+  jsonResponse(res, 200, { config: getWorkerConfigCache() })
 }
 
 async function handlePutSelectedModel(req: IncomingMessage, res: ServerResponse) {
@@ -595,6 +616,7 @@ function createRouter(
     { pattern: /^GET \/api\/media\/usage$/, paramNames: [], handler: handleMediaUsage },
     { pattern: /^GET \/api\/session-models$/, paramNames: [], handler: handleGetSessionModels },
     { pattern: /^GET \/api\/session-modes$/, paramNames: [], handler: handleGetSessionModes },
+    { pattern: /^GET \/api\/worker-config$/, paramNames: [], handler: handleGetWorkerConfig },
 
     // Mutation endpoints
     { pattern: /^PATCH \/api\/preferences$/, paramNames: [], handler: handlePatchPreferences },

@@ -33,6 +33,8 @@ import type {
   BranchesResponse,
   SessionModeOverrides,
   SessionModeChangeEvent,
+  WorkerConfigSnapshot,
+  WorkerConfigChangeEvent,
 } from '@shared/companion'
 import type { ChatEvent, SessionInfo, FolderInfo, ChatMessage, MessagePart, SendMessageInput, PlanReview, OrchestrationPlan } from '@shared/chat'
 import type { RotinaEvent } from '@shared/rotinas'
@@ -580,6 +582,18 @@ async function handleRequest(client: ConnectedClient, requestId: string, req: Co
               value: req.value,
               sessionId: req.sessionId ?? null,
             })
+          }
+        }
+        sendResponse(ws, requestId, true)
+        break
+      }
+
+      case 'worker-config:set': {
+        // Mesma via do modes:select: a config vive no renderer, então a
+        // escolha feita no celular é aplicada lá e volta pelo broadcast.
+        for (const win of BrowserWindow.getAllWindows()) {
+          if (!win.isDestroyed()) {
+            win.webContents.send('companion:worker-config-set', req.config)
           }
         }
         sendResponse(ws, requestId, true)
@@ -1269,6 +1283,15 @@ export function broadcastSessionModes(overrides: SessionModeOverrides): void {
   for (const client of clients) {
     if (!client.authenticated || client.ws.readyState !== WebSocket.OPEN) continue
     client.ws.send(wrap({ type: 'session:mode-change', overrides } satisfies SessionModeChangeEvent))
+  }
+}
+
+/** Config dos modos delegados (workers de subagentes/orquestração e visão) —
+ *  global, não por chat. */
+export function broadcastWorkerConfig(config: WorkerConfigSnapshot): void {
+  for (const client of clients) {
+    if (!client.authenticated || client.ws.readyState !== WebSocket.OPEN) continue
+    client.ws.send(wrap({ type: 'worker-config:change', config } satisfies WorkerConfigChangeEvent))
   }
 }
 

@@ -1,7 +1,40 @@
 import { create } from 'zustand'
-import type { Catalog, CatalogModel, ReasoningConfig, WorkerModelConfig } from '@orbit/shared'
+import type {
+  Catalog,
+  CatalogModel,
+  ReasoningConfig,
+  WorkerConfigSnapshot,
+  WorkerModelConfig,
+} from '@orbit/shared'
 import { Storage } from '~/lib/storage'
 import { useConnectionStore } from './connection-store'
+
+/** Guarda ou apaga a chave conforme o valor — os três campos da config de
+ *  workers/visão são anuláveis ("usar o modelo principal"). */
+async function persistOrRemove(key: string, value: unknown): Promise<void> {
+  if (value) await Storage.setItem(key, JSON.stringify(value))
+  else await Storage.removeItem(key)
+}
+
+/** Manda a config inteira para o desktop, que é quem a guarda de verdade e
+ *  repassa aos demais aparelhos. */
+function pushWorkerConfig(state: {
+  workerModel: WorkerModelConfig | null
+  workerReasoning: ReasoningConfig | null
+  visionModel: WorkerModelConfig | null
+}): void {
+  const { wsClient } = useConnectionStore.getState()
+  void wsClient
+    .send({
+      type: 'worker-config:set',
+      config: {
+        workerModel: state.workerModel,
+        workerReasoning: state.workerReasoning,
+        visionModel: state.visionModel,
+      },
+    })
+    .catch(() => {})
+}
 
 const CATALOG_CACHE_KEY = 'orbit_catalog_cache'
 const PROVIDERS_CACHE_KEY = 'orbit_providers_cache'
@@ -52,6 +85,8 @@ interface SettingsState {
   fetchConnectedProviders: () => Promise<void>
   /** Busca preferências via HTTP. */
   fetchPreferences: () => Promise<void>
+  /** Busca a config de workers/visão do desktop (fonte da verdade). */
+  fetchWorkerConfig: () => Promise<void>
   /** Atualiza preferências via HTTP. */
   updatePreferences: (patch: Record<string, unknown>) => Promise<void>
   /** Carrega o catálogo em cache (se houver) — pinta a UI instantaneamente
@@ -67,6 +102,9 @@ interface SettingsState {
   workerReasoning: ReasoningConfig | null
   /** Define (ou limpa) o thinking dos workers. */
   setWorkerReasoning: (reasoning: ReasoningConfig | null) => Promise<void>
+
+  /** Aplica a config de workers/visão vinda do desktop (sem devolver para lá). */
+  applyWorkerConfigSync: (config: WorkerConfigSnapshot) => void
 
   /** Modelo de visão delegado (modo Visão) — descreve imagens no desktop. */
   visionModel: WorkerModelConfig | null
@@ -189,6 +227,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
     } else {
       await Storage.removeItem(WORKER_MODEL_KEY)
     }
+    pushWorkerConfig(get())
   },
 
   setWorkerReasoning: async (reasoning) => {
@@ -198,6 +237,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
     } else {
       await Storage.removeItem(WORKER_REASONING_KEY)
     }
+    pushWorkerConfig(get())
   },
 
   setVisionModel: async (model) => {
@@ -207,6 +247,26 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
     } else {
       await Storage.removeItem(VISION_MODEL_KEY)
     }
+    pushWorkerConfig(get())
+  },
+
+  applyWorkerConfigSync: (config) => {
+    if (!config || typeof config !== 'object') return
+    const { workerModel, workerReasoning, visionModel } = get()
+    const next = {
+      workerModel: config.workerModel ?? null,
+      workerReasoning: config.workerReasoning ?? null,
+      visionModel: config.visionModel ?? null,
+    }
+    if (
+      JSON.stringify({ workerModel, workerReasoning, visionModel }) === JSON.stringify(next)
+    ) {
+      return
+    }
+    set(next)
+    void persistOrRemove(WORKER_MODEL_KEY, next.workerModel)
+    void persistOrRemove(WORKER_REASONING_KEY, next.workerReasoning)
+    void persistOrRemove(VISION_MODEL_KEY, next.visionModel)
   },
 
   setVisionConfigOpen: (open) => {
@@ -239,6 +299,20 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
       }
     } catch {
       // Silently fail
+    }
+  },
+
+  fetchWorkerConfig: async () => {
+    const { http } = useConnectionStore.getState()
+    if (!http) return
+    try {
+      const res = await http.getWorkerConfig()
+      if (res.ok && res.data) {
+        const config = (res.data as { config?: WorkerConfigSnapshot }).config
+        if (config) get().applyWorkerConfigSync(config)
+      }
+    } catch {
+      // Offline — segue com o que está guardado no aparelho.
     }
   },
 
