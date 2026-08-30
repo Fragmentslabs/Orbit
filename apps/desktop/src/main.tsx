@@ -6,6 +6,8 @@ import './index.css'
 import { esteiraApi, rotinasApi } from './lib/ipc'
 import { useEsteiraStore } from './stores/esteira-store'
 import { useRotinasStore } from './stores/rotinas-store'
+// Efeito de import: liga a sincronizacao dos modos por chat com o mobile.
+import './stores/session-modes-sync'
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>

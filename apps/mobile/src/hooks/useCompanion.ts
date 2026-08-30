@@ -1,11 +1,17 @@
 import { useEffect } from 'react'
-import type { ChatEventMessage, EsteiraEventMessage, RotinaEventMessage } from '@orbit/shared'
+import type {
+  ChatEventMessage,
+  EsteiraEventMessage,
+  RotinaEventMessage,
+  SessionModeOverrides,
+} from '@orbit/shared'
 import { useConnectionStore } from '../stores/connection-store'
 import { useMessageQueueStore } from '../stores/message-queue-store'
 import { useRecentConnectionsStore } from '~/stores/recent-connections-store'
 import { useSessionStore } from '../stores/session-store'
 import { useSettingsStore } from '../stores/settings-store'
 import { useSessionModelPrefs } from '~/stores/session-model-prefs'
+import { applyRemoteModes, fetchSessionModes } from '~/stores/session-modes-sync'
 import { useRotinasStore } from '~/stores/rotinas-store'
 import { useEsteiraStore } from '~/stores/esteira-store'
 
@@ -74,6 +80,8 @@ export function useCompanion() {
         void useSettingsStore.getState().fetchConnectedProviders()
         // Overrides de modelo por sessão (snapshot do renderer do desktop)
         void useSessionModelPrefs.getState().hydrate()
+        // Modos ativos por chat (mesmo caminho: snapshot do renderer)
+        void fetchSessionModes()
         // Processa fila de mensagens offline
         useMessageQueueStore.getState().processAllQueues()
       } else if (state.status === 'disconnected' && state.error === 'invalid_pin') {
@@ -109,6 +117,12 @@ export function useCompanion() {
       }
     })
 
+    // session:mode-change → modos ativos por chat mudados no desktop
+    const unsubModes = conn.onEvent('session:mode-change', (event) => {
+      const msg = event as { overrides?: SessionModeOverrides }
+      if (msg?.overrides) applyRemoteModes(msg.overrides, true)
+    })
+
     // rotinas:event → rotinas store (criar/editar/excluir/execução pelo scheduler)
     const unsubRotinas = conn.onEvent('rotinas:event', (event) => {
       const msg = event as RotinaEventMessage
@@ -128,6 +142,7 @@ export function useCompanion() {
     return () => {
       unsubChat()
       unsubModels()
+      unsubModes()
       unsubRotinas()
       unsubEsteira()
     }

@@ -31,6 +31,8 @@ import type {
   StatusUpdate,
   SessionStateResponse,
   BranchesResponse,
+  SessionModeOverrides,
+  SessionModeChangeEvent,
 } from '@shared/companion'
 import type { ChatEvent, SessionInfo, FolderInfo, ChatMessage, MessagePart, SendMessageInput, PlanReview, OrchestrationPlan } from '@shared/chat'
 import type { RotinaEvent } from '@shared/rotinas'
@@ -559,6 +561,23 @@ async function handleRequest(client: ConnectedClient, requestId: string, req: Co
             win.webContents.send('companion:model-select', {
               providerId: req.providerId,
               modelId: req.modelId,
+              sessionId: req.sessionId ?? null,
+            })
+          }
+        }
+        sendResponse(ws, requestId, true)
+        break
+      }
+
+      case 'modes:select': {
+        // Espelho do models:select: os modos por chat vivem no renderer
+        // (localStorage), então a escolha feita no celular é aplicada lá — e
+        // de lá volta para todos os companions pelo broadcast.
+        for (const win of BrowserWindow.getAllWindows()) {
+          if (!win.isDestroyed()) {
+            win.webContents.send('companion:mode-select', {
+              mode: req.mode,
+              value: req.value,
               sessionId: req.sessionId ?? null,
             })
           }
@@ -1240,6 +1259,16 @@ export function broadcastSessionModels(
   for (const client of clients) {
     if (!client.authenticated || client.ws.readyState !== WebSocket.OPEN) continue
     client.ws.send(wrap({ type: 'session:model-change', overrides } as unknown as CompanionEvent))
+  }
+}
+
+/** Mesma ideia do broadcastSessionModels, para os modos ativos por chat
+ *  (pesquisa, navegador, plano, subagentes, orquestração, visão, simples e
+ *  brain) — sem isto o mobile abre todo chat nos defaults dele. */
+export function broadcastSessionModes(overrides: SessionModeOverrides): void {
+  for (const client of clients) {
+    if (!client.authenticated || client.ws.readyState !== WebSocket.OPEN) continue
+    client.ws.send(wrap({ type: 'session:mode-change', overrides } satisfies SessionModeChangeEvent))
   }
 }
 

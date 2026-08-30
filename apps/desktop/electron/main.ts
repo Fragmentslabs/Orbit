@@ -33,8 +33,9 @@ import {
   mediaDiskUsage,
   registerMediaProtocol,
 } from './lib/media'
-import { startCompanionServer, getCompanionStatus, setPairingMode, forwardChatEvent, broadcastSessionModels } from './lib/companion-server'
-import { setSessionModelsCache } from './lib/companion-http'
+import type { SessionModeOverrides } from '@shared/companion'
+import { startCompanionServer, getCompanionStatus, setPairingMode, forwardChatEvent, broadcastSessionModels, broadcastSessionModes } from './lib/companion-server'
+import { setSessionModelsCache, setSessionModesCache } from './lib/companion-http'
 import { readJson as readStorageJson } from './lib/storage'
 import { registerPanelWebContents } from './lib/panel-browser'
 import { setupMemoryScheduler } from './lib/memory/scheduler'
@@ -1198,6 +1199,13 @@ app.whenReady().then(() => {
   ipcMain.on('companion:session-models', (_event, overrides: Record<string, { providerId: string; modelId: string }>) => {
     setSessionModelsCache(overrides)
     broadcastSessionModels(overrides)
+  })
+
+  // Modos ativos por chat: mesma via dos modelos (cache HTTP para o connect +
+  // evento 'session:mode-change' para quem já está conectado).
+  ipcMain.on('companion:session-modes', (_event, overrides: SessionModeOverrides) => {
+    setSessionModesCache(overrides)
+    broadcastSessionModes(overrides)
   })
 
   // Imagens das respostas do assistente (orbit-media://)

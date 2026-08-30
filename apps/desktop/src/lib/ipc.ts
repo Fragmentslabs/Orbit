@@ -6,6 +6,7 @@ import type {
   SendMessageInput,
   SessionRevert,
 } from "@shared/chat"
+import type { ChatModeKey, SessionModeOverrides } from "@shared/companion"
 import type { McpConfig, McpServerStatus } from "@shared/mcp"
 import type { MediaEntry, MediaFilter, MediaUsage } from "@shared/media"
 import type {
@@ -202,6 +203,23 @@ export const sessionModelsApi = {
       listener(data as { providerId: string; modelId: string; sessionId?: string | null }),
     )
     return () => window.ipcRenderer.off("companion:model-select", wrapper)
+  },
+}
+
+/** Modos por chat: mesma via do sessionModelsApi. O renderer empurra o mapa
+ *  inteiro (mode-overrides + simples + brain) e escuta os toggles feitos nos
+ *  companions (WS 'modes:select'). */
+export const sessionModesApi = {
+  sync: (overrides: SessionModeOverrides) => {
+    window.ipcRenderer?.send("companion:session-modes", overrides)
+  },
+  onSelect: (
+    listener: (data: { mode: ChatModeKey; value: boolean; sessionId?: string | null }) => void,
+  ) => {
+    const wrapper = window.ipcRenderer.on("companion:mode-select", (data) =>
+      listener(data as { mode: ChatModeKey; value: boolean; sessionId?: string | null }),
+    )
+    return () => window.ipcRenderer.off("companion:mode-select", wrapper)
   },
 }
 

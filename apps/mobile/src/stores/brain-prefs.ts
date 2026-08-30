@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { Storage } from '~/lib/storage'
+import { pushModeSelect } from '~/lib/mode-sync'
 
 /**
  * Preferência do modo Brain (memória persistente): o valor efetivo é
@@ -21,6 +22,8 @@ interface BrainPrefsState {
   hydrated: boolean
   hydrate: () => Promise<void>
   setEnabled: (sessionId: string | null | undefined, enabled: boolean) => void
+  /** Aplica o mapa vindo do desktop (sem devolver o toggle para lá). */
+  applySync: (overrides: Overrides) => void
   /** Transfere o override do rascunho para a sessão recém-criada */
   adopt: (sessionId: string) => void
 }
@@ -52,15 +55,23 @@ export const useBrainPrefs = create<BrainPrefsState>((set, get) => ({
     else overrides[key] = false
     void Storage.setItem(STORAGE_KEY, JSON.stringify(overrides))
     set({ overrides })
+    pushModeSelect('brain', sessionId, enabled)
+  },
+
+  applySync: (overrides) => {
+    void Storage.setItem(STORAGE_KEY, JSON.stringify(overrides))
+    set({ overrides })
   },
 
   adopt: (sessionId) => {
     const overrides = { ...get().overrides }
     if (overrides[DRAFT_KEY] === undefined) return
-    overrides[sessionId] = overrides[DRAFT_KEY]
+    const value = overrides[DRAFT_KEY]
+    overrides[sessionId] = value
     delete overrides[DRAFT_KEY]
     void Storage.setItem(STORAGE_KEY, JSON.stringify(overrides))
     set({ overrides })
+    pushModeSelect('brain', sessionId, value ?? true)
   },
 }))
 

@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { Storage } from '~/lib/storage'
+import { pushModeSelect } from '~/lib/mode-sync'
 
 /**
  * Ativação por chat dos modos que antes eram estado local dos inputs
@@ -40,6 +41,8 @@ interface ModeOverridesState {
     sessionId: string | null | undefined,
     value: boolean,
   ) => void
+  /** Aplica o mapa vindo do desktop (sem devolver o toggle para lá). */
+  applySync: (overrides: OverrideMap) => void
   /** Transfere os overrides do rascunho para a sessão recém-criada */
   adopt: (sessionId: string) => void
 }
@@ -68,6 +71,12 @@ export const useModeOverrides = create<ModeOverridesState>((set, get) => ({
     const overrides = { ...get().overrides, [mode]: bySession }
     void Storage.setItem(STORAGE_KEY, JSON.stringify(overrides))
     set({ overrides })
+    pushModeSelect(mode, sessionId, value)
+  },
+
+  applySync: (overrides) => {
+    void Storage.setItem(STORAGE_KEY, JSON.stringify(overrides))
+    set({ overrides })
   },
 
   adopt: (sessionId) => {
@@ -88,6 +97,12 @@ export const useModeOverrides = create<ModeOverridesState>((set, get) => ({
     if (!changed) return
     void Storage.setItem(STORAGE_KEY, JSON.stringify(overrides))
     set({ overrides })
+    // A sessão acabou de nascer no desktop sem modo nenhum: manda os do
+    // rascunho, senão o chat abre lá nos defaults.
+    for (const mode of Object.keys(overrides) as OverridableMode[]) {
+      const value = overrides[mode]?.[sessionId]
+      if (value !== undefined) pushModeSelect(mode, sessionId, value)
+    }
   },
 }))
 

@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { Storage } from '~/lib/storage'
+import { pushModeSelect } from '~/lib/mode-sync'
 
 /**
  * Preferência do modo Simples (resposta em texto puro): desativado por padrão
@@ -20,6 +21,8 @@ interface SimplePrefsState {
   hydrated: boolean
   hydrate: () => Promise<void>
   setEnabled: (sessionId: string | null | undefined, value: boolean) => void
+  /** Aplica o mapa vindo do desktop (sem devolver o toggle para lá). */
+  applySync: (overrides: Overrides) => void
   adopt: (sessionId: string) => void
   clear: (sessionId: string) => void
 }
@@ -51,15 +54,23 @@ export const useSimplePrefs = create<SimplePrefsState>((set, get) => ({
     else delete overrides[key]
     void Storage.setItem(STORAGE_KEY, JSON.stringify(overrides))
     set({ overrides })
+    pushModeSelect('simple', sessionId, value)
+  },
+
+  applySync: (overrides) => {
+    void Storage.setItem(STORAGE_KEY, JSON.stringify(overrides))
+    set({ overrides })
   },
 
   adopt: (sessionId) => {
     const overrides = { ...get().overrides }
     if (overrides[DRAFT_KEY] === undefined) return
-    overrides[sessionId] = overrides[DRAFT_KEY]
+    const value = overrides[DRAFT_KEY]
+    overrides[sessionId] = value
     delete overrides[DRAFT_KEY]
     void Storage.setItem(STORAGE_KEY, JSON.stringify(overrides))
     set({ overrides })
+    pushModeSelect('simple', sessionId, value ?? false)
   },
 
   clear: (sessionId) => {

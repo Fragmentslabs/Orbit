@@ -69,6 +69,13 @@ export class CompanionHttp {
     return this.get('/api/session-models')
   }
 
+  /** Modos ativos por chat (pesquisa, navegador, plano, subagentes,
+   *  orquestração, visão, simples e brain) mantidos pelo renderer do desktop.
+   *  O mobile herda o estado do chat ao conectar. */
+  async getSessionModes(): Promise<HttpResult<{ overrides: Record<string, Record<string, boolean>> }>> {
+    return this.get('/api/session-modes')
+  }
+
   async getConnectedProviders(): Promise<HttpResult<string[]>> {
     return this.get('/api/providers/connected')
   }

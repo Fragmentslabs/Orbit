@@ -30,6 +30,8 @@ import { approvePendingSkill, discardPendingSkill, listPendingSkills } from './s
 import { authorizeMcp, listMcpStatus, readMcpConfig, reconnectMcp, saveMcpConfig } from './mcp'
 import { readMedia, listMedia, mediaDiskUsage, deleteMedia, deleteManyMedia } from './media'
 
+import type { SessionModeOverrides } from '@shared/companion'
+
 const execFileAsync = promisify(execFile)
 
 export const HTTP_PORT = 3848
@@ -266,6 +268,23 @@ export function getSessionModelsCache(): Record<string, SelectedModel> {
 
 async function handleGetSessionModels(_req: IncomingMessage, res: ServerResponse) {
   jsonResponse(res, 200, { overrides: getSessionModelsCache() })
+}
+
+// Mesma mecânica dos modelos, para os modos ativos por chat: o renderer é a
+// fonte da verdade (os modos vivem no localStorage dele) e empurra o mapa
+// inteiro a cada mudança; aqui fica o cache que o mobile lê ao conectar.
+let sessionModesCache: SessionModeOverrides = {}
+
+export function setSessionModesCache(overrides: SessionModeOverrides): void {
+  sessionModesCache = overrides ?? {}
+}
+
+export function getSessionModesCache(): SessionModeOverrides {
+  return sessionModesCache
+}
+
+async function handleGetSessionModes(_req: IncomingMessage, res: ServerResponse) {
+  jsonResponse(res, 200, { overrides: getSessionModesCache() })
 }
 
 async function handlePutSelectedModel(req: IncomingMessage, res: ServerResponse) {
@@ -575,6 +594,7 @@ function createRouter(
     { pattern: /^GET \/api\/media$/, paramNames: [], handler: handleListMedia },
     { pattern: /^GET \/api\/media\/usage$/, paramNames: [], handler: handleMediaUsage },
     { pattern: /^GET \/api\/session-models$/, paramNames: [], handler: handleGetSessionModels },
+    { pattern: /^GET \/api\/session-modes$/, paramNames: [], handler: handleGetSessionModes },
 
     // Mutation endpoints
     { pattern: /^PATCH \/api\/preferences$/, paramNames: [], handler: handlePatchPreferences },

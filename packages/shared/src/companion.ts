@@ -118,6 +118,36 @@ export interface SelectModelRequest {
   sessionId?: string | null
 }
 
+/** Modos ativáveis por chat que o desktop e os companions compartilham. Os
+ *  seis primeiros vivem no mode-overrides; 'simple' e 'brain' têm store
+ *  próprio em cada app, mas viajam no mesmo mapa. */
+export type ChatModeKey =
+  | 'search'
+  | 'browser'
+  | 'plan'
+  | 'subagents'
+  | 'orchestra'
+  | 'vision'
+  | 'simple'
+  | 'brain'
+
+/** modo → (sessionId → ativo). A chave 'draft' é o chat ainda sem sessão. */
+export type SessionModeOverrides = Partial<Record<ChatModeKey, Record<string, boolean>>>
+
+export interface SelectSessionModeRequest {
+  type: 'modes:select'
+  mode: ChatModeKey
+  value: boolean
+  /** Sessão alvo — ausente/null = chat novo (draft). */
+  sessionId?: string | null
+}
+
+/** Mapa completo de modos por chat empurrado pelo desktop aos companions. */
+export interface SessionModeChangeEvent {
+  type: 'session:mode-change'
+  overrides: SessionModeOverrides
+}
+
 export interface GetCatalogRequest {
   type: 'catalog:get'
 }
@@ -474,6 +504,7 @@ export type CompanionRequest =
   | ApproveAskRequest
   | GetModelsRequest
   | SelectModelRequest
+  | SelectSessionModeRequest
   | GetCatalogRequest
   | GetAnalyticsRequest
   | GetStatusRequest
@@ -608,6 +639,7 @@ export type CompanionEvent =
   | EsteiraEventMessage
   | PendingAskNotification
   | NewMessageNotification
+  | SessionModeChangeEvent
   | StatusUpdate
 
 // ─── Wire Protocol ───────────────────────────────────────────────────────────
