@@ -431,15 +431,15 @@ export function PromptInput({
   const modesList = [
     { id: 'research', icon: Search, label: t('promptInput.modes.research') },
     ...(isCodeMode
-      ? [{ id: 'plan', icon: FileText, label: t('promptInput.modes.plan'), accent: true }]
+      ? [{ id: 'plan', icon: FileText, label: t('promptInput.modes.plan') }]
       : [{ id: 'browser', icon: Globe, label: t('promptInput.modes.browser') }]),
     { id: 'simple', icon: AlignLeft, label: t('promptInput.modes.simple') },
     { id: 'brain', icon: BrainCircuit, label: t('promptInput.modes.brain') },
-    { id: 'subagents', icon: Bot, label: t('promptInput.modes.subagents'), accent: true },
+    { id: 'subagents', icon: Bot, label: t('promptInput.modes.subagents') },
     ...(isCodeMode
-      ? [{ id: 'orchestra', icon: Network, label: t('promptInput.modes.orchestra'), accent: true }]
+      ? [{ id: 'orchestra', icon: Network, label: t('promptInput.modes.orchestra') }]
       : []),
-    { id: 'loop', icon: RefreshCw, label: t('promptInput.modes.loop'), accent: true },
+    { id: 'loop', icon: RefreshCw, label: t('promptInput.modes.loop') },
     { id: 'vision', icon: Eye, label: t('promptInput.modes.vision') },
   ]
 
@@ -598,14 +598,10 @@ export function PromptInput({
               >
                 <IconComponent
                   size={17}
-                  // Avançados (plano, subagentes, orquestra, loop) acendem em
-                  // âmbar; os demais em branco — é o que os distingue agora que
-                  // dividem a mesma fileira.
-                  color={
-                    isActive
-                      ? mode.accent ? tokens.primary : tokens.foreground
-                      : tokens.mutedForeground
-                  }
+                  // Todo modo ativo acende igual (branco), com o fundo muted
+                  // marcando o estado — os avançados já não acendem em âmbar,
+                  // que dava a impressão de dois tipos de toggle na fileira.
+                  color={isActive ? tokens.foreground : tokens.mutedForeground}
                 />
               </Pressable>
             )
