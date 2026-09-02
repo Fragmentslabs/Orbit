@@ -918,6 +918,10 @@ app.whenReady().then(() => {
   ipcMain.handle('openwith:register', () => registerOpenWith())
   ipcMain.handle('openwith:unregister', () => unregisterOpenWith())
 
+  // Versão do app (package.json empacotado pelo electron-builder) — a tela
+  // Sobre mostra a mesma string que os artefatos e o handshake do companion.
+  ipcMain.handle('app:version', () => app.getVersion())
+
   // Pasta pendente (app iniciado via "Abrir com Orbit"): o renderer busca na
   // montagem para não perder o evento enviado antes do React subir.
   ipcMain.handle('app:consumePendingOpen', () => {

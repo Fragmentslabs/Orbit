@@ -66,6 +66,8 @@ export const windowApi = {
     const wrapper = window.ipcRenderer.on("app:open-folder", (directory) => listener(directory as string))
     return () => window.ipcRenderer.off("app:open-folder", wrapper)
   },
+  /** Versão do app (mesma do package.json/artefatos) — exibida em Sobre */
+  version: () => (window.ipcRenderer?.invoke("app:version") ?? Promise.resolve("")) as Promise<string>,
   /** Busca pasta pendente da abertura fria (app iniciado pelo Explorer) */
   consumePendingOpen: () =>
     (window.ipcRenderer?.invoke("app:consumePendingOpen") ?? Promise.resolve(null)) as Promise<string | null>,

@@ -16,6 +16,7 @@ import {
   Puzzle,
   Palette,
   Languages,
+  Info,
   ChevronRight,
 } from 'lucide-react-native'
 import { useConnectionStore } from '~/stores/connection-store'
@@ -131,6 +132,14 @@ export default function SettingsScreen() {
             icon={BookOpen}
             label={t('settings.howItWorks')}
             onPress={() => router.push('/(main)/howto')}
+            chevron
+          />
+          <RowDivider />
+          <Row
+            icon={Info}
+            label={t('settings.about')}
+            value={appVersion}
+            onPress={() => router.push('/(main)/about')}
             chevron
           />
         </View>

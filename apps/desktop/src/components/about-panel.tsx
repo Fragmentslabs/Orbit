@@ -1,6 +1,8 @@
+import { useEffect, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { Button } from "@/components/ui/button"
 import { Globe, Heart, Star } from "lucide-react"
+import { windowApi } from "@/src/lib/ipc"
 
 const KO_FI_URL = "https://ko-fi.com/fragmentslabs"
 const WEBSITE_URL = "https://fragmentslabs.com"
@@ -8,10 +10,22 @@ const GITHUB_URL = "https://github.com/fragmentslabs"
 
 export function AboutPanel() {
   const { t } = useTranslation()
+  // A versão vive no main (app.getVersion) — é a mesma dos artefatos do
+  // electron-builder e a que o mobile mostra na sua tela Sobre.
+  const [version, setVersion] = useState("")
+  useEffect(() => {
+    void windowApi.version().then(setVersion)
+  }, [])
+
   return (
     <div className="flex h-full flex-col gap-3 overflow-y-auto pr-1">
-      <div>
+      <div className="flex items-center justify-between gap-2">
         <p className="text-sm font-semibold">{t("settings.about.title")}</p>
+        {version && (
+          <span className="shrink-0 rounded-full border px-2 py-0.5 font-mono text-[11px] text-muted-foreground">
+            {t("settings.about.version", { version })}
+          </span>
+        )}
       </div>
       <p className="text-xs leading-relaxed text-muted-foreground">{t("settings.about.intro")}</p>
       <div className="rounded-lg border bg-muted/20 p-3">
