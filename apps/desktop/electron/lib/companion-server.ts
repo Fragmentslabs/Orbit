@@ -30,6 +30,7 @@ import type {
   ApiResponse,
   StatusUpdate,
   SessionStateResponse,
+  PendingAskState,
   BranchesResponse,
   SessionModeOverrides,
   SessionModeChangeEvent,
@@ -45,8 +46,9 @@ import { searchSessions } from './search-sessions'
 import { listCredentialProviders } from './auth'
 import { reply as askReply } from './ask-broker'
 import { revert as revertSession, unrevert as unrevertSession } from './session/revert'
-import { abortChat, runChat } from './chat-engine'
-import { abortOrchestration, approvePlan, rejectPlan, runOrchestration } from './orchestrator'
+import { abortChat, getRunningSessionIds, runChat } from './chat-engine'
+import { getLoopRunningSessionIds } from './loop-engine'
+import { abortOrchestration, approvePlan, getOrchestrationRunningSessionIds, rejectPlan, runOrchestration } from './orchestrator'
 import { readPlanFile, deletePlanFile } from './plan-file'
 import { getCatalog } from './catalog'
 import { getModelsSnapshot } from './models'
@@ -439,16 +441,33 @@ async function handleRequest(client: ConnectedClient, requestId: string, req: Co
       }
 
       case 'session:state': {
-        // Plano e review vivem fora das mensagens; sem isto o mobile so os
-        // conhecia pelos eventos ao vivo e perdia os cards ao reabrir o chat.
-        const [planReview, plan] = await Promise.all([
+        // Plano, review e pedidos pendentes vivem fora das mensagens; sem isto
+        // o mobile so os conhecia pelos eventos ao vivo e perdia os cards ao
+        // reabrir o chat — ou nunca os via, quando o pedido foi emitido antes
+        // de o celular parear. E a mesma leitura que o desktop faz no
+        // ensureMessages, entao os dois apps mostram exatamente os mesmos cards.
+        const [planReview, plan, pendingAsks] = await Promise.all([
           readJson<PlanReview>(StorageKeys.planReview(req.sessionId)),
           readJson<OrchestrationPlan>(StorageKeys.orchestration(req.sessionId)),
+          readJson<PendingAskState[]>(StorageKeys.pendingAsks(req.sessionId)),
         ])
         sendResponse(ws, requestId, true, {
           planReview: planReview ?? undefined,
           plan: plan ?? undefined,
+          pendingAsks: pendingAsks ?? [],
         } satisfies SessionStateResponse)
+        break
+      }
+
+      case 'sessions:running': {
+        // Mesma fonte do IPC 'chat:running' do renderer: o engine vive no main,
+        // entao so ele sabe o que ainda esta rodando. Sem isto o celular que
+        // conecta no meio da execucao mostra a conversa parada.
+        sendResponse(ws, requestId, true, [
+          ...getRunningSessionIds(),
+          ...getLoopRunningSessionIds(),
+          ...getOrchestrationRunningSessionIds(),
+        ])
         break
       }
 
@@ -1082,6 +1101,18 @@ async function handleRequest(client: ConnectedClient, requestId: string, req: Co
           sendResponse(ws, requestId, false, undefined, 'Sessão não encontrada')
           break
         }
+        // O review vive no disco, fora das mensagens: sem gravar o
+        // "implementing" aqui, reabrir a conversa (em qualquer app) ressuscitava
+        // o card de aceite com o plano ja em execucao. É o mesmo que o
+        // acceptPlanReview do renderer faz quando o aceite parte do desktop.
+        const aceito: PlanReview = {
+          status: 'implementing',
+          messageId: req.messageId,
+          permissionMode: req.permissionMode,
+        }
+        await writeJson(StorageKeys.planReview(req.sessionId), aceito)
+        broadcastSessionEvent({ type: 'plan:review', sessionId: req.sessionId, review: aceito })
+
         // Envia uma nova mensagem de implementação (mesma lógica do desktop)
         const canOrchestrate = req.orchestrate && session.mode === 'code'
         const input: SendMessageInput = {
@@ -1113,16 +1144,13 @@ async function handleRequest(client: ConnectedClient, requestId: string, req: Co
           await deletePlanFile(session.directory)
         }
         await removeJson(StorageKeys.planReview(req.sessionId))
-        // Notifica o renderer para atualizar o estado
-        for (const win of BrowserWindow.getAllWindows()) {
-          if (!win.isDestroyed()) {
-            win.webContents.send('chat:event', {
-              type: 'plan:review',
-              sessionId: req.sessionId,
-              review: { status: 'rejected', messageId: '' },
-            })
-          }
-        }
+        // Notifica o renderer E os demais companions — recusar num celular
+        // precisa tirar o card do desktop e de qualquer outro aparelho pareado.
+        broadcastSessionEvent({
+          type: 'plan:review',
+          sessionId: req.sessionId,
+          review: { status: 'rejected', messageId: '' },
+        })
         sendResponse(ws, requestId, true)
         break
       }
@@ -1138,6 +1166,13 @@ async function handleRequest(client: ConnectedClient, requestId: string, req: Co
           sendResponse(ws, requestId, false, undefined, 'Sessão não encontrada')
           break
         }
+        const revisando: PlanReview = {
+          status: 'revising',
+          messageId: req.messageId,
+          permissionMode: req.permissionMode,
+        }
+        await writeJson(StorageKeys.planReview(req.sessionId), revisando)
+        broadcastSessionEvent({ type: 'plan:review', sessionId: req.sessionId, review: revisando })
         const input: SendMessageInput = {
           sessionId: req.sessionId,
           text: req.feedback,
@@ -1145,7 +1180,7 @@ async function handleRequest(client: ConnectedClient, requestId: string, req: Co
           modelId: req.modelId ?? 'gpt-4o',
           mode: session.mode,
           options: {
-            planReview: { status: 'revising', messageId: req.messageId, permissionMode: req.permissionMode },
+            planReview: revisando,
             permissionMode: req.permissionMode,
           },
           directory: session.directory,

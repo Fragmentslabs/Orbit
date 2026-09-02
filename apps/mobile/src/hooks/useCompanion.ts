@@ -74,6 +74,15 @@ export function useCompanion() {
         }
         // Fetch initial data
         void useSessionStore.getState().fetchSessions()
+        // O chat aberto pode ter ganho cards (pergunta, permissao, plano)
+        // enquanto o socket estava fora: os eventos ao vivo passaram sem
+        // ninguem ouvindo, entao o estado da sessao e rebuscado no desktop.
+        const activeId = useSessionStore.getState().activeSessionId
+        if (activeId) void useSessionStore.getState().fetchMessages(activeId)
+        // Quem ainda esta rodando no desktop — sem isto, conectar no meio de
+        // uma execucao mostra a conversa parada (e reconectar depois dela
+        // terminar deixa o spinner preso).
+        void useSessionStore.getState().fetchRunningSessions()
         void useSessionStore.getState().fetchFolders()
         void useSettingsStore.getState().fetchSelectedModel()
         void useSettingsStore.getState().fetchPreferences()

@@ -4,7 +4,7 @@
  * e o handshake de autenticação.
  */
 
-import type { SendMessageOptions, SessionMode, FilePart, WorkerModelConfig, ReasoningConfig, PermissionMode, PlanReview, OrchestrationPlan } from './chat'
+import type { SendMessageOptions, SessionMode, FilePart, WorkerModelConfig, ReasoningConfig, PermissionMode, PlanReview, OrchestrationPlan, AskItem } from './chat'
 import type { AnalyticsRange } from './analytics'
 import type { NovaRotinaInput, Rotina, RotinaEvent, RotinaModelo } from './rotinas'
 import type {
@@ -47,18 +47,34 @@ export interface SearchSessionsRequest {
 }
 
 /**
- * Estado da sessao que nao vem nas mensagens: plano de orquestracao e review de
- * plano. O mobile so conhecia os dois pelos eventos ao vivo, entao ao reabrir a
- * conversa os cards sumiam mesmo com o plano ainda pendente.
+ * Estado da sessao que nao vem nas mensagens: plano de orquestracao, review de
+ * plano e pedidos pendentes (permissao/pergunta). O mobile so conhecia os tres
+ * pelos eventos ao vivo, entao ao reabrir a conversa — ou ao parear depois que
+ * o card ja tinha sido emitido — os cards sumiam mesmo com o pedido pendente.
  */
 export interface GetSessionStateRequest {
   type: 'session:state'
   sessionId: string
 }
 
+/** Pedido pendente como o desktop persiste: AskItem + agrupamento de lote. */
+export type PendingAskState = AskItem & { batchId?: string }
+
 export interface SessionStateResponse {
   planReview?: PlanReview
   plan?: OrchestrationPlan
+  /** Lista autoritativa dos pedidos pendentes da sessao (vazia = nenhum). */
+  pendingAsks?: PendingAskState[]
+}
+
+/**
+ * Sessoes com engine rodando no desktop (chat, loop, orquestracao). O mobile so
+ * sabia disso pelos eventos de status ao vivo: conectar no meio de uma execucao
+ * mostrava a conversa parada, e reconectar depois dela terminar deixava o
+ * spinner preso. Espelha o IPC 'chat:running' que o renderer usa apos reload.
+ */
+export interface GetRunningSessionsRequest {
+  type: 'sessions:running'
 }
 
 export interface GetMessagesRequest {
@@ -517,6 +533,7 @@ export type CompanionRequest =
   | SearchSessionsRequest
   | GetMessagesRequest
   | GetSessionStateRequest
+  | GetRunningSessionsRequest
   | SendMessageRequest
   | CreateSessionRequest
   | AbortRequest

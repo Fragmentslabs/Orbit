@@ -14,6 +14,7 @@ import type {
 import { StorageKeys } from '@shared/chat'
 import { getProvider } from './catalog'
 import { abortChat, runChat, toModelMessages } from './chat-engine'
+import { forwardChatEvent } from './companion-server'
 import { classifyProviderError, errorToText } from './errors'
 import { ORCHESTRATOR_PLAN_PROMPT, ORCHESTRATOR_SYNTHESIS_PROMPT } from './prompts'
 import { resolveModel } from './providers'
@@ -86,8 +87,13 @@ function newId(prefix: string) {
   return `${prefix}_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 10)}`
 }
 
+/** Mesmo funil do chat-engine: janela + companions. Sem o forward, todo o
+ *  fluxo de orquestracao (stream do planejamento, card do plano, progresso das
+ *  tasks, status) so existia no desktop — no celular o card de aprovacao so
+ *  aparecia se a conversa fosse reaberta, e nunca atualizava ao vivo. */
 function emit(win: BrowserWindow, event: ChatEvent) {
   if (!win.isDestroyed()) win.webContents.send('chat:event', event)
+  forwardChatEvent(event)
 }
 
 /** Insere ou atualiza uma part na mensagem e emite o evento 'part' — usado

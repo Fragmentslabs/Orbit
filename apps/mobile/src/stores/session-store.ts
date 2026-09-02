@@ -142,6 +142,10 @@ interface SessionState {
   planReviews: Record<string, PlanReview>
   /** Sessões que aguardam criação de PlanReview ao fim do streaming. */
   _planReviewOutbox: Record<string, boolean>
+  /** Sessoes cuja PlanReview foi criada aqui (envio em modo plano pelo celular)
+   *  e por isso ainda nao existe no disco do desktop — nao pode ser limpa pelo
+   *  session:state, senao o card sumiria ao reabrir a conversa. */
+  _localPlanReviews: Record<string, boolean>
   /** Planos de orquestração por sessão. */
   orchestration: Record<string, OrchestrationPlan>
   /** Contagem de mensagens não lidas por sessão. */
@@ -152,6 +156,8 @@ interface SessionState {
   searchSessions: (query: string) => Promise<SearchHit[]>
   /** Busca lista de pastas via WS. */
   fetchFolders: () => Promise<void>
+  /** Sincroniza quem esta rodando no desktop (o engine vive la). */
+  fetchRunningSessions: () => Promise<void>
   /** Seleciona sessão e carrega mensagens. */
   selectSession: (id: string | null) => Promise<void>
   /** Busca as mensagens mais recentes de uma sessão via WS. */
@@ -296,6 +302,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
   errors: {},
   planReviews: {},
   _planReviewOutbox: {},
+  _localPlanReviews: {},
   orchestration: {},
   unreadCounts: {},
 
@@ -344,6 +351,29 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     }
   },
 
+  fetchRunningSessions: async () => {
+    const { wsClient } = useConnectionStore.getState()
+    try {
+      const res = await wsClient.send({ type: 'sessions:running' })
+      if (!res.ok || !Array.isArray(res.data)) return
+      const rodando = new Set(res.data as string[])
+      set((state) => {
+        const status = { ...state.status }
+        for (const id of rodando) {
+          if (status[id] !== 'streaming') status[id] = 'streaming'
+        }
+        // Terminou enquanto o celular estava fora: o 'status: idle' passou sem
+        // ninguem ouvindo e o spinner ficaria preso para sempre.
+        for (const id of Object.keys(status)) {
+          if (status[id] === 'streaming' && !rodando.has(id)) status[id] = 'idle'
+        }
+        return { status }
+      })
+    } catch {
+      // Silently fail — will retry on reconnect
+    }
+  },
+
   selectSession: async (id) => {
     set((state) => ({
       activeSessionId: id,
@@ -378,22 +408,43 @@ export const useSessionStore = create<SessionState>((set, get) => ({
 
   fetchMessages: async (sessionId) => {
     const { wsClient } = useConnectionStore.getState()
-    // Plano e review nao vem nas mensagens: sem esta busca, reabrir a conversa
-    // perdia o card de aceite mesmo com o plano ainda pendente (o mobile so os
-    // conhecia pelos eventos ao vivo, que ja tinham passado).
+    // Plano, review e pedidos pendentes nao vem nas mensagens: sem esta busca,
+    // reabrir a conversa (ou parear o celular depois que o card foi emitido)
+    // perdia os cards mesmo com o pedido ainda pendente no desktop — o mobile
+    // so os conhecia pelos eventos ao vivo, que ja tinham passado.
+    const askIdsAntes = new Set(
+      (useChatStore.getState().pendingAsks[sessionId] ?? []).map((a) => a.requestId),
+    )
+    const planReviewAntes = get().planReviews[sessionId]
+    const planAntes = get().orchestration[sessionId]
     void wsClient
       .send({ type: 'session:state', sessionId })
       .then((res) => {
         if (!res.ok || !res.data) return
         const state = res.data as SessionStateResponse
-        set((prev) => ({
-          planReviews: state.planReview
-            ? { ...prev.planReviews, [sessionId]: state.planReview }
-            : prev.planReviews,
-          orchestration: state.plan
-            ? { ...prev.orchestration, [sessionId]: state.plan }
-            : prev.orchestration,
-        }))
+        set((prev) => {
+          const planReviews = { ...prev.planReviews }
+          if (state.planReview) planReviews[sessionId] = state.planReview
+          // Sem review no desktop, nada mudou aqui desde a busca e o card nao e
+          // otimista deste app: foi aceito/recusado enquanto o celular estava
+          // fora — sai da tela em vez de virar um card morto.
+          else if (
+            prev.planReviews[sessionId] === planReviewAntes &&
+            !prev._localPlanReviews[sessionId]
+          ) {
+            delete planReviews[sessionId]
+          }
+
+          const orchestration = { ...prev.orchestration }
+          if (state.plan) orchestration[sessionId] = state.plan
+          else if (prev.orchestration[sessionId] === planAntes) {
+            delete orchestration[sessionId]
+            void Storage.removeItem(CACHE_ORCHESTRATION_PREFIX + sessionId)
+          }
+          return { planReviews, orchestration }
+        })
+        // Lista autoritativa dos cards de pergunta/permissão do desktop.
+        useChatStore.getState().syncPendingAsks(sessionId, state.pendingAsks ?? [], askIdsAntes)
       })
       .catch(() => {})
     try {
@@ -627,13 +678,15 @@ export const useSessionStore = create<SessionState>((set, get) => ({
         delete orchestration[sessionId]
         const _planReviewOutbox = { ...(state._planReviewOutbox ?? {}) }
         delete _planReviewOutbox[sessionId]
+        const _localPlanReviews = { ...(state._localPlanReviews ?? {}) }
+        delete _localPlanReviews[sessionId]
         const unreadCounts = { ...state.unreadCounts }
         delete unreadCounts[sessionId]
         // Limpa pendingAsks da memória e do cache
         const pendingAsks = { ...useChatStore.getState().pendingAsks }
         delete pendingAsks[sessionId]
         useChatStore.setState({ pendingAsks, activeAskSessionId: useChatStore.getState().activeAskSessionId === sessionId ? null : useChatStore.getState().activeAskSessionId })
-        return { sessions, activeSessionId, planReviews, orchestration, _planReviewOutbox, unreadCounts }
+        return { sessions, activeSessionId, planReviews, orchestration, _planReviewOutbox, _localPlanReviews, unreadCounts }
       })
       // Cleanup de arquivos de cache
       void Storage.removeItem(CACHE_ASKS_PREFIX + sessionId)
@@ -869,6 +922,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
             const lastAssistant = [...msgs].reverse().find((m) => m.role === 'assistant')
             if (lastAssistant) {
               patch.planReviews = { ...state.planReviews, [sessionId]: { status: 'proposed', messageId: lastAssistant.id } }
+              patch._localPlanReviews = { ...state._localPlanReviews, [sessionId]: true }
             }
             const cleanOutbox = { ...state._planReviewOutbox }
             delete cleanOutbox[sessionId]
@@ -998,9 +1052,14 @@ export const useSessionStore = create<SessionState>((set, get) => ({
         break
 
       case 'plan:review':
-        set((state) => ({
-          planReviews: { ...state.planReviews, [sessionId]: event.review },
-        }))
+        set((state) => {
+          const _localPlanReviews = { ...state._localPlanReviews }
+          delete _localPlanReviews[sessionId]
+          return {
+            planReviews: { ...state.planReviews, [sessionId]: event.review },
+            _localPlanReviews,
+          }
+        })
         break
 
       case 'session:model-change' as any: {

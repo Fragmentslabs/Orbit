@@ -38,10 +38,44 @@ interface ChatState {
   removePendingAsk: (sessionId: string, requestId: string) => void
   /** Define os pending asks de uma sessão (usado ao carregar cache). */
   setPendingAsks: (sessionId: string, asks: PendingAsk[]) => void
+  /**
+   * Aplica a lista autoritativa vinda do desktop (session:state) ao abrir o
+   * chat: mostra o que o desktop mostra e descarta card já respondido enquanto
+   * o celular estava fora. `knownIds` são os requestIds que existiam quando a
+   * busca saiu — pedido que chegou ao vivo depois dela ainda não está no disco
+   * do desktop e é preservado.
+   */
+  syncPendingAsks: (sessionId: string, serverAsks: PendingAsk[], knownIds: Set<string>) => void
   /** Responde a um pending ask via WS. */
   replyToAsk: (requestId: string, value: unknown) => Promise<void>
   /** Retorna todos os asks de uma sessão. */
   getAsks: (sessionId: string) => PendingAsk[]
+}
+
+/**
+ * Grava a lista de uma sessão no estado + cache e mantém activeAskSessionId
+ * coerente (aponta para alguma sessão com pedido, ou null quando não há mais).
+ */
+function applyAsks(
+  state: ChatState,
+  sessionId: string,
+  asks: PendingAsk[],
+): Pick<ChatState, 'pendingAsks' | 'activeAskSessionId'> {
+  const pendingAsks = { ...state.pendingAsks }
+  if (asks.length === 0) {
+    delete pendingAsks[sessionId]
+    void Storage.removeItem(CACHE_ASKS_PREFIX + sessionId)
+  } else {
+    pendingAsks[sessionId] = asks
+    void cacheAsks(sessionId, asks)
+  }
+  const activeAskSessionId =
+    asks.length > 0
+      ? sessionId
+      : state.activeAskSessionId === sessionId
+        ? (Object.keys(pendingAsks)[0] ?? null)
+        : state.activeAskSessionId
+  return { pendingAsks, activeAskSessionId }
 }
 
 // ─── Store ──────────────────────────────────────────────────────────────────
@@ -86,18 +120,35 @@ export const useChatStore = create<ChatState>((set, get) => ({
   },
 
   setPendingAsks: (sessionId, asks) => {
-    set((state) => ({
-      pendingAsks: { ...state.pendingAsks, [sessionId]: asks },
-      activeAskSessionId: state.activeAskSessionId ?? sessionId,
-    }))
+    set((state) => applyAsks(state, sessionId, asks))
+  },
+
+  syncPendingAsks: (sessionId, serverAsks, knownIds) => {
+    set((state) => {
+      const current = state.pendingAsks[sessionId] ?? []
+      const serverIds = new Set(serverAsks.map((a) => a.requestId))
+      const recemChegados = current.filter(
+        (a) => !serverIds.has(a.requestId) && !knownIds.has(a.requestId),
+      )
+      return applyAsks(state, sessionId, [...serverAsks, ...recemChegados])
+    })
   },
 
   replyToAsk: async (requestId, value) => {
     const { wsClient } = useConnectionStore.getState()
     try {
-      await wsClient.send({ type: 'ask:reply', requestId, value })
+      const res = await wsClient.send({ type: 'ask:reply', requestId, value })
+      // ok:false = o desktop nao tem mais esse pedido em aberto (respondido em
+      // outro lugar, ou o app reiniciou e o card sobreviveu so no disco). Nao
+      // vira 'ask:done', entao o card seria eterno — some aqui mesmo.
+      if (!res.ok) {
+        const sessionId = Object.keys(get().pendingAsks).find((id) =>
+          get().pendingAsks[id]?.some((a) => a.requestId === requestId),
+        )
+        if (sessionId) get().removePendingAsk(sessionId, requestId)
+      }
     } catch {
-      // Silently fail
+      // Sem rede: mantem o card para tentar de novo depois de reconectar
     }
   },
 
