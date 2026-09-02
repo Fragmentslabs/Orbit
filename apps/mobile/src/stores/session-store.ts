@@ -779,8 +779,11 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     const updated: PlanReview = { ...review, status: 'implementing', permissionMode }
     set((state) => ({ planReviews: { ...state.planReviews, [sessionId]: updated } }))
 
-    const session = get().sessions.find((s) => s.id === sessionId)
+    // Mesma resolucao do sendMessage: override do chat > default global. Sem
+    // ela a implementacao roda no modelo global, e com selectedModel vazio o
+    // desktop cai no fallback openai/gpt-4o — provider que pode nem existir.
     const settings = useSettingsStore.getState()
+    const modelo = sessionModelFor(sessionId) ?? settings.selectedModel
     const { wsClient } = useConnectionStore.getState()
     try {
       await wsClient.send({
@@ -788,8 +791,8 @@ export const useSessionStore = create<SessionState>((set, get) => ({
         sessionId,
         messageId: review.messageId,
         permissionMode,
-        providerId: settings.selectedModel?.providerId,
-        modelId: settings.selectedModel?.modelId,
+        providerId: modelo?.providerId,
+        modelId: modelo?.modelId,
         orchestrate,
       })
     } catch {
@@ -818,6 +821,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     set((state) => ({ planReviews: { ...state.planReviews, [sessionId]: updated } }))
 
     const settings = useSettingsStore.getState()
+    const modelo = sessionModelFor(sessionId) ?? settings.selectedModel
     const { wsClient } = useConnectionStore.getState()
     try {
       await wsClient.send({
@@ -826,8 +830,8 @@ export const useSessionStore = create<SessionState>((set, get) => ({
         messageId: review.messageId,
         feedback,
         permissionMode: review.permissionMode ?? 'ask',
-        providerId: settings.selectedModel?.providerId,
-        modelId: settings.selectedModel?.modelId,
+        providerId: modelo?.providerId,
+        modelId: modelo?.modelId,
       })
     } catch {
       // Silently fail

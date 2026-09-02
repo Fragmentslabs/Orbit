@@ -230,23 +230,22 @@ export function AskCard({ ask, onReply }: AskCardProps) {
       })
     }
 
-    const allAnswered = questions.every((qq) => {
-      const sel = selectedOptions[qq.id]
-      return (sel && sel.length > 0) || (textAnswers[qq.id]?.trim() ?? '') !== ''
-    })
+    // A tool question espera answers como string[] alinhado por indice com as
+    // perguntas (ela interpola direto no retorno para o agente). Enviar objetos
+    // aqui virava "[object Object]" no lado do modelo: o card fechava e a
+    // resposta do usuario se perdia. Mesmo formato do card do desktop:
+    // opcoes marcadas + texto livre, unidos por virgula.
+    const answerOf = (qq: (typeof questions)[number]) => {
+      const picks = [...(selectedOptions[qq.id] ?? [])]
+      const txt = textAnswers[qq.id]?.trim()
+      if (txt) picks.push(txt)
+      return picks.join(', ')
+    }
+
+    const allAnswered = questions.every((qq) => answerOf(qq).length > 0)
 
     const submitAnswers = () => {
-      const answers = questions.map((qq) => {
-        const sel = selectedOptions[qq.id] ?? []
-        const txt = textAnswers[qq.id] ?? ''
-        return {
-          id: qq.id,
-          text: qq.text,
-          selected: sel.length > 0 ? sel : undefined,
-          answer: txt.trim() || undefined,
-        }
-      })
-      reply({ answers })
+      reply({ answers: questions.map(answerOf) })
     }
 
     return (
