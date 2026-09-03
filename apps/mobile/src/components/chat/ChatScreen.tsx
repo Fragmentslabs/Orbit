@@ -2,7 +2,6 @@ import { useCallback, useState, useEffect, useRef, useMemo } from 'react'
 import { View, Text, Animated } from 'react-native'
 import { useTranslation } from 'react-i18next'
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller'
-import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Stack, useRouter } from 'expo-router'
 import { SafeScreen } from '~/components/layout/SafeScreen'
 import type { SendMessageOptions, FilePart } from '@orbit/shared'
@@ -24,6 +23,8 @@ import { Suggestions } from '~/components/chat/Suggestion'
 import { RevertBar } from '~/components/chat/RevertBar'
 import { ChatHeader } from '~/components/chat/ChatHeader'
 import { FolderSelector } from '~/components/chat/FolderSelector'
+import { useDraftFolders } from '~/stores/draft-folders-store'
+import { useBottomBreathing } from '~/lib/keyboard'
 import { Persona } from '~/components/ai/Persona'
 import { getThemeTokens } from '~/lib/theme-tokens'
 import { useThemeStore } from '~/stores/theme-store'
@@ -58,7 +59,6 @@ const NO_MESSAGES: never[] = []
 export function ChatScreen({ sessionId }: ChatScreenProps) {
   const { t } = useTranslation()
   const router = useRouter()
-  const insets = useSafeAreaInsets()
   const mode = useWorkspaceStore((s) => s.mode)
   const tokens = getThemeTokens(useThemeStore((s) => s.resolved))
 
@@ -145,27 +145,51 @@ export function ChatScreen({ sessionId }: ChatScreenProps) {
   // Cria a sessão no primeiro envio quando ainda é um rascunho (sem id).
   const [creating, setCreating] = useState(false)
 
-  // Pastas do modo código: rascunho começa vazio; sessão existente herda as
-  // pastas dela (e mudanças são persistidas no próximo envio).
-  const [folders, setFolders] = useState<string[]>([])
+  // Pastas do modo código: o rascunho herda a pasta do último chat (store
+  // persistido, como o workspace do desktop); a sessão existente herda as dela
+  // (e mudanças são persistidas no próximo envio).
+  const [folders, setFolders] = useState<string[]>(() => useDraftFolders.getState().folders)
   // Ref espelho das pastas, atualizado no setter (não no render): o handleSend
   // fica com identidade estável entre trocas de modo — senão o memo do
   // ChatInput quebra e o PromptInput inteiro re-renderiza (o delay da troca).
-  const foldersRef = useRef<string[]>([])
-  const updateFolders = useCallback((next: string[]) => {
+  // Nasce com o mesmo valor do state, senão o envio veria uma lista vazia
+  // enquanto a tela mostra a pasta herdada.
+  const foldersRef = useRef<string[]>(useDraftFolders.getState().folders)
+  const applyFolders = useCallback((next: string[], persistir: boolean) => {
     foldersRef.current = next
     setFolders(next)
+    // Persiste como "pasta mais recente": o próximo chat novo já nasce nela,
+    // mesmo padrão do workspace do desktop. Lista vazia nunca é persistida —
+    // abrir uma conversa de chat (que não tem pasta) apagaria a herança.
+    if (persistir && next.length > 0) useDraftFolders.getState().setFolders(next)
   }, [])
+  // Escolha explícita no seletor: essa vale como a pasta mais recente.
+  const updateFolders = useCallback((next: string[]) => applyFolders(next, true), [applyFolders])
   useEffect(() => {
-    // Rascunho (sem sessão) mantém a pasta que a pessoa acabou de escolher; a
-    // sessão existente manda no seletor, inclusive quando não tem pasta.
-    if (!session) return
-    updateFolders(
+    // Rascunho (sem sessão) herda a pasta do último chat de código; a sessão
+    // existente manda no seletor, inclusive quando não tem pasta.
+    if (!session) {
+      void useDraftFolders.getState().hydrate().then((recentes) => {
+        if (recentes.length > 0 && foldersRef.current.length === 0) {
+          applyFolders(recentes, false)
+        }
+      })
+      return
+    }
+    applyFolders(
       session.directory ? [session.directory, ...(session.extraDirectories ?? [])] : [],
+      session.mode === 'code',
     )
-  }, [sessionId, session?.directory, session?.extraDirectories, updateFolders])
+  }, [sessionId, session, session?.directory, session?.extraDirectories, applyFolders])
+
+  // O mesmo respiro que o PromptInput aplica fixo embaixo — os dois precisam
+  // usar o mesmo número para o input encostar no teclado quando ele abre.
+  const respiroDoInput = useBottomBreathing()
 
   const isCode = (session?.mode ?? mode) === 'code'
+  // Modo código sem pasta não tem em que trabalhar: o envio fica bloqueado até
+  // escolher uma (o texto continua editável).
+  const precisaDePasta = isCode && folders.length === 0
 
   // Sugestões do estado vazio — traduzidas e por modo, como no desktop
   const chatSuggestions = t('chatScreen.suggestions.chat', { returnObjects: true }) as string[]
@@ -180,7 +204,10 @@ export function ChatScreen({ sessionId }: ChatScreenProps) {
         ? useSessionStore.getState().sessions.find((s) => s.id === sessionId)
         : undefined
       const codeMode = (target?.mode ?? useWorkspaceStore.getState().mode) === 'code'
-      const dirConfig = codeMode && foldersRef.current.length > 0
+      // Sem pasta o modo código não roda: o botão já está desabilitado, mas as
+      // sugestões chamam o envio direto.
+      if (codeMode && foldersRef.current.length === 0) return
+      const dirConfig = codeMode
         ? { directory: foldersRef.current[0], extraDirectories: foldersRef.current.slice(1) }
         : {}
       if (sessionId) {
@@ -193,7 +220,17 @@ export function ChatScreen({ sessionId }: ChatScreenProps) {
         const created = await createSession(useWorkspaceStore.getState().mode)
         if (!created) return
 
-        if (codeMode && foldersRef.current.length > 0 && useSettingsStore.getState().autoCreateFolders) {
+        // Pasta escolhida no "+" da sidebar tem precedência: é uma decisão
+        // explícita, não vale sobrescrever com o mapeamento automático.
+        const { pendingFolderId, setPendingFolder } = useDraftFolders.getState()
+        const pendingFolder = pendingFolderId
+          ? useSessionStore.getState().folders.find((f) => f.id === pendingFolderId)
+          : undefined
+        if (pendingFolderId) setPendingFolder(null)
+
+        if (pendingFolder && pendingFolder.mode === created.mode && !pendingFolder.archived) {
+          await useSessionStore.getState().moveToFolder(created.id, pendingFolder.id)
+        } else if (codeMode && foldersRef.current.length > 0 && useSettingsStore.getState().autoCreateFolders) {
           const allFolders = useSessionStore.getState().folders
           const autoFolderMap = await loadAutoFolderMap()
           const existingFolderId = autoFolderMap[foldersRef.current[0]]
@@ -280,6 +317,12 @@ export function ChatScreen({ sessionId }: ChatScreenProps) {
     [sessionId, revertToMessage],
   )
 
+  // Closure inline aqui virava prop nova a cada render e derrubava o memo do
+  // MessageList — que existe justamente para a lista não reconciliar à toa.
+  const handleLoadOlder = useCallback(() => {
+    if (sessionId) void loadOlderMessages(sessionId)
+  }, [sessionId, loadOlderMessages])
+
   const handleUnrevert = useCallback(
     (sid: string) => {
       void unrevert(sid)
@@ -338,19 +381,30 @@ export function ChatScreen({ sessionId }: ChatScreenProps) {
   const personaState = isEmpty ? 'idle' : isStreaming ? 'thinking' : 'idle'
   const personaVisible = useAppearanceStore((s) => s.personaVisible)
 
+  // O inset de baixo NÃO entra no SafeScreen: com o teclado aberto ele sobrava
+  // entre o input e o teclado (o KAV já empurra a coluna inteira). Quem aplica
+  // o respiro de baixo é o PromptInput, que sabe se o teclado está aberto.
   return (
-    <SafeScreen edges={['top', 'bottom']}>
+    <SafeScreen edges={['top']}>
       <Stack.Screen options={{ headerShown: false }} />
 
       {/* KAV do react-native-keyboard-controller: mesma API do RN, mas a
           animação roda na thread nativa em sincronia com o teclado — sem o
           lag de abrir/fechar do KAV clássico (que só reage no keyboardDidShow/
           Hide). A coluna inteira acompanha: header fixo, conversa encolhe,
-          input rente ao teclado. */}
+          input rente ao teclado.
+
+          A lib calcula o padding como `bottom do frame - (altura da tela -
+          teclado - offset)`, e o frame já nasce deslocado pelo paddingTop do
+          SafeScreen — passar o inset de cima como offset somava a altura da
+          notch ao espaço do teclado. O offset NEGATIVO aqui desconta o respiro
+          que o input aplica fixo embaixo: assim o padding animado vale
+          `teclado - respiro`, o total bate nos dois extremos e só existe UMA
+          animação (duas saíam de fase e faziam o input passar do ponto). */}
       <KeyboardAvoidingView
         style={{ flex: 1 }}
         behavior="padding"
-        keyboardVerticalOffset={insets.top}
+        keyboardVerticalOffset={-respiroDoInput}
       >
         <ChatHeader
           session={session}
@@ -403,7 +457,7 @@ export function ChatScreen({ sessionId }: ChatScreenProps) {
                 messages={activeMessages}
                 isStreaming={isStreaming}
                 onRevert={handleRevert}
-                onLoadOlder={sessionId ? () => void loadOlderMessages(sessionId) : undefined}
+                onLoadOlder={handleLoadOlder}
                 ListFooterComponent={listFooter}
               />
             )}
@@ -421,6 +475,11 @@ export function ChatScreen({ sessionId }: ChatScreenProps) {
         {isCode && (
           <View style={{ paddingHorizontal: 16, marginBottom: 8 }}>
             <FolderSelector folders={folders} onFoldersChange={updateFolders} />
+            {precisaDePasta && (
+              <Text style={{ fontSize: 11, marginTop: 6, color: tokens.mutedForeground }}>
+                {t('chatScreen.folderRequired')}
+              </Text>
+            )}
           </View>
         )}
 
@@ -461,6 +520,7 @@ export function ChatScreen({ sessionId }: ChatScreenProps) {
           onAbort={handleAbort}
           isStreaming={isStreaming}
           sessionId={sessionId}
+          sendDisabled={precisaDePasta}
           onCreateSession={onCreateSession}
           onNavigateToSession={onNavigateToSession}
         />

@@ -45,6 +45,7 @@ import { useSimpleMode, useSimplePrefs } from '~/stores/simple-prefs'
 import { useBrainEnabled, useBrainPrefs } from '~/stores/brain-prefs'
 import { Storage } from '~/lib/storage'
 import { getThemeTokens } from '~/lib/theme-tokens'
+import { useBottomBreathing } from '~/lib/keyboard'
 import { useThemeStore } from '~/stores/theme-store'
 import { SendButtonGroup } from './SendButtonGroup'
 import { QueueIndicator } from './QueueIndicator'
@@ -60,6 +61,9 @@ interface PromptInputProps {
   isStreaming?: boolean
   sessionId?: string
   disabled?: boolean
+  /** Bloqueia só o envio (o texto continua editável) — ex.: modo código sem
+   *  pasta associada. */
+  sendDisabled?: boolean
   onCreateSession?: () => Promise<SessionInfo | null>
   onNavigateToSession?: (sessionId: string) => void
 }
@@ -78,6 +82,7 @@ export function PromptInput({
   isStreaming,
   sessionId,
   disabled,
+  sendDisabled,
   onCreateSession,
   onNavigateToSession,
 }: PromptInputProps) {
@@ -131,6 +136,10 @@ export function PromptInput({
   const [loopConfigOpen, setLoopConfigOpen] = useState(false)
   const [isFocused, setIsFocused] = useState(false)
   const tokens = getThemeTokens(useThemeStore((s) => s.resolved))
+  // Padding FIXO: o KeyboardAvoidingView desconta este mesmo valor da altura do
+  // teclado (keyboardVerticalOffset negativo, no ChatScreen), então existe uma
+  // animação só e o input não sai de fase com o teclado. Ver lib/keyboard.
+  const respiroFechado = useBottomBreathing()
   // Global (como no desktop): o card de revisão de plano lê o mesmo modo
   // para sugerir o aceite padrão.
   const permissionMode = usePermissionPrefs((s) => s.mode)
@@ -271,11 +280,14 @@ export function PromptInput({
 
   const handleTakePhoto = async () => {
     setPlusOpen(false)
-    const ImagePicker = await import('expo-image-picker')
-    const perm = await ImagePicker.requestCameraPermissionsAsync()
-    if (!perm.granted) return
     setIsLoadingFile(true)
     try {
+      // O import e a permissão ficam DENTRO do try: fora dele, uma falha ao
+      // carregar o módulo virava rejeição não tratada (tela vermelha em dev)
+      // em vez de um erro tratado, e o loading nunca era desligado.
+      const ImagePicker = await import('expo-image-picker')
+      const perm = await ImagePicker.requestCameraPermissionsAsync()
+      if (!perm.granted) return
       const result = await ImagePicker.launchCameraAsync({ quality: 0.8 })
       if (!result.canceled && result.assets?.[0]) {
         const asset = result.assets[0]
@@ -291,11 +303,11 @@ export function PromptInput({
 
   const handlePickPhotos = async () => {
     setPlusOpen(false)
-    const ImagePicker = await import('expo-image-picker')
-    const perm = await ImagePicker.requestMediaLibraryPermissionsAsync()
-    if (!perm.granted) return
     setIsLoadingFile(true)
     try {
+      const ImagePicker = await import('expo-image-picker')
+      const perm = await ImagePicker.requestMediaLibraryPermissionsAsync()
+      if (!perm.granted) return
       const result = await ImagePicker.launchImageLibraryAsync({ quality: 0.8, allowsMultipleSelection: true })
       if (!result.canceled && result.assets) {
         const parts = await Promise.all(
@@ -362,7 +374,7 @@ export function PromptInput({
 
   const handleSend = useCallback(() => {
     const trimmed = text.trim()
-    if (!trimmed || disabled) return
+    if (!trimmed || disabled || sendDisabled) return
 
     // Agente em execução: em vez de bloquear o envio (causava o texto ficar
     // preso no input ao dar Enter), manda para a fila da sessão — o mesmo
@@ -389,7 +401,7 @@ export function PromptInput({
     setText('')
     setAttachments([])
     setPlusOpen(false)
-  }, [text, isStreaming, disabled, onSend, handleQueue, sessionId, buildOptions, attachments])
+  }, [text, isStreaming, disabled, sendDisabled, onSend, handleQueue, sessionId, buildOptions, attachments])
 
   const handleSchedule = useCallback(() => {
     setScheduleSheetVisible(true)
@@ -472,8 +484,14 @@ export function PromptInput({
   }
 
   return (
-    <View className="px-3 py-1.5 relative overflow-visible"
-      style={{ backgroundColor: tokens.background, borderTopWidth: 1, borderTopColor: tokens.border }}
+    <View className="px-3 pt-1.5 relative overflow-visible"
+      style={{
+        backgroundColor: tokens.background,
+        borderTopWidth: 1,
+        borderTopColor: tokens.border,
+        // 6 = o py-1.5 que o padding de baixo substitui.
+        paddingBottom: respiroFechado + 6,
+      }}
     >
       {/* Queue Indicator */}
       {sessionId && (
@@ -573,7 +591,7 @@ export function PromptInput({
               onSchedule={handleSchedule}
               isStreaming={!!isStreaming}
               hasText={text.trim().length > 0}
-              disabled={disabled}
+              disabled={disabled || sendDisabled}
             />
           </View>
         </View>

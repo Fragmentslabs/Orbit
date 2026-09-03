@@ -38,6 +38,7 @@ import {
 import { useWorkspaceStore } from '~/stores/workspace-store'
 import { useConnectionStore } from '~/stores/connection-store'
 import { useSessionStore } from '~/stores/session-store'
+import { useDraftFolders } from '~/stores/draft-folders-store'
 import { Storage } from '~/lib/storage'
 import { Spin } from '~/components/ui/spin'
 import { ActionMenu, type ActionMenuItem } from '~/components/ui/action-menu'
@@ -344,6 +345,28 @@ export function Sidebar() {
     router.push('/(main)')
   }, [closeSidebar, router])
 
+  /** "+" da pasta: chat novo já apontando para a pasta (e para o diretório do
+   *  chat mais recente dela), como no desktop. A sessão só nasce no 1º envio —
+   *  o pendingFolder guarda o destino até lá. */
+  const handleNewChatInFolder = useCallback((folder: FolderInfo) => {
+    const maisRecente = sessions
+      .filter((s) => s.folderId === folder.id)
+      .reduce<SessionInfo | undefined>(
+        (melhor, s) => (melhor && s.updatedAt <= melhor.updatedAt ? melhor : s),
+        undefined,
+      )
+    if (maisRecente?.directory) {
+      useDraftFolders.getState().setFolders([
+        maisRecente.directory,
+        ...(maisRecente.extraDirectories ?? []),
+      ])
+    }
+    useDraftFolders.getState().setPendingFolder(folder.id)
+    if (folder.mode !== mode) setMode(folder.mode)
+    closeSidebar()
+    router.push('/(main)')
+  }, [sessions, mode, setMode, closeSidebar, router])
+
   const handleOpenSession = useCallback((id: string) => {
     if (selectionMode) {
       toggleSelected(id)
@@ -644,6 +667,8 @@ export function Sidebar() {
         else toggleFolderExpanded(folder.id)
       }}
       onLongPress={(e) => openFolderMenu(folder.id, e.nativeEvent.pageY)}
+      onNewChat={() => handleNewChatInFolder(folder)}
+      newChatLabel={t('sidebar.newChatInFolder')}
       tokens={tokens}
     />
   )
@@ -1096,6 +1121,8 @@ const FolderRow = memo(function FolderRow({
   selected,
   onToggle,
   onLongPress,
+  onNewChat,
+  newChatLabel,
   tokens,
 }: {
   folder: FolderInfo
@@ -1104,6 +1131,8 @@ const FolderRow = memo(function FolderRow({
   selected?: boolean
   onToggle: () => void
   onLongPress?: (e: GestureResponderEvent) => void
+  onNewChat?: () => void
+  newChatLabel?: string
   tokens: ThemeTokens
 }) {
   return (
@@ -1137,6 +1166,20 @@ const FolderRow = memo(function FolderRow({
           ))}
       </View>
       {folder.pinned && <Pin size={14} color={tokens.mutedForeground} />}
+      {/* Chat novo já dentro da pasta, como o "+" da linha de pasta no desktop
+          (lá ele aparece no hover; aqui fica fixo, que é o que dá para tocar). */}
+      {!selectionMode && onNewChat && (
+        <Pressable
+          onPress={(e) => {
+            e.stopPropagation()
+            onNewChat()
+          }}
+          hitSlop={8}
+          accessibilityLabel={newChatLabel}
+        >
+          <Plus size={15} color={tokens.mutedForeground} />
+        </Pressable>
+      )}
     </Pressable>
   )
 }, (prev, next) =>
@@ -1145,7 +1188,8 @@ const FolderRow = memo(function FolderRow({
   prev.selectionMode === next.selectionMode &&
   prev.selected === next.selected &&
   prev.tokens === next.tokens &&
-  prev.onToggle === next.onToggle
+  prev.onToggle === next.onToggle &&
+  prev.onNewChat === next.onNewChat
 )
 
 /** Pasta ATIVA que ainda guarda chats arquivados, mostrada dentro de
