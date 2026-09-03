@@ -132,7 +132,8 @@
     "navigation": "Navegação",
     "sessions": "Sessões",
     "theme": "Tema",
-    "esteira": "Esteira"
+    "esteira": "Esteira",
+    "newChatInFolder": "Novo chat nesta pasta"
   },
   "media": {
     "title": "Mídia",
@@ -210,7 +211,8 @@
         "Gere testes para este projeto",
         "Refatore algo no código"
       ]
-    }
+    },
+    "folderRequired": "Escolha uma pasta para trabalhar no modo código."
   },
   "sendButtonGroup": {
     "sendOptions": "Opções de envio",
@@ -447,7 +449,8 @@
     "description": "Usado pelos subagentes e pela orquestração. Sem configuração, os workers usam o mesmo modelo do chat.",
     "useSameModel": "Usar o mesmo modelo do chat",
     "searchPlaceholder": "Pesquisar modelos…",
-    "thinkingOnWorker": "Thinking no worker"
+    "thinkingOnWorker": "Thinking no worker",
+    "noModels": "Nenhum modelo disponível"
   },
   "visionConfig": {
     "title": "Modo Visão",
@@ -543,7 +546,8 @@
     "deleteBodyDocSuffix": ", junto com o documento anexado"
   },
   "memoryGraph": {
-    "center": "Centralizar"
+    "center": "Centralizar",
+    "building": "Montando o grafo…"
   },
   "appearanceScreen": {
     "title": "Aparência",

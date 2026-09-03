@@ -132,7 +132,8 @@
     "navigation": "Navigation",
     "sessions": "Sessions",
     "theme": "Theme",
-    "esteira": "Pipelines"
+    "esteira": "Pipelines",
+    "newChatInFolder": "New chat in this folder"
   },
   "media": {
     "title": "Media",
@@ -210,7 +211,8 @@
         "Generate tests for this project",
         "Refactor something in the code"
       ]
-    }
+    },
+    "folderRequired": "Pick a folder to work in code mode."
   },
   "sendButtonGroup": {
     "sendOptions": "Send options",
@@ -447,7 +449,8 @@
     "description": "Used by subagents and orchestration. Without configuration, workers use the same model as the chat.",
     "useSameModel": "Use the same model as the chat",
     "searchPlaceholder": "Search models…",
-    "thinkingOnWorker": "Thinking on worker"
+    "thinkingOnWorker": "Thinking on worker",
+    "noModels": "No models available"
   },
   "visionConfig": {
     "title": "Vision mode",
@@ -543,7 +546,8 @@
     "deleteBodyDocSuffix": ", along with the attached document"
   },
   "memoryGraph": {
-    "center": "Center"
+    "center": "Center",
+    "building": "Building the graph…"
   },
   "appearanceScreen": {
     "title": "Appearance",
