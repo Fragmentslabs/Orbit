@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { memo, useCallback, useEffect, useMemo, useState } from 'react'
 import { Modal, View, Text, TextInput, Pressable, SectionList, Platform } from 'react-native'
 import { X, Search, Check, Brain, RefreshCw } from 'lucide-react-native'
 import { useTranslation } from 'react-i18next'
@@ -68,7 +68,7 @@ type ModelSection =
  * o próprio trecho do card (bordas + raio nas pontas) para o grupo continuar
  * visualmente um card único — equivalente ao card com overflow-hidden original.
  */
-function ModelRow({
+const ModelRow = memo(function ModelRow({
   provider,
   model,
   index,
@@ -157,15 +157,33 @@ function ModelRow({
       )}
     </Pressable>
   )
+},
+(prev, next) =>
+  prev.model === next.model &&
+  prev.provider === next.provider &&
+  prev.index === next.index &&
+  prev.count === next.count &&
+  prev.isSelected === next.isSelected &&
+  prev.tokens === next.tokens &&
+  prev.subtitle === next.subtitle &&
+  prev.onPress === next.onPress &&
+  prev.onRemove === next.onRemove,
+)
+
+export function ModelPickerModal({ visible, ...props }: ModelPickerModalProps) {
+  // Fechado não monta nada: o componente vive junto do input (e dos formulários
+  // de rotina/esteira), e antes montava o Modal + recalculava as seções do
+  // catálogo em todo render do dono, mesmo fora da tela.
+  if (!visible) return null
+  return <ModelPickerSheet {...props} />
 }
 
-export function ModelPickerModal({
-  visible,
+function ModelPickerSheet({
   onClose,
   sessionId,
   selected: selectedOverride,
   onSelect,
-}: ModelPickerModalProps) {
+}: Omit<ModelPickerModalProps, 'visible'>) {
   const { t } = useTranslation()
   const catalog = useSettingsStore((s) => s.catalog)
   const sessionModel = useSessionModel(sessionId)
@@ -186,10 +204,12 @@ export function ModelPickerModal({
   const isWeb = Platform.OS === 'web'
 
   // Catálogo ausente (primeiro uso sem cache): abre o drawer na hora com o
-  // skeleton enquanto o fetch roda por baixo.
+  // skeleton enquanto o fetch roda por baixo. Só na montagem — o componente
+  // agora só existe enquanto aberto.
   useEffect(() => {
-    if (visible && !catalog && !loading) void fetchCatalog()
-  }, [visible, catalog, loading, fetchCatalog])
+    if (!catalog && !loading) void fetchCatalog()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   const sections = useMemo<ModelSection[]>(() => {
     if (!catalog) return []
@@ -254,21 +274,25 @@ export function ModelPickerModal({
     ]
   }, [catalog, search, connectedProviders, recents, onSelect])
 
-  const handleSelect = async (providerId: string, modelId: string) => {
-    if (onSelect) {
-      onSelect(providerId, modelId)
+  // Identidade estável: a linha é memoizada e recebe isto como prop.
+  const handleSelect = useCallback(
+    (providerId: string, modelId: string) => {
+      if (onSelect) {
+        onSelect(providerId, modelId)
+        onClose()
+        return
+      }
+      // Por chat: sessão existente ganha override; chat novo (sem sessão) vira
+      // o draft + default global — espelho do desktop.
+      selectModel(sessionId ?? null, providerId, modelId)
       onClose()
-      return
-    }
-    // Por chat: sessão existente ganha override; chat novo (sem sessão) vira
-    // o draft + default global — espelho do desktop.
-    selectModel(sessionId ?? null, providerId, modelId)
-    onClose()
-  }
+    },
+    [onSelect, onClose, selectModel, sessionId],
+  )
 
   return (
     <Modal
-      visible={visible}
+      visible
       transparent
       animationType={isWeb ? 'fade' : 'slide'}
       onRequestClose={onClose}

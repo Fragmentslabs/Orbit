@@ -87,6 +87,31 @@ export const MessageList = memo(
       },
     }), [messages])
 
+    // renderItem estável: inline, ele era recriado a cada render da lista e as
+    // props das linhas vinham novas junto — o memo do MessageBubble não segurava
+    // nada, então TODA a janela visível re-renderizava a cada flush de delta do
+    // streaming. `onRevert` recebe o id, e não uma closure por linha.
+    const renderItem = useCallback(
+      ({ item, index }: { item: ChatMessage; index: number }) => (
+        <View className="py-1">
+          {isNewDay(messages[index - 1]?.createdAt, item.createdAt) && (
+            <DateSeparator timestamp={item.createdAt} />
+          )}
+          {item.summary ? (
+            <SummaryCard message={item} />
+          ) : (
+            <MessageBubble
+              message={item}
+              isLast={index === messages.length - 1}
+              isBusy={isStreaming}
+              onRevert={onRevert}
+            />
+          )}
+        </View>
+      ),
+      [messages, isStreaming, onRevert],
+    )
+
     return (
       <View className="flex-1 relative">
         <FlatList
@@ -94,23 +119,7 @@ export const MessageList = memo(
           style={{ flex: 1 }}
           data={messages}
           keyExtractor={(item) => item.id}
-          renderItem={({ item, index }) => (
-            <View className="py-1">
-              {isNewDay(messages[index - 1]?.createdAt, item.createdAt) && (
-                <DateSeparator timestamp={item.createdAt} />
-              )}
-              {item.summary ? (
-                <SummaryCard message={item} />
-              ) : (
-                <MessageBubble
-                  message={item}
-                  isLast={index === messages.length - 1}
-                  isBusy={isStreaming}
-                  onRevert={onRevert ? () => onRevert(item.id) : undefined}
-                />
-              )}
-            </View>
-          )}
+          renderItem={renderItem}
           ListFooterComponent={ListFooterComponent}
           contentContainerStyle={{ paddingVertical: 8, paddingHorizontal: 16 }}
           initialNumToRender={8}

@@ -8,22 +8,22 @@
  * Zoom/pan viram pinch/arrastar, e o node selecionado abre o card num overlay
  * inferior.
  */
-import { memo, useCallback, useMemo, useRef, useState } from 'react'
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { View, Text, Pressable, ScrollView, StyleSheet } from 'react-native'
 import { Gesture, GestureDetector } from 'react-native-gesture-handler'
-import Svg, { G, Line, Circle, Rect, Text as SvgText } from 'react-native-svg'
+import Svg, { G, Line, Circle, Text as SvgText } from 'react-native-svg'
 import { Crosshair, X } from 'lucide-react-native'
 import { useTranslation } from 'react-i18next'
 import type { Memory } from '@orbit/shared'
 import {
   LABEL_HEIGHT,
   LABEL_OFFSET,
-  layoutMemoryGraph,
   nodeLabelText,
   normalizeText,
 } from '@orbit/shared'
 import type { LayoutEdge, LayoutNode } from '@orbit/shared'
 import { KIND_COLOR, kindLabel, lastActivity } from './meta'
+import { useGraphLayout } from './use-graph-layout'
 import { MemoryCard } from './MemoryCard'
 import { getThemeTokens } from '~/lib/theme-tokens'
 import type { ThemeTokens } from '~/lib/theme-tokens'
@@ -34,6 +34,16 @@ const STALE_MS = 30 * 24 * 60 * 60 * 1000
 /** Piso do zoom — baixo o bastante para um grafo grande caber inteiro. */
 const ZOOM_MIN = 0.04
 const ZOOM_MAX = 3
+
+/** Abaixo deste zoom o rótulo é um borrão de 3px: desenhar o texto (o elemento
+ *  mais caro do SVG, um por nó) só custa frame. */
+const LABEL_MIN_ZOOM = 0.32
+/** Anel de "recente"/selecionado some junto com os rótulos — no zoom de longe
+ *  ele vira um pixel em volta do círculo. */
+const HALO_MIN_ZOOM = 0.18
+
+const EMPTY_NODES: LayoutNode[] = []
+const EMPTY_EDGES: LayoutEdge[] = []
 
 /**
  * Retângulo realmente ocupado pelo nó: o círculo unido ao rótulo centrado
@@ -55,6 +65,50 @@ interface Transform {
   k: number
 }
 
+interface Region {
+  minX: number
+  maxX: number
+  minY: number
+  maxY: number
+}
+
+/** Retângulo do CONTEÚDO visível no container, dado o transform atual. */
+function visibleWorldRect(t: Transform, size: { w: number; h: number }): Region {
+  return {
+    minX: -t.x / t.k,
+    minY: -t.y / t.k,
+    maxX: (size.w - t.x) / t.k,
+    maxY: (size.h - t.y) / t.k,
+  }
+}
+
+/** Uma tela de folga para cada lado: o conteúdo que entra durante o arraste já
+ *  está montado quando aparece. */
+function expand(r: Region): Region {
+  const mw = (r.maxX - r.minX) || 1
+  const mh = (r.maxY - r.minY) || 1
+  return { minX: r.minX - mw, maxX: r.maxX + mw, minY: r.minY - mh, maxY: r.maxY + mh }
+}
+
+function contains(outer: Region, inner: Region): boolean {
+  return (
+    inner.minX >= outer.minX &&
+    inner.maxX <= outer.maxX &&
+    inner.minY >= outer.minY &&
+    inner.maxY <= outer.maxY
+  )
+}
+
+function areaRatio(inner: Region, outer: Region): number {
+  const areaOuter = (outer.maxX - outer.minX) * (outer.maxY - outer.minY)
+  if (areaOuter <= 0) return 1
+  return ((inner.maxX - inner.minX) * (inner.maxY - inner.minY)) / areaOuter
+}
+
+function intersects(a: Region, b: Region): boolean {
+  return a.minX <= b.maxX && b.minX <= a.maxX && a.minY <= b.maxY && b.minY <= a.maxY
+}
+
 export function MemoryGraph({ pool, allById, query, selectedId, onSelect }: {
   /** Memórias visíveis (filtro de modo/projeto — a busca só destaca) */
   pool: Memory[]
@@ -73,18 +127,32 @@ export function MemoryGraph({ pool, allById, query, selectedId, onSelect }: {
    *  ter acontecido, e ler o state capturado no closure dava uma base velha —
    *  era daí que vinha o salto ao encostar o segundo dedo. */
   const live = useRef<Transform>({ x: 0, y: 0, k: 1 })
+  // Um commit por frame. Os callbacks do gesto chegam na thread de JS e podiam
+  // vir mais de uma vez entre dois frames — cada um disparava um render e um
+  // redesenho do SVG inteiro. O primeiro evento do frame agenda; os seguintes
+  // só atualizam o valor vivo.
+  const frame = useRef<number | null>(null)
   const setTransform = useCallback((next: Transform) => {
     live.current = next
-    setTransformState(next)
+    if (frame.current != null) return
+    frame.current = requestAnimationFrame(() => {
+      frame.current = null
+      setTransformState(live.current)
+    })
   }, [])
-
-  // `now` sai daqui junto com o layout de propósito: solto no corpo ele seria
-  // um valor novo a cada frame do gesto e anularia o memo da cena. "Recente" e
-  // "esquecida" passam a ser relativos ao momento em que o grafo foi montado.
-  const { nodes, edges, now } = useMemo(
-    () => ({ ...layoutMemoryGraph(pool, { inferEdges: true }), now: Date.now() }),
-    [pool],
+  useEffect(
+    () => () => {
+      if (frame.current != null) cancelAnimationFrame(frame.current)
+    },
+    [],
   )
+
+  // O layout é O(n²) e roda fora do primeiro render (ver useGraphLayout); `now`
+  // vem junto dele de propósito: solto no corpo seria um valor novo a cada
+  // frame do gesto e anularia o memo da cena.
+  const { layout, now } = useGraphLayout(pool)
+  const nodes = layout?.nodes ?? EMPTY_NODES
+  const edges = layout?.edges ?? EMPTY_EDGES
   const nodeById = useMemo(() => new Map(nodes.map((n) => [n.memory.id, n])), [nodes])
 
   const queryTokens = normalizeText(query).split(' ').filter(Boolean)
@@ -102,12 +170,24 @@ export function MemoryGraph({ pool, allById, query, selectedId, onSelect }: {
   const fitView = useCallback(
     (w = size.w, h = size.h) => {
       if (!w || !h || nodes.length === 0) return
-      const boxes = nodes.map(extentOf)
+      // Uma passada só, sem spread: `Math.min(...array)` percorre quatro vezes
+      // e estoura a pilha em grafo grande (o limite de argumentos).
+      let minX = Infinity
+      let maxX = -Infinity
+      let minY = Infinity
+      let maxY = -Infinity
+      for (const node of nodes) {
+        const b = extentOf(node)
+        if (b.minX < minX) minX = b.minX
+        if (b.maxX > maxX) maxX = b.maxX
+        if (b.minY < minY) minY = b.minY
+        if (b.maxY > maxY) maxY = b.maxY
+      }
       const pad = 80
-      const minX = Math.min(...boxes.map((b) => b.minX)) - pad
-      const maxX = Math.max(...boxes.map((b) => b.maxX)) + pad
-      const minY = Math.min(...boxes.map((b) => b.minY)) - pad
-      const maxY = Math.max(...boxes.map((b) => b.maxY)) + pad
+      minX -= pad
+      maxX += pad
+      minY -= pad
+      maxY += pad
       // Grafos grandes ficam bem abaixo do piso do pinch — sem o clamp,
       // "centralizar" levava a um zoom do qual o gesto não conseguia voltar.
       const k = Math.max(ZOOM_MIN, Math.min(w / (maxX - minX), h / (maxY - minY), 1.4))
@@ -186,6 +266,61 @@ export function MemoryGraph({ pool, allById, query, selectedId, onSelect }: {
     [panGesture, pinchGesture],
   )
 
+  // O layout chega depois do primeiro render: enquadrar só no onLayout deixava
+  // o grafo fora de vista (naquele momento ainda não havia nós).
+  const framed = useRef<LayoutNode[] | null>(null)
+  useEffect(() => {
+    if (!size.w || !size.h || nodes.length === 0 || framed.current === nodes) return
+    framed.current = nodes
+    fitView(size.w, size.h)
+  }, [nodes, size, fitView])
+
+  // ─── Culling ───────────────────────────────────────────────────────────
+  // Só entra na cena o que está perto da tela. A região é folgada (uma tela
+  // inteira de margem para cada lado) e só é recalculada quando a área visível
+  // sai dela — assim o memo da cena sobrevive à maior parte dos frames de pan,
+  // em vez de reconstruir centenas de elementos SVG a cada um.
+  // A região carrega os nós a que pertence: pool novo (filtro/projeto)
+  // reposiciona tudo, e a região antiga deixa de valer sozinha — sem precisar
+  // de um efeito só para zerá-la.
+  const [regionState, setRegion] = useState<{ nodes: LayoutNode[]; rect: Region } | null>(null)
+  const region = regionState && regionState.nodes === nodes ? regionState.rect : null
+  useEffect(() => {
+    if (!size.w || !size.h || nodes.length === 0) return
+    const visivel = visibleWorldRect(transform, size)
+    // Recalcula quando a área visível sai da região OU quando ela ficou muito
+    // menor que a região (zoom para dentro): sem o segundo caso, aproximar
+    // continuaria desenhando o grafo inteiro herdado do enquadramento anterior.
+    // O expand() devolve 9x a área visível, bem acima do limiar — não repica.
+    if (region && contains(region, visivel) && areaRatio(visivel, region) > 0.05) return
+    setRegion({ nodes, rect: expand(visivel) })
+  }, [transform, size, nodes, region])
+
+  const visible = useMemo(() => {
+    // Sem região definida ainda (primeiro frame), desenha tudo: é o mesmo
+    // enquadramento do fitView, em que o grafo inteiro cabe na tela.
+    if (!region) return { nodes, edges }
+    const dentro = nodes.filter((node) => intersects(region, extentOf(node)))
+    const ids = new Set(dentro.map((n) => n.memory.id))
+    return {
+      nodes: dentro,
+      edges: edges.filter((edge) => {
+        if (ids.has(edge.from) || ids.has(edge.to)) return true
+        // Aresta longa atravessando a tela com as duas pontas fora: mantém
+        // pelo retângulo que ela ocupa, senão some um traço que aparecia.
+        const a = nodeById.get(edge.from)
+        const b = nodeById.get(edge.to)
+        if (!a || !b) return false
+        return intersects(region, {
+          minX: Math.min(a.x, b.x),
+          maxX: Math.max(a.x, b.x),
+          minY: Math.min(a.y, b.y),
+          maxY: Math.max(a.y, b.y),
+        })
+      }),
+    }
+  }, [region, nodes, edges, nodeById])
+
   const selected = selectedId ? allById.get(selectedId) : undefined
   // Guardado como elemento: com um nó selecionado, o card seria remontado a
   // cada frame de pan/pinch (o array `related` sozinho já era uma prop nova
@@ -234,9 +369,7 @@ export function MemoryGraph({ pool, allById, query, selectedId, onSelect }: {
         style={[s.canvas, { borderColor: tokens.border, backgroundColor: tokens.card + '80' }]}
         onLayout={(e) => {
           const { width, height } = e.nativeEvent.layout
-          const first = size.w === 0
-          setSize({ w: width, h: height })
-          if (first) fitView(width, height)
+          setSize((atual) => (atual.w === width && atual.h === height ? atual : { w: width, h: height }))
         }}
       >
         <GestureDetector gesture={composed}>
@@ -246,18 +379,29 @@ export function MemoryGraph({ pool, allById, query, selectedId, onSelect }: {
                   mudam — sem isto cada frame reconciliava todos os nós e o
                   pinch engasgava no fio de JS. */}
               <GraphScene
-                nodes={nodes}
-                edges={edges}
+                nodes={visible.nodes}
+                edges={visible.edges}
                 nodeById={nodeById}
                 selectedId={selectedId}
                 matchesQuery={matchesQuery}
                 now={now}
                 tokens={tokens}
                 onSelect={onSelect}
+                showLabels={transform.k >= LABEL_MIN_ZOOM}
+                showHalos={transform.k >= HALO_MIN_ZOOM}
               />
             </G>
           </Svg>
         </GestureDetector>
+
+        {/* Layout ainda em construção (grafo grande = simulação de forças) */}
+        {!layout && (
+          <View style={s.building}>
+            <Text style={[s.buildingText, { color: tokens.mutedForeground }]}>
+              {t('memoryGraph.building')}
+            </Text>
+          </View>
+        )}
 
         {/* Card da memória selecionada — overlay inferior */}
         {selectedCard}
@@ -281,6 +425,8 @@ const GraphScene = memo(function GraphScene({
   now,
   tokens,
   onSelect,
+  showLabels,
+  showHalos,
 }: {
   nodes: LayoutNode[]
   edges: LayoutEdge[]
@@ -290,6 +436,10 @@ const GraphScene = memo(function GraphScene({
   now: number
   tokens: ThemeTokens
   onSelect: (id: string | null) => void
+  /** Zoom de longe não desenha rótulo nem anel — texto é o elemento mais caro
+   *  do SVG e ali ele é ilegível de qualquer forma. */
+  showLabels: boolean
+  showHalos: boolean
 }) {
   return (
     <>
@@ -329,7 +479,7 @@ const GraphScene = memo(function GraphScene({
         const isSelected = memory.id === selectedId
         const color = KIND_COLOR[memory.kind]
         const opacity = !matched ? 0.18 : stale ? 0.45 : 1
-        const label = nodeLabelText(memory, node.isRoot)
+        const label = showLabels || node.isRoot ? nodeLabelText(memory, node.isRoot) : ''
         return (
           <G
             key={memory.id}
@@ -338,7 +488,7 @@ const GraphScene = memo(function GraphScene({
             opacity={opacity}
             onPress={() => onSelect(isSelected ? null : memory.id)}
           >
-            {!node.isRoot && (recent || isSelected) && (
+            {showHalos && !node.isRoot && (recent || isSelected) && (
               <Circle
                 r={node.r + 4}
                 fill="none"
@@ -357,15 +507,17 @@ const GraphScene = memo(function GraphScene({
               stroke={color}
               strokeWidth={isSelected ? 2.5 : node.isRoot ? 2 : 1.2}
             />
-            <SvgText
-              y={node.r + LABEL_OFFSET + 10}
-              textAnchor="middle"
-              fontSize={node.isRoot ? 13 : memory.area ? 11 : 10}
-              fontWeight={node.isRoot ? '700' : memory.area ? '600' : '400'}
-              fill={tokens.foreground}
-            >
-              {label}
-            </SvgText>
+            {(showLabels || node.isRoot) && (
+              <SvgText
+                y={node.r + LABEL_OFFSET + 10}
+                textAnchor="middle"
+                fontSize={node.isRoot ? 13 : memory.area ? 11 : 10}
+                fontWeight={node.isRoot ? '700' : memory.area ? '600' : '400'}
+                fill={tokens.foreground}
+              >
+                {label}
+              </SvgText>
+            )}
           </G>
         )
       })}
@@ -391,6 +543,9 @@ const s = StyleSheet.create({
   legendText: { fontSize: 11 },
 
   canvas: { flex: 1, borderRadius: 14, borderWidth: 1, overflow: 'hidden' },
+
+  building: { position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, alignItems: 'center', justifyContent: 'center' },
+  buildingText: { fontSize: 12 },
 
   selectedOverlay: { position: 'absolute', left: 8, right: 8, bottom: 8 },
   selectedClose: {

@@ -1,14 +1,12 @@
-import { useMemo, useState } from 'react'
-import { Modal, View, Text, TextInput, Pressable, ScrollView, Switch, StyleSheet } from 'react-native'
+import { useCallback, useState } from 'react'
+import { Modal, View, Text, TextInput, Pressable, Switch, StyleSheet } from 'react-native'
 import { X, Search, Check, Sparkles, Brain } from 'lucide-react-native'
-import { ProviderLogo } from '~/components/ui/provider-logo'
 import { useTranslation } from 'react-i18next'
 import { useSettingsStore } from '~/stores/settings-store'
-import { Storage } from '~/lib/storage'
 import { getThemeTokens } from '~/lib/theme-tokens'
 import { useThemeStore } from '~/stores/theme-store'
 import { hslToRgba } from '~/lib/theme'
-import { ModalityIcons } from '~/components/ui/modality-icons'
+import { CatalogModelList } from './CatalogModelList'
 import type { ModelVariant } from '@orbit/shared'
 
 interface WorkerModelModalProps {
@@ -22,10 +20,16 @@ interface WorkerModelModalProps {
  * modelo do chat" (limpa a configuração).
  */
 export function WorkerModelModal({ visible, onClose }: WorkerModelModalProps) {
+  // Fechado não monta nada. Antes o componente vivia junto do PromptInput e
+  // recalculava o catálogo a cada render dele, mesmo com o modal fora da tela.
+  if (!visible) return null
+  return <WorkerModelSheet onClose={onClose} />
+}
+
+function WorkerModelSheet({ onClose }: { onClose: () => void }) {
   const { t } = useTranslation()
   const tokens = getThemeTokens(useThemeStore((s) => s.resolved))
   const catalog = useSettingsStore((s) => s.catalog)
-  const connectedProviders = useSettingsStore((s) => s.connectedProviders)
   const workerModel = useSettingsStore((s) => s.workerModel)
   const workerReasoning = useSettingsStore((s) => s.workerReasoning)
 
@@ -34,37 +38,28 @@ export function WorkerModelModal({ visible, onClose }: WorkerModelModalProps) {
     0.08,
   )
 
+  // Pelos setters do store, não por setState + Storage na mão: são eles que
+  // persistem E empurram a config para o desktop (worker-config:set). Escrever
+  // direto no store deixava a escolha só neste aparelho.
+  const setWorkerModel = useSettingsStore((s) => s.setWorkerModel)
+  const setWorkerReasoning = useSettingsStore((s) => s.setWorkerReasoning)
+
   const toggleReasoning = (on: boolean) => {
-    const val = on ? { enabled: true } as const : null
-    useSettingsStore.setState({ workerReasoning: val })
-    Storage.setItem('orbit_worker_reasoning', JSON.stringify(val)).catch(() => {})
+    void setWorkerReasoning(on ? { enabled: true } : null)
   }
 
   const selectVariant = (variantId: string) => {
-    const val = { enabled: true, variantId } as const
-    useSettingsStore.setState({ workerReasoning: val })
-    Storage.setItem('orbit_worker_reasoning', JSON.stringify(val)).catch(() => {})
+    void setWorkerReasoning({ enabled: true, variantId })
   }
 
   const [search, setSearch] = useState('')
 
-  const groups = useMemo(() => {
-    if (!catalog) return []
-    const q = search.toLowerCase().trim()
-    return Object.values(catalog)
-      .filter((provider) => connectedProviders.includes(provider.id))
-      .map((provider) => ({
-        provider,
-        models: Object.values(provider.models)
-          .filter((model) => !q || model.name.toLowerCase().includes(q) || model.id.toLowerCase().includes(q))
-          .sort((a, b) =>
-            a.release_date && b.release_date
-              ? b.release_date.localeCompare(a.release_date)
-              : a.name.localeCompare(b.name),
-          ),
-      }))
-      .filter((group) => group.models.length > 0)
-  }, [catalog, search, connectedProviders])
+  const handleSelect = useCallback(
+    (providerId: string, modelId: string) => {
+      void setWorkerModel({ providerId, modelId })
+    },
+    [setWorkerModel],
+  )
 
   const selectedCatalogModel = workerModel && catalog
     ? catalog[workerModel.providerId]?.models[workerModel.modelId]
@@ -74,7 +69,7 @@ export function WorkerModelModal({ visible, onClose }: WorkerModelModalProps) {
   const variants = selectedCatalogModel?.variants ?? []
 
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+    <Modal visible transparent animationType="slide" onRequestClose={onClose}>
       <View style={s.backdropWrap}>
         <Pressable style={StyleSheet.absoluteFill} onPress={onClose} />
 
@@ -94,9 +89,8 @@ export function WorkerModelModal({ visible, onClose }: WorkerModelModalProps) {
           {/* Usar o modelo do chat */}
           <Pressable
             onPress={() => {
-              useSettingsStore.setState({ workerModel: null, workerReasoning: null })
-              Storage.setItem('orbit_worker_model', JSON.stringify(null)).catch(() => {})
-              Storage.setItem('orbit_worker_reasoning', JSON.stringify(null)).catch(() => {})
+              void setWorkerModel(null)
+              void setWorkerReasoning(null)
             }}
             style={[s.sameModelRow, { borderColor: tokens.border }, !workerModel && { backgroundColor: rowSelectedBg }]}
           >
@@ -119,89 +113,60 @@ export function WorkerModelModal({ visible, onClose }: WorkerModelModalProps) {
             />
           </View>
 
-          <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 24 }}>
-            {/* Thinking config — topo, acima da listagem */}
-            {workerModel && supportsReasoning && (
-              <View style={[s.thinkingCard, { borderColor: tokens.border, backgroundColor: tokens.card }]}>
-                <View style={s.thinkingRow}>
-                  <View className="flex-row items-center gap-2">
-                    <Brain size={18} color={tokens.mutedForeground} />
-                    <Text style={[s.thinkingLabel, { color: tokens.foreground }]}>{t('workerModelModal.thinkingOnWorker')}</Text>
+          <CatalogModelList
+            search={search}
+            selected={workerModel}
+            onSelect={handleSelect}
+            emptyLabel={t('workerModelModal.noModels')}
+            header={
+              /* Config de thinking rola junto com a lista, como antes */
+              workerModel && supportsReasoning ? (
+                <View style={[s.thinkingCard, { borderColor: tokens.border, backgroundColor: tokens.card }]}>
+                  <View style={s.thinkingRow}>
+                    <View className="flex-row items-center gap-2">
+                      <Brain size={18} color={tokens.mutedForeground} />
+                      <Text style={[s.thinkingLabel, { color: tokens.foreground }]}>{t('workerModelModal.thinkingOnWorker')}</Text>
+                    </View>
+                    <Switch
+                      value={thinkingOn}
+                      onValueChange={toggleReasoning}
+                      trackColor={{ false: tokens.muted, true: tokens.primary }}
+                      thumbColor={tokens.foreground}
+                    />
                   </View>
-                  <Switch
-                    value={thinkingOn}
-                    onValueChange={toggleReasoning}
-                    trackColor={{ false: tokens.muted, true: tokens.primary }}
-                    thumbColor={tokens.foreground}
-                  />
-                </View>
-                {thinkingOn && variants.length > 0 && (
-                  <View style={s.reasoningLevels}>
-                    {variants.map((v: ModelVariant) => {
-                      const active = v.id === (workerReasoning?.variantId ?? '')
-                      return (
-                        <Pressable
-                          key={v.id}
-                          onPress={() => selectVariant(v.id)}
-                          style={[
-                            s.levelChip,
-                            active
-                              ? { backgroundColor: tokens.background, borderColor: tokens.border }
-                              : { backgroundColor: tokens.muted, borderColor: tokens.border },
-                          ]}
-                        >
-                          <Text
+                  {thinkingOn && variants.length > 0 && (
+                    <View style={s.reasoningLevels}>
+                      {variants.map((v: ModelVariant) => {
+                        const active = v.id === (workerReasoning?.variantId ?? '')
+                        return (
+                          <Pressable
+                            key={v.id}
+                            onPress={() => selectVariant(v.id)}
                             style={[
-                              s.levelChipLabel,
-                              { color: active ? tokens.primary : tokens.mutedForeground },
+                              s.levelChip,
+                              active
+                                ? { backgroundColor: tokens.background, borderColor: tokens.border }
+                                : { backgroundColor: tokens.muted, borderColor: tokens.border },
                             ]}
                           >
-                            {v.label}
-                          </Text>
-                          {active && <Check size={14} color={tokens.primary} />}
-                        </Pressable>
-                      )
-                    })}
-                  </View>
-                )}
-              </View>
-            )}
-
-            {/* Lista de modelos */}
-            {groups.map(({ provider, models }) => (
-              <View key={provider.id} style={{ marginBottom: 16 }}>
-                <Text style={[s.providerLabel, { color: tokens.mutedForeground }]}>{provider.name}</Text>
-                <View style={[s.modelsBox, { borderColor: tokens.border, backgroundColor: tokens.card }]}>
-                  {models.map((model, index) => {
-                    const isSelected =
-                      workerModel?.providerId === provider.id && workerModel?.modelId === model.id
-                    return (
-                      <Pressable
-                        key={model.id}
-                        onPress={() => {
-                          useSettingsStore.setState({ workerModel: { providerId: provider.id, modelId: model.id } })
-                          Storage.setItem('orbit_worker_model', JSON.stringify({ providerId: provider.id, modelId: model.id })).catch(() => {})
-                        }}
-                        style={[
-                          s.modelRow,
-                          index < models.length - 1 && { borderBottomWidth: 1, borderBottomColor: tokens.border },
-                          isSelected && { backgroundColor: rowSelectedBg },
-                        ]}
-                      >
-                        <ProviderLogo providerId={provider.id} size={16} color={tokens.mutedForeground} />
-                        <View style={{ flex: 1 }}>
-                          <Text style={[s.modelName, { color: tokens.foreground }]}>{model.name}</Text>
-                          <Text style={[s.modelId, { color: tokens.mutedForeground }]} numberOfLines={1}>{model.id}</Text>
-                        </View>
-                        <ModalityIcons modalities={model.modalities?.input} color={tokens.mutedForeground} />
-                        {isSelected && <Check size={16} color={tokens.primary} />}
-                      </Pressable>
-                    )
-                  })}
+                            <Text
+                              style={[
+                                s.levelChipLabel,
+                                { color: active ? tokens.primary : tokens.mutedForeground },
+                              ]}
+                            >
+                              {v.label}
+                            </Text>
+                            {active && <Check size={14} color={tokens.primary} />}
+                          </Pressable>
+                        )
+                      })}
+                    </View>
+                  )}
                 </View>
-              </View>
-            ))}
-          </ScrollView>
+              ) : undefined
+            }
+          />
         </View>
       </View>
     </Modal>
@@ -245,11 +210,6 @@ const s = StyleSheet.create({
     marginBottom: 12,
   },
   searchInput: { flex: 1, fontSize: 14, paddingVertical: 2 },
-  providerLabel: { fontSize: 11, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 8, paddingLeft: 4 },
-  modelsBox: { borderWidth: 1, borderRadius: 12, overflow: 'hidden' },
-  modelRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 14, paddingVertical: 12 },
-  modelName: { fontSize: 14, fontWeight: '500' },
-  modelId: { fontSize: 11 },
   thinkingCard: {
     borderWidth: 1,
     borderRadius: 12,

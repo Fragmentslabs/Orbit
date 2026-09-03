@@ -1,15 +1,15 @@
-import { useMemo, useState } from 'react'
-import { Modal, View, Text, TextInput, Pressable, ScrollView, StyleSheet } from 'react-native'
+import { useCallback, useState } from 'react'
+import { Modal, View, Text, TextInput, Pressable, StyleSheet } from 'react-native'
 import { X, Search, Check, Eye } from 'lucide-react-native'
-import { ProviderLogo } from '~/components/ui/provider-logo'
 import { useTranslation } from 'react-i18next'
 import { modelSupportsVision } from '@orbit/shared'
+import type { CatalogModel, CatalogProvider } from '@orbit/shared'
 import { useSettingsStore } from '~/stores/settings-store'
 import { useModeOverrides } from '~/stores/mode-overrides'
 import { getThemeTokens } from '~/lib/theme-tokens'
 import { useThemeStore } from '~/stores/theme-store'
 import { hslToRgba } from '~/lib/theme'
-import { ModalityIcons } from '~/components/ui/modality-icons'
+import { CatalogModelList } from './CatalogModelList'
 
 interface VisionConfigModalProps {
   visible: boolean
@@ -25,10 +25,20 @@ interface VisionConfigModalProps {
  * configura E ativa o modo; "Desativar visão" limpa a seleção e desliga.
  */
 export function VisionConfigModal({ visible, onClose, targetSession }: VisionConfigModalProps) {
+  // Fechado não monta nada (ver WorkerModelModal).
+  if (!visible) return null
+  return <VisionConfigSheet onClose={onClose} targetSession={targetSession} />
+}
+
+function VisionConfigSheet({
+  onClose,
+  targetSession,
+}: {
+  onClose: () => void
+  targetSession?: string
+}) {
   const { t } = useTranslation()
   const tokens = getThemeTokens(useThemeStore((s) => s.resolved))
-  const catalog = useSettingsStore((s) => s.catalog)
-  const connectedProviders = useSettingsStore((s) => s.connectedProviders)
   const visionModel = useSettingsStore((s) => s.visionModel)
   const setVisionModel = useSettingsStore((s) => s.setVisionModel)
   const setModeActive = useModeOverrides((s) => s.setMode)
@@ -40,33 +50,20 @@ export function VisionConfigModal({ visible, onClose, targetSession }: VisionCon
     0.08,
   )
 
-  const groups = useMemo(() => {
-    if (!catalog) return []
-    const q = search.toLowerCase().trim()
-    return Object.values(catalog)
-      .filter((provider) => connectedProviders.includes(provider.id))
-      .map((provider) => ({
-        provider,
-        models: Object.values(provider.models)
-          .filter(
-            (model) =>
-              modelSupportsVision(provider, model.id) &&
-              (!q || model.name.toLowerCase().includes(q) || model.id.toLowerCase().includes(q)),
-          )
-          .sort((a, b) =>
-            a.release_date && b.release_date
-              ? b.release_date.localeCompare(a.release_date)
-              : a.name.localeCompare(b.name),
-          ),
-      }))
-      .filter((group) => group.models.length > 0)
-  }, [catalog, search, connectedProviders])
+  // Identidade estável: a lista usa o filtro como dependência do memo dela.
+  const apenasComVisao = useCallback(
+    (provider: CatalogProvider, model: CatalogModel) => modelSupportsVision(provider, model.id),
+    [],
+  )
 
-  const selectModel = (providerId: string, modelId: string) => {
-    // Escolher modelo configura E ativa o modo (nesta sessão), como no desktop
-    void setVisionModel({ providerId, modelId })
-    setModeActive('vision', targetSession, true)
-  }
+  const selectModel = useCallback(
+    (providerId: string, modelId: string) => {
+      // Escolher modelo configura E ativa o modo (nesta sessão), como no desktop
+      void setVisionModel({ providerId, modelId })
+      setModeActive('vision', targetSession, true)
+    },
+    [setVisionModel, setModeActive, targetSession],
+  )
 
   const disableVision = () => {
     void setVisionModel(null)
@@ -74,7 +71,7 @@ export function VisionConfigModal({ visible, onClose, targetSession }: VisionCon
   }
 
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+    <Modal visible transparent animationType="slide" onRequestClose={onClose}>
       <View style={s.backdropWrap}>
         <Pressable style={StyleSheet.absoluteFill} onPress={onClose} />
 
@@ -115,48 +112,16 @@ export function VisionConfigModal({ visible, onClose, targetSession }: VisionCon
             />
           </View>
 
-          <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 24 }}>
-            {groups.length === 0 && (
-              <Text style={[s.empty, { color: tokens.mutedForeground }]}>
-                {t('visionConfig.noModels')}
-              </Text>
-            )}
-
-            {groups.map(({ provider, models }) => (
-              <View key={provider.id} style={{ marginBottom: 16 }}>
-                <Text style={[s.providerLabel, { color: tokens.mutedForeground }]}>{provider.name}</Text>
-                <View style={[s.modelsBox, { borderColor: tokens.border, backgroundColor: tokens.card }]}>
-                  {models.map((model, index) => {
-                    const isSelected =
-                      visionModel?.providerId === provider.id && visionModel?.modelId === model.id
-                    return (
-                      <Pressable
-                        key={model.id}
-                        onPress={() => selectModel(provider.id, model.id)}
-                        style={[
-                          s.modelRow,
-                          index < models.length - 1 && { borderBottomWidth: 1, borderBottomColor: tokens.border },
-                          isSelected && { backgroundColor: rowSelectedBg },
-                        ]}
-                      >
-                        <ProviderLogo providerId={provider.id} size={16} color={tokens.mutedForeground} />
-                        <View style={{ flex: 1 }}>
-                          <Text style={[s.modelName, { color: tokens.foreground }]}>{model.name}</Text>
-                          <Text style={[s.modelId, { color: tokens.mutedForeground }]} numberOfLines={1}>{model.id}</Text>
-                        </View>
-                        <ModalityIcons modalities={model.modalities?.input} color={tokens.mutedForeground} />
-                        {isSelected && <Check size={16} color={tokens.primary} />}
-                      </Pressable>
-                    )
-                  })}
-                </View>
-              </View>
-            ))}
-
-            <Text style={[s.hint, { color: tokens.mutedForeground }]}>
-              {t('visionConfig.noSelectionHint')}
-            </Text>
-          </ScrollView>
+          <CatalogModelList
+            search={search}
+            includeModel={apenasComVisao}
+            selected={visionModel}
+            onSelect={selectModel}
+            emptyLabel={t('visionConfig.noModels')}
+          />
+          <Text style={[s.hint, { color: tokens.mutedForeground }]}>
+            {t('visionConfig.noSelectionHint')}
+          </Text>
 
           {/* Footer — espelho do dialog desktop */}
           <View style={[s.footer, { borderTopColor: tokens.border }]}>
@@ -217,12 +182,6 @@ const s = StyleSheet.create({
     marginBottom: 12,
   },
   searchInput: { flex: 1, fontSize: 14, paddingVertical: 2 },
-  providerLabel: { fontSize: 11, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 8, paddingLeft: 4 },
-  modelsBox: { borderWidth: 1, borderRadius: 12, overflow: 'hidden' },
-  modelRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 14, paddingVertical: 12 },
-  modelName: { fontSize: 14, fontWeight: '500' },
-  modelId: { fontSize: 11 },
-  empty: { fontSize: 13, textAlign: 'center', paddingVertical: 24 },
   hint: { fontSize: 11, opacity: 0.7, lineHeight: 16 },
   footer: {
     flexDirection: 'row',

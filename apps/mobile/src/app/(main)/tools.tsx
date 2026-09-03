@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
-import { View, Text, Pressable, ScrollView, RefreshControl, StyleSheet, Alert, useWindowDimensions } from 'react-native'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { View, Text, Pressable, SectionList, RefreshControl, StyleSheet, Alert, useWindowDimensions } from 'react-native'
 import * as DocumentPicker from 'expo-document-picker'
 import * as FileSystem from 'expo-file-system/legacy'
 import { useRouter } from 'expo-router'
@@ -327,6 +327,33 @@ function stateLabel(state: McpConnectionState): string {
 
 // ─── Screen ───────────────────────────────────────────────────────────────────
 
+type ToolsItem =
+  | { kind: 'pending'; proposal: SkillProposal }
+  | { kind: 'mcp'; server: McpServerStatus }
+  | { kind: 'skill'; skill: Skill }
+  | { kind: 'skills-empty' }
+
+interface ToolsSection {
+  kind: 'pending' | 'mcp' | 'skills'
+  title: string
+  data: ToolsItem[]
+}
+
+function itemKey(item: ToolsItem, index: number): string {
+  if (item.kind === 'pending') return `pending:${item.proposal.slug}`
+  if (item.kind === 'mcp') return `mcp:${item.server.config.name}`
+  if (item.kind === 'skill') return `skill:${item.skill.slug}`
+  return `skills-empty:${index}`
+}
+
+function SectionGap() {
+  return <View style={{ height: 16 }} />
+}
+
+function ItemGap() {
+  return <View style={{ height: 8 }} />
+}
+
 export default function ToolsScreen() {
   const { t } = useTranslation()
   const router = useRouter()
@@ -432,6 +459,103 @@ export default function ToolsScreen() {
     ])
   }
 
+  // Uma SectionList no lugar do ScrollView com três .map() aninhados: antes
+  // todos os cards (skills, servidores MCP, propostas) montavam de uma vez ao
+  // abrir a tela. Cada card carrega a própria borda e há um gap de 8 entre
+  // eles, então virtualizar não quebra o agrupamento visual.
+  const sections = useMemo<ToolsSection[]>(() => {
+    if (isEmpty) return []
+    const out: ToolsSection[] = []
+    if (pending.length > 0) {
+      out.push({
+        kind: 'pending',
+        title: t('toolsScreen.pendingProposals', { count: pending.length }),
+        data: pending.map((proposal) => ({ kind: 'pending', proposal })),
+      })
+    }
+    if (mcpServers.length > 0) {
+      out.push({
+        kind: 'mcp',
+        title: t('toolsScreen.mcpServers', { count: mcpServers.length }),
+        data: mcpServers.map((server) => ({ kind: 'mcp', server })),
+      })
+    }
+    // Skills sempre aparece (cabeçalho com o botão de criar); vazio vira uma
+    // linha de placeholder, como no ScrollView anterior.
+    out.push({
+      kind: 'skills',
+      title: t('toolsScreen.skills', { count: skills.length }),
+      data:
+        skills.length > 0
+          ? skills.map((skill) => ({ kind: 'skill', skill }))
+          : [{ kind: 'skills-empty' }],
+    })
+    return out
+  }, [isEmpty, pending, mcpServers, skills, t])
+
+  const renderItem = useCallback(
+    ({ item }: { item: ToolsItem }) => {
+      if (item.kind === 'skills-empty') {
+        return (
+          <View style={s.emptyBox}>
+            <Sparkles size={24} color={tokens.mutedForeground} />
+            <Text style={[s.emptyDesc, { color: tokens.mutedForeground }]}>
+              {t('toolsScreen.noSkillsYet')}
+            </Text>
+          </View>
+        )
+      }
+      const card =
+        item.kind === 'pending' ? (
+          <PendingProposalCard proposal={item.proposal} />
+        ) : item.kind === 'mcp' ? (
+          <McpServerCard
+            server={item.server}
+            onEdit={handleEditMcp}
+            onDelete={handleDeleteMcp}
+            onReconnect={(name) => void reconnectMcp(name)}
+            onAuthorize={(name) => void authorizeMcp(name)}
+          />
+        ) : (
+          <SkillCard
+            skill={item.skill}
+            onView={setViewSkill}
+            onEdit={handleEditSkill}
+            onDelete={handleDeleteSkill}
+          />
+        )
+      return <View style={s.itemRow}>{card}</View>
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- handlers estáveis o bastante para a lista
+    [tokens, t],
+  )
+
+  const renderSectionHeader = useCallback(
+    ({ section }: { section: ToolsSection }) => (
+      <View style={[s.sectionHeaderRow, { backgroundColor: tokens.background }]}>
+        <Text style={[s.sectionLabel, { color: tokens.mutedForeground }]}>{section.title}</Text>
+        {section.kind === 'mcp' && (
+          <Pressable
+            onPress={() => { setEditMcp(undefined); setMcpFormOpen(true) }}
+            style={[s.sectionBtn, { backgroundColor: tokens.primary }]}
+          >
+            <Plus size={14} color={tokens.primaryForeground} />
+            <Text style={[s.sectionBtnText, { color: tokens.primaryForeground }]}>{t('toolsScreen.add')}</Text>
+          </Pressable>
+        )}
+        {section.kind === 'skills' && (
+          <CreateSkillDropdown
+            onCreate={handleCreateSkill}
+            onImport={handleImportSkill}
+            onAskOrbit={handleAskOrbit}
+          />
+        )}
+      </View>
+    ),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [tokens, t],
+  )
+
   return (
     <SafeScreen style={s.container}>
       <View style={[s.header, { borderBottomColor: tokens.border }]}>
@@ -442,14 +566,24 @@ export default function ToolsScreen() {
         <View style={s.headerBtn} />
       </View>
 
-      <ScrollView
+      <SectionList
         style={{ flex: 1 }}
+        sections={sections}
+        keyExtractor={itemKey}
+        renderItem={renderItem}
+        renderSectionHeader={renderSectionHeader}
+        SectionSeparatorComponent={SectionGap}
+        ItemSeparatorComponent={ItemGap}
         contentContainerStyle={{ paddingBottom: 48 }}
+        stickySectionHeadersEnabled={false}
+        initialNumToRender={10}
+        maxToRenderPerBatch={10}
+        windowSize={7}
+        removeClippedSubviews
         refreshControl={
           <RefreshControl refreshing={loading || importing} onRefresh={load} tintColor={tokens.primary} />
         }
-      >
-        {isEmpty && (
+        ListEmptyComponent={
           <View style={s.emptyBox}>
             <Puzzle size={32} color={tokens.mutedForeground} />
             <Text style={[s.emptyTitle, { color: tokens.foreground }]}>{t('toolsScreen.emptyTitle')}</Text>
@@ -457,83 +591,8 @@ export default function ToolsScreen() {
               {t('toolsScreen.emptyDesc')}
             </Text>
           </View>
-        )}
-
-        {/* Pending proposals */}
-        {pending.length > 0 && (
-          <>
-            <Text style={[s.sectionLabel, { color: tokens.mutedForeground }]}>
-              {t('toolsScreen.pendingProposals', { count: pending.length })}
-            </Text>
-            <View style={s.section}>
-              {pending.map((prop) => (
-                <PendingProposalCard key={prop.slug} proposal={prop} />
-              ))}
-            </View>
-          </>
-        )}
-
-        {/* MCP Servers */}
-        {mcpServers.length > 0 && (
-          <>
-            <View style={s.sectionHeader}>
-              <Text style={[s.sectionLabel, { color: tokens.mutedForeground }]}>
-                {t('toolsScreen.mcpServers', { count: mcpServers.length })}
-              </Text>
-              <Pressable onPress={() => { setEditMcp(undefined); setMcpFormOpen(true) }} style={[s.sectionBtn, { backgroundColor: tokens.primary }]}>
-                <Plus size={14} color={tokens.primaryForeground} />
-                <Text style={[s.sectionBtnText, { color: tokens.primaryForeground }]}>{t('toolsScreen.add')}</Text>
-              </Pressable>
-            </View>
-            <View style={s.section}>
-              {mcpServers.map((server) => (
-                <McpServerCard
-                  key={server.config.name}
-                  server={server}
-                  onEdit={handleEditMcp}
-                  onDelete={handleDeleteMcp}
-                  onReconnect={(name) => void reconnectMcp(name)}
-                  onAuthorize={(name) => void authorizeMcp(name)}
-                />
-              ))}
-            </View>
-          </>
-        )}
-
-        {/* Skills */}
-        <View style={s.sectionHeader}>
-          <Text style={[s.sectionLabel, { color: tokens.mutedForeground }]}>
-            {t('toolsScreen.skills', { count: skills.length })}
-          </Text>
-          <CreateSkillDropdown
-            onCreate={handleCreateSkill}
-            onImport={handleImportSkill}
-            onAskOrbit={handleAskOrbit}
-          />
-        </View>
-        {skills.length > 0 ? (
-          <View style={s.section}>
-            {skills.map((skill) => (
-              <SkillCard
-                key={skill.slug}
-                skill={skill}
-                onView={setViewSkill}
-                onEdit={handleEditSkill}
-                onDelete={handleDeleteSkill}
-              />
-            ))}
-          </View>
-        ) : (
-          !isEmpty && (
-            <View style={s.emptyBox}>
-              <Sparkles size={24} color={tokens.mutedForeground} />
-              <Text style={[s.emptyDesc, { color: tokens.mutedForeground }]}>
-                {t('toolsScreen.noSkillsYet')}
-              </Text>
-            </View>
-          )
-        )}
-      </ScrollView>
+        }
+      />
 
       {/* Modals */}
       <SkillFormModal visible={skillFormOpen} onClose={() => setSkillFormOpen(false)} edit={editSkill} />
@@ -589,14 +648,6 @@ const s = StyleSheet.create({
   headerBtn: { width: 38, height: 38, alignItems: 'center', justifyContent: 'center' },
   headerTitle: { fontSize: 16, fontWeight: '600' },
 
-  sectionHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingTop: 22,
-    paddingBottom: 8,
-  },
   sectionLabel: {
     fontSize: 11,
     fontWeight: '600',
@@ -612,9 +663,14 @@ const s = StyleSheet.create({
     borderRadius: 6,
   },
   sectionBtnText: { fontSize: 13, fontWeight: '500' },
-  section: {
-    marginHorizontal: 16,
-    gap: 8,
+  itemRow: { marginHorizontal: 16 },
+  sectionHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingTop: 20,
+    paddingBottom: 8,
   },
 
   emptyBox: { alignItems: 'center', gap: 10, paddingVertical: 60, paddingHorizontal: 32 },
