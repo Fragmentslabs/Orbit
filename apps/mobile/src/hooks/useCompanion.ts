@@ -1,5 +1,7 @@
 import { useEffect } from 'react'
 import type {
+  AppPreferences,
+  SessionModelChangeEvent,
   ChatEventMessage,
   EsteiraEventMessage,
   RotinaEventMessage,
@@ -13,6 +15,7 @@ import { useSessionStore } from '../stores/session-store'
 import { useSettingsStore } from '../stores/settings-store'
 import { useSessionModelPrefs } from '~/stores/session-model-prefs'
 import { applyRemoteModes, fetchSessionModes } from '~/stores/session-modes-sync'
+import { applyAppPreferences, hydrateAppPreferences } from '~/stores/prefs-sync'
 import { useRotinasStore } from '~/stores/rotinas-store'
 import { useEsteiraStore } from '~/stores/esteira-store'
 
@@ -94,6 +97,9 @@ export function useCompanion() {
         void fetchSessionModes()
         // Config de subagentes/orquestração e visão (global, mora no desktop)
         void useSettingsStore.getState().fetchWorkerConfig()
+        // Preferências do desktop mandam: na conexão o celular adota as de lá
+        // (defaults de modo, permissão, pastas automáticas).
+        void hydrateAppPreferences()
         // Processa fila de mensagens offline
         useMessageQueueStore.getState().processAllQueues()
       } else if (state.status === 'disconnected' && state.error === 'invalid_pin') {
@@ -123,7 +129,7 @@ export function useCompanion() {
 
     // session:model-change → overrides de modelo por sessão vindos do desktop
     const unsubModels = conn.onEvent('session:model-change', (event) => {
-      const msg = event as { overrides?: Record<string, { providerId: string; modelId: string }> }
+      const msg = event as Partial<SessionModelChangeEvent>
       if (msg?.overrides) {
         useSessionModelPrefs.getState().applySync(msg.overrides)
       }
@@ -139,6 +145,13 @@ export function useCompanion() {
     const unsubWorkerConfig = conn.onEvent('worker-config:change', (event) => {
       const msg = event as { config?: WorkerConfigSnapshot }
       if (msg?.config) useSettingsStore.getState().applyWorkerConfigSync(msg.config)
+    })
+
+    // prefs:change → preferências do app (defaults de modo, permissão, pastas
+    // automáticas) mudadas no desktop ou em outro aparelho pareado
+    const unsubPrefs = conn.onEvent('prefs:change', (event) => {
+      const msg = event as { prefs?: AppPreferences }
+      if (msg?.prefs) applyAppPreferences(msg.prefs)
     })
 
     // rotinas:event → rotinas store (criar/editar/excluir/execução pelo scheduler)
@@ -162,6 +175,7 @@ export function useCompanion() {
       unsubModels()
       unsubModes()
       unsubWorkerConfig()
+      unsubPrefs()
       unsubRotinas()
       unsubEsteira()
     }

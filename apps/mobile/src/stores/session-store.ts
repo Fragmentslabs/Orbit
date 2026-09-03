@@ -565,7 +565,12 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     const visionModel = settings.visionModel && modeActiveFor('vision', sessionId, visionPrefs.vision)
       ? { ...settings.visionModel }
       : undefined
-    const loopConfig = config?.options?.loop ? settings.loopConfig : undefined
+    // Só maxIterations viaja: é o que a engine lê (o autoReview é um ajuste
+    // local do modal). Antes o objeto inteiro ia com `as any` — e o desktop
+    // descartava, porque o campo nem existia no protocolo.
+    const loopConfig = config?.options?.loop
+      ? { maxIterations: settings.loopConfig.maxIterations }
+      : undefined
     try {
       await wsClient.send({
         type: 'messages:send',
@@ -580,7 +585,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
         loopConfig,
         directory: config?.directory,
         extraDirectories: config?.extraDirectories,
-      } as any)
+      })
     } catch (err) {
       set((state) => ({
         status: { ...state.status, [sessionId]: 'error' },
@@ -1066,14 +1071,6 @@ export const useSessionStore = create<SessionState>((set, get) => ({
         })
         break
 
-      case 'session:model-change' as any: {
-        // Overrides de modelo por sessão vindos do desktop (renderer → main →
-        // companions). Só entra chave que o mobile não tem localmente.
-        const overrides = (event as { overrides?: SessionModelOverrides }).overrides
-        useSessionModelPrefs.getState().applySync(overrides ?? {})
-        break
-      }
-
       case 'session':
         // Sessão criada/atualizada pelo desktop (workers da orquestração)
         set((state) => {
@@ -1136,16 +1133,9 @@ export const useSessionStore = create<SessionState>((set, get) => ({
 
       case 'ask:batch': {
         const { addPendingAsk } = useChatStore.getState()
-        const items = (event.items ?? []) as Array<{ requestId: string; kind: string; claim?: unknown; questions?: unknown; origin?: unknown }>
-        for (const item of items) {
-          addPendingAsk(sessionId, {
-            requestId: item.requestId,
-            kind: item.kind as 'permission' | 'question',
-            claim: item.claim as any,
-            questions: item.questions as any,
-            origin: item.origin as any,
-            batchId: event.batchId,
-          })
+        // event.items já é AskItem[] — o batchId agrupa o lote (card único).
+        for (const item of event.items ?? []) {
+          addPendingAsk(sessionId, { ...item, batchId: event.batchId })
         }
         break
       }

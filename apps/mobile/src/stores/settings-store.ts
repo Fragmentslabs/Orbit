@@ -36,6 +36,10 @@ function pushWorkerConfig(state: {
     .catch(() => {})
 }
 
+/** Vira true assim que a config de workers/visão do desktop chega (fetch na
+ *  conexão ou evento). Enquanto for false, o cache do aparelho preenche. */
+let configDoDesktopAplicada = false
+
 const CATALOG_CACHE_KEY = 'orbit_catalog_cache'
 const PROVIDERS_CACHE_KEY = 'orbit_providers_cache'
 const SELECTED_MODEL_CACHE_KEY = 'orbit_selected_model_cache'
@@ -199,17 +203,21 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
       if (rawSelected && !get().selectedModel) {
         set({ selectedModel: JSON.parse(rawSelected) as SelectedModel })
       }
-      const rawWorker = await Storage.getItem(WORKER_MODEL_KEY)
-      if (rawWorker && !get().workerModel) {
-        set({ workerModel: JSON.parse(rawWorker) as WorkerModelConfig })
-      }
-      const rawReasoning = await Storage.getItem(WORKER_REASONING_KEY)
-      if (rawReasoning && !get().workerReasoning) {
-        set({ workerReasoning: JSON.parse(rawReasoning) as ReasoningConfig })
-      }
-      const rawVisionModel = await Storage.getItem(VISION_MODEL_KEY)
-      if (rawVisionModel && !get().visionModel) {
-        set({ visionModel: JSON.parse(rawVisionModel) as WorkerModelConfig })
+      // Worker/visão só saem do cache enquanto o desktop não respondeu: ele é
+      // a fonte da verdade e pode ter limpado a config (ver applyWorkerConfigSync).
+      if (!configDoDesktopAplicada) {
+        const rawWorker = await Storage.getItem(WORKER_MODEL_KEY)
+        if (rawWorker && !get().workerModel) {
+          set({ workerModel: JSON.parse(rawWorker) as WorkerModelConfig })
+        }
+        const rawReasoning = await Storage.getItem(WORKER_REASONING_KEY)
+        if (rawReasoning && !get().workerReasoning) {
+          set({ workerReasoning: JSON.parse(rawReasoning) as ReasoningConfig })
+        }
+        const rawVisionModel = await Storage.getItem(VISION_MODEL_KEY)
+        if (rawVisionModel && !get().visionModel) {
+          set({ visionModel: JSON.parse(rawVisionModel) as WorkerModelConfig })
+        }
       }
       const rawAutoFolders = await Storage.getItem(AUTO_FOLDERS_KEY)
       if (rawAutoFolders) {
@@ -252,6 +260,10 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
 
   applyWorkerConfigSync: (config) => {
     if (!config || typeof config !== 'object') return
+    // A partir daqui a config do desktop é a verdade: o cache local não pode
+    // mais ressuscitar um worker/visão que o desktop limpou, mesmo que a
+    // hidratação do disco termine depois da conexão.
+    configDoDesktopAplicada = true
     const { workerModel, workerReasoning, visionModel } = get()
     const next = {
       workerModel: config.workerModel ?? null,

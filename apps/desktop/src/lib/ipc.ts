@@ -6,7 +6,7 @@ import type {
   SendMessageInput,
   SessionRevert,
 } from "@shared/chat"
-import type { ChatModeKey, SessionModeOverrides, WorkerConfigSnapshot } from "@shared/companion"
+import type { AppPreferences, ChatModeKey, SessionModeOverrides, WorkerConfigSnapshot } from "@shared/companion"
 import type { McpConfig, McpServerStatus } from "@shared/mcp"
 import type { MediaEntry, MediaFilter, MediaUsage } from "@shared/media"
 import type {
@@ -237,6 +237,21 @@ export const workerConfigApi = {
       listener(data as WorkerConfigSnapshot),
     )
     return () => window.ipcRenderer.off("companion:worker-config-set", wrapper)
+  },
+}
+
+/** Preferências do app (defaults de modo por tipo de chat, modo de permissão e
+ *  pastas automáticas): mesma via do workerConfigApi. O renderer é a fonte da
+ *  verdade e o celular espelha. */
+export const appPreferencesApi = {
+  sync: (prefs: AppPreferences) => {
+    window.ipcRenderer?.send("companion:preferences", prefs)
+  },
+  onSet: (listener: (prefs: AppPreferences) => void) => {
+    const wrapper = window.ipcRenderer.on("companion:preferences-set", (data) =>
+      listener(data as AppPreferences),
+    )
+    return () => window.ipcRenderer.off("companion:preferences-set", wrapper)
   },
 }
 

@@ -103,6 +103,9 @@ export interface SendMessageRequest {
   directory?: string
   /** Pastas adicionais (modo código). */
   extraDirectories?: string[]
+  /** Configuração do modo loop. Mesma forma que o SendMessageInput da engine —
+   *  sem ela o desktop caía no padrão, ignorando o que foi configurado no app. */
+  loopConfig?: { maxIterations: number }
 }
 
 export interface CreateSessionRequest {
@@ -158,6 +161,14 @@ export interface SelectSessionModeRequest {
   sessionId?: string | null
 }
 
+/** Modelo por chat empurrado pelo desktop aos companions. Estava sendo emitido
+ *  e consumido sem tipo dos dois lados (`as any`), então uma mudança no formato
+ *  passaria despercebida. */
+export interface SessionModelChangeEvent {
+  type: 'session:model-change'
+  overrides: Record<string, { providerId: string; modelId: string }>
+}
+
 /** Mapa completo de modos por chat empurrado pelo desktop aos companions. */
 export interface SessionModeChangeEvent {
   type: 'session:mode-change'
@@ -181,6 +192,48 @@ export interface SetWorkerConfigRequest {
 export interface WorkerConfigChangeEvent {
   type: 'worker-config:change'
   config: WorkerConfigSnapshot
+}
+
+/** Modos ligados por padrão num chat novo, por modo do app. Mesma forma nos
+ *  dois apps (ActiveModeDefaults de cada model-mode-prefs). */
+export interface ChatModeDefaults {
+  simple: boolean
+  brain: boolean
+  thinking: boolean
+  search: boolean
+  browser: boolean
+  plan: boolean
+  subagents: boolean
+  orchestra: boolean
+  vision: boolean
+}
+
+/**
+ * Preferencias do app que valem nos dois lados: defaults de modo por tipo de
+ * chat, modo de permissao e criacao automatica de pastas. Antes cada app
+ * guardava as suas (o /api/preferences do companion era um armazem paralelo que
+ * ninguem no desktop lia), entao mudar no celular nao mudava nada no desktop.
+ * O desktop e a fonte da verdade: elas vivem no renderer, e o celular espelha.
+ */
+export interface AppPreferences {
+  chatModes: ChatModeDefaults
+  codeModes: ChatModeDefaults
+  permissionMode: PermissionMode
+  autoCreateFolders: boolean
+}
+
+export interface GetAppPreferencesRequest {
+  type: 'prefs:get'
+}
+
+export interface SetAppPreferencesRequest {
+  type: 'prefs:set'
+  prefs: AppPreferences
+}
+
+export interface AppPreferencesChangeEvent {
+  type: 'prefs:change'
+  prefs: AppPreferences
 }
 
 export interface GetCatalogRequest {
@@ -534,6 +587,8 @@ export type CompanionRequest =
   | GetMessagesRequest
   | GetSessionStateRequest
   | GetRunningSessionsRequest
+  | GetAppPreferencesRequest
+  | SetAppPreferencesRequest
   | SendMessageRequest
   | CreateSessionRequest
   | AbortRequest
@@ -676,8 +731,10 @@ export type CompanionEvent =
   | EsteiraEventMessage
   | PendingAskNotification
   | NewMessageNotification
+  | SessionModelChangeEvent
   | SessionModeChangeEvent
   | WorkerConfigChangeEvent
+  | AppPreferencesChangeEvent
   | StatusUpdate
 
 // ─── Wire Protocol ───────────────────────────────────────────────────────────

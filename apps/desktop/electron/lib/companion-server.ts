@@ -36,6 +36,8 @@ import type {
   SessionModeChangeEvent,
   WorkerConfigSnapshot,
   WorkerConfigChangeEvent,
+  AppPreferences,
+  AppPreferencesChangeEvent,
 } from '@shared/companion'
 import type { ChatEvent, SessionInfo, FolderInfo, ChatMessage, MessagePart, SendMessageInput, PlanReview, OrchestrationPlan } from '@shared/chat'
 import type { RotinaEvent } from '@shared/rotinas'
@@ -44,11 +46,13 @@ import { StorageKeys } from '@shared/chat'
 import { readJson, writeJson, removeJson, listKeys } from './storage'
 import { searchSessions } from './search-sessions'
 import { listCredentialProviders } from './auth'
-import { reply as askReply } from './ask-broker'
+import { replyOrResume } from './ask-resume'
 import { revert as revertSession, unrevert as unrevertSession } from './session/revert'
-import { abortChat, getRunningSessionIds, runChat } from './chat-engine'
+import { getRunningSessionIds } from './chat-engine'
+import { abortSession, dispatchSend } from './send-dispatch'
+import { readAppLanguage } from './app-language'
 import { getLoopRunningSessionIds } from './loop-engine'
-import { abortOrchestration, approvePlan, getOrchestrationRunningSessionIds, rejectPlan, runOrchestration } from './orchestrator'
+import { approvePlan, getOrchestrationRunningSessionIds, rejectPlan } from './orchestrator'
 import { readPlanFile, deletePlanFile } from './plan-file'
 import { getCatalog } from './catalog'
 import { getModelsSnapshot } from './models'
@@ -508,7 +512,10 @@ async function handleRequest(client: ConnectedClient, requestId: string, req: Co
         }
 
         // Listar provedores conectados para resolver o modelo
-        const connected = await listCredentialProviders()
+        const [connected, idioma] = await Promise.all([
+          listCredentialProviders(),
+          readAppLanguage(),
+        ])
 
         const input: SendMessageInput = {
           sessionId: req.sessionId,
@@ -522,9 +529,17 @@ async function handleRequest(client: ConnectedClient, requestId: string, req: Co
           extraDirectories: req.extraDirectories ?? session.extraDirectories,
           workerModel: req.workerModel,
           visionModel: req.visionModel,
+          loopConfig: req.loopConfig,
+          // Idioma do app (publicado pelo renderer). Sem ele o agente cai no
+          // idioma do PROMPT — o desktop manda em todo envio, e o caminho do
+          // companion não mandava.
+          ...(idioma ? { language: idioma } : {}),
         }
 
-        void runChat(win, input)
+        // Mesmo roteamento do chat:send do desktop: orquestra, loop ou chat, com
+        // as guardas de modo. Antes daqui saía sempre um runChat, então do
+        // celular a orquestra virava chat comum e o loop rodava um turno só.
+        await dispatchSend(win, input)
         sendResponse(ws, requestId, true)
         break
       }
@@ -554,14 +569,17 @@ async function handleRequest(client: ConnectedClient, requestId: string, req: Co
       }
 
       case 'chat:abort': {
-        abortChat(req.sessionId)
-        abortOrchestration(req.sessionId)
+        // Mesmo encerramento do desktop: engines + pedidos pendentes + confiança
+        // da sessão. Parar pela metade deixava o loop girando.
+        abortSession(req.sessionId)
         sendResponse(ws, requestId, true)
         break
       }
 
       case 'ask:reply': {
-        const ok = askReply(req.requestId, req.value)
+        // Mesmo caminho do desktop: pedido vivo resolve na hora, card de uma
+        // execução já encerrada volta para a conversa como mensagem.
+        const ok = await replyOrResume(BrowserWindow.getAllWindows()[0] ?? null, req.requestId, req.value)
         sendResponse(ws, requestId, ok)
         break
       }
@@ -601,6 +619,25 @@ async function handleRequest(client: ConnectedClient, requestId: string, req: Co
               value: req.value,
               sessionId: req.sessionId ?? null,
             })
+          }
+        }
+        sendResponse(ws, requestId, true)
+        break
+      }
+
+      case 'prefs:get': {
+        // Espelho do worker-config: as preferencias vivem no renderer, que
+        // empurra o snapshot para ca a cada mudanca.
+        sendResponse(ws, requestId, true, getAppPreferences())
+        break
+      }
+
+      case 'prefs:set': {
+        // Mudanca feita no celular: aplica no renderer (fonte da verdade) e de
+        // la o snapshot volta para todos os companions.
+        for (const win of BrowserWindow.getAllWindows()) {
+          if (!win.isDestroyed()) {
+            win.webContents.send('companion:preferences-set', req.prefs)
           }
         }
         sendResponse(ws, requestId, true)
@@ -692,8 +729,7 @@ async function handleRequest(client: ConnectedClient, requestId: string, req: Co
         // Cascata: deletar um orquestrador aborta e remove seus workers filhos.
         const ids = [req.sessionId, ...all.filter((s) => s.parentId === req.sessionId).map((s) => s.id)]
         for (const id of ids) {
-          abortChat(id)
-          abortOrchestration(id)
+          abortSession(id)
           await removeJson(StorageKeys.session(id))
           await removeJson(StorageKeys.messages(id))
           await removeJson(StorageKeys.planReview(id))
@@ -1129,11 +1165,9 @@ async function handleRequest(client: ConnectedClient, requestId: string, req: Co
           directory: session.directory,
           extraDirectories: session.extraDirectories,
         }
-        if (canOrchestrate) {
-          void runOrchestration(win, input)
-        } else {
-          void runChat(win, input)
-        }
+        // Pelo roteador: no desktop o aceite passa pelo sendMessage → chat:send,
+        // então as mesmas guardas (e o modo loop) precisam valer aqui.
+        await dispatchSend(win, input)
         sendResponse(ws, requestId, true)
         break
       }
@@ -1186,7 +1220,7 @@ async function handleRequest(client: ConnectedClient, requestId: string, req: Co
           directory: session.directory,
           extraDirectories: session.extraDirectories,
         }
-        void runChat(win, input)
+        await dispatchSend(win, input)
         sendResponse(ws, requestId, true)
         break
       }
@@ -1327,6 +1361,24 @@ export function broadcastWorkerConfig(config: WorkerConfigSnapshot): void {
   for (const client of clients) {
     if (!client.authenticated || client.ws.readyState !== WebSocket.OPEN) continue
     client.ws.send(wrap({ type: 'worker-config:change', config } satisfies WorkerConfigChangeEvent))
+  }
+}
+
+/** Snapshot das preferencias do app, empurrado pelo renderer. O cache aqui
+ *  serve o 'prefs:get' de quem conecta depois da ultima mudanca. */
+let appPreferences: AppPreferences | null = null
+
+export function getAppPreferences(): AppPreferences | null {
+  return appPreferences
+}
+
+/** Preferencias mudaram no desktop → espelha em todos os companions. */
+export function broadcastAppPreferences(prefs: AppPreferences): void {
+  appPreferences = prefs
+  const payload = wrap({ type: 'prefs:change', prefs } satisfies AppPreferencesChangeEvent)
+  for (const client of clients) {
+    if (!client.authenticated || client.ws.readyState !== WebSocket.OPEN) continue
+    client.ws.send(payload)
   }
 }
 

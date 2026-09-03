@@ -1010,7 +1010,12 @@ function applyChatEvent(event: ChatEvent, set: Setter, get: () => SessionState) 
   }
 
   const persistPendingAsks = (sid: string) => {
-    void storage.write(StorageKeys.pendingAsks(sid), get().pendingAsks[sid] ?? [])
+    // Sessão ainda não carregada (ex.: "ask:done" de um card que o main
+    // encerrou antes de a conversa ser aberta): o store não conhece a lista
+    // dela, e gravar aqui apagaria o arquivo que ainda guarda pedidos válidos.
+    const asks = get().pendingAsks[sid]
+    if (!asks) return
+    void storage.write(StorageKeys.pendingAsks(sid), asks)
   }
 
   switch (event.type) {

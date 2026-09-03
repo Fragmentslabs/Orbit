@@ -9,6 +9,7 @@ import { useRotinasStore } from './stores/rotinas-store'
 // Efeito de import: liga a sincronizacao dos modos por chat com o mobile.
 import './stores/session-modes-sync'
 import './stores/worker-config-sync'
+import './stores/preferences-sync'
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>

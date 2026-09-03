@@ -16,14 +16,14 @@ import { getModelsSnapshot, invalidateModelsSnapshot } from './lib/models'
 import { revert as revertSession, unrevert as unrevertSession } from './lib/session/revert'
 import { abortProjectInit, getInitStatus, runProjectInit, type RunInitInput } from './lib/project-init'
 import { createRemoteRepo } from './lib/github-repo'
-import { abortChat, compactSession, getRunningSessionIds, runChat } from './lib/chat-engine'
-import { runChatWithLoop, abortLoop, getLoopRunningSessionIds } from './lib/loop-engine'
-import { reply as askReply, rejectSession as rejectSessionAsks } from './lib/ask-broker'
-import { abortOrchestration, approvePlan, getOrchestrationRunningSessionIds, rejectPlan, runOrchestration } from './lib/orchestrator'
+import { compactSession, getRunningSessionIds } from './lib/chat-engine'
+import { getLoopRunningSessionIds } from './lib/loop-engine'
+import { replyOrResume } from './lib/ask-resume'
+import { approvePlan, getOrchestrationRunningSessionIds, rejectPlan } from './lib/orchestrator'
 import { authorizeMcp, initMcp, listMcpStatus, oauthRedirectUrl, readMcpConfig, reconnectMcp, saveMcpConfig } from './lib/mcp'
 import { connectNodara, disconnectNodara, discoverNodara, stopWatchingNodaraBridge, watchNodaraBridge } from './lib/nodara'
 import { loadTrustRules } from './lib/permission/trust-rules'
-import { clearSessionTrust } from './lib/permission'
+import { abortSession, dispatchSend } from './lib/send-dispatch'
 import { savePlanFile, deletePlanFile, readPlanFile } from './lib/plan-file'
 import {
   backfillMedia,
@@ -33,8 +33,8 @@ import {
   mediaDiskUsage,
   registerMediaProtocol,
 } from './lib/media'
-import type { SessionModeOverrides, WorkerConfigSnapshot } from '@shared/companion'
-import { startCompanionServer, getCompanionStatus, setPairingMode, forwardChatEvent, broadcastSessionModels, broadcastSessionModes, broadcastWorkerConfig } from './lib/companion-server'
+import type { AppPreferences, SessionModeOverrides, WorkerConfigSnapshot } from '@shared/companion'
+import { startCompanionServer, getCompanionStatus, setPairingMode, forwardChatEvent, broadcastSessionModels, broadcastSessionModes, broadcastWorkerConfig, broadcastAppPreferences } from './lib/companion-server'
 import { setSessionModelsCache, setSessionModesCache, setWorkerConfigCache } from './lib/companion-http'
 import { readJson as readStorageJson } from './lib/storage'
 import { registerPanelWebContents } from './lib/panel-browser'
@@ -51,7 +51,7 @@ import { loginShellArgs, userShellEnv } from './lib/shell-env'
 import { searchSessions } from './lib/search-sessions'
 import { tocarSom } from './lib/sound'
 import { destroyBrowserWindow } from './lib/tools'
-import type { SendMessageInput, SessionInfo } from '@shared/chat'
+import type { SendMessageInput } from '@shared/chat'
 import type { ChatEvent } from '@shared/chat'
 import { StorageKeys } from '@shared/chat'
 import * as esteira from './lib/esteira'
@@ -1115,41 +1115,9 @@ app.whenReady().then(() => {
   // Chat
   ipcMain.handle('chat:send', async (_event, input: SendMessageInput) => {
     if (!win) return
-    // Regra de ouro: workers não orquestram (sem recursão infinita).
-    // Workers podem usar subagentes (limite de profundidade gerenciado pelo subagent tool).
-    const session = await readJson<SessionInfo>(StorageKeys.session(input.sessionId))
-    if (session?.orchestration?.role === 'worker') {
-      input = { ...input, options: { ...input.options, orchestrate: undefined } }
-    }
-    // Orquestração é exclusiva do modo code
-    if (input.options.orchestrate && input.mode !== 'code') {
-      input = { ...input, options: { ...input.options, orchestrate: undefined } }
-    }
-    // Orquestração: desativa plano (incompatível), ativa loop e subagentes por padrão
-    if (input.options.orchestrate) {
-      input = {
-        ...input,
-        options: {
-          ...input.options,
-          plan: undefined,
-          loop: input.options.loop !== false,
-          subagents: input.options.subagents !== false,
-        },
-      }
-      void runOrchestration(win, input)
-    } else if (input.options.loop) {
-      void runChatWithLoop(win, input, input.loopConfig ?? { maxIterations: 5 })
-    } else {
-      void runChat(win, input)
-    }
+    await dispatchSend(win, input)
   })
-  ipcMain.handle('chat:abort', (_event, sessionId: string) => {
-    abortChat(sessionId)
-    abortLoop(sessionId)
-    abortOrchestration(sessionId)
-    rejectSessionAsks(sessionId)
-    clearSessionTrust(sessionId)
-  })
+  ipcMain.handle('chat:abort', (_event, sessionId: string) => abortSession(sessionId))
   // Sessões ainda rodando no main (engine vive aqui) — o renderer consulta
   // após um reload para re-exibir spinner/botão de parar imediatamente.
   ipcMain.handle('chat:running', () => [
@@ -1157,7 +1125,10 @@ app.whenReady().then(() => {
     ...getLoopRunningSessionIds(),
     ...getOrchestrationRunningSessionIds(),
   ])
-  ipcMain.handle('chat:askReply', (_event, requestId: string, value: unknown) => askReply(requestId, value))
+  // Pedido vivo responde direto; card sobrevivente de uma execução encerrada
+  // volta para a conversa como mensagem (ver ask-resume).
+  ipcMain.handle('chat:askReply', (_event, requestId: string, value: unknown) =>
+    replyOrResume(win, requestId, value))
   ipcMain.handle('chat:approvePlan', (_event, sessionId: string, planId: string, taskIds?: string[]) => {
     if (win) void approvePlan(win, sessionId, planId, taskIds)
   })
@@ -1210,6 +1181,12 @@ app.whenReady().then(() => {
   ipcMain.on('companion:session-modes', (_event, overrides: SessionModeOverrides) => {
     setSessionModesCache(overrides)
     broadcastSessionModes(overrides)
+  })
+
+  // Preferências do app (defaults de modo, permissão, pastas automáticas):
+  // mesma via, com o renderer como fonte da verdade.
+  ipcMain.on('companion:preferences', (_event, prefs: AppPreferences) => {
+    broadcastAppPreferences(prefs)
   })
 
   // Config dos modos delegados (workers + visão), pelo mesmo caminho.
