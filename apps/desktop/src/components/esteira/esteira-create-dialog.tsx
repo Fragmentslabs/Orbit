@@ -92,6 +92,17 @@ export function EsteiraCreateDialog({
       setNome(esteiraEditando.nome)
       setPushAoFinal(esteiraEditando.pushAoFinal)
       setPrints(!!esteiraEditando.printsDoResultado)
+      // Semeia o seletor com o modelo REAL da esteira (todas as fases o
+      // compartilham). Sem isto o "Modelo padrão" abria com o valor obsoleto
+      // da última esteira que passou por este modal.
+      const modeloAtual = esteiraEditando.fases[0]
+      if (modeloAtual) {
+        useSessionModelPrefs.getState().selectModel(
+          CHAVE_MODELO,
+          modeloAtual.providerId,
+          modeloAtual.modelId,
+        )
+      }
       // Edição parte das fases REAIS da esteira (já são cópias, D4), não dos
       // templates: o usuário pode tê-las editado só para esta pipeline.
       setFases(
@@ -174,8 +185,12 @@ export function EsteiraCreateDialog({
               nome: fase.nome,
               descricao: fase.descricao,
               prompt: fase.prompt,
-              providerId: anterior?.providerId ?? modelo.providerId,
-              modelId: anterior?.modelId ?? modelo.modelId,
+              // O "Modelo padrão" é o modelo do pipeline inteiro (não há
+              // override por fase na UI): trocá-lo vale para todas as fases.
+              // Antes o `anterior ?? modelo` sempre mantinha o modelo velho, e
+              // mudar o campo não fazia nada.
+              providerId: modelo.providerId,
+              modelId: modelo.modelId,
               thinkingNivel: anterior?.thinkingNivel ?? 0,
               tools: [...fase.tools],
               tipo: fase.tipo,

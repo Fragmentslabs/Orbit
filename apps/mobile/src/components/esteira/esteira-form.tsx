@@ -155,7 +155,13 @@ function FormEsteiraCorpo({
   )
   const [pushAoFinal, setPushAoFinal] = useState(editando?.pushAoFinal ?? false)
   const [prints, setPrints] = useState(editando?.printsDoResultado ?? false)
-  const [modelo, setModelo] = useState<ModeloEscolhido | null>(null)
+  // Edição parte do modelo REAL da esteira (todas as fases o compartilham);
+  // sem isto o form abria sem modelo e o "Modelo padrão" ficava vazio.
+  const [modelo, setModelo] = useState<ModeloEscolhido | null>(() =>
+    editando?.fases[0]
+      ? { providerId: editando.fases[0].providerId, modelId: editando.fases[0].modelId }
+      : null,
+  )
   const [salvando, setSalvando] = useState(false)
   const [erro, setErro] = useState<string | null>(null)
 
@@ -216,8 +222,11 @@ function FormEsteiraCorpo({
               nome: fase.nome,
               descricao: fase.descricao,
               prompt: fase.prompt,
-              providerId: anterior?.providerId ?? modelo.providerId,
-              modelId: anterior?.modelId ?? modelo.modelId,
+              // O "Modelo padrão" vale para o pipeline inteiro (sem override
+              // por fase na UI): mudá-lo troca o modelo de todas as fases.
+              // Antes `anterior ?? modelo` mantinha o modelo velho.
+              providerId: modelo.providerId,
+              modelId: modelo.modelId,
               thinkingNivel: anterior?.thinkingNivel ?? 0,
               tools: [...fase.tools],
               tipo: fase.tipo,
