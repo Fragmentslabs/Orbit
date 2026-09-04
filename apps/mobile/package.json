@@ -1,7 +1,7 @@
 {
   "name": "@orbit/mobile",
   "main": "expo-router/entry",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "dependencies": {
     "@babel/plugin-transform-arrow-functions": "^7.29.7",
     "@babel/plugin-transform-shorthand-properties": "^7.29.7",
