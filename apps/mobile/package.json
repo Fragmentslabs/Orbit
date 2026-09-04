@@ -1,7 +1,7 @@
 {
   "name": "@orbit/mobile",
   "main": "expo-router/entry",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "dependencies": {
     "@babel/plugin-transform-arrow-functions": "^7.29.7",
     "@babel/plugin-transform-shorthand-properties": "^7.29.7",
@@ -28,6 +28,7 @@
     "@rn-primitives/toggle": "^1.5.2",
     "@rn-primitives/toggle-group": "^1.5.2",
     "@rn-primitives/tooltip": "^1.5.2",
+    "@shopify/react-native-skia": "^2.11.2",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "expo": "~57.0.15",
