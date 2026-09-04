@@ -318,6 +318,13 @@ interface SimNode extends LayoutNode {
   vy: number
   /** Quantos nós descem desta subárvore — ramos pesados repelem mais. */
   subtreeSize: number
+  /**
+   * Caixa de colisão já resolvida. Ela depende só do raio e do rótulo, que não
+   * mudam depois da montagem — e a separação consulta isto milhões de vezes.
+   */
+  halfW: number
+  top: number
+  bottom: number
 }
 
 const ITERATIONS = 320
@@ -335,10 +342,15 @@ const GRAVITY = 0.012
  * converge para algo torcido; com ela cada ramo já nasce apontando para o seu
  * próprio setor, e a simulação apenas relaxa o desenho.
  */
-function seedPositions(nodes: Map<string, SimNode>, shape: TreeShape, rng: () => number): void {
+function seedPositions(
+  nodes: Map<string, SimNode>,
+  shape: TreeShape,
+  rng: () => number,
+  escala = 1,
+): void {
   const root = shape.rootId ? nodes.get(shape.rootId) : undefined
   if (!root) {
-    scatterFloating(nodes, [...nodes.keys()], 0, rng)
+    scatterFloating(nodes, [...nodes.keys()], 0, rng, 0, escala)
     return
   }
   root.x = 0
@@ -354,8 +366,8 @@ function seedPositions(nodes: Map<string, SimNode>, shape: TreeShape, rng: () =>
     { id: root.memory.id, angle: rng() * Math.PI * 2, spread: Math.PI * 2, depth: 0 },
   ]
 
-  while (queue.length) {
-    const slot = queue.shift()!
+  for (let cabeca = 0; cabeca < queue.length; cabeca++) {
+    const slot = queue[cabeca]
     const children = (shape.childrenOf.get(slot.id) ?? []).filter((id) => nodes.has(id))
     if (children.length === 0) continue
     const parent = nodes.get(slot.id)!
@@ -374,7 +386,8 @@ function seedPositions(nodes: Map<string, SimNode>, shape: TreeShape, rng: () =>
       // filho invadir a fatia do irmão.
       const angle = cursor + share * (0.3 + rng() * 0.4)
       // A distância também varia — é o que quebra o padrão de anéis concêntricos.
-      const distance = BASE_LINK_DISTANCE * (0.8 + rng() * 0.6) * (1 + slot.depth * 0.15)
+      const distance =
+        BASE_LINK_DISTANCE * escala * (0.8 + rng() * 0.6) * (1 + slot.depth * 0.15)
       child.x = parent.x + Math.cos(angle) * distance
       child.y = parent.y + Math.sin(angle) * distance
       // Filho nunca recebe o círculo inteiro: no máximo a fatia do pai, e
@@ -398,7 +411,7 @@ function seedPositions(nodes: Map<string, SimNode>, shape: TreeShape, rng: () =>
     if (floatingSet.has(id)) continue
     treeRadius = Math.max(treeRadius, Math.hypot(node.x, node.y))
   }
-  scatterFloating(nodes, shape.floating, treeRadius * 0.45, rng, treeRadius * 0.75)
+  scatterFloating(nodes, shape.floating, treeRadius * 0.45, rng, treeRadius * 0.75, escala)
 }
 
 /**
@@ -413,9 +426,10 @@ function scatterFloating(
   rng: () => number,
   /** Faixa em que os primeiros nós se acomodam antes do raio crescer. */
   band = 0,
+  escala = 1,
 ): void {
   const GOLDEN_ANGLE = Math.PI * (3 - Math.sqrt(5))
-  const spacing = BASE_LINK_DISTANCE * 1.6
+  const spacing = BASE_LINK_DISTANCE * escala * 1.6
   const phase = rng() * Math.PI * 2
   ids.forEach((id, i) => {
     const node = nodes.get(id)
@@ -429,148 +443,280 @@ function scatterFloating(
   })
 }
 
-/** Molas + repulsão + gravidade, com resfriamento progressivo. */
-function simulate(list: SimNode[], links: Array<{ a: SimNode; b: SimNode; rest: number }>): void {
-  let alpha = 1
-  for (let iter = 0; iter < ITERATIONS; iter++) {
-    // Repulsão entre todos os pares. O grupo é pequeno o bastante (centenas de
-    // nós) para o O(n²) direto sair mais barato que montar uma quadtree.
-    for (let i = 0; i < list.length; i++) {
-      const a = list[i]
-      for (let j = i + 1; j < list.length; j++) {
-        const b = list[j]
-        let dx = b.x - a.x
-        let dy = b.y - a.y
-        let d2 = dx * dx + dy * dy
-        if (d2 < 1) {
-          // Coincidentes: desempata com um empurrão determinístico.
-          dx = (i % 7) - 3 + 0.5
-          dy = (j % 7) - 3 + 0.5
-          d2 = dx * dx + dy * dy
-        }
-        // Nós de ramos maiores empurram mais forte, abrindo espaço para eles.
-        const strength =
-          (REPULSION * (1 + Math.log2(1 + a.subtreeSize + b.subtreeSize) * 0.35)) / d2
-        const d = Math.sqrt(d2)
-        const fx = (dx / d) * strength
-        const fy = (dy / d) * strength
-        a.vx -= fx
-        a.vy -= fy
-        b.vx += fx
-        b.vy += fy
-      }
-    }
+// ---------------------------------------------------------------------------
+// Execução em fatias
+// ---------------------------------------------------------------------------
+//
+// As três fases pesadas (repulsão, separação e desempate radial) varrem todos
+// os pares do grupo — juntas, ~470 varreduras O(n²). Rodadas de uma tacada só
+// elas prendem a thread de JS por segundos: nada pinta e nada responde ao
+// toque, que é exatamente a travada ao abrir o grafo.
+//
+// Por isso cada uma vive num cursor retomável: o laço externo pode parar no
+// meio de uma varredura e continuar na chamada seguinte. A ORDEM das operações
+// é a mesma da versão de uma tacada só — cada par continua lendo as posições
+// que os pares anteriores deixaram —, então o resultado é idêntico; o que muda
+// é apenas quem decide a hora de devolver o controle.
 
-    for (const link of links) {
-      const dx = link.b.x - link.a.x
-      const dy = link.b.y - link.a.y
-      const d = Math.hypot(dx, dy) || 0.01
-      const force = SPRING * (d - link.rest)
-      const fx = (dx / d) * force
-      const fy = (dy / d) * force
-      link.a.vx += fx
-      link.a.vy += fy
-      link.b.vx -= fx
-      link.b.vy -= fy
-    }
+const SEPARATE_PASSES = 90
+const PUSH_ROUNDS = 60
 
-    for (const node of list) {
-      if (node.isRoot) {
-        // A raiz fica presa no centro: é o âncora visual do grupo.
-        node.vx = 0
-        node.vy = 0
-        node.x = 0
-        node.y = 0
-        continue
-      }
-      node.vx -= node.x * GRAVITY
-      node.vy -= node.y * GRAVITY
-      node.x += node.vx * alpha
-      node.y += node.vy * alpha
-      // Amortecimento: sem ele o sistema oscila em vez de assentar.
-      node.vx *= 0.6
-      node.vy *= 0.6
-    }
+/**
+ * Passes de separação e rodadas de desempate por tamanho de grupo. No caminho
+ * exato cada passe é O(n²) e 90 já é caro; no da grade ele é O(n · vizinhos),
+ * barato o bastante para dar bem mais — e é disso que a vizinhança saturada de
+ * um grafo grande precisa para não deixar rótulo sobre rótulo.
+ */
+function passesDe(n: number): number {
+  return n > GRADE_MINIMA ? 240 : SEPARATE_PASSES
+}
+function rodadasDe(n: number): number {
+  return n > GRADE_MINIMA ? 120 : PUSH_ROUNDS
+}
+/**
+ * Pares avaliados entre duas leituras do relógio. O passo tem que ser contado
+ * em PARES, não em índices do laço externo: num grupo de 3 mil nós cada índice
+ * externo vale milhares de pares, e um passo fixo de 32 índices estourava o
+ * orçamento da fatia em mais de um segundo. Contando pares, a fatia passa do
+ * orçamento por no máximo o custo de um bloco — alguns milissegundos.
+ */
+const PARES_POR_CHECAGEM = 2048
 
-    alpha *= 1 - ALPHA_DECAY
-  }
+/**
+ * Acima deste tamanho o grupo troca as varreduras de todos os pares por uma
+ * GRADE ESPACIAL. Abaixo dele nada muda: o caminho exato de sempre continua
+ * valendo, e nenhum grafo que já existe hoje muda de desenho.
+ *
+ * O corte é onde o O(n²) ainda cabe num piscar — 250 nós são 31 mil pares por
+ * varredura, ~15 milhões no pipeline inteiro.
+ */
+const GRADE_MINIMA = 250
+/**
+ * Raio além do qual a repulsão é desprezada no caminho da grade. A força cai
+ * com 1/d², então a partir de uma vizinhança e meia o que sobra é ruído — e é
+ * ele que custa O(n²). O formato do grafo passa a vir das molas, da semente
+ * radial e do passe de separação, que são os que realmente desenham.
+ */
+const CUTOFF = BASE_LINK_DISTANCE * 1.5
+/**
+ * Gravidade no caminho da grade. Sem a repulsão de longe empurrando para fora,
+ * a atração ao centro precisa cair junto — senão o grupo colapsa num nó só e
+ * sobra tudo para a separação resolver.
+ */
+const GRAVITY_GRADE = 0.004
+/** Deslocamento médio por nó abaixo do qual a simulação já assentou. */
+const CONVERGIU = 0.08
+/**
+ * Teto do passo de um nó numa iteração.
+ *
+ * A repulsão cresce com 1/d², então um par quase coincidente gera uma força
+ * enorme — e sem teto ela vira um arremesso. Num grupo denso isso encadeia: a
+ * cada iteração alguém é jogado para longe, e o grupo inteiro sai de escala.
+ * Com mil memórias num projeto só, as posições chegavam a 10²⁶ e o desenho
+ * virava lixo; o passe de separação depois não tinha o que salvar.
+ *
+ * O teto é o remédio clássico de layout por forças (o "resfriamento" do
+ * Fruchterman-Reingold): a direção da força continua valendo, só o tamanho do
+ * passo é limitado.
+ *
+ * Vale SÓ no caminho da grade. Medindo o algoritmo antigo, grupo por grupo: até
+ * ~500 nós ele era saudável (raio máximo na casa dos milhares) e só a partir de
+ * ~700 saía de escala — e nenhum teto serve para os dois casos, porque mesmo um
+ * grafo sadio de 150 nós dá passos grandes nas primeiras iterações, que o
+ * desenho depois absorve. Como o caminho exato só roda em grupo de até 250, ele
+ * fica sem teto e continua bit a bit igual ao de hoje; a trava entra onde a
+ * densidade realmente quebra.
+ */
+const MAX_PASSO = BASE_LINK_DISTANCE * 2
+
+/** Iterações da simulação por tamanho de grupo — grafo grande assenta com
+ *  menos, e cada iteração dele custa muito mais. */
+function iteracoesDe(n: number): number {
+  if (n <= GRADE_MINIMA) return ITERATIONS
+  if (n <= 1500) return 240
+  return 160
 }
 
-/** true quando as caixas de a e b se invadem (incluindo a folga mínima). */
+/**
+ * Grade uniforme sobre as posições, em formato CSR (um array de índices e um
+ * de deslocamentos). Sem array por célula: com milhares de nós, alocar e
+ * coletar milhares de arrays a cada varredura custaria mais que a própria
+ * conta.
+ */
+interface Grade {
+  cell: number
+  minX: number
+  minY: number
+  cols: number
+  rows: number
+  /** Deslocamento inicial de cada célula em `itens` (tamanho cols*rows+1). */
+  inicio: Int32Array
+  /** Índices dos nós, agrupados por célula. */
+  itens: Int32Array
+}
+
+function montarGrade(list: SimNode[], celulaMinima: number): Grade {
+  let minX = Infinity
+  let minY = Infinity
+  let maxX = -Infinity
+  let maxY = -Infinity
+  for (const node of list) {
+    if (node.x < minX) minX = node.x
+    if (node.x > maxX) maxX = node.x
+    if (node.y < minY) minY = node.y
+    if (node.y > maxY) maxY = node.y
+  }
+  const largura = Math.max(1, maxX - minX)
+  const altura = Math.max(1, maxY - minY)
+  // Teto de células: num grupo espalhado a grade fina gastaria mais memória
+  // que o próprio grupo. Dobrar a célula só aumenta a vizinhança varrida — o
+  // corte por distância continua sendo quem decide de verdade.
+  let cell = celulaMinima
+  const teto = 8 * list.length + 1024
+  while ((Math.ceil(largura / cell) + 1) * (Math.ceil(altura / cell) + 1) > teto) cell *= 2
+  const cols = Math.ceil(largura / cell) + 1
+  const rows = Math.ceil(altura / cell) + 1
+
+  const total = cols * rows
+  const inicio = new Int32Array(total + 1)
+  const celulaDe = new Int32Array(list.length)
+  for (let i = 0; i < list.length; i++) {
+    const node = list[i]
+    const c = Math.min(cols - 1, Math.max(0, Math.floor((node.x - minX) / cell)))
+    const l = Math.min(rows - 1, Math.max(0, Math.floor((node.y - minY) / cell)))
+    const cel = l * cols + c
+    celulaDe[i] = cel
+    inicio[cel + 1]++
+  }
+  for (let cel = 0; cel < total; cel++) inicio[cel + 1] += inicio[cel]
+  const itens = new Int32Array(list.length)
+  const cursor = inicio.slice(0, total)
+  for (let i = 0; i < list.length; i++) itens[cursor[celulaDe[i]]++] = i
+  return { cell, minX, minY, cols, rows, inicio, itens }
+}
+
+/** Índices dos nós nas 9 células ao redor de `i`, escritos em `buffer`. */
+function vizinhosDe(grade: Grade, list: SimNode[], i: number, buffer: Int32Array): number {
+  const node = list[i]
+  const c = Math.min(grade.cols - 1, Math.max(0, Math.floor((node.x - grade.minX) / grade.cell)))
+  const l = Math.min(grade.rows - 1, Math.max(0, Math.floor((node.y - grade.minY) / grade.cell)))
+  const c0 = c > 0 ? c - 1 : 0
+  const c1 = c + 1 < grade.cols ? c + 1 : grade.cols - 1
+  const l0 = l > 0 ? l - 1 : 0
+  const l1 = l + 1 < grade.rows ? l + 1 : grade.rows - 1
+  let qtd = 0
+  for (let ll = l0; ll <= l1; ll++) {
+    const base = ll * grade.cols
+    for (let cc = c0; cc <= c1; cc++) {
+      const cel = base + cc
+      const fim = grade.inicio[cel + 1]
+      for (let p = grade.inicio[cel]; p < fim; p++) buffer[qtd++] = grade.itens[p]
+    }
+  }
+  return qtd
+}
+
+/** Lado da célula que garante achar toda caixa capaz de encavalar com outra. */
+function celulaDeSeparacao(list: SimNode[]): number {
+  let maxHalfW = 0
+  let maxTop = 0
+  let maxBottom = 0
+  for (const node of list) {
+    const box = boxOf(node)
+    if (box.halfW > maxHalfW) maxHalfW = box.halfW
+    if (box.top > maxTop) maxTop = box.top
+    if (box.bottom > maxBottom) maxBottom = box.bottom
+  }
+  // A folga de 1.5 cobre o quanto um nó anda DENTRO de uma varredura: a grade
+  // é montada no começo dela e as posições mudam enquanto ela roda.
+  return Math.max(2 * maxHalfW + MIN_GAP, maxTop + maxBottom + MIN_GAP) * 1.5
+}
+
+const relogio: () => number =
+  typeof performance !== 'undefined' && typeof performance.now === 'function'
+    ? () => performance.now()
+    : () => Date.now()
+
+interface SimLink {
+  a: SimNode
+  b: SimNode
+  rest: number
+}
+
+type FaseGrupo = 'sim' | 'sep' | 'push' | 'ok'
+
+interface GrupoSim {
+  id: string
+  list: SimNode[]
+  links: SimLink[]
+  fase: FaseGrupo
+  /** Grupo grande: varreduras por grade em vez de todos os pares. */
+  usaGrade: boolean
+  /** Iterações da simulação — menos nos grupos grandes. */
+  iteracoes: number
+  /** Passes de separação e rodadas de desempate deste grupo. */
+  passes: number
+  rodadas: number
+  /** Grade da varredura em curso, refeita a cada volta. */
+  grade: Grade | null
+  /** Lado da célula usado nas fases de separação. */
+  celulaSep: number
+  /**
+   * Escala do grupo. A distância natural entre pai e filho (90) é MENOR que a
+   * largura de uma caixa de rótulo (até 190): num grupo grande a simulação
+   * entrega um emaranhado, e a separação recebe centenas de vizinhos por nó
+   * para desfazer sozinha. Esticar molas, semente e alcance da repulsão pelo
+   * tamanho médio da caixa faz a simulação já entregar o espaçamento certo —
+   * é a diferença entre a grade valer a pena e não valer.
+   */
+  escala: number
+  /** Alcance da repulsão ao quadrado e força, escalados junto. */
+  cutoff2: number
+  repulsao: number
+  /** Rascunho dos vizinhos — um por grupo, reaproveitado a cada consulta. */
+  buffer: Int32Array
+  /** Deslocamento somado na iteração em curso, para detectar convergência. */
+  movimento: number
+  /** Resfriamento da simulação — sobrevive entre fatias. */
+  alpha: number
+  /** Iteração (sim), passe (sep) ou rodada (push) em curso. */
+  volta: number
+  /** Índice do laço externo onde a varredura parou. */
+  cursor: number
+  /** Alguém se moveu na varredura em curso? Quando ninguém se move, a fase
+   *  termina antes do limite — é o `break` das versões de uma tacada só. */
+  ativo: boolean
+}
+
+/**
+ * Unidade de progresso: um nó varrido. Serve para os dois caminhos — dentro de
+ * um grupo o custo por nó é uniforme, então a barra anda linear.
+ */
+function varredurasDe(n: number): number {
+  return iteracoesDe(n) + passesDe(n) + rodadasDe(n)
+}
+
+/**
+ * Penetração das caixas de a e b nos dois eixos (incluindo a folga mínima), ou
+ * null quando elas não se tocam.
+ *
+ * O objeto de retorno é REAPROVEITADO: a separação chama isto milhões de vezes
+ * e alocar três objetos por chamada — as duas caixas e o resultado — era a
+ * conta mais cara da fase. Quem chama lê os dois campos na hora e não guarda a
+ * referência.
+ */
+const penetracao = { x: 0, y: 0 }
 function overlapOf(a: SimNode, b: SimNode): { x: number; y: number } | null {
-  const ba = boxOf(a)
-  const bb = boxOf(b)
-  const x = ba.halfW + bb.halfW + MIN_GAP - Math.abs(b.x - a.x)
+  const x = a.halfW + b.halfW + MIN_GAP - Math.abs(b.x - a.x)
   if (x <= 0) return null
   // Vertical assimétrico: a caixa desce mais do que sobe (o rótulo fica abaixo
   // do círculo), então o teste depende de quem está por cima.
   const dy = b.y - a.y
-  const y = dy >= 0 ? ba.bottom + bb.top + MIN_GAP - dy : bb.bottom + ba.top + MIN_GAP + dy
+  const y = dy >= 0 ? a.bottom + b.top + MIN_GAP - dy : b.bottom + a.top + MIN_GAP + dy
   if (y <= 0) return null
-  return { x, y }
-}
-
-/**
- * Passe de separação — a regra dura do espaço mínimo. Resolve sobreposição das
- * CAIXAS DE RÓTULO empurrando o par pelo eixo de menor penetração, que é o
- * deslocamento mínimo capaz de abrir a folga.
- */
-function separate(list: SimNode[]): void {
-  const PASSES = 90
-  for (let pass = 0; pass < PASSES; pass++) {
-    let moved = false
-    for (let i = 0; i < list.length; i++) {
-      const a = list[i]
-      for (let j = i + 1; j < list.length; j++) {
-        const b = list[j]
-        const overlap = overlapOf(a, b)
-        if (!overlap) continue
-        moved = true
-        if (overlap.x < overlap.y) {
-          const dir = b.x >= a.x ? 1 : -1
-          const push = (overlap.x / 2) * dir
-          if (!a.isRoot) a.x -= push
-          if (!b.isRoot) b.x += push
-        } else {
-          const dir = b.y >= a.y ? 1 : -1
-          const push = (overlap.y / 2) * dir
-          if (!a.isRoot) a.y -= push
-          if (!b.isRoot) b.y += push
-        }
-      }
-    }
-    if (!moved) break
-  }
-}
-
-/**
- * Rede de segurança: se depois da separação ainda houver caixa encavalada
- * (vizinhança saturada), empurra o nó mais profundo radialmente para fora até
- * abrir espaço. É o "vai para um nível mais distante" literal.
- */
-function pushOutRemaining(list: SimNode[]): void {
-  const ROUNDS = 60
-  for (let round = 0; round < ROUNDS; round++) {
-    let collided = false
-    for (let i = 0; i < list.length; i++) {
-      const a = list[i]
-      for (let j = i + 1; j < list.length; j++) {
-        const b = list[j]
-        const overlap = overlapOf(a, b)
-        if (!overlap) continue
-        collided = true
-        // Cede quem tem menos vínculo: flutuante antes de quem está na árvore
-        // e, entre dois da árvore, o mais profundo. A raiz nunca se move.
-        const rank = (n: SimNode) => (n.isRoot ? -1 : n.floating ? 1e6 : n.depth)
-        const victim = a.isRoot ? b : b.isRoot ? a : rank(a) >= rank(b) ? a : b
-        const dist = Math.hypot(victim.x, victim.y) || 0.01
-        const step = Math.max(overlap.x, overlap.y) + MIN_GAP
-        victim.x += (victim.x / dist) * step
-        victim.y += (victim.y / dist) * step
-      }
-    }
-    if (!collided) break
-  }
+  penetracao.x = x
+  penetracao.y = y
+  return penetracao
 }
 
 // ---------------------------------------------------------------------------
@@ -590,10 +736,31 @@ export interface LayoutOptions {
 }
 
 /**
- * Monta o canvas inteiro: um grafo orgânico por projeto, empacotados lado a
- * lado sem se tocarem.
+ * Layout em andamento — o mesmo trabalho de `layoutMemoryGraph`, só que
+ * entregue em fatias para quem não pode bloquear a thread.
  */
-export function layoutMemoryGraph(pool: Memory[], options: LayoutOptions = {}): MemoryLayout {
+export interface MemoryGraphJob {
+  /** Trabalha por até `budgetMs` e devolve `true` quando terminou. Com
+   *  `Infinity` roda tudo numa chamada só. */
+  step(budgetMs: number): boolean
+  readonly done: boolean
+  /** 0..1, monotônico — alimenta a barra de progresso. */
+  readonly progress: number
+  /**
+   * Layout com as posições ATUAIS. Enquanto `done` for falso ele é parcial: é
+   * o que permite mostrar o grafo se assentando em vez de um spinner opaco.
+   */
+  snapshot(): MemoryLayout
+}
+
+/**
+ * Monta o canvas inteiro: um grafo orgânico por projeto, empacotados lado a
+ * lado sem se tocarem — em fatias, para caber entre dois frames.
+ */
+export function createMemoryGraphJob(
+  pool: Memory[],
+  options: LayoutOptions = {},
+): MemoryGraphJob {
   const collapsedIds = options.collapsedIds ?? new Set<string>()
   const labelOf = options.labelOf ?? nodeLabelText
 
@@ -615,18 +782,26 @@ export function layoutMemoryGraph(pool: Memory[], options: LayoutOptions = {}): 
     return byGroup.get(b)!.length - byGroup.get(a)!.length
   })
 
-  interface Laid {
-    id: string
-    nodes: SimNode[]
-    minX: number
-    minY: number
-    maxX: number
-    maxY: number
-  }
-  const laid: Laid[] = []
+  const grupos: GrupoSim[] = []
   const treeEdges: LayoutEdge[] = []
 
+  // O progresso é dominado pelas varreduras de pares, então o peso de cada
+  // grupo é o número de pares vezes as varreduras que ele ainda vai levar. A
+  // preparação entra fora da conta: ao lado disso ela é ruído.
+  let totalUnidades = 0
   for (const gid of groupIds) {
+    const n = byGroup.get(gid)!.length
+    totalUnidades += n * varredurasDe(n)
+  }
+  totalUnidades = Math.max(1, totalUnidades)
+  let unidades = 0
+
+  let fase: 'prep' | 'grupos' | 'done' = 'prep'
+  let prepIdx = 0
+  let grupoIdx = 0
+
+  /** Árvore, semente e molas de um grupo — tudo que a simulação precisa. */
+  function prepararGrupo(gid: string): GrupoSim | null {
     const members = byGroup.get(gid)!
     const shape = spanningTree(members)
     const hidden = hiddenDescendants(shape, collapsedIds)
@@ -657,6 +832,8 @@ export function layoutMemoryGraph(pool: Memory[], options: LayoutOptions = {}): 
       if (hidden.has(memory.id)) continue
       const isRoot = memory.id === shape.rootId
       const children = shape.childrenOf.get(memory.id) ?? []
+      const raio = nodeRadius(memory, isRoot)
+      const meiaLargura = labelHalfWidthOf(labelOf(memory, isRoot))
       nodes.set(memory.id, {
         memory,
         x: 0,
@@ -670,16 +847,28 @@ export function layoutMemoryGraph(pool: Memory[], options: LayoutOptions = {}): 
         childCount: children.length,
         collapsed: collapsedIds.has(memory.id),
         groupId: gid,
-        r: nodeRadius(memory, isRoot),
-        labelHalfWidth: labelHalfWidthOf(labelOf(memory, isRoot)),
+        r: raio,
+        labelHalfWidth: meiaLargura,
         subtreeSize: subtreeSize.get(memory.id) ?? 1,
+        halfW: Math.max(raio, meiaLargura),
+        top: raio,
+        bottom: raio + LABEL_OFFSET + LABEL_HEIGHT,
       })
     }
-    if (nodes.size === 0) continue
+    if (nodes.size === 0) return null
 
-    seedPositions(nodes, shape, makeRng(seedOf(gid)))
+    const lista = [...nodes.values()]
+    const usaGrade = lista.length > GRADE_MINIMA
+    // Caixa média do grupo (largura cheia + folga) contra a distância natural
+    // de uma aresta: o quociente é o quanto o grupo precisa esticar.
+    let somaHalfW = 0
+    for (const node of lista) somaHalfW += node.halfW
+    const caixaMedia = (2 * somaHalfW) / lista.length + MIN_GAP
+    const escala = usaGrade ? Math.max(1, caixaMedia / BASE_LINK_DISTANCE) : 1
 
-    const links: Array<{ a: SimNode; b: SimNode; rest: number }> = []
+    seedPositions(nodes, shape, makeRng(seedOf(gid)), escala)
+
+    const links: SimLink[] = []
     for (const node of nodes.values()) {
       const parent = node.parentId ? nodes.get(node.parentId) : undefined
       if (!parent) continue
@@ -689,7 +878,7 @@ export function layoutMemoryGraph(pool: Memory[], options: LayoutOptions = {}): 
         BASE_LINK_DISTANCE *
         (0.85 + Math.sqrt(siblings) * 0.22) *
         (1 + Math.min(node.depth, 5) * 0.06)
-      links.push({ a: parent, b: node, rest })
+      links.push({ a: parent, b: node, rest: rest * escala })
       treeEdges.push({
         from: parent.memory.id,
         to: node.memory.id,
@@ -698,180 +887,554 @@ export function layoutMemoryGraph(pool: Memory[], options: LayoutOptions = {}): 
       })
     }
 
-    const list = [...nodes.values()]
-    simulate(list, links)
-    separate(list)
-    pushOutRemaining(list)
-
-    let minX = Infinity
-    let minY = Infinity
-    let maxX = -Infinity
-    let maxY = -Infinity
-    for (const node of list) {
-      const box = boxOf(node)
-      minX = Math.min(minX, node.x - box.halfW)
-      maxX = Math.max(maxX, node.x + box.halfW)
-      minY = Math.min(minY, node.y - box.top)
-      maxY = Math.max(maxY, node.y + box.bottom)
+    return {
+      id: gid,
+      list: lista,
+      links,
+      fase: 'sim',
+      usaGrade,
+      iteracoes: iteracoesDe(lista.length),
+      passes: passesDe(lista.length),
+      rodadas: rodadasDe(lista.length),
+      grade: null,
+      celulaSep: celulaDeSeparacao(lista),
+      escala,
+      // A força cresce com o quadrado da distância para o equilíbrio entre
+      // mola e repulsão cair no mesmo ponto, só que na escala nova.
+      cutoff2: (CUTOFF * escala) ** 2,
+      repulsao: REPULSION * escala * escala,
+      buffer: new Int32Array(lista.length),
+      movimento: 0,
+      alpha: 1,
+      volta: 0,
+      cursor: 0,
+      ativo: false,
     }
-    laid.push({ id: gid, nodes: list, minX, minY, maxX, maxY })
   }
 
-  // Dispersão dos grupos: espiral de ângulo áureo + separação de círculos.
-  // Empacotar em linhas produzia fileiras visíveis de projetos lado a lado;
-  // a espiral espalha as ilhas sem alinhamento perceptível, e a separação
-  // garante que duas nunca se toquem.
-  const nodes: LayoutNode[] = []
-  const groups: LayoutGroup[] = []
-
-  interface Island {
-    group: (typeof laid)[number]
-    cx: number
-    cy: number
-    radius: number
-  }
-  // Raio do círculo que envolve o grupo — meia diagonal da sua caixa.
-  const islands: Island[] = laid.map((group) => ({
-    group,
-    cx: 0,
-    cy: 0,
-    radius: Math.hypot(group.maxX - group.minX, group.maxY - group.minY) / 2,
-  }))
-  // Maiores primeiro para ocuparem o miolo; o id desempata para o resultado
-  // não depender da ordem de iteração do Map.
-  islands.sort((a, b) => b.radius - a.radius || a.group.id.localeCompare(b.group.id))
-
-  const groupRng = makeRng(seedOf('memory-graph-islands'))
-  const GOLDEN_ANGLE = Math.PI * (3 - Math.sqrt(5))
-  let reach = 0
-  islands.forEach((island, i) => {
-    if (i === 0) return
-    // O raio acumula o tamanho das ilhas já colocadas, então grupos grandes
-    // afastam os seguintes em vez de serem atropelados por eles.
-    reach += island.radius * 0.85
-    const angle = i * GOLDEN_ANGLE + groupRng() * 0.4
-    island.cx = Math.cos(angle) * reach
-    island.cy = Math.sin(angle) * reach
-  })
-
-  for (let pass = 0; pass < 240; pass++) {
-    let moved = false
-    for (let i = 0; i < islands.length; i++) {
-      for (let j = i + 1; j < islands.length; j++) {
-        const a = islands[i]
-        const b = islands[j]
-        const dx = b.cx - a.cx
-        const dy = b.cy - a.cy
-        const distance = Math.hypot(dx, dy) || 0.01
-        const needed = a.radius + b.radius + GROUP_GAP
-        if (distance >= needed) continue
-        moved = true
-        const push = (needed - distance) / 2
-        const ux = dx / distance
-        const uy = dy / distance
-        a.cx -= ux * push
-        a.cy -= uy * push
-        b.cx += ux * push
-        b.cy += uy * push
+  /**
+   * Repulsão de `i` contra todos os pares seguintes — o caminho exato, com o
+   * empurrão aplicado nos dois nós de uma vez. Devolve os pares avaliados.
+   */
+  function repulsaoExata(list: SimNode[], i: number): number {
+    const n = list.length
+    const a = list[i]
+    for (let j = i + 1; j < n; j++) {
+      const b = list[j]
+      let dx = b.x - a.x
+      let dy = b.y - a.y
+      let d2 = dx * dx + dy * dy
+      if (d2 < 1) {
+        // Coincidentes: desempata com um empurrão determinístico.
+        dx = (i % 7) - 3 + 0.5
+        dy = (j % 7) - 3 + 0.5
+        d2 = dx * dx + dy * dy
       }
+      // Nós de ramos maiores empurram mais forte, abrindo espaço para eles.
+      const strength =
+        (REPULSION * (1 + Math.log2(1 + a.subtreeSize + b.subtreeSize) * 0.35)) / d2
+      const d = Math.sqrt(d2)
+      const fx = (dx / d) * strength
+      const fy = (dy / d) * strength
+      a.vx -= fx
+      a.vy -= fy
+      b.vx += fx
+      b.vy += fy
     }
-    if (!moved) break
+    return n - 1 - i
   }
 
-  for (const island of islands) {
-    const { group } = island
-    // Desloca pelo CENTRO da caixa, não pelo canto — é o centro que a espiral
-    // posicionou.
-    const dx = island.cx - (group.minX + group.maxX) / 2
-    const dy = island.cy - (group.minY + group.maxY) / 2
-    for (const node of group.nodes) {
-      nodes.push({
-        memory: node.memory,
-        x: node.x + dx,
-        y: node.y + dy,
-        depth: node.depth,
-        isRoot: node.isRoot,
-        floating: node.floating,
-        parentId: node.parentId,
-        childCount: node.childCount,
-        collapsed: node.collapsed,
-        groupId: node.groupId,
-        r: node.r,
-        labelHalfWidth: node.labelHalfWidth,
-      })
+  /**
+   * Repulsão de `i` contra a vizinhança da grade — só o que está dentro do
+   * corte. Aqui a força é aplicada SÓ em `i`: cada par acaba avaliado duas
+   * vezes, uma de cada lado, e a soma das forças é a mesma do caminho exato.
+   */
+  function repulsaoVizinha(g: GrupoSim, i: number): number {
+    const { list, buffer } = g
+    const a = list[i]
+    const qtd = vizinhosDe(g.grade!, list, i, buffer)
+    for (let p = 0; p < qtd; p++) {
+      const j = buffer[p]
+      if (j === i) continue
+      const b = list[j]
+      let dx = b.x - a.x
+      let dy = b.y - a.y
+      let d2 = dx * dx + dy * dy
+      if (d2 > g.cutoff2) continue
+      if (d2 < 1) {
+        // Coincidentes: mesmo desempate do caminho exato, orientado do par
+        // menor para o maior, para os dois lados se empurrarem em sentidos
+        // opostos em vez de na mesma direção.
+        const menor = i < j ? i : j
+        const maior = i < j ? j : i
+        dx = (menor % 7) - 3 + 0.5
+        dy = (maior % 7) - 3 + 0.5
+        if (i !== menor) {
+          dx = -dx
+          dy = -dy
+        }
+        d2 = dx * dx + dy * dy
+      }
+      const strength =
+        (g.repulsao * (1 + Math.log2(1 + a.subtreeSize + b.subtreeSize) * 0.35)) / d2
+      const d = Math.sqrt(d2)
+      a.vx -= (dx / d) * strength
+      a.vy -= (dy / d) * strength
     }
-    groups.push({
-      id: group.id,
-      label: labels.get(group.id) ?? '',
-      minX: group.minX + dx,
-      minY: group.minY + dy,
-      maxX: group.maxX + dx,
-      maxY: group.maxY + dy,
+    return qtd
+  }
+
+  /** Molas + repulsão + gravidade, com resfriamento progressivo. */
+  function simular(g: GrupoSim, estourou: () => boolean): boolean {
+    const { list, links } = g
+    const n = list.length
+    const gravidade = g.usaGrade ? GRAVITY_GRADE : GRAVITY
+    while (g.volta < g.iteracoes) {
+      // A grade vale por uma iteração: na seguinte as posições já são outras.
+      // Montá-la custa O(n), contra os O(n · vizinhos) da varredura.
+      if (g.usaGrade && g.cursor === 0) {
+        g.grade = montarGrade(list, CUTOFF * g.escala)
+        g.movimento = 0
+      }
+      // Repulsão — o laço externo é o ponto de retomada.
+      while (g.cursor < n) {
+        let restante = PARES_POR_CHECAGEM
+        while (g.cursor < n && restante > 0) {
+          const i = g.cursor++
+          restante -= g.usaGrade ? repulsaoVizinha(g, i) : repulsaoExata(list, i)
+          unidades++
+        }
+        if (estourou()) return false
+      }
+
+      for (const link of links) {
+        const dx = link.b.x - link.a.x
+        const dy = link.b.y - link.a.y
+        const d = Math.hypot(dx, dy) || 0.01
+        const force = SPRING * (d - link.rest)
+        const fx = (dx / d) * force
+        const fy = (dy / d) * force
+        link.a.vx += fx
+        link.a.vy += fy
+        link.b.vx -= fx
+        link.b.vy -= fy
+      }
+
+      for (const node of list) {
+        if (node.isRoot) {
+          // A raiz fica presa no centro: é o âncora visual do grupo.
+          node.vx = 0
+          node.vy = 0
+          node.x = 0
+          node.y = 0
+          continue
+        }
+        node.vx -= node.x * gravidade
+        node.vy -= node.y * gravidade
+        let px = node.vx * g.alpha
+        let py = node.vy * g.alpha
+        if (g.usaGrade) {
+          const passo = Math.hypot(px, py)
+          const teto = MAX_PASSO * g.escala
+          if (passo > teto) {
+            // Corta o passo E a velocidade: só encurtar o passo deixaria a
+            // energia guardada na velocidade para estourar na iteração seguinte.
+            const freio = teto / passo
+            px *= freio
+            py *= freio
+            node.vx *= freio
+            node.vy *= freio
+          }
+        }
+        node.x += px
+        node.y += py
+        if (g.usaGrade) g.movimento += Math.abs(px) + Math.abs(py)
+        // Amortecimento: sem ele o sistema oscila em vez de assentar.
+        node.vx *= 0.6
+        node.vy *= 0.6
+      }
+
+      g.alpha *= 1 - ALPHA_DECAY
+      g.volta++
+      g.cursor = 0
+      // Assentou: as iterações que faltam não mexem mais no desenho, e num
+      // grupo grande cada uma delas custa caro.
+      // O limiar acompanha a escala do grupo: num grupo esticado, "parado" é
+      // proporcionalmente maior em unidades de mundo.
+      if (g.usaGrade && g.movimento / n < CONVERGIU * g.escala) {
+        unidades += (g.iteracoes - g.volta) * n
+        return true
+      }
+      if (estourou()) return false
+    }
+    return true
+  }
+
+  /**
+   * Passe de separação — a regra dura do espaço mínimo. Resolve sobreposição
+   * das CAIXAS DE RÓTULO empurrando o par pelo eixo de menor penetração, que é
+   * o deslocamento mínimo capaz de abrir a folga.
+   */
+  function separar(g: GrupoSim, estourou: () => boolean): boolean {
+    const { list, buffer } = g
+    const n = list.length
+    while (g.volta < g.passes) {
+      if (g.usaGrade && g.cursor === 0) g.grade = montarGrade(list, g.celulaSep)
+      while (g.cursor < n) {
+        let restante = PARES_POR_CHECAGEM
+        while (g.cursor < n && restante > 0) {
+          const i = g.cursor++
+          const a = list[i]
+          // Na grade só as 9 células ao redor entram; no caminho exato, todos
+          // os índices seguintes. Nos dois casos cada par é tratado uma vez só
+          // e na mesma ordem.
+          const qtd = g.usaGrade ? vizinhosDe(g.grade!, list, i, buffer) : n
+          for (let p = g.usaGrade ? 0 : i + 1; p < qtd; p++) {
+            const j = g.usaGrade ? buffer[p] : p
+            if (j <= i) continue
+            const b = list[j]
+            const overlap = overlapOf(a, b)
+            if (!overlap) continue
+            g.ativo = true
+            if (overlap.x < overlap.y) {
+              const dir = b.x >= a.x ? 1 : -1
+              const push = (overlap.x / 2) * dir
+              if (!a.isRoot) a.x -= push
+              if (!b.isRoot) b.x += push
+            } else {
+              const dir = b.y >= a.y ? 1 : -1
+              const push = (overlap.y / 2) * dir
+              if (!a.isRoot) a.y -= push
+              if (!b.isRoot) b.y += push
+            }
+          }
+          restante -= qtd
+          unidades++
+        }
+        if (estourou()) return false
+      }
+      const moveu = g.ativo
+      g.ativo = false
+      g.cursor = 0
+      g.volta++
+      if (!moveu) {
+        // Assentou antes do limite: o que sobrou da fase entra no progresso de
+        // uma vez, senão a barra ficaria presa esperando um trabalho que não
+        // vai acontecer.
+        unidades += (g.passes - g.volta) * n
+        return true
+      }
+      if (estourou()) return false
+    }
+    return true
+  }
+
+  /**
+   * Rede de segurança: se depois da separação ainda houver caixa encavalada
+   * (vizinhança saturada), empurra o nó mais profundo radialmente para fora até
+   * abrir espaço. É o "vai para um nível mais distante" literal.
+   */
+  function empurrar(g: GrupoSim, estourou: () => boolean): boolean {
+    const { list, buffer } = g
+    const n = list.length
+    while (g.volta < g.rodadas) {
+      if (g.usaGrade && g.cursor === 0) g.grade = montarGrade(list, g.celulaSep)
+      while (g.cursor < n) {
+        let restante = PARES_POR_CHECAGEM
+        while (g.cursor < n && restante > 0) {
+          const i = g.cursor++
+          const a = list[i]
+          const qtd = g.usaGrade ? vizinhosDe(g.grade!, list, i, buffer) : n
+          for (let p = g.usaGrade ? 0 : i + 1; p < qtd; p++) {
+            const j = g.usaGrade ? buffer[p] : p
+            if (j <= i) continue
+            const b = list[j]
+            const overlap = overlapOf(a, b)
+            if (!overlap) continue
+            g.ativo = true
+            // Cede quem tem menos vínculo: flutuante antes de quem está na
+            // árvore e, entre dois da árvore, o mais profundo. A raiz nunca se
+            // move.
+            const rank = (node: SimNode) => (node.isRoot ? -1 : node.floating ? 1e6 : node.depth)
+            const victim = a.isRoot ? b : b.isRoot ? a : rank(a) >= rank(b) ? a : b
+            const dist = Math.hypot(victim.x, victim.y) || 0.01
+            const step = Math.max(overlap.x, overlap.y) + MIN_GAP
+            victim.x += (victim.x / dist) * step
+            victim.y += (victim.y / dist) * step
+          }
+          restante -= qtd
+          unidades++
+        }
+        if (estourou()) return false
+      }
+      const colidiu = g.ativo
+      g.ativo = false
+      g.cursor = 0
+      g.volta++
+      if (!colidiu) {
+        unidades += (g.rodadas - g.volta) * n
+        return true
+      }
+      if (estourou()) return false
+    }
+    return true
+  }
+
+  /** Avança um grupo pelas suas três fases; false quando o orçamento acabou. */
+  function passoGrupo(g: GrupoSim, estourou: () => boolean): boolean {
+    if (g.fase === 'sim') {
+      if (!simular(g, estourou)) return false
+      g.fase = 'sep'
+      g.volta = 0
+      g.cursor = 0
+      g.ativo = false
+    }
+    if (g.fase === 'sep') {
+      if (!separar(g, estourou)) return false
+      g.fase = 'push'
+      g.volta = 0
+      g.cursor = 0
+      g.ativo = false
+    }
+    if (g.fase === 'push') {
+      if (!empurrar(g, estourou)) return false
+      g.fase = 'ok'
+    }
+    return true
+  }
+
+  /**
+   * Dispersão dos grupos + montagem do resultado. Empacotar em linhas produzia
+   * fileiras visíveis de projetos lado a lado; a espiral de ângulo áureo
+   * espalha as ilhas sem alinhamento perceptível, e a separação garante que
+   * duas nunca se toquem.
+   *
+   * Roda a partir das posições atuais, então serve tanto para o resultado final
+   * quanto para as prévias do meio do caminho.
+   */
+  function montar(): MemoryLayout {
+    const nodes: LayoutNode[] = []
+    const groups: LayoutGroup[] = []
+
+    interface Island {
+      grupo: GrupoSim
+      minX: number
+      minY: number
+      maxX: number
+      maxY: number
+      cx: number
+      cy: number
+      radius: number
+    }
+    // Raio do círculo que envolve o grupo — meia diagonal da sua caixa.
+    const islands: Island[] = grupos.map((grupo) => {
+      let minX = Infinity
+      let minY = Infinity
+      let maxX = -Infinity
+      let maxY = -Infinity
+      for (const node of grupo.list) {
+        const box = boxOf(node)
+        minX = Math.min(minX, node.x - box.halfW)
+        maxX = Math.max(maxX, node.x + box.halfW)
+        minY = Math.min(minY, node.y - box.top)
+        maxY = Math.max(maxY, node.y + box.bottom)
+      }
+      return {
+        grupo,
+        minX,
+        minY,
+        maxX,
+        maxY,
+        cx: 0,
+        cy: 0,
+        radius: Math.hypot(maxX - minX, maxY - minY) / 2,
+      }
     })
-  }
+    // Maiores primeiro para ocuparem o miolo; o id desempata para o resultado
+    // não depender da ordem de iteração do Map.
+    islands.sort((a, b) => b.radius - a.radius || a.grupo.id.localeCompare(b.grupo.id))
 
-  const visibleById = new Map(nodes.map((n) => [n.memory.id, n]))
-  const edges: LayoutEdge[] = treeEdges.filter(
-    (e) => visibleById.has(e.from) && visibleById.has(e.to),
-  )
-  const seen = new Set(edges.map((e) => [e.from, e.to].sort().join(':')))
+    const groupRng = makeRng(seedOf('memory-graph-islands'))
+    const GOLDEN_ANGLE = Math.PI * (3 - Math.sqrt(5))
+    let reach = 0
+    islands.forEach((island, i) => {
+      if (i === 0) return
+      // O raio acumula o tamanho das ilhas já colocadas, então grupos grandes
+      // afastam os seguintes em vez de serem atropelados por eles.
+      reach += island.radius * 0.85
+      const angle = i * GOLDEN_ANGLE + groupRng() * 0.4
+      island.cx = Math.cos(angle) * reach
+      island.cy = Math.sin(angle) * reach
+    })
 
-  // Relações reais que a árvore não absorveu (segundo pai, "related").
-  for (const node of nodes) {
-    for (const rel of node.memory.relatedIds) {
-      const other = visibleById.get(rel)
-      if (!other) continue
-      // Ligação entre grupos é sempre ruído: projetos distintos não se cruzam.
-      if (other.groupId !== node.groupId) continue
-      const key = [node.memory.id, rel].sort().join(':')
-      if (seen.has(key)) continue
-      seen.add(key)
-      edges.push({
-        from: node.memory.id,
-        to: rel,
-        kind: 'cross',
-        hits: node.memory.hits + other.memory.hits,
+    for (let pass = 0; pass < 240; pass++) {
+      let moved = false
+      for (let i = 0; i < islands.length; i++) {
+        for (let j = i + 1; j < islands.length; j++) {
+          const a = islands[i]
+          const b = islands[j]
+          const dx = b.cx - a.cx
+          const dy = b.cy - a.cy
+          const distance = Math.hypot(dx, dy) || 0.01
+          const needed = a.radius + b.radius + GROUP_GAP
+          if (distance >= needed) continue
+          moved = true
+          const push = (needed - distance) / 2
+          const ux = dx / distance
+          const uy = dy / distance
+          a.cx -= ux * push
+          a.cy -= uy * push
+          b.cx += ux * push
+          b.cy += uy * push
+        }
+      }
+      if (!moved) break
+    }
+
+    for (const island of islands) {
+      // Desloca pelo CENTRO da caixa, não pelo canto — é o centro que a espiral
+      // posicionou.
+      const dx = island.cx - (island.minX + island.maxX) / 2
+      const dy = island.cy - (island.minY + island.maxY) / 2
+      for (const node of island.grupo.list) {
+        nodes.push({
+          memory: node.memory,
+          x: node.x + dx,
+          y: node.y + dy,
+          depth: node.depth,
+          isRoot: node.isRoot,
+          floating: node.floating,
+          parentId: node.parentId,
+          childCount: node.childCount,
+          collapsed: node.collapsed,
+          groupId: node.groupId,
+          r: node.r,
+          labelHalfWidth: node.labelHalfWidth,
+        })
+      }
+      groups.push({
+        id: island.grupo.id,
+        label: labels.get(island.grupo.id) ?? '',
+        minX: island.minX + dx,
+        minY: island.minY + dy,
+        maxX: island.maxX + dx,
+        maxY: island.maxY + dy,
       })
     }
-  }
 
-  if (options.inferEdges) {
-    const tagIndex = new Map<string, string[]>()
+    const visibleById = new Map(nodes.map((n) => [n.memory.id, n]))
+    const edges: LayoutEdge[] = treeEdges.filter(
+      (e) => visibleById.has(e.from) && visibleById.has(e.to),
+    )
+    const seen = new Set(edges.map((e) => [e.from, e.to].sort().join(':')))
+
+    // Relações reais que a árvore não absorveu (segundo pai, "related").
     for (const node of nodes) {
-      for (const tag of node.memory.tags) {
-        const key = `${node.groupId}::${normalizeText(tag)}`
-        const bucket = tagIndex.get(key) ?? []
-        bucket.push(node.memory.id)
-        tagIndex.set(key, bucket)
+      for (const rel of node.memory.relatedIds) {
+        const other = visibleById.get(rel)
+        if (!other) continue
+        // Ligação entre grupos é sempre ruído: projetos distintos não se cruzam.
+        if (other.groupId !== node.groupId) continue
+        const key = [node.memory.id, rel].sort().join(':')
+        if (seen.has(key)) continue
+        seen.add(key)
+        edges.push({
+          from: node.memory.id,
+          to: rel,
+          kind: 'cross',
+          hits: node.memory.hits + other.memory.hits,
+        })
       }
     }
-    let count = 0
-    const compared = new Set<string>()
-    for (const node of nodes) {
-      if (count >= MAX_INFERRED_EDGES) break
-      const candidates = new Set<string>()
-      for (const tag of node.memory.tags) {
-        for (const id of tagIndex.get(`${node.groupId}::${normalizeText(tag)}`) ?? []) {
-          if (id !== node.memory.id) candidates.add(id)
+
+    if (options.inferEdges) {
+      const tagIndex = new Map<string, string[]>()
+      for (const node of nodes) {
+        for (const tag of node.memory.tags) {
+          const key = `${node.groupId}::${normalizeText(tag)}`
+          const bucket = tagIndex.get(key) ?? []
+          bucket.push(node.memory.id)
+          tagIndex.set(key, bucket)
         }
       }
-      for (const candidateId of candidates) {
+      let count = 0
+      const compared = new Set<string>()
+      for (const node of nodes) {
         if (count >= MAX_INFERRED_EDGES) break
-        const key = [node.memory.id, candidateId].sort().join(':')
-        if (seen.has(key) || compared.has(key)) continue
-        compared.add(key)
-        const other = visibleById.get(candidateId)?.memory
-        if (!other || other.tags.length === 0) continue
-        if (jaccard(node.memory.tags, other.tags) >= INFERRED_JACCARD) {
-          seen.add(key)
-          edges.push({ from: node.memory.id, to: candidateId, kind: 'inferred', hits: 0 })
-          count++
+        const candidates = new Set<string>()
+        for (const tag of node.memory.tags) {
+          for (const id of tagIndex.get(`${node.groupId}::${normalizeText(tag)}`) ?? []) {
+            if (id !== node.memory.id) candidates.add(id)
+          }
+        }
+        for (const candidateId of candidates) {
+          if (count >= MAX_INFERRED_EDGES) break
+          const key = [node.memory.id, candidateId].sort().join(':')
+          if (seen.has(key) || compared.has(key)) continue
+          compared.add(key)
+          const other = visibleById.get(candidateId)?.memory
+          if (!other || other.tags.length === 0) continue
+          if (jaccard(node.memory.tags, other.tags) >= INFERRED_JACCARD) {
+            seen.add(key)
+            edges.push({ from: node.memory.id, to: candidateId, kind: 'inferred', hits: 0 })
+            count++
+          }
         }
       }
     }
+
+    return { nodes, edges, groups }
   }
 
-  return { nodes, edges, groups }
+  function step(budgetMs: number): boolean {
+    if (fase === 'done') return true
+    const inicio = relogio()
+    const estourou = () => relogio() - inicio >= budgetMs
+
+    for (;;) {
+      if (fase === 'prep') {
+        while (prepIdx < groupIds.length) {
+          const grupo = prepararGrupo(groupIds[prepIdx++])
+          if (grupo) grupos.push(grupo)
+          if (estourou()) return false
+        }
+        fase = 'grupos'
+        grupoIdx = 0
+        continue
+      }
+      if (grupoIdx >= grupos.length) {
+        fase = 'done'
+        return true
+      }
+      if (!passoGrupo(grupos[grupoIdx], estourou)) return false
+      grupoIdx++
+    }
+  }
+
+  return {
+    step,
+    get done() {
+      return fase === 'done'
+    },
+    get progress() {
+      return fase === 'done' ? 1 : Math.min(0.999, unidades / totalUnidades)
+    },
+    snapshot: montar,
+  }
+}
+
+/**
+ * Layout completo numa chamada — a forma síncrona, para quem pode bloquear
+ * (o desktop, os testes). No mobile use `createMemoryGraphJob`.
+ */
+export function layoutMemoryGraph(pool: Memory[], options: LayoutOptions = {}): MemoryLayout {
+  const job = createMemoryGraphJob(pool, options)
+  // Com orçamento infinito o step nunca devolve o controle no meio; o laço é
+  // só rede de segurança.
+  while (!job.step(Infinity)) {
+    /* vazio */
+  }
+  return job.snapshot()
 }
 
 /**
