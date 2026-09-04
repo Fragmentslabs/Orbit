@@ -18,13 +18,14 @@ import {
 } from 'react-native'
 import { useTranslation } from 'react-i18next'
 import Animated from 'react-native-reanimated'
-import { ChevronDown, GripVertical, Pencil, Plus, X } from 'lucide-react-native'
+import { Brain, ChevronDown, GripVertical, Pencil, Plus, X } from 'lucide-react-native'
 import type { Esteira, FaseConfig, FaseEscolhida, FaseTemplate } from '@orbit/shared'
 import { Input } from '~/components/ui/input'
 import { Switch } from '~/components/ui/switch'
 import { BottomSheet } from '~/components/ui/bottom-sheet'
 import { FolderSelector } from '~/components/chat/FolderSelector'
 import { ModelPickerModal } from '~/components/chat/ModelPickerModal'
+import { ProviderLogo } from '~/components/ui/provider-logo'
 import { getThemeTokens } from '~/lib/theme-tokens'
 import { useThemeStore } from '~/stores/theme-store'
 import { useSettingsStore } from '~/stores/settings-store'
@@ -297,9 +298,16 @@ function FormEsteiraCorpo({
               { backgroundColor: pressed ? tokens.muted : tokens.card, borderColor: tokens.border },
             ]}
           >
-            <Text style={[s.modeloTexto, { color: nomeModelo ? tokens.foreground : tokens.mutedForeground }]}>
-              {nomeModelo ?? t('esteira.modeloPadrao')}
-            </Text>
+            <View style={s.modeloTriggerEsquerda}>
+              {modelo?.providerId ? (
+                <ProviderLogo providerId={modelo.providerId} size={14} color={tokens.mutedForeground} />
+              ) : (
+                <Brain size={14} color={tokens.mutedForeground} />
+              )}
+              <Text style={[s.modeloTexto, { color: nomeModelo ? tokens.foreground : tokens.mutedForeground }]} numberOfLines={1}>
+                {nomeModelo ?? t('esteira.modeloPadrao')}
+              </Text>
+            </View>
             <ChevronDown size={15} color={tokens.mutedForeground} />
           </Pressable>
         </View>
@@ -472,12 +480,14 @@ const s = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    gap: 8,
     borderRadius: 8,
     borderWidth: 1,
     paddingHorizontal: 12,
     paddingVertical: 10,
   },
-  modeloTexto: { fontSize: 13, fontWeight: '500' },
+  modeloTriggerEsquerda: { flexDirection: 'row', alignItems: 'center', gap: 7, flex: 1, minWidth: 0 },
+  modeloTexto: { fontSize: 13, fontWeight: '500', flex: 1 },
   adicionarFase: {
     flexDirection: 'row',
     alignItems: 'center',
