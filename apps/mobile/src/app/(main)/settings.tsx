@@ -43,7 +43,9 @@ export default function SettingsScreen() {
   const loading = useSettingsStore((s) => s.loading)
 
   const [refreshing, setRefreshing] = useState(false)
-  const appVersion = Constants.expoConfig?.version ?? '0.1.0'
+  // Sem literal de reserva: um numero fixo aqui envelhece a cada release e
+  // passaria a mentir. Faltando o expo config, a UI simplesmente omite.
+  const appVersion = Constants.expoConfig?.version ?? ''
 
   useEffect(() => {
     void fetchSelectedModel()
@@ -138,7 +140,7 @@ export default function SettingsScreen() {
           <Row
             icon={Info}
             label={t('settings.about')}
-            value={appVersion}
+            value={appVersion || undefined}
             onPress={() => router.push('/(main)/about')}
             chevron
           />
@@ -154,9 +156,11 @@ export default function SettingsScreen() {
         </View>
 
         {/* ── Versão ────────────────────────────────────────────────── */}
-        <View style={s.footer}>
-          <Text style={[s.footerText, { color: tokens.mutedForeground }]}>{t('settings.footer', { version: appVersion })}</Text>
-        </View>
+        {appVersion ? (
+          <View style={s.footer}>
+            <Text style={[s.footerText, { color: tokens.mutedForeground }]}>{t('settings.footer', { version: appVersion })}</Text>
+          </View>
+        ) : null}
       </ScrollView>
     </SafeScreen>
   )

@@ -1,3 +1,4 @@
+import { app } from 'electron'
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js'
@@ -157,7 +158,7 @@ async function connect(runtime: ServerRuntime, interactive = false): Promise<voi
   runtime.lastAttempt = Date.now()
   const url = oauthUrl(runtime.config)
   try {
-    let client = new Client({ name: 'orbit', version: '0.1.0' })
+    let client = new Client({ name: 'orbit', version: app.getVersion() })
     if (url) {
       await ensureOAuthLoopback()
       runtime.authorized = await hasOAuthTokens(url)
@@ -181,7 +182,7 @@ async function connect(runtime: ServerRuntime, interactive = false): Promise<voi
       // fechado no erro) — o SDK recusa reiniciar o mesmo transport. Com o
       // token salvo pelo finishAuth, a conexão vai em instâncias novas.
       await transport.close().catch(() => {})
-      client = new Client({ name: 'orbit', version: '0.1.0' })
+      client = new Client({ name: 'orbit', version: app.getVersion() })
       transport = await buildTransport(runtime.config)
       await withTimeout(client.connect(transport), CONNECT_TIMEOUT_MS, runtime.config.name)
     }
