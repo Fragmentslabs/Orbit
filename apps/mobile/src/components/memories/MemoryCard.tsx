@@ -4,7 +4,7 @@
  * (doc, promover, editar, excluir). No mobile as ações ficam sempre visíveis
  * (não há hover).
  */
-import { useEffect, useState } from 'react'
+import { memo, useEffect, useState } from 'react'
 import { View, Text, Pressable, TextInput, Modal, ScrollView, Alert, StyleSheet } from 'react-native'
 import { ArrowUpCircle, FileText, Link2, Pencil, Trash2, X } from 'lucide-react-native'
 import { useTranslation } from 'react-i18next'
@@ -145,7 +145,12 @@ function DocModal({ memory, visible, onClose }: {
   )
 }
 
-export function MemoryCard({ memory, related, onSelectRelated }: {
+/**
+ * Memoizado: na lista, rolar re-renderiza o pai e sem isto cada card visível
+ * era refeito — com markdown, badges e modais dentro. O `related` precisa vir
+ * com referência estável do pai para o memo segurar (ver `relacionadasDe`).
+ */
+export const MemoryCard = memo(function MemoryCard({ memory, related, onSelectRelated }: {
   memory: Memory
   /** Memórias em relatedIds já resolvidas pelo pai */
   related: Memory[]
@@ -257,7 +262,7 @@ export function MemoryCard({ memory, related, onSelectRelated }: {
       {memory.hasDoc && <DocModal memory={memory} visible={docOpen} onClose={() => setDocOpen(false)} />}
     </View>
   )
-}
+})
 
 const s = StyleSheet.create({
   card: { borderRadius: 14, borderWidth: 1, padding: 12, gap: 8 },

@@ -3,8 +3,8 @@
  * Lista/Grafo, filtro automático pelo modo do workspace (chat mostra
  * core+seasonal+general; código mostra project+general com filtro de projeto).
  */
-import { useEffect, useMemo, useState } from 'react'
-import { View, Text, Pressable, TextInput, FlatList, ScrollView, RefreshControl, StyleSheet } from 'react-native'
+import { useCallback, useDeferredValue, useEffect, useMemo, useState } from 'react'
+import { View, Text, Pressable, TextInput, FlatList, ScrollView, RefreshControl, StyleSheet, InteractionManager } from 'react-native'
 import { useRouter } from 'expo-router'
 import { ArrowLeft, RefreshCw, Search, List, Network, X } from 'lucide-react-native'
 import { useTranslation } from 'react-i18next'
@@ -14,6 +14,7 @@ import { useMemoryStore } from '~/stores/memory-store'
 import { useWorkspaceStore } from '~/stores/workspace-store'
 import { MemoryCard } from '~/components/memories/MemoryCard'
 import { MemoryGraph } from '~/components/memories/MemoryGraph'
+import { prewarmGraphLayout, stopGraphLayout } from '~/components/memories/use-graph-layout'
 import { lastActivity } from '~/components/memories/meta'
 import { Spin } from '~/components/ui/spin'
 import { getThemeTokens } from '~/lib/theme-tokens'
@@ -21,6 +22,8 @@ import { useThemeStore } from '~/stores/theme-store'
 import { SafeScreen } from '~/components/layout/SafeScreen'
 
 const ALL_PROJECTS = '__all__'
+
+const chaveDe = (m: Memory) => m.id
 
 export default function MemoriesScreen() {
   const { t } = useTranslation()
@@ -70,14 +73,55 @@ export default function MemoriesScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [index, mode, projectFilter])
 
+  // Adiada: `searchMemories` pontua TODA memória do pool, e com milhares delas
+  // fazer isso a cada tecla digitada engasgava o próprio campo de texto.
+  const queryAdiada = useDeferredValue(query)
   const filtered = useMemo(() => {
-    if (query.trim()) return searchMemories(pool, query, 50)
+    if (queryAdiada.trim()) return searchMemories(pool, queryAdiada, 50)
     return [...pool].sort((a, b) => lastActivity(b) - lastActivity(a))
-  }, [pool, query])
+  }, [pool, queryAdiada])
+
+  // Adianta o layout do grafo com a lista ainda na frente: quando o toggle é
+  // apertado, na maioria das vezes ele já está pronto (ou quase). Espera as
+  // interações para não disputar frame com a transição da tela.
+  useEffect(() => {
+    const tarefa = InteractionManager.runAfterInteractions(() => prewarmGraphLayout(pool))
+    return () => tarefa.cancel()
+  }, [pool])
+
+  // Saiu da tela de memórias: não faz sentido continuar moendo em segundo plano.
+  useEffect(() => () => stopGraphLayout(), [])
 
   const byId = useMemo(() => new Map(index.map((m) => [m.id, m])), [index])
-  const relatedOf = (memory: Memory) =>
-    memory.relatedIds.map((id) => byId.get(id)).filter((m): m is Memory => m != null)
+  // Resolvido uma vez por índice: montar o array dentro do renderItem devolvia
+  // uma prop nova a cada rolagem e anulava o memo do card.
+  const relacionadas = useMemo(() => {
+    const mapa = new Map<string, Memory[]>()
+    for (const m of index) {
+      const lista = m.relatedIds.map((id) => byId.get(id)).filter((x): x is Memory => x != null)
+      if (lista.length > 0) mapa.set(m.id, lista)
+    }
+    return mapa
+  }, [index, byId])
+  const SEM_RELACIONADAS: Memory[] = useMemo(() => [], [])
+
+  const abrirNoGrafo = useCallback((id: string) => {
+    setSelectedId(id)
+    setTab('graph')
+  }, [])
+
+  const renderItem = useCallback(
+    ({ item }: { item: Memory }) => (
+      <View style={{ marginBottom: 10 }}>
+        <MemoryCard
+          memory={item}
+          related={relacionadas.get(item.id) ?? SEM_RELACIONADAS}
+          onSelectRelated={abrirNoGrafo}
+        />
+      </View>
+    ),
+    [relacionadas, SEM_RELACIONADAS, abrirNoGrafo],
+  )
 
   const empty = (tab === 'graph' ? pool : filtered).length === 0
 
@@ -177,19 +221,16 @@ export default function MemoriesScreen() {
         ) : tab === 'list' ? (
           <FlatList
             data={filtered}
-            keyExtractor={(m) => m.id}
-            renderItem={({ item }) => (
-              <View style={{ marginBottom: 10 }}>
-                <MemoryCard
-                  memory={item}
-                  related={relatedOf(item)}
-                  onSelectRelated={(id) => {
-                    setSelectedId(id)
-                    setTab('graph')
-                  }}
-                />
-              </View>
-            )}
+            keyExtractor={chaveDe}
+            renderItem={renderItem}
+            // Cartões têm altura variável (markdown, tags, ações), então não há
+            // getItemLayout: o que dá para fazer é montar menos por lote e
+            // soltar da árvore nativa o que saiu da janela.
+            initialNumToRender={8}
+            maxToRenderPerBatch={8}
+            updateCellsBatchingPeriod={50}
+            windowSize={7}
+            removeClippedSubviews
             contentContainerStyle={{ paddingBottom: 32 }}
             refreshControl={
               <RefreshControl refreshing={loading} onRefresh={() => void fetch()} tintColor={tokens.primary} />
