@@ -2,7 +2,7 @@
 {
   "$schema": "https://raw.githubusercontent.com/electron-userland/electron-builder/master/packages/app-builder-lib/scheme.json",
   "electronVersion": "30.0.1",
-  "appId": "YourAppID",
+  "appId": "com.fragmentslabs.orbit.code",
   "asar": true,
   "asarUnpack": [
     "**/node_modules/sharp/**",
