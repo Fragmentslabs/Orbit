@@ -10,6 +10,8 @@
     "postinstall": "node scripts/fix-pty-permissions.mjs",
     "build": "tsc && vite build && electron-builder",
     "build:store": "tsc && vite build && node scripts/generate-appx-assets.mjs && electron-builder --win appx --config electron-builder.store.json5",
+    "build:mas": "tsc && vite build && electron-builder --mac mas",
+    "upload:mas": "tsc && vite build && electron-builder --mac mas --publish always",
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit"

@@ -37,7 +37,10 @@
     "target": [
       "dmg"
     ],
-    "artifactName": "${productName}-Mac-${version}-Installer.${ext}"
+    "artifactName": "${productName}-Mac-${version}-Installer.${ext}",
+    "provisioningProfile": "/Users/desknik/Library/MobileDevice/Provisioning Profiles/1698ba7d-11d9-411e-8385-af55ac4fbb9b.mobileprovision",
+    "icon": "build/icon.icns",
+    "minimumSystemVersion": "12.0.0"
   },
   "win": {
     "target": [
