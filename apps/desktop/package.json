@@ -4,6 +4,7 @@
   "version": "0.1.2",
   "description": "Orbit - AI-powered coding assistant",
   "author": "Orbit",
+  "homepage": "https://orbit.fragmentslabs.com",
   "type": "module",
   "scripts": {
     "dev": "vite",

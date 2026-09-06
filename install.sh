@@ -25,7 +25,7 @@ die()  { printf '\033[1;31m==>\033[0m %s\n' "$*" >&2; exit 1; }
 
 # --- architecture -------------------------------------------------------------
 case "$(uname -m)" in
-  x86_64|amd64) ASSET="Orbit-Linux-x64.AppImage" ;;
+  x86_64|amd64) ASSET="Orbit-Linux-x86_64.AppImage" ;;
   aarch64|arm64)
     info "Detected arm64. Orbit currently ships x86_64 AppImages only."
     info "Run it via an emulator, or build from source."
