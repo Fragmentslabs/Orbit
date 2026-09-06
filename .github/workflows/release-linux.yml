@@ -1,0 +1,31 @@
+name: Release Linux
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build & publish (AppImage + deb)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build & publish to GitHub Releases
+        run: npm run desktop:release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -1,7 +1,7 @@
 {
   "name": "@orbit/desktop",
   "private": true,
-  "version": "0.1.2",
+  "version": "0.1.2.1",
   "description": "Orbit - AI-powered coding assistant",
   "author": "Orbit",
   "type": "module",
@@ -9,6 +9,7 @@
     "dev": "vite",
     "postinstall": "node scripts/fix-pty-permissions.mjs",
     "build": "tsc && vite build && electron-builder",
+    "release:linux": "tsc && vite build && electron-builder --linux AppImage deb --publish always",
     "build:store": "tsc && vite build && node scripts/generate-appx-assets.mjs && electron-builder --win appx --config electron-builder.store.json5",
     "build:mas": "tsc && vite build && electron-builder --mac mas",
     "upload:mas": "tsc && vite build && electron-builder --mac mas --publish always",

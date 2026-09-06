@@ -65,8 +65,19 @@
   },
   "linux": {
     "target": [
-      "AppImage"
+      "AppImage",
+      "deb"
     ],
-    "artifactName": "${productName}-Linux-${version}.${ext}"
+    "category": "Development",
+    // TODO: trocar pelo e-mail real do mantenedor
+    "maintainer": "Orbit <orbit@fragmentslabs.com>",
+    // Version-less name so the "latest/download" release URL stays stable
+    // (e.g. Orbit-Linux-x64.AppImage → .../releases/latest/download/Orbit-Linux-x64.AppImage)
+    "artifactName": "${productName}-Linux-${arch}.${ext}"
+  },
+  "publish": {
+    "provider": "github",
+    "owner": "Fragmentslabs",
+    "repo": "Orbit"
   }
 }

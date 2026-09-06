@@ -159,6 +159,15 @@ Build the desktop installer:
 npm run desktop:build   # outputs to apps/desktop/release/
 ```
 
+Release a new Linux version — GitHub Actions builds and publishes the AppImage + `.deb` to GitHub Releases automatically:
+
+```bash
+# 1. bump the version in apps/desktop/package.json (and the root package.json)
+# 2. commit and push, then tag & release:
+git tag v0.1.3
+git push origin v0.1.3
+```
+
 ---
 
 ## 🧠 How it works
@@ -248,5 +257,11 @@ After **four years**, each release automatically converts to **Apache-2.0**.
 [Full license text](./LICENSE) · commercial licenses: [ko-fi.com/fragmentslabs](https://ko-fi.com/fragmentslabs)
 
 The core app is free with ads; **Fragments Plus** (cloud memory, mobile anywhere, and access to the Fragments app suite — Nodara, Fracta, ...) is a paid subscription powered by Fragments Labs' closed-source servers, in the spirit of n8n and Supabase.
+
+Orbit includes code derived from [opencode](https://github.com/sst/opencode) (MIT) — see [NOTICE](./NOTICE) for attribution and the full upstream license text.
+ds; **Fragments Plus** (cloud memory, mobile anywhere, and access to the Fragments app suite — Nodara, Fracta, ...) is a paid subscription powered by Fragments Labs' closed-source servers, in the spirit of n8n and Supabase.
+
+Orbit includes code derived from [opencode](https://github.com/sst/opencode) (MIT) — see [NOTICE](./NOTICE) for attribution and the full upstream license text.
+spirit of n8n and Supabase.
 
 Orbit includes code derived from [opencode](https://github.com/sst/opencode) (MIT) — see [NOTICE](./NOTICE) for attribution and the full upstream license text.
