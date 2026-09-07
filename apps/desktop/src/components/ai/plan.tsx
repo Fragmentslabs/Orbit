@@ -16,6 +16,7 @@ import {
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "~/components/ui/collapsible"
 import { cn } from "~/lib/utils"
 import { Shimmer } from "./shimmer"
+import { useTranslation } from "react-i18next"
 
 interface PlanContextValue {
   isStreaming: boolean
@@ -103,9 +104,12 @@ export const PlanFooter = (props: PlanFooterProps) => (
 
 export type PlanTriggerProps = ComponentProps<typeof Button>
 
-export const PlanTrigger = ({ className, ...props }: PlanTriggerProps) => (
-  <CollapsibleTrigger render={<Button className={cn("size-8", className)} data-slot="plan-trigger" size="icon" variant="ghost" {...props} />}><ChevronsUpDownIcon className="size-4" /><span className="sr-only">Toggle plan</span></CollapsibleTrigger>
-)
+export const PlanTrigger = ({ className, ...props }: PlanTriggerProps) => {
+  const { t } = useTranslation()
+  return (
+  <CollapsibleTrigger render={<Button className={cn("size-8", className)} data-slot="plan-trigger" size="icon" variant="ghost" {...props} />}><ChevronsUpDownIcon className="size-4" /><span className="sr-only">{t("plan.toggle")}</span></CollapsibleTrigger>
+  )
+}
 
 /** Demo component for preview */
 export default function PlanDemo() {

@@ -213,7 +213,7 @@ export const MemoryCard = memo(function MemoryCard({ memory, related, onSelectRe
       {/* Peso / usos / datas */}
       <View style={s.metaRow}>
         <View style={s.weightMeta}>
-          <Text style={[s.metaText, { color: tokens.mutedForeground }]}>peso</Text>
+          <Text style={[s.metaText, { color: tokens.mutedForeground }]}>{t('memoryCard.weightMeta')}</Text>
           <View style={[s.weightTrack, { backgroundColor: tokens.muted }]}>
             <View style={[s.weightFill, { width: `${Math.round(memory.weight * 100)}%` }]} />
           </View>

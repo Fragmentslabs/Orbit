@@ -2,6 +2,7 @@ import { useState, useMemo } from 'react'
 import { View, Text, Pressable, LayoutAnimation, Platform, UIManager } from 'react-native'
 import { CalendarIcon, ListPlus, ChevronDown } from 'lucide-react-native'
 import { useTranslation } from 'react-i18next'
+import type { TFunction } from 'i18next'
 import { useMessageQueueStore } from '~/stores/message-queue-store'
 import { getThemeTokens } from '~/lib/theme-tokens'
 import { formatTime } from '~/lib/format-time'
@@ -15,19 +16,18 @@ interface QueueIndicatorProps {
   sessionId?: string
 }
 
-function formatSchedule(ts: number, locale: string): string {
-  const now = Date.now()
-  const diff = ts - now
-  if (diff < 0) return 'Agora'
-  if (diff < 60_000) return 'Em segundos'
-  if (diff < 3_600_000) return `Em ${Math.ceil(diff / 60_000)}min`
-  if (diff < 86_400_000) return `Em ${Math.ceil(diff / 3_600_000)}h`
+function formatSchedule(ts: number, locale: string, t: TFunction): string {
+  const diff = ts - Date.now()
+  if (diff < 0) return t('queue.now')
+  if (diff < 60_000) return t('queue.inSeconds')
+  if (diff < 3_600_000) return t('queue.inMinutes', { count: Math.ceil(diff / 60_000) })
+  if (diff < 86_400_000) return t('queue.inHours', { count: Math.ceil(diff / 3_600_000) })
   const date = new Date(ts).toLocaleDateString(locale, { dateStyle: 'short' })
   return `${date} ${formatTime(ts, locale)}`
 }
 
 export function QueueIndicator({ sessionId }: QueueIndicatorProps) {
-  const { i18n } = useTranslation()
+  const { t, i18n } = useTranslation()
   const tokens = getThemeTokens(useThemeStore((s) => s.resolved))
   const queues = useMessageQueueStore((s) => s.queues)
   const [expanded, setExpanded] = useState(false)
@@ -57,7 +57,7 @@ export function QueueIndicator({ sessionId }: QueueIndicatorProps) {
           {toggle.queueCount > 0 && <ListPlus size={14} color={tokens.mutedForeground} />}
           {toggle.scheduledCount > 0 && <CalendarIcon size={14} color={tokens.mutedForeground} />}
           <Text className="text-xs" style={{ color: tokens.mutedForeground }}>
-            {toggle.total} {toggle.total === 1 ? 'mensagem' : 'mensagens'} na fila
+            {t('queue.count', { count: toggle.total })}
           </Text>
         </View>
         <ChevronDown
@@ -86,7 +86,7 @@ export function QueueIndicator({ sessionId }: QueueIndicatorProps) {
                 {msg.text}
               </Text>
               <Text className="text-[10px]" style={{ color: tokens.mutedForeground, opacity: 0.6 }}>
-                {msg.scheduledAt ? formatSchedule(msg.scheduledAt, i18n.language) : 'Fila'}
+                {msg.scheduledAt ? formatSchedule(msg.scheduledAt, i18n.language, t) : t('queue.badge')}
               </Text>
             </View>
           ))}

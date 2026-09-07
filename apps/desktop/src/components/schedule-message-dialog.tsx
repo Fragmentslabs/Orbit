@@ -137,7 +137,7 @@ export function ScheduleMessageDialog({
               <input
                 type="text"
                 value={customDate}
-                placeholder="AAAA-MM-DD"
+                placeholder={t("send.scheduleDialog.datePlaceholder")}
                 onChange={(e) => {
                   setCustomDate(e.target.value)
                   setSelectedPreset(null)
@@ -149,7 +149,7 @@ export function ScheduleMessageDialog({
               <input
                 type="text"
                 value={customTime}
-                placeholder="HH:MM"
+                placeholder={t("send.scheduleDialog.timePlaceholder")}
                 onChange={(e) => {
                   setCustomTime(e.target.value)
                   setSelectedPreset(null)

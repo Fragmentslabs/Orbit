@@ -2,6 +2,7 @@ import { useMemo } from "react"
 import type { ChatMessage } from "@shared/chat"
 import { Shimmer } from "@/src/components/ai/shimmer"
 import { AssistantMarkdown, MessageError } from "@/src/components/messages/shared"
+import { useTranslation } from "react-i18next"
 
 /**
  * Mensagem do assistente em modo simples: só o texto (com markdown/code blocks),
@@ -15,6 +16,7 @@ export function SimpleAssistantMessage({ message, sessionId, isLast, isBusy, onR
   isBusy: boolean
   onRetry?: () => void
 }) {
+  const { t } = useTranslation()
   const textParts = useMemo(
     () => message.parts.filter((part) => part.type === "text" && part.text.trim()),
     [message.parts],
@@ -23,7 +25,7 @@ export function SimpleAssistantMessage({ message, sessionId, isLast, isBusy, onR
 
   return (
     <div className="flex w-full flex-col gap-1">
-      {textParts.length === 0 && working && <Shimmer className="text-sm">Pensando…</Shimmer>}
+      {textParts.length === 0 && working && <Shimmer className="text-sm">{t("chat.thinking")}</Shimmer>}
       {textParts.map((part) => (
         <AssistantMarkdown key={part.id}>{(part as { type: "text"; text: string }).text}</AssistantMarkdown>
       ))}

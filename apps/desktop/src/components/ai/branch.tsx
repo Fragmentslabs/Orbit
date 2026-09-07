@@ -4,6 +4,7 @@ import type { ComponentProps, HTMLAttributes, ReactElement } from "react"
 import { createContext, useContext, useEffect, useState } from "react"
 import { Button } from "~/components/ui/button"
 import { cn } from "~/lib/utils"
+import { useTranslation } from "react-i18next"
 
 interface BranchContextType {
   currentBranch: number
@@ -119,11 +120,12 @@ export const BranchSelector = ({ className, from, ...props }: BranchSelectorProp
 export type BranchPreviousProps = ComponentProps<typeof Button>
 
 export const BranchPrevious = ({ className, children, ...props }: BranchPreviousProps) => {
+  const { t } = useTranslation()
   const { goToPrevious, totalBranches } = useBranch()
 
   return (
     <Button
-      aria-label="Previous branch"
+      aria-label={t("branch.previous")}
       className={cn(
         "size-7 shrink-0 rounded-full text-muted-foreground transition-colors",
         "hover:bg-accent hover:text-foreground",
@@ -145,11 +147,12 @@ export const BranchPrevious = ({ className, children, ...props }: BranchPrevious
 export type BranchNextProps = ComponentProps<typeof Button>
 
 export const BranchNext = ({ className, children, ...props }: BranchNextProps) => {
+  const { t } = useTranslation()
   const { goToNext, totalBranches } = useBranch()
 
   return (
     <Button
-      aria-label="Next branch"
+      aria-label={t("branch.next")}
       className={cn(
         "size-7 shrink-0 rounded-full text-muted-foreground transition-colors",
         "hover:bg-accent hover:text-foreground",

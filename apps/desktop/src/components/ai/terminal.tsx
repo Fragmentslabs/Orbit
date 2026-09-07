@@ -12,6 +12,7 @@ import {
 import { Button } from "~/components/ui/button"
 import { cn } from "~/lib/utils"
 import { Shimmer } from "./shimmer"
+import { useTranslation } from "react-i18next"
 
 interface TerminalContextType {
   output: string
@@ -95,6 +96,7 @@ export const TerminalTitle = ({ className, children, ...props }: TerminalTitlePr
 export type TerminalStatusProps = HTMLAttributes<HTMLDivElement>
 
 export const TerminalStatus = ({ className, children, ...props }: TerminalStatusProps) => {
+  const { t } = useTranslation()
   const { isStreaming } = useContext(TerminalContext)
 
   if (!isStreaming) {
@@ -103,7 +105,7 @@ export const TerminalStatus = ({ className, children, ...props }: TerminalStatus
 
   return (
     <div className={cn("flex items-center gap-2 text-xs text-zinc-400", className)} {...props}>
-      {children ?? <Shimmer className="w-16">Executando…</Shimmer>}
+      {children ?? <Shimmer className="w-16">{t("terminal.running")}</Shimmer>}
     </div>
   )
 }

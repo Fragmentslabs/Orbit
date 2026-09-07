@@ -7,8 +7,10 @@ import { useThemeStore } from '~/stores/theme-store'
 import { getThemeTokens } from '~/lib/theme-tokens'
 import { ModelPickerModal } from './ModelPickerModal'
 import { ProviderLogo } from '~/components/ui/provider-logo'
+import { useTranslation } from 'react-i18next'
 
 export function ModelPicker({ sessionId }: { sessionId?: string | null }) {
+  const { t } = useTranslation()
   const [modalVisible, setModalVisible] = useState(false)
   const resolved = useThemeStore((s) => s.resolved)
   const tokens = getThemeTokens(resolved)
@@ -34,7 +36,7 @@ export function ModelPicker({ sessionId }: { sessionId?: string | null }) {
           <Brain size={14} className="text-muted-foreground" />
         )}
         <Text className="text-sm text-muted-foreground font-medium max-w-[120px]" numberOfLines={1}>
-          {selectedModelInfo?.name ?? selected?.modelId ?? 'Selecionar Modelo'}
+          {selectedModelInfo?.name ?? selected?.modelId ?? t('modelPicker.select')}
         </Text>
         <ChevronDown size={12} className="text-muted-foreground" />
       </Pressable>

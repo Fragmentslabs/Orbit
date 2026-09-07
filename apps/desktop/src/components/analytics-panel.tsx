@@ -324,7 +324,7 @@ function LimitsDialog({
             <p className="mb-1 text-xs font-medium">{t("analytics.limits.tokenLimit")}</p>
             <Input
               type="number"
-              placeholder="ex: 1000000"
+              placeholder={t("analytics.limits.tokenLimitPlaceholder")}
               value={tokenLimit}
               onChange={(e) => setTokenLimit(e.target.value)}
             />
@@ -336,7 +336,7 @@ function LimitsDialog({
             <Input
               type="number"
               step="0.01"
-              placeholder="ex: 10.00"
+              placeholder={t("analytics.limits.costLimitPlaceholder")}
               value={costLimit}
               onChange={(e) => setCostLimit(e.target.value)}
             />

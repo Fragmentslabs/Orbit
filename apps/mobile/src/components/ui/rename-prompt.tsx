@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Modal, View, Text, TextInput, Pressable, StyleSheet } from 'react-native'
 import { getThemeTokens } from '~/lib/theme-tokens'
 import { useThemeStore } from '~/stores/theme-store'
+import { useTranslation } from 'react-i18next'
 
 interface RenamePromptProps {
   visible: boolean
@@ -13,6 +14,7 @@ interface RenamePromptProps {
 
 /** Modal simples de renomear (conversa ou pasta) — reutilizado no header do chat e na sidebar. */
 export function RenamePrompt({ visible, title, initialValue, onClose, onSubmit }: RenamePromptProps) {
+  const { t } = useTranslation()
   const [value, setValue] = useState(initialValue)
   const tokens = getThemeTokens(useThemeStore((s) => s.resolved))
 
@@ -41,10 +43,10 @@ export function RenamePrompt({ visible, title, initialValue, onClose, onSubmit }
           />
           <View style={s.actions}>
             <Pressable onPress={onClose} style={s.cancelBtn}>
-              <Text style={[s.cancelText, { color: tokens.mutedForeground }]}>Cancelar</Text>
+              <Text style={[s.cancelText, { color: tokens.mutedForeground }]}>{t('renamePrompt.cancel')}</Text>
             </Pressable>
             <Pressable onPress={submit} style={[s.saveBtn, { backgroundColor: tokens.primary }]}>
-              <Text style={[s.saveText, { color: tokens.primaryForeground }]}>Salvar</Text>
+              <Text style={[s.saveText, { color: tokens.primaryForeground }]}>{t('renamePrompt.save')}</Text>
             </Pressable>
           </View>
         </View>

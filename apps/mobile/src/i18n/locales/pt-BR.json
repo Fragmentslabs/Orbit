@@ -543,7 +543,8 @@
     "connected": "Conectadas",
     "deleteTitle": "Excluir memória?",
     "deleteBody": "\"{{text}}\" será excluída permanentemente{{docSuffix}}.",
-    "deleteBodyDocSuffix": ", junto com o documento anexado"
+    "deleteBodyDocSuffix": ", junto com o documento anexado",
+    "weightMeta": "peso"
   },
   "memoryGraph": {
     "center": "Centralizar",
@@ -1169,5 +1170,29 @@
     "none": "Nenhuma branch local.",
     "loadError": "Não foi possível ler as branches.",
     "switchError": "Não foi possível trocar de branch."
+  },
+  "chatSearchScreen": {
+    "placeholder": "Buscar conversas…",
+    "prompt": "Digite para buscar em todas as conversas",
+    "noResults": "Nenhum resultado encontrado"
+  },
+  "queue": {
+    "count_one": "{{count}} mensagem na fila",
+    "count_other": "{{count}} mensagens na fila",
+    "badge": "Fila",
+    "now": "Agora",
+    "inSeconds": "Em segundos",
+    "inMinutes": "Em {{count}}min",
+    "inHours": "Em {{count}}h"
+  },
+  "modelPicker": {
+    "select": "Selecionar modelo"
+  },
+  "renamePrompt": {
+    "cancel": "Cancelar",
+    "save": "Salvar"
+  },
+  "summaryCard": {
+    "title": "Resumo das mensagens anteriores (contexto compactado)"
   }
 }

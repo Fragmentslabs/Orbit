@@ -646,7 +646,7 @@ export function RightPanel() {
                   <span className="size-1.5 shrink-0 rounded-full bg-destructive" />
                 )}
                 {!isWorking && !isError && hasUnread && tab.id !== activeTabId && (
-                  <span className="size-2 shrink-0 rounded-full bg-primary" title="Mensagens não lidas" />
+                  <span className="size-2 shrink-0 rounded-full bg-primary" title={t("panel.unreadMessages")} />
                 )}
                 {!closeOnLeft && closeButton}
               </div>

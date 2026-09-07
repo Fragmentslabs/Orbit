@@ -110,7 +110,8 @@
       "settingsDescription": "Opens Orbit's settings"
     },
     "quickSettings": "Quick settings",
-    "quickSettingsModel": "Model"
+    "quickSettingsModel": "Model",
+    "placeholderDefault": "What would you like to know?"
   },
   "codeInput": {
     "placeholderNoFolder": "Select a folder to get started…",
@@ -224,7 +225,9 @@
       "inHours_other": "In {{count}} hours",
       "tomorrow": "Tomorrow at {{time}}",
       "cancel": "Cancel",
-      "confirm": "Confirm"
+      "confirm": "Confirm",
+      "datePlaceholder": "YYYY-MM-DD",
+      "timePlaceholder": "HH:MM"
     }
   },
   "modelPicker": {
@@ -628,7 +631,8 @@
         "label": "Media",
         "description": "Chat images, screenshots and captures"
       }
-    }
+    },
+    "unreadMessages": "Unread messages"
   },
   "chat": {
     "retry": "Retry",
@@ -703,7 +707,8 @@
         "Generate tests for this project",
         "Refactor something in the code"
       ]
-    }
+    },
+    "summaryCard": "Summary of earlier messages (compacted context)"
   },
   "usage": {
     "inputIn": "{{count}} in",
@@ -747,7 +752,10 @@
     "attachment": "attachment",
     "remove": "Remove attachment",
     "preview": "attachment preview",
-    "unnamedFile": "File"
+    "unnamedFile": "File",
+    "errorAccept": "No files match the accepted types.",
+    "errorMaxFileSize": "All files exceed the maximum size.",
+    "errorMaxFiles": "Too many files. Some were not added."
   },
   "webPreview": {
     "back": "Go back",
@@ -1221,7 +1229,9 @@
       "title": "Usage limits",
       "description": "Set monthly limits to control usage.",
       "tokenLimit": "Monthly token limit",
-      "costLimit": "Monthly spend limit (USD)"
+      "costLimit": "Monthly spend limit (USD)",
+      "tokenLimitPlaceholder": "e.g. 1000000",
+      "costLimitPlaceholder": "e.g. 10.00"
     },
     "heatmap": {
       "less": "Less",
@@ -1513,7 +1523,9 @@
     "cancel": "Cancel",
     "add": "Add",
     "loading": "Loading...",
-    "close": "Close"
+    "close": "Close",
+    "previous": "Previous",
+    "next": "Next"
   },
   "appearance": {
     "title": "Appearance",
@@ -1913,6 +1925,27 @@
       "chat": "Chat mode",
       "code": "Code mode"
     },
-    "subtituloChat": "Chat sessions that come back on their own — no working folders, just conversation and the chat tools."
+    "subtituloChat": "Chat sessions that come back on their own — no working folders, just conversation and the chat tools.",
+    "timePlaceholder": "HH:MM"
+  },
+  "queue": {
+    "count_one": "{{count}} message queued",
+    "count_other": "{{count}} messages queued",
+    "badge": "Queued",
+    "cancelSend": "Cancel send",
+    "now": "Now",
+    "inSeconds": "In seconds",
+    "inMinutes": "In {{count}}min",
+    "inHours": "In {{count}}h"
+  },
+  "conversation": {
+    "emptyTitle": "No messages yet",
+    "emptyDescription": "Start a conversation to see messages here"
+  },
+  "terminal": {
+    "running": "Running…"
+  },
+  "plan": {
+    "toggle": "Toggle plan"
   }
 }

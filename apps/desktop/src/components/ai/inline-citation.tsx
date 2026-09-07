@@ -11,6 +11,7 @@ import { Badge } from "~/components/ui/badge"
 import { Carousel, type CarouselApi, CarouselContent, CarouselItem } from "~/components/ui/carousel"
 import { HoverCard, HoverCardContent, HoverCardTrigger } from "~/components/ui/hover-card"
 import { cn } from "~/lib/utils"
+import { useTranslation } from "react-i18next"
 
 export type InlineCitationProps = ComponentProps<"span">
 
@@ -152,6 +153,7 @@ export const InlineCitationCarouselPrev = ({
   className,
   ...props
 }: InlineCitationCarouselPrevProps) => {
+  const { t } = useTranslation()
   const api = useCarouselApi()
 
   const handleClick = useCallback(() => {
@@ -162,7 +164,7 @@ export const InlineCitationCarouselPrev = ({
 
   return (
     <button
-      aria-label="Previous"
+      aria-label={t("common.previous")}
       className={cn("shrink-0", className)}
       onClick={handleClick}
       type="button"
@@ -179,6 +181,7 @@ export const InlineCitationCarouselNext = ({
   className,
   ...props
 }: InlineCitationCarouselNextProps) => {
+  const { t } = useTranslation()
   const api = useCarouselApi()
 
   const handleClick = useCallback(() => {
@@ -189,7 +192,7 @@ export const InlineCitationCarouselNext = ({
 
   return (
     <button
-      aria-label="Next"
+      aria-label={t("common.next")}
       className={cn("shrink-0", className)}
       onClick={handleClick}
       type="button"

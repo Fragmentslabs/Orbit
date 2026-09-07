@@ -477,7 +477,7 @@ export const PromptInput = ({
       if (incoming.length && accepted.length === 0) {
         onError?.({
           code: "accept",
-          message: "No files match the accepted types.",
+          message: t("attachments.errorAccept"),
         })
         return
       }
@@ -486,7 +486,7 @@ export const PromptInput = ({
       if (accepted.length > 0 && sized.length === 0) {
         onError?.({
           code: "max_file_size",
-          message: "All files exceed the maximum size.",
+          message: t("attachments.errorMaxFileSize"),
         })
         return
       }
@@ -498,7 +498,7 @@ export const PromptInput = ({
         if (typeof capacity === "number" && sized.length > capacity) {
           onError?.({
             code: "max_files",
-            message: "Too many files. Some were not added.",
+            message: t("attachments.errorMaxFiles"),
           })
         }
         const next: (FileUIPart & { id: string })[] = []
@@ -743,9 +743,10 @@ export type PromptInputTextareaProps = ComponentProps<typeof InputGroupTextarea>
 export const PromptInputTextarea = ({
   onChange,
   className,
-  placeholder = "What would you like to know?",
+  placeholder,
   ...props
 }: PromptInputTextareaProps) => {
+  const { t } = useTranslation()
   const controller = useOptionalPromptInputController()
   const attachments = usePromptInputAttachments()
   const [isComposing, setIsComposing] = useState(false)
@@ -824,7 +825,7 @@ export const PromptInputTextarea = ({
       onCompositionStart={() => setIsComposing(true)}
       onKeyDown={handleKeyDown}
       onPaste={handlePaste}
-      placeholder={placeholder}
+      placeholder={placeholder ?? t("input.placeholderDefault")}
       {...props}
       {...controlledProps}
     />

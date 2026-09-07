@@ -62,7 +62,7 @@ export function AgendaEditor({ agenda, onChange }: { agenda: Agenda; onChange: (
           <input
             type="text"
             value={agenda.horario}
-            placeholder="HH:MM"
+            placeholder={t("rotinas.timePlaceholder")}
             onChange={(e) => onChange({ ...agenda, horario: e.target.value })}
             className={cn(
               "w-20 rounded-md border bg-background px-2 py-1 font-mono text-xs outline-none focus-visible:ring-2 focus-visible:ring-ring/30",

@@ -5,6 +5,7 @@ import type { ComponentProps, HTMLAttributes } from "react"
 import { Button } from "@/components/ui/button"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { cn } from "@/lib/utils"
+import { useTranslation } from "react-i18next"
 
 export type ArtifactProps = HTMLAttributes<HTMLDivElement>
 
@@ -35,7 +36,9 @@ export const ArtifactClose = ({
   size = "sm",
   variant = "ghost",
   ...props
-}: ArtifactCloseProps) => (
+}: ArtifactCloseProps) => {
+  const { t } = useTranslation()
+  return (
   <Button
     className={cn("size-8 p-0 text-muted-foreground hover:text-foreground", className)}
     size={size}
@@ -44,9 +47,10 @@ export const ArtifactClose = ({
     {...props}
   >
     {children ?? <XIcon className="size-4" />}
-    <span className="sr-only">Close</span>
-  </Button>
-)
+    <span className="sr-only">{t("common.close")}</span>
+    </Button>
+  )
+}
 
 export type ArtifactTitleProps = HTMLAttributes<HTMLParagraphElement>
 

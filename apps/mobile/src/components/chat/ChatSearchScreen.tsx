@@ -15,6 +15,7 @@ import { useWorkspaceStore } from '~/stores/workspace-store'
 import { getThemeTokens } from '~/lib/theme-tokens'
 import { useThemeStore } from '~/stores/theme-store'
 import { SafeScreen } from '~/components/layout/SafeScreen'
+import { useTranslation } from 'react-i18next'
 
 type SearchGroup = {
   sessionId: string
@@ -24,6 +25,7 @@ type SearchGroup = {
 }
 
 export function ChatSearchScreen() {
+  const { t } = useTranslation()
   const router = useRouter()
   const tokens = getThemeTokens(useThemeStore((s) => s.resolved))
   const searchSessions = useSessionStore((s) => s.searchSessions)
@@ -115,7 +117,7 @@ export function ChatSearchScreen() {
             ref={inputRef}
             value={query}
             onChangeText={setQuery}
-            placeholder="Buscar conversas..."
+            placeholder={t('chatSearchScreen.placeholder')}
             placeholderTextColor={tokens.mutedForeground}
             className="flex-1 py-2 text-base"
             style={{ color: tokens.foreground }}
@@ -139,13 +141,13 @@ export function ChatSearchScreen() {
       ) : !query.trim() ? (
         <View className="flex-1 items-center justify-center px-8 py-12">
           <Text className="text-center text-sm" style={{ color: tokens.mutedForeground }}>
-            Digite para buscar em todas as conversas
+            {t('chatSearchScreen.prompt')}
           </Text>
         </View>
       ) : results.length === 0 ? (
         <View className="flex-1 items-center justify-center px-8 py-12">
           <Text className="text-center text-sm" style={{ color: tokens.mutedForeground }}>
-            Nenhum resultado encontrado
+            {t('chatSearchScreen.noResults')}
           </Text>
         </View>
       ) : (

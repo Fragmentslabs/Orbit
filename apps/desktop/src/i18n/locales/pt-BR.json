@@ -110,7 +110,8 @@
       "settingsDescription": "Abre as configurações do Orbit"
     },
     "quickSettings": "Configurações rápidas",
-    "quickSettingsModel": "Modelo"
+    "quickSettingsModel": "Modelo",
+    "placeholderDefault": "O que você quer saber?"
   },
   "codeInput": {
     "placeholderNoFolder": "Selecione uma pasta para começar…",
@@ -224,7 +225,9 @@
       "inHours_other": "Em {{count}} horas",
       "tomorrow": "Amanhã às {{time}}",
       "cancel": "Cancelar",
-      "confirm": "Confirmar"
+      "confirm": "Confirmar",
+      "datePlaceholder": "AAAA-MM-DD",
+      "timePlaceholder": "HH:MM"
     }
   },
   "modelPicker": {
@@ -628,7 +631,8 @@
         "label": "Mídia",
         "description": "Imagens do chat, screenshots e capturas"
       }
-    }
+    },
+    "unreadMessages": "Mensagens não lidas"
   },
   "chat": {
     "retry": "Tentar novamente",
@@ -703,7 +707,8 @@
         "Gere testes para este projeto",
         "Refatore algo no código"
       ]
-    }
+    },
+    "summaryCard": "Resumo das mensagens anteriores (contexto compactado)"
   },
   "usage": {
     "inputIn": "{{count}} de entrada",
@@ -747,7 +752,10 @@
     "attachment": "anexo",
     "remove": "Remover anexo",
     "preview": "prévia do anexo",
-    "unnamedFile": "Arquivo"
+    "unnamedFile": "Arquivo",
+    "errorAccept": "Nenhum arquivo corresponde aos tipos aceitos.",
+    "errorMaxFileSize": "Todos os arquivos excedem o tamanho máximo.",
+    "errorMaxFiles": "Arquivos demais. Alguns não foram adicionados."
   },
   "webPreview": {
     "back": "Voltar",
@@ -1221,7 +1229,9 @@
       "title": "Limites de uso",
       "description": "Defina limites mensais para controlar o consumo.",
       "tokenLimit": "Limite mensal de tokens",
-      "costLimit": "Limite mensal de gasto (USD)"
+      "costLimit": "Limite mensal de gasto (USD)",
+      "tokenLimitPlaceholder": "ex: 1000000",
+      "costLimitPlaceholder": "ex: 10.00"
     },
     "heatmap": {
       "less": "Menos",
@@ -1513,7 +1523,9 @@
     "cancel": "Cancelar",
     "add": "Adicionar",
     "loading": "Carregando...",
-    "close": "Fechar"
+    "close": "Fechar",
+    "previous": "Anterior",
+    "next": "Próximo"
   },
   "appearance": {
     "title": "Aparência",
@@ -1913,6 +1925,27 @@
       "chat": "Modo chat",
       "code": "Modo código"
     },
-    "subtituloChat": "Sessões de chat que voltam sozinhas — sem pastas de trabalho, só conversa e as ferramentas do chat."
+    "subtituloChat": "Sessões de chat que voltam sozinhas — sem pastas de trabalho, só conversa e as ferramentas do chat.",
+    "timePlaceholder": "HH:MM"
+  },
+  "queue": {
+    "count_one": "{{count}} mensagem na fila",
+    "count_other": "{{count}} mensagens na fila",
+    "badge": "Fila",
+    "cancelSend": "Cancelar envio",
+    "now": "Agora",
+    "inSeconds": "Em segundos",
+    "inMinutes": "Em {{count}}min",
+    "inHours": "Em {{count}}h"
+  },
+  "conversation": {
+    "emptyTitle": "Nenhuma mensagem ainda",
+    "emptyDescription": "Comece uma conversa para ver as mensagens aqui"
+  },
+  "terminal": {
+    "running": "Executando…"
+  },
+  "plan": {
+    "toggle": "Alternar plano"
   }
 }

@@ -6,6 +6,7 @@ import { getThemeTokens } from '~/lib/theme-tokens'
 import { useThemeStore } from '~/stores/theme-store'
 import { hslToRgba } from '~/lib/theme'
 import type { ChatMessage } from '@orbit/shared'
+import { useTranslation } from 'react-i18next'
 
 function messageText(message: ChatMessage): string {
   return message.parts
@@ -15,6 +16,7 @@ function messageText(message: ChatMessage): string {
 }
 
 export function SummaryCard({ message }: { message: ChatMessage }) {
+  const { t } = useTranslation()
   const [open, setOpen] = useState(false)
   const tokens = getThemeTokens(useThemeStore((s) => s.resolved))
   const hsl = (v: string) => v.replace(/hsla?\(|\)/g, '').replace(/,/g, '')
@@ -33,7 +35,7 @@ export function SummaryCard({ message }: { message: ChatMessage }) {
       >
         <NotebookPen size={14} color={tokens.mutedForeground} />
         <Text className="flex-1 text-xs" style={{ color: tokens.mutedForeground }}>
-          Resumo das mensagens anteriores (contexto compactado)
+          {t('summaryCard.title')}
         </Text>
         <ChevronDown
           size={14}

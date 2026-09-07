@@ -1,5 +1,6 @@
 import { useState } from "react"
 import { useTranslation } from "react-i18next"
+import type { TFunction } from "i18next"
 import { CalendarIcon, ChevronDownIcon, ListPlus, X } from "lucide-react"
 import {
   Collapsible,
@@ -14,19 +15,18 @@ interface QueueIndicatorProps {
   sessionId?: string
 }
 
-function formatSchedule(ts: number, locale: string): string {
-  const now = Date.now()
-  const diff = ts - now
-  if (diff < 0) return "Agora"
-  if (diff < 60_000) return "Em segundos"
-  if (diff < 3_600_000) return `Em ${Math.ceil(diff / 60_000)}min`
-  if (diff < 86_400_000) return `Em ${Math.ceil(diff / 3_600_000)}h`
+function formatSchedule(ts: number, locale: string, t: TFunction): string {
+  const diff = ts - Date.now()
+  if (diff < 0) return t("queue.now")
+  if (diff < 60_000) return t("queue.inSeconds")
+  if (diff < 3_600_000) return t("queue.inMinutes", { count: Math.ceil(diff / 60_000) })
+  if (diff < 86_400_000) return t("queue.inHours", { count: Math.ceil(diff / 3_600_000) })
   const date = new Date(ts).toLocaleDateString(locale, { dateStyle: "short" })
   return `${date} ${formatTime(ts, locale)}`
 }
 
 export function QueueIndicator({ sessionId }: QueueIndicatorProps) {
-  const { i18n } = useTranslation()
+  const { t, i18n } = useTranslation()
   const [open, setOpen] = useState(false)
   const queues = useMessageQueueStore((s) => s.queues)
   const remove = useMessageQueueStore((s) => s.remove)
@@ -43,9 +43,7 @@ export function QueueIndicator({ sessionId }: QueueIndicatorProps) {
         <span className="flex items-center gap-1.5 text-muted-foreground">
           {queueCount > 0 && <ListPlus className="size-3.5" />}
           {scheduledCount > 0 && <CalendarIcon className="size-3.5" />}
-          <span>
-            {items.length} {items.length === 1 ? "mensagem" : "mensagens"} na fila
-          </span>
+          <span>{t("queue.count", { count: items.length })}</span>
         </span>
         <ChevronDownIcon
           className={cn(
@@ -73,12 +71,12 @@ export function QueueIndicator({ sessionId }: QueueIndicatorProps) {
               </span>
               <span className="flex shrink-0 items-center gap-1">
                 <span className="text-[10px] text-muted-foreground/60">
-                  {msg.scheduledAt ? formatSchedule(msg.scheduledAt, i18n.language) : "Fila"}
+                  {msg.scheduledAt ? formatSchedule(msg.scheduledAt, i18n.language, t) : t("queue.badge")}
                 </span>
                 <button
                   type="button"
                   onClick={() => remove(sessionId, msg.id)}
-                  title="Cancelar envio"
+                  title={t("queue.cancelSend")}
                   className="rounded p-0.5 text-muted-foreground/50 transition-colors hover:bg-destructive/10 hover:text-destructive"
                 >
                   <X className="size-3.5" />

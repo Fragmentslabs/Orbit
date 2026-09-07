@@ -5,6 +5,7 @@ import { StickToBottom, useStickToBottomContext } from "use-stick-to-bottom"
 import { Button } from "~/components/ui/button"
 import { cn } from "~/lib/utils"
 import { Message, MessageContent } from "./message"
+import { useTranslation } from "react-i18next"
 
 export type ConversationProps = ComponentProps<typeof StickToBottom>
 
@@ -32,12 +33,14 @@ export type ConversationEmptyStateProps = ComponentProps<"div"> & {
 
 export const ConversationEmptyState = ({
   className,
-  title = "No messages yet",
-  description = "Start a conversation to see messages here",
+  title,
+  description,
   icon,
   children,
   ...props
-}: ConversationEmptyStateProps) => (
+}: ConversationEmptyStateProps) => {
+  const { t } = useTranslation()
+  return (
   <div
     className={cn(
       "flex size-full flex-col items-center justify-center gap-3 p-8 text-center",
@@ -49,13 +52,16 @@ export const ConversationEmptyState = ({
       <>
         {icon && <div className="text-muted-foreground">{icon}</div>}
         <div className="space-y-1">
-          <h3 className="font-medium text-sm">{title}</h3>
-          {description && <p className="text-muted-foreground text-sm">{description}</p>}
+          <h3 className="font-medium text-sm">{title ?? t("conversation.emptyTitle")}</h3>
+          <p className="text-muted-foreground text-sm">
+            {description ?? t("conversation.emptyDescription")}
+          </p>
         </div>
       </>
     )}
-  </div>
-)
+    </div>
+  )
+}
 
 export type ConversationScrollButtonProps = ComponentProps<typeof Button>
 
