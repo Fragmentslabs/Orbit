@@ -1159,13 +1159,16 @@ const openLiveFile = useCallback(async (filePath: string) => {
                                   </div>
                                 </HoverCardContent>
                               </HoverCard>
-                              <CommitMetadata className="min-w-0 text-[10px]">
+                              {/* O autor e o separador dele saem juntos quando a
+                                  coluna aperta: truncar só o texto deixava os dois
+                                  pontos colados com um vão vazio no meio. */}
+                              <CommitMetadata className="@container min-w-0 text-[10px]">
                                 <CommitHash className="shrink-0 text-[10px]">
                                   {row.commit!.hash.slice(0, 7)}
                                 </CommitHash>
-                                <CommitSeparator className="shrink-0" />
-                                <span className="truncate">
-                                  {row.commit!.author}
+                                <span className="hidden min-w-0 items-center gap-2 @[16rem]:flex">
+                                  <CommitSeparator className="shrink-0" />
+                                  <span className="truncate">{row.commit!.author}</span>
                                 </span>
                                 <CommitSeparator className="shrink-0" />
                                 <CommitTimestamp
