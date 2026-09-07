@@ -4,6 +4,7 @@ import { Sidebar } from '~/components/layout/Sidebar'
 import { RightPanel } from '~/components/chat/RightPanel'
 import { useBreakpoint } from '~/components/layout/ResponsiveContainer'
 import { useWorkspaceStore } from '~/stores/workspace-store'
+import { useSidebarSwipe } from '~/components/layout/useSidebarSwipe'
 
 const SIDEBAR_WIDTH = 280
 
@@ -12,9 +13,11 @@ export default function MainLayout() {
   const isDesktop = breakpoint === 'desktop'
   const rightPanelOpen = useWorkspaceStore((s) => s.rightPanelOpen)
   const sidebarPinned = useWorkspaceStore((s) => s.sidebarPinned)
+  // Swipe da borda esquerda abre o drawer; no desktop ele já é fixo/hover.
+  const swipeHandlers = useSidebarSwipe(!isDesktop)
 
   return (
-    <View className="flex-1 bg-background">
+    <View className="flex-1 bg-background" {...swipeHandlers}>
       <View className="flex-1 flex-row">
         {/* Content area - offset when sidebar pinned on desktop */}
         <View
