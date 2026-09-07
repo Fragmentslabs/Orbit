@@ -231,6 +231,7 @@
     "loading": "Loading...",
     "error": "Error",
     "select": "Select a model",
+    "noProvider": "No provider",
     "title": "Select model",
     "recent": "Recent",
     "removeRecent": "Remove from recents"
@@ -884,6 +885,11 @@
   "vision": {
     "hint": "Your current model has no vision and vision mode is off — attached images are not seen by the agent.",
     "configure": "Configure vision",
+    "dismiss": "Dismiss"
+  },
+  "providerHint": {
+    "hint": "No provider configured yet — connect one to send messages.",
+    "configure": "Configure a provider",
     "dismiss": "Dismiss"
   },
   "orchestrationConfig": {

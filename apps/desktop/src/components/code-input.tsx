@@ -46,7 +46,7 @@ import { useModeActive, useModeOverrides } from "@/src/stores/mode-overrides"
 import { usePanelStore } from "@/src/stores/panel-store"
 import { usePermissionPrefs } from "@/src/stores/permission-prefs"
 import { useModelModePrefs } from "@/src/stores/model-mode-prefs"
-import { useProviderStore } from "@/src/stores/provider-store"
+import { useProviderStore, useNoProviderConnected } from "@/src/stores/provider-store"
 import { useSessionModel } from "@/src/stores/session-model-prefs"
 import { useSettingsUi } from "@/src/stores/settings-ui"
 import { useReasoningPrefs } from "@/src/stores/reasoning-prefs"
@@ -78,13 +78,15 @@ function markWorkerConfigPrompted() {
   localStorage.setItem(WORKER_CONFIG_PROMPTED_KEY, "1")
 }
 
-export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId }: {
+export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId, onProviderBlocked }: {
   onSubmit: (text: string, options: SendMessageOptions, directory: string, extraDirectories: string[], files?: FilePart[]) => void
   status?: ChatStatus
   onStop?: () => void
   hasMessages?: boolean
   /** Sessão ativa — o toggle Brain é por chat (undefined = chat novo) */
   sessionId?: string
+  /** Sem provedor configurado e o usuário tentou enviar — quem renderiza o card decide como reagir */
+  onProviderBlocked?: () => void
 }) {
   const { t } = useTranslation()
   const codeActiveModes = useModelModePrefs((s) => s.codeActiveModes)
@@ -129,6 +131,10 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId }: 
   // modelos com reasoningAlwaysOn continuam valendo como antes
   const thinking = codeActiveModes.thinking || enabled || !!model?.reasoningAlwaysOn
   const busy = status === "submitted" || status === "streaming" || status === "cancelling"
+  // Pré-configuração (sem provedor): o envio é bloqueado via onSubmitCapture —
+  // em CAPTURE, antes do handleSubmit do PromptInput limpar o input — para o
+  // texto do usuário não se perder; onProviderBlocked mostra o card explicativo
+  const noProvider = useNoProviderConnected()
   const openSettings = useSettingsUi((s) => s.openSettings)
   const enqueueForSend = useMessageQueueStore((s) => s.enqueueForSend)
   const enqueueScheduled = useMessageQueueStore((s) => s.enqueueScheduled)
@@ -328,6 +334,11 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId }: 
         <QueueIndicator sessionId={sessionId} />
         <PromptInput
           multiple
+          onSubmitCapture={noProvider ? (e) => {
+            e.preventDefault()
+            e.stopPropagation()
+            onProviderBlocked?.()
+          } : undefined}
           onSubmit={handleSubmit}
           className="rounded-xl border-2 border-sidebar-border [&>div]:!rounded-[calc(var(--radius-xl)-2px)] [&>div]:!border-none [&>div]:!bg-transparent"
         >

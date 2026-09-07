@@ -42,7 +42,7 @@ import { usePanelStore } from "@/src/stores/panel-store"
 import { useSessionStore } from "@/src/stores/session-store"
 import { useSettingsUi } from "@/src/stores/settings-ui"
 import { useModelModePrefs } from "@/src/stores/model-mode-prefs"
-import { useProviderStore } from "@/src/stores/provider-store"
+import { useProviderStore, useNoProviderConnected } from "@/src/stores/provider-store"
 import { useSessionModel } from "@/src/stores/session-model-prefs"
 import { useReasoningPrefs } from "@/src/stores/reasoning-prefs"
 import { useSimpleMode, useSimplePrefs } from "@/src/stores/simple-prefs"
@@ -51,7 +51,7 @@ import { toFileParts } from "@/src/lib/message-utils"
 import { resolveSlashAction } from "@/src/lib/slash-actions"
 import { useAppearanceStore } from "@/src/stores/appearance-store"
 
-export function ChatInput({ onSubmit, status, onStop, sessionId, draftKey }: {
+export function ChatInput({ onSubmit, status, onStop, sessionId, draftKey, onProviderBlocked }: {
   onSubmit: (text: string, options: SendMessageOptions, files?: FilePart[]) => void
   status?: ChatStatus
   onStop?: () => void
@@ -59,6 +59,8 @@ export function ChatInput({ onSubmit, status, onStop, sessionId, draftKey }: {
   sessionId?: string
   /** Chave de rascunho própria (ex.: painel lateral, para não misturar com o chat novo do painel principal) */
   draftKey?: string
+  /** Sem provedor configurado e o usuário tentou enviar — quem renderiza o card decide como reagir */
+  onProviderBlocked?: () => void
 }) {
   const { t } = useTranslation()
   const chatActiveModes = useModelModePrefs((s) => s.chatActiveModes)
@@ -78,6 +80,10 @@ export function ChatInput({ onSubmit, status, onStop, sessionId, draftKey }: {
   // modelos com reasoningAlwaysOn continuam valendo como antes
   const thinking = chatActiveModes.thinking || enabled || !!model?.reasoningAlwaysOn
   const busy = status === "submitted" || status === "streaming" || status === "cancelling"
+  // Pré-configuração (sem provedor): o envio é bloqueado via onSubmitCapture —
+  // em CAPTURE, antes do handleSubmit do PromptInput limpar o input — para o
+  // texto do usuário não se perder; onProviderBlocked mostra o card explicativo
+  const noProvider = useNoProviderConnected()
 
   const visionModel = useProviderStore((s) => s.visionModel)
   const vision = useModeActive("vision", sessionId, chatActiveModes.vision)
@@ -152,6 +158,11 @@ export function ChatInput({ onSubmit, status, onStop, sessionId, draftKey }: {
       <QueueIndicator sessionId={sessionId} />
       <PromptInput
         multiple
+        onSubmitCapture={noProvider ? (e) => {
+          e.preventDefault()
+          e.stopPropagation()
+          onProviderBlocked?.()
+        } : undefined}
         onSubmit={(message) => {
           const files = toFileParts(message.files ?? [])
           // Comandos "/" viram o prompt do pipeline correspondente

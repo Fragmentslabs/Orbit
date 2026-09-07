@@ -233,3 +233,16 @@ export const useProviderStore = create<ProviderState>((set, get) => ({
     }))
   },
 }))
+
+/**
+ * Pré-configuração: nenhum provedor conectado (primeira execução) e o estado
+ * de inicialização já é conhecido (sem loading/falha). Enquanto loading/erro,
+ * retorna false para a UI não acusar falta de provedor indevidamente.
+ * Usado pelo seletor de modelo (pulso) e pelo bloqueio de envio (card).
+ */
+export function useNoProviderConnected(): boolean {
+  const loading = useProviderStore((s) => s.loading)
+  const error = useProviderStore((s) => s.error)
+  const connectedProviders = useProviderStore((s) => s.connectedProviders)
+  return !loading && !error && connectedProviders.length === 0
+}

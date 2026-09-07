@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react"
+import { useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { BrainIcon, ChevronDownIcon, SettingsIcon, XIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -14,11 +14,12 @@ import {
   ModelSelectorName,
   ModelSelectorTrigger,
 } from "@/src/components/ai/model-selector"
-import { SettingsDialog } from "@/src/components/settings-dialog"
 import { ModalityIcons } from "@/src/components/ai/modality-icons"
 import type { CatalogModel, CatalogProvider } from "@shared/chat"
-import { useProviderStore, type SelectedModel } from "@/src/stores/provider-store"
+import { useProviderStore, useNoProviderConnected, type SelectedModel } from "@/src/stores/provider-store"
+import { useSettingsUi } from "@/src/stores/settings-ui"
 import { useSessionModel, useSessionModelPrefs } from "@/src/stores/session-model-prefs"
+import { cn } from "@/lib/utils"
 
 const MAX_MODELS_PER_PROVIDER = 40
 
@@ -49,8 +50,9 @@ export function ModelPicker({ sessionId, open: openProp, onOpenChange: onOpenCha
 }) {
   const { t } = useTranslation()
   const [internalOpen, setInternalOpen] = useState(false)
-  const [settingsOpen, setSettingsOpen] = useState(false)
   const [skipFinalFocus, setSkipFinalFocus] = useState(false)
+  const pendingSettings = useRef(false)
+  const openSettings = useSettingsUi((s) => s.openSettings)
   const open = openProp ?? internalOpen
   const onOpenChange = onOpenChangeProp ?? setInternalOpen
   const catalog = useProviderStore((s) => s.catalog)
@@ -61,6 +63,9 @@ export function ModelPicker({ sessionId, open: openProp, onOpenChange: onOpenCha
   const removeRecent = useSessionModelPrefs((s) => s.removeRecent)
   const loading = useProviderStore((s) => s.loading)
   const error = useProviderStore((s) => s.error)
+  // Sem provedor configurado (primeira execução): o trigger pulsa e aponta
+  // para o footer do seletor ("Configurar um provedor")
+  const noProvider = useNoProviderConnected()
 
   const controlled = value !== undefined
   const selected = controlled ? value : sessionSelected
@@ -110,13 +115,36 @@ export function ModelPicker({ sessionId, open: openProp, onOpenChange: onOpenCha
 
   return (
     <>
-      <ModelSelector open={open} onOpenChange={onOpenChange}>
+      <ModelSelector
+        open={open}
+        onOpenChange={onOpenChange}
+        onOpenChangeComplete={(isOpen) => {
+          if (isOpen) return
+          setSkipFinalFocus(false)
+          if (!pendingSettings.current) return
+          pendingSettings.current = false
+          openSettings("providers")
+        }}
+      >
         {!hideTrigger && (
-          <ModelSelectorTrigger render={<Button className="h-7 gap-1 px-1.5 text-xs" variant="ghost" />}>
-            <ModelSelectorLogo provider={selected?.providerId ?? "openai"} />
-            <ModelSelectorName>
-              {loading ? t("modelPicker.loading") : selectedModel?.name ?? (error ? t("modelPicker.error") : t("modelPicker.select"))}
-            </ModelSelectorName>
+          <ModelSelectorTrigger render={<Button className={cn("h-7 gap-1 px-1.5 text-xs", noProvider && "ring-2 ring-primary/40")} variant="ghost" />}>
+            {noProvider ? (
+              <>
+                {/* Estado de atenção: dot pulsante + label, sem logo de provider */}
+                <span className="relative flex size-2 shrink-0" aria-hidden>
+                  <span className="absolute inline-flex size-full animate-ping rounded-full bg-primary opacity-75" />
+                  <span className="relative inline-flex size-2 rounded-full bg-primary" />
+                </span>
+                <ModelSelectorName className="text-primary">{t("modelPicker.noProvider")}</ModelSelectorName>
+              </>
+            ) : (
+              <>
+                <ModelSelectorLogo provider={selected?.providerId ?? "openai"} />
+                <ModelSelectorName>
+                  {loading ? t("modelPicker.loading") : selectedModel?.name ?? (error ? t("modelPicker.error") : t("modelPicker.select"))}
+                </ModelSelectorName>
+              </>
+            )}
             <ChevronDownIcon className="size-3 text-muted-foreground" />
           </ModelSelectorTrigger>
         )}
@@ -215,11 +243,13 @@ export function ModelPicker({ sessionId, open: openProp, onOpenChange: onOpenCha
               variant="ghost"
               className="w-full justify-start gap-2 text-xs"
               onClick={() => {
+                // Handoff determinístico: marca a intenção e fecha o seletor. O
+                // settings só abre no onOpenChangeComplete, quando este dialog
+                // terminou de sair — o setTimeout de 120ms disputava com a
+                // animação de saída de 100ms.
                 setSkipFinalFocus(true)
+                pendingSettings.current = true
                 onOpenChange(false)
-                // Aguarda o dialog de seleção fechar completamente (animação ~100ms)
-                // para evitar conflito de foco com o input autofocus do settings.
-                setTimeout(() => setSettingsOpen(true), 120)
               }}
             >
               <SettingsIcon className="size-3.5" />
@@ -228,7 +258,6 @@ export function ModelPicker({ sessionId, open: openProp, onOpenChange: onOpenCha
           </div>
         </ModelSelectorContent>
       </ModelSelector>
-      <SettingsDialog open={settingsOpen} onOpenChange={(next) => { setSettingsOpen(next); if (!next) setSkipFinalFocus(false) }} />
     </>
   )
 }

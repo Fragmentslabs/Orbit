@@ -9,6 +9,7 @@ import { AskCardBatch } from "@/src/components/ask-card-batch"
 import { ChatInput } from "@/src/components/chat-input"
 import { CodeInput } from "@/src/components/code-input"
 import { VisionHintCard } from "@/src/components/vision-hint-card"
+import { ProviderHintCard } from "@/src/components/provider-hint-card"
 import { Persona, type PersonaState } from "@/src/components/ai/persona"
 import { useAppearanceStore } from "@/src/stores/appearance-store"
 import { Conversation, ConversationContent, ConversationScrollButton } from "@/src/components/ai/conversation"
@@ -30,7 +31,7 @@ import { Actions } from "@/src/components/ai/actions"
 import { messageText, visibleMessageText } from "@/src/lib/message-utils"
 import { useActiveSession, useSessionStatus, useSessionStore, type SendConfig } from "@/src/stores/session-store"
 import { brainEnabledFor } from "@/src/stores/brain-prefs"
-import { useProviderStore } from "@/src/stores/provider-store"
+import { useProviderStore, useNoProviderConnected } from "@/src/stores/provider-store"
 import { useModelModePrefs } from "@/src/stores/model-mode-prefs"
 import { useSimpleMode } from "@/src/stores/simple-prefs"
 
@@ -362,6 +363,15 @@ export function ChatView({ sessionId }: { sessionId?: string } = {}) {
   const [centerVisible, setCenterVisible] = useState(!hasChat)
   const [centerPersonaVisible, setCenterPersonaVisible] = useState(!hasChat)
   const [chatVisible, setChatVisible] = useState(hasChat)
+  // Card de provedor ausente: aparece quando o usuário tenta enviar sem
+  // provider configurado (input ou sugestão) e some quando um provedor conecta
+  const [providerHintVisible, setProviderHintVisible] = useState(false)
+  const noProvider = useNoProviderConnected()
+
+  // Conectou um provedor (ou a inicialização revelou que existem) → card some
+  useEffect(() => {
+    if (!noProvider) setProviderHintVisible(false)
+  }, [noProvider])
 
   useEffect(() => {
     const wasChatting = prevHasChat.current
@@ -447,10 +457,16 @@ export function ChatView({ sessionId }: { sessionId?: string } = {}) {
   const handleSuggestion = useCallback(
     (suggestion: string) => {
       if (viewMode === "chat") {
+        // Sem provedor configurado: mostra o card de configuração em vez de
+        // mandar a mensagem para o engine (que falharia com erro genérico)
+        if (noProvider) {
+          setProviderHintVisible(true)
+          return
+        }
         handleChatSend(suggestion, { simple: simpleMode, brain: brainEnabledFor(session?.id, useModelModePrefs.getState().chatActiveModes.brain) })
       }
     },
-    [viewMode, handleChatSend, simpleMode, session?.id],
+    [viewMode, handleChatSend, simpleMode, session?.id, noProvider],
   )
 
   const { t } = useTranslation()
@@ -570,6 +586,8 @@ export function ChatView({ sessionId }: { sessionId?: string } = {}) {
       )}
       {/* Imagem anexada com modelo sem visão e modo Visão desligado */}
       <VisionHintCard sessionId={session?.id} />
+      {/* Tentativa de envio sem nenhum provedor configurado (primeira execução) */}
+      <ProviderHintCard visible={providerHintVisible} onDismiss={() => setProviderHintVisible(false)} />
       {/* Pedidos aguardando resposta (permissão / question), inline acima do input.
           Itens com batchId (workers em lote) agrupam num card único de submit único. */}
       {pendingAsks.length > 0 && (
@@ -588,7 +606,13 @@ export function ChatView({ sessionId }: { sessionId?: string } = {}) {
         </div>
       )}
       {viewMode === "chat" ? (
-        <ChatInput onSubmit={handleChatSend} status={status} onStop={handleStop} sessionId={session?.id} />
+        <ChatInput
+          onSubmit={handleChatSend}
+          status={status}
+          onStop={handleStop}
+          sessionId={session?.id}
+          onProviderBlocked={() => setProviderHintVisible(true)}
+        />
       ) : (
         <CodeInput
           onSubmit={handleCodeSend}
@@ -596,6 +620,7 @@ export function ChatView({ sessionId }: { sessionId?: string } = {}) {
           onStop={handleStop}
           hasMessages={hasChat}
           sessionId={session?.id}
+          onProviderBlocked={() => setProviderHintVisible(true)}
         />
       )}
     </div>

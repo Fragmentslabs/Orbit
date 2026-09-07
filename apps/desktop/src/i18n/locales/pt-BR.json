@@ -231,6 +231,7 @@
     "loading": "Carregando...",
     "error": "Erro",
     "select": "Selecionar modelo",
+    "noProvider": "Sem provedor",
     "title": "Selecionar modelo",
     "recent": "Recentes",
     "removeRecent": "Remover dos recentes"
@@ -884,6 +885,11 @@
   "vision": {
     "hint": "Seu modelo atual não tem visão e o modo Visão está desligado — imagens anexadas não são vistas pelo agente.",
     "configure": "Configurar visão",
+    "dismiss": "Dispensar"
+  },
+  "providerHint": {
+    "hint": "Nenhum provedor configurado ainda — conecte um para enviar mensagens.",
+    "configure": "Configurar provedor",
     "dismiss": "Dispensar"
   },
   "orchestrationConfig": {
