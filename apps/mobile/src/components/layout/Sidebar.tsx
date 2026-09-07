@@ -48,8 +48,12 @@ import { getThemeTokens } from '~/lib/theme-tokens'
 import { useThemeStore } from '~/stores/theme-store'
 import type { ThemeTokens } from '~/lib/theme-tokens'
 import type { SessionInfo, FolderInfo } from '@orbit/shared'
-
-const DRAWER_WIDTH = 308
+import {
+  DRAWER_WIDTH,
+  animateDrawer,
+  backdropOpacity,
+  drawerTranslateX,
+} from '~/components/layout/sidebar-anim'
 
 /** Mesma chave do desktop (app-sidebar) — pastas abertas/fechadas persistidas. */
 const FOLDER_EXPANDED_KEY = 'orbit.sidebar.folder-expanded'
@@ -121,23 +125,11 @@ export function Sidebar() {
   const deleteFolder = useSessionStore((s) => s.deleteFolder)
   const organizeSidebar = useSessionStore((s) => s.organizeSidebar)
 
-  const [slideAnim] = useState(() => new Animated.Value(-DRAWER_WIDTH))
-  const [backdropAnim] = useState(() => new Animated.Value(0))
-
+  // Posição do drawer vive no módulo de animação — o gesto de swipe
+  // (useSidebarSwipe) arrasta os mesmos valores durante o toque.
   useEffect(() => {
-    Animated.parallel([
-      Animated.timing(slideAnim, {
-        toValue: sidebarOpen ? 0 : -DRAWER_WIDTH,
-        duration: 250,
-        useNativeDriver: true,
-      }),
-      Animated.timing(backdropAnim, {
-        toValue: sidebarOpen ? 1 : 0,
-        duration: 250,
-        useNativeDriver: true,
-      }),
-    ]).start()
-  }, [sidebarOpen, slideAnim, backdropAnim])
+    animateDrawer(sidebarOpen)
+  }, [sidebarOpen])
 
   // ─── Modo de seleção (chats e pastas) ────────────────────────────────────
   const [selectionMode, setSelectionMode] = useState(false)
@@ -815,7 +807,7 @@ export function Sidebar() {
           right: 0,
           bottom: 0,
           backgroundColor: 'rgba(0,0,0,0.4)',
-          opacity: backdropAnim,
+          opacity: backdropOpacity,
           zIndex: 50,
         }}
       >
@@ -833,7 +825,7 @@ export function Sidebar() {
           backgroundColor: tokens.background,
           borderRightWidth: 1,
           borderRightColor: tokens.border,
-          transform: [{ translateX: slideAnim }],
+          transform: [{ translateX: drawerTranslateX }],
           zIndex: 51,
           elevation: 10,
         }}
