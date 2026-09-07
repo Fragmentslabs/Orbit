@@ -246,6 +246,11 @@ function createWindow() {
   win.on('maximize', () => win?.webContents.send('window:maximized-change', true))
   win.on('unmaximize', () => win?.webContents.send('window:maximized-change', false))
 
+  // Tela cheia: no macOS os semáforos somem, então o padding de 80px que os
+  // acomoda na titlebar precisa sair junto — senão sobra um buraco à esquerda.
+  win.on('enter-full-screen', () => win?.webContents.send('window:fullscreen-change', true))
+  win.on('leave-full-screen', () => win?.webContents.send('window:fullscreen-change', false))
+
   // Test active push message to Renderer-process.
   win.webContents.on('did-finish-load', () => {
     if (isInitialWindow) startEntranceSound()
@@ -850,6 +855,7 @@ app.whenReady().then(() => {
   ipcMain.handle('window:close', () => win?.close())
   ipcMain.handle('window:isMaximized', () => win?.isMaximized() ?? false)
   ipcMain.handle('window:toggleFullscreen', () => win?.setFullScreen(!win.isFullScreen()))
+  ipcMain.handle('window:isFullscreen', () => win?.isFullScreen() ?? false)
 
   ipcMain.handle('select-folder', async () => {
     const result = await dialog.showOpenDialog(win!, {

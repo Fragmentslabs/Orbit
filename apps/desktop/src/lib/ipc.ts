@@ -55,6 +55,15 @@ export const windowApi = {
   close: () => window.ipcRenderer?.invoke("window:close"),
   isMaximized: () => (window.ipcRenderer?.invoke("window:isMaximized") ?? Promise.resolve(false)) as Promise<boolean>,
   toggleFullscreen: () => window.ipcRenderer?.invoke("window:toggleFullscreen"),
+  isFullscreen: () =>
+    (window.ipcRenderer?.invoke("window:isFullscreen") ?? Promise.resolve(false)) as Promise<boolean>,
+  onFullscreenChange: (listener: (fullscreen: boolean) => void) => {
+    if (!window.ipcRenderer) return () => {}
+    const wrapper = window.ipcRenderer.on("window:fullscreen-change", (fullscreen) =>
+      listener(fullscreen as boolean),
+    )
+    return () => window.ipcRenderer.off("window:fullscreen-change", wrapper)
+  },
   onMaximizedChange: (listener: (maximized: boolean) => void) => {
     if (!window.ipcRenderer) return () => {}
     const wrapper = window.ipcRenderer.on("window:maximized-change", (maximized) => listener(maximized as boolean))

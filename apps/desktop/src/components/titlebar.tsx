@@ -211,6 +211,15 @@ export function TitleBar({ onSearchOpen }: { onSearchOpen?: () => void }) {
   const { setView, setMode } = useWorkspace()
   const openSettings = useSettingsUi((s) => s.openSettings)
 
+  // Em tela cheia o macOS esconde os semáforos; sem isso o pl-[80px] que os
+  // acomoda vira um vão vazio e joga busca/título para o meio da barra.
+  const [fullscreen, setFullscreen] = useState(false)
+  useEffect(() => {
+    if (!isMac) return
+    void windowApi.isFullscreen().then(setFullscreen)
+    return windowApi.onFullscreenChange(setFullscreen)
+  }, [isMac])
+
   // No Mac as ações vivem no menu nativo do topo (ver createAppMenu no main);
   // aqui só despachamos para os stores/estados do renderer.
   useEffect(() => {
@@ -246,7 +255,9 @@ export function TitleBar({ onSearchOpen }: { onSearchOpen?: () => void }) {
       style={dragStyle}
     >
       <div
-        className={`flex h-full items-center gap-1 ${isMac ? "translate-y-[2px] pl-[80px]" : "pl-1.5"}`}
+        className={`flex h-full items-center gap-1 ${
+          isMac ? (fullscreen ? "translate-y-[2px] pl-2" : "translate-y-[2px] pl-[80px]") : "pl-1.5"
+        }`}
         style={noDragStyle}
       >
         {!isMac && <HamburgerMenu />}
