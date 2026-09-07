@@ -23,7 +23,7 @@ import { useProviderStore } from "@/src/stores/provider-store"
 import { customProvidersApi } from "@/src/lib/ipc"
 import { cn } from "@/lib/utils"
 
-import type { SettingsTab } from "@/src/stores/settings-ui"
+import { useSettingsUi, type SettingsTab } from "@/src/stores/settings-ui"
 import type { DetectResult } from "@/src/lib/ipc"
 
 interface TabDef {
@@ -484,4 +484,19 @@ export function SettingsDialog({ open, onOpenChange, initialTab = "providers" }:
       </DialogContent>
     </Dialog>
   )
+}
+
+/**
+ * Instância ÚNICA do SettingsDialog, montada na raiz do app e controlada pelo
+ * `useSettingsUi`. Todo ponto de entrada (menu da conta, menu nativo do macOS,
+ * comando /settings, "gerenciar provedores" do seletor de modelo) chama
+ * `openSettings(tab)` e cai exatamente neste dialog — antes cada seletor
+ * montava um SettingsDialog próprio dentro da sua árvore, e o do input de chat
+ * herdava os handlers do PromptInput.
+ */
+export function SettingsDialogHost() {
+  const open = useSettingsUi((s) => s.open)
+  const tab = useSettingsUi((s) => s.tab)
+  const setOpen = useSettingsUi((s) => s.setOpen)
+  return <SettingsDialog open={open} onOpenChange={setOpen} initialTab={tab} />
 }

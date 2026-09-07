@@ -88,7 +88,6 @@ import type { FolderInfo, SessionInfo } from "@shared/chat"
 import { useMessageQueueStore, startMessageScheduler } from "@/src/stores/message-queue-store"
 import { useSessionStore } from "@/src/stores/session-store"
 import { useSettingsUi } from "@/src/stores/settings-ui"
-import { SettingsDialog } from "@/src/components/settings-dialog"
 import { ConnectAppDialog } from "@/components/connect-app-dialog"
 
 type MenuItem = { icon: React.ReactNode; label: string; onSelect: () => void; separator?: boolean; destructive?: boolean }
@@ -1437,9 +1436,6 @@ function AccountDropdown({ onOpenSettings }: { onOpenSettings: () => void }) {
 export function AppSidebar() {
   const initialize = useSessionStore((s) => s.initialize)
   const initQueue = useMessageQueueStore((s) => s.initialize)
-  const settingsOpen = useSettingsUi((s) => s.open)
-  const settingsTab = useSettingsUi((s) => s.tab)
-  const setSettingsOpen = useSettingsUi((s) => s.setOpen)
   const openSettings = useSettingsUi((s) => s.openSettings)
 
   useEffect(() => {
@@ -1474,7 +1470,6 @@ export function AppSidebar() {
         <SidebarFooter className="p-0">
           <AccountSection onOpenSettings={() => openSettings()} />
         </SidebarFooter>
-        <SettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} initialTab={settingsTab} />
       </Sidebar>
     </SelectionProvider>
   )

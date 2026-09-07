@@ -25,6 +25,7 @@ import { UsageView } from "@/src/components/usage-view"
 import { RightPanel, RightPanelDropZone } from "@/src/components/right-panel"
 import { ensureAgentBrowser, evictInactiveWebviews } from "@/src/components/browser/webview-session"
 import { TitleBar } from "@/src/components/titlebar"
+import { SettingsDialogHost } from "@/src/components/settings-dialog"
 import { ChatSearch } from "@/src/components/chat-search"
 import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels"
 
@@ -401,6 +402,7 @@ function App() {
           <div className="flex h-svh flex-col overflow-hidden">
             <TitleBar onSearchOpen={() => setSearchOpen(true)} />
             <ChatSearch open={searchOpen} onOpenChange={setSearchOpen} />
+            <SettingsDialogHost />
             <SidebarProvider className="min-h-0 flex-1 overflow-hidden" open={open} onOpenChange={setOpen}>
               <Layout />
             </SidebarProvider>

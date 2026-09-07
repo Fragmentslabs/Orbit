@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react"
+import { useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import {
   AlignLeft,
@@ -30,8 +30,8 @@ import {
   ModelSelectorTrigger,
 } from "@/src/components/ai/model-selector"
 import { SegmentedControl } from "@/components/ui/segmented-control"
-import { SettingsDialog } from "@/src/components/settings-dialog"
 import { useProviderStore } from "@/src/stores/provider-store"
+import { useSettingsUi } from "@/src/stores/settings-ui"
 import { useModelModePrefs } from "@/src/stores/model-mode-prefs"
 import type { DefaultModel, ActiveModeDefaults } from "@/src/stores/model-mode-prefs"
 import type { BrainContextMode } from "@/src/stores/brain-prefs"
@@ -55,8 +55,9 @@ function ModelField({
   nullLabel?: string
 }) {
   const [open, setOpen] = useState(false)
-  const [settingsOpen, setSettingsOpen] = useState(false)
   const [skipFinalFocus, setSkipFinalFocus] = useState(false)
+  const pendingSettings = useRef(false)
+  const openSettings = useSettingsUi((s) => s.openSettings)
   const catalog = useProviderStore((s) => s.catalog)
   const connectedProviders = useProviderStore((s) => s.connectedProviders)
 
@@ -79,7 +80,17 @@ function ModelField({
   return (
     <div>
       <p className="mb-1 text-xs font-medium">{label}</p>
-      <ModelSelector open={open} onOpenChange={setOpen}>
+      <ModelSelector
+        open={open}
+        onOpenChange={setOpen}
+        onOpenChangeComplete={(isOpen) => {
+          if (isOpen) return
+          setSkipFinalFocus(false)
+          if (!pendingSettings.current) return
+          pendingSettings.current = false
+          openSettings("providers")
+        }}
+      >
         <ModelSelectorTrigger render={<Button className="h-7 gap-1 px-1.5 text-xs" variant="outline" />}>
           {value ? (
             <>
@@ -135,11 +146,13 @@ function ModelField({
               variant="ghost"
               className="w-full justify-start gap-2 text-xs"
               onClick={() => {
+                // Handoff determinístico: marca a intenção e fecha o seletor. O
+                // settings só abre no onOpenChangeComplete, quando este dialog
+                // terminou de sair — o setTimeout de 120ms disputava com a
+                // animação de saída de 100ms.
                 setSkipFinalFocus(true)
+                pendingSettings.current = true
                 setOpen(false)
-                // Aguarda o dialog de seleção fechar completamente (animação ~100ms)
-                // para evitar conflito de foco com o input autofocus do settings.
-                setTimeout(() => setSettingsOpen(true), 120)
               }}
             >
               <SettingsIcon className="size-3.5" />
@@ -148,7 +161,6 @@ function ModelField({
           </div>
         </ModelSelectorContent>
       </ModelSelector>
-      <SettingsDialog open={settingsOpen} onOpenChange={(next) => { setSettingsOpen(next); if (!next) setSkipFinalFocus(false) }} />
     </div>
   )
 }
