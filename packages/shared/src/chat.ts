@@ -509,6 +509,8 @@ export interface CatalogModel {
   release_date?: string
   limit?: { context: number; output: number }
   cost?: { input: number; output: number }
+  /** Estado no catálogo (models.dev): `deprecated` = removido do backend do provedor */
+  status?: 'deprecated' | 'beta'
 }
 
 export interface CatalogProvider {

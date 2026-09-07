@@ -49,6 +49,24 @@ function enrichCatalog(catalog: Catalog): Catalog {
   return catalog
 }
 
+/**
+ * Remove modelos marcados como `deprecated` no models.dev: eles saíram do
+ * backend do provedor (o gateway responde 400 "Model is unavailable") mas
+ * continuam no snapshot do catálogo. Mesma política do cliente do opencode,
+ * que esconde esses modelos do seletor.
+ */
+function pruneDeprecated(catalog: Catalog): Catalog {
+  for (const providerId in catalog) {
+    const provider = catalog[providerId]
+    for (const modelId in provider.models) {
+      if (provider.models[modelId].status === 'deprecated') {
+        delete provider.models[modelId]
+      }
+    }
+  }
+  return catalog
+}
+
 async function fetchCatalog(): Promise<Catalog | null> {
   try {
     const res = await fetch(MODELS_DEV_URL, {
@@ -57,6 +75,7 @@ async function fetchCatalog(): Promise<Catalog | null> {
     })
     if (!res.ok) return null
     const catalog = (await res.json()) as Catalog
+    pruneDeprecated(catalog)
     await fs.mkdir(dataDir(), { recursive: true })
     await fs.writeFile(cacheFile(), JSON.stringify({ catalog, fetchedAt: Date.now() }), 'utf8')
     return enrichCatalog(catalog)
@@ -70,6 +89,7 @@ export async function getCatalog(): Promise<Catalog> {
 
   const cache = await readCache()
   if (cache) {
+    pruneDeprecated(cache.catalog)
     cached = enrichCatalog(cache.catalog)
     if (Date.now() - cache.fetchedAt > REFRESH_INTERVAL) {
       void fetchCatalog().then((fresh) => {
