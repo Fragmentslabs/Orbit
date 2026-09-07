@@ -6,6 +6,7 @@ import { StorageKeys } from '@shared/chat'
 import { runChat } from './chat-engine'
 import { REVIEW_PROMPT } from './prompts'
 import { resolveModel } from './providers'
+import { withProviderSession } from './provider-session'
 import { readJson } from './storage'
 
 export interface LoopEngineConfig {
@@ -92,6 +93,14 @@ export async function reviewIteration(
  * Executa runChat em loop: executa → revisa → itera até done ou limite.
  */
 export async function runChatWithLoop(
+  win: BrowserWindow,
+  input: SendMessageInput,
+  config: LoopEngineConfig,
+): Promise<void> {
+  return withProviderSession(input.sessionId, () => runLoop(win, input, config))
+}
+
+async function runLoop(
   win: BrowserWindow,
   input: SendMessageInput,
   config: LoopEngineConfig,

@@ -22,6 +22,7 @@ import { classifyProviderError, errorToText } from './errors'
 import { buildSystemPrompt } from './prompts'
 import { buildProviderOptions, interleavedReasoningField, normalizeMessages } from './reasoning'
 import { resolveModel } from './providers'
+import { withProviderSession } from './provider-session'
 import { attachMediaMessage, saveMedia } from './media'
 import sharp from 'sharp'
 import { claimsCompletion, isNoCorrectionReply } from './overclaim'
@@ -637,6 +638,10 @@ async function bumpSessionActivity(win: BrowserWindow, sessionId: string): Promi
 }
 
 export async function runChat(win: BrowserWindow, input: SendMessageInput): Promise<void> {
+  return withProviderSession(input.sessionId, () => runChatTurn(win, input))
+}
+
+async function runChatTurn(win: BrowserWindow, input: SendMessageInput): Promise<void> {
   const { sessionId } = input
   abortControllers.get(sessionId)?.abort()
   const controller = new AbortController()
@@ -1470,6 +1475,10 @@ export async function compactSession(
   win: BrowserWindow,
   sessionId: string,
 ): Promise<void> {
+  return withProviderSession(sessionId, () => compactSessionTurn(win, sessionId))
+}
+
+async function compactSessionTurn(win: BrowserWindow, sessionId: string): Promise<void> {
   const history = await loadMessages(sessionId)
   const lastAssistant = [...history].reverse().find((m) => m.role === 'assistant' && m.providerId)
   const providerId = lastAssistant?.providerId

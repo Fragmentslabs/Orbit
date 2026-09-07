@@ -4,6 +4,7 @@ import { getProvider, modelSupportsVision } from '../catalog'
 import { classificarComando, mensagemBloqueio } from './command-policy'
 import { extrairAnotacao, extrairCommit } from './contrato'
 import { resolveModel } from '../providers'
+import { withProviderSession } from '../provider-session'
 import { buildProviderOptions, interleavedReasoningField, normalizeMessages } from '../reasoning'
 import { createBashTool } from '../tools/shell'
 import type { ToolContext } from '../tools/context'
@@ -333,6 +334,10 @@ function resumirTool(tool: string, input: unknown): string {
 }
 
 export async function executarFase(ctx: ContextoFase): Promise<ResultadoFase> {
+  return withProviderSession(`esteira_${ctx.task.id}`, () => executarFaseInterna(ctx))
+}
+
+async function executarFaseInterna(ctx: ContextoFase): Promise<ResultadoFase> {
   const comandosControlados: string[] = []
   const provider = await getProvider(ctx.fase.providerId)
   const toolCtx: ToolContext = {

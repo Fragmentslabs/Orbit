@@ -18,6 +18,7 @@ import { forwardChatEvent } from './companion-server'
 import { classifyProviderError, errorToText } from './errors'
 import { ORCHESTRATOR_PLAN_PROMPT, ORCHESTRATOR_SYNTHESIS_PROMPT } from './prompts'
 import { resolveModel } from './providers'
+import { withProviderSession } from './provider-session'
 import { buildProviderOptions, interleavedReasoningField, normalizeMessages, reasoningPrepareStep } from './reasoning'
 import { readJson, writeJson } from './storage'
 import { createSubagentTool, createTaskTool } from './tools/orchestration'
@@ -134,6 +135,10 @@ export function getOrchestrationRunningSessionIds(): string[] {
 
 /** Fase 1 — planejamento. Substitui runChat quando options.orchestrate está ativo. */
 export async function runOrchestration(win: BrowserWindow, input: SendMessageInput): Promise<void> {
+  return withProviderSession(input.sessionId, () => runOrchestrationTurn(win, input))
+}
+
+async function runOrchestrationTurn(win: BrowserWindow, input: SendMessageInput): Promise<void> {
   // Todo worker roda em modo código na pasta de trabalho — sem pasta não há o
   // que orquestrar. A UI do desktop já bloqueia o envio sem pasta, mas rotina
   // agendada e companion não: antes o create_task rebaixava a tarefa para chat,
@@ -389,6 +394,15 @@ export async function runOrchestration(win: BrowserWindow, input: SendMessageInp
 
 /** Fase 2 (execução dos workers) + Fase 3 (síntese). */
 export async function approvePlan(
+  win: BrowserWindow,
+  sessionId: string,
+  planId: string,
+  taskIds?: string[],
+): Promise<void> {
+  return withProviderSession(sessionId, () => approvePlanTurn(win, sessionId, planId, taskIds))
+}
+
+async function approvePlanTurn(
   win: BrowserWindow,
   sessionId: string,
   planId: string,

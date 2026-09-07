@@ -9,6 +9,7 @@ import * as memoryService from '../memory/service'
 import { errorToText } from '../errors'
 import { getProvider } from '../catalog'
 import { resolveModel } from '../providers'
+import { withProviderSession } from '../provider-session'
 import { reasoningPrepareStep } from '../reasoning'
 import { createGlobTool, createGrepTool, createListTool, createReadTool } from '../tools/files'
 import type { ToolContext } from '../tools/context'
@@ -731,6 +732,10 @@ Reply with JSON (write "reason", "gap", and "mission" text values in ${outputLan
 }
 
 export async function runProjectInit(input: RunInitInput): Promise<string[]> {
+  return withProviderSession(`init:${input.directory}`, () => runProjectInitInterna(input))
+}
+
+async function runProjectInitInterna(input: RunInitInput): Promise<string[]> {
   const { directory, force, language } = input
   const hooks = input.hooks ?? {}
   if (running.has(directory)) {
