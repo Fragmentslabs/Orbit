@@ -831,6 +831,10 @@ async function getFileAtCommit(
 }
 
 app.whenReady().then(() => {
+  // WM_CLASS do Electron vem de app.name; o .desktop do Linux declara
+  // StartupWMClass=Orbit — alinhar aqui garante o ícone correto no dock/menu.
+  app.setName('Orbit')
+
   // Instância secundária: o lock não foi obtido e o app já está saindo.
   if (!gotSingleInstanceLock) return
 
