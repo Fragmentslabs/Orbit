@@ -50,6 +50,7 @@ import { dataDir, listKeys, readJson, removeJson, writeJson } from './lib/storag
 import { loginShellArgs, userShellEnv } from './lib/shell-env'
 import { searchSessions } from './lib/search-sessions'
 import { tocarSom } from './lib/sound'
+import { setupAutoUpdater } from './lib/updater'
 import { destroyBrowserWindow } from './lib/tools'
 import type { SendMessageInput } from '@shared/chat'
 import type { ChatEvent } from '@shared/chat'
@@ -1548,6 +1549,9 @@ app.whenReady().then(() => {
   // Mantém o menu de contexto do Explorer sempre apontando para o exe atual
   // (o caminho muda a cada instalação/atualização).
   if (app.isPackaged) void registerOpenWith()
+
+  // Auto-update via GitHub (ignorado em MAS/Windows Store/linux-deb)
+  setupAutoUpdater()
 
   createWindow()
 })
