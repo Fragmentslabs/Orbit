@@ -12,8 +12,9 @@
     "build": "tsc && vite build && electron-builder",
     "release:linux": "tsc && vite build && electron-builder --linux AppImage deb --publish always",
     "build:store": "tsc && vite build && node scripts/generate-appx-assets.mjs && electron-builder --win appx --config electron-builder.store.json5",
-    "build:mas": "tsc && vite build && electron-builder --mac mas",
-    "upload:mas": "tsc && vite build && electron-builder --mac mas --publish always",
+    "build:mas": "tsc && vite build && electron-builder --mac mas --config.mac.provisioningProfile=\"/Users/desknik/Library/MobileDevice/Provisioning Profiles/1698ba7d-11d9-411e-8385-af55ac4fbb9b.mobileprovision\"",
+    "upload:mas": "tsc && vite build && electron-builder --mac mas --publish always --config.mac.provisioningProfile=\"/Users/desknik/Library/MobileDevice/Provisioning Profiles/1698ba7d-11d9-411e-8385-af55ac4fbb9b.mobileprovision\"",
+    "release:mac": "tsc && vite build && electron-builder --mac dmg --publish always --config.mac.notarize.teamId=2AML844DBK",
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit"

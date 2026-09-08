@@ -37,8 +37,9 @@
     "target": [
       "dmg"
     ],
-    "artifactName": "${productName}-Mac-${version}-Installer.${ext}",
-    "provisioningProfile": "/Users/desknik/Library/MobileDevice/Provisioning Profiles/1698ba7d-11d9-411e-8385-af55ac4fbb9b.mobileprovision",
+    "artifactName": "${productName}-Mac-${version}.${ext}",
+    // O provisioningProfile (Mac App Store) é injetado via CLI nos scripts build:mas/upload:mas —
+    // aqui ele ficaria no build de distribuição direta (DMG), que precisa do Developer ID, não do MAS.
     "icon": "build/icon.icns",
     "minimumSystemVersion": "12.0.0",
     "bundleVersion": "3",
