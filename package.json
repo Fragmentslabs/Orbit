@@ -16,8 +16,11 @@
   "scripts": {
     "desktop:dev": "npm run dev --workspace=@orbit/desktop",
     "desktop:build": "npm run build --workspace=@orbit/desktop",
-    "desktop:build:store": "npm run build:store --workspace=@orbit/desktop",
-    "desktop:release": "npm run release:linux --workspace=@orbit/desktop",
+    "desktop:build:linux": "npm run build:linux --workspace=@orbit/desktop",
+    "desktop:build:mac": "npm run build:mac --workspace=@orbit/desktop",
+    "desktop:build:windows": "npm run build:windows --workspace=@orbit/desktop",
+    "desktop:build:windows:release": "npm run build:windows:release --workspace=@orbit/desktop",
+    "desktop:build:all": "npm run desktop:build:linux && npm run desktop:build:mac && npm run desktop:build:windows:release",
     "mobile:dev": "npm run start --workspace=@orbit/mobile",
     "mobile:web": "npm run web --workspace=@orbit/mobile",
     "typecheck": "npm run typecheck --workspaces --if-present",
