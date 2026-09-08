@@ -16,11 +16,12 @@ import {
   Check,
 } from 'lucide-react-native'
 import { useTranslation } from 'react-i18next'
-import type { MediaEntry, MediaSource } from '@orbit/shared'
+import { folderKey, normalizeFolderName, type MediaEntry, type MediaSource } from '@orbit/shared'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useConnectionStore } from '~/stores/connection-store'
 import { useSessionStore } from '~/stores/session-store'
 import { useWorkspaceStore } from '~/stores/workspace-store'
+import { useDraftFolders } from '~/stores/draft-folders-store'
 import { useMediaStore } from '~/stores/media-store'
 import { getThemeTokens } from '~/lib/theme-tokens'
 import { useThemeStore } from '~/stores/theme-store'
@@ -29,6 +30,10 @@ import { ImageLightbox } from '~/components/chat/ImageLightbox'
 
 type SourceFilter = 'all' | MediaSource
 type PeriodFilter = 'all' | 'today' | 'week' | 'month'
+
+/** Filtro de projeto: 'all' = todos; '__none__' = mídia sem projeto conhecido. */
+const PROJECT_ALL = 'all'
+const PROJECT_NONE = '__none__'
 
 const PERIOD_MS: Record<Exclude<PeriodFilter, 'all'>, number> = {
   today: 24 * 60 * 60 * 1000,
@@ -61,6 +66,8 @@ export default function MediaScreen() {
   const setMode = useWorkspaceStore((s) => s.setMode)
   const sessions = useSessionStore((s) => s.sessions)
   const http = useConnectionStore((s) => s.http)
+  const folders = useDraftFolders((s) => s.folders)
+  const hydrateFolders = useDraftFolders((s) => s.hydrate)
 
   const entries = useMediaStore((s) => s.entries)
   const usage = useMediaStore((s) => s.usage)
@@ -73,6 +80,8 @@ export default function MediaScreen() {
   const [query, setQuery] = useState('')
   const [source, setSource] = useState<SourceFilter>('all')
   const [period, setPeriod] = useState<PeriodFilter>('all')
+  /** Filtro explícito do usuário; null = segue o padrão (projeto da pasta selecionada). */
+  const [projectOverride, setProjectOverride] = useState<string | null>(null)
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [selectionMode, setSelectionMode] = useState(false)
   const [preview, setPreview] = useState<MediaEntry | null>(null)
@@ -85,6 +94,11 @@ export default function MediaScreen() {
     if (http) void refresh()
   }, [http, refresh])
 
+  // Pastas recentes (a "pasta selecionada" do app) — alimenta o filtro padrão.
+  useEffect(() => {
+    void hydrateFolders()
+  }, [hydrateFolders])
+
   const handleRefresh = useCallback(() => {
     setNow(Date.now())
     void refresh()
@@ -96,18 +110,86 @@ export default function MediaScreen() {
     [sessions, mode],
   )
 
+  /**
+   * Projeto de uma entrada: o diretório da sessão que a originou, normalizado
+   * com a MESMA regra das pastas da sidebar (folderKey/normalizeFolderName).
+   * Entrada sem sessão conhecida (órfã do backfill) ou sessão sem diretório
+   * (modo chat) não tem projeto.
+   */
+  const sessionById = useMemo(() => new Map(sessions.map((s) => [s.id, s])), [sessions])
+  const projectOf = useCallback((entry: MediaEntry): { key: string; label: string } | null => {
+    if (!entry.sessionId) return null
+    const directory = sessionById.get(entry.sessionId)?.directory
+    if (!directory) return null
+    const label = normalizeFolderName(directory)
+    return { key: folderKey(label), label }
+  }, [sessionById])
+
+  /** Entradas no escopo do modo atual (aplica o filtro de sessão uma vez só). */
+  const scopedEntries = useMemo(
+    () => entries.filter((entry) => !entry.sessionId || modeSessionIds.has(entry.sessionId)),
+    [entries, modeSessionIds],
+  )
+
+  /** Projetos com mídia no escopo — os chips do filtro. */
+  const projectOptions = useMemo(() => {
+    const byKey = new Map<string, string>()
+    for (const entry of scopedEntries) {
+      const p = projectOf(entry)
+      if (p && !byKey.has(p.key)) byKey.set(p.key, p.label)
+    }
+    return [...byKey.entries()]
+      .map(([key, label]) => ({ key, label }))
+      .sort((a, b) => a.label.localeCompare(b.label))
+  }, [scopedEntries, projectOf])
+
+  const hasProjectless = useMemo(
+    () => scopedEntries.some((entry) => !projectOf(entry)),
+    [scopedEntries, projectOf],
+  )
+
+  /** Projeto da pasta selecionada (folders[0]) — o filtro padrão. */
+  const defaultProjectKey = useMemo(() => {
+    if (!folders[0]) return null
+    return folderKey(normalizeFolderName(folders[0]))
+  }, [folders])
+
+  const defaultProjectHasMedia = useMemo(
+    () => !!defaultProjectKey && scopedEntries.some((entry) => projectOf(entry)?.key === defaultProjectKey),
+    [defaultProjectKey, scopedEntries, projectOf],
+  )
+
+  const projectOptionKeys = useMemo(() => new Set(projectOptions.map((p) => p.key)), [projectOptions])
+
+  /**
+   * Filtro efetivo: o escolhido pelo usuário quando é válido; se ele saiu do
+   * escopo (ex.: trocou de modo e o projeto não tem mídia aqui) ou nada foi
+   * escolhido, cai no padrão — o projeto da pasta selecionada, quando tem
+   * mídia — e só então "todos". Tudo derivado: nada de setState em effect.
+   */
+  const project = useMemo(() => {
+    if (projectOverride === PROJECT_ALL || projectOverride === PROJECT_NONE) return projectOverride
+    if (projectOverride && projectOptionKeys.has(projectOverride)) return projectOverride
+    if (defaultProjectKey && defaultProjectHasMedia) return defaultProjectKey
+    return PROJECT_ALL
+  }, [projectOverride, projectOptionKeys, defaultProjectKey, defaultProjectHasMedia])
+
   const visible = useMemo(() => {
     const needle = query.trim().toLowerCase()
     const since = period === 'all' ? 0 : now - PERIOD_MS[period]
-    return entries.filter((entry) => {
+    return scopedEntries.filter((entry) => {
       if (source !== 'all' && entry.source !== source) return false
-      // Órfãs (sem sessão) aparecem nos dois modos; com sessão, só no modo dela.
-      if (entry.sessionId && !modeSessionIds.has(entry.sessionId)) return false
+      if (project === PROJECT_NONE) {
+        if (projectOf(entry)) return false
+      } else if (project !== PROJECT_ALL) {
+        const p = projectOf(entry)
+        if (!p || p.key !== project) return false
+      }
       if (entry.createdAt < since) return false
       if (!needle) return true
       return `${entry.name ?? ''} ${entry.taskId ?? ''} ${entry.id}`.toLowerCase().includes(needle)
     })
-  }, [entries, source, period, query, modeSessionIds, now])
+  }, [scopedEntries, source, period, query, project, projectOf, now])
 
   const selecting = selectionMode
 
@@ -225,6 +307,42 @@ export default function MediaScreen() {
       {/* Filtros — origem e período, com divisor como no desktop */}
       <View style={s.filtersWrap}>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.filtersContent}>
+          {(projectOptions.length > 0 || hasProjectless) && (
+            <>
+              <Pressable
+                key="project-all"
+                onPress={() => setProjectOverride(PROJECT_ALL)}
+                style={[s.chip, { backgroundColor: project === PROJECT_ALL ? tokens.primary : tokens.border }]}
+              >
+                <Text style={[s.chipText, { color: project === PROJECT_ALL ? '#fff' : tokens.mutedForeground }]}>
+                  {t('media.project.all')}
+                </Text>
+              </Pressable>
+              {projectOptions.map((p) => (
+                <Pressable
+                  key={`project-${p.key}`}
+                  onPress={() => setProjectOverride(p.key)}
+                  style={[s.chip, { backgroundColor: project === p.key ? tokens.primary : tokens.border }]}
+                >
+                  <Text style={[s.chipText, { color: project === p.key ? '#fff' : tokens.mutedForeground }]}>
+                    {p.label}
+                  </Text>
+                </Pressable>
+              ))}
+              {hasProjectless && (
+                <Pressable
+                  key="project-none"
+                  onPress={() => setProjectOverride(PROJECT_NONE)}
+                  style={[s.chip, { backgroundColor: project === PROJECT_NONE ? tokens.primary : tokens.border }]}
+                >
+                  <Text style={[s.chipText, { color: project === PROJECT_NONE ? '#fff' : tokens.mutedForeground }]}>
+                    {t('media.project.none')}
+                  </Text>
+                </Pressable>
+              )}
+              <View style={[s.filtersDivider, { backgroundColor: tokens.border }]} />
+            </>
+          )}
           {sourceFilters.map((value) => (
             <Pressable
               key={`source-${value}`}

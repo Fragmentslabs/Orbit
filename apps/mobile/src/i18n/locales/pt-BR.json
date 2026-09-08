@@ -158,6 +158,10 @@
       "today": "24h",
       "week": "7 dias",
       "month": "30 dias"
+    },
+    "project": {
+      "all": "Todos os projetos",
+      "none": "Sem projeto"
     }
   },
   "chatHeader": {
