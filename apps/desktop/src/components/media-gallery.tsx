@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
-import { CheckIcon, HardDriveIcon, ImageOff, MessageSquare, RefreshCw, Search, Trash2, X } from "lucide-react"
+import { CheckIcon, Folder, HardDriveIcon, ImageOff, MessageSquare, RefreshCw, Search, Trash2, X } from "lucide-react"
 import type { MediaEntry, MediaSource } from "@shared/media"
+import { folderKey, normalizeFolderName } from "@shared/chat"
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { mediaApi } from "@/src/lib/ipc"
@@ -24,6 +25,10 @@ import { cn } from "@/lib/utils"
 
 type SourceFilter = "all" | MediaSource
 type PeriodFilter = "all" | "today" | "week" | "month"
+
+/** Filtro de projeto: "all" = todos; "__none__" = mídia sem projeto conhecido. */
+const PROJECT_ALL = "all"
+const PROJECT_NONE = "__none__"
 
 const PERIOD_MS: Record<Exclude<PeriodFilter, "all">, number> = {
   today: 24 * 60 * 60 * 1000,
@@ -118,13 +123,15 @@ function Thumb({ entry, selected, selecting, onToggle, onOpen }: {
 
 export function MediaGallery() {
   const { t, i18n } = useTranslation()
-  const { mode, setMode } = useWorkspace()
+  const { mode, setMode, folders } = useWorkspace()
   const sessions = useSessionStore((s) => s.sessions)
   const [entries, setEntries] = useState<MediaEntry[]>([])
   const [usage, setUsage] = useState({ count: 0, bytes: 0 })
   const [loading, setLoading] = useState(true)
   const [source, setSource] = useState<SourceFilter>("all")
   const [period, setPeriod] = useState<PeriodFilter>("all")
+  /** Filtro explícito do usuário; null = segue o padrão (projeto da pasta selecionada). */
+  const [projectOverride, setProjectOverride] = useState<string | null>(null)
   const [query, setQuery] = useState("")
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [preview, setPreview] = useState<MediaEntry | null>(null)
@@ -161,19 +168,86 @@ export function MediaGallery() {
     [sessions, mode],
   )
 
+  /**
+   * Projeto de uma entrada: o diretório da sessão que a originou, normalizado
+   * com a MESMA regra das pastas da sidebar (folderKey/normalizeFolderName).
+   * Entrada sem sessão conhecida (órfã do backfill) ou sessão sem diretório
+   * (modo chat) não tem projeto.
+   */
+  const sessionById = useMemo(() => new Map(sessions.map((s) => [s.id, s])), [sessions])
+  const projectOf = useCallback((entry: MediaEntry): { key: string; label: string } | null => {
+    if (!entry.sessionId) return null
+    const directory = sessionById.get(entry.sessionId)?.directory
+    if (!directory) return null
+    const label = normalizeFolderName(directory)
+    return { key: folderKey(label), label }
+  }, [sessionById])
+
+  /** Entradas no escopo do modo atual (aplica o filtro de sessão uma vez só). */
+  const scopedEntries = useMemo(
+    () => entries.filter((entry) => !entry.sessionId || modeSessionIds.has(entry.sessionId)),
+    [entries, modeSessionIds],
+  )
+
+  /** Projetos com mídia no escopo — os chips do filtro. */
+  const projectOptions = useMemo(() => {
+    const byKey = new Map<string, string>()
+    for (const entry of scopedEntries) {
+      const p = projectOf(entry)
+      if (p && !byKey.has(p.key)) byKey.set(p.key, p.label)
+    }
+    return [...byKey.entries()]
+      .map(([key, label]) => ({ key, label }))
+      .sort((a, b) => a.label.localeCompare(b.label))
+  }, [scopedEntries, projectOf])
+
+  const hasProjectless = useMemo(
+    () => scopedEntries.some((entry) => !projectOf(entry)),
+    [scopedEntries, projectOf],
+  )
+
+  /** Projeto da pasta selecionada no workspace (folders[0]) — o filtro padrão. */
+  const defaultProjectKey = useMemo(() => {
+    if (!folders[0]) return null
+    return folderKey(normalizeFolderName(folders[0]))
+  }, [folders])
+
+  const defaultProjectHasMedia = useMemo(
+    () => !!defaultProjectKey && scopedEntries.some((entry) => projectOf(entry)?.key === defaultProjectKey),
+    [defaultProjectKey, scopedEntries, projectOf],
+  )
+
+  const projectOptionKeys = useMemo(() => new Set(projectOptions.map((p) => p.key)), [projectOptions])
+
+  /**
+   * Filtro efetivo: o escolhido pelo usuário quando é válido; se ele saiu do
+   * escopo (ex.: trocou de modo e o projeto não tem mídia aqui) ou nada foi
+   * escolhido, cai no padrão — o projeto da pasta selecionada, quando tem
+   * mídia — e só então "todos". Tudo derivado: nada de setState em effect.
+   */
+  const project = useMemo(() => {
+    if (projectOverride === PROJECT_ALL || projectOverride === PROJECT_NONE) return projectOverride
+    if (projectOverride && projectOptionKeys.has(projectOverride)) return projectOverride
+    if (defaultProjectKey && defaultProjectHasMedia) return defaultProjectKey
+    return PROJECT_ALL
+  }, [projectOverride, projectOptionKeys, defaultProjectKey, defaultProjectHasMedia])
+
   const visible = useMemo(() => {
     const needle = query.trim().toLowerCase()
     const since = period === "all" ? 0 : Date.now() - PERIOD_MS[period]
-    return entries.filter((entry) => {
+    return scopedEntries.filter((entry) => {
       if (source !== "all" && entry.source !== source) return false
-      // Entradas sem sessão conhecida (órfãs do backfill) aparecem nos dois
-      // modos; com sessão, só no modo da sessão.
-      if (entry.sessionId && !modeSessionIds.has(entry.sessionId)) return false
+      if (project === PROJECT_NONE) {
+        if (projectOf(entry)) return false
+      } else if (project !== PROJECT_ALL) {
+        const p = projectOf(entry)
+        if (!p || p.key !== project) return false
+      }
       if (entry.createdAt < since) return false
       if (!needle) return true
       return `${entry.name ?? ""} ${entry.taskId ?? ""} ${entry.id}`.toLowerCase().includes(needle)
     })
-  }, [entries, source, period, query, modeSessionIds])
+  }, [scopedEntries, source, period, query, project, projectOf])
 
   const toggle = useCallback((id: string) => {
     setSelected((prev) => {
@@ -238,6 +312,54 @@ export function MediaGallery() {
           >
             <RefreshCw className="size-3.5" />
           </button>
+        </div>
+        <div className="flex flex-wrap items-center gap-1">
+          {projectOptions.length > 0 || hasProjectless ? (
+            <>
+              <Folder className="size-3.5 shrink-0 text-muted-foreground" />
+              <button
+                type="button"
+                onClick={() => setProjectOverride(PROJECT_ALL)}
+                className={cn(
+                  "rounded-full px-2 py-0.5 text-[11px] transition-colors",
+                  project === PROJECT_ALL
+                    ? "bg-sidebar-accent text-sidebar-accent-foreground"
+                    : "text-muted-foreground hover:bg-sidebar-accent/50",
+                )}
+              >
+                {t("media.project.all")}
+              </button>
+              {projectOptions.map((p) => (
+                <button
+                  key={p.key}
+                  type="button"
+                  onClick={() => setProjectOverride(p.key)}
+                  className={cn(
+                    "rounded-full px-2 py-0.5 text-[11px] transition-colors",
+                    project === p.key
+                      ? "bg-sidebar-accent text-sidebar-accent-foreground"
+                      : "text-muted-foreground hover:bg-sidebar-accent/50",
+                  )}
+                >
+                  {p.label}
+                </button>
+              ))}
+              {hasProjectless && (
+                <button
+                  type="button"
+                  onClick={() => setProjectOverride(PROJECT_NONE)}
+                  className={cn(
+                    "rounded-full px-2 py-0.5 text-[11px] transition-colors",
+                    project === PROJECT_NONE
+                      ? "bg-sidebar-accent text-sidebar-accent-foreground"
+                      : "text-muted-foreground hover:bg-sidebar-accent/50",
+                  )}
+                >
+                  {t("media.project.none")}
+                </button>
+              )}
+            </>
+          ) : null}
         </div>
         <div className="flex flex-wrap items-center gap-1">
           {sourceFilters.map((value) => (

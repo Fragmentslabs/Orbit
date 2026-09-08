@@ -1648,6 +1648,10 @@
       "today": "24h",
       "week": "7 days",
       "month": "30 days"
+    },
+    "project": {
+      "all": "All projects",
+      "none": "No project"
     }
   },
   "esteira": {
