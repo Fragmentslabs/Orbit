@@ -245,7 +245,7 @@ pausada ── retomar ───────────────────
   4. Prompt da fase.
 - **Autonomia**: nenhum prompt de permissão (D5). Guarda-corpo = `tools` da fase + política de comandos (§8).
 - **Fim da fase**: o agente finaliza com a anotação markdown da fase (obrigatória — se ausente, a fase é considerada com erro e entra no fluxo de retry).
-- **Snapshot**: a task é executada a partir da descrição no momento do disparo; edições no título/descrição durante a execução não alteram a task em andamento (valem para o relatório final/reações futuras).
+- **Snapshot**: a task é executada a partir da descrição no momento do disparo; edições no título/descrição durante a execução não alteram a task em andamento (valem para o resumo final/reações futuras).
 
 ---
 
@@ -300,7 +300,7 @@ pausada ── retomar ───────────────────
   - Alternativa aceitável: lista única ordenada por fila (a fila automática segue a ordem da lista). Kanban é o que viabiliza o drag para fase (D8).
 - **Card da task**: título, badge da fase atual, badge de erro quando pausada por erro, tempo/tokens (compactos), ícone de pausa quando pausada.
 - **Controles da esteira**: ligar/desligar modo automático, pausar tudo, retry config, push config.
-- **Footer**: relatório (§13), altura baixa.
+- **Footer**: totais da esteira (concluídas/total, tempo, tokens) em texto com ícones, altura baixa.
 
 ### 12.2 Drag & drop
 - Drag do card: para a coluna "Pendentes" = mantém pendente; para qualquer fase = inicia a task daquela fase (D8); para a coluna da fase atual de uma task em execução não tem efeito.
@@ -333,21 +333,12 @@ pausada ── retomar ───────────────────
 
 - **Título**: editável inline (não afeta execução em andamento — snapshot, §7).
 - **Tabs de fases**: uma tab por fase configurada; tab da fase atual com indicador de execução; fases `pulada` marcadas; conteúdo em markdown (renderização + edição).
-- **Coluna direita**: `criadoEm`, `concluidoEm`, `tempoTrabalhoMs`, `tokens`, `custo` (estimado por modelo — §16), e o editor de **dependências** (adicionar/remover tasks do board; validação de ciclo; reorganização da fila automática refletida no board).
+- **Coluna direita**: `criadoEm`, `concluidoEm`, `tempoTrabalhoMs`, `tokens`, `custo` (estimado por modelo — §15), e o editor de **dependências** (adicionar/remover tasks do board; validação de ciclo; reorganização da fila automática refletida no board).
 - **Aviso de erro**: banner no topo quando `pausaMotivo === 'erro'` com o texto de `erro` e botão **Retomar**.
 
 ---
 
-## 14. UI — Relatórios no footer
-
-- Cards **baixos** no rodapé do board (uma linha de altura), um por esteira:
-  - ✅ tasks concluídas · ❌ falhas · 🔄 em andamento · commits (`abc1234`, ...) · ⏱ tempo total · tokens · custo.
-- Atualização: ao vivo durante execução, e o card da esteira automática mostra progresso `n/total`.
-- Clique no card abre o detalhe (lista de tasks por estado + commits).
-
----
-
-## 15. Persistência e arquivos
+## 14. Persistência e arquivos
 
 Persistência local em JSON na pasta de dados do app (mesma base das memórias/settings do Orbit), sem banco novo nesta fase. Estrutura sugerida:
 
@@ -365,30 +356,30 @@ Stores zustand (padrão do app):
 |---|---|
 | `apps/desktop/src/stores/projeto-store.ts` | CRUD de projetos (nome + pastas) |
 | `apps/desktop/src/stores/esteira-store.ts` | CRUD de esteiras, fases, política de comandos, modo de operação, persistência |
-| `apps/desktop/src/stores/esteira-exec-store.ts` | estado de execução: fila, tasks em andamento, retries, relatórios (efêmero + persistido) |
+| `apps/desktop/src/stores/esteira-exec-store.ts` | estado de execução: fila, tasks em andamento, retries, totais de telemetria (efêmero + persistido) |
 
 Componentes:
 
 | Arquivo | Conteúdo |
 |---|---|
-| `apps/desktop/src/components/esteira/esteira-board.tsx` | página do board (kanban por fase + footer de relatórios) |
+| `apps/desktop/src/components/esteira/esteira-board.tsx` | página do board (kanban por fase + footer de totais) |
 | `apps/desktop/src/components/esteira/esteira-create-dialog.tsx` | modal de criação (nome, pastas, modelo, fases, branch/worktree) |
 | `apps/desktop/src/components/esteira/task-card.tsx` | card da task (badges de fase/erro/pausa) |
 | `apps/desktop/src/components/esteira/task-modal.tsx` | modal da task (título, tabs de fases markdown, coluna direita, dependências) |
-| `apps/desktop/src/components/esteira/esteira-footer.tsx` | cards de relatório do footer |
+| `apps/desktop/src/components/esteira/esteira-footer.tsx` | totais do footer (concluídas, tempo, tokens) |
 
 ---
 
-## 16. Telemetria
+## 15. Telemetria
 
 - **Tokens**: contados por fase (anotação + task).
 - **Custo**: estimado — tokens × preço por 1k tokens do modelo usado (`models-store.ts`). Arredondado para 4 casas.
 - **Tempo de trabalho**: soma dos períodos `em_progresso` (pausas e tempo pendente não contam).
-- Exibidos no modal da task (coluna direita) e no relatório do footer.
+- Exibidos no modal da task (coluna direita) e no footer do board.
 
 ---
 
-## 17. Fora de escopo (fases futuras)
+## 16. Fora de escopo (fases futuras)
 
 - **Rotinas** — agendador (cron) para executar esteiras/agentes em horários definidos.
 - **Watcher QA** — agente em loop testando projetos e criando tasks na esteira ao achar erros/melhorias (depende de Rotinas).
@@ -398,7 +389,7 @@ Componentes:
 
 ---
 
-## 18. Riscos
+## 17. Riscos
 
 | Risco | Mitigação |
 |---|---|
@@ -410,7 +401,7 @@ Componentes:
 
 ---
 
-## 19. Decisões assumidas (pendências a confirmar)
+## 18. Decisões assumidas (pendências a confirmar)
 
 1. **Retry padrão = 3** — confirmar se o default deve ser outro.
 2. **Drag inicia da fase solta** — fases anteriores ficam `pulada`. Se a regra "passar por todas as fases" for absoluta, o drag deve apenas **enfileirar** a task (início na fase 1). **A confirmar.**
@@ -419,3 +410,7 @@ Componentes:
 5. **Anotações editáveis pelo usuário** — edição não sobrescreve conteúdo do agente (append com autor/ts).
 6. **Validação pode corrigir pequenos problemas**; problemas maiores → pausa com erro (não há retorno de fase).
 7. **Board = kanban por fase** (para viabilizar o drag); lista simples é alternativa se o kanban ficar pesado.
+esado.
+� alternativa se o kanban ficar pesado.
+kanban ficar pesado.
+� alternativa se o kanban ficar pesado.
