@@ -89,6 +89,11 @@ export function ChatHeader({ title, hasMenu, session, sessionId, rightPanelOpen,
   const [renaming, setRenaming] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
   const toggleChatSearch = useChatSearchStore((s) => s.toggle)
+  // Com muitas pastas o modo inline não cabe nem perto do limite `@xl`
+  // (3 pastas + branch + título ≈ 750-800px; `@xl` = 36rem). Com mais de 3
+  // pastas, exige o container em `@5xl` (64rem = 1024px) para ficar solto;
+  // senão, usa o dropdown compacto.
+  const manyFolders = (folders?.length ?? 0) > 3
 
   return (
     // O `@container` da raiz mede a largura real do header (que encolhe com a
@@ -116,14 +121,14 @@ export function ChatHeader({ title, hasMenu, session, sessionId, rightPanelOpen,
         <span className="truncate text-sm font-medium text-foreground">{title ?? t("header.newChat")}</span>
         {workspaceMode === 'code' && (
           <>
-            <div className="hidden min-w-0 items-center gap-1 @xl:flex">
+            <div className={`hidden min-w-0 items-center gap-1 ${manyFolders ? "@5xl:flex" : "@xl:flex"}`}>
               {repoPath && <BranchSelector repoPath={repoPath} onRequestAgentAction={onRequestAgentAction} />}
               {folders && folders.length > 0 && onFoldersChange && (
                 <FolderSelector folders={folders} onFoldersChange={onFoldersChange} compact />
               )}
             </div>
             {(repoPath || (folders && folders.length > 0)) && onFoldersChange && (
-              <div className="flex min-w-0 items-center @xl:hidden">
+              <div className={`flex min-w-0 items-center ${manyFolders ? "@5xl:hidden" : "@xl:hidden"}`}>
                 <CompactWorkspaceSelector
                   repoPath={repoPath}
                   folders={folders ?? []}
