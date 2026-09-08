@@ -516,8 +516,14 @@ function SourcesBlock({ sources }: { sources: any[] }) {
 function AssistantImage({ part }: { part: ImagePart }) {
   const { t } = useTranslation()
   const tokens = getThemeTokens(useThemeStore((s) => s.resolved))
-  const [failed, setFailed] = useState(false)
+  const [failedSrc, setFailedSrc] = useState<string | null>(null)
   const [lightboxOpen, setLightboxOpen] = useState(false)
+
+  // O estado de falha é atado à URL: quando a part é reemitida/reescrita com
+  // nova src (refetch com token fresco, part substituída), a imagem volta a
+  // tentar carregar — antes o latch `failed` congelava o placeholder até o
+  // componente remontar.
+  const failed = failedSrc === part.src
 
   if (failed) {
     return (
@@ -540,7 +546,7 @@ function AssistantImage({ part }: { part: ImagePart }) {
             source={part.src}
             style={{ width: 240, height: 180 }}
             contentFit="contain"
-            onError={() => setFailed(true)}
+            onError={() => setFailedSrc(part.src)}
           />
         </Pressable>
       </View>

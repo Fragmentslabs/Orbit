@@ -457,8 +457,13 @@ export const useSessionStore = create<SessionState>((set, get) => ({
         const msgs = res.data as ChatMessage[]
         set((state) => {
           const current = state.messages[sessionId] ?? []
-          const byId = new Map(msgs.map((message) => [message.id, message]))
-          for (const message of current) byId.set(message.id, message)
+          // A rede é autoritativa: a resposta do desktop já vem com as URLs de
+          // mídia reescritas (http://host:3848/...t=token). Antes o cache/local
+          // vencia no conflito e o histórico ficava com orbit-media:// — esquema
+          // que o React Native não resolve — para sempre. Mensagens que só
+          // existem localmente continuam no mapa (base é o current).
+          const byId = new Map(current.map((message) => [message.id, message]))
+          for (const message of msgs) byId.set(message.id, message)
           const merged = [...byId.values()].sort((a, b) => a.createdAt - b.createdAt)
 
           // Reconciliação de status pós-reconexão: se a última mensagem do

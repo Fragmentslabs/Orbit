@@ -483,7 +483,11 @@ async function handleRequest(client: ConnectedClient, requestId: string, req: Co
         const end = Math.max(messages.length - offset, 0)
         const start = Math.max(end - limit, 0)
         const page = messages.slice(start, end)
-        sendResponse(ws, requestId, true, page)
+        // O mobile não conhece orbit-media:// (esquema do Electron — só o
+        // streaming e o sessions:unrevert reescreviam). Sem isto, todo
+        // histórico chega cru ao app e as imagens nunca carregam.
+        const rewritten = rewriteMessages(page, mediaBaseUrl(client)) ?? page
+        sendResponse(ws, requestId, true, rewritten)
         break
       }
 
@@ -795,7 +799,12 @@ async function handleRequest(client: ConnectedClient, requestId: string, req: Co
         const revertState = await revertSession(req.sessionId, req.messageId)
         if (revertState !== null) {
           const messages = (await readJson<ChatMessage[]>(StorageKeys.messages(req.sessionId))) ?? []
-          sendResponse(ws, requestId, true, { revert: revertState, messages })
+          // Mesma reescrita do sessions:unrevert: a mensagem revertida não
+          // pode voltar com orbit-media:// cru para o app.
+          sendResponse(ws, requestId, true, {
+            revert: revertState,
+            messages: rewriteMessages(messages, mediaBaseUrl(client)) ?? messages,
+          })
         } else {
           sendResponse(ws, requestId, false, undefined, 'Não foi possível reverter')
         }
