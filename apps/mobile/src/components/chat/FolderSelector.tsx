@@ -313,8 +313,10 @@ const s = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 7,
     maxWidth: 160,
+    flexShrink: 1,
+    minWidth: 0,
   },
-  chipText: { fontSize: 13, fontWeight: '500' },
+  chipText: { fontSize: 13, fontWeight: '500', flexShrink: 1, flex: 1, minWidth: 0 },
   addBtn: {
     width: 30,
     height: 30,
