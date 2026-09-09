@@ -138,7 +138,7 @@ export function BranchSelector({ repoPath, onRequestAgentAction, open: openProp,
             type="button"
             onClick={() => handleSelect(branch)}
             className={cn(
-              "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-xs transition-colors",
+              "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs transition-colors",
               active ? "bg-primary/10 text-primary" : "hover:bg-foreground/10",
             )}
           >
