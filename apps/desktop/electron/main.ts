@@ -532,6 +532,13 @@ interface CommitFileEntry {
   path: string
 }
 
+/** Status de um arquivo no working tree (git status --porcelain). */
+interface GitStatusEntry {
+  /** Caminho relativo ao repo (separador '/'). */
+  path: string
+  status: 'added' | 'modified' | 'deleted' | 'untracked' | 'renamed'
+}
+
 interface CommitEntry {
   hash: string
   author: string
@@ -836,6 +843,84 @@ async function getFileAtCommit(
   }
 }
 
+function classifyGitStatus(code: string): GitStatusEntry['status'] {
+  if (code.startsWith('?')) return 'untracked'
+  if (code.includes('D')) return 'deleted'
+  if (code.includes('A')) return 'added'
+  // M (modificado) e T (mudança de tipo) são tratados como modificação
+  return 'modified'
+}
+
+/** Lista os arquivos com mudança no working tree (estilo `git status`). */
+async function getGitStatus(
+  repoPath: string,
+): Promise<{ ok: true; entries: GitStatusEntry[] } | { ok: false; error: string }> {
+  try {
+    const { stdout } = await runGit(repoPath, ['status', '--porcelain', '-z'], 15_000)
+    const entries: GitStatusEntry[] = []
+    const parts = stdout.split('\0')
+    for (let i = 0; i < parts.length; i++) {
+      const raw = parts[i]
+      if (!raw) continue
+      // Registro "XY path" — com -z o path não sofre escaping (path separado por \0).
+      const code = raw.slice(0, 2)
+      const path = raw.slice(3)
+      // Rename/copy com -z: "R  old\0new\0" — o campo seguinte é o path novo.
+      if ((code.startsWith('R') || code.startsWith('C')) && parts[i + 1]) {
+        entries.push({
+          path: parts[i + 1],
+          status: code.startsWith('R') ? 'renamed' : 'added',
+        })
+        i++
+        continue
+      }
+      entries.push({ path, status: classifyGitStatus(code) })
+    }
+    return { ok: true, entries }
+  } catch (err) {
+    return { ok: false, error: (err as Error).message }
+  }
+}
+
+/** Diff do working tree contra HEAD para um arquivo (patch unified). */
+async function getWorkingFileDiff(
+  repoPath: string,
+  relPath: string,
+): Promise<{ ok: true; patch: string } | { ok: false; error: string }> {
+  try {
+    const isTracked = await runGit(repoPath, ['ls-files', '--error-unmatch', '--', relPath], 15_000)
+      .then(() => true)
+      .catch(() => false)
+    if (isTracked) {
+      const { stdout } = await runGit(repoPath, ['diff', 'HEAD', '--', relPath])
+      return { ok: true, patch: stdout }
+    }
+    // Arquivo não rastreado (novo): diff contra /dev/null mostra tudo adicionado.
+    const { stdout } = await runGit(repoPath, ['diff', '--no-index', '--', '/dev/null', relPath])
+    return { ok: true, patch: stdout }
+  } catch (err) {
+    // `git diff --no-index` sai com código 1 quando há diferenças — o stdout
+    // ainda traz o patch completo.
+    const e = err as { stdout?: string; message?: string }
+    if (e.stdout) return { ok: true, patch: e.stdout }
+    return { ok: false, error: e.message ?? String(err) }
+  }
+}
+
+/** Diff que um commit introduziu em um arquivo (diff contra o pai). */
+async function getCommitFileDiff(
+  repoPath: string,
+  hash: string,
+  relPath: string,
+): Promise<{ ok: true; patch: string } | { ok: false; error: string }> {
+  try {
+    const { stdout } = await runGit(repoPath, ['show', hash, '--', relPath])
+    return { ok: true, patch: stdout }
+  } catch (err) {
+    return { ok: false, error: (err as Error).message }
+  }
+}
+
 app.whenReady().then(() => {
   // WM_CLASS do Electron vem de app.name; o .desktop do Linux declara
   // StartupWMClass=Orbit — alinhar aqui garante o ícone correto no dock/menu.
@@ -969,6 +1054,18 @@ app.whenReady().then(() => {
 
   ipcMain.handle('git:showFile', async (_event, repoPath: string, hash: string, relPath: string, deleted: boolean) => {
     return getFileAtCommit(repoPath, hash, relPath, deleted)
+  })
+
+  ipcMain.handle('git:status', async (_event, repoPath: string) => {
+    return getGitStatus(repoPath)
+  })
+
+  ipcMain.handle('git:diffWorkingFile', async (_event, repoPath: string, relPath: string) => {
+    return getWorkingFileDiff(repoPath, relPath)
+  })
+
+  ipcMain.handle('git:showCommitDiff', async (_event, repoPath: string, hash: string, relPath: string) => {
+    return getCommitFileDiff(repoPath, hash, relPath)
   })
 
   ipcMain.handle('git:branches', async (_event, repoPath: string) => {

@@ -166,22 +166,49 @@ const FileTreeFileContext = createContext<FileTreeFileContextType>({
   name: "",
 });
 
+export type GitFileStatus =
+  | "added"
+  | "modified"
+  | "deleted"
+  | "untracked"
+  | "renamed";
+
+const GIT_STATUS_LABEL: Record<GitFileStatus, string> = {
+  added: "A",
+  modified: "M",
+  deleted: "D",
+  untracked: "U",
+  renamed: "R",
+};
+
+const GIT_STATUS_STYLE: Record<GitFileStatus, string> = {
+  added: "text-green-600 dark:text-green-400",
+  modified: "text-yellow-600 dark:text-yellow-400",
+  deleted: "text-red-600 dark:text-red-400",
+  untracked: "text-green-600 dark:text-green-400",
+  renamed: "text-blue-600 dark:text-blue-400",
+};
+
 export type FileTreeFileProps = HTMLAttributes<HTMLDivElement> & {
   path: string;
   name: string;
   icon?: ReactNode;
+  /** Status git do arquivo — renderiza o indicador (M/D/A/U/R) à direita. */
+  status?: GitFileStatus;
 };
 
 export const FileTreeFile = ({
   path,
   name,
   icon,
+  status,
   className,
   children,
   ...props
 }: FileTreeFileProps) => {
   const { selectedPath, onSelect } = useContext(FileTreeContext);
   const isSelected = selectedPath === path;
+  const isDeleted = status === "deleted";
 
   return (
     <FileTreeFileContext.Provider value={{ path, name }}>
@@ -189,6 +216,7 @@ export const FileTreeFile = ({
         className={cn(
           "flex cursor-pointer items-center gap-1 rounded px-2 py-1 transition-colors hover:bg-muted/50",
           isSelected && "bg-muted",
+          isDeleted && "opacity-70",
           className,
         )}
         onClick={() => onSelect?.(path)}
@@ -205,9 +233,31 @@ export const FileTreeFile = ({
           <>
             <span className="size-4" />
             <FileTreeIcon>
-              {icon ?? <FileIcon className="size-4 text-muted-foreground" />}
+              {icon ?? (
+                <FileIcon
+                  className={cn(
+                    "size-4 text-muted-foreground",
+                    isDeleted && "text-red-500/70",
+                  )}
+                />
+              )}
             </FileTreeIcon>
-            <FileTreeName>{name}</FileTreeName>
+            <FileTreeName
+              className={cn(isDeleted && "line-through text-muted-foreground/70")}
+            >
+              {name}
+            </FileTreeName>
+            {status && (
+              <span
+                className={cn(
+                  "ml-auto shrink-0 pl-2 font-mono text-[10px] font-semibold",
+                  GIT_STATUS_STYLE[status],
+                )}
+                title={status}
+              >
+                {GIT_STATUS_LABEL[status]}
+              </span>
+            )}
           </>
         )}
       </div>
