@@ -257,7 +257,12 @@ export function EsteiraCreateDialog({
             </Campo>
 
             <Campo rotulo={t("esteira.modeloPadrao")} dica={t("esteira.modeloDica")}>
-              <ModelPicker sessionId={CHAVE_MODELO} />
+              {/* Trigger com cara de campo de formulário (mesmo visual do
+                  Input), mas abrindo o seletor real — que inclui os recentes. */}
+              <ModelPicker
+                sessionId={CHAVE_MODELO}
+                triggerClassName="w-full justify-start gap-1.5 rounded-md border border-input bg-input/20 px-2 text-sm font-normal shadow-none hover:bg-accent/40 dark:bg-input/30 md:text-xs/relaxed"
+              />
             </Campo>
 
             <Campo rotulo={t("esteira.fases")} dica={t("esteira.fasesDica")}>

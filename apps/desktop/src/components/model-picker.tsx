@@ -33,13 +33,15 @@ const MAX_MODELS_PER_PROVIDER = 40
  * a seleção vem de props, recents da sessão são ocultados e `filter` pode
  * restringir os modelos listados (ex.: só visão, só tool_call).
  */
-export function ModelPicker({ sessionId, open: openProp, onOpenChange: onOpenChangeProp, hideTrigger, value, onValueChange, filter, nullLabel }: {
+export function ModelPicker({ sessionId, open: openProp, onOpenChange: onOpenChangeProp, hideTrigger, triggerClassName, value, onValueChange, filter, nullLabel }: {
   sessionId?: string
   /** Controle externo do diálogo (usado pelo menu de configurações rápidas) */
   open?: boolean
   onOpenChange?: (open: boolean) => void
   /** Oculta o trigger — útil quando outro elemento abre o diálogo */
   hideTrigger?: boolean
+  /** Classes extras no trigger (ex.: estilizá-lo como campo de formulário) */
+  triggerClassName?: string
   /** Modo controlado: seleção vinda de props (dialogs de configuração) */
   value?: SelectedModel | null
   onValueChange?: (model: SelectedModel | null) => void
@@ -127,7 +129,7 @@ export function ModelPicker({ sessionId, open: openProp, onOpenChange: onOpenCha
         }}
       >
         {!hideTrigger && (
-          <ModelSelectorTrigger render={<Button className={cn("h-7 gap-1 px-1.5 text-xs", noProvider && "ring-2 ring-primary/40")} variant="ghost" />}>
+          <ModelSelectorTrigger render={<Button className={cn("h-7 gap-1 px-1.5 text-xs", noProvider && "ring-2 ring-primary/40", triggerClassName)} variant="ghost" />}>
             {noProvider ? (
               <>
                 {/* Estado de atenção: dot pulsante + label, sem logo de provider */}
