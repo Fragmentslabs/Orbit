@@ -1011,7 +1011,11 @@
     "noUpstreamPull": "A branch atual não tem branch remota de tracking — envie os commits primeiro (o botão Enviar cria a branch remota).",
     "authFailed": "Falha de autenticação com o Git/GitHub. Configure um token (ex.: gh auth login) ou credenciais SSH e tente novamente.",
     "localBranch": "{{branch}} (só local)",
-    "imageNotAvailable": "Visualização de imagem em commits ainda não é suportada."
+    "imageNotAvailable": "Visualização de imagem em commits ainda não é suportada.",
+    "standardMode": "Ver arquivo",
+    "diffMode": "Ver diff",
+    "noChangesInDiff": "Sem mudanças neste arquivo.",
+    "diffUnavailable": "Diff indisponível para este arquivo."
   },
   "createRepo": {
     "titulo": "Este projeto ainda não tem repositório remoto",

@@ -1,4 +1,11 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import { useTranslation } from "react-i18next";
 import {
   CheckIcon,
@@ -8,10 +15,12 @@ import {
   DownloadIcon,
   Ellipsis,
   EyeIcon,
+  FileTextIcon,
   FolderGit2Icon,
   FolderOpenIcon,
   FolderTreeIcon,
   GitBranchIcon,
+  GitCompareArrowsIcon,
   ArrowDownIcon,
   ArrowUpIcon,
   HistoryIcon,
@@ -47,7 +56,10 @@ import {
   FileTree,
   FileTreeFile,
   FileTreeFolder,
+  type GitFileStatus,
 } from "@/src/components/ai/file-tree";
+import { parsePatch } from "@/lib/unified-diff";
+import { HighlightedDiffFile } from "@/src/components/diff-lines";
 import {
   Artifact,
   ArtifactAction,
@@ -109,7 +121,7 @@ type GitLogResult =
   | { ok: false; error: string };
 
 type ViewedFile =
-  | { kind: "live"; path: string }
+  | { kind: "live"; path: string; relPath: string | null; deleted: boolean }
   | {
       kind: "commit";
       repoPath: string;
@@ -118,7 +130,31 @@ type ViewedFile =
       deleted: boolean;
     };
 
+/** Entrada do git status por caminho absoluto (chave do mapa). */
+interface GitStatusEntry {
+  path: string;
+  status: GitFileStatus;
+}
+
+type GitStatusResult =
+  | { ok: true; entries: GitStatusEntry[] }
+  | { ok: false; error: string };
+
+type DiffResult = { ok: true; patch: string } | { ok: false; error: string };
+
+/** Arquivo excluído no working tree (fantasma no tree, não existe em disco). */
+interface DeletedEntry {
+  path: string;
+  name: string;
+}
+
 const FILE_PANEL_MIN_PX = 200;
+
+/** Junta a raiz do repo com um caminho relativo (separadores '/' no relPath). */
+function joinPath(root: string, relPath: string) {
+  const base = root.replace(/[\\/]+$/, "");
+  return `${base}/${relPath.replace(/\\/g, "/")}`;
+}
 
 function getBaseName(p: string) {
   const parts = p.replace(/\\/g, "/").split("/");
@@ -289,21 +325,47 @@ function CommitRefBadges({
 }
 
 function renderEntries(
+  dirPath: string,
   entries: DirEntryInfo[] | undefined,
   dirCache: Record<string, DirEntryInfo[]>,
   expandedPaths: Set<string>,
-) {
+  gitStatus: Record<string, GitStatusEntry>,
+  deletedByDir: Record<string, DeletedEntry[]>,
+): ReactNode[] | null {
   if (!entries) return null;
-  return entries.map((entry) =>
+  const children: ReactNode[] = entries.map((entry) =>
     entry.isDirectory ? (
       <FileTreeFolder key={entry.path} name={entry.name} path={entry.path}>
         {expandedPaths.has(entry.path) &&
-          renderEntries(dirCache[entry.path], dirCache, expandedPaths)}
+          renderEntries(
+            entry.path,
+            dirCache[entry.path],
+            dirCache,
+            expandedPaths,
+            gitStatus,
+            deletedByDir,
+          )}
       </FileTreeFolder>
     ) : (
-      <FileTreeFile key={entry.path} name={entry.name} path={entry.path} />
+      <FileTreeFile
+        key={entry.path}
+        name={entry.name}
+        path={entry.path}
+        status={gitStatus[entry.path]?.status}
+      />
     ),
   );
+  // Arquivos excluídos (não existem em disco): entram como fantasmas no
+  // diretório pai, com indicador D — clicar abre o arquivo como excluído.
+  const deleted = deletedByDir[dirPath];
+  if (deleted) {
+    for (const d of deleted) {
+      children.push(
+        <FileTreeFile key={d.path} name={d.name} path={d.path} status="deleted" />,
+      );
+    }
+  }
+  return children;
 }
 
 function FolderQuickSwitch({
@@ -418,6 +480,28 @@ function CodeView({
   );
 }
 
+/** Modo diff do visualizador: realça com a linguagem e só pinta o fundo. */
+function DiffCodeView({ patch, filePath }: { patch: string; filePath: string }) {
+  const { t } = useTranslation();
+  const files = useMemo(() => parsePatch(patch), [patch]);
+
+  if (files.length === 0) {
+    return (
+      <div className="p-4 text-sm text-muted-foreground">
+        {t("folders.noChangesInDiff")}
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-w-0 font-mono text-xs">
+      {files.map((file, fi) => (
+        <HighlightedDiffFile key={fi} file={file} filePath={filePath} />
+      ))}
+    </div>
+  );
+}
+
 export function FoldersTab() {
   const { t } = useTranslation();
   const { folders, setFolders } = useWorkspace();
@@ -455,6 +539,13 @@ const [viewedFile, setViewedFile] = useState<ViewedFile>();
   const copyTimeoutRef = useRef<number>();
   const [fileBrowserOpen, setFileBrowserOpen] = useState(true);
   const [mdMode, setMdMode] = useState<"edit" | "preview">("preview");
+  // Status git do working tree, keyed por caminho absoluto (indicadores na árvore)
+  const [gitStatus, setGitStatus] = useState<Record<string, GitStatusEntry>>({});
+  // Modo diff do visualizador de arquivos (padrão vs patch)
+  const [diffMode, setDiffMode] = useState(false);
+  const [diffPatch, setDiffPatch] = useState<string | null>(null);
+  const [diffLoading, setDiffLoading] = useState(false);
+  const [diffError, setDiffError] = useState<string | null>(null);
 
   const [commits, setCommits] = useState<CommitEntry[] | null>(null);
   const [commitsError, setCommitsError] = useState<string | null>(null);
@@ -515,6 +606,51 @@ const [viewedFile, setViewedFile] = useState<ViewedFile>();
     [loadDir],
   )
 
+  // Status git do repo raiz: alimenta os indicadores M/D/A/U/R na árvore e os
+  // fantasmas de arquivos excluídos.
+  const loadGitStatus = useCallback(async () => {
+    const repo = folders[0]
+    if (!repo) {
+      setGitStatus({})
+      return
+    }
+    const result = (await window.ipcRenderer.invoke(
+      "git:status",
+      repo,
+    )) as GitStatusResult
+    if (!result.ok) {
+      setGitStatus({})
+      return
+    }
+    const map: Record<string, GitStatusEntry> = {}
+    for (const entry of result.entries) {
+      map[joinPath(repo, entry.path)] = entry
+    }
+    setGitStatus(map)
+  }, [folders])
+
+  // Recarrega os indicadores ao montar, trocar de pasta/branch ou voltar à
+  // aba de arquivos (pull/push/disco podem ter mudado o working tree).
+  useEffect(() => {
+    if (viewMode !== "files") return
+    void loadGitStatus()
+  }, [viewMode, loadGitStatus, currentBranch])
+
+  // Agrupa arquivos excluídos por diretório pai (camada de fantasma no tree).
+  const deletedByDir = useMemo(() => {
+    const map: Record<string, DeletedEntry[]> = {}
+    for (const [absPath, entry] of Object.entries(gitStatus)) {
+      if (entry.status !== "deleted") continue
+      const idx = absPath.lastIndexOf("/")
+      const dir = idx >= 0 ? absPath.slice(0, idx) : absPath
+      const name = idx >= 0 ? absPath.slice(idx + 1) : absPath
+      const list = map[dir] ?? []
+      list.push({ path: absPath, name })
+      map[dir] = list
+    }
+    return map
+  }, [gitStatus])
+
   useEffect(() => {
     if (!currentBranch || folders.length === 0) return
     reloadRootDir(folders[0])
@@ -544,31 +680,70 @@ const [viewedFile, setViewedFile] = useState<ViewedFile>();
     [dirCache, loadDir],
   );
 
-const openLiveFile = useCallback(async (filePath: string) => {
-    setViewedFile({ kind: "live", path: filePath });
-    setFileLoading(true);
-    setFileError(null);
-    setFileContent(null);
-    setFileImage(null);
-    setMdMode("preview");
-    if (isImageFile(filePath)) {
+const openLiveFile = useCallback(
+    async (filePath: string, deleted = false) => {
+      const repo = folders[0];
+      let relPath: string | null = null;
+      if (repo) {
+        const root = repo.replace(/[\\/]+$/, "");
+        const sep = root.includes("\\") ? "\\" : "/";
+        if (filePath.startsWith(root + sep))
+          relPath = filePath.slice(root.length + 1).replace(/\\/g, "/");
+      }
+      setViewedFile({ kind: "live", path: filePath, relPath, deleted });
+      setFileLoading(true);
+      setFileError(null);
+      setFileContent(null);
+      setFileImage(null);
+      setMdMode("preview");
+      setDiffMode(false);
+      setDiffPatch(null);
+      setDiffError(null);
+      if (isImageFile(filePath)) {
+        setFileLoading(false);
+        if (deleted) {
+          setFileError(t("folders.imageNotAvailable"));
+          return;
+        }
+        const result = (await window.ipcRenderer.invoke(
+          "fs:readFileAsDataUrl",
+          filePath,
+        )) as { dataUrl: string } | { error: string };
+        setFileLoading(false);
+        if ("dataUrl" in result) setFileImage(result.dataUrl);
+        else setFileError(result.error);
+        return;
+      }
+      if (deleted) {
+        // Arquivo excluído no working tree: o modo padrão mostra o conteúdo
+        // no HEAD (o arquivo não existe mais em disco).
+        if (repo && relPath) {
+          const result = (await window.ipcRenderer.invoke(
+            "git:showFile",
+            repo,
+            "HEAD",
+            relPath,
+            false,
+          )) as ReadFileResult;
+          setFileLoading(false);
+          if ("content" in result) setFileContent(result.content);
+          else setFileError(result.error);
+        } else {
+          setFileLoading(false);
+          setFileError(t("folders.diffUnavailable"));
+        }
+        return;
+      }
       const result = (await window.ipcRenderer.invoke(
-        "fs:readFileAsDataUrl",
+        "fs:readFile",
         filePath,
-      )) as { dataUrl: string } | { error: string };
+      )) as ReadFileResult;
       setFileLoading(false);
-      if ("dataUrl" in result) setFileImage(result.dataUrl);
+      if ("content" in result) setFileContent(result.content);
       else setFileError(result.error);
-      return;
-    }
-    const result = (await window.ipcRenderer.invoke(
-      "fs:readFile",
-      filePath,
-    )) as ReadFileResult;
-    setFileLoading(false);
-    if ("content" in result) setFileContent(result.content);
-    else setFileError(result.error);
-  }, []);
+    },
+    [folders, t],
+  );
 
   const openCommitFile = useCallback(
     async (repoPath: string, hash: string, path: string, deleted: boolean) => {
@@ -577,6 +752,9 @@ const openLiveFile = useCallback(async (filePath: string) => {
       setFileError(null);
       setFileContent(null);
       setFileImage(null);
+      setDiffMode(false);
+      setDiffPatch(null);
+      setDiffError(null);
       if (isImageFile(path)) {
         setFileLoading(false);
         setFileError(t("folders.imageNotAvailable"));
@@ -599,9 +777,55 @@ const openLiveFile = useCallback(async (filePath: string) => {
 
   const handleSelect = useCallback(
     (path: string) => {
+      // Fantasma de arquivo excluído: abre o arquivo como excluído (HEAD + diff)
+      if (gitStatus[path]?.status === "deleted") {
+        void openLiveFile(path, true);
+        return;
+      }
       if (entryIsDirRef.current.get(path) === false) openLiveFile(path);
     },
-    [openLiveFile],
+    [openLiveFile, gitStatus],
+  );
+
+  // Alterna o visualizador entre o arquivo padrão e o modo diff (patch unificado).
+  const handleToggleDiff = useCallback(
+    async (target: boolean) => {
+      if (!viewedFile || fileLoading || diffLoading || target === diffMode) return;
+      if (!target) {
+        setDiffMode(false);
+        setDiffPatch(null);
+        setDiffError(null);
+        return;
+      }
+      setDiffLoading(true);
+      setDiffError(null);
+      try {
+        const result: DiffResult =
+          viewedFile.kind === "live"
+            ? viewedFile.relPath && folders[0]
+              ? ((await window.ipcRenderer.invoke(
+                  "git:diffWorkingFile",
+                  folders[0],
+                  viewedFile.relPath,
+                )) as DiffResult)
+              : { ok: false, error: t("folders.diffUnavailable") }
+            : ((await window.ipcRenderer.invoke(
+                "git:showCommitDiff",
+                viewedFile.repoPath,
+                viewedFile.hash,
+                viewedFile.path,
+              )) as DiffResult);
+        if (result.ok) {
+          setDiffPatch(result.patch);
+          setDiffMode(true);
+        } else {
+          setDiffError(result.error);
+        }
+      } finally {
+        setDiffLoading(false);
+      }
+    },
+    [viewedFile, fileLoading, diffLoading, diffMode, folders, t],
   );
 
   const isMarkdownFile = viewedFile ? /(?:\.md|\.markdown)$/i.test(viewedFile.path) : false;
@@ -667,12 +891,13 @@ const openLiveFile = useCallback(async (filePath: string) => {
     const result = await pullChanges(repo);
     if (result.ok) {
       reloadRootDir(repo);
+      void loadGitStatus();
       setCommitsReload((n) => n + 1);
       setSyncStatus({ kind: "info", text: t("folders.pulledOk") });
     } else {
       setSyncStatus({ kind: "error", text: syncErrorMessage(result) });
     }
-  }, [folders, syncBusyDir, pullChanges, reloadRootDir, syncErrorMessage, t]);
+  }, [folders, syncBusyDir, pullChanges, reloadRootDir, loadGitStatus, syncErrorMessage, t]);
 
   const [criarRepoOpen, setCriarRepoOpen] = useState(false);
 
@@ -682,6 +907,7 @@ const openLiveFile = useCallback(async (filePath: string) => {
     setSyncStatus(null);
     const result = await pushChanges(repo);
     if (result.ok) {
+      void loadGitStatus();
       setCommitsReload((n) => n + 1);
       setSyncStatus({
         kind: "info",
@@ -696,7 +922,7 @@ const openLiveFile = useCallback(async (filePath: string) => {
       return;
     }
     setSyncStatus({ kind: "error", text: syncErrorMessage(result) });
-  }, [folders, syncBusyDir, pushChanges, syncErrorMessage, t]);
+  }, [folders, syncBusyDir, pushChanges, loadGitStatus, syncErrorMessage, t]);
 
   useEffect(() => {
     if (viewMode !== "commits" || folders.length === 0) return;
@@ -850,8 +1076,42 @@ const openLiveFile = useCallback(async (filePath: string) => {
           </ArtifactHeader>
           {viewedFile ? (
             <div className="relative flex min-h-0 min-w-0 flex-1 flex-col">
-              {isMarkdownFile && (
-                <div className="absolute top-3 right-3 z-20">
+              <div className="absolute top-3 right-3 z-20 flex flex-col items-end gap-1.5">
+                {!isImage && (
+                  <div className="flex items-center gap-0.5 rounded-full border border-border bg-popover/90 p-0.5 shadow-sm backdrop-blur-xl">
+                    <button
+                      type="button"
+                      onClick={() => void handleToggleDiff(false)}
+                      title={t("folders.standardMode")}
+                      className={cn(
+                        "flex size-6 items-center justify-center rounded-full transition-colors",
+                        !diffMode
+                          ? "bg-primary text-primary-foreground"
+                          : "text-muted-foreground hover:bg-accent hover:text-accent-foreground",
+                      )}
+                    >
+                      <FileTextIcon className="size-3.5" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void handleToggleDiff(true)}
+                      title={t("folders.diffMode")}
+                      className={cn(
+                        "flex size-6 items-center justify-center rounded-full transition-colors",
+                        diffMode
+                          ? "bg-primary text-primary-foreground"
+                          : "text-muted-foreground hover:bg-accent hover:text-accent-foreground",
+                      )}
+                    >
+                      {diffLoading ? (
+                        <Loader2 className="size-3.5 animate-spin" />
+                      ) : (
+                        <GitCompareArrowsIcon className="size-3.5" />
+                      )}
+                    </button>
+                  </div>
+                )}
+                {isMarkdownFile && !diffMode && (
                   <div className="flex items-center gap-0.5 rounded-full border border-border bg-popover/90 p-0.5 shadow-sm backdrop-blur-xl">
                     <button
                       type="button"
@@ -880,13 +1140,25 @@ const openLiveFile = useCallback(async (filePath: string) => {
                       <EyeIcon className="size-3.5" />
                     </button>
                   </div>
-                </div>
-              )}
-              <ArtifactContent className="min-h-0 min-w-0 flex-1 overflow-auto  p-0">
+                )}
+              </div>
+              <ArtifactContent className="min-h-0 min-w-0 flex-1 overflow-auto p-0">
                 {fileLoading ? (
                   <div className="p-4 text-sm text-muted-foreground">
                     {t("common.loading")}
                   </div>
+                ) : diffMode ? (
+                  diffLoading ? (
+                    <div className="p-4 text-sm text-muted-foreground">
+                      {t("common.loading")}
+                    </div>
+                  ) : diffError ? (
+                    <div className="p-4 text-sm text-muted-foreground">
+                      {diffError}
+                    </div>
+                  ) : diffPatch != null ? (
+                    <DiffCodeView patch={diffPatch} filePath={viewedFile.path} />
+                  ) : null
                 ) : fileError ? (
                   <div className="p-4 text-sm text-muted-foreground">
                     {fileError}
@@ -973,9 +1245,12 @@ const openLiveFile = useCallback(async (filePath: string) => {
                       >
                         {expandedPaths.has(folderPath) &&
                           renderEntries(
+                            folderPath,
                             dirCache[folderPath],
                             dirCache,
                             expandedPaths,
+                            gitStatus,
+                            deletedByDir,
                           )}
                       </FileTreeFolder>
                     ))}

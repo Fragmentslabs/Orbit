@@ -1011,7 +1011,11 @@
     "noUpstreamPull": "Current branch has no remote tracking branch — push first (the Push button creates the remote branch).",
     "authFailed": "Git/GitHub authentication failed. Configure a token (e.g.: gh auth login) or SSH credentials and try again.",
     "localBranch": "{{branch}} (local only)",
-    "imageNotAvailable": "Image preview in commits is not supported yet."
+    "imageNotAvailable": "Image preview in commits is not supported yet.",
+    "standardMode": "View file",
+    "diffMode": "View diff",
+    "noChangesInDiff": "No changes in this file.",
+    "diffUnavailable": "Diff not available for this file."
   },
   "createRepo": {
     "titulo": "This project has no remote repository yet",
