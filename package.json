@@ -23,6 +23,8 @@
     "desktop:build:all": "npm run desktop:build:linux && npm run desktop:build:mac && npm run desktop:build:windows:release",
     "mobile:dev": "npm run start --workspace=@orbit/mobile",
     "mobile:web": "npm run web --workspace=@orbit/mobile",
+    "mobile:android:dev": "npm run android:dev --workspace=@orbit/mobile",
+    "mobile:ios:dev": "npm run ios:dev --workspace=@orbit/mobile",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "lint": "npm run lint --workspaces --if-present",
     "test": "npm run test --workspaces --if-present"

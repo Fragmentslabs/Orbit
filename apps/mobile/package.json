@@ -93,7 +93,9 @@
   "scripts": {
     "start": "expo start",
     "android": "expo run:android",
+    "android:dev": "APP_VARIANT=development expo run:android",
     "ios": "expo run:ios",
+    "ios:dev": "APP_VARIANT=development expo run:ios",
     "web": "expo start --web",
     "lint": "expo lint",
     "typecheck": "tsc --noEmit"

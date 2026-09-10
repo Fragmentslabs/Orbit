@@ -140,7 +140,7 @@ Orbit:
 
 ## 🚀 Getting started (development)
 
-**Requirements:** Node.js 20+, npm.
+**Requirements:** Node.js 20+, npm. On Windows, desktop builds require Visual Studio Build Tools 2022 (workload "Desktop development with C++") — without it, `electron-builder` fails rebuilding native modules (`node-pty`, `ws`).
 
 ```bash
 # install dependencies (monorepo — npm workspaces)

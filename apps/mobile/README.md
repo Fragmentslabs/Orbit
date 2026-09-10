@@ -8,6 +8,8 @@ App mobile (Expo + React Native) que se conecta ao Orbit Desktop via WebSocket/H
 - **npm** ≥ 9 (monorepo com workspaces)
 - **Expo CLI** — `npx expo --version`
 - Orbit Desktop rodando na mesma rede (ou via Tailscale)
+- **Android (build nativo dev):** `APP_VARIANT=development` instala como **"Orbit (Dev)"** (`com.fragmentslabs.orbit.dev`), lado a lado com o de produção. versionCode só cresce — sem a variante, o Android recusa instalar sobre um build de código maior (`INSTALL_FAILED_VERSION_DOWNGRADE`)
+- **iOS (build nativo dev):** mesma variante → bundle id `com.fragmentslabs.orbit.dev`; instala ao lado do app de produção em vez de sobrescrevê-lo (no iOS não há trava de downgrade — a instalação substitui os dados)
 
 ## Setup
 
@@ -91,6 +93,8 @@ npx expo start          # Dev server
 npx expo start --web    # Versão web
 npx expo start --android
 npx expo start --ios
+npm run android:dev     # Build nativo Android (Orbit (Dev), APP_VARIANT=development)
+npm run ios:dev         # Build nativo iOS (Orbit (Dev), APP_VARIANT=development)
 npm run typecheck       # Typecheck (tsc --noEmit)
 npm run lint            # Lint via Expo
 ```
