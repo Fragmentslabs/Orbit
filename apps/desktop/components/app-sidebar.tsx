@@ -19,8 +19,8 @@ import {
   Folder,
   FolderPlus,
   GitFork,
+  Heart,
   Loader2,
-  LogOut,
   MessageSquare,
   Monitor,
   Moon,
@@ -88,6 +88,7 @@ import type { FolderInfo, SessionInfo } from "@shared/chat"
 import { useMessageQueueStore, startMessageScheduler } from "@/src/stores/message-queue-store"
 import { useSessionStore } from "@/src/stores/session-store"
 import { useSettingsUi } from "@/src/stores/settings-ui"
+import { KO_FI_URL } from "@/src/lib/appLinks"
 import { ConnectAppDialog } from "@/components/connect-app-dialog"
 
 type MenuItem = { icon: React.ReactNode; label: string; onSelect: () => void; separator?: boolean; destructive?: boolean }
@@ -1424,9 +1425,9 @@ function AccountDropdown({ onOpenSettings }: { onOpenSettings: () => void }) {
           </DropdownMenuSub>
         </DropdownMenuGroup>
         <DropdownMenuSeparator />
-        <DropdownMenuItem>
-          <LogOut className="size-4" />
-          {t("sidebar.account.logout")}
+        <DropdownMenuItem onClick={() => window.open(KO_FI_URL, "_blank")}>
+          <Heart className="size-4 text-rose-400" />
+          {t("sidebar.account.support")}
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>

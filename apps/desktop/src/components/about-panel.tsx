@@ -3,10 +3,7 @@ import { useTranslation } from "react-i18next"
 import { Button } from "@/components/ui/button"
 import { Globe, Heart, Star } from "lucide-react"
 import { windowApi } from "@/src/lib/ipc"
-
-const KO_FI_URL = "https://ko-fi.com/fragmentslabs"
-const WEBSITE_URL = "https://fragmentslabs.com"
-const GITHUB_URL = "https://github.com/fragmentslabs"
+import { GITHUB_URL, KO_FI_URL, WEBSITE_URL } from "@/src/lib/appLinks"
 
 export function AboutPanel() {
   const { t } = useTranslation()
