@@ -26,6 +26,6 @@ jobs:
         run: npm ci
 
       - name: Build & publish to GitHub Releases
-        run: npm run desktop:release
+        run: npm run desktop:build:linux
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
