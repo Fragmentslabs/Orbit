@@ -31,12 +31,13 @@
     "getenv": "^2.0.0"
   },
   "allowScripts": {
-    "electron@30.5.1": true,
     "esbuild@0.21.5": true,
     "node-pty@1.1.0": true,
     "unrs-resolver@1.12.2": true,
     "fsevents@2.3.3": true,
     "bufferutil@4.1.0": true,
-    "utf-8-validate@6.0.6": true
+    "utf-8-validate@6.0.6": true,
+    "electron@44.3.0": true,
+    "electron-winstaller@5.4.0": true
   }
 }
