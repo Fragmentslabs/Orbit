@@ -229,6 +229,12 @@ function createWindow() {
   // Frame customizado: some o menu nativo (Alt ainda o invocaria em win/linux)
   win.setMenuBarVisibility(false)
 
+  // Abre preenchendo a tela: maximizado (não tela cheia nativa), então menu bar
+  // e semáforos continuam no lugar. O maximize é aplicado ao frame enquanto a
+  // janela ainda está escondida — o primeiro frame já sai no tamanho da área
+  // útil, sem animação de crescimento nem flash no tamanho padrão (800x600).
+  win.maximize()
+
   // Mostra a janela só quando o renderer já pintou o primeiro frame — sem
   // flash branco de inicialização. O som começa no did-finish-load, antes do
   // timer de despertar do renderer, evitando o atraso do spawn do player do SO
