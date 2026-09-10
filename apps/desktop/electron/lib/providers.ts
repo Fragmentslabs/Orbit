@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto'
+import { app } from 'electron'
 import { createAnthropic } from '@ai-sdk/anthropic'
 import { createGoogleGenerativeAI } from '@ai-sdk/google'
 import { createOpenAI } from '@ai-sdk/openai'
@@ -11,6 +11,12 @@ import type { LanguageModel } from 'ai'
 import { resolveApiKey } from './auth'
 import { getProvider } from './catalog'
 import { ProviderResolutionError } from './provider-errors'
+import {
+  SESSION_HEADER,
+  SESSION_HEADER_PROVIDERS,
+  freshSessionId,
+  providerFetch,
+} from './provider-fetch'
 import { currentProviderSession } from './provider-session'
 
 /**
@@ -23,6 +29,7 @@ type SdkFactory = (opts: {
   apiKey?: string
   baseURL?: string
   headers?: Record<string, string>
+  fetch?: typeof fetch
 }) => {
   languageModel?: (id: string) => LanguageModel
   (id: string): LanguageModel
@@ -59,24 +66,57 @@ export function isServedByOpenAiCompatible(npm: string | undefined): boolean {
 export { ProviderResolutionError } from './provider-errors'
 
 /**
- * Header de sessão exigido pelo OpenCode (Zen e Go): sem ele a API responde
- * "Request is missing x-opencode-session and cannot be routed efficiently".
- * O valor é o id da conversa — estável durante toda ela e novo a cada conversa
- * criada. Só é aplicado aos providers listados aqui; os demais seguem sem
- * headers extras.
- */
-const SESSION_HEADER = 'x-opencode-session'
-const SESSION_HEADER_PROVIDERS = new Set(['opencode', 'opencode-go'])
-
-/**
  * Fallback para chamadas fora de qualquer conversa (ex: um teste de conexão do
  * provider nas Configurações). Enviar um id estável do processo é melhor que
  * omitir o header, que faria a requisição falhar.
  */
 let processSessionId: string | null = null
 function fallbackSessionId(): string {
-  processSessionId ??= `orbit_${randomUUID()}`
+  processSessionId ??= freshSessionId()
   return processSessionId
+}
+
+/**
+ * Ids de sessão que o gateway já recusou, e o substituto que ele aceitou. Sem
+ * isso, toda requisição seguinte do mesmo turno (tool loop, visão, workers)
+ * repetiria a recusa e a repetição de emergência do `providerFetch` — dois
+ * requests por passo, indefinidamente.
+ */
+const rejectedSessions = new Set<string>()
+let recoveredSessionId: string | null = null
+
+function rotateSession(rejectedId: string): string {
+  rejectedSessions.add(rejectedId)
+  recoveredSessionId ??= freshSessionId()
+  return recoveredSessionId
+}
+
+/**
+ * Id da conversa para o header de sessão (ver provider-fetch.ts). Id vazio é
+ * tratado como ausente (o gateway faz o mesmo), daí `||` no lugar de `??`.
+ */
+function sessionIdFor(opts?: ResolveModelOptions): string {
+  const base = opts?.sessionId || currentProviderSession() || fallbackSessionId()
+  return rejectedSessions.has(base) ? (recoveredSessionId ??= freshSessionId()) : base
+}
+
+/**
+ * UA do produto. O SDK assina sozinho (`ai-sdk/openai-compatible`) e o gateway
+ * não tem como distinguir o Orbit de qualquer outro consumidor — a doc do
+ * OpenCode Go pede que o cliente se identifique. Formato `Orbit/<versão>`.
+ */
+let cachedUserAgent: string | null = null
+function orbitUserAgent(): string {
+  if (cachedUserAgent === null) {
+    let version = ''
+    try {
+      version = app?.getVersion?.() ?? ''
+    } catch {
+      // Fora do Electron (scripts, testes): assina com o nome puro.
+    }
+    cachedUserAgent = version ? `Orbit/${version}` : 'Orbit'
+  }
+  return cachedUserAgent
 }
 
 export interface ResolveModelOptions {
@@ -99,8 +139,9 @@ function providerHeaders(
     return Object.keys(headers).length > 0 ? headers : undefined
   }
   const existing = Object.keys(headers).find((k) => k.toLowerCase() === SESSION_HEADER)
-  if (!existing) {
-    headers[SESSION_HEADER] = opts?.sessionId ?? currentProviderSession() ?? fallbackSessionId()
+  if (!existing) headers[SESSION_HEADER] = sessionIdFor(opts)
+  if (!Object.keys(headers).some((k) => k.toLowerCase() === 'user-agent')) {
+    headers['user-agent'] = orbitUserAgent()
   }
   return headers
 }
@@ -138,12 +179,19 @@ export async function resolveModel(
 
   const factory = BUNDLED_SDKS[npm]
   const headers = providerHeaders(providerId, opts)
+  // Nos provedores de sessão, o header também é garantido no transporte: o
+  // wrapper repõe o que faltar em qualquer requisição do SDK e repete uma vez se
+  // o gateway recusar a sessão (ver provider-fetch.ts).
+  const fetchImpl = SESSION_HEADER_PROVIDERS.has(providerId)
+    ? providerFetch(sessionIdFor(opts), rotateSession)
+    : undefined
 
   if (factory && npm !== '@ai-sdk/openai-compatible') {
     const sdk = (factory as SdkFactory)({
       apiKey,
       ...(provider.api ? { baseURL: provider.api } : {}),
       ...(headers ? { headers } : {}),
+      ...(fetchImpl ? { fetch: fetchImpl } : {}),
     })
     return sdk(modelId)
   }
@@ -161,6 +209,7 @@ export async function resolveModel(
     baseURL: provider.api,
     includeUsage: true,
     ...(headers ? { headers } : {}),
+    ...(fetchImpl ? { fetch: fetchImpl } : {}),
   })
   return sdk(modelId)
 }
