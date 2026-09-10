@@ -30,7 +30,7 @@ projeto (board)
 | D7 | **Falha = retry + pausa** — o agente tenta refazer N vezes; se persistir, a task fica **pausada** com aviso de erro no card e no modal. |
 | D8 | **Início manual**: botão "Iniciar" (começa da fase 1) **ou drag do card para uma fase** (a task começa daquela fase em diante). Pausar a task a congela na fase atual; retomar continua dela. |
 | D9 | **Modo automático**: fila FIFO, **uma task por vez** — termina uma, começa a próxima. O usuário pode iniciar tasks adicionais manualmente, executadas **em paralelo**. |
-| D10 | **Commits**: seguem o padrão de commits do usuário (consultado nas memórias); fallback: Conventional Commits. **Sem** convenção de branch com id de task/esteira. |
+| D10 | **Commits**: seguem o padrão de commits do usuário (consultado nas memórias); fallback: Conventional Commits. **Sem** convenção de branch com id de task/esteira. O engine faz um **commit final** por task (`commitAoFinal`, padrão true) com a mensagem gerada por uma chamada one-shot — contexto das fases + preferências do usuário — e só commita o que a task mudou. |
 | D11 | **Branch/worktree por esteira** — selecionar uma existente ou criar na criação da esteira. |
 | D12 | **Sem chats** — esteira não cria sessões de chat e não se comunica com chats. O histórico da execução vive nas anotações por fase da task. |
 | D13 | **Relatórios** — cards no footer do board, altura baixa, sem roubar espaço. |
@@ -280,7 +280,8 @@ pausada ── retomar ───────────────────
 - **Fallback**: Conventional Commits (`feat:`, `fix:`, `refactor:`, ...) — mesmo padrão já usado no repo do Orbit.
 - **Quando**: na fase de **Desenvolvimento** (ou na fase que altera código), ao concluir a implementação — o hash é anotado na fase e aparece no resumo da task.
 - **Onde**: branch/worktree da esteira (D11). **Sem** convenção de branch `orbit/esteira-<id>`.
-- **Push**: só se `pushAoFinal` (controlado, registrado); padrão `false` — commit local.
+- **Commit final do engine** (`commitAoFinal`, padrão **true**): ao concluir a última fase, o engine cria um commit com **todo o trabalho da task** — incluindo os ajustes de validação/revisão, que as fases posteriores não podem commitar (template). Só commita se houver diff (`git status` vazio = nada a commitar) e só os **arquivos alterados** (nunca varre a árvore). A mensagem é gerada por uma chamada one-shot (sem tools, mesmo modelo do pipeline) que recebe o **mesmo contexto de uma fase**: descrição da task, anotações das fases anteriores, preferências de commits do usuário nas memórias e o estilo dos commits recentes do repo. O prompt é editável por esteira (`commitPrompt`; vazio = `ESTEIRA_COMMIT_PROMPT_PADRAO`: preferências na memória → Conventional Commits com header + body de tópicos). Falha do commit não pausa a task: vai para `task.commitFalha`.
+- **Push**: só se `pushAoFinal` (controlado, registrado); padrão `false` — commit local. **Push implica commit final**: `pushAoFinal` exige `commitAoFinal` (validado na criação/edição e no engine), e o push é cancelado se o commit final falhar — nunca sobe branch sem o estado completo commitado.
 
 ---
 
@@ -406,7 +407,7 @@ Componentes:
 1. **Retry padrão = 3** — confirmar se o default deve ser outro.
 2. **Drag inicia da fase solta** — fases anteriores ficam `pulada`. Se a regra "passar por todas as fases" for absoluta, o drag deve apenas **enfileirar** a task (início na fase 1). **A confirmar.**
 3. **Custo = estimado por tokens×preço do modelo** (não há faturamento real nesta fase).
-4. **Push automático desligado por padrão** (`pushAoFinal: false`).
+4. **Push automático desligado por padrão** (`pushAoFinal: false`); **commit final ligado por padrão** (`commitAoFinal: true`) — a task sempre deixa um commit limpo no branch, e o push continua opt-in.
 5. **Anotações editáveis pelo usuário** — edição não sobrescreve conteúdo do agente (append com autor/ts).
 6. **Validação pode corrigir pequenos problemas**; problemas maiores → pausa com erro (não há retorno de fase).
 7. **Board = kanban por fase** (para viabilizar o drag); lista simples é alternativa se o kanban ficar pesado.
