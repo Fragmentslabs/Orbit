@@ -29,3 +29,6 @@ jobs:
         run: npm run desktop:build:linux
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Sem isso, reexecutar o workflow mais de 2h depois da publicacao faz o
+          # electron-builder pular o upload em silencio (release "antiga" demais).
+          EP_GH_IGNORE_TIME: "true"
