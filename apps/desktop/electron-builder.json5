@@ -70,6 +70,11 @@
       "deb"
     ],
     "category": "Development",
+    // No electron-builder 26 o default de executableName no Linux deixou de ser o productName
+    // e passou a derivar do `name` do pacote ("@orbit/desktop" -> "@orbitdesktop"), que o
+    // target AppImage rejeita (so aceita letras, digitos, ponto, underscore, hifen e espaco).
+    // Explicito para manter o nome dos releases anteriores.
+    "executableName": "Orbit",
     // TODO: trocar pelo e-mail real do mantenedor
     "maintainer": "Orbit <orbit@fragmentslabs.com>",
     // Version-less name so the "latest/download" release URL stays stable
