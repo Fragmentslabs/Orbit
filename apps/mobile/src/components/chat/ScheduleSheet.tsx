@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { View, Text, Pressable, Animated, Modal, StyleSheet, Dimensions } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
-import DateTimePicker from '@expo/ui/community/datetime-picker'
+import { DateTimePicker } from '@expo/ui/community/datetime-picker'
 import { CalendarIcon, Clock, ChevronDown } from 'lucide-react-native'
 import { useTranslation } from 'react-i18next'
 import { getThemeTokens } from '~/lib/theme-tokens'

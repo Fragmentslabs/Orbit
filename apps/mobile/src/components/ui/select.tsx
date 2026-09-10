@@ -1,7 +1,6 @@
-import { Platform, View } from "react-native";
+import { View, Text } from "react-native";
 import * as SelectPrimitive from "@rn-primitives/select";
 import { cn } from "~/lib/utils";
-import { Text } from "react-native";
 import type * as React from "react";
 
 const Select = SelectPrimitive.Root;

@@ -1,4 +1,4 @@
-import { View, Pressable, type PressableProps } from "react-native";
+import { View } from "react-native";
 import * as DialogPrimitive from "@rn-primitives/dialog";
 import { cn } from "~/lib/utils";
 

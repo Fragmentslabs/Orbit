@@ -1,8 +1,7 @@
-import { useMemo, useState, useCallback, type ReactNode } from 'react'
-import { View, Text, Pressable, ScrollView, Platform } from 'react-native'
+import { useMemo, useCallback, type ReactNode } from 'react'
+import { View, Text, Pressable, ScrollView } from 'react-native'
 import { Sparkles, Wrench, Layers, Zap, BrainCircuit } from 'lucide-react-native'
-import { normalizeText } from '@orbit/shared'
-import { SLASH_ACTION_COMMANDS } from '@orbit/shared'
+import { normalizeText, SLASH_ACTION_COMMANDS } from '@orbit/shared'
 import type { SlashCommand } from '~/hooks/useSlashCommands'
 import { getThemeTokens } from '~/lib/theme-tokens'
 import { useThemeStore } from '~/stores/theme-store'
@@ -38,7 +37,6 @@ export function SlashPalette({ value, setText, commands, children }: SlashPalett
   const tokens = getThemeTokens(useThemeStore((s) => s.resolved))
   const open = value.startsWith('/') && !LITERAL_COMMANDS.some((literal) => value.startsWith(literal))
   const query = open ? normalizeText(value.slice(1)) : ''
-  const [selectedIndex, setSelectedIndex] = useState(0)
 
   const filtered = useMemo(() => {
     if (!open) return []

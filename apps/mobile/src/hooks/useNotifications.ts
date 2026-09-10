@@ -102,6 +102,11 @@ export function useNotifications() {
   // ─── Handle notificação tocada ──────────────────────────────────────────
 
   useEffect(() => {
+    // Carregamento condicional de módulo opcional: import estático não
+    // serve aqui (o módulo pode não existir no runtime — Expo Go, web,
+    // build sem o nativo) e é justamente por isso que o require está
+    // dentro do try/if.
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const { router } = require('expo-router')
 
     const unsub = addNotificationResponseListener((response) => {

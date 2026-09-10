@@ -103,7 +103,6 @@ export function ConfigSheet({
     ]).start()
   }, [visible, slideAnim, backdropAnim])
 
-  const currentPerm = PERMISSION_MODES.find((m) => m.id === permissionMode) ?? PERMISSION_MODES[0]
 
   return (
     <Modal visible={visible} transparent animationType="none" onRequestClose={onClose}>

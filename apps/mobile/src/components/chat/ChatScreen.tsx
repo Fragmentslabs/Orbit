@@ -129,7 +129,7 @@ export function ChatScreen({ sessionId }: ChatScreenProps) {
   useEffect(() => {
     void selectSession(sessionId ?? null)
     closeChatSearch()
-  }, [sessionId])
+  }, [sessionId, selectSession, closeChatSearch])
 
   useEffect(() => {
     startMessageScheduler()

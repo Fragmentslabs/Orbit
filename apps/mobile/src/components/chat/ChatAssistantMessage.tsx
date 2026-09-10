@@ -8,7 +8,6 @@ import {
   Globe,
   Search,
   Link,
-  Paperclip,
   Bot,
   Sparkles,
   Terminal,
@@ -20,7 +19,6 @@ import { useTranslation } from 'react-i18next'
 import type {
   ChatMessage,
   MessagePart,
-  TextPart,
   ReasoningPart,
   ToolPart,
   AgentPart,

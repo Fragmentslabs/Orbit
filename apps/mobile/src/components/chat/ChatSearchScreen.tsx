@@ -86,10 +86,10 @@ export function ChatSearchScreen() {
   }
 
   const flatData = useMemo(() => {
-    const rows: Array<
+    type Row =
       | { kind: 'heading'; key: string; title: string }
       | { kind: 'hit'; key: string; hit: SearchHit }
-    > = []
+    const rows: Row[] = []
     for (const group of groups) {
       rows.push({ kind: 'heading', key: `h-${group.sessionId}`, title: group.title })
       group.hits.forEach((hit, i) => {

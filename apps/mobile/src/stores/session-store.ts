@@ -1,13 +1,4 @@
 import { create } from 'zustand'
-export interface RevertResponse {
-  revert: SessionRevert
-  messages: ChatMessage[]
-}
-
-export interface MessagesResponse {
-  messages: ChatMessage[]
-}
-
 import type {
   SessionInfo,
   SessionMode,
@@ -18,7 +9,6 @@ import type {
   ChatEvent,
   SendMessageOptions,
   FilePart,
-  AskItem,
   SearchHit,
   PlanReview,
   OrchestrationPlan,
@@ -37,8 +27,17 @@ import { useModeOverrides, modeActiveFor } from './mode-overrides'
 import { useModelModePrefs } from './model-mode-prefs'
 import { useSimplePrefs } from './simple-prefs'
 import { useBrainPrefs } from './brain-prefs'
-import { DRAFT_KEY, useSessionModelPrefs, type SelectedModel, type SessionModelOverrides } from './session-model-prefs'
+import { DRAFT_KEY, useSessionModelPrefs, type SelectedModel } from './session-model-prefs'
 import { useModelRotationStore } from './model-rotation-store'
+
+export interface RevertResponse {
+  revert: SessionRevert
+  messages: ChatMessage[]
+}
+
+export interface MessagesResponse {
+  messages: ChatMessage[]
+}
 
 // ─── Modelo efetivo da sessão ────────────────────────────────────────────────
 // Mistura três regras (override por chat > draft > último chat > default
@@ -308,7 +307,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
   unreadCounts: {},
 
   fetchSessions: async () => {
-    const { wsClient, connection } = useConnectionStore.getState()
+    const { wsClient } = useConnectionStore.getState()
     try {
       const res = await wsClient.send({ type: 'sessions:list' })
       if (res.ok && Array.isArray(res.data)) {

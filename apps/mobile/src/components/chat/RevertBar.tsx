@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useState } from 'react'
 import { Animated, PanResponder, Pressable, Text, View } from 'react-native'
 import { History, MessageSquareText, Undo2, X } from 'lucide-react-native'
 import { useTranslation } from 'react-i18next'

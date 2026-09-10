@@ -1,4 +1,4 @@
-import { View } from "react-native";
+import {  } from "react-native";
 import * as ProgressPrimitive from "@rn-primitives/progress";
 import { cn } from "~/lib/utils";
 

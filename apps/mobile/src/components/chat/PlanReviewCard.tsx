@@ -143,7 +143,7 @@ export function PlanReviewCard({ sessionId, review }: Props) {
     // o setState que a regra aponta é a marcação de carregando/reset que
     // PRECISA acontecer antes do await, senão a tela mostra dado velho.
     // eslint-disable-next-line react-hooks/set-state-in-effect
-  useEffect(() => { load() }, [review.status])
+  useEffect(() => { load() }, [review.status, load])
 
   const checkboxCount = content
     ? [...content.matchAll(/\[(\s|x)\]/gi)].length

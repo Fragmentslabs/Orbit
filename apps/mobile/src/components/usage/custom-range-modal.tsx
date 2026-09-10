@@ -14,6 +14,11 @@ import { useThemeStore } from '~/stores/theme-store'
 // o módulo ausente, a UI cai no fallback manual (CampoDataManual).
 const PickerNativo: ComponentType<any> | null = (() => {
   try {
+    // Carregamento condicional de módulo opcional: import estático não
+    // serve aqui (o módulo pode não existir no runtime — Expo Go, web,
+    // build sem o nativo) e é justamente por isso que o require está
+    // dentro do try/if.
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
     return require('@react-native-community/datetimepicker').default
   } catch {
     return null

@@ -9,19 +9,15 @@ import {
   Bot,
   Network,
   FileText,
-  X,
-  Paperclip,
-  ArrowUp,
-  Square,
   Settings2,
   RefreshCw,
   Eye,
 } from 'lucide-react-native'
-import { Image } from 'expo-image'
+import {  } from 'expo-image'
 import { useTranslation } from 'react-i18next'
 import type { SendMessageOptions, FilePart, SessionInfo } from '@orbit/shared'
 import { resolveSlashAction } from '@orbit/shared'
-import { cn } from '~/lib/utils'
+import {  } from '~/lib/utils'
 import { ContextMeter } from './ContextMeter'
 import { ModelPicker } from './ModelPicker'
 import { AttachmentSheet } from './AttachmentSheet'

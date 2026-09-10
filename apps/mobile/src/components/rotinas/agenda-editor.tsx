@@ -1,7 +1,7 @@
 import { Component, useState, type ComponentType, type ReactNode } from 'react'
 import { View, Text, Pressable, TextInput, StyleSheet, Modal, Platform } from 'react-native'
 import type { DateTimePickerEvent } from '@react-native-community/datetimepicker'
-import { useSafeAreaInsets } from 'react-native-safe-area-context'
+import {  } from 'react-native-safe-area-context'
 import { useTranslation } from 'react-i18next'
 import {
   AlignLeft,
@@ -29,6 +29,11 @@ import { descreverAgenda, diasCurtos, modoDaAgenda, type ModoAgenda } from '~/li
 // módulo ausente, a UI cai no seletor manual (SeletorHorarioManual).
 const PickerNativo: ComponentType<any> | null = (() => {
   try {
+    // Carregamento condicional de módulo opcional: import estático não
+    // serve aqui (o módulo pode não existir no runtime — Expo Go, web,
+    // build sem o nativo) e é justamente por isso que o require está
+    // dentro do try/if.
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
     return require('@react-native-community/datetimepicker').default
   } catch {
     return null

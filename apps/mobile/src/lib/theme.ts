@@ -210,6 +210,11 @@ export function generateCSSVariables(theme: Theme): Record<string, string> {
  */
 export function getSystemColorScheme(): 'light' | 'dark' {
   try {
+    // Carregamento condicional de módulo opcional: import estático não
+    // serve aqui (o módulo pode não existir no runtime — Expo Go, web,
+    // build sem o nativo) e é justamente por isso que o require está
+    // dentro do try/if.
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const { Appearance } = require('react-native')
     return Appearance.getColorScheme() ?? 'light'
   } catch {

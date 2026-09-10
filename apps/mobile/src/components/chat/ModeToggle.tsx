@@ -1,5 +1,5 @@
 import type { LucideIcon } from 'lucide-react-native'
-import { Pressable, Text, View } from 'react-native'
+import { Pressable, Text } from 'react-native'
 import { cn } from '~/lib/utils'
 
 interface ModeToggleProps {

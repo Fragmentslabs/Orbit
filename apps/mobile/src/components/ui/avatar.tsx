@@ -1,4 +1,4 @@
-import { View, Image, type ImageProps } from "react-native";
+import { View, Image, Text, type ImageProps } from "react-native";
 import { cn } from "~/lib/utils";
 
 type AvatarProps = ImageProps & {
@@ -31,10 +31,12 @@ function Avatar({ className, size = 40, fallback, ...props }: AvatarProps) {
         />
       ) : (
         <View className="items-center justify-center">
-          <Image
-            {...props}
-            style={{ width: size, height: size, borderRadius: size / 2 }}
-          />
+          <Text
+            className="font-medium text-muted-foreground"
+            style={{ fontSize: size * 0.4 }}
+          >
+            {initials}
+          </Text>
         </View>
       )}
     </View>

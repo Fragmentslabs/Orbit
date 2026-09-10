@@ -1,4 +1,4 @@
-import { View, Text, type TextProps } from "react-native";
+import {  } from "react-native";
 import * as TabsPrimitive from "@rn-primitives/tabs";
 import { cn } from "~/lib/utils";
 

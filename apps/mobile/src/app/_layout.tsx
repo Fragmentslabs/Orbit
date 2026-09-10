@@ -86,6 +86,9 @@ export default function RootLayout() {
     void useBrainPrefs.getState().hydrate();
     void usePermissionPrefs.getState().hydrate();
     void useModelRotationStore.getState().hydrate();
+    // Hidratação de boot: roda uma vez. Declarar as deps faria o app reidratar
+    // todo estado persistido a cada mudança de tema do sistema.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Sincroniza mudanças do theme-store com o Appearance API (NativeWind v5)
@@ -100,7 +103,7 @@ export default function RootLayout() {
       setPreference("system", systemIsDark);
       setColorScheme(systemIsDark ? "dark" : "light");
     }
-  }, [systemIsDark]);
+  }, [systemIsDark, setPreference]);
 
   const navTheme = useMemo(
     () => (resolved === "dark" ? OrbitDarkTheme : OrbitLightTheme),

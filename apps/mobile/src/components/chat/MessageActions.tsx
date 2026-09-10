@@ -1,5 +1,5 @@
 import { View, Text, Pressable } from 'react-native'
-import { Copy, RotateCcw, Clock, CheckCircle } from 'lucide-react-native'
+import { Copy, RotateCcw, CheckCircle } from 'lucide-react-native'
 import { useTranslation } from 'react-i18next'
 import type { ChatMessage } from '@orbit/shared'
 import { getThemeTokens } from '~/lib/theme-tokens'

@@ -16,6 +16,9 @@ export function detectSystemLocale(): 'pt-BR' | 'en' {
 
 const systemLocale = detectSystemLocale()
 
+// `i18n.use()` é a API documentada do i18next; a coincidência com o export
+// nomeado `use` do módulo é da própria lib, não um import trocado.
+// eslint-disable-next-line import/no-named-as-default-member
 void i18n.use(initReactI18next).init({
   resources: {
     'pt-BR': { translation: ptBR },

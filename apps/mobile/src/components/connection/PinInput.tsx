@@ -61,7 +61,11 @@ export function PinInput({ onComplete, disabled, error }: PinInputProps) {
             keyboardType="number-pad"
             maxLength={PIN_LENGTH}
             value={digit}
-            onChangeText={(text) => { text.length > 1 ? handlePaste(text) : handleChange(text, i) }}
+            onChangeText={(text) => {
+              // Mais de um caractere = colagem do PIN inteiro num campo só.
+              if (text.length > 1) handlePaste(text)
+              else handleChange(text, i)
+            }}
             onKeyPress={(e) => handleKeyPress(e, i)}
             selectTextOnFocus
             editable={!disabled}

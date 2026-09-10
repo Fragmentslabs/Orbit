@@ -39,6 +39,11 @@ interface RiveModule {
 let riveModule: RiveModule | null = null
 if (!isExpoGo) {
   try {
+    // Carregamento condicional de módulo opcional: import estático não
+    // serve aqui (o módulo pode não existir no runtime — Expo Go, web,
+    // build sem o nativo) e é justamente por isso que o require está
+    // dentro do try/if.
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
     riveModule = require('rive-react-native') as RiveModule
   } catch {
     riveModule = null

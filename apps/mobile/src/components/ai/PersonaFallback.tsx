@@ -61,7 +61,6 @@ export function PersonaFallback({ state, size }: Props) {
 
   // Desktop light: invert(1) brightness(0.85) → mapeamos branco para cinza-azulado escuro
   // Desktop dark: keep white with glow
-  const c = isLight ? '60,65,85' : '255,255,255'
   const shadowC = isLight ? '#3c4155' : '#ffffff'
   const glowBg = isLight ? `rgba(60,65,85,0.06)` : 'rgba(255,255,255,0.06)'
   const ringMain = isLight ? `rgba(60,65,85,0.92)` : 'rgba(255,255,255,0.92)'

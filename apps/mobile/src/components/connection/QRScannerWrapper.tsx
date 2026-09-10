@@ -1,4 +1,4 @@
-import React, { Suspense, useState, useEffect, useCallback } from 'react'
+import React, { Suspense } from 'react'
 import { View, Text, Platform, StyleSheet } from 'react-native'
 import type { ConnectionConfig } from '@orbit/companion-client'
 import { Spin } from '~/components/ui/spin'
@@ -18,6 +18,11 @@ let QRScannerInner: React.ComponentType<Props> | null = null
 
 try {
   if (canUseCamera) {
+    // Carregamento condicional de módulo opcional: import estático não
+    // serve aqui (o módulo pode não existir no runtime — Expo Go, web,
+    // build sem o nativo) e é justamente por isso que o require está
+    // dentro do try/if.
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
     QRScannerInner = require('./QRScanner').QRScanner
   }
 } catch {

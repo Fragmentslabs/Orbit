@@ -77,6 +77,11 @@ export async function openFilePart(file: FilePart): Promise<void> {
     await FileSystem.writeAsStringAsync(localUri, base64, { encoding: FileSystem.EncodingType.Base64 })
   }
 
+  // Carregamento condicional de módulo opcional: import estático não
+  // serve aqui (o módulo pode não existir no runtime — Expo Go, web,
+  // build sem o nativo) e é justamente por isso que o require está
+  // dentro do try/if.
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
   Sharing = require('expo-sharing') as typeof import('expo-sharing')
   if (await Sharing.isAvailableAsync()) {
     await Sharing.shareAsync(localUri, { mimeType: file.mime, dialogTitle: file.filename ?? i18n.t('attachment.openWith') })

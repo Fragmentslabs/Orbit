@@ -148,14 +148,16 @@ export function Sidebar() {
     setSelectedFolderIds(new Set())
   }
 
-  const toggleSelected = (id: string) => {
+  // Estável: um useCallback lá embaixo depende dela e era recriado a cada
+  // render por causa disto. Só usa o setter do useState, que já é estável.
+  const toggleSelected = useCallback((id: string) => {
     setSelectedIds((prev) => {
       const next = new Set(prev)
       if (next.has(id)) next.delete(id)
       else next.add(id)
       return next
     })
-  }
+  }, [])
 
   const toggleSelectedFolder = (id: string) => {
     setSelectedFolderIds((prev) => {

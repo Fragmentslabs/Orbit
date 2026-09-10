@@ -126,7 +126,7 @@ module.exports = [
       'no-useless-constructor': 'off',
       '@typescript-eslint/no-useless-constructor': 'warn',
       'no-undef': 'off',
-      '@typescript-eslint/no-require-imports': ['warn', { allow: ['\\.(aac|aiff|avif|bmp|caf|db|gif|heic|html|jpeg|jpg|json|m4a|m4v|mov|mp3|mp4|mpeg|mpg|otf|pdf|png|psd|svg|ttf|wav|webm|webp|xml|yaml|yml|zip)$'] }],
+      '@typescript-eslint/no-require-imports': ['warn', { allow: ['\\.(aac|aiff|avif|bmp|caf|db|gif|heic|html|jpeg|jpg|json|m4a|m4v|mov|mp3|mp4|mpeg|mpg|otf|pdf|png|psd|riv|svg|ttf|wav|webm|webp|xml|yaml|yml|zip)$'] }],
     },
   },
 

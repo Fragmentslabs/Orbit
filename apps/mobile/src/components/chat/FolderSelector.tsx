@@ -218,7 +218,7 @@ function DirBrowserModal({
         setLoading(false)
       }
     },
-    [wsClient],
+    [wsClient, t],
   )
 
   useEffect(() => {

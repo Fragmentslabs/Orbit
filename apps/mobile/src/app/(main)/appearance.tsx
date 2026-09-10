@@ -1,7 +1,6 @@
-import { View, Text, Pressable, ScrollView, StyleSheet, Switch } from 'react-native'
+import { View, Text, Pressable, ScrollView, StyleSheet, Switch, useColorScheme } from 'react-native'
 import { useRouter } from 'expo-router'
 import { ArrowLeft, Sun, Moon, Monitor, ChevronRight, Smile } from 'lucide-react-native'
-import { useColorScheme } from 'react-native'
 import { useTranslation } from 'react-i18next'
 import { useThemeStore, type ThemePreference } from '~/stores/theme-store'
 import { useAppearanceStore } from '~/stores/appearance-store'

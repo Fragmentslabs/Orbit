@@ -31,13 +31,9 @@ export function ContextMeter({ sessionId }: { sessionId?: string }) {
   const messages = useSessionStore((s) =>
     sessionId ? s.messages[sessionId] ?? NO_MSGS : NO_MSGS,
   )
-  const { lastTokens, compacted } = useMemo(() => {
-    let lastSummary = -1
-    for (let i = 0; i < messages.length; i++) {
-      if (messages[i].summary) lastSummary = i
-    }
+  const { lastTokens } = useMemo(() => {
     const found = [...messages].reverse().find((m) => m.role === 'assistant' && m.tokens)?.tokens
-    return { lastTokens: found, compacted: lastSummary >= 0 }
+    return { lastTokens: found }
   }, [messages])
 
   const tokens = getThemeTokens(useThemeStore((s) => s.resolved))
