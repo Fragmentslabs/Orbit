@@ -188,6 +188,13 @@ export interface FilePart {
   chip?: boolean
 }
 
+/** MIME marcador de um elemento selecionado no browser do painel (modo
+ * seleção). O renderer serializa o elemento (tag/url/selector/texto/html)
+ * como data URL neste MIME; o preprocessAttachment do engine o transforma em
+ * chip (badge na bolha) + TextPart com source "attachment" — o modelo recebe
+ * o detalhe completo, a bolha do usuário mostra só o chip. */
+export const BROWSER_SELECTION_MIME = "application/x-orbit-browser-selection"
+
 /** Agente do pipeline /init exibido como acordeon (estilo thinking): o
  * principal narra a revisão; cada worker mostra sua exploração em streaming. */
 export interface AgentPart {

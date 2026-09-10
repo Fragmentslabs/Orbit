@@ -14,7 +14,7 @@ import type {
   TextPart,
   ToolPart,
 } from '@shared/chat'
-import { StorageKeys } from '@shared/chat'
+import { BROWSER_SELECTION_MIME, StorageKeys } from '@shared/chat'
 import { getProvider, modelSupportsVision } from './catalog'
 import { compactHistory, findLastSummaryIndex, shouldCompact } from './compaction'
 import { createToolApproval, takeDenialReason } from './permission'
@@ -309,6 +309,33 @@ async function preprocessAttachment(
   },
 ): Promise<MessagePart[]> {
   const filename = file.filename ?? ''
+
+  // Elemento selecionado no browser do painel (modo seleção): o renderer
+  // serializa o elemento (tag/url/selector/texto/html) como data URL JSON no
+  // MIME marcador. Vira chip (badge na bolha do chat) + TextPart com source
+  // 'attachment' — mesmo padrão do PDF: o modelo recebe o detalhe completo, a
+  // bolha do usuário mostra só o chip.
+  if (file.mime === BROWSER_SELECTION_MIME) {
+    const raw = decodeDataUrlText(file.url)
+    let text = `[Elemento selecionado no browser do painel — ${file.filename || 'elemento'}]`
+    if (raw) {
+      try {
+        const sel = JSON.parse(raw) as { tag?: string; url?: string; selector?: string; text?: string; html?: string }
+        text = [
+          `[Elemento selecionado no browser do painel — <${sel.tag ?? '?'}> em ${sel.url ?? ''}]`,
+          `selector: ${sel.selector ?? ''}`,
+          `texto: ${sel.text || '(sem texto)'}`,
+          `html: ${sel.html ?? ''}`,
+        ].join('\n')
+      } catch {
+        // payload inválido — o filename do chip já dá contexto suficiente
+      }
+    }
+    return [
+      attachmentChip(file),
+      { id: newId('prt'), type: 'text', text, state: 'done', source: 'attachment' },
+    ]
+  }
 
   if (file.mime === 'application/pdf' || PDF_EXT.test(filename)) {
     let text: string

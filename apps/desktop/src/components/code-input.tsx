@@ -55,6 +55,7 @@ import { useSimpleMode, useSimplePrefs } from "@/src/stores/simple-prefs"
 import { useSkillsStore } from "@/src/stores/skills-store"
 import { useAppearanceStore } from "@/src/stores/appearance-store"
 import type { ChatStatus, FilePart, PermissionMode, SendMessageOptions } from "@shared/chat"
+import { BROWSER_SELECTION_MIME } from "@shared/chat"
 import { toFileParts } from "@/src/lib/message-utils"
 import { resolveSlashAction } from "@/src/lib/slash-actions"
 
@@ -232,14 +233,33 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId, on
     text = resolveText(text)
     saveRecentFolders(folders)
     const [directory, ...extraDirectories] = folders
+    // Elementos selecionados no browser do painel (modo seleção): viram
+    // anexos (chip/badge na bolha da mensagem, como PDFs). O detalhe
+    // (selector/html/texto) vai serializado no data URL do MIME marcador e o
+    // engine o converte em texto para o modelo — a bolha mostra só o chip.
     const currentSelections = selections
     if (currentSelections.length > 0) {
-      text += `\n\n${currentSelections
-        .map(
-          (sel) =>
-            `[Elemento selecionado no browser do painel — <${sel.tag}> em ${sel.url}]\nselector: ${sel.selector}\ntexto: ${sel.text || "(sem texto)"}\nhtml: ${sel.html}`,
-        )
-        .join("\n\n")}`
+      files.push(
+        ...currentSelections.map<FilePart>((sel) => {
+          const payload = encodeURIComponent(
+            JSON.stringify({
+              tag: sel.tag,
+              url: sel.url,
+              selector: sel.selector,
+              text: sel.text,
+              html: sel.html,
+            }),
+          )
+          const label = sel.text ? `"${sel.text.slice(0, 40)}${sel.text.length > 40 ? "…" : ""}"` : ""
+          return {
+            id: sel.id,
+            type: "file",
+            mime: BROWSER_SELECTION_MIME,
+            filename: `<${sel.tag}>${label ? ` ${label}` : ""}`,
+            url: `data:${BROWSER_SELECTION_MIME},${payload}`,
+          }
+        }),
+      )
       usePanelStore.getState().clearSelections()
     }
     // A mensagem foi enviada: o rascunho da sessão (se existia de uma troca
