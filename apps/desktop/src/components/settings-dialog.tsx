@@ -1,4 +1,4 @@
-import { memo, useEffect, useMemo, useRef, useState } from "react"
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { Bell, BookOpen, Database, KeyRound, Palette, Settings2, Shield, Trash2, Check, Plus, Wifi, WifiOff, RefreshCw, Server, X, Pencil, Info } from "lucide-react"
 import {
@@ -47,26 +47,114 @@ function useTabs(): TabDef[] {
   ]
 }
 
-const ProviderRow = memo(function ProviderRow({ providerId }: { providerId: string }) {
+/**
+ * Enquanto o campo de chave está aberto, esta linha é a dona do foco.
+ *
+ * O campo perdia o foco sozinho no meio da digitação — e ninguém mais
+ * recuperava: o `blur` ia para o `body` sem nenhuma interação do usuário e as
+ * teclas seguintes caíam no vazio (não dava para cadastrar a chave pelo
+ * seletor de modelos; o caminho pela sidebar às vezes escapava). Como não há
+ * como saber quem rouba o foco de fora, o campo se defende: se o foco sair para
+ * o vazio sem um `pointerdown` recente, ele volta — e registra quem levou, para
+ * a próxima ocorrência dizer o nome do culpado.
+ */
+function useKeepFocusWhileEditing(active: boolean, containerRef: React.RefObject<HTMLDivElement>) {
+  useEffect(() => {
+    if (!active) return
+    const input = containerRef.current?.querySelector("input")
+    if (!input) return
+
+    let lastPointerDown = 0
+    const onPointerDown = () => {
+      lastPointerDown = performance.now()
+    }
+    /** Um destino de foco de verdade (campo, botão, link, algo com tabindex) é
+     *  navegação legítima — Tab, clique em outro campo. O que o campo recupera
+     *  é o foco que "sumiu": `body`, um `div` do diálogo, nada. */
+    const isMeaningfulTarget = (node: Element | null) =>
+      !!node &&
+      node !== document.body &&
+      node.matches("input, textarea, select, button, a[href], [tabindex], [contenteditable=true]")
+
+    /** Devolve o foco, se ele realmente escapou: clique do usuário e foco que foi
+     *  para outro campo são movimentos legítimos e não se combatem. */
+    const reclaim = () => {
+      if (performance.now() - lastPointerDown < 400) return
+      if (!input.isConnected || document.activeElement === input) return
+      if (isMeaningfulTarget(document.activeElement)) return
+      console.warn("[providers] campo de chave perdeu o foco sozinho; devolvendo", document.activeElement)
+      input.focus()
+    }
+    // O foco indo para o vazio chega como `blur` — e nem sempre vem acompanhado
+    // do `focusout` (o `blur` avisa primeiro); os dois entram, deduplicados,
+    // porque o mesmo movimento gera os dois eventos.
+    let lastFocusOut = 0
+    const onFocusOut = () => {
+      if (performance.now() - lastFocusOut < 50) return
+      lastFocusOut = performance.now()
+      reclaim()
+      // O roubo pode chegar atrasado (rAF/timer de quem tirou o foco): confere
+      // de novo depois, ainda respeitando o clique do usuário.
+      requestAnimationFrame(reclaim)
+      setTimeout(reclaim, 150)
+    }
+
+    // Foco inicial explícito em vez do `autoFocus` nativo: assim ele roda
+    // depois do commit (o mesmo efeito reinstala a posse do campo quando a
+    // linha remonta com o campo aberto).
+    input.focus()
+    input.addEventListener("blur", onFocusOut)
+    input.addEventListener("focusout", onFocusOut)
+    window.addEventListener("pointerdown", onPointerDown, true)
+    // Janela voltando ao foco com o campo aberto: se o foco do documento não
+    // está em nenhum campo, o usuário digitando aqui não escreveria em nada.
+    window.addEventListener("focus", reclaim)
+    return () => {
+      input.removeEventListener("blur", onFocusOut)
+      input.removeEventListener("focusout", onFocusOut)
+      window.removeEventListener("pointerdown", onPointerDown, true)
+      window.removeEventListener("focus", reclaim)
+    }
+  }, [active, containerRef])
+}
+
+const ProviderRow = memo(function ProviderRow({
+  providerId,
+  editing,
+  draft,
+  onEdit,
+  onDraftChange,
+}: {
+  providerId: string
+  /** Campo de chave aberto nesta linha */
+  editing: boolean
+  /** Texto já digitado desta linha (o estado vive no ProvidersTab — ver lá) */
+  draft: string
+  /* Callbacks levam o id (em vez de serem fechados sobre ele) para continuarem
+     estáveis: com props estáveis, o `memo` evita re-renderizar as outras
+     dezenas de linhas da lista a cada tecla digitada. */
+  onEdit: (providerId: string, editing: boolean) => void
+  onDraftChange: (providerId: string, value: string) => void
+}) {
   const { t } = useTranslation()
   const provider = useProviderStore((s) => s.catalog[providerId])
   const connected = useProviderStore((s) => s.connectedProviders.includes(providerId))
   const setApiKey = useProviderStore((s) => s.setApiKey)
   const removeApiKey = useProviderStore((s) => s.removeApiKey)
 
-  const [editing, setEditing] = useState(false)
-  const [key, setKey] = useState("")
   const [saving, setSaving] = useState(false)
+  const keyFieldRef = useRef<HTMLDivElement>(null)
+  const openField = editing && !connected
+  useKeepFocusWhileEditing(openField, keyFieldRef)
 
   if (!provider) return null
 
   const save = async () => {
-    if (!key.trim()) return
+    if (!draft.trim()) return
     setSaving(true)
-    await setApiKey(providerId, key.trim())
+    await setApiKey(providerId, draft.trim())
     setSaving(false)
-    setEditing(false)
-    setKey("")
+    onEdit(providerId, false)
   }
 
   return (
@@ -91,27 +179,26 @@ const ProviderRow = memo(function ProviderRow({ providerId }: { providerId: stri
           </Button>
         ) : (
           !editing && (
-            <Button size="sm" variant="outline" className="gap-1" onClick={() => setEditing(true)}>
+            <Button size="sm" variant="outline" className="gap-1" onClick={() => onEdit(providerId, true)}>
               <KeyRound className="size-3.5" />
               {t("providers.addKey")}
             </Button>
           )
         )}
       </div>
-      {editing && !connected && (
-        <div className="flex gap-2">
+      {openField && (
+        <div ref={keyFieldRef} className="flex gap-2">
           <Input
-            autoFocus
             type="password"
-            value={key}
+            value={draft}
             placeholder={t("providers.apiKeyPlaceholder", { name: provider.name })}
-            onChange={(e) => setKey(e.target.value)}
+            onChange={(e) => onDraftChange(providerId, e.target.value)}
             onKeyDown={(e) => {
               if (e.key === "Enter") void save()
-              if (e.key === "Escape") setEditing(false)
+              if (e.key === "Escape") onEdit(providerId, false)
             }}
           />
-          <Button disabled={!key.trim() || saving} onClick={() => void save()}>
+          <Button disabled={!draft.trim() || saving} onClick={() => void save()}>
             {t("common.save")}
           </Button>
         </div>
@@ -290,6 +377,34 @@ function ProvidersTab({ searchInputRef }: { searchInputRef?: React.RefObject<HTM
   const [editProvider, setEditProvider] = useState<{ id: string; name: string; api?: string } | undefined>(undefined)
   const [detecting, setDetecting] = useState(false)
   const [detectResults, setDetectResults] = useState<DetectResult[] | null>(null)
+  /**
+   * Qual linha está com o campo de chave aberto, e o que já foi digitado nela.
+   * Fica aqui (e não dentro da linha) porque a lista se re-renderiza quando o
+   * catálogo ou as conexões mudam: se a linha remontasse no meio da digitação,
+   * o campo aberto e o texto digitado iam junto. De quebra, só uma linha fica
+   * em edição por vez, e fechar o campo sempre descarta o rascunho.
+   */
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [drafts, setDrafts] = useState<Record<string, string>>({})
+
+  const setEditing = useCallback(
+    (providerId: string, editing: boolean) => {
+      setEditingId(editing ? providerId : null)
+      if (!editing) {
+        setDrafts((current) => {
+          if (!(providerId in current)) return current
+          const next = { ...current }
+          delete next[providerId]
+          return next
+        })
+      }
+    },
+    [],
+  )
+
+  const setDraft = useCallback((providerId: string, value: string) => {
+    setDrafts((current) => ({ ...current, [providerId]: value }))
+  }, [])
 
   const customIds = useMemo(() => new Set(customProviders.map((p) => p.id)), [customProviders])
 
@@ -403,7 +518,14 @@ function ProvidersTab({ searchInputRef }: { searchInputRef?: React.RefObject<HTM
           className="h-7 w-full min-w-0 rounded-md border border-input bg-input/20 px-2 py-0.5 text-sm transition-colors outline-none file:inline-flex file:h-6 file:border-0 file:bg-transparent file:text-xs/relaxed file:font-medium file:text-foreground placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30 md:text-xs/relaxed dark:bg-input/30"
         />
         {providerIds.map((id) => (
-          <ProviderRow key={id} providerId={id} />
+          <ProviderRow
+            key={id}
+            providerId={id}
+            editing={editingId === id}
+            draft={drafts[id] ?? ""}
+            onEdit={setEditing}
+            onDraftChange={setDraft}
+          />
         ))}
         {providerIds.length === 0 && (
           <p className="py-4 text-center text-xs text-muted-foreground">{t("providers.cloud.none")}</p>
