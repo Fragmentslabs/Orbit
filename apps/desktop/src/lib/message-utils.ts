@@ -1,4 +1,4 @@
-import type { ChatMessage, FilePart, MessagePart, ToolPart } from "@shared/chat"
+import type { ChatMessage, FilePart, MessagePart, TextPart, ToolPart } from "@shared/chat"
 
 /** Converte blob URLs dos anexos do input em data URLs estáveis. O input
  * trabalha com blob URLs (URL.createObjectURL) e os REVOGA ao limpar — a fila
@@ -28,6 +28,56 @@ export async function blobUrlsToDataUrls<T extends { url?: string }>(files: T[])
 
 /** Ferramentas que tocam a web — alimentam chain-of-thought e fontes. */
 export const WEB_TOOLS = new Set(["websearch", "webfetch", "browser_open", "browser_links"])
+
+/**
+ * Texto gerado pelo engine em continuações INTERNAS do turno (nudges de
+ * verificação anti-overclaim e de fechamento da checklist) — nunca é a
+ * resposta ao usuário. 'nudge'/'todo' renderizam apagados; 'internal' nem
+ * chega a renderizar. Ver NO_CHANGES_PROMPT/TODO_COMPLETION_PROMPT e os
+ * marcadores source em chat-engine.ts.
+ */
+export function isEngineText(source: TextPart["source"]): boolean {
+  return source === "nudge" || source === "todo" || source === "internal"
+}
+
+/**
+ * Índice (em segments) da primeira parte do ÚLTIMO bloco de texto contíguo
+ * da mensagem. Um bloco é um run de partes consecutivas de texto/reasoning,
+ * quebrado só por algo que não seja texto (ferramenta, agente, imagem): duas
+ * partes de texto separadas apenas por reasoning são a MESMA resposta — é o
+ * que acontece num corte por limite de tokens seguido de AUTO_CONTINUE, em
+ * que a continuação reabre o raciocínio e o texto retoma de onde cortou.
+ * Sem isso a UI promovia a continuação a "resposta final" e apagava o trecho
+ * anterior (a "resposta sobreposta" por um resumo curto). Textos do engine
+ * são invisíveis ao run (nem iniciam nem quebram um bloco): além de nunca
+ * roubarem o lugar da resposta final, não apagam o bloco real à esquerda
+ * quando aparecem depois dele.
+ */
+export function lastTextRunStart(segments: { kind: string; part?: MessagePart }[]): number {
+  let runStart = -1
+  let lastRunStart = -1
+  for (let i = 0; i < segments.length; i++) {
+    const part = segments[i].part
+    // Texto do engine (nudge/todo/internal) é INVISÍVEL para o run: o source
+    // dele já o apaga na UI, então nem inicia um bloco novo nem quebra o
+    // atual. Se contasse, um nudge depois de uma ferramenta viraria o último
+    // bloco e apagaria a resposta real (o sintoma "resposta sobreposta").
+    if (segments[i].kind === "part" && part?.type === "text" && isEngineText(part.source)) {
+      continue
+    }
+    const textish =
+      segments[i].kind === "part" &&
+      part !== undefined &&
+      (part.type === "text" || part.type === "reasoning")
+    if (textish) {
+      if (runStart === -1) runStart = i
+      lastRunStart = runStart
+    } else {
+      runStart = -1
+    }
+  }
+  return lastRunStart
+}
 
 export interface WebSource {
   url: string

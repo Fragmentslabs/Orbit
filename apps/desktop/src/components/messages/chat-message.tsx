@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { GlobeIcon, LinkIcon, SearchIcon, XCircleIcon } from "lucide-react"
 import type { ChatMessage, MessagePart, ToolPart } from "@shared/chat"
-import { extractSources, hostnameOf, parseSearchResults, WEB_TOOLS } from "@/src/lib/message-utils"
+import { extractSources, hostnameOf, isEngineText, lastTextRunStart, parseSearchResults, WEB_TOOLS } from "@/src/lib/message-utils"
 import {
   ChainOfThought,
   ChainOfThoughtContent,
@@ -141,14 +141,17 @@ export function ChatAssistantMessage({ message, sessionId, isLast, isBusy, busyL
   const sources = useMemo(() => (finished ? extractSources(message) : []), [finished, message])
   const waiting = isLast && isBusy && message.parts.length === 0
 
-  // Só o último texto da mensagem é a resposta final (branca); os anteriores
-  // são narração intermediária ("pensando alto") e ficam em cor apagada —
-  // inclusive se alguma ferramenta (pesquisa, agente etc.) chegar depois do
-  // texto final no stream.
-  const lastTextIndex = segments.reduce(
-    (last, segment, i) => (segment.kind === "part" && segment.part.type === "text" ? i : last),
-    -1,
-  )
+  // O ÚLTIMO bloco de texto da mensagem é a resposta final (branca); os
+  // anteriores são narração intermediária ("pensando alto") e ficam em cor
+  // apagada — inclusive se alguma ferramenta (pesquisa, agente etc.) chegar
+  // depois do texto no stream. Um bloco é um run de partes consecutivas de
+  // texto (lastTextRunStart): dois trechos separados só por reasoning são a
+  // MESMA resposta — caso do corte por limite de tokens seguido de
+  // AUTO_CONTINUE. Textos do engine NUNCA contam como resposta final nem
+  // quebram o run: 'nudge' (verificação anti-overclaim) e 'todo' (fechamento
+  // da checklist) ficam apagados; 'internal' ("nada a corrigir") não
+  // renderiza.
+  const lastRunStart = useMemo(() => lastTextRunStart(segments), [segments])
 
   return (
     <div className="flex w-full flex-col gap-1">
@@ -157,10 +160,10 @@ export function ChatAssistantMessage({ message, sessionId, isLast, isBusy, busyL
         segment.kind === "research" ? (
           <ResearchBlock key={segment.id} parts={segment.parts} />
         ) : segment.part.type === "text" ? (
-          segment.part.source === "vision" ? (
+          segment.part.source === "internal" ? null : segment.part.source === "vision" ? (
             <VisionWorkingRow key={segment.id} />
           ) : (
-            <AssistantMarkdown key={segment.id} muted={index < lastTextIndex}>
+            <AssistantMarkdown key={segment.id} muted={index < lastRunStart || isEngineText(segment.part.source)}>
               {segment.part.text}
             </AssistantMarkdown>
           )

@@ -82,7 +82,7 @@ Your response must:
 // cortava no meio de um texto/tool call silenciosamente, indistinguível de
 // conclusão normal — a causa raiz das "respostas interrompidas do nada".
 const MAX_AUTO_CONTINUES = 3
-const AUTO_CONTINUE_PROMPT = `[SYSTEM: the previous reply was cut off by the model's output token limit (finish_reason "length") — this is NOT the end of the turn. Continue exactly from where you left off: do NOT repeat or summarize what was already written, just pick up the next part and finish the work. If you were mid-task, complete it.]`
+const AUTO_CONTINUE_PROMPT = `[SYSTEM: the previous reply was cut off by the model's output token limit (finish_reason "length") — this is NOT the end of the turn. Continue exactly from where you left off: resume mid-sentence if the cut happened mid-sentence, do NOT repeat what was already written, do NOT restart the answer, and do NOT append a closing summary — the text you produce now is displayed as the direct continuation of the previous text, together forming one single answer. If you were mid-task, complete it.]`
 const AUTO_CONTINUE_TOOL_PROMPT = (toolNames: string) => `[SYSTEM: the previous reply was cut off by the model's output token limit (finish_reason "length") in the middle of a ${toolNames} tool call. That tool call was NOT executed. Do NOT retry it as one giant operation — split it into smaller operations (smaller file writes, shorter commands, less data per call) and continue from where you left off.]`
 // Nudge de fechamento da TODO: o turno terminou em 'stop' mas o modelo não
 // reenviou a lista marcando os itens como completed (os checkboxes ficam com
@@ -1457,8 +1457,18 @@ async function runChatTurn(win: BrowserWindow, input: SendMessageInput): Promise
     // anterior) → vira 'internal' e a UI nem renderiza; ou houve uma correção
     // real ("Correção: …") → permanece 'nudge', visível em cor apagada.
     if (endSnapshot.state === 'changed') {
-      for (const part of assistantMessage.parts) {
-        if (part.type === 'text' && part.source === 'nudge') part.source = undefined
+      // Promove SÓ o último texto do nudge: é ele que carrega a resposta real
+      // pós-correção (trabalho feito + "Correção: …"). Os anteriores seguem
+      // 'nudge' (apagados) — varrer todos abria caminho para o texto do nudge
+      // que não é a resposta final virar branco. Se o último não foi correção
+      // de verdade ("Nada a corrigir.") mas o snapshot mudou por outra via
+      // (ex.: ferramentas do próprio nudge gravaram algo), também não promove:
+      // linha de verificação interna nunca vira resposta final.
+      const lastNudgeText = [...assistantMessage.parts]
+        .reverse()
+        .find((p): p is TextPart => p.type === 'text' && p.source === 'nudge')
+      if (lastNudgeText) {
+        lastNudgeText.source = isNoCorrectionReply(lastNudgeText.text) ? 'internal' : undefined
       }
     } else if (overclaimNudges > 0) {
       const lastNudgeText = [...assistantMessage.parts]

@@ -2,11 +2,13 @@ import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "rea
 import { useTranslation } from "react-i18next"
 import { ChevronDownIcon } from "lucide-react"
 import { cn } from "@/lib/utils"
-import type { ChatMessage, MessagePart, TextPart, ToolPart } from "@shared/chat"
+import type { ChatMessage, MessagePart, ToolPart } from "@shared/chat"
 import { usePanelStore } from "@/src/stores/panel-store"
 import {
   extractSources,
+  isEngineText,
   isTestCommand,
+  lastTextRunStart,
   parseTestSummary,
   type TestSummary,
 } from "@/src/lib/message-utils"
@@ -255,14 +257,6 @@ function segmentParts(parts: MessagePart[]): Segment[] {
   return segments
 }
 
-/** Texto que o engine gerou nas continuações internas do turno (nudges de
- * verificação e de fechamento da checklist) — nunca é a resposta ao usuário,
- * então jamais ocupa o lugar da resposta final. 'nudge'/'todo' renderizam
- * apagados; 'internal' nem chega a renderizar. */
-function isEngineText(source: TextPart["source"]): boolean {
-  return source === "nudge" || source === "todo" || source === "internal"
-}
-
 export function CodeAssistantMessage({ message, sessionId, isLast, isBusy, busyLabel, onRetry }: {
   message: ChatMessage
   sessionId?: string
@@ -278,20 +272,18 @@ export function CodeAssistantMessage({ message, sessionId, isLast, isBusy, busyL
   const sources = useMemo(() => (finished ? extractSources(message) : []), [finished, message])
   const waiting = isLast && isBusy && message.parts.length === 0
 
-  // Só o último texto da mensagem é a resposta final (branca); os anteriores
-  // são narração intermediária do agente e ficam em cor apagada — inclusive
-  // se alguma ação (read, bash etc.) chegar depois do texto final no stream.
-  // Textos internos do engine NUNCA contam como resposta final: ficam sempre
-  // apagados, como pensamento interno do agente. 'nudge' = verificação
-  // anti-overclaim; 'todo' = linha de fechamento da checklist; 'internal' é o
-  // nudge que terminou como "nada a corrigir" e nem aparece.
-  const lastTextIndex = segments.reduce(
-    (last, segment, i) =>
-      segment.kind === "part" && segment.part.type === "text" && !isEngineText(segment.part.source)
-        ? i
-        : last,
-    -1,
-  )
+  // O ÚLTIMO bloco de texto da mensagem é a resposta final (branca); os
+  // anteriores são narração intermediária do agente e ficam em cor apagada —
+  // inclusive se alguma ação (read, bash etc.) chegar depois do texto no
+  // stream. Um bloco é um run de partes consecutivas de texto (lastTextRunStart):
+  // dois trechos separados só por reasoning são a MESMA resposta — caso do
+  // corte por limite de tokens seguido de AUTO_CONTINUE, em que a continuação
+  // não pode apagar o trecho anterior. Textos internos do engine NUNCA contam
+  // como resposta final nem quebram o run: ficam sempre apagados, como
+  // pensamento interno do agente. 'nudge' = verificação anti-overclaim;
+  // 'todo' = linha de fechamento da checklist; 'internal' é o nudge que
+  // terminou como "nada a corrigir" e nem aparece.
+  const lastRunStart = useMemo(() => lastTextRunStart(segments), [segments])
 
   // Só a última todowrite é a checklist viva; anteriores viram uma linha
   const lastTodoId = [...message.parts]
@@ -316,7 +308,7 @@ export function CodeAssistantMessage({ message, sessionId, isLast, isBusy, busyL
           ) : (
             <AssistantMarkdown
               key={segment.id}
-              muted={index < lastTextIndex || isEngineText(segment.part.source)}
+              muted={index < lastRunStart || isEngineText(segment.part.source)}
             >
               {segment.part.text}
             </AssistantMarkdown>
