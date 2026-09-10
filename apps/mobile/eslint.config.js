@@ -83,12 +83,16 @@ module.exports = [
     files: [
       '**/metro.config.js',
       '**/babel.config.js',
-      '**/app.config.js',
       'eslint.config.js',
       'src/lib/lucide-styled.js',
     ],
     languageOptions: { globals: globals.node, sourceType: 'commonjs' },
     rules: { '@typescript-eslint/no-require-imports': 'off' },
+  },
+  // app.config.js roda em Node mas é ESM (export default) — só os globais.
+  {
+    files: ['**/app.config.js'],
+    languageOptions: { globals: globals.node },
   },
 
   importPlugin.flatConfigs.typescript,

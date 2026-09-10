@@ -29,13 +29,17 @@ function EditModal({ memory, visible, onClose }: {
   const [weight, setWeight] = useState(memory.weight)
   const tokens = getThemeTokens(useThemeStore((s) => s.resolved))
 
-  useEffect(() => {
+  // Semeia o formulário na ABERTURA, ajustando no render em vez de num
+  // efeito: evita o render extra em que os campos apareceriam vazios.
+  const [wasVisible, setWasVisible] = useState(visible)
+  if (visible !== wasVisible) {
+    setWasVisible(visible)
     if (visible) {
       setText(memory.text)
       setTags(memory.tags.join(', '))
       setWeight(memory.weight)
     }
-  }, [visible, memory])
+  }
 
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
@@ -115,6 +119,10 @@ function DocModal({ memory, visible, onClose }: {
 
   useEffect(() => {
     if (visible) {
+    // Busca/sincronização de dados em efeito é o padrão documentado do React;
+    // o setState que a regra aponta é a marcação de carregando/reset que
+    // PRECISA acontecer antes do await, senão a tela mostra dado velho.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
       setDoc(null)
       void openDoc(memory.id).then(setDoc)
     }

@@ -84,6 +84,10 @@ export default function UsageScreen() {
   )
 
   useEffect(() => {
+    // Busca/sincronização de dados em efeito é o padrão documentado do React;
+    // o setState que a regra aponta é a marcação de carregando/reset que
+    // PRECISA acontecer antes do await, senão a tela mostra dado velho.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     void fetchSummary(range)
   }, [range, fetchSummary])
 

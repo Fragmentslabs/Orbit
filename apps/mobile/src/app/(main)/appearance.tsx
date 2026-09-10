@@ -1,13 +1,14 @@
 import { View, Text, Pressable, ScrollView, StyleSheet, Switch } from 'react-native'
 import { useRouter } from 'expo-router'
 import { ArrowLeft, Sun, Moon, Monitor, ChevronRight, Smile } from 'lucide-react-native'
-import { Appearance, useColorScheme } from 'react-native'
+import { useColorScheme } from 'react-native'
 import { useTranslation } from 'react-i18next'
 import { useThemeStore, type ThemePreference } from '~/stores/theme-store'
 import { useAppearanceStore } from '~/stores/appearance-store'
 import { getThemeTokens } from '~/lib/theme-tokens'
 import { useThemeStore as useThemeTokensStore } from '~/stores/theme-store'
 import { SafeScreen } from '~/components/layout/SafeScreen'
+import { setColorScheme } from '~/lib/theme'
 
 export default function AppearanceScreen() {
   const { t } = useTranslation()
@@ -22,7 +23,7 @@ export default function AppearanceScreen() {
 
   const handleTheme = (value: ThemePreference) => {
     setThemePref(value, systemIsDark)
-    Appearance.setColorScheme(value === 'system' ? (systemIsDark ? 'dark' : 'light') : value)
+    setColorScheme(value === 'system' ? (systemIsDark ? 'dark' : 'light') : value)
   }
 
   const themeChips: { value: ThemePreference; label: string; icon: typeof Sun }[] = [

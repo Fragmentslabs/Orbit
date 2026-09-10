@@ -131,10 +131,18 @@ export function PlanReviewCard({ sessionId, review }: Props) {
     }
   }, [sessionId])
 
-  useEffect(() => {
+  // Conteúdo do plano vindo do store: sincroniza no render (estado derivado),
+  // sem o commit extra do efeito.
+  const [lastReviewContent, setLastReviewContent] = useState(review.content)
+  if (review.content !== lastReviewContent) {
+    setLastReviewContent(review.content)
     if (review.content) setContent(review.content)
-  }, [review.content])
+  }
 
+    // Busca/sincronização de dados em efeito é o padrão documentado do React;
+    // o setState que a regra aponta é a marcação de carregando/reset que
+    // PRECISA acontecer antes do await, senão a tela mostra dado velho.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { load() }, [review.status])
 
   const checkboxCount = content

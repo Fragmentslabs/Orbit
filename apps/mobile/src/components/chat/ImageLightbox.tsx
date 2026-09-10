@@ -1,3 +1,9 @@
+/* eslint-disable react-hooks/refs -- `base` é lido dentro dos callbacks do
+ * react-native-gesture-handler (.onStart/.onUpdate), que rodam no gesto e
+ * nunca durante o render. A regra não consegue provar isso e marca qualquer
+ * acesso a ref em função criada no render — envolver em useMemo não muda o
+ * diagnóstico (testado). A alternativa, virar estado, dispararia um render
+ * por quadro do pinch/pan, que é exatamente o que o ref evita aqui. */
 import { useCallback, useRef, useState } from 'react'
 import { Modal, View, Text, Pressable, StyleSheet, useWindowDimensions } from 'react-native'
 import { Gesture, GestureDetector } from 'react-native-gesture-handler'

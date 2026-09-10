@@ -2,7 +2,9 @@ import "../global.css";
 import "../i18n";
 
 import { useEffect, useMemo } from "react"
-import { Appearance, useColorScheme } from "react-native"
+import { useColorScheme } from "react-native"
+import { setColorScheme } from "../lib/theme"
+
 import { DarkTheme, DefaultTheme, Stack, ThemeProvider, useRouter } from "expo-router"
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { KeyboardProvider } from "react-native-keyboard-controller";
@@ -24,6 +26,7 @@ import { useSimplePrefs } from "../stores/simple-prefs";
 import { useBrainPrefs } from "../stores/brain-prefs";
 import { usePermissionPrefs } from "../stores/permission-prefs";
 import { useModelRotationStore } from "../stores/model-rotation-store";
+
 
 SplashScreen.preventAutoHideAsync();
 
@@ -65,7 +68,7 @@ export default function RootLayout() {
   useEffect(() => {
     hydrateThemePreference().then((pref) => {
       setPreference(pref, systemIsDark);
-      Appearance.setColorScheme(pref === "system" ? (systemIsDark ? "dark" : "light") : pref);
+      setColorScheme(pref === "system" ? (systemIsDark ? "dark" : "light") : pref);
     });
     hydratePersonaVisible().then((visible) => {
       useAppearanceStore.getState().setPersonaVisible(visible);
@@ -87,7 +90,7 @@ export default function RootLayout() {
 
   // Sincroniza mudanças do theme-store com o Appearance API (NativeWind v5)
   useEffect(() => {
-    Appearance.setColorScheme(resolved);
+    setColorScheme(resolved);
   }, [resolved]);
 
   // Sincroniza mudança de scheme do SO quando preference é "system"
@@ -95,7 +98,7 @@ export default function RootLayout() {
     const pref = useThemeStore.getState().preference;
     if (pref === "system") {
       setPreference("system", systemIsDark);
-      Appearance.setColorScheme(systemIsDark ? "dark" : "light");
+      setColorScheme(systemIsDark ? "dark" : "light");
     }
   }, [systemIsDark]);
 

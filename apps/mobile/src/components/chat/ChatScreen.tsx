@@ -98,11 +98,14 @@ export function ChatScreen({ sessionId }: ChatScreenProps) {
   const closeChatSearch = useChatSearchStore((s) => s.close)
 
   // Persona: grande no centro quando vazio, some assim que a conversa começa.
-  const chatProgress = useRef(new Animated.Value(isEmpty ? 0 : 1)).current
+  // useState com inicializador lazy no lugar de `useRef(new ...).current`:
+  // valor igualmente estável, legível no render (react-hooks/refs proíbe ler
+  // ref aqui) e alocado uma única vez.
+  const [chatProgress] = useState(() => new Animated.Value(isEmpty ? 0 : 1))
   // Persona pequena do header: só aparece depois que a do centro termina de
   // sumir (mesma lógica em duas etapas do desktop) — por isso o delay igual
   // à duração da animação do centro.
-  const headerPersonaOpacity = useRef(new Animated.Value(isEmpty ? 0 : 1)).current
+  const [headerPersonaOpacity] = useState(() => new Animated.Value(isEmpty ? 0 : 1))
 
   useEffect(() => {
     Animated.timing(chatProgress, {
@@ -176,6 +179,10 @@ export function ChatScreen({ sessionId }: ChatScreenProps) {
       })
       return
     }
+    // Busca/sincronização de dados em efeito é o padrão documentado do React;
+    // o setState que a regra aponta é a marcação de carregando/reset que
+    // PRECISA acontecer antes do await, senão a tela mostra dado velho.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     applyFolders(
       session.directory ? [session.directory, ...(session.extraDirectories ?? [])] : [],
       session.mode === 'code',

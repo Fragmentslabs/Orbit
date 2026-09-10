@@ -1,3 +1,15 @@
+import { Appearance } from 'react-native'
+
+/**
+ * `Appearance.setColorScheme` existe no React Native mas NÃO no
+ * react-native-web: chamá-la direto derruba o alvo web (`npm run
+ * mobile:web`) no boot e nas telas de tema/aparência. No web o tema já vem
+ * do theme-store + NativeWind, então ignorar a ausência é o certo.
+ */
+export function setColorScheme(scheme: 'light' | 'dark'): void {
+  Appearance.setColorScheme?.(scheme)
+}
+
 /**
  * Orbit Mobile Theme
  * CSS variables e utilitários de tema baseados no desktop

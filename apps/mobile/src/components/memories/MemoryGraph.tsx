@@ -1,3 +1,7 @@
+/* eslint-disable react-hooks/refs -- os acessos apontados estão dentro de
+ * worklets do Reanimated ('worklet'), que executam na thread de UI, fora do
+ * ciclo de render do React. Mesmo caso do ImageLightbox: a regra é
+ * conservadora com callbacks entregues a bibliotecas de gesto. */
 /**
  * Grafo de memórias — porte do memory-graph do desktop. O layout vem de
  * @orbit/shared (createMemoryGraphJob), então as duas plataformas desenham

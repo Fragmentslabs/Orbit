@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { Modal, View, Text, TextInput, Pressable, StyleSheet } from 'react-native'
 import { getThemeTokens } from '~/lib/theme-tokens'
 import { useThemeStore } from '~/stores/theme-store'
@@ -18,9 +18,14 @@ export function RenamePrompt({ visible, title, initialValue, onClose, onSubmit }
   const [value, setValue] = useState(initialValue)
   const tokens = getThemeTokens(useThemeStore((s) => s.resolved))
 
-  useEffect(() => {
+  // Ajuste durante o render (padrão oficial do React para "resetar estado
+  // quando uma prop muda") em vez de setState em efeito: sem o commit extra
+  // do efeito, o input já nasce com o valor certo na primeira pintura.
+  const [wasVisible, setWasVisible] = useState(visible)
+  if (visible !== wasVisible) {
+    setWasVisible(visible)
     if (visible) setValue(initialValue)
-  }, [visible, initialValue])
+  }
 
   const submit = () => {
     const trimmed = value.trim()

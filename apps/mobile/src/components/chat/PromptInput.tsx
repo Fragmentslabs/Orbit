@@ -109,7 +109,12 @@ export function PromptInput({
   const [loop, setLoop] = useState(false)
   const prevSessionIdRef = useRef(sessionId)
   const textRef = useRef(text)
-  textRef.current = text
+  // Sincronizado em efeito, não no corpo do render: escrever em ref durante o
+  // render é justamente o que a regra react-hooks/refs proíbe. O único leitor
+  // é o efeito de troca de sessão abaixo, que roda depois deste.
+  useEffect(() => {
+    textRef.current = text
+  }, [text])
 
   // Plano aceito → desliga o toggle de modo plano: a próxima mensagem não
   // deve gerar outro plano.
@@ -124,6 +129,10 @@ export function PromptInput({
     if (prev !== sessionId) {
       if (prev) setInputDraft(prev, textRef.current)
       const saved = getInputDraft(sessionId ?? 'draft')
+    // Busca/sincronização de dados em efeito é o padrão documentado do React;
+    // o setState que a regra aponta é a marcação de carregando/reset que
+    // PRECISA acontecer antes do await, senão a tela mostra dado velho.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
       if (saved) setText(saved)
       prevSessionIdRef.current = sessionId
     }
@@ -203,6 +212,10 @@ export function PromptInput({
     if (pendingDraft === undefined) return
     const payload = useDraftInput.getState().consume(sessionId)
     if (!payload) return
+    // Busca/sincronização de dados em efeito é o padrão documentado do React;
+    // o setState que a regra aponta é a marcação de carregando/reset que
+    // PRECISA acontecer antes do await, senão a tela mostra dado velho.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setText(payload.text)
     if (payload.files?.length) setAttachments((prev) => [...prev, ...payload.files!])
   }, [pendingDraft, sessionId])

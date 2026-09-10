@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { View, Text } from 'react-native'
 import { useTranslation } from 'react-i18next'
 import { getThemeTokens } from '~/lib/theme-tokens'
@@ -16,7 +17,9 @@ export function DateSeparator({ timestamp }: { timestamp: number }) {
   const { t, i18n } = useTranslation()
   const tokens = getThemeTokens(useThemeStore((s) => s.resolved))
 
-  const now = Date.now()
+  // Congelado na montagem: o rótulo não precisa virar "Ontem" sozinho no meio
+  // da sessão, e ler o relógio no render quebra a pureza do componente.
+  const [now] = useState(() => Date.now())
   const yesterday = new Date()
   yesterday.setDate(yesterday.getDate() - 1)
 

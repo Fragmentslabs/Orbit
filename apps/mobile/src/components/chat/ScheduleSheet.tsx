@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { View, Text, Pressable, Animated, Modal, StyleSheet, Dimensions } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import DateTimePicker from '@expo/ui/community/datetime-picker'
@@ -49,10 +49,13 @@ export function ScheduleSheet({ visible, onClose, onConfirm }: ScheduleSheetProp
   const [slideAnim] = useState(() => new Animated.Value(SHEET_HEIGHT))
   const [backdropAnim] = useState(() => new Animated.Value(0))
 
-  const [selectedDate, setSelectedDate] = useState(new Date(Date.now() + 30 * 60 * 1000))
+  const [selectedDate, setSelectedDate] = useState(() => new Date(Date.now() + 30 * 60 * 1000))
   const [selectedPreset, setSelectedPreset] = useState<number | null>(null)
   const [customExpanded, setCustomExpanded] = useState(false)
-  const [preview, setPreview] = useState<string | null>(null)
+  // `preview` e `now` são derivados, não estado: preview é sempre o
+  // formatDateTime da selectedDate, e `now` é congelado na abertura da folha
+  // (ler o relógio no render torna o componente impuro).
+  const [now, setNow] = useState(() => Date.now())
 
   const [pickerTarget, setPickerTarget] = useState<'date' | 'time' | null>(null)
 
@@ -71,20 +74,32 @@ export function ScheduleSheet({ visible, onClose, onConfirm }: ScheduleSheetProp
     ]).start()
 
     if (visible) {
-      const defaultDate = new Date(Date.now() + 30 * 60 * 1000)
-      setSelectedDate(defaultDate)
-      setSelectedPreset(0)
-      setCustomExpanded(false)
-      setPickerTarget(null)
-      setPreview(formatDateTime(defaultDate.getTime(), locale))
+      // Caso irredutível: a folha precisa semear a data a partir do RELÓGIO
+      // quando abre. Ler o relógio no render é impuro (react-hooks/purity), e
+      // a abertura só chega aqui como mudança de prop — não há handler onde
+      // fazer isso. O efeito é o lugar semanticamente certo para leitura
+      // impura; o setState que vem junto é o preço.
+      const abertura = Date.now()
+      /* eslint-disable react-hooks/set-state-in-effect */
+      setNow(abertura)
+      setSelectedDate(new Date(abertura + 30 * 60 * 1000))
+      /* eslint-enable react-hooks/set-state-in-effect */
     }
   }, [visible, slideAnim, backdropAnim])
 
-  useEffect(() => {
-    if (customExpanded) {
-      setPreview(formatDateTime(selectedDate.getTime(), locale))
+  // Estado inicial de cada abertura, ajustado no render: o efeito acima cuida
+  // só da animação, e assim a folha já entra com a data certa na 1ª pintura.
+  const [wasVisible, setWasVisible] = useState(visible)
+  if (visible !== wasVisible) {
+    setWasVisible(visible)
+    if (visible) {
+      setSelectedPreset(0)
+      setCustomExpanded(false)
+      setPickerTarget(null)
     }
-  }, [selectedDate, customExpanded])
+  }
+
+  const preview = formatDateTime(selectedDate.getTime(), locale)
 
   const handlePreset = (preset: SchedulePreset, idx: number) => {
     const ts = preset.getTimestamp()
@@ -92,7 +107,6 @@ export function ScheduleSheet({ visible, onClose, onConfirm }: ScheduleSheetProp
     setCustomExpanded(false)
     setPickerTarget(null)
     setSelectedDate(new Date(ts))
-    setPreview(formatDateTime(ts, locale))
   }
 
   const toggleCustom = () => {
@@ -100,7 +114,6 @@ export function ScheduleSheet({ visible, onClose, onConfirm }: ScheduleSheetProp
     setCustomExpanded(willExpand)
     if (willExpand) {
       setSelectedPreset(null)
-      setPreview(formatDateTime(selectedDate.getTime(), locale))
     } else {
       setPickerTarget(null)
     }
@@ -129,7 +142,7 @@ export function ScheduleSheet({ visible, onClose, onConfirm }: ScheduleSheetProp
     onClose()
   }
 
-  const canConfirm = preview !== null && selectedDate.getTime() > Date.now()
+  const canConfirm = selectedDate.getTime() > now
 
   return (
     <Modal visible={visible} transparent animationType="none" onRequestClose={onClose}>

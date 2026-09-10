@@ -57,8 +57,8 @@ export default function MemoriesScreen() {
   const kinds: MemoryKind[] = mode === 'chat' ? ['core', 'seasonal', 'general'] : ['project', 'general']
 
   // Pool visível (modo + projeto, sem a busca) — o grafo destaca em vez de esconder
+  const [now] = useState(() => Date.now())
   const pool = useMemo(() => {
-    const now = Date.now()
     return index.filter((m) => {
       if (!kinds.includes(m.kind)) return false
       // "general" existe nos dois modos, mas os aprendizados gravados sob ele

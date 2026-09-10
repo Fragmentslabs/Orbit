@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
 import { Animated, Easing } from "react-native";
 
@@ -9,7 +9,11 @@ export function Spin({
   active?: boolean;
   children: ReactNode;
 }) {
-  const rotationAnim = useRef(new Animated.Value(0)).current;
+  // useState com inicializador lazy, e não `useRef(new ...).current`: o valor
+  // é igualmente estável, mas pode ser lido no render (a regra react-hooks/refs
+  // proíbe ler ref aqui) e o Animated.Value é alocado UMA vez — com useRef o
+  // argumento era reconstruído a cada render e descartado.
+  const [rotationAnim] = useState(() => new Animated.Value(0));
 
   useEffect(() => {
     let loop: Animated.CompositeAnimation | null = null;

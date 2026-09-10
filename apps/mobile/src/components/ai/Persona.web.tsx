@@ -1,3 +1,8 @@
+/* eslint-disable react-hooks/immutability -- atribuir `.value` nos inputs da
+ * state machine É a API do Rive (useStateMachineInput devolve um handle
+ * imperativo, não um valor de render). A mutação acontece dentro de um
+ * useEffect; a regra proíbe modificar qualquer retorno de hook, sem distinguir
+ * handle imperativo de valor. */
 import {
   useRive,
   useStateMachineInput,

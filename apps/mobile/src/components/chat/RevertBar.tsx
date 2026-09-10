@@ -18,14 +18,17 @@ export function RevertBar({ session, onUnrevert, onDismiss }: RevertBarProps) {
   const { t } = useTranslation()
   const tokens = getThemeTokens(useThemeStore((s) => s.resolved))
   const [dismissed, setDismissed] = useState(false)
-  const translateY = useRef(new Animated.Value(0)).current
+  // useState com inicializador lazy no lugar de `useRef(new ...).current`:
+  // valor igualmente estável, legível no render (react-hooks/refs proíbe ler
+  // ref aqui) e alocado uma única vez.
+  const [translateY] = useState(() => new Animated.Value(0))
 
   const revert = session.revert
 
   // O early return NÃO pode vir antes deste useRef: ao arrastar a barra,
   // setDismissed(true) provoca um render que pularia o hook e o React
   // derrubaria a árvore com "Rendered fewer hooks than expected".
-  const panResponder = useRef(
+  const [panResponder] = useState(() =>
     PanResponder.create({
       onMoveShouldSetPanResponder: (_, gs) => gs.dy > 10,
       onPanResponderMove: (_, gs) => {
@@ -51,7 +54,7 @@ export function RevertBar({ session, onUnrevert, onDismiss }: RevertBarProps) {
         }
       },
     }),
-  ).current
+  )
 
   // Agora sim: todos os hooks já rodaram.
   if (!revert || dismissed) return null
