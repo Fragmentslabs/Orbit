@@ -13,9 +13,10 @@ function matches(filePath: string, query: string): boolean {
   return query.split(" ").every((token) => haystack.includes(token))
 }
 
-export function FilePalette({ directory, children }: {
+export function FilePalette({ directory, children, className }: {
   directory?: string
   children: ReactNode
+  className?: string
 }) {
   const { t } = useTranslation()
   const controller = usePromptInputController()
@@ -93,7 +94,7 @@ export function FilePalette({ directory, children }: {
   }
 
   return (
-    <div className="relative" onKeyDownCapture={handleKeyDownCapture}>
+    <div className={cn("relative", className)} onKeyDownCapture={handleKeyDownCapture}>
       {open && (filtered.length > 0 || loading) && (
         <div className="absolute bottom-full left-0 right-0 z-50 mb-2 max-h-80 overflow-y-auto rounded-xl border-2 border-sidebar-border bg-popover p-1.5 text-popover-foreground shadow-lg">
           <p className="flex items-center gap-1 px-2 pb-0.5 pt-1.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
