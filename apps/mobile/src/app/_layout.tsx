@@ -125,12 +125,12 @@ export default function RootLayout() {
       router.replace("/(main)");
     } else if (!loadingConfig && connection.status === "disconnected") {
       // Só decide rota depois que o loadConfig() terminou
-      if (connection.error || !config) {
+      if (connection.errorReason || !config) {
         router.replace("/(connection)");
       }
       // Se tem config mas deu erro, a tela de conexão mostra o erro
     }
-  }, [connection.status, connection.error, loadingConfig, config, router]);
+  }, [connection.status, connection.errorReason, loadingConfig, config, router]);
 
   // Esconde splash só depois da decisão de rota inicial
   useEffect(() => {

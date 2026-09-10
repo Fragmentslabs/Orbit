@@ -1,9 +1,10 @@
 import { BrowserWindow, Notification } from 'electron'
-import type { AskItem, ChatMessage } from '@shared/chat'
+import type { AskItem, ChatMessage, MessageErrorKind } from '@shared/chat'
 import { StorageKeys } from '@shared/chat'
 import { readJson } from './storage'
 import { somCustomDisponivel, tocarSom } from './sound'
 import { notifyCompanionMessage } from './companion-server'
+import { t, type MainMessageKey } from './i18n'
 
 /**
  * Notificações nativas do desktop.
@@ -92,14 +93,18 @@ export async function notifyPendingAsk(sessionId: string, item: AskItem): Promis
   if (item.kind === 'question') {
     const primeira = item.questions?.[0]?.text
     void mostrar('pendingAsk', {
-      title: 'Pergunta do Orbit',
-      body: primeira ? `${titulo}: ${primeira}` : `Pergunta pendente em ${titulo}`,
+      title: await t('notif.question.title'),
+      // O texto da pergunta é conteúdo (idioma do modelo/usuário); só o
+      // fallback é frase fixa.
+      body: primeira
+        ? `${titulo}: ${primeira}`
+        : await t('notif.question.pendingIn', { session: titulo }),
       sessionId,
     })
   } else {
     void mostrar('pendingAsk', {
-      title: 'Permissão necessária',
-      body: `${titulo}: ${item.claim?.title ?? 'o agente quer executar uma ação'}`,
+      title: await t('notif.permission.title'),
+      body: `${titulo}: ${item.claim?.title ?? (await t('notif.permission.fallback'))}`,
       sessionId,
     })
   }
@@ -110,13 +115,17 @@ export async function notifyPendingAskBatch(sessionId: string, items: AskItem[])
   if (items.length === 0) return
   const titulo = await tituloDaSessao(sessionId)
   const primeiro = items[0]
-  const extra = items.length > 1 ? ` (+${items.length - 1} mais)` : ''
+  const extra =
+    items.length > 1 ? ` ${await t('notif.batch.more', { count: items.length - 1 })}` : ''
+  const fallback = await t(
+    primeiro.kind === 'question' ? 'notif.pending.question' : 'notif.pending.action',
+  )
   void mostrar('pendingAsk', {
-    title: 'Permissão necessária',
+    title: await t('notif.permission.title'),
     body:
       primeiro.kind === 'question'
-        ? `${titulo}: ${primeiro.questions?.[0]?.text ?? 'pergunta pendente'}${extra}`
-        : `${titulo}: ${primeiro.claim?.title ?? 'ação pendente'}${extra}`,
+        ? `${titulo}: ${primeiro.questions?.[0]?.text ?? fallback}${extra}`
+        : `${titulo}: ${primeiro.claim?.title ?? fallback}${extra}`,
     sessionId,
   })
 }
@@ -136,12 +145,32 @@ export async function notifyNewMessage(sessionId: string, mensagem: ChatMessage)
   notifyCompanionMessage(sessionId, titulo, preview)
 }
 
-/** Erro de chat (fallha do provider, não aborto manual). */
-export async function notifyChatError(sessionId: string, erro: string): Promise<void> {
+/** Motivo curto por tipo de falha, para o corpo do banner. */
+const CHAT_ERROR_KEYS: Record<Exclude<MessageErrorKind, 'unknown'>, MainMessageKey> = {
+  moderation: 'notif.chatError.kind.moderation',
+  'model-unavailable': 'notif.chatError.kind.model-unavailable',
+  'rate-limit': 'notif.chatError.kind.rate-limit',
+  network: 'notif.chatError.kind.network',
+  'provider-config': 'notif.chatError.kind.provider-config',
+}
+
+/** Erro de chat (falha do provider, não aborto manual). */
+export async function notifyChatError(
+  sessionId: string,
+  erro: string,
+  kind?: MessageErrorKind,
+): Promise<void> {
   const titulo = await tituloDaSessao(sessionId)
+  // Falha classificada → motivo traduzido (e curto, que é o que cabe num
+  // banner); o texto cru fica no card de erro dentro do app. Só o `unknown`
+  // cai no texto cru, por falta de explicação própria.
+  const motivo =
+    kind && kind !== 'unknown'
+      ? await t(CHAT_ERROR_KEYS[kind])
+      : erro.slice(0, 200) || (await t('notif.chatError.unexpected'))
   void mostrar('chatError', {
-    title: 'Erro no chat',
-    body: `${titulo}: ${erro.slice(0, 200) || 'erro inesperado'}`,
+    title: await t('notif.chatError.title'),
+    body: `${titulo}: ${motivo}`,
     sessionId,
   })
 }

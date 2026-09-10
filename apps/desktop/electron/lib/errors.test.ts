@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import { classifyProviderError, errorToText, isRecoverableErrorKind } from './errors'
+import { ProviderResolutionError } from './provider-errors'
 
 /**
  * Esta classificação decide se a rotação de modelos dispara. Errar para menos
@@ -87,6 +88,28 @@ describe('classifyProviderError', () => {
       ['gateway', { statusCode: 502, message: 'Bad Gateway' }],
     ])('classifica %s como network', (_label, payload) => {
       expect(classifyProviderError(payload).kind).toBe('network')
+    })
+  })
+
+  describe('configuração do provedor', () => {
+    it.each([
+      ['provedor desconhecido', new ProviderResolutionError('Unknown provider: x', 'unknown-provider')],
+      [
+        'chave ausente',
+        new ProviderResolutionError('No API key configured for Anthropic. Add one in Settings.', 'missing-key'),
+      ],
+      ['SDK não empacotado', new ProviderResolutionError('Missing SDK: @ai-sdk/x', 'missing-sdk')],
+    ])('classifica %s como provider-config', (_label, payload) => {
+      expect(classifyProviderError(payload).kind).toBe('provider-config')
+    })
+
+    it('vence os padrões do provedor (id com "429" não vira rate-limit)', () => {
+      const err = new ProviderResolutionError('Unknown provider: gateway-429', 'unknown-provider')
+      expect(classifyProviderError(err).kind).toBe('provider-config')
+    })
+
+    it('não rotaciona — trocar de modelo não conserta configuração', () => {
+      expect(isRecoverableErrorKind('provider-config')).toBe(false)
     })
   })
 

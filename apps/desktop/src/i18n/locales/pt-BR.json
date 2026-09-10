@@ -669,7 +669,8 @@
       "moderation": "O provedor bloqueou esta resposta no filtro de conteúdo dele. Isso roda no servidor do provedor e não dá para desligar daqui — dá falso-positivo com frequência em turnos que incluem imagens. Trocar de modelo resolve.",
       "model-unavailable": "Este provedor não serve o modelo selecionado. Escolha outro modelo para continuar.",
       "rate-limit": "O provedor atingiu o limite de uso ou de requisições. Aguarde um pouco ou troque de modelo.",
-      "network": "Falha de rede ao falar com o provedor (timeout, indisponibilidade). Tente novamente ou troque de modelo."
+      "network": "Falha de rede ao falar com o provedor (timeout, indisponibilidade). Tente novamente ou troque de modelo.",
+      "provider-config": "O provedor deste modelo não está pronto: falta a chave de API, ou o provedor/SDK não está disponível. Verifique as Configurações."
     },
     "fallbackStatus": "Tentando fallback {{current}}/{{total}}…",
     "stopped": "Parou por atingir o limite de passos — pode ter ficado incompleto. Peça para continuar.",

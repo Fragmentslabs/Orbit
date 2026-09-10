@@ -1,6 +1,12 @@
 import { useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
-import type { ChatEventMessage, PendingAskNotification, NewMessageNotification, ChatStatus } from '@orbit/shared'
+import type {
+  ChatEventMessage,
+  PendingAskNotification,
+  NewMessageNotification,
+  ChatStatus,
+  MessageErrorKind,
+} from '@orbit/shared'
 import { useConnectionStore } from '../stores/connection-store'
 import { useNotificationPrefsStore } from '../stores/notification-prefs-store'
 import { useSessionStore } from '../stores/session-store'
@@ -48,10 +54,17 @@ export function useNotifications() {
       const sessions = useSessionStore.getState().sessions
       const session = sessions.find((s) => s.id === ask.sessionId)
       const sessionTitle = session?.title ?? t('notifications.defaultSessionTitle')
+      // O desktop manda `title` vazio quando o pedido não traz texto próprio
+      // (claim/pergunta) — o fallback é nosso, no idioma do celular.
+      const pedido =
+        ask.title ||
+        (ask.kind === 'permission'
+          ? t('notifications.permissionFallback')
+          : t('notifications.questionFallback'))
 
       void scheduleLocalNotification({
         title: t('notifications.pendingQuestionTitle'),
-        body: `${sessionTitle}: ${ask.title}`,
+        body: `${sessionTitle}: ${pedido}`,
         data: { type: 'pending-ask', sessionId: ask.sessionId },
       })
     })
@@ -82,11 +95,23 @@ export function useNotifications() {
       if (!prefs.chatError) return
 
       const msg = event as ChatEventMessage
-      const chatEvent = msg.event as { type: string; sessionId: string; status: ChatStatus; error?: string } | null
+      const chatEvent = msg.event as {
+        type: string
+        sessionId: string
+        status: ChatStatus
+        error?: string
+        errorKind?: MessageErrorKind
+      } | null
       if (chatEvent?.type === 'status' && chatEvent.status === 'error') {
+        // Kind conhecido → explicação traduzida e curta; o texto cru de
+        // `error` (provedor ou engine) é diagnóstico e não se traduz.
+        const body =
+          chatEvent.errorKind && chatEvent.errorKind !== 'unknown'
+            ? t(`notifications.chatErrorKind.${chatEvent.errorKind}`)
+            : chatEvent.error || t('notifications.chatErrorBody')
         void scheduleLocalNotification({
           title: t('notifications.chatErrorTitle'),
-          body: chatEvent.error ?? t('notifications.chatErrorBody'),
+          body,
           data: { type: 'chat-error', sessionId: chatEvent.sessionId },
         })
       }

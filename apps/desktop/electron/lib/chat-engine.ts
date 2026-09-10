@@ -1571,9 +1571,11 @@ async function runChatTurn(win: BrowserWindow, input: SendMessageInput): Promise
       sessionId,
       status: aborted ? 'idle' : 'error',
       error: aborted ? undefined : message,
+      // Vai junto para o mobile traduzir o aviso: o texto cru é diagnóstico.
+      errorKind: aborted ? undefined : assistantMessage.errorKind,
     })
     // Falha real (não aborto manual) → notificação nativa de erro
-    if (!aborted) void notifyChatError(sessionId, message ?? 'erro inesperado')
+    if (!aborted) void notifyChatError(sessionId, message ?? '', assistantMessage.errorKind)
   } finally {
     clearTurnImages(sessionId)
     if (abortControllers.get(sessionId) === controller) abortControllers.delete(sessionId)

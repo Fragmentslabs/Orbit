@@ -15,7 +15,7 @@ import {
   type AuthRequest,
   newMessageId,
 } from '@orbit/shared'
-import type { ConnectionConfig, ConnectionState } from './types'
+import type { ConnectionConfig, ConnectionState, ConnectionErrorReason } from './types'
 
 // ─── Event Handlers ──────────────────────────────────────────────────────────
 
@@ -29,6 +29,17 @@ const RECONNECT_BASE_DELAY = 1_000
 const RECONNECT_MAX_DELAY = 30_000
 const RECONNECT_MAX_ATTEMPTS = 5
 const REQUEST_TIMEOUT = 15_000
+
+/**
+ * Normaliza o `reason` do auth:error. O desktop pode ser mais novo que o app e
+ * mandar um motivo que este cliente ainda não conhece — nesse caso vira
+ * 'unknown' (com o valor cru preservado em `error` para diagnóstico).
+ */
+function authErrorReason(reason: unknown): ConnectionErrorReason {
+  return reason === 'invalid_pin' || reason === 'already_paired' || reason === 'rate_limited'
+    ? reason
+    : 'unknown'
+}
 
 // ─── CompanionWebSocket ──────────────────────────────────────────────────────
 
@@ -139,7 +150,7 @@ export class CompanionWebSocket {
     try {
       this.ws = new WebSocket(url)
     } catch (err) {
-      this.setState({ status: 'disconnected', error: String(err) })
+      this.setState({ status: 'disconnected', errorReason: 'socket_error', error: String(err) })
       this.scheduleReconnect()
       return
     }
@@ -214,9 +225,13 @@ export class CompanionWebSocket {
     }
 
     if (payload.type === 'auth:error') {
+      const reason = authErrorReason(payload.reason)
       this.setState({
         status: 'disconnected',
-        error: payload.reason,
+        errorReason: reason,
+        // Motivo desconhecido: guarda o valor cru para diagnóstico (não é
+        // exibível — a UI traduz pelo errorReason).
+        error: reason === 'unknown' ? String(payload.reason) : undefined,
       })
       this.shouldReconnect = false
       this.cleanup()
@@ -303,9 +318,13 @@ export class CompanionWebSocket {
 
     if (this.reconnectAttempt >= RECONNECT_MAX_ATTEMPTS) {
       this.shouldReconnect = false
+      // Só o código: o texto (traduzido, com o número de tentativas
+      // interpolado) é montado pelo app.
       this.setState({
         status: 'disconnected',
-        error: `Falha na conexão após ${RECONNECT_MAX_ATTEMPTS} tentativas. Verifique se o Orbit Desktop está rodando.`,
+        errorReason: 'connect_failed',
+        error: undefined,
+        reconnectAttempt: this.reconnectAttempt,
       })
       return
     }

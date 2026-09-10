@@ -6,6 +6,7 @@ import { Globe, History, KeyboardIcon, Loader2, Monitor, X } from 'lucide-react-
 import * as Device from 'expo-device'
 import { useTranslation } from 'react-i18next'
 import { useConnectionStore } from '~/stores/connection-store'
+import { connectionErrorMessage } from '~/lib/connection-error'
 import { prettyDeviceName } from '~/lib/device-name'
 import { useRecentConnectionsStore, type RecentConnection } from '~/stores/recent-connections-store'
 import { Button } from '~/components/ui/button'
@@ -48,6 +49,7 @@ export function ManualConnectSheet({ visible, onClose, prefill }: ManualConnectS
   const [backdropAnim] = useState(() => new Animated.Value(0))
 
   const isConnecting = connection.status === 'connecting' || connection.status === 'authenticating'
+  const errorMessage = connectionErrorMessage(connection, t)
 
   // Altura do teclado — usada para limitar a altura do drawer quando o teclado
   // abre (evita o cabeçalho sair da tela). O levantamento suave fica por conta
@@ -240,11 +242,9 @@ export function ManualConnectSheet({ visible, onClose, prefill }: ManualConnectS
                 </View>
               </View>
 
-              {connection.error ? (
+              {errorMessage ? (
                 <View style={s.errorBox}>
-                  <Text style={[s.errorText, { color: '#ff3344' }]}>
-                    {connection.error === 'invalid_pin' ? t('manualConnectSheet.invalidPin') : connection.error}
-                  </Text>
+                  <Text style={[s.errorText, { color: '#ff3344' }]}>{errorMessage}</Text>
                 </View>
               ) : null}
 

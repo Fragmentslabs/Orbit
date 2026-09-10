@@ -10,7 +10,7 @@ export { CompanionHttp } from './http-client'
 export type { HttpResult } from './http-client'
 export { generateConnectionPayload, parseConnectionPayload, isValidPin } from './qr-code'
 export type { QrPayload } from './qr-code'
-export type { ConnectionConfig, ConnectionState } from './types'
+export type { ConnectionConfig, ConnectionState, ConnectionErrorReason } from './types'
 
 // Re-export shared types commonly used alongside the client
 export {

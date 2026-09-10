@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next'
 import type { ConnectionState } from '@orbit/companion-client'
 import { Badge } from '~/components/ui/badge'
 import { Spin } from '~/components/ui/spin'
+import { connectionErrorMessage } from '~/lib/connection-error'
 import { getThemeTokens } from '~/lib/theme-tokens'
 import { useThemeStore } from '~/stores/theme-store'
 
@@ -25,6 +26,7 @@ export function ConnectionStatus({ state, detailed }: ConnectionStatusProps) {
   const config = STATUS_CONFIG[state.status]
   const { Icon } = config
   const label = t(`connectionStatus.${state.status}`)
+  const errorMessage = connectionErrorMessage(state, t)
   // Na tela de conexão o "Desconectado" é redundante (a tela inteira já diz
   // isso) — só mostra o badge quando há algo relevante a informar.
   const showBadge = state.status !== 'disconnected'
@@ -49,8 +51,8 @@ export function ConnectionStatus({ state, detailed }: ConnectionStatusProps) {
         </>
       )}
 
-      {detailed && state.error ? (
-        <Text style={[s.error, { color: '#ff3344' }]} numberOfLines={1}>{state.error}</Text>
+      {detailed && errorMessage ? (
+        <Text style={[s.error, { color: '#ff3344' }]} numberOfLines={1}>{errorMessage}</Text>
       ) : null}
     </View>
   )

@@ -9,6 +9,7 @@ import { runOrchestration } from '../orchestrator'
 import { broadcastChatEvent, broadcastRotinaEvent } from '../broadcast'
 import { readJson, writeJson } from '../storage'
 import { readAppLanguage } from '../app-language'
+import { t } from '../i18n'
 import { atualizarRotina, listarRotinas, listarRuns, salvarRun } from './repo'
 
 /**
@@ -98,16 +99,19 @@ async function colherResultado(sessionId: string): Promise<{ tokens: number; cus
   return { tokens, custo, erro }
 }
 
-function notificar(rotina: Rotina, run: RotinaRun): void {
+async function notificar(rotina: Rotina, run: RotinaRun): Promise<void> {
   if (!Notification.isSupported()) return
   const ok = run.status === 'ok'
-  new Notification({
-    title: rotina.titulo,
-    body: ok
-      ? `Rotina concluída${run.custo > 0 ? ` — US$ ${run.custo.toFixed(4)}` : ''}`
-      : `Rotina falhou: ${(run.erro ?? '').slice(0, 120) || 'erro desconhecido'}`,
-    silent: ok,
-  }).show()
+  // Corpo em frase fixa traduzida (o título é o nome da rotina, dado do usuário);
+  // o erro da execução é texto do provedor/engine — não se traduz.
+  const body = ok
+    ? run.custo > 0
+      ? await t('notif.rotina.doneWithCost', { cost: run.custo.toFixed(4) })
+      : await t('notif.rotina.done')
+    : await t('notif.rotina.failed', {
+        error: (run.erro ?? '').slice(0, 120) || (await t('notif.rotina.unknownError')),
+      })
+  new Notification({ title: rotina.titulo, body, silent: ok }).show()
 }
 
 // ─── Execução ────────────────────────────────────────────────────────────────
@@ -206,7 +210,7 @@ export async function executarRotina(rotina: Rotina, motivo: 'agenda' | 'manual'
 
   await salvarRun(run)
   emitir({ type: 'run', run })
-  notificar(rotina, run)
+  void notificar(rotina, run)
   return session.id
 }
 

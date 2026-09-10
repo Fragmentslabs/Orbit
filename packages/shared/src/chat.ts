@@ -268,10 +268,20 @@ export interface AssistantSnapshot {
  * - `model-unavailable`: o modelo não existe/não é servido pelo provedor.
  * - `rate-limit`: limite de uso/requisições do provedor (429, FreeUsageLimit).
  * - `network`: falha de rede/indisponibilidade do endpoint (timeout, 5xx...).
- * Todas, exceto `unknown`, são resolvidas trocando de modelo — é o que a
- * rotação de modelos faz automaticamente (ver `resolveRotation` no main).
+ * `moderation`, `model-unavailable`, `rate-limit` e `network` são resolvidas
+ * trocando de modelo — é o que a rotação de modelos faz automaticamente (ver
+ * `resolveRotation` no main). `provider-config` (provedor/SDK desconhecido,
+ * chave ausente) e `unknown` NÃO são: trocar de modelo não conserta
+ * configuração.
  */
-export type MessageErrorKind = "moderation" | "model-unavailable" | "rate-limit" | "network" | "unknown"
+export type MessageErrorKind =
+  | "moderation"
+  | "model-unavailable"
+  | "rate-limit"
+  | "network"
+  /** Configuração nossa, não falha do provedor: chave ausente, provedor/SDK desconhecido. */
+  | "provider-config"
+  | "unknown"
 
 export interface ChatMessage {
   id: string
@@ -495,7 +505,15 @@ export interface SendMessageInput {
 }
 
 export type ChatEvent =
-  | { type: "status"; sessionId: string; status: ChatStatus; error?: string; fallback?: RotationFallbackInfo }
+  | {
+      type: "status"
+      sessionId: string
+      status: ChatStatus
+      error?: string
+      /** Classificação do erro — o texto de `error` é diagnóstico e não se traduz. */
+      errorKind?: MessageErrorKind
+      fallback?: RotationFallbackInfo
+    }
   | { type: "message"; sessionId: string; message: ChatMessage }
   /** Substituição completa do histórico (ex: compactação insere resumo no meio) */
   | { type: "messages"; sessionId: string; messages: ChatMessage[] }

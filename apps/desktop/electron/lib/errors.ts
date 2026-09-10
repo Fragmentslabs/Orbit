@@ -1,4 +1,5 @@
 import type { MessageErrorKind } from '@shared/chat'
+import { ProviderResolutionError } from './provider-errors'
 
 /**
  * Converte um valor lançado em texto legível. O SDK de AI e os gateways
@@ -112,6 +113,18 @@ const NETWORK_PATTERNS = [
   /\b5\d{2}\b/, // HTTP 5xx
 ]
 
+/**
+ * Erro de configuração de provedor, mesmo reembrulhado. Instâncias de módulos
+ * distintos (bundle duplicado) escapam do `instanceof`, então o `name` — fixado
+ * no construtor — é o segundo critério.
+ */
+function isProviderConfigError(value: unknown): boolean {
+  return (
+    value instanceof ProviderResolutionError ||
+    (value instanceof Error && value.name === 'ProviderResolutionError')
+  )
+}
+
 export interface ClassifiedError {
   kind: MessageErrorKind
   /** Texto cru do provedor, preservado para diagnóstico no card de erro. */
@@ -152,6 +165,10 @@ function matchable(value: unknown): string {
  */
 export function classifyProviderError(value: unknown): ClassifiedError {
   const detail = errorToText(value)
+  // Falha de CONFIGURAÇÃO (provedor/SDK desconhecido, chave ausente) antes de
+  // qualquer padrão: o texto é nosso, não do provedor — e um id de provider com
+  // "429" no meio casaria com rate-limit.
+  if (isProviderConfigError(value)) return { kind: 'provider-config', detail }
   let haystack = detail
   try {
     haystack = matchable(value)

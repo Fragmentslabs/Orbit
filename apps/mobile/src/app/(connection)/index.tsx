@@ -38,7 +38,7 @@ export default function ConnectionScreen() {
   const [prefill, setPrefill] = useState<{ host: string; port: number } | undefined>(undefined)
   const tokens = getThemeTokens(useThemeStore((s) => s.resolved))
 
-  const isAutoReconnecting = !!savedConfig && connection.status !== 'disconnected' && !connection.error
+  const isAutoReconnecting = !!savedConfig && connection.status !== 'disconnected' && !connection.errorReason
 
   // Ao entrar na tela o persona começa dormindo e acorda depois de um instante,
   // tocando a transição sleep → normal (espelho do fluxo do desktop). Só depois

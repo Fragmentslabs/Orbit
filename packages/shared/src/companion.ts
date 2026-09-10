@@ -729,6 +729,11 @@ export interface PendingAskNotification {
   sessionId: string
   requestId: string
   kind: 'permission' | 'question'
+  /**
+   * Texto do pedido (claim ou primeira pergunta). Vazio quando o item não traz
+   * texto próprio — nesse caso o app mobile aplica o fallback traduzido dele,
+   * que é o idioma do celular (o desktop traduz o dele, ver lib/i18n.ts).
+   */
   title: string
   questions?: unknown[]
 }

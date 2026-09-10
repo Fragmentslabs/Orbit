@@ -253,7 +253,14 @@
     "hiddenActions_other": "+{{count}} hidden actions — show all",
     "sourcesConsulted_one": "{{count}} Source Consulted",
     "sourcesConsulted_other": "{{count}} Sources Consulted",
-    "imageUnavailable": "Image unavailable"
+    "imageUnavailable": "Image unavailable",
+    "errorKind": {
+      "moderation": "The provider blocked this response with its content filter. This runs on the provider's servers and can't be turned off from here — it misfires often on turns that include images. Switching to another model resolves it.",
+      "model-unavailable": "This provider doesn't serve the selected model. Pick another model to continue.",
+      "rate-limit": "The provider hit its usage or request limit. Wait a bit or switch models.",
+      "network": "Network error talking to the provider (timeout, outage). Try again or switch models.",
+      "provider-config": "This model's provider isn't ready: the API key is missing or the provider/SDK isn't available. Check Settings."
+    }
   },
   "askCard": {
     "permissionRequired": "Permission required",
@@ -823,6 +830,14 @@
     "sessionsInPeriod": "Sessions in period",
     "peakHour": "Peak hour"
   },
+  "connectionErrors": {
+    "invalid_pin": "Invalid PIN. Check the PIN shown on Orbit Desktop.",
+    "already_paired": "This device is already paired. Unpair it on Orbit Desktop and try again.",
+    "rate_limited": "Too many connection attempts. Wait a moment and try again.",
+    "connect_failed": "Could not connect after {{attempts}} attempts. Check that Orbit Desktop is running.",
+    "socket_error": "Could not start the connection. Check the IP address and port.",
+    "unknown": "Connection failed."
+  },
   "connectionScreen": {
     "reconnecting": "Reconnecting",
     "cancel": "Cancel",
@@ -862,7 +877,6 @@
     "ipAddress": "IP address",
     "port": "Port",
     "pin": "PIN",
-    "invalidPin": "Invalid PIN. Check the PIN shown on Orbit Desktop.",
     "connecting": "Connecting...",
     "connect": "Connect",
     "reset": "Clear fields"
@@ -870,10 +884,19 @@
   "notifications": {
     "defaultSessionTitle": "Session",
     "pendingQuestionTitle": "Pending question",
+    "permissionFallback": "the agent wants to run an action",
+    "questionFallback": "pending question",
     "newMessageTitle": "New message",
     "newMessageBody": "New message",
     "chatErrorTitle": "Chat error",
-    "chatErrorBody": "An error occurred during the chat."
+    "chatErrorBody": "An error occurred during the chat.",
+    "chatErrorKind": {
+      "moderation": "the provider blocked this reply with its content filter — switch models",
+      "model-unavailable": "this provider does not serve the selected model — pick another one",
+      "rate-limit": "provider usage limit reached — wait a bit or switch models",
+      "network": "network failure talking to the provider — try again",
+      "provider-config": "the provider is not configured — check Settings"
+    }
   },
   "slashCommands": {
     "userSkill": "User skill",

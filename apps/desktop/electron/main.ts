@@ -48,6 +48,7 @@ import { computeAnalytics } from './lib/analytics'
 import type { AnalyticsRange } from '@shared/analytics'
 import { approvePendingSkill, discardPendingSkill, listPendingSkills } from './lib/skills/pending'
 import { dataDir, listKeys, readJson, removeJson, writeJson } from './lib/storage'
+import { loadMainLocale, setMainLocale } from './lib/i18n'
 import { loginShellArgs, userShellEnv } from './lib/shell-env'
 import { searchSessions } from './lib/search-sessions'
 import { tocarSom, caminhoSom } from './lib/sound'
@@ -928,6 +929,10 @@ app.whenReady().then(() => {
   // Instância secundária: o lock não foi obtido e o app já está saindo.
   if (!gotSingleInstanceLock) return
 
+  // Idioma persistido do renderer: carrega antes de qualquer aviso nativo, que
+  // pode disparar (rotina agendada) sem nenhum pedido vindo da UI.
+  void loadMainLocale()
+
   createAppMenu()
 
   // Controles da titlebar customizada (frame: false em win/linux)
@@ -1214,8 +1219,12 @@ app.whenReady().then(() => {
   })
   // Idioma do app: o renderer publica, o main lê quando dispara algo sem
   // pedido do renderer (rotinas agendadas).
-  ipcMain.handle('app:setLanguage', (_event, language: string) =>
-    writeJson(StorageKeys.appLanguage, language))
+  ipcMain.handle('app:setLanguage', (_event, language: string) => {
+    // O idioma também vale para as notificações nativas, que nascem aqui
+    // (ver lib/i18n.ts).
+    setMainLocale(language)
+    return writeJson(StorageKeys.appLanguage, language)
+  })
   ipcMain.handle('init:status', (_event, directory: string) => getInitStatus(directory))
   // Parar a análise disparada pelo card do projeto, que roda fora de qualquer
   // sessão de chat (a do /init é cancelada junto com a sessão, em chat:abort).

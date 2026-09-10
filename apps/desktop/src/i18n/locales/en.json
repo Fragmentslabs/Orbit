@@ -669,7 +669,8 @@
       "moderation": "The provider blocked this response with its content filter. This runs on the provider's servers and can't be turned off from here — it misfires often on turns that include images. Switching to another model resolves it.",
       "model-unavailable": "This provider doesn't serve the selected model. Pick another model to continue.",
       "rate-limit": "The provider hit its usage or request limit. Wait a bit or switch models.",
-      "network": "Network error talking to the provider (timeout, outage). Try again or switch models."
+      "network": "Network error talking to the provider (timeout, outage). Try again or switch models.",
+      "provider-config": "This model's provider isn't ready: the API key is missing or the provider/SDK isn't available. Check Settings."
     },
     "fallbackStatus": "Trying fallback {{current}}/{{total}}…",
     "stopped": "Stopped after reaching the step limit — it may be incomplete. Ask it to continue.",

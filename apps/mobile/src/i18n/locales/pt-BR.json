@@ -253,7 +253,14 @@
     "hiddenActions_other": "+{{count}} ações ocultas — mostrar todas",
     "sourcesConsulted_one": "{{count}} Fonte Consultada",
     "sourcesConsulted_other": "{{count}} Fontes Consultadas",
-    "imageUnavailable": "Imagem indisponível"
+    "imageUnavailable": "Imagem indisponível",
+    "errorKind": {
+      "moderation": "O provedor bloqueou esta resposta no filtro de conteúdo dele. Isso roda no servidor do provedor e não dá para desligar daqui — dá falso-positivo com frequência em turnos que incluem imagens. Trocar de modelo resolve.",
+      "model-unavailable": "Este provedor não serve o modelo selecionado. Escolha outro modelo para continuar.",
+      "rate-limit": "O provedor atingiu o limite de uso ou de requisições. Aguarde um pouco ou troque de modelo.",
+      "network": "Falha de rede ao falar com o provedor (timeout, indisponibilidade). Tente novamente ou troque de modelo.",
+      "provider-config": "O provedor deste modelo não está pronto: falta a chave de API, ou o provedor/SDK não está disponível. Verifique as Configurações."
+    }
   },
   "askCard": {
     "permissionRequired": "Permissão necessária",
@@ -823,6 +830,14 @@
     "sessionsInPeriod": "Sessões no período",
     "peakHour": "Horário de pico"
   },
+  "connectionErrors": {
+    "invalid_pin": "PIN inválido. Verifique o PIN exibido no Orbit Desktop.",
+    "already_paired": "Este dispositivo já está pareado. Despareie no Orbit Desktop e tente de novo.",
+    "rate_limited": "Muitas tentativas de conexão. Aguarde um instante e tente de novo.",
+    "connect_failed": "Falha na conexão após {{attempts}} tentativas. Verifique se o Orbit Desktop está rodando.",
+    "socket_error": "Não foi possível iniciar a conexão. Verifique o endereço IP e a porta.",
+    "unknown": "Falha na conexão."
+  },
   "connectionScreen": {
     "reconnecting": "Reconectando",
     "cancel": "Cancelar",
@@ -862,7 +877,6 @@
     "ipAddress": "Endereço IP",
     "port": "Porta",
     "pin": "PIN",
-    "invalidPin": "PIN inválido. Verifique o PIN exibido no Orbit Desktop.",
     "connecting": "Conectando...",
     "connect": "Conectar",
     "reset": "Limpar campos"
@@ -870,10 +884,19 @@
   "notifications": {
     "defaultSessionTitle": "Sessão",
     "pendingQuestionTitle": "Pergunta pendente",
+    "permissionFallback": "o agente quer executar uma ação",
+    "questionFallback": "pergunta pendente",
     "newMessageTitle": "Nova mensagem",
     "newMessageBody": "Nova mensagem",
     "chatErrorTitle": "Erro no chat",
-    "chatErrorBody": "Ocorreu um erro durante o chat."
+    "chatErrorBody": "Ocorreu um erro durante o chat.",
+    "chatErrorKind": {
+      "moderation": "o filtro de conteúdo do provedor bloqueou a resposta — troque de modelo",
+      "model-unavailable": "o provedor não serve o modelo selecionado — escolha outro modelo",
+      "rate-limit": "limite de uso do provedor atingido — aguarde ou troque de modelo",
+      "network": "falha de rede ao falar com o provedor — tente novamente",
+      "provider-config": "o provedor não está configurado — verifique as Configurações"
+    }
   },
   "slashCommands": {
     "userSkill": "Skill do usuário",

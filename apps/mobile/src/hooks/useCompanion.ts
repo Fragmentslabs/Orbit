@@ -106,7 +106,7 @@ export function useCompanion() {
         void hydrateAppPreferences()
         // Processa fila de mensagens offline
         useMessageQueueStore.getState().processAllQueues()
-      } else if (state.status === 'disconnected' && state.error === 'invalid_pin') {
+      } else if (state.status === 'disconnected' && state.errorReason === 'invalid_pin') {
         // PIN expirou (TTL de 5 min no desktop) — esquece a config salva para
         // não ficar preso num loop de auto-reconexão que sempre falha
         void useConnectionStore.getState().clearSavedConfig()

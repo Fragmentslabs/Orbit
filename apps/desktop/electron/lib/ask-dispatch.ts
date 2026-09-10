@@ -22,15 +22,24 @@ interface PendingBatch {
 
 const batches = new Map<string, PendingBatch>()
 
+/**
+ * Título humano do pedido para o companion. Vazio quando o item não traz texto
+ * próprio: o app mobile (que pode estar em outro idioma) aplica o fallback
+ * traduzido dele — mandar uma frase pronta daqui era o que fazia um celular em
+ * inglês receber aviso em português. A notificação nativa do desktop resolve o
+ * fallback do lado de cá, em lib/notifications.ts.
+ */
+function tituloDoPedido(item: AskItem): string {
+  return item.kind === 'permission' ? (item.claim?.title ?? '') : (item.questions?.[0]?.text ?? '')
+}
+
 function emitSingle(target: string, item: AskItem): void {
   void notifyPendingAsk(target, item)
   notifyCompanionAsk(
     target,
     item.requestId,
     item.kind === 'permission' ? 'permission' : 'question',
-    item.kind === 'permission'
-      ? (item.claim?.title ?? 'O agente quer executar uma ação')
-      : (item.questions?.[0]?.text ?? 'Pergunta pendente do Orbit'),
+    tituloDoPedido(item),
     item.questions,
   )
   broadcastChatEvent(
@@ -67,9 +76,7 @@ function flushBatch(target: string): void {
     target,
     primeiro.requestId,
     primeiro.kind === 'permission' ? 'permission' : 'question',
-    primeiro.kind === 'permission'
-      ? (primeiro.claim?.title ?? 'O agente quer executar uma ação')
-      : (primeiro.questions?.[0]?.text ?? 'Pergunta pendente do Orbit'),
+    tituloDoPedido(primeiro),
     primeiro.questions,
   )
   broadcastChatEvent({ type: 'ask:batch', sessionId: target, batchId: newRequestId(), items: batch.items })

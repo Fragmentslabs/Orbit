@@ -324,10 +324,10 @@ export function MessageError({
   onRetry?: () => void
 }) {
   const { t } = useTranslation()
-  // Falhas do provedor têm explicação própria; o texto cru vira detalhe
-  // secundário (nunca é descartado — é o que permite diagnosticar).
-  const explained =
-    kind === "moderation" || kind === "model-unavailable" || kind === "rate-limit" || kind === "network"
+  // Falha classificada tem explicação própria (chat.errorKind.*); o texto cru
+  // vira detalhe secundário (nunca é descartado — é o que permite
+  // diagnosticar). Só `unknown` não tem explicação e mostra o texto cru.
+  const explained = kind !== undefined && kind !== "unknown"
 
   return (
     <div className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive">

@@ -10,6 +10,7 @@ import { createCohere } from '@ai-sdk/cohere'
 import type { LanguageModel } from 'ai'
 import { resolveApiKey } from './auth'
 import { getProvider } from './catalog'
+import { ProviderResolutionError } from './provider-errors'
 import { currentProviderSession } from './provider-session'
 
 /**
@@ -53,7 +54,9 @@ export function isServedByOpenAiCompatible(npm: string | undefined): boolean {
   return !(npm in BUNDLED_SDKS)
 }
 
-export class ProviderResolutionError extends Error {}
+/** Reexportado daqui porque era o endereço público da classe antes de o módulo
+ *  existir (ver provider-errors.ts). */
+export { ProviderResolutionError } from './provider-errors'
 
 /**
  * Header de sessão exigido pelo OpenCode (Zen e Go): sem ele a API responde
@@ -108,14 +111,19 @@ export async function resolveModel(
   opts?: ResolveModelOptions,
 ): Promise<LanguageModel> {
   const provider = await getProvider(providerId)
-  if (!provider) throw new ProviderResolutionError(`Provedor desconhecido: ${providerId}`)
+  if (!provider) {
+    // Mensagens daqui são DIAGNÓSTICO (ficam em ChatMessage.error e aparecem
+    // como detalhe cru no card) — a explicação que o usuário lê é traduzida na
+    // UI a partir do `reason`/kind (chat.errorKind.*, notif.chatError.kind.*).
+    throw new ProviderResolutionError(`Unknown provider: ${providerId}`, 'unknown-provider')
+  }
 
   const npm = provider.npm ?? '@ai-sdk/openai-compatible'
 
   // SDKs que usam auth própria do ambiente (gcloud ADC, AWS credentials, etc.)
   if (npm === '@ai-sdk/google-vertex' || npm === '@ai-sdk/amazon-bedrock') {
     const factory = BUNDLED_SDKS[npm]
-    if (!factory) throw new ProviderResolutionError(`SDK não encontrado: ${npm}`)
+    if (!factory) throw new ProviderResolutionError(`Missing SDK: ${npm}`, 'missing-sdk')
     const sdk = (factory as () => ReturnType<typeof createVertex>)()
     return sdk(modelId)
   }
@@ -123,7 +131,8 @@ export async function resolveModel(
   const apiKey = await resolveApiKey(providerId, [...provider.env])
   if (!apiKey && provider.env.length > 0) {
     throw new ProviderResolutionError(
-      `Nenhuma chave de API configurada para ${provider.name}. Adicione uma em Configurações.`,
+      `No API key configured for ${provider.name}. Add one in Settings.`,
+      'missing-key',
     )
   }
 
@@ -141,7 +150,8 @@ export async function resolveModel(
 
   if (!provider.api) {
     throw new ProviderResolutionError(
-      `O provedor ${provider.name} requer o SDK ${npm}, que não está disponível no Orbit ainda.`,
+      `Provider ${provider.name} requires the SDK ${npm}, which Orbit does not bundle yet.`,
+      'missing-sdk',
     )
   }
 

@@ -702,7 +702,20 @@ export function ChatAssistantMessage({ message, compact, isLast, isBusy, onRever
 
       {message.error && (
         <View className="mt-2 w-full rounded-lg px-3 py-2" style={{ borderWidth: 1, borderColor: tokens.destructive, backgroundColor: hslToRgba(tokens.destructive.replace(/hsla?\(|\)/g, '').replace(/,/g, ''), 0.12) }}>
-          <Text className="text-xs" style={{ color: tokens.destructive }}>{message.error}</Text>
+          {/* Falha classificada tem explicação traduzida; o texto cru do provedor
+              desce para detalhe secundário (mesma regra do desktop). */}
+          {message.errorKind && message.errorKind !== 'unknown' ? (
+            <>
+              <Text className="text-xs" style={{ color: tokens.destructive }}>
+                {t(`chatAssistant.errorKind.${message.errorKind}`)}
+              </Text>
+              <Text className="mt-1 font-mono text-[11px]" style={{ color: tokens.destructive, opacity: 0.7 }}>
+                {message.error}
+              </Text>
+            </>
+          ) : (
+            <Text className="text-xs" style={{ color: tokens.destructive }}>{message.error}</Text>
+          )}
         </View>
       )}
 
