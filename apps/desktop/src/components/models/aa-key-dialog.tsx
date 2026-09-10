@@ -21,7 +21,10 @@ import { useModelsStore } from "@/src/stores/models-store"
  * OpenRouter embute. A chave vai para o auth.json ("artificialanalysis").
  */
 
-const AA_KEYS_URL = "https://artificialanalysis.ai/api-access"
+// A antiga /api-access saiu do ar (404). A página viva do "Free Artificial
+// Analysis Data API" — que é onde a chave gratuita é obtida e onde o endpoint
+// que consumimos (api/v2/data/llms/models) está documentado — é a de docs.
+const AA_KEYS_URL = "https://artificialanalysis.ai/documentation#authentication"
 
 export function AAKeyButton() {
   const { t } = useTranslation()

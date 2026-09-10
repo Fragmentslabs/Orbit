@@ -383,7 +383,7 @@
       "connect": "No speed data — connect Artificial Analysis",
       "title": "Connect Artificial Analysis",
       "description": "The free key unlocks measured speed (tokens/s, TTFT) and technical benchmarks (GPQA, HLE, SWE-Bench…) for the Speed scores and filters.",
-      "createKey": "Create key at artificialanalysis.ai/api-access",
+      "createKey": "Get a free key at artificialanalysis.ai",
       "keyPlaceholder": "API Key…",
       "cancel": "Cancel",
       "saving": "Saving…",

@@ -383,7 +383,7 @@
       "connect": "Sem dados de velocidade — conectar Artificial Analysis",
       "title": "Conectar Artificial Analysis",
       "description": "A chave gratuita libera velocidade medida (tokens/s, TTFT) e benchmarks técnicos (GPQA, HLE, SWE-Bench…) para os scores e filtros de Speed.",
-      "createKey": "Criar chave em artificialanalysis.ai/api-access",
+      "createKey": "Criar chave gratuita em artificialanalysis.ai",
       "keyPlaceholder": "Chave de API…",
       "cancel": "Cancelar",
       "saving": "Salvando…",
