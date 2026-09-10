@@ -120,6 +120,19 @@ export interface Esteira {
   /** O engine faz push do branch ao concluir a última fase (padrão false — commit local) */
   pushAoFinal: boolean
   /**
+   * O engine cria um commit final ao concluir a última fase, contendo só o
+   * que a task mudou (padrão true). As fases posteriores à desenvolvimento
+   * não podem commitar (templates), então sem isto os ajustes delas viveriam
+   * só na working tree — e um push (pushAoFinal) subiria um branch sem eles.
+   */
+  commitAoFinal: boolean
+  /**
+   * Prompt do agente que escreve a mensagem do commit final. Ausente = o
+   * default (ESTEIRA_COMMIT_PROMPT_PADRAO): seguir as preferências de commits
+   * do usuário na memória; sem elas, Conventional Commits com header e body.
+   */
+  commitPrompt?: string
+  /**
    * Instrui as fases a capturarem prints do resultado visual das mudanças
    * (run_browser_script / panel_screenshot) e a anexá-los na anotação.
    */
@@ -179,6 +192,13 @@ export interface Task {
    * não subiu — o erro fica aqui para o usuário resolver (a task não pausa).
    */
   pushFalha?: string
+  /**
+   * Commit final falhou (commitAoFinal ligado): o erro do git fica aqui — a
+   * task não pausa, o trabalho está feito; commit e push são entrega.
+   */
+  commitFalha?: string
+  /** Hash do commit final criado pelo engine (commitAoFinal ligado). */
+  commitFinalHash?: string
   /** Origem da task, quando criada pelo agente a partir de um chat */
   origemSessionId?: string
   /**
@@ -253,6 +273,10 @@ export interface NovaEsteiraInput {
   branch?: string
   worktree?: string
   pushAoFinal?: boolean
+  /** Commit final do engine ao concluir a última fase (padrão true) */
+  commitAoFinal?: boolean
+  /** Prompt da mensagem do commit final (ausente = ESTEIRA_COMMIT_PROMPT_PADRAO) */
+  commitPrompt?: string
   /** Instrui as fases a capturarem prints do resultado visual */
   printsDoResultado?: boolean
   modoOperacao?: 'manual' | 'automatico'
@@ -274,3 +298,18 @@ export interface NovaTaskInput {
  * daria mais uma decisão sem resposta certa.
  */
 export const ESTEIRA_RETRY_PADRAO = 3
+
+/**
+ * Prompt padrão do agente que escreve a mensagem do commit final (D10). É o
+ * valor de `Esteira.commitPrompt` quando o usuário não customiza: segue as
+ * preferências de commits dele salvas nas memórias; sem elas, Conventional
+ * Commits com header + body de tópicos resumidos. O contexto (task, anotações
+ * das fases, arquivos alterados) vai na mensagem do usuário, como nas fases.
+ */
+export const ESTEIRA_COMMIT_PROMPT_PADRAO = `Write the git commit message for the final state of this pipeline task.
+
+Follow the user's commit preferences from memory when they exist (language, format, scope). If there are none, fall back to Conventional Commits: a concise header "type: subject" plus a body with the summarized topics of what changed.
+
+Base the message ONLY on the actual changes in the context below (task description, notes from the phases, changed files) — never invent work that was not done. The header must be short; the body lists the main topics, not a file-by-file log.
+
+Output just the commit message: first line the header, then a blank line, then the body. No markdown fences, no commentary.`

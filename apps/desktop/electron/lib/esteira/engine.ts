@@ -1,13 +1,22 @@
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
+import { generateText } from 'ai'
 import type { AnotacaoFase, Esteira, EsteiraEvent, Projeto, Task } from '@shared/esteira'
-import { ESTEIRA_RETRY_PADRAO } from '@shared/esteira'
+import { ESTEIRA_COMMIT_PROMPT_PADRAO, ESTEIRA_RETRY_PADRAO } from '@shared/esteira'
+import type { SendMessageInput } from '@shared/chat'
 import { capture, diff } from '../snapshot'
 import { userShellEnv } from '../shell-env'
 import { criaCiclo, dependenciasPendentes } from './contrato'
 import { executarFase, type ToolProgress } from './runner'
 import { atualizarTask, listarEsteiras, listarProjetos, listarTasks, modificarTasks } from './repo'
 import { broadcastEsteiraEvent } from '../broadcast'
+import { loadPromptContext, search as buscarMemoria } from '../memory/service'
+import { getProvider } from '../catalog'
+import { resolveModel } from '../providers'
+import { withProviderSession } from '../provider-session'
+import { buildProviderOptions, interleavedReasoningField, normalizeMessages } from '../reasoning'
+import { toTokenUsage } from '../usage'
+import type { Memory } from '@shared/memory'
 
 const execFileAsync = promisify(execFile)
 
@@ -231,13 +240,25 @@ async function rodarTask(esteiraId: string, taskId: string, retomandoInterrompid
       }
 
       const ultimaFase = indice >= esteira.fases.length - 1
-      // Push final determinístico: a fase Relatório (que fazia isso) não
-      // existe mais — ninguém vai subir o branch se o engine não fizer.
-      const pushFalha = ultimaFase && esteira.pushAoFinal ? await tentarPush(raiz, controller.signal) : undefined
+      // Commit final + push determinísticos (D10): as fases posteriores à
+      // desenvolvimento não podem commitar, então o commit aqui captura o
+      // trabalho completo da task — incluindo os ajustes de validação — em
+      // vez de deixá-lo solto na working tree. Push implica commit: não
+      // existe entrega de branch sem o estado final commitado.
+      const querCommitFinal = ultimaFase && (esteira.commitAoFinal !== false || esteira.pushAoFinal)
+      const commit = querCommitFinal
+        ? await tentarCommit(raiz, esteira, task, projeto.pastas, controller.signal)
+        : undefined
+      const pushFalha =
+        ultimaFase && esteira.pushAoFinal
+          ? commit?.erro
+            ? 'Commit final falhou; o push foi cancelado para não subir trabalho incompleto.'
+            : await tentarPush(raiz, controller.signal)
+          : undefined
       const diffAtual = await medirDiff()
-      // Pausa caiu DEPOIS do modelo terminar (durante o push/diff): a fase
-      // ainda não conta como concluída — o retomar roda ela de novo do zero,
-      // como qualquer fase interrompida. Sem este check, o persist abaixo
+      // Pausa caiu DEPOIS do modelo terminar (durante o commit/push/diff): a
+      // fase ainda não conta como concluída — o retomar roda ela de novo do
+      // zero, como qualquer fase interrompida. Sem este check, o persist abaixo
       // sobrescrevia a pausa com 'concluida' na última fase (corrida entre
       // pausarTask e a gravação de conclusão).
       if (controller.signal.aborted) break
@@ -245,8 +266,10 @@ async function rodarTask(esteiraId: string, taskId: string, retomandoInterrompid
         ...t,
         diff: diffAtual ?? t.diff,
         anotacoes: [...t.anotacoes, anotacao],
-        tokens: t.tokens + resultado.tokens,
-        custo: t.custo + resultado.custo,
+        tokens: t.tokens + resultado.tokens + (commit?.tokens ?? 0),
+        custo: t.custo + resultado.custo + (commit?.custo ?? 0),
+        commitFalha: commit?.erro,
+        commitFinalHash: commit?.hash,
         pushFalha,
         faseAtual: ultimaFase ? t.faseAtual : indice + 1,
         // Guarda extra: se a pausa venceu esta gravação, não conclui.
@@ -307,6 +330,270 @@ async function concluir(esteiraId: string, taskId: string, inicioExecucao: numbe
           tempoTrabalhoMs: t.tempoTrabalhoMs + (Date.now() - inicioExecucao),
         },
   )
+}
+
+// ─── Commit final ────────────────────────────────────────────────────────────
+
+interface ResultadoCommit {
+  /** Erro do git ao medir/encenar/commitar (mensagem não gerada NÃO é erro — vira fallback) */
+  erro?: string
+  /** Hash curto do commit criado */
+  hash?: string
+  tokens: number
+  custo: number
+}
+
+/** Quantos caminhos por `git add` antes de cair no add -A da árvore inteira. */
+const MAX_CAMINHOS_ADD = 2000
+
+/**
+ * Commit final determinístico quando `commitAoFinal` está ligado (D10).
+ *
+ * Sem ele, os ajustes das fases posteriores à desenvolvimento viveriam só na
+ * working tree (os templates as proíbem de commitar) — e o push subiria um
+ * branch sem esse trabalho. A mensagem é gerada por uma chamada one-shot (sem
+ * tools) com o MESMO contexto que uma fase recebe: descrição da task, notas
+ * das fases anteriores, preferências de commits do usuário na memória e o
+ * estilo dos commits recentes do repo. Sem diff, nada é commitado — as fases
+ * anteriores podem já ter commitado tudo, e commit vazio não existe.
+ *
+ * Falha NÃO reverte a conclusão da task (igual ao push): o erro vai para
+ * `task.commitFalha` e o push é cancelado, para não subir trabalho incompleto.
+ */
+async function tentarCommit(
+  raiz: string,
+  esteira: Esteira,
+  task: Task,
+  pastas: string[],
+  signal: AbortSignal,
+): Promise<ResultadoCommit> {
+  // 1) Diff real do worktree (porcelain -z + untracked-files=all: inclui
+  //    arquivos novos e não escapa caminhos com espaço/aspas).
+  let status: string
+  try {
+    const { stdout } = await execFileAsync(
+      'git',
+      ['status', '--porcelain=v1', '-z', '--untracked-files=all'],
+      { cwd: raiz, env: userShellEnv(), timeout: 30_000, signal },
+    )
+    status = stdout
+  } catch (err) {
+    if (signal.aborted) return { tokens: 0, custo: 0 }
+    const e = err as { stderr?: string; message?: string }
+    return { erro: e.stderr?.trim() || e.message || String(err), tokens: 0, custo: 0 }
+  }
+  if (!status.trim()) return { tokens: 0, custo: 0 }
+
+  const { mensagem, tokens, custo } = await gerarMensagemCommit(raiz, esteira, task, pastas, status, signal)
+
+  // 3) Só os arquivos que a task mudou (git status respeita .gitignore): nada
+  //    de varredura da árvore inteira, nada do que não é do trabalho da task.
+  const caminhos = caminhosDoStatus(status)
+  const addArgs = caminhos.length > MAX_CAMINHOS_ADD ? ['add', '-A'] : ['add', '-A', '--', ...caminhos]
+  try {
+    await execFileAsync('git', addArgs, { cwd: raiz, env: userShellEnv(), timeout: 120_000, signal })
+  } catch (err) {
+    if (signal.aborted) return { tokens, custo }
+    const e = err as { stderr?: string; message?: string }
+    return { erro: e.stderr?.trim() || e.message || String(err), tokens, custo }
+  }
+
+  // 4) Commit — header e body como -m separados (o git junta com linha em
+  //    branco entre eles). Mensagem vazia/fallback cai no título da task.
+  const [cabecalho, ...corpo] = mensagem.split('\n')
+  const corpoJunto = corpo.join('\n').trim()
+  const commitArgs = corpoJunto
+    ? ['commit', '-m', cabecalho.trim() || task.titulo, '-m', corpoJunto]
+    : ['commit', '-m', cabecalho.trim() || task.titulo]
+  try {
+    await execFileAsync('git', commitArgs, { cwd: raiz, env: userShellEnv(), timeout: 120_000, signal })
+  } catch (err) {
+    if (signal.aborted) return { tokens, custo }
+    const e = err as { stderr?: string; message?: string }
+    return { erro: e.stderr?.trim() || e.message || String(err), tokens, custo }
+  }
+
+  try {
+    const { stdout } = await execFileAsync('git', ['rev-parse', '--short', 'HEAD'], {
+      cwd: raiz,
+      env: userShellEnv(),
+      timeout: 15_000,
+      signal,
+    })
+    return { hash: stdout.trim() || undefined, tokens, custo }
+  } catch {
+    // Hash ilegível não invalida o commit — segue sem ele no relatório.
+    return { tokens, custo }
+  }
+}
+
+/**
+ * Caminhos do `git status --porcelain=v1 -z`: cada entrada é `XY <caminho>`,
+ * com exceção de rename/copy (`R`/`C`) — no -z o campo corrente é o DESTINO
+ * e o próximo campo traz a origem (que não existe mais e não precisa entrar
+ * no `git add`).
+ */
+function caminhosDoStatus(status: string): string[] {
+  const campos = status.split('\0')
+  const caminhos: string[] = []
+  for (let i = 0; i < campos.length; i++) {
+    const campo = campos[i]
+    if (!campo) continue
+    const primeiro = campo[0]
+    const caminho = campo.slice(3)
+    if (primeiro === 'R' || primeiro === 'C') {
+      if (caminho) caminhos.push(caminho)
+      i++
+    } else if (caminho) {
+      caminhos.push(caminho)
+    }
+  }
+  return caminhos
+}
+
+/**
+ * Gera a mensagem do commit final com uma chamada one-shot (sem tools), no
+ * modelo padrão da esteira. O prompt do sistema é o `commitPrompt` da esteira
+ * ou o default (preferências de commits na memória; fallback Conventional
+ * Commits). Falha da chamada NÃO falha o commit: cai no título da task.
+ */
+async function gerarMensagemCommit(
+  raiz: string,
+  esteira: Esteira,
+  task: Task,
+  pastas: string[],
+  status: string,
+  signal: AbortSignal,
+): Promise<{ mensagem: string; tokens: number; custo: number }> {
+  const fase = esteira.fases[0]
+  if (!fase) return { mensagem: task.titulo, tokens: 0, custo: 0 }
+  let provider
+  try {
+    provider = await getProvider(fase.providerId)
+  } catch {
+    provider = undefined
+  }
+  let model
+  try {
+    model = await resolveModel(fase.providerId, fase.modelId)
+  } catch (err) {
+    console.error('[esteira] modelo do commit final indisponível — mensagem fallback:', err)
+    return { mensagem: task.titulo, tokens: 0, custo: 0 }
+  }
+
+  // Preferências de commits do usuário: gerais por peso + busca direcionada
+  // (a busca lexical acha "mensagens de commit em inglês" mesmo fora do topo).
+  const ctx = await loadPromptContext('code', raiz)
+  const commitPrefs = await buscarMemoria({ query: 'commit', kinds: ['general'], limit: 5 }).catch(() => [])
+  const memorias = [...ctx.general, ...commitPrefs.filter((m) => !ctx.general.includes(m))]
+
+  // Estilo real do repo: os últimos commits são a preferência de fato.
+  let log = ''
+  try {
+    const { stdout } = await execFileAsync('git', ['log', '--oneline', '-20'], {
+      cwd: raiz,
+      env: userShellEnv(),
+      timeout: 15_000,
+      signal,
+    })
+    log = stdout.trim()
+  } catch {
+    // repo sem commits ainda — segue sem o bloco de estilo
+  }
+
+  const input: SendMessageInput = {
+    sessionId: `esteira_${task.id}`,
+    text: task.descricao,
+    providerId: fase.providerId,
+    modelId: fase.modelId,
+    mode: 'code',
+    options: { permissionMode: 'full' },
+    directory: raiz,
+    extraDirectories: pastas.filter((p) => p !== raiz),
+  }
+
+  const providerOptions = await buildProviderOptions(input)
+  try {
+    // withProviderSession: provedores que exigem um identificador estável de
+    // conversa (ex.: header x-opencode-session) recebem o da task, como nas fases.
+    const { text, usage } = await withProviderSession(`esteira_${task.id}`, () =>
+      generateText({
+        model,
+        system: esteira.commitPrompt?.trim() || ESTEIRA_COMMIT_PROMPT_PADRAO,
+        messages: normalizeMessages(
+          [{ role: 'user', content: montarPromptCommit({ esteira, task, pastas, status, memorias, log }) }],
+          interleavedReasoningField(provider, fase.modelId),
+        ),
+        abortSignal: signal,
+        providerOptions,
+      }),
+    )
+    const tok = toTokenUsage(usage, provider?.models[fase.modelId]?.cost)
+    const mensagem = limparMensagemCommit(text)
+    return {
+      mensagem: mensagem || task.titulo,
+      tokens: tok.input + tok.output + (tok.reasoning ?? 0),
+      custo: tok.cost ?? 0,
+    }
+  } catch (err) {
+    console.error('[esteira] geração da mensagem do commit final falhou — fallback no título:', err)
+    return { mensagem: task.titulo, tokens: 0, custo: 0 }
+  }
+}
+
+/**
+ * Contexto da mensagem do commit — espelha o que uma fase recebe (montarMensagem
+ * do runner): o agente precisa saber o que foi feito nas fases anteriores para
+ * escrever um bom commit, não adivinhar pelo diff.
+ */
+function montarPromptCommit(ctx: {
+  esteira: Esteira
+  task: Task
+  pastas: string[]
+  status: string
+  memorias: Memory[]
+  log: string
+}): string {
+  const partes: string[] = []
+  partes.push(`# Task: ${ctx.task.titulo}`)
+  if (ctx.task.descricao.trim()) partes.push(ctx.task.descricao.trim())
+
+  const fases = ctx.esteira.fases
+  const listaFases = fases.map((f) => `${f.nome} — ${f.descricao}`).join('\n')
+  partes.push(`\n## Pipeline\nThis task ran through ${fases.length} phases:\n${listaFases}`)
+
+  const anteriores = ctx.task.anotacoes.filter((a) => a.status !== 'pulada')
+  if (anteriores.length > 0) {
+    partes.push('\n## Notes from the phases')
+    for (const a of anteriores) {
+      partes.push(`### ${a.faseNome} (${a.status})\n${a.conteudo}`)
+    }
+  }
+
+  const repo: string[] = [`Working folder: ${ctx.pastas[0] ?? '(none)'}`]
+  if (ctx.esteira.branch) repo.push(`Branch: ${ctx.esteira.branch}`)
+  if (ctx.esteira.worktree) repo.push(`Worktree: ${ctx.esteira.worktree}`)
+  partes.push(`\n## Repository\n${repo.join('\n')}`)
+
+  partes.push(`\n## Changed files (working tree)\n${ctx.status.trim() || '(none)'}`)
+
+  if (ctx.memorias.length > 0) {
+    partes.push(
+      `\n## User's commit preferences (from memory — follow them)\n${ctx.memorias.map((m) => `- ${m.text}`).join('\n')}`,
+    )
+  }
+  if (ctx.log) {
+    partes.push(
+      `\n## Recent commits in this repository (imitate the style when the preferences above don't specify)\n${ctx.log}`,
+    )
+  }
+  return partes.join('\n')
+}
+
+/** Tira cercas de markdown e sobra de branco da resposta do modelo. */
+function limparMensagemCommit(texto: string): string {
+  const semFences = texto.trim().replace(/^```[a-z]*\s*\n?/i, '').replace(/\n?```\s*$/i, '')
+  return semFences.trim()
 }
 
 // ─── Push final ──────────────────────────────────────────────────────────────

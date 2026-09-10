@@ -177,6 +177,13 @@ async function copiarFases(input: NovaEsteiraInput): Promise<FaseConfig[]> {
 }
 
 export async function criarEsteira(input: NovaEsteiraInput): Promise<Esteira> {
+  // Push sem commit final subiria um branch sem o estado completo da task
+  // (as fases posteriores à desenvolvimento não commitaram) — dependência
+  // obrigatória, validada aqui porque o IPC pode burlar a UI.
+  if (input.pushAoFinal && input.commitAoFinal === false) {
+    throw new Error('Push ao final exige o commit final ativado.')
+  }
+  const commitPrompt = input.commitPrompt?.trim()
   const esteira: Esteira = {
     id: novoId('est_'),
     projetoId: input.projetoId,
@@ -186,6 +193,8 @@ export async function criarEsteira(input: NovaEsteiraInput): Promise<Esteira> {
     worktree: input.worktree,
     modoOperacao: input.modoOperacao ?? 'manual',
     pushAoFinal: input.pushAoFinal ?? false,
+    commitAoFinal: input.commitAoFinal ?? true,
+    ...(commitPrompt ? { commitPrompt } : {}),
     printsDoResultado: input.printsDoResultado ?? false,
     politicaComandos: { bloqueados: [...POLITICA_PADRAO.bloqueados], controlados: [...POLITICA_PADRAO.controlados] },
     templateId: input.fases?.map((f) => f.templateId ?? 'custom').join(',') ?? input.templateIds?.join(','),
@@ -212,7 +221,19 @@ export async function atualizarEsteira(
   const esteiras = await listarEsteiras()
   const indice = esteiras.findIndex((e) => e.id === id)
   if (indice < 0) return null
-  esteiras[indice] = { ...esteiras[indice], ...patch }
+  const anterior = esteiras[indice]
+  const commitAoFinal = patch.commitAoFinal ?? anterior.commitAoFinal
+  const pushAoFinal = patch.pushAoFinal ?? anterior.pushAoFinal
+  if (pushAoFinal && commitAoFinal === false) {
+    throw new Error('Push ao final exige o commit final ativado.')
+  }
+  // Prompt vazio no patch = volta ao padrão (ESTEIRA_COMMIT_PROMPT_PADRAO).
+  if (typeof patch.commitPrompt === 'string') {
+    const limpo = patch.commitPrompt.trim()
+    if (limpo) patch = { ...patch, commitPrompt: limpo }
+    else delete patch.commitPrompt
+  }
+  esteiras[indice] = { ...anterior, ...patch }
   await salvarEsteiras(esteiras)
   emitir({ type: 'esteira', esteira: esteiras[indice] })
   return esteiras[indice]
@@ -246,6 +267,9 @@ export async function relatorio(esteiraId: string): Promise<RelatorioEsteira> {
     for (const anotacao of task.anotacoes) {
       if (anotacao.commitHash) commits.add(anotacao.commitHash)
     }
+    // Commit final do engine (commitAoFinal): hash fora da fase — entra no
+    // relatório junto com os commits feitos pelas fases.
+    if (task.commitFinalHash) commits.add(task.commitFinalHash)
   }
   return {
     esteiraId,
