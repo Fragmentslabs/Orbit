@@ -851,7 +851,7 @@
     "connectManually": "Conectar manualmente",
     "scanQrCode": "Escanear QR Code",
     "tipLabel": "Dica:",
-    "tipText": "use Tailscale para acessar seu desktop de qualquer lugar, sem configurar a rede."
+    "tipText": "para acessar seu desktop de fora da rede, instale uma VPN mesh (Tailscale, ZeroTier) nos dois aparelhos e conecte pelo IP dela."
   },
   "connectionStatus": {
     "disconnected": "Desconectado",

@@ -190,11 +190,13 @@ export default function ConnectionScreen() {
   const statusAndHint = (
     <>
       <ConnectionStatus state={connection} detailed />
-      <View style={[s.tipBox, { backgroundColor: 'rgba(26,28,34,0.5)' }]}>
-        <Text style={[s.tipText, { color: tokens.mutedForeground }]}>
-          <Text style={{ fontWeight: '600' }}>{t('connectionScreen.tipLabel')}</Text> {t('connectionScreen.tipText')}
-        </Text>
-      </View>
+      {discoveryStatus === 'none' && (
+        <View style={[s.tipBox, { backgroundColor: 'rgba(26,28,34,0.5)' }]}>
+          <Text style={[s.tipText, { color: tokens.mutedForeground }]}>
+            <Text style={{ fontWeight: '600' }}>{t('connectionScreen.tipLabel')}</Text> {t('connectionScreen.tipText')}
+          </Text>
+        </View>
+      )}
     </>
   )
 

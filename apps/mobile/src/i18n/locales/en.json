@@ -851,7 +851,7 @@
     "connectManually": "Connect manually",
     "scanQrCode": "Scan QR Code",
     "tipLabel": "Tip:",
-    "tipText": "use Tailscale to reach your desktop from anywhere, no network setup needed."
+    "tipText": "to reach your desktop from outside your network, install a mesh VPN (Tailscale, ZeroTier) on both devices and connect with that IP."
   },
   "connectionStatus": {
     "disconnected": "Disconnected",
