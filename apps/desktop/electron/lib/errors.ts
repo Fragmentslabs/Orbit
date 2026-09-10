@@ -73,6 +73,11 @@ const RATE_LIMIT_PATTERNS = [
   /freeusage/i,
   /free ?usage ?limit/i,
   /quota (exceeded|exhausted|reached)/i,
+  // O 429 de cota da OpenAI inverte a ordem ("You exceeded your current
+  // quota") e o code vem como insufficient_quota — nenhum dos dois casava
+  // com o padrão acima, que exige o verbo logo depois de "quota".
+  /insufficient_quota/i,
+  /(exceed|exhaust)\w*\s+(your\s+)?(current\s+)?quota/i,
   /usage limit/i,
   /request limit/i,
   /RATE_LIMIT_EXCEEDED|RATE_LIMITED/i,

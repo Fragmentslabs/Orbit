@@ -226,8 +226,16 @@ Before submitting:
 
 ```bash
 npm run typecheck   # must pass
+npm test            # must pass
 npm run lint        # must pass with zero warnings
 ```
+
+Tests run with [Vitest](https://vitest.dev) and live next to the code they
+cover (`*.test.ts`). The suite targets the pure logic where a regression is
+silent and expensive — provider error classification, model-rotation
+resolution, context compaction, the unified-diff parser and the engine's turn
+annotations. Anything needing Electron, the network or a model isn't covered:
+keep those boundaries behind a mockable module, as `model-rotation.ts` does.
 
 Keep changes surgical and focused — review is easier when each PR does one thing.
 

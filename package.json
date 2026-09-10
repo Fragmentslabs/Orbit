@@ -24,7 +24,8 @@
     "mobile:dev": "npm run start --workspace=@orbit/mobile",
     "mobile:web": "npm run web --workspace=@orbit/mobile",
     "typecheck": "npm run typecheck --workspaces --if-present",
-    "lint": "npm run lint --workspaces --if-present"
+    "lint": "npm run lint --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present"
   },
   "dependencies": {
     "getenv": "^2.0.0"
