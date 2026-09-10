@@ -1165,7 +1165,12 @@
     "nenhumaTask": "No task found",
     "aguardando": "Waiting for {{titulo}}",
     "aguardandoTitulo": "Waiting for: {{titulo}}",
-    "proxima": "Next"
+    "proxima": "Next",
+    "commit": "Create a commit when finishing",
+    "commitPromptTitulo": "Final commit message",
+    "commitPromptDica": "Prompt used by the agent that writes the final commit message. It receives the task, the notes from every phase and the changed files — exactly the same context a phase gets. Empty uses the default: follow the user's commit preferences from memory, falling back to Conventional Commits (header + body of summarized topics).",
+    "commitPromptVazio": "Empty = default prompt (memory preferences → Conventional Commits).",
+    "commitFalhou": "Final commit failed"
   },
   "branch": {
     "title": "Branch",

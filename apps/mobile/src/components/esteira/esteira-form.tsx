@@ -18,8 +18,9 @@ import {
 } from 'react-native'
 import { useTranslation } from 'react-i18next'
 import Animated from 'react-native-reanimated'
-import { Brain, ChevronDown, GripVertical, Pencil, Plus, X } from 'lucide-react-native'
+import { Brain, ChevronDown, GripVertical, Pencil, Plus, Settings2, X } from 'lucide-react-native'
 import type { Esteira, FaseConfig, FaseEscolhida, FaseTemplate } from '@orbit/shared'
+import { ESTEIRA_COMMIT_PROMPT_PADRAO } from '@orbit/shared'
 import { Input } from '~/components/ui/input'
 import { Switch } from '~/components/ui/switch'
 import { BottomSheet } from '~/components/ui/bottom-sheet'
@@ -155,6 +156,9 @@ function FormEsteiraCorpo({
     editando ? (projetos.find((p) => p.id === editando.projetoId)?.pastas ?? []) : [],
   )
   const [pushAoFinal, setPushAoFinal] = useState(editando?.pushAoFinal ?? false)
+  const [commitAoFinal, setCommitAoFinal] = useState(editando?.commitAoFinal !== false)
+  const [commitPrompt, setCommitPrompt] = useState(editando?.commitPrompt ?? '')
+  const [promptAberto, setPromptAberto] = useState(false)
   const [prints, setPrints] = useState(editando?.printsDoResultado ?? false)
   // Edição parte do modelo REAL da esteira (todas as fases o compartilham);
   // sem isto o form abria sem modelo e o "Modelo padrão" ficava vazio.
@@ -204,6 +208,13 @@ function FormEsteiraCorpo({
   const podeCriar =
     nome.trim().length > 0 && fases.length > 0 && !!modelo && pastas.length > 0 && !salvando
 
+  // Push depende do commit final: desligar o commit desliga o push junto —
+  // sem o estado completo commitado, o push subiria trabalho incompleto.
+  const aoMudarCommit = (ligado: boolean) => {
+    setCommitAoFinal(ligado)
+    if (!ligado) setPushAoFinal(false)
+  }
+
   const salvar = async () => {
     if (!podeCriar || !modelo) return
     setSalvando(true)
@@ -215,6 +226,8 @@ function FormEsteiraCorpo({
         await atualizarEsteira(editando.id, {
           nome: nome.trim(),
           pushAoFinal,
+          commitAoFinal,
+          ...(commitPrompt.trim() ? { commitPrompt: commitPrompt.trim() } : { commitPrompt: '' }),
           printsDoResultado: prints,
           fases: fases.map((fase, ordem): FaseConfig => {
             const anterior = editando.fases[ordem]
@@ -248,6 +261,8 @@ function FormEsteiraCorpo({
         providerId: modelo.providerId,
         modelId: modelo.modelId,
         pushAoFinal,
+        commitAoFinal,
+        ...(commitPrompt.trim() ? { commitPrompt: commitPrompt.trim() } : {}),
         printsDoResultado: prints,
       })
       onConcluida(esteira)
@@ -343,8 +358,26 @@ function FormEsteiraCorpo({
 
         <View style={{ gap: 10 }}>
           <View style={s.switchLinha}>
-            <Switch checked={pushAoFinal} onCheckedChange={setPushAoFinal} />
-            <Text style={[s.switchTexto, { color: tokens.foreground }]}>{t('esteira.push')}</Text>
+            <Switch checked={commitAoFinal} onCheckedChange={aoMudarCommit} />
+            <Text style={[s.switchTexto, { color: tokens.foreground }]}>{t('esteira.commit')}</Text>
+            <Pressable onPress={() => setPromptAberto(true)} hitSlop={8}>
+              <Settings2 size={14} color={tokens.mutedForeground} />
+            </Pressable>
+          </View>
+          <View style={s.switchLinha}>
+            <Switch
+              checked={pushAoFinal}
+              onCheckedChange={setPushAoFinal}
+              disabled={!commitAoFinal}
+            />
+            <Text
+              style={[
+                s.switchTexto,
+                { color: commitAoFinal ? tokens.foreground : tokens.mutedForeground },
+              ]}
+            >
+              {t('esteira.push')}
+            </Text>
           </View>
           <View style={s.switchLinha}>
             <Switch checked={prints} onCheckedChange={setPrints} />
@@ -434,6 +467,35 @@ function FormEsteiraCorpo({
           onSalvar={salvarFase}
         />
       )}
+
+      {/* Prompt do commit final: vazio = padrão (preferências do usuário na
+          memória; fallback Conventional Commits). */}
+      <BottomSheet
+        aberto={promptAberto}
+        aoFechar={() => setPromptAberto(false)}
+        titulo={
+          <Text style={[s.sheetTitulo, { color: tokens.foreground }]}>
+            {t('esteira.commitPromptTitulo')}
+          </Text>
+        }
+      >
+        <View style={{ gap: 10, paddingBottom: 24 }}>
+          <Text style={[s.dica, { color: tokens.mutedForeground }]}>
+            {t('esteira.commitPromptDica')}
+          </Text>
+          <Input
+            value={commitPrompt}
+            onChangeText={setCommitPrompt}
+            placeholder={ESTEIRA_COMMIT_PROMPT_PADRAO}
+            multiline
+            textAlignVertical="top"
+            style={{ height: 180 }}
+          />
+          <Text style={[s.dica, { color: tokens.mutedForeground }]}>
+            {t('esteira.commitPromptVazio')}
+          </Text>
+        </View>
+      </BottomSheet>
     </KeyboardAvoidingView>
   )
 }

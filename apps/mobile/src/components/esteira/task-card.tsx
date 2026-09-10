@@ -56,6 +56,7 @@ export const TaskCard = memo(function TaskCard({
   if (emExecucao && faseNome) chips.push({ key: 'fase', icon: 'play', texto: faseNome, cor: 'primary' })
   if (comErro) chips.push({ key: 'erro', icon: 'alert', texto: t('esteira.erro'), cor: 'destructive' })
   if (task.pushFalha) chips.push({ key: 'push', icon: 'alert', texto: t('esteira.pushFalhou'), cor: 'warning' })
+  if (task.commitFalha) chips.push({ key: 'commit', icon: 'alert', texto: t('esteira.commitFalhou'), cor: 'warning' })
   if (task.status === 'pausada' && !comErro) chips.push({ key: 'pausada', icon: 'pause', texto: faseNome ?? t('esteira.pausada'), cor: 'muted' })
   if (task.tempoTrabalhoMs > 0) extras.push({ key: 'tempo', icon: 'clock', texto: formatDuration(task.tempoTrabalhoMs) })
   if (task.tokens > 0) extras.push({ key: 'tokens', texto: `${formatTokens(task.tokens)} tok` })

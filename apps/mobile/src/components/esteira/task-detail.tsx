@@ -141,6 +141,18 @@ export function TaskDetail({
           </View>
         )}
 
+        {!!task.commitFalha && (
+          <View style={[s.banner, { backgroundColor: tokens.muted, borderColor: '#eab308' }]}>
+            <AlertTriangle size={16} color="#eab308" />
+            <View style={{ flex: 1, gap: 3 }}>
+              <Text style={[s.bannerTitulo, { color: tokens.foreground }]}>{t('esteira.commitFalhou')}</Text>
+              <Text style={[s.bannerTexto, { color: tokens.mutedForeground }]} numberOfLines={3}>
+                {task.commitFalha}
+              </Text>
+            </View>
+          </View>
+        )}
+
         {/* Título editável + badge de status */}
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
           <Input
