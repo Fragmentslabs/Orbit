@@ -21,8 +21,10 @@ export function RevertBar({ session, onUnrevert, onDismiss }: RevertBarProps) {
   const translateY = useRef(new Animated.Value(0)).current
 
   const revert = session.revert
-  if (!revert || dismissed) return null
 
+  // O early return NÃO pode vir antes deste useRef: ao arrastar a barra,
+  // setDismissed(true) provoca um render que pularia o hook e o React
+  // derrubaria a árvore com "Rendered fewer hooks than expected".
   const panResponder = useRef(
     PanResponder.create({
       onMoveShouldSetPanResponder: (_, gs) => gs.dy > 10,
@@ -50,6 +52,9 @@ export function RevertBar({ session, onUnrevert, onDismiss }: RevertBarProps) {
       },
     }),
   ).current
+
+  // Agora sim: todos os hooks já rodaram.
+  if (!revert || dismissed) return null
 
   const isCode = Boolean(revert.files || revert.diff)
   const count = revert.files?.length ?? 0

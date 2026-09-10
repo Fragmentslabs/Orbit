@@ -19,7 +19,9 @@ module.exports = [
   importPlugin.flatConfigs.recommended,
   importPlugin.flatConfigs.errors,
 
-  { ignores: ['android/app/build'] },
+  // `.expo/` é cache/saída gerada pelo dev server (inclusive páginas de erro
+  // em JS puro) — lintar isso reporta problema de código que ninguém escreveu.
+  { ignores: ['android/app/build', '.expo/**', 'expo-env.d.ts'] },
   {
     plugins: { expo: expoPlugin },
     rules: {
@@ -75,7 +77,19 @@ module.exports = [
     },
   },
   { files: ['**/*.d.ts'], rules: { 'import/order': 'off' } },
-  { files: ['**/metro.config.js'], languageOptions: { globals: globals.node } },
+  // Configs e shims em CommonJS: rodam em Node (require/module/process), não
+  // no bundle do app.
+  {
+    files: [
+      '**/metro.config.js',
+      '**/babel.config.js',
+      '**/app.config.js',
+      'eslint.config.js',
+      'src/lib/lucide-styled.js',
+    ],
+    languageOptions: { globals: globals.node, sourceType: 'commonjs' },
+    rules: { '@typescript-eslint/no-require-imports': 'off' },
+  },
 
   importPlugin.flatConfigs.typescript,
   {
