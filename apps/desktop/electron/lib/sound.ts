@@ -7,10 +7,11 @@ import { userShellEnv } from './shell-env'
 /**
  * Reprodução de sons custom (WAV) no main process.
  *
- * Sons do produto: `entrance.wav` (abertura do app) e `notification.wav`
- * (banners de notificação). Em dev os arquivos ficam em `assets/sounds` na
- * raiz do app; em produção são copiados pelo electron-builder
- * (`extraResources`) para `Resources/sounds`.
+ * Sons do produto: `notification.wav` (banners de notificação). O som de
+ * entrada da persona não passa mais por aqui — o renderer o toca com WebAudio
+ * (ver src/lib/entrance-sound.ts), sincronizado com o despertar. Em dev os
+ * arquivos ficam em `assets/sounds` na raiz do app; em produção são copiados
+ * pelo electron-builder (`extraResources`) para `Resources/sounds`.
  *
  * Player por plataforma: macOS `afplay`, Windows SoundPlayer via PowerShell,
  * Linux `pw-play`/`paplay`/`aplay`/`ffplay`. Quando nenhum player está
@@ -18,7 +19,7 @@ import { userShellEnv } from './shell-env'
  *
  * Todos os players precisam ser SÍNCRONOS: o áudio morre junto com o processo
  * que o toca. No Windows isso significa `PlaySync()` — com `Play()`, que é
- * assíncrono, o PowerShell saía em ~0,7s e cortava o som de entrada de 4,2s.
+ * assíncrono, o PowerShell saía em ~0,7s e cortava o som no meio.
  */
 
 type Player = { bin: string; args: (caminho: string) => string[] }

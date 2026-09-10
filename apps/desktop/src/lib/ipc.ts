@@ -103,6 +103,10 @@ export const openWithApi = {
 export const sound = {
   play: (name: string) =>
     (window.ipcRenderer?.invoke("sound:play", name) ?? Promise.resolve(false)) as Promise<boolean>,
+  /** Bytes do WAV de entrada — decodificados no renderer (WebAudio), que agenda
+   *  a reprodução no mesmo tick do despertar da persona. */
+  entranceData: () =>
+    (window.ipcRenderer?.invoke("sound:entrance-data") ?? Promise.resolve(null)) as Promise<Uint8Array | null>,
 }
 
 export const storage = {

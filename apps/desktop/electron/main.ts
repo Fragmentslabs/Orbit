@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url'
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 import fs from 'node:fs/promises'
-import { chmodSync } from 'node:fs'
+import { chmodSync, existsSync } from 'node:fs'
 import path from 'node:path'
 import type * as NodePty from 'node-pty'
 import { listCredentialProviders, removeCredential, setCredential } from './lib/auth'
@@ -50,7 +50,7 @@ import { approvePendingSkill, discardPendingSkill, listPendingSkills } from './l
 import { dataDir, listKeys, readJson, removeJson, writeJson } from './lib/storage'
 import { loginShellArgs, userShellEnv } from './lib/shell-env'
 import { searchSessions } from './lib/search-sessions'
-import { tocarSom } from './lib/sound'
+import { tocarSom, caminhoSom } from './lib/sound'
 import { setupAutoUpdater } from './lib/updater'
 import { destroyBrowserWindow } from './lib/tools'
 import type { SendMessageInput } from '@shared/chat'
@@ -91,7 +91,6 @@ export const RENDERER_DIST = path.join(process.env.APP_ROOT, 'dist')
 process.env.VITE_PUBLIC = VITE_DEV_SERVER_URL ? path.join(process.env.APP_ROOT, 'public') : RENDERER_DIST
 
 let win: BrowserWindow | null
-let entranceSoundStarted = false
 let entranceWindowCreated = false
 
 // ─── "Abrir com Orbit" (menu de contexto do Explorer) ───────────────────────
@@ -236,16 +235,9 @@ function createWindow() {
   win.maximize()
 
   // Mostra a janela só quando o renderer já pintou o primeiro frame — sem
-  // flash branco de inicialização. O som começa no did-finish-load, antes do
-  // timer de despertar do renderer, evitando o atraso do spawn do player do SO
-  // (perceptível no app empacotado) depois que a persona aparece.
-  const startEntranceSound = () => {
-    if (entranceSoundStarted) return
-    entranceSoundStarted = true
-    void tocarSom('entrance').then((ok) => {
-      if (!ok) console.warn('[som] som de entrada não pôde ser reproduzido')
-    })
-  }
+  // flash branco de inicialização. (O som de entrada agora roda no renderer:
+  // agenda a reprodução no mesmo tick do despertar da persona — ver
+  // src/lib/entrance-sound.ts.)
   const showWindow = () => {
     if (win && !win.isDestroyed() && !win.isVisible()) win.show()
   }
@@ -262,7 +254,6 @@ function createWindow() {
 
   // Test active push message to Renderer-process.
   win.webContents.on('did-finish-load', () => {
-    if (isInitialWindow) startEntranceSound()
     win?.webContents.send('main-process-message', (new Date).toLocaleString())
   })
 
@@ -1178,8 +1169,15 @@ app.whenReady().then(() => {
     }
   })
 
-  // Sons do produto (entrada do app, notificações) — player do SO
+  // Sons do produto (entrada do app, notificações)
   ipcMain.handle('sound:play', (_event, nome: string) => tocarSom(nome))
+  // Bytes do WAV de entrada para o renderer (WebAudio) — a decodificação e o
+  // agendamento acontecem lá, no mesmo tick do despertar da persona.
+  ipcMain.handle('sound:entrance-data', async () => {
+    const caminho = caminhoSom('entrance')
+    if (!existsSync(caminho)) return null
+    return new Uint8Array(await fs.readFile(caminho))
+  })
 
   // Storage genérico (sessões, mensagens, pastas) — padrão opencode
   ipcMain.handle('storage:read', (_event, key: string) => readJson(key))

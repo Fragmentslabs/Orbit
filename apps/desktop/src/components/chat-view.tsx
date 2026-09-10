@@ -29,6 +29,7 @@ import { ChatMessageSearchBar } from "@/src/components/chat-message-search-bar"
 import { useChatSearchStore } from "@/src/stores/chat-search-store"
 import { Actions } from "@/src/components/ai/actions"
 import { messageText, visibleMessageText } from "@/src/lib/message-utils"
+import { playEntranceSound, prepareEntranceSound } from "@/src/lib/entrance-sound"
 import { useActiveSession, useSessionStatus, useSessionStore, type SendConfig } from "@/src/stores/session-store"
 import { brainEnabledFor } from "@/src/stores/brain-prefs"
 import { useProviderStore, useNoProviderConnected } from "@/src/stores/provider-store"
@@ -282,9 +283,10 @@ function ChatMessages({ messages, isBusy, busyLabel, mode, sessionId, sendMessag
 }
 
 // Abertura do app: a persona central nasce dormindo e acorda ~650ms após a
-// montagem. O som é iniciado pelo main antes de a janela ser exibida, para que
-// o atraso de inicialização do player não aconteça depois do despertar. Os flags
-// são por módulo/processo — trocas de tela seguintes usam a transição normal.
+// montagem. O som de entrada é tocado pelo renderer (WebAudio) neste mesmo
+// instante — áudio e persona começam juntos (ver src/lib/entrance-sound.ts).
+// Os flags são por módulo/processo — trocas de tela seguintes usam a transição
+// normal.
 let entranceWakeDone = false
 const isInitialLaunch = typeof window !== "undefined" && new URLSearchParams(window.location.search).has("entrance")
 
@@ -380,6 +382,9 @@ export function ChatView({ sessionId }: { sessionId?: string } = {}) {
   }, [noProvider])
 
   useEffect(() => {
+    // Decodifica o WAV de entrada durante o carregamento (idempotente), para
+    // o áudio estar pronto quando o despertar de 650ms acontecer.
+    void prepareEntranceSound()
     const wasChatting = prevHasChat.current
     prevHasChat.current = hasChat
     const timers: ReturnType<typeof setTimeout>[] = []
@@ -423,11 +428,12 @@ export function ChatView({ sessionId }: { sessionId?: string } = {}) {
       setCenterVisible(true)
       setCenterPersonaVisible(true)
       if (isInitialLaunch && !entranceWakeDone) {
-        // Abertura do app: o som já foi iniciado pelo main antes da janela
-        // aparecer; a transição sleep → idle acontece 650ms depois da montagem
-        // para alinhar com o início audível da entrada.
+        // Abertura do app: a transição sleep → idle acontece 650ms depois da
+        // montagem, e o som de entrada (já decodificado durante o carregamento)
+        // é agendado neste mesmo callback — os dois começam juntos.
         timers.push(setTimeout(() => {
           entranceWakeDone = true
+          playEntranceSound()
           setDisplayCenterState("idle")
         }, 650))
       } else {
