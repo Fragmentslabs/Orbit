@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { DndContext, PointerSensor, useDraggable, useDroppable, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core"
-import { GripVerticalIcon, PencilIcon, PlusIcon, XIcon } from "lucide-react"
+import { GripVerticalIcon, PencilIcon, PlusIcon, Settings2Icon, XIcon } from "lucide-react"
 import type { Esteira, FaseEscolhida, FaseTemplate } from "@shared/esteira"
+import { ESTEIRA_COMMIT_PROMPT_PADRAO } from "@shared/esteira"
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
+import { Textarea } from "@/components/ui/textarea"
 import { Button } from "@/components/ui/button"
 import { Switch } from "@/components/ui/switch"
 import {
@@ -58,6 +60,9 @@ export function EsteiraCreateDialog({
   const [pastas, setPastas] = useState<string[]>([])
   const [fases, setFases] = useState<FaseEscolhida[]>([])
   const [pushAoFinal, setPushAoFinal] = useState(false)
+  const [commitAoFinal, setCommitAoFinal] = useState(true)
+  const [commitPrompt, setCommitPrompt] = useState("")
+  const [promptAberto, setPromptAberto] = useState(false)
   const [prints, setPrints] = useState(false)
   const [salvando, setSalvando] = useState(false)
   const [editando, setEditando] = useState<{ indice: number | null; fase: FaseEscolhida | null } | null>(null)
@@ -91,6 +96,8 @@ export function EsteiraCreateDialog({
     if (esteiraEditando) {
       setNome(esteiraEditando.nome)
       setPushAoFinal(esteiraEditando.pushAoFinal)
+      setCommitAoFinal(esteiraEditando.commitAoFinal !== false)
+      setCommitPrompt(esteiraEditando.commitPrompt ?? "")
       setPrints(!!esteiraEditando.printsDoResultado)
       // Semeia o seletor com o modelo REAL da esteira (todas as fases o
       // compartilham). Sem isto o "Modelo padrão" abria com o valor obsoleto
@@ -119,6 +126,8 @@ export function EsteiraCreateDialog({
     }
     setNome("")
     setPushAoFinal(false)
+    setCommitAoFinal(true)
+    setCommitPrompt("")
     setPrints(false)
     setFases(templates.filter((tpl) => tpl.padrao).map(doTemplate))
   }, [aberto, templates, projetoExistente, esteiraEditando])
@@ -167,6 +176,13 @@ export function EsteiraCreateDialog({
   // trabalhar, e a task só falharia na primeira fase.
   const podeCriar = nome.trim().length > 0 && fases.length > 0 && !!modelo && pastas.length > 0
 
+  // Push depende do commit final: desligar o commit desliga o push junto —
+  // um push sem o estado completo commitado subiria trabalho incompleto.
+  const aoMudarCommit = (ligado: boolean) => {
+    setCommitAoFinal(ligado)
+    if (!ligado) setPushAoFinal(false)
+  }
+
   const criar = async () => {
     if (!podeCriar || salvando || !modelo) return
     setSalvando(true)
@@ -177,6 +193,8 @@ export function EsteiraCreateDialog({
         await atualizarEsteira(esteiraEditando.id, {
           nome: nome.trim(),
           pushAoFinal,
+          commitAoFinal,
+          ...(commitPrompt.trim() ? { commitPrompt: commitPrompt.trim() } : { commitPrompt: "" }),
           printsDoResultado: prints,
           fases: fases.map((fase, ordem) => {
             const anterior = esteiraEditando.fases[ordem]
@@ -212,6 +230,8 @@ export function EsteiraCreateDialog({
         providerId: modelo.providerId,
         modelId: modelo.modelId,
         pushAoFinal,
+        commitAoFinal,
+        ...(commitPrompt.trim() ? { commitPrompt: commitPrompt.trim() } : {}),
         printsDoResultado: prints,
       })
       // Recentes são globais e compartilhados com os chats. O modelo entra na
@@ -308,8 +328,26 @@ export function EsteiraCreateDialog({
             </Campo>
 
             <div className="space-y-2">
+              <div className="flex items-center gap-2">
+                <Switch checked={commitAoFinal} onCheckedChange={aoMudarCommit} />
+                <span className="text-xs text-foreground">{t("esteira.commit")}</span>
+                <button
+                  type="button"
+                  onClick={() => setPromptAberto(true)}
+                  title={t("esteira.commitPromptTitulo")}
+                  className="text-muted-foreground hover:text-foreground"
+                >
+                  <Settings2Icon className="size-3.5" />
+                </button>
+              </div>
               <label className="flex cursor-pointer items-center gap-2">
-                <Switch checked={pushAoFinal} onCheckedChange={setPushAoFinal} />
+                {/* Push depende do commit final: sem ele, o push subiria um
+                    branch sem o estado completo da task. */}
+                <Switch
+                  checked={pushAoFinal}
+                  onCheckedChange={setPushAoFinal}
+                  disabled={!commitAoFinal}
+                />
                 <span className="text-xs text-foreground">{t("esteira.push")}</span>
               </label>
               <label className="flex cursor-pointer items-center gap-2">
@@ -337,6 +375,28 @@ export function EsteiraCreateDialog({
         onOpenChange={(v) => !v && setEditando(null)}
         onSalvar={(fase, comoPadrao) => void salvarFase(fase, comoPadrao)}
       />
+
+      {/* Prompt do commit final: vazio = padrão (preferências do usuário na
+          memória; fallback Conventional Commits). */}
+      <Dialog open={promptAberto} onOpenChange={setPromptAberto}>
+        <DialogContent className="max-w-xl">
+          <DialogTitle>{t("esteira.commitPromptTitulo")}</DialogTitle>
+          <p className="text-[11px] text-muted-foreground">{t("esteira.commitPromptDica")}</p>
+          <Textarea
+            value={commitPrompt}
+            onChange={(e) => setCommitPrompt(e.target.value)}
+            placeholder={ESTEIRA_COMMIT_PROMPT_PADRAO}
+            rows={12}
+            className="text-xs"
+          />
+          <div className="flex items-center justify-between gap-2">
+            <p className="text-[11px] text-muted-foreground">{t("esteira.commitPromptVazio")}</p>
+            <Button size="sm" onClick={() => setPromptAberto(false)}>
+              {t("common.close")}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </>
   )
 }

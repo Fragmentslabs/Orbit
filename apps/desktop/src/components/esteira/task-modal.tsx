@@ -128,6 +128,16 @@ export function TaskModal({
           </div>
         )}
 
+        {task.commitFalha && (
+          <div className="flex items-start gap-2 rounded-t-lg border-b border-yellow-500/30 bg-yellow-500/10 px-4 py-2.5">
+            <AlertTriangleIcon className="mt-0.5 size-4 shrink-0 text-yellow-600 dark:text-yellow-400" />
+            <div className="min-w-0 flex-1">
+              <p className="text-xs font-medium text-yellow-700 dark:text-yellow-300">{t("esteira.commitFalhou")}</p>
+              <p className="mt-0.5 break-all text-[11px] text-yellow-700/80 dark:text-yellow-300/80">{task.commitFalha}</p>
+            </div>
+          </div>
+        )}
+
         <div className="flex items-center gap-2 px-4 pt-4">
           <Input
             value={titulo}

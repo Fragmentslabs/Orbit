@@ -1824,7 +1824,12 @@
     "selecioneDependencias": "Nenhuma — inicia livremente",
     "semTasksParaDependencia": "Ainda não há outra task nesta esteira",
     "buscarTask": "Buscar task...",
-    "nenhumaTask": "Nenhuma task encontrada"
+    "nenhumaTask": "Nenhuma task encontrada",
+    "commit": "Criar commit ao finalizar",
+    "commitPromptTitulo": "Mensagem do commit final",
+    "commitPromptDica": "Prompt usado pelo agente que escreve a mensagem do commit final. Ele recebe a task, as anotações de todas as fases e os arquivos alterados — o mesmo contexto que uma fase recebe. Vazio usa o padrão: seguir as preferências de commits do usuário salvas na memória, com fallback em Conventional Commits (header + body de tópicos resumidos).",
+    "commitPromptVazio": "Vazio = prompt padrão (preferências da memória → Conventional Commits).",
+    "commitFalhou": "Commit final falhou"
   },
   "rotinas": {
     "titulo": "Rotinas",

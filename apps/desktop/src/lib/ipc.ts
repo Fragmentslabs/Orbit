@@ -403,6 +403,10 @@ export interface NovaEsteiraInput {
   branch?: string
   worktree?: string
   pushAoFinal?: boolean
+  /** Commit final do engine ao concluir a última fase (padrão true) */
+  commitAoFinal?: boolean
+  /** Prompt da mensagem do commit final (ausente = ESTEIRA_COMMIT_PROMPT_PADRAO) */
+  commitPrompt?: string
   /** Instrui as fases a capturarem prints do resultado visual */
   printsDoResultado?: boolean
   modoOperacao?: "manual" | "automatico"
