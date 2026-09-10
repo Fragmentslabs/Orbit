@@ -61,6 +61,16 @@ const MODEL_UNAVAILABLE_PATTERNS = [
 ]
 
 /**
+ * Recusa do gateway do OpenCode por falta do header de sessão. A requisição não
+ * chegou a ser roteada e nenhum token foi consumido — é indisponibilidade do
+ * caminho até o modelo, não do request: cai em `network` (recuperável) para que
+ * a rotação de modelos siga adiante. O `providerFetch` já repete uma vez com um
+ * id de sessão novo antes disso, então chegar aqui significa que a repetição
+ * também falhou.
+ */
+const SESSION_ROUTING_PATTERNS = [/missing x-opencode-session/i]
+
+/**
  * Limite de uso/requisições do provedor ou gateway. Cobre o 429 clássico
  * (OpenAI/Anthropic/OpenRouter: `statusCode`/`code` 429), o Zen do OpenCode
  * (`FreeUsageLimitError` — teto de uso gratuito por conta, janela rolante) e
@@ -179,6 +189,7 @@ export function classifyProviderError(value: unknown): ClassifiedError {
   if (MODEL_UNAVAILABLE_PATTERNS.some((re) => re.test(haystack))) {
     return { kind: 'model-unavailable', detail }
   }
+  if (SESSION_ROUTING_PATTERNS.some((re) => re.test(haystack))) return { kind: 'network', detail }
   if (RATE_LIMIT_PATTERNS.some((re) => re.test(haystack))) return { kind: 'rate-limit', detail }
   if (NETWORK_PATTERNS.some((re) => re.test(haystack))) return { kind: 'network', detail }
   return { kind: 'unknown', detail }

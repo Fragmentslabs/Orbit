@@ -89,6 +89,18 @@ describe('classifyProviderError', () => {
     ])('classifica %s como network', (_label, payload) => {
       expect(classifyProviderError(payload).kind).toBe('network')
     })
+
+    it('classifica a recusa de sessão do OpenCode Go como network (rotacionável)', () => {
+      // A requisição nem foi roteada, mas o turno não pode morrer: a rotação
+      // segue adiante (o providerFetch já repetiu uma vez com id novo).
+      const err = new Error(
+        'Error from provider (Console Go): Request is missing x-opencode-session and ' +
+          'cannot be routed efficiently. Please see https://opencode.ai/docs/go/#where-can-i-use-it',
+      )
+      const { kind } = classifyProviderError(err)
+      expect(kind).toBe('network')
+      expect(isRecoverableErrorKind(kind)).toBe(true)
+    })
   })
 
   describe('configuração do provedor', () => {
