@@ -1,6 +1,6 @@
 import { useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
-import { BrainIcon, ChevronDownIcon, ListRestartIcon, SettingsIcon, XIcon } from "lucide-react"
+import { BrainIcon, ChevronDownIcon, ListRestartIcon, Plug, SettingsIcon, XIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
   ModelSelector,
@@ -83,8 +83,9 @@ export function ModelPicker({ sessionId, open: openProp, onOpenChange: onOpenCha
   const removeRecent = useSessionModelPrefs((s) => s.removeRecent)
   const loading = useProviderStore((s) => s.loading)
   const error = useProviderStore((s) => s.error)
-  // Sem provedor configurado (primeira execução): o trigger pulsa e aponta
-  // para o footer do seletor ("Configurar um provedor")
+  // Sem provedor configurado (primeira execução): o trigger adota a mesma
+  // linguagem visual do ProviderHintCard (ícone Plug em primary + tint de
+  // fundo) e aponta para o footer do seletor ("Configurar um provedor")
   const noProvider = useNoProviderConnected()
 
   const controlled = value !== undefined
@@ -155,15 +156,13 @@ export function ModelPicker({ sessionId, open: openProp, onOpenChange: onOpenCha
         }}
       >
         {!hideTrigger && (
-          <ModelSelectorTrigger render={<Button className={cn("h-7 gap-1 px-1.5 text-xs", noProvider && "ring-2 ring-primary/40", triggerClassName)} variant="ghost" />}>
+          <ModelSelectorTrigger render={<Button className={cn("h-7 gap-1 px-1.5 text-xs", noProvider && "border-primary/30 bg-primary/10 hover:bg-primary/15 aria-expanded:bg-primary/15 dark:bg-primary/15 dark:hover:bg-primary/20", triggerClassName)} variant="ghost" />}>
             {noProvider ? (
               <>
-                {/* Estado de atenção: dot pulsante + label, sem logo de provider */}
-                <span className="relative flex size-2 shrink-0" aria-hidden>
-                  <span className="absolute inline-flex size-full animate-ping rounded-full bg-primary opacity-75" />
-                  <span className="relative inline-flex size-2 rounded-full bg-primary" />
-                </span>
-                <ModelSelectorName className="text-primary">{t("modelPicker.noProvider")}</ModelSelectorName>
+                {/* Estado de atenção: mesmo idioma do ProviderHintCard — ícone
+                    Plug em primary + label em foreground, sem animação */}
+                <Plug className="size-3.5 shrink-0 text-primary" aria-hidden />
+                <ModelSelectorName className="text-foreground/80">{t("modelPicker.noProvider")}</ModelSelectorName>
               </>
             ) : (
               <>

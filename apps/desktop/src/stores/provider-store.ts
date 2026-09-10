@@ -238,7 +238,7 @@ export const useProviderStore = create<ProviderState>((set, get) => ({
  * Pré-configuração: nenhum provedor conectado (primeira execução) e o estado
  * de inicialização já é conhecido (sem loading/falha). Enquanto loading/erro,
  * retorna false para a UI não acusar falta de provedor indevidamente.
- * Usado pelo seletor de modelo (pulso) e pelo bloqueio de envio (card).
+ * Usado pelo seletor de modelo (destaque de atenção) e pelo bloqueio de envio (card).
  */
 /** Rótulo curto "modelo · provedor" para linhas compactas (ex.: slots de
  *  rotação). Retorna null quando o modelo não está no catálogo. */
