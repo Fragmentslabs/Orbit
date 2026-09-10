@@ -1,7 +1,7 @@
 {
   "name": "@orbit/mobile",
   "main": "expo-router/entry",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "dependencies": {
     "@babel/plugin-transform-arrow-functions": "^7.29.7",
     "@babel/plugin-transform-shorthand-properties": "^7.29.7",
@@ -92,10 +92,10 @@
   },
   "scripts": {
     "start": "expo start",
-    "android": "expo run:android",
-    "android:dev": "APP_VARIANT=development expo run:android",
-    "ios": "expo run:ios",
-    "ios:dev": "APP_VARIANT=development expo run:ios",
+    "android": "expo prebuild --platform android && expo run:android",
+    "android:dev": "APP_VARIANT=development expo prebuild --platform android && APP_VARIANT=development expo run:android",
+    "ios": "expo prebuild --platform ios && expo run:ios",
+    "ios:dev": "APP_VARIANT=development expo prebuild --platform ios && APP_VARIANT=development expo run:ios",
     "web": "expo start --web",
     "lint": "expo lint",
     "typecheck": "tsc --noEmit"

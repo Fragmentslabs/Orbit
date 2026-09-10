@@ -93,7 +93,7 @@ npx expo start          # Dev server
 npx expo start --web    # Versão web
 npx expo start --android
 npx expo start --ios
-npm run android:dev     # Build nativo Android (Orbit (Dev), APP_VARIANT=development)
+npm run android:dev     # Build nativo Android (Orbit (Dev)) — regenera o projeto com a variante
 npm run ios:dev         # Build nativo iOS (Orbit (Dev), APP_VARIANT=development)
 npm run typecheck       # Typecheck (tsc --noEmit)
 npm run lint            # Lint via Expo
