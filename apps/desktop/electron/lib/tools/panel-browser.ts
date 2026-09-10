@@ -26,6 +26,38 @@ const MAX_MODEL_IMAGE_BYTES = 300_000
 const SCREENSHOT_TIMEOUT_MS = 45_000
 
 /** Presets de viewport para teste de responsividade. */
+/** Entrada do panel_screenshot. Declarado aqui (e não inline) para que o
+ *  `execute` continue com parâmetros tipados mesmo quando o campo `ver` é
+ *  removido do schema anunciado ao modelo — ver o comentário no uso. */
+const SCREENSHOT_SCHEMA = z.object({
+  savePath: z
+    .string()
+    .optional()
+    .describe('Path relative to the working folder to save the image (optional)'),
+  fullscreen: z
+    .boolean()
+    .optional()
+    .describe('Captures full screen (bigger shot) and returns to the side view'),
+  fullPage: z
+    .boolean()
+    .optional()
+    .describe('Captures the whole page (scroll included) in a hidden window'),
+  format: z.enum(['webp', 'png']).optional().describe('Default webp; png for documentation'),
+  maxWidth: z
+    .number()
+    .int()
+    .min(320)
+    .max(3840)
+    .optional()
+    .describe('Maximum width in px (default 1024 — raise it only for documentation)'),
+  ver: z
+    .boolean()
+    .optional()
+    .describe(
+      'Loads the image into your context so you can SEE it — natively if you have vision, or via the configured vision model description when the Vision mode is ON (the raw image never enters your context in that case). Default false — returns only the media URL (no image tokens). Use true when you actually need to see the screen.',
+    ),
+})
+
 const VIEWPORT_PRESETS: Record<string, { width: number | null; height: number | null; label: string }> = {
   mobile: { width: 390, height: 844, label: 'mobile (390×844)' },
   tablet: { width: 834, height: 1112, label: 'tablet (834×1112)' },
@@ -115,41 +147,14 @@ export function createPanelBrowserTools(ctx: ToolContext): ToolSet {
     panel_screenshot: tool({
       description:
         'Takes a screenshot of the panel page. By default it returns only the media URL (orbit-media://...) — the image is NOT loaded into your context (saves image tokens). Pass ver: true to load the image so you can actually SEE it — natively if you have vision, or via the configured vision model when the Vision mode is ON (in that case the vision model DESCRIBES the image and only the description enters your context, even if you have native vision). With savePath, also saves it to the working folder (e.g.: docs/login/screen.webp) — use in documentation mode. With fullscreen, expands to full screen, captures, and returns to the side view. With fullPage, captures the WHOLE page (beyond the viewport) in a hidden window, without touching the panel; format: png gives a high-resolution image for documentation.',
-      inputSchema: z.object(
-        (() => {
-          const fields: Record<string, z.ZodTypeAny> = {
-            savePath: z
-              .string()
-              .optional()
-              .describe('Path relative to the working folder to save the image (optional)'),
-            fullscreen: z
-              .boolean()
-              .optional()
-              .describe('Captures full screen (bigger shot) and returns to the side view'),
-            fullPage: z
-              .boolean()
-              .optional()
-              .describe('Captures the whole page (scroll included) in a hidden window'),
-            format: z.enum(['webp', 'png']).optional().describe('Default webp; png for documentation'),
-            maxWidth: z
-              .number()
-              .int()
-              .min(320)
-              .max(3840)
-              .optional()
-              .describe('Maximum width in px (default 1024 — raise it only for documentation)'),
-          }
-          if (ctx.modelVision || ctx.visionModel) {
-            fields.ver = z
-              .boolean()
-              .optional()
-              .describe(
-                'Loads the image into your context so you can SEE it — natively if you have vision, or via the configured vision model description when the Vision mode is ON (the raw image never enters your context in that case). Default false — returns only the media URL (no image tokens). Use true when you actually need to see the screen.',
-              )
-          }
-          return fields
-        })(),
-      ) as any,
+      // O schema é montado em runtime porque `ver` só pode EXISTIR quando há
+      // visão disponível — anunciar o campo sem ela faria o modelo pedir uma
+      // imagem que ninguém consegue ler. O `omit` preserva o tipo estático da
+      // forma completa (com `ver` opcional), que é exatamente o que o execute
+      // abaixo consome; sem isso os parâmetros dele viriam como `any`.
+      inputSchema: (ctx.modelVision || ctx.visionModel
+        ? SCREENSHOT_SCHEMA
+        : SCREENSHOT_SCHEMA.omit({ ver: true })) as typeof SCREENSHOT_SCHEMA,
       execute: async ({ savePath, fullscreen, fullPage, format, maxWidth, ver }, { toolCallId }) => {
         const outFormat: 'webp' | 'png' = format === 'png' ? 'png' : 'webp'
         const run = async (): Promise<string> => {

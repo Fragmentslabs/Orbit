@@ -176,6 +176,9 @@ export function ManagedTerminalTab({ ptyId, sessionId }: ManagedTerminalTabProps
       // Apenas desanexa do DOM; a sessão (buffer + PTY) continua viva no módulo
       session.host.remove()
     }
+    // Reanexa por ptyId; o sessionId é gravado na sessão e não muda durante
+    // a vida da aba (ver comentário acima).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ptyId])
 
   return (

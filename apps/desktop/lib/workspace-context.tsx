@@ -13,7 +13,9 @@ function loadDefaultMode(): WorkspaceMode {
       const parsed = JSON.parse(raw) as WorkspaceMode
       if (parsed === "chat" || parsed === "code") return parsed
     }
-  } catch {}
+  } catch {
+    // localStorage indisponível ou JSON corrompido — cai no padrão
+  }
   return "chat"
 }
 
@@ -21,7 +23,9 @@ function loadInitialFolders(): string[] {
   try {
     const stored = localStorage.getItem(RECENT_FOLDERS_KEY)
     if (stored) return JSON.parse(stored)
-  } catch {}
+  } catch {
+    // idem: lista de pastas corrompida recomeça vazia
+  }
   return []
 }
 
@@ -53,7 +57,9 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
     setView("chat")
     try {
       localStorage.setItem("orbit-default-mode", JSON.stringify(next))
-    } catch {}
+    } catch {
+      // quota cheia ou modo privativo: o modo vale só nesta sessão
+    }
   }
 
   return (

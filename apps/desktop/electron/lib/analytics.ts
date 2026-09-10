@@ -11,10 +11,11 @@ function computeRange(range: AnalyticsRange): { since: number; until?: number } 
     return { since: range.from, until: range.to }
   }
   switch (range) {
-    case 'today':
+    case 'today': {
       const startOfDay = new Date()
       startOfDay.setHours(0, 0, 0, 0)
       return { since: startOfDay.getTime() }
+    }
     case '7d':
       return { since: now - 7 * 24 * 60 * 60 * 1000 }
     case '30d':

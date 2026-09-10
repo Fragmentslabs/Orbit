@@ -346,14 +346,14 @@ function FullscreenChatFeed({ pinned, onTogglePin }: { pinned: boolean; onToggle
   useEffect(() => {
     if (expanded && !prevExpanded.current) scrollToBottom()
     prevExpanded.current = expanded
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // Só a abertura importa aqui — scrollToBottom é estável.
   }, [expanded])
 
   // Auto-scroll: novas mensagens / deltas do streaming / asks mudam a lista
   useEffect(() => {
     if (visibleMessages.length > prevLength.current) scrollToBottom()
     prevLength.current = visibleMessages.length
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // Depende do tamanho, não da identidade da lista (que muda a cada delta).
   }, [visibleMessages.length])
 
   // Carrega um chunk de mensagens antigas, preservando a posição de rolagem.

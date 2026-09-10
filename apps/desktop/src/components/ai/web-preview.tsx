@@ -251,7 +251,11 @@ export const WebPreviewUrl = ({ value, onChange, onKeyDown, ...props }: WebPrevi
   )
 }
 
-export type WebPreviewBodyProps = ComponentProps<"iframe"> & {
+// Base "div" e não "iframe": o corpo renderiza o container do pool de
+// <webview> (ou o próprio <webview>), nunca um iframe. Herdar os atributos de
+// iframe obrigava a espalhar `props as any` nos dois caminhos.
+export type WebPreviewBodyProps = ComponentProps<"div"> & {
+  src?: string
   loading?: ReactNode
   /** Dimensões fixas do viewport (responsividade). Ausente = preenche o container. */
   viewport?: { width: number; height: number } | null
@@ -319,7 +323,7 @@ export const WebPreviewBody = ({
           ref={containerRef}
           className={cn("bg-white", viewport ? "shrink-0 rounded-md border shadow-sm" : "size-full", className)}
           style={viewport ? { width: viewport.width, height: viewport.height } : undefined}
-          {...(props as any)}
+          {...props}
         />
         {empty && (
           <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-4 bg-sidebar p-6 text-center text-muted-foreground">
@@ -390,13 +394,12 @@ export const WebPreviewBody = ({
         viewport && "flex items-start justify-center bg-muted/40 p-3",
       )}
     >
-      {/* @ts-ignore webview is an electron specific tag */}
       <webview
         className={cn("bg-white", viewport ? "shrink-0 rounded-md border shadow-sm" : "size-full", className)}
         style={viewport ? { width: viewport.width, height: viewport.height } : undefined}
         src={(src ?? url) || undefined}
         title={t("webPreview.previewTitle")}
-        {...(props as any)}
+        {...props}
       />
       {loading}
     </div>

@@ -19,8 +19,7 @@ import { useBrainPrefs } from "@/src/stores/brain-prefs"
 const DRAFT_KEY = "draft"
 
 function withoutDraft(bySession: Record<string, boolean>): Record<string, boolean> {
-  const { [DRAFT_KEY]: _draft, ...rest } = bySession
-  return rest
+  return Object.fromEntries(Object.entries(bySession).filter(([key]) => key !== DRAFT_KEY))
 }
 
 const MODE_OVERRIDE_KEYS: OverridableMode[] = [

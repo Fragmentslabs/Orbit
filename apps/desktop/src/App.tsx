@@ -175,7 +175,7 @@ function Layout() {
 
   useEffect(() => {
     if (workspaceMode !== "code" && workspaceMode !== "chat") setRightPanelOpen(false)
-  }, [workspaceMode])
+  }, [workspaceMode, setRightPanelOpen])
 
   const handleHoverShow = useCallback(() => {
     clearTimeout(showTimer.current)

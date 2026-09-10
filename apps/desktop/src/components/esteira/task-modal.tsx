@@ -52,6 +52,9 @@ export function TaskModal({
     setTitulo(task.titulo)
     setDescricao(task.descricao)
     setFaseAtiva(task.faseAtual ?? 0)
+    // Semeia o formulário na troca de task, não a cada mutação do objeto —
+    // senão um update do store apagaria o que está sendo digitado.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [task?.id])
 
   const anotacaoPorFase = useMemo(() => {

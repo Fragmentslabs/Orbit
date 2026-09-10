@@ -399,7 +399,9 @@ export function RightPanel() {
   const tabsBySession = usePanelStore((s) => s.tabsBySession)
   const activeTabBySession = usePanelStore((s) => s.activeTabBySession)
   const sessionKey = activeSessionId ?? "__orphan__"
-  const tabs = tabsBySession[sessionKey] ?? []
+  // `?? []` cria um array novo a cada render: memoizado, os callbacks e
+  // efeitos abaixo param de se recriar junto.
+  const tabs = useMemo(() => tabsBySession[sessionKey] ?? [], [tabsBySession, sessionKey])
   const activeTabId = activeTabBySession[sessionKey] ?? null
   const addTabToStore = usePanelStore((s) => s.addTab)
   const removeTabFromStore = usePanelStore((s) => s.removeTab)
@@ -472,7 +474,7 @@ export function RightPanel() {
     const tabTitle = n > 1 ? `${meta.label} ${n}` : meta.label
     addTabToStore(sessionKey, { id, type, title: tabTitle })
     setActiveTabInStore(sessionKey, id)
-  }, [activeSessionId, tabs, addTabToStore, setActiveTabInStore, folders, tabMeta, nextTabNumber])
+  }, [sessionKey, tabs, addTabToStore, setActiveTabInStore, folders, tabMeta, nextTabNumber])
 
   const removeTab = useCallback((id: string) => {
     const sk = activeSessionId ?? "__orphan__"
@@ -520,6 +522,9 @@ export function RightPanel() {
       setActiveTabInStore(activeSessionId, id)
       usePanelStore.setState({ pendingChatTab: 0, pendingChatTabSession: undefined, pendingChatTabTitle: undefined })
     }
+    // Reage ao PEDIDO (pendingChatTab), lendo as abas do momento. `tabs` como
+    // dep faria o efeito rodar de novo pela aba que ele mesmo acabou de criar.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pendingChatTab, pendingChatTabSession, pendingChatTabTitle, activeSessionId])
 
   // Diff solicitado pelo chat: abre aba Diff
@@ -562,6 +567,8 @@ export function RightPanel() {
       pendingDiffTaskId: undefined,
       pendingDiffTitle: undefined,
     })
+    // Idem: o gatilho é o pedido de diff, não a lista de abas.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pendingDiff, pendingDiffSessionId, pendingDiffMessageId, pendingDiffEsteiraId, pendingDiffTaskId, pendingDiffTitle, activeSessionId])
 
   // Workers da orquestração em execução abrem tabs automaticamente
@@ -582,6 +589,9 @@ export function RightPanel() {
         if (!currentActive) setActiveTabInStore(activeSessionId, id)
       }
     }
+    // Abre aba para worker que entrou em execução; `tabs` é lido no momento
+    // (o guard `exists` evita duplicar) e como dep re-dispararia a si mesmo.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessions, statusMap, activeSessionId])
 
   const activeTab = tabs.find(t => t.id === activeTabId)

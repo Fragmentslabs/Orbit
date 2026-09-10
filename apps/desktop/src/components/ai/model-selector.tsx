@@ -158,7 +158,10 @@ export type ModelSelectorLogoProps = Omit<ComponentProps<"img">, "src" | "alt"> 
     | "scaleway"
     | "amazon-bedrock"
     | "cerebras"
-    | (string & {})
+    // Mantém o autocomplete dos literais acima sem fechar a união: qualquer
+    // provider novo do catálogo continua válido. `Record<never, never>` é o
+    // equivalente de `{}` que não cai no ban-types.
+    | (string & Record<never, never>)
 }
 
 export const ModelSelectorLogo = ({ provider, className, ...props }: ModelSelectorLogoProps) => (

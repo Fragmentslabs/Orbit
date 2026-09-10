@@ -28,6 +28,7 @@ import { importSkillSelection } from './skills/import'
 import { sanitizeSlug, serializeSkill } from './skills/parser'
 import { approvePendingSkill, discardPendingSkill, listPendingSkills } from './skills/pending'
 import { authorizeMcp, listMcpStatus, readMcpConfig, reconnectMcp, saveMcpConfig } from './mcp'
+import type { McpConfig } from '@shared/mcp'
 import { readMedia, listMedia, mediaDiskUsage, deleteMedia, deleteManyMedia } from './media'
 
 import type { SessionModeOverrides, WorkerConfigSnapshot } from '@shared/companion'
@@ -531,7 +532,9 @@ async function handleGetMcpConfig(_req: IncomingMessage, res: ServerResponse) {
 async function handlePutMcpConfig(req: IncomingMessage, res: ServerResponse) {
   try {
     const config = await readBody(req)
-    const status = await saveMcpConfig(config as any)
+    // Corpo cru da rede: readBody devolve Record<string, unknown> e quem
+    // valida a forma é o saveMcpConfig (escreve o arquivo e reconcilia).
+    const status = await saveMcpConfig(config as unknown as McpConfig)
     jsonResponse(res, 200, status)
   } catch (err) {
     jsonResponse(res, 400, { error: (err as Error).message })
@@ -560,7 +563,7 @@ async function handleAuthorizeMcp(_req: IncomingMessage, res: ServerResponse, na
 async function handleGetBranches(req: IncomingMessage, res: ServerResponse) {
   try {
     const body = await readBody(req)
-    const repoPath = (body as any)?.repoPath
+    const repoPath = body?.repoPath as string | undefined
     if (!repoPath) { jsonResponse(res, 200, { branches: [], current: '' }); return }
     const [{ stdout: list }, { stdout: current }] = await Promise.all([
       execFileAsync('git', ['branch', '--list', '--format=%(refname:short)'], { cwd: repoPath }),
@@ -576,7 +579,7 @@ async function handleGetBranches(req: IncomingMessage, res: ServerResponse) {
 async function handlePostCheckout(req: IncomingMessage, res: ServerResponse) {
   try {
     const body = await readBody(req)
-    const { repoPath, branch } = body as any
+    const { repoPath, branch } = body as { repoPath?: string; branch?: string }
     if (!repoPath || !branch) { jsonResponse(res, 400, { error: 'repoPath e branch obrigatórios' }); return }
     await execFileAsync('git', ['checkout', branch], { cwd: repoPath })
     jsonResponse(res, 200, { ok: true })

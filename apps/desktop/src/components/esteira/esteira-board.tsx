@@ -48,7 +48,7 @@ export function EsteiraBoard() {
   // de deixar a tela presa num board que não existe mais.
   useEffect(() => {
     if (abertaId && !aberta) setAbertaId(null)
-  }, [abertaId, aberta])
+  }, [abertaId, aberta, setAbertaId])
 
   if (!carregado) {
     return <p className="p-6 text-center text-xs text-muted-foreground">{t("esteira.carregando")}</p>

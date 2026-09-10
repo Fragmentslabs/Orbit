@@ -211,7 +211,9 @@ function McpServerDialog({ open, onOpenChange, initial }: {
     try {
       const result = await window.ipcRenderer.invoke("select-folder")
       if (result) setCwd(result as string)
-    } catch {}
+    } catch {
+      // diálogo cancelado ou indisponível — mantém o cwd atual
+    }
   }
 
   const save = async () => {

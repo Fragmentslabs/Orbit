@@ -153,14 +153,14 @@ export function MemoryGraph({ pool, query, selectedId, onSelect, projectDirector
     return { minX, minY, maxX, maxY, width: maxX - minX, height: maxY - minY }
   }, [nodes])
 
-  const queryTokens = normalizeText(query).split(" ").filter(Boolean)
+  const queryTokens = useMemo(() => normalizeText(query).split(" ").filter(Boolean), [query])
   const matchesQuery = useCallback(
     (memory: Memory) => {
       if (queryTokens.length === 0) return true
       const haystack = normalizeText(`${memory.text} ${memory.tags.join(" ")}`)
       return queryTokens.every((t) => haystack.includes(t))
     },
-    [query],
+    [queryTokens],
   )
 
   const fitView = useCallback((animate = true) => {
@@ -191,6 +191,10 @@ export function MemoryGraph({ pool, query, selectedId, onSelect, projectDirector
   useEffect(() => {
     fitView(framed.current)
     framed.current = true
+    // Reenquadra quando o grafo MUDA DE TAMANHO. fitView depende de `nodes`,
+    // que troca de identidade a cada recálculo — como dep, jogaria fora o
+    // pan/zoom do usuário a cada atualização.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [nodes.length])
 
   const zoomIn = useCallback(() => viewport.zoomBy(ZOOM_FACTOR), [viewport])

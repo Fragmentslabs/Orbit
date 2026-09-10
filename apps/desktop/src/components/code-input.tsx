@@ -170,7 +170,7 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId, on
     subagents,
     orchestrate: orchestra && mode === "code" ? {} : undefined,
     loop,
-  }), [plan, search, simple, brain, brainContext, permissionMode, thinking, variantId, subagents, orchestra, loop])
+  }), [plan, search, simple, brain, brainContext, permissionMode, thinking, variantId, subagents, orchestra, loop, mode])
 
   const getDirs = useCallback(() => {
     const [directory, ...extraDirectories] = folders

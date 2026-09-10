@@ -429,6 +429,9 @@ export const PromptInput = ({
   children,
   ...props
 }: PromptInputProps) => {
+  // Declarado no topo do corpo: os callbacks abaixo usam `t` e precisam
+  // cita-lo nas proprias deps (no fim do corpo isso cairia na TDZ).
+  const { t } = useTranslation()
   // Try to use a provider controller if present
   const controller = useOptionalPromptInputController()
   const usingProvider = !!controller
@@ -515,7 +518,7 @@ export const PromptInput = ({
         return prev.concat(next)
       })
     },
-    [matchesAccept, maxFiles, maxFileSize, onError],
+    [matchesAccept, maxFiles, maxFileSize, onError, t],
   )
 
   const removeLocal = useCallback(
@@ -631,7 +634,7 @@ export const PromptInput = ({
         }
       }
     },
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- cleanup only on unmount; filesRef always current
+    // Cleanup só no unmount; filesRef está sempre atual.
     [usingProvider],
   )
 
@@ -691,7 +694,6 @@ export const PromptInput = ({
   }
 
   // Render with or without local provider
-  const { t } = useTranslation()
   const inner = (
     <>
       <input
@@ -955,10 +957,10 @@ interface SpeechRecognition extends EventTarget {
   lang: string
   start(): void
   stop(): void
-  onstart: ((this: SpeechRecognition, ev: Event) => any) | null
-  onend: ((this: SpeechRecognition, ev: Event) => any) | null
-  onresult: ((this: SpeechRecognition, ev: SpeechRecognitionEvent) => any) | null
-  onerror: ((this: SpeechRecognition, ev: SpeechRecognitionErrorEvent) => any) | null
+  onstart: ((this: SpeechRecognition, ev: Event) => void) | null
+  onend: ((this: SpeechRecognition, ev: Event) => void) | null
+  onresult: ((this: SpeechRecognition, ev: SpeechRecognitionEvent) => void) | null
+  onerror: ((this: SpeechRecognition, ev: SpeechRecognitionErrorEvent) => void) | null
 }
 
 interface SpeechRecognitionEvent extends Event {

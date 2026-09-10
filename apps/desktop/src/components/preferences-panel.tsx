@@ -35,7 +35,7 @@ import { useSettingsUi } from "@/src/stores/settings-ui"
 import { useModelModePrefs } from "@/src/stores/model-mode-prefs"
 import type { DefaultModel, ActiveModeDefaults } from "@/src/stores/model-mode-prefs"
 import type { BrainContextMode } from "@/src/stores/brain-prefs"
-import { useBrainPrefs, useChatContext, useCodeContext } from "@/src/stores/brain-prefs"
+import { useBrainPrefs } from "@/src/stores/brain-prefs"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { LOCALE_LABELS, SUPPORTED_LOCALES, useLocaleStore, type AppLocale } from "@/src/stores/locale-store"
 
@@ -245,10 +245,12 @@ function ContextSelect({ value, onChange }: {
 
 function MemoriaSection({ isCode }: { isCode: boolean }) {
   const { t } = useTranslation()
-  const context = isCode ? useCodeContext() : useChatContext()
-  const setter = isCode
-    ? useBrainPrefs((s) => s.setCodeContext)
-    : useBrainPrefs((s) => s.setChatContext)
+  // A condição vai DENTRO do seletor: chamar um hook ou outro conforme a
+  // prop deixa a ordem de hooks dependendo dela. Hoje funciona porque cada
+  // call site passa um `isCode` fixo, mas basta alguém tornar a prop dinâmica
+  // para quebrar em runtime.
+  const context = useBrainPrefs((s) => (isCode ? s.codeContext : s.chatContext))
+  const setter = useBrainPrefs((s) => (isCode ? s.setCodeContext : s.setChatContext))
 
   const description = isCode
     ? t("preferences.context.descriptionCode")

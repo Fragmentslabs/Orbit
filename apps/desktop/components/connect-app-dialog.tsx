@@ -52,6 +52,9 @@ export function ConnectAppDialog({ open, onOpenChange }: Props) {
       clearInterval(pollingRef.current)
       void companionApi.setPairingMode(false)
     }
+    // Só a abertura reinicia o polling; fetchStatus é recriado a cada render
+    // e entraria num ciclo de limpar/recriar o interval.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open])
 
   useEffect(() => {
@@ -64,7 +67,10 @@ export function ConnectAppDialog({ open, onOpenChange }: Props) {
     })
       .then(setQrDataUrl)
       .catch(() => setQrDataUrl(null))
-  }, [status?.ip, status?.port, status?.running])
+    // `status.pin` entra nas deps de propósito: o PIN é regerado a cada 5
+    // minutos (PIN_TTL_MS) e sem isto o QR continuaria oferecendo o antigo,
+    // divergindo do PIN em texto logo abaixo dele.
+  }, [status?.ip, status?.port, status?.running, status?.pin])
 
   const running = status?.running ?? false
   const deviceCount = status?.connectedClients?.length ?? 0

@@ -130,6 +130,9 @@ export function EsteiraCreateDialog({
     setCommitPrompt("")
     setPrints(false)
     setFases(templates.filter((tpl) => tpl.padrao).map(doTemplate))
+    // O reset é disparado pela ABERTURA do modal; doTemplate é um helper
+    // recriado a cada render e como dep limparia o formulário sozinho.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [aberto, templates, projetoExistente, esteiraEditando])
 
   const disponiveis = templates.filter(

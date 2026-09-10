@@ -349,7 +349,7 @@ export function ChatView({ sessionId }: { sessionId?: string } = {}) {
       prevSessionId.current = session.id
       setFolders([session.directory, ...(session.extraDirectories ?? [])])
     }
-  }, [session?.id, session?.directory, viewMode, setFolders])
+  }, [session?.id, session?.directory, session?.extraDirectories, viewMode, setFolders])
 
   const isBusy = status === "submitted" || status === "streaming" || status === "cancelling" || status === "fallback"
   const hasChat = messages.length > 0
