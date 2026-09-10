@@ -2,6 +2,8 @@ import type {
   Catalog,
   CatalogProvider,
   ChatEvent,
+  ModelRotation,
+  RotationConfig,
   SearchHit,
   SendMessageInput,
   SessionRevert,
@@ -214,6 +216,29 @@ export const sessionModelsApi = {
       listener(data as { providerId: string; modelId: string; sessionId?: string | null }),
     )
     return () => window.ipcRenderer.off("companion:model-select", wrapper)
+  },
+}
+
+/** Rotação de modelos: o renderer empurra o estado inteiro (lista +
+ *  escolha por chat) para o main, que guarda em cache, resolve a sequência
+ *  do turno e repassa aos companions. No sentido inverso, escuta o que foi
+ *  feito no celular (WS 'rotation:select' / 'rotation:set') — o renderer é a
+ *  fonte da verdade, então é aqui que a mudança é persistida. */
+export const rotationApi = {
+  sync: (config: RotationConfig) => {
+    window.ipcRenderer?.send("rotation:sync", config)
+  },
+  onSelect: (listener: (data: { rotationId: string | null; sessionId?: string | null }) => void) => {
+    const wrapper = window.ipcRenderer.on("companion:rotation-select", (data) =>
+      listener(data as { rotationId: string | null; sessionId?: string | null }),
+    )
+    return () => window.ipcRenderer.off("companion:rotation-select", wrapper)
+  },
+  onSet: (listener: (data: { rotations: ModelRotation[] }) => void) => {
+    const wrapper = window.ipcRenderer.on("companion:rotation-set", (data) =>
+      listener(data as { rotations: ModelRotation[] }),
+    )
+    return () => window.ipcRenderer.off("companion:rotation-set", wrapper)
   },
 }
 

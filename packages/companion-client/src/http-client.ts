@@ -6,7 +6,7 @@
  */
 
 import type { ConnectionConfig } from './types'
-import type { MediaEntry, MediaUsage, WorkerConfigSnapshot } from '@orbit/shared'
+import type { MediaEntry, MediaUsage, RotationConfig, WorkerConfigSnapshot } from '@orbit/shared'
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -74,6 +74,13 @@ export class CompanionHttp {
    *  O mobile herda o estado do chat ao conectar. */
   async getSessionModes(): Promise<HttpResult<{ overrides: Record<string, Record<string, boolean>> }>> {
     return this.get('/api/session-modes')
+  }
+
+  /** Rotação de modelos do desktop: lista de rotações + qual está escolhida
+   *  em cada chat. O celular herda o estado ao conectar e depois acompanha
+   *  pelo evento WS 'rotation:change'. */
+  async getRotations(): Promise<HttpResult<{ config: RotationConfig }>> {
+    return this.get('/api/rotations')
   }
 
   /** Config global dos modos delegados (modelo/thinking dos workers de

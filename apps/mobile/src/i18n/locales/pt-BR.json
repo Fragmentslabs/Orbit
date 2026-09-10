@@ -1190,7 +1190,8 @@
     "inHours": "Em {{count}}h"
   },
   "modelPicker": {
-    "select": "Selecionar modelo"
+    "select": "Selecionar modelo",
+    "rotation": "Rotações"
   },
   "renamePrompt": {
     "cancel": "Cancelar",
@@ -1198,5 +1199,29 @@
   },
   "summaryCard": {
     "title": "Resumo das mensagens anteriores (contexto compactado)"
+  },
+  "rotation": {
+    "title": "Rotação de modelos",
+    "description": "Listas de modelos que o Orbit tenta em sequência quando um falha no início do turno. As rotações aparecem no seletor de modelo como um modelo — escolha uma no chat para valer nele.",
+    "manage": "Gerenciar rotações",
+    "new": "Nova rotação",
+    "newName": "Rotação",
+    "empty": "Nenhuma rotação ainda",
+    "emptyHint": "Crie uma rotação e adicione os modelos que serão tentados em sequência quando um falhar.",
+    "notFound": "Esta rotação não existe mais.",
+    "namePlaceholder": "Nome da rotação",
+    "nameRequired": "O nome é obrigatório",
+    "nameDuplicate": "Já existe uma rotação com esse nome",
+    "modelsSection": "Modelos",
+    "addModel": "Adicionar modelo",
+    "slotNone": "Nenhum",
+    "removeRotation": "Excluir rotação",
+    "remove": "Excluir",
+    "cancel": "Cancelar",
+    "confirmRemove": "Excluir a rotação \"{{name}}\"?",
+    "confirmRemoveDescription": "Esta rotação será removida e os chats que a estavam usando voltam a usar o modelo padrão.",
+    "maxHint": "Até {{max}} modelos por rotação",
+    "slotsLabel_one": "{{count}} modelo",
+    "slotsLabel_other": "{{count}} modelos"
   }
 }

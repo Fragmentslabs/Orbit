@@ -34,12 +34,13 @@ import type {
   BranchesResponse,
   SessionModeOverrides,
   SessionModeChangeEvent,
+  RotationChangeEvent,
   WorkerConfigSnapshot,
   WorkerConfigChangeEvent,
   AppPreferences,
   AppPreferencesChangeEvent,
 } from '@shared/companion'
-import type { ChatEvent, SessionInfo, FolderInfo, ChatMessage, MessagePart, SendMessageInput, PlanReview, OrchestrationPlan } from '@shared/chat'
+import type { ChatEvent, SessionInfo, FolderInfo, ChatMessage, MessagePart, SendMessageInput, PlanReview, OrchestrationPlan, RotationConfig } from '@shared/chat'
 import type { RotinaEvent } from '@shared/rotinas'
 import type { EsteiraEvent } from '@shared/esteira'
 import { StorageKeys } from '@shared/chat'
@@ -606,6 +607,34 @@ async function handleRequest(client: ConnectedClient, requestId: string, req: Co
               modelId: req.modelId,
               sessionId: req.sessionId ?? null,
             })
+          }
+        }
+        sendResponse(ws, requestId, true)
+        break
+      }
+
+      case 'rotation:select': {
+        // Espelho do models:select: as rotações vivem no renderer
+        // (localStorage), então a escolha feita no celular é aplicada lá — e
+        // de lá volta para todos os companions pelo broadcast.
+        for (const win of BrowserWindow.getAllWindows()) {
+          if (!win.isDestroyed()) {
+            win.webContents.send('companion:rotation-select', {
+              rotationId: req.rotationId ?? null,
+              sessionId: req.sessionId ?? null,
+            })
+          }
+        }
+        sendResponse(ws, requestId, true)
+        break
+      }
+
+      case 'rotation:set': {
+        // CRUD de rotação feito no celular: manda a lista inteira para o
+        // renderer persistir (fonte da verdade), como o prefs:set.
+        for (const win of BrowserWindow.getAllWindows()) {
+          if (!win.isDestroyed()) {
+            win.webContents.send('companion:rotation-set', { rotations: req.rotations ?? [] })
           }
         }
         sendResponse(ws, requestId, true)
@@ -1351,6 +1380,15 @@ export function broadcastSessionModels(
   for (const client of clients) {
     if (!client.authenticated || client.ws.readyState !== WebSocket.OPEN) continue
     client.ws.send(wrap({ type: 'session:model-change', overrides } as unknown as CompanionEvent))
+  }
+}
+
+/** Estado da rotação (lista + escolha por chat) empurrado aos companions —
+ *  sem isto o celular abriria sem as rotações criadas no desktop. */
+export function broadcastRotationConfig(config: RotationConfig): void {
+  for (const client of clients) {
+    if (!client.authenticated || client.ws.readyState !== WebSocket.OPEN) continue
+    client.ws.send(wrap({ type: 'rotation:change', config } satisfies RotationChangeEvent))
   }
 }
 

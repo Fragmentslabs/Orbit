@@ -263,11 +263,13 @@ function isEngineText(source: TextPart["source"]): boolean {
   return source === "nudge" || source === "todo" || source === "internal"
 }
 
-export function CodeAssistantMessage({ message, sessionId, isLast, isBusy, onRetry }: {
+export function CodeAssistantMessage({ message, sessionId, isLast, isBusy, busyLabel, onRetry }: {
   message: ChatMessage
   sessionId?: string
   isLast: boolean
   isBusy: boolean
+  /** Rótulo do estado de espera (ex.: "Tentando fallback 2/3…") — substitui o padrão */
+  busyLabel?: string
   onRetry?: () => void
 }) {
   const { t } = useTranslation()
@@ -298,7 +300,7 @@ export function CodeAssistantMessage({ message, sessionId, isLast, isBusy, onRet
 
   return (
     <div className="flex w-full flex-col gap-1">
-      {waiting && <Shimmer className="text-sm">{t("chat.code.analyzing")}</Shimmer>}
+      {waiting && <Shimmer className="text-sm">{busyLabel ?? t("chat.code.analyzing")}</Shimmer>}
       {segments.map((segment, index) =>
         segment.kind === "task" ? (
           <TaskGroup

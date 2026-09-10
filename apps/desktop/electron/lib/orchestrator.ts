@@ -15,7 +15,8 @@ import { StorageKeys } from '@shared/chat'
 import { getProvider } from './catalog'
 import { abortChat, runChat, toModelMessages } from './chat-engine'
 import { forwardChatEvent } from './companion-server'
-import { classifyProviderError, errorToText } from './errors'
+import { classifyProviderError, errorToText, isRecoverableErrorKind } from './errors'
+import { hasStreamedContent, resolveRotation } from './model-rotation'
 import { ORCHESTRATOR_PLAN_PROMPT, ORCHESTRATOR_SYNTHESIS_PROMPT } from './prompts'
 import { resolveModel } from './providers'
 import { withProviderSession } from './provider-session'
@@ -177,9 +178,31 @@ async function runOrchestrationTurn(win: BrowserWindow, input: SendMessageInput)
   await saveMessages(sessionId, history)
   emit(win, { type: 'message', sessionId, message: assistantMessage })
 
+  // Rotação de modelos (mesma regra do chat-engine): rotação escolhida no
+  // seletor para este chat; senão o modelo pinado; senão o default — com o
+  // primeiro modelo como ponto de partida do loop abaixo.
+  const rotationSequence = resolveRotation(input.sessionId, {
+    providerId: input.providerId,
+    modelId: input.modelId,
+  })
+  const primaryModel = rotationSequence[0] ?? { providerId: input.providerId, modelId: input.modelId }
+
   try {
-    const model = await resolveModel(input.providerId, input.modelId)
-    emit(win, { type: 'status', sessionId, status: 'streaming' })
+    // Loop de tentativas do PLANEJAMENTO: falha recuperável antes do primeiro
+    // token troca para o próximo modelo da sequência (os workers já herdam a
+    // rotação pelo runChat; a síntese/revisão seguem o comportamento atual).
+    let attemptIndex = 0
+    for (;;) {
+      const primary = rotationSequence[attemptIndex] ?? primaryModel
+      assistantMessage.providerId = primary.providerId
+      assistantMessage.modelId = primary.modelId
+      assistantMessage.parts = []
+      assistantMessage.error = undefined
+      assistantMessage.errorKind = undefined
+      emit(win, { type: 'message', sessionId, message: assistantMessage })
+      try {
+        const model = await resolveModel(primary.providerId, primary.modelId)
+        emit(win, { type: 'status', sessionId, status: 'streaming' })
 
     const tasks: OrchestrationTask[] = []
     // Tool context do planejamento (leitura do projeto + subagent). Sempre
@@ -235,13 +258,13 @@ async function runOrchestrationTurn(win: BrowserWindow, input: SendMessageInput)
         ? 'You also have the subagent tool for research while planning (3 calls max).'
         : 'You do NOT have subagents: research the project yourself with read/ls/glob/grep before splitting.',
     ].join('\n')
-    const provider = await getProvider(input.providerId)
+    const provider = await getProvider(primary.providerId)
     const baseMessages = normalizeMessages(
       toModelMessages(history.slice(0, -1)),
-      interleavedReasoningField(provider, input.modelId),
+      interleavedReasoningField(provider, primary.modelId),
     )
-    const providerOptions = await buildProviderOptions(input)
-    const cost = provider?.models[input.modelId]?.cost
+    const providerOptions = await buildProviderOptions({ ...input, providerId: primary.providerId, modelId: primary.modelId })
+    const cost = provider?.models[primary.modelId]?.cost
 
     // Consome o stream de uma passada de planejamento, emitindo parts (texto,
     // raciocínio, tool-calls) para a UI mostrar o orquestrador trabalhando —
@@ -255,7 +278,7 @@ async function runOrchestrationTurn(win: BrowserWindow, input: SendMessageInput)
         stopWhen: stepCountIs(PLAN_MAX_STEPS),
         abortSignal: controller.signal,
         providerOptions,
-        prepareStep: reasoningPrepareStep(provider, input.modelId),
+        prepareStep: reasoningPrepareStep(provider, primary.modelId),
         onError: () => { /* tratado no loop do fullStream */ },
       })
       let text = ''
@@ -371,9 +394,32 @@ async function runOrchestrationTurn(win: BrowserWindow, input: SendMessageInput)
     // próprias — ela sempre roda, e o toggle Loop só decide o TAMANHO do
     // orçamento global de rodadas (ver a fase de revisão em approvePlan).
     pending.set(sessionId, { input, plan, assistantMessageId: assistantMessage.id })
-    await persistPlan(win, sessionId, plan)
-    emit(win, { type: 'message', sessionId, message: assistantMessage })
-    emit(win, { type: 'status', sessionId, status: 'idle' })
+      await persistPlan(win, sessionId, plan)
+        emit(win, { type: 'message', sessionId, message: assistantMessage })
+        emit(win, { type: 'status', sessionId, status: 'idle' })
+        break
+      } catch (err) {
+        const aborted = controller.signal.aborted
+        const { kind } = classifyProviderError(err)
+        const nextIndex = attemptIndex + 1
+        if (
+          !aborted &&
+          !hasStreamedContent(assistantMessage.parts) &&
+          isRecoverableErrorKind(kind) &&
+          nextIndex < rotationSequence.length
+        ) {
+          attemptIndex = nextIndex
+          emit(win, {
+            type: 'status',
+            sessionId,
+            status: 'fallback',
+            fallback: { current: nextIndex + 1, total: rotationSequence.length },
+          })
+          continue
+        }
+        throw err
+      }
+    }
   } catch (err) {
     const aborted = controller.signal.aborted
     const { kind, detail: message } = classifyProviderError(err)

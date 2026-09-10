@@ -4,7 +4,7 @@
  * e o handshake de autenticação.
  */
 
-import type { SendMessageOptions, SessionMode, FilePart, WorkerModelConfig, ReasoningConfig, PermissionMode, PlanReview, OrchestrationPlan, AskItem } from './chat'
+import type { SendMessageOptions, SessionMode, FilePart, WorkerModelConfig, ReasoningConfig, PermissionMode, PlanReview, OrchestrationPlan, AskItem, ModelRotation, RotationConfig } from './chat'
 import type { AnalyticsRange } from './analytics'
 import type { NovaRotinaInput, Rotina, RotinaEvent, RotinaModelo } from './rotinas'
 import type {
@@ -167,6 +167,32 @@ export interface SelectSessionModeRequest {
 export interface SessionModelChangeEvent {
   type: 'session:model-change'
   overrides: Record<string, { providerId: string; modelId: string }>
+}
+
+/** Rotação escolhida para um chat, feita num companion. Espelho do
+ *  `models:select`: as rotações vivem no renderer do desktop (localStorage),
+ *  então a escolha do celular é aplicada lá e volta a todos pelo broadcast.
+ *  `rotationId` null desfaz (o chat volta ao modelo). */
+export interface SelectRotationRequest {
+  type: 'rotation:select'
+  rotationId: string | null
+  /** Sessão alvo — ausente/null = chat novo (draft). */
+  sessionId?: string | null
+}
+
+/** CRUD de rotações feito num companion: manda a lista inteira, como o
+ *  `prefs:set`. O renderer do desktop persiste e devolve pelo broadcast —
+ *  evita um verbo por operação e mantém uma única fonte da verdade. */
+export interface SetRotationsRequest {
+  type: 'rotation:set'
+  rotations: ModelRotation[]
+}
+
+/** Estado completo da rotação (lista + escolha por chat) empurrado pelo
+ *  desktop aos companions, no mesmo formato que o main recebe do renderer. */
+export interface RotationChangeEvent {
+  type: 'rotation:change'
+  config: RotationConfig
 }
 
 /** Mapa completo de modos por chat empurrado pelo desktop aos companions. */
@@ -596,6 +622,8 @@ export type CompanionRequest =
   | GetModelsRequest
   | SelectModelRequest
   | SelectSessionModeRequest
+  | SelectRotationRequest
+  | SetRotationsRequest
   | SetWorkerConfigRequest
   | GetCatalogRequest
   | GetAnalyticsRequest
@@ -733,6 +761,7 @@ export type CompanionEvent =
   | NewMessageNotification
   | SessionModelChangeEvent
   | SessionModeChangeEvent
+  | RotationChangeEvent
   | WorkerConfigChangeEvent
   | AppPreferencesChangeEvent
   | StatusUpdate

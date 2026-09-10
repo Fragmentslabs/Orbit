@@ -240,6 +240,17 @@ export const useProviderStore = create<ProviderState>((set, get) => ({
  * retorna false para a UI não acusar falta de provedor indevidamente.
  * Usado pelo seletor de modelo (pulso) e pelo bloqueio de envio (card).
  */
+/** Rótulo curto "modelo · provedor" para linhas compactas (ex.: slots de
+ *  rotação). Retorna null quando o modelo não está no catálogo. */
+export function useCatalogModelLabel(model: { providerId: string; modelId: string } | null): string | null {
+  const catalog = useProviderStore((s) => s.catalog)
+  if (!model) return null
+  const provider = catalog[model.providerId]
+  const catalogModel = provider?.models[model.modelId]
+  if (!catalogModel) return null
+  return `${catalogModel.name} · ${provider?.name ?? model.providerId}`
+}
+
 export function useNoProviderConnected(): boolean {
   const loading = useProviderStore((s) => s.loading)
   const error = useProviderStore((s) => s.error)

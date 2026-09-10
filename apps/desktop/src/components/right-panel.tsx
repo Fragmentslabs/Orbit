@@ -231,7 +231,7 @@ export function RightPanelDropZone() {
 }
 
 function WorkerStatusIcon({ status }: { status: string }) {
-  if (status === "submitted" || status === "streaming" || status === "cancelling") {
+  if (status === "submitted" || status === "streaming" || status === "cancelling" || status === "fallback") {
     return <LoaderIcon className="size-3 shrink-0 animate-spin text-muted-foreground" />
   }
   if (status === "error") return <XCircleIcon className="size-3 shrink-0 text-destructive" />
@@ -571,7 +571,7 @@ export function RightPanel() {
       const status = statusMap[session.id]
       if (
         session.parentId === activeSessionId &&
-        (status === "submitted" || status === "streaming" || status === "cancelling")
+        (status === "submitted" || status === "streaming" || status === "cancelling" || status === "fallback")
       ) {
         const id = `chat-${session.id}`
         const exists = tabs.some((t) => t.id === id)

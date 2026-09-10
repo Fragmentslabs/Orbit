@@ -34,8 +34,9 @@ import {
   registerMediaProtocol,
 } from './lib/media'
 import type { AppPreferences, SessionModeOverrides, WorkerConfigSnapshot } from '@shared/companion'
-import { startCompanionServer, getCompanionStatus, setPairingMode, forwardChatEvent, broadcastSessionModels, broadcastSessionModes, broadcastWorkerConfig, broadcastAppPreferences } from './lib/companion-server'
-import { setSessionModelsCache, setSessionModesCache, setWorkerConfigCache } from './lib/companion-http'
+import { startCompanionServer, getCompanionStatus, setPairingMode, forwardChatEvent, broadcastSessionModels, broadcastSessionModes, broadcastWorkerConfig, broadcastAppPreferences, broadcastRotationConfig } from './lib/companion-server'
+import { setSessionModelsCache, setSessionModesCache, setWorkerConfigCache, setRotationHttpCache } from './lib/companion-http'
+import { setRotationConfigCache } from './lib/model-rotation'
 import { readJson as readStorageJson } from './lib/storage'
 import { registerPanelWebContents } from './lib/panel-browser'
 import { setupMemoryScheduler } from './lib/memory/scheduler'
@@ -54,6 +55,7 @@ import { setupAutoUpdater } from './lib/updater'
 import { destroyBrowserWindow } from './lib/tools'
 import type { SendMessageInput } from '@shared/chat'
 import type { ChatEvent } from '@shared/chat'
+import type { RotationConfig } from '@shared/chat'
 import { StorageKeys } from '@shared/chat'
 import * as esteira from './lib/esteira'
 import * as rotinas from './lib/rotinas'
@@ -1301,6 +1303,17 @@ app.whenReady().then(() => {
   ipcMain.on('companion:worker-config', (_event, config: WorkerConfigSnapshot) => {
     setWorkerConfigCache(config)
     broadcastWorkerConfig(config)
+  })
+
+  // Rotação de modelos: o renderer empurra o estado (lista de rotações +
+  // escolha por chat) e o main guarda em cache — o engine resolve a
+  // sequência do turno na hora da chamada. O mesmo estado alimenta o cache
+  // HTTP (GET /api/rotations, lido pelo celular no connect) e vai aos
+  // companions em tempo real ('rotation:change').
+  ipcMain.on('rotation:sync', (_event, config: RotationConfig) => {
+    setRotationConfigCache(config)
+    setRotationHttpCache(config)
+    broadcastRotationConfig(config)
   })
 
   // Imagens das respostas do assistente (orbit-media://)

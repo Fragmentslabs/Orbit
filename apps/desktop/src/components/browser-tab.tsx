@@ -302,7 +302,7 @@ function FullscreenChatFeed({ pinned, onTogglePin }: { pinned: boolean; onToggle
   const messages = useSessionStore((s) => (sessionId ? s.messages[sessionId] ?? NO_MSGS : NO_MSGS))
   const status = useSessionStatus(sessionId)
   const pendingAsks = useSessionStore((s) => (sessionId ? s.pendingAsks[sessionId] ?? NO_ASKS : NO_ASKS))
-  const isBusy = status === "submitted" || status === "streaming" || status === "cancelling"
+  const isBusy = status === "submitted" || status === "streaming" || status === "cancelling" || status === "fallback"
   const { hovered, handleEnter, handleLeave } = useEdgeHover()
   const scrollRef = useRef<HTMLDivElement | null>(null)
   const expanded = pinned || hovered

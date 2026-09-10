@@ -5,6 +5,7 @@ import type { SelectedModel } from "@/src/stores/provider-store"
 import { useProviderStore } from "@/src/stores/provider-store"
 import { useSessionStore } from "@/src/stores/session-store"
 import { sessionModelsApi } from "@/src/lib/ipc"
+import { useModelRotationStore } from "@/src/stores/model-rotation-store"
 
 /**
  * Modelo selecionado POR CHAT (padrão do opencode: o modelo segue a sessão,
@@ -134,6 +135,10 @@ if (typeof window !== "undefined" && window.ipcRenderer) {
   sessionModelsApi.sync(loadRecord())
   sessionModelsApi.onSelect(({ providerId, modelId, sessionId }) => {
     if (providerId && modelId) {
+      // Escolher um modelo desfaz a rotação do chat — mesmo par do seletor do
+      // desktop (model-picker.tsx). Sem isto a rotação continuaria vencendo,
+      // porque o engine a resolve antes do modelo pinado.
+      useModelRotationStore.getState().selectRotation(sessionId ?? null, null)
       useSessionModelPrefs.getState().selectModel(sessionId ?? null, providerId, modelId)
     }
   })

@@ -8,7 +8,7 @@ import { cn } from "@/lib/utils"
 export interface TaskItem {
   id: string
   title: string
-  status: "idle" | "submitted" | "streaming" | "cancelling" | "error"
+  status: "idle" | "submitted" | "streaming" | "cancelling" | "fallback" | "error"
   mode?: "chat" | "code"
 }
 
@@ -28,7 +28,7 @@ export function TaskProgress({
   const total = tasks.length
   const done = tasks.filter((t) => t.status === "idle").length
   const running = tasks.some(
-    (t) => t.status === "submitted" || t.status === "streaming" || t.status === "cancelling",
+    (t) => t.status === "submitted" || t.status === "streaming" || t.status === "cancelling" || t.status === "fallback",
   )
   const hasErrors = tasks.some((t) => t.status === "error")
   const progress = total > 0 ? Math.round((done / total) * 100) : 0
@@ -123,6 +123,7 @@ function TaskIcon({ status }: { status: TaskItem["status"] }) {
   switch (status) {
     case "submitted":
     case "streaming":
+    case "fallback":
       return <LoaderIcon className="size-3.5 shrink-0 animate-spin text-primary" />
     case "error":
       return <XCircleIcon className="size-3.5 shrink-0 text-destructive" />

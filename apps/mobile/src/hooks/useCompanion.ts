@@ -2,6 +2,7 @@ import { useEffect } from 'react'
 import type {
   AppPreferences,
   SessionModelChangeEvent,
+  RotationChangeEvent,
   ChatEventMessage,
   EsteiraEventMessage,
   RotinaEventMessage,
@@ -14,6 +15,7 @@ import { useRecentConnectionsStore } from '~/stores/recent-connections-store'
 import { useSessionStore } from '../stores/session-store'
 import { useSettingsStore } from '../stores/settings-store'
 import { useSessionModelPrefs } from '~/stores/session-model-prefs'
+import { useModelRotationStore } from '~/stores/model-rotation-store'
 import { applyRemoteModes, fetchSessionModes } from '~/stores/session-modes-sync'
 import { applyAppPreferences, hydrateAppPreferences } from '~/stores/prefs-sync'
 import { useRotinasStore } from '~/stores/rotinas-store'
@@ -93,6 +95,8 @@ export function useCompanion() {
         void useSettingsStore.getState().fetchConnectedProviders()
         // Overrides de modelo por sessão (snapshot do renderer do desktop)
         void useSessionModelPrefs.getState().hydrate()
+        // Rotações de modelo (lista + escolha por chat) — vivem no desktop
+        void useModelRotationStore.getState().hydrate()
         // Modos ativos por chat (mesmo caminho: snapshot do renderer)
         void fetchSessionModes()
         // Config de subagentes/orquestração e visão (global, mora no desktop)
@@ -135,6 +139,13 @@ export function useCompanion() {
       }
     })
 
+    // rotation:change → rotações (lista + escolha por chat) mudadas no
+    // desktop ou em outro aparelho pareado
+    const unsubRotation = conn.onEvent('rotation:change', (event) => {
+      const msg = event as Partial<RotationChangeEvent>
+      if (msg?.config) useModelRotationStore.getState().applySync(msg.config)
+    })
+
     // session:mode-change → modos ativos por chat mudados no desktop
     const unsubModes = conn.onEvent('session:mode-change', (event) => {
       const msg = event as { overrides?: SessionModeOverrides }
@@ -173,6 +184,7 @@ export function useCompanion() {
     return () => {
       unsubChat()
       unsubModels()
+      unsubRotation()
       unsubModes()
       unsubWorkerConfig()
       unsubPrefs()

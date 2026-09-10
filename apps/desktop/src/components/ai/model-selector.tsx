@@ -40,7 +40,22 @@ export const ModelSelectorContent = ({
 }: ModelSelectorContentProps) => {
   const { t } = useTranslation()
   return (
-    <DialogContent className={cn("p-0 sm:max-w-sm", className)} {...props}>
+    <DialogContent
+      className={cn(
+        "p-0 sm:max-w-sm",
+        // O dialog é `p-0` com título `sr-only`, então a primeira linha
+        // visível é a barra de busca — e o botão de fechar (absoluto,
+        // `top-2 right-2`, size-6) era desenhado POR CIMA do campo. Aqui o
+        // wrapper do input abre espaço à direita (36px = 8px do botão +
+        // 24px de largura + 4px de respiro) para os dois ficarem lado a
+        // lado. O centro vertical já bate: o campo vai de 4px a 36px
+        // (padding do wrapper + `h-8` do InputGroup) e o botão de 8px a
+        // 32px — ambos centrados em 20px.
+        "[&_[data-slot=command-input-wrapper]]:pr-9",
+        className,
+      )}
+      {...props}
+    >
       <DialogTitle className="sr-only">{title ?? t("modelPicker.title")}</DialogTitle>
       <Command className="**:data-[slot=command-input-wrapper]:h-auto">{children}</Command>
     </DialogContent>

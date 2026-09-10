@@ -237,7 +237,34 @@
     "noProvider": "No provider",
     "title": "Select model",
     "recent": "Recent",
-    "removeRecent": "Remove from recents"
+    "removeRecent": "Remove from recents",
+    "rotation": "Rotations",
+    "createRotation": "Create rotation"
+  },
+  "rotation": {
+    "title": "Model rotation",
+    "description": "Lists of models Orbit tries in sequence when one fails at the start of a turn. Rotations show up in the model picker like a model.",
+    "new": "New rotation",
+    "newName": "Rotation",
+    "edit": "Edit rotation",
+    "confirmRemove": "Delete rotation \"{{name}}\"?",
+    "confirmRemoveDescription": "This rotation will be removed and any chat that was using it will fall back to the default model.",
+    "cancel": "Cancel",
+    "nameRequired": "Name is required",
+    "nameDuplicate": "A rotation with this name already exists",
+    "maxHint": "Up to {{max}} models per rotation",
+    "slotsLabel_one": "{{count}} model",
+    "slotsLabel_other": "{{count}} models",
+    "namePlaceholder": "Rotation name",
+    "addModel": "Add model",
+    "removeSlot": "Remove model",
+    "removeRotation": "Delete rotation",
+    "remove": "Delete",
+    "dragSlot": "Drag to reorder",
+    "slotNone": "None",
+    "empty": "No rotations yet",
+    "emptyHint": "Create a rotation and add the models to try in sequence when one fails. Then pick it in the chat's model picker.",
+    "modelsSection": "Models"
   },
   "models": {
     "loadingCatalog": "Loading model catalog…",
@@ -245,6 +272,7 @@
     "refreshCatalog": "Refresh catalog",
     "bestForTitle": "Best For",
     "count": "{{count}} of {{total}} models",
+    "rotation": "Rotation",
     "noResults": "No model matches your search or filters.",
     "clearFilters": "Clear",
     "filters": {
@@ -639,8 +667,11 @@
     "switchModel": "Switch model",
     "errorKind": {
       "moderation": "The provider blocked this response with its content filter. This runs on the provider's servers and can't be turned off from here — it misfires often on turns that include images. Switching to another model resolves it.",
-      "model-unavailable": "This provider doesn't serve the selected model. Pick another model to continue."
+      "model-unavailable": "This provider doesn't serve the selected model. Pick another model to continue.",
+      "rate-limit": "The provider hit its usage or request limit. Wait a bit or switch models.",
+      "network": "Network error talking to the provider (timeout, outage). Try again or switch models."
     },
+    "fallbackStatus": "Trying fallback {{current}}/{{total}}…",
     "stopped": "Stopped after reaching the step limit — it may be incomplete. Ask it to continue.",
     "copy": "Copy",
     "revert": "Revert to here",
@@ -1529,7 +1560,8 @@
     "loading": "Loading...",
     "close": "Close",
     "previous": "Previous",
-    "next": "Next"
+    "next": "Next",
+    "back": "Back"
   },
   "appearance": {
     "title": "Appearance",

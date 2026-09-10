@@ -343,7 +343,7 @@ function LinhaDoRun({ session, run }: { session: SessionInfo; run?: RotinaRun })
   // O status ao vivo vem do store de sessões — é a mesma fonte do spinner da
   // sidebar. `run` só tem a foto final (tokens, custo, duração).
   const statusSessao = useSessionStore((s) => s.status[session.id])
-  const rodando = statusSessao === "submitted" || statusSessao === "streaming" || run?.status === "rodando"
+  const rodando = statusSessao === "submitted" || statusSessao === "streaming" || statusSessao === "fallback" || run?.status === "rodando"
   const status = rodando ? "rodando" : (run?.status ?? "ok")
 
   const abrirChat = () => {

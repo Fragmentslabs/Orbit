@@ -126,11 +126,13 @@ function segmentParts(parts: MessagePart[]): Segment[] {
   return segments
 }
 
-export function ChatAssistantMessage({ message, sessionId, isLast, isBusy, onRetry }: {
+export function ChatAssistantMessage({ message, sessionId, isLast, isBusy, busyLabel, onRetry }: {
   message: ChatMessage
   sessionId?: string
   isLast: boolean
   isBusy: boolean
+  /** Rótulo do estado de espera (ex.: "Tentando fallback 2/3…") — substitui "Pensando…" */
+  busyLabel?: string
   onRetry?: () => void
 }) {
   const { t } = useTranslation()
@@ -150,7 +152,7 @@ export function ChatAssistantMessage({ message, sessionId, isLast, isBusy, onRet
 
   return (
     <div className="flex w-full flex-col gap-1">
-      {waiting && <Shimmer className="text-sm">{t("chat.thinking")}</Shimmer>}
+      {waiting && <Shimmer className="text-sm">{busyLabel ?? t("chat.thinking")}</Shimmer>}
       {segments.map((segment, index) =>
         segment.kind === "research" ? (
           <ResearchBlock key={segment.id} parts={segment.parts} />

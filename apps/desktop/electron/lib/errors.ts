@@ -59,6 +59,54 @@ const MODEL_UNAVAILABLE_PATTERNS = [
   /\bmodel .* does not exist/i,
 ]
 
+/**
+ * Limite de uso/requisições do provedor ou gateway. Cobre o 429 clássico
+ * (OpenAI/Anthropic/OpenRouter: `statusCode`/`code` 429), o Zen do OpenCode
+ * (`FreeUsageLimitError` — teto de uso gratuito por conta, janela rolante) e
+ * mensagens de quota dos demais gateways (Groq, orama, NVIDIA...).
+ */
+const RATE_LIMIT_PATTERNS = [
+  /\b429\b/,
+  /too many requests/i,
+  /rate[ _-]?limit/i,
+  /rate.?limited/i,
+  /freeusage/i,
+  /free ?usage ?limit/i,
+  /quota (exceeded|exhausted|reached)/i,
+  /usage limit/i,
+  /request limit/i,
+  /RATE_LIMIT_EXCEEDED|RATE_LIMITED/i,
+  /retry.?after/i,
+]
+
+/**
+ * Rede/indisponibilidade do endpoint. Cobre códigos do undici/fetch nativo
+ * (`ECONNREFUSED`, `ENOTFOUND`, `UND_ERR_CONNECT_TIMEOUT`...), `fetch failed`
+ * do SDK da Vercel, e HTTP 5xx (OpenAI `server_error`, Anthropic
+ * `overloaded_error` em 529, gateways em 502/503/504).
+ */
+const NETWORK_PATTERNS = [
+  /ECONNREFUSED/i,
+  /ENOTFOUND/i,
+  /ETIMEDOUT/i,
+  /EHOSTUNREACH/i,
+  /EAI_AGAIN/i,
+  /EPIPE/i,
+  /EADDRNOTAVAIL/i,
+  /UND_ERR_CONNECT_TIMEOUT/i,
+  /UND_ERR_SOCKET/i,
+  /socket hang up/i,
+  /fetch failed/i,
+  /network error/i,
+  /connection (refused|reset|closed|timed out)/i,
+  /timed? ?out/i,
+  /service unavailable/i,
+  /bad gateway/i,
+  /gateway timeout/i,
+  /overloaded/i,
+  /\b5\d{2}\b/, // HTTP 5xx
+]
+
 export interface ClassifiedError {
   kind: MessageErrorKind
   /** Texto cru do provedor, preservado para diagnóstico no card de erro. */
@@ -109,5 +157,20 @@ export function classifyProviderError(value: unknown): ClassifiedError {
   if (MODEL_UNAVAILABLE_PATTERNS.some((re) => re.test(haystack))) {
     return { kind: 'model-unavailable', detail }
   }
+  if (RATE_LIMIT_PATTERNS.some((re) => re.test(haystack))) return { kind: 'rate-limit', detail }
+  if (NETWORK_PATTERNS.some((re) => re.test(haystack))) return { kind: 'network', detail }
   return { kind: 'unknown', detail }
+}
+
+/** Kinds que a rotação de modelos contorna automaticamente (trocar de modelo
+ *  resolve). Auth (401/403) e abort manual ficam de fora de propósito. */
+const RECOVERABLE_ERROR_KINDS: ReadonlySet<MessageErrorKind> = new Set([
+  'moderation',
+  'model-unavailable',
+  'rate-limit',
+  'network',
+])
+
+export function isRecoverableErrorKind(kind: MessageErrorKind): boolean {
+  return RECOVERABLE_ERROR_KINDS.has(kind)
 }

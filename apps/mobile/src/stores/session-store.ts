@@ -38,6 +38,7 @@ import { useModelModePrefs } from './model-mode-prefs'
 import { useSimplePrefs } from './simple-prefs'
 import { useBrainPrefs } from './brain-prefs'
 import { DRAFT_KEY, useSessionModelPrefs, type SelectedModel, type SessionModelOverrides } from './session-model-prefs'
+import { useModelRotationStore } from './model-rotation-store'
 
 // ─── Modelo efetivo da sessão ────────────────────────────────────────────────
 // Mistura três regras (override por chat > draft > último chat > default
@@ -627,6 +628,9 @@ export const useSessionStore = create<SessionState>((set, get) => ({
         // sem escolha explícita, fixa o modelo efetivamente usado (herdado do
         // último chat) para o picker e o envio continuarem consistentes.
         useSessionModelPrefs.getState().adopt(session.id, sessionModelFor(undefined) ?? undefined)
+        // Idem para a rotação escolhida no chat novo — sem isto ela ficaria
+        // presa no draft e o primeiro turno da sessão rodaria sem rotação.
+        useModelRotationStore.getState().adoptRotation(session.id)
         return session
       }
     } catch {

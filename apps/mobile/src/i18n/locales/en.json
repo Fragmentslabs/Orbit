@@ -1190,7 +1190,8 @@
     "inHours": "In {{count}}h"
   },
   "modelPicker": {
-    "select": "Select model"
+    "select": "Select model",
+    "rotation": "Rotations"
   },
   "renamePrompt": {
     "cancel": "Cancel",
@@ -1198,5 +1199,29 @@
   },
   "summaryCard": {
     "title": "Summary of earlier messages (compacted context)"
+  },
+  "rotation": {
+    "title": "Model rotation",
+    "description": "Lists of models Orbit tries in sequence when one fails at the start of a turn. Rotations show up in the model picker like a model — pick one in a chat to use it there.",
+    "manage": "Manage rotations",
+    "new": "New rotation",
+    "newName": "Rotation",
+    "empty": "No rotations yet",
+    "emptyHint": "Create a rotation and add the models to try in sequence when one fails.",
+    "notFound": "This rotation no longer exists.",
+    "namePlaceholder": "Rotation name",
+    "nameRequired": "Name is required",
+    "nameDuplicate": "A rotation with this name already exists",
+    "modelsSection": "Models",
+    "addModel": "Add model",
+    "slotNone": "None",
+    "removeRotation": "Delete rotation",
+    "remove": "Delete",
+    "cancel": "Cancel",
+    "confirmRemove": "Delete rotation \"{{name}}\"?",
+    "confirmRemoveDescription": "This rotation will be removed and any chat that was using it will fall back to the default model.",
+    "maxHint": "Up to {{max}} models per rotation",
+    "slotsLabel_one": "{{count}} model",
+    "slotsLabel_other": "{{count}} models"
   }
 }

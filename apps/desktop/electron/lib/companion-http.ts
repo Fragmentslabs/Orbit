@@ -31,6 +31,7 @@ import { authorizeMcp, listMcpStatus, readMcpConfig, reconnectMcp, saveMcpConfig
 import { readMedia, listMedia, mediaDiskUsage, deleteMedia, deleteManyMedia } from './media'
 
 import type { SessionModeOverrides, WorkerConfigSnapshot } from '@shared/companion'
+import type { RotationConfig } from '@shared/chat'
 
 const execFileAsync = promisify(execFile)
 
@@ -268,6 +269,20 @@ export function getSessionModelsCache(): Record<string, SelectedModel> {
 
 async function handleGetSessionModels(_req: IncomingMessage, res: ServerResponse) {
   jsonResponse(res, 200, { overrides: getSessionModelsCache() })
+}
+
+// Rotação de modelos: mesma mecânica. O cache do engine vive em
+// model-rotation.ts (é ele quem resolve a sequência do turno); aqui fica só
+// a cópia que o mobile lê no connect (GET /api/rotations) — em tempo real
+// ela chega pelo WS 'rotation:change'.
+let rotationConfigHttpCache: RotationConfig = { rotations: [], sessionOverrides: {} }
+
+export function setRotationHttpCache(config: RotationConfig | null | undefined): void {
+  rotationConfigHttpCache = config ?? { rotations: [], sessionOverrides: {} }
+}
+
+async function handleGetRotations(_req: IncomingMessage, res: ServerResponse) {
+  jsonResponse(res, 200, { config: rotationConfigHttpCache })
 }
 
 // Mesma mecânica dos modelos, para os modos ativos por chat: o renderer é a
@@ -616,6 +631,7 @@ function createRouter(
     { pattern: /^GET \/api\/media\/usage$/, paramNames: [], handler: handleMediaUsage },
     { pattern: /^GET \/api\/session-models$/, paramNames: [], handler: handleGetSessionModels },
     { pattern: /^GET \/api\/session-modes$/, paramNames: [], handler: handleGetSessionModes },
+    { pattern: /^GET \/api\/rotations$/, paramNames: [], handler: handleGetRotations },
     { pattern: /^GET \/api\/worker-config$/, paramNames: [], handler: handleGetWorkerConfig },
 
     // Mutation endpoints

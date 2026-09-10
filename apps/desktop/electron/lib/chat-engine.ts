@@ -18,7 +18,8 @@ import { StorageKeys } from '@shared/chat'
 import { getProvider, modelSupportsVision } from './catalog'
 import { compactHistory, findLastSummaryIndex, shouldCompact } from './compaction'
 import { createToolApproval, takeDenialReason } from './permission'
-import { classifyProviderError, errorToText } from './errors'
+import { classifyProviderError, errorToText, isRecoverableErrorKind } from './errors'
+import { hasStreamedContent, resolveRotation } from './model-rotation'
 import { buildSystemPrompt } from './prompts'
 import { buildProviderOptions, interleavedReasoningField, normalizeMessages } from './reasoning'
 import { resolveModel } from './providers'
@@ -550,14 +551,37 @@ export function toModelMessages(history: ChatMessage[], modelVision = true): Mod
 
 const MAX_TITLE_LENGTH = 50
 
+// Modelos thinking (DeepSeek R1, Qwen QwQ, OpenAI o1/o3, Gemini Thinking etc.)
+// emitem blocos `<think>...</think>`. Alguns provedores/gateways não separam
+// o raciocínio direito e esses tokens vazam no `text` retornado — quando o
+// bloco é filtrado e sobra só o início da tag, o título nasce com `<think`
+// colado na frente. Remove também tokens de fim/início de turno de outros
+// modelos (ChatML, Llama, Mistral) que aparecem raramente em gateways mal
+// configurados.
+function stripThinkingAndArtifacts(text: string): string {
+  return text
+    // Bloco de raciocínio completo (com fechamento) — pode aparecer em
+    // qualquer lugar; alguns provedores não separam reasoning direito.
+    .replace(/<think>[\s\S]*?<\/think>/gi, '')
+    // Tag aberta/fechada solta OU parcial sem `>` (modelo cortou, gateway
+    // vazou). Ancorada em "<think" pra não comer texto legítimo.
+    .replace(/<\/?think(?:ing)?\b[^>]*>?/gi, '')
+    // Tokens de fim/início de turno de modelos específicos (ChatML,
+    // Anthropic specials, Llama/Mistral end-of-turn).
+    .replace(/<\/?(?:s|antml(?::text|_thinking)?)\s*>/gi, '')
+    .replace(/<\||\|>/g, '')
+    .replace(/\[\/?INST\]/g, '')
+}
+
 function truncateTitle(text: string): string {
-  const cleaned = text
+  const cleaned = stripThinkingAndArtifacts(text)
     .trim()
     .replace(/\*\*/g, '') // negrito/marcação forte
     .replace(/[*_`#>~]/g, '') // outra marcação markdown
     .replace(/^["']|["']$/g, '')
     .replace(/\s+/g, ' ')
     .trim()
+  if (!cleaned) return ''
   if (cleaned.length <= MAX_TITLE_LENGTH) return cleaned
   // corta no limite de caracteres SEM quebrar palavra no meio, quando possível
   const hard = cleaned.slice(0, MAX_TITLE_LENGTH)
@@ -661,6 +685,17 @@ async function runChatTurn(win: BrowserWindow, input: SendMessageInput): Promise
   const history = await loadMessages(sessionId)
   const isFirstExchange = history.length === 0
 
+  // Rotação de modelos: sequência resolvida no momento da chamada (ver
+  // model-rotation.ts) — rotação escolhida no seletor para este chat; senão
+  // o modelo pinado no chat; senão o default. `primaryModel` abaixo é o
+  // primeiro da lista — usado no preprocess de anexos (decisão de visão) e
+  // como fallback do loop de tentativas.
+  const rotationSequence = resolveRotation(input.sessionId, {
+    providerId: input.providerId,
+    modelId: input.modelId,
+  })
+  const primaryModel = rotationSequence[0] ?? { providerId: input.providerId, modelId: input.modelId }
+
   // Comando /compact — compacta o histórico e não gera resposta do modelo
   if (input.text.trim() === '/compact') {
     try {
@@ -726,8 +761,8 @@ async function runChatTurn(win: BrowserWindow, input: SendMessageInput): Promise
   // delega para o modelo de visão configurado (modo Visão) — sob demanda, via
   // tool describe_image — ou vira aviso.
   const files = input.files ?? []
-  const provider = await getProvider(input.providerId)
-  const modelVision = modelSupportsVision(provider, input.modelId)
+  const provider = await getProvider(primaryModel.providerId)
+  const modelVision = modelSupportsVision(provider, primaryModel.modelId)
   // Registro das imagens do turno (modo Visão): a tool describe_image lê
   // daqui sob demanda; vive só durante o turno (limpo no finally).
   const turnImages: TurnImage[] = []
@@ -762,13 +797,34 @@ async function runChatTurn(win: BrowserWindow, input: SendMessageInput): Promise
   }
 
   try {
-    const model = await resolveModel(input.providerId, input.modelId)
-    const supportsTools = provider?.models[input.modelId]?.tool_call !== false
+    // Loop de tentativas da rotação: cada tentativa usa o próximo modelo da
+    // sequência. Só rotaciona falha recuperável (rate-limit/rede/moderação/
+    // modelo indisponível) ANTES do primeiro token; abort e erros finais caem
+    // no catch externo (comportamento atual).
+    let attemptIndex = 0
+    for (;;) {
+      const primary = rotationSequence[attemptIndex] ?? primaryModel
+      // Registra o modelo desta tentativa na mensagem (badge "via X" e
+      // compactação usam ChatMessage.providerId/modelId) e zera o estado do
+      // turno deixado pela tentativa anterior.
+      assistantMessage.providerId = primary.providerId
+      assistantMessage.modelId = primary.modelId
+      assistantMessage.parts = []
+      assistantMessage.error = undefined
+      assistantMessage.errorKind = undefined
+      assistantMessage.tokens = undefined
+      assistantMessage.truncated = undefined
+      emit(win, { type: 'message', sessionId, message: assistantMessage })
+      try {
+        const provider = await getProvider(primary.providerId)
+        const model = await resolveModel(primary.providerId, primary.modelId)
+        const modelVision = modelSupportsVision(provider, primary.modelId)
+        const supportsTools = provider?.models[primary.modelId]?.tool_call !== false
 
     // Compactação automática: os tokens reais da última resposta indicam que o
     // contexto está perto do limite → resume o trecho antigo uma única vez
     const lastTokens = [...history].reverse().find((m) => m.role === 'assistant' && m.tokens)?.tokens
-    if (shouldCompact(lastTokens, provider?.models[input.modelId])) {
+    if (shouldCompact(lastTokens, provider?.models[primary.modelId])) {
       try {
         const summary = await compactHistory(history, model)
         if (summary) {
@@ -988,7 +1044,7 @@ async function runChatTurn(win: BrowserWindow, input: SendMessageInput): Promise
     // com teto de tentativas por turno).
     const initialMessages = normalizeMessages(
       toModelMessages(history.slice(0, -1), modelVision),
-      interleavedReasoningField(provider, input.modelId),
+      interleavedReasoningField(provider, primary.modelId),
     )
     let autoContinues = 0
     let todoNudges = 0
@@ -1020,13 +1076,13 @@ async function runChatTurn(win: BrowserWindow, input: SendMessageInput): Promise
                           : AUTO_CONTINUE_PROMPT,
                   },
                 ],
-                interleavedReasoningField(provider, input.modelId),
+                interleavedReasoningField(provider, primary.modelId),
               ),
         tools: supportsTools ? buildToolSet(input, toolContext) : undefined,
         toolApproval,
         stopWhen: stepCountIs(MAX_STEPS),
         abortSignal: controller.signal,
-        providerOptions: await buildProviderOptions(input),
+        providerOptions: await buildProviderOptions({ ...input, providerId: primary.providerId, modelId: primary.modelId }),
         prepareStep: ({ stepNumber, messages }) => {
           // Reaplica a normalização de reasoning a cada passo do tool loop: o
           // SDK reconstrói as mensagens entre steps e pode descartar o
@@ -1034,7 +1090,7 @@ async function runChatTurn(win: BrowserWindow, input: SendMessageInput): Promise
           // exige o campo de volta em todas as mensagens de assistente).
           const normalized = normalizeMessages(
             messages,
-            interleavedReasoningField(provider, input.modelId),
+            interleavedReasoningField(provider, primary.modelId),
           )
           if (stepNumber < MAX_STEPS) return normalized === messages ? {} : { messages: normalized }
           return {
@@ -1245,7 +1301,7 @@ async function runChatTurn(win: BrowserWindow, input: SendMessageInput): Promise
             // Em auto-continue, soma a cada iteração do loop (a mensagem é a
             // mesma, mas cada chamada ao modelo tem seu próprio uso).
             {
-              const stepTokens = toTokenUsage(part.totalUsage, provider?.models[input.modelId]?.cost)
+              const stepTokens = toTokenUsage(part.totalUsage, provider?.models[primary.modelId]?.cost)
               assistantMessage.tokens = {
                 ...addTokenUsage(assistantMessage.tokens, stepTokens),
                 lastStep: lastStepUsage,
@@ -1433,6 +1489,32 @@ async function runChatTurn(win: BrowserWindow, input: SendMessageInput): Promise
 
     // Workers já nascem com título (task.title) — não sobrescrever
     if (isFirstExchange && input.orchestrationRole !== 'worker') void generateTitle(input, win)
+        break
+      } catch (err) {
+        // Tentativa falhou: rotaciona se a falha é recuperável e ainda não
+        // emitiu conteúdo (v1 não reenvia tokens já entregues). Abort e erros
+        // finais sobem para o catch externo — comportamento atual.
+        const aborted = controller.signal.aborted
+        const { kind } = classifyProviderError(err)
+        const nextIndex = attemptIndex + 1
+        if (
+          !aborted &&
+          !hasStreamedContent(assistantMessage.parts) &&
+          isRecoverableErrorKind(kind) &&
+          nextIndex < rotationSequence.length
+        ) {
+          attemptIndex = nextIndex
+          emit(win, {
+            type: 'status',
+            sessionId,
+            status: 'fallback',
+            fallback: { current: nextIndex + 1, total: rotationSequence.length },
+          })
+          continue
+        }
+        throw err
+      }
+    }
   } catch (err) {
     const aborted = controller.signal.aborted
     const { kind, detail: message } = classifyProviderError(err)

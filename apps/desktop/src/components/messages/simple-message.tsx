@@ -9,11 +9,13 @@ import { useTranslation } from "react-i18next"
  * sem reasoning nem tool views. Enquanto o modelo trabalha sem texto visível,
  * mostra um shimmer.
  */
-export function SimpleAssistantMessage({ message, sessionId, isLast, isBusy, onRetry }: {
+export function SimpleAssistantMessage({ message, sessionId, isLast, isBusy, busyLabel, onRetry }: {
   message: ChatMessage
   sessionId?: string
   isLast: boolean
   isBusy: boolean
+  /** Rótulo do estado de espera (ex.: "Tentando fallback 2/3…") — substitui "Pensando…" */
+  busyLabel?: string
   onRetry?: () => void
 }) {
   const { t } = useTranslation()
@@ -25,7 +27,7 @@ export function SimpleAssistantMessage({ message, sessionId, isLast, isBusy, onR
 
   return (
     <div className="flex w-full flex-col gap-1">
-      {textParts.length === 0 && working && <Shimmer className="text-sm">{t("chat.thinking")}</Shimmer>}
+      {textParts.length === 0 && working && <Shimmer className="text-sm">{busyLabel ?? t("chat.thinking")}</Shimmer>}
       {textParts.map((part) => (
         <AssistantMarkdown key={part.id}>{(part as { type: "text"; text: string }).text}</AssistantMarkdown>
       ))}

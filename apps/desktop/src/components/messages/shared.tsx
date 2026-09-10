@@ -326,7 +326,8 @@ export function MessageError({
   const { t } = useTranslation()
   // Falhas do provedor têm explicação própria; o texto cru vira detalhe
   // secundário (nunca é descartado — é o que permite diagnosticar).
-  const explained = kind === "moderation" || kind === "model-unavailable"
+  const explained =
+    kind === "moderation" || kind === "model-unavailable" || kind === "rate-limit" || kind === "network"
 
   return (
     <div className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive">

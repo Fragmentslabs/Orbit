@@ -14,6 +14,7 @@ import {
   KeyRound,
   SlidersHorizontal,
   Puzzle,
+  ListRestart,
   Palette,
   Languages,
   Info,
@@ -113,6 +114,13 @@ export default function SettingsScreen() {
             icon={Puzzle}
             label={t('settings.tools')}
             onPress={() => router.push('/(main)/tools')}
+            chevron
+          />
+          <RowDivider />
+          <Row
+            icon={ListRestart}
+            label={t('rotation.title')}
+            onPress={() => router.push('/(main)/rotations')}
             chevron
           />
           <RowDivider />

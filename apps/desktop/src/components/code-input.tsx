@@ -130,7 +130,7 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId, on
   // Thinking: o chip das preferências define o default; reasoning do modelo e
   // modelos com reasoningAlwaysOn continuam valendo como antes
   const thinking = codeActiveModes.thinking || enabled || !!model?.reasoningAlwaysOn
-  const busy = status === "submitted" || status === "streaming" || status === "cancelling"
+  const busy = status === "submitted" || status === "streaming" || status === "cancelling" || status === "fallback"
   // Pré-configuração (sem provedor): o envio é bloqueado via onSubmitCapture —
   // em CAPTURE, antes do handleSubmit do PromptInput limpar o input — para o
   // texto do usuário não se perder; onProviderBlocked mostra o card explicativo

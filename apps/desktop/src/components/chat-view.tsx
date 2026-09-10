@@ -44,12 +44,13 @@ const NO_ASKS: never[] = []
 // `messages`/`sendMessage` ficam fora da comparação de propósito: o retry usa
 // `slice(0, index)`, imune a mensagens novas anexadas ao final da lista.
 const MessageItem = memo(
-  function MessageItem({ msg, isLast, waiting, finished, isBusy, mode, sessionId, sendMessage, messages, index }: {
+  function MessageItem({ msg, isLast, waiting, finished, isBusy, busyLabel, mode, sessionId, sendMessage, messages, index }: {
     msg: ChatMessage
     isLast: boolean
     waiting: boolean
     finished: boolean
     isBusy: boolean
+    busyLabel?: string
     mode: "chat" | "code"
     sessionId?: string
     sendMessage: (mode: "chat" | "code", text: string, config: SendConfig) => Promise<void>
@@ -112,6 +113,7 @@ const MessageItem = memo(
           sessionId={sessionId}
           isLast={isLast}
           isBusy={isBusy}
+          busyLabel={busyLabel}
           onRetry={handleRetry}
         />
       </MessageContent>
@@ -125,14 +127,16 @@ const MessageItem = memo(
     prev.waiting === next.waiting &&
     prev.finished === next.finished &&
     prev.isBusy === next.isBusy &&
+    prev.busyLabel === next.busyLabel &&
     prev.mode === next.mode &&
     prev.sessionId === next.sessionId &&
     prev.index === next.index,
 )
 
-function ChatMessages({ messages, isBusy, mode, sessionId, sendMessage, planIds, planReview, plan }: {
+function ChatMessages({ messages, isBusy, busyLabel, mode, sessionId, sendMessage, planIds, planReview, plan }: {
   messages: ChatMessage[]
   isBusy: boolean
+  busyLabel?: string
   mode: "chat" | "code"
   sessionId?: string
   sendMessage: (mode: "chat" | "code", text: string, config: SendConfig) => Promise<void>
@@ -244,6 +248,7 @@ function ChatMessages({ messages, isBusy, mode, sessionId, sendMessage, planIds,
                 waiting={waiting}
                 finished={finished}
                 isBusy={isBusy}
+                busyLabel={busyLabel}
                 mode={mode}
                 sessionId={sessionId}
                 sendMessage={sendMessage}
@@ -295,6 +300,7 @@ export function ChatView({ sessionId }: { sessionId?: string } = {}) {
     session ? s.messages[session.id] ?? NO_MESSAGES : NO_MESSAGES,
   )
   const status = useSessionStatus(session?.id)
+  const fallback = useSessionStore((s) => (session ? s.fallback[session.id] : undefined))
   const plan = useSessionStore((s) => (session ? s.orchestration[session.id] : undefined))
   const planReview = useSessionStore((s) => (session ? s.planReviews[session.id] : undefined))
   const pendingAsks = useSessionStore((s) => (session ? s.pendingAsks[session.id] ?? NO_ASKS : NO_ASKS))
@@ -345,7 +351,7 @@ export function ChatView({ sessionId }: { sessionId?: string } = {}) {
     }
   }, [session?.id, session?.directory, viewMode, setFolders])
 
-  const isBusy = status === "submitted" || status === "streaming" || status === "cancelling"
+  const isBusy = status === "submitted" || status === "streaming" || status === "cancelling" || status === "fallback"
   const hasChat = messages.length > 0
   const personaVisible = useAppearanceStore((s) => s.personaVisible)
   // Pasta alvo do card de init: a da sessão ou a selecionada no FolderSelector
@@ -550,7 +556,21 @@ export function ChatView({ sessionId }: { sessionId?: string } = {}) {
           <div className={`flex min-h-0 flex-1 flex-col ${topVisible && !simpleMode && personaVisible ? "pt-6" : "pt-2"}`}>
             <div className="pointer-events-none sticky top-0 z-10 h-12 bg-linear-to-b to-transparent" style={{ backgroundImage: 'linear-gradient(to bottom, var(--panel-bg, var(--background)), transparent)' }} />
             {chatSearchOpen && viewMode === "chat" && <ChatMessageSearchBar messages={messages} />}
-            <ChatMessages messages={messages} isBusy={isBusy} mode={viewMode} sessionId={session?.id} sendMessage={sendMessage} planIds={planMsgIds} planReview={planReview} plan={plan} />
+            <ChatMessages
+              messages={messages}
+              isBusy={isBusy}
+              busyLabel={
+                status === "fallback" && fallback
+                  ? t("chat.fallbackStatus", { current: fallback.current, total: fallback.total })
+                  : undefined
+              }
+              mode={viewMode}
+              sessionId={session?.id}
+              sendMessage={sendMessage}
+              planIds={planMsgIds}
+              planReview={planReview}
+              plan={plan}
+            />
           </div>
         </div>
       </div>

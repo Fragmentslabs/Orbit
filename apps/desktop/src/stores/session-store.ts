@@ -9,6 +9,7 @@ import type {
   FolderInfo,
   OrchestrationPlan,
   PlanReview,
+  RotationFallbackInfo,
   SendMessageOptions,
   SessionInfo,
   SessionMode,
@@ -29,6 +30,7 @@ import { useProviderStore } from "@/src/stores/provider-store"
 import { sessionModelFor, useSessionModelPrefs } from "@/src/stores/session-model-prefs"
 import { useLoopConfigStore } from "@/src/stores/loop-config-store"
 import { LOCALE_PROMPT_NAME, useLocaleStore } from "@/src/stores/locale-store"
+import { useModelRotationStore } from "@/src/stores/model-rotation-store"
 import { usePanelStore } from "@/src/stores/panel-store"
 
 /**
@@ -58,6 +60,9 @@ interface SessionState {
   messages: Record<string, ChatMessage[]>
   status: Record<string, ChatStatus>
   errors: Record<string, string | undefined>
+  /** Fallback em andamento (rotação de modelos): tentativa atual/total por
+   *  sessão — a UI mostra "tentando fallback X/Y" no lugar de "Pensando…" */
+  fallback: Record<string, RotationFallbackInfo | undefined>
   activeIds: Record<SessionMode, string | null>
   /** Pasta a atribuir à próxima sessão criada pelo fluxo de novo chat.
    *  O "+" da pasta não cria sessão no clique — só ao enviar a 1ª mensagem. */
@@ -193,6 +198,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
   messages: {},
   status: {},
   errors: {},
+  fallback: {},
   activeIds: { chat: null, code: null },
   pendingFolderId: null,
   orchestration: {},
@@ -470,6 +476,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       useBrainPrefs.getState().setEnabled(sid, true) // limpa o override do Brain
       useSimplePrefs.getState().clear(sid)
       useSessionModelPrefs.getState().clear(sid)
+      useModelRotationStore.getState().selectRotation(sid, null)
       void storage.remove(StorageKeys.planReview(sid))
       void storage.remove(StorageKeys.pendingAsks(sid))
       emitChatEvent({ type: "session:deleted", sessionId: sid })
@@ -577,6 +584,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       useBrainPrefs.getState().setEnabled(sid, true)
       useSimplePrefs.getState().clear(sid)
       useSessionModelPrefs.getState().clear(sid)
+      useModelRotationStore.getState().selectRotation(sid, null)
       void storage.remove(StorageKeys.planReview(sid))
       emitChatEvent({ type: "session:deleted", sessionId: sid })
     }
@@ -809,6 +817,8 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       // escolha explícita, fixa o modelo efetivamente usado (herdado do último
       // chat), para o picker e o envio continuarem consistentes.
       useSessionModelPrefs.getState().adopt(sessionId, selected)
+      // A rotação escolhida no chat novo (draft) passa a valer para a sessão
+      useModelRotationStore.getState().adoptRotation(sessionId)
     } else if (mode === "code") {
       const dirChanged = config.directory && session.directory !== config.directory
       const extraChanged =
@@ -1023,6 +1033,12 @@ function applyChatEvent(event: ChatEvent, set: Setter, get: () => SessionState) 
       set((state) => ({
         status: { ...state.status, [sessionId]: event.status },
         errors: { ...state.errors, [sessionId]: event.error },
+        // Fallback (rotação): guarda a tentativa em andamento; limpa quando o
+        // turno sai do estado de falha/fallback.
+        fallback:
+          event.status === "fallback" && event.fallback
+            ? { ...state.fallback, [sessionId]: event.fallback }
+            : { ...state.fallback, [sessionId]: undefined },
       }))
       break
 
@@ -1054,13 +1070,16 @@ case "message": {
         const finished =
           inbound.role === "assistant" && (inbound.tokens !== undefined || inbound.error !== undefined)
         const stuck =
-          state.status[sessionId] === "streaming" || state.status[sessionId] === "submitted"
+          state.status[sessionId] === "streaming" ||
+          state.status[sessionId] === "submitted" ||
+          state.status[sessionId] === "fallback"
         const status =
           finished && stuck
             ? { ...state.status, [sessionId]: "idle" as ChatStatus }
             : state.status
+        const fallback = finished && stuck ? { ...state.fallback, [sessionId]: undefined } : state.fallback
 
-        return { messages: { ...state.messages, [sessionId]: next }, unreadCounts, status }
+        return { messages: { ...state.messages, [sessionId]: next }, unreadCounts, status, fallback }
       })
 
       // Um modelo só entra nos "recentes" quando foi de fato usado: a resposta
@@ -1166,6 +1185,7 @@ case "title":
 
     case "session:deleted":
       useSessionModelPrefs.getState().clear(sessionId)
+      useModelRotationStore.getState().selectRotation(sessionId, null)
       set((state) => {
         const sessions = state.sessions.filter((s) => s.id !== sessionId)
         const messages = { ...state.messages }

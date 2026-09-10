@@ -1,11 +1,12 @@
 import { useEffect, useMemo } from "react"
 import { useTranslation } from "react-i18next"
-import { RefreshCw, Search, Sparkles } from "lucide-react"
+import { ListRestart, RefreshCw, Search, Sparkles } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { cn } from "@/lib/utils"
 import { filterModels, hasActiveFilters, useModelsStore } from "@/src/stores/models-store"
+import { useRotationUi } from "@/src/stores/rotation-ui"
 import { AAKeyButton } from "./aa-key-dialog"
 import { BestForSection } from "./best-for"
 import { CompareDialog, CompareFloatingCard } from "./compare"
@@ -21,6 +22,7 @@ import { ModelsTable } from "./models-table"
 
 export function ModelsView() {
   const { t } = useTranslation()
+  const openRotation = useRotationUi((s) => s.openRotation)
   const initialize = useModelsStore((s) => s.initialize)
   const refresh = useModelsStore((s) => s.refresh)
   const snapshot = useModelsStore((s) => s.snapshot)
@@ -89,7 +91,18 @@ export function ModelsView() {
         <span>
           {t("models.count", { count: filtered.length, total: models.length })}
         </span>
-        <AAKeyButton />
+        <div className="flex items-center gap-1.5">
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-6 gap-1.5 px-2 text-[11px] text-muted-foreground"
+            onClick={() => openRotation()}
+          >
+            <ListRestart className="size-3" />
+            {t("models.rotation")}
+          </Button>
+          <AAKeyButton />
+        </div>
       </div>
 
       <ModelsTable models={filtered} />

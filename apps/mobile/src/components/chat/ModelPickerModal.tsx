@@ -1,11 +1,13 @@
 import { memo, useCallback, useEffect, useMemo, useState } from 'react'
 import { Modal, View, Text, TextInput, Pressable, SectionList, Platform } from 'react-native'
-import { X, Search, Check, Brain, RefreshCw } from 'lucide-react-native'
+import { X, Search, Check, Brain, RefreshCw, ListRestart, ChevronRight } from 'lucide-react-native'
 import { useTranslation } from 'react-i18next'
-import type { CatalogModel, CatalogProvider } from '@orbit/shared'
+import { useRouter } from 'expo-router'
+import type { CatalogModel, CatalogProvider, ModelRotation } from '@orbit/shared'
 import { useSettingsStore } from '~/stores/settings-store'
 import { useSessionModel } from '~/stores/session-store'
 import { useSessionModelPrefs, type SelectedModel } from '~/stores/session-model-prefs'
+import { useModelRotationStore, useSessionRotation } from '~/stores/model-rotation-store'
 import { useThemeStore } from '~/stores/theme-store'
 import { getThemeTokens } from '~/lib/theme-tokens'
 import { hslToRgba } from '~/lib/theme'
@@ -59,7 +61,17 @@ interface RecentRowItem {
   recent: SelectedModel
 }
 
+interface RotationRowItem {
+  key: string
+  rotation: ModelRotation
+}
+
+/** Item de qualquer uma das seções — anotado explicitamente na SectionList,
+ *  que senão infere o tipo do primeiro membro da união e recusa os outros. */
+type ModelSectionItem = RotationRowItem | RecentRowItem | ModelRowItem
+
 type ModelSection =
+  | { kind: 'rotations'; data: RotationRowItem[] }
   | { kind: 'recents'; data: RecentRowItem[] }
   | { kind: 'provider'; provider: CatalogProvider; data: ModelRowItem[] }
 
@@ -170,6 +182,69 @@ const ModelRow = memo(function ModelRow({
   prev.onRemove === next.onRemove,
 )
 
+/**
+ * Linha de rotação — mesmo desenho de card fatiado da ModelRow, com o ícone
+ * de rotação no lugar do logo do provedor e a contagem de modelos no lugar
+ * do id. Escolher uma rotação PINA ela no chat, como um modelo.
+ */
+function RotationRow({
+  rotation,
+  index,
+  count,
+  isSelected,
+  tokens,
+  onPress,
+}: {
+  rotation: ModelRotation
+  index: number
+  count: number
+  isSelected: boolean
+  tokens: Record<string, string>
+  onPress: (rotationId: string) => void
+}) {
+  const { t } = useTranslation()
+  const isFirst = index === 0
+  const isLast = index === count - 1
+  const rowSelectedBg = hslToRgba(
+    tokens.primary.replace(/hsla?\(|\)/g, '').replace(/,/g, ''),
+    0.08,
+  )
+
+  return (
+    <Pressable
+      onPress={() => onPress(rotation.id)}
+      style={({ pressed }) => ({
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 12,
+        paddingHorizontal: 14,
+        paddingVertical: 11,
+        backgroundColor: isSelected ? rowSelectedBg : pressed ? tokens.muted : tokens.card,
+        borderColor: tokens.border,
+        borderTopWidth: isFirst ? 1 : 0,
+        borderBottomWidth: 1,
+        borderLeftWidth: 1,
+        borderRightWidth: 1,
+        borderTopLeftRadius: isFirst ? CARD_RADIUS : 0,
+        borderTopRightRadius: isFirst ? CARD_RADIUS : 0,
+        borderBottomLeftRadius: isLast ? CARD_RADIUS : 0,
+        borderBottomRightRadius: isLast ? CARD_RADIUS : 0,
+      })}
+    >
+      <ListRestart size={16} color={tokens.mutedForeground} />
+      <View className="flex-1">
+        <Text className="text-sm font-medium" style={{ color: tokens.foreground }}>
+          {rotation.name}
+        </Text>
+        <Text className="text-xs" style={{ color: tokens.mutedForeground }} numberOfLines={1}>
+          {t('rotation.slotsLabel', { count: rotation.models.length })}
+        </Text>
+      </View>
+      {isSelected && <Check size={16} color={tokens.primary} />}
+    </Pressable>
+  )
+}
+
 export function ModelPickerModal({ visible, ...props }: ModelPickerModalProps) {
   // Fechado não monta nada: o componente vive junto do input (e dos formulários
   // de rotina/esteira), e antes montava o Modal + recalculava as seções do
@@ -191,6 +266,13 @@ function ModelPickerSheet({
   // objeto = modelo do dono da escolha (rotina).
   const selectedModel = selectedOverride === undefined ? sessionModel : selectedOverride
   const selectModel = useSessionModelPrefs((s) => s.selectModel)
+  const router = useRouter()
+  // Rotações: só no modo não-controlado (a escolha de uma rotina/esteira é de
+  // um modelo, não de uma cadeia) — mesmo critério do `hideRotationOptions`
+  // do desktop, que também evita rotação dentro do editor de rotação.
+  const rotations = useModelRotationStore((s) => s.rotations)
+  const selectRotation = useModelRotationStore((s) => s.selectRotation)
+  const activeRotation = useSessionRotation(onSelect ? null : sessionId)
   const recents = useSessionModelPrefs((s) => s.recents)
   const removeRecent = useSessionModelPrefs((s) => s.removeRecent)
   const connectedProviders = useSettingsStore((s) => s.connectedProviders)
@@ -268,11 +350,19 @@ function ModelPickerSheet({
       })
       .filter((section) => section.data.length > 0)
 
+    // Rotações no topo (antes dos recentes), como no seletor do desktop.
+    const rotationRows: RotationRowItem[] = onSelect
+      ? []
+      : rotations
+          .filter((r) => !q || r.name.toLowerCase().includes(q))
+          .map((r) => ({ key: `rotation-${r.id}`, rotation: r }))
+
     return [
+      ...(rotationRows.length > 0 ? [{ kind: 'rotations' as const, data: rotationRows }] : []),
       ...(recentRows.length > 0 ? [{ kind: 'recents' as const, data: recentRows }] : []),
       ...providerSections,
     ]
-  }, [catalog, search, connectedProviders, recents, onSelect])
+  }, [catalog, search, connectedProviders, recents, onSelect, rotations])
 
   // Identidade estável: a linha é memoizada e recebe isto como prop.
   const handleSelect = useCallback(
@@ -282,13 +372,32 @@ function ModelPickerSheet({
         onClose()
         return
       }
+      // Escolher um modelo desfaz a rotação do chat (e vice-versa) — o engine
+      // resolve a rotação ANTES do modelo pinado, então sem isto o modelo
+      // escolhido aqui não valeria.
+      selectRotation(sessionId ?? null, null)
       // Por chat: sessão existente ganha override; chat novo (sem sessão) vira
       // o draft + default global — espelho do desktop.
       selectModel(sessionId ?? null, providerId, modelId)
       onClose()
     },
-    [onSelect, onClose, selectModel, sessionId],
+    [onSelect, onClose, selectModel, selectRotation, sessionId],
   )
+
+  /** Clicar na rotação pina ela no chat; clicar na que já está pinada desfaz. */
+  const handleSelectRotation = useCallback(
+    (rotationId: string) => {
+      const isActive = activeRotation?.id === rotationId
+      selectRotation(sessionId ?? null, isActive ? null : rotationId)
+      onClose()
+    },
+    [activeRotation, selectRotation, sessionId, onClose],
+  )
+
+  const openRotations = useCallback(() => {
+    onClose()
+    router.push('/(main)/rotations')
+  }, [onClose, router])
 
   return (
     <Modal
@@ -382,12 +491,25 @@ function ModelPickerSheet({
               </Text>
             </View>
           ) : (
-            <SectionList
+            <SectionList<ModelSectionItem, ModelSection>
               className="flex-1"
               contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 8, paddingBottom: 16 }}
               sections={sections}
               keyExtractor={(item) => item.key}
               renderItem={({ item, index, section }) => {
+                if (section.kind === 'rotations') {
+                  const row = item as RotationRowItem
+                  return (
+                    <RotationRow
+                      rotation={row.rotation}
+                      index={index}
+                      count={section.data.length}
+                      isSelected={activeRotation?.id === row.rotation.id}
+                      tokens={tokens}
+                      onPress={handleSelectRotation}
+                    />
+                  )
+                }
                 if (section.kind === 'recents') {
                   const row = item as RecentRowItem
                   return (
@@ -425,7 +547,11 @@ function ModelPickerSheet({
               }}
               renderSectionHeader={({ section }) => (
                 <Text className="text-xs font-semibold uppercase tracking-wider mb-2 pt-1 pl-1" style={{ color: tokens.mutedForeground }}>
-                  {section.kind === 'recents' ? t('modelPickerModal.recent') : section.provider.name}
+                  {section.kind === 'rotations'
+                    ? t('modelPicker.rotation')
+                    : section.kind === 'recents'
+                      ? t('modelPickerModal.recent')
+                      : section.provider.name}
                 </Text>
               )}
               SectionSeparatorComponent={() => <View className="h-4" />}
@@ -437,6 +563,31 @@ function ModelPickerSheet({
               windowSize={7}
               updateCellsBatchingPeriod={40}
             />
+          )}
+
+          {/* Rodapé: gerenciar rotações — espelho do botão "Criar rotação" do
+              rodapé do seletor no desktop. Escondido no modo controlado
+              (rotina/esteira/slot de rotação), onde a escolha é de um modelo. */}
+          {!onSelect && (
+            <Pressable
+              onPress={openRotations}
+              style={({ pressed }) => ({
+                flexDirection: 'row',
+                alignItems: 'center',
+                gap: 10,
+                paddingHorizontal: 16,
+                paddingVertical: 14,
+                borderTopWidth: 1,
+                borderTopColor: tokens.border,
+                backgroundColor: pressed ? tokens.muted : 'transparent',
+              })}
+            >
+              <ListRestart size={16} color={tokens.mutedForeground} />
+              <Text className="flex-1 text-sm" style={{ color: tokens.foreground }}>
+                {t('rotation.manage')}
+              </Text>
+              <ChevronRight size={16} color={tokens.mutedForeground} />
+            </Pressable>
           )}
         </View>
       </View>

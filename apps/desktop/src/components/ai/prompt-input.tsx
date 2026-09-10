@@ -1,4 +1,5 @@
-import type { ChatStatus, FileUIPart } from "ai"
+import type { ChatStatus } from "@shared/chat"
+import type { FileUIPart } from "ai"
 import { useTranslation } from "react-i18next"
 import {
   CornerDownLeftIcon,
@@ -926,7 +927,7 @@ export const PromptInputSubmit = ({
   const { t } = useTranslation()
   let Icon = <CornerDownLeftIcon className="size-4" />
 
-  if (status === "submitted") {
+  if (status === "submitted" || status === "fallback") {
     Icon = <Loader2Icon className="size-4 animate-spin" />
   } else if (status === "streaming") {
     Icon = <SquareIcon className="size-4" />

@@ -6,7 +6,7 @@
 
 export type SessionMode = "chat" | "code"
 
-export type ChatStatus = "idle" | "submitted" | "streaming" | "cancelling" | "error"
+export type ChatStatus = "idle" | "submitted" | "streaming" | "cancelling" | "error" | "fallback"
 
 /** Resultado de busca textual em sessões (título + mensagens). */
 export interface SearchHit {
@@ -258,9 +258,12 @@ export interface AssistantSnapshot {
  * - `moderation`: o provedor bloqueou a resposta por filtro de conteúdo. É
  *   server-side (ex: DashScope/Qwen) — não há como desligar pelo request.
  * - `model-unavailable`: o modelo não existe/não é servido pelo provedor.
- * Ambos são resolvidos trocando de modelo, não repetindo a mesma chamada.
+ * - `rate-limit`: limite de uso/requisições do provedor (429, FreeUsageLimit).
+ * - `network`: falha de rede/indisponibilidade do endpoint (timeout, 5xx...).
+ * Todas, exceto `unknown`, são resolvidas trocando de modelo — é o que a
+ * rotação de modelos faz automaticamente (ver `resolveRotation` no main).
  */
-export type MessageErrorKind = "moderation" | "model-unavailable" | "unknown"
+export type MessageErrorKind = "moderation" | "model-unavailable" | "rate-limit" | "network" | "unknown"
 
 export interface ChatMessage {
   id: string
@@ -421,6 +424,36 @@ export interface WorkerModelConfig {
   reasoning?: ReasoningConfig
 }
 
+/** Modelo de um slot de rotação — mesma forma de `SelectedModel` do renderer. */
+export interface RotationModel {
+  providerId: string
+  modelId: string
+}
+
+/** Rotação nomeada: lista ordenada de modelos (1..4 slots). Se um modelo
+ *  falhar com erro recuperável, o turno tenta o próximo da lista. */
+export interface ModelRotation {
+  id: string
+  name: string
+  models: RotationModel[]
+}
+
+/** Estado completo da rotação de modelos (renderer → main via IPC
+ *  `rotation:sync`). Não há toggle global nem rotação "ativa": a rotação é
+ *  apenas criada e ESCOLHIDA POR CHAT no seletor de modelo, como um modelo
+ *  (`sessionOverrides` = sessão → rotação; "draft" = chat novo). */
+export interface RotationConfig {
+  rotations: ModelRotation[]
+  sessionOverrides: Record<string, string>
+}
+
+export interface RotationFallbackInfo {
+  /** Índice (1-based) da tentativa atual dentro da sequência */
+  current: number
+  /** Tamanho total da sequência */
+  total: number
+}
+
 export interface SendMessageInput {
   sessionId: string
   text: string
@@ -454,7 +487,7 @@ export interface SendMessageInput {
 }
 
 export type ChatEvent =
-  | { type: "status"; sessionId: string; status: ChatStatus; error?: string }
+  | { type: "status"; sessionId: string; status: ChatStatus; error?: string; fallback?: RotationFallbackInfo }
   | { type: "message"; sessionId: string; message: ChatMessage }
   /** Substituição completa do histórico (ex: compactação insere resumo no meio) */
   | { type: "messages"; sessionId: string; messages: ChatMessage[] }
