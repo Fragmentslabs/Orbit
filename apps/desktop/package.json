@@ -15,7 +15,7 @@
     "build:mac": "npm run clean && tsc && vite build && electron-builder --mac dmg zip --arm64 --publish always && electron-builder --mac dmg zip --x64 --publish always",
     "build:mac:x64": "npm run clean && tsc && vite build && electron-builder --mac dmg zip --x64 --publish always",
     "build:windows": "npm run clean && tsc && vite build && node scripts/generate-appx-assets.mjs && electron-builder --win appx --config electron-builder.store.json5",
-    "build:windows:release": "npm run clean && tsc && vite build && electron-builder --win nsis --publish always",
+    "build:windows:release": "npm run clean && tsc && vite build && electron-builder --win nsis --x64 --publish always",
     "build:mas": "npm run clean && tsc && vite build && electron-builder --mac mas --config.mac.provisioningProfile=\"/Users/desknik/Library/MobileDevice/Provisioning Profiles/1698ba7d-11d9-411e-8385-af55ac4fbb9b.mobileprovision\"",
     "upload:mas": "npm run clean && tsc && vite build && electron-builder --mac mas --publish always --config.mac.provisioningProfile=\"/Users/desknik/Library/MobileDevice/Provisioning Profiles/1698ba7d-11d9-411e-8385-af55ac4fbb9b.mobileprovision\"",
     "build:all": "npm run build:linux && npm run build:mac && npm run build:windows:release",

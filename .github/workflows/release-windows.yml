@@ -1,0 +1,45 @@
+name: Release Windows
+
+on:
+  push:
+    tags:
+      - "v*"
+  # Permite publicar a partir de uma tag que ja existe, sem mover a tag: empurrar a
+  # tag de novo reacenderia o workflow de Linux, reenviando os artefatos de Linux.
+  # Disparar este workflow com ref=homolog e build_ref=v0.1.3 builda a tag e publica.
+  workflow_dispatch:
+    inputs:
+      build_ref:
+        description: "Tag ou commit a buildar (vazio = o proprio ref disparado)"
+        required: false
+        default: ""
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build & publish (NSIS x64)
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.build_ref || github.ref }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build & publish to GitHub Releases
+        run: npm run desktop:build:windows:release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Sem isso, reexecutar o workflow mais de 2h depois da publicacao faz o
+          # electron-builder pular o upload em silencio (release "antiga" demais).
+          EP_GH_IGNORE_TIME: "true"
