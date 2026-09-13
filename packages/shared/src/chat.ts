@@ -208,7 +208,40 @@ export interface AgentPart {
   durationMs?: number
 }
 
-export type MessagePart = TextPart | ReasoningPart | ToolPart | ImagePart | FilePart | AgentPart
+/**
+ * Artefato HTML que o assistente inclui na resposta (tool create_artifact):
+ * uma página renderizável — dashboard, protótipo, diagrama, relatório — que
+ * vive num arquivo próprio em orbit-data/artifacts e é servida pelo protocolo
+ * orbit-artifact://.
+ *
+ * O HTML NUNCA entra na part: a mensagem persiste só a URL (o mesmo contrato
+ * da ImagePart), senão cada conversa carregaria kilobytes de markup no
+ * storage e na sincronização com o companion.
+ */
+export interface ArtifactPart {
+  id: string
+  type: "artifact"
+  /** URL orbit-artifact://<id>.html servida pelo protocolo do main */
+  src: string
+  /** Id do registro na galeria (o nome do arquivo) — usado para abrir no
+   *  painel, atualizar e excluir */
+  artifactId: string
+  title: string
+  /** Miniatura capturada na criação (orbit-artifact://<id>.png), quando houve */
+  thumb?: string
+  /** Revisão: incrementa a cada update_artifact. A UI usa como cache-buster do
+   *  iframe — a URL não muda quando o artefato é reescrito no mesmo arquivo. */
+  revision?: number
+}
+
+export type MessagePart =
+  | TextPart
+  | ReasoningPart
+  | ToolPart
+  | ImagePart
+  | FilePart
+  | AgentPart
+  | ArtifactPart
 
 export interface TokenUsage {
   /** Soma de todos os steps do turno (tool loop) — reflete custo/billing, NÃO

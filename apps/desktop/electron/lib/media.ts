@@ -1,28 +1,46 @@
-import { app, net, protocol } from 'electron'
+import { app, BrowserWindow, net, protocol, session } from 'electron'
 import fsp from 'node:fs/promises'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
 import sharp from 'sharp'
 import { StorageKeys, type ChatMessage } from '@shared/chat'
-import type { MediaEntry, MediaFilter, MediaSource, MediaUsage } from '@shared/media'
+import {
+  ARTIFACT_SCHEME,
+  MEDIA_SCHEME,
+  mediaKind,
+  type MediaEntry,
+  type MediaFilter,
+  type MediaKind,
+  type MediaSource,
+  type MediaUsage,
+} from '@shared/media'
 import { listKeys, readJson } from './storage'
 
 export type { MediaEntry, MediaFilter, MediaSource, MediaUsage }
 
 /**
- * Mídia das respostas do assistente (tool show_image), dos screenshots e dos
- * scripts de browser: PNGs/JPGs/WebPs salvos em orbit-data/media e servidos ao
- * renderer pelo protocolo orbit-media:// — as mensagens persistem só a URL,
- * nunca base64.
+ * Registry dos ativos que o agente produz.
  *
- * Cada arquivo também ganha um registro em media/index.json (quem criou, em
- * qual sessão/mensagem, quando, dimensões). O índice é o que alimenta a
- * galeria e o rastreio de espaço; o DIRETÓRIO é a fonte da verdade — se o
- * índice sumir ou corromper, ele é reconstruído a partir do disco.
+ * Imagens (tool show_image, screenshots, scripts de browser) são PNGs/JPGs/
+ * WebPs em orbit-data/media, servidos pelo protocolo orbit-media://.
+ * Artefatos (tool create_artifact) são páginas HTML em orbit-data/artifacts,
+ * servidas pelo protocolo orbit-artifact://. Em ambos os casos as mensagens
+ * persistem só a URL, nunca o conteúdo.
+ *
+ * O ÍNDICE é um só (media/index.json) e o arquivo nunca é duplicado: o
+ * registro é um ponteiro — `path` absoluto + `kind` — e é isso que deixa a
+ * galeria, o uso de disco e o "abrir no chat" valerem para os dois tipos sem
+ * duas implementações. Por isso toda leitura/exclusão resolve pelo `path` da
+ * ENTRADA, nunca remontando `mediaDir() + id`.
+ *
+ * O diretório continua sendo a fonte da verdade das imagens: se o índice
+ * sumir ou corromper, `backfillMedia` o reconstrói a partir do disco.
  */
 
-const SCHEME = 'orbit-media'
+const SCHEME = MEDIA_SCHEME
 const SAFE_ID = /^[a-zA-Z0-9_-]+\.(png|jpg|jpeg|webp|gif)$/
+/** Artefato = a página (.html) ou a miniatura capturada dela (.png). */
+const SAFE_ARTIFACT_ID = /^[a-zA-Z0-9_-]+\.(html|png)$/
 const INDEX_FILE = 'index.json'
 
 export interface SaveMediaMeta {
@@ -35,6 +53,12 @@ export interface SaveMediaMeta {
 
 function mediaDir(): string {
   return path.join(app.getPath('userData'), 'orbit-data', 'media')
+}
+
+/** Artefatos moram fora de media/ para não colidirem com o backfill, que varre
+ *  o diretório de imagens e registraria qualquer arquivo novo como imagem. */
+function artifactsDir(): string {
+  return path.join(app.getPath('userData'), 'orbit-data', 'artifacts')
 }
 
 function indexFile(): string {
@@ -103,6 +127,7 @@ export async function saveMedia(buffer: Buffer, ext: string, meta?: SaveMediaMet
     size,
     createdAt: Date.now(),
     source: meta?.source ?? 'chat',
+    kind: 'image',
     sessionId: meta?.sessionId,
     messageId: meta?.messageId,
     taskId: meta?.taskId,
@@ -147,6 +172,10 @@ function matches(entry: MediaEntry, filter: MediaFilter): boolean {
     const sources = Array.isArray(filter.source) ? filter.source : [filter.source]
     if (!sources.includes(entry.source)) return false
   }
+  if (filter.kind) {
+    const kinds = Array.isArray(filter.kind) ? filter.kind : [filter.kind]
+    if (!kinds.includes(mediaKind(entry))) return false
+  }
   if (filter.sessionId && entry.sessionId !== filter.sessionId) return false
   if (filter.since != null && entry.createdAt < filter.since) return false
   if (filter.query) {
@@ -169,10 +198,25 @@ export async function getMediaEntry(id: string): Promise<MediaEntry | null> {
   return entries.find((e) => e.id === id) ?? null
 }
 
-/** Remove arquivo + registro. Retorna false quando o id é inválido. */
+/**
+ * Remove arquivo + registro. Retorna false quando o id é inválido.
+ *
+ * O caminho sai da ENTRADA (imagens e artefatos vivem em pastas diferentes);
+ * o `mediaDir() + id` só entra como fallback para registros órfãos — mídia em
+ * disco que o índice perdeu. Num artefato, a miniatura vai junto.
+ */
 export async function deleteMedia(id: string): Promise<boolean> {
-  if (!SAFE_ID.test(id)) return false
-  await fsp.rm(path.join(mediaDir(), id), { force: true })
+  const isImage = SAFE_ID.test(id)
+  if (!isImage && !SAFE_ARTIFACT_ID.test(id)) return false
+
+  const entry = await getMediaEntry(id)
+  const file = entry?.path ?? (isImage ? path.join(mediaDir(), id) : null)
+  if (!file) return false
+  await fsp.rm(file, { force: true })
+  if (entry?.thumb && SAFE_ARTIFACT_ID.test(entry.thumb)) {
+    await fsp.rm(path.join(artifactsDir(), entry.thumb), { force: true })
+  }
+
   await withIndexLock(async () => {
     const entries = await readIndex()
     const next = entries.filter((e) => e.id !== id)
@@ -181,7 +225,7 @@ export async function deleteMedia(id: string): Promise<boolean> {
   return true
 }
 
-/** Remove várias imagens de uma vez (seleção em lote na galeria). */
+/** Remove vários ativos de uma vez (seleção em lote na galeria). */
 export async function deleteManyMedia(ids: string[]): Promise<number> {
   let removed = 0
   for (const id of ids) {
@@ -203,24 +247,37 @@ export async function cleanupScriptMedia(): Promise<number> {
   return deleteManyMedia(disposable.map((e) => e.id))
 }
 
-/** Uso de disco da pasta media (arquivos reais, não o índice). */
+/**
+ * Uso de disco dos ativos (arquivos reais, não o índice): imagens em media/ e
+ * artefatos em artifacts/.
+ *
+ * `count` conta ATIVOS — as miniaturas dos artefatos somam bytes mas não
+ * contam como item, senão cada artefato apareceria duas vezes no número que o
+ * usuário lê na galeria.
+ */
 export async function mediaDiskUsage(): Promise<MediaUsage> {
   let count = 0
   let bytes = 0
-  try {
-    for (const name of await fsp.readdir(mediaDir())) {
-      if (!SAFE_ID.test(name)) continue
-      try {
-        const stat = await fsp.stat(path.join(mediaDir(), name))
-        count += 1
-        bytes += stat.size
-      } catch {
-        // arquivo removido no meio da varredura
+
+  async function scan(dir: string, valid: RegExp, countable: (name: string) => boolean) {
+    try {
+      for (const name of await fsp.readdir(dir)) {
+        if (!valid.test(name)) continue
+        try {
+          const stat = await fsp.stat(path.join(dir, name))
+          if (countable(name)) count += 1
+          bytes += stat.size
+        } catch {
+          // arquivo removido no meio da varredura
+        }
       }
+    } catch {
+      // pasta ainda não existe
     }
-  } catch {
-    // pasta ainda não existe
   }
+
+  await scan(mediaDir(), SAFE_ID, () => true)
+  await scan(artifactsDir(), SAFE_ARTIFACT_ID, (name) => name.endsWith('.html'))
   return { count, bytes }
 }
 
@@ -325,3 +382,288 @@ export function registerMediaProtocol(): void {
     return net.fetch(pathToFileURL(path.join(mediaDir(), id)).toString())
   })
 }
+
+// ─── Artefatos HTML ──────────────────────────────────────────────────────────
+
+/**
+ * Página renderizável produzida pelo agente (create_artifact): dashboard,
+ * protótipo, diagrama, relatório. Mesma mecânica das imagens — arquivo em
+ * disco, registro no índice, URL na mensagem — com duas diferenças:
+ *
+ * 1. Scheme próprio. `orbit-media://` não é privilegiado, e HTML sem origem
+ *    não roda script nem carrega módulo. `orbit-artifact://` é registrado como
+ *    standard+secure (ver registerArtifactSchemePrivileges, que PRECISA rodar
+ *    antes do app ficar pronto).
+ * 2. Miniatura. A galeria é um grid de <img>; o artefato ganha um PNG
+ *    capturado numa janela oculta para caber nesse grid.
+ *
+ * O conteúdo é escrito pelo modelo, que pode ter lido a web no mesmo turno:
+ * quem renderiza trata como não-confiável (iframe sandbox sem
+ * allow-same-origin, partição isolada).
+ */
+
+/** Altura máxima capturada na miniatura — páginas longas viram tira inútil. */
+const THUMB_VIEWPORT = { width: 1024, height: 768 }
+const THUMB_WIDTH = 640
+const THUMB_LOAD_TIMEOUT_MS = 8_000
+
+export interface SaveArtifactMeta {
+  title: string
+  sessionId?: string
+  messageId?: string
+}
+
+export interface ArtifactRef {
+  /** Nome do arquivo: art_xxx.html — também o id do registro na galeria */
+  id: string
+  url: string
+  title: string
+  thumb?: string
+  revision: number
+}
+
+/**
+ * Privilégios do scheme dos artefatos. TEM que ser chamado no topo do main,
+ * antes de `app.whenReady()` — depois disso o Chromium já fixou a tabela de
+ * schemes e a chamada não tem efeito (a página carregaria como origem opaca,
+ * sem script).
+ */
+export function registerArtifactSchemePrivileges(): void {
+  protocol.registerSchemesAsPrivileged([
+    {
+      scheme: ARTIFACT_SCHEME,
+      privileges: {
+        standard: true,
+        secure: true,
+        supportFetchAPI: true,
+        // Sem CORS o artefato não consegue nem buscar dados de uma API pública
+        // que o próprio modelo colocou no script.
+        corsEnabled: true,
+        stream: true,
+      },
+    },
+  ])
+}
+
+const ARTIFACT_CONTENT_TYPES: Record<string, string> = {
+  html: 'text/html; charset=utf-8',
+  png: 'image/png',
+}
+
+async function handleArtifactRequest(request: Request): Promise<Response> {
+  // Scheme standard: a URL tem host + path (orbit-artifact://art_x.html/?rev=2),
+  // diferente do orbit-media://, onde o id inteiro cai no host e não há query.
+  const parsed = new URL(request.url)
+  const id = decodeURIComponent(parsed.host || parsed.pathname.replace(/^\/+/, '')).replace(/\/+$/, '')
+  if (!SAFE_ARTIFACT_ID.test(id)) return new Response('not found', { status: 404 })
+  try {
+    const buffer = await fsp.readFile(path.join(artifactsDir(), id))
+    const ext = id.split('.').pop() ?? ''
+    return new Response(new Uint8Array(buffer), {
+      status: 200,
+      headers: {
+        'Content-Type': ARTIFACT_CONTENT_TYPES[ext] ?? 'application/octet-stream',
+        // O arquivo é reescrito no lugar pelo update_artifact: cache aqui
+        // serviria a revisão antiga.
+        'Cache-Control': 'no-store',
+      },
+    })
+  } catch {
+    return new Response('not found', { status: 404 })
+  }
+}
+
+/** Registra o protocolo dos artefatos (chamar após app.whenReady). */
+export function registerArtifactProtocol(): void {
+  protocol.handle(ARTIFACT_SCHEME, handleArtifactRequest)
+}
+
+/** Extrai o id de uma URL orbit-artifact:// (ou devolve a entrada se já for um id). */
+export function artifactIdFromUrl(url: string): string | null {
+  let id = url
+  if (url.startsWith(`${ARTIFACT_SCHEME}://`)) {
+    id = url.slice(`${ARTIFACT_SCHEME}://`.length)
+  }
+  id = id.replace(/\/+$/, '')
+  return SAFE_ARTIFACT_ID.test(id) ? id : null
+}
+
+/**
+ * Captura a miniatura numa janela oculta isolada. Best-effort: qualquer falha
+ * devolve undefined e o artefato fica sem thumb (o tile cai no ícone) — nunca
+ * derruba a criação do artefato.
+ */
+async function captureThumbnail(artifactId: string): Promise<string | undefined> {
+  let win: BrowserWindow | null = null
+  try {
+    // Partição efêmera e exclusiva: o artefato é conteúdo do modelo e não
+    // divide cookies/storage com o browser do agente nem com o app. Sem o
+    // prefixo "persist:" nada disso encosta no disco.
+    const partition = `artifact-thumb-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+    // O protocolo TEM que ser registrado nesta sessão também: protocol.handle
+    // vale só para a sessão default, e sem isto o loadURL abaixo fica pendurado
+    // para sempre (nem carrega, nem rejeita).
+    session.fromPartition(partition).protocol.handle(ARTIFACT_SCHEME, handleArtifactRequest)
+
+    win = new BrowserWindow({
+      show: false,
+      width: THUMB_VIEWPORT.width,
+      height: THUMB_VIEWPORT.height,
+      useContentSize: true,
+      // Sem isto o Chromium não pinta uma janela nunca exibida e o capturePage
+      // volta em branco (mesmo motivo do engine de scripts).
+      paintWhenInitiallyHidden: true,
+      webPreferences: {
+        partition,
+        nodeIntegration: false,
+        contextIsolation: true,
+        sandbox: true,
+        backgroundThrottling: false,
+      },
+    })
+    const target = win
+    // O .catch é obrigatório no race: uma rejeição do loadURL depois do timeout
+    // ficaria sem tratamento e derrubaria o processo main.
+    await Promise.race([
+      target.loadURL(`${ARTIFACT_SCHEME}://${artifactId}`).catch(() => {}),
+      new Promise((resolve) => setTimeout(resolve, THUMB_LOAD_TIMEOUT_MS)),
+    ])
+    // Um respiro para fontes/CDN/script do artefato pintarem
+    await new Promise((resolve) => setTimeout(resolve, 900))
+    if (target.isDestroyed()) return undefined
+
+    // Mesma proteção do painel: com o renderer ocupado o capturePage pode
+    // nunca resolver, e aí a tool inteira ficaria pendurada.
+    const CAPTURE_TIMED_OUT = Symbol('captureTimedOut')
+    const outcome = await Promise.race([
+      target.webContents.capturePage(),
+      new Promise<typeof CAPTURE_TIMED_OUT>((resolve) =>
+        setTimeout(() => resolve(CAPTURE_TIMED_OUT), THUMB_LOAD_TIMEOUT_MS),
+      ),
+    ])
+    if (outcome === CAPTURE_TIMED_OUT) return undefined
+    const image = outcome
+    const png = image.toPNG()
+    if (png.length === 0) return undefined
+    const buffer = await sharp(png).resize({ width: THUMB_WIDTH, withoutEnlargement: true }).png().toBuffer()
+
+    const thumbId = `${artifactId.replace(/\.html$/, '')}.png`
+    await fsp.writeFile(path.join(artifactsDir(), thumbId), buffer)
+    return thumbId
+  } catch {
+    return undefined
+  } finally {
+    if (win && !win.isDestroyed()) win.destroy()
+  }
+}
+
+/** Salva o HTML, captura a miniatura e registra o artefato na galeria. */
+export async function saveArtifact(html: string, meta: SaveArtifactMeta): Promise<ArtifactRef> {
+  const id = `art_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}.html`
+  await fsp.mkdir(artifactsDir(), { recursive: true })
+  const file = path.join(artifactsDir(), id)
+  await fsp.writeFile(file, html, 'utf8')
+
+  const thumb = await captureThumbnail(id)
+  const entry: MediaEntry = {
+    id,
+    path: file,
+    size: Buffer.byteLength(html, 'utf8'),
+    createdAt: Date.now(),
+    source: 'chat',
+    kind: 'artifact',
+    sessionId: meta.sessionId,
+    messageId: meta.messageId,
+    name: meta.title,
+    thumb,
+    revision: 1,
+  }
+  await withIndexLock(async () => {
+    const entries = await readIndex()
+    entries.push(entry)
+    await writeIndex(entries)
+  })
+  return { id, url: `${ARTIFACT_SCHEME}://${id}`, title: meta.title, thumb, revision: 1 }
+}
+
+/**
+ * Reescreve um artefato existente NO MESMO arquivo (a URL e o lugar dele na
+ * conversa se mantêm) e recaptura a miniatura. Retorna null quando o id não
+ * existe no índice.
+ */
+export async function updateArtifact(
+  id: string,
+  html: string,
+  title?: string,
+): Promise<ArtifactRef | null> {
+  if (!SAFE_ARTIFACT_ID.test(id) || !id.endsWith('.html')) return null
+  const entry = await getMediaEntry(id)
+  if (!entry || mediaKind(entry) !== 'artifact') return null
+
+  await fsp.writeFile(entry.path, html, 'utf8')
+  const thumb = (await captureThumbnail(id)) ?? entry.thumb
+  const revision = (entry.revision ?? 1) + 1
+  const name = title ?? entry.name ?? id
+
+  await withIndexLock(async () => {
+    const entries = await readIndex()
+    const current = entries.find((e) => e.id === id)
+    if (!current) return
+    current.size = Buffer.byteLength(html, 'utf8')
+    current.thumb = thumb
+    current.revision = revision
+    current.name = name
+    await writeIndex(entries)
+  })
+
+  /**
+   * Avisa as janelas. O arquivo é um só, mas quem JÁ está na tela não
+   * descobre sozinho: o iframe do card antigo foi montado com a revisão
+   * anterior e não recarrega por conta própria. Sem este evento o usuário
+   * veria a versão velha logo acima da nova, na mesma conversa.
+   *
+   * Emitido direto daqui (e não pelo broadcast.ts) para não criar o ciclo
+   * media → broadcast → companion-server → companion-http → media.
+   */
+  for (const win of BrowserWindow.getAllWindows()) {
+    if (!win.isDestroyed()) win.webContents.send('artifact:updated', { artifactId: id, revision })
+  }
+
+  return { id, url: `${ARTIFACT_SCHEME}://${id}`, title: name, thumb, revision }
+}
+
+/**
+ * Vincula um artefato à mensagem onde ele apareceu — mesmo motivo do
+ * attachMediaMessage: a tool roda no meio do turno e não conhece o id da
+ * mensagem, e é esse vínculo que faz o "abrir no chat" da galeria funcionar.
+ */
+export async function attachArtifactMessage(
+  id: string,
+  messageId: string,
+  sessionId?: string,
+): Promise<void> {
+  if (!SAFE_ARTIFACT_ID.test(id)) return
+  await withIndexLock(async () => {
+    const entries = await readIndex()
+    const entry = entries.find((e) => e.id === id)
+    if (!entry) return
+    entry.messageId = messageId
+    if (sessionId) entry.sessionId = sessionId
+    await writeIndex(entries)
+  })
+}
+
+/** Lê o HTML de um artefato — usado pelo companion (sem acesso ao protocolo)
+ *  e pela exportação. */
+export async function readArtifact(id: string): Promise<{ html: string; entry: MediaEntry } | null> {
+  if (!SAFE_ARTIFACT_ID.test(id)) return null
+  const entry = await getMediaEntry(id)
+  if (!entry || mediaKind(entry) !== 'artifact') return null
+  try {
+    return { html: await fsp.readFile(entry.path, 'utf8'), entry }
+  } catch {
+    return null
+  }
+}
+
+export type { MediaKind }

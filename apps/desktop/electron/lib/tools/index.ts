@@ -1,6 +1,7 @@
 import type { ToolSet } from 'ai'
 import type { SendMessageInput } from '@shared/chat'
 import { getMcpTools } from '../mcp'
+import { createArtifactTools } from './artifact'
 import { createBrowserLinksTool, createBrowserOpenTool } from './browser'
 import { createBrowserScriptTools } from './browser-script'
 import { createEsteiraTools } from './esteira'
@@ -60,6 +61,14 @@ export function buildToolSet(input: SendMessageInput, ctx: ToolContext | null): 
       tools.browser_open = createBrowserOpenTool(input.sessionId)
       tools.browser_links = createBrowserLinksTool(input.sessionId)
     }
+    // Artefatos HTML: no chat o agente não tem write/bash — é a única forma
+    // dele entregar algo renderizável. Não é toggle (não expõe capacidade
+    // nova: não lê, não escreve no projeto, não acessa a rede em nome do
+    // agente) e workers ficam de fora, porque quem responde ao usuário é a
+    // sessão principal.
+    if (input.orchestrationRole !== 'worker') {
+      Object.assign(tools, createArtifactTools(input.sessionId))
+    }
     if (allowBrain) Object.assign(tools, createChatMemoryTools(input))
     // Esteira: transformar o que foi discutido no chat em esteira/task de um
     // board. Fica sempre disponível (não é toggle): a esteira é outra forma de
@@ -85,7 +94,13 @@ export function buildToolSet(input: SendMessageInput, ctx: ToolContext | null): 
 
   // Modo código: MCP disponível (servidores configurados) + skill flow
   Object.assign(tools, getMcpTools())
-  if (input.orchestrationRole !== 'worker') tools.create_skill = createSkillTool()
+  if (input.orchestrationRole !== 'worker') {
+    tools.create_skill = createSkillTool()
+    // Artefatos também no código: relatório de análise, diagrama de
+    // arquitetura, comparativo — coisas que o usuário quer VER e que não
+    // deveriam virar arquivo solto no repositório dele.
+    Object.assign(tools, createArtifactTools(input.sessionId))
+  }
 
   if (input.options.research) {
     tools.websearch = createWebSearchTool()

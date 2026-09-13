@@ -13,6 +13,7 @@ import {
   type TestSummary,
 } from "@/src/lib/message-utils"
 import { ImagePartView } from "@/src/components/ai/image"
+import { ArtifactPartView } from "@/src/components/ai/artifact-part"
 import { Shimmer } from "@/src/components/ai/shimmer"
 import { SubAgentCard } from "@/src/components/ai/sub-agent-card"
 import { TodoList } from "@/src/components/ai/todo-list"
@@ -239,13 +240,17 @@ type Segment =
 function segmentParts(parts: MessagePart[]): Segment[] {
   const segments: Segment[] = []
   for (const part of parts) {
-    // Subagentes, TODO viva, propostas de skill e show_image têm render próprio
+    // Subagentes, TODO viva, propostas de skill, show_image e artefatos têm
+    // render próprio — a chamada não entra no acordeon de ações (o card do
+    // artefato JÁ é o resultado dela)
     if (
       part.type === "tool" &&
       part.tool !== "subagent" &&
       part.tool !== "todowrite" &&
       part.tool !== "create_skill" &&
-      part.tool !== "show_image"
+      part.tool !== "show_image" &&
+      part.tool !== "create_artifact" &&
+      part.tool !== "update_artifact"
     ) {
       const last = segments[segments.length - 1]
       if (last?.kind === "task") last.parts.push(part)
@@ -325,6 +330,8 @@ export function CodeAssistantMessage({ message, sessionId, isLast, isBusy, busyL
           <SkillProposalCard key={segment.id} part={segment.part} />
         ) : segment.part.type === "image" ? (
           <ImagePartView key={segment.id} part={segment.part} />
+        ) : segment.part.type === "artifact" ? (
+          <ArtifactPartView key={segment.id} part={segment.part} sessionId={sessionId} />
         ) : null,
       )}
       {message.error && (

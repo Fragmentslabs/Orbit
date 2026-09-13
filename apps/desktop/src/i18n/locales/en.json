@@ -658,6 +658,10 @@
       "media": {
         "label": "Media",
         "description": "Chat images, screenshots and captures"
+      },
+      "artifact": {
+        "label": "Artifact",
+        "description": "HTML page produced by the assistant"
       }
     },
     "unreadMessages": "Unread messages"
@@ -1993,5 +1997,13 @@
   },
   "plan": {
     "toggle": "Toggle plan"
+  },
+  "artifacts": {
+    "revision": "v{{n}}",
+    "reload": "Reload",
+    "openInPanel": "Open in panel",
+    "export": "Export HTML",
+    "expand": "Expand",
+    "unavailable": "Artifact unavailable"
   }
 }

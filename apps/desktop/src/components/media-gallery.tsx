@@ -1,20 +1,23 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
-import { CheckIcon, Folder, HardDriveIcon, ImageOff, MessageSquare, RefreshCw, Search, Trash2, X } from "lucide-react"
-import type { MediaEntry, MediaSource } from "@shared/media"
+import { CheckIcon, CodeXml, Folder, HardDriveIcon, ImageOff, MessageSquare, RefreshCw, Search, Trash2, X } from "lucide-react"
+import { mediaKind, thumbUrl, type MediaEntry, type MediaSource } from "@shared/media"
 import { folderKey, normalizeFolderName } from "@shared/chat"
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
-import { mediaApi } from "@/src/lib/ipc"
+import { artifactApi, mediaApi } from "@/src/lib/ipc"
 import { useSessionStore } from "@/src/stores/session-store"
+import { usePanelStore } from "@/src/stores/panel-store"
 import { useWorkspace } from "@/lib/workspace-context"
 import { cn } from "@/lib/utils"
 
 /**
- * Galeria de mídia: página dedicada (aba do painel direito) com as imagens
- * que o agente produziu — show_image, screenshots e capturas de
- * scripts/lotes — e as prints coladas pelo usuário. Lê o registry do main
- * (orbit-data/media/index.json).
+ * Galeria de mídia: página dedicada (aba do painel direito) com o que o agente
+ * produziu — imagens (show_image, screenshots, capturas de scripts/lotes),
+ * artefatos HTML (create_artifact) e as prints coladas pelo usuário. Lê o
+ * registry do main (orbit-data/media/index.json), que indexa os dois tipos:
+ * o arquivo do artefato mora em orbit-data/artifacts, e o registro aponta
+ * para ele — nada é duplicado.
  *
  * Escopada por modo: no modo chat mostra só mídia de sessões de chat; no
  * modo código, só de sessões de código.
@@ -77,6 +80,12 @@ function Thumb({ entry, selected, selecting, onToggle, onOpen }: {
   onOpen: () => void
 }) {
   const [failed, setFailed] = useState(false)
+  // Artefato sem miniatura (captura falhou) ou imagem quebrada caem no ícone —
+  // o tile continua clicável, o ativo ainda existe.
+  const preview = thumbUrl(entry)
+  const isArtifact = mediaKind(entry) === "artifact"
+  const FallbackIcon = isArtifact ? CodeXml : ImageOff
+
   return (
     <div
       className={cn(
@@ -90,13 +99,13 @@ function Thumb({ entry, selected, selecting, onToggle, onOpen }: {
         className="block size-full cursor-pointer"
         title={entry.name || entry.id}
       >
-        {failed ? (
+        {failed || !preview ? (
           <div className="flex size-full items-center justify-center text-muted-foreground">
-            <ImageOff className="size-4" />
+            <FallbackIcon className="size-4" />
           </div>
         ) : (
           <img
-            src={`orbit-media://${entry.id}`}
+            src={preview}
             alt={entry.name ?? entry.id}
             loading="lazy"
             onError={() => setFailed(true)}
@@ -104,6 +113,14 @@ function Thumb({ entry, selected, selecting, onToggle, onOpen }: {
           />
         )}
       </button>
+      {isArtifact && (
+        // O grid mistura imagem e página: sem o selo, um artefato parece um
+        // screenshot e o clique (que abre uma aba, não um lightbox) surpreende.
+        <span className="pointer-events-none absolute right-1.5 top-1.5 flex items-center gap-1 rounded bg-background/85 px-1.5 py-0.5 text-[10px] font-medium text-foreground">
+          <CodeXml className="size-3" />
+          HTML
+        </span>
+      )}
       <button
         type="button"
         onClick={onToggle}
@@ -161,6 +178,11 @@ export function MediaGallery() {
     })()
     return () => { mounted.current = false }
   }, [refresh])
+
+  // Artefato reescrito com a galeria aberta: o registro muda (revisão, tamanho,
+  // título) e a miniatura é recapturada com o MESMO nome de arquivo. Só o
+  // refresh traz a revisão nova, que é o que desempata a URL da miniatura.
+  useEffect(() => artifactApi.onUpdated(() => void refresh()), [refresh])
 
   /** Sessões do modo atual — escopo da galeria (chat mostra só chat, etc). */
   const modeSessionIds = useMemo(
@@ -287,6 +309,25 @@ export function MediaGallery() {
       setTimeout(() => scrollToMessage(entry.messageId!), 400)
     }
   }, [setMode])
+
+  /**
+   * Clique no tile: imagem abre o lightbox; artefato abre a aba própria (o
+   * lightbox é um <img>, e uma página renderizável precisa de iframe e
+   * espaço). A aba nasce na sessão de ORIGEM do artefato quando ela é
+   * conhecida — é lá que o card dele está na conversa.
+   */
+  const openEntry = useCallback(
+    (entry: MediaEntry) => {
+      if (mediaKind(entry) !== "artifact") {
+        setPreview(entry)
+        return
+      }
+      const sessionId = entry.sessionId ?? useSessionStore.getState().activeIds[mode]
+      if (!sessionId) return
+      usePanelStore.getState().openArtifactTab(sessionId, entry.id, entry.name || entry.id)
+    },
+    [mode],
+  )
 
   const sourceFilters: SourceFilter[] = ["all", "user", "chat", "screenshot", "script", "batch"]
   const periodFilters: PeriodFilter[] = ["all", "today", "week", "month"]
@@ -433,7 +474,7 @@ export function MediaGallery() {
                 selected={selected.has(entry.id)}
                 selecting={selected.size > 0}
                 onToggle={() => toggle(entry.id)}
-                onOpen={() => setPreview(entry)}
+                onOpen={() => openEntry(entry)}
               />
             ))}
           </div>

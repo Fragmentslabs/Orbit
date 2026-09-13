@@ -32,6 +32,12 @@ const NATIVE_TOOLS = new Set([
   'panel_resize',
   'panel_screenshot',
   'show_image',
+  // Artefatos HTML mostrados na resposta. Não pedem permissão: escrevem só no
+  // storage do Orbit (orbit-data/artifacts), nunca no projeto do usuário, e
+  // rodam num iframe sandbox sem acesso ao app — o threat model é o de uma
+  // página web qualquer, não o do bash.
+  'create_artifact',
+  'update_artifact',
   // Automação em lote na engine oculta (mesmo threat model do bash: o agente
   // já executa código arbitrário; o script roda isolado num utilityProcess)
   'run_browser_script',

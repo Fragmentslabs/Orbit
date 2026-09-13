@@ -26,6 +26,19 @@ const chatPrompt = (language?: string) => `${identity(language)}`
 
 const CITATION_INSTRUCTION = `When using information from the web in your text, cite the source inline with numbered markdown links in the format [1](https://source-url), [2](https://other-url) — only the number as the link text. Number citations in the order they appear.`
 
+const ARTIFACT_INSTRUCTION = `HTML ARTIFACTS. You have create_artifact({ title, html }), which renders a live HTML page inside your response — the user sees and interacts with it right there in the chat, and it is saved to Orbit's media gallery.
+
+Use it when the answer is better SEEN than described: dashboards and charts from data discussed in the conversation, screen prototypes and UI mockups, diagrams and flows, interactive simulators and calculators, comparison tables, formatted reports the user will revisit.
+
+Do NOT use it for: code the user asked you to write into their project (that is write/edit, in code mode), a short answer that fits in text, or a wall of raw data.
+
+Rules:
+- The HTML must be COMPLETE and SELF-CONTAINED: inline CSS and JS in the same document. External scripts only from a public CDN; there is no bundler and no local file next to it.
+- The page renders on a light background by default. Support the dark theme with @media (prefers-color-scheme: dark) when it costs little.
+- After creating it, do NOT re-describe the content in text — the user is already looking at it. One line saying what it is, at most.
+- To change something you already rendered, call update_artifact({ artifactId, html }) with the full new HTML instead of creating a second artifact.
+- Never write the artifact into the user's repository: create_artifact already persists it in Orbit's own storage.`
+
 const researchPrompt = (language?: string) => `${identity(language)}
 
 DEEP RESEARCH MODE. For this conversation, act as a rigorous researcher:
@@ -59,7 +72,7 @@ Guidelines (same philosophy as opencode):
 - panel_screenshot is an internal tool for YOU to see the page's state (the image goes into your context, not the user's chat). Use it sparingly — large images may be rejected by the provider. For a whole long page or a high-resolution PNG for documentation: panel_screenshot({ fullPage: true, format: 'png' }) — it captures in a hidden window, without disturbing the panel.
 - For MANY screenshots (several URLs, theme/color variations, several viewports), don't loop with panel_*: use capture_batch({ steps: [...] }) or run_browser_script({ script }) — a single call, dozens of images, none of them entering your context. Show the ones that matter with show_image({ media: '<mediaUrl from the manifest>' }).
 - After UI/frontend changes, validate visually and show the result with show_image — 1-2 key images per change (before/after, or main screen + mobile via panel_resize), never a wall of screenshots: each image costs context and may not even reach the model (screenshots over 300KB are omitted).
-- NEVER write temporary scripts, screenshots, or artifacts into the user's repository. The internal tools (run_browser_script, capture_batch, panel_screenshot, show_image) already persist to Orbit's own storage. Only write an image to the working folder when the user explicitly asks for a file in the repo (panel_screenshot({ savePath })).
+- NEVER write temporary scripts, screenshots, or generated pages into the user's repository. The internal tools (run_browser_script, capture_batch, panel_screenshot, show_image, create_artifact) already persist to Orbit's own storage. Only write an image to the working folder when the user explicitly asks for a file in the repo (panel_screenshot({ savePath })).
 
 CONVERSATION FIRST:
 - General questions, opinions, or requests for analysis WITHOUT a code context (e.g. "what do you think about X?", "is it possible to do X?", "can you explain Y?") — answer in text and stop, no tools: don't read files, don't run commands, don't open browser/panel, don't propose development options. Briefly offer to implement it if they want.
@@ -378,6 +391,10 @@ export async function buildSystemPrompt(input: SendMessageInput): Promise<string
       )
     }
   }
+
+  // Artefatos HTML — a tool existe nos dois modos, mas nunca nos workers
+  // (quem responde ao usuário é a sessão principal).
+  if (input.orchestrationRole !== 'worker') parts.push(ARTIFACT_INSTRUCTION)
 
   parts.push(...(await buildSkillsBlock(input)))
 

@@ -658,6 +658,10 @@
       "media": {
         "label": "Mídia",
         "description": "Imagens do chat, screenshots e capturas"
+      },
+      "artifact": {
+        "label": "Artefato",
+        "description": "Página HTML produzida pelo assistente"
       }
     },
     "unreadMessages": "Mensagens não lidas"
@@ -1992,5 +1996,13 @@
   },
   "plan": {
     "toggle": "Alternar plano"
+  },
+  "artifacts": {
+    "revision": "v{{n}}",
+    "reload": "Recarregar",
+    "openInPanel": "Abrir no painel",
+    "export": "Exportar HTML",
+    "expand": "Expandir",
+    "unavailable": "Artefato indisponível"
   }
 }

@@ -31,6 +31,9 @@ import {
   deleteManyMedia,
   listMedia,
   mediaDiskUsage,
+  readArtifact,
+  registerArtifactProtocol,
+  registerArtifactSchemePrivileges,
   registerMediaProtocol,
 } from './lib/media'
 import type { AppPreferences, SessionModeOverrides, WorkerConfigSnapshot } from '@shared/companion'
@@ -90,6 +93,12 @@ export const MAIN_DIST = path.join(process.env.APP_ROOT, 'dist-electron')
 export const RENDERER_DIST = path.join(process.env.APP_ROOT, 'dist')
 
 process.env.VITE_PUBLIC = VITE_DEV_SERVER_URL ? path.join(process.env.APP_ROOT, 'public') : RENDERER_DIST
+
+// Privilégios do orbit-artifact:// — TEM que acontecer aqui, no topo do
+// módulo: depois de app.whenReady() o Chromium já fixou a tabela de schemes e
+// o artefato carregaria como origem opaca, sem rodar script. O protocolo em si
+// (registerArtifactProtocol) é registrado lá embaixo, com o app pronto.
+registerArtifactSchemePrivileges()
 
 let win: BrowserWindow | null
 let entranceWindowCreated = false
@@ -1331,6 +1340,9 @@ app.whenReady().then(() => {
 
   // Imagens das respostas do assistente (orbit-media://)
   registerMediaProtocol()
+  // Artefatos HTML das respostas (orbit-artifact://) — os privilégios do
+  // scheme já foram declarados no topo do módulo.
+  registerArtifactProtocol()
 
   // Modo esteira: board de projetos/esteiras/tasks e o engine de execução.
   // As mutações voltam ao renderer por 'esteira:event' (o engine emite).
@@ -1401,6 +1413,25 @@ app.whenReady().then(() => {
   ipcMain.handle('media:cleanupScripts', () => cleanupScriptMedia())
   // Indexa imagens anteriores ao registry (roda na primeira abertura da galeria)
   ipcMain.handle('media:backfill', () => backfillMedia())
+
+  // Artefatos HTML: o renderer nunca lê o arquivo direto (ele é servido pelo
+  // orbit-artifact://) — só precisa do conteúdo para exportar.
+  ipcMain.handle('artifact:read', async (_event, id: string) => {
+    const artifact = await readArtifact(id)
+    return artifact ? artifact.html : null
+  })
+  ipcMain.handle('artifact:export', async (_event, id: string) => {
+    const artifact = await readArtifact(id)
+    if (!artifact) return { ok: false as const, error: 'Artefato não encontrado' }
+    const suggested = `${(artifact.entry.name || 'artefato').replace(/[\\/:*?"<>|]/g, '-').slice(0, 60)}.html`
+    const result = await dialog.showSaveDialog({
+      defaultPath: suggested,
+      filters: [{ name: 'HTML', extensions: ['html'] }],
+    })
+    if (result.canceled || !result.filePath) return { ok: false as const, canceled: true as const }
+    await fs.writeFile(result.filePath, artifact.html, 'utf8')
+    return { ok: true as const, path: result.filePath }
+  })
 
   // Memória Brain — a UI fala com o service; mutações chegam de volta via memory:event
   ipcMain.handle('memory:list', () => memoryService.list())

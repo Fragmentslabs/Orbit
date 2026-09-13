@@ -24,7 +24,7 @@ import { buildSystemPrompt } from './prompts'
 import { buildProviderOptions, interleavedReasoningField, normalizeMessages } from './reasoning'
 import { resolveModel } from './providers'
 import { withProviderSession } from './provider-session'
-import { attachMediaMessage, saveMedia } from './media'
+import { attachArtifactMessage, attachMediaMessage, saveMedia } from './media'
 import sharp from 'sharp'
 import { claimsCompletion, isNoCorrectionReply } from './overclaim'
 import { extractPdfText } from './pdf'
@@ -1287,6 +1287,28 @@ async function runChatTurn(win: BrowserWindow, input: SendMessageInput): Promise
                 // mensagem (roda no meio do turno) — a galeria usa esse
                 // vínculo para o "abrir no chat".
                 void attachMediaMessage(output.mediaUrl, assistantMessage.id, sessionId)
+              }
+            }
+            // create_artifact/update_artifact: o HTML vira parte da resposta
+            // (renderizada pelo ai/artifact-part). O update emite uma part NOVA
+            // no turno atual em vez de mexer na mensagem antiga: o arquivo é o
+            // mesmo, então o card antigo passa a mostrar a versão nova sozinho
+            // — o que a part nova marca é ONDE na conversa a mudança foi feita.
+            if (part.toolName === 'create_artifact' || part.toolName === 'update_artifact') {
+              const output = part.output as
+                | { artifactId?: string; url?: string; title?: string; thumb?: string; revision?: number }
+                | string
+              if (typeof output === 'object' && output?.artifactId && output.url) {
+                upsertPart({
+                  id: `${part.toolCallId}-artifact`,
+                  type: 'artifact',
+                  src: output.url,
+                  artifactId: output.artifactId,
+                  title: output.title || output.artifactId,
+                  thumb: output.thumb,
+                  revision: output.revision,
+                })
+                void attachArtifactMessage(output.artifactId, assistantMessage.id, sessionId)
               }
             }
             break

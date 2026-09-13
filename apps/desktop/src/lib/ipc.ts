@@ -444,7 +444,28 @@ export const rotinasApi = {
   },
 }
 
-/** Galeria de mídia — imagens produzidas pelo agente (orbit-data/media). */
+/**
+ * Artefatos HTML (orbit-data/artifacts). O conteúdo NÃO passa por aqui para
+ * renderizar — o iframe carrega direto de orbit-artifact://. Estas chamadas
+ * existem só para tirar o artefato do Orbit (exportar/copiar).
+ */
+export const artifactApi = {
+  read: (id: string) => window.ipcRenderer.invoke("artifact:read", id) as Promise<string | null>,
+  /** update_artifact reescreveu o arquivo: quem já está renderizando aquele
+   *  id precisa recarregar (a URL não muda, então nada dispara sozinho). */
+  onUpdated: (listener: (payload: { artifactId: string; revision: number }) => void) => {
+    const wrapper = window.ipcRenderer.on("artifact:updated", (payload) =>
+      listener(payload as { artifactId: string; revision: number }),
+    )
+    return () => window.ipcRenderer.off("artifact:updated", wrapper)
+  },
+  export: (id: string) =>
+    window.ipcRenderer.invoke("artifact:export", id) as Promise<
+      { ok: true; path: string } | { ok: false; canceled?: boolean; error?: string }
+    >,
+}
+
+/** Galeria de mídia — ativos produzidos pelo agente (imagens e artefatos). */
 export const mediaApi = {
   list: (filter?: MediaFilter) => window.ipcRenderer.invoke("media:list", filter) as Promise<MediaEntry[]>,
   usage: () => window.ipcRenderer.invoke("media:usage") as Promise<MediaUsage>,

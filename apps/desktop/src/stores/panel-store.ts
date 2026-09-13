@@ -1,6 +1,6 @@
 import { create } from "zustand"
 
-export type TabType = "chat" | "terminal" | "folders" | "browser" | "diff" | "media"
+export type TabType = "chat" | "terminal" | "folders" | "browser" | "diff" | "media" | "artifact"
 
 export interface PanelTab {
   id: string
@@ -14,6 +14,8 @@ export interface PanelTab {
   pending?: boolean
   /** URL inicial da aba Browser (ausente = abre a tela padrão com busca). */
   url?: string
+  /** Aba Artefato: id do registro (art_xxx.html) que a aba renderiza. */
+  artifactId?: string
 }
 
 export interface BrowserSelection {
@@ -65,6 +67,9 @@ interface PanelState {
   removeTab: (sessionId: string, tabId: string) => void
   setActiveTab: (sessionId: string, tabId: string | null) => void
   setTabsForSession: (sessionId: string, tabs: PanelTab[], activeId: string | null) => void
+  /** Abre (ou reaproveita) a aba que renderiza um artefato em tela cheia.
+   *  Chamada pelo card na conversa e pela galeria. */
+  openArtifactTab: (sessionId: string, artifactId: string, title: string) => void
   getTabs: (sessionId: string) => PanelTab[]
   getActiveTabId: (sessionId: string) => string | null
   /** Atualiza o título das abas de chat que apontam para uma sessão (ex.: agente nomeou o chat). */
@@ -176,6 +181,32 @@ export const usePanelStore = create<PanelState>((set, get) => {
         tabsBySession: { ...state.tabsBySession, [sessionId]: tabs },
         activeTabBySession: { ...state.activeTabBySession, [sessionId]: activeId },
       })),
+
+    openArtifactTab: (sessionId, artifactId, title) =>
+      set((state) => {
+        const tabs = state.tabsBySession[sessionId] ?? []
+        // Reabrir o mesmo artefato foca a aba existente em vez de empilhar
+        // cópias — o artefato é um só, a aba também.
+        const existing = tabs.find((t) => t.type === "artifact" && t.artifactId === artifactId)
+        if (existing) {
+          return {
+            rightPanelOpen: true,
+            activeTabBySession: { ...state.activeTabBySession, [sessionId]: existing.id },
+          }
+        }
+        const tab: PanelTab = {
+          id: `artifact-${nextTabId()}`,
+          type: "artifact",
+          title,
+          sessionId,
+          artifactId,
+        }
+        return {
+          rightPanelOpen: true,
+          tabsBySession: { ...state.tabsBySession, [sessionId]: [...tabs, tab] },
+          activeTabBySession: { ...state.activeTabBySession, [sessionId]: tab.id },
+        }
+      }),
 
     getTabs: (sessionId) => get().tabsBySession[sessionId] ?? [],
 

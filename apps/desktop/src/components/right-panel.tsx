@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { useDroppable, useDndContext } from "@dnd-kit/core"
-import { FileCode, Globe, Folder, Images, MessageSquare, Terminal, X, PlusIcon, Bot, LoaderIcon, Loader2, XCircleIcon, Trash2, GripVertical } from "lucide-react"
+import { CodeXml, FileCode, Globe, Folder, Images, MessageSquare, Terminal, X, PlusIcon, Bot, LoaderIcon, Loader2, XCircleIcon, Trash2, GripVertical } from "lucide-react"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -20,6 +20,7 @@ import { destroyWebview } from "@/src/components/browser/webview-session"
 import { FoldersTab } from "@/src/components/folders-tab"
 import { DiffTab } from "@/src/components/diff-tab"
 import { MediaGallery } from "@/src/components/media-gallery"
+import { ArtifactTab } from "@/src/components/artifact-tab"
 import { ProcessOutputDialog } from "@/src/components/process-output-dialog"
 import { useWorkspace } from "@/lib/workspace-context"
 import { usePanelStore, nextTabId, type TabType, type PanelTab } from "@/src/stores/panel-store"
@@ -45,6 +46,7 @@ function useTabMeta(): Record<TabType, TabMeta> {
     browser: { icon: Globe, label: t("panel.tabs.browser.label"), description: t("panel.tabs.browser.description") },
     diff: { icon: FileCode, label: t("panel.tabs.diff.label"), description: t("panel.tabs.diff.description") },
     media: { icon: Images, label: t("panel.tabs.media.label"), description: t("panel.tabs.media.description") },
+    artifact: { icon: CodeXml, label: t("panel.tabs.artifact.label"), description: t("panel.tabs.artifact.description") },
   }
 }
 
@@ -201,6 +203,12 @@ function TabContent({ tab, sessionId, onUpdateTab }: { tab: PanelTab; sessionId?
           <MediaGallery />
         </div>
       )
+    case "artifact":
+      return (
+        <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
+          <ArtifactTab artifactId={tab.artifactId} title={tab.title} />
+        </div>
+      )
   }
 }
 
@@ -261,7 +269,13 @@ function SelectorScreen({ onSelect, onOpenWorker }: {
   )
 
   const availableTabs = useMemo(
-    () => (Object.entries(tabMeta) as [TabType, TabMeta][]).filter(([type]) => mode !== "chat" || type === "chat" || type === "media"),
+    () =>
+      (Object.entries(tabMeta) as [TabType, TabMeta][]).filter(
+        // "artifact" nunca entra no seletor: uma aba de artefato só existe
+        // apontando para um artefato (abre pelo card na conversa ou pela
+        // galeria), nunca vazia.
+        ([type]) => type !== "artifact" && (mode !== "chat" || type === "chat" || type === "media"),
+      ),
     [mode, tabMeta],
   )
 
@@ -411,7 +425,13 @@ export function RightPanel() {
   const isDragging = dndContext.active !== null
 
   const availableTabs = useMemo(
-    () => (Object.entries(tabMeta) as [TabType, TabMeta][]).filter(([type]) => mode !== "chat" || type === "chat" || type === "media"),
+    () =>
+      (Object.entries(tabMeta) as [TabType, TabMeta][]).filter(
+        // "artifact" nunca entra no seletor: uma aba de artefato só existe
+        // apontando para um artefato (abre pelo card na conversa ou pela
+        // galeria), nunca vazia.
+        ([type]) => type !== "artifact" && (mode !== "chat" || type === "chat" || type === "media"),
+      ),
     [mode, tabMeta],
   )
 
