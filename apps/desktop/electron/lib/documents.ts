@@ -5,6 +5,7 @@ import path from 'node:path'
 import mammoth from 'mammoth'
 import * as XLSX from 'xlsx'
 import { extractPdfPages } from './pdf'
+import type { CellValue } from './sheet-query'
 import {
   capPages,
   documentKindOf,
@@ -145,4 +146,39 @@ export async function extractDocumentFile(filePath: string): Promise<ExtractedDo
   const kind = documentKindOf(filePath)
   if (!kind) throw new Error(`Não é um documento suportado: ${path.basename(filePath)}`)
   return extractDocument(await fsp.readFile(filePath), kind)
+}
+
+/**
+ * Linhas TIPADAS de uma aba, para a consulta (sheet_query).
+ *
+ * Usa `raw: true`, ao contrário da extração de texto: ali o objetivo é o
+ * modelo LER, e `raw: false` entrega o valor já formatado como a planilha o
+ * exibe; aqui o objetivo é CALCULAR, e número precisa chegar como number —
+ * somar a partir do texto formatado reintroduziria o parse de locale
+ * ("1.234,56") que é onde mora o erro silencioso.
+ *
+ * `sheet` ausente = primeira aba, que é o caso da planilha de aba única.
+ */
+export function readSheetRows(
+  bytes: Buffer,
+  sheet?: string,
+): { rows: CellValue[][]; sheetName: string; sheetNames: string[] } {
+  const workbook = XLSX.read(bytes, { type: 'buffer', cellDates: true })
+  const sheetNames = workbook.SheetNames
+  if (sheetNames.length === 0) throw new Error('A planilha não tem nenhuma aba.')
+
+  const wanted = sheet?.trim().toLowerCase()
+  const sheetName = wanted
+    ? sheetNames.find((n) => n.toLowerCase() === wanted) ?? ''
+    : sheetNames[0]
+  if (!sheetName) {
+    throw new Error(`Aba não encontrada: "${sheet}". Abas disponíveis: ${sheetNames.join(', ')}`)
+  }
+
+  const rows = XLSX.utils.sheet_to_json<CellValue[]>(workbook.Sheets[sheetName], {
+    header: 1,
+    raw: true,
+    defval: null,
+  })
+  return { rows, sheetName, sheetNames }
 }

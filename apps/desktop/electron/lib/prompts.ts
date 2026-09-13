@@ -38,13 +38,23 @@ const DOCUMENT_ATTACHMENT_RULES = `A long document attached to this conversation
 
 Never answer about a part of the document you have not read, and never ask the user to paste an excerpt — you can read it yourself. When you assert something from a document, say where it came from (file and page), so the user can check it.`
 
-const DOCUMENT_INSTRUCTION_CHAT = `ATTACHED DOCUMENTS. ${DOCUMENT_ATTACHMENT_RULES}`
+const SPREADSHEET_RULES = `SPREADSHEETS. When a question about a spreadsheet involves counting, adding, averaging or comparing across rows, call sheet_query — it filters, groups and computes in the runtime, and the number comes back exact.
+
+Do NOT read the rows and do the arithmetic yourself. Over hundreds of rows that is both expensive and unreliable, and a wrong total is indistinguishable from a right one in your answer. sheet_query works on a spreadsheet in the working folder (filePath) and on one attached to the conversation (docId).
+
+The result tells you how many rows were scanned and whether any cells were skipped for not being numeric. Pass that on when it matters: a total that ignored 300 cells is not the total the user asked for.`
+
+const DOCUMENT_INSTRUCTION_CHAT = `ATTACHED DOCUMENTS. ${DOCUMENT_ATTACHMENT_RULES}
+
+${SPREADSHEET_RULES}`
 
 const DOCUMENT_INSTRUCTION_CODE = `DOCUMENTS (PDF, DOCX, spreadsheets).
 
 In the working folder: \`read\` opens them page by page (offset/limit count pages; in a spreadsheet each sheet is a page) and \`grep\` searches inside them, reporting \`file:p12\`. A spec, contract or requirements document committed next to the code is readable material — locate the part you need with grep, then read around it instead of paging blindly. Treat what the document specifies as a requirement, and cite it as file and page when you rely on it.
 
-${DOCUMENT_ATTACHMENT_RULES}`
+${DOCUMENT_ATTACHMENT_RULES}
+
+${SPREADSHEET_RULES}`
 
 const ARTIFACT_INSTRUCTION = `HTML ARTIFACTS. You have create_artifact({ title, html }), which renders a live HTML page inside your response — the user sees and interacts with it right there in the chat, and it is saved to Orbit's media gallery.
 

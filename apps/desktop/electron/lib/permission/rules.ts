@@ -43,6 +43,8 @@ const NATIVE_TOOLS = new Set([
   'doc_list',
   'doc_search',
   'doc_read',
+  // Consulta de planilha: leitura pura, sem escrita em lugar nenhum
+  'sheet_query',
   // Automação em lote na engine oculta (mesmo threat model do bash: o agente
   // já executa código arbitrário; o script roda isolado num utilityProcess)
   'run_browser_script',

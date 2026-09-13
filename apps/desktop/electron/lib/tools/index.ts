@@ -3,6 +3,7 @@ import type { SendMessageInput } from '@shared/chat'
 import { getMcpTools } from '../mcp'
 import { createArtifactTools } from './artifact'
 import { createDocumentTools } from './documents'
+import { createSheetQueryTool } from './sheet'
 import { createBrowserLinksTool, createBrowserOpenTool } from './browser'
 import { createBrowserScriptTools } from './browser-script'
 import { createEsteiraTools } from './esteira'
@@ -75,6 +76,9 @@ export function buildToolSet(input: SendMessageInput, ctx: ToolContext | null): 
     // responde que não há, e é justamente isso que impede o agente de
     // alucinar sobre um documento que ele não leu.
     Object.assign(tools, createDocumentTools(input.sessionId))
+    // Consulta de planilha: no chat a fonte e sempre um anexo (nao ha pasta
+    // de trabalho), por isso ctx entra como null.
+    tools.sheet_query = createSheetQueryTool(input.sessionId, null)
     if (allowBrain) Object.assign(tools, createChatMemoryTools(input))
     // Esteira: transformar o que foi discutido no chat em esteira/task de um
     // board. Fica sempre disponível (não é toggle): a esteira é outra forma de
@@ -111,6 +115,9 @@ export function buildToolSet(input: SendMessageInput, ctx: ToolContext | null): 
   // repositório, não o que o usuário arrastou para a conversa. Sem isto, o
   // trecho de abertura do anexo apontaria para uma tool inexistente.
   Object.assign(tools, createDocumentTools(input.sessionId))
+  // No codigo a consulta alcanca as duas fontes: planilha do repositorio
+  // (filePath, via ctx) e planilha anexada na conversa (docId).
+  tools.sheet_query = createSheetQueryTool(input.sessionId, ctx)
 
   if (input.options.research) {
     tools.websearch = createWebSearchTool()

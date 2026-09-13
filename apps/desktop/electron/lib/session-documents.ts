@@ -100,6 +100,15 @@ export async function saveSessionDocument(
   const stored: StoredDocument = { ...doc, pages: extracted.pages }
   await fsp.mkdir(sessionDir(sessionId), { recursive: true })
   await fsp.writeFile(path.join(sessionDir(sessionId), `${doc.id}.json`), JSON.stringify(stored), 'utf8')
+
+  // Planilha guarda também o ARQUIVO ORIGINAL. O texto extraído serve para
+  // ler, mas não para calcular: ali o valor já vem formatado como a planilha
+  // o exibe, e somar a partir disso obrigaria a reparsear "1.234,56" — que é
+  // exatamente onde mora o erro silencioso de locale. O sheet_query relê os
+  // bytes com os tipos originais. Só planilha: num PDF não há o que calcular.
+  if (kind === 'spreadsheet') {
+    await fsp.writeFile(path.join(sessionDir(sessionId), `${doc.id}.bin`), bytes)
+  }
   return { doc, pages: extracted.pages }
 }
 
@@ -169,6 +178,23 @@ export async function searchSessionDocuments(
     }
   }
   return hits
+}
+
+/**
+ * Bytes originais de uma planilha anexada — a fonte tipada do sheet_query.
+ * null quando o documento não é planilha ou foi anexado antes desta cópia
+ * existir (nesse caso a consulta avisa em vez de calcular errado).
+ */
+export async function readSessionDocumentBytes(
+  sessionId: string,
+  docId: string,
+): Promise<Buffer | null> {
+  if (!SAFE_SESSION.test(sessionId) || !SAFE_DOC_ID.test(docId)) return null
+  try {
+    return await fsp.readFile(path.join(sessionDir(sessionId), `${docId}.bin`))
+  } catch {
+    return null
+  }
 }
 
 /** Apaga os documentos de uma sessão (chat excluído). */
