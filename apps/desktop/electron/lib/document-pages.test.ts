@@ -6,6 +6,7 @@ import {
   documentKindOf,
   isDocumentPath,
   pageLabel,
+  pageLocator,
   pageWindow,
   paginateText,
   type DocumentPage,
@@ -156,5 +157,33 @@ describe('pageLabel', () => {
 
   it('PDF fala em página, que é a paginação real do arquivo', () => {
     expect(pageLabel({ num: 12, text: '' }, 'pdf')).toBe('p. 12')
+  })
+})
+
+/**
+ * O localizador é o que o agente CITA para o usuário e o que ele usa como
+ * offset. Dizer "p12" num DOCX faria o modelo apontar uma página que o Word
+ * não tem (a paginação ali é sintética), e numa planilha faria "página 3"
+ * significar a terceira aba.
+ */
+describe('pageLocator', () => {
+  it('PDF usa página, que é a paginação real do arquivo', () => {
+    expect(pageLocator({ num: 12, text: '' }, 'pdf')).toBe('p12')
+  })
+
+  it('DOCX não finge ter página do Word', () => {
+    const locator = pageLocator({ num: 12, text: '' }, 'docx')
+    expect(locator).toBe('bloco12')
+    expect(locator).not.toMatch(/^p\d/)
+  })
+
+  it('planilha leva o nome da aba junto do offset', () => {
+    expect(pageLocator({ num: 3, text: '', label: 'Custos' }, 'spreadsheet')).toBe('aba3 (Custos)')
+  })
+
+  it('sempre carrega o número que serve de offset na leitura', () => {
+    for (const kind of ['pdf', 'docx', 'spreadsheet'] as const) {
+      expect(pageLocator({ num: 7, text: '' }, kind)).toContain('7')
+    }
   })
 })

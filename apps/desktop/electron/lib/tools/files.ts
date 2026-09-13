@@ -8,6 +8,7 @@ import {
   extractDocumentFile,
   isDocumentPath,
   pageLabel,
+  pageLocator,
   pageWindow,
 } from '../documents'
 
@@ -49,7 +50,7 @@ async function readDocument(file: string, offset?: number, limit?: number): Prom
 export function createReadTool(ctx: ToolContext) {
   return tool({
     description:
-      'Reads a file. For text files, returns the content with line numbers (offset/limit = lines). Also reads PDF, DOCX and spreadsheets, returning the extracted text a few pages at a time (offset/limit = pages; in a spreadsheet, each sheet is a page) — never the whole document at once, so use grep to locate the relevant part of a long document and then read around it.',
+      'Reads a file. For text files, returns the content with line numbers (offset/limit = lines). Also reads PDF, DOCX and spreadsheets, returning the extracted text a few pages at a time (offset/limit = pages; a spreadsheet is paged by sheet, and a large sheet is split into row ranges) — never the whole document at once, so use grep to locate the relevant part of a long document and then read around it.',
     inputSchema: z.object({
       filePath: z.string().describe('File path (relative to the working folder or absolute)'),
       offset: z.number().optional().describe('Start line — or start page, in a document (1-indexed)'),
@@ -247,7 +248,9 @@ export function createGrepTool(ctx: ToolContext) {
             for (const page of doc.pages) {
               for (const line of page.text.split('\n')) {
                 if (!regex.test(line)) continue
-                results.push(`${rel}:p${page.num}: ${line.trim().slice(0, 250)}`)
+                results.push(
+                  `${rel}:${pageLocator(page, doc.kind)}: ${line.trim().slice(0, 250)}`,
+                )
                 break // uma ocorrência por página basta para localizar o trecho
               }
               if (results.length >= MAX_GREP_MATCHES) break

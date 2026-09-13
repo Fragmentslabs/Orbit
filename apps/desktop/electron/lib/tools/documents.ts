@@ -1,6 +1,6 @@
 import { tool } from 'ai'
 import { z } from 'zod'
-import { documentHeader, pageLabel, pageWindow } from '../document-pages'
+import { documentHeader, pageLabel, pageLocator, pageWindow } from '../document-pages'
 import {
   listSessionDocuments,
   readSessionDocument,
@@ -63,7 +63,12 @@ export function createDocumentTools(sessionId: string) {
         }
         const suffix = hits.length >= MAX_HITS ? '\n… (resultados truncados)' : ''
         return (
-          hits.map((h) => `${h.docId} (${h.filename}):p${h.page}: ${h.line}`).join('\n') + suffix
+          hits
+            .map((h) => {
+              const where = pageLocator({ num: h.page, text: '', label: h.label }, h.kind)
+              return `${h.docId} (${h.filename}):${where}: ${h.line}`
+            })
+            .join('\n') + suffix
         )
       },
     }),

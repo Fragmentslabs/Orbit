@@ -111,6 +111,21 @@ export function pageLabel(page: DocumentPage, kind: DocumentKind): string {
   return kind === 'docx' ? `bloco ${page.num}` : `p. ${page.num}`
 }
 
+/**
+ * Localizador compacto para resultado de busca. Carrega SEMPRE o número que
+ * serve de `offset` na leitura, porque é isso que o agente precisa para ler
+ * em volta do resultado — e o nome da aba quando existe, que é o handle útil
+ * numa planilha.
+ *
+ * O tipo aparece no rótulo de propósito: dizer "p12" num DOCX faria o agente
+ * citar ao usuário uma página que o Word não tem (a paginação ali é nossa,
+ * sintética), e numa planilha faria "página 3" significar a terceira aba.
+ */
+export function pageLocator(page: DocumentPage, kind: DocumentKind): string {
+  if (kind === 'spreadsheet') return `aba${page.num}${page.label ? ` (${page.label})` : ''}`
+  return kind === 'docx' ? `bloco${page.num}` : `p${page.num}`
+}
+
 /** Janela de páginas pedida, normalizada contra os limites do documento. */
 export function pageWindow(
   doc: ExtractedDocument,

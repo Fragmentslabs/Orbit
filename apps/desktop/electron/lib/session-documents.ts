@@ -127,6 +127,10 @@ export interface DocumentHit {
   filename: string
   page: number
   line: string
+  /** Tipo e rótulo da página, para o resultado dizer "aba3 (Custos)" em vez de
+   *  "p3" — numa planilha o número é índice de aba, não página. */
+  kind: DocumentKind
+  label?: string
 }
 
 /**
@@ -156,6 +160,8 @@ export async function searchSessionDocuments(
           filename: found.doc.filename,
           page: page.num,
           line: line.trim().slice(0, 250),
+          kind: found.doc.kind,
+          label: page.label,
         })
         break
       }

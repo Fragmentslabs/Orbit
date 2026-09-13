@@ -29,17 +29,25 @@ import {
  * ler um trecho sem carregar o resto:
  *
  *   - PDF    → páginas reais (pdf-parse devolve pages[])
- *   - XLSX   → uma página por aba (a divisão natural da planilha)
+ *   - XLSX   → uma página por aba, e a aba grande quebrada em faixas de
+ *              linhas (com o cabeçalho repetido em cada faixa)
  *   - DOCX   → páginas sintéticas por tamanho (o formato não guarda paginação)
  */
 
-const MAX_ROWS_PER_SHEET = 2000
+/**
+ * Linhas por página numa planilha. "Página = aba" só funciona enquanto a aba
+ * cabe: uma aba de 100 mil linhas precisa ser paginada por dentro, senão o
+ * fim dela fica inalcançável — foi assim que a primeira versão truncava em
+ * 2000 linhas sem NENHUM offset capaz de chegar no resto.
+ */
+const ROWS_PER_PAGE = 400
 
 export {
   documentKindOf,
   documentHeader,
   isDocumentPath,
   pageLabel,
+  pageLocator,
   pageWindow,
 } from './document-pages'
 export type { DocumentKind, DocumentPage, ExtractedDocument } from './document-pages'
@@ -53,26 +61,46 @@ function csvCell(value: unknown): string {
   return /[,"\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s
 }
 
-/** Uma página por aba: é como a planilha já se organiza, e deixa o agente
- *  pedir "a aba de custos" sem carregar as outras. */
+/**
+ * Páginas de uma planilha: começa pela aba (a divisão que a planilha já tem,
+ * e que deixa o agente pedir "a aba de custos" sem carregar as outras) e
+ * quebra a aba em faixas de linhas quando ela é grande.
+ *
+ * A primeira linha é repetida no topo de cada faixa: sem o cabeçalho, uma
+ * faixa do meio vira uma lista de valores sem nome de coluna — o agente leria
+ * "1240,BRL,pendente" sem saber o que é cada campo.
+ */
 function extractSpreadsheetPages(bytes: Buffer): DocumentPage[] {
   const workbook = XLSX.read(bytes, { type: 'buffer' })
-  return workbook.SheetNames.map((name, index) => {
+  const pages: DocumentPage[] = []
+
+  for (const name of workbook.SheetNames) {
     const rows = XLSX.utils.sheet_to_json<unknown[]>(workbook.Sheets[name], {
       header: 1,
       raw: false,
       defval: '',
     })
-    const body = rows
-      .slice(0, MAX_ROWS_PER_SHEET)
-      .map((row) => row.map(csvCell).join(','))
-      .join('\n')
-    const note =
-      rows.length > MAX_ROWS_PER_SHEET
-        ? `\n_(primeiras ${MAX_ROWS_PER_SHEET} de ${rows.length} linhas)_`
-        : ''
-    return { num: index + 1, label: name, text: `${body}${note}` }
-  })
+    const asCsv = (row: unknown[]) => row.map(csvCell).join(',')
+    const header = rows.length > 0 ? asCsv(rows[0]) : ''
+
+    if (rows.length <= ROWS_PER_PAGE) {
+      pages.push({ num: pages.length + 1, label: name, text: rows.map(asCsv).join('\n') })
+      continue
+    }
+
+    // Aba grande: faixas de linhas, cada uma uma página própria.
+    for (let start = 1; start < rows.length; start += ROWS_PER_PAGE) {
+      const slice = rows.slice(start, start + ROWS_PER_PAGE)
+      const last = Math.min(start + ROWS_PER_PAGE - 1, rows.length - 1)
+      pages.push({
+        num: pages.length + 1,
+        label: `${name}, linhas ${start}-${last} de ${rows.length - 1}`,
+        text: [header, ...slice.map(asCsv)].join('\n'),
+      })
+    }
+  }
+
+  return pages
 }
 
 async function extractFresh(bytes: Buffer, kind: DocumentKind): Promise<ExtractedDocument> {
