@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { Download, FileText, Maximize2, PanelRight, RotateCw } from "lucide-react"
 import type { DocumentPart } from "@shared/chat"
@@ -15,43 +15,41 @@ import { usePanelStore } from "@/src/stores/panel-store"
  *
  * O que aparece aqui é o HTML de preview, não o PDF — o Electron não embarca
  * o visualizador de PDF do Chrome (carregar um .pdf falha até como página de
- * topo). Como o PDF é gerado A PARTIR desse mesmo HTML, com o mesmo CSS de
- * impressão, o preview é fiel ao que sai no arquivo; PDF e DOCX ficam como
- * entrega, nos botões de exportar.
+ * topo). PDF e DOCX ficam como entrega, nos botões de exportar.
+ *
+ * O PDF nasce DESTE mesmo HTML, então o conteúdo é o mesmo; o que difere é a
+ * margem, porque o documento traz um bloco @media screen com margem de
+ * leitura e um @media print com margem de documento. Consequência: a quebra
+ * de linha do preview não é a do arquivo impresso.
  */
 
 /**
- * O preview é uma PÁGINA em retrato: o iframe é renderizado no tamanho real de
- * uma A4 a 96dpi e escalado para caber na LARGURA disponível — a altura do
- * card acompanha a proporção da folha.
+ * O preview renderiza no TAMANHO NATURAL, refluindo na largura do card — não
+ * escala uma A4 para baixo.
  *
- * Duas coisas que não funcionam e por quê. Encolher o iframe direto (largura
- * de ~370px) espreme o texto entre as margens de 2cm do documento, sobrando
- * ~220px úteis. E fixar a altura do card escalando a página para baixo deixa
- * faixas laterais enormes com o conteúdo minúsculo — o card fica paisagem
- * exibindo um objeto retrato.
+ * A versão anterior renderizava o documento em 794px (A4 a 96dpi) e reduzia
+ * com transform. Medi: o transform não borra, o Chromium rasteriza certo até
+ * em DPR 1.5. O que incomodava era a REDUÇÃO em si — a 78%, um serifado de
+ * 11pt vira ~8.6pt, pequeno e mole; ao abrir em tamanho cheio ficava nítido.
+ * Reduzir menos era impossível sem cortar a página.
  *
- * Escalando pela largura, a página preenche o card, o texto sai no maior
- * tamanho possível e a proporção continua fiel ao impresso.
+ * Refluindo, o texto sai no tamanho real e sem nenhuma reamostragem. O preço
+ * é a quebra de linha diferir do PDF, o que num preview é aceitável: o
+ * arquivo entregue continua sendo gerado em A4 com margem de impressão
+ * (@media print), e quem quer ver a paginação exata abre o PDF.
  */
-const A4_WIDTH = 794
-const A4_HEIGHT = 1123
-/** Nunca amplia além do tamanho natural: acima de 794px o texto ficaria
- *  artificialmente grande em relação ao que sai impresso. */
-const MAX_SCALE = 1
+
 /**
  * Teto de altura do preview, como fração da JANELA — e não em pixels fixos.
  *
- * Uma A4 inteira na largura do chat passa de 900px e domina a conversa; um
- * teto baixo demais devolve um selo ilegível. O que decide se o card "domina"
- * não é o número de pixels, é quanto da tela ele ocupa: 72% da altura visível
- * deixa o documento grande e ainda mostra que há conversa em volta, num
- * monitor pequeno ou grande.
+ * O que decide se um card "domina" a conversa não é o número de pixels, é
+ * quanto da tela ele ocupa: o mesmo card é enorme num notebook e modesto num
+ * monitor grande.
  *
- * O preview mostra o TOPO da folha, cortado, com esmaecimento na base; ver o
- * documento completo é o clique, o botão de expandir ou a aba do painel.
+ * O preview mostra o TOPO do documento, cortado, com esmaecimento na base;
+ * ver o resto é o clique, o botão de expandir ou a aba do painel.
  */
-const PREVIEW_VIEWPORT_RATIO = 0.72
+const PREVIEW_VIEWPORT_RATIO = 0.6
 
 const FORMAT_LABEL: Record<DocumentFormat, string> = { pdf: "PDF", docx: "DOCX" }
 
@@ -69,27 +67,7 @@ export function DocumentPartView({
   const [reloads, setReloads] = useState(0)
   const openArtifactTab = usePanelStore((s) => s.openArtifactTab)
 
-  /**
-   * A escala precisa da largura REAL do card, que depende do painel, da
-   * largura da janela e do zoom — nada disso dá para saber em CSS puro, porque
-   * o iframe tem que ser renderizado em 794px para o documento não reflowar.
-   * Daí o ResizeObserver: ele reescala quando o usuário abre o painel lateral
-   * ou redimensiona a janela.
-   */
-  const frameBoxRef = useRef<HTMLDivElement | null>(null)
-  const [boxWidth, setBoxWidth] = useState(0)
-  useEffect(() => {
-    const el = frameBoxRef.current
-    if (!el) return
-    const observer = new ResizeObserver(([entry]) => {
-      setBoxWidth(entry.contentRect.width)
-    })
-    observer.observe(el)
-    return () => observer.disconnect()
-  }, [])
-
-  // Altura da janela para o teto proporcional. Não dá para usar 72vh em CSS
-  // puro porque o `clipped` (o esmaecimento) precisa saber se houve corte.
+  // Altura da janela para o teto proporcional.
   const [viewportHeight, setViewportHeight] = useState(() =>
     typeof window === "undefined" ? 900 : window.innerHeight,
   )
@@ -99,10 +77,7 @@ export function DocumentPartView({
     return () => window.removeEventListener("resize", onResize)
   }, [])
 
-  const scale = Math.min(MAX_SCALE, (boxWidth || A4_WIDTH) / A4_WIDTH)
-  const fullHeight = Math.round(A4_HEIGHT * scale)
-  const previewHeight = Math.min(fullHeight, Math.round(viewportHeight * PREVIEW_VIEWPORT_RATIO))
-  const clipped = fullHeight > previewHeight
+  const previewHeight = Math.round(viewportHeight * PREVIEW_VIEWPORT_RATIO)
 
   // Mesmo motivo do artefato: update_document reescreve os arquivos no lugar,
   // então a URL sozinha não distingue as revisões.
@@ -192,14 +167,9 @@ export function DocumentPartView({
           </div>
         </div>
 
-        {/*
-          A folha ocupa a largura inteira do card, com a altura limitada pelo
-          teto: o que aparece é o topo da página, no tamanho em que ela será
-          impressa. A escala continua vindo da largura — cortar a altura
-          preserva o tamanho do texto, enquanto reduzir a escala o encolheria.
-        */}
+        {/* O documento ocupa a largura do card e renderiza no tamanho natural;
+            o teto corta a altura, mostrando o topo. */}
         <div
-          ref={frameBoxRef}
           role="button"
           tabIndex={0}
           title={t("artifacts.expand")}
@@ -220,19 +190,11 @@ export function DocumentPartView({
             src={src}
             title={part.title}
             nonce={nonce}
-            className="pointer-events-none"
-            style={{
-              width: A4_WIDTH,
-              height: A4_HEIGHT,
-              transform: `scale(${scale})`,
-              transformOrigin: "top left",
-            }}
+            className="pointer-events-none h-full w-full"
           />
-          {clipped && (
-            // Esmaecimento na base: sem ele o corte parece conteúdo faltando,
-            // e não uma página que continua.
-            <div className="pointer-events-none absolute inset-x-0 bottom-0 h-12 bg-gradient-to-t from-white to-transparent" />
-          )}
+          {/* Esmaecimento na base: sem ele o corte parece conteúdo faltando,
+              e não um documento que continua. */}
+          <div className="pointer-events-none absolute inset-x-0 bottom-0 h-12 bg-gradient-to-t from-white to-transparent" />
         </div>
       </div>
 

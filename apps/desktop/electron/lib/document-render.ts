@@ -203,7 +203,12 @@ function inlineHtml(text: string): string {
  * o que se vê no preview é o que sai impresso.
  */
 const DOCUMENT_CSS = `
-  @page { size: A4; margin: 2.5cm 2cm; }
+  /*
+   * Margem SÓ no padding do body. Com @page margin também definida, as duas
+   * somavam: o PDF saía com 5cm no topo em vez de 2.5cm, e cabiam 25 linhas
+   * onde cabem 30.
+   */
+  @page { size: A4; margin: 0; }
   :root { color-scheme: light }
   body { margin: 0; padding: 2.5cm 2cm; background: #fff; color: #111;
          font: 11pt/1.6 Georgia, 'Times New Roman', serif; }
@@ -222,7 +227,22 @@ const DOCUMENT_CSS = `
   /* break-before e o nome moderno; page-break-before fica como fallback.
      A classe vai no bloco seguinte a quebra, nunca num elemento vazio. */
   .page-break { break-before: page; page-break-before: always; }
-  @media screen { body { padding: 2.5cm 2cm; box-shadow: 0 0 0 1px #e5e5e5; } }
+
+  /*
+   * NA TELA o documento usa margem de leitura, não de impressão. O preview
+   * cabe na largura do card e renderiza no tamanho natural — sem reduzir por
+   * transform, que é o que deixava o texto pequeno e mole. Com 2.5cm de
+   * margem numa coluna de chat sobraria pouco texto por linha.
+   *
+   * O printToPDF respeita @media print e ignora @media screen (verificado),
+   * então o arquivo entregue mantém a margem de documento.
+   */
+  @media screen {
+    body { padding: 1.2cm 1.4cm; }
+  }
+  @media print {
+    body { padding: 2.5cm 2cm; }
+  }
 `
 
 export function renderHtml(blocks: Block[], title: string): string {

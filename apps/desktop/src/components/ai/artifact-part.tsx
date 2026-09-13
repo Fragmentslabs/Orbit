@@ -21,9 +21,15 @@ import { cn } from "@/lib/utils"
  * sandbox.
  */
 
-/** Altura do preview embutido — alto o bastante pra um dashboard fazer sentido,
- *  baixo o bastante pra não sequestrar a rolagem da conversa. */
-const PREVIEW_HEIGHT = 420
+/**
+ * Altura do preview como fração da JANELA, não em pixels fixos: 420px fixos
+ * ficavam apertados para um dashboard, e a mesma altura pesa diferente num
+ * notebook e num monitor grande. A fração mantém a presença relativa
+ * constante — alto o bastante para o artefato fazer sentido, baixo o bastante
+ * para a conversa continuar visível em volta.
+ */
+const PREVIEW_VIEWPORT_RATIO = 0.6
+const MIN_PREVIEW_HEIGHT = 420
 
 const SANDBOX = "allow-scripts allow-popups allow-forms allow-modals"
 
@@ -71,6 +77,19 @@ export function ArtifactPartView({
   const [reloads, setReloads] = useState(0)
   const openArtifactTab = usePanelStore((s) => s.openArtifactTab)
 
+  const [viewportHeight, setViewportHeight] = useState(() =>
+    typeof window === 'undefined' ? 900 : window.innerHeight,
+  )
+  useEffect(() => {
+    const onResize = () => setViewportHeight(window.innerHeight)
+    window.addEventListener('resize', onResize)
+    return () => window.removeEventListener('resize', onResize)
+  }, [])
+  const previewHeight = Math.max(
+    MIN_PREVIEW_HEIGHT,
+    Math.round(viewportHeight * PREVIEW_VIEWPORT_RATIO),
+  )
+
   // Recarrega quando o agente reescreve ESTE artefato. A `part` de uma
   // mensagem antiga guarda a revisão de quando ela foi criada e nunca muda —
   // sem o aviso do main, o card de cima continuaria mostrando a versão velha
@@ -108,7 +127,10 @@ export function ArtifactPartView({
               </span>
             )}
           </div>
+          {/* Ordem igual à do card de documento: baixar, recarregar, painel,
+              tela cheia — o mesmo gesto na mesma posição nos dois cards. */}
           <div className="flex shrink-0 items-center gap-0.5">
+            <IconAction icon={Download} label={t("artifacts.export")} onClick={onExport} />
             <IconAction
               icon={RotateCw}
               label={t("artifacts.reload")}
@@ -121,7 +143,6 @@ export function ArtifactPartView({
                 onClick={() => openArtifactTab(sessionId, part.artifactId, part.title)}
               />
             )}
-            <IconAction icon={Download} label={t("artifacts.export")} onClick={onExport} />
             <IconAction
               icon={Maximize2}
               label={t("artifacts.expand")}
@@ -133,7 +154,7 @@ export function ArtifactPartView({
           src={src}
           title={part.title}
           nonce={nonce}
-          style={{ height: PREVIEW_HEIGHT }}
+          style={{ height: previewHeight }}
         />
       </div>
 
