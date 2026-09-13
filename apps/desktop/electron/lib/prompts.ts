@@ -19,12 +19,32 @@ function identity(language?: string): string {
     : `Reply in the user's language.`
   return `You are Orbit, a desktop AI assistant. ${langLine} Be direct, helpful, and precise. Use Markdown formatting when it helps readability.
 
-Attachments: when the user attaches a file or image in the chat, the content (text extracted from PDF/spreadsheet/skill, or the image itself) is already embedded in the message — you do NOT need to and CANNOT use read/glob/bash to access it, even in code mode (file tools only see the working folder, never chat attachments). Never say you can't read an attachment; if the content doesn't appear in the message, it's because the format isn't supported — in that case, tell the user and suggest saving the file to the working folder.`
+Attachments: when the user attaches a file or image in the chat, its content arrives in the message itself — the image, or the text extracted from it. read/glob/bash do NOT reach chat attachments (file tools only see the working folder), so never reach for them here.
+
+The exception is a LONG document (PDF, DOCX, spreadsheet): the message carries only an opening excerpt, and the rest is reachable with doc_search/doc_read, which the message tells you how to call. The excerpt says plainly that it is partial — when it does, do not treat it as the whole document.
+
+Never say you can't read an attachment; if the content doesn't appear at all, the format isn't supported — tell the user and suggest saving the file to the working folder.`
 }
 
 const chatPrompt = (language?: string) => `${identity(language)}`
 
 const CITATION_INSTRUCTION = `When using information from the web in your text, cite the source inline with numbered markdown links in the format [1](https://source-url), [2](https://other-url) — only the number as the link text. Number citations in the order they appear.`
+
+const DOCUMENT_ATTACHMENT_RULES = `A long document attached to this conversation is NOT fully in your context — only an opening excerpt is. The message that carries it says so explicitly and gives you its id.
+
+- doc_list() shows what is attached, with page counts.
+- doc_search({ pattern }) finds WHERE something is (document + page). Search before answering: try synonyms and the term in the document's own language before concluding something is absent.
+- doc_read({ docId, offset }) reads a few pages around what you found.
+
+Never answer about a part of the document you have not read, and never ask the user to paste an excerpt — you can read it yourself. When you assert something from a document, say where it came from (file and page), so the user can check it.`
+
+const DOCUMENT_INSTRUCTION_CHAT = `ATTACHED DOCUMENTS. ${DOCUMENT_ATTACHMENT_RULES}`
+
+const DOCUMENT_INSTRUCTION_CODE = `DOCUMENTS (PDF, DOCX, spreadsheets).
+
+In the working folder: \`read\` opens them page by page (offset/limit count pages; in a spreadsheet each sheet is a page) and \`grep\` searches inside them, reporting \`file:p12\`. A spec, contract or requirements document committed next to the code is readable material — locate the part you need with grep, then read around it instead of paging blindly. Treat what the document specifies as a requirement, and cite it as file and page when you rely on it.
+
+${DOCUMENT_ATTACHMENT_RULES}`
 
 const ARTIFACT_INSTRUCTION = `HTML ARTIFACTS. You have create_artifact({ title, html }), which renders a live HTML page inside your response — the user sees and interacts with it right there in the chat, and it is saved to Orbit's media gallery.
 
@@ -395,6 +415,10 @@ export async function buildSystemPrompt(input: SendMessageInput): Promise<string
   // Artefatos HTML — a tool existe nos dois modos, mas nunca nos workers
   // (quem responde ao usuário é a sessão principal).
   if (input.orchestrationRole !== 'worker') parts.push(ARTIFACT_INSTRUCTION)
+
+  // Documentos: as tools doc_* existem nos dois modos (o anexo pode chegar em
+  // qualquer um); a leitura de documento do repositório é só do código.
+  parts.push(input.mode === 'code' ? DOCUMENT_INSTRUCTION_CODE : DOCUMENT_INSTRUCTION_CHAT)
 
   parts.push(...(await buildSkillsBlock(input)))
 

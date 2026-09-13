@@ -27,9 +27,13 @@ import { withProviderSession } from './provider-session'
 import { attachArtifactMessage, attachMediaMessage, saveMedia } from './media'
 import sharp from 'sharp'
 import { claimsCompletion, isNoCorrectionReply } from './overclaim'
-import { extractPdfText } from './pdf'
-import { extractSpreadsheetText } from './xlsx'
-import { extractDocxText } from './docx'
+import {
+  documentKindOf,
+  pageLabel,
+  type DocumentKind,
+  type DocumentPage,
+} from './document-pages'
+import { saveSessionDocument, type SessionDocument } from './session-documents'
 import { describeSkillAttachment } from './skills/import'
 import {
   clearTurnImages,
@@ -188,6 +192,51 @@ const DOCX_MIME = 'application/vnd.openxmlformats-officedocument.wordprocessingm
 const DOCX_EXT = /\.docx$/i
 const SKILL_LIKE_EXT = /\.(skill|md|markdown)$/i
 
+/**
+ * Abaixo deste tamanho o documento entra INTEIRO na mensagem, como antes.
+ * Paginar um anexo de duas páginas só trocaria contexto barato por uma ida e
+ * volta de tool — o custo da paginação só compensa quando o documento é
+ * grande o bastante para pesar em todos os turnos seguintes.
+ */
+const INLINE_DOC_CHARS = 8000
+/** Páginas do trecho de abertura de um documento grande. */
+const PREVIEW_PAGES = 2
+
+/** O anexo é um documento paginável? Combina o MIME (quando o navegador
+ *  informa) com a extensão (quando ele manda octet-stream). */
+function attachmentDocumentKind(mime: string, filename: string): DocumentKind | null {
+  if (mime === 'application/pdf' || PDF_EXT.test(filename)) return 'pdf'
+  if (mime === DOCX_MIME || DOCX_EXT.test(filename)) return 'docx'
+  if (SPREADSHEET_MIME.test(mime) || SPREADSHEET_EXT.test(filename)) return 'spreadsheet'
+  return documentKindOf(filename)
+}
+
+/**
+ * Texto que representa o documento na mensagem. Pequeno vai inteiro; grande
+ * vai como trecho de abertura mais a instrução de como alcançar o resto.
+ *
+ * Este texto é persistido e reenviado em todo turno, então ele é justamente o
+ * que precisa ficar pequeno — é aqui que a economia acontece.
+ */
+function documentAttachmentPreview(doc: SessionDocument, pages: DocumentPage[]): string {
+  const unit = doc.kind === 'spreadsheet' ? 'abas' : doc.kind === 'docx' ? 'blocos' : 'páginas'
+  const head = `[Documento anexado: ${doc.filename} — ${doc.totalPages} ${unit}, id ${doc.id}]`
+  const render = (list: DocumentPage[]) =>
+    list
+      .map((page) => `--- ${pageLabel(page, doc.kind)} ---\n${page.text || '(sem texto)'}`)
+      .join('\n\n')
+
+  if (doc.totalChars <= INLINE_DOC_CHARS && !doc.truncated) {
+    return `${head}\n\n${render(pages)}`
+  }
+  const shown = pages.slice(0, PREVIEW_PAGES)
+  return (
+    `${head}\n\nTrecho inicial (${unit} 1-${shown.length} de ${doc.totalPages}):\n\n${render(shown)}\n\n` +
+    `[O documento NÃO está inteiro aqui. Para o resto: doc_search({ pattern }) localiza a ${unit === 'abas' ? 'aba' : 'página'} e doc_read({ docId: "${doc.id}", offset }) lê a partir dela. ` +
+    `Não responda sobre o conteúdo além deste trecho sem consultar — e nunca peça ao usuário para colar o texto.]`
+  )
+}
+
 /** Converte um anexo (FilePart) em conteúdo de modelo: imagem/PDF nativos,
  * arquivos de texto viram texto inline; o resto vira só uma nota. Usado só
  * para HISTÓRICO já persistido — anexos novos são pré-processados em
@@ -337,43 +386,47 @@ async function preprocessAttachment(
     ]
   }
 
-  if (file.mime === 'application/pdf' || PDF_EXT.test(filename)) {
-    let text: string
-    try {
-      text = await extractPdfText(file.url)
-    } catch (err) {
-      text = `(erro ao extrair texto: ${errorToText(err)})`
+  // PDF, DOCX e planilha: um caminho só. O texto extraído é guardado na
+  // sessão e a mensagem leva apenas o trecho de abertura — o resto o agente
+  // alcança com doc_search/doc_read.
+  //
+  // Antes, os três despejavam o documento inteiro numa TextPart, que o
+  // toModelMessages reenvia A CADA TURNO: um PDF grande ocupava a janela de
+  // contexto pelo resto da conversa, sendo cobrado de novo em toda mensagem
+  // (e o PDF nem tinha teto — só DOCX e planilha cortavam em 30k, perdendo o
+  // resto em silêncio).
+  const documentKind = attachmentDocumentKind(file.mime, filename)
+  if (documentKind) {
+    const bytes = decodeDataUrlBytes(file.url)
+    if (!bytes) {
+      return [
+        attachmentChip(file),
+        { id: newId('prt'), type: 'text', text: `[Documento anexado: ${filename}] (não foi possível ler o arquivo)`, state: 'done', source: 'attachment' },
+      ]
     }
-    return [
-      attachmentChip(file),
-      { id: newId('prt'), type: 'text', text: `[PDF anexado: ${filename || 'documento'}]\n\n${text}`, state: 'done', source: 'attachment' },
-    ]
-  }
-
-  if (SPREADSHEET_MIME.test(file.mime) || SPREADSHEET_EXT.test(filename)) {
-    let text: string
     try {
-      text = await extractSpreadsheetText(file.url)
+      const { doc, pages } = await saveSessionDocument(
+        deps.sessionId ?? 'sem-sessao',
+        Buffer.from(bytes),
+        filename || 'documento',
+        documentKind,
+      )
+      return [
+        attachmentChip(file),
+        {
+          id: newId('prt'),
+          type: 'text',
+          text: documentAttachmentPreview(doc, pages),
+          state: 'done',
+          source: 'attachment',
+        },
+      ]
     } catch (err) {
-      text = `(erro ao ler planilha: ${errorToText(err)})`
+      return [
+        attachmentChip(file),
+        { id: newId('prt'), type: 'text', text: `[Documento anexado: ${filename}] (erro ao extrair: ${errorToText(err)})`, state: 'done', source: 'attachment' },
+      ]
     }
-    return [
-      attachmentChip(file),
-      { id: newId('prt'), type: 'text', text: `[Planilha anexada: ${filename || 'arquivo'}]\n\n${text}`, state: 'done', source: 'attachment' },
-    ]
-  }
-
-  if (file.mime === DOCX_MIME || DOCX_EXT.test(filename)) {
-    let text: string
-    try {
-      text = await extractDocxText(file.url)
-    } catch (err) {
-      text = `(erro ao ler documento: ${errorToText(err)})`
-    }
-    return [
-      attachmentChip(file),
-      { id: newId('prt'), type: 'text', text: `[Documento anexado: ${filename || 'arquivo'}]\n\n${text}`, state: 'done', source: 'attachment' },
-    ]
   }
 
   // Skill anexada (.skill texto/ZIP, ou .md com frontmatter de skill) — o

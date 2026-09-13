@@ -5,15 +5,6 @@
 // pode não estar acessível. Por isso garantimos o polyfill aqui, ANTES de
 // carregar o pdf-parse. O import é lazy: só acontece quando houver um PDF de
 // verdade, evitando crash no startup do app.
-const DATA_URL_PREFIX = /^data:[^;,]*;base64,/
-
-function dataUrlToBytes(url: string): Uint8Array {
-  const match = DATA_URL_PREFIX.exec(url)
-  if (!match) throw new Error('Formato de data URL inválido para PDF')
-  const base64 = url.slice(match[0].length)
-  return new Uint8Array(Buffer.from(base64, 'base64'))
-}
-
 async function ensurePdfGlobals(): Promise<void> {
   if (globalThis.DOMMatrix) return
   const canvas = await import('@napi-rs/canvas').catch(() => null)
@@ -48,10 +39,3 @@ export async function extractPdfPages(bytes: Uint8Array): Promise<{ num: number;
   return result.pages.map((page) => ({ num: page.num, text: page.text.trim() }))
 }
 
-export async function extractPdfText(dataUrl: string): Promise<string> {
-  const bytes = dataUrlToBytes(dataUrl)
-  const PDFParse = await loadPdfParse()
-  const parser = new PDFParse(bytes)
-  const result = await parser.getText()
-  return result.text.trim()
-}

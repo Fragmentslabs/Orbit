@@ -38,6 +38,11 @@ const NATIVE_TOOLS = new Set([
   // página web qualquer, não o do bash.
   'create_artifact',
   'update_artifact',
+  // Consulta aos documentos anexados na conversa: leitura pura do texto que o
+  // próprio usuário anexou, já persistido no storage do Orbit.
+  'doc_list',
+  'doc_search',
+  'doc_read',
   // Automação em lote na engine oculta (mesmo threat model do bash: o agente
   // já executa código arbitrário; o script roda isolado num utilityProcess)
   'run_browser_script',

@@ -2,6 +2,7 @@ import type { ToolSet } from 'ai'
 import type { SendMessageInput } from '@shared/chat'
 import { getMcpTools } from '../mcp'
 import { createArtifactTools } from './artifact'
+import { createDocumentTools } from './documents'
 import { createBrowserLinksTool, createBrowserOpenTool } from './browser'
 import { createBrowserScriptTools } from './browser-script'
 import { createEsteiraTools } from './esteira'
@@ -69,6 +70,11 @@ export function buildToolSet(input: SendMessageInput, ctx: ToolContext | null): 
     if (input.orchestrationRole !== 'worker') {
       Object.assign(tools, createArtifactTools(input.sessionId))
     }
+    // Documentos anexados: o equivalente do read/grep para o chat, que não
+    // tem nenhum dos dois. Sempre disponíveis — quando não há anexo, doc_list
+    // responde que não há, e é justamente isso que impede o agente de
+    // alucinar sobre um documento que ele não leu.
+    Object.assign(tools, createDocumentTools(input.sessionId))
     if (allowBrain) Object.assign(tools, createChatMemoryTools(input))
     // Esteira: transformar o que foi discutido no chat em esteira/task de um
     // board. Fica sempre disponível (não é toggle): a esteira é outra forma de
@@ -101,6 +107,10 @@ export function buildToolSet(input: SendMessageInput, ctx: ToolContext | null): 
     // deveriam virar arquivo solto no repositório dele.
     Object.assign(tools, createArtifactTools(input.sessionId))
   }
+  // Documentos anexados também no código: `read`/`grep` alcançam o
+  // repositório, não o que o usuário arrastou para a conversa. Sem isto, o
+  // trecho de abertura do anexo apontaria para uma tool inexistente.
+  Object.assign(tools, createDocumentTools(input.sessionId))
 
   if (input.options.research) {
     tools.websearch = createWebSearchTool()
