@@ -138,9 +138,23 @@ export function ArtifactPartView({
       </div>
 
       <Dialog open={expanded} onOpenChange={setExpanded}>
-        <DialogContent className="h-[88vh] max-w-[92vw] gap-0 p-0">
-          <DialogTitle className="border-b px-4 py-2.5 text-sm">{part.title}</DialogTitle>
-          <ArtifactFrame src={src} title={part.title} nonce={`${nonce}:full`} className="h-full" />
+        {/*
+          flex-col, e não o grid padrão do DialogContent: com altura fixa, as
+          linhas implícitas do grid são ESTICADAS (align-content normal vira
+          stretch), e a linha do título ficava com metade do diálogo — a faixa
+          vazia no topo, com o conteúdo empurrado para baixo. Mesmo padrão do
+          plan-dialog e do process-output-dialog.
+        */}
+        <DialogContent className="flex h-[88vh] max-w-[92vw] flex-col gap-0 p-0">
+          <DialogTitle className="shrink-0 border-b px-4 py-2.5 pr-12 text-sm">
+            {part.title}
+          </DialogTitle>
+          <ArtifactFrame
+            src={src}
+            title={part.title}
+            nonce={`${nonce}:full`}
+            className="min-h-0 flex-1"
+          />
         </DialogContent>
       </Dialog>
     </>

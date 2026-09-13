@@ -137,9 +137,24 @@ export interface InlineRun {
   bold?: boolean
   italic?: boolean
   code?: boolean
+  /** Quebra de linha dentro do parágrafo (veio de um <br> no fonte). */
+  br?: boolean
 }
 
-const INLINE = /(\*\*[^*]+\*\*|__[^_]+__|\*[^*]+\*|_[^_]+_|`[^`]+`)/
+/**
+ * Ênfase SÓ com asterisco e crase — `_` e `__` ficaram deliberadamente de
+ * fora.
+ *
+ * Num documento, sequência de underscore quase nunca é ênfase: é linha de
+ * preencher ("Nome: ______"), que é o pão de cada dia de formulário, prova e
+ * ficha. Com a regra de underscore ativa, `__ **Data:** __` casava como um
+ * itálico único e ENGOLIA o `**Data:**` no meio — o documento saía com o
+ * marcador cru visível. O modelo sempre pode usar * e **; a linha de
+ * preencher não tem alternativa.
+ */
+const INLINE = /(\*\*[^*]+\*\*|\*[^*]+\*|`[^`]+`)/
+/** <br>, <br/> e <br /> — o que o modelo escreve para abrir espaço de resposta. */
+const LINE_BREAK = /<br\s*\/?>/gi
 
 /**
  * Quebra o texto em trechos com marcação. Um passo só, sem aninhamento:
@@ -148,13 +163,19 @@ const INLINE = /(\*\*[^*]+\*\*|__[^_]+__|\*[^*]+\*|_[^_]+_|`[^`]+`)/
  */
 export function parseInline(text: string): InlineRun[] {
   const runs: InlineRun[] = []
-  for (const part of text.split(INLINE)) {
-    if (part === '') continue
-    if (/^(\*\*|__)[\s\S]+(\*\*|__)$/.test(part)) runs.push({ text: part.slice(2, -2), bold: true })
-    else if (/^`[\s\S]+`$/.test(part)) runs.push({ text: part.slice(1, -1), code: true })
-    else if (/^(\*|_)[\s\S]+(\*|_)$/.test(part)) runs.push({ text: part.slice(1, -1), italic: true })
-    else runs.push({ text: part })
-  }
+  // O <br> é tratado ANTES da ênfase: ele é estrutura, não estilo, e precisa
+  // sobreviver ao escape de HTML que o resto do conteúdo sofre.
+  const segments = text.split(LINE_BREAK)
+  segments.forEach((segment, index) => {
+    if (index > 0) runs.push({ text: '', br: true })
+    for (const part of segment.split(INLINE)) {
+      if (part === '') continue
+      if (/^\*\*[\s\S]+\*\*$/.test(part)) runs.push({ text: part.slice(2, -2), bold: true })
+      else if (/^`[\s\S]+`$/.test(part)) runs.push({ text: part.slice(1, -1), code: true })
+      else if (/^\*[\s\S]+\*$/.test(part)) runs.push({ text: part.slice(1, -1), italic: true })
+      else runs.push({ text: part })
+    }
+  })
   return runs.length > 0 ? runs : [{ text: '' }]
 }
 
@@ -166,6 +187,7 @@ const escapeXml = (s: string) =>
 function inlineHtml(text: string): string {
   return parseInline(text)
     .map((run) => {
+      if (run.br) return '<br>'
       const escaped = escapeXml(run.text)
       if (run.bold) return `<strong>${escaped}</strong>`
       if (run.italic) return `<em>${escaped}</em>`
@@ -282,6 +304,8 @@ ${parts.join('\n')}
 function inlineOoxml(text: string): string {
   return parseInline(text)
     .map((run) => {
+      // No OOXML a quebra dentro do parágrafo é um run só com <w:br/>.
+      if (run.br) return '<w:r><w:br/></w:r>'
       const props: string[] = []
       if (run.bold) props.push('<w:b/>')
       if (run.italic) props.push('<w:i/>')

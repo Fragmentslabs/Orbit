@@ -198,3 +198,65 @@ describe('renderHtml — quebra de página', () => {
     expect(renderHtml(parseMarkdown('a\n\n## b'), 'T')).not.toContain('page-break"')
   })
 })
+
+/**
+ * Linha de preencher e quebra de linha: os dois casos que apareceram numa
+ * prova gerada de verdade e saíram errados na tela do usuário.
+ */
+describe('parseInline — formulário', () => {
+  it('linha de preencher sobrevive inteira', () => {
+    const runs = parseInline('Nome: ______________________')
+    expect(runs.map((r) => r.text).join('')).toBe('Nome: ______________________')
+    expect(runs.some((r) => r.bold || r.italic)).toBe(false)
+  })
+
+  it('negrito depois de underscores continua sendo reconhecido', () => {
+    // "__ **Data:** __" casava como itálico de underscore e ENGOLIA o
+    // **Data:**, que saía cru no documento.
+    const runs = parseInline('**Nome:** ____________ **Data:** __/__/__')
+    const bolds = runs.filter((r) => r.bold).map((r) => r.text)
+    expect(bolds).toEqual(['Nome:', 'Data:'])
+    expect(runs.map((r) => r.text).join('')).toContain('__/__/__')
+  })
+
+  it('underscore no meio de palavra não vira ênfase', () => {
+    const runs = parseInline('a variável user_name_id continua inteira')
+    expect(runs).toHaveLength(1)
+    expect(runs[0].italic).toBeUndefined()
+  })
+
+  it('asterisco continua funcionando para negrito e itálico', () => {
+    const runs = parseInline('**forte** e *leve*')
+    expect(runs.find((r) => r.bold)?.text).toBe('forte')
+    expect(runs.find((r) => r.italic)?.text).toBe('leve')
+  })
+})
+
+describe('parseInline — <br>', () => {
+  it('vira quebra de linha em vez de texto escapado', () => {
+    const runs = parseInline('a<br>b')
+    expect(runs.map((r) => (r.br ? "|" : r.text)).join('')).toBe('a|b')
+  })
+
+  it('aceita as variações que o modelo escreve', () => {
+    for (const tag of ['<br>', '<br/>', '<br />', '<BR>']) {
+      expect(parseInline(`x${tag}y`).filter((r) => r.br)).toHaveLength(1)
+    }
+  })
+
+  it('no HTML sai como <br>, não escapado', () => {
+    const html = renderHtml(parseMarkdown('a) 245 + 138 = ______<br><br>b) 356'), 'T')
+    expect(html).toContain('<br>')
+    expect(html).not.toContain('&lt;br&gt;')
+  })
+
+  it('no DOCX sai como w:br dentro do parágrafo', () => {
+    expect(renderOoxmlBody(parseMarkdown('a<br>b'))).toContain('<w:br/>')
+  })
+
+  it('outro HTML continua escapado — só <br> é interpretado', () => {
+    const html = renderHtml(parseMarkdown('<script>x</script> e <b>y</b>'), 'T')
+    expect(html).toContain('&lt;script&gt;')
+    expect(html).toContain('&lt;b&gt;')
+  })
+})

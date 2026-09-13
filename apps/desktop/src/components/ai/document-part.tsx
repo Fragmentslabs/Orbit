@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
-import { Download, FileText, Maximize2, RotateCw } from "lucide-react"
+import { Download, FileText, Maximize2, PanelRight, RotateCw } from "lucide-react"
 import type { DocumentPart } from "@shared/chat"
 import type { DocumentFormat } from "@shared/media"
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { ArtifactFrame } from "@/src/components/ai/artifact-part"
 import { documentApi, artifactApi } from "@/src/lib/ipc"
+import { usePanelStore } from "@/src/stores/panel-store"
 import { cn } from "@/lib/utils"
 
 /**
@@ -20,14 +21,36 @@ import { cn } from "@/lib/utils"
  * entrega, nos botões de exportar.
  */
 
-const PREVIEW_HEIGHT = 460
+/**
+ * O preview é uma PÁGINA, não um quadro: o iframe é renderizado no tamanho
+ * real de uma A4 a 96dpi e reduzido por transform.
+ *
+ * Encolher o iframe direto (largura de ~370px) deixaria o texto espremido
+ * entre as margens de 2cm do documento — cerca de 220px úteis. Renderizando em
+ * 794×1123 e escalando, a proporção e os tamanhos relativos ficam fiéis ao
+ * impresso, que é o ponto de um preview de documento.
+ */
+const A4_WIDTH = 794
+const A4_HEIGHT = 1123
+const PREVIEW_HEIGHT = 520
+const PREVIEW_SCALE = PREVIEW_HEIGHT / A4_HEIGHT
+const PREVIEW_WIDTH = Math.round(A4_WIDTH * PREVIEW_SCALE)
 
 const FORMAT_LABEL: Record<DocumentFormat, string> = { pdf: "PDF", docx: "DOCX" }
 
-export function DocumentPartView({ part }: { part: DocumentPart }) {
+export function DocumentPartView({
+  part,
+  sessionId,
+}: {
+  part: DocumentPart
+  /** Ausente em contextos sem sessão: o botão de abrir no painel some, já que
+   *  as abas do painel são por sessão. */
+  sessionId?: string
+}) {
   const { t } = useTranslation()
   const [expanded, setExpanded] = useState(false)
   const [reloads, setReloads] = useState(0)
+  const openArtifactTab = usePanelStore((s) => s.openArtifactTab)
 
   // Mesmo motivo do artefato: update_document reescreve os arquivos no lugar,
   // então a URL sozinha não distingue as revisões.
@@ -92,6 +115,18 @@ export function DocumentPartView({ part }: { part: DocumentPart }) {
             >
               <RotateCw className="size-3.5" />
             </Button>
+            {sessionId && (
+              <Button
+                variant="ghost"
+                size="icon"
+                className="size-6"
+                aria-label={t("artifacts.openInPanel")}
+                title={t("artifacts.openInPanel")}
+                onClick={() => openArtifactTab(sessionId, part.documentId, part.title)}
+              >
+                <PanelRight className="size-3.5" />
+              </Button>
+            )}
             <Button
               variant="ghost"
               size="icon"
@@ -104,19 +139,44 @@ export function DocumentPartView({ part }: { part: DocumentPart }) {
             </Button>
           </div>
         </div>
-        <ArtifactFrame
-          src={src}
-          title={part.title}
-          nonce={nonce}
-          className={cn("bg-neutral-100 dark:bg-neutral-900")}
-          style={{ height: PREVIEW_HEIGHT }}
-        />
+
+        {/* Fundo neutro em volta da "folha", como um visualizador de documento */}
+        <div
+          className={cn("flex justify-center overflow-hidden bg-neutral-200 py-4 dark:bg-neutral-800")}
+          style={{ height: PREVIEW_HEIGHT + 32 }}
+        >
+          <div
+            className="shadow-md ring-1 ring-black/10"
+            style={{ width: PREVIEW_WIDTH, height: PREVIEW_HEIGHT }}
+          >
+            <ArtifactFrame
+              src={src}
+              title={part.title}
+              nonce={nonce}
+              style={{
+                width: A4_WIDTH,
+                height: A4_HEIGHT,
+                transform: `scale(${PREVIEW_SCALE})`,
+                transformOrigin: "top left",
+              }}
+            />
+          </div>
+        </div>
       </div>
 
       <Dialog open={expanded} onOpenChange={setExpanded}>
-        <DialogContent className="h-[90vh] max-w-[min(1100px,92vw)] gap-0 p-0">
-          <DialogTitle className="border-b px-4 py-2.5 text-sm">{part.title}</DialogTitle>
-          <ArtifactFrame src={src} title={part.title} nonce={`${nonce}:full`} className="h-full" />
+        {/* flex-col pelo mesmo motivo do artefato: com altura fixa, as linhas
+            do grid padrão são esticadas e o título come metade do diálogo. */}
+        <DialogContent className="flex h-[90vh] max-w-[min(900px,92vw)] flex-col gap-0 p-0">
+          <DialogTitle className="shrink-0 border-b px-4 py-2.5 pr-12 text-sm">
+            {part.title}
+          </DialogTitle>
+          <ArtifactFrame
+            src={src}
+            title={part.title}
+            nonce={`${nonce}:full`}
+            className="min-h-0 flex-1"
+          />
         </DialogContent>
       </Dialog>
     </>
