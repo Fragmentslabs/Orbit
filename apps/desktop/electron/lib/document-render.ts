@@ -15,14 +15,100 @@
  * Módulo puro (sem Electron, sem IO) para ser testável.
  */
 
+export type CellAlign = 'left' | 'center' | 'right'
+
 export type Block =
   | { type: 'heading'; level: 1 | 2 | 3; text: string }
   | { type: 'paragraph'; text: string }
   | { type: 'listItem'; text: string; ordered: boolean }
   | { type: 'quote'; text: string }
-  | { type: 'table'; header: string[]; rows: string[][] }
+  | { type: 'table'; header: string[]; rows: string[][]; align: CellAlign[] }
   | { type: 'rule' }
   | { type: 'pageBreak' }
+
+// ─── Estilo do documento ─────────────────────────────────────────────────
+
+/**
+ * Personalização do documento. É um conjunto FECHADO de opções, e não CSS
+ * livre, por uma razão dura: tudo aqui precisa existir também em OOXML. CSS
+ * arbitrário renderizaria um PDF bonito e um .docx quebrado, e o usuário só
+ * descobriria ao abrir o arquivo no Word.
+ */
+export interface DocumentStyle {
+  /** Família da fonte. Um nome que não exista na máquina do leitor cai no
+   *  fallback — tanto no navegador quanto no Word. */
+  fontFamily?: string
+  /** Corpo do texto em pontos. Títulos escalam proporcionalmente. */
+  fontSize?: number
+  /** Cor de destaque (hex): títulos, cabeçalho de tabela e réguas. */
+  accentColor?: string
+  /** Margem da página em centímetros (vale para o PDF; na tela a margem é de
+   *  leitura). */
+  marginCm?: number
+  /** Colunas do texto. Vale para o documento inteiro. */
+  columns?: number
+  align?: 'left' | 'justify'
+}
+
+export interface ResolvedStyle {
+  fontFamily: string
+  fontSize: number
+  accentColor: string
+  marginCm: number
+  columns: number
+  align: 'left' | 'justify'
+}
+
+const DEFAULT_STYLE: ResolvedStyle = {
+  fontFamily: 'Georgia',
+  fontSize: 11,
+  accentColor: '111111',
+  marginCm: 2.5,
+  columns: 1,
+  align: 'justify',
+}
+
+/** Escala dos títulos sobre o corpo — mantém a proporção original (11pt →
+ *  20/15/12.5pt) em qualquer tamanho base. */
+const HEADING_SCALE = [1.82, 1.36, 1.14]
+
+/**
+ * O estilo vem do MODELO, então cada campo é validado antes de virar CSS ou
+ * atributo XML. Um nome de fonte com `;}` injetaria regra no CSS do documento;
+ * uma cor com aspas quebraria o XML e o .docx nem abriria.
+ */
+export function normalizeStyle(style?: DocumentStyle): ResolvedStyle {
+  // O hífen fica por último na classe, onde é literal — sem precisar de escape.
+  const family = (style?.fontFamily ?? '').replace(/[^a-zA-Z0-9 -]/g, '').trim().slice(0, 40)
+  const hex = (style?.accentColor ?? '').replace(/^#/, '')
+  return {
+    fontFamily: family || DEFAULT_STYLE.fontFamily,
+    fontSize: clamp(style?.fontSize, 7, 18, DEFAULT_STYLE.fontSize),
+    accentColor: /^[0-9a-fA-F]{6}$/.test(hex) ? hex.toUpperCase() : DEFAULT_STYLE.accentColor,
+    marginCm: clamp(style?.marginCm, 0.5, 5, DEFAULT_STYLE.marginCm),
+    columns: Math.round(clamp(style?.columns, 1, 3, DEFAULT_STYLE.columns)),
+    align: style?.align === 'left' ? 'left' : DEFAULT_STYLE.align,
+  }
+}
+
+function clamp(value: number | undefined, min: number, max: number, fallback: number): number {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return fallback
+  return Math.min(max, Math.max(min, value))
+}
+
+export function headingSize(style: ResolvedStyle, level: 1 | 2 | 3): number {
+  return Math.round(style.fontSize * HEADING_SCALE[level - 1] * 10) / 10
+}
+
+/** Pilha de fallback: a fonte pedida, depois um genérico compatível. Sem isto,
+ *  um nome inexistente deixaria o documento na fonte padrão do sistema, que
+ *  pode ser bem diferente do que o agente quis. */
+export function fontStack(style: ResolvedStyle): string {
+  const monoish = /courier|mono|consolas/i.test(style.fontFamily)
+  const sansish = /arial|helvetica|calibri|verdana|tahoma|segoe|roboto|open sans/i.test(style.fontFamily)
+  const generic = monoish ? 'monospace' : sansish ? 'sans-serif' : "'Times New Roman', serif"
+  return `'${style.fontFamily}', ${generic}`
+}
 
 /** Quebra de página explícita no fonte — o Markdown não tem sintaxe para isso
  *  e um documento de várias páginas precisa. */
@@ -41,6 +127,25 @@ function tableCells(line: string): string[] {
     .replace(/^\||\|$/g, '')
     .split('|')
     .map((c) => c.trim())
+}
+
+/**
+ * Alinhamento a partir da linha divisória (`|:---|:---:|---:|`).
+ *
+ * A divisória sempre foi ACEITA com `:` e o alinhamento, descartado — uma
+ * tabela de valores pedida à direita saía toda à esquerda, sem aviso. Ler
+ * aqui é o que torna a sintaxe honesta.
+ */
+function tableAlign(divider: string, columns: number): CellAlign[] {
+  const marks = tableCells(divider)
+  return Array.from({ length: columns }, (_, i) => {
+    const mark = marks[i] ?? ''
+    const left = mark.startsWith(':')
+    const right = mark.endsWith(':')
+    if (left && right) return 'center'
+    if (right) return 'right'
+    return 'left'
+  })
 }
 
 /**
@@ -95,13 +200,14 @@ export function parseMarkdown(markdown: string): Block[] {
     if (TABLE_ROW.test(trimmed) && i + 1 < lines.length && TABLE_DIVIDER.test(lines[i + 1].trim())) {
       flushParagraph()
       const header = tableCells(trimmed)
+      i += 1 // consome a divisória, mas lê o alinhamento dela antes
+      const align = tableAlign(lines[i].trim(), header.length)
       const rows: string[][] = []
-      i += 1 // pula a divisória
       while (i + 1 < lines.length && TABLE_ROW.test(lines[i + 1].trim())) {
         i += 1
         rows.push(tableCells(lines[i].trim()))
       }
-      blocks.push({ type: 'table', header, rows })
+      blocks.push({ type: 'table', header, rows, align })
       continue
     }
 
@@ -199,10 +305,18 @@ function inlineHtml(text: string): string {
 
 /**
  * CSS de documento impresso, não de página web: medidas em centímetro, fonte
- * serifada, quebra de página controlada. É o mesmo HTML que vira PDF, então
- * o que se vê no preview é o que sai impresso.
+ * do estilo escolhido, quebra de página controlada. É o mesmo HTML que vira
+ * PDF, então o conteúdo do preview é o do arquivo.
  */
-const DOCUMENT_CSS = `
+function documentCss(style: ResolvedStyle): string {
+  const accent = `#${style.accentColor}`
+  // Cabeçalho de tabela e régua usam a cor de destaque com transparência, para
+  // um destaque forte não virar uma faixa sólida ilegível.
+  const columns =
+    style.columns > 1
+      ? `column-count: ${style.columns}; column-gap: 1cm;`
+      : ''
+  return `
   /*
    * Margem SÓ no padding do body. Com @page margin também definida, as duas
    * somavam: o PDF saía com 5cm no topo em vez de 2.5cm, e cabiam 25 linhas
@@ -210,20 +324,26 @@ const DOCUMENT_CSS = `
    */
   @page { size: A4; margin: 0; }
   :root { color-scheme: light }
-  body { margin: 0; padding: 2.5cm 2cm; background: #fff; color: #111;
-         font: 11pt/1.6 Georgia, 'Times New Roman', serif; }
-  h1 { font-size: 20pt; margin: 0 0 .6em; }
-  h2 { font-size: 15pt; margin: 1.4em 0 .4em; }
-  h3 { font-size: 12.5pt; margin: 1.2em 0 .3em; }
-  p { margin: 0 0 .7em; text-align: justify; }
+  body { margin: 0; padding: ${style.marginCm}cm ${Math.max(0.5, style.marginCm - 0.5)}cm;
+         background: #fff; color: #111;
+         font: ${style.fontSize}pt/1.6 ${fontStack(style)}; ${columns} }
+  h1 { font-size: ${headingSize(style, 1)}pt; margin: 0 0 .6em; color: ${accent}; }
+  h2 { font-size: ${headingSize(style, 2)}pt; margin: 1.4em 0 .4em; color: ${accent}; }
+  h3 { font-size: ${headingSize(style, 3)}pt; margin: 1.2em 0 .3em; color: ${accent}; }
+  p { margin: 0 0 .7em; text-align: ${style.align}; }
   ul, ol { margin: 0 0 .7em 1.4em; padding: 0; }
   li { margin: 0 0 .25em; }
-  blockquote { margin: 0 0 .7em; padding-left: 1em; border-left: 3px solid #ccc; color: #444; }
+  blockquote { margin: 0 0 .7em; padding-left: 1em; border-left: 3px solid ${accent}; color: #444; }
   code { font-family: 'Courier New', monospace; font-size: .92em; background: #f3f3f3; padding: .1em .3em; }
-  hr { border: 0; border-top: 1px solid #ccc; margin: 1.2em 0; }
-  table { border-collapse: collapse; width: 100%; margin: 0 0 .9em; font-size: 10pt; }
-  th, td { border: 1px solid #bbb; padding: .35em .5em; text-align: left; vertical-align: top; }
-  th { background: #f0f0f0; font-weight: bold; }
+  hr { border: 0; border-top: 1px solid ${accent}; margin: 1.2em 0; opacity: .35; }
+  table { border-collapse: collapse; width: 100%; margin: 0 0 .9em;
+          font-size: ${Math.max(7, style.fontSize - 1)}pt; }
+  th, td { border: 1px solid #bbb; padding: .35em .5em; vertical-align: top; }
+  th { background: ${accent}; color: #fff; font-weight: bold; }
+  /* Alinhamento vindo da divisória da tabela (|:---:|) */
+  .c { text-align: center; } .r { text-align: right; } .l { text-align: left; }
+  /* Uma tabela partida entre colunas fica ilegível; a coluna quebra antes. */
+  table, blockquote { break-inside: avoid; }
   /* break-before e o nome moderno; page-break-before fica como fallback.
      A classe vai no bloco seguinte a quebra, nunca num elemento vazio. */
   .page-break { break-before: page; page-break-before: always; }
@@ -241,11 +361,13 @@ const DOCUMENT_CSS = `
     body { padding: 1.2cm 1.4cm; }
   }
   @media print {
-    body { padding: 2.5cm 2cm; }
+    body { padding: ${style.marginCm}cm ${Math.max(0.5, style.marginCm - 0.5)}cm; }
   }
 `
+}
 
-export function renderHtml(blocks: Block[], title: string): string {
+export function renderHtml(blocks: Block[], title: string, style?: DocumentStyle): string {
+  const resolved = normalizeStyle(style)
   const parts: string[] = []
   let list: { ordered: boolean; items: string[] } | null = null
   /**
@@ -289,9 +411,14 @@ export function renderHtml(blocks: Block[], title: string): string {
         pendingBreak = true
         break
       case 'table': {
-        const head = block.header.map((c) => `<th>${inlineHtml(c)}</th>`).join('')
+        // Classe de alinhamento por COLUNA, vinda da divisória do Markdown.
+        const cls = (i: number) => {
+          const a = block.align[i] ?? 'left'
+          return a === 'center' ? ' class="c"' : a === 'right' ? ' class="r"' : ''
+        }
+        const head = block.header.map((c, i) => `<th${cls(i)}>${inlineHtml(c)}</th>`).join('')
         const body = block.rows
-          .map((row) => `<tr>${row.map((c) => `<td>${inlineHtml(c)}</td>`).join('')}</tr>`)
+          .map((row) => `<tr>${row.map((c, i) => `<td${cls(i)}>${inlineHtml(c)}</td>`).join('')}</tr>`)
           .join('')
         parts.push(
           `<table${breakClass()}><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table>`,
@@ -313,7 +440,7 @@ export function renderHtml(blocks: Block[], title: string): string {
 <html lang="pt-BR"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${escapeXml(title)}</title>
-<style>${DOCUMENT_CSS}</style>
+<style>${documentCss(resolved)}</style>
 </head><body>
 ${parts.join('\n')}
 </body></html>`
@@ -349,14 +476,32 @@ function paragraphOoxml(content: string, opts: { style?: string; numId?: number;
   return `<w:p>${props}${content}</w:p>`
 }
 
-function tableOoxml(header: string[], rows: string[][]): string {
-  const cell = (text: string, bold: boolean) =>
-    `<w:tc><w:tcPr><w:tcW w:w="0" w:type="auto"/></w:tcPr>${paragraphOoxml(
-      bold ? `<w:r><w:rPr><w:b/></w:rPr><w:t xml:space="preserve">${escapeXml(text)}</w:t></w:r>` : inlineOoxml(text),
-    )}</w:tc>`
-  const headerRow = `<w:tr>${header.map((c) => cell(c, true)).join('')}</w:tr>`
+function tableOoxml(
+  header: string[],
+  rows: string[][],
+  align: CellAlign[],
+  style: ResolvedStyle,
+): string {
+  /** No OOXML o alinhamento é do PARÁGRAFO dentro da célula (w:jc), não da
+   *  célula — alinhar a célula não move o texto. */
+  const jc = (i: number) => {
+    const a = align[i] ?? 'left'
+    return a === 'left' ? '' : `<w:jc w:val="${a}"/>`
+  }
+  const cell = (text: string, i: number, isHeader: boolean) => {
+    // Cabeçalho com a cor de destaque preenchida e texto branco, espelhando o
+    // CSS — sem w:shd o Word desenha o cabeçalho igual ao corpo.
+    const shading = isHeader
+      ? `<w:shd w:val="clear" w:color="auto" w:fill="${style.accentColor}"/>`
+      : ''
+    const content = isHeader
+      ? `<w:r><w:rPr><w:b/><w:color w:val="FFFFFF"/></w:rPr><w:t xml:space="preserve">${escapeXml(text)}</w:t></w:r>`
+      : inlineOoxml(text)
+    return `<w:tc><w:tcPr><w:tcW w:w="0" w:type="auto"/>${shading}</w:tcPr><w:p><w:pPr>${jc(i)}</w:pPr>${content}</w:p></w:tc>`
+  }
+  const headerRow = `<w:tr>${header.map((c, i) => cell(c, i, true)).join('')}</w:tr>`
   const bodyRows = rows
-    .map((row) => `<w:tr>${row.map((c) => cell(c, false)).join('')}</w:tr>`)
+    .map((row) => `<w:tr>${row.map((c, i) => cell(c, i, false)).join('')}</w:tr>`)
     .join('')
   // Bordas explícitas: sem tblBorders o Word desenha a tabela sem linha nenhuma.
   const borders = ['top', 'left', 'bottom', 'right', 'insideH', 'insideV']
@@ -366,7 +511,8 @@ function tableOoxml(header: string[], rows: string[][]): string {
 }
 
 /** Corpo do document.xml a partir dos blocos. */
-export function renderOoxmlBody(blocks: Block[]): string {
+export function renderOoxmlBody(blocks: Block[], style?: DocumentStyle): string {
+  const resolved = normalizeStyle(style)
   const parts: string[] = []
   let pendingBreak = false
 
@@ -394,7 +540,7 @@ export function renderOoxmlBody(blocks: Block[]): string {
         // A quebra de página não se aplica a tabela (não existe
         // pageBreakBefore em w:tbl): entra como parágrafo vazio antes.
         if (pendingBreak) parts.push(paragraphOoxml('', { pageBreak: true }))
-        parts.push(tableOoxml(block.header, block.rows))
+        parts.push(tableOoxml(block.header, block.rows, block.align, resolved))
         break
       case 'rule':
         parts.push(

@@ -17,7 +17,7 @@ import {
 } from '@shared/media'
 import { listKeys, readJson } from './storage'
 import { buildDocx } from './docx-package'
-import { parseMarkdown, renderHtml } from './document-render'
+import { parseMarkdown, renderHtml, type DocumentStyle } from './document-render'
 
 export type { MediaEntry, MediaFilter, MediaSource, MediaUsage }
 
@@ -715,6 +715,7 @@ export async function readArtifact(id: string): Promise<{ html: string; entry: M
 
 export interface SaveDocumentMeta {
   title: string
+  style?: DocumentStyle
   sessionId?: string
   messageId?: string
   /** Pasta de trabalho da sessão — escopo de projeto do documento. */
@@ -789,6 +790,7 @@ async function writeDocumentFiles(
   html: string,
   formats: DocumentFormat[],
   title: string,
+  style?: DocumentStyle,
 ): Promise<DocumentFormat[]> {
   const dir = documentsDir()
   await fsp.mkdir(dir, { recursive: true })
@@ -805,7 +807,7 @@ async function writeDocumentFiles(
   }
   if (formats.includes('docx')) {
     try {
-      const docx = await buildDocx(parseMarkdown(markdown), title)
+      const docx = await buildDocx(parseMarkdown(markdown), title, style)
       await fsp.writeFile(path.join(dir, `${base}.docx`), docx)
       done.push('docx')
     } catch {
@@ -821,8 +823,8 @@ export async function saveDocument(
   meta: SaveDocumentMeta,
 ): Promise<DocumentRef> {
   const base = `doc_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`
-  const html = renderHtml(parseMarkdown(markdown), meta.title)
-  const written = await writeDocumentFiles(base, markdown, html, formats, meta.title)
+  const html = renderHtml(parseMarkdown(markdown), meta.title, meta.style)
+  const written = await writeDocumentFiles(base, markdown, html, formats, meta.title, meta.style)
   const thumb = await captureThumbnail(`${base}.html`)
 
   const id = `${base}.md`
@@ -840,6 +842,7 @@ export async function saveDocument(
     folderId: meta.folderId,
     name: meta.title,
     formats: written,
+    style: meta.style as Record<string, unknown> | undefined,
     thumb,
     revision: 1,
   }
@@ -866,7 +869,7 @@ export async function saveDocument(
 export async function updateDocument(
   id: string,
   markdown: string,
-  options: { title?: string; formats?: DocumentFormat[] },
+  options: { title?: string; formats?: DocumentFormat[]; style?: DocumentStyle },
 ): Promise<DocumentRef | null> {
   const entry = await getMediaEntry(id)
   if (!entry || mediaKind(entry) !== 'document') return null
@@ -874,8 +877,11 @@ export async function updateDocument(
   const base = documentBase(id)
   const title = options.title ?? entry.name ?? 'Documento'
   const formats = options.formats ?? entry.formats ?? ['pdf']
-  const html = renderHtml(parseMarkdown(markdown), title)
-  const written = await writeDocumentFiles(base, markdown, html, formats, title)
+  // Estilo omitido = mantem o que o documento ja tinha. Sem isso, mexer no
+  // texto ressetaria a fonte e as cores escolhidas antes.
+  const style = (options.style ?? entry.style) as DocumentStyle | undefined
+  const html = renderHtml(parseMarkdown(markdown), title, style)
+  const written = await writeDocumentFiles(base, markdown, html, formats, title, style)
   const thumb = (await captureThumbnail(`${base}.html`)) ?? entry.thumb
   const revision = (entry.revision ?? 1) + 1
 
@@ -886,6 +892,7 @@ export async function updateDocument(
     current.size = Buffer.byteLength(markdown, 'utf8')
     current.name = title
     current.formats = written
+    current.style = style as Record<string, unknown> | undefined
     current.thumb = thumb
     current.revision = revision
     await writeIndex(entries)

@@ -36,7 +36,30 @@ const formatSchema = z
   .describe('Output formats (default: pdf). Use docx when the user will edit the file.')
 
 const MARKDOWN_HELP =
-  'Markdown: # ## ### for headings, - or 1. for lists, | tables |, > quote, **bold**, *italic*, `code`, --- for a rule, and \\pagebreak on its own line to force a page break.'
+  'Markdown: # ## ### for headings, - or 1. for lists, | tables | (the divider row sets column alignment: |:---|:---:|---:|), > quote, **bold**, *italic*, `code`, --- for a rule, <br> for a blank line, and \\pagebreak on its own line to force a page break.'
+
+/**
+ * Estilo exposto como um conjunto FECHADO de opções, e não CSS livre: tudo
+ * aqui tem que existir também em OOXML, senão o PDF sairia bonito e o .docx
+ * quebrado — e o usuário só descobriria ao abrir o arquivo no Word.
+ */
+const styleSchema = z
+  .object({
+    fontFamily: z
+      .string()
+      .optional()
+      .describe('Font name, e.g. "Georgia", "Calibri", "Arial", "Courier New". It must exist on the reader\'s machine; unknown names fall back to a generic family.'),
+    fontSize: z.number().optional().describe('Body size in points (7-18, default 11). Headings scale with it.'),
+    accentColor: z
+      .string()
+      .optional()
+      .describe('Hex color for headings, table header and rules, e.g. "#1F4E79".'),
+    marginCm: z.number().optional().describe('Page margin in centimetres (0.5-5, default 2.5).'),
+    columns: z.number().optional().describe('Text columns for the WHOLE document (1-3, default 1).'),
+    align: z.enum(['left', 'justify']).optional().describe('Body text alignment (default justify).'),
+  })
+  .optional()
+  .describe('Visual customization. Applies to both PDF and DOCX.')
 
 export interface DocumentToolScope {
   sessionId: string
@@ -87,14 +110,16 @@ export function createDocumentAuthoringTools(scope: DocumentToolScope) {
         title: z.string().min(1).max(150).describe('Document title, also used as the file name'),
         markdown: z.string().min(1).describe('Full document content in Markdown'),
         formats: formatSchema,
+        style: styleSchema,
       }),
-      execute: async ({ title, markdown, formats }) => {
+      execute: async ({ title, markdown, formats, style }) => {
         if (Buffer.byteLength(markdown, 'utf8') > MAX_MARKDOWN_BYTES) {
           return `Documento muito grande (limite de ${Math.round(MAX_MARKDOWN_BYTES / 1024)}KB de Markdown).`
         }
         const wanted: DocumentFormat[] = formats?.length ? formats : ['pdf']
         const ref = await saveDocument(markdown, wanted, {
           title,
+          style,
           sessionId: scope.sessionId,
           directory: scope.directory,
           folderId: await resolveFolderId(scope.sessionId),
@@ -121,12 +146,13 @@ export function createDocumentAuthoringTools(scope: DocumentToolScope) {
         markdown: z.string().min(1).describe('The complete new Markdown'),
         title: z.string().max(150).optional(),
         formats: formatSchema,
+        style: styleSchema,
       }),
-      execute: async ({ documentId, markdown, title, formats }) => {
+      execute: async ({ documentId, markdown, title, formats, style }) => {
         if (Buffer.byteLength(markdown, 'utf8') > MAX_MARKDOWN_BYTES) {
           return `Documento muito grande (limite de ${Math.round(MAX_MARKDOWN_BYTES / 1024)}KB de Markdown).`
         }
-        const ref = await updateDocument(documentId, markdown, { title, formats })
+        const ref = await updateDocument(documentId, markdown, { title, formats, style })
         if (!ref) return `Documento não encontrado: ${documentId}. Use list_documents para ver os disponíveis.`
         return {
           documentId: ref.id,

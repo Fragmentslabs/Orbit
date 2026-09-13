@@ -56,6 +56,13 @@ export interface MediaEntry {
   /** Só em documentos: quais renderizações existem em disco. */
   formats?: DocumentFormat[]
   /**
+   * Só em documentos: a personalização escolhida (fonte, tamanho, cor de
+   * destaque, margem, colunas, alinhamento). Guardada aqui para o
+   * update_document manter o visual sem o agente ter que repetir o estilo a
+   * cada alteração de texto.
+   */
+  style?: Record<string, unknown>
+  /**
    * Projeto a que o ativo pertence — a pasta de trabalho da sessão que o
    * criou, capturada NO MOMENTO da criação.
    *

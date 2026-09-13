@@ -1,5 +1,12 @@
 import { createRequire } from 'node:module'
-import { renderOoxmlBody, type Block } from './document-render'
+import {
+  headingSize,
+  normalizeStyle,
+  renderOoxmlBody,
+  type Block,
+  type DocumentStyle,
+  type ResolvedStyle,
+} from './document-render'
 
 /**
  * Empacota os blocos num .docx de verdade.
@@ -39,16 +46,30 @@ const DOC_RELS = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/numbering" Target="numbering.xml"/>
 </Relationships>`
 
-const STYLES = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+/**
+ * Estilos derivados do estilo do documento.
+ *
+ * O OOXML mede fonte em MEIOS-pontos (w:sz), então tudo é dobrado; a
+ * justificação é do parágrafo (w:jc), não do corpo; e a cor do título é a
+ * mesma cor de destaque usada no CSS, para o .docx e o PDF não divergirem.
+ */
+function stylesXml(style: ResolvedStyle): string {
+  const half = (pt: number) => Math.round(pt * 2)
+  const jc = style.align === 'justify' ? '<w:jc w:val="both"/>' : ''
+  const heading = (level: 1 | 2 | 3, before: number, after: number) =>
+    `<w:style w:type="paragraph" w:styleId="Heading${level}"><w:name w:val="heading ${level}"/><w:basedOn w:val="Normal"/><w:pPr><w:outlineLvl w:val="${level - 1}"/><w:spacing w:before="${before}" w:after="${after}"/></w:pPr><w:rPr><w:b/><w:color w:val="${style.accentColor}"/><w:sz w:val="${half(headingSize(style, level))}"/></w:rPr></w:style>`
+
+  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
-<w:docDefaults><w:rPrDefault><w:rPr><w:rFonts w:ascii="Georgia" w:hAnsi="Georgia"/><w:sz w:val="22"/></w:rPr></w:rPrDefault></w:docDefaults>
-<w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:name w:val="Normal"/><w:pPr><w:spacing w:after="160" w:line="276" w:lineRule="auto"/></w:pPr></w:style>
-<w:style w:type="paragraph" w:styleId="Heading1"><w:name w:val="heading 1"/><w:basedOn w:val="Normal"/><w:pPr><w:outlineLvl w:val="0"/><w:spacing w:before="240" w:after="120"/></w:pPr><w:rPr><w:b/><w:sz w:val="40"/></w:rPr></w:style>
-<w:style w:type="paragraph" w:styleId="Heading2"><w:name w:val="heading 2"/><w:basedOn w:val="Normal"/><w:pPr><w:outlineLvl w:val="1"/><w:spacing w:before="240" w:after="120"/></w:pPr><w:rPr><w:b/><w:sz w:val="30"/></w:rPr></w:style>
-<w:style w:type="paragraph" w:styleId="Heading3"><w:name w:val="heading 3"/><w:basedOn w:val="Normal"/><w:pPr><w:outlineLvl w:val="2"/><w:spacing w:before="200" w:after="100"/></w:pPr><w:rPr><w:b/><w:sz w:val="25"/></w:rPr></w:style>
+<w:docDefaults><w:rPrDefault><w:rPr><w:rFonts w:ascii="${style.fontFamily}" w:hAnsi="${style.fontFamily}"/><w:sz w:val="${half(style.fontSize)}"/></w:rPr></w:rPrDefault></w:docDefaults>
+<w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:name w:val="Normal"/><w:pPr><w:spacing w:after="160" w:line="276" w:lineRule="auto"/>${jc}</w:pPr></w:style>
+${heading(1, 240, 120)}
+${heading(2, 240, 120)}
+${heading(3, 200, 100)}
 <w:style w:type="paragraph" w:styleId="Quote"><w:name w:val="Quote"/><w:basedOn w:val="Normal"/><w:pPr><w:ind w:left="567"/></w:pPr><w:rPr><w:i/><w:color w:val="444444"/></w:rPr></w:style>
 <w:style w:type="paragraph" w:styleId="ListParagraph"><w:name w:val="List Paragraph"/><w:basedOn w:val="Normal"/><w:pPr><w:ind w:left="720"/><w:spacing w:after="60"/></w:pPr></w:style>
 </w:styles>`
+}
 
 /** numId 1 = marcador, numId 2 = numerada (ver renderOoxmlBody). */
 const NUMBERING = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
@@ -74,12 +95,29 @@ function coreProps(title: string): string {
 </cp:coreProperties>`
 }
 
-/** Gera o .docx a partir dos blocos. A4 retrato com margens de 2cm. */
-export async function buildDocx(blocks: Block[], title: string): Promise<Buffer> {
+/** Twips por centímetro — a unidade de medida de página do OOXML. */
+const TWIPS_PER_CM = 567
+
+/**
+ * Gera o .docx a partir dos blocos, em A4 retrato, com a margem e as colunas
+ * do estilo. As colunas valem para a SEÇÃO inteira: o documento tem um
+ * `sectPr` só, então é o documento todo em uma ou mais colunas — trecho a
+ * trecho exigiria dividir em várias seções.
+ */
+export async function buildDocx(
+  blocks: Block[],
+  title: string,
+  style?: DocumentStyle,
+): Promise<Buffer> {
   const JSZip = _require('jszip') as typeof import('jszip')
-  const body = renderOoxmlBody(blocks)
+  const resolved = normalizeStyle(style)
+  const body = renderOoxmlBody(blocks, style)
+
+  const marginTwips = Math.round(resolved.marginCm * TWIPS_PER_CM)
+  const sideTwips = Math.round(Math.max(0.5, resolved.marginCm - 0.5) * TWIPS_PER_CM)
+  const cols = resolved.columns > 1 ? `<w:cols w:num="${resolved.columns}" w:space="425"/>` : ''
   const document = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>${body}<w:sectPr><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="1134" w:right="1134" w:bottom="1134" w:left="1134"/></w:sectPr></w:body></w:document>`
+<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>${body}<w:sectPr><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="${marginTwips}" w:right="${sideTwips}" w:bottom="${marginTwips}" w:left="${sideTwips}"/>${cols}</w:sectPr></w:body></w:document>`
 
   const zip = new JSZip()
   zip.file('[Content_Types].xml', CONTENT_TYPES)
@@ -87,7 +125,7 @@ export async function buildDocx(blocks: Block[], title: string): Promise<Buffer>
   zip.folder('docProps')!.file('core.xml', coreProps(title))
   const word = zip.folder('word')!
   word.file('document.xml', document)
-  word.file('styles.xml', STYLES)
+  word.file('styles.xml', stylesXml(resolved))
   word.file('numbering.xml', NUMBERING)
   word.folder('_rels')!.file('document.xml.rels', DOC_RELS)
 

@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
 
 import {
+  headingSize,
+  normalizeStyle,
   parseInline,
   parseMarkdown,
   renderHtml,
@@ -258,5 +260,115 @@ describe('parseInline — <br>', () => {
     const html = renderHtml(parseMarkdown('<script>x</script> e <b>y</b>'), 'T')
     expect(html).toContain('&lt;script&gt;')
     expect(html).toContain('&lt;b&gt;')
+  })
+})
+
+/**
+ * O estilo vem do MODELO. Duas falhas aqui são graves e silenciosas: um valor
+ * malicioso ou torto vira CSS/XML inválido — no melhor caso o documento fica
+ * estranho, no pior o .docx não abre.
+ */
+describe('normalizeStyle', () => {
+  it('sem estilo, devolve o padrão', () => {
+    const s = normalizeStyle()
+    expect(s.fontFamily).toBe('Georgia')
+    expect(s.fontSize).toBe(11)
+    expect(s.columns).toBe(1)
+  })
+
+  it('aceita os valores válidos', () => {
+    const s = normalizeStyle({ fontFamily: 'Calibri', fontSize: 13, accentColor: '#1f4e79', marginCm: 1.5, columns: 2, align: 'left' })
+    expect(s).toEqual({
+      fontFamily: 'Calibri', fontSize: 13, accentColor: '1F4E79',
+      marginCm: 1.5, columns: 2, align: 'left',
+    })
+  })
+
+  it('limpa a fonte — um nome com pontuação injetaria CSS/XML', () => {
+    const s = normalizeStyle({ fontFamily: 'Arial"; } body { display:none } /*' })
+    expect(s.fontFamily).not.toMatch(/["';{}/*]/)
+    expect(s.fontFamily.startsWith('Arial')).toBe(true)
+  })
+
+  it('cor inválida cai no padrão em vez de virar XML quebrado', () => {
+    for (const bad of ['red', '#12', 'rgb(1,2,3)', '"><script>', '']) {
+      expect(normalizeStyle({ accentColor: bad }).accentColor).toBe('111111')
+    }
+  })
+
+  it('aceita hex com e sem #, normalizando para maiúsculas', () => {
+    expect(normalizeStyle({ accentColor: '#abcdef' }).accentColor).toBe('ABCDEF')
+    expect(normalizeStyle({ accentColor: 'abcdef' }).accentColor).toBe('ABCDEF')
+  })
+
+  it('números fora da faixa são limitados, não rejeitados', () => {
+    expect(normalizeStyle({ fontSize: 200 }).fontSize).toBe(18)
+    expect(normalizeStyle({ fontSize: 1 }).fontSize).toBe(7)
+    expect(normalizeStyle({ columns: 99 }).columns).toBe(3)
+    expect(normalizeStyle({ marginCm: -5 }).marginCm).toBe(0.5)
+  })
+
+  it('valor não numérico não vira NaN no CSS', () => {
+    const s = normalizeStyle({ fontSize: Number.NaN, marginCm: undefined })
+    expect(s.fontSize).toBe(11)
+    expect(s.marginCm).toBe(2.5)
+  })
+
+  it('títulos escalam com o corpo', () => {
+    const grande = normalizeStyle({ fontSize: 14 })
+    expect(headingSize(grande, 1)).toBeGreaterThan(headingSize(normalizeStyle(), 1))
+    expect(headingSize(grande, 1)).toBeGreaterThan(headingSize(grande, 2))
+  })
+})
+
+describe('estilo aplicado às saídas', () => {
+  const style = { fontFamily: 'Calibri', fontSize: 13, accentColor: '#1F4E79', columns: 2, marginCm: 1.5 }
+
+  it('HTML leva fonte, tamanho, cor e colunas', () => {
+    const html = renderHtml(parseMarkdown('# Título'), 'T', style)
+    expect(html).toContain("'Calibri'")
+    expect(html).toContain('13pt')
+    expect(html).toContain('#1F4E79')
+    expect(html).toContain('column-count: 2')
+  })
+
+  it('DOCX leva a cor no título', () => {
+    // O OOXML usa hex sem "#"; com ele o Word ignora a cor em silêncio.
+    const xml = renderOoxmlBody(parseMarkdown('| a |\n|---|\n| 1 |'), style)
+    expect(xml).toContain('w:fill="1F4E79"')
+    expect(xml).not.toContain('#1F4E79')
+  })
+
+  it('uma coluna não emite regra de colunas', () => {
+    expect(renderHtml(parseMarkdown('x'), 'T', { columns: 1 })).not.toContain('column-count')
+  })
+})
+
+describe('alinhamento de tabela', () => {
+  const md = '| esq | centro | dir |\n|:---|:---:|---:|\n| a | b | c |'
+
+  it('a divisória define o alinhamento de cada coluna', () => {
+    const table = parseMarkdown(md)[0]
+    expect(table.type).toBe('table')
+    if (table.type !== 'table') return
+    expect(table.align).toEqual(['left', 'center', 'right'])
+  })
+
+  it('no HTML vira classe por célula', () => {
+    const html = renderHtml(parseMarkdown(md), 'T')
+    expect(html).toContain('<th class="c">')
+    expect(html).toContain('<td class="r">')
+  })
+
+  it('no DOCX vira w:jc no parágrafo da célula — alinhar a célula não moveria o texto', () => {
+    const xml = renderOoxmlBody(parseMarkdown(md))
+    expect(xml).toContain('<w:jc w:val="center"/>')
+    expect(xml).toContain('<w:jc w:val="right"/>')
+  })
+
+  it('tabela sem marcação de alinhamento fica toda à esquerda', () => {
+    const table = parseMarkdown('| a | b |\n|---|---|\n| 1 | 2 |')[0]
+    if (table.type !== 'table') return
+    expect(table.align).toEqual(['left', 'left'])
   })
 })
