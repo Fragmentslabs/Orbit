@@ -169,32 +169,15 @@ export function DocumentPartView({
 
         {/* O documento ocupa a largura do card e renderiza no tamanho natural;
             o teto corta a altura, mostrando o topo. */}
-        <div
-          role="button"
-          tabIndex={0}
-          title={t("artifacts.expand")}
-          onClick={() => setExpanded(true)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" || e.key === " ") setExpanded(true)
-          }}
-          className="relative cursor-zoom-in overflow-hidden bg-white"
-          style={{ height: previewHeight }}
-        >
-          {/*
-            pointer-events-none no iframe: com a altura cortada, a roda do
-            mouse rolaria o DOCUMENTO dentro de uma janelinha em vez da
-            conversa — uma armadilha de rolagem. Inerte, o preview deixa a
-            conversa rolar normalmente e o clique abre o documento inteiro.
-          */}
-          <ArtifactFrame
-            src={src}
-            title={part.title}
-            nonce={nonce}
-            className="pointer-events-none h-full w-full"
-          />
-          {/* Esmaecimento na base: sem ele o corte parece conteúdo faltando,
-              e não um documento que continua. */}
-          <div className="pointer-events-none absolute inset-x-0 bottom-0 h-12 bg-gradient-to-t from-white to-transparent" />
+        {/*
+          O documento ROLA dentro do card. Cheguei a deixar o iframe inerte
+          para a roda do mouse nunca ser capturada pelo preview, mas isso
+          tirou do usuário a leitura no próprio card, que é o uso mais comum —
+          e o Chromium encadeia a rolagem: ao chegar no fim do documento, a
+          conversa volta a rolar sozinha.
+        */}
+        <div className="relative overflow-hidden bg-white" style={{ height: previewHeight }}>
+          <ArtifactFrame src={src} title={part.title} nonce={nonce} className="h-full w-full" />
         </div>
       </div>
 
