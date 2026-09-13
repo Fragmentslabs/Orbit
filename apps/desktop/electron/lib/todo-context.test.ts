@@ -127,3 +127,53 @@ describe('stripEngineMarkers', () => {
     expect(stripEngineMarkers(texto)).toContain('[Verified record:')
   })
 })
+
+/**
+ * Artefatos: o `artifactId` só existe no RESULTADO da tool, que não volta ao
+ * modelo em turnos futuros (toModelMessages reenvia apenas texto e reasoning).
+ * Sem esta anotação, um pedido de mudança no turno seguinte faz o modelo criar
+ * um SEGUNDO artefato em vez de atualizar o primeiro — duplicata na conversa e
+ * na galeria.
+ */
+describe('engineAnnotations — artefatos', () => {
+  const artifactPart = (artifactId: string, title: string, revision = 1) =>
+    ({ id: `p-${artifactId}`, type: 'artifact', src: `orbit-artifact://${artifactId}`, artifactId, title, revision }) as never
+
+  it('reemite o id do artefato para o turno seguinte poder atualizá-lo', () => {
+    const out = engineAnnotations(message({ parts: [artifactPart('art_a.html', 'Vendas Q4')] }))
+    expect(out).toContain('art_a.html')
+    expect(out).toContain('Vendas Q4')
+    expect(out).toContain('update_artifact')
+  })
+
+  it('deduplica pelo id quando o agente cria e já corrige no mesmo turno', () => {
+    const out = engineAnnotations(
+      message({
+        parts: [artifactPart('art_a.html', 'Vendas Q4', 1), artifactPart('art_a.html', 'Vendas Q4', 2)],
+      }),
+    )
+    expect(out.match(/art_a\.html/g)).toHaveLength(1)
+  })
+
+  it('lista cada artefato quando o turno produziu mais de um', () => {
+    const out = engineAnnotations(
+      message({ parts: [artifactPart('art_a.html', 'Vendas'), artifactPart('art_b.html', 'Custos')] }),
+    )
+    expect(out).toContain('art_a.html')
+    expect(out).toContain('art_b.html')
+  })
+
+  it('a anotação é removível pelo stripEngineMarkers (o modelo copia o formato)', () => {
+    const out = engineAnnotations(message({ parts: [artifactPart('art_a.html', 'Vendas Q4')] }))
+    expect(stripEngineMarkers(`Resposta ao usuário.\n${out}`)).toBe('Resposta ao usuário.')
+  })
+
+  it('título com colchetes não quebra o marcador de linha inteira', () => {
+    const out = engineAnnotations(message({ parts: [artifactPart('art_a.html', 'Resumo [beta]')] }))
+    expect(stripEngineMarkers(`Texto.\n${out}`)).toBe('Texto.')
+  })
+
+  it('sem artefato no turno, não anota nada', () => {
+    expect(engineAnnotations(message())).toBe('')
+  })
+})

@@ -1,4 +1,4 @@
-import type { ChatMessage, ToolPart } from '@shared/chat'
+import type { ArtifactPart, ChatMessage, ToolPart } from '@shared/chat'
 
 /**
  * toModelMessages/textOf (compaction) só reenviam TextParts — ToolParts
@@ -6,6 +6,12 @@ import type { ChatMessage, ToolPart } from '@shared/chat'
  * futuros. Isso apaga o estado da TODO entre turnos: ao dizer "continue", o
  * modelo não vê mais sua própria lista e frequentemente recria uma do zero.
  * Este módulo extrai esse estado como texto pra sobreviver ao corte.
+ *
+ * Os artefatos HTML sofrem do mesmo corte pelo mesmo motivo: o `artifactId`
+ * volta no RESULTADO da tool, que só existe dentro do turno que a chamou.
+ * Sem a anotação, "muda a cor do gráfico" no turno seguinte chega a um modelo
+ * que não sabe mais o id do que ele mesmo desenhou — e ele cria um segundo
+ * artefato em vez de atualizar o primeiro.
  */
 
 interface TodoItem {
@@ -24,6 +30,33 @@ function formatTodoState(items: TodoItem[]): string {
   const mark = { completed: 'x', in_progress: '~', pending: ' ' } as const
   const lines = items.map((i) => `- [${mark[i.status] ?? ' '}] ${i.content}`)
   return `[TODO for this response]\n${lines.join('\n')}`
+}
+
+/**
+ * Artefatos que a resposta materializou. Uma part por chamada de
+ * create_artifact/update_artifact — o mesmo id pode aparecer duas vezes se o
+ * agente criou e já corrigiu no mesmo turno, então a lista é deduplicada pelo
+ * id, ficando com a ÚLTIMA revisão vista.
+ */
+function artifactRefs(message: ChatMessage): ArtifactPart[] {
+  const byId = new Map<string, ArtifactPart>()
+  for (const part of message.parts) {
+    if (part.type === 'artifact') byId.set(part.artifactId, part)
+  }
+  return [...byId.values()]
+}
+
+/**
+ * Uma ÚNICA linha, prefixada com [SYSTEM: e sem nenhum "]" interno: é o que
+ * faz o stripEngineMarkers conseguir removê-la caso o modelo passe a imitá-la
+ * no texto visível (ENGINE_MARKER_LINE casa linha inteira, sem "]" no meio).
+ */
+function formatArtifacts(refs: ArtifactPart[]): string | null {
+  if (refs.length === 0) return null
+  const list = refs
+    .map((r) => `${r.artifactId} (${r.title.replace(/[[\]]/g, '')})`)
+    .join('; ')
+  return `[SYSTEM: HTML artifacts rendered in this response — ${list}. If the user asks for a CHANGE to one of them, call update_artifact with that exact id and the full new HTML; do NOT call create_artifact again, which would leave a duplicate in the conversation and in the gallery.]`
 }
 
 /** Quantos arquivos citar no registro antes de resumir (contexto é caro). */
@@ -106,6 +139,9 @@ export function engineAnnotations(message: ChatMessage): string {
 
   const ledger = formatChangeLedger(message)
   if (ledger) parts.push(ledger)
+
+  const artifacts = formatArtifacts(artifactRefs(message))
+  if (artifacts) parts.push(artifacts)
 
   // Item marcado "completed" é asserção do modelo, não medição. Num turno em
   // que nada foi escrito, a checklist vira a "prova" mais convincente do
