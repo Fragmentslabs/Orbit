@@ -260,7 +260,8 @@
       "rate-limit": "O provedor atingiu o limite de uso ou de requisições. Aguarde um pouco ou troque de modelo.",
       "network": "Falha de rede ao falar com o provedor (timeout, indisponibilidade). Tente novamente ou troque de modelo.",
       "provider-config": "O provedor deste modelo não está pronto: falta a chave de API, ou o provedor/SDK não está disponível. Verifique as Configurações."
-    }
+    },
+    "artifactDesktopOnly": "Artefato disponível no app desktop"
   },
   "askCard": {
     "permissionRequired": "Permissão necessária",

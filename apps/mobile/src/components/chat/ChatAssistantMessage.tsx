@@ -22,6 +22,7 @@ import type {
   ReasoningPart,
   ToolPart,
   AgentPart,
+  ArtifactPart,
   ImagePart,
   FilePart,
 } from '@orbit/shared'
@@ -511,6 +512,30 @@ function SourcesBlock({ sources }: { sources: any[] }) {
  * excluído depois na galeria do desktop — quando a carga falha, mostramos um
  * placeholder no lugar do quadro vazio.
  */
+/**
+ * Artefato HTML na resposta. O companion ainda não serve o arquivo (a página
+ * mora no storage do desktop, atrás do protocolo orbit-artifact://), então
+ * aqui o card só ANUNCIA o artefato — sem isto a mensagem ficaria com um
+ * buraco e o texto do assistente falaria de algo invisível.
+ */
+function AssistantArtifact({ part }: { part: ArtifactPart }) {
+  const { t } = useTranslation()
+  const tokens = getThemeTokens(useThemeStore((s) => s.resolved))
+  return (
+    <View
+      className="mt-2 w-full gap-1 rounded-lg px-3 py-2"
+      style={{ borderWidth: 1, borderColor: tokens.border }}
+    >
+      <Text className="text-xs font-medium" style={{ color: tokens.foreground }}>
+        {part.title}
+      </Text>
+      <Text className="text-xs" style={{ color: tokens.mutedForeground }}>
+        {t('chatAssistant.artifactDesktopOnly')}
+      </Text>
+    </View>
+  )
+}
+
 function AssistantImage({ part }: { part: ImagePart }) {
   const { t } = useTranslation()
   const tokens = getThemeTokens(useThemeStore((s) => s.resolved))
@@ -689,6 +714,8 @@ export function ChatAssistantMessage({ message, compact, isLast, isBusy, onRever
             return <AgentPartView key={part.id} part={part} />
           case 'image':
             return <AssistantImage key={part.id} part={part} />
+          case 'artifact':
+            return <AssistantArtifact key={part.id} part={part} />
           case 'file':
             return (
               <View key={part.id} className="mt-1 w-full">

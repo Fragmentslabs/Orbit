@@ -260,7 +260,8 @@
       "rate-limit": "The provider hit its usage or request limit. Wait a bit or switch models.",
       "network": "Network error talking to the provider (timeout, outage). Try again or switch models.",
       "provider-config": "This model's provider isn't ready: the API key is missing or the provider/SDK isn't available. Check Settings."
-    }
+    },
+    "artifactDesktopOnly": "Artifact available on the desktop app"
   },
   "askCard": {
     "permissionRequired": "Permission required",
