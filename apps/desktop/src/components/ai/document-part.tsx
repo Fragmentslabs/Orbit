@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { Download, FileText, Maximize2, PanelRight, RotateCw } from "lucide-react"
 import type { DocumentPart } from "@shared/chat"
@@ -8,7 +8,6 @@ import { Button } from "@/components/ui/button"
 import { ArtifactFrame } from "@/src/components/ai/artifact-part"
 import { documentApi, artifactApi } from "@/src/lib/ipc"
 import { usePanelStore } from "@/src/stores/panel-store"
-import { cn } from "@/lib/utils"
 
 /**
  * Documento entregável na resposta (tool create_document): relatório,
@@ -22,19 +21,24 @@ import { cn } from "@/lib/utils"
  */
 
 /**
- * O preview é uma PÁGINA, não um quadro: o iframe é renderizado no tamanho
- * real de uma A4 a 96dpi e reduzido por transform.
+ * O preview é uma PÁGINA em retrato: o iframe é renderizado no tamanho real de
+ * uma A4 a 96dpi e escalado para caber na LARGURA disponível — a altura do
+ * card acompanha a proporção da folha.
  *
- * Encolher o iframe direto (largura de ~370px) deixaria o texto espremido
- * entre as margens de 2cm do documento — cerca de 220px úteis. Renderizando em
- * 794×1123 e escalando, a proporção e os tamanhos relativos ficam fiéis ao
- * impresso, que é o ponto de um preview de documento.
+ * Duas coisas que não funcionam e por quê. Encolher o iframe direto (largura
+ * de ~370px) espreme o texto entre as margens de 2cm do documento, sobrando
+ * ~220px úteis. E fixar a altura do card escalando a página para baixo deixa
+ * faixas laterais enormes com o conteúdo minúsculo — o card fica paisagem
+ * exibindo um objeto retrato.
+ *
+ * Escalando pela largura, a página preenche o card, o texto sai no maior
+ * tamanho possível e a proporção continua fiel ao impresso.
  */
 const A4_WIDTH = 794
 const A4_HEIGHT = 1123
-const PREVIEW_HEIGHT = 520
-const PREVIEW_SCALE = PREVIEW_HEIGHT / A4_HEIGHT
-const PREVIEW_WIDTH = Math.round(A4_WIDTH * PREVIEW_SCALE)
+/** Nunca amplia além do tamanho natural: acima de 794px o texto ficaria
+ *  artificialmente grande em relação ao que sai impresso. */
+const MAX_SCALE = 1
 
 const FORMAT_LABEL: Record<DocumentFormat, string> = { pdf: "PDF", docx: "DOCX" }
 
@@ -51,6 +55,26 @@ export function DocumentPartView({
   const [expanded, setExpanded] = useState(false)
   const [reloads, setReloads] = useState(0)
   const openArtifactTab = usePanelStore((s) => s.openArtifactTab)
+
+  /**
+   * A escala precisa da largura REAL do card, que depende do painel, da
+   * largura da janela e do zoom — nada disso dá para saber em CSS puro, porque
+   * o iframe tem que ser renderizado em 794px para o documento não reflowar.
+   * Daí o ResizeObserver: ele reescala quando o usuário abre o painel lateral
+   * ou redimensiona a janela.
+   */
+  const frameBoxRef = useRef<HTMLDivElement | null>(null)
+  const [boxWidth, setBoxWidth] = useState(0)
+  useEffect(() => {
+    const el = frameBoxRef.current
+    if (!el) return
+    const observer = new ResizeObserver(([entry]) => {
+      setBoxWidth(entry.contentRect.width)
+    })
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [])
+  const scale = Math.min(MAX_SCALE, (boxWidth || A4_WIDTH) / A4_WIDTH)
 
   // Mesmo motivo do artefato: update_document reescreve os arquivos no lugar,
   // então a URL sozinha não distingue as revisões.
@@ -140,15 +164,14 @@ export function DocumentPartView({
           </div>
         </div>
 
-        {/* Fundo neutro em volta da "folha", como um visualizador de documento */}
-        <div
-          className={cn("flex justify-center overflow-hidden bg-neutral-200 py-4 dark:bg-neutral-800")}
-          style={{ height: PREVIEW_HEIGHT + 32 }}
-        >
-          <div
-            className="shadow-md ring-1 ring-black/10"
-            style={{ width: PREVIEW_WIDTH, height: PREVIEW_HEIGHT }}
-          >
+        {/*
+          A folha ocupa a largura inteira do card e a altura sai da proporção.
+          Antes da primeira medição a escala é 1 (altura de uma A4 inteira);
+          quando o ResizeObserver reporta a largura real, o bloco encolhe para
+          a proporção correta — um ajuste só, no primeiro layout.
+        */}
+        <div ref={frameBoxRef} className="overflow-hidden bg-white">
+          <div style={{ height: Math.round(A4_HEIGHT * scale) }}>
             <ArtifactFrame
               src={src}
               title={part.title}
@@ -156,7 +179,7 @@ export function DocumentPartView({
               style={{
                 width: A4_WIDTH,
                 height: A4_HEIGHT,
-                transform: `scale(${PREVIEW_SCALE})`,
+                transform: `scale(${scale})`,
                 transformOrigin: "top left",
               }}
             />
