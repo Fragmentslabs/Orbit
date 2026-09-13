@@ -24,7 +24,9 @@ export function ArtifactTab({ artifactId, title }: { artifactId?: string; title:
   useEffect(() => {
     if (!artifactId) return
     let cancelled = false
-    void mediaApi.list({ kind: "artifact" }).then((entries) => {
+    // Artefato e documento usam a mesma aba: os dois são servidos como HTML
+    // pelo orbit-artifact://.
+    void mediaApi.list({ kind: ["artifact", "document"] }).then((entries) => {
       if (cancelled) return
       const found = entries.find((e) => e.id === artifactId) ?? null
       setEntry(found)
@@ -58,7 +60,9 @@ export function ArtifactTab({ artifactId, title }: { artifactId?: string; title:
     )
   }
 
-  const src = `${ARTIFACT_SCHEME}://${artifactId}?rev=${entry?.revision ?? 1}&r=${reloads}`
+  // Documento: o id do registro é o fonte .md, mas o que renderiza é o .html.
+  const fileId = artifactId.endsWith(".md") ? artifactId.replace(/\.md$/, ".html") : artifactId
+  const src = `${ARTIFACT_SCHEME}://${fileId}?rev=${entry?.revision ?? 1}&r=${reloads}`
 
   return (
     <div className="flex min-w-0 flex-1 flex-col overflow-hidden">

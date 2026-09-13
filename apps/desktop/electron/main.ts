@@ -29,9 +29,12 @@ import {
   backfillMedia,
   cleanupScriptMedia,
   deleteManyMedia,
+  documentFilePath,
+  getMediaEntry,
   listMedia,
   mediaDiskUsage,
   readArtifact,
+  readDocumentSource,
   registerArtifactProtocol,
   registerArtifactSchemePrivileges,
   registerMediaProtocol,
@@ -63,7 +66,8 @@ import type { RotationConfig } from '@shared/chat'
 import { StorageKeys } from '@shared/chat'
 import * as esteira from './lib/esteira'
 import * as rotinas from './lib/rotinas'
-import type { MediaFilter } from '@shared/media'
+import type { DocumentFormat, MediaFilter } from '@shared/media'
+import { documentFileName } from '@shared/media'
 import type { FaseTemplate, NovaEsteiraInput, NovaTaskInput } from '@shared/esteira'
 import type { NovaRotinaInput, Rotina, RotinaModelo } from '@shared/rotinas'
 import type { Memory, MemoryEvent } from '@shared/memory'
@@ -1420,6 +1424,24 @@ app.whenReady().then(() => {
     const artifact = await readArtifact(id)
     return artifact ? artifact.html : null
   })
+  // Documentos: exportar a renderizacao (PDF/DOCX) para fora do Orbit.
+  ipcMain.handle('document:source', async (_event, id: string) => {
+    const found = await readDocumentSource(id)
+    return found ? found.markdown : null
+  })
+  ipcMain.handle('document:export', async (_event, id: string, format: DocumentFormat) => {
+    const source = await documentFilePath(id, format)
+    if (!source) return { ok: false as const, error: 'Documento ou formato não encontrado' }
+    const entry = await getMediaEntry(id)
+    const result = await dialog.showSaveDialog({
+      defaultPath: documentFileName(entry?.name ?? 'documento', format),
+      filters: [{ name: format.toUpperCase(), extensions: [format] }],
+    })
+    if (result.canceled || !result.filePath) return { ok: false as const, canceled: true as const }
+    await fs.copyFile(source, result.filePath)
+    return { ok: true as const, path: result.filePath }
+  })
+
   ipcMain.handle('artifact:export', async (_event, id: string) => {
     const artifact = await readArtifact(id)
     if (!artifact) return { ok: false as const, error: 'Artefato não encontrado' }

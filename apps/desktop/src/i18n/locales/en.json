@@ -2005,5 +2005,8 @@
     "export": "Export HTML",
     "expand": "Expand",
     "unavailable": "Artifact unavailable"
+  },
+  "documents": {
+    "exportFormat": "Export {{format}}"
   }
 }

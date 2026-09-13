@@ -45,6 +45,12 @@ const NATIVE_TOOLS = new Set([
   'doc_read',
   // Consulta de planilha: leitura pura, sem escrita em lugar nenhum
   'sheet_query',
+  // Documentos entregaveis: escrevem no storage do Orbit
+  // (orbit-data/documents), nunca no projeto do usuario.
+  'create_document',
+  'update_document',
+  'read_document',
+  'list_documents',
   // Automação em lote na engine oculta (mesmo threat model do bash: o agente
   // já executa código arbitrário; o script roda isolado num utilityProcess)
   'run_browser_script',

@@ -4,6 +4,7 @@ import { getMcpTools } from '../mcp'
 import { createArtifactTools } from './artifact'
 import { createDocumentTools } from './documents'
 import { createSheetQueryTool } from './sheet'
+import { createDocumentAuthoringTools } from './document'
 import { createBrowserLinksTool, createBrowserOpenTool } from './browser'
 import { createBrowserScriptTools } from './browser-script'
 import { createEsteiraTools } from './esteira'
@@ -79,6 +80,14 @@ export function buildToolSet(input: SendMessageInput, ctx: ToolContext | null): 
     // Consulta de planilha: no chat a fonte e sempre um anexo (nao ha pasta
     // de trabalho), por isso ctx entra como null.
     tools.sheet_query = createSheetQueryTool(input.sessionId, null)
+    // Documentos entregaveis (PDF/DOCX). No chat o escopo e a pasta da
+    // sidebar, quando houver — nao existe diretorio de trabalho aqui.
+    if (input.orchestrationRole !== 'worker') {
+      Object.assign(
+        tools,
+        createDocumentAuthoringTools({ sessionId: input.sessionId }),
+      )
+    }
     if (allowBrain) Object.assign(tools, createChatMemoryTools(input))
     // Esteira: transformar o que foi discutido no chat em esteira/task de um
     // board. Fica sempre disponível (não é toggle): a esteira é outra forma de
@@ -118,6 +127,15 @@ export function buildToolSet(input: SendMessageInput, ctx: ToolContext | null): 
   // No codigo a consulta alcanca as duas fontes: planilha do repositorio
   // (filePath, via ctx) e planilha anexada na conversa (docId).
   tools.sheet_query = createSheetQueryTool(input.sessionId, ctx)
+  // No codigo o escopo e o REPOSITORIO: list_documents reencontra o que foi
+  // produzido sobre a mesma pasta de trabalho em qualquer conversa anterior,
+  // nao so nesta sessao.
+  if (input.orchestrationRole !== 'worker') {
+    Object.assign(
+      tools,
+      createDocumentAuthoringTools({ sessionId: input.sessionId, directory: input.directory }),
+    )
+  }
 
   if (input.options.research) {
     tools.websearch = createWebSearchTool()

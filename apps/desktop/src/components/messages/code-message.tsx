@@ -14,6 +14,7 @@ import {
 } from "@/src/lib/message-utils"
 import { ImagePartView } from "@/src/components/ai/image"
 import { ArtifactPartView } from "@/src/components/ai/artifact-part"
+import { DocumentPartView } from "@/src/components/ai/document-part"
 import { Shimmer } from "@/src/components/ai/shimmer"
 import { SubAgentCard } from "@/src/components/ai/sub-agent-card"
 import { TodoList } from "@/src/components/ai/todo-list"
@@ -250,7 +251,9 @@ function segmentParts(parts: MessagePart[]): Segment[] {
       part.tool !== "create_skill" &&
       part.tool !== "show_image" &&
       part.tool !== "create_artifact" &&
-      part.tool !== "update_artifact"
+      part.tool !== "update_artifact" &&
+      part.tool !== "create_document" &&
+      part.tool !== "update_document"
     ) {
       const last = segments[segments.length - 1]
       if (last?.kind === "task") last.parts.push(part)
@@ -332,6 +335,8 @@ export function CodeAssistantMessage({ message, sessionId, isLast, isBusy, busyL
           <ImagePartView key={segment.id} part={segment.part} />
         ) : segment.part.type === "artifact" ? (
           <ArtifactPartView key={segment.id} part={segment.part} sessionId={sessionId} />
+        ) : segment.part.type === "document" ? (
+          <DocumentPartView key={segment.id} part={segment.part} />
         ) : null,
       )}
       {message.error && (

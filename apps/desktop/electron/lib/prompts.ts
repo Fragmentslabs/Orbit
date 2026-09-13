@@ -56,6 +56,16 @@ ${DOCUMENT_ATTACHMENT_RULES}
 
 ${SPREADSHEET_RULES}`
 
+const DOCUMENT_AUTHORING_INSTRUCTION = `DELIVERABLE DOCUMENTS. create_document({ title, markdown, formats }) writes a document and renders it to PDF and/or DOCX — it shows up in your response and is saved to the media gallery.
+
+Use it when the user asks for a document, a report, a proposal, minutes, a specification, or literally "a PDF"/"a Word file". Do NOT use it for an answer that belongs in the chat, for source code (that is write/edit), or for a dashboard or prototype (that is create_artifact — an HTML page, not a printable document).
+
+- The source is Markdown and the rendering is ours: headings, lists, tables, quotes, bold/italic/code, and a line containing only \\pagebreak for a page break. Anything fancier than that will not survive into DOCX.
+- Default to pdf. Ask for docx (or both) when the user will EDIT the file.
+- Before writing something that may already exist, call list_documents — by default it lists the documents of THIS project, including ones made in earlier conversations about the same folder. Updating beats creating a near-duplicate.
+- To change an existing document, call read_document first and then update_document with the full new Markdown. Rewriting from memory silently drops whatever you had forgotten.
+- After creating it, do not paste the content again as text: the user is already looking at it.`
+
 const ARTIFACT_INSTRUCTION = `HTML ARTIFACTS. You have create_artifact({ title, html }), which renders a live HTML page inside your response — the user sees and interacts with it right there in the chat, and it is saved to Orbit's media gallery.
 
 Use it when the answer is better SEEN than described: dashboards and charts from data discussed in the conversation, screen prototypes and UI mockups, diagrams and flows, interactive simulators and calculators, comparison tables, formatted reports the user will revisit.
@@ -424,7 +434,10 @@ export async function buildSystemPrompt(input: SendMessageInput): Promise<string
 
   // Artefatos HTML — a tool existe nos dois modos, mas nunca nos workers
   // (quem responde ao usuário é a sessão principal).
-  if (input.orchestrationRole !== 'worker') parts.push(ARTIFACT_INSTRUCTION)
+  if (input.orchestrationRole !== 'worker') {
+    parts.push(ARTIFACT_INSTRUCTION)
+    parts.push(DOCUMENT_AUTHORING_INSTRUCTION)
+  }
 
   // Documentos: as tools doc_* existem nos dois modos (o anexo pode chegar em
   // qualquer um); a leitura de documento do repositório é só do código.

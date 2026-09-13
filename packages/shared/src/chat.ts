@@ -234,6 +234,29 @@ export interface ArtifactPart {
   revision?: number
 }
 
+/**
+ * Documento autorado pelo agente (tool create_document): relatório, proposta,
+ * ata. O fonte é Markdown; PDF e DOCX são renderizações dele.
+ *
+ * O preview mostrado na conversa é HTML e não o PDF — o Electron não embarca
+ * o visualizador de PDF do Chrome, e o .docx não é renderizável no navegador.
+ * Como o PDF é gerado A PARTIR desse HTML, o que se vê é o que sai impresso.
+ */
+export interface DocumentPart {
+  id: string
+  type: "document"
+  /** Id do registro na galeria (doc_xxx.md) — o fonte Markdown */
+  documentId: string
+  title: string
+  /** URL orbit-artifact:// do HTML de preview */
+  previewSrc: string
+  /** Renderizações disponíveis em disco */
+  formats: ("pdf" | "docx")[]
+  thumb?: string
+  /** Incrementa a cada update_document — cache-buster do iframe */
+  revision?: number
+}
+
 export type MessagePart =
   | TextPart
   | ReasoningPart
@@ -242,6 +265,7 @@ export type MessagePart =
   | FilePart
   | AgentPart
   | ArtifactPart
+  | DocumentPart
 
 export interface TokenUsage {
   /** Soma de todos os steps do turno (tool loop) — reflete custo/billing, NÃO

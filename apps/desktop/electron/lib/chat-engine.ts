@@ -24,7 +24,7 @@ import { buildSystemPrompt } from './prompts'
 import { buildProviderOptions, interleavedReasoningField, normalizeMessages } from './reasoning'
 import { resolveModel } from './providers'
 import { withProviderSession } from './provider-session'
-import { attachArtifactMessage, attachMediaMessage, saveMedia } from './media'
+import { attachArtifactMessage, attachDocumentMessage, attachMediaMessage, saveMedia } from './media'
 import sharp from 'sharp'
 import { claimsCompletion, isNoCorrectionReply } from './overclaim'
 import {
@@ -1362,6 +1362,34 @@ async function runChatTurn(win: BrowserWindow, input: SendMessageInput): Promise
                   revision: output.revision,
                 })
                 void attachArtifactMessage(output.artifactId, assistantMessage.id, sessionId)
+              }
+            }
+            // create_document/update_document: o documento vira parte da
+            // resposta (renderizado pelo ai/document-part). Mesmo contrato do
+            // artefato: a mensagem persiste a URL do preview, nunca o conteúdo.
+            if (part.toolName === 'create_document' || part.toolName === 'update_document') {
+              const output = part.output as
+                | {
+                    documentId?: string
+                    previewUrl?: string
+                    title?: string
+                    formats?: ('pdf' | 'docx')[]
+                    thumb?: string
+                    revision?: number
+                  }
+                | string
+              if (typeof output === 'object' && output?.documentId && output.previewUrl) {
+                upsertPart({
+                  id: `${part.toolCallId}-document`,
+                  type: 'document',
+                  documentId: output.documentId,
+                  title: output.title || output.documentId,
+                  previewSrc: output.previewUrl,
+                  formats: output.formats ?? [],
+                  thumb: output.thumb,
+                  revision: output.revision,
+                })
+                void attachDocumentMessage(output.documentId, assistantMessage.id, sessionId)
               }
             }
             break

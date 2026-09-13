@@ -2004,5 +2004,8 @@
     "export": "Exportar HTML",
     "expand": "Expandir",
     "unavailable": "Artefato indisponível"
+  },
+  "documents": {
+    "exportFormat": "Exportar {{format}}"
   }
 }

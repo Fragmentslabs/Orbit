@@ -15,6 +15,7 @@ import { Shimmer } from "@/src/components/ai/shimmer"
 import { SubAgentCard } from "@/src/components/ai/sub-agent-card"
 import { ImagePartView } from "@/src/components/ai/image"
 import { ArtifactPartView } from "@/src/components/ai/artifact-part"
+import { DocumentPartView } from "@/src/components/ai/document-part"
 import { Source, Sources, SourcesContent, SourcesTrigger } from "@/src/components/ai/sources"
 import { SkillProposalCard } from "@/src/components/skill-proposal-card"
 import {
@@ -176,6 +177,8 @@ export function ChatAssistantMessage({ message, sessionId, isLast, isBusy, busyL
           <AgentPartView key={segment.id} part={segment.part} />
         ) : segment.part.type === "artifact" ? (
           <ArtifactPartView key={segment.id} part={segment.part} sessionId={sessionId} />
+        ) : segment.part.type === "document" ? (
+          <DocumentPartView key={segment.id} part={segment.part} />
         ) : segment.part.type === "file" ? null : segment.part.tool === "subagent" ? (
           <SubAgentCard key={segment.id} part={segment.part} />
         ) : segment.part.tool === "create_skill" ? (
@@ -184,7 +187,9 @@ export function ChatAssistantMessage({ message, sessionId, isLast, isBusy, busyL
         // ao lado dele seria ruído
         segment.part.tool === "show_image" ||
           segment.part.tool === "create_artifact" ||
-          segment.part.tool === "update_artifact" ? null : (
+          segment.part.tool === "update_artifact" ||
+          segment.part.tool === "create_document" ||
+          segment.part.tool === "update_document" ? null : (
           <GenericToolView
             key={segment.id}
             part={segment.part}

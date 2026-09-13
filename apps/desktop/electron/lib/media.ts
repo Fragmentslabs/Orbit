@@ -13,8 +13,11 @@ import {
   type MediaKind,
   type MediaSource,
   type MediaUsage,
+  type DocumentFormat,
 } from '@shared/media'
 import { listKeys, readJson } from './storage'
+import { buildDocx } from './docx-package'
+import { parseMarkdown, renderHtml } from './document-render'
 
 export type { MediaEntry, MediaFilter, MediaSource, MediaUsage }
 
@@ -39,9 +42,22 @@ export type { MediaEntry, MediaFilter, MediaSource, MediaUsage }
 
 const SCHEME = MEDIA_SCHEME
 const SAFE_ID = /^[a-zA-Z0-9_-]+\.(png|jpg|jpeg|webp|gif)$/
-/** Artefato = a página (.html) ou a miniatura capturada dela (.png). */
-const SAFE_ARTIFACT_ID = /^[a-zA-Z0-9_-]+\.(html|png)$/
+/**
+ * Arquivos servidos pelo orbit-artifact://: a página do artefato (.html), a
+ * miniatura capturada (.png) e, nos documentos, o fonte (.md) e as
+ * renderizações (.pdf/.docx).
+ */
+const SAFE_ARTIFACT_ID = /^[a-zA-Z0-9_-]+\.(html|png|md|pdf|docx)$/
 const INDEX_FILE = 'index.json'
+
+/**
+ * Diretório de um arquivo servido pelo scheme, decidido pelo PREFIXO do id
+ * (`art_` / `doc_`) — os ids são gerados aqui, então o prefixo é confiável e
+ * evita ter que consultar o índice a cada requisição do protocolo.
+ */
+function assetFileDir(id: string): string {
+  return id.startsWith('doc_') ? documentsDir() : artifactsDir()
+}
 
 export interface SaveMediaMeta {
   source: MediaSource
@@ -59,6 +75,12 @@ function mediaDir(): string {
  *  o diretório de imagens e registraria qualquer arquivo novo como imagem. */
 function artifactsDir(): string {
   return path.join(app.getPath('userData'), 'orbit-data', 'artifacts')
+}
+
+/** Documentos: fonte .md, preview .html, renderizações .pdf/.docx e a
+ *  miniatura .png, todos com o mesmo id-base. */
+function documentsDir(): string {
+  return path.join(app.getPath('userData'), 'orbit-data', 'documents')
 }
 
 function indexFile(): string {
@@ -177,6 +199,10 @@ function matches(entry: MediaEntry, filter: MediaFilter): boolean {
     if (!kinds.includes(mediaKind(entry))) return false
   }
   if (filter.sessionId && entry.sessionId !== filter.sessionId) return false
+  // Escopo de projeto: é o que faz o agente reencontrar, no modo código, o
+  // que ele produziu antes no MESMO repositório — em qualquer sessão.
+  if (filter.directory && entry.directory !== filter.directory) return false
+  if (filter.folderId && entry.folderId !== filter.folderId) return false
   if (filter.since != null && entry.createdAt < filter.since) return false
   if (filter.query) {
     const needle = filter.query.toLowerCase()
@@ -448,6 +474,9 @@ export function registerArtifactSchemePrivileges(): void {
 const ARTIFACT_CONTENT_TYPES: Record<string, string> = {
   html: 'text/html; charset=utf-8',
   png: 'image/png',
+  md: 'text/plain; charset=utf-8',
+  pdf: 'application/pdf',
+  docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
 }
 
 async function handleArtifactRequest(request: Request): Promise<Response> {
@@ -457,7 +486,7 @@ async function handleArtifactRequest(request: Request): Promise<Response> {
   const id = decodeURIComponent(parsed.host || parsed.pathname.replace(/^\/+/, '')).replace(/\/+$/, '')
   if (!SAFE_ARTIFACT_ID.test(id)) return new Response('not found', { status: 404 })
   try {
-    const buffer = await fsp.readFile(path.join(artifactsDir(), id))
+    const buffer = await fsp.readFile(path.join(assetFileDir(id), id))
     const ext = id.split('.').pop() ?? ''
     return new Response(new Uint8Array(buffer), {
       status: 200,
@@ -548,7 +577,9 @@ async function captureThumbnail(artifactId: string): Promise<string | undefined>
     const buffer = await sharp(png).resize({ width: THUMB_WIDTH, withoutEnlargement: true }).png().toBuffer()
 
     const thumbId = `${artifactId.replace(/\.html$/, '')}.png`
-    await fsp.writeFile(path.join(artifactsDir(), thumbId), buffer)
+    // assetFileDir pelo prefixo: a mesma captura serve artefato e documento,
+    // que moram em diretórios diferentes.
+    await fsp.writeFile(path.join(assetFileDir(thumbId), thumbId), buffer)
     return thumbId
   } catch {
     return undefined
@@ -664,6 +695,240 @@ export async function readArtifact(id: string): Promise<{ html: string; entry: M
   } catch {
     return null
   }
+}
+
+// ─── Documentos (PDF / DOCX) ─────────────────────────────────────────────
+
+/**
+ * Documento autorado pelo agente. O FONTE é Markdown; PDF e DOCX são
+ * renderizações dele, e o HTML é o preview mostrado na conversa.
+ *
+ * O preview é HTML, e não o PDF, por uma limitação dura: o Electron não
+ * embarca o visualizador de PDF do Chrome — carregar um .pdf falha com
+ * ERR_FAILED até como página de topo. Como o PDF nasce DESTE html (via
+ * printToPDF), o preview é fiel ao impresso mesmo sem renderizar o binário.
+ *
+ * Guardar o Markdown é o que torna "modificar" possível de verdade: editar um
+ * PDF ou preservar a formatação de um .docx existente é intratável; reescrever
+ * o fonte e renderizar de novo é exato.
+ */
+
+export interface SaveDocumentMeta {
+  title: string
+  sessionId?: string
+  messageId?: string
+  /** Pasta de trabalho da sessão — escopo de projeto do documento. */
+  directory?: string
+  /** Pasta da sidebar (modo chat, sem diretório). */
+  folderId?: string
+}
+
+export interface DocumentRef {
+  /** Id do FONTE: doc_xxx.md — também o id do registro na galeria. */
+  id: string
+  title: string
+  previewUrl: string
+  formats: DocumentFormat[]
+  thumb?: string
+  revision: number
+}
+
+/** Base do id, sem extensão: doc_xxx */
+function documentBase(id: string): string {
+  return id.replace(/\.(md|html|pdf|docx|png)$/, '')
+}
+
+/**
+ * Gera o PDF a partir do HTML já gravado, com o Chromium — nenhuma biblioteca
+ * de PDF entra no projeto. A janela carrega pelo orbit-artifact://, então o
+ * CSS de impressão (@page A4) é o mesmo que o preview usa.
+ */
+async function renderPdf(htmlId: string): Promise<Buffer | null> {
+  let win: BrowserWindow | null = null
+  try {
+    const partition = `document-pdf-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+    // Mesma armadilha do thumbnail: protocol.handle só vale na sessão default,
+    // e sem registrar aqui o loadURL nunca resolve.
+    session.fromPartition(partition).protocol.handle(ARTIFACT_SCHEME, handleArtifactRequest)
+
+    win = new BrowserWindow({
+      show: false,
+      width: 1024,
+      height: 1400,
+      paintWhenInitiallyHidden: true,
+      webPreferences: { partition, nodeIntegration: false, contextIsolation: true, sandbox: true },
+    })
+    const target = win
+    await Promise.race([
+      target.loadURL(`${ARTIFACT_SCHEME}://${htmlId}`).catch(() => {}),
+      new Promise((resolve) => setTimeout(resolve, THUMB_LOAD_TIMEOUT_MS)),
+    ])
+    await new Promise((resolve) => setTimeout(resolve, 400))
+    if (target.isDestroyed()) return null
+
+    return await target.webContents.printToPDF({
+      printBackground: true,
+      pageSize: 'A4',
+      // Zero aqui de propósito: as margens já vêm do padding do CSS do
+      // documento (@page + body), e somar as do printToPDF daria margem
+      // dobrada — o texto ficaria espremido no meio da folha.
+      margins: { top: 0, bottom: 0, left: 0, right: 0 },
+    })
+  } catch {
+    return null
+  } finally {
+    if (win && !win.isDestroyed()) win.destroy()
+  }
+}
+
+/** Escreve fonte, preview e as renderizações pedidas. Retorna os formatos que
+ *  realmente foram gerados — um PDF que falhou não pode constar no registro. */
+async function writeDocumentFiles(
+  base: string,
+  markdown: string,
+  html: string,
+  formats: DocumentFormat[],
+  title: string,
+): Promise<DocumentFormat[]> {
+  const dir = documentsDir()
+  await fsp.mkdir(dir, { recursive: true })
+  await fsp.writeFile(path.join(dir, `${base}.md`), markdown, 'utf8')
+  await fsp.writeFile(path.join(dir, `${base}.html`), html, 'utf8')
+
+  const done: DocumentFormat[] = []
+  if (formats.includes('pdf')) {
+    const pdf = await renderPdf(`${base}.html`)
+    if (pdf) {
+      await fsp.writeFile(path.join(dir, `${base}.pdf`), pdf)
+      done.push('pdf')
+    }
+  }
+  if (formats.includes('docx')) {
+    try {
+      const docx = await buildDocx(parseMarkdown(markdown), title)
+      await fsp.writeFile(path.join(dir, `${base}.docx`), docx)
+      done.push('docx')
+    } catch {
+      // formato que falhou simplesmente não entra em `formats`
+    }
+  }
+  return done
+}
+
+export async function saveDocument(
+  markdown: string,
+  formats: DocumentFormat[],
+  meta: SaveDocumentMeta,
+): Promise<DocumentRef> {
+  const base = `doc_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`
+  const html = renderHtml(parseMarkdown(markdown), meta.title)
+  const written = await writeDocumentFiles(base, markdown, html, formats, meta.title)
+  const thumb = await captureThumbnail(`${base}.html`)
+
+  const id = `${base}.md`
+  const file = path.join(documentsDir(), id)
+  const entry: MediaEntry = {
+    id,
+    path: file,
+    size: Buffer.byteLength(markdown, 'utf8'),
+    createdAt: Date.now(),
+    source: 'chat',
+    kind: 'document',
+    sessionId: meta.sessionId,
+    messageId: meta.messageId,
+    directory: meta.directory,
+    folderId: meta.folderId,
+    name: meta.title,
+    formats: written,
+    thumb,
+    revision: 1,
+  }
+  await withIndexLock(async () => {
+    const entries = await readIndex()
+    entries.push(entry)
+    await writeIndex(entries)
+  })
+  return {
+    id,
+    title: meta.title,
+    previewUrl: `${ARTIFACT_SCHEME}://${base}.html`,
+    formats: written,
+    thumb,
+    revision: 1,
+  }
+}
+
+/**
+ * Reescreve um documento existente NO MESMO id. "Modificar" é reescrever o
+ * fonte e renderizar de novo: editar o binário preservando formatação é
+ * intratável, e o fonte guardado torna a reescrita exata.
+ */
+export async function updateDocument(
+  id: string,
+  markdown: string,
+  options: { title?: string; formats?: DocumentFormat[] },
+): Promise<DocumentRef | null> {
+  const entry = await getMediaEntry(id)
+  if (!entry || mediaKind(entry) !== 'document') return null
+
+  const base = documentBase(id)
+  const title = options.title ?? entry.name ?? 'Documento'
+  const formats = options.formats ?? entry.formats ?? ['pdf']
+  const html = renderHtml(parseMarkdown(markdown), title)
+  const written = await writeDocumentFiles(base, markdown, html, formats, title)
+  const thumb = (await captureThumbnail(`${base}.html`)) ?? entry.thumb
+  const revision = (entry.revision ?? 1) + 1
+
+  await withIndexLock(async () => {
+    const entries = await readIndex()
+    const current = entries.find((e) => e.id === id)
+    if (!current) return
+    current.size = Buffer.byteLength(markdown, 'utf8')
+    current.name = title
+    current.formats = written
+    current.thumb = thumb
+    current.revision = revision
+    await writeIndex(entries)
+  })
+
+  for (const win of BrowserWindow.getAllWindows()) {
+    if (!win.isDestroyed()) {
+      win.webContents.send('artifact:updated', { artifactId: `${base}.html`, revision })
+    }
+  }
+
+  return { id, title, previewUrl: `${ARTIFACT_SCHEME}://${base}.html`, formats: written, thumb, revision }
+}
+
+/** Markdown de origem — é o que o agente relê antes de modificar. */
+export async function readDocumentSource(
+  id: string,
+): Promise<{ markdown: string; entry: MediaEntry } | null> {
+  const entry = await getMediaEntry(id)
+  if (!entry || mediaKind(entry) !== 'document') return null
+  try {
+    return { markdown: await fsp.readFile(entry.path, 'utf8'), entry }
+  } catch {
+    return null
+  }
+}
+
+/** Caminho absoluto de uma renderização, para exportar/abrir fora. */
+export async function documentFilePath(id: string, format: DocumentFormat): Promise<string | null> {
+  const entry = await getMediaEntry(id)
+  if (!entry || mediaKind(entry) !== 'document') return null
+  if (!(entry.formats ?? []).includes(format)) return null
+  return path.join(documentsDir(), `${documentBase(id)}.${format}`)
+}
+
+/** Vincula o documento à mensagem onde ele apareceu (mesmo motivo do
+ *  attachMediaMessage: a tool roda no meio do turno). */
+export async function attachDocumentMessage(
+  id: string,
+  messageId: string,
+  sessionId?: string,
+): Promise<void> {
+  await attachArtifactMessage(id, messageId, sessionId)
 }
 
 export type { MediaKind }

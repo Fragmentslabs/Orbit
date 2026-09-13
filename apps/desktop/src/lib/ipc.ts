@@ -465,7 +465,18 @@ export const artifactApi = {
     >,
 }
 
-/** Galeria de mídia — ativos produzidos pelo agente (imagens e artefatos). */
+/** Documentos entregáveis (orbit-data/documents). O preview é servido pelo
+ *  orbit-artifact://; estas chamadas são para tirar o arquivo do Orbit. */
+export const documentApi = {
+  export: (id: string, format: "pdf" | "docx") =>
+    window.ipcRenderer.invoke("document:export", id, format) as Promise<
+      { ok: true; path: string } | { ok: false; canceled?: boolean; error?: string }
+    >,
+  source: (id: string) =>
+    window.ipcRenderer.invoke("document:source", id) as Promise<string | null>,
+}
+
+/** Galeria de mídia — ativos produzidos pelo agente (imagens, artefatos e documentos). */
 export const mediaApi = {
   list: (filter?: MediaFilter) => window.ipcRenderer.invoke("media:list", filter) as Promise<MediaEntry[]>,
   usage: () => window.ipcRenderer.invoke("media:usage") as Promise<MediaUsage>,

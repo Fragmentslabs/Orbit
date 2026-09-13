@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
-import { CheckIcon, CodeXml, Folder, HardDriveIcon, ImageOff, MessageSquare, RefreshCw, Search, Trash2, X } from "lucide-react"
+import { CheckIcon, CodeXml, FileText, Folder, HardDriveIcon, ImageOff, MessageSquare, RefreshCw, Search, Trash2, X } from "lucide-react"
 import { mediaKind, thumbUrl, type MediaEntry, type MediaSource } from "@shared/media"
 import { folderKey, normalizeFolderName } from "@shared/chat"
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog"
@@ -83,8 +83,17 @@ function Thumb({ entry, selected, selecting, onToggle, onOpen }: {
   // Artefato sem miniatura (captura falhou) ou imagem quebrada caem no ícone —
   // o tile continua clicável, o ativo ainda existe.
   const preview = thumbUrl(entry)
-  const isArtifact = mediaKind(entry) === "artifact"
-  const FallbackIcon = isArtifact ? CodeXml : ImageOff
+  const kind = mediaKind(entry)
+  const isArtifact = kind === "artifact"
+  const isDocument = kind === "document"
+  const FallbackIcon = isDocument ? FileText : isArtifact ? CodeXml : ImageOff
+  // Selo por tipo: o grid mistura imagem, página e documento, e o clique faz
+  // coisas diferentes em cada um — sem o selo a diferença é invisível.
+  const badge = isDocument
+    ? (entry.formats ?? []).map((f) => f.toUpperCase()).join("/") || "DOC"
+    : isArtifact
+      ? "HTML"
+      : null
 
   return (
     <div
@@ -113,12 +122,10 @@ function Thumb({ entry, selected, selecting, onToggle, onOpen }: {
           />
         )}
       </button>
-      {isArtifact && (
-        // O grid mistura imagem e página: sem o selo, um artefato parece um
-        // screenshot e o clique (que abre uma aba, não um lightbox) surpreende.
+      {badge && (
         <span className="pointer-events-none absolute right-1.5 top-1.5 flex items-center gap-1 rounded bg-background/85 px-1.5 py-0.5 text-[10px] font-medium text-foreground">
-          <CodeXml className="size-3" />
-          HTML
+          {isDocument ? <FileText className="size-3" /> : <CodeXml className="size-3" />}
+          {badge}
         </span>
       )}
       <button
@@ -318,7 +325,10 @@ export function MediaGallery() {
    */
   const openEntry = useCallback(
     (entry: MediaEntry) => {
-      if (mediaKind(entry) !== "artifact") {
+      const kind = mediaKind(entry)
+      // Documento abre na aba do painel igual ao artefato: o preview dele é
+      // HTML, e o lightbox só sabe mostrar <img>.
+      if (kind !== "artifact" && kind !== "document") {
         setPreview(entry)
         return
       }
