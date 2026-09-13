@@ -39,6 +39,19 @@ const A4_HEIGHT = 1123
 /** Nunca amplia além do tamanho natural: acima de 794px o texto ficaria
  *  artificialmente grande em relação ao que sai impresso. */
 const MAX_SCALE = 1
+/**
+ * Teto de altura do preview, como fração da JANELA — e não em pixels fixos.
+ *
+ * Uma A4 inteira na largura do chat passa de 900px e domina a conversa; um
+ * teto baixo demais devolve um selo ilegível. O que decide se o card "domina"
+ * não é o número de pixels, é quanto da tela ele ocupa: 72% da altura visível
+ * deixa o documento grande e ainda mostra que há conversa em volta, num
+ * monitor pequeno ou grande.
+ *
+ * O preview mostra o TOPO da folha, cortado, com esmaecimento na base; ver o
+ * documento completo é o clique, o botão de expandir ou a aba do painel.
+ */
+const PREVIEW_VIEWPORT_RATIO = 0.72
 
 const FORMAT_LABEL: Record<DocumentFormat, string> = { pdf: "PDF", docx: "DOCX" }
 
@@ -74,7 +87,22 @@ export function DocumentPartView({
     observer.observe(el)
     return () => observer.disconnect()
   }, [])
+
+  // Altura da janela para o teto proporcional. Não dá para usar 72vh em CSS
+  // puro porque o `clipped` (o esmaecimento) precisa saber se houve corte.
+  const [viewportHeight, setViewportHeight] = useState(() =>
+    typeof window === "undefined" ? 900 : window.innerHeight,
+  )
+  useEffect(() => {
+    const onResize = () => setViewportHeight(window.innerHeight)
+    window.addEventListener("resize", onResize)
+    return () => window.removeEventListener("resize", onResize)
+  }, [])
+
   const scale = Math.min(MAX_SCALE, (boxWidth || A4_WIDTH) / A4_WIDTH)
+  const fullHeight = Math.round(A4_HEIGHT * scale)
+  const previewHeight = Math.min(fullHeight, Math.round(viewportHeight * PREVIEW_VIEWPORT_RATIO))
+  const clipped = fullHeight > previewHeight
 
   // Mesmo motivo do artefato: update_document reescreve os arquivos no lugar,
   // então a URL sozinha não distingue as revisões.
@@ -165,25 +193,46 @@ export function DocumentPartView({
         </div>
 
         {/*
-          A folha ocupa a largura inteira do card e a altura sai da proporção.
-          Antes da primeira medição a escala é 1 (altura de uma A4 inteira);
-          quando o ResizeObserver reporta a largura real, o bloco encolhe para
-          a proporção correta — um ajuste só, no primeiro layout.
+          A folha ocupa a largura inteira do card, com a altura limitada pelo
+          teto: o que aparece é o topo da página, no tamanho em que ela será
+          impressa. A escala continua vindo da largura — cortar a altura
+          preserva o tamanho do texto, enquanto reduzir a escala o encolheria.
         */}
-        <div ref={frameBoxRef} className="overflow-hidden bg-white">
-          <div style={{ height: Math.round(A4_HEIGHT * scale) }}>
-            <ArtifactFrame
-              src={src}
-              title={part.title}
-              nonce={nonce}
-              style={{
-                width: A4_WIDTH,
-                height: A4_HEIGHT,
-                transform: `scale(${scale})`,
-                transformOrigin: "top left",
-              }}
-            />
-          </div>
+        <div
+          ref={frameBoxRef}
+          role="button"
+          tabIndex={0}
+          title={t("artifacts.expand")}
+          onClick={() => setExpanded(true)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" || e.key === " ") setExpanded(true)
+          }}
+          className="relative cursor-zoom-in overflow-hidden bg-white"
+          style={{ height: previewHeight }}
+        >
+          {/*
+            pointer-events-none no iframe: com a altura cortada, a roda do
+            mouse rolaria o DOCUMENTO dentro de uma janelinha em vez da
+            conversa — uma armadilha de rolagem. Inerte, o preview deixa a
+            conversa rolar normalmente e o clique abre o documento inteiro.
+          */}
+          <ArtifactFrame
+            src={src}
+            title={part.title}
+            nonce={nonce}
+            className="pointer-events-none"
+            style={{
+              width: A4_WIDTH,
+              height: A4_HEIGHT,
+              transform: `scale(${scale})`,
+              transformOrigin: "top left",
+            }}
+          />
+          {clipped && (
+            // Esmaecimento na base: sem ele o corte parece conteúdo faltando,
+            // e não uma página que continua.
+            <div className="pointer-events-none absolute inset-x-0 bottom-0 h-12 bg-gradient-to-t from-white to-transparent" />
+          )}
         </div>
       </div>
 
