@@ -35,6 +35,19 @@ async function loadPdfParse(): Promise<typeof import('pdf-parse').PDFParse> {
   return PDFParse
 }
 
+/**
+ * Texto POR PÁGINA — a unidade que a camada de documentos usa para servir um
+ * trecho sem carregar o resto (ver documents.ts). O pdf-parse já devolve
+ * `pages[]`; páginas vazias (só imagem, sem camada de texto) são preservadas
+ * para a numeração continuar batendo com a do documento real.
+ */
+export async function extractPdfPages(bytes: Uint8Array): Promise<{ num: number; text: string }[]> {
+  const PDFParse = await loadPdfParse()
+  const parser = new PDFParse(bytes)
+  const result = await parser.getText()
+  return result.pages.map((page) => ({ num: page.num, text: page.text.trim() }))
+}
+
 export async function extractPdfText(dataUrl: string): Promise<string> {
   const bytes = dataUrlToBytes(dataUrl)
   const PDFParse = await loadPdfParse()

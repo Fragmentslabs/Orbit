@@ -3,6 +3,13 @@ import fs from 'node:fs/promises'
 import path from 'node:path'
 import { z } from 'zod'
 import { IGNORED_DIRS, resolveSafePath, type ToolContext } from './context'
+import {
+  documentHeader,
+  extractDocumentFile,
+  isDocumentPath,
+  pageLabel,
+  pageWindow,
+} from '../documents'
 
 /**
  * Ferramentas de arquivo portadas do opencode (read/write/edit/ls/glob/grep)
@@ -14,17 +21,43 @@ const MAX_LINE_LENGTH = 2000
 const MAX_GREP_MATCHES = 100
 const MAX_GLOB_RESULTS = 200
 
+/** Quantas páginas de documento uma leitura devolve por padrão. Baixo de
+ *  propósito: o ponto da paginação é o agente pedir mais quando precisar, não
+ *  arrastar o documento inteiro para o contexto em duas chamadas. */
+const DEFAULT_DOC_PAGES = 3
+const MAX_DOC_PAGES = 20
+
+/**
+ * Leitura de documento (PDF/DOCX/planilha) com a MESMA semântica offset/limit
+ * do arquivo de texto — só que a unidade é página, não linha. Reaproveitar o
+ * `read` em vez de criar uma tool nova é deliberado: o modelo já sabe paginar
+ * com offset/limit, e um `read` que engasga em .pdf é justamente o bug que
+ * isto corrige.
+ */
+async function readDocument(file: string, offset?: number, limit?: number): Promise<string> {
+  const doc = await extractDocumentFile(file)
+  if (doc.totalPages === 0) {
+    return `<document path="${file}" kind="${doc.kind}">\n(nenhum texto extraível — provavelmente um PDF digitalizado, sem camada de texto)\n</document>`
+  }
+  const { from, to, pages } = pageWindow(doc, offset, limit, DEFAULT_DOC_PAGES, MAX_DOC_PAGES)
+  const body = pages
+    .map((page) => `--- ${pageLabel(page, doc.kind)} ---\n${page.text || '(página sem texto)'}`)
+    .join('\n\n')
+  return `${documentHeader(file, doc, { from, to })}\n${body}\n</document>`
+}
+
 export function createReadTool(ctx: ToolContext) {
   return tool({
     description:
-      'Reads a text file. Returns the content with line numbers. Use offset/limit for large files.',
+      'Reads a file. For text files, returns the content with line numbers (offset/limit = lines). Also reads PDF, DOCX and spreadsheets, returning the extracted text a few pages at a time (offset/limit = pages; in a spreadsheet, each sheet is a page) — never the whole document at once, so use grep to locate the relevant part of a long document and then read around it.',
     inputSchema: z.object({
       filePath: z.string().describe('File path (relative to the working folder or absolute)'),
-      offset: z.number().optional().describe('Start line (1-indexed)'),
-      limit: z.number().optional().describe('Number of lines to read'),
+      offset: z.number().optional().describe('Start line — or start page, in a document (1-indexed)'),
+      limit: z.number().optional().describe('Number of lines — or pages, in a document'),
     }),
     execute: async ({ filePath, offset, limit }) => {
       const file = resolveSafePath(ctx, filePath)
+      if (isDocumentPath(file)) return readDocument(file, offset, limit)
       const raw = await fs.readFile(file, 'utf8')
       const lines = raw.split('\n')
       const start = Math.max((offset ?? 1) - 1, 0)
@@ -188,7 +221,8 @@ export function createGlobTool(ctx: ToolContext) {
 
 export function createGrepTool(ctx: ToolContext) {
   return tool({
-    description: 'Searches for a pattern (regex) in file contents.',
+    description:
+      'Searches for a pattern (regex) in file contents. Also searches inside PDF, DOCX and spreadsheets, reporting the page instead of the line (file:p12) — this is how you locate the relevant part of a long document before reading it.',
     inputSchema: z.object({
       pattern: z.string().describe('Regular expression'),
       dirPath: z.string().optional().describe('Base directory (default: working folder)'),
@@ -203,6 +237,28 @@ export function createGrepTool(ctx: ToolContext) {
       for await (const file of walkFiles(base, ctx.abort)) {
         const rel = path.relative(base, file).replace(/\\/g, '/')
         if (includeRegex && !includeRegex.test(rel)) continue
+
+        // Documento: busca no texto extraído (cacheado) e reporta a PÁGINA.
+        // Sem isto o walk pulava o arquivo — PDF é binário e cai no teste de
+        // \0 abaixo —, então o agente nem sabia que havia conteúdo ali.
+        if (isDocumentPath(file)) {
+          try {
+            const doc = await extractDocumentFile(file)
+            for (const page of doc.pages) {
+              for (const line of page.text.split('\n')) {
+                if (!regex.test(line)) continue
+                results.push(`${rel}:p${page.num}: ${line.trim().slice(0, 250)}`)
+                break // uma ocorrência por página basta para localizar o trecho
+              }
+              if (results.length >= MAX_GREP_MATCHES) break
+            }
+          } catch {
+            // documento ilegível (protegido, corrompido) — segue o walk
+          }
+          if (results.length >= MAX_GREP_MATCHES) break
+          continue
+        }
+
         let content: string
         try {
           const stat = await fs.stat(file)

@@ -1,6 +1,7 @@
 import fs from 'node:fs/promises'
 import { Dirent } from 'node:fs'
 import path from 'node:path'
+import { isDocumentPath } from '../document-pages'
 
 /**
  * Scanner determinístico do /init: varre a estrutura do projeto e os arquivos
@@ -39,6 +40,12 @@ export interface ProjectScan {
   subprojects: Subproject[]
   /** Arquivos de documentação encontrados (*.md em docs/, especificações, etc.) */
   docs: string[]
+  /**
+   * Documentos binários do repositório (PDF/DOCX/planilha) — spec, contrato,
+   * requisitos, modelo de dados em planilha. Ficam separados dos `docs`
+   * porque exigem leitura paginada (read/grep entram neles pela camada de
+   * documents.ts); listá-los junto sugeriria que são texto simples. */
+  binaryDocs: string[]
   /** Arquivos de schema/modelo de dados (*.sql, *.prisma, etc.) */
   schemas: string[]
 }
@@ -154,6 +161,7 @@ export async function scanProject(directory: string): Promise<ProjectScan> {
     configExcerpts: [],
     subprojects: [],
     docs: [],
+    binaryDocs: [],
     schemas: [],
   }
 
@@ -276,6 +284,11 @@ export async function scanProject(directory: string): Promise<ProjectScan> {
             const ext = path.extname(e.name).toLowerCase()
             if (ext === '.md' || (e.name.endsWith('.md') && e.name !== 'README.md')) {
               if (scan.docs.length < 20) scan.docs.push(rel)
+            } else if (isDocumentPath(e.name)) {
+              // Spec em PDF, requisitos em DOCX, modelo de dados em planilha:
+              // fazem parte do projeto tanto quanto um .md, e antes da camada
+              // de documentos o /init não tinha como nem saber que existiam.
+              if (scan.binaryDocs.length < 20) scan.binaryDocs.push(rel)
             } else if (ext === '.sql' || ext === '.prisma' || e.name.endsWith('.prisma')) {
               if (scan.schemas.length < 10) scan.schemas.push(rel)
             }
@@ -309,6 +322,12 @@ export function describeScan(scan: ProjectScan): string {
     section('Estrutura', '```\n' + scan.structure.join('\n') + '\n```'),
     section('Subprojetos detectados', subprojectsBlock),
     section('Documentação encontrada', scan.docs.map((d) => `- ${d}`).join('\n')),
+    section(
+      'Documentos do projeto (PDF/DOCX/planilha)',
+      scan.binaryDocs.length > 0
+        ? `${scan.binaryDocs.map((d) => `- ${d}`).join('\n')}\n\nLeia com \`read\` (devolve página a página) e localize trechos com \`grep\` (reporta \`arquivo:p12\`). Não tente lê-los como texto simples.`
+        : '',
+    ),
     section('Schemas de banco', scan.schemas.map((s) => `- ${s}`).join('\n')),
     scan.readmeExcerpt ? section('README (trecho)', scan.readmeExcerpt) : '',
     ...scan.configExcerpts.map((c) => section(`Arquivo: ${c.file}`, '```\n' + c.content + '\n```')),
