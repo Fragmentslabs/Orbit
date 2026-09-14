@@ -1367,7 +1367,11 @@ async function runChatTurn(win: BrowserWindow, input: SendMessageInput): Promise
             // create_document/update_document: o documento vira parte da
             // resposta (renderizado pelo ai/document-part). Mesmo contrato do
             // artefato: a mensagem persiste a URL do preview, nunca o conteúdo.
-            if (part.toolName === 'create_document' || part.toolName === 'update_document') {
+            if (
+              part.toolName === 'create_document' ||
+              part.toolName === 'update_document' ||
+              part.toolName === 'docx_edit'
+            ) {
               const output = part.output as
                 | {
                     documentId?: string

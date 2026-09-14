@@ -52,6 +52,11 @@ const NATIVE_TOOLS = new Set([
   'update_document',
   'read_document',
   'list_documents',
+  // Edicao de .docx: grava COPIA no storage do Orbit. Escrever no projeto do
+  // usuario so acontece com savePath, que a propria tool restringe ao pedido
+  // explicito — mesma convencao do panel_screenshot.
+  'docx_edit',
+  'docx_paragraphs',
   // Automação em lote na engine oculta (mesmo threat model do bash: o agente
   // já executa código arbitrário; o script roda isolado num utilityProcess)
   'run_browser_script',

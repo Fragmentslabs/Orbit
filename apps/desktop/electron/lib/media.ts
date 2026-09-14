@@ -17,6 +17,7 @@ import {
 } from '@shared/media'
 import { listKeys, readJson } from './storage'
 import { buildDocx } from './docx-package'
+import mammoth from 'mammoth'
 import { parseMarkdown, renderHtml, type DocumentStyle } from './document-render'
 
 export type { MediaEntry, MediaFilter, MediaSource, MediaUsage }
@@ -939,3 +940,72 @@ export async function attachDocumentMessage(
 }
 
 export type { MediaKind }
+
+/**
+ * Documento DERIVADO: uma cópia editada de um .docx que veio de fora.
+ *
+ * Diferente do saveDocument, aqui NÃO há fonte em Markdown — o arquivo é o
+ * original do usuário com o texto trocado, e é justamente isso que preserva a
+ * formatação. Por isso o .docx é gravado como está e o preview é gerado à
+ * parte (mammoth → HTML), só para o card da conversa ter o que mostrar.
+ *
+ * O original nunca é tocado: a cópia vive no storage do Orbit e sai de lá pelo
+ * botão de baixar.
+ */
+export async function saveDerivedDocx(
+  docx: Buffer,
+  meta: SaveDocumentMeta & { sourceName?: string },
+): Promise<DocumentRef> {
+  const base = `doc_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`
+  const dir = documentsDir()
+  await fsp.mkdir(dir, { recursive: true })
+  await fsp.writeFile(path.join(dir, `${base}.docx`), docx)
+
+  // Preview: o HTML do mammoth dentro do mesmo CSS de documento, para o card
+  // ficar igual ao dos documentos que o Orbit escreve.
+  let previewHtml: string
+  try {
+    const { value } = await mammoth.convertToHtml({ buffer: docx })
+    previewHtml = renderHtml([], meta.title).replace('</body>', `${value}\n</body>`)
+  } catch {
+    previewHtml = renderHtml(parseMarkdown(`# ${meta.title}\n\n(pré-visualização indisponível)`), meta.title)
+  }
+  await fsp.writeFile(path.join(dir, `${base}.html`), previewHtml, 'utf8')
+  const thumb = await captureThumbnail(`${base}.html`)
+
+  const id = `${base}.md` // o id do registro segue o padrão dos documentos
+  await fsp.writeFile(
+    path.join(dir, id),
+    `<!-- cópia editada de ${meta.sourceName ?? 'documento anexado'}; o conteúdo real está no .docx -->\n`,
+    'utf8',
+  )
+  const entry: MediaEntry = {
+    id,
+    path: path.join(dir, id),
+    size: docx.length,
+    createdAt: Date.now(),
+    source: 'chat',
+    kind: 'document',
+    sessionId: meta.sessionId,
+    messageId: meta.messageId,
+    directory: meta.directory,
+    folderId: meta.folderId,
+    name: meta.title,
+    formats: ['docx'],
+    thumb,
+    revision: 1,
+  }
+  await withIndexLock(async () => {
+    const entries = await readIndex()
+    entries.push(entry)
+    await writeIndex(entries)
+  })
+  return {
+    id,
+    title: meta.title,
+    previewUrl: `${ARTIFACT_SCHEME}://${base}.html`,
+    formats: ['docx'],
+    thumb,
+    revision: 1,
+  }
+}

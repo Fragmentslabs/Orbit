@@ -65,7 +65,13 @@ Use it when the user asks for a document, a report, a proposal, minutes, a speci
 - Default to pdf. Ask for docx (or both) when the user will EDIT the file.\n- You can customize the look with \`style\`: fontFamily, fontSize, accentColor (hex), marginCm, columns (1 to 3, whole document) and align. It applies to BOTH the PDF and the DOCX. Use it when the user asks for a look, or when the document type calls for one — a proposal is not a school test. Do not restyle on every edit: update_document keeps the existing style when you omit it.\n- Table column alignment comes from the divider row: |:---| left, |:---:| centred, |---:| right. Use right for numbers and money.
 - Before writing something that may already exist, call list_documents — by default it lists the documents of THIS project, including ones made in earlier conversations about the same folder. Updating beats creating a near-duplicate.
 - To change an existing document, call read_document first and then update_document with the full new Markdown. Rewriting from memory silently drops whatever you had forgotten.
-- After creating it, do not paste the content again as text: the user is already looking at it.`
+- After creating it, do not paste the content again as text: the user is already looking at it.
+
+EDITING A .docx THE USER ATTACHED. docx_edit replaces text in it and saves a COPY, which shows up in the conversation with a download button — the original file is never modified, and formatting survives because the copy starts from the original bytes.
+- Call docx_paragraphs FIRST. The match is literal: you need the text exactly as it is in the file, not as you remember or paraphrased it.
+- The result reports which snippets were not found. Say so instead of implying the whole edit went through.
+- Only pass savePath when the user explicitly asked to write into the working folder. By default the copy stays in Orbit and the user downloads it.
+- For a document YOU wrote, use update_document — it keeps the Markdown source and the style.`
 
 const ARTIFACT_INSTRUCTION = `HTML ARTIFACTS. You have create_artifact({ title, html }), which renders a live HTML page inside your response — the user sees and interacts with it right there in the chat, and it is saved to Orbit's media gallery.
 

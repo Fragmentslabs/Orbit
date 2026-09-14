@@ -111,7 +111,9 @@ export async function saveSessionDocument(
   // No PDF, o motivo é rasterizar: um PDF digitalizado não tem camada de
   // texto, e a única forma de lê-lo é renderizar a página e olhar. Sem os
   // bytes, esse documento seria permanentemente ilegível.
-  if (kind === 'spreadsheet' || kind === 'pdf') {
+  // DOCX entra pelo mesmo motivo do PDF, com outro fim: editar preservando
+  // a formatacao so e possivel partindo do arquivo ORIGINAL.
+  if (kind === 'spreadsheet' || kind === 'pdf' || kind === 'docx') {
     await fsp.writeFile(path.join(sessionDir(sessionId), `${doc.id}.bin`), bytes)
   }
   return { doc, pages: extracted.pages }
@@ -186,8 +188,8 @@ export async function searchSessionDocuments(
 }
 
 /**
- * Bytes originais do anexo — a fonte tipada do sheet_query e a fonte da
- * rasterização do pdf_view_page. null quando o tipo não guarda original ou
+ * Bytes originais do anexo — a fonte tipada do sheet_query, a fonte da
+ * rasterização do pdf_view_page e a base da cópia editada do docx_edit. null quando o tipo não guarda original ou
  * quando o anexo é anterior a esta cópia existir; nesse caso quem chama avisa
  * em vez de devolver resultado errado.
  */
