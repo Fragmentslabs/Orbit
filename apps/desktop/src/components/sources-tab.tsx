@@ -1,0 +1,397 @@
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { useTranslation } from "react-i18next"
+import {
+  ArrowDownToLine,
+  ArrowUpToLine,
+  FileSpreadsheet,
+  FileText,
+  FileType2,
+  FolderOpen,
+  HardDriveIcon,
+  Loader2,
+  MessageSquare,
+  Plus,
+  RefreshCw,
+  Trash2,
+} from "lucide-react"
+import { docsApi, type SourceDocument } from "@/src/lib/ipc"
+import { useSessionStore } from "@/src/stores/session-store"
+import { cn } from "@/lib/utils"
+
+/**
+ * Aba Fontes: os documentos com que se CONVERSA.
+ *
+ * É o outro lado da galeria de mídia. Lá ficam as saídas do agente (imagens,
+ * artefatos, documentos gerados); aqui ficam as entradas — e os dois ciclos
+ * de vida são opostos: apagar um artefato libera espaço, apagar uma fonte
+ * muda as respostas seguintes. Por isso a exclusão em lote e a limpeza
+ * automática da galeria não alcançam nada desta lista.
+ *
+ * Duas áreas, porque a diferença é de INTENÇÃO:
+ *
+ * - "Fontes da pasta" é o corpus declarado, válido para todas as conversas
+ *   daquela pasta.
+ * - "Desta conversa" são os anexos que você jogou no chat para perguntar uma
+ *   coisa — o que é a maioria dos anexos, e não vira corpus sozinho.
+ *
+ * Nada escorre de baixo para cima automaticamente: fonte errada é silenciosa
+ * e muda respostas em OUTRAS conversas, enquanto o clique a mais é visível na
+ * hora. Mas o anexo aparece aqui assim que chega, com o botão do lado — o
+ * problema de um gesto que ninguém adivinha se resolve mostrando, não
+ * compartilhando por padrão. Arrastar entre as áreas faz o mesmo, e soltar o
+ * arquivo direto na área certa já decide o escopo.
+ *
+ * Existe só no modo chat. No modo código a pergunta já tem resposta: o
+ * repositório é o corpus, e `read`/`grep` leem PDF, DOCX e planilha paginando
+ * igual — um documento na pasta de trabalho já está ao alcance do agente sem
+ * precisar ser declarado fonte em lugar nenhum.
+ */
+
+const ACCEPT = ".pdf,.docx,.xlsx,.xls,.ods,.csv"
+
+/** Tipo de arrasto interno — distingue mover um documento entre as áreas de
+ *  um arquivo vindo de fora do app. */
+const DRAG_MIME = "application/x-orbit-document"
+
+/** Teto por arquivo — barreira contra arquivo patológico, não limite de uso. */
+const MAX_FILE_BYTES = 100 * 1024 * 1024
+
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+}
+
+function KindIcon({ kind, className }: { kind: SourceDocument["kind"]; className?: string }) {
+  const Icon = kind === "spreadsheet" ? FileSpreadsheet : kind === "docx" ? FileType2 : FileText
+  return <Icon className={className} />
+}
+
+/** Lê o arquivo como base64 — é o formato que o IPC do anexo já usa. */
+function readAsBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => {
+      const result = String(reader.result ?? "")
+      // O data URL vem como "data:<mime>;base64,<dados>"; o main só quer os dados.
+      resolve(result.slice(result.indexOf(",") + 1))
+    }
+    reader.onerror = () => reject(reader.error ?? new Error("falha ao ler o arquivo"))
+    reader.readAsDataURL(file)
+  })
+}
+
+function DocumentRow({
+  doc,
+  originLabel,
+  moveLabel,
+  MoveIcon,
+  onMove,
+  onRemove,
+}: {
+  doc: SourceDocument
+  originLabel?: string
+  moveLabel?: string
+  MoveIcon?: typeof ArrowUpToLine
+  onMove?: () => void
+  onRemove: () => void
+}) {
+  const { t, i18n } = useTranslation()
+  const unit =
+    doc.kind === "spreadsheet"
+      ? t("sources.unitSheets", { count: doc.totalPages })
+      : doc.kind === "docx"
+        ? t("sources.unitBlocks", { count: doc.totalPages })
+        : t("sources.unitPages", { count: doc.totalPages })
+
+  return (
+    <li
+      draggable
+      onDragStart={(e) => {
+        e.dataTransfer.setData(DRAG_MIME, doc.id)
+        e.dataTransfer.effectAllowed = "move"
+      }}
+      className="group flex cursor-grab items-center gap-2.5 rounded-md px-2 py-2 active:cursor-grabbing hover:bg-accent/50"
+    >
+      <KindIcon kind={doc.kind} className="size-4 shrink-0 text-muted-foreground" />
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-xs font-medium text-foreground">{doc.filename}</p>
+        <p className="truncate text-[11px] text-muted-foreground">
+          {doc.id} · {unit}
+          {doc.sizeBytes ? ` · ${formatBytes(doc.sizeBytes)}` : ""}
+          {" · "}
+          {new Date(doc.createdAt).toLocaleDateString(i18n.language, {
+            day: "2-digit",
+            month: "2-digit",
+          })}
+          {originLabel ? ` · ${originLabel}` : ""}
+          {doc.truncated ? ` · ${t("sources.truncated")}` : ""}
+        </p>
+      </div>
+      {onMove && MoveIcon && (
+        <button
+          type="button"
+          onClick={onMove}
+          className="flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-md text-muted-foreground opacity-0 group-hover:opacity-100 hover:bg-accent hover:text-foreground"
+          title={moveLabel}
+        >
+          <MoveIcon className="size-3.5" />
+        </button>
+      )}
+      <button
+        type="button"
+        onClick={onRemove}
+        className="flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-md text-muted-foreground opacity-0 group-hover:opacity-100 hover:bg-destructive/10 hover:text-destructive"
+        title={t("sources.remove")}
+      >
+        <Trash2 className="size-3.5" />
+      </button>
+    </li>
+  )
+}
+
+export function SourcesTab({ sessionId }: { sessionId?: string }) {
+  const { t } = useTranslation()
+  const [shared, setShared] = useState<SourceDocument[]>([])
+  const [own, setOwn] = useState<SourceDocument[]>([])
+  const [folderId, setFolderId] = useState<string | null>(null)
+  const [usage, setUsage] = useState(0)
+  const [loading, setLoading] = useState(true)
+  const [busy, setBusy] = useState(false)
+  const [dropZone, setDropZone] = useState<"shared" | "own" | null>(null)
+  const [errors, setErrors] = useState<string[]>([])
+  const sharedInput = useRef<HTMLInputElement>(null)
+  const ownInput = useRef<HTMLInputElement>(null)
+
+  const folders = useSessionStore((s) => s.folders)
+  const sessions = useSessionStore((s) => s.sessions)
+  const folderName = useMemo(
+    () => folders.find((f) => f.id === folderId)?.name ?? null,
+    [folders, folderId],
+  )
+
+  const refresh = useCallback(async () => {
+    if (!sessionId) {
+      setShared([])
+      setOwn([])
+      setLoading(false)
+      return
+    }
+    const result = await docsApi.list(sessionId)
+    setShared(result.shared)
+    setOwn(result.own)
+    setFolderId(result.folderId)
+    setUsage(result.usage)
+    setLoading(false)
+  }, [sessionId])
+
+  useEffect(() => {
+    setLoading(true)
+    void refresh()
+  }, [refresh])
+
+  // O anexo também chega pela conversa (e por outro chat da mesma pasta): sem
+  // este aviso, a aba aberta ao lado mostraria a lista de antes.
+  useEffect(() => docsApi.onChanged(() => void refresh()), [refresh])
+
+  const addFiles = useCallback(
+    async (files: File[], toShared: boolean) => {
+      if (!sessionId || files.length === 0) return
+      setBusy(true)
+      setErrors([])
+      const payload: { filename: string; data: string }[] = []
+      const failed: string[] = []
+      for (const file of files) {
+        if (file.size > MAX_FILE_BYTES) {
+          failed.push(t("sources.tooBig", { name: file.name, size: formatBytes(MAX_FILE_BYTES) }))
+          continue
+        }
+        try {
+          payload.push({ filename: file.name, data: await readAsBase64(file) })
+        } catch (err) {
+          failed.push(`${file.name}: ${(err as Error).message}`)
+        }
+      }
+      if (payload.length > 0) {
+        const result = await docsApi.add(sessionId, payload, toShared)
+        failed.push(...result.errors)
+      }
+      setErrors(failed)
+      setBusy(false)
+      await refresh()
+    },
+    [sessionId, refresh, t],
+  )
+
+  const move = useCallback(
+    async (docId: string, toShared: boolean) => {
+      if (!sessionId) return
+      const result = await docsApi.setShared(sessionId, docId, toShared)
+      setErrors(result.ok ? [] : [result.error])
+      await refresh()
+    },
+    [sessionId, refresh],
+  )
+
+  const remove = useCallback(
+    async (docId: string) => {
+      if (!sessionId) return
+      await docsApi.remove(sessionId, docId)
+      await refresh()
+    },
+    [sessionId, refresh],
+  )
+
+  /** Soltar na área decide o escopo: arquivo de fora entra ali, documento
+   *  arrastado da outra área muda de lado. */
+  const handleDrop = useCallback(
+    (e: React.DragEvent, toShared: boolean) => {
+      e.preventDefault()
+      setDropZone(null)
+      const dragged = e.dataTransfer.getData(DRAG_MIME)
+      if (dragged) {
+        void move(dragged, toShared)
+        return
+      }
+      void addFiles(Array.from(e.dataTransfer.files), toShared)
+    },
+    [addFiles, move],
+  )
+
+  if (!sessionId) {
+    return (
+      <div className="flex flex-1 items-center justify-center p-6 text-center text-xs text-muted-foreground">
+        {t("sources.noSession")}
+      </div>
+    )
+  }
+
+  const section = (
+    kind: "shared" | "own",
+    title: string,
+    hint: string,
+    docs: SourceDocument[],
+    input: React.RefObject<HTMLInputElement>,
+  ) => {
+    const isShared = kind === "shared"
+    return (
+      <section
+        onDragOver={(e) => {
+          e.preventDefault()
+          setDropZone(kind)
+        }}
+        onDragLeave={() => setDropZone((z) => (z === kind ? null : z))}
+        onDrop={(e) => handleDrop(e, isShared)}
+        className={cn(
+          "flex flex-col rounded-lg border border-transparent px-2 py-2 transition-colors",
+          dropZone === kind && "border-dashed border-primary/60 bg-primary/5",
+        )}
+      >
+        <div className="flex items-center gap-2 px-1 pb-1">
+          <p className="flex flex-1 items-center gap-1.5 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+            {isShared ? <FolderOpen className="size-3" /> : <MessageSquare className="size-3" />}
+            {title}
+          </p>
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => input.current?.click()}
+            className="flex cursor-pointer items-center gap-1 rounded-md px-1.5 py-1 text-[11px] text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-60"
+          >
+            {busy ? <Loader2 className="size-3 animate-spin" /> : <Plus className="size-3" />}
+            {t("sources.add")}
+          </button>
+        </div>
+        <input
+          ref={input}
+          type="file"
+          accept={ACCEPT}
+          multiple
+          className="hidden"
+          onChange={(e) => {
+            void addFiles(Array.from(e.target.files ?? []), isShared)
+            e.target.value = ""
+          }}
+        />
+        {docs.length === 0 ? (
+          <p className="px-1 py-2 text-[11px] text-muted-foreground/80">{hint}</p>
+        ) : (
+          <ul className="flex flex-col">
+            {docs.map((doc) => (
+              <DocumentRow
+                key={doc.id}
+                doc={doc}
+                originLabel={
+                  isShared && doc.sessionId !== sessionId
+                    ? sessions.find((s) => s.id === doc.sessionId)?.title
+                    : undefined
+                }
+                moveLabel={isShared ? t("sources.unshare") : t("sources.share")}
+                MoveIcon={isShared ? ArrowDownToLine : ArrowUpToLine}
+                onMove={folderId ? () => void move(doc.id, !isShared) : undefined}
+                onRemove={() => void remove(doc.id)}
+              />
+            ))}
+          </ul>
+        )}
+      </section>
+    )
+  }
+
+  return (
+    <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
+      <div className="flex items-center gap-2 border-b border-border/60 px-4 py-3">
+        <p className="flex-1 text-sm font-medium text-foreground">{t("sources.title")}</p>
+        <button
+          type="button"
+          onClick={() => void refresh()}
+          className="flex size-7 cursor-pointer items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
+          title={t("sources.refresh")}
+        >
+          <RefreshCw className="size-3.5" />
+        </button>
+      </div>
+
+      {errors.length > 0 && (
+        <div className="border-b border-border/60 bg-destructive/10 px-4 py-2 text-[11px] text-destructive">
+          {errors.map((error) => (
+            <p key={error}>{error}</p>
+          ))}
+        </div>
+      )}
+
+      <div className="flex-1 overflow-y-auto p-2">
+        {loading ? (
+          <div className="flex items-center justify-center gap-2 p-6 text-xs text-muted-foreground">
+            <Loader2 className="size-3.5 animate-spin" />
+            {t("sources.loading")}
+          </div>
+        ) : (
+          <div className="flex flex-col gap-1">
+            {folderName &&
+              section(
+                "shared",
+                t("sources.sharedTitle", { folder: folderName }),
+                t("sources.sharedHint"),
+                shared,
+                sharedInput,
+              )}
+            {section("own", t("sources.ownTitle"), t("sources.ownHint"), own, ownInput)}
+            {!folderName && (
+              <p className="px-3 py-2 text-[11px] text-muted-foreground/80">
+                {t("sources.noFolderHint")}
+              </p>
+            )}
+          </div>
+        )}
+      </div>
+
+      {shared.length + own.length > 0 && (
+        <div className="flex items-center gap-1.5 border-t border-border/60 px-4 py-2 text-[11px] text-muted-foreground">
+          <HardDriveIcon className="size-3" />
+          {t("sources.usage", { count: shared.length + own.length, size: formatBytes(usage) })}
+        </div>
+      )}
+    </div>
+  )
+}

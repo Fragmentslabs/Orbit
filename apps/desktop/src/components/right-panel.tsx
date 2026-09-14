@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { useDroppable, useDndContext } from "@dnd-kit/core"
-import { CodeXml, FileCode, Globe, Folder, Images, MessageSquare, Terminal, X, PlusIcon, Bot, LoaderIcon, Loader2, XCircleIcon, Trash2, GripVertical } from "lucide-react"
+import { CodeXml, FileCode, Globe, Folder, Images, Library, MessageSquare, Terminal, X, PlusIcon, Bot, LoaderIcon, Loader2, XCircleIcon, Trash2, GripVertical } from "lucide-react"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -21,6 +21,7 @@ import { FoldersTab } from "@/src/components/folders-tab"
 import { DiffTab } from "@/src/components/diff-tab"
 import { MediaGallery } from "@/src/components/media-gallery"
 import { ArtifactTab } from "@/src/components/artifact-tab"
+import { SourcesTab } from "@/src/components/sources-tab"
 import { ProcessOutputDialog } from "@/src/components/process-output-dialog"
 import { useWorkspace } from "@/lib/workspace-context"
 import { usePanelStore, nextTabId, type TabType, type PanelTab } from "@/src/stores/panel-store"
@@ -47,6 +48,7 @@ function useTabMeta(): Record<TabType, TabMeta> {
     diff: { icon: FileCode, label: t("panel.tabs.diff.label"), description: t("panel.tabs.diff.description") },
     media: { icon: Images, label: t("panel.tabs.media.label"), description: t("panel.tabs.media.description") },
     artifact: { icon: CodeXml, label: t("panel.tabs.artifact.label"), description: t("panel.tabs.artifact.description") },
+    sources: { icon: Library, label: t("panel.tabs.sources.label"), description: t("panel.tabs.sources.description") },
   }
 }
 
@@ -209,6 +211,12 @@ function TabContent({ tab, sessionId, onUpdateTab }: { tab: PanelTab; sessionId?
           <ArtifactTab artifactId={tab.artifactId} title={tab.title} />
         </div>
       )
+    case "sources":
+      return (
+        <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
+          <SourcesTab sessionId={tab.sessionId ?? sessionId} />
+        </div>
+      )
   }
 }
 
@@ -273,8 +281,14 @@ function SelectorScreen({ onSelect, onOpenWorker }: {
       (Object.entries(tabMeta) as [TabType, TabMeta][]).filter(
         // "artifact" nunca entra no seletor: uma aba de artefato só existe
         // apontando para um artefato (abre pelo card na conversa ou pela
-        // galeria), nunca vazia.
-        ([type]) => type !== "artifact" && (mode !== "chat" || type === "chat" || type === "media"),
+        // galeria), nunca vazia. "sources" é o inverso — só no modo chat,
+        // porque no código o repositório já É o corpus e read/grep leem
+        // PDF/DOCX/planilha de lá sem precisar declarar fonte nenhuma.
+        ([type]) =>
+          type !== "artifact" &&
+          (type === "sources"
+            ? mode === "chat"
+            : mode !== "chat" || type === "chat" || type === "media"),
       ),
     [mode, tabMeta],
   )
@@ -429,8 +443,14 @@ export function RightPanel() {
       (Object.entries(tabMeta) as [TabType, TabMeta][]).filter(
         // "artifact" nunca entra no seletor: uma aba de artefato só existe
         // apontando para um artefato (abre pelo card na conversa ou pela
-        // galeria), nunca vazia.
-        ([type]) => type !== "artifact" && (mode !== "chat" || type === "chat" || type === "media"),
+        // galeria), nunca vazia. "sources" é o inverso — só no modo chat,
+        // porque no código o repositório já É o corpus e read/grep leem
+        // PDF/DOCX/planilha de lá sem precisar declarar fonte nenhuma.
+        ([type]) =>
+          type !== "artifact" &&
+          (type === "sources"
+            ? mode === "chat"
+            : mode !== "chat" || type === "chat" || type === "media"),
       ),
     [mode, tabMeta],
   )

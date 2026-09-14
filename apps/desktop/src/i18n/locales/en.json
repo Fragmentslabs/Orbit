@@ -662,6 +662,10 @@
       "artifact": {
         "label": "Artifact",
         "description": "HTML page produced by the assistant"
+      },
+      "sources": {
+        "label": "Sources",
+        "description": "Documents this conversation works with"
       }
     },
     "unreadMessages": "Unread messages"
@@ -2008,5 +2012,30 @@
   },
   "documents": {
     "exportFormat": "Export {{format}}"
+  },
+  "sources": {
+    "title": "Sources",
+    "add": "Add",
+    "refresh": "Refresh",
+    "remove": "Remove source",
+    "loading": "Loading sources…",
+    "noSession": "Open a conversation to see its sources.",
+    "tooBig": "{{name}}: larger than the {{size}} limit.",
+    "truncated": "cut at the size limit",
+    "unitPages_one": "{{count}} page",
+    "unitPages_other": "{{count}} pages",
+    "unitSheets_one": "{{count}} sheet",
+    "unitSheets_other": "{{count}} sheets",
+    "unitBlocks_one": "{{count}} block",
+    "unitBlocks_other": "{{count}} blocks",
+    "usage_one": "{{count}} source · {{size}}",
+    "usage_other": "{{count}} sources · {{size}}",
+    "sharedTitle": "“{{folder}}” sources",
+    "sharedHint": "Drop documents here to talk to them from any conversation in this folder.",
+    "ownTitle": "This conversation",
+    "ownHint": "Whatever you attach in the chat shows up here, and stays in this conversation.",
+    "noFolderHint": "This conversation is not in a folder. Move it into a sidebar folder to share sources across conversations.",
+    "share": "Add to the folder sources",
+    "unshare": "Keep in this conversation only"
   }
 }
