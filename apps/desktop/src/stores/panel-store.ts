@@ -1,6 +1,6 @@
 import { create } from "zustand"
 
-export type TabType = "chat" | "terminal" | "folders" | "browser" | "diff" | "media" | "artifact" | "sources"
+export type TabType = "chat" | "terminal" | "folders" | "browser" | "diff" | "media" | "artifact" | "sources" | "source"
 
 export interface PanelTab {
   id: string
@@ -16,6 +16,11 @@ export interface PanelTab {
   url?: string
   /** Aba Artefato: id do registro (art_xxx.html) que a aba renderiza. */
   artifactId?: string
+  /** Aba Fonte: documento aberto por uma citacao, e o trecho a grifar. */
+  sourceDocId?: string
+  sourcePage?: number
+  sourceFromLine?: number
+  sourceToLine?: number
 }
 
 export interface BrowserSelection {
@@ -70,6 +75,12 @@ interface PanelState {
   /** Abre (ou reaproveita) a aba que renderiza um artefato em tela cheia.
    *  Chamada pelo card na conversa e pela galeria. */
   openArtifactTab: (sessionId: string, artifactId: string, title: string) => void
+  /** Abre (ou reaproveita) a aba que mostra uma fonte no trecho citado.
+   *  Chamada pela citacao na conversa. */
+  openSourceTab: (
+    sessionId: string,
+    ref: { docId: string; page: number; fromLine?: number; toLine?: number; title: string },
+  ) => void
   getTabs: (sessionId: string) => PanelTab[]
   getActiveTabId: (sessionId: string) => string | null
   /** Atualiza o título das abas de chat que apontam para uma sessão (ex.: agente nomeou o chat). */
@@ -200,6 +211,43 @@ export const usePanelStore = create<PanelState>((set, get) => {
           title,
           sessionId,
           artifactId,
+        }
+        return {
+          rightPanelOpen: true,
+          tabsBySession: { ...state.tabsBySession, [sessionId]: [...tabs, tab] },
+          activeTabBySession: { ...state.activeTabBySession, [sessionId]: tab.id },
+        }
+      }),
+
+    openSourceTab: (sessionId, ref) =>
+      set((state) => {
+        const tabs = state.tabsBySession[sessionId] ?? []
+        // Uma aba por documento: clicar em outra citação do MESMO arquivo
+        // reaproveita a aba e só troca o trecho grifado — empilhar uma aba por
+        // citação encheria o painel numa resposta com dez referências.
+        const existing = tabs.find((t) => t.type === "source" && t.sourceDocId === ref.docId)
+        const patch = {
+          sourcePage: ref.page,
+          sourceFromLine: ref.fromLine,
+          sourceToLine: ref.toLine,
+        }
+        if (existing) {
+          return {
+            rightPanelOpen: true,
+            tabsBySession: {
+              ...state.tabsBySession,
+              [sessionId]: tabs.map((t) => (t.id === existing.id ? { ...t, ...patch } : t)),
+            },
+            activeTabBySession: { ...state.activeTabBySession, [sessionId]: existing.id },
+          }
+        }
+        const tab: PanelTab = {
+          id: `source-${nextTabId()}`,
+          type: "source",
+          title: ref.title,
+          sessionId,
+          sourceDocId: ref.docId,
+          ...patch,
         }
         return {
           rightPanelOpen: true,

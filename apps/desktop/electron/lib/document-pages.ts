@@ -10,7 +10,15 @@ import path from 'node:path'
  * decisões testáveis.
  */
 
-export type DocumentKind = 'pdf' | 'docx' | 'spreadsheet'
+/**
+ * Tipos de fonte. Os tres primeiros vem de um ARQUIVO binario; `text`
+ * (trecho colado) e `web` (pagina baixada) ja nascem como texto e existem
+ * so no painel de fontes — nao ha extensao que os traga do disco, e por
+ * isso eles nao entram no EXTENSIONS: fazer .txt/.md virar documento
+ * mudaria o `read` do modo codigo, que precisa continuar entregando esses
+ * arquivos crus.
+ */
+export type DocumentKind = 'pdf' | 'docx' | 'spreadsheet' | 'text' | 'web'
 
 export interface DocumentPage {
   /** 1-indexado. Em planilha é o índice da aba; em DOCX, do bloco sintético. */
@@ -124,6 +132,39 @@ export function pageLabel(page: DocumentPage, kind: DocumentKind): string {
 export function pageLocator(page: DocumentPage, kind: DocumentKind): string {
   if (kind === 'spreadsheet') return `aba${page.num}${page.label ? ` (${page.label})` : ''}`
   return kind === 'docx' ? `bloco${page.num}` : `p${page.num}`
+}
+
+/**
+ * Numera as linhas de uma página, no formato `12| texto`.
+ *
+ * É o que torna a citação VERIFICÁVEL: sem número de linha, o modelo só pode
+ * apontar a página, e o usuário que clicar cai num bloco de texto tendo que
+ * procurar sozinho o trecho citado — que é justamente a conferência que a
+ * citação deveria dispensar. A numeração é por página (e não contínua no
+ * documento) porque o localizador já carrega a página, e reiniciar mantém os
+ * números curtos.
+ *
+ * O custo é da ordem de 5% do texto da página, pago em toda leitura; a troca é
+ * deliberada.
+ */
+export function numberLines(text: string, width = 3): string {
+  return text
+    .split('\n')
+    .map((line, i) => `${String(i + 1).padStart(width, ' ')}| ${line}`)
+    .join('\n')
+}
+
+/**
+ * Referência clicável de um trecho, no formato que o renderer entende.
+ *
+ * A linha entra no próprio endereço em vez de o trecho ir por texto livre:
+ * texto livre exigiria que o modelo repetisse a citação sem errar um
+ * caractere e ainda a codificasse na URL, e qualquer divergência deixaria o
+ * destaque silenciosamente vazio.
+ */
+export function sourceAnchor(docId: string, page: number, fromLine?: number, toLine?: number): string {
+  const lines = fromLine ? `L${fromLine}${toLine && toLine > fromLine ? `-${toLine}` : ''}` : ''
+  return `orbit-source://${docId}/p${page}${lines}`
 }
 
 /** Janela de páginas pedida, normalizada contra os limites do documento. */

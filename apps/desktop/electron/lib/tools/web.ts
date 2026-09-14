@@ -101,32 +101,47 @@ export function htmlToText(html: string): string {
     .trim()
 }
 
+/**
+ * Baixa uma página e devolve o texto legível e o título.
+ *
+ * Separado da tool porque o painel de fontes usa o mesmo caminho: adicionar um
+ * site como fonte é baixar a página e guardar o texto — não faria sentido ter
+ * dois extratores de HTML com resultados diferentes para o mesmo endereço.
+ */
+export async function fetchReadablePage(
+  url: string,
+  maxChars = 100_000,
+): Promise<{ title: string; text: string }> {
+  if (!url.startsWith('http://') && !url.startsWith('https://')) {
+    throw new Error('A URL deve começar com http:// ou https://')
+  }
+  const res = await fetch(url, {
+    headers: {
+      'User-Agent':
+        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36',
+      Accept: 'text/html,application/xhtml+xml,text/plain;q=0.9,*/*;q=0.8',
+    },
+    signal: AbortSignal.timeout(FETCH_TIMEOUT),
+  })
+  if (!res.ok) throw new Error(`Requisição falhou com status ${res.status}`)
+
+  const raw = await res.text()
+  if (raw.length > MAX_RESPONSE_SIZE) throw new Error('Resposta excede o limite de 5MB')
+
+  const isHtml = (res.headers.get('content-type') ?? '').includes('text/html')
+  const title = isHtml ? decodeEntities(/<title[^>]*>([\s\S]*?)<\/title>/i.exec(raw)?.[1] ?? '').trim() : ''
+  return {
+    title: title || new URL(url).hostname,
+    text: (isHtml ? htmlToText(raw) : raw).slice(0, maxChars),
+  }
+}
+
 export function createWebFetchTool() {
   return tool({
     description: 'Downloads a URL\'s content and returns it as readable text.',
     inputSchema: z.object({
       url: z.string().describe('http(s) URL to fetch'),
     }),
-    execute: async ({ url }) => {
-      if (!url.startsWith('http://') && !url.startsWith('https://')) {
-        throw new Error('A URL deve começar com http:// ou https://')
-      }
-      const res = await fetch(url, {
-        headers: {
-          'User-Agent':
-            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36',
-          Accept: 'text/html,application/xhtml+xml,text/plain;q=0.9,*/*;q=0.8',
-        },
-        signal: AbortSignal.timeout(FETCH_TIMEOUT),
-      })
-      if (!res.ok) throw new Error(`Requisição falhou com status ${res.status}`)
-
-      const raw = await res.text()
-      if (raw.length > MAX_RESPONSE_SIZE) throw new Error('Resposta excede o limite de 5MB')
-
-      const contentType = res.headers.get('content-type') ?? ''
-      const text = contentType.includes('text/html') ? htmlToText(raw) : raw
-      return text.slice(0, 100_000)
-    },
+    execute: async ({ url }) => (await fetchReadablePage(url)).text,
   })
 }

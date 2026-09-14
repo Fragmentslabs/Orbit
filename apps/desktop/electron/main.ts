@@ -56,9 +56,12 @@ import { approvePendingSkill, discardPendingSkill, listPendingSkills } from './l
 import { dataDir, listKeys, readJson, removeJson, writeJson } from './lib/storage'
 import {
   addSessionDocument,
+  addSessionText,
+  addSessionUrl,
   deleteFolderDocuments,
   deleteSessionDocuments,
   listSessionSources,
+  readSessionPage,
   removeSessionDocument,
   setSessionDocumentShared,
 } from './lib/session-documents'
@@ -1453,11 +1456,25 @@ app.whenReady().then(() => {
       return { added, errors }
     },
   )
+  // Nem toda fonte é arquivo: trecho colado e página da web entram pelo mesmo
+  // caminho, já como texto.
+  ipcMain.handle(
+    'docs:addText',
+    (_event, sessionId: string, title: string, text: string, shared: boolean) =>
+      addSessionText(sessionId, title, text, shared),
+  )
+  ipcMain.handle('docs:addUrl', (_event, sessionId: string, url: string, shared: boolean) =>
+    addSessionUrl(sessionId, url, shared),
+  )
   // Arrastar de uma área para a outra na aba: anexo da conversa vira fonte da
   // pasta e vice-versa. O id muda junto (docN ↔ srcN), porque é o prefixo que
   // diz em que escopo o arquivo mora.
   ipcMain.handle('docs:setShared', (_event, sessionId: string, docId: string, shared: boolean) =>
     setSessionDocumentShared(sessionId, docId, shared),
+  )
+  // Uma pagina para o visualizador do painel (o clique numa citacao).
+  ipcMain.handle('docs:page', (_event, sessionId: string, docId: string, page: number) =>
+    readSessionPage(sessionId, docId, page),
   )
   ipcMain.handle('docs:remove', (_event, sessionId: string, docId: string) =>
     removeSessionDocument(sessionId, docId),

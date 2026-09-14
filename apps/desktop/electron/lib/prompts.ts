@@ -37,7 +37,9 @@ const DOCUMENT_ATTACHMENT_RULES = `A long document attached to this conversation
 - doc_read({ docId, offset }) reads a few pages around what you found.
 - pdf_view_page({ docId, page }) RENDERS a PDF page and lets you look at it. Use it when doc_read comes back empty (a scanned PDF has no text layer, so reading it means seeing it) and when the question is about layout rather than wording.
 
-Never answer about a part of the document you have not read, and never ask the user to paste an excerpt — you can read it yourself. When you assert something from a document, say where it came from (file and page), so the user can check it.`
+Never answer about a part of the document you have not read, and never ask the user to paste an excerpt — you can read it yourself.
+
+CITE WHAT YOU READ. When a statement comes from a document, put a numbered citation right after it, exactly like a web citation but pointing at the document: [1](orbit-source://<docId>/p<page>L<line>) — for example [1](orbit-source://src3/p12L28), or [2](orbit-source://doc1/p4L10-14) for a range of lines. The user clicks it and the passage opens highlighted, so the numbers have to be the real ones: doc_read shows every line numbered, and doc_search reports the hit as p12L28. Cite the line you actually took the wording from, not the start of the page. An assertion from a document without a citation forces the user to go find it, which is the work the citation exists to save.`
 
 const SPREADSHEET_RULES = `SPREADSHEETS. When a question about a spreadsheet involves counting, adding, averaging or comparing across rows, call sheet_query — it filters, groups and computes in the runtime, and the number comes back exact.
 

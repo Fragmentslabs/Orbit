@@ -666,6 +666,10 @@
       "sources": {
         "label": "Sources",
         "description": "Documents this conversation works with"
+      },
+      "source": {
+        "label": "Source",
+        "description": "Cited passage of a document"
       }
     },
     "unreadMessages": "Unread messages"
@@ -2036,6 +2040,16 @@
     "ownHint": "Whatever you attach in the chat shows up here, and stays in this conversation.",
     "noFolderHint": "This conversation is not in a folder. Move it into a sidebar folder to share sources across conversations.",
     "share": "Add to the folder sources",
-    "unshare": "Keep in this conversation only"
+    "unshare": "Keep in this conversation only",
+    "addFile": "File…",
+    "addText": "Pasted text…",
+    "addSite": "Website…",
+    "textTitlePlaceholder": "Title (e.g. Minutes of the March 12 meeting)",
+    "textPlaceholder": "Paste here the passage this conversation should be able to consult",
+    "textHint": "The text is paginated and read on demand, like any other source — pasting it in the chat would keep all of it in context every turn.",
+    "siteHint": "The page is downloaded and stored as text: a snapshot, so the citation keeps holding even if the site changes.",
+    "viewerEmpty": "Click a citation in the conversation to open the passage here.",
+    "viewerMissing": "Source {{id}} no longer exists in this conversation.",
+    "pageOf": "page {{page}} of {{total}}"
   }
 }

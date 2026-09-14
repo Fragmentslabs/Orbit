@@ -5,6 +5,7 @@ import { StorageKeys, type SessionInfo } from '@shared/chat'
 import { extractDocument, type DocumentKind, type ExtractedDocument } from './documents'
 import { documentKindOf } from './document-pages'
 import { readJson } from './storage'
+import { fetchReadablePage } from './tools/web'
 
 /**
  * Documentos com que a conversa trabalha — as FONTES.
@@ -58,6 +59,9 @@ export interface SessionDocument {
   createdAt: number
   /** true quando mora no escopo da pasta (id `srcN`). */
   shared?: boolean
+  /** Endereço de origem, nas fontes de site — é o que o usuário reconhece e
+   *  o que permite abrir a página de novo. */
+  sourceUrl?: string
 }
 
 interface StoredDocument extends SessionDocument {
@@ -224,7 +228,7 @@ export async function saveSessionDocument(
   bytes: Buffer,
   filename: string,
   kind: DocumentKind,
-  options: { shared?: boolean } = {},
+  options: { shared?: boolean; sourceUrl?: string } = {},
 ): Promise<{ doc: SessionDocument; pages: ExtractedDocument['pages'] }> {
   const scopes = await scopesOf(sessionId)
   const toFolder = Boolean(options.shared && scopes.folder)
@@ -241,6 +245,7 @@ export async function saveSessionDocument(
     sizeBytes: bytes.length,
     createdAt: Date.now(),
     shared: toFolder,
+    ...(options.sourceUrl ? { sourceUrl: options.sourceUrl } : {}),
   }
   await writeDocument(scopeDir(scope), doc, extracted.pages, kind === 'spreadsheet' || kind === 'pdf' || kind === 'docx' ? bytes : null)
   notifyDocumentsChanged()
@@ -295,6 +300,8 @@ export interface DocumentHit {
   docId: string
   filename: string
   page: number
+  /** Linha dentro da página (1-indexada) — é o que a citação aponta. */
+  lineNumber: number
   line: string
   /** Tipo e rótulo da página, para o resultado dizer "aba3 (Custos)" em vez de
    *  "p3" — numa planilha o número é índice de aba, não página. */
@@ -322,13 +329,15 @@ export async function searchSessionDocuments(
     const found = await readSessionDocument(sessionId, id)
     if (!found) continue
     for (const page of found.extracted.pages) {
-      for (const line of page.text.split('\n')) {
-        if (!pattern.test(line)) continue
+      const lines = page.text.split('\n')
+      for (let i = 0; i < lines.length; i += 1) {
+        if (!pattern.test(lines[i])) continue
         hits.push({
           docId: id,
           filename: found.doc.filename,
           page: page.num,
-          line: line.trim().slice(0, 250),
+          lineNumber: i + 1,
+          line: lines[i].trim().slice(0, 250),
           kind: found.doc.kind,
           label: page.label,
         })
@@ -338,6 +347,41 @@ export async function searchSessionDocuments(
     }
   }
   return hits
+}
+
+/**
+ * Uma página do documento, para o visualizador do painel.
+ *
+ * Devolve o texto puro e deixa a numeração para a UI: no painel a linha é uma
+ * coluna própria (dá para selecionar o texto sem levar o número junto), ao
+ * contrário da leitura do modelo, onde ela precisa estar embutida.
+ */
+export async function readSessionPage(
+  sessionId: string,
+  docId: string,
+  page: number,
+): Promise<{
+  filename: string
+  kind: DocumentKind
+  totalPages: number
+  page: number
+  label?: string
+  text: string
+  sourceUrl?: string
+} | null> {
+  const found = await readSessionDocument(sessionId, docId)
+  if (!found) return null
+  const wanted = Math.min(Math.max(Math.round(page) || 1, 1), Math.max(found.extracted.totalPages, 1))
+  const target = found.extracted.pages.find((p) => p.num === wanted)
+  return {
+    filename: found.doc.filename,
+    kind: found.doc.kind,
+    totalPages: found.extracted.totalPages,
+    page: wanted,
+    label: target?.label,
+    text: target?.text ?? '',
+    sourceUrl: found.doc.sourceUrl,
+  }
 }
 
 /**
@@ -376,6 +420,68 @@ export async function addSessionDocument(
     return { ok: true, doc }
   } catch (err) {
     return { ok: false, error: `${filename}: ${(err as Error).message}` }
+  }
+}
+
+/**
+ * Adiciona um trecho de texto colado como fonte.
+ *
+ * Existe porque nem toda fonte é arquivo: o e-mail que alguém mandou, o
+ * pedaço de uma norma, a transcrição de uma reunião. Colar isso numa mensagem
+ * jogaria o texto inteiro no contexto de todo turno; como fonte, ele é
+ * paginado e lido sob demanda igual aos outros.
+ */
+export async function addSessionText(
+  sessionId: string,
+  title: string,
+  text: string,
+  shared: boolean,
+): Promise<{ ok: true; doc: SessionDocument } | { ok: false; error: string }> {
+  const content = text.trim()
+  if (!content) return { ok: false, error: 'O texto está vazio.' }
+  try {
+    const { doc } = await saveSessionDocument(
+      sessionId,
+      Buffer.from(content, 'utf8'),
+      title.trim() || 'Texto colado',
+      'text',
+      { shared },
+    )
+    return { ok: true, doc }
+  } catch (err) {
+    return { ok: false, error: (err as Error).message }
+  }
+}
+
+/**
+ * Adiciona uma página da web como fonte: baixa, extrai o texto legível e
+ * guarda como qualquer outro documento.
+ *
+ * É uma FOTOGRAFIA do momento, não um link vivo — a página pode mudar depois,
+ * e o que o agente lê continua sendo o que foi capturado. Isso é o que se
+ * quer numa fonte de pesquisa (a citação tem que continuar valendo), e é o
+ * oposto do webfetch, que serve justamente para ver o estado atual.
+ */
+export async function addSessionUrl(
+  sessionId: string,
+  url: string,
+  shared: boolean,
+): Promise<{ ok: true; doc: SessionDocument } | { ok: false; error: string }> {
+  try {
+    const page = await fetchReadablePage(url)
+    if (!page.text.trim()) {
+      return { ok: false, error: `${url}: a página não trouxe texto legível (pode depender de JavaScript).` }
+    }
+    const { doc } = await saveSessionDocument(
+      sessionId,
+      Buffer.from(page.text, 'utf8'),
+      page.title,
+      'web',
+      { shared, sourceUrl: url },
+    )
+    return { ok: true, doc }
+  } catch (err) {
+    return { ok: false, error: `${url}: ${(err as Error).message}` }
   }
 }
 

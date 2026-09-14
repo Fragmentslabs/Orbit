@@ -1,7 +1,14 @@
 import { tool } from 'ai'
 import { z } from 'zod'
 import fsp from 'node:fs/promises'
-import { documentHeader, documentKindOf, pageLabel, pageLocator, pageWindow } from '../document-pages'
+import {
+  documentHeader,
+  documentKindOf,
+  numberLines,
+  pageLabel,
+  pageLocator,
+  pageWindow,
+} from '../document-pages'
 import { rasterizePdf } from '../pdf-raster'
 import { resolveSafePath, type ToolContext } from './context'
 import {
@@ -73,7 +80,7 @@ export function createDocumentTools(sessionId: string) {
           hits
             .map((h) => {
               const where = pageLocator({ num: h.page, text: '', label: h.label }, h.kind)
-              return `${h.docId} (${h.filename}):${where}: ${h.line}`
+              return `${h.docId} (${h.filename}):${where}L${h.lineNumber}: ${h.line}`
             })
             .join('\n') + suffix
         )
@@ -96,8 +103,15 @@ export function createDocumentTools(sessionId: string) {
           return `<document name="${doc.filename}">\n(nenhum texto extraível — provavelmente um PDF digitalizado. Use pdf_view_page para VER a página: sem camada de texto, olhar é a única forma de ler.)\n</document>`
         }
         const { from, to, pages } = pageWindow(extracted, offset, limit, DEFAULT_DOC_PAGES, MAX_DOC_PAGES)
+        // As linhas vêm numeradas para a citação poder apontar o trecho, e não
+        // só a página — é o número daqui que vai no link da resposta.
         const body = pages
-          .map((page) => `--- ${pageLabel(page, extracted.kind)} ---\n${page.text || '(página sem texto)'}`)
+          .map(
+            (page) =>
+              `--- ${pageLabel(page, extracted.kind)} ---\n${
+                page.text ? numberLines(page.text) : '(página sem texto)'
+              }`,
+          )
           .join('\n\n')
         return `${documentHeader(doc.filename, extracted, { from, to })}\n${body}\n</document>`
       },

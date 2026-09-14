@@ -666,6 +666,10 @@
       "sources": {
         "label": "Fontes",
         "description": "Documentos com que a conversa trabalha"
+      },
+      "source": {
+        "label": "Fonte",
+        "description": "Trecho citado de um documento"
       }
     },
     "unreadMessages": "Mensagens não lidas"
@@ -2035,6 +2039,16 @@
     "ownHint": "O que você anexar no chat aparece aqui, e vale só nesta conversa.",
     "noFolderHint": "Esta conversa não está em nenhuma pasta. Mova-a para uma pasta da sidebar para compartilhar fontes entre conversas.",
     "share": "Adicionar às fontes da pasta",
-    "unshare": "Deixar só nesta conversa"
+    "unshare": "Deixar só nesta conversa",
+    "addFile": "Arquivo…",
+    "addText": "Texto colado…",
+    "addSite": "Site…",
+    "textTitlePlaceholder": "Título (ex.: Ata da reunião de 12/03)",
+    "textPlaceholder": "Cole aqui o trecho que a conversa deve poder consultar",
+    "textHint": "O texto é paginado e lido sob demanda, como qualquer outra fonte — colar direto no chat manteria tudo no contexto a cada turno.",
+    "siteHint": "A página é baixada e guardada como texto: uma fotografia do momento, para a citação continuar valendo mesmo que o site mude.",
+    "viewerEmpty": "Clique numa citação da conversa para abrir o trecho aqui.",
+    "viewerMissing": "A fonte {{id}} não existe mais nesta conversa.",
+    "pageOf": "página {{page}} de {{total}}"
   }
 }

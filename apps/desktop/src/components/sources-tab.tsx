@@ -7,13 +7,25 @@ import {
   FileText,
   FileType2,
   FolderOpen,
+  Globe,
   HardDriveIcon,
   Loader2,
   MessageSquare,
   Plus,
   RefreshCw,
+  StickyNote,
   Trash2,
+  Upload,
 } from "lucide-react"
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
+import { Input } from "@/components/ui/input"
+import { Textarea } from "@/components/ui/textarea"
 import { docsApi, type SourceDocument } from "@/src/lib/ipc"
 import { useSessionStore } from "@/src/stores/session-store"
 import { cn } from "@/lib/utils"
@@ -62,9 +74,25 @@ function formatBytes(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
 }
 
+const KIND_ICONS = {
+  spreadsheet: FileSpreadsheet,
+  docx: FileType2,
+  pdf: FileText,
+  text: StickyNote,
+  web: Globe,
+} as const
+
 function KindIcon({ kind, className }: { kind: SourceDocument["kind"]; className?: string }) {
-  const Icon = kind === "spreadsheet" ? FileSpreadsheet : kind === "docx" ? FileType2 : FileText
+  const Icon = KIND_ICONS[kind] ?? FileText
   return <Icon className={className} />
+}
+
+function hostOf(url: string): string {
+  try {
+    return new URL(url).hostname.replace(/^www\./, "")
+  } catch {
+    return url
+  }
 }
 
 /** Lê o arquivo como base64 — é o formato que o IPC do anexo já usa. */
@@ -118,6 +146,7 @@ function DocumentRow({
         <p className="truncate text-xs font-medium text-foreground">{doc.filename}</p>
         <p className="truncate text-[11px] text-muted-foreground">
           {doc.id} · {unit}
+          {doc.sourceUrl ? ` · ${hostOf(doc.sourceUrl)}` : ""}
           {doc.sizeBytes ? ` · ${formatBytes(doc.sizeBytes)}` : ""}
           {" · "}
           {new Date(doc.createdAt).toLocaleDateString(i18n.language, {
@@ -159,6 +188,7 @@ export function SourcesTab({ sessionId }: { sessionId?: string }) {
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState(false)
   const [dropZone, setDropZone] = useState<"shared" | "own" | null>(null)
+  const [dialog, setDialog] = useState<{ kind: "text" | "web"; shared: boolean } | null>(null)
   const [errors, setErrors] = useState<string[]>([])
   const sharedInput = useRef<HTMLInputElement>(null)
   const ownInput = useRef<HTMLInputElement>(null)
@@ -221,6 +251,30 @@ export function SourcesTab({ sessionId }: { sessionId?: string }) {
       await refresh()
     },
     [sessionId, refresh, t],
+  )
+
+  const addText = useCallback(
+    async (title: string, text: string, shared: boolean) => {
+      if (!sessionId) return
+      setBusy(true)
+      const result = await docsApi.addText(sessionId, title, text, shared)
+      setErrors(result.ok ? [] : [result.error])
+      setBusy(false)
+      await refresh()
+    },
+    [sessionId, refresh],
+  )
+
+  const addUrl = useCallback(
+    async (url: string, shared: boolean) => {
+      if (!sessionId) return
+      setBusy(true)
+      const result = await docsApi.addUrl(sessionId, url, shared)
+      setErrors(result.ok ? [] : [result.error])
+      setBusy(false)
+      await refresh()
+    },
+    [sessionId, refresh],
   )
 
   const move = useCallback(
@@ -292,15 +346,29 @@ export function SourcesTab({ sessionId }: { sessionId?: string }) {
             {isShared ? <FolderOpen className="size-3" /> : <MessageSquare className="size-3" />}
             {title}
           </p>
-          <button
-            type="button"
-            disabled={busy}
-            onClick={() => input.current?.click()}
-            className="flex cursor-pointer items-center gap-1 rounded-md px-1.5 py-1 text-[11px] text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-60"
-          >
-            {busy ? <Loader2 className="size-3 animate-spin" /> : <Plus className="size-3" />}
-            {t("sources.add")}
-          </button>
+          <DropdownMenu>
+            <DropdownMenuTrigger
+              disabled={busy}
+              className="flex cursor-pointer items-center gap-1 rounded-md px-1.5 py-1 text-[11px] text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-60"
+            >
+              {busy ? <Loader2 className="size-3 animate-spin" /> : <Plus className="size-3" />}
+              {t("sources.add")}
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={() => input.current?.click()}>
+                <Upload className="size-3.5" />
+                {t("sources.addFile")}
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setDialog({ kind: "text", shared: isShared })}>
+                <StickyNote className="size-3.5" />
+                {t("sources.addText")}
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setDialog({ kind: "web", shared: isShared })}>
+                <Globe className="size-3.5" />
+                {t("sources.addSite")}
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
         <input
           ref={input}
@@ -392,6 +460,114 @@ export function SourcesTab({ sessionId }: { sessionId?: string }) {
           {t("sources.usage", { count: shared.length + own.length, size: formatBytes(usage) })}
         </div>
       )}
+
+      <AddSourceDialog
+        request={dialog}
+        busy={busy}
+        onClose={() => setDialog(null)}
+        onSubmitText={(title, text, toShared) => void addText(title, text, toShared)}
+        onSubmitUrl={(url, toShared) => void addUrl(url, toShared)}
+      />
     </div>
+  )
+}
+
+/**
+ * Colar um trecho ou apontar um endereço — as duas fontes que não vêm de
+ * arquivo. O mesmo diálogo serve aos dois porque a diferença é só o campo; o
+ * destino (pasta ou conversa) já veio decidido de onde o menu foi aberto.
+ */
+function AddSourceDialog({
+  request,
+  busy,
+  onClose,
+  onSubmitText,
+  onSubmitUrl,
+}: {
+  request: { kind: "text" | "web"; shared: boolean } | null
+  busy: boolean
+  onClose: () => void
+  onSubmitText: (title: string, text: string, shared: boolean) => void
+  onSubmitUrl: (url: string, shared: boolean) => void
+}) {
+  const { t } = useTranslation()
+  const [title, setTitle] = useState("")
+  const [body, setBody] = useState("")
+
+  // Limpa ao abrir: o diálogo é reaproveitado entre os dois tipos e entre as
+  // duas áreas, e reaparecer com o texto anterior seria confuso.
+  useEffect(() => {
+    if (request) {
+      setTitle("")
+      setBody("")
+    }
+  }, [request])
+
+  if (!request) return null
+  const isText = request.kind === "text"
+  const canSubmit = isText ? body.trim().length > 0 : body.trim().length > 0
+
+  const submit = () => {
+    if (!canSubmit || busy) return
+    if (isText) onSubmitText(title, body, request.shared)
+    else onSubmitUrl(body.trim(), request.shared)
+    onClose()
+  }
+
+  return (
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="max-w-md">
+        <DialogTitle>{isText ? t("sources.addText") : t("sources.addSite")}</DialogTitle>
+        <div className="flex flex-col gap-3">
+          {isText && (
+            <Input
+              autoFocus
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              placeholder={t("sources.textTitlePlaceholder")}
+            />
+          )}
+          {isText ? (
+            <Textarea
+              value={body}
+              onChange={(e) => setBody(e.target.value)}
+              placeholder={t("sources.textPlaceholder")}
+              className="min-h-40 resize-none"
+            />
+          ) : (
+            <Input
+              autoFocus
+              value={body}
+              onChange={(e) => setBody(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") submit()
+              }}
+              placeholder="https://"
+            />
+          )}
+          <p className="text-[11px] text-muted-foreground">
+            {isText ? t("sources.textHint") : t("sources.siteHint")}
+          </p>
+          <div className="flex justify-end gap-2">
+            <button
+              type="button"
+              onClick={onClose}
+              className="cursor-pointer rounded-md px-3 py-1.5 text-xs text-muted-foreground hover:bg-accent"
+            >
+              {t("common.cancel")}
+            </button>
+            <button
+              type="button"
+              disabled={!canSubmit || busy}
+              onClick={submit}
+              className="flex cursor-pointer items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-60"
+            >
+              {busy && <Loader2 className="size-3 animate-spin" />}
+              {t("sources.add")}
+            </button>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
   )
 }

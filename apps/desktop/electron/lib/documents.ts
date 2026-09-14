@@ -107,6 +107,10 @@ function extractSpreadsheetPages(bytes: Buffer): DocumentPage[] {
 async function extractFresh(bytes: Buffer, kind: DocumentKind): Promise<ExtractedDocument> {
   if (kind === 'pdf') return capPages(await extractPdfPages(bytes), kind)
   if (kind === 'spreadsheet') return capPages(extractSpreadsheetPages(bytes), kind)
+  // Trecho colado e pagina baixada ja chegam como texto: so paginar.
+  if (kind === 'text' || kind === 'web') {
+    return capPages(paginateText(bytes.toString('utf8').trim()), kind)
+  }
   const result = await mammoth.extractRawText({ buffer: bytes })
   return capPages(paginateText(result.value.trim()), kind)
 }
@@ -121,7 +125,10 @@ async function extractFresh(bytes: Buffer, kind: DocumentKind): Promise<Extracte
  * mtime, que muda em checkout e não muda em edição preservando timestamp.
  */
 export async function extractDocument(bytes: Buffer, kind: DocumentKind): Promise<ExtractedDocument> {
-  const hash = createHash('sha256').update(bytes).digest('hex').slice(0, 32)
+  // O tipo entra na chave junto com o conteudo: desde que `text` existe, os
+  // mesmos bytes podem ser lidos de duas formas, e o cache de uma serviria
+  // paginacao errada para a outra.
+  const hash = createHash('sha256').update(kind).update(bytes).digest('hex').slice(0, 32)
   const file = path.join(cacheDir(), `${hash}.json`)
 
   try {

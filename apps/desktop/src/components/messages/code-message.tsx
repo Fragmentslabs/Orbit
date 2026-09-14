@@ -316,6 +316,7 @@ export function CodeAssistantMessage({ message, sessionId, isLast, isBusy, busyL
           ) : (
             <AssistantMarkdown
               key={segment.id}
+              sessionId={sessionId}
               muted={index < lastRunStart || isEngineText(segment.part.source)}
             >
               {segment.part.text}

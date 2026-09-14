@@ -165,7 +165,11 @@ export function ChatAssistantMessage({ message, sessionId, isLast, isBusy, busyL
           segment.part.source === "internal" ? null : segment.part.source === "vision" ? (
             <VisionWorkingRow key={segment.id} />
           ) : (
-            <AssistantMarkdown key={segment.id} muted={index < lastRunStart || isEngineText(segment.part.source)}>
+            <AssistantMarkdown
+              key={segment.id}
+              sessionId={sessionId}
+              muted={index < lastRunStart || isEngineText(segment.part.source)}
+            >
               {segment.part.text}
             </AssistantMarkdown>
           )

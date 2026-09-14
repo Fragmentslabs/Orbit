@@ -6,6 +6,7 @@ import {
   ChevronDownIcon,
   CopyIcon,
   Eye,
+  FileTextIcon,
   LoaderIcon,
   RefreshCwIcon,
   RotateCwIcon,
@@ -32,6 +33,7 @@ import { useSessionModelPrefs } from "@/src/stores/session-model-prefs"
 import { hostnameOf, messageText, visibleMessageText } from "@/src/lib/message-utils"
 import { formatDuration, formatTime } from "@/src/lib/format"
 import { useSessionStore } from "@/src/stores/session-store"
+import { usePanelStore } from "@/src/stores/panel-store"
 import { Actions, Action } from "@/src/components/ai/actions"
 import {
   InlineCitation,
@@ -60,41 +62,102 @@ function childrenToText(children: ReactNode): string {
 const CITATION_TEXT = /^\[?\d{1,3}\]?$/
 
 /**
- * Links markdown cujo texto é apenas um número ([1](url)) viram citações
- * inline com hover card; os demais abrem como links normais.
+ * Citação de documento: orbit-source://<docId>/p<pagina>L<linha>[-<linha>].
+ *
+ * A linha vai no endereço em vez de o trecho ir por texto livre — o modelo
+ * teria que repetir a citação sem errar um caractere e ainda codificá-la, e
+ * qualquer divergência deixaria o destaque silenciosamente vazio.
  */
-const MarkdownLink: Components["a"] = ({ href, children, ...props }) => {
-  const text = childrenToText(children).trim()
-  if (href && CITATION_TEXT.test(text)) {
-    return (
-      <InlineCitation>
-        <InlineCitationCard>
-          <InlineCitationCardTrigger sources={[href]} />
-          <InlineCitationCardBody className="p-3">
-            <InlineCitationSource title={hostnameOf(href)} url={href} />
-          </InlineCitationCardBody>
-        </InlineCitationCard>
-      </InlineCitation>
-    )
+const SOURCE_HREF = /^orbit-source:\/\/([a-z]+\d+)\/p(\d+)(?:L(\d+)(?:-(\d+))?)?$/i
+
+export interface SourceRef {
+  docId: string
+  page: number
+  fromLine?: number
+  toLine?: number
+}
+
+export function parseSourceHref(href: string): SourceRef | null {
+  const match = SOURCE_HREF.exec(href.trim())
+  if (!match) return null
+  return {
+    docId: match[1],
+    page: Number(match[2]),
+    fromLine: match[3] ? Number(match[3]) : undefined,
+    toLine: match[4] ? Number(match[4]) : undefined,
   }
+}
+
+/** Citação de documento: abre a fonte no painel, no trecho citado. */
+function SourceCitation({ source, label, sessionId }: {
+  source: SourceRef
+  label: string
+  sessionId?: string
+}) {
+  const openSourceTab = usePanelStore((s) => s.openSourceTab)
+  const where = source.fromLine
+    ? `p. ${source.page}, linha ${source.fromLine}${source.toLine && source.toLine > source.fromLine ? `-${source.toLine}` : ""}`
+    : `p. ${source.page}`
   return (
-    <a href={href} rel="noreferrer" target="_blank" {...props}>
-      {children}
-    </a>
+    <button
+      type="button"
+      title={`${source.docId} — ${where}`}
+      onClick={() => {
+        if (!sessionId) return
+        openSourceTab(sessionId, { ...source, title: source.docId })
+      }}
+      className="mx-0.5 inline-flex cursor-pointer items-center gap-0.5 rounded bg-primary/10 px-1.5 align-baseline text-[0.7rem] font-medium text-primary hover:bg-primary/20"
+    >
+      <FileTextIcon className="size-2.5" />
+      {label.replace(/[[\]]/g, "")}
+    </button>
   )
 }
 
-const markdownComponents: Components = { a: MarkdownLink }
+/**
+ * Links markdown cujo texto é apenas um número ([1](url)) viram citações
+ * inline com hover card; os demais abrem como links normais.
+ */
+function makeMarkdownLink(sessionId?: string): Components["a"] {
+  return function MarkdownLink({ href, children, ...props }) {
+    const text = childrenToText(children).trim()
+    const source = href ? parseSourceHref(href) : null
+    if (source) return <SourceCitation source={source} label={text} sessionId={sessionId} />
+    if (href && CITATION_TEXT.test(text)) {
+      return (
+        <InlineCitation>
+          <InlineCitationCard>
+            <InlineCitationCardTrigger sources={[href]} />
+            <InlineCitationCardBody className="p-3">
+              <InlineCitationSource title={hostnameOf(href)} url={href} />
+            </InlineCitationCardBody>
+          </InlineCitationCard>
+        </InlineCitation>
+      )
+    }
+    return (
+      <a href={href} rel="noreferrer" target="_blank" {...props}>
+        {children}
+      </a>
+    )
+  }
+}
 
 /**
  * Markdown do assistente com suporte a citações inline. `muted` marca a
  * narração intermediária (texto que o modelo escreve entre ferramentas,
  * "pensando alto") para não se confundir com a resposta final.
+ *
+ * `sessionId` existe por causa da citação de documento: abrir a fonte no
+ * painel precisa saber de qual conversa ela é (o id `doc1` de um chat é outro
+ * arquivo em outro chat). Sem ele a citação ainda aparece, mas inerte.
  */
-export function AssistantMarkdown({ children, muted = false }: {
+export function AssistantMarkdown({ children, muted = false, sessionId }: {
   children: string
   muted?: boolean
+  sessionId?: string
 }) {
+  const components = useMemo(() => ({ a: makeMarkdownLink(sessionId) }), [sessionId])
   return (
     <div
       className={cn(
@@ -103,7 +166,7 @@ export function AssistantMarkdown({ children, muted = false }: {
         "[&_[data-streamdown=code-block]]:text-foreground",
       )}
     >
-      <MessageResponse components={markdownComponents}>{children}</MessageResponse>
+      <MessageResponse components={components}>{children}</MessageResponse>
     </div>
   )
 }

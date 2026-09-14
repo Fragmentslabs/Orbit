@@ -491,13 +491,25 @@ export interface SourceDocument {
   id: string
   sessionId: string
   filename: string
-  kind: "pdf" | "docx" | "spreadsheet"
+  kind: "pdf" | "docx" | "spreadsheet" | "text" | "web"
   totalPages: number
   totalChars: number
   truncated: boolean
   sizeBytes?: number
   createdAt: number
   shared?: boolean
+  sourceUrl?: string
+}
+
+/** Uma página lida do documento, para o painel mostrar com o trecho grifado. */
+export interface SourcePage {
+  filename: string
+  kind: SourceDocument["kind"]
+  totalPages: number
+  page: number
+  label?: string
+  text: string
+  sourceUrl?: string
 }
 
 /**
@@ -521,6 +533,20 @@ export const docsApi = {
       added: number
       errors: string[]
     }>,
+  /** Trecho colado como fonte — nem toda fonte é arquivo. */
+  addText: (sessionId: string, title: string, text: string, shared: boolean) =>
+    window.ipcRenderer.invoke("docs:addText", sessionId, title, text, shared) as Promise<
+      { ok: true } | { ok: false; error: string }
+    >,
+  /** Página da web como fonte: baixa e guarda o texto (fotografia do
+   *  momento, não link vivo — a citação precisa continuar valendo). */
+  addUrl: (sessionId: string, url: string, shared: boolean) =>
+    window.ipcRenderer.invoke("docs:addUrl", sessionId, url, shared) as Promise<
+      { ok: true } | { ok: false; error: string }
+    >,
+  /** Uma pagina do documento, para o visualizador do painel. */
+  page: (sessionId: string, docId: string, page: number) =>
+    window.ipcRenderer.invoke("docs:page", sessionId, docId, page) as Promise<SourcePage | null>,
   /** Move entre os escopos (o id muda junto: docN ↔ srcN). */
   setShared: (sessionId: string, docId: string, shared: boolean) =>
     window.ipcRenderer.invoke("docs:setShared", sessionId, docId, shared) as Promise<
