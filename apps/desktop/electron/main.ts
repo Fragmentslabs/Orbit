@@ -54,6 +54,14 @@ import { computeAnalytics } from './lib/analytics'
 import type { AnalyticsRange } from '@shared/analytics'
 import { approvePendingSkill, discardPendingSkill, listPendingSkills } from './lib/skills/pending'
 import { dataDir, listKeys, readJson, removeJson, writeJson } from './lib/storage'
+import {
+  addSessionDocument,
+  deleteFolderDocuments,
+  deleteSessionDocuments,
+  listSessionSources,
+  removeSessionDocument,
+  setSessionDocumentShared,
+} from './lib/session-documents'
 import { loadMainLocale, setMainLocale } from './lib/i18n'
 import { loginShellArgs, userShellEnv } from './lib/shell-env'
 import { searchSessions } from './lib/search-sessions'
@@ -1417,6 +1425,49 @@ app.whenReady().then(() => {
   ipcMain.handle('media:cleanupScripts', () => cleanupScriptMedia())
   // Indexa imagens anteriores ao registry (roda na primeira abertura da galeria)
   ipcMain.handle('media:backfill', () => backfillMedia())
+
+  // Fontes da conversa (aba "Fontes" do painel direito). O escopo é resolvido
+  // no main a partir da sessão — o renderer manda só o sessionId e recebe de
+  // volta a pasta, quando houver, para dizer que as fontes são compartilhadas.
+  ipcMain.handle('docs:list', (_event, sessionId: string) => listSessionSources(sessionId))
+  ipcMain.handle(
+    'docs:add',
+    async (
+      _event,
+      sessionId: string,
+      files: { filename: string; data: string }[],
+      shared: boolean,
+    ) => {
+      const errors: string[] = []
+      let added = 0
+      for (const file of files) {
+        const result = await addSessionDocument(
+          sessionId,
+          file.filename,
+          Buffer.from(file.data, 'base64'),
+          shared,
+        )
+        if (result.ok) added += 1
+        else errors.push(result.error)
+      }
+      return { added, errors }
+    },
+  )
+  // Arrastar de uma área para a outra na aba: anexo da conversa vira fonte da
+  // pasta e vice-versa. O id muda junto (docN ↔ srcN), porque é o prefixo que
+  // diz em que escopo o arquivo mora.
+  ipcMain.handle('docs:setShared', (_event, sessionId: string, docId: string, shared: boolean) =>
+    setSessionDocumentShared(sessionId, docId, shared),
+  )
+  ipcMain.handle('docs:remove', (_event, sessionId: string, docId: string) =>
+    removeSessionDocument(sessionId, docId),
+  )
+  // Limpeza: o chat e a pasta são excluídos pelo renderer, que é quem sabe da
+  // cascata — o que sobra aqui é apagar o que aquele escopo guardava em disco.
+  ipcMain.handle('docs:clearSession', (_event, sessionId: string) =>
+    deleteSessionDocuments(sessionId),
+  )
+  ipcMain.handle('docs:clearFolder', (_event, folderId: string) => deleteFolderDocuments(folderId))
 
   // Artefatos HTML: o renderer nunca lê o arquivo direto (ele é servido pelo
   // orbit-artifact://) — só precisa do conteúdo para exportar.

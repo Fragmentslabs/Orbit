@@ -32,7 +32,7 @@ const CITATION_INSTRUCTION = `When using information from the web in your text, 
 
 const DOCUMENT_ATTACHMENT_RULES = `A long document attached to this conversation is NOT fully in your context — only an opening excerpt is. The message that carries it says so explicitly and gives you its id.
 
-- doc_list() shows what is attached, with page counts.
+- doc_list() shows what you can read, with page counts. Two kinds: docN are the files attached in this conversation; srcN are the sources the user declared for the sidebar folder, shared with its other conversations — so a srcN can be there without you ever having seen it attached.
 - doc_search({ pattern }) finds WHERE something is (document + page). Search before answering: try synonyms and the term in the document's own language before concluding something is absent.
 - doc_read({ docId, offset }) reads a few pages around what you found.
 - pdf_view_page({ docId, page }) RENDERS a PDF page and lets you look at it. Use it when doc_read comes back empty (a scanned PDF has no text layer, so reading it means seeing it) and when the question is about layout rather than wording.

@@ -30,15 +30,16 @@ export function createDocumentTools(sessionId: string) {
   return {
     doc_list: tool({
       description:
-        'Lists the documents (PDF, DOCX, spreadsheets) attached to this conversation, with their id and page count. Use it when you are unsure which document the user means, or to check whether something was attached earlier in the conversation.',
+        'Lists the documents (PDF, DOCX, spreadsheets) this conversation can read, with their id and page count. Two kinds: srcN are the SOURCES of the sidebar folder, declared by the user and shared with its other conversations (so they can be listed here without having been attached in this one); docN are the files attached in THIS conversation. Use it when you are unsure which document the user means, or to check what is available at all.',
       inputSchema: z.object({}),
       execute: async () => {
         const docs = await listSessionDocuments(sessionId)
-        if (docs.length === 0) return 'Nenhum documento anexado nesta conversa.'
+        if (docs.length === 0) return 'Nenhum documento disponível nesta conversa.'
         return docs
           .map((d) => {
             const unit = d.kind === 'spreadsheet' ? 'abas' : d.kind === 'docx' ? 'blocos' : 'páginas'
-            return `${d.id}: ${d.filename} (${d.kind}, ${d.totalPages} ${unit}${d.truncated ? ', cortado no limite de tamanho' : ''})`
+            const escopo = d.shared ? 'fonte da pasta' : 'anexo desta conversa'
+            return `${d.id}: ${d.filename} (${d.kind}, ${d.totalPages} ${unit}, ${escopo}${d.truncated ? ', cortado no limite de tamanho' : ''})`
           })
           .join('\n')
       },
@@ -46,7 +47,7 @@ export function createDocumentTools(sessionId: string) {
 
     doc_search: tool({
       description:
-        'Searches the documents attached to this conversation and returns WHERE each match is (document, page) with the matching line — not the surrounding text. This is how you find the relevant part of a long document: search first, then doc_read around the page. Always prefer this over asking the user to paste an excerpt.',
+        'Searches every document this conversation can read (the folder sources and the files attached here) and returns WHERE each match is (document, page) with the matching line — not the surrounding text. This is how you find the relevant part of a long document: search first, then doc_read around the page. Always prefer this over asking the user to paste an excerpt.',
       inputSchema: z.object({
         pattern: z
           .string()
@@ -81,7 +82,7 @@ export function createDocumentTools(sessionId: string) {
 
     doc_read: tool({
       description:
-        'Reads a stretch of an attached document, a few pages at a time (in a spreadsheet, each sheet is a page). Never returns the whole document: use doc_search to find the right page and read around it.',
+        'Reads a stretch of a document, a few pages at a time (in a spreadsheet, each sheet is a page). Never returns the whole document: use doc_search to find the right page and read around it.',
       inputSchema: z.object({
         docId: z.string().describe('Document id (from doc_list or doc_search)'),
         offset: z.number().optional().describe('First page to read (1-indexed)'),

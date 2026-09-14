@@ -18,7 +18,7 @@ import type {
 // normalizeFolderName/folderKey vivem no shared: o mobile agrupa chats por
 // projeto do mesmo jeito e precisa da MESMA regra de nome.
 import { folderKey, normalizeFolderName, StorageKeys } from "@shared/chat"
-import { chatApi, companionApi, sessionApi, storage } from "@/src/lib/ipc"
+import { chatApi, companionApi, docsApi, sessionApi, storage } from "@/src/lib/ipc"
 import { visibleMessageText } from "@/src/lib/message-utils"
 import { useBrainPrefs } from "@/src/stores/brain-prefs"
 import { useSimplePrefs } from "@/src/stores/simple-prefs"
@@ -479,6 +479,10 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       useModelRotationStore.getState().selectRotation(sid, null)
       void storage.remove(StorageKeys.planReview(sid))
       void storage.remove(StorageKeys.pendingAsks(sid))
+      // Fontes anexadas: apaga o escopo proprio do chat. Quando ele estava
+      // numa pasta, o escopo e da pasta e o main nao o toca aqui — as fontes
+      // continuam valendo para os outros chats dela.
+      void docsApi.clearSession(sid)
       emitChatEvent({ type: "session:deleted", sessionId: sid })
     }
     const idSet = new Set(ids)
@@ -586,6 +590,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       useSessionModelPrefs.getState().clear(sid)
       useModelRotationStore.getState().selectRotation(sid, null)
       void storage.remove(StorageKeys.planReview(sid))
+      void docsApi.clearSession(sid)
       emitChatEvent({ type: "session:deleted", sessionId: sid })
     }
     set((state) => {
@@ -657,6 +662,10 @@ export const useSessionStore = create<SessionState>((set, get) => ({
   deleteFolder: (id) => {
     // Sessões afetadas ANTES do set (depois, folderId já estará null)
     const affected = get().sessions.filter((s) => s.folderId === id).map((s) => s.id)
+    // As fontes da pasta morrem com ela: os chats voltam para a raiz e nenhum
+    // deles resolve mais para este escopo, então o que ficasse em disco seria
+    // lixo inalcançável.
+    void docsApi.clearFolder(id)
     set((state) => {
       const folders = state.folders.filter((f) => f.id !== id)
       persistFolders(folders)

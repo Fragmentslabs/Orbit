@@ -24,7 +24,7 @@ import type { DocumentToolScope } from './document'
 export function createPdfOpsTools(scope: DocumentToolScope, ctx: ToolContext | null) {
   /** Resolve um PDF por anexo ou por caminho na pasta de trabalho. */
   const load = async (ref: string): Promise<{ bytes: Buffer; name: string } | string> => {
-    if (ref.startsWith('doc')) {
+    if (/^(doc|src)[0-9]+$/.test(ref)) {
       const found = await readSessionDocument(scope.sessionId, ref)
       if (found) {
         if (found.doc.kind !== 'pdf') return `${ref} (${found.doc.filename}) não é PDF.`
@@ -93,7 +93,7 @@ export function createPdfOpsTools(scope: DocumentToolScope, ctx: ToolContext | n
           .array(z.string())
           .min(2)
           .max(20)
-          .describe('Attached document ids (doc1, doc2…) or PDF paths in the working folder'),
+          .describe('Document ids from doc_list (doc1, src2…) or PDF paths in the working folder'),
         title: z.string().max(150).optional(),
         savePath: savePathSchema,
       }),

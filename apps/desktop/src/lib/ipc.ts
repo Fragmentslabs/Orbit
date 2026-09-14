@@ -486,6 +486,60 @@ export const mediaApi = {
   backfill: () => window.ipcRenderer.invoke("media:backfill") as Promise<number>,
 }
 
+/** Um documento que a conversa lê: anexo dela (`docN`) ou fonte da pasta (`srcN`). */
+export interface SourceDocument {
+  id: string
+  sessionId: string
+  filename: string
+  kind: "pdf" | "docx" | "spreadsheet"
+  totalPages: number
+  totalChars: number
+  truncated: boolean
+  sizeBytes?: number
+  createdAt: number
+  shared?: boolean
+}
+
+/**
+ * Fontes da conversa — os documentos com que se conversa, não o que o agente
+ * produziu (isso é a galeria de mídia).
+ *
+ * Dois escopos: `own` são os anexos desta conversa e `shared` são as fontes da
+ * pasta, declaradas de propósito e válidas para todas as conversas dela. Nada
+ * passa de um para o outro sozinho — quem move é o usuário, na aba.
+ */
+export const docsApi = {
+  list: (sessionId: string) =>
+    window.ipcRenderer.invoke("docs:list", sessionId) as Promise<{
+      shared: SourceDocument[]
+      own: SourceDocument[]
+      folderId: string | null
+      usage: number
+    }>,
+  add: (sessionId: string, files: { filename: string; data: string }[], shared: boolean) =>
+    window.ipcRenderer.invoke("docs:add", sessionId, files, shared) as Promise<{
+      added: number
+      errors: string[]
+    }>,
+  /** Move entre os escopos (o id muda junto: docN ↔ srcN). */
+  setShared: (sessionId: string, docId: string, shared: boolean) =>
+    window.ipcRenderer.invoke("docs:setShared", sessionId, docId, shared) as Promise<
+      { ok: true; id: string } | { ok: false; error: string }
+    >,
+  remove: (sessionId: string, docId: string) =>
+    window.ipcRenderer.invoke("docs:remove", sessionId, docId) as Promise<boolean>,
+  /** Chat excluído: apaga só o escopo próprio dele (nunca o da pasta). */
+  clearSession: (sessionId: string) =>
+    window.ipcRenderer.invoke("docs:clearSession", sessionId) as Promise<void>,
+  clearFolder: (folderId: string) =>
+    window.ipcRenderer.invoke("docs:clearFolder", folderId) as Promise<void>,
+  /** O anexo pode chegar pela conversa enquanto a aba está aberta ao lado. */
+  onChanged: (listener: () => void) => {
+    const wrapper = window.ipcRenderer.on("documents:changed", () => listener())
+    return () => window.ipcRenderer.off("documents:changed", wrapper)
+  },
+}
+
 /** Publica o idioma efetivo para o main — quem dispara sem o renderer no laço
  *  (scheduler de rotinas) precisa lê-lo de algum lugar. */
 export const appApi = {
