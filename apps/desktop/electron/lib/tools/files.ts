@@ -38,7 +38,7 @@ const MAX_DOC_PAGES = 20
 async function readDocument(file: string, offset?: number, limit?: number): Promise<string> {
   const doc = await extractDocumentFile(file)
   if (doc.totalPages === 0) {
-    return `<document path="${file}" kind="${doc.kind}">\n(nenhum texto extraível — provavelmente um PDF digitalizado, sem camada de texto)\n</document>`
+    return `<document path="${file}" kind="${doc.kind}">\n(nenhum texto extraível — provavelmente um PDF digitalizado. Use pdf_view_page para VER a página: sem camada de texto, olhar é a única forma de ler.)\n</document>`
   }
   const { from, to, pages } = pageWindow(doc, offset, limit, DEFAULT_DOC_PAGES, MAX_DOC_PAGES)
   const body = pages

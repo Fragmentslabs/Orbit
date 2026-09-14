@@ -35,6 +35,7 @@ const DOCUMENT_ATTACHMENT_RULES = `A long document attached to this conversation
 - doc_list() shows what is attached, with page counts.
 - doc_search({ pattern }) finds WHERE something is (document + page). Search before answering: try synonyms and the term in the document's own language before concluding something is absent.
 - doc_read({ docId, offset }) reads a few pages around what you found.
+- pdf_view_page({ docId, page }) RENDERS a PDF page and lets you look at it. Use it when doc_read comes back empty (a scanned PDF has no text layer, so reading it means seeing it) and when the question is about layout rather than wording.
 
 Never answer about a part of the document you have not read, and never ask the user to paste an excerpt — you can read it yourself. When you assert something from a document, say where it came from (file and page), so the user can check it.`
 

@@ -101,12 +101,17 @@ export async function saveSessionDocument(
   await fsp.mkdir(sessionDir(sessionId), { recursive: true })
   await fsp.writeFile(path.join(sessionDir(sessionId), `${doc.id}.json`), JSON.stringify(stored), 'utf8')
 
-  // Planilha guarda também o ARQUIVO ORIGINAL. O texto extraído serve para
-  // ler, mas não para calcular: ali o valor já vem formatado como a planilha
-  // o exibe, e somar a partir disso obrigaria a reparsear "1.234,56" — que é
-  // exatamente onde mora o erro silencioso de locale. O sheet_query relê os
-  // bytes com os tipos originais. Só planilha: num PDF não há o que calcular.
-  if (kind === 'spreadsheet') {
+  // Planilha e PDF guardam também o ARQUIVO ORIGINAL, por motivos diferentes.
+  //
+  // Na planilha, o texto extraído serve para ler mas não para calcular: ali o
+  // valor já vem formatado como ela o exibe, e somar a partir disso obrigaria
+  // a reparsear "1.234,56" — onde mora o erro silencioso de locale. O
+  // sheet_query relê os bytes com os tipos originais.
+  //
+  // No PDF, o motivo é rasterizar: um PDF digitalizado não tem camada de
+  // texto, e a única forma de lê-lo é renderizar a página e olhar. Sem os
+  // bytes, esse documento seria permanentemente ilegível.
+  if (kind === 'spreadsheet' || kind === 'pdf') {
     await fsp.writeFile(path.join(sessionDir(sessionId), `${doc.id}.bin`), bytes)
   }
   return { doc, pages: extracted.pages }
@@ -181,9 +186,10 @@ export async function searchSessionDocuments(
 }
 
 /**
- * Bytes originais de uma planilha anexada — a fonte tipada do sheet_query.
- * null quando o documento não é planilha ou foi anexado antes desta cópia
- * existir (nesse caso a consulta avisa em vez de calcular errado).
+ * Bytes originais do anexo — a fonte tipada do sheet_query e a fonte da
+ * rasterização do pdf_view_page. null quando o tipo não guarda original ou
+ * quando o anexo é anterior a esta cópia existir; nesse caso quem chama avisa
+ * em vez de devolver resultado errado.
  */
 export async function readSessionDocumentBytes(
   sessionId: string,

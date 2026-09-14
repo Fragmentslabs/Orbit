@@ -43,6 +43,7 @@ const NATIVE_TOOLS = new Set([
   'doc_list',
   'doc_search',
   'doc_read',
+  'pdf_view_page',
   // Consulta de planilha: leitura pura, sem escrita em lugar nenhum
   'sheet_query',
   // Documentos entregaveis: escrevem no storage do Orbit

@@ -13,6 +13,12 @@ async function ensurePdfGlobals(): Promise<void> {
     if (!globalThis.ImageData && canvas.ImageData) {
       globalThis.ImageData = canvas.ImageData as unknown as typeof ImageData
     }
+    // A rasterização desenha caminhos vetoriais — sem Path2D o pdfjs falha em
+    // páginas com traçado, que é a maioria das que têm tabela ou moldura.
+    const withPath = canvas as unknown as { Path2D?: typeof Path2D }
+    if (!globalThis.Path2D && withPath.Path2D) {
+      globalThis.Path2D = withPath.Path2D
+    }
     return
   }
   throw new Error(
@@ -38,4 +44,3 @@ export async function extractPdfPages(bytes: Uint8Array): Promise<{ num: number;
   const result = await parser.getText()
   return result.pages.map((page) => ({ num: page.num, text: page.text.trim() }))
 }
-

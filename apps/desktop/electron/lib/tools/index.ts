@@ -2,7 +2,7 @@ import type { ToolSet } from 'ai'
 import type { SendMessageInput } from '@shared/chat'
 import { getMcpTools } from '../mcp'
 import { createArtifactTools } from './artifact'
-import { createDocumentTools } from './documents'
+import { createDocumentTools, createPdfViewTool } from './documents'
 import { createSheetQueryTool } from './sheet'
 import { createDocumentAuthoringTools } from './document'
 import { createBrowserLinksTool, createBrowserOpenTool } from './browser'
@@ -77,6 +77,8 @@ export function buildToolSet(input: SendMessageInput, ctx: ToolContext | null): 
     // responde que não há, e é justamente isso que impede o agente de
     // alucinar sobre um documento que ele não leu.
     Object.assign(tools, createDocumentTools(input.sessionId))
+    // Ver pagina de PDF: no chat a fonte e sempre um anexo.
+    tools.pdf_view_page = createPdfViewTool(input.sessionId, null, ctx?.modelVision !== false)
     // Consulta de planilha: no chat a fonte e sempre um anexo (nao ha pasta
     // de trabalho), por isso ctx entra como null.
     tools.sheet_query = createSheetQueryTool(input.sessionId, null)
@@ -124,6 +126,7 @@ export function buildToolSet(input: SendMessageInput, ctx: ToolContext | null): 
   // repositório, não o que o usuário arrastou para a conversa. Sem isto, o
   // trecho de abertura do anexo apontaria para uma tool inexistente.
   Object.assign(tools, createDocumentTools(input.sessionId))
+  tools.pdf_view_page = createPdfViewTool(input.sessionId, ctx, ctx?.modelVision !== false)
   // No codigo a consulta alcanca as duas fontes: planilha do repositorio
   // (filePath, via ctx) e planilha anexada na conversa (docId).
   tools.sheet_query = createSheetQueryTool(input.sessionId, ctx)
