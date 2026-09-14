@@ -18,6 +18,7 @@ import {
 import { listKeys, readJson } from './storage'
 import { buildDocx } from './docx-package'
 import mammoth from 'mammoth'
+import { rasterizePdf } from './pdf-raster'
 import { parseMarkdown, renderHtml, type DocumentStyle } from './document-render'
 
 export type { MediaEntry, MediaFilter, MediaSource, MediaUsage }
@@ -1008,4 +1009,81 @@ export async function saveDerivedDocx(
     thumb,
     revision: 1,
   }
+}
+
+/**
+ * PDF DERIVADO: resultado de juntar, recortar, girar, carimbar ou preencher.
+ *
+ * O preview é feito com as PÁGINAS RASTERIZADAS, não com o binário: o Electron
+ * não embarca visualizador de PDF, então a única forma de mostrar um PDF na
+ * conversa é renderizá-lo como imagem. É a mesma rasterização que torna o
+ * digitalizado legível, reaproveitada para exibir.
+ */
+
+/** Páginas mostradas no preview — o suficiente para reconhecer o documento
+ *  sem transformar o card num visualizador. */
+const PREVIEW_PAGE_COUNT = 3
+
+export async function saveDerivedPdf(
+  pdf: Buffer,
+  meta: SaveDocumentMeta & { sourceName?: string },
+): Promise<DocumentRef> {
+  const base = `doc_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`
+  const dir = documentsDir()
+  await fsp.mkdir(dir, { recursive: true })
+  await fsp.writeFile(path.join(dir, `${base}.pdf`), pdf)
+
+  // Rasteriza as primeiras páginas e monta o preview com elas.
+  let body = '<p>(pré-visualização indisponível)</p>'
+  try {
+    const pages = Array.from({ length: PREVIEW_PAGE_COUNT }, (_, i) => i + 1)
+    const rendered = await rasterizePdf(pdf, { pages, scale: 1.2 })
+    const imgs: string[] = []
+    for (const page of rendered.pages) {
+      const name = `${base}-p${page.pageNumber}.png`
+      await fsp.writeFile(path.join(dir, name), page.png)
+      imgs.push(
+        `<img src="${ARTIFACT_SCHEME}://${name}" alt="página ${page.pageNumber}" style="width:100%;display:block;margin:0 0 1.2em;box-shadow:0 0 0 1px #ddd">`,
+      )
+    }
+    const rest =
+      rendered.total > rendered.pages.length
+        ? `<p style="text-align:center;color:#666">… ${rendered.total - rendered.pages.length} página(s) a mais — baixe o PDF para ver o documento inteiro.</p>`
+        : ''
+    body = imgs.join('\n') + rest
+  } catch {
+    // preview é conveniência: o arquivo vale mesmo sem ele
+  }
+  const html = renderHtml([], meta.title).replace('</body>', `${body}\n</body>`)
+  await fsp.writeFile(path.join(dir, `${base}.html`), html, 'utf8')
+  const thumb = await captureThumbnail(`${base}.html`)
+
+  const id = `${base}.md`
+  await fsp.writeFile(
+    path.join(dir, id),
+    `<!-- PDF derivado de ${meta.sourceName ?? 'documento anexado'}; o conteúdo real está no .pdf -->\n`,
+    'utf8',
+  )
+  const entry: MediaEntry = {
+    id,
+    path: path.join(dir, id),
+    size: pdf.length,
+    createdAt: Date.now(),
+    source: 'chat',
+    kind: 'document',
+    sessionId: meta.sessionId,
+    messageId: meta.messageId,
+    directory: meta.directory,
+    folderId: meta.folderId,
+    name: meta.title,
+    formats: ['pdf'],
+    thumb,
+    revision: 1,
+  }
+  await withIndexLock(async () => {
+    const entries = await readIndex()
+    entries.push(entry)
+    await writeIndex(entries)
+  })
+  return { id, title: meta.title, previewUrl: `${ARTIFACT_SCHEME}://${base}.html`, formats: ['pdf'], thumb, revision: 1 }
 }

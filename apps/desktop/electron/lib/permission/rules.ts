@@ -57,6 +57,12 @@ const NATIVE_TOOLS = new Set([
   // explicito — mesma convencao do panel_screenshot.
   'docx_edit',
   'docx_paragraphs',
+  // Operacoes de PDF: geram arquivo NOVO no storage do Orbit; escrever no
+  // projeto so com savePath, restrito ao pedido explicito.
+  'pdf_merge',
+  'pdf_transform',
+  'pdf_form_fields',
+  'pdf_form_fill',
   // Automação em lote na engine oculta (mesmo threat model do bash: o agente
   // já executa código arbitrário; o script roda isolado num utilityProcess)
   'run_browser_script',

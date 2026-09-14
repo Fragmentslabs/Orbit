@@ -1370,7 +1370,10 @@ async function runChatTurn(win: BrowserWindow, input: SendMessageInput): Promise
             if (
               part.toolName === 'create_document' ||
               part.toolName === 'update_document' ||
-              part.toolName === 'docx_edit'
+              part.toolName === 'docx_edit' ||
+              part.toolName === 'pdf_merge' ||
+              part.toolName === 'pdf_transform' ||
+              part.toolName === 'pdf_form_fill'
             ) {
               const output = part.output as
                 | {

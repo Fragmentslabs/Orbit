@@ -6,6 +6,7 @@ import { createDocumentTools, createPdfViewTool } from './documents'
 import { createSheetQueryTool } from './sheet'
 import { createDocumentAuthoringTools } from './document'
 import { createDocxEditTools } from './docx'
+import { createPdfOpsTools } from './pdf'
 import { createBrowserLinksTool, createBrowserOpenTool } from './browser'
 import { createBrowserScriptTools } from './browser-script'
 import { createEsteiraTools } from './esteira'
@@ -92,6 +93,7 @@ export function buildToolSet(input: SendMessageInput, ctx: ToolContext | null): 
       )
       // Editar .docx anexado: a copia fica no Orbit, o original nao e tocado.
       Object.assign(tools, createDocxEditTools({ sessionId: input.sessionId }, null))
+      Object.assign(tools, createPdfOpsTools({ sessionId: input.sessionId }, null))
     }
     if (allowBrain) Object.assign(tools, createChatMemoryTools(input))
     // Esteira: transformar o que foi discutido no chat em esteira/task de um
@@ -144,6 +146,10 @@ export function buildToolSet(input: SendMessageInput, ctx: ToolContext | null): 
     Object.assign(
       tools,
       createDocxEditTools({ sessionId: input.sessionId, directory: input.directory }, ctx),
+    )
+    Object.assign(
+      tools,
+      createPdfOpsTools({ sessionId: input.sessionId, directory: input.directory }, ctx),
     )
   }
 

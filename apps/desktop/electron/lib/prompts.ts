@@ -71,7 +71,11 @@ EDITING A .docx THE USER ATTACHED. docx_edit replaces text in it and saves a COP
 - Call docx_paragraphs FIRST. The match is literal: you need the text exactly as it is in the file, not as you remember or paraphrased it.
 - The result reports which snippets were not found. Say so instead of implying the whole edit went through.
 - Only pass savePath when the user explicitly asked to write into the working folder. By default the copy stays in Orbit and the user downloads it.
-- For a document YOU wrote, use update_document — it keeps the Markdown source and the style.`
+- For a document YOU wrote, use update_document — it keeps the Markdown source and the style.
+
+WORKING WITH EXISTING PDFs. pdf_merge joins files; pdf_transform picks, REORDERS, rotates and stamps a watermark (pages take a range like "1-3,7", and the order you write is the order that comes out, so it also deletes and reorders); pdf_form_fields lists a form fields and pdf_form_fill fills them.
+- Every one of these writes a NEW file that appears in the conversation with a download button. The source is never modified, and savePath only when the user explicitly asked.
+- Before filling a form, call pdf_form_fields: fields are matched by their INTERNAL name, which is rarely the label printed next to the box. Flatten only when the form is being SENT.`
 
 const ARTIFACT_INSTRUCTION = `HTML ARTIFACTS. You have create_artifact({ title, html }), which renders a live HTML page inside your response — the user sees and interacts with it right there in the chat, and it is saved to Orbit's media gallery.
 
