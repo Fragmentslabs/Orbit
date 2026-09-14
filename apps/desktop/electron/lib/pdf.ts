@@ -44,3 +44,39 @@ export async function extractPdfPages(bytes: Uint8Array): Promise<{ num: number;
   const result = await parser.getText()
   return result.pages.map((page) => ({ num: page.num, text: page.text.trim() }))
 }
+
+/**
+ * Imagens EMBUTIDAS no PDF (as figuras de verdade, não a página renderizada).
+ *
+ * É o complemento da rasterização: `rasterizePdf` devolve uma foto da página
+ * inteira; isto devolve a foto que estava dentro dela, no tamanho e na
+ * qualidade originais — que é o que serve para reaproveitar um gráfico, um
+ * logotipo ou a digitalização de uma assinatura.
+ */
+export async function extractPdfImages(
+  bytes: Uint8Array,
+  options: { pages?: number[]; max?: number } = {},
+): Promise<{ pageNumber: number; name: string; png: Buffer; width: number; height: number }[]> {
+  const PDFParse = await loadPdfParse()
+  const result = await new PDFParse({ data: bytes }).getImage()
+  const max = Math.max(1, options.max ?? 20)
+  const wanted = options.pages?.length ? new Set(options.pages) : null
+
+  const out: { pageNumber: number; name: string; png: Buffer; width: number; height: number }[] = []
+  for (const page of result.pages ?? []) {
+    if (wanted && !wanted.has(page.pageNumber)) continue
+    for (const image of page.images ?? []) {
+      if (out.length >= max) return out
+      const data = image.data as unknown as Uint8Array | undefined
+      if (!data || data.length === 0) continue
+      out.push({
+        pageNumber: page.pageNumber,
+        name: String(image.name ?? `img${out.length + 1}`),
+        png: Buffer.from(data),
+        width: Number(image.width ?? 0),
+        height: Number(image.height ?? 0),
+      })
+    }
+  }
+  return out
+}

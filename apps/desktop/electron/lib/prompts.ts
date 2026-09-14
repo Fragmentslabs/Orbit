@@ -75,6 +75,7 @@ EDITING A .docx THE USER ATTACHED. docx_edit replaces text in it and saves a COP
 
 WORKING WITH EXISTING PDFs. pdf_merge joins files; pdf_transform picks, REORDERS, rotates and stamps a watermark (pages take a range like "1-3,7", and the order you write is the order that comes out, so it also deletes and reorders); pdf_form_fields lists a form fields and pdf_form_fill fills them.
 - Every one of these writes a NEW file that appears in the conversation with a download button. The source is never modified, and savePath only when the user explicitly asked.
+- pdf_metadata reads the document properties; pdf_transform writes them. pdf_extract_images pulls the FIGURES out of the file into the gallery — different from pdf_view_page, which photographs the page.
 - Before filling a form, call pdf_form_fields: fields are matched by their INTERNAL name, which is rarely the label printed next to the box. Flatten only when the form is being SENT.`
 
 const ARTIFACT_INSTRUCTION = `HTML ARTIFACTS. You have create_artifact({ title, html }), which renders a live HTML page inside your response — the user sees and interacts with it right there in the chat, and it is saved to Orbit's media gallery.

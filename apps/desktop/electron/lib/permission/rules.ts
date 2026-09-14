@@ -63,6 +63,8 @@ const NATIVE_TOOLS = new Set([
   'pdf_transform',
   'pdf_form_fields',
   'pdf_form_fill',
+  'pdf_metadata',
+  'pdf_extract_images',
   // Automação em lote na engine oculta (mesmo threat model do bash: o agente
   // já executa código arbitrário; o script roda isolado num utilityProcess)
   'run_browser_script',

@@ -15,6 +15,41 @@ import { degrees, PDFDocument, rgb, StandardFonts } from 'pdf-lib'
  *  arquivo absurdo a partir de um documento grande. */
 const MAX_PAGES = 2000
 
+export interface PdfMetadata {
+  title?: string
+  author?: string
+  subject?: string
+  keywords?: string
+}
+
+/** Metadados atuais do arquivo — o que aparece em Propriedades no leitor. */
+export async function readMetadata(source: Buffer): Promise<Record<string, string | undefined>> {
+  const doc = await PDFDocument.load(source, { ignoreEncryption: true })
+  const date = (d: Date | undefined) => (d ? d.toISOString().slice(0, 10) : undefined)
+  return {
+    title: doc.getTitle(),
+    author: doc.getAuthor(),
+    subject: doc.getSubject(),
+    keywords: doc.getKeywords(),
+    creator: doc.getCreator(),
+    producer: doc.getProducer(),
+    createdAt: date(doc.getCreationDate()),
+    modifiedAt: date(doc.getModificationDate()),
+    pages: String(doc.getPageCount()),
+  }
+}
+
+function applyMetadata(doc: PDFDocument, meta: PdfMetadata): void {
+  if (meta.title !== undefined) doc.setTitle(meta.title)
+  if (meta.author !== undefined) doc.setAuthor(meta.author)
+  if (meta.subject !== undefined) doc.setSubject(meta.subject)
+  // O pdf-lib espera lista; uma string com virgulas viraria UMA palavra-chave.
+  if (meta.keywords !== undefined) {
+    doc.setKeywords(meta.keywords.split(',').map((k) => k.trim()).filter(Boolean))
+  }
+  doc.setModificationDate(new Date())
+}
+
 export interface PageSelection {
   /** Páginas 1-indexadas, na ORDEM pedida — é o que permite reordenar, e não
    *  só filtrar. Ausente = todas. */
@@ -22,6 +57,7 @@ export interface PageSelection {
   /** Rotação em graus, aplicada às páginas selecionadas (90, 180, 270). */
   rotate?: number
   watermark?: string
+  metadata?: PdfMetadata
 }
 
 /**
@@ -121,6 +157,7 @@ export async function transformPdf(
     }
   }
   if (selection.watermark) await stampWatermark(out, selection.watermark)
+  if (selection.metadata) applyMetadata(out, selection.metadata)
 
   const bytes = Buffer.from(await out.save())
   return { bytes, pages: out.getPageCount(), total }

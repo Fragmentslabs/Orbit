@@ -3,8 +3,10 @@ import fsp from 'node:fs/promises'
 import path from 'node:path'
 import { z } from 'zod'
 import { documentKindOf } from '../document-pages'
-import { saveDerivedPdf } from '../media'
-import { fillForm, mergePdfs, parsePageRange, readFormFields, transformPdf } from '../pdf-ops'
+
+import { fillForm, mergePdfs, parsePageRange, readFormFields, readMetadata, transformPdf } from '../pdf-ops'
+import { extractPdfImages } from '../pdf'
+import { saveDerivedPdf, saveMedia } from '../media'
 import { readSessionDocument, readSessionDocumentBytes } from '../session-documents'
 import { resolveSafePath, type ToolContext } from './context'
 import type { DocumentToolScope } from './document'
@@ -128,10 +130,19 @@ export function createPdfOpsTools(scope: DocumentToolScope, ctx: ToolContext | n
           .describe('Range like "1-3,7". Omit to keep every page (useful when only rotating or stamping).'),
         rotate: z.number().optional().describe('Degrees to rotate: 90, 180 or 270. Added to the current rotation.'),
         watermark: z.string().optional().describe('Diagonal translucent text, e.g. "CONFIDENCIAL"'),
+        metadata: z
+          .object({
+            title: z.string().optional(),
+            author: z.string().optional(),
+            subject: z.string().optional(),
+            keywords: z.string().optional().describe('Comma-separated'),
+          })
+          .optional()
+          .describe('Document properties written into the new file (what a reader shows under Properties)'),
         title: z.string().max(150).optional(),
         savePath: savePathSchema,
       }),
-      execute: async ({ source, pages, rotate, watermark, title, savePath }) => {
+      execute: async ({ source, pages, rotate, watermark, metadata, title, savePath }) => {
         const src = await load(source)
         if (typeof src === 'string') return src
         try {
@@ -142,7 +153,12 @@ export function createPdfOpsTools(scope: DocumentToolScope, ctx: ToolContext | n
           if (pages && (!selected || selected.length === 0)) {
             return `Nenhuma página válida em "${pages}" — o documento tem ${probe.total}.`
           }
-          const result = await transformPdf(src.bytes, { pages: selected, rotate, watermark })
+          const result = await transformPdf(src.bytes, {
+            pages: selected,
+            rotate,
+            watermark,
+            metadata,
+          })
           const out = await deliver(
             result.bytes,
             title || src.name.replace(/\.pdf$/i, ''),
@@ -222,6 +238,65 @@ export function createPdfOpsTools(scope: DocumentToolScope, ctx: ToolContext | n
           }
         } catch (err) {
           return `Erro ao preencher ${src.name}: ${(err as Error).message}`
+        }
+      },
+    }),
+    pdf_metadata: tool({
+      description:
+        'Reads the document properties of a PDF: title, author, subject, keywords, producer, dates and page count — what a reader shows under Properties. To CHANGE them, use pdf_transform with its metadata field, which writes a new file.',
+      inputSchema: z.object({ source: z.string() }),
+      execute: async ({ source }) => {
+        const src = await load(source)
+        if (typeof src === 'string') return src
+        try {
+          const meta = await readMetadata(src.bytes)
+          const linhas = Object.entries(meta)
+            .filter(([, v]) => v !== undefined && v !== '')
+            .map(([k, v]) => `${k}: ${v}`)
+          return linhas.length > 0
+            ? `${src.name}\n${linhas.join('\n')}`
+            : `${src.name} não declara nenhum metadado.`
+        } catch (err) {
+          return `Erro ao ler metadados de ${src.name}: ${(err as Error).message}`
+        }
+      },
+    }),
+
+    pdf_extract_images: tool({
+      description:
+        'Extracts the images EMBEDDED in a PDF (the actual figures, not a picture of the page) and saves them to the media gallery, where the user can view and download them. Use it to reuse a chart, a logo or a scanned signature. To see how a page LOOKS instead, use pdf_view_page.',
+      inputSchema: z.object({
+        source: z.string(),
+        pages: z.string().optional().describe('Range like "1-3,7". Omit for the whole document.'),
+        max: z.number().optional().describe('Cap on how many images to extract (default 20)'),
+      }),
+      execute: async ({ source, pages, max }) => {
+        const src = await load(source)
+        if (typeof src === 'string') return src
+        try {
+          // O total só é conhecido depois de abrir; 10000 é um teto folgado
+          // apenas para a faixa ser expandida sem truncar nada de verdade.
+          const wanted = pages ? parsePageRange(pages, 10_000) : undefined
+          const images = await extractPdfImages(new Uint8Array(src.bytes), { pages: wanted, max })
+          if (images.length === 0) {
+            return `Nenhuma imagem embutida encontrada em ${src.name}${
+              pages ? ` nas páginas ${pages}` : ''
+            }. Um PDF só de texto não tem imagens; para ver a aparência da página use pdf_view_page.`
+          }
+          const saved: string[] = []
+          for (const image of images) {
+            const url = await saveMedia(image.png, 'png', {
+              source: 'chat',
+              sessionId: scope.sessionId,
+              name: `${src.name} p${image.pageNumber} ${image.name}`,
+            })
+            saved.push(`${url} — página ${image.pageNumber}, ${image.width}×${image.height}`)
+          }
+          return `${saved.length} imagem(ns) extraída(s) de ${src.name} e salvas na galeria:\n${saved.join(
+            '\n',
+          )}\n\nPara mostrar alguma ao usuário na resposta: show_image({ media: "<orbit-media://…>" }).`
+        } catch (err) {
+          return `Erro ao extrair imagens de ${src.name}: ${(err as Error).message}`
         }
       },
     }),
