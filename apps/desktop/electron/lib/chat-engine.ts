@@ -243,7 +243,10 @@ function documentAttachmentPreview(doc: SessionDocument, pages: DocumentPage[]):
  * `preprocessAttachment` antes de chegar aqui (ver runChat). */
 function fileToModelContent(file: FilePart, modelVision: boolean): Exclude<UserContent, string>[number] {
   if (file.mime.startsWith('image/')) {
-    if (modelVision) return { type: 'image', image: file.url, mediaType: file.mime }
+    // Parte `file`, e não `image`: o ai-sdk depreciou o tipo `image` e avisa no
+    // terminal a cada anexo. A parte `file` com mediaType de imagem é o
+    // substituto, e os provedores a recebem igual.
+    if (modelVision) return { type: 'file', data: file.url, mediaType: file.mime }
     // Modelo sem visão (histórico): nota de texto — a descrição, quando
     // existe, já está no TextPart irmão gerado em preprocessAttachment.
     return { type: 'text', text: `[Imagem anexada anteriormente: ${file.filename ?? 'imagem'}]` }

@@ -32,7 +32,14 @@ export async function describeImage(opts: {
         {
           role: 'user',
           content: [
-            { type: 'image', image: opts.imageDataUrl },
+            // Parte `file` com mediaType: o tipo `image` foi depreciado no
+            // ai-sdk. O mime sai do próprio data URL, que é como a imagem
+            // chega aqui.
+            {
+              type: 'file',
+              data: opts.imageDataUrl,
+              mediaType: /^data:(image\/[\w.+-]+)/.exec(opts.imageDataUrl)?.[1] ?? 'image/png',
+            },
             { type: 'text', text: DESCRIBE_PROMPT(opts.language, opts.focus) },
           ],
         },
