@@ -2061,6 +2061,7 @@
     "zoomIn": "Aproximar",
     "zoomOut": "Afastar",
     "print": "Imprimir",
-    "download": "Baixar"
+    "download": "Baixar",
+    "actionFailed": "Não foi possível concluir a ação."
   }
 }

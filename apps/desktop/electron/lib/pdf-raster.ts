@@ -1,4 +1,4 @@
-import { BrowserWindow } from 'electron'
+import { app, BrowserWindow } from 'electron'
 import { createRequire } from 'node:module'
 import fsp from 'node:fs/promises'
 import path from 'node:path'
@@ -90,6 +90,34 @@ async function loadSources(): Promise<{ lib: string; worker: string }> {
 }
 
 /**
+ * Caminho que o visualizador embutido aceita abrir.
+ *
+ * O Chromium decide pela EXTENSÃO o que fazer com um file://. O original de
+ * uma fonte é guardado como `<id>.bin`, e com essa extensão ele BAIXA o
+ * arquivo em vez de abrir o visualizador — era o "salvar um .bin" no lugar do
+ * diálogo de impressão. Medido: o mesmo conteúdo como `.pdf` carrega com
+ * contentType application/pdf; como `.bin` dispara will-download.
+ *
+ * Separado para poder ser testado sem abrir diálogo de impressão nenhum.
+ */
+export async function printablePath(
+  filePath: string,
+): Promise<{ path: string; cleanup: () => void }> {
+  if (filePath.toLowerCase().endsWith('.pdf')) return { path: filePath, cleanup: () => {} }
+  const copia = path.join(
+    app.getPath('temp'),
+    `orbit-print-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}.pdf`,
+  )
+  await fsp.copyFile(filePath, copia)
+  return {
+    path: copia,
+    // Só depois que o diálogo resolve: apagar antes tiraria o arquivo debaixo
+    // do próprio visualizador que vai gerar as páginas.
+    cleanup: () => void fsp.rm(copia, { force: true }).catch(() => {}),
+  }
+}
+
+/**
  * Manda um arquivo para a impressora pelo diálogo do sistema.
  *
  * Abre numa janela oculta com o visualizador embutido: é o Chromium que sabe
@@ -97,6 +125,14 @@ async function loadSources(): Promise<{ lib: string; worker: string }> {
  * desenhamos daria um resultado pior justamente onde ele precisa ser fiel.
  */
 export async function printFile(filePath: string): Promise<{ ok: boolean; error?: string }> {
+  let alvo: { path: string; cleanup: () => void }
+  try {
+    alvo = await printablePath(filePath)
+  } catch (err) {
+    return { ok: false, error: `Não foi possível preparar o arquivo: ${(err as Error).message}` }
+  }
+  const limpar = alvo.cleanup
+
   const win = new BrowserWindow({
     show: false,
     webPreferences: {
@@ -109,13 +145,15 @@ export async function printFile(filePath: string): Promise<{ ok: boolean; error?
     },
   })
   try {
-    await win.loadURL(pathToFileURL(filePath).toString())
+    await win.loadURL(pathToFileURL(alvo.path).toString())
     return await new Promise((resolve) => {
       win.webContents.print({ silent: false }, (success, reason) => {
+        limpar()
         resolve(success ? { ok: true } : { ok: false, error: reason })
       })
     })
   } catch (err) {
+    limpar()
     return { ok: false, error: (err as Error).message }
   } finally {
     if (!win.isDestroyed()) win.destroy()

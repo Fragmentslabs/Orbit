@@ -422,7 +422,12 @@ export async function readSessionText(
       lines: page.text.split('\n'),
     })),
     sourceUrl: found.doc.sourceUrl,
-    hasOriginal: (await sessionDocumentFile(sessionId, docId)) !== null,
+    // Só PDF: `hasOriginal` decide se o painel mostra o modo Original, e ele
+    // desenha as páginas com o pdfjs. Um .docx TEM arquivo guardado, mas não
+    // há o que desenhar — o painel abriria em branco, e o imprimir mandaria
+    // para o Chromium um formato que ele não renderiza.
+    hasOriginal:
+      found.doc.kind === 'pdf' && (await sessionDocumentFile(sessionId, docId)) !== null,
   }
 }
 
@@ -486,6 +491,11 @@ export async function printSessionDocument(
 ): Promise<{ ok: boolean; error?: string }> {
   const source = await sessionDocumentFile(sessionId, docId)
   if (!source) return { ok: false, error: 'Este tipo de fonte não tem arquivo para imprimir.' }
+  // Mesma regra do documento da galeria: o Chromium só pagina PDF. Com .docx
+  // ele baixaria o arquivo em vez de abrir o diálogo de impressão.
+  if (source.ext !== 'pdf') {
+    return { ok: false, error: 'Só PDF pode ser impresso daqui. Baixe o arquivo e imprima pelo Word.' }
+  }
   return printFile(source.path)
 }
 

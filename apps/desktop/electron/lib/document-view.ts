@@ -120,7 +120,11 @@ export async function viewPrint(
 ): Promise<{ ok: boolean; error?: string }> {
   if (isSessionDoc(id)) return printSessionDocument(sessionId, id)
   const file = await mediaFile(id)
-  if (!file) return { ok: false, error: 'Documento sem arquivo para imprimir.' }
+  // Só PDF: o Chromium não renderiza .docx, e mandar um para a janela de
+  // impressão faz ele BAIXAR o arquivo em vez de abrir o diálogo.
+  if (!file || file.ext !== 'pdf') {
+    return { ok: false, error: 'Este documento não tem versão em PDF para imprimir. Baixe o arquivo.' }
+  }
   return printFile(file.path)
 }
 

@@ -2062,6 +2062,7 @@
     "zoomIn": "Zoom in",
     "zoomOut": "Zoom out",
     "print": "Print",
-    "download": "Download"
+    "download": "Download",
+    "actionFailed": "The action could not be completed."
   }
 }

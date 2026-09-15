@@ -87,6 +87,7 @@ export function SourceViewer({
   const [zoom, setZoom] = useState(ZOOM_BASE)
   const [focus, setFocus] = useState<Focus | null>(null)
   const [busy, setBusy] = useState<"print" | "export" | null>(null)
+  const [erro, setErro] = useState<string | null>(null)
   // A busca foi preenchida pela citação (e não digitada): é o que mantém o
   // destaque preso à página citada em vez de marcar a frase onde ela repetir.
   const [fromCitation, setFromCitation] = useState(false)
@@ -210,10 +211,22 @@ export function SourceViewer({
   // qualquer uma.
   const highlightPage = fromCitation ? citedPage : null
 
+  /**
+   * Imprimir e baixar podem falhar (formato sem versão em PDF, arquivo que
+   * sumiu, gravação negada). Antes o resultado era descartado e o botão
+   * simplesmente não fazia nada — o erro precisa chegar em quem clicou.
+   */
   const run = async (action: "print" | "export") => {
     setBusy(action)
-    if (action === "print") await docsApi.print(sessionId, docId)
-    else await docsApi.export(sessionId, docId)
+    setErro(null)
+    const result =
+      action === "print"
+        ? await docsApi.print(sessionId, docId)
+        : await docsApi.export(sessionId, docId)
+    // Cancelar no diálogo não é erro: o usuário desistiu.
+    if (!result.ok && !("canceled" in result && result.canceled)) {
+      setErro(result.error ?? t("sources.actionFailed"))
+    }
     setBusy(null)
   }
 
@@ -334,6 +347,19 @@ export function SourceViewer({
           </a>
         )}
       </div>
+
+      {erro && (
+        <div className="flex items-start gap-2 border-b border-border/60 bg-destructive/10 px-3 py-1.5 text-[11px] text-destructive">
+          <p className="min-w-0 flex-1">{erro}</p>
+          <button
+            type="button"
+            onClick={() => setErro(null)}
+            className="flex size-4 shrink-0 cursor-pointer items-center justify-center rounded hover:bg-destructive/20"
+          >
+            <X className="size-3" />
+          </button>
+        </div>
+      )}
 
       {findOpen && (
         <div className="flex items-center gap-2 border-b border-border/60 px-3 py-1.5">
