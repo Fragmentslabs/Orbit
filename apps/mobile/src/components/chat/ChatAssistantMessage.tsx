@@ -23,6 +23,7 @@ import type {
   ToolPart,
   AgentPart,
   ArtifactPart,
+  DocumentPart,
   ImagePart,
   FilePart,
 } from '@orbit/shared'
@@ -536,6 +537,34 @@ function AssistantArtifact({ part }: { part: ArtifactPart }) {
   )
 }
 
+/**
+ * Documento gerado pelo agente (PDF/DOCX).
+ *
+ * Sem este caso a part caía no `default: return null` e o documento virava um
+ * BURACO na mensagem — o agente dizia que entregou algo e não aparecia nada.
+ * É o mesmo problema que o artefato já teve, e a solução é a mesma: anunciar
+ * o que foi criado e dizer onde abrir, em vez de sumir.
+ */
+function AssistantDocument({ part }: { part: DocumentPart }) {
+  const { t } = useTranslation()
+  const tokens = getThemeTokens(useThemeStore((s) => s.resolved))
+  return (
+    <View
+      className="mt-2 w-full gap-1 rounded-lg px-3 py-2"
+      style={{ borderWidth: 1, borderColor: tokens.border }}
+    >
+      <Text className="text-xs font-medium" style={{ color: tokens.foreground }}>
+        {part.title}
+      </Text>
+      <Text className="text-xs" style={{ color: tokens.mutedForeground }}>
+        {part.formats.length > 0
+          ? `${part.formats.map((f) => f.toUpperCase()).join(' · ')} — ${t('chatAssistant.documentDesktopOnly')}`
+          : t('chatAssistant.documentDesktopOnly')}
+      </Text>
+    </View>
+  )
+}
+
 function AssistantImage({ part }: { part: ImagePart }) {
   const { t } = useTranslation()
   const tokens = getThemeTokens(useThemeStore((s) => s.resolved))
@@ -716,6 +745,8 @@ export function ChatAssistantMessage({ message, compact, isLast, isBusy, onRever
             return <AssistantImage key={part.id} part={part} />
           case 'artifact':
             return <AssistantArtifact key={part.id} part={part} />
+          case 'document':
+            return <AssistantDocument key={part.id} part={part} />
           case 'file':
             return (
               <View key={part.id} className="mt-1 w-full">

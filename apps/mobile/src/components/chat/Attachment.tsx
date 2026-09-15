@@ -56,8 +56,18 @@ export function MessageAttachment({ file }: { file: FilePart }) {
         >
           <Image source={file.url} style={s.image} contentFit="cover" />
         </Pressable>
-        {file.url && (
-          <ImageLightbox src={file.url} alt={file.filename} open={lightboxOpen} onOpenChange={setLightboxOpen} />
+        {/*
+          A lista mostra o thumbnail (leve, ja veio na mensagem); ampliar pega
+          o original da galeria. O desktop reescreve o mediaUrl para um HTTP
+          assinado antes de enviar — aqui ele chega pronto para carregar.
+        */}
+        {(file.mediaUrl || file.url) && (
+          <ImageLightbox
+            src={file.mediaUrl || file.url}
+            alt={file.filename}
+            open={lightboxOpen}
+            onOpenChange={setLightboxOpen}
+          />
         )}
       </>
     )

@@ -68,6 +68,11 @@ import {
 import * as rotinas from './rotinas'
 import * as esteira from './esteira'
 import {
+  rewriteMediaPart as rewriteMediaPartOne,
+  rewriteMessage as rewriteMessageMedia,
+  rewriteMessages as rewriteMessagesMedia,
+} from './companion-media'
+import {
   startCompanionHttpServer,
   stopCompanionHttpServer,
   isCompanionHttpRunning,
@@ -285,44 +290,18 @@ function forkId(): string {
 // montada com o host que o próprio client usou para conectar, que é o único
 // endereço que o celular consegue alcançar.
 
-const MEDIA_URL_RE = /^orbit-media:\/\/([a-zA-Z0-9_-]+\.(png|jpg|jpeg|webp|gif))$/
-
 function mediaBaseUrl(client: ConnectedClient): string {
   return `http://${client.mediaHost}:${COMPANION_HTTP_PORT}`
 }
 
-function rewriteImagePart(part: MessagePart, base: string): MessagePart | null {
-  if (part.type !== 'image') return null
-  const id = MEDIA_URL_RE.exec(part.src)?.[1]
-  if (!id) return null
-  return { ...part, src: `${base}/api/media/${id}?t=${createMediaToken(id)}` }
-}
-
-function rewriteMessage(msg: ChatMessage, base: string): ChatMessage | null {
-  let changed = false
-  const parts = msg.parts.map((p) => {
-    const rewritten = rewriteImagePart(p, base)
-    if (rewritten) {
-      changed = true
-      return rewritten
-    }
-    return p
-  })
-  return changed ? { ...msg, parts } : null
-}
-
-function rewriteMessages(msgs: ChatMessage[], base: string): ChatMessage[] | null {
-  let changed = false
-  const out = msgs.map((m) => {
-    const rewritten = rewriteMessage(m, base)
-    if (rewritten) {
-      changed = true
-      return rewritten
-    }
-    return m
-  })
-  return changed ? out : null
-}
+/** A reescrita mora no companion-media.ts (puro e testado); aqui só entra a
+ *  fabrica de token, que depende do segredo persistido. */
+const rewriteMessage = (msg: ChatMessage, base: string) =>
+  rewriteMessageMedia(msg, base, createMediaToken)
+const rewriteMessages = (msgs: ChatMessage[], base: string) =>
+  rewriteMessagesMedia(msgs, base, createMediaToken)
+const rewriteMediaPart = (part: MessagePart, base: string) =>
+  rewriteMediaPartOne(part, base, createMediaToken)
 
 // ─── Request Handlers ────────────────────────────────────────────────────────
 
@@ -1349,7 +1328,7 @@ export function forwardChatEvent(event: ChatEvent): void {
       const rewritten = rewriteMessages(event.messages, base)
       if (rewritten) out = { ...event, messages: rewritten }
     } else if (event.type === 'part') {
-      const rewritten = rewriteImagePart(event.part, base)
+      const rewritten = rewriteMediaPart(event.part, base)
       if (rewritten) out = { ...event, part: rewritten }
     }
     client.ws.send(wrap({ type: 'chat:event', event: out } as CompanionEvent))
