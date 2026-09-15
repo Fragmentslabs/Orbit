@@ -109,6 +109,27 @@ export const RENDERER_DIST = path.join(process.env.APP_ROOT, 'dist')
 
 process.env.VITE_PUBLIC = VITE_DEV_SERVER_URL ? path.join(process.env.APP_ROOT, 'public') : RENDERER_DIST
 
+/**
+ * Ícone da janela.
+ *
+ * No Windows a barra de tarefas pede o tamanho PEQUENO (16/32px). Com um PNG
+ * grande e só ele, o Chromium não tem o que entregar nesse tamanho e cai no
+ * ícone padrão do Electron — era o que aparecia no modo dev. O .ico traz os
+ * sete tamanhos já rasterizados (build/icon.ico, gerado por
+ * scripts/make-ico.mjs).
+ *
+ * No app empacotado o .ico não vai junto (o `files` do builder leva só dist e
+ * dist-electron) e nem precisa: ali o próprio executável carrega o ícone. Por
+ * isso a escolha é por EXISTÊNCIA do arquivo, não por ambiente.
+ */
+function windowIconPath(): string {
+  if (process.platform === 'win32') {
+    const ico = path.join(process.env.APP_ROOT, 'build', 'icon.ico')
+    if (existsSync(ico)) return ico
+  }
+  return path.join(process.env.VITE_PUBLIC, 'logo.png')
+}
+
 // Privilégios do orbit-artifact:// — TEM que acontecer aqui, no topo do
 // módulo: depois de app.whenReady() o Chromium já fixou a tabela de schemes e
 // o artefato carregaria como origem opaca, sem rodar script. O protocolo em si
@@ -227,7 +248,7 @@ function createWindow() {
   const isInitialWindow = !entranceWindowCreated
   entranceWindowCreated = true
   win = new BrowserWindow({
-    icon: path.join(process.env.VITE_PUBLIC, 'logo.png'),
+    icon: windowIconPath(),
     minWidth: 720,
     minHeight: 480,
     // Nasce escondida e só aparece no primeiro frame do renderer (ready-to-
@@ -946,9 +967,16 @@ async function getCommitFileDiff(
 }
 
 app.whenReady().then(() => {
-  // WM_CLASS do Electron vem de app.name; o .desktop do Linux declara
-  // StartupWMClass=Orbit — alinhar aqui garante o ícone correto no dock/menu.
+  // WM_CLASS do Electron vem do desktopName do package.json ("orbit.desktop"),
+  // e o electron-builder nomeia o .desktop e o StartupWMClass a partir do
+  // MESMO campo (linux.syncDesktopName). E esse casamento que faz o ambiente
+  // ligar a janela aberta ao atalho instalado — sem ele o dock nao acha o
+  // icone e cai no generico.
   app.setName('Orbit')
+
+  // Identidade da app no Windows. Sem ela o sistema trata a janela como sendo
+  // do electron.exe em modo dev, e a barra de tarefas mostra o icone dele.
+  if (process.platform === 'win32') app.setAppUserModelId('com.fragmentslabs.orbit.code')
 
   // Instância secundária: o lock não foi obtido e o app já está saindo.
   if (!gotSingleInstanceLock) return
