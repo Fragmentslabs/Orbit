@@ -165,3 +165,19 @@
     scrollbar-color: var(--border) transparent;
   }
 }
+/**
+ * Camada de seleção do visualizador de PDF.
+ *
+ * A página é uma imagem e o texto por cima é transparente, existindo só para
+ * dar seleção e cópia. Sem uma regra de ::selection o Chromium pinta o
+ * selecionado com a cor de destaque do sistema, IGNORANDO o transparente — e o
+ * texto reaparece deslocado sobre o da imagem, como se estivesse sendo escrito
+ * em cima dela.
+ *
+ * Medido por captura de tela: sem regra, 1338 pixels escuros na área do texto
+ * selecionado; declarando o fundo, zero — e a faixa continua visível.
+ */
+.pdf-text-layer ::selection {
+  color: transparent;
+  background: rgb(59 130 246 / 0.35);
+}

@@ -27,8 +27,9 @@ import { cn } from "@/lib/utils"
  *   busca) grifado por cima. Não é o visualizador nativo do Chromium porque
  *   ele é um plugin fechado — dá para apontar a página pela URL, mas não para
  *   alcançar o conteúdo nem a busca dele, e portanto não há como marcar o
- *   trecho. Grifar dentro do PDF exige desenhar o PDF. O preço é não haver
- *   seleção de texto aqui: a página é uma imagem.
+ *   trecho. Grifar dentro do PDF exige desenhar o PDF. A página é uma imagem,
+ *   e a seleção vem de uma camada de texto transparente posicionada sobre os
+ *   glifos (ver PageView).
  * - Texto: o texto extraído com as linhas numeradas — onde se seleciona e
  *   copia, e o mesmo texto que o modelo leu (é o que garante que a linha 28
  *   daqui seja a linha 28 que ele citou).
@@ -705,6 +706,44 @@ function PageView({
     [rendered, highlight],
   )
   const aspect = rendered && rendered.height > 0 ? rendered.width / rendered.height : 1
+  const layerRef = useRef<HTMLDivElement>(null)
+
+  /**
+   * Ajusta a largura de cada span pela MEDIÇÃO, e não pela estimativa.
+   *
+   * O span tem que ocupar exatamente a largura que aquele texto ocupa na
+   * imagem, senão a marca da seleção sobra ou falta em relação ao glifo. A
+   * estimativa por meia altura chega perto mas erra em fonte condensada,
+   * versalete e número; medir acerta.
+   *
+   * `offsetWidth` é a largura de LAYOUT e ignora o transform, então dá para
+   * ler a largura natural mesmo com o scaleX anterior aplicado — sem ter que
+   * zerá-lo antes e provocar um segundo cálculo de layout.
+   */
+  useLayoutEffect(() => {
+    const layer = layerRef.current
+    if (!layer || !rendered) return
+    const ajustar = () => {
+      const pageWidth = layer.clientWidth
+      if (!pageWidth) return
+      const spans = layer.children
+      const naturais: number[] = []
+      for (let i = 0; i < spans.length; i += 1) naturais.push((spans[i] as HTMLElement).offsetWidth)
+      for (let i = 0; i < spans.length; i += 1) {
+        const item = rendered.items[i]
+        if (!item) continue
+        const alvo = item.width * pageWidth
+        const escala = naturais[i] > 0 ? alvo / naturais[i] : selectionScaleX(item, aspect)
+        ;(spans[i] as HTMLElement).style.transform = `scaleX(${Math.min(3, Math.max(0.2, escala))})`
+      }
+    }
+    ajustar()
+    // O zoom muda a largura da página: sem reobservar, a camada ficaria na
+    // escala de antes.
+    const observer = new ResizeObserver(ajustar)
+    observer.observe(layer)
+    return () => observer.disconnect()
+  }, [rendered, aspect])
 
   return (
     <div
@@ -739,10 +778,12 @@ function PageView({
             />
           ))}
           {/* Camada de seleção: o texto visível está no pixel da imagem, e
-              estes spans transparentes existem só para dar seleção e cópia. O
-              alinhamento é estimado (ver selectionScaleX), então a marca da
-              seleção encosta no glifo sem ser exata. */}
-          <div className="absolute inset-0">
+              estes spans transparentes existem só para dar seleção e cópia.
+              `selection:text-transparent` é o que impede o texto de APARECER
+              ao ser selecionado: sem isso o Chromium pinta o selecionado com
+              a cor de destaque do sistema, ignorando o transparente — e o
+              texto surgia por cima do da imagem, desalinhado. */}
+          <div ref={layerRef} className="pdf-text-layer absolute inset-0">
             {rendered.items.map((item, i) => (
               <span
                 key={i}
@@ -753,6 +794,7 @@ function PageView({
                   // A altura do item é fração da ALTURA da página, e o cqw
                   // mede a LARGURA: a proporção converte entre as duas.
                   fontSize: `${(item.height / aspect) * 100}cqw`,
+                  // Estimativa inicial; o efeito abaixo a corrige por medição.
                   transform: `scaleX(${selectionScaleX(item, aspect)})`,
                 }}
               >
