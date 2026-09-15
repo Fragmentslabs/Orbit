@@ -81,6 +81,8 @@ interface PanelState {
     sessionId: string,
     ref: { docId: string; page: number; fromLine?: number; toLine?: number; title: string },
   ) => void
+  /** Chat novo virou sessão: as abas abertas no balde órfão passam a ser dela. */
+  adoptOrphanTabs: (sessionId: string) => void
   getTabs: (sessionId: string) => PanelTab[]
   getActiveTabId: (sessionId: string) => string | null
   /** Atualiza o título das abas de chat que apontam para uma sessão (ex.: agente nomeou o chat). */
@@ -134,6 +136,9 @@ interface PanelState {
   pendingDiffTaskId?: string
   pendingDiffTitle?: string
 }
+
+/** Balde das abas de um chat que ainda nao virou sessao (ver adoptOrphanTabs). */
+export const ORPHAN_KEY = "__orphan__"
 
 let activeTimer: ReturnType<typeof setTimeout> | null = null
 const ACTIVE_TIMEOUT_MS = 6000
@@ -254,6 +259,25 @@ export const usePanelStore = create<PanelState>((set, get) => {
           tabsBySession: { ...state.tabsBySession, [sessionId]: [...tabs, tab] },
           activeTabBySession: { ...state.activeTabBySession, [sessionId]: tab.id },
         }
+      }),
+
+    adoptOrphanTabs: (sessionId) =>
+      set((state) => {
+        const orphans = state.tabsBySession[ORPHAN_KEY]
+        if (!orphans || orphans.length === 0) return state
+        // A sessão nova não tem abas; se tivesse, as dela mandam — o órfão é
+        // um rascunho, não pode sobrescrever o que já existe.
+        if ((state.tabsBySession[sessionId] ?? []).length > 0) return state
+        const tabsBySession = { ...state.tabsBySession }
+        delete tabsBySession[ORPHAN_KEY]
+        tabsBySession[sessionId] = orphans.map((tab) =>
+          // A aba de chat pendente segue apontando para o que ela criou.
+          tab.sessionId || tab.pending ? tab : { ...tab, sessionId },
+        )
+        const activeTabBySession = { ...state.activeTabBySession }
+        activeTabBySession[sessionId] = activeTabBySession[ORPHAN_KEY] ?? null
+        delete activeTabBySession[ORPHAN_KEY]
+        return { tabsBySession, activeTabBySession }
       }),
 
     getTabs: (sessionId) => get().tabsBySession[sessionId] ?? [],

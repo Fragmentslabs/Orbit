@@ -2023,7 +2023,6 @@
     "refresh": "Refresh",
     "remove": "Remove source",
     "loading": "Loading sources…",
-    "noSession": "Open a conversation to see its sources.",
     "tooBig": "{{name}}: larger than the {{size}} limit.",
     "truncated": "cut at the size limit",
     "unitPages_one": "{{count}} page",
@@ -2063,6 +2062,8 @@
     "zoomOut": "Zoom out",
     "print": "Print",
     "download": "Download",
-    "actionFailed": "The action could not be completed."
+    "actionFailed": "The action could not be completed.",
+    "draftTitle": "In this new chat",
+    "draftHint": "Bring the material before asking: whatever you attach here becomes part of the conversation as soon as you send the first message."
   }
 }

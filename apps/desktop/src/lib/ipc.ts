@@ -599,6 +599,9 @@ export const docsApi = {
     >,
   remove: (sessionId: string, docId: string) =>
     window.ipcRenderer.invoke("docs:remove", sessionId, docId) as Promise<boolean>,
+  /** Chat novo virou sessão: as fontes do rascunho passam a ser dela. */
+  adoptDraft: (sessionId: string) =>
+    window.ipcRenderer.invoke("docs:adoptDraft", sessionId) as Promise<number>,
   /** Chat excluído: apaga só o escopo próprio dele (nunca o da pasta). */
   clearSession: (sessionId: string) =>
     window.ipcRenderer.invoke("docs:clearSession", sessionId) as Promise<void>,

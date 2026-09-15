@@ -192,7 +192,19 @@ function DocumentRow({
   )
 }
 
+/**
+ * Escopo do chat que ainda nao virou sessao. Precisa bater com o DRAFT_SCOPE
+ * do main: e a mesma pasta em disco, e o rascunho e adotado pela sessao na
+ * primeira mensagem.
+ */
+const DRAFT_SCOPE = "draft"
+
 export function SourcesTab({ sessionId }: { sessionId?: string }) {
+  // Sem sessao ainda (chat novo): as fontes vao para o escopo do rascunho, em
+  // vez de a aba ficar inerte pedindo que o usuario mande uma mensagem antes
+  // de poder trazer o material.
+  const scope = sessionId ?? DRAFT_SCOPE
+  const isDraft = !sessionId
   const { t } = useTranslation()
   const [shared, setShared] = useState<SourceDocument[]>([])
   const [own, setOwn] = useState<SourceDocument[]>([])
@@ -215,19 +227,13 @@ export function SourcesTab({ sessionId }: { sessionId?: string }) {
   )
 
   const refresh = useCallback(async () => {
-    if (!sessionId) {
-      setShared([])
-      setOwn([])
-      setLoading(false)
-      return
-    }
-    const result = await docsApi.list(sessionId)
+    const result = await docsApi.list(scope)
     setShared(result.shared)
     setOwn(result.own)
     setFolderId(result.folderId)
     setUsage(result.usage)
     setLoading(false)
-  }, [sessionId])
+  }, [scope])
 
   useEffect(() => {
     setLoading(true)
@@ -240,7 +246,7 @@ export function SourcesTab({ sessionId }: { sessionId?: string }) {
 
   const addFiles = useCallback(
     async (files: File[], toShared: boolean) => {
-      if (!sessionId || files.length === 0) return
+      if (files.length === 0) return
       setBusy(true)
       setErrors([])
       const payload: { filename: string; data: string }[] = []
@@ -257,57 +263,53 @@ export function SourcesTab({ sessionId }: { sessionId?: string }) {
         }
       }
       if (payload.length > 0) {
-        const result = await docsApi.add(sessionId, payload, toShared)
+        const result = await docsApi.add(scope, payload, toShared)
         failed.push(...result.errors)
       }
       setErrors(failed)
       setBusy(false)
       await refresh()
     },
-    [sessionId, refresh, t],
+    [scope, refresh, t],
   )
 
   const addText = useCallback(
     async (title: string, text: string, shared: boolean) => {
-      if (!sessionId) return
       setBusy(true)
-      const result = await docsApi.addText(sessionId, title, text, shared)
+      const result = await docsApi.addText(scope, title, text, shared)
       setErrors(result.ok ? [] : [result.error])
       setBusy(false)
       await refresh()
     },
-    [sessionId, refresh],
+    [scope, refresh],
   )
 
   const addUrl = useCallback(
     async (url: string, shared: boolean) => {
-      if (!sessionId) return
       setBusy(true)
-      const result = await docsApi.addUrl(sessionId, url, shared)
+      const result = await docsApi.addUrl(scope, url, shared)
       setErrors(result.ok ? [] : [result.error])
       setBusy(false)
       await refresh()
     },
-    [sessionId, refresh],
+    [scope, refresh],
   )
 
   const move = useCallback(
     async (docId: string, toShared: boolean) => {
-      if (!sessionId) return
-      const result = await docsApi.setShared(sessionId, docId, toShared)
+      const result = await docsApi.setShared(scope, docId, toShared)
       setErrors(result.ok ? [] : [result.error])
       await refresh()
     },
-    [sessionId, refresh],
+    [scope, refresh],
   )
 
   const remove = useCallback(
     async (docId: string) => {
-      if (!sessionId) return
-      await docsApi.remove(sessionId, docId)
+      await docsApi.remove(scope, docId)
       await refresh()
     },
-    [sessionId, refresh],
+    [scope, refresh],
   )
 
   /** Soltar na área decide o escopo: arquivo de fora entra ali, documento
@@ -325,14 +327,6 @@ export function SourcesTab({ sessionId }: { sessionId?: string }) {
     },
     [addFiles, move],
   )
-
-  if (!sessionId) {
-    return (
-      <div className="flex flex-1 items-center justify-center p-6 text-center text-xs text-muted-foreground">
-        {t("sources.noSession")}
-      </div>
-    )
-  }
 
   const section = (
     kind: "shared" | "own",
@@ -462,8 +456,14 @@ export function SourcesTab({ sessionId }: { sessionId?: string }) {
                 shared,
                 sharedInput,
               )}
-            {section("own", t("sources.ownTitle"), t("sources.ownHint"), own, ownInput)}
-            {!folderName && (
+            {section(
+              "own",
+              isDraft ? t("sources.draftTitle") : t("sources.ownTitle"),
+              isDraft ? t("sources.draftHint") : t("sources.ownHint"),
+              own,
+              ownInput,
+            )}
+            {!folderName && !isDraft && (
               <p className="px-3 py-2 text-[11px] text-muted-foreground/80">
                 {t("sources.noFolderHint")}
               </p>

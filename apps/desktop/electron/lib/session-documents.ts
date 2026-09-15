@@ -192,6 +192,19 @@ export async function listSessionSources(sessionId: string): Promise<{
   }
 }
 
+/**
+ * Escopo do chat que ainda não existe.
+ *
+ * Um chat novo é um RASCUNHO: a sessão só nasce ao enviar a primeira mensagem.
+ * Sem um escopo próprio, anexar antes disso seria impossível — e obrigar a
+ * mandar uma mensagem só para poder anexar inverte a ordem natural de "trago o
+ * material, depois pergunto".
+ *
+ * É um escopo fixo, e não um por rascunho, pelo mesmo motivo do rascunho de
+ * texto do input (draft-input.ts): a UI tem um chat novo por vez.
+ */
+export const DRAFT_SCOPE = 'draft'
+
 /** Contador por escopo. O arquivo é o que garante que o id nunca volte. */
 const COUNTER_FILE = 'counter.json'
 
@@ -281,6 +294,62 @@ async function writeDocument(
   await fsp.mkdir(dir, { recursive: true })
   await fsp.writeFile(path.join(dir, `${doc.id}.json`), JSON.stringify(stored), 'utf8')
   if (original) await fsp.writeFile(path.join(dir, `${doc.id}.bin`), original)
+}
+
+/**
+ * Passa as fontes do rascunho para a sessão que acabou de nascer.
+ *
+ * Chamado quando a primeira mensagem cria a sessão — mesmo momento em que o
+ * app adota o texto do input, o toggle do Brain e o modelo escolhidos no
+ * rascunho. Depois disso o escopo do rascunho fica vazio para o próximo chat
+ * novo.
+ *
+ * Os ids são reatribuídos pelo contador da sessão em vez de renomear o
+ * diretório: a sessão pode já ter documentos (raro, mas possível se algo
+ * anexou antes), e um `doc1` chegando por cima de outro `doc1` apagaria o que
+ * já estava lá.
+ */
+export async function adoptDraftDocuments(sessionId: string): Promise<number> {
+  if (!SAFE_SCOPE.test(sessionId) || sessionId === DRAFT_SCOPE) return 0
+  const from = scopeDir(DRAFT_SCOPE)
+  let files: string[]
+  try {
+    files = (await fsp.readdir(from)).filter(
+      (file) => file.endsWith('.json') && SAFE_ID.test(file.replace(/\.json$/, '')),
+    )
+  } catch {
+    return 0
+  }
+  if (files.length === 0) {
+    await fsp.rm(from, { recursive: true, force: true })
+    return 0
+  }
+
+  const target = scopeDir(sessionId)
+  await fsp.mkdir(target, { recursive: true })
+  let adopted = 0
+  for (const file of files.sort()) {
+    const oldId = file.replace(/\.json$/, '')
+    try {
+      const raw = await fsp.readFile(path.join(from, file), 'utf8')
+      const stored = JSON.parse(raw) as StoredDocument
+      const id = await allocateId(sessionId, 'doc')
+      await fsp.writeFile(
+        path.join(target, `${id}.json`),
+        JSON.stringify({ ...stored, id, sessionId }),
+        'utf8',
+      )
+      // O arquivo original vai junto: sem ele o documento perderia a
+      // rasterização, o sheet_query e a edição preservando formatação.
+      await fsp.rename(path.join(from, `${oldId}.bin`), path.join(target, `${id}.bin`)).catch(() => {})
+      adopted += 1
+    } catch {
+      // Um arquivo ilegível não pode impedir a adoção dos outros.
+    }
+  }
+  await fsp.rm(from, { recursive: true, force: true })
+  notifyDocumentsChanged()
+  return adopted
 }
 
 /** Reconstrói o ExtractedDocument de um documento guardado. */

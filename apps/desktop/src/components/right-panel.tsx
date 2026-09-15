@@ -25,7 +25,7 @@ import { SourcesTab } from "@/src/components/sources-tab"
 import { SourceViewer } from "@/src/components/source-viewer"
 import { ProcessOutputDialog } from "@/src/components/process-output-dialog"
 import { useWorkspace } from "@/lib/workspace-context"
-import { usePanelStore, nextTabId, type TabType, type PanelTab } from "@/src/stores/panel-store"
+import { usePanelStore, nextTabId, ORPHAN_KEY, type TabType, type PanelTab } from "@/src/stores/panel-store"
 import { useSessionStore } from "@/src/stores/session-store"
 import { useProcessStore } from "@/src/stores/process-store"
 import { useTerminalStore } from "@/src/stores/terminal-store"
@@ -442,7 +442,7 @@ export function RightPanel() {
 
   const tabsBySession = usePanelStore((s) => s.tabsBySession)
   const activeTabBySession = usePanelStore((s) => s.activeTabBySession)
-  const sessionKey = activeSessionId ?? "__orphan__"
+  const sessionKey = activeSessionId ?? ORPHAN_KEY
   // `?? []` cria um array novo a cada render: memoizado, os callbacks e
   // efeitos abaixo param de se recriar junto.
   const tabs = useMemo(() => tabsBySession[sessionKey] ?? [], [tabsBySession, sessionKey])
@@ -535,7 +535,7 @@ export function RightPanel() {
   }, [sessionKey, tabs, addTabToStore, setActiveTabInStore, folders, tabMeta, nextTabNumber])
 
   const removeTab = useCallback((id: string) => {
-    const sk = activeSessionId ?? "__orphan__"
+    const sk = activeSessionId ?? ORPHAN_KEY
     const tab = tabs.find((t) => t.id === id)
     if (tab?.type === "terminal") {
       useTerminalStore.getState().killTerminal(id)

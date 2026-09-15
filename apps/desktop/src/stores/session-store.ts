@@ -822,6 +822,14 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       useSimplePrefs.getState().adopt(sessionId)
       useModeOverrides.getState().adopt(sessionId)
       useDraftInput.getState().adopt(sessionId)
+      // Fontes anexadas na aba ANTES de existir sessão. É aguardado, e não
+      // disparado em paralelo: o turno começa logo abaixo, e o agente precisa
+      // encontrar os documentos já no escopo da sessão quando chamar doc_list.
+      await docsApi.adoptDraft(sessionId)
+      // As abas do painel ficam guardadas por sessão; num chat novo elas vivem
+      // num balde órfão. Sem mudar de balde, a aba Fontes que o usuário acabou
+      // de usar sumiria da tela no instante em que ele mandasse a mensagem.
+      usePanelStore.getState().adoptOrphanTabs(sessionId)
       // O modelo escolhido no chat novo (draft) passa a ser o da sessão; sem
       // escolha explícita, fixa o modelo efetivamente usado (herdado do último
       // chat), para o picker e o envio continuarem consistentes.

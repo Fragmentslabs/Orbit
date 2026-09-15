@@ -55,6 +55,7 @@ import type { AnalyticsRange } from '@shared/analytics'
 import { approvePendingSkill, discardPendingSkill, listPendingSkills } from './lib/skills/pending'
 import { dataDir, listKeys, readJson, removeJson, writeJson } from './lib/storage'
 import {
+  adoptDraftDocuments,
   addSessionDocument,
   addSessionText,
   addSessionUrl,
@@ -1529,6 +1530,11 @@ app.whenReady().then(() => {
   )
   // Limpeza: o chat e a pasta são excluídos pelo renderer, que é quem sabe da
   // cascata — o que sobra aqui é apagar o que aquele escopo guardava em disco.
+  // Chat novo: a sessao so nasce na primeira mensagem, entao o que foi
+  // anexado antes disso vive num escopo de rascunho e e adotado aqui.
+  ipcMain.handle('docs:adoptDraft', (_event, sessionId: string) =>
+    adoptDraftDocuments(sessionId),
+  )
   ipcMain.handle('docs:clearSession', (_event, sessionId: string) =>
     deleteSessionDocuments(sessionId),
   )

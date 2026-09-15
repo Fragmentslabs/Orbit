@@ -2022,7 +2022,6 @@
     "refresh": "Recarregar",
     "remove": "Remover fonte",
     "loading": "Carregando fontes…",
-    "noSession": "Abra uma conversa para ver as fontes dela.",
     "tooBig": "{{name}}: maior que o limite de {{size}}.",
     "truncated": "cortado no limite",
     "unitPages_one": "{{count}} página",
@@ -2062,6 +2061,8 @@
     "zoomOut": "Afastar",
     "print": "Imprimir",
     "download": "Baixar",
-    "actionFailed": "Não foi possível concluir a ação."
+    "actionFailed": "Não foi possível concluir a ação.",
+    "draftTitle": "Neste chat novo",
+    "draftHint": "Traga o material antes de perguntar: o que você anexar aqui passa a ser da conversa assim que você enviar a primeira mensagem."
   }
 }
