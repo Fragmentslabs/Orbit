@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { ChevronDown, ChevronUp, ExternalLink, Loader2, Search, X } from "lucide-react"
-import { docsApi, type SourceText } from "@/src/lib/ipc"
+import { docsApi, type RenderedPage, type SourceText } from "@/src/lib/ipc"
 import { cn } from "@/lib/utils"
 
 /**
@@ -30,6 +30,9 @@ import { cn } from "@/lib/utils"
 /** Teto de linhas renderizadas de uma vez. Acima disso a rolagem contínua
  *  passa a custar mais do que entrega: são dezenas de milhares de nós. */
 const MAX_LINES = 20_000
+
+/** Páginas por chamada de renderização — o mesmo teto do rasterizador. */
+const BATCH = 5
 
 interface Match {
   page: number
@@ -135,6 +138,11 @@ export function SourceViewer({
 
   const current = matches[matchIndex]
   const citedPage = page ?? 0
+  // O texto das linhas citadas: é por ele que o destaque é localizado dentro
+  // do PDF — o pdfjs dá as coordenadas do TEXTO, não do número da linha.
+  const citedLines = data?.pages
+    .find((p) => p.num === citedPage)
+    ?.lines.slice((fromLine ?? 1) - 1, toLine ?? fromLine ?? 0) ?? []
   const term = query.trim().toLowerCase()
   const truncated = (data?.pages.length ?? 0) > visiblePages.length
 
@@ -273,12 +281,12 @@ export function SourceViewer({
           {t("sources.viewerMissing", { id: docId })}
         </div>
       ) : mode === "original" ? (
-        // O arquivo de verdade, no visualizador nativo: mesma rolagem, zoom e
-        // busca de um PDF aberto fora do app.
-        <iframe
-          src={docsApi.fileUrl(sessionId, docId, data.kind === "docx" ? "docx" : "pdf")}
-          title={data.filename}
-          className="min-h-0 flex-1 border-0 bg-muted/40"
+        <OriginalPages
+          sessionId={sessionId}
+          docId={docId}
+          total={data.totalPages}
+          citedPage={citedPage}
+          highlight={citedLines}
         />
       ) : (
         <div ref={scrollRef} className="flex-1 overflow-auto px-3 py-3 font-mono text-xs leading-relaxed">
@@ -324,6 +332,142 @@ export function SourceViewer({
           )}
         </div>
       )}
+    </div>
+  )
+}
+
+/**
+ * O PDF desenhado por nós, página a página, com o trecho citado grifado.
+ *
+ * Por que não o visualizador nativo do Chromium, que a versão anterior usava:
+ * ele é um plugin fechado — dá para apontar a página pela URL, mas não para
+ * alcançar o conteúdo nem a busca dele, e portanto não há como marcar o trecho
+ * citado. Grifar dentro do PDF exige desenhar o PDF.
+ *
+ * A troca é real e vale dizer: aqui não há seleção de texto, porque a página é
+ * uma imagem. Selecionar e copiar continua no modo Texto, que também é onde a
+ * busca marca as ocorrências.
+ *
+ * As páginas carregam sob demanda, em lotes: cada chamada de renderização abre
+ * uma janela oculta, então pedir de cinco em cinco é uma janela a cada cinco
+ * páginas roladas, e não uma por página.
+ */
+function OriginalPages({
+  sessionId,
+  docId,
+  total,
+  citedPage,
+  highlight,
+}: {
+  sessionId: string
+  docId: string
+  total: number
+  citedPage: number
+  highlight: string[]
+}) {
+  const { t } = useTranslation()
+  const [pages, setPages] = useState<Record<number, RenderedPage>>({})
+  const requested = useRef(new Set<number>())
+  const containerRef = useRef<HTMLDivElement>(null)
+  const citedRef = useRef<HTMLDivElement>(null)
+
+  const load = useCallback(
+    async (first: number) => {
+      const batch = Math.max(1, first - ((first - 1) % BATCH))
+      if (requested.current.has(batch)) return
+      requested.current.add(batch)
+      const result = await docsApi.render(sessionId, docId, batch, BATCH, {
+        // O destaque só é procurado no lote que contém a página citada:
+        // procurar em todo lote marcaria, em outras páginas, uma frase que
+        // simplesmente se repete — e o usuário leria isso como a citação.
+        highlight: citedPage >= batch && citedPage < batch + BATCH ? highlight : [],
+      })
+      if (!result) return
+      setPages((current) => {
+        const next = { ...current }
+        for (const p of result.pages) next[p.page] = p
+        return next
+      })
+    },
+    [sessionId, docId, citedPage, highlight],
+  )
+
+  // Primeiro lote: o que contém a página citada (ou o começo do documento).
+  useEffect(() => {
+    requested.current.clear()
+    setPages({})
+    void load(citedPage || 1)
+  }, [load, citedPage])
+
+  useEffect(() => {
+    const root = containerRef.current
+    if (!root) return
+    const observer = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          if (!entry.isIntersecting) continue
+          const n = Number((entry.target as HTMLElement).dataset.page)
+          if (n) void load(n)
+        }
+      },
+      // Margem generosa: a página começa a renderizar antes de entrar na tela,
+      // senão a rolagem encontra sempre um retângulo vazio.
+      { root, rootMargin: "600px" },
+    )
+    for (const el of root.querySelectorAll("[data-page]")) observer.observe(el)
+    return () => observer.disconnect()
+  }, [load, total])
+
+  useLayoutEffect(() => {
+    if (citedPage && pages[citedPage]) citedRef.current?.scrollIntoView({ block: "start" })
+  }, [citedPage, pages])
+
+  return (
+    <div ref={containerRef} className="flex-1 overflow-auto bg-muted/40 p-3">
+      <div className="mx-auto flex max-w-3xl flex-col gap-3">
+        {Array.from({ length: total }, (_, i) => i + 1).map((n) => {
+          const rendered = pages[n]
+          return (
+            <div
+              key={n}
+              data-page={n}
+              ref={n === citedPage ? citedRef : undefined}
+              className="relative overflow-hidden rounded bg-background shadow-sm"
+              // Proporção de A4 enquanto não renderizou: sem uma altura
+              // aproximada, a lista inteira colapsaria e tudo entraria na tela
+              // de uma vez, disparando o carregamento do documento todo.
+              style={rendered ? undefined : { aspectRatio: "1 / 1.414" }}
+            >
+              {rendered ? (
+                <>
+                  <img
+                    src={rendered.dataUrl}
+                    alt={t("sources.pageOf", { page: n, total })}
+                    className="block w-full"
+                  />
+                  {rendered.highlights.map((rect, i) => (
+                    <span
+                      key={i}
+                      className="pointer-events-none absolute bg-amber-300/45 ring-1 ring-amber-500/50"
+                      style={{
+                        left: `${(rect.x / rendered.width) * 100}%`,
+                        top: `${(rect.y / rendered.height) * 100}%`,
+                        width: `${(rect.width / rendered.width) * 100}%`,
+                        height: `${(rect.height / rendered.height) * 100}%`,
+                      }}
+                    />
+                  ))}
+                </>
+              ) : (
+                <div className="flex h-full items-center justify-center gap-2 text-[11px] text-muted-foreground">
+                  <Loader2 className="size-3 animate-spin" />
+                  {t("sources.pageOf", { page: n, total })}
+                </div>
+              )}
+            </div>
+          )
+        })}
+      </div>
     </div>
   )
 }

@@ -63,6 +63,7 @@ import {
   listSessionSources,
   readSessionText,
   removeSessionDocument,
+  renderSessionPages,
   setSessionDocumentShared,
 } from './lib/session-documents'
 import { loadMainLocale, setMainLocale } from './lib/i18n'
@@ -1476,6 +1477,19 @@ app.whenReady().then(() => {
   // modelo, que e paginada porque cada pagina custa contexto.
   ipcMain.handle('docs:text', (_event, sessionId: string, docId: string) =>
     readSessionText(sessionId, docId),
+  )
+  // Paginas renderizadas com o trecho grifado: o visualizador nativo do
+  // Chromium e fechado, entao grifar dentro do PDF exige desenhar a pagina.
+  ipcMain.handle(
+    'docs:render',
+    (
+      _event,
+      sessionId: string,
+      docId: string,
+      from: number,
+      count: number,
+      options?: { scale?: number; highlight?: string[] },
+    ) => renderSessionPages(sessionId, docId, from, count, options ?? {}),
   )
   ipcMain.handle('docs:remove', (_event, sessionId: string, docId: string) =>
     removeSessionDocument(sessionId, docId),

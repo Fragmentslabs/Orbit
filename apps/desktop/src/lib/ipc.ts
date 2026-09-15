@@ -501,6 +501,15 @@ export interface SourceDocument {
   sourceUrl?: string
 }
 
+/** Uma pagina do PDF desenhada por nos, com onde marcar o trecho citado. */
+export interface RenderedPage {
+  page: number
+  dataUrl: string
+  width: number
+  height: number
+  highlights: { x: number; y: number; width: number; height: number }[]
+}
+
 /** O documento inteiro em texto, para o painel rolar e grifar o trecho. */
 export interface SourceText {
   filename: string
@@ -550,6 +559,18 @@ export const docsApi = {
     window.ipcRenderer.invoke("docs:text", sessionId, docId) as Promise<SourceText | null>,
   /** URL do arquivo original, servida pelo mesmo protocolo dos artefatos. */
   fileUrl: sourceFileUrl,
+  /** Paginas do PDF renderizadas, com os retangulos do trecho a grifar. */
+  render: (
+    sessionId: string,
+    docId: string,
+    from: number,
+    count: number,
+    options?: { scale?: number; highlight?: string[] },
+  ) =>
+    window.ipcRenderer.invoke("docs:render", sessionId, docId, from, count, options) as Promise<{
+      total: number
+      pages: RenderedPage[]
+    } | null>,
   /** Move entre os escopos (o id muda junto: docN ↔ srcN). */
   setShared: (sessionId: string, docId: string, shared: boolean) =>
     window.ipcRenderer.invoke("docs:setShared", sessionId, docId, shared) as Promise<

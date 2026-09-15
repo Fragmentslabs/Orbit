@@ -6,6 +6,7 @@ import { extractDocument, type DocumentKind, type ExtractedDocument } from './do
 import { documentKindOf } from './document-pages'
 import { readJson } from './storage'
 import { fetchReadablePage } from './tools/web'
+import { MAX_RASTER_PAGES, rasterizePdf, type HighlightRect } from './pdf-raster'
 
 /**
  * Documentos com que a conversa trabalha — as FONTES.
@@ -411,6 +412,53 @@ export async function readSessionText(
     })),
     sourceUrl: found.doc.sourceUrl,
     hasOriginal: (await sessionDocumentFile(sessionId, docId)) !== null,
+  }
+}
+
+/**
+ * Páginas do PDF renderizadas em imagem, com o trecho citado marcado.
+ *
+ * É o que permite grifar DENTRO do PDF: o visualizador nativo do Chromium é
+ * fechado — não dá para alcançar o conteúdo dele nem a sua busca — então a
+ * página é desenhada por nós e o destaque vai por cima, nas coordenadas que o
+ * pdfjs dá para o texto.
+ *
+ * Em lote porque cada chamada abre uma janela oculta: pedir de cinco em cinco
+ * é uma janela a cada cinco páginas, em vez de uma por página rolada.
+ */
+export async function renderSessionPages(
+  sessionId: string,
+  docId: string,
+  from: number,
+  count: number,
+  options: { scale?: number; highlight?: string[] } = {},
+): Promise<{
+  total: number
+  pages: { page: number; dataUrl: string; width: number; height: number; highlights: HighlightRect[] }[]
+} | null> {
+  const found = await readSessionDocument(sessionId, docId)
+  if (!found || found.doc.kind !== 'pdf') return null
+  const bytes = await readSessionDocumentBytes(sessionId, docId)
+  if (!bytes) return null
+
+  const start = Math.max(1, Math.round(from) || 1)
+  const wanted: number[] = []
+  for (let n = start; n < start + Math.min(Math.max(count, 1), MAX_RASTER_PAGES); n += 1) wanted.push(n)
+
+  const rendered = await rasterizePdf(bytes, {
+    pages: wanted,
+    scale: options.scale,
+    highlight: options.highlight,
+  })
+  return {
+    total: rendered.total,
+    pages: rendered.pages.map((p) => ({
+      page: p.pageNumber,
+      dataUrl: `data:image/png;base64,${p.png.toString('base64')}`,
+      width: p.width,
+      height: p.height,
+      highlights: p.highlights,
+    })),
   }
 }
 
