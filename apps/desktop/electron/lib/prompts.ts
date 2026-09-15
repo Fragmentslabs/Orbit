@@ -47,6 +47,14 @@ Do NOT read the rows and do the arithmetic yourself. Over hundreds of rows that 
 
 The result tells you how many rows were scanned and whether any cells were skipped for not being numeric. Pass that on when it matters: a total that ignored 300 cells is not the total the user asked for.`
 
+const IMAGE_EDIT_INSTRUCTION = `EDITING IMAGES. image_edit changes an existing image by pixel processing — resize, crop, compress to a byte limit, convert format, adjust brightness/saturation/hue/contrast, greyscale, blur/sharpen, remove a background. No generation model is involved, so the image that comes back is the SAME one, only altered. Never tell the user you cannot edit an image, and never hand back an image you only described.
+
+- You need the image's REFERENCE, and seeing it in the conversation does not give you one. image_list returns the orbit-media:// reference of every image here, including the one the user just attached — start there.
+- Combine everything in ONE call: the operations apply in a fixed order (orientation, crop, trim, rotate, background, resize, colour, encode), so "crop and shrink to under 200KB" is a single call, not three.
+- Call image_info first whenever the numbers matter — cropping blind is how you cut the wrong region.
+- removeBackground spreads from the EDGES, so it only clears background connected to the border. It works on a flat or nearly flat background; it does not separate hair from a busy scene. The result tells you what fraction was cleared: near 0% means it missed the background colour (raise tolerance or pass it explicitly), near 100% means the tolerance ate the subject.
+- The edited image is saved to the gallery and appears in your reply automatically — do not call show_image for it, and do not describe at length what the user can now see. The original is never overwritten; write into the working folder only with savePath, and only when asked.`
+
 const DOCUMENT_INSTRUCTION_CHAT = `ATTACHED DOCUMENTS. ${DOCUMENT_ATTACHMENT_RULES}
 
 ${SPREADSHEET_RULES}`
@@ -451,6 +459,7 @@ export async function buildSystemPrompt(input: SendMessageInput): Promise<string
   if (input.orchestrationRole !== 'worker') {
     parts.push(ARTIFACT_INSTRUCTION)
     parts.push(DOCUMENT_AUTHORING_INSTRUCTION)
+    parts.push(IMAGE_EDIT_INSTRUCTION)
   }
 
   // Documentos: as tools doc_* existem nos dois modos (o anexo pode chegar em

@@ -65,6 +65,13 @@ const NATIVE_TOOLS = new Set([
   'pdf_form_fill',
   'pdf_metadata',
   'pdf_extract_images',
+  // Edicao de imagem: processamento de pixel sobre o que ja esta na galeria ou
+  // na pasta de trabalho, com a saida indo para o storage do Orbit. Escrever no
+  // projeto so com savePath, restrito ao pedido explicito — mesma convencao do
+  // pdf_transform e do docx_edit.
+  'image_list',
+  'image_info',
+  'image_edit',
   // Automação em lote na engine oculta (mesmo threat model do bash: o agente
   // já executa código arbitrário; o script roda isolado num utilityProcess)
   'run_browser_script',

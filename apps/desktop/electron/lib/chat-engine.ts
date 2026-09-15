@@ -1329,8 +1329,11 @@ async function runChatTurn(win: BrowserWindow, input: SendMessageInput): Promise
                 })
               }
             }
-            // show_image: a imagem vira parte da resposta (renderizada pelo ai/image)
-            if (part.toolName === 'show_image') {
+            // show_image e image_edit: a imagem vira parte da resposta
+            // (renderizada pelo ai/image). No image_edit isso é o ponto — uma
+            // edição descrita em texto obrigaria o usuário a abrir a galeria
+            // para saber se o recorte do fundo ficou bom.
+            if (part.toolName === 'show_image' || part.toolName === 'image_edit') {
               const output = part.output as { mediaUrl?: string; alt?: string } | string
               if (typeof output === 'object' && output?.mediaUrl) {
                 upsertPart({

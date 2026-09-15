@@ -1,0 +1,457 @@
+import sharp from 'sharp'
+import type { Sharp } from 'sharp'
+
+/**
+ * Edição de imagens sem modelo de geração.
+ *
+ * Tudo aqui é processamento de pixel — redimensionar, recortar, ajustar tom,
+ * comprimir, recortar fundo. Nada inventa conteúdo, e é justamente por isso
+ * que serve para o trabalho corriqueiro: o resultado é previsível, é rápido, e
+ * a foto que entra é a mesma que sai.
+ *
+ * Módulo puro de bytes (sem Electron, sem IO), para ser testável — mesma
+ * separação do pdf-ops.ts.
+ */
+
+/** Tetos de sanidade: um pedido errado não pode virar um GB de RAM. */
+const MAX_PIXELS = 50_000_000
+const MAX_DIMENSION = 20_000
+
+export interface ImageInfo {
+  format: string
+  width: number
+  height: number
+  channels: number
+  hasAlpha: boolean
+  sizeBytes: number
+  /**
+   * Cor predominante em #rrggbb — palpite de fundo, não medição: o sharp a
+   * tira de um histograma binado, então o que volta é o centro do bin e pode
+   * diferir alguns pontos da cor que está lá.
+   */
+  dominant: string
+}
+
+export async function imageInfo(source: Buffer): Promise<ImageInfo> {
+  const meta = await sharp(source).metadata()
+  const stats = await sharp(source).stats()
+  return {
+    format: meta.format ?? 'desconhecido',
+    width: meta.width ?? 0,
+    height: meta.height ?? 0,
+    channels: meta.channels ?? 0,
+    hasAlpha: meta.hasAlpha ?? false,
+    sizeBytes: source.length,
+    dominant: toHex(stats.dominant),
+  }
+}
+
+function toHex({ r, g, b }: { r: number; g: number; b: number }): string {
+  const part = (v: number) => Math.round(v).toString(16).padStart(2, '0')
+  return `#${part(r)}${part(g)}${part(b)}`
+}
+
+/** `#rgb`, `#rrggbb` ou `rgb(r,g,b)` → canais. Erro explícito no resto: uma cor
+ *  que o modelo escreveu errado não pode virar preto silenciosamente. */
+export function parseColor(value: string): { r: number; g: number; b: number } {
+  const text = value.trim().toLowerCase()
+  const short = /^#([0-9a-f])([0-9a-f])([0-9a-f])$/.exec(text)
+  if (short) {
+    return {
+      r: parseInt(short[1] + short[1], 16),
+      g: parseInt(short[2] + short[2], 16),
+      b: parseInt(short[3] + short[3], 16),
+    }
+  }
+  const long = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/.exec(text)
+  if (long) {
+    return { r: parseInt(long[1], 16), g: parseInt(long[2], 16), b: parseInt(long[3], 16) }
+  }
+  const rgb = /^rgba?\(\s*(\d{1,3})\s*,\s*(\d{1,3})\s*,\s*(\d{1,3})/.exec(text)
+  if (rgb) {
+    return { r: Number(rgb[1]), g: Number(rgb[2]), b: Number(rgb[3]) }
+  }
+  throw new Error(`Cor inválida: "${value}". Use #rrggbb, #rgb ou rgb(r,g,b).`)
+}
+
+export interface RemoveBackgroundOptions {
+  /** Cor do fundo. Ausente = adivinhada pelas quinas da imagem. */
+  color?: string
+  /** 0–100. Quanto o pixel pode se afastar da cor de fundo e ainda ser fundo. */
+  tolerance?: number
+  /** Raio de suavização da borda recortada, em pixels. 0 = corte duro. */
+  feather?: number
+}
+
+export interface RemoveBackgroundResult {
+  png: Buffer
+  /** Cor tratada como fundo — o que o usuário precisa ver quando errou o alvo. */
+  color: string
+  /** Fração da imagem que virou transparente, 0–1. */
+  removed: number
+}
+
+/** Distância máxima possível entre duas cores RGB — normaliza a tolerância. */
+const MAX_DISTANCE = Math.sqrt(255 * 255 * 3)
+
+/**
+ * Recorta o fundo por preenchimento a partir das BORDAS.
+ *
+ * A diferença para um chroma key simples está aí: o chroma key apaga toda cor
+ * parecida, onde quer que ela esteja, e abre buracos no meio do assunto — a
+ * camisa branca da pessoa some junto com a parede branca. Espalhar a partir da
+ * borda só alcança o que está LIGADO ao fundo, então o branco cercado por
+ * assunto continua opaco.
+ *
+ * O que isto faz bem: fundo liso ou quase liso — foto de produto, retrato de
+ * estúdio, logotipo, captura de tela. O que não faz: separar cabelo de uma
+ * cena movimentada, que é exatamente onde um modelo de segmentação entra. O
+ * `removed` devolvido serve para reconhecer o segundo caso sem precisar olhar.
+ */
+export async function removeBackground(
+  source: Buffer,
+  options: RemoveBackgroundOptions = {},
+): Promise<RemoveBackgroundResult> {
+  const { data, info } = await sharp(source)
+    .rotate()
+    .ensureAlpha()
+    .raw()
+    .toBuffer({ resolveWithObject: true })
+  const { width, height } = info
+  if (width * height > MAX_PIXELS) {
+    throw new Error(
+      `Imagem grande demais para recortar o fundo (${width}x${height}). Redimensione antes.`,
+    )
+  }
+
+  const background = options.color ? parseColor(options.color) : sampleCorners(data, width, height)
+  const tolerance = Math.min(100, Math.max(0, options.tolerance ?? 12))
+  const limit = (tolerance / 100) * MAX_DISTANCE
+
+  // Fila explícita, e não recursão: uma imagem de alguns megapixels de fundo
+  // liso estouraria a pilha de chamadas na primeira foto de verdade.
+  const seen = new Uint8Array(width * height)
+  const queue = new Int32Array(width * height)
+  let head = 0
+  let tail = 0
+
+  const matches = (index: number): boolean => {
+    const at = index * 4
+    const dr = data[at] - background.r
+    const dg = data[at + 1] - background.g
+    const db = data[at + 2] - background.b
+    return Math.sqrt(dr * dr + dg * dg + db * db) <= limit
+  }
+
+  const push = (index: number) => {
+    if (seen[index]) return
+    seen[index] = 1
+    if (matches(index)) queue[tail++] = index
+  }
+
+  for (let x = 0; x < width; x++) {
+    push(x)
+    push((height - 1) * width + x)
+  }
+  for (let y = 0; y < height; y++) {
+    push(y * width)
+    push(y * width + width - 1)
+  }
+
+  let removed = 0
+  while (head < tail) {
+    const index = queue[head++]
+    data[index * 4 + 3] = 0
+    removed++
+    const x = index % width
+    const y = (index / width) | 0
+    if (x > 0) push(index - 1)
+    if (x < width - 1) push(index + 1)
+    if (y > 0) push(index - width)
+    if (y < height - 1) push(index + width)
+  }
+
+  const feather = Math.min(20, Math.max(0, options.feather ?? 0))
+  if (feather > 0) await softenAlpha(data, width, height, feather)
+
+  const png = await sharp(data, { raw: { width, height, channels: 4 } }).png().toBuffer()
+  return { png, color: toHex(background), removed: removed / (width * height) }
+}
+
+/**
+ * Cor de fundo pelas quatro quinas.
+ *
+ * Mediana por canal, e não média: se uma das quinas cair em cima do assunto,
+ * a média puxaria o palpite para uma cor que não existe na imagem, enquanto a
+ * mediana ignora a quina discordante.
+ */
+function sampleCorners(data: Buffer, width: number, height: number) {
+  const corners = [
+    0,
+    (width - 1) * 4,
+    (height - 1) * width * 4,
+    ((height - 1) * width + width - 1) * 4,
+  ]
+  const channel = (offset: number) => {
+    const values = corners.map((at) => data[at + offset]).sort((a, b) => a - b)
+    return Math.round((values[1] + values[2]) / 2)
+  }
+  return { r: channel(0), g: channel(1), b: channel(2) }
+}
+
+/**
+ * Borra SÓ o canal alfa, para a borda do recorte não ficar serrilhada.
+ *
+ * O corte por tolerância é binário: ou o pixel é fundo ou não é. Numa foto,
+ * a transição real ocupa um ou dois pixels misturados, e o corte duro deixa
+ * neles um contorno da cor do fundo antigo. Suavizar o alfa dissolve esse
+ * contorno sem tocar nas cores do assunto.
+ */
+async function softenAlpha(data: Buffer, width: number, height: number, radius: number) {
+  const alpha = Buffer.allocUnsafe(width * height)
+  for (let i = 0; i < width * height; i++) alpha[i] = data[i * 4 + 3]
+  const blurred = await sharp(alpha, { raw: { width, height, channels: 1 } })
+    .blur(radius)
+    .raw()
+    .toBuffer()
+  for (let i = 0; i < width * height; i++) data[i * 4 + 3] = blurred[i]
+}
+
+export interface ImageEdit {
+  resize?: {
+    width?: number
+    height?: number
+    fit?: 'cover' | 'contain' | 'fill' | 'inside' | 'outside'
+    /** Deixa crescer além do tamanho original. Por padrão não — ampliar um
+     *  arquivo pequeno só produz borrão maior. */
+    enlarge?: boolean
+    /** Cor de preenchimento quando `contain` sobra espaço. */
+    background?: string
+  }
+  crop?: { left: number; top: number; width: number; height: number }
+  /** Corta a moldura de cor uniforme em volta (digitalização, print com barra). */
+  trim?: { threshold?: number }
+  rotate?: number
+  flip?: boolean
+  flop?: boolean
+  removeBackground?: RemoveBackgroundOptions
+  grayscale?: boolean
+  negate?: boolean
+  /** 1 = neutro. 1.2 clareia 20%, 0.8 escurece 20%. */
+  brightness?: number
+  /** 1 = neutro, 0 = cinza, >1 satura. */
+  saturation?: number
+  /** Giro da roda de cores, em graus. */
+  hue?: number
+  /** 1 = neutro. Aplicado em volta do cinza médio. */
+  contrast?: number
+  gamma?: number
+  /** Estica o histograma para usar toda a faixa — salva foto lavada. */
+  normalize?: boolean
+  blur?: number
+  sharpen?: boolean
+  tint?: string
+  /** Achata a transparência sobre esta cor (obrigatório ao virar JPEG). */
+  flatten?: string
+  format?: 'png' | 'jpeg' | 'webp'
+  /** 1–100. Ignorado no PNG, que é sem perdas. */
+  quality?: number
+  /** Teto de bytes: reduz qualidade e, se preciso, dimensões, até caber. */
+  maxBytes?: number
+}
+
+export interface EditResult {
+  bytes: Buffer
+  format: string
+  width: number
+  height: number
+  /** Preenchido quando houve removeBackground — a cor tratada como fundo. */
+  backgroundColor?: string
+  /** Fração recortada, quando houve removeBackground. */
+  backgroundRemoved?: number
+  /** Passos que o maxBytes precisou dar; vazio quando coube de primeira. */
+  compression?: string
+}
+
+/**
+ * Aplica as operações pedidas, nesta ordem fixa:
+ *
+ *   orientação EXIF → recorte → moldura → giro/espelho → fundo → tamanho →
+ *   cor → achatamento → codificação
+ *
+ * A ordem não é arbitrária. A orientação do EXIF vem primeiro porque as
+ * coordenadas do recorte são as da imagem como a pessoa a vê, não como os
+ * bytes estão guardados. O fundo sai antes de redimensionar porque reduzir
+ * primeiro mistura assunto e fundo na borda e estraga o recorte. E a cor vem
+ * depois do tamanho só porque é mais barato ajustar menos pixels.
+ */
+export async function editImage(source: Buffer, edit: ImageEdit): Promise<EditResult> {
+  let working = source
+  let backgroundColor: string | undefined
+  let backgroundRemoved: number | undefined
+
+  // A etapa de geometria materializa um PNG intermediário para não perder a
+  // transparência no caminho. Numa foto de 12MP isso é caro, então ela só roda
+  // quando há de fato o que fazer — um simples "reduza esta imagem" não paga.
+  const needsGeometry = Boolean(
+    edit.crop || edit.trim || edit.rotate || edit.flip || edit.flop,
+  )
+
+  if (edit.removeBackground) {
+    const cut = await removeBackground(
+      needsGeometry ? await applyGeometry(source, edit) : source,
+      edit.removeBackground,
+    )
+    working = cut.png
+    backgroundColor = cut.color
+    backgroundRemoved = cut.removed
+  } else if (needsGeometry) {
+    working = await applyGeometry(source, edit)
+  }
+
+  let pipeline = sharp(working)
+  // Quando nada acima tocou nos pixels, a orientação do EXIF ainda não foi
+  // aplicada — e sem ela a foto de celular sai deitada.
+  if (!needsGeometry && !edit.removeBackground) pipeline = pipeline.rotate()
+
+  if (edit.resize && (edit.resize.width || edit.resize.height)) {
+    const { width, height, fit, enlarge, background } = edit.resize
+    if ((width ?? 0) > MAX_DIMENSION || (height ?? 0) > MAX_DIMENSION) {
+      throw new Error(`Tamanho pedido acima do limite de ${MAX_DIMENSION}px.`)
+    }
+    pipeline = pipeline.resize({
+      width: width || undefined,
+      height: height || undefined,
+      fit: fit ?? 'inside',
+      withoutEnlargement: !enlarge,
+      background: background ? { ...parseColor(background), alpha: 1 } : undefined,
+    })
+  }
+
+  pipeline = applyColor(pipeline, edit)
+
+  if (edit.flatten) pipeline = pipeline.flatten({ background: parseColor(edit.flatten) })
+
+  return encode(pipeline, edit, { backgroundColor, backgroundRemoved })
+}
+
+/** Orientação, recorte, moldura e giro — tudo que mexe na grade de pixels. */
+async function applyGeometry(source: Buffer, edit: ImageEdit): Promise<Buffer> {
+  let pipeline = sharp(source).rotate()
+
+  if (edit.crop) {
+    const { left, top, width, height } = edit.crop
+    if (width <= 0 || height <= 0) throw new Error('O recorte precisa de largura e altura positivas.')
+    // O extract do sharp recusa um retângulo que passe da borda; o erro dele
+    // fala de "bad extract area", que não diz ao modelo o que corrigir.
+    const meta = await sharp(source).rotate().metadata()
+    const limitX = meta.width ?? 0
+    const limitY = meta.height ?? 0
+    if (left < 0 || top < 0 || left + width > limitX || top + height > limitY) {
+      throw new Error(
+        `O recorte (${left},${top} ${width}x${height}) sai da imagem, que tem ${limitX}x${limitY}.`,
+      )
+    }
+    pipeline = pipeline.extract({ left, top, width, height })
+  }
+
+  if (edit.trim) pipeline = pipeline.trim({ threshold: edit.trim.threshold ?? 10 })
+  if (edit.rotate) pipeline = pipeline.rotate(edit.rotate, { background: '#00000000' })
+  if (edit.flip) pipeline = pipeline.flip()
+  if (edit.flop) pipeline = pipeline.flop()
+
+  // Materializa em PNG para não perder a transparência entre as etapas.
+  return pipeline.png().toBuffer()
+}
+
+function applyColor(pipeline: Sharp, edit: ImageEdit): Sharp {
+  let out = pipeline
+  // As chaves entram uma a uma: o modulate recusa `{ brightness: undefined }`
+  // com erro de parâmetro, então pedir só saturação quebraria o ajuste inteiro.
+  const modulate: { brightness?: number; saturation?: number; hue?: number } = {}
+  if (edit.brightness !== undefined) modulate.brightness = edit.brightness
+  // Saturação 0 é o pedido legítimo "tire toda a cor", mas o modulate exige um
+  // número acima de zero — quem faz isso no sharp é o grayscale.
+  if (edit.saturation !== undefined && edit.saturation > 0) modulate.saturation = edit.saturation
+  if (edit.hue !== undefined) modulate.hue = edit.hue
+  if (Object.keys(modulate).length > 0) out = out.modulate(modulate)
+  if (edit.saturation === 0) out = out.grayscale()
+  // linear(a, b) faz saída = a*entrada + b. Para girar em torno do cinza médio
+  // (e não do preto, que só clarearia tudo), o deslocamento acompanha o ganho.
+  if (edit.contrast !== undefined) out = out.linear(edit.contrast, 128 * (1 - edit.contrast))
+  if (edit.gamma !== undefined) out = out.gamma(edit.gamma)
+  if (edit.grayscale) out = out.grayscale()
+  if (edit.negate) out = out.negate({ alpha: false })
+  if (edit.normalize) out = out.normalise()
+  if (edit.tint) out = out.tint(parseColor(edit.tint))
+  if (edit.blur) out = out.blur(edit.blur)
+  if (edit.sharpen) out = out.sharpen()
+  return out
+}
+
+/** Qualidades tentadas ao perseguir um teto de bytes, da melhor para a pior. */
+const QUALITY_STEPS = [90, 80, 70, 60, 50, 40, 30]
+/** Quantas vezes pode encolher depois de esgotar a qualidade. */
+const MAX_SHRINKS = 6
+
+async function encode(
+  pipeline: Sharp,
+  edit: ImageEdit,
+  extra: { backgroundColor?: string; backgroundRemoved?: number },
+): Promise<EditResult> {
+  // PNG quando o fundo saiu e ninguém pediu formato: salvar transparência em
+  // JPEG a perderia inteira, sem aviso.
+  const format = edit.format ?? (extra.backgroundRemoved !== undefined ? 'png' : undefined)
+  const base = await pipeline.toBuffer()
+
+  const write = async (quality: number, scale: number): Promise<Buffer> => {
+    let step = sharp(base)
+    if (scale < 1) {
+      const meta = await sharp(base).metadata()
+      step = step.resize({
+        width: Math.max(1, Math.round((meta.width ?? 1) * scale)),
+        withoutEnlargement: true,
+      })
+    }
+    if (format === 'jpeg') return step.jpeg({ quality }).toBuffer()
+    if (format === 'webp') return step.webp({ quality }).toBuffer()
+    if (format === 'png') return step.png().toBuffer()
+    return step.toBuffer()
+  }
+
+  const quality = edit.quality ?? 82
+  let bytes = await write(quality, 1)
+  let compression: string | undefined
+
+  if (edit.maxBytes && bytes.length > edit.maxBytes) {
+    const tried: string[] = [`${format ?? 'original'} q${quality}`]
+    // PNG não tem qualidade com perdas: insistir nos passos abaixo só gastaria
+    // tempo, então a redução dele é toda por dimensão.
+    if (format !== 'png') {
+      for (const step of QUALITY_STEPS) {
+        if (step >= quality) continue
+        bytes = await write(step, 1)
+        tried.push(`q${step}`)
+        if (bytes.length <= edit.maxBytes) break
+      }
+    }
+    let scale = 1
+    for (let i = 0; i < MAX_SHRINKS && bytes.length > edit.maxBytes; i++) {
+      scale *= 0.8
+      bytes = await write(format === 'png' ? quality : 60, scale)
+      tried.push(`${Math.round(scale * 100)}% do tamanho`)
+    }
+    compression = tried.join(' → ')
+  }
+
+  const meta = await sharp(bytes).metadata()
+  return {
+    bytes,
+    format: meta.format ?? 'desconhecido',
+    width: meta.width ?? 0,
+    height: meta.height ?? 0,
+    backgroundColor: extra.backgroundColor,
+    backgroundRemoved: extra.backgroundRemoved,
+    compression,
+  }
+}
