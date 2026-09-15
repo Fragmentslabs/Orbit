@@ -34,6 +34,7 @@ import { hostnameOf, messageText, visibleMessageText } from "@/src/lib/message-u
 import { formatDuration, formatTime } from "@/src/lib/format"
 import { useSessionStore } from "@/src/stores/session-store"
 import { usePanelStore } from "@/src/stores/panel-store"
+import { parseSourceHref, rescueLegacyCitations, type SourceRef } from "@/src/lib/citations"
 import { Actions, Action } from "@/src/components/ai/actions"
 import {
   InlineCitation,
@@ -60,38 +61,6 @@ function childrenToText(children: ReactNode): string {
 }
 
 const CITATION_TEXT = /^\[?\d{1,3}\]?$/
-
-/**
- * Citação de documento: #orbit-source/<docId>/p<pagina>L<linha>[-<linha>].
- *
- * A linha vai no endereço em vez de o trecho ir por texto livre — o modelo
- * teria que repetir a citação sem errar um caractere e ainda codificá-la, e
- * qualquer divergência deixaria o destaque silenciosamente vazio.
- *
- * E é FRAGMENTO, não um esquema próprio: o markdown passa por rehype-sanitize,
- * que apaga o href de todo protocolo fora de http/https/mailto/tel. Com
- * `orbit-source://` o link chegava aqui sem endereço e a citação virava um
- * número inerte na resposta.
- */
-const SOURCE_HREF = /^#orbit-source\/([a-z]+\d+)\/p(\d+)(?:L(\d+)(?:-(\d+))?)?$/i
-
-export interface SourceRef {
-  docId: string
-  page: number
-  fromLine?: number
-  toLine?: number
-}
-
-export function parseSourceHref(href: string): SourceRef | null {
-  const match = SOURCE_HREF.exec(href.trim())
-  if (!match) return null
-  return {
-    docId: match[1],
-    page: Number(match[2]),
-    fromLine: match[3] ? Number(match[3]) : undefined,
-    toLine: match[4] ? Number(match[4]) : undefined,
-  }
-}
 
 /** Citação de documento: abre a fonte no painel, no trecho citado. */
 function SourceCitation({ source, label, sessionId }: {
@@ -163,6 +132,10 @@ export function AssistantMarkdown({ children, muted = false, sessionId }: {
   sessionId?: string
 }) {
   const components = useMemo(() => ({ a: makeMarkdownLink(sessionId) }), [sessionId])
+  // Respostas gravadas antes da mudanca de formato guardam a citacao antiga,
+  // que o sanitizador derruba; a reescrita aqui devolve o clique a elas sem
+  // mexer no historico em disco.
+  const text = useMemo(() => rescueLegacyCitations(children), [children])
   return (
     <div
       className={cn(
@@ -171,7 +144,7 @@ export function AssistantMarkdown({ children, muted = false, sessionId }: {
         "[&_[data-streamdown=code-block]]:text-foreground",
       )}
     >
-      <MessageResponse components={components}>{children}</MessageResponse>
+      <MessageResponse components={components}>{text}</MessageResponse>
     </div>
   )
 }

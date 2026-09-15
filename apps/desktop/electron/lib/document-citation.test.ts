@@ -45,34 +45,3 @@ describe('sourceAnchor', () => {
     expect(sourceAnchor('doc1', 4, 28, 28)).toBe('#orbit-source/doc1/p4L28')
   })
 })
-
-/**
- * Cópia da regex do renderer (shared.tsx). Vive aqui porque o componente
- * importa React e o vitest roda em node — o que importa é o CONTRATO entre os
- * dois lados, e ele quebraria em silêncio: um endereço que não casa vira link
- * comum, que não abre nada e não avisa.
- */
-const SOURCE_HREF = /^#orbit-source\/([a-z]+\d+)\/p(\d+)(?:L(\d+)(?:-(\d+))?)?$/i
-
-describe('contrato do endereço com o renderer', () => {
-  it('tudo que sourceAnchor gera é reconhecido do outro lado', () => {
-    for (const anchor of [
-      sourceAnchor('src3', 12),
-      sourceAnchor('doc1', 4, 28),
-      sourceAnchor('doc12', 400, 1, 999),
-    ]) {
-      expect(SOURCE_HREF.test(anchor)).toBe(true)
-    }
-  })
-
-  it('extrai id, página e linhas', () => {
-    const m = SOURCE_HREF.exec(sourceAnchor('src7', 12, 28, 31))
-    expect(m?.slice(1)).toEqual(['src7', '12', '28', '31'])
-  })
-
-  it('não casa com http nem com id inventado', () => {
-    expect(SOURCE_HREF.test('https://exemplo.com/p1')).toBe(false)
-    expect(SOURCE_HREF.test('#orbit-source/../../etc/p1')).toBe(false)
-    expect(SOURCE_HREF.test('#orbit-source/src1/p')).toBe(false)
-  })
-})
