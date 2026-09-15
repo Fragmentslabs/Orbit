@@ -10,7 +10,7 @@ import type {
 } from "@shared/chat"
 import type { AppPreferences, ChatModeKey, SessionModeOverrides, WorkerConfigSnapshot } from "@shared/companion"
 import type { McpConfig, McpServerStatus } from "@shared/mcp"
-import type { MediaEntry, MediaFilter, MediaUsage } from "@shared/media"
+import { sourceFileUrl, type MediaEntry, type MediaFilter, type MediaUsage } from "@shared/media"
 import type {
   Esteira,
   EsteiraEvent,
@@ -501,15 +501,16 @@ export interface SourceDocument {
   sourceUrl?: string
 }
 
-/** Uma página lida do documento, para o painel mostrar com o trecho grifado. */
-export interface SourcePage {
+/** O documento inteiro em texto, para o painel rolar e grifar o trecho. */
+export interface SourceText {
   filename: string
   kind: SourceDocument["kind"]
   totalPages: number
-  page: number
-  label?: string
-  text: string
+  pages: { num: number; label?: string; lines: string[] }[]
   sourceUrl?: string
+  /** true quando existe arquivo original servivel (PDF/DOCX) — o modo
+   *  "original" do painel só aparece nesse caso. */
+  hasOriginal: boolean
 }
 
 /**
@@ -544,19 +545,11 @@ export const docsApi = {
     window.ipcRenderer.invoke("docs:addUrl", sessionId, url, shared) as Promise<
       { ok: true } | { ok: false; error: string }
     >,
-  /** Uma pagina do documento, para o visualizador do painel. */
-  page: (sessionId: string, docId: string, page: number) =>
-    window.ipcRenderer.invoke("docs:page", sessionId, docId, page) as Promise<SourcePage | null>,
-  /** A pagina do PDF renderizada (modo "original"); null quando o tipo nao
-   *  tem original exibivel e a UI cai no texto. */
-  render: (sessionId: string, docId: string, page: number, scale?: number) =>
-    window.ipcRenderer.invoke("docs:render", sessionId, docId, page, scale) as Promise<{
-      dataUrl: string
-      width: number
-      height: number
-      page: number
-      total: number
-    } | null>,
+  /** O documento inteiro em texto, para o painel rolar. */
+  text: (sessionId: string, docId: string) =>
+    window.ipcRenderer.invoke("docs:text", sessionId, docId) as Promise<SourceText | null>,
+  /** URL do arquivo original, servida pelo mesmo protocolo dos artefatos. */
+  fileUrl: sourceFileUrl,
   /** Move entre os escopos (o id muda junto: docN ↔ srcN). */
   setShared: (sessionId: string, docId: string, shared: boolean) =>
     window.ipcRenderer.invoke("docs:setShared", sessionId, docId, shared) as Promise<

@@ -62,13 +62,18 @@ function childrenToText(children: ReactNode): string {
 const CITATION_TEXT = /^\[?\d{1,3}\]?$/
 
 /**
- * Citação de documento: orbit-source://<docId>/p<pagina>L<linha>[-<linha>].
+ * Citação de documento: #orbit-source/<docId>/p<pagina>L<linha>[-<linha>].
  *
  * A linha vai no endereço em vez de o trecho ir por texto livre — o modelo
  * teria que repetir a citação sem errar um caractere e ainda codificá-la, e
  * qualquer divergência deixaria o destaque silenciosamente vazio.
+ *
+ * E é FRAGMENTO, não um esquema próprio: o markdown passa por rehype-sanitize,
+ * que apaga o href de todo protocolo fora de http/https/mailto/tel. Com
+ * `orbit-source://` o link chegava aqui sem endereço e a citação virava um
+ * número inerte na resposta.
  */
-const SOURCE_HREF = /^orbit-source:\/\/([a-z]+\d+)\/p(\d+)(?:L(\d+)(?:-(\d+))?)?$/i
+const SOURCE_HREF = /^#orbit-source\/([a-z]+\d+)\/p(\d+)(?:L(\d+)(?:-(\d+))?)?$/i
 
 export interface SourceRef {
   docId: string

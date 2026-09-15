@@ -2054,6 +2054,8 @@
     "openInPanel": "Open in the panel",
     "modeOriginal": "Original",
     "modeText": "Text",
-    "rendering": "Rendering the page…"
+    "find": "Find in the document",
+    "findPlaceholder": "Find…",
+    "truncatedView": "Showing {{shown}} of {{total}} pages — the document is too large to scroll in one go. Use Original to see the rest."
   }
 }

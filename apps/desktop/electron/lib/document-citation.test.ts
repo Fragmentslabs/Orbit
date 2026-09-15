@@ -30,19 +30,19 @@ describe('numberLines', () => {
 
 describe('sourceAnchor', () => {
   it('endereço de página, sem linha', () => {
-    expect(sourceAnchor('src3', 12)).toBe('orbit-source://src3/p12')
+    expect(sourceAnchor('src3', 12)).toBe('#orbit-source/src3/p12')
   })
 
   it('linha única', () => {
-    expect(sourceAnchor('doc1', 4, 28)).toBe('orbit-source://doc1/p4L28')
+    expect(sourceAnchor('doc1', 4, 28)).toBe('#orbit-source/doc1/p4L28')
   })
 
   it('intervalo de linhas', () => {
-    expect(sourceAnchor('doc1', 4, 28, 31)).toBe('orbit-source://doc1/p4L28-31')
+    expect(sourceAnchor('doc1', 4, 28, 31)).toBe('#orbit-source/doc1/p4L28-31')
   })
 
   it('intervalo de uma linha só não vira faixa', () => {
-    expect(sourceAnchor('doc1', 4, 28, 28)).toBe('orbit-source://doc1/p4L28')
+    expect(sourceAnchor('doc1', 4, 28, 28)).toBe('#orbit-source/doc1/p4L28')
   })
 })
 
@@ -52,7 +52,7 @@ describe('sourceAnchor', () => {
  * dois lados, e ele quebraria em silêncio: um endereço que não casa vira link
  * comum, que não abre nada e não avisa.
  */
-const SOURCE_HREF = /^orbit-source:\/\/([a-z]+\d+)\/p(\d+)(?:L(\d+)(?:-(\d+))?)?$/i
+const SOURCE_HREF = /^#orbit-source\/([a-z]+\d+)\/p(\d+)(?:L(\d+)(?:-(\d+))?)?$/i
 
 describe('contrato do endereço com o renderer', () => {
   it('tudo que sourceAnchor gera é reconhecido do outro lado', () => {
@@ -72,7 +72,7 @@ describe('contrato do endereço com o renderer', () => {
 
   it('não casa com http nem com id inventado', () => {
     expect(SOURCE_HREF.test('https://exemplo.com/p1')).toBe(false)
-    expect(SOURCE_HREF.test('orbit-source://../../etc/p1')).toBe(false)
-    expect(SOURCE_HREF.test('orbit-source://src1/p')).toBe(false)
+    expect(SOURCE_HREF.test('#orbit-source/../../etc/p1')).toBe(false)
+    expect(SOURCE_HREF.test('#orbit-source/src1/p')).toBe(false)
   })
 })

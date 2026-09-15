@@ -161,10 +161,17 @@ export function numberLines(text: string, width = 3): string {
  * texto livre exigiria que o modelo repetisse a citação sem errar um
  * caractere e ainda a codificasse na URL, e qualquer divergência deixaria o
  * destaque silenciosamente vazio.
+ *
+ * FRAGMENTO, e não um esquema próprio: o markdown da resposta passa por
+ * rehype-sanitize, que aceita só http/https/mailto/tel e APAGA o href de
+ * qualquer outro protocolo — o link chegava ao renderer sem endereço nenhum e
+ * a citação virava um número inerte. Fragmento não tem protocolo, então
+ * atravessa intacto; e, ao contrário de um domínio falso, no pior caso não
+ * navega para lugar nenhum.
  */
 export function sourceAnchor(docId: string, page: number, fromLine?: number, toLine?: number): string {
   const lines = fromLine ? `L${fromLine}${toLine && toLine > fromLine ? `-${toLine}` : ''}` : ''
-  return `orbit-source://${docId}/p${page}${lines}`
+  return `#orbit-source/${docId}/p${page}${lines}`
 }
 
 /** Janela de páginas pedida, normalizada contra os limites do documento. */

@@ -13,6 +13,7 @@ import { ProviderHintCard } from "@/src/components/provider-hint-card"
 import { Persona, type PersonaState } from "@/src/components/ai/persona"
 import { useAppearanceStore } from "@/src/stores/appearance-store"
 import { usePanelStore } from "@/src/stores/panel-store"
+import { docsApi } from "@/src/lib/ipc"
 import { Conversation, ConversationContent, ConversationScrollButton } from "@/src/components/ai/conversation"
 import { Message, MessageAttachment, MessageAttachments, MessageContent } from "@/src/components/ai/message"
 import { Suggestion } from "@/src/components/ai/suggestion"
@@ -41,6 +42,50 @@ import { useSimpleMode } from "@/src/stores/simple-prefs"
 const NO_MESSAGES: ChatMessage[] = []
 const NO_ASKS: never[] = []
 
+/** Extensões que viram documento da conversa — é o que decide se o chip abre. */
+const DOCUMENT_FILE = /\.(pdf|docx|xlsx|xls|ods|csv)$/i
+
+/**
+ * Chip do anexo não-imagem. Clicar abre o arquivo no painel.
+ *
+ * O `documentId` vem no chip desde que ele passou a ser gravado; nos anexos
+ * anteriores a isso ele não existe, e aí o documento é reencontrado pelo NOME
+ * entre as fontes da conversa. Sem esse resgate, toda mensagem antiga ficaria
+ * com um anexo permanentemente inerte.
+ */
+function DocumentChip({ file, sessionId }: { file: FilePart; sessionId?: string }) {
+  const { t } = useTranslation()
+  const openable = Boolean(sessionId) && (!!file.documentId || DOCUMENT_FILE.test(file.filename ?? ""))
+
+  const open = async () => {
+    if (!sessionId) return
+    let docId = file.documentId
+    if (!docId) {
+      const { shared, own } = await docsApi.list(sessionId)
+      docId = [...own, ...shared].find((d) => d.filename === file.filename)?.id
+    }
+    if (!docId) return
+    usePanelStore.getState().openSourceTab(sessionId, {
+      docId,
+      page: 1,
+      title: file.filename ?? docId,
+    })
+  }
+
+  return (
+    <button
+      type="button"
+      disabled={!openable}
+      onClick={() => void open()}
+      title={openable ? t("sources.openInPanel") : undefined}
+      className="flex h-7 select-none items-center gap-1.5 rounded-md border border-border px-1.5 text-sm enabled:cursor-pointer enabled:hover:bg-accent disabled:cursor-default"
+    >
+      <PaperclipIcon className="size-3 text-muted-foreground" />
+      <span className="truncate">{file.filename ?? t("attachments.unnamedFile")}</span>
+    </button>
+  )
+}
+
 // Memoizado por referência da mensagem + flags: no flush de deltas só a
 // mensagem streamando muda de referência — as demais não re-renderizam.
 // `messages`/`sendMessage` ficam fora da comparação de propósito: o retry usa
@@ -60,7 +105,6 @@ const MessageItem = memo(
     index: number
   }) {
   const AssistantMessage = mode === "chat" ? ChatAssistantMessage : CodeAssistantMessage
-  const { t } = useTranslation()
 
   const handleRetry = useCallback(() => {
     const prevUser = [...messages].slice(0, index).reverse().find((m) => m.role === "user")
@@ -86,24 +130,7 @@ const MessageItem = memo(
                   // Anexo que virou documento abre no painel; os demais (texto
                   // solto, elemento do browser) não têm o que abrir — o
                   // conteúdo deles está na própria mensagem.
-                  <button
-                    key={file.id}
-                    type="button"
-                    disabled={!file.documentId || !sessionId}
-                    onClick={() => {
-                      if (!file.documentId || !sessionId) return
-                      usePanelStore.getState().openSourceTab(sessionId, {
-                        docId: file.documentId,
-                        page: 1,
-                        title: file.filename ?? file.documentId,
-                      })
-                    }}
-                    title={file.documentId ? t("sources.openInPanel") : undefined}
-                    className="flex h-7 select-none items-center gap-1.5 rounded-md border border-border px-1.5 text-sm enabled:cursor-pointer enabled:hover:bg-accent disabled:cursor-default"
-                  >
-                    <PaperclipIcon className="size-3 text-muted-foreground" />
-                    <span className="truncate">{file.filename ?? t("attachments.unnamedFile")}</span>
-                  </button>
+                  <DocumentChip key={file.id} file={file} sessionId={sessionId} />
                 ),
               )}
             </MessageAttachments>

@@ -6,7 +6,6 @@ import { extractDocument, type DocumentKind, type ExtractedDocument } from './do
 import { documentKindOf } from './document-pages'
 import { readJson } from './storage'
 import { fetchReadablePage } from './tools/web'
-import { rasterizePdf } from './pdf-raster'
 
 /**
  * Documentos com que a conversa trabalha — as FONTES.
@@ -350,69 +349,68 @@ export async function searchSessionDocuments(
   return hits
 }
 
+
+/** Extensão do arquivo original por tipo — só os que têm arquivo guardado. */
+const ORIGINAL_EXT: Partial<Record<DocumentKind, string>> = {
+  pdf: 'pdf',
+  docx: 'docx',
+}
+
 /**
- * Uma página do documento, para o visualizador do painel.
- *
- * Devolve o texto puro e deixa a numeração para a UI: no painel a linha é uma
- * coluna própria (dá para selecionar o texto sem levar o número junto), ao
- * contrário da leitura do modelo, onde ela precisa estar embutida.
+ * Caminho do arquivo ORIGINAL de uma fonte, para o protocolo servi-lo ao
+ * painel. null quando o tipo não guarda original (texto colado, site) ou
+ * quando o arquivo não está mais lá.
  */
-export async function readSessionPage(
+export async function sessionDocumentFile(
   sessionId: string,
   docId: string,
-  page: number,
+): Promise<{ path: string; ext: string } | null> {
+  if (!SAFE_ID.test(docId)) return null
+  const found = await readSessionDocument(sessionId, docId)
+  const ext = found && ORIGINAL_EXT[found.doc.kind]
+  if (!ext) return null
+  const dir = dirForId(await scopesOf(sessionId), docId)
+  if (!dir) return null
+  const file = path.join(dir, `${docId}.bin`)
+  try {
+    await fsp.access(file)
+  } catch {
+    return null
+  }
+  return { path: file, ext }
+}
+
+/**
+ * Todas as páginas em texto, para o painel rolar o documento inteiro.
+ *
+ * Vai de uma vez, e não página a página: a leitura do MODELO é paginada
+ * porque cada página custa contexto, mas quem está olhando a tela quer rolar.
+ * O teto global da extração (8MB) já limita o pior caso.
+ */
+export async function readSessionText(
+  sessionId: string,
+  docId: string,
 ): Promise<{
   filename: string
   kind: DocumentKind
   totalPages: number
-  page: number
-  label?: string
-  text: string
+  pages: { num: number; label?: string; lines: string[] }[]
   sourceUrl?: string
+  hasOriginal: boolean
 } | null> {
   const found = await readSessionDocument(sessionId, docId)
   if (!found) return null
-  const wanted = Math.min(Math.max(Math.round(page) || 1, 1), Math.max(found.extracted.totalPages, 1))
-  const target = found.extracted.pages.find((p) => p.num === wanted)
   return {
     filename: found.doc.filename,
     kind: found.doc.kind,
     totalPages: found.extracted.totalPages,
-    page: wanted,
-    label: target?.label,
-    text: target?.text ?? '',
+    pages: found.extracted.pages.map((page) => ({
+      num: page.num,
+      label: page.label,
+      lines: page.text.split('\n'),
+    })),
     sourceUrl: found.doc.sourceUrl,
-  }
-}
-
-/**
- * A página COMO ELA É, renderizada em imagem — o modo "original" do painel.
- *
- * Só existe para PDF, e só enquanto o arquivo original estiver guardado: é
- * dele que a imagem sai. Nos outros tipos não há o que mostrar além do texto
- * (o Chromium não abre .docx nem .xlsx, e um texto colado não tem "original"),
- * e quem chama trata o null exibindo o texto.
- */
-export async function renderSessionPage(
-  sessionId: string,
-  docId: string,
-  page: number,
-  scale?: number,
-): Promise<{ dataUrl: string; width: number; height: number; page: number; total: number } | null> {
-  const found = await readSessionDocument(sessionId, docId)
-  if (!found || found.doc.kind !== 'pdf') return null
-  const bytes = await readSessionDocumentBytes(sessionId, docId)
-  if (!bytes) return null
-  const wanted = Math.max(1, Math.round(page) || 1)
-  const rendered = await rasterizePdf(bytes, { pages: [wanted], scale })
-  const first = rendered.pages[0]
-  if (!first) return null
-  return {
-    dataUrl: `data:image/png;base64,${first.png.toString('base64')}`,
-    width: first.width,
-    height: first.height,
-    page: first.pageNumber,
-    total: rendered.total,
+    hasOriginal: (await sessionDocumentFile(sessionId, docId)) !== null,
   }
 }
 

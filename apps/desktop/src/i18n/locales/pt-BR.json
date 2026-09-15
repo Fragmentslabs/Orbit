@@ -2053,6 +2053,8 @@
     "openInPanel": "Abrir no painel",
     "modeOriginal": "Original",
     "modeText": "Texto",
-    "rendering": "Renderizando a página…"
+    "find": "Localizar no documento",
+    "findPlaceholder": "Localizar…",
+    "truncatedView": "Mostrando {{shown}} de {{total}} páginas — o documento é grande demais para rolar inteiro de uma vez. Use o Original para ver o resto."
   }
 }

@@ -14,8 +14,10 @@ import {
   type MediaSource,
   type MediaUsage,
   type DocumentFormat,
+  SOURCE_HOST,
 } from '@shared/media'
 import { listKeys, readJson } from './storage'
+import { sessionDocumentFile } from './session-documents'
 import { buildDocx } from './docx-package'
 import mammoth from 'mammoth'
 import { rasterizePdf } from './pdf-raster'
@@ -485,6 +487,28 @@ async function handleArtifactRequest(request: Request): Promise<Response> {
   // Scheme standard: a URL tem host + path (orbit-artifact://art_x.html/?rev=2),
   // diferente do orbit-media://, onde o id inteiro cai no host e não há query.
   const parsed = new URL(request.url)
+
+  if (parsed.host === SOURCE_HOST) {
+    const [, sessionId, file] = parsed.pathname.split('/')
+    const docId = (file ?? '').replace(/\.[a-z0-9]+$/i, '')
+    const source = await sessionDocumentFile(
+      decodeURIComponent(sessionId ?? ''),
+      decodeURIComponent(docId),
+    )
+    if (!source) return new Response('not found', { status: 404 })
+    try {
+      const buffer = await fsp.readFile(source.path)
+      return new Response(new Uint8Array(buffer), {
+        status: 200,
+        headers: {
+          'Content-Type': ARTIFACT_CONTENT_TYPES[source.ext] ?? 'application/octet-stream',
+          'Cache-Control': 'no-store',
+        },
+      })
+    } catch {
+      return new Response('not found', { status: 404 })
+    }
+  }
   const id = decodeURIComponent(parsed.host || parsed.pathname.replace(/^\/+/, '')).replace(/\/+$/, '')
   if (!SAFE_ARTIFACT_ID.test(id)) return new Response('not found', { status: 404 })
   try {
