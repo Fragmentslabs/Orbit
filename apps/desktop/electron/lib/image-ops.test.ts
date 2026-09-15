@@ -357,6 +357,146 @@ describe('editImage', () => {
     expect(await alphaAt(out.bytes, 1, 1)).toBe(0)
   })
 
+  it('escreve na imagem sem mudar o tamanho dela', async () => {
+    const base = await solid(300, 200, '#334155')
+    const out = await editImage(base, { text: [{ content: 'Legenda' }] })
+    expect(out.width).toBe(300)
+    expect(out.height).toBe(200)
+    expect(Buffer.compare(out.bytes, base)).not.toBe(0)
+  })
+
+  it('o texto longo quebra e fica DENTRO da foto', async () => {
+    // O erro que ninguém perdoa numa imagem entregue pronta é a legenda vazando
+    // pela borda. A largura por caractere varia quase quatro vezes conforme as
+    // letras, então isto só funciona medindo o texto de verdade.
+    const base = await solid(400, 300, '#ffffff')
+    const out = await editImage(base, {
+      text: [
+        {
+          content:
+            'MAIÚSCULAS LARGAS E PALAVRAS COMPRIDAS QUE PRECISAM QUEBRAR EM VÁRIAS LINHAS PARA CABER',
+          position: 'top',
+          color: '#000000',
+          outline: null,
+        },
+      ],
+    })
+
+    // Caixa do que foi pintado: tudo que deixou de ser branco.
+    const { data, info } = await sharp(out.bytes).ensureAlpha().raw().toBuffer({ resolveWithObject: true })
+    let minX = info.width
+    let maxX = -1
+    // Conta FAIXAS de texto (grupos de linhas pintadas separados por branco), e
+    // não linhas de pixel: o número de linhas de pixel depende da altura da
+    // letra, que muda com a fonte instalada na máquina.
+    let faixas = 0
+    let dentroDeFaixa = false
+    for (let y = 0; y < info.height; y++) {
+      let pintouNaLinha = false
+      for (let x = 0; x < info.width; x++) {
+        const at = (y * info.width + x) * 4
+        if (data[at] < 200) {
+          pintouNaLinha = true
+          if (x < minX) minX = x
+          if (x > maxX) maxX = x
+        }
+      }
+      if (pintouNaLinha && !dentroDeFaixa) faixas++
+      dentroDeFaixa = pintouNaLinha
+    }
+    expect(maxX).toBeGreaterThan(0) // pintou alguma coisa
+    expect(minX).toBeGreaterThanOrEqual(0)
+    expect(maxX).toBeLessThan(info.width)
+    expect(faixas).toBeGreaterThan(1) // quebrou em mais de uma linha
+  })
+
+  it('cada âncora põe o texto no seu canto', async () => {
+    const base = await solid(400, 300, '#ffffff')
+    const centro = async (position: 'top-left' | 'bottom-right') => {
+      const out = await editImage(base, {
+        text: [{ content: 'X', position, color: '#000000', outline: null, size: 40 }],
+      })
+      const { data, info } = await sharp(out.bytes).ensureAlpha().raw().toBuffer({ resolveWithObject: true })
+      let somaX = 0
+      let somaY = 0
+      let n = 0
+      for (let i = 0; i < info.width * info.height; i++) {
+        if (data[i * 4] < 200) {
+          somaX += i % info.width
+          somaY += (i / info.width) | 0
+          n++
+        }
+      }
+      return { x: somaX / n, y: somaY / n }
+    }
+    const cima = await centro('top-left')
+    const baixo = await centro('bottom-right')
+    expect(cima.x).toBeLessThan(200)
+    expect(cima.y).toBeLessThan(150)
+    expect(baixo.x).toBeGreaterThan(200)
+    expect(baixo.y).toBeGreaterThan(150)
+  })
+
+  it('o contorno sai junto com o preenchimento', async () => {
+    // Sem contorno, a legenda branca some no primeiro fundo claro.
+    const out = await editImage(await solid(300, 150, '#808080'), {
+      text: [{ content: 'Contorno', color: '#ffffff', outline: '#000000', size: 48 }],
+    })
+    const { data } = await sharp(out.bytes).ensureAlpha().raw().toBuffer({ resolveWithObject: true })
+    let brancos = 0
+    let pretos = 0
+    for (let i = 0; i < data.length; i += 4) {
+      if (data[i] > 230 && data[i + 1] > 230) brancos++
+      if (data[i] < 30 && data[i + 1] < 30) pretos++
+    }
+    expect(brancos).toBeGreaterThan(50)
+    expect(pretos).toBeGreaterThan(50)
+  })
+
+  it('o texto entra DEPOIS da cor — a legenda não fica cinza com a foto', async () => {
+    // A legenda é anotação, não faz parte da foto que está sendo ajustada.
+    const out = await editImage(await solid(300, 150, '#334155'), {
+      saturation: 0,
+      text: [{ content: 'Cor', color: '#ff0000', outline: null, size: 60 }],
+    })
+    const { data } = await sharp(out.bytes).ensureAlpha().raw().toBuffer({ resolveWithObject: true })
+    let vermelhos = 0
+    for (let i = 0; i < data.length; i += 4) {
+      if (data[i] > 180 && data[i + 1] < 90 && data[i + 2] < 90) vermelhos++
+    }
+    expect(vermelhos).toBeGreaterThan(30)
+  })
+
+  it('texto vazio não altera a imagem, e marcação não quebra o desenho', async () => {
+    const base = await solid(200, 120, '#334155')
+    const vazio = await editImage(base, { text: [{ content: '   ' }] })
+    expect(vazio.width).toBe(200)
+
+    // Um `<` solto invalidaria o SVG e derrubaria a edição inteira.
+    const marcado = await editImage(base, {
+      text: [{ content: 'if (a < b && c > d) "x"', size: 20 }],
+    })
+    expect(Buffer.compare(marcado.bytes, base)).not.toBe(0)
+  })
+
+  it('vários textos na mesma passada', async () => {
+    const out = await editImage(await solid(400, 300, '#ffffff'), {
+      text: [
+        { content: 'A', position: 'top-left', color: '#ff0000', outline: null, size: 40 },
+        { content: 'B', position: 'bottom-right', color: '#0000ff', outline: null, size: 40 },
+      ],
+    })
+    const { data } = await sharp(out.bytes).ensureAlpha().raw().toBuffer({ resolveWithObject: true })
+    let vermelho = 0
+    let azul = 0
+    for (let i = 0; i < data.length; i += 4) {
+      if (data[i] > 180 && data[i + 2] < 90) vermelho++
+      if (data[i + 2] > 180 && data[i] < 90) azul++
+    }
+    expect(vermelho).toBeGreaterThan(20)
+    expect(azul).toBeGreaterThan(20)
+  })
+
   it('flatten achata a transparência sobre a cor pedida', async () => {
     const semFundo = await editImage(await subjectOnBackground('#ffffff'), { removeBackground: {} })
     const achatado = await editImage(semFundo.bytes, { flatten: '#000000', format: 'jpeg' })

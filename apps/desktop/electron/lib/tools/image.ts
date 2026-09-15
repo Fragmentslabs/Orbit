@@ -110,7 +110,7 @@ export function createImageTools(scope: DocumentToolScope, ctx: ToolContext | nu
     image_edit: tool({
       description:
         'Edits an existing image by pixel processing — no generation model involved, so the photo that goes in is the same one that comes out, only resized/adjusted. Combine as many operations as you need in ONE call; they are applied in a fixed order: EXIF orientation, crop, trim, rotate/flip, background removal, resize, colour, flatten, encode.\n' +
-        'Use it for: resizing, cropping, compressing to a size limit (maxBytes), converting format, adjusting brightness/saturation/hue/contrast, greyscale, blur/sharpen, and removing a background.\n' +
+        'Use it for: resizing, cropping, compressing to a size limit (maxBytes), converting format, adjusting brightness/saturation/hue/contrast, greyscale, blur/sharpen, removing a background, and WRITING TEXT on the image (captions, labels, watermarks) — text is drawn last, so it stays sharp and keeps its colour whatever else you did to the photo.\n' +
         'removeBackground spreads from the EDGES of the image, so it only clears background CONNECTED to the border — a white shirt inside the subject survives a white wall being removed. It compares COLOUR rather than brightness, so a lit backdrop that shades from one side to the other still keys cleanly. Both the background colour and the tolerance are MEASURED FROM THE IMAGE: omit them on the first attempt, and correct only if the reported result is wrong — guessing a tolerance is how the subject gets eaten. It handles a flat or nearly flat background (product shot, studio portrait, logo, screenshot); it does NOT separate hair from a busy scene, which needs a segmentation model. The result reports how much was cleared and the threshold used: a very low percentage means it failed, not that the image had little background.\n' +
         'The result is ALWAYS a new image in the gallery, shown in your reply — the original is never overwritten. Pass savePath only when the user asked for the file to be written into the working folder.',
       inputSchema: z.object({
@@ -165,6 +165,32 @@ export function createImageTools(scope: DocumentToolScope, ctx: ToolContext | nu
         sharpen: z.boolean().optional(),
         tint: z.string().optional().describe('Tints the image with this colour, e.g. "#1e40af"'),
         flatten: z.string().optional().describe('Flattens transparency onto this colour (required for JPEG)'),
+        text: z
+          .array(
+            z.object({
+              content: z.string().describe('The text. Use \\n for a deliberate line break; long text wraps on its own.'),
+              position: z
+                .enum(['top-left', 'top', 'top-right', 'left', 'center', 'right', 'bottom-left', 'bottom', 'bottom-right'])
+                .optional()
+                .describe('Where to anchor it (default bottom). Prefer this over x/y — it needs no knowledge of the dimensions.'),
+              x: z.number().int().min(0).optional().describe('Exact position in pixels; overrides position'),
+              y: z.number().int().min(0).optional(),
+              size: z.number().int().min(8).optional()
+                .describe('Font height in pixels. Omit it: the default scales with the image, which keeps the same visual weight on a thumbnail and on a poster.'),
+              color: z.string().optional().describe('Fill colour, default white'),
+              outline: z.string().nullable().optional()
+                .describe('Outline colour, dark by default. It is what keeps the text readable over a photo that goes from bright sky to shadow inside one word — pass null only over a flat background.'),
+              background: z.string().optional().describe('Band behind the text, for a very busy photo'),
+              backgroundOpacity: z.number().min(0).max(1).optional(),
+              font: z.string().optional().describe('Font family; falls back to the system sans if absent'),
+              align: z.enum(['left', 'center', 'right']).optional(),
+              maxWidth: z.number().int().positive().optional()
+                .describe('Width in pixels before wrapping; default 90% of the image'),
+              opacity: z.number().min(0).max(1).optional().describe('Use ~0.5 for a watermark'),
+            }),
+          )
+          .optional()
+          .describe('Text written over the image — captions, labels, watermarks. Several entries land in one pass, which is how you label more than one spot.'),
         format: z.enum(['png', 'jpeg', 'webp']).optional(),
         quality: z.number().int().min(1).max(100).optional().describe('1-100, ignored for PNG'),
         maxBytes: z.number().int().positive().optional()

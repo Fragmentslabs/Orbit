@@ -1,5 +1,5 @@
 import sharp from 'sharp'
-import type { Sharp } from 'sharp'
+import type { OverlayOptions, Sharp } from 'sharp'
 
 /**
  * Edição de imagens sem modelo de geração.
@@ -396,6 +396,47 @@ async function softenAlpha(data: Buffer, width: number, height: number, radius: 
   for (let i = 0; i < width * height; i++) data[i * 4 + 3] = blurred[i * stride]
 }
 
+/**
+ * Texto escrito sobre a imagem.
+ *
+ * A dificuldade de escrever numa FOTO não é desenhar a letra — é ela continuar
+ * legível sobre um fundo que muda de claro para escuro no meio da palavra.
+ * Por isso o padrão é branco com contorno escuro, que é o que se lê tanto no
+ * céu quanto na sombra, e existe a faixa atrás para quando nem isso basta.
+ */
+export interface TextOverlay {
+  content: string
+  /** Onde ancorar. O modelo não sabe as dimensões da foto; isto evita que
+   *  precise saber. */
+  position?:
+    | 'top-left'
+    | 'top'
+    | 'top-right'
+    | 'left'
+    | 'center'
+    | 'right'
+    | 'bottom-left'
+    | 'bottom'
+    | 'bottom-right'
+  /** Posição exata em pixels, quando a âncora não serve. Sobrepõe `position`. */
+  x?: number
+  y?: number
+  /** Altura da fonte em pixels. Ausente = proporcional à imagem, que é o que
+   *  mantém a legenda com o mesmo peso num thumbnail e num pôster. */
+  size?: number
+  color?: string
+  /** Contorno. `null` desliga — só faz sentido sobre fundo garantidamente liso. */
+  outline?: string | null
+  /** Faixa atrás do texto, para foto muito ruidosa. */
+  background?: string
+  backgroundOpacity?: number
+  font?: string
+  align?: 'left' | 'center' | 'right'
+  /** Largura máxima antes de quebrar a linha. Ausente = 90% da imagem. */
+  maxWidth?: number
+  opacity?: number
+}
+
 export interface ImageEdit {
   resize?: {
     width?: number
@@ -432,6 +473,9 @@ export interface ImageEdit {
   tint?: string
   /** Achata a transparência sobre esta cor (obrigatório ao virar JPEG). */
   flatten?: string
+  /** Texto escrito por cima. Aplicado depois do tamanho e da cor: a legenda é
+   *  anotação, não faz parte da foto que está sendo ajustada. */
+  text?: TextOverlay[]
   format?: 'png' | 'jpeg' | 'webp'
   /** 1–100. Ignorado no PNG, que é sem perdas. */
   quality?: number
@@ -455,11 +499,198 @@ export interface EditResult {
   compression?: string
 }
 
+const DEFAULT_FONT = 'Segoe UI, DejaVu Sans, Liberation Sans, Helvetica, Arial, sans-serif'
+/** Altura da fonte como fração do lado menor — mantém o mesmo peso visual numa
+ *  miniatura e num pôster. */
+const TEXT_SIZE_RATIO = 0.07
+const LINE_HEIGHT = 1.22
+/** Espessura do contorno em relação à fonte. */
+const OUTLINE_RATIO = 0.16
+
+function escapeXml(text: string): string {
+  return text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+}
+
+/**
+ * Largura real de uma linha, renderizando e medindo.
+ *
+ * Não dá para estimar: no mesmo corpo de 40px, dez "M" ocupam 353px e dez "i"
+ * ocupam 93 — quase quatro vezes de diferença. Uma constante média faz a
+ * legenda com muitas maiúsculas vazar para fora da foto, que é o erro que
+ * ninguém perdoa numa imagem entregue pronta.
+ */
+async function measureText(text: string, size: number, font: string): Promise<number> {
+  if (!text.trim()) return 0
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${Math.max(
+    64,
+    Math.ceil(text.length * size),
+  )}" height="${Math.ceil(size * 2)}"><text x="0" y="${Math.ceil(
+    size * 1.4,
+  )}" font-family="${font}" font-size="${size}" fill="#000">${escapeXml(text)}</text></svg>`
+  try {
+    const { info } = await sharp(Buffer.from(svg))
+      .png()
+      .trim()
+      .toBuffer({ resolveWithObject: true })
+    return info.width
+  } catch {
+    // Nada desenhado (só espaços, ou nenhuma fonte instalada): o trim não acha
+    // o que recortar e reclama. Zero é a resposta honesta.
+    return 0
+  }
+}
+
+/**
+ * Quebra o texto em linhas que cabem na largura.
+ *
+ * Mede a frase inteira UMA vez para calibrar a largura média de caractere
+ * daquele texto específico, e só então quebra. É o meio-termo entre estimar
+ * com uma constante (erra por quatro) e medir cada tentativa (uma renderização
+ * por palavra): a mistura de letras de uma legenda é estável ao longo dela,
+ * então o valor calibrado nela vale para as suas próprias linhas.
+ */
+async function wrapText(
+  content: string,
+  size: number,
+  font: string,
+  maxWidth: number,
+): Promise<string[]> {
+  const flat = content.replace(/\s+/g, ' ').trim()
+  if (!flat) return []
+
+  const measured = await measureText(flat, size, font)
+  const perChar = measured > 0 ? measured / flat.length : size * 0.5
+  const limit = Math.max(1, Math.floor(maxWidth / perChar))
+
+  const lines: string[] = []
+  for (const paragraph of content.split('\n')) {
+    const trimmed = paragraph.replace(/\s+/g, ' ').trim()
+    if (!trimmed) {
+      // Linha em branco escrita de propósito é espaçamento pedido pelo autor.
+      lines.push('')
+      continue
+    }
+    let current = ''
+    for (const word of trimmed.split(' ')) {
+      const candidate = current ? `${current} ${word}` : word
+      if (candidate.length <= limit || !current) current = candidate
+      else {
+        lines.push(current)
+        current = word
+      }
+    }
+    if (current) lines.push(current)
+  }
+  return lines
+}
+
+/**
+ * Escreve os textos sobre a imagem.
+ *
+ * Desenha em SVG e compõe, porque é o que dá contorno de verdade
+ * (`paint-order`) — e o contorno é o que faz a legenda sobreviver a uma foto
+ * que vai do céu claro à sombra escura dentro da mesma palavra. Escrever em
+ * branco puro funciona até a primeira imagem de fundo claro.
+ */
+async function drawText(image: Buffer, overlays: TextOverlay[]): Promise<Buffer> {
+  const meta = await sharp(image).metadata()
+  const width = meta.width ?? 0
+  const height = meta.height ?? 0
+  if (!width || !height) return image
+
+  const layers: OverlayOptions[] = []
+
+  for (const overlay of overlays) {
+    if (!overlay.content?.trim()) continue
+    const font = overlay.font ? `${overlay.font}, ${DEFAULT_FONT}` : DEFAULT_FONT
+    const size = Math.max(8, Math.round(overlay.size ?? Math.min(width, height) * TEXT_SIZE_RATIO))
+    const margin = Math.round(size * 0.6)
+    const maxWidth = Math.max(size, Math.min(overlay.maxWidth ?? Math.round(width * 0.9), width - margin * 2))
+
+    const lines = await wrapText(overlay.content, size, font, maxWidth)
+    if (lines.length === 0) continue
+
+    // Confere a linha mais longa de verdade e encolhe se ainda assim passou: a
+    // calibragem é boa, não é exata, e vazar da foto não é aceitável.
+    const widths = await Promise.all(lines.map((line) => measureText(line, size, font)))
+    const widest = Math.max(1, ...widths)
+    const scale = widest > maxWidth ? maxWidth / widest : 1
+    const finalSize = Math.max(8, Math.floor(size * scale))
+    const lineHeight = Math.round(finalSize * LINE_HEIGHT)
+    const blockWidth = Math.ceil(widest * scale)
+    const blockHeight = lineHeight * lines.length
+
+    const position = overlay.position ?? 'bottom'
+    const left = position.includes('left')
+      ? margin
+      : position.includes('right')
+        ? width - blockWidth - margin
+        : Math.round((width - blockWidth) / 2)
+    const top = position.startsWith('top')
+      ? margin
+      : position.startsWith('bottom')
+        ? height - blockHeight - margin
+        : Math.round((height - blockHeight) / 2)
+
+    const align =
+      overlay.align ??
+      (position.includes('left') ? 'left' : position.includes('right') ? 'right' : 'center')
+    const textX = align === 'left' ? 0 : align === 'right' ? blockWidth : blockWidth / 2
+    const anchor = align === 'left' ? 'start' : align === 'right' ? 'end' : 'middle'
+
+    const color = overlay.color ?? '#ffffff'
+    const outline = overlay.outline === null ? null : (overlay.outline ?? '#000000')
+    const strokeWidth = Math.max(1, Math.round(finalSize * OUTLINE_RATIO))
+    // O contorno cresce para os DOIS lados da letra, então metade dele fica
+    // fora do bloco medido. Sem esta folga a borda sai cortada.
+    const pad = strokeWidth + 2
+
+    const band = overlay.background
+      ? `<rect x="0" y="0" width="${blockWidth + pad * 2}" height="${
+          blockHeight + pad * 2
+        }" rx="${Math.round(finalSize * 0.2)}" fill="${overlay.background}" fill-opacity="${
+          overlay.backgroundOpacity ?? 0.55
+        }"/>`
+      : ''
+
+    const rows = lines
+      .map((line, i) => {
+        const y = pad + Math.round(lineHeight * (i + 0.8))
+        const stroke = outline
+          ? ` stroke="${outline}" stroke-width="${strokeWidth}" paint-order="stroke fill" stroke-linejoin="round"`
+          : ''
+        return `<text x="${pad + textX}" y="${y}" text-anchor="${anchor}" font-family="${font}" font-size="${finalSize}" font-weight="600" fill="${color}"${stroke}>${escapeXml(
+          line,
+        )}</text>`
+      })
+      .join('')
+
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${blockWidth + pad * 2}" height="${
+      blockHeight + pad * 2
+    }">${band}<g opacity="${overlay.opacity ?? 1}">${rows}</g></svg>`
+
+    layers.push({
+      input: Buffer.from(svg),
+      // Preso dentro da imagem: uma âncora pedida fora dela poria o texto onde
+      // ninguém o veria, e o composite recusa deslocamento negativo.
+      left: Math.max(0, Math.min(width - 1, (overlay.x ?? left) - pad)),
+      top: Math.max(0, Math.min(height - 1, (overlay.y ?? top) - pad)),
+    })
+  }
+
+  if (layers.length === 0) return image
+  return sharp(image).composite(layers).png().toBuffer()
+}
+
 /**
  * Aplica as operações pedidas, nesta ordem fixa:
  *
  *   orientação EXIF → recorte → moldura → giro/espelho → fundo → tamanho →
- *   cor → achatamento → codificação
+ *   cor → texto → achatamento → codificação
  *
  * A ordem não é arbitrária. A orientação do EXIF vem primeiro porque as
  * coordenadas do recorte são as da imagem como a pessoa a vê, não como os
@@ -513,6 +744,13 @@ export async function editImage(source: Buffer, edit: ImageEdit): Promise<EditRe
   }
 
   pipeline = applyColor(pipeline, edit)
+
+  // Texto por último entre os pixels: a legenda é anotação, não faz parte da
+  // foto. Escrevê-la antes do resize a deixaria borrada junto com a imagem, e
+  // antes do preto e branco a pintaria de cinza junto.
+  if (edit.text && edit.text.length > 0) {
+    pipeline = sharp(await drawText(await pipeline.toBuffer(), edit.text))
+  }
 
   if (edit.flatten) pipeline = pipeline.flatten({ background: parseColor(edit.flatten) })
 
