@@ -28,6 +28,7 @@ import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { docsApi, type SourceDocument } from "@/src/lib/ipc"
 import { useSessionStore } from "@/src/stores/session-store"
+import { usePanelStore } from "@/src/stores/panel-store"
 import { cn } from "@/lib/utils"
 
 /**
@@ -115,6 +116,7 @@ function DocumentRow({
   moveLabel,
   MoveIcon,
   onMove,
+  onOpen,
   onRemove,
 }: {
   doc: SourceDocument
@@ -122,6 +124,7 @@ function DocumentRow({
   moveLabel?: string
   MoveIcon?: typeof ArrowUpToLine
   onMove?: () => void
+  onOpen: () => void
   onRemove: () => void
 }) {
   const { t, i18n } = useTranslation()
@@ -142,7 +145,17 @@ function DocumentRow({
       className="group flex cursor-grab items-center gap-2.5 rounded-md px-2 py-2 active:cursor-grabbing hover:bg-accent/50"
     >
       <KindIcon kind={doc.kind} className="size-4 shrink-0 text-muted-foreground" />
-      <div className="min-w-0 flex-1">
+      {/* O corpo da linha abre o arquivo; os botões da direita ficam fora dele
+          para o clique de remover não abrir o que está sendo removido. */}
+      <div
+        role="button"
+        tabIndex={0}
+        onClick={onOpen}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") onOpen()
+        }}
+        className="min-w-0 flex-1 cursor-pointer text-left"
+      >
         <p className="truncate text-xs font-medium text-foreground">{doc.filename}</p>
         <p className="truncate text-[11px] text-muted-foreground">
           {doc.id} · {unit}
@@ -193,6 +206,7 @@ export function SourcesTab({ sessionId }: { sessionId?: string }) {
   const sharedInput = useRef<HTMLInputElement>(null)
   const ownInput = useRef<HTMLInputElement>(null)
 
+  const openSourceTab = usePanelStore((s) => s.openSourceTab)
   const folders = useSessionStore((s) => s.folders)
   const sessions = useSessionStore((s) => s.sessions)
   const folderName = useMemo(
@@ -397,6 +411,10 @@ export function SourcesTab({ sessionId }: { sessionId?: string }) {
                 moveLabel={isShared ? t("sources.unshare") : t("sources.share")}
                 MoveIcon={isShared ? ArrowDownToLine : ArrowUpToLine}
                 onMove={folderId ? () => void move(doc.id, !isShared) : undefined}
+                onOpen={() =>
+                  sessionId &&
+                  openSourceTab(sessionId, { docId: doc.id, page: 1, title: doc.filename })
+                }
                 onRemove={() => void remove(doc.id)}
               />
             ))}

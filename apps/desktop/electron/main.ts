@@ -63,6 +63,7 @@ import {
   listSessionSources,
   readSessionPage,
   removeSessionDocument,
+  renderSessionPage,
   setSessionDocumentShared,
 } from './lib/session-documents'
 import { loadMainLocale, setMainLocale } from './lib/i18n'
@@ -1475,6 +1476,15 @@ app.whenReady().then(() => {
   // Uma pagina para o visualizador do painel (o clique numa citacao).
   ipcMain.handle('docs:page', (_event, sessionId: string, docId: string, page: number) =>
     readSessionPage(sessionId, docId, page),
+  )
+  // Modo "original" do painel: a pagina do PDF renderizada como imagem. Nao e
+  // o arquivo servido por um protocolo porque o que se quer aqui e a mesma
+  // navegacao por pagina do modo texto, e porque o .docx e a planilha nao tem
+  // visualizador nativo no Chromium — o null cai no texto.
+  ipcMain.handle(
+    'docs:render',
+    (_event, sessionId: string, docId: string, page: number, scale?: number) =>
+      renderSessionPage(sessionId, docId, page, scale),
   )
   ipcMain.handle('docs:remove', (_event, sessionId: string, docId: string) =>
     removeSessionDocument(sessionId, docId),

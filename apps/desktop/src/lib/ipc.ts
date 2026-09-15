@@ -547,6 +547,16 @@ export const docsApi = {
   /** Uma pagina do documento, para o visualizador do painel. */
   page: (sessionId: string, docId: string, page: number) =>
     window.ipcRenderer.invoke("docs:page", sessionId, docId, page) as Promise<SourcePage | null>,
+  /** A pagina do PDF renderizada (modo "original"); null quando o tipo nao
+   *  tem original exibivel e a UI cai no texto. */
+  render: (sessionId: string, docId: string, page: number, scale?: number) =>
+    window.ipcRenderer.invoke("docs:render", sessionId, docId, page, scale) as Promise<{
+      dataUrl: string
+      width: number
+      height: number
+      page: number
+      total: number
+    } | null>,
   /** Move entre os escopos (o id muda junto: docN ↔ srcN). */
   setShared: (sessionId: string, docId: string, shared: boolean) =>
     window.ipcRenderer.invoke("docs:setShared", sessionId, docId, shared) as Promise<

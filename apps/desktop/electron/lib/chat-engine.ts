@@ -265,7 +265,7 @@ function fileToModelContent(file: FilePart, modelVision: boolean): Exclude<UserC
  * chip). Em imagens, `thumbUrl` traz um thumbnail reduzido só para a bolha do
  * chat (o modelo continua não recebendo o arquivo: toModelMessages ignora
  * chips pela flag `chip`). */
-function attachmentChip(file: FilePart, thumbUrl?: string): FilePart {
+function attachmentChip(file: FilePart, thumbUrl?: string, documentId?: string): FilePart {
   return {
     id: file.id,
     type: 'file',
@@ -273,6 +273,7 @@ function attachmentChip(file: FilePart, thumbUrl?: string): FilePart {
     filename: file.filename,
     url: thumbUrl ?? '',
     chip: true,
+    ...(documentId ? { documentId } : {}),
   }
 }
 
@@ -412,7 +413,9 @@ async function preprocessAttachment(
         documentKind,
       )
       return [
-        attachmentChip(file),
+        // O chip leva o id do documento: e o que permite clicar no anexo e
+        // abrir o arquivo no painel, ja que o conteudo nao vive na mensagem.
+        attachmentChip(file, undefined, doc.id),
         {
           id: newId('prt'),
           type: 'text',

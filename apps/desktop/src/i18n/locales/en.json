@@ -2050,6 +2050,10 @@
     "siteHint": "The page is downloaded and stored as text: a snapshot, so the citation keeps holding even if the site changes.",
     "viewerEmpty": "Click a citation in the conversation to open the passage here.",
     "viewerMissing": "Source {{id}} no longer exists in this conversation.",
-    "pageOf": "page {{page}} of {{total}}"
+    "pageOf": "page {{page}} of {{total}}",
+    "openInPanel": "Open in the panel",
+    "modeOriginal": "Original",
+    "modeText": "Text",
+    "rendering": "Rendering the page…"
   }
 }

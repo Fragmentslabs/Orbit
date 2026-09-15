@@ -6,6 +6,7 @@ import { extractDocument, type DocumentKind, type ExtractedDocument } from './do
 import { documentKindOf } from './document-pages'
 import { readJson } from './storage'
 import { fetchReadablePage } from './tools/web'
+import { rasterizePdf } from './pdf-raster'
 
 /**
  * Documentos com que a conversa trabalha — as FONTES.
@@ -381,6 +382,37 @@ export async function readSessionPage(
     label: target?.label,
     text: target?.text ?? '',
     sourceUrl: found.doc.sourceUrl,
+  }
+}
+
+/**
+ * A página COMO ELA É, renderizada em imagem — o modo "original" do painel.
+ *
+ * Só existe para PDF, e só enquanto o arquivo original estiver guardado: é
+ * dele que a imagem sai. Nos outros tipos não há o que mostrar além do texto
+ * (o Chromium não abre .docx nem .xlsx, e um texto colado não tem "original"),
+ * e quem chama trata o null exibindo o texto.
+ */
+export async function renderSessionPage(
+  sessionId: string,
+  docId: string,
+  page: number,
+  scale?: number,
+): Promise<{ dataUrl: string; width: number; height: number; page: number; total: number } | null> {
+  const found = await readSessionDocument(sessionId, docId)
+  if (!found || found.doc.kind !== 'pdf') return null
+  const bytes = await readSessionDocumentBytes(sessionId, docId)
+  if (!bytes) return null
+  const wanted = Math.max(1, Math.round(page) || 1)
+  const rendered = await rasterizePdf(bytes, { pages: [wanted], scale })
+  const first = rendered.pages[0]
+  if (!first) return null
+  return {
+    dataUrl: `data:image/png;base64,${first.png.toString('base64')}`,
+    width: first.width,
+    height: first.height,
+    page: first.pageNumber,
+    total: rendered.total,
   }
 }
 

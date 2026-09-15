@@ -2049,6 +2049,10 @@
     "siteHint": "A página é baixada e guardada como texto: uma fotografia do momento, para a citação continuar valendo mesmo que o site mude.",
     "viewerEmpty": "Clique numa citação da conversa para abrir o trecho aqui.",
     "viewerMissing": "A fonte {{id}} não existe mais nesta conversa.",
-    "pageOf": "página {{page}} de {{total}}"
+    "pageOf": "página {{page}} de {{total}}",
+    "openInPanel": "Abrir no painel",
+    "modeOriginal": "Original",
+    "modeText": "Texto",
+    "rendering": "Renderizando a página…"
   }
 }

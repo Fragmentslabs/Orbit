@@ -12,6 +12,7 @@ import { VisionHintCard } from "@/src/components/vision-hint-card"
 import { ProviderHintCard } from "@/src/components/provider-hint-card"
 import { Persona, type PersonaState } from "@/src/components/ai/persona"
 import { useAppearanceStore } from "@/src/stores/appearance-store"
+import { usePanelStore } from "@/src/stores/panel-store"
 import { Conversation, ConversationContent, ConversationScrollButton } from "@/src/components/ai/conversation"
 import { Message, MessageAttachment, MessageAttachments, MessageContent } from "@/src/components/ai/message"
 import { Suggestion } from "@/src/components/ai/suggestion"
@@ -82,13 +83,27 @@ const MessageItem = memo(
                     data={{ type: "file", mediaType: file.mime, filename: file.filename, url: file.url }}
                   />
                 ) : (
-                  <div
+                  // Anexo que virou documento abre no painel; os demais (texto
+                  // solto, elemento do browser) não têm o que abrir — o
+                  // conteúdo deles está na própria mensagem.
+                  <button
                     key={file.id}
-                    className="flex h-7 cursor-default select-none items-center gap-1.5 rounded-md border border-border px-1.5 text-sm"
+                    type="button"
+                    disabled={!file.documentId || !sessionId}
+                    onClick={() => {
+                      if (!file.documentId || !sessionId) return
+                      usePanelStore.getState().openSourceTab(sessionId, {
+                        docId: file.documentId,
+                        page: 1,
+                        title: file.filename ?? file.documentId,
+                      })
+                    }}
+                    title={file.documentId ? t("sources.openInPanel") : undefined}
+                    className="flex h-7 select-none items-center gap-1.5 rounded-md border border-border px-1.5 text-sm enabled:cursor-pointer enabled:hover:bg-accent disabled:cursor-default"
                   >
                     <PaperclipIcon className="size-3 text-muted-foreground" />
                     <span className="truncate">{file.filename ?? t("attachments.unnamedFile")}</span>
-                  </div>
+                  </button>
                 ),
               )}
             </MessageAttachments>

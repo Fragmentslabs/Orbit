@@ -186,6 +186,14 @@ export interface FilePart {
    * formatos fica vazio.
    */
   chip?: boolean
+  /**
+   * Documento da conversa que este anexo virou (doc1, doc2…). É o que faz o
+   * chip abrir o arquivo no painel: sem ele, o chip sabe o nome do arquivo
+   * mas não tem como alcançar o conteúdo, que vive no store de fontes e não
+   * na mensagem. Ausente em anexo que não é documento (imagem, texto solto) e
+   * nos anexos anteriores a este campo existir.
+   */
+  documentId?: string
 }
 
 /** MIME marcador de um elemento selecionado no browser do painel (modo
