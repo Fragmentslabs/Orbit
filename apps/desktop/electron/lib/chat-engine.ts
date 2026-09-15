@@ -1142,7 +1142,7 @@ async function runChatTurn(win: BrowserWindow, input: SendMessageInput): Promise
     for (;;) {
       const result = streamText({
         model,
-        system: await buildSystemPrompt(input),
+        system: await buildSystemPrompt(input, modelVision),
         messages:
           autoContinues === 0 && todoNudges === 0 && overclaimNudges === 0
             ? initialMessages
@@ -1321,11 +1321,21 @@ async function runChatTurn(win: BrowserWindow, input: SendMessageInput): Promise
             // ToolPart não é reenviada em turnos futuros — o placeholder na
             // mensagem do usuário é substituído pela descrição real).
             if (part.toolName === 'describe_image') {
-              const input = existing?.input as { ref?: number } | undefined
-              if (typeof input?.ref === 'number') {
+              // Só o anexo do turno tem placeholder para substituir. Uma
+              // referência da galeria (orbit-media://) descreve imagem que não
+              // está em mensagem nenhuma, e não há onde gravar — o número em
+              // forma de texto, porém, ainda é o anexo do turno.
+              const input = existing?.input as { ref?: number | string } | undefined
+              const turnRef =
+                typeof input?.ref === 'number'
+                  ? input.ref
+                  : typeof input?.ref === 'string' && /^\d+$/.test(input.ref.trim())
+                    ? Number(input.ref.trim())
+                    : null
+              if (turnRef !== null) {
                 await persistImageDescription({
                   sessionId,
-                  ref: input.ref,
+                  ref: turnRef,
                   text: typeof part.output === 'string' ? part.output : JSON.stringify(part.output, null, 2),
                   history,
                   win,

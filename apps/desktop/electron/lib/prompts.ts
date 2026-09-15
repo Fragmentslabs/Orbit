@@ -52,9 +52,54 @@ const IMAGE_EDIT_INSTRUCTION = `EDITING IMAGES. image_edit changes an existing i
 - You need the image's REFERENCE, and seeing it in the conversation does not give you one. image_list returns the orbit-media:// reference of every image here, including the one the user just attached — start there.
 - Combine everything in ONE call: the operations apply in a fixed order (orientation, crop, trim, rotate, background, resize, colour, encode), so "crop and shrink to under 200KB" is a single call, not three.
 - Call image_info first whenever the numbers matter — cropping blind is how you cut the wrong region.
-- For text, anchor it with position rather than x/y, and leave size alone: both are worked out from the image, and a hardcoded size that suits one photo is unreadable on the next. Pass several entries to label several spots in one call.
+- For text, anchor it with position rather than x/y, and leave size alone: both are worked out from the image, and a hardcoded size that suits one photo is unreadable on the next. Pass several entries to label several spots in one call.`
+
+/**
+ * O que dizer ao agente sobre OLHAR a imagem antes de editá-la.
+ *
+ * Metade das operações não precisa de olhos: redimensionar, comprimir,
+ * converter e recortar o fundo medem a própria imagem. A outra metade depende
+ * de ONDE as coisas estão — recortar uma região, pôr um rótulo em cima de algo,
+ * escolher a cor que contrasta — e aí editar às cegas é como cortar a metade
+ * errada da foto.
+ *
+ * Três situações, e o que muda entre elas é o que o agente CONSEGUE fazer:
+ *
+ * - o modelo ativo enxerga: ele já viu o anexo desta mensagem, mas não a
+ *   imagem que só existe na galeria;
+ * - modelo de texto com o modo Visão ligado: não enxerga nada sozinho, e o
+ *   describe_image é o caminho — que é justamente o que ele esquece de usar;
+ * - modelo de texto sem o modo Visão: não há caminho nenhum. Aí o certo não é
+ *   fingir precisão, é dizer que dá para fazer melhor com a Visão ligada.
+ *
+ * Função pura e exportada para ser testável: é lógica de três ramos, e o ramo
+ * errado faz o agente ou prometer o que não pode ou pedir o que já tem.
+ */
+export function imageVisionGuidance(modelVision: boolean, hasVisionModel: boolean): string {
+  if (modelVision) {
+    return `\n\nLOOKING BEFORE EDITING. Resizing, compressing, converting and removing a background measure the image themselves and need no eyes. Anything that depends on WHERE things are — cropping to a region, placing a label over something, picking a colour that contrasts — does. You can see images attached to the CURRENT message, so use that. An image that exists only in the gallery is NOT in your context: ${
+      hasVisionModel
+        ? 'call describe_image with its orbit-media:// URL to look at it, including the result of an edit you just made.'
+        : 'you cannot see it, so ask the user to attach it rather than guessing at coordinates.'
+    }`
+  }
+  if (hasVisionModel) {
+    return `\n\nLOOK BEFORE YOU EDIT. You cannot see images: the active model has no vision. Resizing, compressing, converting and removing a background measure the image themselves, so go ahead with those. But anything that depends on WHERE things are — cropping to a region, placing a label over something, picking a colour that contrasts — is guesswork until you look, and cropping blind is how you cut the wrong half.
+Vision mode is ON, so call describe_image FIRST for those, with the orbit-media:// URL from image_list (it reaches images from earlier turns and the result of your own edits, not just this message's attachment). Put what you need in focus — "where in the frame is the person, and what are the pixel bounds" gets you a usable answer; "describe this" does not.`
+  }
+  return `\n\nYOU CANNOT SEE IMAGES. The active model has no vision and Vision mode is off, so no image in this conversation is visible to you. Resizing, compressing, converting format and removing a background all measure the image themselves — do those normally and with confidence.
+What you cannot do well is anything that depends on WHERE things are: cropping to a region, placing a label over a specific object, picking a colour that contrasts with what is behind it. Do not invent coordinates and do not describe image content you have not been told. Say plainly that you are working blind, and tell the user once that turning on Vision mode lets you look at the image first and place things properly. Then do the best the measured operations allow.`
+}
+
+const IMAGE_EDIT_TAIL = `
 - removeBackground spreads from the EDGES, so it only clears background connected to the border, and it compares colour rather than brightness, so an unevenly lit backdrop still keys cleanly. Call it with NO colour and NO tolerance: both are measured from the image, and a guessed tolerance is what eats the subject. Correct only from a reported result — near 0% cleared means it missed the background, near 100% means the threshold was too loose.
 - The edited image is saved to the gallery and appears in your reply automatically — do not call show_image for it, and do not describe at length what the user can now see. The original is never overwritten; write into the working folder only with savePath, and only when asked.`
+
+/** O bloco completo de edição de imagem, já com o ramo de visão que vale para
+ *  esta combinação de modelo e modo. */
+function imageEditInstruction(modelVision: boolean, hasVisionModel: boolean): string {
+  return IMAGE_EDIT_INSTRUCTION + IMAGE_EDIT_TAIL + imageVisionGuidance(modelVision, hasVisionModel)
+}
 
 const DOCUMENT_INSTRUCTION_CHAT = `ATTACHED DOCUMENTS. ${DOCUMENT_ATTACHMENT_RULES}
 
@@ -420,7 +465,15 @@ async function buildBrainBlock(input: SendMessageInput): Promise<string[]> {
   return parts
 }
 
-export async function buildSystemPrompt(input: SendMessageInput): Promise<string> {
+/**
+ * `modelVision` vem por parâmetro, e não dentro do input, porque não é escolha
+ * do usuário: é uma propriedade do modelo ativo, resolvida no chat-engine ao
+ * montar o turno.
+ */
+export async function buildSystemPrompt(
+  input: SendMessageInput,
+  modelVision = true,
+): Promise<string> {
   const parts: string[] = []
 
   if (input.mode === 'code') {
@@ -460,7 +513,7 @@ export async function buildSystemPrompt(input: SendMessageInput): Promise<string
   if (input.orchestrationRole !== 'worker') {
     parts.push(ARTIFACT_INSTRUCTION)
     parts.push(DOCUMENT_AUTHORING_INSTRUCTION)
-    parts.push(IMAGE_EDIT_INSTRUCTION)
+    parts.push(imageEditInstruction(modelVision, Boolean(input.visionModel)))
   }
 
   // Documentos: as tools doc_* existem nos dois modos (o anexo pode chegar em
