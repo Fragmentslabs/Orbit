@@ -24,7 +24,7 @@ import { ArtifactTab } from "@/src/components/artifact-tab"
 import { SourcesTab } from "@/src/components/sources-tab"
 import { SourceViewer } from "@/src/components/source-viewer"
 import { ProcessOutputDialog } from "@/src/components/process-output-dialog"
-import { useWorkspace } from "@/lib/workspace-context"
+import { useWorkspace, type WorkspaceMode } from "@/lib/workspace-context"
 import { usePanelStore, nextTabId, ORPHAN_KEY, type TabType, type PanelTab } from "@/src/stores/panel-store"
 import { useSessionStore } from "@/src/stores/session-store"
 import { useProcessStore } from "@/src/stores/process-store"
@@ -37,6 +37,27 @@ interface TabMeta {
   icon: typeof MessageSquare
   label: string
   description: string
+}
+
+/**
+ * Os tipos de aba que o usuário pode abrir vazios, pelo seletor.
+ *
+ * "artifact" nunca entra: uma aba de artefato só existe apontando para um
+ * artefato (abre pelo card na conversa ou pela galeria), nunca vazia — e
+ * "source" (singular, o visualizador de uma fonte citada) pelo mesmo motivo.
+ *
+ * O modo código tem tudo; o chat tem o subconjunto que faz sentido sem pasta
+ * de trabalho. "sources" está nos dois: no código o repositório é o corpus
+ * dos ARQUIVOS — `read` e `grep` já abrem PDF, DOCX e planilha de lá — mas
+ * site e texto colado não estão no repositório e são justamente o material
+ * que não dá para commitar. O agente já recebe as tools de documento e a
+ * instrução sobre `srcN` no modo código (electron/lib/tools/index.ts e
+ * prompts.ts): era só a aba que faltava para o usuário poder declarar fonte.
+ */
+function isSelectableTab(type: TabType, mode: WorkspaceMode): boolean {
+  if (type === "artifact" || type === "source") return false
+  if (mode === "code") return true
+  return type === "chat" || type === "media" || type === "sources"
 }
 
 function useTabMeta(): Record<TabType, TabMeta> {
@@ -292,19 +313,8 @@ function SelectorScreen({ onSelect, onOpenWorker }: {
 
   const availableTabs = useMemo(
     () =>
-      (Object.entries(tabMeta) as [TabType, TabMeta][]).filter(
-        // "artifact" nunca entra no seletor: uma aba de artefato só existe
-        // apontando para um artefato (abre pelo card na conversa ou pela
-        // galeria), nunca vazia — e "source" (singular, o visualizador de uma
-        // fonte citada) pelo mesmo motivo. "sources" é o inverso — só no modo chat,
-        // porque no código o repositório já É o corpus e read/grep leem
-        // PDF/DOCX/planilha de lá sem precisar declarar fonte nenhuma.
-        ([type]) =>
-          type !== "artifact" &&
-          type !== "source" &&
-          (type === "sources"
-            ? mode === "chat"
-            : mode !== "chat" || type === "chat" || type === "media"),
+      (Object.entries(tabMeta) as [TabType, TabMeta][]).filter(([type]) =>
+        isSelectableTab(type, mode),
       ),
     [mode, tabMeta],
   )
@@ -456,19 +466,8 @@ export function RightPanel() {
 
   const availableTabs = useMemo(
     () =>
-      (Object.entries(tabMeta) as [TabType, TabMeta][]).filter(
-        // "artifact" nunca entra no seletor: uma aba de artefato só existe
-        // apontando para um artefato (abre pelo card na conversa ou pela
-        // galeria), nunca vazia — e "source" (singular, o visualizador de uma
-        // fonte citada) pelo mesmo motivo. "sources" é o inverso — só no modo chat,
-        // porque no código o repositório já É o corpus e read/grep leem
-        // PDF/DOCX/planilha de lá sem precisar declarar fonte nenhuma.
-        ([type]) =>
-          type !== "artifact" &&
-          type !== "source" &&
-          (type === "sources"
-            ? mode === "chat"
-            : mode !== "chat" || type === "chat" || type === "media"),
+      (Object.entries(tabMeta) as [TabType, TabMeta][]).filter(([type]) =>
+        isSelectableTab(type, mode),
       ),
     [mode, tabMeta],
   )

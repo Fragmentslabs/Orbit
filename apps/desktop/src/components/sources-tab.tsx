@@ -54,10 +54,13 @@ import { cn } from "@/lib/utils"
  * compartilhando por padrão. Arrastar entre as áreas faz o mesmo, e soltar o
  * arquivo direto na área certa já decide o escopo.
  *
- * Existe só no modo chat. No modo código a pergunta já tem resposta: o
- * repositório é o corpus, e `read`/`grep` leem PDF, DOCX e planilha paginando
- * igual — um documento na pasta de trabalho já está ao alcance do agente sem
- * precisar ser declarado fonte em lugar nenhum.
+ * Vale nos dois modos. No código o repositório já é o corpus dos ARQUIVOS —
+ * `read` e `grep` abrem PDF, DOCX e planilha de lá paginando igual, então um
+ * documento commitado não precisa ser declarado fonte. O que não está no
+ * repositório é o resto: a doc de uma lib, uma RFC, o ticket colado, o PDF de
+ * spec que o cliente mandou e que ninguém quer commitar. Para esse material a
+ * pasta automática do projeto vira o que seria um `docs/` não versionado,
+ * disponível em toda conversa daquele repositório.
  */
 
 const ACCEPT = ".pdf,.docx,.xlsx,.xls,.ods,.csv"
