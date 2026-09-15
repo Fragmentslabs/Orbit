@@ -334,6 +334,14 @@ export function MediaGallery() {
       }
       const sessionId = entry.sessionId ?? useSessionStore.getState().activeIds[mode]
       if (!sessionId) return
+      // Documento vai para o visualizador de documentos (o mesmo do PDF
+      // anexado); artefato continua na aba que renderiza a pagina HTML.
+      if (kind === "document") {
+        usePanelStore
+          .getState()
+          .openSourceTab(sessionId, { docId: entry.id, page: 1, title: entry.name || entry.id })
+        return
+      }
       usePanelStore.getState().openArtifactTab(sessionId, entry.id, entry.name || entry.id)
     },
     [mode],

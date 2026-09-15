@@ -2,6 +2,7 @@ import { BrowserWindow } from 'electron'
 import { createRequire } from 'node:module'
 import fsp from 'node:fs/promises'
 import path from 'node:path'
+import { pathToFileURL } from 'node:url'
 
 /**
  * Rasteriza páginas de PDF em imagem.
@@ -80,6 +81,39 @@ async function loadSources(): Promise<{ lib: string; worker: string }> {
     })
   }
   return sourcesPromise
+}
+
+/**
+ * Manda um arquivo para a impressora pelo diálogo do sistema.
+ *
+ * Abre numa janela oculta com o visualizador embutido: é o Chromium que sabe
+ * paginar um PDF para papel, e refazer isso a partir das imagens que
+ * desenhamos daria um resultado pior justamente onde ele precisa ser fiel.
+ */
+export async function printFile(filePath: string): Promise<{ ok: boolean; error?: string }> {
+  const win = new BrowserWindow({
+    show: false,
+    webPreferences: {
+      // plugins: liga o visualizador de PDF embutido, sem o qual a janela
+      // baixaria o arquivo em vez de renderizá-lo.
+      plugins: true,
+      partition: `doc-print-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      nodeIntegration: false,
+      contextIsolation: true,
+    },
+  })
+  try {
+    await win.loadURL(pathToFileURL(filePath).toString())
+    return await new Promise((resolve) => {
+      win.webContents.print({ silent: false }, (success, reason) => {
+        resolve(success ? { ok: true } : { ok: false, error: reason })
+      })
+    })
+  } catch (err) {
+    return { ok: false, error: (err as Error).message }
+  } finally {
+    if (!win.isDestroyed()) win.destroy()
+  }
 }
 
 /**

@@ -60,14 +60,11 @@ import {
   addSessionUrl,
   deleteFolderDocuments,
   deleteSessionDocuments,
-  exportSessionDocument,
   listSessionSources,
-  printSessionDocument,
-  readSessionText,
   removeSessionDocument,
-  renderSessionPages,
   setSessionDocumentShared,
 } from './lib/session-documents'
+import { viewExport, viewPrint, viewRender, viewText } from './lib/document-view'
 import { loadMainLocale, setMainLocale } from './lib/i18n'
 import { loginShellArgs, userShellEnv } from './lib/shell-env'
 import { searchSessions } from './lib/search-sessions'
@@ -1478,7 +1475,7 @@ app.whenReady().then(() => {
   // O documento inteiro em texto: o painel ROLA, ao contrario da leitura do
   // modelo, que e paginada porque cada pagina custa contexto.
   ipcMain.handle('docs:text', (_event, sessionId: string, docId: string) =>
-    readSessionText(sessionId, docId),
+    viewText(sessionId, docId),
   )
   // Paginas renderizadas com o trecho grifado: o visualizador nativo do
   // Chromium e fechado, entao grifar dentro do PDF exige desenhar a pagina.
@@ -1491,13 +1488,13 @@ app.whenReady().then(() => {
       from: number,
       count: number,
       options?: { scale?: number; highlight?: string[]; includeOutline?: boolean },
-    ) => renderSessionPages(sessionId, docId, from, count, options ?? {}),
+    ) => viewRender(sessionId, docId, from, count, options ?? {}),
   )
   ipcMain.handle('docs:print', (_event, sessionId: string, docId: string) =>
-    printSessionDocument(sessionId, docId),
+    viewPrint(sessionId, docId),
   )
   ipcMain.handle('docs:export', (_event, sessionId: string, docId: string) =>
-    exportSessionDocument(sessionId, docId),
+    viewExport(sessionId, docId),
   )
   ipcMain.handle('docs:remove', (_event, sessionId: string, docId: string) =>
     removeSessionDocument(sessionId, docId),

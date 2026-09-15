@@ -99,19 +99,6 @@ export interface MediaUsage {
 export const MEDIA_SCHEME = "orbit-media"
 export const ARTIFACT_SCHEME = "orbit-artifact"
 
-/** Host reservado, dentro do scheme dos artefatos, para o arquivo ORIGINAL de
- *  uma fonte da conversa. */
-export const SOURCE_HOST = "srcdoc"
-
-/**
- * URL do arquivo original de uma fonte. Definida aqui, e nao dos dois lados,
- * porque o main a SERVE e o renderer a PEDE: se as duas formas divergirem, o
- * painel abre em branco sem erro nenhum.
- */
-export function sourceFileUrl(sessionId: string, docId: string, ext: string): string {
-  return `${ARTIFACT_SCHEME}://${SOURCE_HOST}/${encodeURIComponent(sessionId)}/${encodeURIComponent(docId)}.${ext}`
-}
-
 /** `kind` normalizado — registros antigos não têm o campo. */
 export function mediaKind(entry: Pick<MediaEntry, "kind">): MediaKind {
   return entry.kind ?? "image"

@@ -1,7 +1,6 @@
 import { app, BrowserWindow, dialog } from 'electron'
 import fsp from 'node:fs/promises'
 import path from 'node:path'
-import { pathToFileURL } from 'node:url'
 import { StorageKeys, type SessionInfo } from '@shared/chat'
 import { extractDocument, type DocumentKind, type ExtractedDocument } from './documents'
 import { documentKindOf } from './document-pages'
@@ -9,6 +8,7 @@ import { readJson } from './storage'
 import { fetchReadablePage } from './tools/web'
 import {
   MAX_RASTER_PAGES,
+  printFile,
   rasterizePdf,
   type HighlightRect,
   type PdfOutlineItem,
@@ -394,17 +394,22 @@ export async function sessionDocumentFile(
  * porque cada página custa contexto, mas quem está olhando a tela quer rolar.
  * O teto global da extração (8MB) já limita o pior caso.
  */
-export async function readSessionText(
-  sessionId: string,
-  docId: string,
-): Promise<{
+/** O documento como o painel lateral o consome, venha de onde vier. */
+export interface SessionDocumentView {
   filename: string
   kind: DocumentKind
   totalPages: number
   pages: { num: number; label?: string; lines: string[] }[]
   sourceUrl?: string
+  /** true quando existe arquivo original exibível (PDF) — é o que decide se o
+   *  modo Original aparece. */
   hasOriginal: boolean
-} | null> {
+}
+
+export async function readSessionText(
+  sessionId: string,
+  docId: string,
+): Promise<SessionDocumentView | null> {
   const found = await readSessionDocument(sessionId, docId)
   if (!found) return null
   return {
@@ -472,12 +477,8 @@ export async function renderSessionPages(
 }
 
 /**
- * Manda o documento para a impressora.
- *
- * Abre o arquivo numa janela oculta e usa o diálogo de impressão do sistema:
- * é o visualizador nativo do Chromium que sabe paginar um PDF para papel, e
- * reimplementar isso a partir das páginas que desenhamos daria um resultado
- * pior justamente onde ele precisa ser fiel.
+ * Manda a fonte para a impressora. Só as que têm arquivo: um trecho colado
+ * não tem nada para imprimir além do texto, que sai pelo baixar.
  */
 export async function printSessionDocument(
   sessionId: string,
@@ -485,30 +486,7 @@ export async function printSessionDocument(
 ): Promise<{ ok: boolean; error?: string }> {
   const source = await sessionDocumentFile(sessionId, docId)
   if (!source) return { ok: false, error: 'Este tipo de fonte não tem arquivo para imprimir.' }
-
-  const win = new BrowserWindow({
-    show: false,
-    webPreferences: {
-      // plugins: é o que liga o visualizador de PDF embutido, sem o qual a
-      // janela baixaria o arquivo em vez de renderizá-lo.
-      plugins: true,
-      partition: `doc-print-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-      nodeIntegration: false,
-      contextIsolation: true,
-    },
-  })
-  try {
-    await win.loadURL(pathToFileURL(source.path).toString())
-    return await new Promise((resolve) => {
-      win.webContents.print({ silent: false }, (success, reason) => {
-        resolve(success ? { ok: true } : { ok: false, error: reason })
-      })
-    })
-  } catch (err) {
-    return { ok: false, error: (err as Error).message }
-  } finally {
-    if (!win.isDestroyed()) win.destroy()
-  }
+  return printFile(source.path)
 }
 
 /**

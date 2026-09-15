@@ -85,6 +85,9 @@ export function SourceViewer({
   const [zoom, setZoom] = useState(ZOOM_BASE)
   const [focus, setFocus] = useState<Focus | null>(null)
   const [busy, setBusy] = useState<"print" | "export" | null>(null)
+  // A busca foi preenchida pela citação (e não digitada): é o que mantém o
+  // destaque preso à página citada em vez de marcar a frase onde ela repetir.
+  const [fromCitation, setFromCitation] = useState(false)
   const anchorRef = useRef<HTMLDivElement>(null)
   const textRef = useRef<HTMLDivElement>(null)
 
@@ -97,18 +100,34 @@ export function SourceViewer({
       if (!alive) return
       setData(result)
       setLoading(false)
-      // Abrir pelo anexo mostra o arquivo como ele é; abrir por uma citação
-      // mostra o texto, que é onde a linha citada pode ser marcada.
-      setMode(!fromLine && result?.hasOriginal ? "original" : "text")
+      // O documento abre como ele é sempre que houver original — inclusive
+      // vindo de uma citação, porque agora o destaque também é desenhado lá.
+      setMode(result?.hasOriginal ? "original" : "text")
     })
     return () => {
       alive = false
     }
-  }, [sessionId, docId, fromLine])
+  }, [sessionId, docId])
 
+  /**
+   * Citação: a busca já entra preenchida com o trecho citado. É o mesmo
+   * mecanismo que marca a ocorrência no PDF e no texto, então o clique cai
+   * direto no trecho e ainda dá para navegar pelas repetições.
+   *
+   * Separado da carga porque o documento não muda quando se clica em OUTRA
+   * citação do mesmo arquivo — só o trecho muda, e reler o texto ali seria
+   * trabalho jogado fora.
+   */
   useEffect(() => {
-    if (fromLine) setMode("text")
-  }, [fromLine, page])
+    if (!data) return
+    const cited = fromLine
+      ? (data.pages.find((p) => p.num === page)?.lines.slice(fromLine - 1, toLine ?? fromLine) ?? [])
+      : []
+    const termo = cited.join(" ").trim()
+    setFromCitation(termo.length >= 2)
+    setQuery(termo.length >= 2 ? termo : "")
+    setFindOpen(termo.length >= 2)
+  }, [data, page, fromLine, toLine])
 
   const matches = useMemo<Match[]>(() => {
     const term = query.trim().toLowerCase()
@@ -124,6 +143,15 @@ export function SourceViewer({
   }, [data, query])
 
   useEffect(() => setMatchIndex(0), [query])
+
+  // Vindo de citação, a ocorrência atual é a da página citada — a mesma frase
+  // pode aparecer antes no documento, e começar pela primeira levaria o painel
+  // para um lugar que não é o citado.
+  useEffect(() => {
+    if (!fromCitation || matches.length === 0) return
+    const alvo = matches.findIndex((m) => m.page === (page ?? 0))
+    if (alvo > 0) setMatchIndex(alvo)
+  }, [fromCitation, matches, page])
 
   // Andar pelas ocorrências leva o modo Original junto: o contador diz 3/12 e
   // a página à vista tem que ser a da terceira.
@@ -179,6 +207,9 @@ export function SourceViewer({
       .find((p) => p.num === citedPage)
       ?.lines.slice((fromLine ?? 1) - 1, toLine ?? fromLine ?? 0) ?? []
   const highlight = term.length >= 2 ? [query.trim()] : citedLines
+  // Numa busca digitada o destaque vale em qualquer página; vindo da citação
+  // ele fica preso à página citada.
+  const highlightPage = fromCitation || term.length < 2 ? citedPage : null
 
   const run = async (action: "print" | "export") => {
     setBusy(action)
@@ -311,7 +342,10 @@ export function SourceViewer({
           <input
             autoFocus
             value={query}
-            onChange={(e) => setQuery(e.target.value)}
+            onChange={(e) => {
+              setQuery(e.target.value)
+              setFromCitation(false)
+            }}
             onKeyDown={(e) => {
               if (e.key === "Enter" && matches.length > 0) {
                 setMatchIndex((i) =>
@@ -381,7 +415,7 @@ export function SourceViewer({
             total={data.totalPages}
             focus={focus ?? (citedPage ? { page: citedPage, nonce: 0 } : null)}
             highlight={highlight}
-            highlightPage={term.length >= 2 ? null : citedPage}
+            highlightPage={highlightPage}
             zoom={zoom}
             onOutline={setOutline}
           />

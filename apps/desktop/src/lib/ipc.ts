@@ -10,7 +10,7 @@ import type {
 } from "@shared/chat"
 import type { AppPreferences, ChatModeKey, SessionModeOverrides, WorkerConfigSnapshot } from "@shared/companion"
 import type { McpConfig, McpServerStatus } from "@shared/mcp"
-import { sourceFileUrl, type MediaEntry, type MediaFilter, type MediaUsage } from "@shared/media"
+import type { MediaEntry, MediaFilter, MediaUsage } from "@shared/media"
 import type {
   Esteira,
   EsteiraEvent,
@@ -564,8 +564,6 @@ export const docsApi = {
   /** O documento inteiro em texto, para o painel rolar. */
   text: (sessionId: string, docId: string) =>
     window.ipcRenderer.invoke("docs:text", sessionId, docId) as Promise<SourceText | null>,
-  /** URL do arquivo original, servida pelo mesmo protocolo dos artefatos. */
-  fileUrl: sourceFileUrl,
   /** Paginas do PDF renderizadas, com os retangulos do trecho a grifar. */
   render: (
     sessionId: string,

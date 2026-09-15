@@ -65,7 +65,7 @@ export function DocumentPartView({
   const { t } = useTranslation()
   const [expanded, setExpanded] = useState(false)
   const [reloads, setReloads] = useState(0)
-  const openArtifactTab = usePanelStore((s) => s.openArtifactTab)
+  const openSourceTab = usePanelStore((s) => s.openSourceTab)
 
   // Altura da janela para o teto proporcional.
   const [viewportHeight, setViewportHeight] = useState(() =>
@@ -149,7 +149,12 @@ export function DocumentPartView({
                 className="size-6"
                 aria-label={t("artifacts.openInPanel")}
                 title={t("artifacts.openInPanel")}
-                onClick={() => openArtifactTab(sessionId, part.documentId, part.title)}
+                // Documento abre no visualizador de documentos, nao na aba de
+                // artefato: e o mesmo painel do PDF anexado, com sumario,
+                // localizar, zoom, imprimir e baixar.
+                onClick={() =>
+                  openSourceTab(sessionId, { docId: part.documentId, page: 1, title: part.title })
+                }
               >
                 <PanelRight className="size-3.5" />
               </Button>
