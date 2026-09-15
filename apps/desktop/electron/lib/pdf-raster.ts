@@ -37,6 +37,14 @@ export interface HighlightRect {
   height: number
 }
 
+/** Entrada do sumário do PDF, já achatada com o nível de indentação. */
+export interface PdfOutlineItem {
+  title: string
+  /** null quando o destino não resolve para uma página. */
+  page: number | null
+  level: number
+}
+
 interface RasterizedPage {
   pageNumber: number
   png: Buffer
@@ -80,8 +88,8 @@ async function loadSources(): Promise<{ lib: string; worker: string }> {
  */
 export async function rasterizePdf(
   bytes: Buffer,
-  options: { pages?: number[]; scale?: number; highlight?: string[] } = {},
-): Promise<{ total: number; pages: RasterizedPage[] }> {
+  options: { pages?: number[]; scale?: number; highlight?: string[]; includeOutline?: boolean } = {},
+): Promise<{ total: number; pages: RasterizedPage[]; outline: PdfOutlineItem[] }> {
   const { lib, worker } = await loadSources()
   const wanted = (options.pages ?? [1]).slice(0, MAX_RASTER_PAGES)
   const scale = Math.min(3, Math.max(0.5, options.scale ?? 1.5))
@@ -137,22 +145,52 @@ export async function rasterizePdf(
             spans.push({ from: flat.length, to: flat.length + piece.length, item })
             flat += piece
           }
-          const at = flat.indexOf(target)
-          if (at < 0) return []
-          const end = at + target.length
+          // TODAS as ocorrências, e não só a primeira: no Localizar a palavra
+          // costuma repetir na mesma página, e marcar uma só faria o contador
+          // dizer 7 enquanto a página mostra 1.
           const rects = []
-          for (const span of spans) {
-            if (span.to <= at || span.from >= end) continue
-            const tx = pdfjs.Util.transform(viewport.transform, span.item.transform)
-            const height = Math.hypot(tx[2], tx[3]) || span.item.height * ${scale}
-            rects.push({
-              x: tx[4],
-              y: tx[5] - height,
-              width: (span.item.width ?? 0) * ${scale},
-              height,
-            })
+          let at = flat.indexOf(target)
+          while (at >= 0 && rects.length < 200) {
+            const end = at + target.length
+            for (const span of spans) {
+              if (span.to <= at || span.from >= end) continue
+              const tx = pdfjs.Util.transform(viewport.transform, span.item.transform)
+              const height = Math.hypot(tx[2], tx[3]) || span.item.height * ${scale}
+              rects.push({
+                x: tx[4],
+                y: tx[5] - height,
+                width: (span.item.width ?? 0) * ${scale},
+                height,
+              })
+            }
+            at = flat.indexOf(target, at + Math.max(1, target.length))
           }
           return rects
+        }
+
+        /** Sumário do PDF, achatado com o nível de cada entrada. */
+        const readOutline = async () => {
+          const raiz = await doc.getOutline()
+          if (!raiz || raiz.length === 0) return []
+          const out = []
+          const walk = async (items, level) => {
+            for (const item of items) {
+              let pageNumber = null
+              try {
+                const dest = typeof item.dest === 'string' ? await doc.getDestination(item.dest) : item.dest
+                if (Array.isArray(dest) && dest[0]) {
+                  pageNumber = (await doc.getPageIndex(dest[0])) + 1
+                }
+              } catch {
+                // destino exótico: a entrada ainda vale como título
+              }
+              out.push({ title: String(item.title ?? '').trim(), page: pageNumber, level })
+              if (item.items && item.items.length > 0 && level < 3) await walk(item.items, level + 1)
+              if (out.length > 500) return
+            }
+          }
+          await walk(raiz, 0)
+          return out
         }
 
         const out = []
@@ -179,7 +217,8 @@ export async function rasterizePdf(
             highlights,
           })
         }
-        return { total: doc.numPages, pages: out }
+        const outline = ${JSON.stringify(Boolean(options.includeOutline))} ? await readOutline() : []
+        return { total: doc.numPages, pages: out, outline }
       })()
     `
     const TIMED_OUT = Symbol('rasterTimeout')
@@ -193,6 +232,7 @@ export async function rasterizePdf(
           dataUrl: string
           highlights: HighlightRect[]
         }[]
+        outline: PdfOutlineItem[]
       }>,
       new Promise<typeof TIMED_OUT>((resolve) => setTimeout(() => resolve(TIMED_OUT), LOAD_TIMEOUT_MS)),
     ])
@@ -200,6 +240,7 @@ export async function rasterizePdf(
 
     return {
       total: outcome.total,
+      outline: outcome.outline ?? [],
       pages: outcome.pages.map((p) => ({
         pageNumber: p.pageNumber,
         width: p.width,

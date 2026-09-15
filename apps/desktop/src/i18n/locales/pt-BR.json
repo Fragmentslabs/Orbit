@@ -2055,6 +2055,12 @@
     "modeText": "Texto",
     "find": "Localizar no documento",
     "findPlaceholder": "Localizar…",
-    "truncatedView": "Mostrando {{shown}} de {{total}} páginas — o documento é grande demais para rolar inteiro de uma vez. Use o Original para ver o resto."
+    "truncatedView": "Mostrando {{shown}} de {{total}} páginas — o documento é grande demais para rolar inteiro de uma vez. Use o Original para ver o resto.",
+    "outline": "Sumário",
+    "noOutline": "Sem sumário — páginas",
+    "zoomIn": "Aproximar",
+    "zoomOut": "Afastar",
+    "print": "Imprimir",
+    "download": "Baixar"
   }
 }

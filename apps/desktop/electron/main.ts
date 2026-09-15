@@ -60,7 +60,9 @@ import {
   addSessionUrl,
   deleteFolderDocuments,
   deleteSessionDocuments,
+  exportSessionDocument,
   listSessionSources,
+  printSessionDocument,
   readSessionText,
   removeSessionDocument,
   renderSessionPages,
@@ -1488,8 +1490,14 @@ app.whenReady().then(() => {
       docId: string,
       from: number,
       count: number,
-      options?: { scale?: number; highlight?: string[] },
+      options?: { scale?: number; highlight?: string[]; includeOutline?: boolean },
     ) => renderSessionPages(sessionId, docId, from, count, options ?? {}),
+  )
+  ipcMain.handle('docs:print', (_event, sessionId: string, docId: string) =>
+    printSessionDocument(sessionId, docId),
+  )
+  ipcMain.handle('docs:export', (_event, sessionId: string, docId: string) =>
+    exportSessionDocument(sessionId, docId),
   )
   ipcMain.handle('docs:remove', (_event, sessionId: string, docId: string) =>
     removeSessionDocument(sessionId, docId),

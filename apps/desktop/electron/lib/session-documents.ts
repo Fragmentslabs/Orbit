@@ -1,12 +1,18 @@
-import { app, BrowserWindow } from 'electron'
+import { app, BrowserWindow, dialog } from 'electron'
 import fsp from 'node:fs/promises'
 import path from 'node:path'
+import { pathToFileURL } from 'node:url'
 import { StorageKeys, type SessionInfo } from '@shared/chat'
 import { extractDocument, type DocumentKind, type ExtractedDocument } from './documents'
 import { documentKindOf } from './document-pages'
 import { readJson } from './storage'
 import { fetchReadablePage } from './tools/web'
-import { MAX_RASTER_PAGES, rasterizePdf, type HighlightRect } from './pdf-raster'
+import {
+  MAX_RASTER_PAGES,
+  rasterizePdf,
+  type HighlightRect,
+  type PdfOutlineItem,
+} from './pdf-raster'
 
 /**
  * Documentos com que a conversa trabalha — as FONTES.
@@ -431,9 +437,10 @@ export async function renderSessionPages(
   docId: string,
   from: number,
   count: number,
-  options: { scale?: number; highlight?: string[] } = {},
+  options: { scale?: number; highlight?: string[]; includeOutline?: boolean } = {},
 ): Promise<{
   total: number
+  outline: PdfOutlineItem[]
   pages: { page: number; dataUrl: string; width: number; height: number; highlights: HighlightRect[] }[]
 } | null> {
   const found = await readSessionDocument(sessionId, docId)
@@ -449,9 +456,11 @@ export async function renderSessionPages(
     pages: wanted,
     scale: options.scale,
     highlight: options.highlight,
+    includeOutline: options.includeOutline,
   })
   return {
     total: rendered.total,
+    outline: rendered.outline,
     pages: rendered.pages.map((p) => ({
       page: p.pageNumber,
       dataUrl: `data:image/png;base64,${p.png.toString('base64')}`,
@@ -459,6 +468,84 @@ export async function renderSessionPages(
       height: p.height,
       highlights: p.highlights,
     })),
+  }
+}
+
+/**
+ * Manda o documento para a impressora.
+ *
+ * Abre o arquivo numa janela oculta e usa o diálogo de impressão do sistema:
+ * é o visualizador nativo do Chromium que sabe paginar um PDF para papel, e
+ * reimplementar isso a partir das páginas que desenhamos daria um resultado
+ * pior justamente onde ele precisa ser fiel.
+ */
+export async function printSessionDocument(
+  sessionId: string,
+  docId: string,
+): Promise<{ ok: boolean; error?: string }> {
+  const source = await sessionDocumentFile(sessionId, docId)
+  if (!source) return { ok: false, error: 'Este tipo de fonte não tem arquivo para imprimir.' }
+
+  const win = new BrowserWindow({
+    show: false,
+    webPreferences: {
+      // plugins: é o que liga o visualizador de PDF embutido, sem o qual a
+      // janela baixaria o arquivo em vez de renderizá-lo.
+      plugins: true,
+      partition: `doc-print-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      nodeIntegration: false,
+      contextIsolation: true,
+    },
+  })
+  try {
+    await win.loadURL(pathToFileURL(source.path).toString())
+    return await new Promise((resolve) => {
+      win.webContents.print({ silent: false }, (success, reason) => {
+        resolve(success ? { ok: true } : { ok: false, error: reason })
+      })
+    })
+  } catch (err) {
+    return { ok: false, error: (err as Error).message }
+  } finally {
+    if (!win.isDestroyed()) win.destroy()
+  }
+}
+
+/**
+ * Salva a fonte em disco, onde o usuário escolher.
+ *
+ * Nas fontes com arquivo é uma cópia do ORIGINAL, byte a byte — não do que o
+ * painel mostra. Nas que nasceram texto (trecho colado, página baixada) o
+ * texto extraído é o que existe, e sai como .txt.
+ */
+export async function exportSessionDocument(
+  sessionId: string,
+  docId: string,
+): Promise<{ ok: true; path: string } | { ok: false; canceled?: true; error?: string }> {
+  const found = await readSessionDocument(sessionId, docId)
+  if (!found) return { ok: false, error: 'Documento não encontrado.' }
+  const source = await sessionDocumentFile(sessionId, docId)
+  const ext = source?.ext ?? 'txt'
+  const base = found.doc.filename.replace(/\.[a-z0-9]+$/i, '').replace(/[\\/:*?"<>|]/g, '-')
+
+  const result = await dialog.showSaveDialog({
+    defaultPath: `${base || 'documento'}.${ext}`,
+    filters: [{ name: ext.toUpperCase(), extensions: [ext] }],
+  })
+  if (result.canceled || !result.filePath) return { ok: false, canceled: true }
+
+  try {
+    if (source) await fsp.copyFile(source.path, result.filePath)
+    else {
+      await fsp.writeFile(
+        result.filePath,
+        found.extracted.pages.map((p) => p.text).join('\n\n'),
+        'utf8',
+      )
+    }
+    return { ok: true, path: result.filePath }
+  } catch (err) {
+    return { ok: false, error: (err as Error).message }
   }
 }
 

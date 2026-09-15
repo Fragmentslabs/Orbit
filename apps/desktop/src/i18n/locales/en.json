@@ -2056,6 +2056,12 @@
     "modeText": "Text",
     "find": "Find in the document",
     "findPlaceholder": "Find…",
-    "truncatedView": "Showing {{shown}} of {{total}} pages — the document is too large to scroll in one go. Use Original to see the rest."
+    "truncatedView": "Showing {{shown}} of {{total}} pages — the document is too large to scroll in one go. Use Original to see the rest.",
+    "outline": "Outline",
+    "noOutline": "No outline — pages",
+    "zoomIn": "Zoom in",
+    "zoomOut": "Zoom out",
+    "print": "Print",
+    "download": "Download"
   }
 }

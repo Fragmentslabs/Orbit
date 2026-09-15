@@ -501,6 +501,13 @@ export interface SourceDocument {
   sourceUrl?: string
 }
 
+/** Entrada do sumario do PDF, ja achatada com o nivel de indentacao. */
+export interface OutlineItem {
+  title: string
+  page: number | null
+  level: number
+}
+
 /** Uma pagina do PDF desenhada por nos, com onde marcar o trecho citado. */
 export interface RenderedPage {
   page: number
@@ -565,12 +572,24 @@ export const docsApi = {
     docId: string,
     from: number,
     count: number,
-    options?: { scale?: number; highlight?: string[] },
+    options?: { scale?: number; highlight?: string[]; includeOutline?: boolean },
   ) =>
     window.ipcRenderer.invoke("docs:render", sessionId, docId, from, count, options) as Promise<{
       total: number
+      outline: OutlineItem[]
       pages: RenderedPage[]
     } | null>,
+  /** Manda para a impressora, pelo dialogo do sistema. */
+  print: (sessionId: string, docId: string) =>
+    window.ipcRenderer.invoke("docs:print", sessionId, docId) as Promise<{
+      ok: boolean
+      error?: string
+    }>,
+  /** Salva a fonte em disco (copia do original, quando existe). */
+  export: (sessionId: string, docId: string) =>
+    window.ipcRenderer.invoke("docs:export", sessionId, docId) as Promise<
+      { ok: true; path: string } | { ok: false; canceled?: true; error?: string }
+    >,
   /** Move entre os escopos (o id muda junto: docN ↔ srcN). */
   setShared: (sessionId: string, docId: string, shared: boolean) =>
     window.ipcRenderer.invoke("docs:setShared", sessionId, docId, shared) as Promise<
