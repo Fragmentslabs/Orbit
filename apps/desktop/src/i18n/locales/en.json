@@ -777,6 +777,10 @@
     "compactNow": "Compact history now"
   },
   "images": {
+    "copy": "Copy",
+    "copied": "Copied",
+    "save": "Save",
+    "saved": "Saved",
     "unavailable": "Image unavailable",
     "enlarge": "Enlarge image",
     "assistantImage": "Assistant image"

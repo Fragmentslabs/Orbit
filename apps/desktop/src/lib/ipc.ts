@@ -484,6 +484,18 @@ export const mediaApi = {
   cleanupScripts: () => window.ipcRenderer.invoke("media:cleanupScripts") as Promise<number>,
   /** Indexa imagens anteriores ao registry — idempotente, roda na 1ª abertura. */
   backfill: () => window.ipcRenderer.invoke("media:backfill") as Promise<number>,
+  /** Salva a imagem em disco pelo diálogo do sistema. Aceita orbit-media://,
+   *  o id cru ou um data URL (anexo que ainda não foi para a galeria). */
+  exportImage: (ref: string, suggestedName?: string) =>
+    window.ipcRenderer.invoke("media:export", ref, suggestedName) as Promise<
+      { ok: true; path: string } | { ok: false; canceled?: boolean; error?: string }
+    >,
+  /** Copia a imagem para a área de transferência como bitmap nativo — é o que
+   *  faz o Ctrl+V colar a IMAGEM em outro app, e não um caminho de arquivo. */
+  copyImage: (ref: string) =>
+    window.ipcRenderer.invoke("media:copy", ref) as Promise<
+      { ok: true } | { ok: false; error?: string }
+    >,
 }
 
 /** Um documento que a conversa lê: anexo dela (`docN`) ou fonte da pasta (`srcN`). */

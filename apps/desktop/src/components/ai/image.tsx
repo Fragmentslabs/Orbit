@@ -1,7 +1,8 @@
 import { useState } from "react"
 import { useTranslation } from "react-i18next"
-import { ImageOff } from "lucide-react"
+import { Check, Copy, Download, ImageOff } from "lucide-react"
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog"
+import { mediaApi } from "@/src/lib/ipc"
 import { cn } from "@/lib/utils"
 import type { ImagePart } from "@shared/chat"
 
@@ -65,16 +66,66 @@ export function ImageLightbox({ src, alt, open, onOpenChange }: {
   onOpenChange: (open: boolean) => void
 }) {
   const { t } = useTranslation()
+  const [done, setDone] = useState<"copied" | "saved" | null>(null)
+  const [busy, setBusy] = useState(false)
+
+  const flash = (what: "copied" | "saved") => {
+    setDone(what)
+    setTimeout(() => setDone(null), 1600)
+  }
+
+  const copy = async () => {
+    setBusy(true)
+    const result = await mediaApi.copyImage(src).catch(() => ({ ok: false as const }))
+    setBusy(false)
+    if (result.ok) flash("copied")
+  }
+
+  const save = async () => {
+    setBusy(true)
+    const result = await mediaApi.exportImage(src, alt || t("images.assistantImage"))
+      .catch(() => ({ ok: false as const }))
+    setBusy(false)
+    if (result.ok) flash("saved")
+  }
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-5xl p-2">
         <DialogTitle className="sr-only">{alt ?? t("images.assistantImage")}</DialogTitle>
-        <img
-          src={src}
-          alt={alt ?? t("images.assistantImage")}
-          className="max-h-[76vh] w-full rounded-md object-contain"
-        />
-        {alt && <p className="px-1 pb-1 text-center text-xs text-muted-foreground">{alt}</p>}
+        {/*
+          Xadrez atrás da imagem: num PNG com fundo recortado, sem ele não dá
+          para distinguir "ficou transparente" de "ficou preto" — que é
+          exatamente a pergunta que se faz ao ampliar um recorte.
+        */}
+        <div className="overflow-hidden rounded-md bg-[length:16px_16px] bg-[position:0_0,8px_8px] bg-[image:linear-gradient(45deg,var(--muted)_25%,transparent_25%,transparent_75%,var(--muted)_75%),linear-gradient(45deg,var(--muted)_25%,transparent_25%,transparent_75%,var(--muted)_75%)]">
+          <img
+            src={src}
+            alt={alt ?? t("images.assistantImage")}
+            className="max-h-[76vh] w-full object-contain"
+          />
+        </div>
+        <div className="flex items-center gap-2 px-1 pb-1">
+          <button
+            type="button"
+            onClick={() => void copy()}
+            disabled={busy}
+            className="flex cursor-pointer items-center gap-1.5 rounded-md border px-2 py-1 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:opacity-50"
+          >
+            {done === "copied" ? <Check className="size-3.5" /> : <Copy className="size-3.5" />}
+            {done === "copied" ? t("images.copied") : t("images.copy")}
+          </button>
+          <button
+            type="button"
+            onClick={() => void save()}
+            disabled={busy}
+            className="flex cursor-pointer items-center gap-1.5 rounded-md border px-2 py-1 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:opacity-50"
+          >
+            {done === "saved" ? <Check className="size-3.5" /> : <Download className="size-3.5" />}
+            {done === "saved" ? t("images.saved") : t("images.save")}
+          </button>
+          {alt && <p className="ml-auto truncate text-xs text-muted-foreground">{alt}</p>}
+        </div>
       </DialogContent>
     </Dialog>
   )

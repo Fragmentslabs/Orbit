@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, dialog, shell, Menu, type MenuItemConstructorOptions } from 'electron'
+import { app, BrowserWindow, ipcMain, dialog, shell, Menu, clipboard, nativeImage, ClipboardItem, type MenuItemConstructorOptions } from 'electron'
 import { createRequire } from 'node:module'
 import { fileURLToPath } from 'node:url'
 import { execFile } from 'node:child_process'
@@ -33,10 +33,12 @@ import {
   getMediaEntry,
   listMedia,
   mediaDiskUsage,
+  mediaIdFromUrl,
   readArtifact,
   readDocumentSource,
   registerArtifactProtocol,
   registerArtifactSchemePrivileges,
+  readMedia,
   registerMediaProtocol,
 } from './lib/media'
 import type { AppPreferences, SessionModeOverrides, WorkerConfigSnapshot } from '@shared/companion'
@@ -1569,6 +1571,69 @@ app.whenReady().then(() => {
     if (result.canceled || !result.filePath) return { ok: false as const, canceled: true as const }
     await fs.copyFile(source, result.filePath)
     return { ok: true as const, path: result.filePath }
+  })
+
+  /**
+   * Bytes de uma imagem, seja qual for a forma como o renderer a conhece.
+   *
+   * Sao tres, e a UI nao deveria ter que saber a diferenca: a URL
+   * orbit-media:// das imagens da galeria, o id cru, e o data URL de um anexo
+   * que ainda nao foi para lugar nenhum. O ultimo caso e o que permite copiar
+   * e salvar a imagem que o usuario acabou de arrastar para o chat.
+   */
+  const bytesOfImageRef = async (
+    ref: string,
+  ): Promise<{ buffer: Buffer; contentType: string } | null> => {
+    const dataUrl = /^data:(image\/[\w.+-]+);base64,(.+)$/s.exec(ref)
+    if (dataUrl) {
+      return { buffer: Buffer.from(dataUrl[2], 'base64'), contentType: dataUrl[1] }
+    }
+    const id = mediaIdFromUrl(ref)
+    return id ? readMedia(id) : null
+  }
+
+  /**
+   * Salvar a imagem em disco, pelo dialogo do sistema.
+   *
+   * O renderer nao grava arquivo: a imagem vive no storage do Orbit e sai por
+   * aqui, do mesmo jeito que o artefato e o documento. Aceita a URL
+   * orbit-media:// ou o id cru — e um data URL tambem, que e como chega uma
+   * imagem que ainda nao foi para a galeria.
+   */
+  ipcMain.handle('media:export', async (_event, ref: string, suggestedName?: string) => {
+    const bytes = await bytesOfImageRef(ref)
+    if (!bytes) return { ok: false as const, error: 'Imagem nao encontrada' }
+    const ext = bytes.contentType.split('/')[1]?.replace('jpeg', 'jpg') || 'png'
+    const base = (suggestedName || 'imagem').replace(/[\\/:*?"<>|]/g, '-').slice(0, 60)
+    const result = await dialog.showSaveDialog({
+      defaultPath: base.toLowerCase().endsWith(`.${ext}`) ? base : `${base}.${ext}`,
+      filters: [{ name: ext.toUpperCase(), extensions: [ext] }],
+    })
+    if (result.canceled || !result.filePath) return { ok: false as const, canceled: true as const }
+    await fs.writeFile(result.filePath, bytes.buffer)
+    return { ok: true as const, path: result.filePath }
+  })
+
+  /**
+   * Copiar a imagem para a area de transferencia.
+   *
+   * Passa pelo main porque o clipboard do Electron escreve a imagem no formato
+   * nativo da plataforma — e e isso que faz o Ctrl+V colar a IMAGEM no Word,
+   * no Paint ou num chat, em vez de um caminho de arquivo.
+   *
+   * O PNG e convertido para bitmap antes: o clipboard aceita o blob de PNG,
+   * mas varios apps do Windows so leem o formato de bitmap, e colar "nada"
+   * seria pior do que nao ter o botao.
+   */
+  ipcMain.handle('media:copy', async (_event, ref: string) => {
+    const bytes = await bytesOfImageRef(ref)
+    if (!bytes) return { ok: false as const, error: 'Imagem nao encontrada' }
+    const image = nativeImage.createFromBuffer(bytes.buffer)
+    if (image.isEmpty()) return { ok: false as const, error: 'Formato de imagem nao suportado' }
+    await clipboard.write([
+      new ClipboardItem({ 'image/png': new Blob([new Uint8Array(image.toPNG())], { type: 'image/png' }) }),
+    ])
+    return { ok: true as const }
   })
 
   ipcMain.handle('artifact:export', async (_event, id: string) => {

@@ -777,6 +777,10 @@
     "compactNow": "Compactar histórico agora"
   },
   "images": {
+    "copy": "Copiar",
+    "copied": "Copiado",
+    "save": "Salvar",
+    "saved": "Salvo",
     "unavailable": "Imagem indisponível",
     "enlarge": "Ampliar imagem",
     "assistantImage": "Imagem do assistente"
