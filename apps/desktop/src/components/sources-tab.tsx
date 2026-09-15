@@ -91,6 +91,42 @@ function KindIcon({ kind, className }: { kind: SourceDocument["kind"]; className
   return <Icon className={className} />
 }
 
+/**
+ * Capa do documento na lista.
+ *
+ * Carrega sob demanda e começa pelo ícone: a do PDF é renderizada no main, e
+ * fazer a lista esperar por ela deixaria a aba em branco no primeiro desenho.
+ * Quando não há miniatura (falha, ou um tipo sem nada para desenhar) o ícone
+ * simplesmente fica — é o estado que existia antes desta capa.
+ */
+function DocumentThumb({ scope, doc }: { scope: string; doc: SourceDocument }) {
+  const [src, setSrc] = useState<string | null>(null)
+
+  useEffect(() => {
+    let alive = true
+    setSrc(null)
+    void docsApi
+      .thumb(scope, doc.id)
+      .then((url) => {
+        if (alive) setSrc(url)
+      })
+      .catch(() => {})
+    return () => {
+      alive = false
+    }
+  }, [scope, doc.id])
+
+  return (
+    <div className="flex size-10 shrink-0 items-center justify-center overflow-hidden rounded-sm border border-border/60 bg-background">
+      {src ? (
+        <img src={src} alt="" className="size-full object-cover object-top" draggable={false} />
+      ) : (
+        <KindIcon kind={doc.kind} className="size-4 text-muted-foreground" />
+      )}
+    </div>
+  )
+}
+
 function hostOf(url: string): string {
   try {
     return new URL(url).hostname.replace(/^www\./, "")
@@ -115,6 +151,7 @@ function readAsBase64(file: File): Promise<string> {
 
 function DocumentRow({
   doc,
+  scope,
   originLabel,
   moveLabel,
   MoveIcon,
@@ -123,6 +160,7 @@ function DocumentRow({
   onRemove,
 }: {
   doc: SourceDocument
+  scope: string
   originLabel?: string
   moveLabel?: string
   MoveIcon?: typeof ArrowUpToLine
@@ -147,7 +185,7 @@ function DocumentRow({
       }}
       className="group flex cursor-grab items-center gap-2.5 rounded-md px-2 py-2 active:cursor-grabbing hover:bg-accent/50"
     >
-      <KindIcon kind={doc.kind} className="size-4 shrink-0 text-muted-foreground" />
+      <DocumentThumb scope={scope} doc={doc} />
       {/* O corpo da linha abre o arquivo; os botões da direita ficam fora dele
           para o clique de remover não abrir o que está sendo removido. */}
       <div
@@ -400,6 +438,7 @@ export function SourcesTab({ sessionId }: { sessionId?: string }) {
               <DocumentRow
                 key={doc.id}
                 doc={doc}
+                scope={scope}
                 originLabel={
                   isShared && doc.sessionId !== sessionId
                     ? sessions.find((s) => s.id === doc.sessionId)?.title

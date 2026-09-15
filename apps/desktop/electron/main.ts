@@ -63,6 +63,7 @@ import {
   deleteSessionDocuments,
   listSessionSources,
   removeSessionDocument,
+  sessionDocumentThumb,
   setSessionDocumentShared,
 } from './lib/session-documents'
 import { viewExport, viewPrint, viewRender, viewText } from './lib/document-view'
@@ -1462,6 +1463,12 @@ app.whenReady().then(() => {
   // no main a partir da sessão — o renderer manda só o sessionId e recebe de
   // volta a pasta, quando houver, para dizer que as fontes são compartilhadas.
   ipcMain.handle('docs:list', (_event, sessionId: string) => listSessionSources(sessionId))
+  // Miniatura por documento, e nao junto do docs:list: a do PDF passa por
+  // rasterizar a pagina, e embutir isso na listagem faria a aba inteira
+  // esperar pelo arquivo mais lento antes de mostrar qualquer linha.
+  ipcMain.handle('docs:thumb', (_event, sessionId: string, docId: string) =>
+    sessionDocumentThumb(sessionId, docId),
+  )
   ipcMain.handle(
     'docs:add',
     async (

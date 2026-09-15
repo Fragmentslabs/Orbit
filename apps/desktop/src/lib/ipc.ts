@@ -565,6 +565,10 @@ export const docsApi = {
     window.ipcRenderer.invoke("docs:addUrl", sessionId, url, shared) as Promise<
       { ok: true } | { ok: false; error: string }
     >,
+  /** Miniatura da primeira pagina (data URL webp), ou null quando nao da para
+   *  gerar — a linha cai no icone do tipo. Pedida por linha, sob demanda. */
+  thumb: (sessionId: string, docId: string) =>
+    window.ipcRenderer.invoke("docs:thumb", sessionId, docId) as Promise<string | null>,
   /** O documento inteiro em texto, para o painel rolar. */
   text: (sessionId: string, docId: string) =>
     window.ipcRenderer.invoke("docs:text", sessionId, docId) as Promise<SourceText | null>,

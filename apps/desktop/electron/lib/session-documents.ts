@@ -4,6 +4,7 @@ import path from 'node:path'
 import { StorageKeys, type SessionInfo } from '@shared/chat'
 import { extractDocument, type DocumentKind, type ExtractedDocument } from './documents'
 import { documentKindOf } from './document-pages'
+import { pageThumb, textThumb } from './document-thumb'
 import { readJson } from './storage'
 import { fetchReadablePage } from './tools/web'
 import {
@@ -342,6 +343,12 @@ export async function adoptDraftDocuments(sessionId: string): Promise<number> {
       // O arquivo original vai junto: sem ele o documento perderia a
       // rasterização, o sheet_query e a edição preservando formatação.
       await fsp.rename(path.join(from, `${oldId}.bin`), path.join(target, `${id}.bin`)).catch(() => {})
+      // A miniatura também, pelo id novo: ela já foi renderizada enquanto o
+      // usuário montava o rascunho, e refazê-la abriria uma janela oculta
+      // justamente no instante em que o primeiro turno está começando.
+      await fsp
+        .rename(path.join(from, `${oldId}.thumb.webp`), path.join(target, `${id}.thumb.webp`))
+        .catch(() => {})
       adopted += 1
     } catch {
       // Um arquivo ilegível não pode impedir a adoção dos outros.
@@ -627,6 +634,58 @@ export async function readSessionDocumentBytes(
   }
 }
 
+/**
+ * Miniatura da primeira página, como data URL — o que a aba Fontes põe no
+ * lugar do ícone do tipo.
+ *
+ * Gerada uma vez e guardada em `<id>.thumb.webp`, porque o caminho do PDF
+ * passa por rasterizar a página numa janela oculta: caro demais para repetir
+ * a cada vez que a aba monta. O documento é imutável depois de salvo, então o
+ * cache nunca precisa ser invalidado — só acompanhado quando o arquivo muda
+ * de escopo ou é apagado.
+ *
+ * Best-effort de ponta a ponta: qualquer falha devolve null e a linha da lista
+ * volta a mostrar o ícone, que é exatamente o estado anterior a isto existir.
+ */
+export async function sessionDocumentThumb(sessionId: string, docId: string): Promise<string | null> {
+  if (!SAFE_ID.test(docId)) return null
+  const dir = dirForId(await scopesOf(sessionId), docId)
+  if (!dir) return null
+  const cached = path.join(dir, `${docId}.thumb.webp`)
+  const asDataUrl = (buffer: Buffer) => `data:image/webp;base64,${buffer.toString('base64')}`
+
+  try {
+    return asDataUrl(await fsp.readFile(cached))
+  } catch {
+    // Sem cache ainda — segue para gerar.
+  }
+
+  const stored = await readStoredAt(dir, docId)
+  if (!stored) return null
+
+  let thumb: Buffer | null = null
+  try {
+    if (stored.kind === 'pdf') {
+      const bytes = await fsp.readFile(path.join(dir, `${docId}.bin`)).catch(() => null)
+      if (bytes) {
+        // Escala baixa de propósito: o resultado é reduzido a 160px de largura
+        // logo em seguida, então renderizar grande só gastaria tempo.
+        const { pages } = await rasterizePdf(bytes, { pages: [1], scale: 0.6 })
+        if (pages[0]) thumb = await pageThumb(pages[0].png)
+      }
+    }
+    // Vale também como plano B do PDF: um anexo antigo pode não ter o original
+    // guardado, e o texto extraído está sempre lá.
+    if (!thumb) thumb = await textThumb(stored.pages.map((p) => p.text).join('\n'))
+  } catch {
+    return null
+  }
+
+  if (!thumb) return null
+  await fsp.writeFile(cached, thumb).catch(() => {})
+  return asDataUrl(thumb)
+}
+
 /** Adiciona um arquivo pela aba Fontes, sem passar por uma mensagem. */
 export async function addSessionDocument(
   sessionId: string,
@@ -745,6 +804,12 @@ export async function setSessionDocumentShared(
   // O original acompanha: sem ele o documento perderia o sheet_query, a
   // rasterização e a edição preservando formatação só por ter mudado de área.
   await fsp.rename(path.join(from, `${docId}.bin`), path.join(dir, `${id}.bin`)).catch(() => {})
+  // A miniatura vai junto pelo id NOVO. Deixá-la para trás não só desperdiçaria
+  // a renderização — o id é reaproveitável dentro do escopo antigo, e o cache
+  // órfão viraria a capa de outro documento.
+  await fsp
+    .rename(path.join(from, `${docId}.thumb.webp`), path.join(dir, `${id}.thumb.webp`))
+    .catch(() => {})
   await fsp.rm(path.join(from, `${docId}.json`), { force: true })
   notifyDocumentsChanged()
   return { ok: true, id }
@@ -761,6 +826,7 @@ export async function removeSessionDocument(sessionId: string, docId: string): P
     return false
   }
   await fsp.rm(path.join(dir, `${docId}.bin`), { force: true })
+  await fsp.rm(path.join(dir, `${docId}.thumb.webp`), { force: true })
   notifyDocumentsChanged()
   return true
 }
@@ -771,6 +837,9 @@ async function scopeUsage(scope: string | null): Promise<number> {
   let total = 0
   try {
     for (const file of await fsp.readdir(dir)) {
+      // A miniatura é cache que nós geramos, não material do usuário: contá-la
+      // faria um texto colado de 2KB aparecer como o dobro do que ele é.
+      if (file.endsWith('.thumb.webp')) continue
       const stat = await fsp.stat(path.join(dir, file)).catch(() => null)
       if (stat?.isFile()) total += stat.size
     }

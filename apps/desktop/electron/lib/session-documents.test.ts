@@ -116,6 +116,45 @@ describe('fontes no modo código', () => {
     expect(new Set(depois.shared.map((d) => d.id)).size).toBe(2)
   })
 
+  it('a miniatura é gerada uma vez e fica em cache no escopo do documento', async () => {
+    const nova = await docs.addSessionText('convb', 'Relatório', 'Linha um\nLinha dois', false)
+    expect(nova.ok).toBe(true)
+    if (!nova.ok) return
+
+    const thumb = await docs.sessionDocumentThumb('convb', nova.doc.id)
+    expect(thumb).toMatch(/^data:image\/webp;base64,/)
+
+    const cache = path.join(userData, 'orbit-data', 'session-docs', 'convb', `${nova.doc.id}.thumb.webp`)
+    await expect(fsp.access(cache)).resolves.toBeUndefined()
+
+    // A segunda chamada não redesenha: é o mesmo arquivo que volta.
+    expect(await docs.sessionDocumentThumb('convb', nova.doc.id)).toBe(thumb)
+
+    // E some junto com o documento — cache órfão viraria a capa de outro id.
+    await docs.removeSessionDocument('convb', nova.doc.id)
+    await expect(fsp.access(cache)).rejects.toThrow()
+  })
+
+  it('a miniatura acompanha o documento quando ele muda de área', async () => {
+    const anexo = await docs.addSessionText('conva', 'Nota', 'Conteúdo da nota', false)
+    expect(anexo.ok).toBe(true)
+    if (!anexo.ok) return
+    await docs.sessionDocumentThumb('conva', anexo.doc.id)
+
+    const movido = await docs.setSessionDocumentShared('conva', anexo.doc.id, true)
+    expect(movido).toBeTruthy()
+    const novoId = (movido as { ok: true; id: string }).id
+
+    const destino = path.join(
+      userData,
+      'orbit-data',
+      'session-docs',
+      `folder-${FOLDER}`,
+      `${novoId}.thumb.webp`,
+    )
+    await expect(fsp.access(destino)).resolves.toBeUndefined()
+  })
+
   it('apagar a pasta leva as fontes dela, e só elas', async () => {
     await docs.addSessionText('conva', 'Só desta conversa', 'texto', false)
     await docs.deleteFolderDocuments(FOLDER)
