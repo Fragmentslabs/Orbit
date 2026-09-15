@@ -1,7 +1,7 @@
 {
   "name": "@orbit/desktop",
   "private": true,
-  "version": "0.1.3",
+  "version": "0.1.4",
   "desktopName": "orbit.desktop",
   "description": "Orbit - AI-powered coding assistant",
   "author": "Orbit",
