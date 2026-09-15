@@ -125,7 +125,8 @@ export async function viewPrint(
   if (!file || file.ext !== 'pdf') {
     return { ok: false, error: 'Este documento não tem versão em PDF para imprimir. Baixe o arquivo.' }
   }
-  return printFile(file.path)
+  const entry = await getMediaEntry(id)
+  return printFile(file.path, entry?.name)
 }
 
 export async function viewExport(

@@ -138,7 +138,10 @@ const PRINT_WINDOW_TTL_MS = 10 * 60_000
  *    Esperar o fim é esperar o usuário — e era isso que mantinha a UI
  *    carregando. O resultado do trabalho quem reporta é o próprio diálogo.
  */
-export async function printFile(filePath: string): Promise<{ ok: boolean; error?: string }> {
+export async function printFile(
+  filePath: string,
+  title?: string,
+): Promise<{ ok: boolean; error?: string }> {
   let alvo: { path: string; cleanup: () => void }
   try {
     alvo = await printablePath(filePath)
@@ -151,7 +154,13 @@ export async function printFile(filePath: string): Promise<{ ok: boolean; error?
     show: false,
     width: 720,
     height: 860,
-    title: path.basename(filePath),
+    // Filha da janela do app: fica por cima dela, some junto e não vira uma
+    // segunda entrada solta na barra de tarefas.
+    parent: BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0],
+    title: title || path.basename(filePath),
+    // Sem a barra de menu do Electron: esta janela existe só para hospedar o
+    // diálogo, e um menu Arquivo/Editar/Exibir ali não leva a lugar nenhum.
+    autoHideMenuBar: true,
     webPreferences: {
       // plugins: liga o visualizador de PDF embutido, sem o qual a janela
       // baixaria o arquivo em vez de renderizá-lo.
@@ -169,6 +178,12 @@ export async function printFile(filePath: string): Promise<{ ok: boolean; error?
     alvo.cleanup()
     if (!win.isDestroyed()) win.destroy()
   }
+
+  // O visualizador de PDF renomeia a janela com o nome do ARQUIVO, que aqui é
+  // a cópia temporária (`orbit-print-mu23….pdf`). Segurar o título mantém na
+  // tela o nome do documento que o usuário mandou imprimir.
+  win.setMenuBarVisibility(false)
+  win.on('page-title-updated', (event) => event.preventDefault())
 
   try {
     await win.loadURL(pathToFileURL(alvo.path).toString())

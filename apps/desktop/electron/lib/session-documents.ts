@@ -496,7 +496,8 @@ export async function printSessionDocument(
   if (source.ext !== 'pdf') {
     return { ok: false, error: 'Só PDF pode ser impresso daqui. Baixe o arquivo e imprima pelo Word.' }
   }
-  return printFile(source.path)
+  const found = await readSessionDocument(sessionId, docId)
+  return printFile(source.path, found?.doc.filename)
 }
 
 /**
