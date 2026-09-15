@@ -75,6 +75,16 @@
     // target AppImage rejeita (so aceita letras, digitos, ponto, underscore, hifen e espaco).
     // Explicito para manter o nome dos releases anteriores.
     "executableName": "Orbit",
+    // O icone do Linux vem daqui; o electron-builder gera os tamanhos e os
+    // instala como /usr/share/icons/hicolor/<tamanho>/apps/Orbit.png, que e o
+    // nome que a chave Icon= do .desktop referencia (executableName).
+    "icon": "build/icon.png",
+    // O Electron tira o app_id (WM_CLASS) do `desktopName` do package.json, e
+    // com isto o .desktop instalado passa a ter o MESMO nome e o mesmo
+    // StartupWMClass. Sem esse casamento o ambiente nao liga a janela aberta
+    // ao atalho, e o dock mostra um icone generico em vez do do app — era o
+    // que acontecia no AppImage.
+    "syncDesktopName": true,
     // TODO: trocar pelo e-mail real do mantenedor
     "maintainer": "Orbit <orbit@fragmentslabs.com>",
     // Version-less name so the "latest/download" release URL stays stable
