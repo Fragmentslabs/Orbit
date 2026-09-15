@@ -119,6 +119,43 @@ export async function printablePath(
 
 /** Rede de segurança: janela de impressão abandonada não fica para sempre. */
 const PRINT_WINDOW_TTL_MS = 10 * 60_000
+/** Teto da espera pela primeira pintura antes de abrir o diálogo. */
+const FIRST_PAINT_TIMEOUT_MS = 3000
+
+/**
+ * Espera a janela PINTAR de fato.
+ *
+ * `ready-to-show` não serve aqui: ele dispara quando a página está pronta
+ * (medido: 107ms), mas o visualizador de PDF é um plugin e desenha depois —
+ * capturar nesse instante devolve um retângulo liso. Era por isso que a
+ * janela de impressão ficava cinza: o diálogo, modal, abria antes do primeiro
+ * quadro e congelava a janela naquele estado.
+ *
+ * Então em vez de cravar um número de milissegundos, mede-se o que interessa:
+ * captura até a imagem deixar de ser lisa. Medido ~277ms num PDF comum.
+ */
+async function waitForFirstPaint(win: BrowserWindow): Promise<boolean> {
+  const started = Date.now()
+  while (Date.now() - started < FIRST_PAINT_TIMEOUT_MS) {
+    await new Promise((resolve) => setTimeout(resolve, 120))
+    if (win.isDestroyed()) return false
+    try {
+      const bitmap = (await win.capturePage()).toBitmap()
+      const counts = new Map<number, number>()
+      for (let i = 0; i < bitmap.length; i += 4) {
+        // Cor grosseira (4 bits por canal): antialiasing não conta como
+        // conteúdo, mas texto e moldura contam.
+        const key = (bitmap[i + 2] >> 4) * 256 + (bitmap[i + 1] >> 4) * 16 + (bitmap[i] >> 4)
+        counts.set(key, (counts.get(key) ?? 0) + 1)
+      }
+      const total = bitmap.length / 4
+      if (total > 0 && (total - Math.max(...counts.values(), 0)) / total > 0.05) return true
+    } catch {
+      // Nada composto ainda (UnknownVizError) — continua esperando.
+    }
+  }
+  return false
+}
 
 /**
  * Abre o diálogo de impressão do sistema para um arquivo.
@@ -198,6 +235,13 @@ export async function printFile(
     encerrada = true
     alvo.cleanup()
   })
+
+  // O diálogo é modal: abri-lo antes do primeiro quadro deixa a janela cinza
+  // atrás dele até o fim. Se a pintura não vier no teto, imprime assim mesmo —
+  // uma prévia feia é melhor que não imprimir.
+  await waitForFirstPaint(win)
+  if (win.isDestroyed()) return { ok: false, error: 'A janela de impressão foi fechada.' }
+
   win.webContents.print({ silent: false }, () => encerrar())
   setTimeout(encerrar, PRINT_WINDOW_TTL_MS)
 
