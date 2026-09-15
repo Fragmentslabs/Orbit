@@ -87,7 +87,7 @@ export function createImageTools(scope: DocumentToolScope, ctx: ToolContext | nu
 
     image_info: tool({
       description:
-        'Reads an image WITHOUT editing it: format, dimensions, file size, whether it has transparency, and the dominant colour. Call it before image_edit when the numbers matter — to crop you need the real dimensions, and the dominant colour is the likely background when removing it. ref: an orbit-media:// URL (attachments and generated images are all in the gallery) or, in code mode, a path in the working folder.',
+        'Reads an image WITHOUT editing it: format, dimensions, file size, whether it has transparency, and the dominant colour. Call it before image_edit when the numbers matter — to crop you need the real dimensions. Do NOT feed the dominant colour into removeBackground: it is a binned approximation, and that tool reads the real background off the image border itself. ref: an orbit-media:// URL (attachments and generated images are all in the gallery) or, in code mode, a path in the working folder.',
       inputSchema: z.object({
         ref: z.string().describe('orbit-media:// URL, or a path in the working folder'),
       }),
@@ -111,7 +111,7 @@ export function createImageTools(scope: DocumentToolScope, ctx: ToolContext | nu
       description:
         'Edits an existing image by pixel processing — no generation model involved, so the photo that goes in is the same one that comes out, only resized/adjusted. Combine as many operations as you need in ONE call; they are applied in a fixed order: EXIF orientation, crop, trim, rotate/flip, background removal, resize, colour, flatten, encode.\n' +
         'Use it for: resizing, cropping, compressing to a size limit (maxBytes), converting format, adjusting brightness/saturation/hue/contrast, greyscale, blur/sharpen, and removing a background.\n' +
-        'removeBackground works by spreading from the EDGES of the image, so it only clears background CONNECTED to the border — a white shirt inside the subject survives a white wall being removed. It handles a flat or nearly flat background (product shot, studio portrait, logo, screenshot); it does NOT separate hair from a busy scene, which needs a segmentation model. The result reports how much was cleared: a very low percentage means it failed, not that the image had little background.\n' +
+        'removeBackground spreads from the EDGES of the image, so it only clears background CONNECTED to the border — a white shirt inside the subject survives a white wall being removed. It compares COLOUR rather than brightness, so a lit backdrop that shades from one side to the other still keys cleanly. Both the background colour and the tolerance are MEASURED FROM THE IMAGE: omit them on the first attempt, and correct only if the reported result is wrong — guessing a tolerance is how the subject gets eaten. It handles a flat or nearly flat background (product shot, studio portrait, logo, screenshot); it does NOT separate hair from a busy scene, which needs a segmentation model. The result reports how much was cleared and the threshold used: a very low percentage means it failed, not that the image had little background.\n' +
         'The result is ALWAYS a new image in the gallery, shown in your reply — the original is never overwritten. Pass savePath only when the user asked for the file to be written into the working folder.',
       inputSchema: z.object({
         ref: z.string().describe('orbit-media:// URL, or a path in the working folder'),
@@ -143,11 +143,14 @@ export function createImageTools(scope: DocumentToolScope, ctx: ToolContext | nu
         flop: z.boolean().optional().describe('Mirror horizontally'),
         removeBackground: z
           .object({
-            color: z.string().optional().describe('Background colour; omit to guess it from the corners'),
+            color: z.string().optional()
+              .describe('Background colour. OMIT IT: the colour is read from the image border, which is more accurate than a guess. Pass one only when the border is not the background.'),
             tolerance: z.number().min(0).max(100).optional()
-              .describe('0-100, default 12. Raise it for an uneven background, lower it if the subject is being eaten'),
+              .describe('OMIT IT on the first attempt: measured from the image itself, which is the only place the right value exists. Pass 0-100 only to correct a reported result — higher to clear leftover background, lower if the subject was eaten.'),
+            despill: z.boolean().optional()
+              .describe('Removes the background colour left clinging to the subject edge. On by default; turn it off only if it is washing out a subject that is genuinely the background colour.'),
             feather: z.number().min(0).max(20).optional()
-              .describe('Softens the cut edge, in pixels. 0 (default) is a hard cut'),
+              .describe('Softens the cut edge, in pixels. 0 (default) is a hard cut; 1-2 looks better on a photo.'),
           })
           .optional(),
         grayscale: z.boolean().optional(),
@@ -210,8 +213,14 @@ export function createImageTools(scope: DocumentToolScope, ctx: ToolContext | nu
         ]
         if (result.backgroundRemoved !== undefined) {
           const percent = Math.round(result.backgroundRemoved * 100)
+          // O limiar usado vai junto porque é o ponto de partida da correção:
+          // sem ele, ajustar a tolerância seria adivinhar de novo do zero.
+          const limiar =
+            result.backgroundLimit === undefined
+              ? ''
+              : ` (limiar ${result.backgroundLimit.toFixed(0)} de 100)`
           notes.push(
-            `fundo ${result.backgroundColor} recortado em ${percent}% da imagem${
+            `fundo ${result.backgroundColor} recortado em ${percent}% da imagem${limiar}${
               percent < 5
                 ? ' — quase nada saiu: confira a cor do fundo ou aumente a tolerância'
                 : percent > 97

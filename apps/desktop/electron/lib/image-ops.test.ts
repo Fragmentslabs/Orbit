@@ -113,6 +113,96 @@ describe('removeBackground', () => {
     expect(folgado.removed).toBeGreaterThan(0.9)
   })
 
+  it('separa pelo MATIZ, e não pelo brilho: tela verde iluminada não come a pele', async () => {
+    // O caso que quebrou de verdade. Uma tela verde real é iluminada de um
+    // lado: o fundo varia de (100,164,77) a (124,201,115), que em RGB fica a
+    // mais da metade do caminho até um tom de pele — nenhum limiar separa os
+    // dois. Em LAB a variação é quase toda de luminosidade, e a margem volta.
+    const gradiente = Buffer.alloc(80 * 80 * 3)
+    for (let y = 0; y < 80; y++) {
+      for (let x = 0; x < 80; x++) {
+        const at = (y * 80 + x) * 3
+        const t = x / 79
+        gradiente[at] = Math.round(100 + t * 24)
+        gradiente[at + 1] = Math.round(164 + t * 37)
+        gradiente[at + 2] = Math.round(77 + t * 38)
+      }
+    }
+    const pele = await sharp({
+      create: { width: 30, height: 30, channels: 3, background: '#c69473' },
+    })
+      .png()
+      .toBuffer()
+    const cena = await sharp(gradiente, { raw: { width: 80, height: 80, channels: 3 } })
+      .composite([{ input: pele, top: 25, left: 25 }])
+      .png()
+      .toBuffer()
+
+    const result = await removeBackground(cena)
+    expect(await alphaAt(result.png, 2, 40)).toBe(0) // fundo escuro: foi
+    expect(await alphaAt(result.png, 77, 40)).toBe(0) // fundo claro: também
+    expect(await alphaAt(result.png, 40, 40)).toBe(255) // pele: ficou
+  })
+
+  it('a tolerância automática sai do espalhamento da própria moldura', async () => {
+    // Quem chama não tem como saber o número certo — ele depende da foto.
+    const liso = await removeBackground(await subjectOnBackground('#ffffff'))
+    const irregular = await sharp({
+      create: { width: 60, height: 60, channels: 3, background: '#cfe8cf' },
+    })
+      .composite([
+        { input: await solid(20, 20, '#c81e1e'), top: 20, left: 20 },
+        // Mancha na moldura: o fundo não é uniforme, e o automático precisa
+        // abrir mais do que abriria num fundo liso.
+        { input: await solid(60, 4, '#a8d0a8'), top: 0, left: 0 },
+      ])
+      .png()
+      .toBuffer()
+    const medido = await removeBackground(irregular)
+
+    expect(medido.limit).toBeGreaterThan(liso.limit)
+    expect(await alphaAt(medido.png, 1, 1)).toBe(0)
+    expect(await alphaAt(medido.png, 30, 30)).toBe(255)
+  })
+
+  it('despill tira o verde que fica grudado na borda do assunto', async () => {
+    // Uma borda real é MISTURA de assunto e fundo, então ao lado de uma tela
+    // verde o contorno sai esverdeado. É o que faz um recorte parecer recortado.
+    const cinza = await sharp({
+      create: { width: 60, height: 60, channels: 3, background: '#00c000' },
+    })
+      .composite([
+        { input: await solid(24, 24, '#8a8a8a'), top: 18, left: 18 },
+        // A moldura de mistura em volta do assunto.
+        { input: await solid(28, 2, '#4a9a4a'), top: 16, left: 16 },
+      ])
+      .png()
+      .toBuffer()
+
+    const esverdeados = async (png: Buffer) => {
+      const { data } = await sharp(png).ensureAlpha().raw().toBuffer({ resolveWithObject: true })
+      let n = 0
+      for (let i = 0; i < data.length; i += 4) {
+        if (data[i + 3] < 128) continue
+        if (data[i + 1] > data[i] + 18 && data[i + 1] > data[i + 2] + 18) n++
+      }
+      return n
+    }
+
+    const sem = await removeBackground(cinza, { despill: false })
+    const com = await removeBackground(cinza)
+    expect(await esverdeados(com.png)).toBeLessThan(await esverdeados(sem.png))
+  })
+
+  it('despill não apaga a cor de um fundo neutro', async () => {
+    // Fundo branco ou cinza não tem matiz para vazar. "Corrigir" ali só tiraria
+    // cor de quem legitimamente a tem.
+    const out = await removeBackground(await subjectOnBackground('#ffffff', '#1e9e1e'))
+    const { data } = await sharp(out.png).ensureAlpha().raw().toBuffer({ resolveWithObject: true })
+    const at = (30 * 60 + 30) * 4
+    expect(data[at + 1]).toBeGreaterThan(data[at] + 18) // o verde do assunto ficou
+  })
+
   it('feather suaviza a borda em vez de deixá-la serrilhada', async () => {
     const duro = await removeBackground(await subjectOnBackground('#ffffff'))
     const suave = await removeBackground(await subjectOnBackground('#ffffff'), { feather: 2 })
@@ -125,6 +215,31 @@ describe('removeBackground', () => {
     }
     expect(await alfas(duro.png)).toBe(0)
     expect(await alfas(suave.png)).toBeGreaterThan(0)
+  })
+
+  it('feather NÃO desloca nem lista o alfa', async () => {
+    // Regressão de um bug real: o blur sobre um raw de 1 canal devolve 3, e ler
+    // o resultado como 1 canal avança um terço do necessário por pixel. O alfa
+    // saía comprimido na horizontal e em faixas — o assunto virava listras, e a
+    // imagem parecia um defeito de renderização em vez de um recorte errado.
+    const duro = await removeBackground(await subjectOnBackground('#ffffff'))
+    const suave = await removeBackground(await subjectOnBackground('#ffffff'), { feather: 1 })
+
+    // O miolo do assunto continua opaco: um deslocamento o perfuraria.
+    expect(await alphaAt(suave.png, 30, 30)).toBe(255)
+    // E a quina continua recortada.
+    expect(await alphaAt(suave.png, 1, 1)).toBe(0)
+
+    // Suavizar muda a BORDA, não a área: as duas versões cobrem quase o mesmo.
+    const opacos = async (png: Buffer) => {
+      const { data } = await sharp(png).ensureAlpha().raw().toBuffer({ resolveWithObject: true })
+      let n = 0
+      for (let i = 3; i < data.length; i += 4) if (data[i] > 128) n++
+      return n
+    }
+    const a = await opacos(duro.png)
+    const b = await opacos(suave.png)
+    expect(Math.abs(a - b)).toBeLessThan(a * 0.2)
   })
 })
 

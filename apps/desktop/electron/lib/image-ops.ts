@@ -77,8 +77,14 @@ export function parseColor(value: string): { r: number; g: number; b: number } {
 export interface RemoveBackgroundOptions {
   /** Cor do fundo. Ausente = adivinhada pelas quinas da imagem. */
   color?: string
-  /** 0–100. Quanto o pixel pode se afastar da cor de fundo e ainda ser fundo. */
-  tolerance?: number
+  /**
+   * 0-100, ou 'auto' (padrão): quanto o pixel pode se afastar da cor de fundo e
+   * ainda ser fundo. O 'auto' mede o espalhamento da moldura da própria
+   * imagem, que é o único lugar onde essa resposta existe.
+   */
+  tolerance?: number | 'auto'
+  /** Tira a cor do fundo que ficou na borda do assunto. Ligado por padrão. */
+  despill?: boolean
   /** Raio de suavização da borda recortada, em pixels. 0 = corte duro. */
   feather?: number
 }
@@ -89,10 +95,59 @@ export interface RemoveBackgroundResult {
   color: string
   /** Fração da imagem que virou transparente, 0–1. */
   removed: number
+  /** Limiar ΔE usado — o número que o 'auto' escolheu, para quem precisar
+   *  repetir o recorte mais apertado ou mais folgado a partir dele. */
+  limit: number
 }
 
-/** Distância máxima possível entre duas cores RGB — normaliza a tolerância. */
-const MAX_DISTANCE = Math.sqrt(255 * 255 * 3)
+/**
+ * Cor em CIELAB, que é onde a comparação de fundo faz sentido.
+ *
+ * Em RGB, "distância" mistura brilho com cor. Numa tela verde iluminada isso
+ * é fatal: o fundo de uma foto real varia de (100,164,77) na quina a
+ * (124,201,115) no meio — uma distância RGB de 56 — enquanto do verde até a
+ * pele são 92. A variação DO PRÓPRIO FUNDO ocupa mais da metade do caminho
+ * até o assunto, e nenhum limiar separa os dois.
+ *
+ * Em LAB essa variação é quase toda de luminosidade (L), e a cor (a,b) fica
+ * praticamente parada. Medindo com L pesando pouco, a mesma foto dá 4,7-7,5
+ * dentro do fundo contra 47,9-60,9 no assunto: sete vezes de margem.
+ *
+ * É a razão de todo chroma key comparar COR e não BRILHO — o refletor que
+ * clareia um canto da tela não a torna menos verde.
+ */
+const SRGB_TO_LINEAR = new Float32Array(256)
+for (let i = 0; i < 256; i++) {
+  const v = i / 255
+  SRGB_TO_LINEAR[i] = v <= 0.04045 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4)
+}
+
+function labOf(r: number, g: number, b: number): [number, number, number] {
+  const R = SRGB_TO_LINEAR[r]
+  const G = SRGB_TO_LINEAR[g]
+  const B = SRGB_TO_LINEAR[b]
+  const x = (R * 0.4124 + G * 0.3576 + B * 0.1805) / 0.95047
+  const y = R * 0.2126 + G * 0.7152 + B * 0.0722
+  const z = (R * 0.0193 + G * 0.1192 + B * 0.9505) / 1.08883
+  const f = (t: number) => (t > 0.008856 ? Math.cbrt(t) : 7.787 * t + 16 / 116)
+  const fx = f(x)
+  const fy = f(y)
+  const fz = f(z)
+  return [116 * fy - 16, 500 * (fx - fy), 200 * (fy - fz)]
+}
+
+/**
+ * Peso da luminosidade na distância.
+ *
+ * Zero seria o chroma key clássico, mas aí preto e branco viram "a mesma cor"
+ * de qualquer fundo cinza. Um quarto mantém a diferença de brilho audível sem
+ * deixar o gradiente do refletor decidir o recorte.
+ */
+const LIGHTNESS_WEIGHT = 0.25
+
+/** A escala 0-100 da tolerância, em ΔE. 100 cobre cores completamente
+ *  diferentes; a faixa útil de um fundo liso fica entre 10 e 30. */
+const TOLERANCE_TO_DELTA_E = 0.6
 
 /**
  * Recorta o fundo por preenchimento a partir das BORDAS.
@@ -124,9 +179,26 @@ export async function removeBackground(
     )
   }
 
-  const background = options.color ? parseColor(options.color) : sampleCorners(data, width, height)
-  const tolerance = Math.min(100, Math.max(0, options.tolerance ?? 12))
-  const limit = (tolerance / 100) * MAX_DISTANCE
+  const background = options.color ? parseColor(options.color) : sampleBorder(data, width, height)
+  const backgroundLab = labOf(background.r, background.g, background.b)
+
+  // Distância de cada pixel até o fundo, calculada de uma vez. O
+  // preenchimento visita o mesmo pixel várias vezes (uma por vizinho), e
+  // converter para LAB dentro do laço refaria a mesma raiz cúbica sem motivo.
+  const distance = new Float32Array(width * height)
+  for (let i = 0; i < distance.length; i++) {
+    const at = i * 4
+    const [l, a, b] = labOf(data[at], data[at + 1], data[at + 2])
+    const dl = l - backgroundLab[0]
+    const da = a - backgroundLab[1]
+    const db = b - backgroundLab[2]
+    distance[i] = Math.sqrt(LIGHTNESS_WEIGHT * dl * dl + da * da + db * db)
+  }
+
+  const limit =
+    options.tolerance === undefined || options.tolerance === 'auto'
+      ? autoLimit(distance, width, height)
+      : Math.min(100, Math.max(0, options.tolerance)) * TOLERANCE_TO_DELTA_E
 
   // Fila explícita, e não recursão: uma imagem de alguns megapixels de fundo
   // liso estouraria a pilha de chamadas na primeira foto de verdade.
@@ -135,13 +207,7 @@ export async function removeBackground(
   let head = 0
   let tail = 0
 
-  const matches = (index: number): boolean => {
-    const at = index * 4
-    const dr = data[at] - background.r
-    const dg = data[at + 1] - background.g
-    const db = data[at + 2] - background.b
-    return Math.sqrt(dr * dr + dg * dg + db * db) <= limit
-  }
+  const matches = (index: number): boolean => distance[index] <= limit
 
   const push = (index: number) => {
     if (seen[index]) return
@@ -171,32 +237,139 @@ export async function removeBackground(
     if (y < height - 1) push(index + width)
   }
 
+  // Descontamina ANTES de suavizar: o vazamento mora nos pixels que ainda são
+  // opacos, e depois do feather parte deles já virou transição.
+  if (options.despill !== false) despill(data, width, height, background)
+
   const feather = Math.min(20, Math.max(0, options.feather ?? 0))
   if (feather > 0) await softenAlpha(data, width, height, feather)
 
   const png = await sharp(data, { raw: { width, height, channels: 4 } }).png().toBuffer()
-  return { png, color: toHex(background), removed: removed / (width * height) }
+  return { png, color: toHex(background), removed: removed / (width * height), limit }
 }
 
 /**
- * Cor de fundo pelas quatro quinas.
+ * Cor de fundo pela MOLDURA inteira, não pelas quatro quinas.
  *
- * Mediana por canal, e não média: se uma das quinas cair em cima do assunto,
- * a média puxaria o palpite para uma cor que não existe na imagem, enquanto a
- * mediana ignora a quina discordante.
+ * Quatro pixels são pouca amostra: numa foto em que o assunto encosta na
+ * borda, duas quinas já podem cair em cima dele. A moldura inteira dilui isso,
+ * e a mediana por canal descarta o que for assunto em vez de fazer média com
+ * ele — uma cor que não existe na imagem seria o pior palpite possível.
  */
-function sampleCorners(data: Buffer, width: number, height: number) {
-  const corners = [
-    0,
-    (width - 1) * 4,
-    (height - 1) * width * 4,
-    ((height - 1) * width + width - 1) * 4,
-  ]
-  const channel = (offset: number) => {
-    const values = corners.map((at) => data[at + offset]).sort((a, b) => a - b)
-    return Math.round((values[1] + values[2]) / 2)
+function sampleBorder(data: Buffer, width: number, height: number) {
+  const r: number[] = []
+  const g: number[] = []
+  const b: number[] = []
+  const take = (index: number) => {
+    const at = index * 4
+    r.push(data[at])
+    g.push(data[at + 1])
+    b.push(data[at + 2])
   }
-  return { r: channel(0), g: channel(1), b: channel(2) }
+  for (let x = 0; x < width; x++) {
+    take(x)
+    take((height - 1) * width + x)
+  }
+  for (let y = 0; y < height; y++) {
+    take(y * width)
+    take(y * width + width - 1)
+  }
+  const median = (values: number[]) => {
+    values.sort((a, z) => a - z)
+    return values[values.length >> 1]
+  }
+  return { r: median(r), g: median(g), b: median(b) }
+}
+
+/**
+ * Tolerância medida na própria imagem, em vez de adivinhada.
+ *
+ * Quem chama não tem como saber o número certo: ele depende de quão uniforme é
+ * o fundo daquela foto. A moldura, por outro lado, é quase toda fundo — então o
+ * espalhamento dela É a resposta. Toma-se um percentil alto (não o máximo, que
+ * seria o pedaço de assunto encostado na borda) e abre-se uma folga.
+ *
+ * Errar para o lado apertado é o lado seguro: sobra fundo, que se vê na hora e
+ * se corrige repetindo com tolerância maior. Errar para o lado folgado come o
+ * assunto, e isso não tem volta.
+ */
+const AUTO_PERCENTILE = 0.8
+const AUTO_MARGIN = 2.5
+const AUTO_FLOOR = 8
+const AUTO_CEILING = 34
+
+function autoLimit(distance: Float32Array, width: number, height: number): number {
+  const border: number[] = []
+  for (let x = 0; x < width; x++) {
+    border.push(distance[x], distance[(height - 1) * width + x])
+  }
+  for (let y = 0; y < height; y++) {
+    border.push(distance[y * width], distance[y * width + width - 1])
+  }
+  border.sort((a, b) => a - b)
+  const spread = border[Math.floor(border.length * AUTO_PERCENTILE)]
+  return Math.min(AUTO_CEILING, Math.max(AUTO_FLOOR, spread * AUTO_MARGIN))
+}
+
+/**
+ * Tira a cor do fundo que ficou grudada na borda do assunto.
+ *
+ * Um recorte perfeito ainda deixa halo: os pixels da transição são uma MISTURA
+ * de assunto e fundo, então ao lado de uma tela verde o contorno da pessoa fica
+ * esverdeado. É o que faz um recorte parecer recortado.
+ *
+ * A correção é a clássica do chroma key: no canal que domina a cor do fundo, o
+ * pixel não pode passar da média dos outros dois. Aplicada SÓ perto do corte —
+ * uma gravata verde no meio do peito não é vazamento, e limitar a imagem
+ * inteira a apagaria.
+ */
+const DESPILL_RADIUS = 2
+
+function despill(
+  data: Buffer,
+  width: number,
+  height: number,
+  background: { r: number; g: number; b: number },
+) {
+  const channels = [background.r, background.g, background.b]
+  const dominant = channels.indexOf(Math.max(...channels))
+  // Fundo cinza ou branco não tem canal dominante de verdade: não há matiz
+  // para vazar, e "corrigir" só tiraria cor de quem tem.
+  const rival = (Math.max(...channels) - Math.min(...channels)) / 255
+  if (rival < 0.08) return
+
+  let ring: number[] = []
+  for (let i = 0; i < width * height; i++) {
+    if (data[i * 4 + 3] === 0) continue
+    const x = i % width
+    const y = (i / width) | 0
+    const touches =
+      (x > 0 && data[(i - 1) * 4 + 3] === 0) ||
+      (x < width - 1 && data[(i + 1) * 4 + 3] === 0) ||
+      (y > 0 && data[(i - width) * 4 + 3] === 0) ||
+      (y < height - 1 && data[(i + width) * 4 + 3] === 0)
+    if (touches) ring.push(i)
+  }
+
+  const treated = new Uint8Array(width * height)
+  for (let step = 0; step < DESPILL_RADIUS && ring.length > 0; step++) {
+    const next: number[] = []
+    for (const i of ring) {
+      if (treated[i]) continue
+      treated[i] = 1
+      const at = i * 4
+      const others = [0, 1, 2].filter((c) => c !== dominant)
+      const cap = (data[at + others[0]] + data[at + others[1]]) / 2
+      if (data[at + dominant] > cap) data[at + dominant] = Math.round(cap)
+      const x = i % width
+      const y = (i / width) | 0
+      if (x > 0) next.push(i - 1)
+      if (x < width - 1) next.push(i + 1)
+      if (y > 0) next.push(i - width)
+      if (y < height - 1) next.push(i + width)
+    }
+    ring = next.filter((i) => !treated[i] && data[i * 4 + 3] !== 0)
+  }
 }
 
 /**
@@ -210,11 +383,17 @@ function sampleCorners(data: Buffer, width: number, height: number) {
 async function softenAlpha(data: Buffer, width: number, height: number, radius: number) {
   const alpha = Buffer.allocUnsafe(width * height)
   for (let i = 0; i < width * height; i++) alpha[i] = data[i * 4 + 3]
-  const blurred = await sharp(alpha, { raw: { width, height, channels: 1 } })
+  // O blur sobre um raw de 1 canal DEVOLVE 3. Ler o resultado como se fosse um
+  // canal só avança um terço do necessário a cada pixel: o alfa sai comprimido
+  // na horizontal e listrado, que foi o artefato de faixas no primeiro recorte
+  // que este código produziu. Por isso o passo vem do que o sharp relata, e não
+  // do que foi pedido.
+  const { data: blurred, info } = await sharp(alpha, { raw: { width, height, channels: 1 } })
     .blur(radius)
     .raw()
-    .toBuffer()
-  for (let i = 0; i < width * height; i++) data[i * 4 + 3] = blurred[i]
+    .toBuffer({ resolveWithObject: true })
+  const stride = info.channels
+  for (let i = 0; i < width * height; i++) data[i * 4 + 3] = blurred[i * stride]
 }
 
 export interface ImageEdit {
@@ -269,6 +448,9 @@ export interface EditResult {
   backgroundColor?: string
   /** Fração recortada, quando houve removeBackground. */
   backgroundRemoved?: number
+  /** Limiar usado no recorte, na escala 0-100 da tolerância. É o ponto de
+   *  partida para corrigir: sem ele, ajustar seria adivinhar de novo. */
+  backgroundLimit?: number
   /** Passos que o maxBytes precisou dar; vazio quando coube de primeira. */
   compression?: string
 }
@@ -289,6 +471,7 @@ export async function editImage(source: Buffer, edit: ImageEdit): Promise<EditRe
   let working = source
   let backgroundColor: string | undefined
   let backgroundRemoved: number | undefined
+  let backgroundLimit: number | undefined
 
   // A etapa de geometria materializa um PNG intermediário para não perder a
   // transparência no caminho. Numa foto de 12MP isso é caro, então ela só roda
@@ -305,6 +488,7 @@ export async function editImage(source: Buffer, edit: ImageEdit): Promise<EditRe
     working = cut.png
     backgroundColor = cut.color
     backgroundRemoved = cut.removed
+    backgroundLimit = cut.limit / TOLERANCE_TO_DELTA_E
   } else if (needsGeometry) {
     working = await applyGeometry(source, edit)
   }
@@ -332,7 +516,7 @@ export async function editImage(source: Buffer, edit: ImageEdit): Promise<EditRe
 
   if (edit.flatten) pipeline = pipeline.flatten({ background: parseColor(edit.flatten) })
 
-  return encode(pipeline, edit, { backgroundColor, backgroundRemoved })
+  return encode(pipeline, edit, { backgroundColor, backgroundRemoved, backgroundLimit })
 }
 
 /** Orientação, recorte, moldura e giro — tudo que mexe na grade de pixels. */
@@ -397,7 +581,7 @@ const MAX_SHRINKS = 6
 async function encode(
   pipeline: Sharp,
   edit: ImageEdit,
-  extra: { backgroundColor?: string; backgroundRemoved?: number },
+  extra: { backgroundColor?: string; backgroundRemoved?: number; backgroundLimit?: number },
 ): Promise<EditResult> {
   // PNG quando o fundo saiu e ninguém pediu formato: salvar transparência em
   // JPEG a perderia inteira, sem aviso.
@@ -452,6 +636,7 @@ async function encode(
     height: meta.height ?? 0,
     backgroundColor: extra.backgroundColor,
     backgroundRemoved: extra.backgroundRemoved,
+    backgroundLimit: extra.backgroundLimit,
     compression,
   }
 }
