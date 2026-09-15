@@ -268,7 +268,12 @@ function fileToModelContent(file: FilePart, modelVision: boolean): Exclude<UserC
  * chip). Em imagens, `thumbUrl` traz um thumbnail reduzido só para a bolha do
  * chat (o modelo continua não recebendo o arquivo: toModelMessages ignora
  * chips pela flag `chip`). */
-function attachmentChip(file: FilePart, thumbUrl?: string, documentId?: string): FilePart {
+function attachmentChip(
+  file: FilePart,
+  thumbUrl?: string,
+  documentId?: string,
+  mediaUrl?: string,
+): FilePart {
   return {
     id: file.id,
     type: 'file',
@@ -277,6 +282,7 @@ function attachmentChip(file: FilePart, thumbUrl?: string, documentId?: string):
     url: thumbUrl ?? '',
     chip: true,
     ...(documentId ? { documentId } : {}),
+    ...(mediaUrl ? { mediaUrl } : {}),
   }
 }
 
@@ -326,11 +332,15 @@ function imageExt(file: FilePart): string {
  * Melhor esforço: falha silenciosa — o envio da mensagem nunca quebra por
  * causa do registro.
  */
-async function saveUserImage(file: FilePart, sessionId?: string, messageId?: string): Promise<void> {
+async function saveUserImage(
+  file: FilePart,
+  sessionId?: string,
+  messageId?: string,
+): Promise<string | undefined> {
   try {
     const bytes = decodeDataUrlBytes(file.url)
-    if (!bytes) return
-    await saveMedia(bytes, imageExt(file), {
+    if (!bytes) return undefined
+    return await saveMedia(bytes, imageExt(file), {
       source: 'user',
       sessionId,
       messageId,
@@ -338,6 +348,7 @@ async function saveUserImage(file: FilePart, sessionId?: string, messageId?: str
     })
   } catch (err) {
     console.error('[attachment] registro da imagem na galeria falhou:', err)
+    return undefined
   }
 }
 
@@ -477,7 +488,7 @@ async function preprocessAttachment(
     // A print colada pelo usuário também entra na galeria de mídia: o
     // original é persistido em disco (source 'user') — o histórico não muda,
     // a mensagem continua com o data URL/thumb de sempre.
-    await saveUserImage(file, deps.sessionId, deps.messageId)
+    const mediaUrl = await saveUserImage(file, deps.sessionId, deps.messageId)
     // Thumbnail só para a bolha do chat: o chip não leva os bytes originais
     // (o histórico não duplica imagens inteiras), mas a UI mostra a imagem.
     const thumbUrl = await imageThumbDataUrl(file.url)
@@ -487,7 +498,7 @@ async function preprocessAttachment(
       const partId = newId('prt')
       deps.turnImages?.push({ url: file.url, filename: file.filename, partId })
       return [
-        attachmentChip(file, thumbUrl),
+        attachmentChip(file, thumbUrl, undefined, mediaUrl),
         {
           id: partId,
           type: 'text',
@@ -503,7 +514,7 @@ async function preprocessAttachment(
     if (deps.modelVision) return [file]
     const filename = file.filename ?? ''
     return [
-      attachmentChip(file, thumbUrl),
+      attachmentChip(file, thumbUrl, undefined, mediaUrl),
       {
         id: newId('prt'),
         type: 'text',

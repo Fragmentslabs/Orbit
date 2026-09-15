@@ -291,7 +291,12 @@ export const MessageResponse = memo(
 MessageResponse.displayName = "MessageResponse"
 
 export type MessageAttachmentProps = HTMLAttributes<HTMLDivElement> & {
-  data: FileUIPart
+  /**
+   * O `FileUIPart` do ai-sdk mais os campos que o Orbit acrescenta ao chip:
+   * `mediaUrl` é a imagem original na galeria (a `url` do chip é só o
+   * thumbnail da bolha), e o tipo do ai-sdk não os conhece.
+   */
+  data: FileUIPart & { mediaUrl?: string }
   className?: string
   onRemove?: () => void
 }
@@ -365,8 +370,20 @@ export function MessageAttachment({ data, className, onRemove, ...props }: Messa
         </>
       )}
       </div>
-      {isImage && data.url && (
-        <ImageLightbox src={data.url} alt={filename} open={lightboxOpen} onOpenChange={setLightboxOpen} />
+      {/*
+        A bolha mostra o thumbnail (leve, já está na mensagem), mas ampliar tem
+        que pegar o original da galeria: esticar 320px para a tela inteira é o
+        que fazia o preview sair borrado — e copiar/salvar entregavam a
+        miniatura no lugar da foto. Sem `mediaUrl` (anexo antigo) o thumbnail
+        volta a ser tudo que existe.
+      */}
+      {isImage && (data.mediaUrl || data.url) && (
+        <ImageLightbox
+          src={data.mediaUrl || data.url}
+          alt={filename}
+          open={lightboxOpen}
+          onOpenChange={setLightboxOpen}
+        />
       )}
     </>
   )

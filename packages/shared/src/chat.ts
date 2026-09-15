@@ -194,6 +194,17 @@ export interface FilePart {
    * nos anexos anteriores a este campo existir.
    */
   documentId?: string
+  /**
+   * Imagem original na galeria (`orbit-media://…`), quando o chip carrega só
+   * um thumbnail.
+   *
+   * A bolha do chat mostra o thumbnail de propósito — ele já está na mensagem
+   * e é leve. Mas ampliar, copiar ou salvar têm que alcançar os bytes de
+   * verdade: sem este campo o visualizador esticaria 320px para a tela inteira
+   * e o botão de salvar entregaria a miniatura no lugar da foto. Ausente nos
+   * anexos anteriores a este campo existir (aí o thumbnail é tudo que há).
+   */
+  mediaUrl?: string
 }
 
 /** MIME marcador de um elemento selecionado no browser do painel (modo
