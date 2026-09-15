@@ -117,12 +117,26 @@ export async function printablePath(
   }
 }
 
+/** Rede de segurança: janela de impressão abandonada não fica para sempre. */
+const PRINT_WINDOW_TTL_MS = 10 * 60_000
+
 /**
- * Manda um arquivo para a impressora pelo diálogo do sistema.
+ * Abre o diálogo de impressão do sistema para um arquivo.
  *
- * Abre numa janela oculta com o visualizador embutido: é o Chromium que sabe
- * paginar um PDF para papel, e refazer isso a partir das imagens que
- * desenhamos daria um resultado pior justamente onde ele precisa ser fiel.
+ * O documento é carregado numa janela com o visualizador embutido: é o
+ * Chromium que sabe paginar um PDF para papel, e refazer isso a partir das
+ * imagens que desenhamos daria um resultado pior justamente onde ele precisa
+ * ser fiel.
+ *
+ * Duas decisões vieram de o botão ficar girando para sempre:
+ *
+ * 1. A janela é VISÍVEL. Com `show: false` o diálogo não tem onde se ancorar e
+ *    fica esperando uma interação que ninguém consegue fazer. Medido: com
+ *    `silent: true` (sem diálogo) o callback volta em ~1s mesmo oculta, então
+ *    o que travava era o diálogo, não a impressão.
+ * 2. A função retorna quando o diálogo ABRE, não quando a impressão termina.
+ *    Esperar o fim é esperar o usuário — e era isso que mantinha a UI
+ *    carregando. O resultado do trabalho quem reporta é o próprio diálogo.
  */
 export async function printFile(filePath: string): Promise<{ ok: boolean; error?: string }> {
   let alvo: { path: string; cleanup: () => void }
@@ -131,10 +145,13 @@ export async function printFile(filePath: string): Promise<{ ok: boolean; error?
   } catch (err) {
     return { ok: false, error: `Não foi possível preparar o arquivo: ${(err as Error).message}` }
   }
-  const limpar = alvo.cleanup
 
   const win = new BrowserWindow({
+    // Começa oculta e aparece depois de carregar, para não piscar em branco.
     show: false,
+    width: 720,
+    height: 860,
+    title: path.basename(filePath),
     webPreferences: {
       // plugins: liga o visualizador de PDF embutido, sem o qual a janela
       // baixaria o arquivo em vez de renderizá-lo.
@@ -144,20 +161,32 @@ export async function printFile(filePath: string): Promise<{ ok: boolean; error?
       contextIsolation: true,
     },
   })
-  try {
-    await win.loadURL(pathToFileURL(alvo.path).toString())
-    return await new Promise((resolve) => {
-      win.webContents.print({ silent: false }, (success, reason) => {
-        limpar()
-        resolve(success ? { ok: true } : { ok: false, error: reason })
-      })
-    })
-  } catch (err) {
-    limpar()
-    return { ok: false, error: (err as Error).message }
-  } finally {
+
+  let encerrada = false
+  const encerrar = () => {
+    if (encerrada) return
+    encerrada = true
+    alvo.cleanup()
     if (!win.isDestroyed()) win.destroy()
   }
+
+  try {
+    await win.loadURL(pathToFileURL(alvo.path).toString())
+  } catch (err) {
+    encerrar()
+    return { ok: false, error: (err as Error).message }
+  }
+
+  win.show()
+  // Fechar a janela no meio é desistir de imprimir — e precisa limpar igual.
+  win.on('closed', () => {
+    encerrada = true
+    alvo.cleanup()
+  })
+  win.webContents.print({ silent: false }, () => encerrar())
+  setTimeout(encerrar, PRINT_WINDOW_TTL_MS)
+
+  return { ok: true }
 }
 
 /**
