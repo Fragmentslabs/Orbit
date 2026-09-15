@@ -1487,7 +1487,7 @@ app.whenReady().then(() => {
       docId: string,
       from: number,
       count: number,
-      options?: { scale?: number; highlight?: string[]; includeOutline?: boolean },
+      options?: { scale?: number; includeText?: boolean; includeOutline?: boolean },
     ) => viewRender(sessionId, docId, from, count, options ?? {}),
   )
   ipcMain.handle('docs:print', (_event, sessionId: string, docId: string) =>

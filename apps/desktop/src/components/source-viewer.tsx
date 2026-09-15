@@ -14,6 +14,7 @@ import {
   X,
 } from "lucide-react"
 import { docsApi, type OutlineItem, type RenderedPage, type SourceText } from "@/src/lib/ipc"
+import { locateText, selectionScaleX } from "@/src/lib/pdf-text"
 import { cn } from "@/lib/utils"
 
 /**
@@ -200,16 +201,13 @@ export function SourceViewer({
   const citedPage = page ?? 0
   const term = query.trim().toLowerCase()
   const truncated = (data?.pages.length ?? 0) > visiblePages.length
-  // O que marcar no PDF: a busca quando há uma, senão o trecho citado. O
-  // pdfjs localiza pelo TEXTO, não pelo número da linha.
-  const citedLines =
-    data?.pages
-      .find((p) => p.num === citedPage)
-      ?.lines.slice((fromLine ?? 1) - 1, toLine ?? fromLine ?? 0) ?? []
-  const highlight = term.length >= 2 ? [query.trim()] : citedLines
-  // Numa busca digitada o destaque vale em qualquer página; vindo da citação
-  // ele fica preso à página citada.
-  const highlightPage = fromCitation || term.length < 2 ? citedPage : null
+  // O destaque sai SEMPRE do campo de busca — inclusive na citação, que entra
+  // preenchendo ele. Assim apagar o filtro desmarca, que é o que se espera de
+  // um filtro, em vez de deixar uma marca que não dá mais para tirar.
+  const highlight = term.length >= 2 ? query.trim() : ""
+  // Vindo da citação o destaque fica preso à página citada; digitando, vale em
+  // qualquer uma.
+  const highlightPage = fromCitation ? citedPage : null
 
   const run = async (action: "print" | "export") => {
     setBusy(action)
@@ -431,8 +429,13 @@ export function SourceViewer({
                 </div>
                 {p.lines.map((line, i) => {
                   const n = i + 1
+                  // A faixa da citação some junto com o filtro, pelo mesmo
+                  // motivo do destaque no PDF.
                   const cited =
-                    p.num === citedPage && n >= (fromLine ?? 0) && n <= (toLine ?? fromLine ?? 0)
+                    fromCitation &&
+                    p.num === citedPage &&
+                    n >= (fromLine ?? 0) &&
+                    n <= (toLine ?? fromLine ?? 0)
                   const isCurrentMatch = current?.page === p.num && current?.line === n
                   const isAnchor = term.length >= 2 ? isCurrentMatch : cited && n === fromLine
                   return (
@@ -549,11 +552,21 @@ function OutlinePanel({
 }
 
 /**
- * O PDF desenhado por nós, página a página, com o trecho grifado.
+ * O PDF desenhado por nós, página a página.
  *
- * As páginas carregam sob demanda em lotes: cada chamada de renderização abre
- * uma janela oculta, então pedir de cinco em cinco é uma janela a cada cinco
- * páginas roladas, e não uma por página.
+ * Três coisas acontecem sobre a mesma imagem, todas a partir dos ITENS DE
+ * TEXTO que vêm com ela:
+ *
+ * - o destaque, calculado AQUI (locateText) e não no main. Antes cada letra
+ *   digitada na busca pedia a página de volta, e o painel piscava
+ *   "carregando" a cada tecla;
+ * - a camada de seleção, spans transparentes sobre os glifos, que é o que
+ *   permite selecionar e copiar num modo onde a página é imagem;
+ * - o zoom, que muda a LARGURA exibida na hora e só depois troca a imagem por
+ *   uma mais nítida — sem jogar fora a que já está na tela.
+ *
+ * Os itens vêm em fração da página, então servem a qualquer escala: mudar o
+ * zoom não invalida destaque nem seleção.
  */
 function OriginalPages({
   sessionId,
@@ -569,7 +582,7 @@ function OriginalPages({
   docId: string
   total: number
   focus: Focus | null
-  highlight: string[]
+  highlight: string
   /** Página em que o destaque é esperado; null quando ele é uma busca, que
    *  pode casar em qualquer uma. */
   highlightPage: number | null
@@ -578,51 +591,49 @@ function OriginalPages({
 }) {
   const { t } = useTranslation()
   const [pages, setPages] = useState<Record<number, RenderedPage>>({})
-  const requested = useRef(new Set<number>())
+  /** Escala já renderizada de cada lote — é o que decide se vale repedir. */
+  const renderedAt = useRef(new Map<number, number>())
+  const inFlight = useRef(new Set<number>())
   const containerRef = useRef<HTMLDivElement>(null)
   const focusRef = useRef<HTMLDivElement>(null)
-  // String em vez do array: um array novo a cada render reiniciaria o
-  // carregamento a cada pintura.
-  const highlightKey = highlight.join(" ")
 
   const load = useCallback(
     async (first: number) => {
       const batch = Math.max(1, first - ((first - 1) % BATCH))
-      if (requested.current.has(batch)) return
-      requested.current.add(batch)
-      const wanted = highlightKey ? highlightKey.split(" ") : []
-      const result = await docsApi.render(sessionId, docId, batch, BATCH, {
-        scale: zoom,
-        // Com trecho citado, procurar só no lote da página dele: marcar em
-        // outra página uma frase que apenas se repete seria lido como a
-        // citação. Numa busca o certo é o contrário — marcar em toda página.
-        highlight:
-          highlightPage === null || (highlightPage >= batch && highlightPage < batch + BATCH)
-            ? wanted
-            : [],
-        includeOutline: requested.current.size === 1,
-      })
-      if (!result) return
-      if (result.outline.length > 0) onOutline(result.outline)
-      setPages((current) => {
-        const next = { ...current }
-        for (const p of result.pages) next[p.page] = p
-        return next
-      })
+      if (inFlight.current.has(batch)) return
+      // Já renderizado NESTA escala: não repete. É o que evita o "carregando"
+      // ao rolar de volta para uma página que já está pronta.
+      if (renderedAt.current.get(batch) === zoom) return
+      inFlight.current.add(batch)
+      try {
+        const result = await docsApi.render(sessionId, docId, batch, BATCH, {
+          scale: zoom,
+          includeText: true,
+          includeOutline: renderedAt.current.size === 0,
+        })
+        if (!result) return
+        if (result.outline.length > 0) onOutline(result.outline)
+        renderedAt.current.set(batch, zoom)
+        setPages((current) => {
+          const next = { ...current }
+          for (const p of result.pages) next[p.page] = p
+          return next
+        })
+      } finally {
+        inFlight.current.delete(batch)
+      }
     },
-    [sessionId, docId, zoom, highlightKey, highlightPage, onOutline],
+    [sessionId, docId, zoom, onOutline],
   )
 
-  // Zoom, documento ou destaque diferentes invalidam o que já foi desenhado.
-  const startAt = focus?.page ?? 1
+  // Trocar de documento zera tudo. Trocar o ZOOM não: as imagens antigas
+  // seguem na tela, esticadas, enquanto as novas chegam — limpar faria o
+  // documento sumir a cada clique no zoom.
   useEffect(() => {
-    requested.current.clear()
+    renderedAt.current.clear()
+    inFlight.current.clear()
     setPages({})
-    void load(startAt)
-    // `startAt` fora das dependências de propósito: mudar de página não pode
-    // jogar fora as imagens já renderizadas.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [load])
+  }, [sessionId, docId])
 
   useEffect(() => {
     const root = containerRef.current
@@ -653,50 +664,110 @@ function OriginalPages({
 
   return (
     <div ref={containerRef} className="flex-1 overflow-auto bg-muted/40 p-3">
-      <div className="mx-auto flex max-w-3xl flex-col gap-3">
-        {Array.from({ length: total }, (_, i) => i + 1).map((n) => {
-          const rendered = pages[n]
-          return (
-            <div
-              key={n}
-              data-page={n}
-              ref={n === focus?.page ? focusRef : undefined}
-              className="relative overflow-hidden rounded bg-background shadow-sm"
-              // Proporção de A4 enquanto não renderizou: sem uma altura
-              // aproximada a lista colapsaria e tudo entraria na tela de uma
-              // vez, disparando o carregamento do documento inteiro.
-              style={rendered ? undefined : { aspectRatio: "1 / 1.414" }}
-            >
-              {rendered ? (
-                <>
-                  <img
-                    src={rendered.dataUrl}
-                    alt={t("sources.pageOf", { page: n, total })}
-                    className="block w-full"
-                  />
-                  {rendered.highlights.map((rect, i) => (
-                    <span
-                      key={i}
-                      className="pointer-events-none absolute bg-amber-300/45 ring-1 ring-amber-500/50"
-                      style={{
-                        left: `${(rect.x / rendered.width) * 100}%`,
-                        top: `${(rect.y / rendered.height) * 100}%`,
-                        width: `${(rect.width / rendered.width) * 100}%`,
-                        height: `${(rect.height / rendered.height) * 100}%`,
-                      }}
-                    />
-                  ))}
-                </>
-              ) : (
-                <div className="flex h-full items-center justify-center gap-2 text-[11px] text-muted-foreground">
-                  <Loader2 className="size-3 animate-spin" />
-                  {t("sources.pageOf", { page: n, total })}
-                </div>
-              )}
-            </div>
-          )
-        })}
+      <div
+        className="mx-auto flex flex-col gap-3"
+        // O zoom é a largura EXIBIDA. Redesenhar numa escala maior só aumenta a
+        // resolução: sem isto a imagem chegava mais nítida do mesmo tamanho e o
+        // botão parecia não fazer efeito nenhum.
+        style={{ width: `${(zoom / ZOOM_BASE) * 100}%`, maxWidth: `${48 * (zoom / ZOOM_BASE)}rem` }}
+      >
+        {Array.from({ length: total }, (_, i) => i + 1).map((n) => (
+          <PageView
+            key={n}
+            page={n}
+            rendered={pages[n]}
+            highlight={highlightPage === null || highlightPage === n ? highlight : ""}
+            outerRef={n === focus?.page ? focusRef : undefined}
+            label={t("sources.pageOf", { page: n, total })}
+          />
+        ))}
       </div>
     </div>
   )
 }
+
+/** Uma página: a imagem, o destaque e a camada de seleção. */
+function PageView({
+  page,
+  rendered,
+  highlight,
+  outerRef,
+  label,
+}: {
+  page: number
+  rendered?: RenderedPage
+  highlight: string
+  outerRef?: React.RefObject<HTMLDivElement>
+  label: string
+}) {
+  const rects = useMemo(
+    () => (rendered && highlight ? locateText(rendered.items, highlight) : []),
+    [rendered, highlight],
+  )
+  const aspect = rendered && rendered.height > 0 ? rendered.width / rendered.height : 1
+
+  return (
+    <div
+      data-page={page}
+      ref={outerRef}
+      className="relative overflow-hidden rounded bg-background shadow-sm"
+      style={{
+        // Proporção de A4 enquanto não renderizou: sem uma altura aproximada a
+        // lista colapsaria e tudo entraria na tela de uma vez, disparando o
+        // carregamento do documento inteiro.
+        ...(rendered ? {} : { aspectRatio: "1 / 1.414" }),
+        // Container de LARGURA (não de tamanho): a camada de seleção mede a
+        // fonte em cqw, e assim ela acompanha o zoom sozinha. `size` conteria
+        // também a altura, e a página — que se dimensiona pela imagem —
+        // colapsaria.
+        containerType: "inline-size",
+      }}
+    >
+      {rendered ? (
+        <>
+          <img src={rendered.dataUrl} alt={label} className="block w-full select-none" />
+          {rects.map((rect, i) => (
+            <span
+              key={i}
+              className="pointer-events-none absolute bg-amber-300/45 ring-1 ring-amber-500/50"
+              style={{
+                left: `${rect.x * 100}%`,
+                top: `${rect.y * 100}%`,
+                width: `${rect.width * 100}%`,
+                height: `${rect.height * 100}%`,
+              }}
+            />
+          ))}
+          {/* Camada de seleção: o texto visível está no pixel da imagem, e
+              estes spans transparentes existem só para dar seleção e cópia. O
+              alinhamento é estimado (ver selectionScaleX), então a marca da
+              seleção encosta no glifo sem ser exata. */}
+          <div className="absolute inset-0">
+            {rendered.items.map((item, i) => (
+              <span
+                key={i}
+                className="absolute origin-top-left whitespace-pre leading-none text-transparent"
+                style={{
+                  left: `${item.x * 100}%`,
+                  top: `${item.y * 100}%`,
+                  // A altura do item é fração da ALTURA da página, e o cqw
+                  // mede a LARGURA: a proporção converte entre as duas.
+                  fontSize: `${(item.height / aspect) * 100}cqw`,
+                  transform: `scaleX(${selectionScaleX(item, aspect)})`,
+                }}
+              >
+                {item.text}
+              </span>
+            ))}
+          </div>
+        </>
+      ) : (
+        <div className="flex h-full items-center justify-center gap-2 text-[11px] text-muted-foreground">
+          <Loader2 className="size-3 animate-spin" />
+          {label}
+        </div>
+      )}
+    </div>
+  )
+}
+

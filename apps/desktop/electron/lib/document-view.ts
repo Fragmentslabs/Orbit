@@ -2,7 +2,7 @@ import fsp from 'node:fs/promises'
 import { dialog } from 'electron'
 import { extractDocument } from './documents'
 import { documentFilePath, getMediaEntry } from './media'
-import { printFile, rasterizePdf, type HighlightRect, type PdfOutlineItem } from './pdf-raster'
+import { printFile, rasterizePdf, type PdfOutlineItem, type PdfTextItem } from './pdf-raster'
 import {
   exportSessionDocument,
   printSessionDocument,
@@ -82,11 +82,11 @@ export async function viewRender(
   id: string,
   from: number,
   count: number,
-  options: { scale?: number; highlight?: string[]; includeOutline?: boolean } = {},
+  options: { scale?: number; includeText?: boolean; includeOutline?: boolean } = {},
 ): Promise<{
   total: number
   outline: PdfOutlineItem[]
-  pages: { page: number; dataUrl: string; width: number; height: number; highlights: HighlightRect[] }[]
+  pages: { page: number; dataUrl: string; width: number; height: number; items: PdfTextItem[] }[]
 } | null> {
   if (isSessionDoc(id)) return renderSessionPages(sessionId, id, from, count, options)
 
@@ -106,7 +106,7 @@ export async function viewRender(
         dataUrl: `data:image/png;base64,${p.png.toString('base64')}`,
         width: p.width,
         height: p.height,
-        highlights: p.highlights,
+        items: p.items,
       })),
     }
   } catch {

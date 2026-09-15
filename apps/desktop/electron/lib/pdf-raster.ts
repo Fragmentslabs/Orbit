@@ -29,13 +29,20 @@ const _require = createRequire(import.meta.url)
 export const MAX_RASTER_PAGES = 5
 const LOAD_TIMEOUT_MS = 30_000
 
-/** Retângulo em pixels da imagem renderizada (origem no canto superior
- *  esquerdo), pronto para virar um overlay sobre a página. */
-export interface HighlightRect {
+/**
+ * Um item de texto da página, em FRAÇÃO das dimensões dela (0 a 1).
+ *
+ * Normalizado de propósito: é o que permite trocar o zoom sem reprocessar
+ * nada — a mesma lista serve para qualquer escala. E é a partir daqui que o
+ * renderer desenha o destaque e a camada de seleção, sem precisar pedir ao
+ * main a cada letra digitada na busca.
+ */
+export interface PdfTextItem {
   x: number
   y: number
   width: number
   height: number
+  text: string
 }
 
 /** Entrada do sumário do PDF, já achatada com o nível de indentação. */
@@ -51,9 +58,8 @@ interface RasterizedPage {
   png: Buffer
   width: number
   height: number
-  /** Onde os trechos procurados estão na página. Vazio quando não se pediu
-   *  destaque ou quando o texto não foi encontrado ali. */
-  highlights: HighlightRect[]
+  /** O texto da página com a posição de cada pedaço. */
+  items: PdfTextItem[]
 }
 
 /** Fonte do pdfjs, lida uma vez por processo (são ~3MB entre lib e worker). */
@@ -122,12 +128,11 @@ export async function printFile(filePath: string): Promise<{ ok: boolean; error?
  */
 export async function rasterizePdf(
   bytes: Buffer,
-  options: { pages?: number[]; scale?: number; highlight?: string[]; includeOutline?: boolean } = {},
+  options: { pages?: number[]; scale?: number; includeText?: boolean; includeOutline?: boolean } = {},
 ): Promise<{ total: number; pages: RasterizedPage[]; outline: PdfOutlineItem[] }> {
   const { lib, worker } = await loadSources()
   const wanted = (options.pages ?? [1]).slice(0, MAX_RASTER_PAGES)
   const scale = Math.min(3, Math.max(0.5, options.scale ?? 1.5))
-  const highlight = (options.highlight ?? []).filter((t) => t.trim().length > 2).slice(0, 20)
 
   let win: BrowserWindow | null = null
   try {
@@ -161,45 +166,26 @@ export async function rasterizePdf(
         const data = new Uint8Array(raw.length)
         for (let i = 0; i < raw.length; i++) data[i] = raw.charCodeAt(i)
         const doc = await pdfjs.getDocument({ data }).promise
-        const wantedText = ${JSON.stringify(highlight)}
-        // Compara sem espaços: o PDF quebra a frase em vários itens de texto e
-        // a posição dos espaços entre eles não é confiável — colar tudo e
-        // procurar o trecho igualmente colado é o que casa na prática.
-        const squash = (s) => s.replace(/\\s+/g, '')
+        const wantText = ${JSON.stringify(Boolean(options.includeText))}
 
-        /** Retângulos dos itens que cobrem o trecho, na escala da imagem. */
-        const locate = (items, viewport, needle) => {
-          const target = squash(needle)
-          if (target.length < 3) return []
-          let flat = ''
-          const spans = []
+        /** Itens de texto da página, em fração das dimensões dela. */
+        const readItems = (items, viewport) => {
+          const out = []
           for (const item of items) {
-            const piece = squash(item.str ?? '')
-            if (!piece) continue
-            spans.push({ from: flat.length, to: flat.length + piece.length, item })
-            flat += piece
+            const texto = item.str ?? ''
+            if (!texto) continue
+            const tx = pdfjs.Util.transform(viewport.transform, item.transform)
+            const alturaGlifo = Math.hypot(tx[2], tx[3]) || (item.height ?? 0) * ${scale}
+            out.push({
+              x: tx[4] / viewport.width,
+              y: (tx[5] - alturaGlifo) / viewport.height,
+              width: ((item.width ?? 0) * ${scale}) / viewport.width,
+              height: alturaGlifo / viewport.height,
+              text: texto,
+            })
+            if (out.length > 4000) break
           }
-          // TODAS as ocorrências, e não só a primeira: no Localizar a palavra
-          // costuma repetir na mesma página, e marcar uma só faria o contador
-          // dizer 7 enquanto a página mostra 1.
-          const rects = []
-          let at = flat.indexOf(target)
-          while (at >= 0 && rects.length < 200) {
-            const end = at + target.length
-            for (const span of spans) {
-              if (span.to <= at || span.from >= end) continue
-              const tx = pdfjs.Util.transform(viewport.transform, span.item.transform)
-              const height = Math.hypot(tx[2], tx[3]) || span.item.height * ${scale}
-              rects.push({
-                x: tx[4],
-                y: tx[5] - height,
-                width: (span.item.width ?? 0) * ${scale},
-                height,
-              })
-            }
-            at = flat.indexOf(target, at + Math.max(1, target.length))
-          }
-          return rects
+          return out
         }
 
         /** Sumário do PDF, achatado com o nível de cada entrada. */
@@ -236,19 +222,17 @@ export async function rasterizePdf(
           canvas.width = Math.ceil(viewport.width)
           canvas.height = Math.ceil(viewport.height)
           await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise
-          let highlights = []
-          if (wantedText.length > 0) {
+          let items = []
+          if (wantText) {
             const content = await page.getTextContent()
-            for (const needle of wantedText) {
-              highlights = highlights.concat(locate(content.items, viewport, needle))
-            }
+            items = readItems(content.items, viewport)
           }
           out.push({
             pageNumber: n,
             width: canvas.width,
             height: canvas.height,
             dataUrl: canvas.toDataURL('image/png'),
-            highlights,
+            items,
           })
         }
         const outline = ${JSON.stringify(Boolean(options.includeOutline))} ? await readOutline() : []
@@ -264,7 +248,7 @@ export async function rasterizePdf(
           width: number
           height: number
           dataUrl: string
-          highlights: HighlightRect[]
+          items: PdfTextItem[]
         }[]
         outline: PdfOutlineItem[]
       }>,
@@ -280,7 +264,7 @@ export async function rasterizePdf(
         width: p.width,
         height: p.height,
         png: Buffer.from(p.dataUrl.slice(p.dataUrl.indexOf(',') + 1), 'base64'),
-        highlights: p.highlights ?? [],
+        items: p.items ?? [],
       })),
     }
   } finally {

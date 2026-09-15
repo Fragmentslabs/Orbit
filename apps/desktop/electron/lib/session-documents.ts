@@ -10,8 +10,8 @@ import {
   MAX_RASTER_PAGES,
   printFile,
   rasterizePdf,
-  type HighlightRect,
   type PdfOutlineItem,
+  type PdfTextItem,
 } from './pdf-raster'
 
 /**
@@ -442,11 +442,11 @@ export async function renderSessionPages(
   docId: string,
   from: number,
   count: number,
-  options: { scale?: number; highlight?: string[]; includeOutline?: boolean } = {},
+  options: { scale?: number; includeText?: boolean; includeOutline?: boolean } = {},
 ): Promise<{
   total: number
   outline: PdfOutlineItem[]
-  pages: { page: number; dataUrl: string; width: number; height: number; highlights: HighlightRect[] }[]
+  pages: { page: number; dataUrl: string; width: number; height: number; items: PdfTextItem[] }[]
 } | null> {
   const found = await readSessionDocument(sessionId, docId)
   if (!found || found.doc.kind !== 'pdf') return null
@@ -460,7 +460,7 @@ export async function renderSessionPages(
   const rendered = await rasterizePdf(bytes, {
     pages: wanted,
     scale: options.scale,
-    highlight: options.highlight,
+    includeText: options.includeText,
     includeOutline: options.includeOutline,
   })
   return {
@@ -471,7 +471,7 @@ export async function renderSessionPages(
       dataUrl: `data:image/png;base64,${p.png.toString('base64')}`,
       width: p.width,
       height: p.height,
-      highlights: p.highlights,
+      items: p.items,
     })),
   }
 }

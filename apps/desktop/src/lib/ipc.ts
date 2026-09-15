@@ -501,6 +501,8 @@ export interface SourceDocument {
   sourceUrl?: string
 }
 
+import type { PdfTextItem } from "@/src/lib/pdf-text"
+
 /** Entrada do sumario do PDF, ja achatada com o nivel de indentacao. */
 export interface OutlineItem {
   title: string
@@ -514,7 +516,9 @@ export interface RenderedPage {
   dataUrl: string
   width: number
   height: number
-  highlights: { x: number; y: number; width: number; height: number }[]
+  /** Texto posicionado em FRACAO da pagina (0 a 1): serve a qualquer zoom, e
+   *  e dele que saem o destaque e a camada de selecao, sem nova renderizacao. */
+  items: PdfTextItem[]
 }
 
 /** O documento inteiro em texto, para o painel rolar e grifar o trecho. */
@@ -570,7 +574,7 @@ export const docsApi = {
     docId: string,
     from: number,
     count: number,
-    options?: { scale?: number; highlight?: string[]; includeOutline?: boolean },
+    options?: { scale?: number; includeText?: boolean; includeOutline?: boolean },
   ) =>
     window.ipcRenderer.invoke("docs:render", sessionId, docId, from, count, options) as Promise<{
       total: number
