@@ -5,7 +5,7 @@ import { z } from 'zod'
 import { documentKindOf } from '../document-pages'
 
 import { fillForm, mergePdfs, parsePageRange, readFormFields, readMetadata, transformPdf } from '../pdf-ops'
-import { extractPdfImages } from '../pdf'
+import { DEFAULT_IMAGE_MIN_SIZE, extractPdfImages } from '../pdf'
 import { saveDerivedPdf, saveMedia } from '../media'
 import { readSessionDocument, readSessionDocumentBytes } from '../session-documents'
 import { resolveSafePath, type ToolContext } from './context'
@@ -269,19 +269,36 @@ export function createPdfOpsTools(scope: DocumentToolScope, ctx: ToolContext | n
         source: z.string(),
         pages: z.string().optional().describe('Range like "1-3,7". Omit for the whole document.'),
         max: z.number().optional().describe('Cap on how many images to extract (default 20)'),
+        minSize: z
+          .number()
+          .optional()
+          .describe(
+            `Skip images whose width OR height is at or below this many pixels (default ${DEFAULT_IMAGE_MIN_SIZE}). It filters out the rules, hairlines and background slices a laid-out PDF is full of. Lower it (or pass 0) when the user is after something small, like a logo or a signature.`,
+          ),
       }),
-      execute: async ({ source, pages, max }) => {
+      execute: async ({ source, pages, max, minSize }) => {
         const src = await load(source)
         if (typeof src === 'string') return src
         try {
           // O total só é conhecido depois de abrir; 10000 é um teto folgado
           // apenas para a faixa ser expandida sem truncar nada de verdade.
           const wanted = pages ? parsePageRange(pages, 10_000) : undefined
-          const images = await extractPdfImages(new Uint8Array(src.bytes), { pages: wanted, max })
+          const floor = minSize ?? DEFAULT_IMAGE_MIN_SIZE
+          const images = await extractPdfImages(new Uint8Array(src.bytes), {
+            pages: wanted,
+            max,
+            minSize: floor,
+          })
           if (images.length === 0) {
-            return `Nenhuma imagem embutida encontrada em ${src.name}${
+            // Dizer só "não encontrei" seria enganoso: o piso descarta em
+            // silêncio, e a saída é justamente baixá-lo.
+            return `Nenhuma imagem de mais de ${floor}px encontrada em ${src.name}${
               pages ? ` nas páginas ${pages}` : ''
-            }. Um PDF só de texto não tem imagens; para ver a aparência da página use pdf_view_page.`
+            }.${
+              floor > 0
+                ? ` Se a figura procurada for pequena (logotipo, assinatura), repita com minSize menor — 0 traz todas.`
+                : ''
+            } Um PDF só de texto não tem imagens; para ver a aparência da página use pdf_view_page.`
           }
           const saved: string[] = []
           for (const image of images) {

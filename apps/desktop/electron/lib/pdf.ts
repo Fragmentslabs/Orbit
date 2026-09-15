@@ -33,16 +33,38 @@ async function loadPdfParse(): Promise<typeof import('pdf-parse').PDFParse> {
 }
 
 /**
+ * Abre o documento. Um ponto só de entrada de propósito: o construtor recebe
+ * OPÇÕES, não os bytes, e passar os bytes direto compila — `Uint8Array` tem
+ * `length`, `LoadParameters.length?` também, e o TypeScript aceita a
+ * atribuição. O resultado era `data: undefined` e o pdfjs recusando com
+ * "Please provide binary data as Uint8Array, rather than Buffer" em todo PDF,
+ * anexo ou do repositório.
+ *
+ * A cópia dos bytes não é desperdício: o pdfjs TRANSFERE o array para o
+ * worker e pode desanexá-lo, e quem chama ainda usa o mesmo Buffer depois
+ * (o anexo grava o arquivo original em disco logo após extrair o texto).
+ */
+async function openPdf(bytes: Uint8Array): Promise<InstanceType<typeof import('pdf-parse').PDFParse>> {
+  const PDFParse = await loadPdfParse()
+  return new PDFParse({ data: new Uint8Array(bytes) })
+}
+
+/**
  * Texto POR PÁGINA — a unidade que a camada de documentos usa para servir um
  * trecho sem carregar o resto (ver documents.ts). O pdf-parse já devolve
  * `pages[]`; páginas vazias (só imagem, sem camada de texto) são preservadas
  * para a numeração continuar batendo com a do documento real.
  */
 export async function extractPdfPages(bytes: Uint8Array): Promise<{ num: number; text: string }[]> {
-  const PDFParse = await loadPdfParse()
-  const parser = new PDFParse(bytes)
-  const result = await parser.getText()
-  return result.pages.map((page) => ({ num: page.num, text: page.text.trim() }))
+  const parser = await openPdf(bytes)
+  try {
+    const result = await parser.getText()
+    return result.pages.map((page) => ({ num: page.num, text: page.text.trim() }))
+  } finally {
+    // Cada parser segura um documento do pdfjs; sem isto, um anexo por
+    // conversa acumularia no main process pelo resto da sessão.
+    await parser.destroy().catch(() => {})
+  }
 }
 
 /**
@@ -53,12 +75,21 @@ export async function extractPdfPages(bytes: Uint8Array): Promise<{ num: number;
  * qualidade originais — que é o que serve para reaproveitar um gráfico, um
  * logotipo ou a digitalização de uma assinatura.
  */
+export const DEFAULT_IMAGE_MIN_SIZE = 80
+
 export async function extractPdfImages(
   bytes: Uint8Array,
-  options: { pages?: number[]; max?: number } = {},
+  options: { pages?: number[]; max?: number; minSize?: number } = {},
 ): Promise<{ pageNumber: number; name: string; png: Buffer; width: number; height: number }[]> {
-  const PDFParse = await loadPdfParse()
-  const result = await new PDFParse({ data: bytes }).getImage()
+  const parser = await openPdf(bytes)
+  // O piso existe para não devolver os cacos decorativos (régua, fio, pixel de
+  // fundo) que todo PDF diagramado tem às dezenas. Fica explícito aqui, e não
+  // no default silencioso da lib, porque é a diferença entre "este PDF não tem
+  // figura" e "a figura que você quer é menor que o piso" — e quem chama
+  // precisa poder baixá-lo para ir buscar um logotipo pequeno.
+  const result = await parser
+    .getImage({ imageThreshold: Math.max(0, options.minSize ?? DEFAULT_IMAGE_MIN_SIZE) })
+    .finally(() => parser.destroy().catch(() => {}))
   const max = Math.max(1, options.max ?? 20)
   const wanted = options.pages?.length ? new Set(options.pages) : null
 
