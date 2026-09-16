@@ -834,8 +834,11 @@ function PageView({
           </div>
         </>
       ) : (
-        <div className="flex h-full items-center justify-center gap-2 text-[11px] text-muted-foreground">
-          <Loader2 className="size-3 animate-spin" />
+        // Página ainda não rasterizada. Sem giro: numa lista de páginas, cada
+        // uma que entra na tela acenderia o seu, e o documento inteiro fica
+        // nervoso enquanto se rola. O número já diz o que é — uma folha que
+        // ainda não foi desenhada — e ela se preenche sozinha.
+        <div className="flex h-full items-center justify-center text-[11px] text-muted-foreground/60">
           {label}
         </div>
       )}
