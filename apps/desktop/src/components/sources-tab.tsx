@@ -261,18 +261,25 @@ export function SourcesTab({ sessionId }: { sessionId?: string }) {
   const openSourceTab = usePanelStore((s) => s.openSourceTab)
   const folders = useSessionStore((s) => s.folders)
   const sessions = useSessionStore((s) => s.sessions)
+  // A pasta que o chat novo vai herdar, escolhida no "+" da sidebar. Só
+  // importa no rascunho: depois de a sessão nascer, a pasta vem dela.
+  const pendingFolderId = useSessionStore((s) => s.pendingFolderId)
   const folderName = useMemo(
     () => folders.find((f) => f.id === folderId)?.name ?? null,
     [folders, folderId],
   )
 
   const refresh = useCallback(async () => {
+    // O rascunho não tem sessão de onde ler a pasta: ele a anota antes de
+    // listar, senão a área compartilhada sairia vazia num chat aberto pelo
+    // "+" de uma pasta — justamente onde ela mais deveria aparecer.
+    if (isDraft) await docsApi.setDraftFolder(pendingFolderId)
     const result = await docsApi.list(scope)
     setShared(result.shared)
     setOwn(result.own)
     setFolderId(result.folderId)
     setUsage(result.usage)
-  }, [scope])
+  }, [scope, isDraft, pendingFolderId])
 
   useEffect(() => {
     void refresh()

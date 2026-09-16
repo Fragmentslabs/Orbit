@@ -66,6 +66,7 @@ import {
   listSessionSources,
   removeSessionDocument,
   sessionDocumentThumb,
+  setDraftFolder,
   setSessionDocumentShared,
 } from './lib/session-documents'
 import { viewExport, viewPrint, viewRender, viewText } from './lib/document-view'
@@ -1541,6 +1542,11 @@ app.whenReady().then(() => {
   // cascata — o que sobra aqui é apagar o que aquele escopo guardava em disco.
   // Chat novo: a sessao so nasce na primeira mensagem, entao o que foi
   // anexado antes disso vive num escopo de rascunho e e adotado aqui.
+  // A pasta que o chat novo vai herdar: sem ela o rascunho aberto pelo "+" de
+  // uma pasta mostraria a area compartilhada vazia.
+  ipcMain.handle('docs:setDraftFolder', (_event, folderId: string | null) =>
+    setDraftFolder(folderId),
+  )
   ipcMain.handle('docs:adoptDraft', (_event, sessionId: string) =>
     adoptDraftDocuments(sessionId),
   )

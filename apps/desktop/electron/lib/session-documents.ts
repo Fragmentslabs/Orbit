@@ -113,8 +113,44 @@ async function scopesOf(sessionId: string): Promise<Scopes> {
   }
 }
 
+/**
+ * Onde o rascunho guarda a pasta a que ele vai pertencer.
+ *
+ * Fica DENTRO do escopo de documentos, e não como uma sessão: um registro de
+ * sessão chamado "draft" apareceria como conversa fantasma na sidebar, porque
+ * a lista de sessões é lida do storage. Aqui ele é invisível para tudo menos
+ * para esta resolução, e some junto com o rascunho na adoção.
+ */
+const DRAFT_FOLDER_FILE = 'folder.json'
+
+/**
+ * A pasta que o chat novo vai herdar quando nascer.
+ *
+ * Um chat criado pelo "+" de uma pasta já pertence a ela antes da primeira
+ * mensagem — o usuário escolheu a pasta ao clicar. Sem isto o rascunho não
+ * teria pasta nenhuma, e a aba Fontes mostraria a área compartilhada vazia
+ * justamente na conversa que foi aberta a partir de uma pasta.
+ */
+export async function setDraftFolder(folderId: string | null): Promise<void> {
+  const file = path.join(scopeDir(DRAFT_SCOPE), DRAFT_FOLDER_FILE)
+  if (!folderId || !SAFE_SCOPE.test(folderId)) {
+    await fsp.rm(file, { force: true })
+    return
+  }
+  await fsp.mkdir(scopeDir(DRAFT_SCOPE), { recursive: true })
+  await fsp.writeFile(file, JSON.stringify({ folderId }), 'utf8')
+}
+
 /** A pasta da conversa, quando ela está em uma. */
 export async function documentFolderId(sessionId: string): Promise<string | null> {
+  if (sessionId === DRAFT_SCOPE) {
+    try {
+      const raw = await fsp.readFile(path.join(scopeDir(DRAFT_SCOPE), DRAFT_FOLDER_FILE), 'utf8')
+      return (JSON.parse(raw) as { folderId?: string }).folderId ?? null
+    } catch {
+      return null
+    }
+  }
   try {
     const session = await readJson<SessionInfo>(StorageKeys.session(sessionId))
     return session?.folderId ?? null
@@ -840,6 +876,8 @@ async function scopeUsage(scope: string | null): Promise<number> {
       // A miniatura é cache que nós geramos, não material do usuário: contá-la
       // faria um texto colado de 2KB aparecer como o dobro do que ele é.
       if (file.endsWith('.thumb.webp')) continue
+      // Nem a pasta que o rascunho anotou: é marcador nosso, não material.
+      if (file === DRAFT_FOLDER_FILE) continue
       const stat = await fsp.stat(path.join(dir, file)).catch(() => null)
       if (stat?.isFile()) total += stat.size
     }

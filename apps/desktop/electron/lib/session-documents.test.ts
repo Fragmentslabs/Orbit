@@ -155,6 +155,43 @@ describe('fontes no modo código', () => {
     await expect(fsp.access(destino)).resolves.toBeUndefined()
   })
 
+  it('o rascunho de uma pasta já enxerga as fontes dela, antes da primeira mensagem', async () => {
+    // Um chat aberto pelo "+" de uma pasta pertence a ela desde o clique. Sem
+    // isto a aba Fontes mostraria a área compartilhada vazia justamente no
+    // chat que foi criado a partir de uma pasta.
+    const fonte = await docs.addSessionText('conva', 'Manual da pasta', 'Conteúdo compartilhado', true)
+    expect(fonte.ok).toBe(true)
+    if (!fonte.ok) return
+
+    // Rascunho solto: não vê nada da pasta.
+    await docs.setDraftFolder(null)
+    expect((await docs.listSessionSources('draft')).shared).toHaveLength(0)
+
+    // Rascunho da pasta: vê.
+    await docs.setDraftFolder(FOLDER)
+    const daPasta = await docs.listSessionSources('draft')
+    expect(daPasta.folderId).toBe(FOLDER)
+    expect(daPasta.shared.map((d) => d.id)).toContain(fonte.doc.id)
+
+    // E o marcador não conta como material do usuário: uma sessão da MESMA
+    // pasta e sem anexos próprios tem que reportar exatamente o mesmo número.
+    // Sem a exclusão, o rascunho apareceria com alguns bytes a mais do nada.
+    await persistSession('convvazia', FOLDER, 'code')
+    expect(daPasta.usage).toBe((await docs.listSessionSources('convvazia')).usage)
+
+    await docs.setDraftFolder(null)
+  })
+
+  it('o rascunho não vira sessão fantasma na lista de conversas', async () => {
+    // A pasta do rascunho mora no escopo de documentos, e não como um registro
+    // de sessão: a sidebar lê as sessões do storage e mostraria um "draft".
+    await docs.setDraftFolder(FOLDER)
+    const dir = path.join(userData, 'orbit-data', 'storage', 'session')
+    const arquivos = await fsp.readdir(dir)
+    expect(arquivos).not.toContain('draft.json')
+    await docs.setDraftFolder(null)
+  })
+
   it('apagar a pasta leva as fontes dela, e só elas', async () => {
     await docs.addSessionText('conva', 'Só desta conversa', 'texto', false)
     await docs.deleteFolderDocuments(FOLDER)
