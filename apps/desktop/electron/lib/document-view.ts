@@ -61,6 +61,7 @@ export async function viewText(
     // extração é por hash do conteúdo, então relê de graça.
     const extracted = await extractDocument(bytes, file.ext === 'pdf' ? 'pdf' : 'docx')
     return {
+      id,
       filename: entry?.name ?? id,
       kind: file.ext === 'pdf' ? 'pdf' : 'docx',
       totalPages: extracted.totalPages,

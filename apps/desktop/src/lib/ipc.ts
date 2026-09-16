@@ -535,6 +535,11 @@ export interface RenderedPage {
 
 /** O documento inteiro em texto, para o painel rolar e grifar o trecho. */
 export interface SourceText {
+  /** Onde o pedido foi parar. Pode diferir do id pedido quando o arquivo
+   *  mudou de area depois da citacao. */
+  id: string
+  /** O id antigo, quando houve desvio — o painel mostra os dois. */
+  movedFrom?: string
   filename: string
   kind: SourceDocument["kind"]
   totalPages: number

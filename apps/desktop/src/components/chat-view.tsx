@@ -52,6 +52,12 @@ const DOCUMENT_FILE = /\.(pdf|docx|xlsx|xls|ods|csv)$/i
  * anteriores a isso ele não existe, e aí o documento é reencontrado pelo NOME
  * entre as fontes da conversa. Sem esse resgate, toda mensagem antiga ficaria
  * com um anexo permanentemente inerte.
+ *
+ * O NOME também é o plano B de um id que não resolve mais: arrastar o arquivo
+ * para as fontes da pasta troca doc1 por src1, e o chip guarda o id como ele
+ * era no dia do envio. O backend segue o rastro sozinho, mas aqui o nome é
+ * prova melhor — ele identifica o arquivo mesmo quando a conversa promoveu
+ * dois documentos e o rastro se perdeu.
  */
 function DocumentChip({ file, sessionId }: { file: FilePart; sessionId?: string }) {
   const { t } = useTranslation()
@@ -60,9 +66,10 @@ function DocumentChip({ file, sessionId }: { file: FilePart; sessionId?: string 
   const open = async () => {
     if (!sessionId) return
     let docId = file.documentId
-    if (!docId) {
-      const { shared, own } = await docsApi.list(sessionId)
-      docId = [...own, ...shared].find((d) => d.filename === file.filename)?.id
+    const { shared, own } = await docsApi.list(sessionId)
+    const docs = [...own, ...shared]
+    if (!docId || !docs.some((d) => d.id === docId)) {
+      docId = docs.find((d) => d.filename === file.filename)?.id ?? docId
     }
     if (!docId) return
     usePanelStore.getState().openSourceTab(sessionId, {

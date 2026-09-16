@@ -247,8 +247,15 @@ export function SourceViewer({
 
         <div className="min-w-0 flex-1 px-1">
           <p className="truncate text-xs font-medium text-foreground">{data?.filename ?? docId}</p>
+          {/*
+            O id mostrado é o de AGORA, não o que foi clicado: arrastar o
+            arquivo entre as áreas troca doc1 por src1, e a citação gravada na
+            conversa continua com o endereço antigo. Dizer "src1 (era doc1)" é
+            o que impede a mudança de parecer o arquivo errado.
+          */}
           <p className="truncate text-[11px] text-muted-foreground">
-            {docId}
+            {data?.id ?? docId}
+            {data?.movedFrom ? ` · ${t("sources.movedFrom", { id: data.movedFrom })}` : ""}
             {data ? ` · ${t("sources.unitPages", { count: data.totalPages })}` : ""}
           </p>
         </div>

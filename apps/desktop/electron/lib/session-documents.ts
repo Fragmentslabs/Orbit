@@ -177,6 +177,124 @@ async function readStoredAt(dir: string | null, id: string): Promise<StoredDocum
   }
 }
 
+/**
+ * Rastro deixado no lugar de um id que mudou de área (`doc1.moved.json`).
+ *
+ * O id é o ENDEREÇO do documento e também diz onde ele mora, então arrastar o
+ * arquivo de "anexos desta conversa" para "fontes da pasta" troca doc1 por
+ * src1 — e toda citação já escrita na conversa passa a apontar para um id que
+ * não existe mais. Para o agente isso era aceitável (ele refaz o doc_list),
+ * mas o que está gravado na conversa é do USUÁRIO: o clique que abria o
+ * trecho citado simplesmente parava de abrir, sem nada explicando por quê.
+ *
+ * O rastro é o que faz o endereço antigo continuar valendo. Fica no escopo de
+ * origem, ao lado de onde o arquivo estava, e é seguido na leitura.
+ */
+const TRAIL_SUFFIX = '.moved.json'
+
+interface Trail {
+  to: string
+  scope: string
+}
+
+async function readTrail(dir: string, id: string): Promise<Trail | null> {
+  try {
+    const raw = await fsp.readFile(path.join(dir, `${id}${TRAIL_SUFFIX}`), 'utf8')
+    const parsed = JSON.parse(raw) as Trail
+    return SAFE_ID.test(parsed.to ?? '') && SAFE_SCOPE.test(parsed.scope ?? '') ? parsed : null
+  } catch {
+    return null
+  }
+}
+
+/** Onde um documento está HOJE, para um id que pode ser antigo. */
+interface ResolvedDoc {
+  id: string
+  dir: string
+}
+
+/**
+ * O documento que um id endereça agora — seguindo o rastro quando ele mudou
+ * de área.
+ *
+ * Toda leitura passa por aqui, e não só o painel: o doc_read de um id citado
+ * num turno anterior tem o mesmo problema, e devolver o texto certo é melhor
+ * do que mandar o agente refazer a lista.
+ *
+ * O laço existe porque o arquivo pode ter ido e voltado (doc1 → src1 → doc2),
+ * e o teto é contra um rastro circular vindo de disco corrompido.
+ */
+async function resolveDoc(sessionId: string, docId: string): Promise<ResolvedDoc | null> {
+  if (!SAFE_ID.test(docId)) return null
+  const scopes = await scopesOf(sessionId)
+  let id = docId
+  for (let hop = 0; hop < 4; hop += 1) {
+    const dir = dirForId(scopes, id)
+    if (!dir) break
+    if (await exists(path.join(dir, `${id}.json`))) return { id, dir }
+    const trail = await readTrail(dir, id)
+    // Só segue para uma área que ESTA conversa já alcança. Um documento
+    // rebaixado para o escopo de outro chat continua fora do alcance deste —
+    // o rastro devolve o endereço, não permissão.
+    if (!trail || (trail.scope !== scopes.session && trail.scope !== scopes.folder)) break
+    id = trail.to
+  }
+  return promotedBeforeTrails(scopes, sessionId, docId)
+}
+
+async function exists(file: string): Promise<boolean> {
+  try {
+    await fsp.access(file)
+    return true
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Resgate dos arquivos promovidos ANTES de o rastro existir.
+ *
+ * Sem isto, a correção só valeria para movimentações futuras, e as conversas
+ * que já perderam a referência continuariam com o clique morto para sempre —
+ * que é justamente o estado que se quer consertar.
+ *
+ * Três condições, todas necessárias para não abrir o arquivo errado sob uma
+ * citação (que seria pior do que não abrir nada):
+ *
+ * - o id pedido é anexo (`docN`): só esse sentido perde o endereço assim;
+ * - o contador da conversa confirma que aquele id chegou a ser distribuído
+ *   aqui — o exemplo do prompt do sistema usa `doc1`, então um id inventado
+ *   pelo modelo não é hipótese remota;
+ * - existe UMA única fonte da pasta vinda desta conversa. Com duas não há
+ *   como saber qual era qual, e aí o clique volta a não abrir nada.
+ */
+async function promotedBeforeTrails(
+  scopes: Scopes,
+  sessionId: string,
+  docId: string,
+): Promise<ResolvedDoc | null> {
+  if (isShared(docId) || !scopes.folder) return null
+  if (!(await wasAllocated(scopes.session, docId))) return null
+  const fromHere = (await readScope(scopes.folder)).filter((doc) => doc.sessionId === sessionId)
+  return fromHere.length === 1 ? { id: fromHere[0].id, dir: scopeDir(scopes.folder) } : null
+}
+
+/** Se um id chegou a ser distribuído neste escopo, pelo contador. */
+async function wasAllocated(scope: string, id: string): Promise<boolean> {
+  if (!scope || !SAFE_SCOPE.test(scope)) return false
+  const n = Number(id.slice(3))
+  if (!Number.isFinite(n)) return false
+  try {
+    const saved = JSON.parse(
+      await fsp.readFile(path.join(scopeDir(scope), COUNTER_FILE), 'utf8'),
+    ) as { next?: number }
+    if (typeof saved.next === 'number') return n < saved.next
+  } catch {
+    // Escopo anterior ao contador: não há com que desmentir o id.
+  }
+  return true
+}
+
 /** Documentos de um escopo, em ordem de anexação. */
 async function readScope(scope: string | null): Promise<SessionDocument[]> {
   if (!scope || !SAFE_SCOPE.test(scope)) return []
@@ -376,6 +494,18 @@ export async function adoptDraftDocuments(sessionId: string): Promise<number> {
         JSON.stringify({ ...stored, id, sessionId }),
         'utf8',
       )
+      // Quando a numeração não coincide, o chip da primeira mensagem já foi
+      // gravado com o id do rascunho: o rastro é o que mantém o clique dele
+      // vivo. Fica no escopo da sessão porque o do rascunho é apagado aqui.
+      if (id !== oldId) {
+        await fsp
+          .writeFile(
+            path.join(target, `${oldId}${TRAIL_SUFFIX}`),
+            JSON.stringify({ to: id, scope: sessionId }),
+            'utf8',
+          )
+          .catch(() => {})
+      }
       // O arquivo original vai junto: sem ele o documento perderia a
       // rasterização, o sheet_query e a edição preservando formatação.
       await fsp.rename(path.join(from, `${oldId}.bin`), path.join(target, `${id}.bin`)).catch(() => {})
@@ -400,8 +530,9 @@ export async function readSessionDocument(
   sessionId: string,
   docId: string,
 ): Promise<{ doc: SessionDocument; extracted: ExtractedDocument } | null> {
-  const scopes = await scopesOf(sessionId)
-  const stored = await readStoredAt(dirForId(scopes, docId), docId)
+  const resolved = await resolveDoc(sessionId, docId)
+  if (!resolved) return null
+  const stored = await readStoredAt(resolved.dir, resolved.id)
   if (!stored) return null
   return {
     doc: stored,
@@ -484,18 +615,13 @@ export async function sessionDocumentFile(
   sessionId: string,
   docId: string,
 ): Promise<{ path: string; ext: string } | null> {
-  if (!SAFE_ID.test(docId)) return null
-  const found = await readSessionDocument(sessionId, docId)
-  const ext = found && ORIGINAL_EXT[found.doc.kind]
+  const resolved = await resolveDoc(sessionId, docId)
+  if (!resolved) return null
+  const stored = await readStoredAt(resolved.dir, resolved.id)
+  const ext = stored && ORIGINAL_EXT[stored.kind]
   if (!ext) return null
-  const dir = dirForId(await scopesOf(sessionId), docId)
-  if (!dir) return null
-  const file = path.join(dir, `${docId}.bin`)
-  try {
-    await fsp.access(file)
-  } catch {
-    return null
-  }
+  const file = path.join(resolved.dir, `${resolved.id}.bin`)
+  if (!(await exists(file))) return null
   return { path: file, ext }
 }
 
@@ -508,6 +634,12 @@ export async function sessionDocumentFile(
  */
 /** O documento como o painel lateral o consome, venha de onde vier. */
 export interface SessionDocumentView {
+  /** Id em que o pedido foi parar — pode não ser o pedido, quando o arquivo
+   *  mudou de área depois da citação. */
+  id: string
+  /** O id ANTIGO, quando houve desvio. O painel mostra os dois: o endereço
+   *  citado e onde o arquivo está agora, para a mudança não parecer bug. */
+  movedFrom?: string
   filename: string
   kind: DocumentKind
   totalPages: number
@@ -525,6 +657,8 @@ export async function readSessionText(
   const found = await readSessionDocument(sessionId, docId)
   if (!found) return null
   return {
+    id: found.doc.id,
+    ...(found.doc.id !== docId ? { movedFrom: docId } : {}),
     filename: found.doc.filename,
     kind: found.doc.kind,
     totalPages: found.extracted.totalPages,
@@ -660,11 +794,10 @@ export async function readSessionDocumentBytes(
   sessionId: string,
   docId: string,
 ): Promise<Buffer | null> {
-  if (!SAFE_ID.test(docId)) return null
-  const dir = dirForId(await scopesOf(sessionId), docId)
-  if (!dir) return null
+  const resolved = await resolveDoc(sessionId, docId)
+  if (!resolved) return null
   try {
-    return await fsp.readFile(path.join(dir, `${docId}.bin`))
+    return await fsp.readFile(path.join(resolved.dir, `${resolved.id}.bin`))
   } catch {
     return null
   }
@@ -684,10 +817,10 @@ export async function readSessionDocumentBytes(
  * volta a mostrar o ícone, que é exatamente o estado anterior a isto existir.
  */
 export async function sessionDocumentThumb(sessionId: string, docId: string): Promise<string | null> {
-  if (!SAFE_ID.test(docId)) return null
-  const dir = dirForId(await scopesOf(sessionId), docId)
-  if (!dir) return null
-  const cached = path.join(dir, `${docId}.thumb.webp`)
+  const resolved = await resolveDoc(sessionId, docId)
+  if (!resolved) return null
+  const { dir, id } = resolved
+  const cached = path.join(dir, `${id}.thumb.webp`)
   const asDataUrl = (buffer: Buffer) => `data:image/webp;base64,${buffer.toString('base64')}`
 
   try {
@@ -696,13 +829,13 @@ export async function sessionDocumentThumb(sessionId: string, docId: string): Pr
     // Sem cache ainda — segue para gerar.
   }
 
-  const stored = await readStoredAt(dir, docId)
+  const stored = await readStoredAt(dir, id)
   if (!stored) return null
 
   let thumb: Buffer | null = null
   try {
     if (stored.kind === 'pdf') {
-      const bytes = await fsp.readFile(path.join(dir, `${docId}.bin`)).catch(() => null)
+      const bytes = await fsp.readFile(path.join(dir, `${id}.bin`)).catch(() => null)
       if (bytes) {
         // Escala baixa de propósito: o resultado é reduzido a 160px de largura
         // logo em seguida, então renderizar grande só gastaria tempo.
@@ -808,8 +941,10 @@ export async function addSessionUrl(
  * outra na aba Fontes.
  *
  * O id MUDA junto com o escopo (doc5 → src2), porque é o prefixo que diz onde
- * o arquivo mora. Um id citado antes deixa de resolver; o agente reencontra
- * por doc_list, que é o que a mensagem de erro manda fazer.
+ * o arquivo mora. No lugar do id antigo fica um RASTRO: sem ele, as citações
+ * já escritas na conversa — e o chip do anexo, que guarda o id — apontariam
+ * para um endereço vazio, e o clique do usuário pararia de abrir o documento
+ * sem nada explicando por quê.
  */
 export async function setSessionDocumentShared(
   sessionId: string,
@@ -847,6 +982,15 @@ export async function setSessionDocumentShared(
     .rename(path.join(from, `${docId}.thumb.webp`), path.join(dir, `${id}.thumb.webp`))
     .catch(() => {})
   await fsp.rm(path.join(from, `${docId}.json`), { force: true })
+  // O endereço antigo continua valendo: é o que está escrito nas citações da
+  // conversa, que não são reescritas em disco.
+  await fsp
+    .writeFile(
+      path.join(from, `${docId}${TRAIL_SUFFIX}`),
+      JSON.stringify({ to: id, scope: target }),
+      'utf8',
+    )
+    .catch(() => {})
   notifyDocumentsChanged()
   return { ok: true, id }
 }
@@ -878,6 +1022,9 @@ async function scopeUsage(scope: string | null): Promise<number> {
       if (file.endsWith('.thumb.webp')) continue
       // Nem a pasta que o rascunho anotou: é marcador nosso, não material.
       if (file === DRAFT_FOLDER_FILE) continue
+      // Nem o rastro de um id que mudou de área — são dezenas de bytes de
+      // contabilidade nossa, e o arquivo já é contado no escopo de destino.
+      if (file.endsWith(TRAIL_SUFFIX)) continue
       const stat = await fsp.stat(path.join(dir, file)).catch(() => null)
       if (stat?.isFile()) total += stat.size
     }
