@@ -678,10 +678,17 @@ export function RightPanel() {
           {tabs.map((tab) => {
             const { icon: Icon } = tabMeta[tab.type]
             const TabIcon = tab.type === "chat" && tab.sessionId ? Bot : Icon
-            const tabStatus = tab.sessionId ? statusMap[tab.sessionId] : undefined
+            // Os três indicadores falam da CONVERSA — está respondendo, deu
+            // erro, chegou mensagem — e só a aba de chat mostra uma conversa.
+            // Várias outras carregam um sessionId por serem daquele chat (a
+            // aba Fontes, o visualizador de documento, o diff), e sem este
+            // recorte todas elas giravam junto com o turno: o PDF que a pessoa
+            // está lendo não fica "carregando" porque o agente está escrevendo.
+            const isChatTab = tab.type === "chat" && !!tab.sessionId
+            const tabStatus = isChatTab ? statusMap[tab.sessionId!] : undefined
             const isWorking = tabStatus === "submitted" || tabStatus === "streaming"
             const isError = tabStatus === "error"
-            const hasUnread = !!tab.sessionId && (unreadCounts[tab.sessionId] ?? 0) > 0
+            const hasUnread = isChatTab && (unreadCounts[tab.sessionId!] ?? 0) > 0
             const closeOnLeft = tabClosePosition === "left"
             const closeButton = (
               <button
