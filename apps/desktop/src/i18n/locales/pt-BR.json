@@ -2025,7 +2025,6 @@
     "add": "Adicionar",
     "refresh": "Recarregar",
     "remove": "Remover fonte",
-    "loading": "Carregando fontes…",
     "tooBig": "{{name}}: maior que o limite de {{size}}.",
     "truncated": "cortado no limite",
     "unitPages_one": "{{count}} página",

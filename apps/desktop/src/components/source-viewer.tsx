@@ -424,14 +424,18 @@ export function SourceViewer({
           />
         )}
 
-        {loading ? (
-          <div className="flex flex-1 items-center justify-center gap-2 text-xs text-muted-foreground">
-            <Loader2 className="size-3.5 animate-spin" />
-            {t("sources.loading")}
-          </div>
-        ) : !data ? (
+        {/*
+          Sem spinner: trocar o documento inteiro por um giro a cada recarga
+          pisca a página que a pessoa está lendo. Enquanto o texto não chegou,
+          `data` ainda é o da leitura anterior (ou null na primeira), e o que
+          aparece é a mensagem de ausente — que é o estado real.
+        */}
+        {!data ? (
+          // Vazio enquanto a primeira leitura não voltou: dizer "não existe"
+          // antes de ter procurado seria mentira, e um spinner faria o
+          // documento piscar a cada recarga.
           <div className="flex flex-1 items-center justify-center p-6 text-center text-xs text-muted-foreground">
-            {t("sources.viewerMissing", { id: docId })}
+            {loading ? "" : t("sources.viewerMissing", { id: docId })}
           </div>
         ) : mode === "original" ? (
           <OriginalPages

@@ -2026,7 +2026,6 @@
     "add": "Add",
     "refresh": "Refresh",
     "remove": "Remove source",
-    "loading": "Loading sources…",
     "tooBig": "{{name}}: larger than the {{size}} limit.",
     "truncated": "cut at the size limit",
     "unitPages_one": "{{count}} page",

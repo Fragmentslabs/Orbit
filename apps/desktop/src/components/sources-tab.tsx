@@ -251,7 +251,6 @@ export function SourcesTab({ sessionId }: { sessionId?: string }) {
   const [own, setOwn] = useState<SourceDocument[]>([])
   const [folderId, setFolderId] = useState<string | null>(null)
   const [usage, setUsage] = useState(0)
-  const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState(false)
   const [dropZone, setDropZone] = useState<"shared" | "own" | null>(null)
   const [dialog, setDialog] = useState<{ kind: "text" | "web"; shared: boolean } | null>(null)
@@ -273,11 +272,9 @@ export function SourcesTab({ sessionId }: { sessionId?: string }) {
     setOwn(result.own)
     setFolderId(result.folderId)
     setUsage(result.usage)
-    setLoading(false)
   }, [scope])
 
   useEffect(() => {
-    setLoading(true)
     void refresh()
   }, [refresh])
 
@@ -483,12 +480,13 @@ export function SourcesTab({ sessionId }: { sessionId?: string }) {
       )}
 
       <div className="flex-1 overflow-y-auto p-2">
-        {loading ? (
-          <div className="flex items-center justify-center gap-2 p-6 text-xs text-muted-foreground">
-            <Loader2 className="size-3.5 animate-spin" />
-            {t("sources.loading")}
-          </div>
-        ) : (
+        {/*
+          Sem estado de carregando: a lista chega em milissegundos e trocá-la
+          por um spinner faz ela SUMIR e voltar a cada recarga — e a aba recarrega
+          sozinha quando um anexo chega. Enquanto não há resposta ainda, o que
+          aparece é o vazio, que é o que a aba mostra mesmo quando não há fonte.
+        */}
+        {(
           <div className="flex flex-col gap-1">
             {folderName &&
               section(
