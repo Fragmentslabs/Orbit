@@ -1,4 +1,5 @@
 import sharp from 'sharp'
+import { labOf } from './image-ops'
 
 /**
  * Vetorização: imagem raster → SVG com caminhos de verdade.
@@ -26,9 +27,32 @@ import sharp from 'sharp'
  *  reduzida antes, o que também suaviza o serrilhado da quantização. */
 const MAX_SIDE = 1000
 
+/**
+ * Abaixo deste ΔE duas cores são a mesma cor para quem olha.
+ *
+ * O limiar de "diferença perceptível" anda por 2,3; aqui ele é um pouco mais
+ * folgado porque o objetivo não é fidelidade de cor, é achar FORMA — e duas
+ * cores que ninguém distingue nunca deveriam virar dois contornos.
+ */
+const IDENTICAL_DELTA_E = 6
+
+/**
+ * Quão perto da linha entre duas cores a mistura precisa cair.
+ *
+ * Uma transição real entre dois tons é, por construção, a média deles — então
+ * ela pousa quase exatamente em cima do segmento que os liga em LAB. Uma cor
+ * de verdade do desenho não tem motivo nenhum para cair ali.
+ */
+const BLEND_LINE_DISTANCE = 12
+
 export interface VectorizeOptions {
-  /** Quantas cores manter. Poucas = desenho mais limpo; muitas = mais fiel. */
-  colors?: number
+  /**
+   * Quantas cores manter, ou 'auto' (padrão). Poucas = desenho mais limpo;
+   * muitas = mais fiel — e é uma escolha que depende da imagem, não de quem
+   * chama: um arquivo castigado precisa de menos cores justamente porque as
+   * que ele tem a mais são ruído.
+   */
+  colors?: number | 'auto'
   /** Ignora manchas menores que isto, em pixels. Tira a sujeira da
    *  quantização sem comer detalhe de verdade. */
   minArea?: number
@@ -42,6 +66,8 @@ export interface VectorizeOptions {
 
 export interface VectorizeResult {
   svg: string
+  /** Quantas cores foram usadas de fato — o número que o 'auto' escolheu. */
+  usedColors: number
   width: number
   height: number
   /** Cores desenhadas, da maior área para a menor. */
@@ -232,11 +258,206 @@ function pathData(loops: Point[][]): string {
     .join('')
 }
 
+/**
+ * `c` está na transição entre `a` e `b`?
+ *
+ * Projeta a cor no segmento que liga as outras duas em LAB. É mistura quando
+ * cai PERTO da linha e no MEIO dela — perto de uma ponta significa que é só
+ * uma variação daquela cor, e isso o passo anterior já resolve.
+ */
+function betweenness(
+  c: [number, number, number],
+  a: [number, number, number],
+  b: [number, number, number],
+): boolean {
+  const abx = b[0] - a[0]
+  const aby = b[1] - a[1]
+  const abz = b[2] - a[2]
+  const len = abx * abx + aby * aby + abz * abz
+  if (len === 0) return false
+  const t = ((c[0] - a[0]) * abx + (c[1] - a[1]) * aby + (c[2] - a[2]) * abz) / len
+  if (t < 0.2 || t > 0.8) return false
+  const px = a[0] + t * abx
+  const py = a[1] + t * aby
+  const pz = a[2] + t * abz
+  return Math.hypot(c[0] - px, c[1] - py, c[2] - pz) < BLEND_LINE_DISTANCE
+}
+
+/**
+ * Reduz a paleta ao número REALMENTE pedido, em espaço perceptual.
+ *
+ * Existe por dois motivos que se somam. O primeiro é que o quantizador do
+ * libvips salta em potências de dois: pedir 8 devolve 16, e o parâmetro
+ * mentiria. O segundo é o que aparece na tela — uma imagem borrada (um
+ * desenho pequeno que foi ampliado, um JPEG castigado) tem bordas de cor
+ * intermediária, e o quantizador as promove a cores próprias. Cada uma vira
+ * uma camada de contorno FANTASMA ao lado do traço real, e o desenho sai com
+ * halo.
+ *
+ * A redução absorve sempre a cor de MENOR área na sua vizinha mais próxima em
+ * LAB. Uma faixa de transição é, por definição, fina e pouco numerosa, então
+ * ela desaparece dentro da cor de verdade de onde saiu — enquanto as cores
+ * dominantes do desenho, que têm área, sobrevivem.
+ */
+function mergeColors(
+  data: Buffer,
+  channels: number,
+  pixels: number,
+  target: number,
+): Map<string, string> {
+  const count = new Map<string, number>()
+  for (let i = 0; i < pixels; i++) {
+    const at = i * channels
+    const hex = toHex(data[at], data[at + 1], data[at + 2])
+    count.set(hex, (count.get(hex) ?? 0) + 1)
+  }
+
+  const lab = new Map<string, [number, number, number]>()
+  for (const hex of count.keys()) {
+    lab.set(hex, labOf(parseInt(hex.slice(1, 3), 16), parseInt(hex.slice(3, 5), 16), parseInt(hex.slice(5, 7), 16)))
+  }
+
+  // Todo mundo começa apontando para si; absorver é reescrever o destino.
+  const remap = new Map<string, string>()
+  for (const hex of count.keys()) remap.set(hex, hex)
+  const vivos = new Map(count)
+
+  const distancia = (a: string, b: string) => {
+    const x = lab.get(a) as [number, number, number]
+    const y = lab.get(b) as [number, number, number]
+    return Math.hypot(x[0] - y[0], x[1] - y[1], x[2] - y[2])
+  }
+  const absorve = (menor: string, destino: string) => {
+    vivos.set(destino, (vivos.get(destino) as number) + (vivos.get(menor) as number))
+    vivos.delete(menor)
+    for (const [de, para] of remap) {
+      if (para === menor) remap.set(de, destino)
+    }
+  }
+
+  // Primeiro passo, e é o que mais importa num arquivo castigado: funde o que
+  // é INDISTINGUÍVEL ao olho, sem olhar tamanho. Um JPEG maltratado entrega o
+  // mesmo creme em cinco versões separadas por menos de um ΔE de nada, e todas
+  // elas são grandes — sobreviveriam a uma fusão por área e consumiriam o
+  // orçamento de cores inteiro, deixando o desenho de verdade sem vaga.
+  for (;;) {
+    let a = ''
+    let b = ''
+    let melhor = IDENTICAL_DELTA_E
+    const cores = [...vivos.keys()]
+    for (let i = 0; i < cores.length; i++) {
+      for (let j = i + 1; j < cores.length; j++) {
+        const d = distancia(cores[i], cores[j])
+        if (d < melhor) {
+          melhor = d
+          a = cores[i]
+          b = cores[j]
+        }
+      }
+    }
+    if (!a) break
+    // A menor é absorvida pela maior: quem tem área define a cor final.
+    const menor = (vivos.get(a) as number) <= (vivos.get(b) as number) ? a : b
+    absorve(menor, menor === a ? b : a)
+  }
+
+  // Segundo passo: some com a tinta de BORDA — a mistura que a transição entre
+  // dois tons cria e que desenha um contorno fantasma ao lado de cada traço.
+  //
+  // O que a identifica não é ser pequena, é ficar ENTRE duas outras cores. A
+  // distinção importa: um acento legítimo (o ponto vermelho de uma marca) é
+  // pequeno também, e um limiar de área o apagaria junto. Já uma mistura entre
+  // o azul-marinho do traço e o creme do fundo cai, por construção, em cima do
+  // segmento que liga os dois — e nenhuma cor de verdade do desenho cai ali.
+  for (;;) {
+    let alvo = ''
+    let destino = ''
+    const cores = [...vivos.keys()]
+    for (const c of cores) {
+      const area = vivos.get(c) as number
+      for (const a of cores) {
+        for (const b of cores) {
+          if (a === c || b === c || a === b) continue
+          // Só é mistura se as duas pontas pesarem mais que ela.
+          if ((vivos.get(a) as number) <= area || (vivos.get(b) as number) <= area) continue
+          const posicao = betweenness(lab.get(c)!, lab.get(a)!, lab.get(b)!)
+          if (!posicao) continue
+          alvo = c
+          destino = distancia(c, a) <= distancia(c, b) ? a : b
+          break
+        }
+        if (alvo) break
+      }
+      if (alvo) break
+    }
+    if (!alvo || vivos.size <= 2) break
+    absorve(alvo, destino)
+  }
+
+  while (vivos.size > target) {
+    // A menor área é a próxima a ser absorvida.
+    let menor = ''
+    let menorN = Infinity
+    for (const [hex, n] of vivos) {
+      if (n < menorN) {
+        menorN = n
+        menor = hex
+      }
+    }
+
+    let destino = ''
+    let melhor = Infinity
+    const a = lab.get(menor) as [number, number, number]
+    for (const hex of vivos.keys()) {
+      if (hex === menor) continue
+      const b = lab.get(hex) as [number, number, number]
+      const d = Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2])
+      if (d < melhor) {
+        melhor = d
+        destino = hex
+      }
+    }
+    if (!destino) break
+    absorve(menor, destino)
+  }
+  return remap
+}
+
+/**
+ * Traça buscando o número de cores que o DESENHO pede.
+ *
+ * Mais cores não é mais fidelidade quando o arquivo é ruim: numa ilustração
+ * pequena que foi ampliada, as cores extras são a mistura das bordas, e cada
+ * uma vira um contorno fantasma ao lado do traço. O resultado fica maior,
+ * mais lento e pior.
+ *
+ * Como isso depende da imagem e não de quem pede, o padrão TENTA e mede: se o
+ * traçado sai pesado para o tamanho da tela, repete com menos cores. No máximo
+ * três tentativas — a busca não pode custar mais que o trabalho.
+ */
 export async function vectorizeImage(
   source: Buffer,
   options: VectorizeOptions = {},
 ): Promise<VectorizeResult> {
-  const colorCount = Math.max(2, Math.min(32, options.colors ?? 8))
+  if (options.colors === undefined || options.colors === 'auto') {
+    let melhor: VectorizeResult | null = null
+    for (const colors of [6, 4, 3]) {
+      const tentativa = await traceOnce(source, { ...options, colors })
+      melhor = tentativa
+      // Orçamento por área: um desenho limpo cabe folgado, e é o excesso que
+      // denuncia que as cores a mais viraram borda em vez de forma.
+      if (tentativa.points <= (tentativa.width * tentativa.height) / 150) break
+    }
+    return melhor as VectorizeResult
+  }
+  return traceOnce(source, options)
+}
+
+async function traceOnce(
+  source: Buffer,
+  options: VectorizeOptions,
+): Promise<VectorizeResult> {
+  const colorCount = Math.max(2, Math.min(32, typeof options.colors === 'number' ? options.colors : 6))
   const tolerance = options.tolerance ?? 1
   const warnings: string[] = []
 
@@ -250,19 +471,27 @@ export async function vectorizeImage(
 
   // Quantizar é o passo que torna o resto possível: sem ele, cada pixel de um
   // gradiente seria uma "cor" e cada um viraria a sua própria forma.
+  //
+  // A paleta pedida ao libvips é GENEROSA de propósito: o quantizador dele
+  // salta em potências de dois — pedir 5, 6, 8 ou 12 devolve 16 —, então o
+  // número que chega aqui não seria respeitado. Quem reduz ao valor pedido é o
+  // mergeColors abaixo, e é ele que também dissolve as faixas de transição que
+  // desenham um contorno fantasma ao lado de cada traço.
   const prepared = sharp(source).flatten({ background: '#ffffff' })
   if (escala < 1) prepared.resize({ width: Math.round((meta.width ?? 1) * escala) })
-  const quantized = await prepared.png({ palette: true, colours: colorCount, dither: 0 }).toBuffer()
+  const quantized = await prepared.png({ palette: true, colours: 64, dither: 0 }).toBuffer()
 
   const { data, info } = await sharp(quantized).removeAlpha().raw().toBuffer({ resolveWithObject: true })
   const { width, height } = info
   const minArea = options.minArea ?? Math.max(4, (width * height) / 20_000)
 
-  // Agrupa os pixels por cor uma vez só.
+  const remap = mergeColors(data, info.channels, width * height, colorCount)
+
+  // Agrupa os pixels por cor uma vez só, já na cor final.
   const porCor = new Map<string, Uint8Array>()
   for (let i = 0; i < width * height; i++) {
     const at = i * info.channels
-    const hex = toHex(data[at], data[at + 1], data[at + 2])
+    const hex = remap.get(toHex(data[at], data[at + 1], data[at + 2])) as string
     let mask = porCor.get(hex)
     if (!mask) {
       mask = new Uint8Array(width * height)
@@ -354,6 +583,7 @@ export async function vectorizeImage(
     svg,
     width,
     height,
+    usedColors: colorCount,
     colors: camadas.map((c) => c.hex),
     paths,
     points,

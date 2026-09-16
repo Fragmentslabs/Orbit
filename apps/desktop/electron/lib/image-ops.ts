@@ -122,7 +122,7 @@ for (let i = 0; i < 256; i++) {
   SRGB_TO_LINEAR[i] = v <= 0.04045 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4)
 }
 
-function labOf(r: number, g: number, b: number): [number, number, number] {
+export function labOf(r: number, g: number, b: number): [number, number, number] {
   const R = SRGB_TO_LINEAR[r]
   const G = SRGB_TO_LINEAR[g]
   const B = SRGB_TO_LINEAR[b]

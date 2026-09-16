@@ -170,6 +170,49 @@ describe('vectorizeImage', () => {
     expect(Buffer.byteLength(out.svg)).toBeLessThan(origem.length)
   })
 
+  it('some com a tinta de borda, e PRESERVA um acento pequeno', async () => {
+    // As duas metades da mesma regra, e é por isso que estão no mesmo teste.
+    //
+    // A mistura entre dois tons (o cinza que nasce entre um traço escuro e um
+    // fundo claro) tem que sumir: é ela que desenha o contorno fantasma. Mas
+    // ela é PEQUENA, e um acento legítimo de marca também é — se a regra fosse
+    // por tamanho, o ponto vermelho morreria junto. O que separa os dois é a
+    // mistura cair sobre a linha que liga as duas cores de onde ela saiu.
+    const escuro = '#1a2b4a'
+    const claro = '#f2f0ea'
+    const meio = '#8a8d9a' // a média dos dois: a tinta de borda
+    const acento = '#e11d48' // vermelho: fora da linha entre os outros dois
+
+    const cena = await sharp({ create: { width: 200, height: 200, channels: 3, background: claro } })
+      .composite([
+        { input: await solid(140, 140, escuro), top: 30, left: 30 },
+        { input: await solid(120, 120, claro), top: 40, left: 40 },
+        // Moldura de mistura acompanhando o traço.
+        { input: await solid(140, 3, meio), top: 28, left: 30 },
+        { input: await solid(140, 3, meio), top: 170, left: 30 },
+        // O acento, pequeno como a mistura.
+        { input: await solid(18, 18, acento), top: 90, left: 90 },
+      ])
+      .png()
+      .toBuffer()
+
+    const out = await vectorizeImage(cena, { colors: 4 })
+    const proximo = (hex: string, alvo: string, limite = 40) => {
+      const p = (h: string, i: number) => parseInt(h.slice(1 + i * 2, 3 + i * 2), 16)
+      return Math.hypot(p(hex, 0) - p(alvo, 0), p(hex, 1) - p(alvo, 1), p(hex, 2) - p(alvo, 2)) < limite
+    }
+    expect(out.colors.some((c) => proximo(c, acento))).toBe(true)
+    expect(out.colors.some((c) => proximo(c, meio, 25))).toBe(false)
+  })
+
+  it('escolhe sozinho quantas cores usar, e diz qual escolheu', async () => {
+    const out = await vectorizeImage(await marca())
+    expect(out.usedColors).toBeGreaterThanOrEqual(3)
+    expect(out.usedColors).toBeLessThanOrEqual(6)
+    // Pedido explícito continua sendo respeitado ao pé da letra.
+    expect((await vectorizeImage(await marca(), { colors: 3 })).usedColors).toBe(3)
+  })
+
   it('imagem grande é reduzida antes, e avisa', async () => {
     const grande = await solid(2400, 1200, '#334155')
     const out = await vectorizeImage(grande)

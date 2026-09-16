@@ -101,7 +101,7 @@ export function createSvgTools(scope: DocumentToolScope, ctx: ToolContext | null
       inputSchema: z.object({
         ref: z.string().describe('orbit-media:// URL of a raster image, or a path in the working folder'),
         colors: z.number().int().min(2).max(32).optional()
-          .describe('How many colours to keep (default 8). A flat logo often needs 2-4.'),
+          .describe('OMIT IT: the tracer measures the drawing and picks. More colours is not more faithful on a battered file — the extra ones are edge blend, and each becomes a ghost outline beside the real stroke. Pass a number only to correct a reported result.'),
         dropBackground: z.boolean().optional()
           .describe('Drop the border colour so the result is cut out rather than a rectangle'),
         tolerance: z.number().min(0).max(10).optional()
@@ -127,7 +127,7 @@ export function createSvgTools(scope: DocumentToolScope, ctx: ToolContext | null
           mediaUrl,
           alt: alt ?? '',
           message:
-            `${src.name} → SVG ${out.width}x${out.height}, ${out.paths} camada(s), ` +
+            `${src.name} → SVG ${out.width}x${out.height}, ${out.usedColors} cores, ${out.paths} camada(s), ` +
             `${out.points} pontos, cores ${out.colors.join(' ')}` +
             `${savedTo ? `, gravado em ${savedTo}` : ''}.` +
             (out.warnings.length > 0 ? ` AVISO: ${out.warnings.join(' ')}` : ''),
