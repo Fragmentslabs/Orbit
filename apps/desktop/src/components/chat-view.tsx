@@ -620,7 +620,9 @@ export function ChatView({ sessionId }: { sessionId?: string } = {}) {
         >
           <div className={`flex min-h-0 flex-1 flex-col ${topVisible && !simpleMode && personaVisible ? "pt-6" : "pt-2"}`}>
             <div className="pointer-events-none sticky top-0 z-10 h-12 bg-linear-to-b to-transparent" style={{ backgroundImage: 'linear-gradient(to bottom, var(--panel-bg, var(--background)), transparent)' }} />
-            {chatSearchOpen && viewMode === "chat" && <ChatMessageSearchBar messages={messages} />}
+            {/* Vale nos dois modos: a conversa de código também tem histórico
+                para procurar, e o menu do header agora a oferece lá. */}
+            {chatSearchOpen && <ChatMessageSearchBar messages={messages} />}
             <ChatMessages
               messages={messages}
               isBusy={isBusy}

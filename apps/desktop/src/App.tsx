@@ -294,8 +294,11 @@ function Layout() {
                                 ? t("sidebar.usage")
                                 : activeSession?.title ?? (workspaceMode === "chat" ? t("header.newChat") : t("header.newCode"))
                   }
-                  hasMenu={view === "chat" && workspaceMode === "chat" && !!activeSession}
-                  session={view === "chat" && workspaceMode === "chat" ? activeSession : undefined}
+                  // O menu vale nos dois modos: fixar, renomear, arquivar,
+                  // excluir e buscar são da SESSÃO, e a sidebar já os oferece
+                  // para uma conversa de código pelo menu da linha.
+                  hasMenu={view === "chat" && !!activeSession}
+                  session={view === "chat" ? activeSession : undefined}
                   // Indicador do browser do agente: vale nos dois modos da
                   // conversa (chat e código), já que as tools de browser são
                   // chaveadas pelo id da sessão, não pelo modo.
