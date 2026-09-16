@@ -124,7 +124,17 @@ const MessageItem = memo(
                 file.mime.startsWith("image/") ? (
                   <MessageAttachment
                     key={file.id}
-                    data={{ type: "file", mediaType: file.mime, filename: file.filename, url: file.url }}
+                    // `mediaUrl` vai junto: a `url` do chip é só o thumbnail
+                    // da bolha, e é ele que o visualizador amplia e que os
+                    // botões de copiar e salvar entregam. Omiti-lo aqui fazia
+                    // o "salvar" devolver um webp de 320px no lugar da foto.
+                    data={{
+                      type: "file",
+                      mediaType: file.mime,
+                      filename: file.filename,
+                      url: file.url,
+                      mediaUrl: file.mediaUrl,
+                    }}
                   />
                 ) : (
                   // Anexo que virou documento abre no painel; os demais (texto
