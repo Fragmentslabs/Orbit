@@ -213,6 +213,51 @@ describe('vectorizeImage', () => {
     expect((await vectorizeImage(await marca(), { colors: 3 })).usedColors).toBe(3)
   })
 
+  it('não abre costura entre duas cores vizinhas', async () => {
+    // Traçando cada cor com os próprios pixels, a fronteira entre duas regiões
+    // é percorrida DUAS vezes, uma de cada lado, e a simplificação afasta um
+    // traçado do outro — abrindo um fio de nada entre elas. As camadas são
+    // empilhadas (cada uma carrega o que vem por cima) para que não exista
+    // fronteira compartilhada que possa divergir.
+    //
+    // A divisa precisa ser ONDULADA: numa reta os dois traçados caem no mesmo
+    // lugar e não há divergência nenhuma para abrir fresta.
+    const duasCores = await sharp(
+      Buffer.from(
+        `<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200">
+           <rect width="200" height="200" fill="#1d4ed8"/>
+           <path d="M0 60 C 50 20, 90 120, 140 70 S 190 40, 200 80 L200 200 L0 200 Z" fill="#dc2626"/>
+         </svg>`,
+      ),
+    )
+      .png()
+      .toBuffer()
+
+    const out = await vectorizeImage(duasCores, { colors: 2 })
+    // Composto SOBRE magenta: o que aparecer dessa cor é buraco no traçado.
+    const sobreMagenta = await sharp({
+      create: { width: 200, height: 200, channels: 3, background: '#ff00ff' },
+    })
+      .composite([{ input: await sharp(Buffer.from(out.svg)).resize(200, 200).png().toBuffer() }])
+      .png()
+      .toBuffer()
+
+    const { data, info } = await sharp(sobreMagenta)
+      .removeAlpha()
+      .raw()
+      .toBuffer({ resolveWithObject: true })
+    let vazando = 0
+    // Só o MIOLO: a borda externa da imagem tem meio pixel de folga por
+    // construção e não é costura.
+    for (let y = 4; y < info.height - 4; y++) {
+      for (let x = 4; x < info.width - 4; x++) {
+        const at = (y * info.width + x) * info.channels
+        if (data[at] > 180 && data[at + 1] < 90 && data[at + 2] > 180) vazando++
+      }
+    }
+    expect(vazando).toBe(0)
+  })
+
   it('imagem grande é reduzida antes, e avisa', async () => {
     const grande = await solid(2400, 1200, '#334155')
     const out = await vectorizeImage(grande)

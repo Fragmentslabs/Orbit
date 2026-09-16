@@ -486,18 +486,79 @@ async function traceOnce(
   const minArea = options.minArea ?? Math.max(4, (width * height) / 20_000)
 
   const remap = mergeColors(data, info.channels, width * height, colorCount)
+  const palette = [...new Set(remap.values())]
 
-  // Agrupa os pixels por cor uma vez só, já na cor final.
-  const porCor = new Map<string, Uint8Array>()
+  // Cada pixel é reatribuído a partir da imagem ORIGINAL, e não da quantizada.
+  //
+  // A diferença aparece na borda. Um pixel de transição foi rotulado pelo
+  // quantizador como uma cor intermediária, e a fusão mandou aquela cor
+  // inteira para um dos lados — todos os pixels dela juntos. Decidindo pixel a
+  // pixel, cada um vai para o lado de que ele está de fato mais perto, e a
+  // fronteira cai onde ela realmente está em vez de deslizar meio traço para
+  // um lado.
+  const original = await sharp(source)
+    .flatten({ background: '#ffffff' })
+    .resize({ width, height, fit: 'fill' })
+    .removeAlpha()
+    .raw()
+    .toBuffer()
+
+  const paletteLab = palette.map(
+    (hex) =>
+      labOf(
+        parseInt(hex.slice(1, 3), 16),
+        parseInt(hex.slice(3, 5), 16),
+        parseInt(hex.slice(5, 7), 16),
+      ) as [number, number, number],
+  )
+
+  const label = new Int32Array(width * height)
   for (let i = 0; i < width * height; i++) {
-    const at = i * info.channels
-    const hex = remap.get(toHex(data[at], data[at + 1], data[at + 2])) as string
-    let mask = porCor.get(hex)
-    if (!mask) {
-      mask = new Uint8Array(width * height)
-      porCor.set(hex, mask)
+    const at = i * 3
+    const [l, a, b] = labOf(original[at], original[at + 1], original[at + 2])
+    let melhor = 0
+    let menor = Infinity
+    for (let k = 0; k < paletteLab.length; k++) {
+      const p = paletteLab[k]
+      const d = (l - p[0]) ** 2 + (a - p[1]) ** 2 + (b - p[2]) ** 2
+      if (d < menor) {
+        menor = d
+        melhor = k
+      }
     }
-    mask[i] = 1
+    label[i] = melhor
+  }
+
+  // Ordem de pintura: maior área atrás. Precisa ser decidida ANTES das
+  // máscaras, porque cada camada carrega o que vem por cima dela.
+  const areaPorCor = new Int32Array(palette.length)
+  for (let i = 0; i < width * height; i++) areaPorCor[label[i]]++
+  const ordem = palette
+    .map((hex, k) => ({ hex, k, area: areaPorCor[k] }))
+    .filter((c) => c.area > 0)
+    .sort((a, b) => b.area - a.area)
+
+  // Camadas EMPILHADAS: cada uma inclui tudo que será desenhado sobre ela.
+  //
+  // Traçando só os próprios pixels, duas regiões vizinhas têm a mesma
+  // fronteira traçada duas vezes — uma de cada lado — e qualquer divergência
+  // entre os dois traçados abre um fio de fundo entre elas. Empilhando, a
+  // camada de baixo passa por baixo da de cima e não existe costura para
+  // divergir.
+  // Posição de cada rótulo na pilha, resolvida uma vez: procurar dentro do
+  // laço de pixel seria varrer a paleta inteira por pixel.
+  const rankDe = new Int32Array(palette.length).fill(ordem.length)
+  ordem.forEach((c, posicao) => {
+    rankDe[c.k] = posicao
+  })
+
+  const porCor = new Map<string, Uint8Array>()
+  for (let posicao = 0; posicao < ordem.length; posicao++) {
+    const mask = new Uint8Array(width * height)
+    for (let i = 0; i < width * height; i++) {
+      if (rankDe[label[i]] >= posicao) mask[i] = 1
+    }
+    porCor.set(ordem[posicao].hex, mask)
   }
 
   // A cor que domina a BORDA é o fundo: é ela que se quer descartar para o
@@ -551,9 +612,9 @@ async function traceOnce(
     })
   }
 
-  // Maior primeiro: o que é grande fica atrás, e o detalhe por cima. Sem isto
-  // uma forma grande desenhada por último cobriria tudo.
-  camadas.sort((a, b) => b.area - a.area)
+  // Sem reordenar: a ordem de pintura foi decidida junto com o empilhamento,
+  // e cada camada já contém o que vem por cima. Ordenar por área traçada aqui
+  // desfaria a pilha — todas as camadas empilhadas são grandes por construção.
 
   const paths = camadas.length
   const points = camadas.reduce((sum, c) => sum + c.points, 0)
