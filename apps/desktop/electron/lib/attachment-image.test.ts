@@ -66,6 +66,24 @@ describe('imagem colada no chat', () => {
     expect(await media.readMedia(media.mediaIdFromUrl(url)!)).not.toBeNull()
   })
 
+  it('cada formato volta com a SUA extensão, inclusive o SVG', async () => {
+    // O "salvar" usa isto para nomear o arquivo. Deduzir a extensão do tipo do
+    // conteúdo fazia `image/svg+xml` virar ".svg+xml", e antes disso o vetor
+    // saía salvo como PNG — porque o mapa de tipos não conhecia SVG. O id, que
+    // nós mesmos escolhemos ao gravar, não depende de ninguém lembrar de nada.
+    const svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 8 8"><rect width="8" height="8"/></svg>'
+    const casos: [Buffer, string, string][] = [
+      [await foto(), 'png', 'image/png'],
+      [Buffer.from(svg, 'utf8'), 'svg', 'image/svg+xml'],
+    ]
+    for (const [bytes, ext, contentType] of casos) {
+      const url = await media.saveMedia(bytes, ext, { source: 'chat', sessionId: 'sessao1' })
+      const lido = await media.readMedia(media.mediaIdFromUrl(url)!)
+      expect(lido!.ext).toBe(ext)
+      expect(lido!.contentType).toBe(contentType)
+    }
+  })
+
   it('o thumbnail da bolha é pequeno o bastante para a perda importar', async () => {
     // Fixa a premissa do conserto: se o thumbnail já fosse grande, esticá-lo
     // não seria problema e este caminho todo seria desnecessário.

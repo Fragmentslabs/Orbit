@@ -1,4 +1,5 @@
 import { tool } from 'ai'
+import sharp from 'sharp'
 import { z } from 'zod'
 import type { SendMessageInput } from '@shared/chat'
 import { describeImage, getTurnImages } from '../vision'
@@ -40,7 +41,20 @@ async function resolveImage(sessionId: string, ref: number | string): Promise<st
   const id = mediaIdFromUrl(ref)
   if (!id) return null
   const file = await readMedia(id)
-  return file ? `data:${file.contentType};base64,${file.buffer.toString('base64')}` : null
+  if (!file) return null
+
+  // SVG é texto, não imagem, e nenhum modelo de visão o aceita: mandá-lo
+  // cru devolve erro do provedor em vez de descrição. Rasterizar é o que
+  // permite OLHAR um vetor — e é pedido com frequência, porque conferir se um
+  // traçado ficou bom é justamente uma pergunta visual.
+  if (file.contentType === 'image/svg+xml') {
+    const png = await sharp(file.buffer)
+      .resize({ width: 1024, withoutEnlargement: false })
+      .png()
+      .toBuffer()
+    return `data:image/png;base64,${png.toString('base64')}`
+  }
+  return `data:${file.contentType};base64,${file.buffer.toString('base64')}`
 }
 
 export function createDescribeImageTool(input: SendMessageInput) {

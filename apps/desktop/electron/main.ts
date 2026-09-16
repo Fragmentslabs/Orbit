@@ -1590,7 +1590,7 @@ app.whenReady().then(() => {
    */
   const bytesOfImageRef = async (
     ref: string,
-  ): Promise<{ buffer: Buffer; contentType: string } | null> => {
+  ): Promise<{ buffer: Buffer; contentType: string; ext?: string } | null> => {
     const dataUrl = /^data:(image\/[\w.+-]+);base64,(.+)$/s.exec(ref)
     if (dataUrl) {
       return { buffer: Buffer.from(dataUrl[2], 'base64'), contentType: dataUrl[1] }
@@ -1626,7 +1626,7 @@ app.whenReady().then(() => {
   ipcMain.handle('media:export', async (_event, ref: string, suggestedName?: string) => {
     const bytes = await bytesOfImageRef(ref)
     if (!bytes) return { ok: false as const, error: 'Imagem nao encontrada' }
-    const ext = extensionOf(bytes.contentType)
+    const ext = bytes.ext || extensionOf(bytes.contentType)
     const base = (suggestedName || 'imagem').replace(/[\\/:*?"<>|]/g, '-').slice(0, 60)
     const result = await dialog.showSaveDialog({
       defaultPath: base.toLowerCase().endsWith(`.${ext}`) ? base : `${base}.${ext}`,

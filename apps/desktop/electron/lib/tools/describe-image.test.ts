@@ -88,6 +88,26 @@ describe('describe_image', () => {
     expect(meta.height).toBe(16)
   })
 
+  it('RASTERIZA um SVG antes de mandar ao modelo de visão', async () => {
+    // SVG é texto, e nenhum modelo de visão o aceita: mandá-lo cru devolve
+    // erro do provedor em vez de descrição. E olhar um vetor é pedido com
+    // frequência — conferir se o traçado ficou bom é pergunta visual.
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40" width="40" height="40"><circle cx="20" cy="20" r="16" fill="#c81e1e"/></svg>`
+    const url = await media.saveMedia(Buffer.from(svg, 'utf8'), 'svg', {
+      source: 'chat',
+      sessionId: 'sessao1',
+    })
+
+    await tool.execute({ ref: url })
+    expect(recebido.imageDataUrl).toMatch(/^data:image\/png;base64,/)
+
+    // E são os pixels do desenho, não um espaço vazio.
+    const bytes = Buffer.from(recebido.imageDataUrl!.split(',')[1], 'base64')
+    const meta = await sharp(bytes).metadata()
+    expect(meta.format).toBe('png')
+    expect(meta.width).toBe(1024) // ampliado: o vetor não perde nitidez
+  })
+
   it('aceita o número em forma de texto, que o modelo erra com frequência', async () => {
     turnImages.push({ url: 'data:image/png;base64,BBBB' })
     await tool.execute({ ref: '1' })

@@ -397,12 +397,18 @@ const CONTENT_TYPES: Record<string, string> = {
 /** Lê um arquivo de mídia persistido — usado pelo servidor HTTP do companion
  *  (que não tem acesso ao protocolo orbit-media:// do Electron). Valida o id
  *  com SAFE_ID (nada de path traversal). */
-export async function readMedia(id: string): Promise<{ buffer: Buffer; contentType: string } | null> {
+export async function readMedia(
+  id: string,
+): Promise<{ buffer: Buffer; contentType: string; ext: string } | null> {
   if (!SAFE_ID.test(id)) return null
   try {
     const buffer = await fsp.readFile(path.join(mediaDir(), id))
+    // A extensao sai do ID, que e a fonte da verdade: nos a escolhemos ao
+    // gravar. Deduzi-la do tipo do conteudo depende de um mapa que alguem
+    // precisa lembrar de estender a cada formato novo — e foi assim que o SVG
+    // saiu salvo com a extensao errada.
     const ext = id.split('.').pop() ?? ''
-    return { buffer, contentType: CONTENT_TYPES[ext] ?? 'application/octet-stream' }
+    return { buffer, contentType: CONTENT_TYPES[ext] ?? 'application/octet-stream', ext }
   } catch {
     return null
   }
