@@ -1361,6 +1361,7 @@ async function runChatTurn(win: BrowserWindow, input: SendMessageInput): Promise
               part.toolName === 'show_image' ||
               part.toolName === 'image_edit' ||
               part.toolName === 'svg_create' ||
+              part.toolName === 'svg_vectorize' ||
               part.toolName === 'svg_edit'
             ) {
               const output = part.output as { mediaUrl?: string; alt?: string } | string

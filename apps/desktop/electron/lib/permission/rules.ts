@@ -74,6 +74,7 @@ const NATIVE_TOOLS = new Set([
   'image_edit',
   // SVG: mesma convencao. Editar e texto, nao pixel, mas a entrega e igual —
   // arquivo novo na galeria, projeto do usuario so com savePath.
+  'svg_vectorize',
   'svg_create',
   'svg_info',
   'svg_edit',

@@ -5,21 +5,22 @@ import sharp from 'sharp'
 import { z } from 'zod'
 
 import { assertSafeSvg, recolorSvg, resizeSvg, svgInfo } from '../svg-ops'
+import { vectorizeImage } from '../vectorize'
 import { getMediaEntry, mediaIdFromUrl, readMedia, saveMedia } from '../media'
 import { resolveSafePath, type ToolContext } from './context'
 import type { DocumentToolScope } from './document'
 
 /**
- * SVG: criar, inspecionar, recolorir e rasterizar.
+ * SVG: vetorizar, criar, inspecionar, recolorir e rasterizar.
  *
  * Separado das tools de imagem porque a natureza é outra. Editar um PNG é
  * reprocessar pixel; editar um SVG é reescrever texto — e é essa diferença que
  * dá o valor. Trocar a cor de um logo em SVG devolve o MESMO logo, em qualquer
  * tamanho; a mesma troca num PNG devolve uma aproximação do que já estava lá.
  *
- * O caminho de volta (SVG → PNG) fica aqui também, porque é onde ele é pedido:
- * "me dá o ícone em 512". O contrário — PNG → SVG — não existe neste módulo e
- * não sai do sharp, que lê SVG mas não escreve.
+ * Os dois caminhos de conversão moram aqui, porque é onde são pedidos: SVG →
+ * PNG ("me dá o ícone em 512") pelo sharp, e PNG → SVG pelo vectorize.ts, que
+ * é escrito à mão justamente porque o sharp lê SVG mas não escreve.
  */
 
 export function createSvgTools(scope: DocumentToolScope, ctx: ToolContext | null) {
@@ -70,7 +71,70 @@ export function createSvgTools(scope: DocumentToolScope, ctx: ToolContext | null
     return { mediaUrl, savedTo }
   }
 
+  /** Carrega uma imagem RASTER da galeria — a entrada da vetorização. */
+  const loadRaster = async (ref: string): Promise<{ bytes: Buffer; name: string } | string> => {
+    const id = mediaIdFromUrl(ref)
+    if (id) {
+      if (id.endsWith('.svg')) return `${ref} já é um SVG.`
+      const entry = await getMediaEntry(id)
+      if (entry) {
+        const file = await readMedia(id)
+        if (!file) return `A imagem ${ref} está no registro mas o arquivo sumiu do disco.`
+        return { bytes: file.buffer, name: entry.name || id }
+      }
+      if (ref.startsWith('orbit-media://')) return `Imagem não encontrada na galeria: ${ref}`
+    }
+    if (!ctx) return `Imagem não encontrada: ${ref}. No chat a referência é a URL orbit-media:// da galeria.`
+    try {
+      return { bytes: await fsp.readFile(resolveSafePath(ctx, ref)), name: path.basename(ref) }
+    } catch (err) {
+      return `Não foi possível abrir ${ref}: ${(err as Error).message}`
+    }
+  }
+
   return {
+    svg_vectorize: tool({
+      description:
+        'Traces a raster image into a real SVG: flat colour regions become paths that scale and can be recoloured afterwards. The image is quantised to a few colours first, so this suits what is MADE of flat regions — a logo, an icon, line art, a silhouette, a screenshot of a shape.\n' +
+        'It does NOT suit photographs. A photo technically produces a valid SVG and the result is junk: every gradient becomes bands, the file ends up larger than the original and looks nothing like it. The result reports that when it happens — read the warnings and pass them on instead of delivering silently.\n' +
+        'dropBackground removes the colour that fills the border, which is what gives a cut-out icon instead of a coloured rectangle. Fewer colours give a cleaner drawing; more give a closer one.',
+      inputSchema: z.object({
+        ref: z.string().describe('orbit-media:// URL of a raster image, or a path in the working folder'),
+        colors: z.number().int().min(2).max(32).optional()
+          .describe('How many colours to keep (default 8). A flat logo often needs 2-4.'),
+        dropBackground: z.boolean().optional()
+          .describe('Drop the border colour so the result is cut out rather than a rectangle'),
+        tolerance: z.number().min(0).max(10).optional()
+          .describe('Simplification in pixels (default 1). Higher = fewer points, straighter outlines.'),
+        savePath: z.string().optional(),
+        alt: z.string().optional(),
+      }),
+      execute: async ({ ref, colors, dropBackground, tolerance, savePath, alt }) => {
+        const src = await loadRaster(ref)
+        if (typeof src === 'string') return src
+        let out
+        try {
+          out = await vectorizeImage(src.bytes, { colors, dropBackground, tolerance })
+        } catch (err) {
+          return `Não foi possível vetorizar ${src.name}: ${(err as Error).message}`
+        }
+        if (out.paths === 0) {
+          return `${src.name}: nada foi traçado — a imagem não tem região de cor chapada que vire forma.`
+        }
+        const base = src.name.replace(/\.[^.]+$/, '')
+        const { mediaUrl, savedTo } = await deliver(out.svg, `${base} (vetor)`, savePath)
+        return {
+          mediaUrl,
+          alt: alt ?? '',
+          message:
+            `${src.name} → SVG ${out.width}x${out.height}, ${out.paths} camada(s), ` +
+            `${out.points} pontos, cores ${out.colors.join(' ')}` +
+            `${savedTo ? `, gravado em ${savedTo}` : ''}.` +
+            (out.warnings.length > 0 ? ` AVISO: ${out.warnings.join(' ')}` : ''),
+        }
+      },
+    }),
+
     svg_create: tool({
       description:
         'Saves SVG markup you wrote as a real .svg file in the gallery, shown in your reply and downloadable. This is how a vector icon you draw becomes something the user can actually use — writing the markup in a message only produces text they have to copy out.\n' +
