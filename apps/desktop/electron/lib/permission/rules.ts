@@ -72,6 +72,11 @@ const NATIVE_TOOLS = new Set([
   'image_list',
   'image_info',
   'image_edit',
+  // SVG: mesma convencao. Editar e texto, nao pixel, mas a entrega e igual —
+  // arquivo novo na galeria, projeto do usuario so com savePath.
+  'svg_create',
+  'svg_info',
+  'svg_edit',
   // Automação em lote na engine oculta (mesmo threat model do bash: o agente
   // já executa código arbitrário; o script roda isolado num utilityProcess)
   'run_browser_script',

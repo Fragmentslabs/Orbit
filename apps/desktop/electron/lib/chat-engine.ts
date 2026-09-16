@@ -1357,7 +1357,12 @@ async function runChatTurn(win: BrowserWindow, input: SendMessageInput): Promise
             // (renderizada pelo ai/image). No image_edit isso é o ponto — uma
             // edição descrita em texto obrigaria o usuário a abrir a galeria
             // para saber se o recorte do fundo ficou bom.
-            if (part.toolName === 'show_image' || part.toolName === 'image_edit') {
+            if (
+              part.toolName === 'show_image' ||
+              part.toolName === 'image_edit' ||
+              part.toolName === 'svg_create' ||
+              part.toolName === 'svg_edit'
+            ) {
               const output = part.output as { mediaUrl?: string; alt?: string } | string
               if (typeof output === 'object' && output?.mediaUrl) {
                 upsertPart({

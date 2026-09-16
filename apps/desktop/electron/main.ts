@@ -1,4 +1,5 @@
 import { app, BrowserWindow, ipcMain, dialog, shell, Menu, clipboard, nativeImage, ClipboardItem, type MenuItemConstructorOptions } from 'electron'
+import sharp from 'sharp'
 import { createRequire } from 'node:module'
 import { fileURLToPath } from 'node:url'
 import { execFile } from 'node:child_process'
@@ -1599,6 +1600,22 @@ app.whenReady().then(() => {
   }
 
   /**
+   * Extensao a partir do tipo do conteudo.
+   *
+   * Nao e so tirar o que vem depois da barra: `image/svg+xml` viraria
+   * ".svg+xml", um arquivo que o sistema nao abre. O mapa cobre o que a
+   * galeria aceita e o resto cai em png, que e o formato de saida padrao.
+   */
+  const extensionOf = (contentType: string): string =>
+    ({
+      'image/png': 'png',
+      'image/jpeg': 'jpg',
+      'image/webp': 'webp',
+      'image/gif': 'gif',
+      'image/svg+xml': 'svg',
+    })[contentType] ?? 'png'
+
+  /**
    * Salvar a imagem em disco, pelo dialogo do sistema.
    *
    * O renderer nao grava arquivo: a imagem vive no storage do Orbit e sai por
@@ -1609,7 +1626,7 @@ app.whenReady().then(() => {
   ipcMain.handle('media:export', async (_event, ref: string, suggestedName?: string) => {
     const bytes = await bytesOfImageRef(ref)
     if (!bytes) return { ok: false as const, error: 'Imagem nao encontrada' }
-    const ext = bytes.contentType.split('/')[1]?.replace('jpeg', 'jpg') || 'png'
+    const ext = extensionOf(bytes.contentType)
     const base = (suggestedName || 'imagem').replace(/[\\/:*?"<>|]/g, '-').slice(0, 60)
     const result = await dialog.showSaveDialog({
       defaultPath: base.toLowerCase().endsWith(`.${ext}`) ? base : `${base}.${ext}`,
@@ -1634,7 +1651,14 @@ app.whenReady().then(() => {
   ipcMain.handle('media:copy', async (_event, ref: string) => {
     const bytes = await bytesOfImageRef(ref)
     if (!bytes) return { ok: false as const, error: 'Imagem nao encontrada' }
-    const image = nativeImage.createFromBuffer(bytes.buffer)
+    // O nativeImage nao le SVG: copiar o vetor cru colaria nada. O sharp
+    // rasteriza num tamanho util para colar em outro app — o arquivo vetorial
+    // continua inteiro na galeria e sai pelo botao de salvar.
+    const raw =
+      bytes.contentType === 'image/svg+xml'
+        ? await sharp(bytes.buffer).resize({ width: 1024, withoutEnlargement: false }).png().toBuffer()
+        : bytes.buffer
+    const image = nativeImage.createFromBuffer(raw)
     if (image.isEmpty()) return { ok: false as const, error: 'Formato de imagem nao suportado' }
     await clipboard.write([
       new ClipboardItem({ 'image/png': new Blob([new Uint8Array(image.toPNG())], { type: 'image/png' }) }),

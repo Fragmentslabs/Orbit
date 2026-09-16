@@ -43,7 +43,13 @@ export type { MediaEntry, MediaFilter, MediaSource, MediaUsage }
  */
 
 const SCHEME = MEDIA_SCHEME
-const SAFE_ID = /^[a-zA-Z0-9_-]+\.(png|jpg|jpeg|webp|gif)$/
+/**
+ * O `svg` entra junto com os rasters porque ele é entregue como IMAGEM: servido
+ * com `image/svg+xml` e desenhado em `<img>`, onde script embutido não executa.
+ * Só não pode ser tratado como os outros na hora de copiar para a área de
+ * transferência — o nativeImage não lê SVG, e lá ele vai rasterizado.
+ */
+const SAFE_ID = /^[a-zA-Z0-9_-]+\.(png|jpg|jpeg|webp|gif|svg)$/
 /**
  * Arquivos servidos pelo orbit-artifact://: a página do artefato (.html), a
  * miniatura capturada (.png) e, nos documentos, o fonte (.md) e as
@@ -385,6 +391,7 @@ const CONTENT_TYPES: Record<string, string> = {
   jpeg: 'image/jpeg',
   webp: 'image/webp',
   gif: 'image/gif',
+  svg: 'image/svg+xml',
 }
 
 /** Lê um arquivo de mídia persistido — usado pelo servidor HTTP do companion

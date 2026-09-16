@@ -52,7 +52,12 @@ const IMAGE_EDIT_INSTRUCTION = `EDITING IMAGES. image_edit changes an existing i
 - You need the image's REFERENCE, and seeing it in the conversation does not give you one. image_list returns the orbit-media:// reference of every image here, including the one the user just attached — start there.
 - Combine everything in ONE call: the operations apply in a fixed order (orientation, crop, trim, rotate, background, resize, colour, encode), so "crop and shrink to under 200KB" is a single call, not three.
 - Call image_info first whenever the numbers matter — cropping blind is how you cut the wrong region.
-- For text, anchor it with position rather than x/y, and leave size alone: both are worked out from the image, and a hardcoded size that suits one photo is unreadable on the next. Pass several entries to label several spots in one call.`
+- For text, anchor it with position rather than x/y, and leave size alone: both are worked out from the image, and a hardcoded size that suits one photo is unreadable on the next. Pass several entries to label several spots in one call.
+
+VECTOR IMAGES. An SVG is text, not pixels, and the svg_* tools treat it that way. svg_create turns markup you wrote into a real .svg file the user can download — writing markup in a message only gives them something to copy out by hand. svg_edit recolours and resizes without touching the drawing, and rasterises to PNG at any size, which is how a favicon or an app icon gets made from one source file.
+- Recolouring needs the real colours: call svg_info first rather than guessing at hex values. The result reports how many paints changed, and 0 means the map missed — say so instead of reporting success.
+- Prefer SVG whenever the thing is an icon, a badge, a simple mark or a diagram: it stays sharp at every size and its colours can be changed later. Reach for a raster only when the source is a photograph.
+- Be straight about the limit: a geometric icon you draw is usually fine, a brand logo is a design decision and markup you invent will look invented. Offer it as a starting point, not a finished identity.`
 
 /**
  * O que dizer ao agente sobre OLHAR a imagem antes de editá-la.

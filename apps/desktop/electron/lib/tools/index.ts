@@ -8,6 +8,7 @@ import { createDocumentAuthoringTools } from './document'
 import { createDocxEditTools } from './docx'
 import { createImageTools } from './image'
 import { createPdfOpsTools } from './pdf'
+import { createSvgTools } from './svg'
 import { createBrowserLinksTool, createBrowserOpenTool } from './browser'
 import { createBrowserScriptTools } from './browser-script'
 import { createEsteiraTools } from './esteira'
@@ -99,6 +100,9 @@ export function buildToolSet(input: SendMessageInput, ctx: ToolContext | null): 
       // ajustar tom, tirar o fundo). No chat a fonte e sempre a galeria — todo
       // anexo de imagem e registrado la —, por isso ctx entra como null.
       Object.assign(tools, createImageTools({ sessionId: input.sessionId }, null))
+      // SVG e imagem sao tools separadas porque a natureza e outra: uma
+      // reprocessa pixel, a outra reescreve texto.
+      Object.assign(tools, createSvgTools({ sessionId: input.sessionId }, null))
     }
     if (allowBrain) Object.assign(tools, createChatMemoryTools(input))
     // Esteira: transformar o que foi discutido no chat em esteira/task de um
@@ -162,6 +166,10 @@ export function buildToolSet(input: SendMessageInput, ctx: ToolContext | null): 
     Object.assign(
       tools,
       createImageTools({ sessionId: input.sessionId, directory: input.directory }, ctx),
+    )
+    Object.assign(
+      tools,
+      createSvgTools({ sessionId: input.sessionId, directory: input.directory }, ctx),
     )
   }
 
