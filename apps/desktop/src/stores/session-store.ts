@@ -18,6 +18,7 @@ import type {
 // normalizeFolderName/folderKey vivem no shared: o mobile agrupa chats por
 // projeto do mesmo jeito e precisa da MESMA regra de nome.
 import { folderKey, normalizeFolderName, StorageKeys } from "@shared/chat"
+import { planAutoFolder } from "@/src/lib/auto-folder"
 import { chatApi, companionApi, docsApi, sessionApi, storage } from "@/src/lib/ipc"
 import { visibleMessageText } from "@/src/lib/message-utils"
 import { useBrainPrefs } from "@/src/stores/brain-prefs"
@@ -110,6 +111,11 @@ interface SessionState {
   toggleFolderPin: (id: string) => void
   /** Arquiva/desarquiva a pasta e, junto, todos os chats que estão nela */
   toggleFolderArchive: (id: string) => void
+  /** Traz a pasta de volta à sidebar SEM desarquivar os chats antigos — é o
+   *  que a pasta automática faz quando se volta a trabalhar num projeto
+   *  arquivado. Os chats de antes continuam em "Arquivados", agrupados pela
+   *  pasta viva, que é um estado que a sidebar já sabe mostrar. */
+  reviveFolder: (id: string) => void
   deleteFolder: (id: string) => void
   /** Reorganiza a sidebar: mescla pastas duplicadas do mesmo projeto e move os
    *  chats soltos (modo código, com diretório) para a pasta do projeto —
@@ -267,34 +273,29 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       ...rest,
     }
 
-    if (mode === "code" && partial?.directory && useModelModePrefs.getState().autoCreateFolders) {
+    const directory = partial?.directory
+    if (mode === "code" && directory && useModelModePrefs.getState().autoCreateFolders) {
       const autoFolderMap = loadAutoFolderMap()
-      const existingFolderId = autoFolderMap[partial.directory]
-      const existingFolder = get().folders.find((f) => f.id === existingFolderId)
+      const plano = planAutoFolder({
+        directory,
+        mode,
+        folders: get().folders,
+        mappedId: autoFolderMap[directory],
+      })
+      const folderId = plano.folderId ?? get().createFolder(mode, plano.create ?? normalizeFolderName(directory)).id
 
-      if (existingFolder) {
-        // Pasta arquivada não recebe chats novos: a sessão nasce solta
-        if (!existingFolder.archived && existingFolder.mode === mode) session.folderId = existingFolder.id
-      } else {
-        const folderName = normalizeFolderName(partial.directory)
-        // Mapa automático perdido (localStorage limpo/migrado) ou diretório com
-        // variação (trailing slash, case, ~ vs absoluto): antes de criar uma
-        // pasta nova, reaproveita a pasta existente do projeto pelo nome
-        // normalizado — evita duas pastas para o mesmo projeto.
-        const existing = get().folders.find(
-          (f) => f.mode === mode && !f.archived && folderKey(f.name) === folderKey(folderName),
-        )
-        if (existing) {
-          autoFolderMap[partial.directory] = existing.id
-          persistAutoFolderMap(autoFolderMap)
-          session.folderId = existing.id
-        } else {
-          const folder = get().createFolder(mode, folderName)
-          autoFolderMap[partial.directory] = folder.id
-          persistAutoFolderMap(autoFolderMap)
-          session.folderId = folder.id
-        }
+      // Voltar a trabalhar no projeto traz a pasta dele de volta — só a pasta.
+      // Os chats antigos continuam arquivados, e a sidebar já os mostra em
+      // "Arquivados" agrupados pela pasta viva. Sem desarquivar, a sessão nova
+      // entraria numa pasta arquivada e sumiria da sidebar (a pasta só lista os
+      // chats no MESMO estado dela): pior do que nascer solta.
+      if (plano.revive) get().reviveFolder(folderId)
+
+      if (autoFolderMap[directory] !== folderId) {
+        autoFolderMap[directory] = folderId
+        persistAutoFolderMap(autoFolderMap)
       }
+      session.folderId = folderId
     }
 
     await storage.write(StorageKeys.session(session.id), session)
@@ -659,6 +660,15 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     emitChatEvent({ type: "folders", folders: get().folders })
   },
 
+  reviveFolder: (id) => {
+    set((state) => {
+      const folders = state.folders.map((f) => (f.id === id ? { ...f, archived: false } : f))
+      persistFolders(folders)
+      return { folders }
+    })
+    emitChatEvent({ type: "folders", folders: get().folders })
+  },
+
   deleteFolder: (id) => {
     // Sessões afetadas ANTES do set (depois, folderId já estará null)
     const affected = get().sessions.filter((s) => s.folderId === id).map((s) => s.id)
@@ -730,12 +740,6 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     // ——— 2) Chats soltos (código, com diretório) → pasta do projeto ———
     const { sessions: current, folders: currentFolders } = get()
     const folderById = new Map(currentFolders.map((f) => [f.id, f]))
-    const folderByKey = new Map<string, FolderInfo>()
-    for (const f of currentFolders) {
-      if (f.archived) continue
-      const key = `${f.mode}|${folderKey(f.name)}`
-      if (!folderByKey.has(key)) folderByKey.set(key, f)
-    }
     const autoFolderMap = loadAutoFolderMap()
     let mapDirty = false
     const moves = new Map<string, string>() // sessionId → folderId
@@ -746,35 +750,36 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     const loose = current
       .filter((s) => s.mode === "code" && !s.folderId && !s.archived && !s.parentId && !s.routineId && !!s.directory)
       .sort((a, b) => b.updatedAt - a.updatedAt)
+    // A mesma decisão da criação da sessão, pelo mesmo caminho: aqui ela
+    // conserta o passado (os chats que já nasceram soltos), e lá evita o
+    // próximo. Antes eram duas regras parecidas e não iguais — e a daqui, ao
+    // topar com a pasta arquivada do projeto, criava uma SEGUNDA pasta com o
+    // mesmo nome ao lado dela: a duplicata que este botão existe para desfazer.
     for (const s of loose) {
       if (moves.has(s.id)) continue
-      const mapped = autoFolderMap[s.directory as string]
-      if (mapped) {
-        const folder = folderById.get(mapped)
-        // Pasta arquivada não recebe chats: o diretório continua mapeado nela
-        // (sessões futuras nascem soltas) — o chat solto tenta por nome abaixo
-        if (folder && !folder.archived) {
-          moves.set(s.id, folder.id)
-          continue
-        }
+      const directory = s.directory as string
+      const plano = planAutoFolder({
+        directory,
+        mode: "code",
+        folders: [...folderById.values()],
+        mappedId: autoFolderMap[directory],
+      })
+      let folderId = plano.folderId
+      if (!folderId) {
+        const folder = get().createFolder("code", plano.create ?? normalizeFolderName(directory))
+        folderById.set(folder.id, folder)
+        folderId = folder.id
       }
-      const match = folderByKey.get(`code|${folderKey(normalizeFolderName(s.directory as string))}`)
-      if (match) {
-        // Reaproveita a pasta existente e registra o diretório no mapa
-        // automático — as próximas sessões do projeto já nascem nela.
-        autoFolderMap[s.directory as string] = match.id
+      if (plano.revive) {
+        get().reviveFolder(folderId)
+        const revivida = get().folders.find((f) => f.id === folderId)
+        if (revivida) folderById.set(folderId, revivida)
+      }
+      if (autoFolderMap[directory] !== folderId) {
+        autoFolderMap[directory] = folderId
         mapDirty = true
-        moves.set(s.id, match.id)
-        continue
       }
-      // Projeto sem pasta: cria seguindo o padrão de nomenclatura
-      const folder = get().createFolder("code", normalizeFolderName(s.directory as string))
-      folderById.set(folder.id, folder)
-      const key = `code|${folderKey(folder.name)}`
-      if (!folderByKey.has(key)) folderByKey.set(key, folder)
-      autoFolderMap[s.directory as string] = folder.id
-      mapDirty = true
-      moves.set(s.id, folder.id)
+      moves.set(s.id, folderId)
     }
     if (mapDirty) persistAutoFolderMap(autoFolderMap)
 
