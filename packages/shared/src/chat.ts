@@ -344,17 +344,21 @@ export interface AssistantSnapshot {
  * - `model-unavailable`: o modelo não existe/não é servido pelo provedor.
  * - `rate-limit`: limite de uso/requisições do provedor (429, FreeUsageLimit).
  * - `network`: falha de rede/indisponibilidade do endpoint (timeout, 5xx...).
+ * - `context-length`: a requisição ficou maior que a janela do modelo.
  * `moderation`, `model-unavailable`, `rate-limit` e `network` são resolvidas
  * trocando de modelo — é o que a rotação de modelos faz automaticamente (ver
  * `resolveRotation` no main). `provider-config` (provedor/SDK desconhecido,
  * chave ausente) e `unknown` NÃO são: trocar de modelo não conserta
- * configuração.
+ * configuração. `context-length` também não: o payload que estourou é o mesmo
+ * em qualquer modelo — o que resolve é compactar a conversa.
  */
 export type MessageErrorKind =
   | "moderation"
   | "model-unavailable"
   | "rate-limit"
   | "network"
+  /** Requisição maior que a janela de contexto do modelo. Não rotacionável. */
+  | "context-length"
   /** Configuração nossa, não falha do provedor: chave ausente, provedor/SDK desconhecido. */
   | "provider-config"
   | "unknown"

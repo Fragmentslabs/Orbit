@@ -682,6 +682,7 @@
       "model-unavailable": "Este provedor não serve o modelo selecionado. Escolha outro modelo para continuar.",
       "rate-limit": "O provedor atingiu o limite de uso ou de requisições. Aguarde um pouco ou troque de modelo.",
       "network": "Falha de rede ao falar com o provedor (timeout, indisponibilidade). Tente novamente ou troque de modelo.",
+      "context-length": "A conversa ficou maior que a janela de contexto do modelo, então o provedor recusou a requisição. Trocar de modelo não resolve — compacte a conversa (botão no medidor de contexto, ou /compact) ou comece uma nova.",
       "provider-config": "O provedor deste modelo não está pronto: falta a chave de API, ou o provedor/SDK não está disponível. Verifique as Configurações."
     },
     "fallbackStatus": "Tentando fallback {{current}}/{{total}}…",

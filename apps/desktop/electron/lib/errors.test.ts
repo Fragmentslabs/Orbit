@@ -103,6 +103,69 @@ describe('classifyProviderError', () => {
     })
   })
 
+  describe('contexto estourado', () => {
+    /**
+     * O caso que motivou o kind: o turno pediu 3,4M tokens num modelo de 1M.
+     * Classificado como `rate-limit`, a UI mandava "aguardar ou trocar de
+     * modelo" — e a rotação repetia o mesmo request gigante em cada modelo da
+     * sequência, todos com a mesma resposta.
+     */
+    const overflow =
+      "Error from provider (Console Go): Upstream request failed: [invalid_request_error] " +
+      "This model's maximum context length is 1048576 tokens. However, you requested 3463912 " +
+      'tokens (3463912 in the messages, 0 in the completion). Please reduce the length of the ' +
+      'messages or completion.'
+
+    it('classifica o estouro de contexto e NÃO rotaciona', () => {
+      const { kind } = classifyProviderError(new Error(overflow))
+      expect(kind).toBe('context-length')
+      expect(isRecoverableErrorKind(kind)).toBe(false)
+    })
+
+    it.each([
+      ['OpenAI', { error: { code: 'context_length_exceeded', message: 'too long' } }],
+      ['Anthropic', new Error('prompt is too long: 213423 tokens > 200000 maximum')],
+      [
+        'Anthropic com max_tokens',
+        new Error('input length and `max_tokens` exceed context limit: 190000 + 32000 > 200000'),
+      ],
+      [
+        'Google',
+        new Error('The input token count (1200000) exceeds the maximum number of tokens allowed'),
+      ],
+    ])('reconhece a forma do %s', (_label, payload) => {
+      expect(classifyProviderError(payload).kind).toBe('context-length')
+    })
+
+    /**
+     * Regressão do defeito real: `matchable` serializava o erro inteiro, e o
+     * APICallError do SDK carrega `responseHeaders`. Como todo provedor
+     * compatível com a OpenAI devolve `x-ratelimit-*` em TODA resposta, o
+     * padrão /rate[ _-]?limit/ casava em qualquer falha daqueles provedores —
+     * o motivo verdadeiro nunca era alcançado.
+     */
+    it('ignora headers x-ratelimit-* ao classificar', () => {
+      const err = Object.assign(new Error(overflow), {
+        statusCode: 400,
+        responseHeaders: {
+          'x-ratelimit-limit-requests': '100',
+          'x-ratelimit-remaining-tokens': '9999',
+        },
+      })
+      expect(classifyProviderError(err).kind).toBe('context-length')
+    })
+
+    it('mas ainda reconhece o rate-limit de verdade, que vem no status/corpo', () => {
+      const err = Object.assign(new Error('Upstream request failed'), {
+        statusCode: 429,
+        responseHeaders: { 'x-ratelimit-remaining-requests': '0' },
+      })
+      const { kind } = classifyProviderError(err)
+      expect(kind).toBe('rate-limit')
+      expect(isRecoverableErrorKind(kind)).toBe(true)
+    })
+  })
+
   describe('configuração do provedor', () => {
     it.each([
       ['provedor desconhecido', new ProviderResolutionError('Unknown provider: x', 'unknown-provider')],
@@ -130,7 +193,9 @@ describe('classifyProviderError', () => {
       ['chave inválida', { error: { code: 'invalid_api_key', message: 'Incorrect API key provided' } }],
       ['401', { statusCode: 401, message: 'Unauthorized' }],
       ['403', { statusCode: 403, message: 'Forbidden' }],
-      ['contexto estourado', { error: { code: 'context_length_exceeded', message: "This model's maximum context length is 128000 tokens" } }],
+      // Contexto estourado saiu daqui: ganhou kind próprio (`context-length`,
+      // coberto acima). Continua não rotacionando — o que mudou é que agora a
+      // UI sabe dizer o que resolve, em vez de mostrar o texto cru.
     ])('deixa %s como unknown (trocar de modelo não resolve)', (_label, payload) => {
       const { kind } = classifyProviderError(payload)
       expect(kind).toBe('unknown')

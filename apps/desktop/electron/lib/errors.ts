@@ -71,6 +71,31 @@ const MODEL_UNAVAILABLE_PATTERNS = [
 const SESSION_ROUTING_PATTERNS = [/missing x-opencode-session/i]
 
 /**
+ * Contexto estourado: a requisição foi montada maior do que a janela do modelo.
+ * NÃO é rotacionável — trocar de modelo manda o mesmo payload gigante para
+ * outro endpoint e falha igual (quando não pior, num modelo de janela menor).
+ * O que resolve é encolher o que vai no request: compactar a conversa ou
+ * começar outra.
+ *
+ * Antes de existir esse kind, essas falhas caíam em `rate-limit` (ver
+ * `matchable`) e a UI pedia para "aguardar um pouco ou trocar de modelo" —
+ * conselho que nunca ia funcionar, e a rotação ainda queimava a sequência
+ * inteira de modelos repetindo o mesmo request.
+ */
+const CONTEXT_LENGTH_PATTERNS = [
+  /context_length_exceeded/i,
+  /maximum context length/i,
+  /context length exceeded/i,
+  /prompt is too long/i,
+  /reduce the length of the (messages|prompt|input)/i,
+  /exceeds? the (maximum )?(number of )?(input )?tokens/i,
+  /token count .{0,40}exceeds/i,
+  /input length and .?max_tokens.? exceed context limit/i,
+  /context window (is )?(full|exceeded)/i,
+  /too many (input )?tokens/i,
+]
+
+/**
  * Limite de uso/requisições do provedor ou gateway. Cobre o 429 clássico
  * (OpenAI/Anthropic/OpenRouter: `statusCode`/`code` 429), o Zen do OpenCode
  * (`FreeUsageLimitError` — teto de uso gratuito por conta, janela rolante) e
@@ -154,7 +179,16 @@ function matchable(value: unknown): string {
   const seen = new WeakSet<object>()
   let serialized = ''
   try {
-    serialized = JSON.stringify(value, (_key, val) => {
+    serialized = JSON.stringify(value, (key, val) => {
+      // Headers de resposta ficam DE FORA. O APICallError do SDK guarda
+      // `responseHeaders`, e praticamente todo provedor compatível com a
+      // OpenAI devolve `x-ratelimit-*` em TODA resposta, inclusive nas que
+      // deram certo. Serializá-los fazia o padrão /rate[ _-]?limit/ casar em
+      // qualquer falha daqueles provedores: um erro de contexto estourado
+      // chegava ao usuário como "o provedor atingiu o limite de uso". O motivo
+      // real vem do corpo (`responseBody`, `code`, `type`) e do `statusCode`,
+      // que continuam aqui.
+      if (key === 'responseHeaders') return undefined
       if (typeof val === 'object' && val !== null) {
         if (seen.has(val)) return undefined
         seen.add(val)
@@ -185,6 +219,12 @@ export function classifyProviderError(value: unknown): ClassifiedError {
   } catch {
     // classificar é best-effort — nunca pode derrubar o catch que nos chamou
   }
+  // Contexto estourado vem antes de tudo: a mensagem do provedor é inequívoca,
+  // e deixá-la cair em qualquer kind rotacionável faz o engine repetir um
+  // request que não tem como dar certo.
+  if (CONTEXT_LENGTH_PATTERNS.some((re) => re.test(haystack))) {
+    return { kind: 'context-length', detail }
+  }
   if (MODERATION_PATTERNS.some((re) => re.test(haystack))) return { kind: 'moderation', detail }
   if (MODEL_UNAVAILABLE_PATTERNS.some((re) => re.test(haystack))) {
     return { kind: 'model-unavailable', detail }
@@ -196,7 +236,8 @@ export function classifyProviderError(value: unknown): ClassifiedError {
 }
 
 /** Kinds que a rotação de modelos contorna automaticamente (trocar de modelo
- *  resolve). Auth (401/403) e abort manual ficam de fora de propósito. */
+ *  resolve). Auth (401/403) e abort manual ficam de fora de propósito, e
+ *  `context-length` também: o payload é o mesmo em qualquer modelo. */
 const RECOVERABLE_ERROR_KINDS: ReadonlySet<MessageErrorKind> = new Set([
   'moderation',
   'model-unavailable',

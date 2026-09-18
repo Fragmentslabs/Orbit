@@ -151,6 +151,7 @@ const CHAT_ERROR_KEYS: Record<Exclude<MessageErrorKind, 'unknown'>, MainMessageK
   'model-unavailable': 'notif.chatError.kind.model-unavailable',
   'rate-limit': 'notif.chatError.kind.rate-limit',
   network: 'notif.chatError.kind.network',
+  'context-length': 'notif.chatError.kind.context-length',
   'provider-config': 'notif.chatError.kind.provider-config',
 }
 

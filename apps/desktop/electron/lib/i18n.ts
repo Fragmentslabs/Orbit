@@ -84,6 +84,10 @@ export const MESSAGES = {
     'pt-BR': 'falha de rede ao falar com o provedor — tente novamente',
     en: 'network failure talking to the provider — try again',
   },
+  'notif.chatError.kind.context-length': {
+    'pt-BR': 'a conversa passou da janela de contexto do modelo — compacte o histórico',
+    en: 'the conversation outgrew the model context window — compact the history',
+  },
   'notif.chatError.kind.provider-config': {
     'pt-BR': 'o provedor não está configurado — verifique as Configurações',
     en: 'the provider is not configured — check Settings',

@@ -35,6 +35,7 @@ import { formatDuration, formatTime } from "@/src/lib/format"
 import { useSessionStore } from "@/src/stores/session-store"
 import { usePanelStore } from "@/src/stores/panel-store"
 import { parseSourceHref, rescueLegacyCitations, type SourceRef } from "@/src/lib/citations"
+import { chatApi } from "@/src/lib/ipc"
 import { Actions, Action } from "@/src/components/ai/actions"
 import {
   InlineCitation,
@@ -369,13 +370,28 @@ export function MessageError({
   // vira detalhe secundário (nunca é descartado — é o que permite
   // diagnosticar). Só `unknown` não tem explicação e mostra o texto cru.
   const explained = kind !== undefined && kind !== "unknown"
+  // Contexto estourado é a única falha classificada em que trocar de modelo
+  // não é saída: o request gigante vai igual para o próximo. Oferecer o menu
+  // aqui mandaria a pessoa tentar de novo pelo caminho que não funciona — o
+  // que resolve é encolher a conversa.
+  const overflowed = kind === "context-length"
 
   return (
     <div className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive">
       <div className="flex items-start justify-between gap-2">
         <span className="flex-1">{explained ? t(`chat.errorKind.${kind}`) : error}</span>
         <div className="flex shrink-0 items-center gap-1">
-          {explained && (
+          {overflowed && sessionId && (
+            <button
+              type="button"
+              onClick={() => chatApi.compact(sessionId)}
+              className="flex shrink-0 items-center gap-1 rounded-md px-1.5 py-1 font-medium text-destructive hover:bg-destructive/20"
+            >
+              <SparklesIcon className="size-3.5" />
+              {t("usage.compactNow")}
+            </button>
+          )}
+          {explained && !overflowed && (
             <SwitchModelMenu sessionId={sessionId} failedModel={failedModel} onRetry={() => onRetry?.()} />
           )}
           {onRetry && (
