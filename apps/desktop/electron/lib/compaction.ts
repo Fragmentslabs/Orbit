@@ -1,5 +1,6 @@
 import { generateText, type LanguageModel } from 'ai'
 import type { CatalogModel, ChatMessage, TokenUsage } from '@shared/chat'
+import { ABSOLUTE_CONTEXT_CAP } from './context-budget'
 import { messageContextText } from './todo-context'
 
 /**
@@ -16,12 +17,6 @@ const RESERVE_PADDING = 4_000
 const TAIL_USER_MESSAGES = 2
 /** Guarda-corpo do prompt de resumo (~25k tokens) */
 const MAX_SUMMARY_INPUT_CHARS = 100_000
-/** Teto absoluto de contexto pra decidir compactar, independente do
- * model.limit.context anunciado pelo catálogo — modelos de contexto muito
- * grande (1M+) só disparariam a compactação relativa perto de ~1M, deixando
- * a conversa operar rotineiramente com centenas de milhares de tokens de
- * histórico antes de cortar qualquer coisa. */
-const ABSOLUTE_CONTEXT_CAP = 300_000
 
 export const COMPACT_PROMPT = `You compact a conversation's history to free up context. Produce dense Markdown notes preserving, in this priority order:
 1. The user's goal and the task's current state (what's been done, what's left).
@@ -49,14 +44,23 @@ export function findLastSummaryIndex(history: ChatMessage[]): number {
 export function shouldCompact(
   lastTokens: TokenUsage | undefined,
   model: CatalogModel | undefined,
+  estimatedContext = 0,
 ): boolean {
-  if (lastTokens == null || !model?.limit?.context) return false
+  if (!model?.limit?.context) return false
   const reserve =
     Math.min(model.limit.output || RESERVE_OUTPUT_CAP, RESERVE_OUTPUT_CAP) + RESERVE_PADDING
   const effectiveContext = Math.min(model.limit.context, ABSOLUTE_CONTEXT_CAP)
-  const used = lastTokens.lastStep
-    ? lastTokens.lastStep.input + lastTokens.lastStep.output
-    : lastTokens.input + lastTokens.output
+  const reported = lastTokens
+    ? lastTokens.lastStep
+      ? lastTokens.lastStep.input + lastTokens.lastStep.output
+      : lastTokens.input + lastTokens.output
+    : 0
+  // `estimatedContext` é medido no próprio histórico, sem depender do provedor:
+  // vários gateways não devolvem usage nenhum, e um turno que falhou não grava
+  // `tokens` — nos dois casos a conversa crescia para sempre sem nunca
+  // compactar, porque o gatilho só olhava o que o provedor tinha reportado.
+  const used = Math.max(reported, estimatedContext)
+  if (used === 0) return false
   return used >= effectiveContext - reserve
 }
 

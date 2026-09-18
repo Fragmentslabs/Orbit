@@ -17,6 +17,7 @@ import type {
 import { BROWSER_SELECTION_MIME, StorageKeys } from '@shared/chat'
 import { getProvider, modelSupportsVision } from './catalog'
 import { compactHistory, findLastSummaryIndex, shouldCompact } from './compaction'
+import { contextBudget, estimateTokens, maxStepsFor, trimTurnContext } from './context-budget'
 import { createToolApproval, takeDenialReason } from './permission'
 import { classifyProviderError, errorToText, isRecoverableErrorKind } from './errors'
 import { hasStreamedContent, resolveRotation } from './model-rotation'
@@ -62,10 +63,11 @@ import { forwardChatEvent } from './companion-server'
 // este engine foi portado) roda sem teto por padrão (agent.steps ?? Infinity)
 // e só para quando o modelo decide (finishReason === 'stop'). 50 era baixo
 // demais: tarefas de código reais passam disso e a stream cortava no meio,
-// indistinguível de uma conclusão normal. 300 é folga suficiente pra
-// qualquer tarefa real; existe só pra não deixar um loop patológico rodar
-// para sempre.
-const MAX_STEPS = 300
+// indistinguível de uma conclusão normal. O teto agora sai de `maxStepsFor`
+// (context-budget), que o escala pelo contexto do modelo: quem tem janela
+// pequena não tem o que fazer com 300 idas ao provedor. Existe só pra não
+// deixar um loop patológico rodar para sempre — o estouro de contexto quem
+// segura é o trimTurnContext no prepareStep.
 // Nudge do último passo permitido — mesma ideia do MAX_STEPS_PROMPT do
 // opencode (packages/core/src/session/runner/max-steps.ts): em vez de
 // cortar a stream no meio de uma tool call, desabilita as tools e força o
@@ -916,12 +918,22 @@ async function runChatTurn(win: BrowserWindow, input: SendMessageInput): Promise
         const provider = await getProvider(primary.providerId)
         const model = await resolveModel(primary.providerId, primary.modelId)
         const modelVision = modelSupportsVision(provider, primary.modelId)
-        const supportsTools = provider?.models[primary.modelId]?.tool_call !== false
+        const catalogModel = provider?.models[primary.modelId]
+        const supportsTools = catalogModel?.tool_call !== false
+        // Teto de passos e orçamento de contexto DESTE modelo: a rotação pode
+        // cair num modelo de janela menor, e o corte tem que acompanhar.
+        const maxSteps = maxStepsFor(catalogModel)
+        const turnBudget = contextBudget(catalogModel)
 
     // Compactação automática: os tokens reais da última resposta indicam que o
-    // contexto está perto do limite → resume o trecho antigo uma única vez
+    // contexto está perto do limite → resume o trecho antigo uma única vez.
+    // O usage reportado é o sinal preferido, mas não é confiável sozinho: há
+    // gateway que não devolve usage nenhum, e um turno que falhou não grava
+    // `tokens`. A medida do próprio histórico entra como piso — é exatamente o
+    // que será enviado, então não depende de o provedor colaborar.
     const lastTokens = [...history].reverse().find((m) => m.role === 'assistant' && m.tokens)?.tokens
-    if (shouldCompact(lastTokens, provider?.models[primary.modelId])) {
+    const historyTokens = estimateTokens(toModelMessages(history, modelVision))
+    if (shouldCompact(lastTokens, catalogModel, historyTokens)) {
       try {
         const summary = await compactHistory(history, model)
         if (summary) {
@@ -1177,19 +1189,30 @@ async function runChatTurn(win: BrowserWindow, input: SendMessageInput): Promise
               ),
         tools: supportsTools ? buildToolSet(input, toolContext) : undefined,
         toolApproval,
-        stopWhen: stepCountIs(MAX_STEPS),
+        stopWhen: stepCountIs(maxSteps),
         abortSignal: controller.signal,
         providerOptions: await buildProviderOptions({ ...input, providerId: primary.providerId, modelId: primary.modelId }),
         prepareStep: ({ stepNumber, messages }) => {
+          // Corte do acúmulo do tool loop. É AQUI que o contexto do turno é
+          // segurado: a compactação só alcança o histórico entre turnos, e o
+          // que estoura são as tool calls + resultados que o SDK reenvia a
+          // cada step. Sem isto um turno longo pede milhões de tokens e o
+          // provedor recusa a requisição inteira.
+          const trimmed = trimTurnContext(messages, turnBudget)
+          if (trimmed !== messages) {
+            console.warn(
+              `[context] step ${stepNumber}: contexto do turno cortado para caber em ${turnBudget} tokens`,
+            )
+          }
           // Reaplica a normalização de reasoning a cada passo do tool loop: o
           // SDK reconstrói as mensagens entre steps e pode descartar o
           // reasoning_content vazio retornado numa chamada de tool (DeepSeek
           // exige o campo de volta em todas as mensagens de assistente).
           const normalized = normalizeMessages(
-            messages,
+            trimmed,
             interleavedReasoningField(provider, primary.modelId),
           )
-          if (stepNumber < MAX_STEPS) return normalized === messages ? {} : { messages: normalized }
+          if (stepNumber < maxSteps) return normalized === messages ? {} : { messages: normalized }
           return {
             activeTools: [],
             toolChoice: 'none' as const,
@@ -1487,7 +1510,7 @@ async function runChatTurn(win: BrowserWindow, input: SendMessageInput): Promise
             // dispara se mesmo assim o modelo não fechar limpo — sem isso,
             // esse caso ficaria indistinguível de uma conclusão normal tanto
             // pra UI quanto pro modelo no próximo turno.
-            if (stepCount >= MAX_STEPS && part.finishReason !== 'stop') {
+            if (stepCount >= maxSteps && part.finishReason !== 'stop') {
               assistantMessage.truncated = true
             }
             break
