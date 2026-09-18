@@ -56,7 +56,8 @@ export function CompactWorkspaceSelector({
                 {t("branch.title")}
               </span>
               <span className="flex items-center gap-1 text-muted-foreground">
-                <span className="max-w-16 truncate">{byDir?.current}</span>
+                {/* max-w-16 corta quase qualquer nome real de branch aqui */}
+                <span className="max-w-16 truncate" title={byDir?.current}>{byDir?.current}</span>
                 <ChevronRight className="size-3" />
               </span>
             </DropdownMenuItem>

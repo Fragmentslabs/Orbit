@@ -137,6 +137,10 @@ export function BranchSelector({ repoPath, onRequestAgentAction, open: openProp,
             key={branch}
             type="button"
             onClick={() => handleSelect(branch)}
+            // O dropdown tem largura fixa (w-44) e nome de branch é longo por
+            // convenção — `feature/`, `fix/`, número do ticket. Sem o title, a
+            // elipse esconde justamente a parte que distingue uma da outra.
+            title={branch}
             className={cn(
               "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs transition-colors",
               active ? "bg-primary/10 text-primary" : "hover:bg-foreground/10",
@@ -178,6 +182,7 @@ export function BranchSelector({ repoPath, onRequestAgentAction, open: openProp,
               <button
                 type="button"
                 disabled={loading || checkoutLoading}
+                title={data.current || t("branch.detached")}
                 className="flex h-7 items-center gap-1 rounded-md border border-border px-1.5 text-xs transition-colors hover:bg-accent hover:text-accent-foreground"
               />
             }
