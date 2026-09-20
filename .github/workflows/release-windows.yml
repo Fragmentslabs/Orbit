@@ -6,7 +6,7 @@ on:
       - "v*"
   # Permite publicar a partir de uma tag que ja existe, sem mover a tag: empurrar a
   # tag de novo reacenderia o workflow de Linux, reenviando os artefatos de Linux.
-  # Disparar este workflow com ref=homolog e build_ref=v0.1.3 builda a tag e publica.
+  # Disparar este workflow com ref=homolog e build_ref=v0.1.4 builda a tag e publica.
   workflow_dispatch:
     inputs:
       build_ref:

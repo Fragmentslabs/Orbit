@@ -40,11 +40,11 @@ Unlike cloud-only coding assistants, Orbit runs locally and lets you decide how 
 | Persistent cross-session memory | ✅ | Partial | Partial | Partial | Partial |
 | Source-available code | ✅ | ❌ | ❌ | ✅ | ❌ |
 
-*Capabilities evolve fast — this table reflects v0.1.0; verify before choosing a tool.*
+*Capabilities evolve fast — this table reflects v0.1.4; verify before choosing a tool.*
 
 ---
 
-## ✨ Features (v0.1.0)
+## ✨ Features (v0.1.4)
 
 ### 🧠 Agent & modes
 
@@ -164,8 +164,8 @@ Release a new Linux version — GitHub Actions builds and publishes the AppImage
 ```bash
 # 1. bump the version in apps/desktop/package.json (and the root package.json)
 # 2. commit and push, then tag & release:
-git tag v0.1.3
-git push origin v0.1.3
+git tag v0.1.4
+git push origin v0.1.4
 ```
 
 ---

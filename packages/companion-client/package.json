@@ -1,6 +1,6 @@
 {
   "name": "@orbit/companion-client",
-  "version": "0.1.0",
+  "version": "0.1.4",
   "private": true,
   "type": "module",
   "main": "src/index.ts",
@@ -15,7 +15,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@orbit/shared": "0.1.0"
+    "@orbit/shared": "0.1.4"
   },
   "devDependencies": {
     "typescript": "^5.2.2"
