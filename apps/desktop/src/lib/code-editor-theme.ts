@@ -153,6 +153,46 @@ export function editorChrome(dark: boolean) {
       ".cm-searchMatch.cm-searchMatch-selected": {
         backgroundColor: "color-mix(in oklab, var(--primary) 40%, transparent)",
       },
+      // Diagnósticos. O tema padrão do @codemirror/lint fixa fundo branco no
+      // balão, o que fica ilegível no escuro — aqui tudo sai das vars do app.
+      // O padrão do pacote é uma imagem SVG de onda embutida; `text-decoration`
+      // acompanha o tamanho da fonte e fica mais nítido no zoom.
+      ".cm-lintRange": { backgroundImage: "none" },
+      ".cm-lintRange-error": {
+        textDecoration: "underline wavy",
+        textDecorationColor: palette.invalid,
+        textDecorationSkipInk: "none",
+      },
+      ".cm-lintRange-warning": {
+        textDecoration: "underline wavy",
+        textDecorationColor: palette.variable,
+        textDecorationSkipInk: "none",
+      },
+      ".cm-tooltip-lint": {
+        backgroundColor: "var(--popover)",
+        color: "var(--popover-foreground)",
+        border: "1px solid var(--border)",
+        borderRadius: "0.5rem",
+        padding: "0.25rem",
+        maxWidth: "32rem",
+      },
+      ".cm-diagnostic": {
+        borderLeftWidth: "3px",
+        borderRadius: "0.25rem",
+        padding: "0.25rem 0.5rem",
+        fontFamily: "var(--font-sans, system-ui, sans-serif)",
+        fontSize: "12px",
+      },
+      ".cm-diagnostic-error": { borderLeftColor: palette.invalid },
+      ".cm-diagnostic-warning": { borderLeftColor: palette.variable },
+      ".cm-diagnosticSource": {
+        color: "var(--muted-foreground)",
+        fontSize: "11px",
+        marginLeft: "0.375rem",
+      },
+      ".cm-lint-marker-error": { color: palette.invalid },
+      ".cm-lint-marker-warning": { color: palette.variable },
+      ".cm-gutter-lint": { width: "0.75rem" },
       ".cm-panels": {
         backgroundColor: "var(--popover)",
         color: "var(--popover-foreground)",

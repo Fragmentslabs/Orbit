@@ -1435,6 +1435,7 @@ const [viewedFile, setViewedFile] = useState<ViewedFile>();
                       filePath={viewedFile.path}
                       wrap={isMarkdownFile}
                       editable={canEdit}
+                      workspaceRoot={folders[0]}
                       onSave={saveFile}
                       onDirtyChange={setDirty}
                       onChange={handleEditorChange}

@@ -29,9 +29,16 @@ import {
 } from "@codemirror/language"
 import { languages } from "@codemirror/language-data"
 import { highlightSelectionMatches, searchKeymap } from "@codemirror/search"
+import { linter, lintGutter, type Diagnostic } from "@codemirror/lint"
 import { useTheme } from "@/components/theme-provider"
 import { darkHighlightStyle, editorChrome, lightHighlightStyle } from "@/src/lib/code-editor-theme"
 import { planMerge, type AgentWrite, type MergePlan } from "@/src/lib/agent-merge"
+import {
+  eslintDiagnostics,
+  jsonDiagnostics,
+  syntaxDiagnostics,
+} from "@/src/lib/code-diagnostics"
+import { lintApi } from "@/src/lib/ipc"
 
 /**
  * Visualizador/editor do painel de arquivos.
@@ -98,6 +105,47 @@ const agentHighlightTheme = EditorView.baseTheme({
 /** Quanto tempo o realce da escrita do agente fica na tela. */
 const AGENT_HIGHLIGHT_MS = 4000
 
+/** Erro de estrutura sai da árvore que já existe: dá para ser quase imediato. */
+const SYNTAX_LINT_DELAY_MS = 300
+/** O eslint atravessa IPC e roda numa worker; não vale correr atrás de cada tecla. */
+const ESLINT_DELAY_MS = 700
+
+const JSON_FILE_RE = /\.jsonc?$/i
+
+/**
+ * Erro de estrutura, da árvore do Lezer (ou do `JSON.parse`, em .json). Custa
+ * quase nada porque o parse já aconteceu para colorir o arquivo.
+ */
+function syntaxLinter(filePath: string) {
+  const isJson = JSON_FILE_RE.test(filePath)
+  return linter(
+    (view): Diagnostic[] =>
+      isJson ? jsonDiagnostics(view.state.doc.toString()) : syntaxDiagnostics(view.state),
+    { delay: SYNTAX_LINT_DELAY_MS },
+  )
+}
+
+/**
+ * O que o PROJETO considera errado, pelo eslint dele. Silencia de vez quando o
+ * projeto não tem eslint utilizável — repetir a tentativa a cada pausa na
+ * digitação seria puro desperdício.
+ */
+function projectLinter(filePath: string, root: string | undefined) {
+  let unavailable = false
+  return linter(
+    async (view): Promise<Diagnostic[]> => {
+      if (unavailable || !root) return []
+      const result = await lintApi.file({ root, filePath, content: view.state.doc.toString() })
+      if (!result.ok) {
+        unavailable = true
+        return []
+      }
+      return eslintDiagnostics(view.state.doc, result.messages)
+    },
+    { delay: ESLINT_DELAY_MS },
+  )
+}
+
 /**
  * Extensões fixas. Montadas à mão em vez do `basicSetup` para não arrastar
  * autocomplete e lint, que aqui não têm de onde tirar sugestão.
@@ -116,6 +164,7 @@ function baseExtensions(): Extension[] {
     bracketMatching(),
     agentHighlight,
     agentHighlightTheme,
+    lintGutter(),
     // Alt+clique para cursor extra sai daqui: o padrão do
     // `clickAddsSelectionRange` já é `altKey`, mas sem isto o segundo cursor
     // é descartado na hora de aplicar a seleção.
@@ -163,6 +212,8 @@ export interface CodeEditorProps {
   /** Quebra de linha: ligada para prosa (markdown), desligada para código. */
   wrap?: boolean
   editable?: boolean
+  /** Raiz do workspace — o eslint do projeto é resolvido a partir dela. */
+  workspaceRoot?: string
   onSave?: (content: string) => void
   onDirtyChange?: (dirty: boolean) => void
   /** Cada tecla digitada — usado pelo salvamento automático. */
@@ -170,7 +221,16 @@ export interface CodeEditorProps {
 }
 
 export const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(function CodeEditor(
-  { content, filePath, wrap = false, editable = false, onSave, onDirtyChange, onChange },
+  {
+    content,
+    filePath,
+    wrap = false,
+    editable = false,
+    workspaceRoot,
+    onSave,
+    onDirtyChange,
+    onChange,
+  },
   ref,
 ) {
   const host = useRef<HTMLDivElement>(null)
@@ -197,6 +257,7 @@ export const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(function
     wrap: new Compartment(),
     history: new Compartment(),
     editable: new Compartment(),
+    diagnostics: new Compartment(),
   })
   const { theme } = useTheme()
   const isDark =
@@ -245,6 +306,7 @@ export const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(function
           c.wrap.of([]),
           c.history.of(history()),
           c.editable.of(EditorState.readOnly.of(true)),
+          c.diagnostics.of([]),
         ],
       }),
       parent: host.current,
@@ -311,6 +373,20 @@ export const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(function
       effects: conf.current.editable.reconfigure(EditorState.readOnly.of(!editable)),
     })
   }, [editable])
+
+  // O linter do eslint fecha sobre o caminho e a raiz, então é remontado
+  // quando qualquer um muda — junto vai o estado de "projeto sem eslint".
+  // Erro de sintaxe vale em qualquer arquivo; o do projeto só onde a edição
+  // faz sentido (arquivo de commit é histórico, e julgá-lo pela config de
+  // hoje diria mais sobre a config do que sobre o arquivo).
+  useEffect(() => {
+    view.current?.dispatch({
+      effects: conf.current.diagnostics.reconfigure([
+        syntaxLinter(filePath),
+        ...(editable ? [projectLinter(filePath, workspaceRoot)] : []),
+      ]),
+    })
+  }, [filePath, editable, workspaceRoot])
 
   useImperativeHandle(
     ref,

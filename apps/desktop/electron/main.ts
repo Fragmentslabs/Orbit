@@ -12,6 +12,7 @@ import { listCredentialProviders, removeCredential, setCredential } from './lib/
 import { getCatalog, ensureCustomProvidersSeeded } from './lib/catalog'
 import { checkWritePath } from './lib/file-write-guard'
 import { recordManualSave } from './lib/manual-saves'
+import { lintFile, stopLintWorkers } from './lib/eslint-service'
 import { addCustomProvider, listCustomProviders, removeCustomProvider, updateCustomProvider } from './lib/custom-providers'
 import { detectLocal } from './lib/detect-local'
 import { killAll as killAllProcesses, listProcesses, killProcess, getProcessOutput } from './lib/process-manager'
@@ -1137,6 +1138,16 @@ app.whenReady().then(() => {
     },
   )
 
+  /**
+   * Lint do arquivo aberto no painel. O conteúdo vem do BUFFER, não do disco:
+   * o valor está em apontar o erro enquanto se digita, antes de salvar.
+   */
+  ipcMain.handle(
+    'lint:file',
+    async (_event, input: { root: string; filePath: string; content: string }) =>
+      lintFile(input.root, input.filePath, input.content),
+  )
+
   ipcMain.handle('fs:listFilesRecursive', async (_event, dirPath: string) => {
     try {
       const files = await listFilesRecursive(dirPath)
@@ -2071,6 +2082,7 @@ app.whenReady().then(() => {
     // continuaria escrevendo no repositório com o app fechando.
     esteira.abortarTudo()
     rotinas.pararScheduler()
+    stopLintWorkers()
   })
 
   // Provedores locais pré-cadastrados (Ollama, LM Studio)

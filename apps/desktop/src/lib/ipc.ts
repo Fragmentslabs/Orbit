@@ -709,6 +709,30 @@ export type WriteFileResult =
       error?: string
     }
 
+/** Uma mensagem do eslint do projeto, como o main a entrega. */
+export interface LintMessage {
+  line: number
+  column: number
+  endLine?: number
+  endColumn?: number
+  message: string
+  ruleId: string | null
+  /** 1 = aviso, 2 = erro (o mesmo do eslint). */
+  severity: number
+}
+
+export const lintApi = {
+  /**
+   * Passa o BUFFER pelo eslint do projeto — não o arquivo em disco, porque o
+   * valor está em apontar o erro antes de salvar. `unavailable` significa
+   * projeto sem eslint utilizável: quem chama para de pedir.
+   */
+  file: (input: { root: string; filePath: string; content: string }) =>
+    window.ipcRenderer.invoke("lint:file", input) as Promise<
+      { ok: true; messages: LintMessage[] } | { ok: false; unavailable: true }
+    >,
+}
+
 export const fsApi = {
   /**
    * Salva o arquivo aberto no painel. `roots` são as pastas do workspace e
