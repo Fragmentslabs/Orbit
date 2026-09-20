@@ -1,26 +1,32 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
-import { Download, FileText, Maximize2, PanelRight, RotateCw } from "lucide-react"
+import { FileText, Maximize2, PanelRight, RotateCw, X } from "lucide-react"
 import type { DocumentPart } from "@shared/chat"
-import type { DocumentFormat } from "@shared/media"
+import { documentOpensAsFile } from "@shared/media"
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { ArtifactFrame } from "@/src/components/ai/artifact-part"
+import { DocumentDownloadMenu, DocumentSourceBadge } from "@/src/components/ai/document-actions"
+import { MessageResponse } from "@/src/components/ai/message"
 import { documentApi, artifactApi } from "@/src/lib/ipc"
-import { usePanelStore } from "@/src/stores/panel-store"
+import { openDocumentInPanel } from "@/src/lib/open-document"
 
 /**
  * Documento entregável na resposta (tool create_document): relatório,
- * proposta, ata.
+ * proposta, ata, documentação.
  *
- * O que aparece aqui é o HTML de preview, não o PDF — o Electron não embarca
- * o visualizador de PDF do Chrome (carregar um .pdf falha até como página de
- * topo). PDF e DOCX ficam como entrega, nos botões de exportar.
+ * O card mostra o documento de DUAS formas, porque são dois objetos:
  *
- * O PDF nasce DESTE mesmo HTML, então o conteúdo é o mesmo; o que difere é a
- * margem, porque o documento traz um bloco @media screen com margem de
- * leitura e um @media print com margem de documento. Consequência: a quebra
- * de linha do preview não é a do arquivo impresso.
+ * - Documento vivo em Markdown: render NATIVO, no tema do Orbit, igual à
+ *   pré-visualização de .md do modo files. Ele não é um arquivo — é texto que
+ *   se lê e se edita —, então fingir uma folha A4 branca no meio de uma
+ *   conversa escura é enfeite que atrapalha.
+ * - Documento PEDIDO como arquivo (PDF, Word) ou derivado de um: o preview de
+ *   documento mesmo, branco e paginado, num iframe. Ali a folha é o assunto:
+ *   é o que vai sair impresso.
+ *
+ * Qual dos dois vem do REGISTRO, não desta part: a part é o retrato do turno
+ * em que foi criada, e o destino do documento pode mudar depois.
  */
 
 /**
@@ -32,11 +38,6 @@ import { usePanelStore } from "@/src/stores/panel-store"
  * em DPR 1.5. O que incomodava era a REDUÇÃO em si — a 78%, um serifado de
  * 11pt vira ~8.6pt, pequeno e mole; ao abrir em tamanho cheio ficava nítido.
  * Reduzir menos era impossível sem cortar a página.
- *
- * Refluindo, o texto sai no tamanho real e sem nenhuma reamostragem. O preço
- * é a quebra de linha diferir do PDF, o que num preview é aceitável: o
- * arquivo entregue continua sendo gerado em A4 com margem de impressão
- * (@media print), e quem quer ver a paginação exata abre o PDF.
  */
 
 /**
@@ -45,27 +46,30 @@ import { usePanelStore } from "@/src/stores/panel-store"
  * O que decide se um card "domina" a conversa não é o número de pixels, é
  * quanto da tela ele ocupa: o mesmo card é enorme num notebook e modesto num
  * monitor grande.
- *
- * O preview mostra o TOPO do documento, cortado, com esmaecimento na base;
- * ver o resto é o clique, o botão de expandir ou a aba do painel.
  */
 const PREVIEW_VIEWPORT_RATIO = 0.6
 
-const FORMAT_LABEL: Record<DocumentFormat, string> = { pdf: "PDF", docx: "DOCX" }
+/** O que o card precisa saber do registro para se desenhar. */
+interface CardDocument {
+  /** true = preview de arquivo (iframe branco); false = Markdown nativo. */
+  asFile: boolean
+  markdown: string | null
+}
 
 export function DocumentPartView({
   part,
   sessionId,
 }: {
   part: DocumentPart
-  /** Ausente em contextos sem sessão: o botão de abrir no painel some, já que
-   *  as abas do painel são por sessão. */
+  /** Ausente em contextos sem sessão: os botões que dependem da conversa somem,
+   *  já que as abas do painel e as Fontes são por sessão. */
   sessionId?: string
 }) {
   const { t } = useTranslation()
   const [expanded, setExpanded] = useState(false)
   const [reloads, setReloads] = useState(0)
-  const openSourceTab = usePanelStore((s) => s.openSourceTab)
+  const [error, setError] = useState<string | null>(null)
+  const [doc, setDoc] = useState<CardDocument | null>(null)
 
   // Altura da janela para o teto proporcional.
   const [viewportHeight, setViewportHeight] = useState(() =>
@@ -78,6 +82,25 @@ export function DocumentPartView({
   }, [])
 
   const previewHeight = Math.round(viewportHeight * PREVIEW_VIEWPORT_RATIO)
+
+  useEffect(() => {
+    let alive = true
+    void (async () => {
+      const info = await documentApi.info(part.documentId)
+      if (!alive) return
+      // Sem registro (documento apagado) fica o iframe, que ao menos mostra o
+      // preview gravado em disco em vez de um card vazio.
+      if (!info || documentOpensAsFile(info)) {
+        setDoc({ asFile: true, markdown: null })
+        return
+      }
+      const source = await documentApi.source(part.documentId)
+      if (alive) setDoc({ asFile: false, markdown: source?.markdown ?? "" })
+    })()
+    return () => {
+      alive = false
+    }
+  }, [part.documentId, reloads])
 
   // Mesmo motivo do artefato: update_document reescreve os arquivos no lugar,
   // então a URL sozinha não distingue as revisões.
@@ -98,11 +121,45 @@ export function DocumentPartView({
     [part.documentId],
   )
 
-  const onExport = useCallback(
-    (format: DocumentFormat) => {
-      void documentApi.export(part.documentId, format)
+  const body = useCallback(
+    (full: boolean) => {
+      if (doc?.asFile === false) {
+        return (
+          <div
+            className={
+              full
+                ? "min-h-0 min-w-0 flex-1 overflow-auto px-5 py-4 text-sm"
+                : "min-w-0 overflow-auto px-4 py-3 text-sm"
+            }
+            style={full ? undefined : { height: previewHeight }}
+          >
+            <MessageResponse>{doc.markdown ?? ""}</MessageResponse>
+          </div>
+        )
+      }
+      if (doc?.asFile) {
+        return full ? (
+          <ArtifactFrame
+            src={src}
+            title={part.title}
+            nonce={`${nonce}:full`}
+            className="min-h-0 flex-1"
+          />
+        ) : (
+          // O documento ROLA dentro do card. Cheguei a deixar o iframe inerte
+          // para a roda do mouse nunca ser capturada, mas isso tirou a leitura
+          // no próprio card, que é o uso mais comum — e o Chromium encadeia a
+          // rolagem: ao chegar no fim, a conversa volta a rolar sozinha.
+          <div className="relative overflow-hidden bg-white" style={{ height: previewHeight }}>
+            <ArtifactFrame src={src} title={part.title} nonce={nonce} className="h-full w-full" />
+          </div>
+        )
+      }
+      // Antes de saber qual dos dois é, só o espaço — trocar um preview pelo
+      // outro na frente do usuário piscaria a cada abertura da conversa.
+      return <div style={full ? undefined : { height: previewHeight }} className={full ? "flex-1" : ""} />
     },
-    [part.documentId],
+    [doc, src, nonce, part.title, previewHeight],
   )
 
   return (
@@ -119,19 +176,14 @@ export function DocumentPartView({
             )}
           </div>
           <div className="flex shrink-0 items-center gap-1">
-            {part.formats.map((format) => (
-              <Button
-                key={format}
-                variant="outline"
-                size="sm"
-                className="h-6 gap-1 px-2 text-[11px]"
-                onClick={() => onExport(format)}
-                title={t("documents.exportFormat", { format: FORMAT_LABEL[format] })}
-              >
-                <Download className="size-3" />
-                {FORMAT_LABEL[format]}
-              </Button>
-            ))}
+            {sessionId && (
+              <DocumentSourceBadge
+                documentId={part.documentId}
+                sessionId={sessionId}
+                onError={setError}
+              />
+            )}
+            <DocumentDownloadMenu documentId={part.documentId} onError={setError} />
             <Button
               variant="ghost"
               size="icon"
@@ -149,12 +201,10 @@ export function DocumentPartView({
                 className="size-6"
                 aria-label={t("artifacts.openInPanel")}
                 title={t("artifacts.openInPanel")}
-                // Documento abre no visualizador de documentos, nao na aba de
-                // artefato: e o mesmo painel do PDF anexado, com sumario,
-                // localizar, zoom, imprimir e baixar.
-                onClick={() =>
-                  openSourceTab(sessionId, { docId: part.documentId, page: 1, title: part.title })
-                }
+                // Documento vivo abre no canvas de Markdown, para ler e
+                // editar; o que foi pedido como arquivo abre no visualizador,
+                // com sumario, zoom e impressao.
+                onClick={() => void openDocumentInPanel(sessionId, part.documentId, part.title)}
               >
                 <PanelRight className="size-3.5" />
               </Button>
@@ -172,18 +222,21 @@ export function DocumentPartView({
           </div>
         </div>
 
-        {/* O documento ocupa a largura do card e renderiza no tamanho natural;
-            o teto corta a altura, mostrando o topo. */}
-        {/*
-          O documento ROLA dentro do card. Cheguei a deixar o iframe inerte
-          para a roda do mouse nunca ser capturada pelo preview, mas isso
-          tirou do usuário a leitura no próprio card, que é o uso mais comum —
-          e o Chromium encadeia a rolagem: ao chegar no fim do documento, a
-          conversa volta a rolar sozinha.
-        */}
-        <div className="relative overflow-hidden bg-white" style={{ height: previewHeight }}>
-          <ArtifactFrame src={src} title={part.title} nonce={nonce} className="h-full w-full" />
-        </div>
+        {error && (
+          <div className="flex items-start gap-2 border-b bg-destructive/10 px-3 py-1.5 text-[11px] text-destructive">
+            <p className="min-w-0 flex-1">{error}</p>
+            <button
+              type="button"
+              onClick={() => setError(null)}
+              className="flex size-4 shrink-0 cursor-pointer items-center justify-center rounded hover:bg-destructive/20"
+              aria-label={t("common.close")}
+            >
+              <X className="size-3" />
+            </button>
+          </div>
+        )}
+
+        {body(false)}
       </div>
 
       <Dialog open={expanded} onOpenChange={setExpanded}>
@@ -193,12 +246,7 @@ export function DocumentPartView({
           <DialogTitle className="shrink-0 border-b px-4 py-2.5 pr-12 text-sm">
             {part.title}
           </DialogTitle>
-          <ArtifactFrame
-            src={src}
-            title={part.title}
-            nonce={`${nonce}:full`}
-            className="min-h-0 flex-1"
-          />
+          {body(true)}
         </DialogContent>
       </Dialog>
     </>

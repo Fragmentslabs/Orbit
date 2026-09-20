@@ -68,6 +68,7 @@ ${heading(2, 240, 120)}
 ${heading(3, 200, 100)}
 <w:style w:type="paragraph" w:styleId="Quote"><w:name w:val="Quote"/><w:basedOn w:val="Normal"/><w:pPr><w:ind w:left="567"/></w:pPr><w:rPr><w:i/><w:color w:val="444444"/></w:rPr></w:style>
 <w:style w:type="paragraph" w:styleId="ListParagraph"><w:name w:val="List Paragraph"/><w:basedOn w:val="Normal"/><w:pPr><w:ind w:left="720"/><w:spacing w:after="60"/></w:pPr></w:style>
+<w:style w:type="paragraph" w:styleId="CodeBlock"><w:name w:val="HTML Preformatted"/><w:basedOn w:val="Normal"/><w:pPr><w:spacing w:before="0" w:after="0" w:line="240" w:lineRule="auto"/><w:jc w:val="left"/><w:ind w:left="170"/><w:shd w:val="clear" w:color="auto" w:fill="F4F5F7"/></w:pPr><w:rPr><w:rFonts w:ascii="Courier New" w:hAnsi="Courier New"/><w:sz w:val="${half(Math.max(7, style.fontSize - 1.5))}"/></w:rPr></w:style>
 </w:styles>`
 }
 

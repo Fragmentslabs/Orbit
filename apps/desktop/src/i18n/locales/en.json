@@ -670,6 +670,10 @@
       "source": {
         "label": "Source",
         "description": "Cited passage of a document"
+      },
+      "document": {
+        "label": "Document",
+        "description": "Document in Markdown, to read and edit"
       }
     },
     "unreadMessages": "Unread messages"
@@ -2020,7 +2024,19 @@
     "unavailable": "Artifact unavailable"
   },
   "documents": {
-    "exportFormat": "Export {{format}}"
+    "download": "Download",
+    "sourceBadgeOff": "Source",
+    "sourceBadgeOn": "In sources",
+    "saving": "saving…",
+    "saved": "saved",
+    "unsaved": "unsaved changes",
+    "saveFailed": "The change could not be saved.",
+    "unavailable": "Document unavailable",
+    "externalChange": "The agent rewrote this document while you were editing. Nothing was saved over it — choose which version stays.",
+    "loadTheirs": "Load the agent's version",
+    "keepMine": "Keep mine",
+    "useAsSource": "Use as a source in this conversation",
+    "isSource": "Already a source in this conversation"
   },
   "sources": {
     "title": "Sources",

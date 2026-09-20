@@ -1,7 +1,7 @@
 import fsp from 'node:fs/promises'
 import { dialog } from 'electron'
 import { extractDocument } from './documents'
-import { documentFilePath, getMediaEntry } from './media'
+import { documentFilePath, ensureDocumentRender, getMediaEntry } from './media'
 import { printFile, rasterizePdf, type PdfOutlineItem, type PdfTextItem } from './pdf-raster'
 import {
   exportSessionDocument,
@@ -35,13 +35,21 @@ function isSessionDoc(id: string): boolean {
   return SESSION_DOC.test(id)
 }
 
-/** Arquivo de um documento da galeria: o PDF quando houver, senão o .docx. */
+/**
+ * Arquivo de um documento da galeria: o PDF quando houver, senão o .docx.
+ *
+ * Nenhum dos dois em disco é o caso NORMAL — um documento escrito pelo agente
+ * nasce só em Markdown. Como este visualizador trabalha sobre o arquivo
+ * renderizado (é dele que saem as páginas, o sumário e a impressão), o PDF é
+ * gerado aqui, na primeira abertura, e fica em cache.
+ */
 async function mediaFile(id: string): Promise<{ path: string; ext: 'pdf' | 'docx' } | null> {
   for (const ext of ['pdf', 'docx'] as const) {
     const file = await documentFilePath(id, ext)
     if (file) return { path: file, ext }
   }
-  return null
+  const rendered = await ensureDocumentRender(id, 'pdf')
+  return rendered ? { path: rendered, ext: 'pdf' } : null
 }
 
 /** Texto paginado do documento, para o modo Texto e para a contagem da busca. */

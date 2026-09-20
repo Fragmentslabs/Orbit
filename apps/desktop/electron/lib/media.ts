@@ -19,7 +19,7 @@ import { listKeys, readJson } from './storage'
 import { buildDocx } from './docx-package'
 import mammoth from 'mammoth'
 import { rasterizePdf } from './pdf-raster'
-import { parseMarkdown, renderHtml, type DocumentStyle } from './document-render'
+import { parseMarkdown, renderHtml, renderThumbHtml, type DocumentStyle } from './document-render'
 
 export type { MediaEntry, MediaFilter, MediaSource, MediaUsage }
 
@@ -247,8 +247,10 @@ export async function deleteMedia(id: string): Promise<boolean> {
   const file = entry?.path ?? (isImage ? path.join(mediaDir(), id) : null)
   if (!file) return false
   await fsp.rm(file, { force: true })
-  if (entry?.thumb && SAFE_ARTIFACT_ID.test(entry.thumb)) {
-    await fsp.rm(path.join(artifactsDir(), entry.thumb), { force: true })
+  for (const thumb of [entry?.thumb, entry?.thumbDark]) {
+    if (thumb && SAFE_ARTIFACT_ID.test(thumb)) {
+      await fsp.rm(path.join(assetFileDir(thumb), thumb), { force: true })
+    }
   }
 
   await withIndexLock(async () => {
@@ -533,23 +535,36 @@ export function artifactIdFromUrl(url: string): string | null {
 }
 
 /**
- * Captura a miniatura numa janela oculta isolada. Best-effort: qualquer falha
- * devolve undefined e o artefato fica sem thumb (o tile cai no ícone) — nunca
- * derruba a criação do artefato.
+ * Id servido pela própria janela de captura quando o HTML vem em memória —
+ * evita gravar um arquivo em disco só para poder fotografá-lo.
+ *
+ * Sem ponto extra no nome: o SAFE_ARTIFACT_ID só aceita um, o da extensão.
  */
-async function captureThumbnail(artifactId: string): Promise<string | undefined> {
-  let win: BrowserWindow | null = null
-  try {
-    // Partição efêmera e exclusiva: o artefato é conteúdo do modelo e não
-    // divide cookies/storage com o browser do agente nem com o app. Sem o
-    // prefixo "persist:" nada disso encosta no disco.
-    const partition = `artifact-thumb-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
-    // O protocolo TEM que ser registrado nesta sessão também: protocol.handle
-    // vale só para a sessão default, e sem isto o loadURL abaixo fica pendurado
-    // para sempre (nem carrega, nem rejeita).
-    session.fromPartition(partition).protocol.handle(ARTIFACT_SCHEME, handleArtifactRequest)
+const INLINE_THUMB_ID = 'inline_thumb.html'
 
-    win = new BrowserWindow({
+/**
+ * Janela oculta e isolada para fotografar uma página.
+ *
+ * `inlineHtml` é servido pelo protocolo dentro da partição desta captura, que
+ * é efêmera e exclusiva — o artefato é conteúdo do modelo e não divide
+ * cookies/storage com o browser do agente nem com o app. Sem o prefixo
+ * "persist:" nada disso encosta no disco.
+ */
+function openCaptureWindow(inlineHtml: string | null): BrowserWindow {
+  const partition = `artifact-thumb-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+  // O protocolo TEM que ser registrado nesta sessão também: protocol.handle
+  // vale só para a sessão default, e sem isto o loadURL fica pendurado para
+  // sempre (nem carrega, nem rejeita).
+  session.fromPartition(partition).protocol.handle(ARTIFACT_SCHEME, (request) => {
+    if (inlineHtml !== null && request.url.includes(INLINE_THUMB_ID)) {
+      return new Response(inlineHtml, {
+        headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' },
+      })
+    }
+    return handleArtifactRequest(request)
+  })
+
+  return new BrowserWindow({
       show: false,
       width: THUMB_VIEWPORT.width,
       height: THUMB_VIEWPORT.height,
@@ -563,41 +578,89 @@ async function captureThumbnail(artifactId: string): Promise<string | undefined>
         contextIsolation: true,
         sandbox: true,
         backgroundThrottling: false,
-      },
-    })
-    const target = win
-    // O .catch é obrigatório no race: uma rejeição do loadURL depois do timeout
-    // ficaria sem tratamento e derrubaria o processo main.
-    await Promise.race([
-      target.loadURL(`${ARTIFACT_SCHEME}://${artifactId}`).catch(() => {}),
-      new Promise((resolve) => setTimeout(resolve, THUMB_LOAD_TIMEOUT_MS)),
-    ])
-    // Um respiro para fontes/CDN/script do artefato pintarem
-    await new Promise((resolve) => setTimeout(resolve, 900))
-    if (target.isDestroyed()) return undefined
+    },
+  })
+}
 
-    // Mesma proteção do painel: com o renderer ocupado o capturePage pode
-    // nunca resolver, e aí a tool inteira ficaria pendurada.
-    const CAPTURE_TIMED_OUT = Symbol('captureTimedOut')
-    const outcome = await Promise.race([
-      target.webContents.capturePage(),
-      new Promise<typeof CAPTURE_TIMED_OUT>((resolve) =>
-        setTimeout(() => resolve(CAPTURE_TIMED_OUT), THUMB_LOAD_TIMEOUT_MS),
-      ),
-    ])
-    if (outcome === CAPTURE_TIMED_OUT) return undefined
-    const image = outcome
-    const png = image.toPNG()
-    if (png.length === 0) return undefined
-    const buffer = await sharp(png).resize({ width: THUMB_WIDTH, withoutEnlargement: true }).png().toBuffer()
+/** Carrega e dá um respiro para fontes/CDN/script pintarem. */
+async function loadForCapture(win: BrowserWindow, url: string): Promise<void> {
+  // O .catch é obrigatório no race: uma rejeição do loadURL depois do timeout
+  // ficaria sem tratamento e derrubaria o processo main.
+  await Promise.race([
+    win.loadURL(url).catch(() => {}),
+    new Promise((resolve) => setTimeout(resolve, THUMB_LOAD_TIMEOUT_MS)),
+  ])
+  await new Promise((resolve) => setTimeout(resolve, 900))
+}
 
-    const thumbId = `${artifactId.replace(/\.html$/, '')}.png`
-    // assetFileDir pelo prefixo: a mesma captura serve artefato e documento,
-    // que moram em diretórios diferentes.
-    await fsp.writeFile(path.join(assetFileDir(thumbId), thumbId), buffer)
-    return thumbId
+/** Fotografa a janela e grava o PNG reduzido. undefined em qualquer falha. */
+async function shot(win: BrowserWindow, thumbId: string): Promise<string | undefined> {
+  if (win.isDestroyed()) return undefined
+  // Mesma proteção do painel: com o renderer ocupado o capturePage pode nunca
+  // resolver, e aí a tool inteira ficaria pendurada.
+  const CAPTURE_TIMED_OUT = Symbol('captureTimedOut')
+  const outcome = await Promise.race([
+    win.webContents.capturePage(),
+    new Promise<typeof CAPTURE_TIMED_OUT>((resolve) =>
+      setTimeout(() => resolve(CAPTURE_TIMED_OUT), THUMB_LOAD_TIMEOUT_MS),
+    ),
+  ])
+  if (outcome === CAPTURE_TIMED_OUT) return undefined
+  const png = outcome.toPNG()
+  if (png.length === 0) return undefined
+  const buffer = await sharp(png).resize({ width: THUMB_WIDTH, withoutEnlargement: true }).png().toBuffer()
+  // assetFileDir pelo prefixo: a mesma captura serve artefato e documento,
+  // que moram em diretórios diferentes.
+  await fsp.writeFile(path.join(assetFileDir(thumbId), thumbId), buffer)
+  return thumbId
+}
+
+/**
+ * Captura a miniatura. Best-effort: qualquer falha devolve undefined e o
+ * artefato fica sem thumb (o tile cai no ícone) — nunca derruba a criação.
+ */
+async function captureThumbnail(artifactId: string): Promise<string | undefined> {
+  let win: BrowserWindow | null = null
+  try {
+    win = openCaptureWindow(null)
+    await loadForCapture(win, `${ARTIFACT_SCHEME}://${artifactId}`)
+    return await shot(win, `${artifactId.replace(/\.html$/, '')}.png`)
   } catch {
     return undefined
+  } finally {
+    if (win && !win.isDestroyed()) win.destroy()
+  }
+}
+
+/**
+ * Miniatura do documento VIVO em Markdown: a capa tem que parecer a tela que
+ * o usuário abre, no tema do Orbit, e não a folha A4 branca — essa é a cara
+ * do arquivo, e só quem foi pedido como arquivo merece.
+ *
+ * Os dois temas saem da MESMA janela: carregar custa quase um segundo,
+ * fotografar de novo custa quase nada. Ter as duas versões é o que deixa o
+ * tile certo mesmo quando o usuário troca o tema depois — capturar só o atual
+ * deixaria a galeria inteira desencontrada no primeiro clique do seletor.
+ */
+async function captureNativeThumbs(
+  base: string,
+  markdown: string,
+  title: string,
+): Promise<{ thumb?: string; thumbDark?: string }> {
+  let win: BrowserWindow | null = null
+  try {
+    win = openCaptureWindow(renderThumbHtml(parseMarkdown(markdown), title))
+    await loadForCapture(win, `${ARTIFACT_SCHEME}://${INLINE_THUMB_ID}`)
+    const thumb = await shot(win, `${base}.png`)
+    if (win.isDestroyed()) return { thumb }
+    await win.webContents
+      .executeJavaScript("document.documentElement.classList.add('dark')")
+      .catch(() => {})
+    // Um quadro para o Chromium repintar com a paleta trocada.
+    await new Promise((resolve) => setTimeout(resolve, 150))
+    return { thumb, thumbDark: await shot(win, `${base}_dark.png`) }
+  } catch {
+    return {}
   } finally {
     if (win && !win.isDestroyed()) win.destroy()
   }
@@ -718,6 +781,13 @@ export async function readArtifact(id: string): Promise<{ html: string; entry: M
  * Documento autorado pelo agente. O FONTE é Markdown; PDF e DOCX são
  * renderizações dele, e o HTML é o preview mostrado na conversa.
  *
+ * O documento NASCE só em Markdown: `formats` vazio é o caso normal, não uma
+ * falha. Renderizar na criação custava uma janela do Chromium por documento —
+ * e a maioria nunca vira arquivo, porque o usuário lê no chat e segue. PDF e
+ * DOCX passam a ser produzidos no primeiro pedido (baixar, abrir no painel) e
+ * ficam em cache no registro. Quem pede explicitamente um PDF ou um .docx
+ * continua recebendo a renderização na hora da criação, pelo `formats`.
+ *
  * O preview é HTML, e não o PDF, por uma limitação dura: o Electron não
  * embarca o visualizador de PDF do Chrome — carregar um .pdf falha com
  * ERR_FAILED até como página de topo. Como o PDF nasce DESTE html (via
@@ -747,6 +817,15 @@ export interface DocumentRef {
   formats: DocumentFormat[]
   thumb?: string
   revision: number
+}
+
+async function fileExists(file: string): Promise<boolean> {
+  try {
+    await fsp.access(file)
+    return true
+  } catch {
+    return false
+  }
 }
 
 /** Base do id, sem extensão: doc_xxx */
@@ -797,6 +876,26 @@ async function renderPdf(htmlId: string): Promise<Buffer | null> {
   }
 }
 
+/**
+ * Uma renderização, a partir do que já está em disco: o PDF nasce do .html
+ * (printToPDF), o .docx nasce do Markdown. null quando falhou — um formato que
+ * não saiu não pode constar no registro.
+ */
+async function renderDocumentFormat(
+  base: string,
+  format: DocumentFormat,
+  markdown: string,
+  title: string,
+  style?: DocumentStyle,
+): Promise<Buffer | null> {
+  if (format === 'pdf') return renderPdf(`${base}.html`)
+  try {
+    return await buildDocx(parseMarkdown(markdown), title, style)
+  } catch {
+    return null
+  }
+}
+
 /** Escreve fonte, preview e as renderizações pedidas. Retorna os formatos que
  *  realmente foram gerados — um PDF que falhou não pode constar no registro. */
 async function writeDocumentFiles(
@@ -813,21 +912,13 @@ async function writeDocumentFiles(
   await fsp.writeFile(path.join(dir, `${base}.html`), html, 'utf8')
 
   const done: DocumentFormat[] = []
-  if (formats.includes('pdf')) {
-    const pdf = await renderPdf(`${base}.html`)
-    if (pdf) {
-      await fsp.writeFile(path.join(dir, `${base}.pdf`), pdf)
-      done.push('pdf')
-    }
-  }
-  if (formats.includes('docx')) {
-    try {
-      const docx = await buildDocx(parseMarkdown(markdown), title, style)
-      await fsp.writeFile(path.join(dir, `${base}.docx`), docx)
-      done.push('docx')
-    } catch {
-      // formato que falhou simplesmente não entra em `formats`
-    }
+  // Set: `formats` vem do modelo e um formato repetido gravaria o arquivo duas
+  // vezes e entraria duplicado no registro.
+  for (const format of new Set(formats)) {
+    const bytes = await renderDocumentFormat(base, format, markdown, title, style)
+    if (!bytes) continue
+    await fsp.writeFile(path.join(dir, `${base}.${format}`), bytes)
+    done.push(format)
   }
   return done
 }
@@ -840,7 +931,12 @@ export async function saveDocument(
   const base = `doc_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`
   const html = renderHtml(parseMarkdown(markdown), meta.title, meta.style)
   const written = await writeDocumentFiles(base, markdown, html, formats, meta.title, meta.style)
-  const thumb = await captureThumbnail(`${base}.html`)
+  // A capa segue o DESTINO do documento: quem vai virar arquivo é fotografado
+  // como folha; quem fica vivo em Markdown, como a tela nativa.
+  const { thumb, thumbDark } =
+    formats.length > 0
+      ? { thumb: await captureThumbnail(`${base}.html`), thumbDark: undefined }
+      : await captureNativeThumbs(base, markdown, meta.title)
 
   const id = `${base}.md`
   const file = path.join(documentsDir(), id)
@@ -857,8 +953,12 @@ export async function saveDocument(
     folderId: meta.folderId,
     name: meta.title,
     formats: written,
+    // O que foi PEDIDO, e não o que saiu: um PDF que falhou não vira documento
+    // vivo por acidente — o destino continua sendo o arquivo.
+    delivery: formats.length > 0 ? [...new Set(formats)] : undefined,
     style: meta.style as Record<string, unknown> | undefined,
     thumb,
+    thumbDark,
     revision: 1,
   }
   await withIndexLock(async () => {
@@ -876,28 +976,67 @@ export async function saveDocument(
   }
 }
 
+export type UpdateDocumentResult =
+  | { ok: true; ref: DocumentRef }
+  | { ok: false; reason: 'notFound' }
+  /** O documento andou desde a versão em que o agente se baseou. */
+  | { ok: false; reason: 'stale'; revision: number }
+
 /**
  * Reescreve um documento existente NO MESMO id. "Modificar" é reescrever o
  * fonte e renderizar de novo: editar o binário preservando formatação é
  * intratável, e o fonte guardado torna a reescrita exata.
+ *
+ * E reescrever é DESTRUTIVO: o texto novo substitui o anterior inteiro. Como o
+ * usuário edita o mesmo arquivo no canvas, uma reescrita baseada numa leitura
+ * velha apagaria em silêncio o que ele digitou no meio do caminho. Daí o
+ * `baseRevision`: o agente diz de que versão partiu, e esta função recusa
+ * quando o documento já andou.
+ *
+ * Sem `baseRevision` a escrita passa — é o caso de quem produziu o texto do
+ * zero e não leu nada. A exceção é o documento com edição humana pendente:
+ * ali escrever às cegas é justamente o acidente que se quer evitar, então a
+ * leitura passa a ser obrigatória.
  */
 export async function updateDocument(
   id: string,
   markdown: string,
-  options: { title?: string; formats?: DocumentFormat[]; style?: DocumentStyle },
-): Promise<DocumentRef | null> {
+  options: {
+    title?: string
+    formats?: DocumentFormat[]
+    style?: DocumentStyle
+    baseRevision?: number
+  },
+): Promise<UpdateDocumentResult> {
   const entry = await getMediaEntry(id)
-  if (!entry || mediaKind(entry) !== 'document') return null
+  if (!entry || mediaKind(entry) !== 'document') return { ok: false, reason: 'notFound' }
+
+  const knownRevision = entry.revision ?? 1
+  const stale =
+    options.baseRevision !== undefined
+      ? options.baseRevision !== knownRevision
+      : entry.userEdited === true
+  if (stale) return { ok: false, reason: 'stale', revision: knownRevision }
 
   const base = documentBase(id)
   const title = options.title ?? entry.name ?? 'Documento'
-  const formats = options.formats ?? entry.formats ?? ['pdf']
+  // Omitir `formats` mantém o que o documento já tem renderizado — inclusive
+  // nada. Cair em ['pdf'] aqui faria a primeira edição de um documento que
+  // nasceu só em Markdown gerar um arquivo que ninguém pediu.
+  const formats = options.formats ?? entry.formats ?? []
   // Estilo omitido = mantem o que o documento ja tinha. Sem isso, mexer no
   // texto ressetaria a fonte e as cores escolhidas antes.
   const style = (options.style ?? entry.style) as DocumentStyle | undefined
   const html = renderHtml(parseMarkdown(markdown), title, style)
   const written = await writeDocumentFiles(base, markdown, html, formats, title, style)
-  const thumb = (await captureThumbnail(`${base}.html`)) ?? entry.thumb
+  const asFile = formats.length > 0
+  const captured = asFile
+    ? { thumb: await captureThumbnail(`${base}.html`), thumbDark: undefined }
+    : await captureNativeThumbs(base, markdown, title)
+  const thumb = captured.thumb ?? entry.thumb
+  // Virou arquivo: a capa escura deixa de existir, senão o tile continuaria
+  // mostrando a tela nativa de um documento que agora é uma folha.
+  const thumbDark = asFile ? undefined : (captured.thumbDark ?? entry.thumbDark)
   const revision = (entry.revision ?? 1) + 1
 
   await withIndexLock(async () => {
@@ -907,8 +1046,15 @@ export async function updateDocument(
     current.size = Buffer.byteLength(markdown, 'utf8')
     current.name = title
     current.formats = written
+    // Pedir um formato agora ("me manda em Word") muda o destino do documento;
+    // omitir mantém o que ele já era.
+    if (options.formats?.length) current.delivery = [...new Set(options.formats)]
+    // O agente escreveu sabendo da versão do usuário: não há mais edição
+    // humana pendente de ser vista.
+    current.userEdited = false
     current.style = style as Record<string, unknown> | undefined
     current.thumb = thumb
+    current.thumbDark = thumbDark
     current.revision = revision
     await writeIndex(entries)
   })
@@ -919,7 +1065,10 @@ export async function updateDocument(
     }
   }
 
-  return { id, title, previewUrl: `${ARTIFACT_SCHEME}://${base}.html`, formats: written, thumb, revision }
+  return {
+    ok: true,
+    ref: { id, title, previewUrl: `${ARTIFACT_SCHEME}://${base}.html`, formats: written, thumb, revision },
+  }
 }
 
 /** Markdown de origem — é o que o agente relê antes de modificar. */
@@ -935,12 +1084,166 @@ export async function readDocumentSource(
   }
 }
 
-/** Caminho absoluto de uma renderização, para exportar/abrir fora. */
+/**
+ * A edição do USUÁRIO no canvas: reescreve o fonte e o preview, e nada além.
+ *
+ * Diferente do updateDocument, que é a reescrita do agente, aqui não se
+ * renderiza arquivo nem se captura miniatura: isto roda a cada pausa da
+ * digitação, e abrir uma janela do Chromium a cada frase deixaria o editor
+ * pesado. As renderizações em disco ficam marcadas como vencidas — `formats`
+ * é zerado, então o próximo download refaz o arquivo a partir do texto novo em
+ * vez de entregar a versão anterior.
+ *
+ * A miniatura envelhece até a próxima escrita do agente. Ela é a capa do tile
+ * na galeria: atrasa, não mente sobre o conteúdo.
+ *
+ * Derivado não entra aqui: o Markdown dele é um bilhete, e gravar por cima
+ * apagaria o bilhete sem tocar no arquivo que o usuário vê.
+ *
+ * O `baseRevision` é a mesma guarda do updateDocument, na direção oposta: o
+ * agente também escreve neste arquivo, e uma gravação baseada no texto de
+ * antes apagaria o que ele acabou de produzir. Recusar devolve a revisão que
+ * está em disco, para o canvas oferecer a escolha em vez de decidir sozinho.
+ */
+export type SaveDocumentEditResult =
+  | { ok: true; revision: number }
+  | { ok: false; reason: 'notFound' }
+  | { ok: false; reason: 'stale'; revision: number }
+
+export async function saveDocumentEdit(
+  id: string,
+  markdown: string,
+  baseRevision?: number,
+): Promise<SaveDocumentEditResult> {
+  const entry = await getMediaEntry(id)
+  if (!entry || mediaKind(entry) !== 'document' || entry.derived) {
+    return { ok: false, reason: 'notFound' }
+  }
+  const knownRevision = entry.revision ?? 1
+  if (baseRevision !== undefined && baseRevision !== knownRevision) {
+    return { ok: false, reason: 'stale', revision: knownRevision }
+  }
+
+  const base = documentBase(id)
+  const title = entry.name ?? 'Documento'
+  const dir = documentsDir()
+  await fsp.writeFile(path.join(dir, `${base}.md`), markdown, 'utf8')
+  await fsp.writeFile(
+    path.join(dir, `${base}.html`),
+    renderHtml(parseMarkdown(markdown), title, entry.style as DocumentStyle | undefined),
+    'utf8',
+  )
+
+  const revision = knownRevision + 1
+  await withIndexLock(async () => {
+    const entries = await readIndex()
+    const current = entries.find((e) => e.id === id)
+    if (!current) return
+    current.size = Buffer.byteLength(markdown, 'utf8')
+    current.formats = []
+    current.revision = revision
+    // A partir daqui o agente não pode reescrever sem antes ler: o que está em
+    // disco é trabalho da pessoa, não a última versão que ele conhece.
+    current.userEdited = true
+    await writeIndex(entries)
+  })
+
+  // Mesmo aviso do updateDocument: o card na conversa mostra o preview pela
+  // URL do .html, que não muda quando o arquivo é reescrito no lugar.
+  for (const win of BrowserWindow.getAllWindows()) {
+    if (!win.isDestroyed()) {
+      win.webContents.send('artifact:updated', { artifactId: `${base}.html`, revision })
+    }
+  }
+  return { ok: true, revision }
+}
+
+/** Anota a fonte que este documento virou, para não promover duas vezes. */
+export async function setDocumentSourceId(id: string, sourceId: string): Promise<void> {
+  await withIndexLock(async () => {
+    const entries = await readIndex()
+    const current = entries.find((e) => e.id === id)
+    if (!current) return
+    current.sourceId = sourceId
+    await writeIndex(entries)
+  })
+}
+
+/** O que o renderer precisa para decidir em que aba o documento abre. */
+export async function documentInfo(
+  id: string,
+): Promise<Pick<MediaEntry, 'id' | 'name' | 'delivery' | 'derived' | 'formats' | 'revision'> | null> {
+  const entry = await getMediaEntry(id)
+  if (!entry || mediaKind(entry) !== 'document') return null
+  return {
+    id: entry.id,
+    name: entry.name,
+    delivery: entry.delivery,
+    derived: entry.derived,
+    formats: entry.formats,
+    revision: entry.revision,
+  }
+}
+
+/** Caminho absoluto de uma renderização QUE JÁ EXISTE — não gera nada. */
 export async function documentFilePath(id: string, format: DocumentFormat): Promise<string | null> {
   const entry = await getMediaEntry(id)
   if (!entry || mediaKind(entry) !== 'document') return null
   if (!(entry.formats ?? []).includes(format)) return null
   return path.join(documentsDir(), `${documentBase(id)}.${format}`)
+}
+
+/**
+ * Caminho de uma renderização, GERANDO-A quando ainda não existe.
+ *
+ * É o que sustenta o documento que nasce só em Markdown: o PDF e o .docx são
+ * produzidos no momento em que alguém os pede — o botão de baixar, o
+ * visualizador do painel — e ficam gravados no registro, então o segundo
+ * pedido sai de graça.
+ *
+ * Só vale para documento com fonte em Markdown. Os DERIVADOS (a cópia de um
+ * .docx anexado, o resultado de juntar PDFs) não têm fonte: o que seria
+ * renderizado ali é o preview, não o documento, e a conversão sairia pior que
+ * o arquivo que já está em disco.
+ */
+export async function ensureDocumentRender(
+  id: string,
+  format: DocumentFormat,
+): Promise<string | null> {
+  const entry = await getMediaEntry(id)
+  if (!entry || mediaKind(entry) !== 'document') return null
+
+  const base = documentBase(id)
+  const file = path.join(documentsDir(), `${base}.${format}`)
+  // Derivado não tem o que renderizar: o Markdown do registro é um bilhete, e
+  // gerar um .docx a partir dele entregaria um arquivo vazio com cara de
+  // documento. Vale o que está em disco, e só.
+  if (entry.derived) return (entry.formats ?? []).includes(format) ? file : null
+  // O registro diz o que foi renderizado, mas quem decide é o disco: o arquivo
+  // pode ter sido apagado por fora, e aí vale gerar de novo em vez de devolver
+  // um caminho que não abre.
+  if ((entry.formats ?? []).includes(format) && (await fileExists(file))) return file
+
+  const markdown = await fsp.readFile(entry.path, 'utf8').catch(() => null)
+  if (markdown === null) return null
+  const bytes = await renderDocumentFormat(
+    base,
+    format,
+    markdown,
+    entry.name ?? 'Documento',
+    entry.style as DocumentStyle | undefined,
+  )
+  if (!bytes) return null
+  await fsp.writeFile(file, bytes)
+
+  await withIndexLock(async () => {
+    const entries = await readIndex()
+    const current = entries.find((e) => e.id === id)
+    if (!current || (current.formats ?? []).includes(format)) return
+    current.formats = [...(current.formats ?? []), format]
+    await writeIndex(entries)
+  })
+  return file
 }
 
 /** Vincula o documento à mensagem onde ele apareceu (mesmo motivo do
@@ -1006,6 +1309,7 @@ export async function saveDerivedDocx(
     folderId: meta.folderId,
     name: meta.title,
     formats: ['docx'],
+    derived: true,
     thumb,
     revision: 1,
   }
@@ -1090,6 +1394,7 @@ export async function saveDerivedPdf(
     folderId: meta.folderId,
     name: meta.title,
     formats: ['pdf'],
+    derived: true,
     thumb,
     revision: 1,
   }

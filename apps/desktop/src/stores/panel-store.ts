@@ -1,6 +1,6 @@
 import { create } from "zustand"
 
-export type TabType = "chat" | "terminal" | "folders" | "browser" | "diff" | "media" | "artifact" | "sources" | "source"
+export type TabType = "chat" | "terminal" | "folders" | "browser" | "diff" | "media" | "artifact" | "sources" | "source" | "document"
 
 export interface PanelTab {
   id: string
@@ -16,6 +16,8 @@ export interface PanelTab {
   url?: string
   /** Aba Artefato: id do registro (art_xxx.html) que a aba renderiza. */
   artifactId?: string
+  /** Aba Documento: id do registro (doc_xxx.md) aberto no canvas de Markdown. */
+  documentId?: string
   /** Aba Fonte: documento aberto por uma citacao, e o trecho a grifar. */
   sourceDocId?: string
   sourcePage?: number
@@ -75,6 +77,9 @@ interface PanelState {
   /** Abre (ou reaproveita) a aba que renderiza um artefato em tela cheia.
    *  Chamada pelo card na conversa e pela galeria. */
   openArtifactTab: (sessionId: string, artifactId: string, title: string) => void
+  /** Abre (ou reaproveita) o canvas de Markdown de um documento vivo — o que
+   *  foi PEDIDO como PDF/Word abre no visualizador, pelo openSourceTab. */
+  openDocumentTab: (sessionId: string, ref: { documentId: string; title: string }) => void
   /** Abre (ou reaproveita) a aba que mostra uma fonte no trecho citado.
    *  Chamada pela citacao na conversa. */
   openSourceTab: (
@@ -216,6 +221,32 @@ export const usePanelStore = create<PanelState>((set, get) => {
           title,
           sessionId,
           artifactId,
+        }
+        return {
+          rightPanelOpen: true,
+          tabsBySession: { ...state.tabsBySession, [sessionId]: [...tabs, tab] },
+          activeTabBySession: { ...state.activeTabBySession, [sessionId]: tab.id },
+        }
+      }),
+
+    openDocumentTab: (sessionId, ref) =>
+      set((state) => {
+        const tabs = state.tabsBySession[sessionId] ?? []
+        // Uma aba por documento, como no artefato: o documento é um só, e
+        // abrir o mesmo duas vezes daria dois editores sobre o mesmo arquivo.
+        const existing = tabs.find((t) => t.type === "document" && t.documentId === ref.documentId)
+        if (existing) {
+          return {
+            rightPanelOpen: true,
+            activeTabBySession: { ...state.activeTabBySession, [sessionId]: existing.id },
+          }
+        }
+        const tab: PanelTab = {
+          id: `document-${nextTabId()}`,
+          type: "document",
+          title: ref.title,
+          sessionId,
+          documentId: ref.documentId,
         }
         return {
           rightPanelOpen: true,

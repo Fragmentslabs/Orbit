@@ -23,6 +23,9 @@ export type Block =
   | { type: 'listItem'; text: string; ordered: boolean }
   | { type: 'quote'; text: string }
   | { type: 'table'; header: string[]; rows: string[][]; align: CellAlign[] }
+  /** Bloco de código cercado por ``` — as linhas vão CRUAS, sem juntar nem
+   *  aparar, porque indentação e quebra são o conteúdo. */
+  | { type: 'code'; lines: string[]; lang?: string }
   | { type: 'rule' }
   | { type: 'pageBreak' }
 
@@ -78,8 +81,13 @@ const HEADING_SCALE = [1.82, 1.36, 1.14]
  * uma cor com aspas quebraria o XML e o .docx nem abriria.
  */
 export function normalizeStyle(style?: DocumentStyle): ResolvedStyle {
+  // O modelo costuma mandar uma PILHA de CSS ("Inter, Segoe UI, sans-serif")
+  // onde o esquema pede um nome. Sem separar, a limpeza abaixo apagava as
+  // vírgulas e sobrava "Inter Segoe UI sans-serif" — uma fonte que não existe
+  // em máquina nenhuma, então o documento caía no fallback em silêncio.
+  const first = (style?.fontFamily ?? '').split(',')[0].replace(/["']/g, '')
   // O hífen fica por último na classe, onde é literal — sem precisar de escape.
-  const family = (style?.fontFamily ?? '').replace(/[^a-zA-Z0-9 -]/g, '').trim().slice(0, 40)
+  const family = first.replace(/[^a-zA-Z0-9 -]/g, '').trim().slice(0, 40)
   const hex = (style?.accentColor ?? '').replace(/^#/, '')
   return {
     fontFamily: family || DEFAULT_STYLE.fontFamily,
@@ -105,7 +113,7 @@ export function headingSize(style: ResolvedStyle, level: 1 | 2 | 3): number {
  *  pode ser bem diferente do que o agente quis. */
 export function fontStack(style: ResolvedStyle): string {
   const monoish = /courier|mono|consolas/i.test(style.fontFamily)
-  const sansish = /arial|helvetica|calibri|verdana|tahoma|segoe|roboto|open sans/i.test(style.fontFamily)
+  const sansish = /arial|helvetica|calibri|verdana|tahoma|segoe|roboto|inter|open sans|sans-serif/i.test(style.fontFamily)
   const generic = monoish ? 'monospace' : sansish ? 'sans-serif' : "'Times New Roman', serif"
   return `'${style.fontFamily}', ${generic}`
 }
@@ -113,6 +121,14 @@ export function fontStack(style: ResolvedStyle): string {
 /** Quebra de página explícita no fonte — o Markdown não tem sintaxe para isso
  *  e um documento de várias páginas precisa. */
 const PAGE_BREAK = /^\\pagebreak\s*$/i
+
+/**
+ * Cerca de bloco de código. Sem isto, ``` caía no ramo de parágrafo e as
+ * linhas eram JUNTADAS POR ESPAÇO — o código chegava ao documento numa linha
+ * só, com os marcadores crus à mostra. É a sintaxe que mais aparece em
+ * documentação técnica, que é o uso mais comum do documento.
+ */
+const FENCE = /^(`{3,}|~{3,})\s*([A-Za-z0-9+#._-]*)\s*$/
 
 const HEADING = /^(#{1,3})\s+(.*)$/
 const BULLET = /^[-*+]\s+(.*)$/
@@ -180,6 +196,29 @@ export function parseMarkdown(markdown: string): Block[] {
     if (RULE.test(trimmed)) {
       flushParagraph()
       blocks.push({ type: 'rule' })
+      continue
+    }
+
+    // A cerca é testada ANTES da régua e do resto: dentro dela nada é
+    // interpretado, senão um `# comentário` de shell viraria título.
+    const fence = FENCE.exec(trimmed)
+    if (fence) {
+      flushParagraph()
+      const marker = fence[1][0]
+      const size = fence[1].length
+      const code: string[] = []
+      i += 1
+      while (i < lines.length) {
+        const closing = FENCE.exec(lines[i].trim())
+        // Fecha só com o MESMO caractere e pelo menos o mesmo comprimento: é o
+        // que deixa um bloco de Markdown conter uma cerca menor por dentro.
+        if (closing && closing[1][0] === marker && closing[1].length >= size) break
+        code.push(lines[i])
+        i += 1
+      }
+      // Cerca não fechada: o bloco entra assim mesmo, até o fim do texto.
+      // Descartar seria perder o conteúdo por causa de um marcador faltando.
+      blocks.push({ type: 'code', lines: code, ...(fence[2] ? { lang: fence[2] } : {}) })
       continue
     }
 
@@ -335,6 +374,19 @@ function documentCss(style: ResolvedStyle): string {
   li { margin: 0 0 .25em; }
   blockquote { margin: 0 0 .7em; padding-left: 1em; border-left: 3px solid ${accent}; color: #444; }
   code { font-family: 'Courier New', monospace; font-size: .92em; background: #f3f3f3; padding: .1em .3em; }
+  /*
+   * Bloco de código. O pre-wrap não é enfeite: numa folha A4 a linha longa
+   * sem quebra sai CORTADA no PDF, e o que passa da margem simplesmente não
+   * é impresso. E o alinhamento volta a ser à esquerda porque o corpo do
+   * documento pode estar justificado, o que em código espaça os símbolos.
+   */
+  pre { margin: 0 0 .8em; padding: .6em .8em; background: #f6f7f9;
+        border: 1px solid #e4e6ea; border-left: 3px solid ${accent};
+        font-family: 'Courier New', monospace; font-size: ${Math.max(7, style.fontSize - 1.5)}pt;
+        line-height: 1.45; text-align: left; white-space: pre-wrap;
+        overflow-wrap: break-word; break-inside: avoid; }
+  /* Dentro do bloco o <code> não repete o fundo nem o respiro do inline. */
+  pre code { background: none; padding: 0; font-size: 1em; }
   hr { border: 0; border-top: 1px solid ${accent}; margin: 1.2em 0; opacity: .35; }
   table { border-collapse: collapse; width: 100%; margin: 0 0 .9em;
           font-size: ${Math.max(7, style.fontSize - 1)}pt; }
@@ -366,8 +418,11 @@ function documentCss(style: ResolvedStyle): string {
 `
 }
 
-export function renderHtml(blocks: Block[], title: string, style?: DocumentStyle): string {
-  const resolved = normalizeStyle(style)
+/**
+ * Os blocos em HTML, sem página nem estilo — é o que o documento impresso e a
+ * miniatura nativa têm em comum. Cada um põe o seu CSS em volta.
+ */
+function htmlBody(blocks: Block[]): string {
   const parts: string[] = []
   let list: { ordered: boolean; items: string[] } | null = null
   /**
@@ -404,6 +459,11 @@ export function renderHtml(blocks: Block[], title: string, style?: DocumentStyle
       case 'quote':
         parts.push(`<blockquote${breakClass()}>${inlineHtml(block.text)}</blockquote>`)
         break
+      case 'code':
+        parts.push(
+          `<pre${breakClass()}><code>${block.lines.map(escapeXml).join('\n')}</code></pre>`,
+        )
+        break
       case 'rule':
         parts.push(`<hr${breakClass()}>`)
         break
@@ -435,14 +495,76 @@ export function renderHtml(blocks: Block[], title: string, style?: DocumentStyle
     }
   }
   flushList()
+  return parts.join('\n')
+}
 
+export function renderHtml(blocks: Block[], title: string, style?: DocumentStyle): string {
   return `<!doctype html>
 <html lang="pt-BR"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${escapeXml(title)}</title>
-<style>${documentCss(resolved)}</style>
+<style>${documentCss(normalizeStyle(style))}</style>
 </head><body>
-${parts.join('\n')}
+${htmlBody(blocks)}
+</body></html>`
+}
+
+/**
+ * A MINIATURA de um documento vivo em Markdown.
+ *
+ * O tile da galeria é a capa do documento, então ele tem que parecer o que o
+ * usuário vê ao abrir: a tela nativa no tema do Orbit, e não a folha A4 branca
+ * — essa é a cara do PDF, e só quem foi pedido como arquivo merece.
+ *
+ * Sai com as DUAS paletas na mesma página, trocadas por uma classe no
+ * <html>: a captura carrega a página uma vez e fotografa os dois temas, o que
+ * evita uma segunda janela do Chromium e deixa o tile certo mesmo quando o
+ * usuário troca o tema depois.
+ *
+ * As cores são os tokens do app (index.css), em oklch — o Chromium entende, e
+ * copiar os valores é o que faz o tile combinar com a grade em volta dele. A
+ * fonte não: a Geist é empacotada pelo renderer e não existe nesta janela, daí
+ * a pilha de sistema.
+ */
+export function renderThumbHtml(blocks: Block[], title: string): string {
+  const body = htmlBody(blocks)
+  return `<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8">
+<title>${escapeXml(title)}</title>
+<style>
+  :root { color-scheme: light;
+    --bg: oklch(1 0 0); --fg: oklch(0.141 0.005 285.823);
+    --muted: oklch(0.967 0.001 286.375); --muted-fg: oklch(0.552 0.016 285.938);
+    --border: oklch(0.92 0.004 286.32); }
+  :root.dark { color-scheme: dark;
+    --bg: oklch(0.141 0.005 285.823); --fg: oklch(0.985 0 0);
+    --muted: oklch(0.274 0.006 286.033); --muted-fg: oklch(0.705 0.015 286.067);
+    --border: oklch(1 0 0 / 14%); }
+  body { margin: 0; padding: 34px 40px; background: var(--bg); color: var(--fg);
+         font: 15px/1.65 ui-sans-serif, 'Segoe UI', system-ui, sans-serif; }
+  h1 { font-size: 1.7em; margin: 0 0 .5em; font-weight: 600; letter-spacing: -.01em; }
+  h2 { font-size: 1.3em; margin: 1.2em 0 .4em; font-weight: 600; }
+  h3 { font-size: 1.1em; margin: 1em 0 .3em; font-weight: 600; }
+  p { margin: 0 0 .7em; }
+  ul, ol { margin: 0 0 .7em 1.3em; padding: 0; }
+  li { margin: 0 0 .25em; }
+  blockquote { margin: 0 0 .7em; padding-left: .9em; border-left: 2px solid var(--border);
+               color: var(--muted-fg); }
+  code { font-family: ui-monospace, 'Cascadia Mono', Consolas, monospace; font-size: .88em;
+         background: var(--muted); border-radius: 4px; padding: .1em .35em; }
+  pre { margin: 0 0 .8em; padding: .7em .9em; background: var(--muted);
+        border: 1px solid var(--border); border-radius: 8px;
+        font-family: ui-monospace, 'Cascadia Mono', Consolas, monospace; font-size: .82em;
+        line-height: 1.5; white-space: pre-wrap; overflow-wrap: break-word; }
+  pre code { background: none; padding: 0; font-size: 1em; }
+  hr { border: 0; border-top: 1px solid var(--border); margin: 1.2em 0; }
+  table { border-collapse: collapse; width: 100%; margin: 0 0 .8em; font-size: .9em; }
+  th, td { border: 1px solid var(--border); padding: .35em .5em; text-align: left; }
+  th { background: var(--muted); font-weight: 600; }
+  .c { text-align: center; } .r { text-align: right; }
+</style>
+</head><body>
+${body}
 </body></html>`
 }
 
@@ -467,10 +589,14 @@ function inlineOoxml(text: string): string {
 const NUM_BULLET = 1
 const NUM_ORDERED = 2
 
-function paragraphOoxml(content: string, opts: { style?: string; numId?: number; pageBreak?: boolean } = {}): string {
+function paragraphOoxml(
+  content: string,
+  opts: { style?: string; numId?: number; pageBreak?: boolean; after?: number } = {},
+): string {
   const pPr: string[] = []
   if (opts.style) pPr.push(`<w:pStyle w:val="${opts.style}"/>`)
   if (opts.numId) pPr.push(`<w:numPr><w:ilvl w:val="0"/><w:numId w:val="${opts.numId}"/></w:numPr>`)
+  if (opts.after !== undefined) pPr.push(`<w:spacing w:after="${opts.after}"/>`)
   if (opts.pageBreak) pPr.push('<w:pageBreakBefore/>')
   const props = pPr.length > 0 ? `<w:pPr>${pPr.join('')}</w:pPr>` : ''
   return `<w:p>${props}${content}</w:p>`
@@ -542,6 +668,25 @@ export function renderOoxmlBody(blocks: Block[], style?: DocumentStyle): string 
         if (pendingBreak) parts.push(paragraphOoxml('', { pageBreak: true }))
         parts.push(tableOoxml(block.header, block.rows, block.align, resolved))
         break
+      case 'code': {
+        // Uma linha por PARÁGRAFO: o OOXML não tem elemento de bloco
+        // pré-formatado, e um parágrafo só com <w:br/> perderia o fundo
+        // cinza linha a linha. Bloco vazio ainda rende um parágrafo, senão
+        // ``` ``` sumiria sem deixar rastro.
+        const lines = block.lines.length > 0 ? block.lines : ['']
+        lines.forEach((line, idx) => {
+          parts.push(
+            paragraphOoxml(`<w:r><w:t xml:space="preserve">${escapeXml(line)}</w:t></w:r>`, {
+              style: 'CodeBlock',
+              pageBreak: pendingBreak && idx === 0,
+              // O estilo zera o espaço entre as linhas do bloco; a última
+              // devolve o respiro, senão o texto seguinte cola no código.
+              ...(idx === lines.length - 1 ? { after: 160 } : {}),
+            }),
+          )
+        })
+        break
+      }
       case 'rule':
         parts.push(
           `<w:p><w:pPr><w:pBdr><w:bottom w:val="single" w:sz="6" w:color="AAAAAA"/></w:pBdr>${

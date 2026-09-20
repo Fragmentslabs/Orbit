@@ -670,6 +670,10 @@
       "source": {
         "label": "Fonte",
         "description": "Trecho citado de um documento"
+      },
+      "document": {
+        "label": "Documento",
+        "description": "Documento em Markdown, para ler e editar"
       }
     },
     "unreadMessages": "Mensagens não lidas"
@@ -2019,7 +2023,19 @@
     "unavailable": "Artefato indisponível"
   },
   "documents": {
-    "exportFormat": "Exportar {{format}}"
+    "download": "Baixar",
+    "sourceBadgeOff": "Fonte",
+    "sourceBadgeOn": "Nas fontes",
+    "saving": "salvando…",
+    "saved": "salvo",
+    "unsaved": "alterações não salvas",
+    "saveFailed": "Não foi possível salvar a alteração.",
+    "unavailable": "Documento indisponível",
+    "externalChange": "O agente reescreveu este documento enquanto você editava. Nada foi gravado por cima — escolha qual versão fica.",
+    "loadTheirs": "Carregar a do agente",
+    "keepMine": "Manter a minha",
+    "useAsSource": "Usar como fonte desta conversa",
+    "isSource": "Já é fonte desta conversa"
   },
   "sources": {
     "title": "Fontes",

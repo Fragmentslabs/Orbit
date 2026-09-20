@@ -255,7 +255,8 @@ export interface ArtifactPart {
 
 /**
  * Documento autorado pelo agente (tool create_document): relatório, proposta,
- * ata. O fonte é Markdown; PDF e DOCX são renderizações dele.
+ * ata, documentação. O fonte é Markdown — e o documento É o Markdown; PDF e
+ * DOCX são renderizações feitas quando alguém pede o arquivo.
  *
  * O preview mostrado na conversa é HTML e não o PDF — o Electron não embarca
  * o visualizador de PDF do Chrome, e o .docx não é renderizável no navegador.
@@ -269,7 +270,8 @@ export interface DocumentPart {
   title: string
   /** URL orbit-artifact:// do HTML de preview */
   previewSrc: string
-  /** Renderizações disponíveis em disco */
+  /** Renderizações JÁ em disco. Vazio é o normal: o documento nasce só em
+   *  Markdown, e o PDF/DOCX é gerado no primeiro download. */
   formats: ("pdf" | "docx")[]
   thumb?: string
   /** Incrementa a cada update_document — cache-buster do iframe */

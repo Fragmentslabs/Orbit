@@ -30,7 +30,9 @@ import {
   backfillMedia,
   cleanupScriptMedia,
   deleteManyMedia,
-  documentFilePath,
+  documentInfo,
+  ensureDocumentRender,
+  saveDocumentEdit,
   getMediaEntry,
   listMedia,
   mediaDiskUsage,
@@ -71,6 +73,7 @@ import {
   setSessionDocumentShared,
 } from './lib/session-documents'
 import { viewExport, viewPrint, viewRender, viewText } from './lib/document-view'
+import { isDocumentSource, useDocumentAsSource } from './lib/document-source'
 import { loadMainLocale, setMainLocale } from './lib/i18n'
 import { loginShellArgs, userShellEnv } from './lib/shell-env'
 import { searchSessions } from './lib/search-sessions'
@@ -83,7 +86,7 @@ import type { RotationConfig } from '@shared/chat'
 import { StorageKeys } from '@shared/chat'
 import * as esteira from './lib/esteira'
 import * as rotinas from './lib/rotinas'
-import type { DocumentFormat, MediaFilter } from '@shared/media'
+import type { DocumentDownload, MediaFilter } from '@shared/media'
 import { documentFileName } from '@shared/media'
 import type { FaseTemplate, NovaEsteiraInput, NovaTaskInput } from '@shared/esteira'
 import type { NovaRotinaInput, Rotina, RotinaModelo } from '@shared/rotinas'
@@ -1563,14 +1566,42 @@ app.whenReady().then(() => {
     return artifact ? artifact.html : null
   })
   // Documentos: exportar a renderizacao (PDF/DOCX) para fora do Orbit.
+  // O canvas precisa da REVISÃO junto do texto: é ela que ele devolve ao
+  // gravar, para uma escrita do agente no meio do caminho ser detectada.
   ipcMain.handle('document:source', async (_event, id: string) => {
     const found = await readDocumentSource(id)
-    return found ? found.markdown : null
+    return found ? { markdown: found.markdown, revision: found.entry.revision ?? 1 } : null
   })
-  ipcMain.handle('document:export', async (_event, id: string, format: DocumentFormat) => {
-    const source = await documentFilePath(id, format)
-    if (!source) return { ok: false as const, error: 'Documento ou formato não encontrado' }
+  // Edicao do usuario no canvas do painel. So o fonte e o preview sao
+  // reescritos: PDF/DOCX sao refeitos no proximo download.
+  ipcMain.handle(
+    'document:saveSource',
+    (_event, id: string, markdown: string, baseRevision?: number) =>
+      saveDocumentEdit(id, markdown, baseRevision),
+  )
+  // Em que aba o documento abre: arquivo pedido vai para o visualizador,
+  // documento vivo vai para o canvas.
+  ipcMain.handle('document:info', (_event, id: string) => documentInfo(id))
+  // Promover a fonte da conversa: a saida do agente vira material de leitura
+  // dele. E um ato explicito do usuario, nunca automatico.
+  ipcMain.handle('document:useAsSource', (_event, sessionId: string, id: string) =>
+    useDocumentAsSource(sessionId, id),
+  )
+  // O botao precisa saber o estado ATUAL: a fonte pode ter sido removida na
+  // aba Fontes depois de promovida, e ai promover de novo e o certo.
+  ipcMain.handle('document:isSource', (_event, sessionId: string, id: string) =>
+    isDocumentSource(sessionId, id),
+  )
+  // O documento nasce só em Markdown: o PDF/DOCX é renderizado AQUI, no
+  // primeiro download, e fica em cache para os próximos.
+  ipcMain.handle('document:export', async (_event, id: string, format: DocumentDownload) => {
     const entry = await getMediaEntry(id)
+    // O .md não se renderiza: ele É o documento, e sai como está em disco.
+    const source =
+      format === 'md' ? (entry?.path ?? null) : await ensureDocumentRender(id, format)
+    if (!source) {
+      return { ok: false as const, error: `Não foi possível gerar o ${format.toUpperCase()} deste documento.` }
+    }
     const result = await dialog.showSaveDialog({
       defaultPath: documentFileName(entry?.name ?? 'documento', format),
       filters: [{ name: format.toUpperCase(), extensions: [format] }],

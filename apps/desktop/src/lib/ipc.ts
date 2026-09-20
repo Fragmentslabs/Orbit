@@ -10,7 +10,7 @@ import type {
 } from "@shared/chat"
 import type { AppPreferences, ChatModeKey, SessionModeOverrides, WorkerConfigSnapshot } from "@shared/companion"
 import type { McpConfig, McpServerStatus } from "@shared/mcp"
-import type { MediaEntry, MediaFilter, MediaUsage } from "@shared/media"
+import type { DocumentDownload, MediaEntry, MediaFilter, MediaUsage } from "@shared/media"
 import type {
   Esteira,
   EsteiraEvent,
@@ -465,16 +465,48 @@ export const artifactApi = {
     >,
 }
 
-/** Documentos entregáveis (orbit-data/documents). O preview é servido pelo
- *  orbit-artifact://; estas chamadas são para tirar o arquivo do Orbit. */
+/** Documentos do agente (orbit-data/documents). O fonte é Markdown: o canvas
+ *  do painel lê e grava por aqui, e o export renderiza o arquivo na hora. */
 export const documentApi = {
-  export: (id: string, format: "pdf" | "docx") =>
+  /** Baixa o documento. "md" copia o fonte; "pdf"/"docx" renderizam na hora
+   *  quando ainda não existem em disco. */
+  export: (id: string, format: DocumentDownload) =>
     window.ipcRenderer.invoke("document:export", id, format) as Promise<
       { ok: true; path: string } | { ok: false; canceled?: boolean; error?: string }
     >,
+  /** O Markdown e a revisão em que ele está — a revisão volta na gravação. */
   source: (id: string) =>
-    window.ipcRenderer.invoke("document:source", id) as Promise<string | null>,
+    window.ipcRenderer.invoke("document:source", id) as Promise<{
+      markdown: string
+      revision: number
+    } | null>,
+  /** Grava a edição do usuário sobre a revisão em que ela se baseou. Recusa
+   *  quando o agente escreveu no meio do caminho, em vez de apagar o que ele
+   *  produziu; a revisão devolvida distingue o aviso do eco da nossa gravação. */
+  saveSource: (id: string, markdown: string, baseRevision?: number) =>
+    window.ipcRenderer.invoke("document:saveSource", id, markdown, baseRevision) as Promise<
+      | { ok: true; revision: number }
+      | { ok: false; reason: "notFound" }
+      | { ok: false; reason: "stale"; revision: number }
+    >,
+  info: (id: string) =>
+    window.ipcRenderer.invoke("document:info", id) as Promise<DocumentInfo | null>,
+  /** Promove o documento a fonte da conversa. Idempotente: se ele já virou
+   *  fonte e ela continua lá, devolve a mesma com `already`. */
+  useAsSource: (sessionId: string, id: string) =>
+    window.ipcRenderer.invoke("document:useAsSource", sessionId, id) as Promise<
+      { ok: true; sourceId: string; already: boolean } | { ok: false; error: string }
+    >,
+  /** É fonte desta conversa AGORA — o usuário pode tê-la removido depois. */
+  isSource: (sessionId: string, id: string) =>
+    window.ipcRenderer.invoke("document:isSource", sessionId, id) as Promise<boolean>,
 }
+
+/** O suficiente para decidir em que aba o documento abre e como intitulá-la. */
+export type DocumentInfo = Pick<
+  MediaEntry,
+  "id" | "name" | "delivery" | "derived" | "formats" | "revision"
+>
 
 /** Galeria de mídia — ativos produzidos pelo agente (imagens, artefatos e documentos). */
 export const mediaApi = {

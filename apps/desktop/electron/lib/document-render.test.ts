@@ -7,6 +7,7 @@ import {
   parseMarkdown,
   renderHtml,
   renderOoxmlBody,
+  renderThumbHtml,
   type Block,
 } from './document-render'
 
@@ -370,5 +371,93 @@ describe('alinhamento de tabela', () => {
     const table = parseMarkdown('| a | b |\n|---|---|\n| 1 | 2 |')[0]
     if (table.type !== 'table') return
     expect(table.align).toEqual(['left', 'left'])
+  })
+})
+
+
+/**
+ * Bloco de código cercado. Antes disto, ``` caía no ramo de parágrafo e as
+ * linhas eram juntadas por espaço — o código chegava ao documento numa linha
+ * só, com os marcadores à mostra. Como documentação técnica é o uso mais
+ * comum do documento, é o caso que mais aparecia quebrado.
+ */
+describe('miniatura nativa', () => {
+  const blocks = parseMarkdown('# Guia\n\nTexto.\n\n```ts\nconst a = 1\n```')
+
+  it('traz as duas paletas na mesma página', () => {
+    const html = renderThumbHtml(blocks, 'Guia')
+
+    // A captura troca de tema ligando a classe, sem recarregar nada.
+    expect(html).toContain(':root.dark')
+    expect(html).toMatch(/--bg:/)
+  })
+
+  it('não é a folha impressa: nada de A4 nem margem de página', () => {
+    const html = renderThumbHtml(blocks, 'Guia')
+
+    expect(html).not.toContain('@page')
+    expect(html).not.toContain('cm')
+  })
+
+  it('desenha os mesmos blocos do documento', () => {
+    const html = renderThumbHtml(blocks, 'Guia')
+
+    expect(html).toContain('<h1>Guia</h1>')
+    expect(html).toContain('<pre><code>const a = 1</code></pre>')
+  })
+})
+
+describe('bloco de código', () => {
+  it('guarda as linhas cruas, sem juntar nem aparar', () => {
+    const blocks = parseMarkdown('Antes:\n\n```ts\nclass A {\n  x = 1\n}\n```\n\nDepois.')
+
+    expect(blocks).toEqual([
+      { type: 'paragraph', text: 'Antes:' },
+      { type: 'code', lines: ['class A {', '  x = 1', '}'], lang: 'ts' },
+      { type: 'paragraph', text: 'Depois.' },
+    ])
+  })
+
+  it('não interpreta Markdown lá dentro', () => {
+    const blocks = parseMarkdown('```sh\n# instala tudo\n- npm i\n| a | b |\n```')
+
+    expect(blocks).toEqual([
+      { type: 'code', lines: ['# instala tudo', '- npm i', '| a | b |'], lang: 'sh' },
+    ])
+  })
+
+  it('cerca sem fechar leva o resto do texto, em vez de perdê-lo', () => {
+    const blocks = parseMarkdown('```\nsobrou aberto\nmais uma linha')
+
+    expect(blocks).toEqual([{ type: 'code', lines: ['sobrou aberto', 'mais uma linha'] }])
+  })
+
+  it('o HTML sai em <pre>, com as quebras e os símbolos preservados', () => {
+    const html = renderHtml(parseMarkdown('```ts\nif (a < b) {\n  go()\n}\n```'), 'T')
+
+    expect(html).toContain('<pre><code>if (a &lt; b) {\n  go()\n}</code></pre>')
+    // Sem pre-wrap a linha longa sai cortada na margem do PDF.
+    expect(html).toContain('white-space: pre-wrap')
+  })
+
+  it('o DOCX sai com uma linha por parágrafo, em Courier e sem justificar', () => {
+    const xml = renderOoxmlBody(parseMarkdown('```\nlinha um\nlinha dois\n```'))
+
+    expect(xml.match(/w:pStyle w:val="CodeBlock"/g)).toHaveLength(2)
+    expect(xml).toContain('<w:t xml:space="preserve">linha um</w:t>')
+    expect(xml).toContain('<w:t xml:space="preserve">linha dois</w:t>')
+  })
+})
+
+describe('fontFamily vinda como pilha de CSS', () => {
+  it('fica com a primeira família, e não com os nomes grudados', () => {
+    // O que o modelo manda de verdade quando o esquema pede um nome.
+    expect(normalizeStyle({ fontFamily: 'Inter, Segoe UI, sans-serif' }).fontFamily).toBe('Inter')
+  })
+
+  it('aspas da pilha não entram no nome', () => {
+    expect(normalizeStyle({ fontFamily: '"Times New Roman", serif' }).fontFamily).toBe(
+      'Times New Roman',
+    )
   })
 })

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { useDroppable, useDndContext } from "@dnd-kit/core"
-import { CodeXml, FileCode, Globe, Folder, Images, Library, Quote, MessageSquare, Terminal, X, PlusIcon, Bot, LoaderIcon, Loader2, XCircleIcon, Trash2, GripVertical } from "lucide-react"
+import { CodeXml, FileCode, FileText, Globe, Folder, Images, Library, Quote, MessageSquare, Terminal, X, PlusIcon, Bot, LoaderIcon, Loader2, XCircleIcon, Trash2, GripVertical } from "lucide-react"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -21,6 +21,7 @@ import { FoldersTab } from "@/src/components/folders-tab"
 import { DiffTab } from "@/src/components/diff-tab"
 import { MediaGallery } from "@/src/components/media-gallery"
 import { ArtifactTab } from "@/src/components/artifact-tab"
+import { DocumentTab } from "@/src/components/document-tab"
 import { SourcesTab } from "@/src/components/sources-tab"
 import { SourceViewer } from "@/src/components/source-viewer"
 import { ProcessOutputDialog } from "@/src/components/process-output-dialog"
@@ -55,7 +56,7 @@ interface TabMeta {
  * prompts.ts): era só a aba que faltava para o usuário poder declarar fonte.
  */
 function isSelectableTab(type: TabType, mode: WorkspaceMode): boolean {
-  if (type === "artifact" || type === "source") return false
+  if (type === "artifact" || type === "source" || type === "document") return false
   if (mode === "code") return true
   return type === "chat" || type === "media" || type === "sources"
 }
@@ -72,6 +73,7 @@ function useTabMeta(): Record<TabType, TabMeta> {
     artifact: { icon: CodeXml, label: t("panel.tabs.artifact.label"), description: t("panel.tabs.artifact.description") },
     sources: { icon: Library, label: t("panel.tabs.sources.label"), description: t("panel.tabs.sources.description") },
     source: { icon: Quote, label: t("panel.tabs.source.label"), description: t("panel.tabs.source.description") },
+    document: { icon: FileText, label: t("panel.tabs.document.label"), description: t("panel.tabs.document.description") },
   }
 }
 
@@ -232,6 +234,16 @@ function TabContent({ tab, sessionId, onUpdateTab }: { tab: PanelTab; sessionId?
       return (
         <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
           <ArtifactTab artifactId={tab.artifactId} title={tab.title} />
+        </div>
+      )
+    case "document":
+      return (
+        <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
+          <DocumentTab
+            documentId={tab.documentId}
+            title={tab.title}
+            sessionId={tab.sessionId ?? sessionId}
+          />
         </div>
       )
     case "sources":

@@ -13,11 +13,18 @@ import { readJson } from '../storage'
 /**
  * Documentos entregáveis: relatório, proposta, ata, especificação.
  *
- * O agente escreve MARKDOWN e o Orbit renderiza para PDF e/ou DOCX. Markdown
- * é o fonte porque HTML→DOCX é intratável (CSS arbitrário não tem equivalente
- * em OOXML) e porque é o que o modelo escreve melhor. Artefato HTML continua
- * sendo o caminho de dashboard e protótipo — documento é outro objeto, com
- * outro destino: imprimir, anexar em e-mail, mandar para um cliente.
+ * O agente escreve MARKDOWN, e é isso que o documento É — não um passo
+ * intermediário. Markdown é o fonte porque HTML→DOCX é intratável (CSS
+ * arbitrário não tem equivalente em OOXML) e porque é o que o modelo escreve
+ * melhor. Artefato HTML continua sendo o caminho de dashboard e protótipo —
+ * documento é outro objeto, feito para ser lido, editado e, quando for o
+ * caso, impresso ou enviado.
+ *
+ * PDF e DOCX são SAÍDAS, não o produto: sem `formats`, nada é renderizado na
+ * criação e o usuário baixa o formato que quiser depois. Renderizar por
+ * padrão custava uma janela do Chromium em todo documento, inclusive nos que
+ * nunca viram arquivo — que são a maioria, porque o normal é ler ali e
+ * seguir.
  *
  * Guardar o fonte é o que faz "modificar" existir de verdade: editar um PDF
  * ou preservar a formatação de um .docx é intratável; reescrever o Markdown e
@@ -33,10 +40,12 @@ const MAX_MARKDOWN_BYTES = 1024 * 1024
 const formatSchema = z
   .array(z.enum(['pdf', 'docx']))
   .optional()
-  .describe('Output formats (default: pdf). Use docx when the user will edit the file.')
+  .describe(
+    'Files to render immediately. OMIT IT by default: the document lives in the conversation as Markdown and the user downloads PDF or DOCX from the card whenever they want. Pass it ONLY when the user explicitly asked for "a PDF" or "a Word file", or said they are going to print, e-mail or send the file.',
+  )
 
 const MARKDOWN_HELP =
-  'Markdown: # ## ### for headings, - or 1. for lists, | tables | (the divider row sets column alignment: |:---|:---:|---:|), > quote, **bold**, *italic*, `code`, --- for a rule, <br> for a blank line, and \\pagebreak on its own line to force a page break.'
+  'Markdown: # ## ### for headings, - or 1. for lists, | tables | (the divider row sets column alignment: |:---|:---:|---:|), > quote, **bold**, *italic*, `code`, ``` fenced blocks for code (write the language right after the opening fence), --- for a rule, <br> for a blank line, and \\pagebreak on its own line to force a page break.'
 
 /**
  * Estilo exposto como um conjunto FECHADO de opções, e não CSS livre: tudo
@@ -48,7 +57,7 @@ const styleSchema = z
     fontFamily: z
       .string()
       .optional()
-      .describe('Font name, e.g. "Georgia", "Calibri", "Arial", "Courier New". It must exist on the reader\'s machine; unknown names fall back to a generic family.'),
+      .describe('ONE font name, e.g. "Georgia", "Calibri", "Arial", "Courier New" — not a CSS stack: "Inter, sans-serif" keeps only "Inter". It must exist on the reader\'s machine; unknown names fall back to a generic family.'),
     fontSize: z.number().optional().describe('Body size in points (7-18, default 11). Headings scale with it.'),
     accentColor: z
       .string()
@@ -105,7 +114,7 @@ function documentFilter(
 export function createDocumentAuthoringTools(scope: DocumentToolScope) {
   return {
     create_document: tool({
-      description: `Writes a deliverable document (report, proposal, minutes, specification) and renders it to PDF and/or DOCX, showing it in your response and saving it to the media gallery. Use it when the user asks for a document, a report or "a PDF/Word" of something — not for a quick answer that belongs in the chat, and not for source code. ${MARKDOWN_HELP}`,
+      description: `Writes a document (report, proposal, minutes, specification, documentation) in Markdown and shows it in your response, saved to the media gallery. Use it when the user asks for a document, a report, documentation, or "a PDF/Word" of something — not for a quick answer that belongs in the chat, and not for source code. The document is Markdown: the user reads it in the conversation and can download it as PDF or DOCX from the card, so do NOT pass \`formats\` unless they asked for a file. ${MARKDOWN_HELP}`,
       inputSchema: z.object({
         title: z.string().min(1).max(150).describe('Document title, also used as the file name'),
         markdown: z.string().min(1).describe('Full document content in Markdown'),
@@ -116,7 +125,9 @@ export function createDocumentAuthoringTools(scope: DocumentToolScope) {
         if (Buffer.byteLength(markdown, 'utf8') > MAX_MARKDOWN_BYTES) {
           return `Documento muito grande (limite de ${Math.round(MAX_MARKDOWN_BYTES / 1024)}KB de Markdown).`
         }
-        const wanted: DocumentFormat[] = formats?.length ? formats : ['pdf']
+        // Sem `formats`, nada é renderizado: o documento nasce em Markdown e o
+        // usuário escolhe o formato na hora de baixar.
+        const wanted: DocumentFormat[] = formats ?? []
         const ref = await saveDocument(markdown, wanted, {
           title,
           style,
@@ -124,7 +135,9 @@ export function createDocumentAuthoringTools(scope: DocumentToolScope) {
           directory: scope.directory,
           folderId: await resolveFolderId(scope.sessionId),
         })
-        if (ref.formats.length === 0) {
+        // Só é falha quando havia o que renderizar: `formats` vazio é o caso
+        // normal, e o documento em Markdown já está inteiro na conversa.
+        if (wanted.length > 0 && ref.formats.length === 0) {
           return `O documento "${title}" foi salvo, mas nenhuma renderização foi gerada. Tente novamente; se persistir, avise o usuário.`
         }
         return {
@@ -134,26 +147,48 @@ export function createDocumentAuthoringTools(scope: DocumentToolScope) {
           formats: ref.formats,
           thumb: ref.thumb,
           revision: ref.revision,
-          message: `Documento criado em ${ref.formats.join(' e ')} — o usuário já o vê na resposta e ele está na galeria. Para alterá-lo, use update_document com este documentId.`,
+          message:
+            ref.formats.length > 0
+              ? `Documento criado em ${ref.formats.join(' e ')} — o usuário já o vê na resposta e ele está na galeria. Para alterá-lo, use update_document com este documentId.`
+              : 'Documento criado — o usuário já o vê na resposta e pode baixá-lo em PDF ou DOCX pelo próprio card quando quiser. Para alterá-lo, use update_document com este documentId.',
         }
       },
     }),
 
     update_document: tool({
-      description: `Rewrites a document you created before, keeping its place in the gallery. Pass the FULL new Markdown — it replaces the source and the file is rendered again. Read the current source with read_document first when you are changing only part of it. ${MARKDOWN_HELP}`,
+      description: `Rewrites a document you created before, keeping its place in the gallery. Pass the FULL new Markdown — it REPLACES the source, so anything you leave out is gone. Read the current source with read_document first and pass back the revision it reported as baseRevision: the user can be editing the same document in the side panel, and that is what stops you from overwriting their work. ${MARKDOWN_HELP}`,
       inputSchema: z.object({
         documentId: z.string().describe('Document id (doc_....md), from create_document or list_documents'),
         markdown: z.string().min(1).describe('The complete new Markdown'),
+        baseRevision: z
+          .number()
+          .optional()
+          .describe(
+            'The revision read_document reported for the version this rewrite is based on. Always pass it when you read the document first. The write is refused if the document changed in the meantime.',
+          ),
         title: z.string().max(150).optional(),
         formats: formatSchema,
         style: styleSchema,
       }),
-      execute: async ({ documentId, markdown, title, formats, style }) => {
+      execute: async ({ documentId, markdown, baseRevision, title, formats, style }) => {
         if (Buffer.byteLength(markdown, 'utf8') > MAX_MARKDOWN_BYTES) {
           return `Documento muito grande (limite de ${Math.round(MAX_MARKDOWN_BYTES / 1024)}KB de Markdown).`
         }
-        const ref = await updateDocument(documentId, markdown, { title, formats, style })
-        if (!ref) return `Documento não encontrado: ${documentId}. Use list_documents para ver os disponíveis.`
+        const result = await updateDocument(documentId, markdown, {
+          title,
+          formats,
+          style,
+          baseRevision,
+        })
+        if (!result.ok) {
+          if (result.reason === 'notFound') {
+            return `Documento não encontrado: ${documentId}. Use list_documents para ver os disponíveis.`
+          }
+          // Nada foi gravado. Repetir a mesma reescrita repetiria o erro: o
+          // caminho é reler e reaplicar a mudança sobre a versão nova.
+          return `O documento mudou desde a versão em que você se baseou — provavelmente o usuário o editou no painel (ele está agora na revisão ${result.revision}). NADA foi gravado. Chame read_document, reaplique sua alteração sobre o texto que voltar e chame update_document de novo com o baseRevision que a leitura informar. Não repita a mesma reescrita: ela apagaria a edição dele.`
+        }
+        const ref = result.ref
         return {
           documentId: ref.id,
           title: ref.title,
@@ -168,14 +203,17 @@ export function createDocumentAuthoringTools(scope: DocumentToolScope) {
 
     read_document: tool({
       description:
-        'Returns the Markdown source of a document, so you can change part of it without rewriting from memory. Always read before a partial edit — rewriting from memory silently drops whatever you had forgotten.',
+        'Returns the Markdown source of a document and the revision it is at. Always read before editing: rewriting from memory silently drops whatever you had forgotten, and the user may have changed the document in the side panel since you last saw it. Pass the revision back as baseRevision in update_document.',
       inputSchema: z.object({
         documentId: z.string().describe('Document id (doc_....md)'),
       }),
       execute: async ({ documentId }) => {
         const found = await readDocumentSource(documentId)
         if (!found) return `Documento não encontrado: ${documentId}.`
-        return `<document id="${documentId}" title="${found.entry.name ?? ''}">\n${found.markdown}\n</document>`
+        // A revisão volta no próprio envelope: é o que o update_document pede
+        // de volta para provar que a reescrita partiu DESTA versão.
+        const revision = found.entry.revision ?? 1
+        return `<document id="${documentId}" title="${found.entry.name ?? ''}" revision="${revision}">\n${found.markdown}\n</document>\nAo reescrever este documento, passe baseRevision=${revision}.`
       },
     }),
 
