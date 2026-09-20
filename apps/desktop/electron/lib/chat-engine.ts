@@ -18,6 +18,7 @@ import { BROWSER_SELECTION_MIME, StorageKeys } from '@shared/chat'
 import { getProvider, modelSupportsVision } from './catalog'
 import { compactHistory, findLastSummaryIndex, shouldCompact } from './compaction'
 import { contextBudget, estimateTokens, maxStepsFor, trimTurnContext } from './context-budget'
+import { clearManualSaves, manualSavesUnder, stripFilesFromPatch } from './manual-saves'
 import { createToolApproval, takeDenialReason } from './permission'
 import { classifyProviderError, errorToText, isRecoverableErrorKind } from './errors'
 import { hasStreamedContent, resolveRotation } from './model-rotation'
@@ -974,6 +975,11 @@ async function runChatTurn(win: BrowserWindow, input: SendMessageInput): Promise
 
     // Snapshot start: estado do filesystem antes do stream (revert per-message)
     if (toolContext) {
+      // Zera o registro de saves manuais ANTES de capturar. O que a pessoa
+      // salvou entre turnos já está dentro do `start` e nunca apareceria no
+      // diff; mantê-lo registrado só criaria o erro inverso — o agente editar
+      // esse mesmo arquivo agora e a alteração dele ser subtraída do registro.
+      clearManualSaves(toolContext.directory)
       try {
         turnSnapshot = { start: await capture(toolContext.directory) }
         assistantMessage.snapshot = { start: turnSnapshot.start }
@@ -1120,7 +1126,24 @@ async function runChatTurn(win: BrowserWindow, input: SendMessageInput): Promise
         const end = await capture(toolContext.directory)
         if (end === start) return { state: 'unchanged' }
         const changes = await diff(toolContext.directory, start, end)
-        return { state: 'changed', end, files: changes.files, patch: changes.patch }
+        // O snapshot é da PASTA, não do agente: o que a pessoa salvou à mão no
+        // painel durante o turno também entra no diff. Sem subtrair, o
+        // registro verificado credita ao modelo um arquivo que ele nunca
+        // tocou — e é essa linha que sustenta a verificação anti-overclaim.
+        const manual = manualSavesUnder(toolContext.directory)
+        const files = manual.size > 0 ? changes.files.filter((f) => !manual.has(f)) : changes.files
+        // Só sobraram arquivos do usuário: do ponto de vista do turno, o
+        // agente não escreveu nada — que é exatamente o que 'unchanged' diz.
+        if (files.length === 0) return { state: 'unchanged' }
+        return {
+          state: 'changed',
+          end,
+          files,
+          // O patch não é só bookkeeping: alimenta a aba Diff e a lista de
+          // arquivos do card. Filtrar só `files` deixaria o arquivo do usuário
+          // fora do registro e ainda visível na tela como obra do agente.
+          patch: manual.size > 0 ? stripFilesFromPatch(changes.patch, manual) : changes.patch,
+        }
       } catch (err) {
         console.error('[snapshot] captura final falhou:', err)
         return { state: 'unknown', error: errorToText(err) }
