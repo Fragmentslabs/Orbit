@@ -274,12 +274,68 @@ export const MessageBranchPage = ({ className, ...props }: MessageBranchPageProp
   )
 }
 
+/**
+ * Teto de altura das figuras do Markdown, e o alinhamento delas.
+ *
+ * O streamdown só limita a LARGURA (max-w-full), o que basta para paisagem e
+ * é péssimo para retrato: uma captura de celular 1080x1920 numa coluna de
+ * 700px sai com 1244px de altura e engole a tela inteira. Com o teto, a mesma
+ * imagem cai para ~360x640 — dá para ler sem ela dominar o texto.
+ *
+ * É teto, não tamanho: imagem pequena continua no tamanho natural, porque
+ * esticar um ícone de 32px até a largura da coluna ficaria pior que pequeno.
+ * E como só a altura é limitada (a largura fica em auto), o navegador reduz a
+ * outra dimensão junto e a proporção se mantém.
+ *
+ * Fração da janela com um limite absoluto: 60vh acompanha a tela, e o teto em
+ * rem impede que num monitor alto a figura volte a ocupar quase tudo.
+ *
+ * E o centro é do INVÓLUCRO que o streamdown põe em volta da figura — um
+ * `div.inline-block[data-streamdown=image-wrapper]`, onde também vivem o
+ * botão de baixar e o estado de carregando.
+ *
+ * Centralizar pelo parágrafo não funciona, e o motivo é uma decisão do
+ * streamdown: quando a imagem é o único filho do parágrafo, ele descarta o
+ * <p> e devolve um Fragment. Ou seja, no caso que interessa — a figura
+ * sozinha na linha — não existe parágrafo para alinhar.
+ *
+ * Daí o `:not(p *)`: a figura SOZINHA (sem <p> por cima) vira um bloco de
+ * largura justa, centralizado. A que divide o parágrafo com outra coisa — a
+ * fileira de selos de um README, `![a](…) ![b](…) ![c](…)` — continua inline,
+ * fluindo com o texto, em vez de virar três linhas empilhadas.
+ *
+ * As classes vão inteiras e LITERAIS: o Tailwind varre o texto do fonte, e
+ * nome montado em runtime (template literal, concatenação) não chega ao CSS
+ * gerado — a regra some sem erro nenhum.
+ */
+const IMAGE_LAYOUT = [
+  "[&_img]:max-h-[min(60vh,40rem)]",
+  "[&_[data-streamdown=image-wrapper]:not(p_*)]:block",
+  "[&_[data-streamdown=image-wrapper]:not(p_*)]:w-fit",
+  "[&_[data-streamdown=image-wrapper]:not(p_*)]:mx-auto",
+  // Garantia: o invólucro é dimensionado por fit-content, e se o navegador
+  // medir largo demais (a altura máxima da figura entra nessa conta), a
+  // figura ainda fica no meio da caixa em vez de encostar à esquerda.
+  "[&_[data-streamdown=image-wrapper]:not(p_*)]:text-center",
+  // Legenda da figura — só a pré-visualização de arquivo gera <figcaption>,
+  // então o estilo pode morar aqui sem afetar o resto.
+  "[&_figcaption]:mt-1.5",
+  "[&_figcaption]:text-center",
+  "[&_figcaption]:text-xs",
+  "[&_figcaption]:text-muted-foreground",
+  "[&_figure]:my-4",
+].join(" ")
+
 export type MessageResponseProps = ComponentProps<typeof Streamdown>
 
 export const MessageResponse = memo(
   ({ className, plugins, shikiTheme, ...props }: MessageResponseProps) => (
     <Streamdown
-      className={cn("size-full [&>*:first-child]:mt-0 [&>*:last-child]:mb-0", className)}
+      className={cn(
+        "size-full [&>*:first-child]:mt-0 [&>*:last-child]:mb-0",
+        IMAGE_LAYOUT,
+        className,
+      )}
       plugins={plugins ?? streamdownPlugins}
       shikiTheme={shikiTheme ?? ["github-light", "github-dark"]}
       {...props}

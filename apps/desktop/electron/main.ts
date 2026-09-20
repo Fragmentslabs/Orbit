@@ -581,6 +581,20 @@ const MIME_MAP: Record<string, string> = {
   '.patch': 'text/x-diff',
 }
 
+/**
+ * Extensões de imagem, derivadas do próprio MIME_MAP para as duas listas não
+ * se separarem com o tempo.
+ */
+const IMAGE_EXTENSIONS = new Set(
+  Object.entries(MIME_MAP)
+    .filter(([, mime]) => mime.startsWith('image/'))
+    .map(([ext]) => ext),
+)
+
+/** Teto de figuras resolvidas por Markdown — um documento com centenas delas
+ *  encheria a memória do renderer de base64 sem ninguém ter pedido. */
+const MAX_MARKDOWN_IMAGES = 60
+
 interface CommitFileEntry {
   status: 'added' | 'modified' | 'deleted' | 'renamed'
   path: string
@@ -1108,6 +1122,52 @@ app.whenReady().then(() => {
       return { error: (err as Error).message }
     }
   })
+
+  /**
+   * As imagens de um Markdown, resolvidas contra a PASTA DELE.
+   *
+   * O preview roda no renderer, cuja origem e o app — um `./imagens/x.png`
+   * resolveria contra essa origem, e nao contra o arquivo aberto, entao a
+   * imagem aparecia quebrada em todo documento que referencia figura.
+   * Resolver aqui e o unico lugar onde a pasta do arquivo e conhecida.
+   *
+   * Devolve um mapa do caminho ORIGINAL para o data URL: e o original que o
+   * renderer tem que trocar no texto, e o que nao resolveu simplesmente nao
+   * entra no mapa e continua como estava.
+   */
+  ipcMain.handle(
+    'fs:markdownImages',
+    async (_event, markdownPath: string, sources: string[]) => {
+      const dir = path.dirname(markdownPath)
+      const out: Record<string, string> = {}
+      // Teto de arquivos: um documento com centenas de figuras encheria a
+      // memoria do renderer de base64 sem que ninguem tivesse pedido isso.
+      for (const src of sources.slice(0, MAX_MARKDOWN_IMAGES)) {
+        // O Markdown escapa espaco como %20; sem decodificar, o caminho nao
+        // existe em disco.
+        let relative = src
+        try {
+          relative = decodeURI(src)
+        } catch {
+          // caminho com % solto: vale tentar como veio
+        }
+        const ext = path.extname(relative).toLowerCase()
+        // So imagem: o alvo vem do conteudo do arquivo, entao ele nao pode
+        // servir para ler qualquer coisa do disco e devolver ao renderer.
+        if (!IMAGE_EXTENSIONS.has(ext)) continue
+        const resolved = path.resolve(dir, relative)
+        try {
+          const stat = await fs.stat(resolved)
+          if (!stat.isFile() || stat.size > MAX_BINARY_SIZE) continue
+          const buffer = await fs.readFile(resolved)
+          out[src] = `data:${MIME_MAP[ext] ?? 'application/octet-stream'};base64,${buffer.toString('base64')}`
+        } catch {
+          // figura faltando no repositorio: fica como estava
+        }
+      }
+      return out
+    },
+  )
 
   ipcMain.handle('shell:showItemInFolder', (_event, filePath: string) => {
     shell.showItemInFolder(filePath)

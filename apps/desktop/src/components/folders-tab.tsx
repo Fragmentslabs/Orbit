@@ -87,6 +87,11 @@ import {
   CommitTimestamp,
 } from "@/src/components/ai/commit";
 import { MessageResponse } from "@/src/components/ai/message";
+import {
+  markdownImageSources,
+  withResolvedImages,
+} from "@/src/lib/markdown-images";
+import { localImageRehypePlugins } from "@/src/lib/local-image-plugins";
 import { Image } from "@/src/components/ai/image";
 
 interface DirEntryInfo {
@@ -166,6 +171,7 @@ const IMAGE_FILE_RE = /\.(png|jpe?g|gif|webp|svg|bmp|avif|ico)$/i;
 function isImageFile(p: string) {
   return IMAGE_FILE_RE.test(p);
 }
+
 
 function getBreadcrumbs(rootPath: string, filePath: string): string[] {
   const root = rootPath.replace(/\\/g, "/").replace(/\/$/, "");
@@ -440,42 +446,58 @@ function FolderQuickSwitch({
   );
 }
 
+/**
+ * O fonte do arquivo, com número de linha.
+ *
+ * `wrap` existe porque texto e código querem coisas opostas: em código,
+ * quebrar a linha sozinho falseia a indentação e é melhor rolar na horizontal;
+ * em Markdown, o parágrafo é UMA linha só, e sem quebra ele sai para fora da
+ * div — foi o que apareceu ao ler um .md no modo edição.
+ *
+ * Por isso cada linha é uma LINHA de verdade (número e conteúdo lado a lado), e
+ * não duas colunas paralelas: com a quebra ligada, um parágrafo que ocupa três
+ * alturas empurraria todos os números seguintes para cima do conteúdo errado.
+ * Assim o número acompanha a altura do que ele numera.
+ */
 function CodeView({
   content,
   highlighted,
+  wrap = false,
 }: {
   content: string;
   highlighted: HighlightedToken[][] | null;
+  wrap?: boolean;
 }) {
   const lines = content.split("\n");
+  // A calha é dimensionada pelo MAIOR número: com cada linha usando a largura
+  // do seu próprio, a coluna sairia serrilhada.
+  const gutter = `${String(lines.length).length + 1}ch`;
   return (
-    <div className="flex min-w-0 font-mono text-xs">
-      <div className="sticky left-0 z-10 min-w-0 shrink-0 select-none bg-code-viewer px-3 py-4 text-right text-muted-foreground/50">
-        {lines.map((_, i) => (
-          <div key={i} className="leading-5">
+    <div className="min-w-0 py-4 font-mono text-xs">
+      {lines.map((line, i) => (
+        <div key={i} className="flex min-w-0">
+          <div
+            className="sticky left-0 z-10 shrink-0 select-none bg-code-viewer px-3 text-right leading-5 text-muted-foreground/50"
+            style={{ minWidth: gutter }}
+          >
             {i + 1}
           </div>
-        ))}
-      </div>
-      <div className="min-w-0 flex-1 px-4 py-4">
-        {highlighted
-          ? highlighted.map((lineTokens, i) => (
-              <div key={i} className="min-w-0 whitespace-pre leading-5">
-                {lineTokens.length === 0
-                  ? " "
-                  : lineTokens.map((t, j) => (
-                      <span key={j} style={{ color: t.color }}>
-                        {t.content}
-                      </span>
-                    ))}
-              </div>
-            ))
-          : lines.map((line, i) => (
-              <div key={i} className="min-w-0 whitespace-pre leading-5">
-                {line || " "}
-              </div>
-            ))}
-      </div>
+          <div
+            className={cn(
+              "min-w-0 flex-1 px-4 leading-5",
+              wrap ? "whitespace-pre-wrap break-words" : "whitespace-pre",
+            )}
+          >
+            {highlighted?.[i]
+              ? highlighted[i].map((t, j) => (
+                  <span key={j} style={{ color: t.color }}>
+                    {t.content}
+                  </span>
+                ))
+              : line || " "}
+          </div>
+        </div>
+      ))}
     </div>
   );
 }
@@ -829,6 +851,50 @@ const openLiveFile = useCallback(
   );
 
   const isMarkdownFile = viewedFile ? /(?:\.md|\.markdown)$/i.test(viewedFile.path) : false;
+
+  /**
+   * Figuras do Markdown aberto, resolvidas contra a pasta DELE.
+   *
+   * O preview roda na origem do app, então um `./imagens/x.png` não resolve
+   * contra o arquivo e a imagem aparecia quebrada. Quem sabe a pasta é o main,
+   * que devolve cada caminho como data URL.
+   */
+  const [previewImages, setPreviewImages] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    if (!fileContent || !viewedFile || !isMarkdownFile || mdMode !== "preview") {
+      setPreviewImages({});
+      return;
+    }
+    const sources = markdownImageSources(fileContent);
+    if (sources.length === 0) {
+      setPreviewImages({});
+      return;
+    }
+    // No arquivo de commit o caminho é relativo ao repositório; juntar com "/"
+    // basta, porque o main resolve com path.resolve.
+    const base =
+      viewedFile.kind === "live"
+        ? viewedFile.path
+        : `${viewedFile.repoPath}/${viewedFile.path}`;
+    let cancelled = false;
+    window.ipcRenderer
+      .invoke("fs:markdownImages", base, sources)
+      .then((map) => {
+        if (!cancelled) setPreviewImages(map as Record<string, string>);
+      })
+      .catch(() => {
+        // figura é enfeite: falhar aqui não pode derrubar a leitura do texto
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [fileContent, viewedFile, isMarkdownFile, mdMode]);
+
+  const previewMarkdown = useMemo(
+    () => (fileContent ? withResolvedImages(fileContent, previewImages) : ""),
+    [fileContent, previewImages],
+  );
   const isImage = viewedFile ? isImageFile(viewedFile.path) : false;
 
   useEffect(() => {
@@ -1173,10 +1239,18 @@ const openLiveFile = useCallback(
                 ) : fileContent != null ? (
                   isMarkdownFile && mdMode === "preview" ? (
                     <div className="min-w-0 px-4 py-4 text-sm text-foreground">
-                      <MessageResponse>{fileContent}</MessageResponse>
+                      {/* O pipeline padrão descarta `src` em data URL, que é
+                          o que a figura local vira depois de resolvida. */}
+                      <MessageResponse rehypePlugins={localImageRehypePlugins}>
+                        {previewMarkdown}
+                      </MessageResponse>
                     </div>
                   ) : (
-                    <CodeView content={fileContent} highlighted={highlighted} />
+                    <CodeView
+                      content={fileContent}
+                      highlighted={highlighted}
+                      wrap={isMarkdownFile}
+                    />
                   )
                 ) : null}
               </ArtifactContent>
