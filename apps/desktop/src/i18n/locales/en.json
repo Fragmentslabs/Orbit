@@ -1707,9 +1707,10 @@
       "week": "7 days",
       "month": "30 days"
     },
-    "project": {
-      "all": "All projects",
-      "none": "No project"
+    "scope": {
+      "all": "Everything",
+      "session": "In this chat",
+      "loose": "Loose"
     }
   },
   "esteira": {

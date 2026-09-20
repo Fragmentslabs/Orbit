@@ -1706,9 +1706,10 @@
       "week": "7 dias",
       "month": "30 dias"
     },
-    "project": {
-      "all": "Todos os projetos",
-      "none": "Sem projeto"
+    "scope": {
+      "all": "Tudo",
+      "session": "Neste chat",
+      "loose": "Soltos"
     }
   },
   "esteira": {

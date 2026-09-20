@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
-import { CheckIcon, CodeXml, FileText, Folder, HardDriveIcon, ImageOff, MessageSquare, RefreshCw, Search, Trash2, X } from "lucide-react"
+import { CheckIcon, CodeXml, FileText, Folder, FolderGit2, HardDriveIcon, ImageOff, MessageSquare, RefreshCw, Search, Trash2, X } from "lucide-react"
+import type { LucideIcon } from "lucide-react"
 import { mediaKind, thumbUrl, type MediaEntry, type MediaSource } from "@shared/media"
 import { folderKey, normalizeFolderName } from "@shared/chat"
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog"
@@ -8,6 +9,8 @@ import { Input } from "@/components/ui/input"
 import { artifactApi, mediaApi } from "@/src/lib/ipc"
 import { useSessionStore } from "@/src/stores/session-store"
 import { usePanelStore } from "@/src/stores/panel-store"
+import { useTheme } from "@/components/theme-provider"
+import { openDocumentInPanel } from "@/src/lib/open-document"
 import { useWorkspace } from "@/lib/workspace-context"
 import { cn } from "@/lib/utils"
 
@@ -29,9 +32,23 @@ import { cn } from "@/lib/utils"
 type SourceFilter = "all" | MediaSource
 type PeriodFilter = "all" | "today" | "week" | "month"
 
-/** Filtro de projeto: "all" = todos; "__none__" = mídia sem projeto conhecido. */
-const PROJECT_ALL = "all"
-const PROJECT_NONE = "__none__"
+/**
+ * ESCOPO da galeria — um filtro só, com quatro naturezas.
+ *
+ * São quatro porque são quatro as formas de a mídia pertencer a algo: a
+ * conversa em que nasceu, a pasta da sidebar daquela conversa, o repositório
+ * em que ela trabalhava, ou nada disso. Separar em vários filtros faria o
+ * usuário combinar escopos que não se cruzam.
+ *
+ * A pasta vem da SESSÃO, não do registro: só documento grava `folderId`, e o
+ * filtro precisa valer para imagem e artefato também.
+ */
+const SCOPE_ALL = "all"
+const SCOPE_SESSION = "session"
+/** Mídia que não pertence a pasta nem a repositório — a de chat solto. */
+const SCOPE_LOOSE = "__loose__"
+const FOLDER_PREFIX = "folder:"
+const PROJECT_PREFIX = "project:"
 
 const PERIOD_MS: Record<Exclude<PeriodFilter, "all">, number> = {
   today: 24 * 60 * 60 * 1000,
@@ -80,9 +97,15 @@ function Thumb({ entry, selected, selecting, onToggle, onOpen }: {
   onOpen: () => void
 }) {
   const [failed, setFailed] = useState(false)
+  const { theme } = useTheme()
+  const isDark =
+    theme === "dark" ||
+    (theme === "system" && window.matchMedia("(prefers-color-scheme: dark)").matches)
   // Artefato sem miniatura (captura falhou) ou imagem quebrada caem no ícone —
   // o tile continua clicável, o ativo ainda existe.
-  const preview = thumbUrl(entry)
+  // O documento vivo tem uma capa por tema: a do grid é a do tema atual, para
+  // o tile não ser a única coisa branca numa tela escura.
+  const preview = thumbUrl(entry, isDark)
   const kind = mediaKind(entry)
   const isArtifact = kind === "artifact"
   const isDocument = kind === "document"
@@ -145,17 +168,51 @@ function Thumb({ entry, selected, selecting, onToggle, onOpen }: {
   )
 }
 
+/** Chip do filtro de escopo. */
+function ScopeChip({
+  active,
+  onClick,
+  label,
+  Icon,
+}: {
+  active: boolean
+  onClick: () => void
+  label: string
+  Icon?: LucideIcon
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      title={label}
+      className={cn(
+        "flex max-w-40 items-center gap-1 rounded-full px-2 py-0.5 text-[11px] transition-colors",
+        active
+          ? "bg-sidebar-accent text-sidebar-accent-foreground"
+          : "text-muted-foreground hover:bg-sidebar-accent/50",
+      )}
+    >
+      {Icon && <Icon className="size-3 shrink-0" />}
+      <span className="truncate">{label}</span>
+    </button>
+  )
+}
+
 export function MediaGallery() {
   const { t, i18n } = useTranslation()
   const { mode, setMode, folders } = useWorkspace()
   const sessions = useSessionStore((s) => s.sessions)
+  /** Pastas da sidebar (agrupamento de conversas) — diferentes das pastas de
+   *  trabalho do workspace, que são repositórios. */
+  const sidebarFolders = useSessionStore((s) => s.folders)
+  const activeSessionId = useSessionStore((s) => s.activeIds[mode])
   const [entries, setEntries] = useState<MediaEntry[]>([])
   const [usage, setUsage] = useState({ count: 0, bytes: 0 })
   const [loading, setLoading] = useState(true)
   const [source, setSource] = useState<SourceFilter>("all")
   const [period, setPeriod] = useState<PeriodFilter>("all")
-  /** Filtro explícito do usuário; null = segue o padrão (projeto da pasta selecionada). */
-  const [projectOverride, setProjectOverride] = useState<string | null>(null)
+  /** Escolha explícita do usuário; null = segue o padrão do contexto atual. */
+  const [scopeOverride, setScopeOverride] = useState<string | null>(null)
   const [query, setQuery] = useState("")
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [preview, setPreview] = useState<MediaEntry | null>(null)
@@ -212,11 +269,42 @@ export function MediaGallery() {
     return { key: folderKey(label), label }
   }, [sessionById])
 
+  /**
+   * Pasta da sidebar de uma entrada, pela sessão que a originou. Entrada órfã
+   * (backfill) ou conversa fora de pasta não tem.
+   */
+  const folderById = useMemo(
+    () => new Map(sidebarFolders.map((f) => [f.id, f.name])),
+    [sidebarFolders],
+  )
+  const folderOf = useCallback(
+    (entry: MediaEntry): { id: string; name: string } | null => {
+      if (!entry.sessionId) return null
+      const folderId = sessionById.get(entry.sessionId)?.folderId
+      if (!folderId) return null
+      const name = folderById.get(folderId)
+      return name ? { id: folderId, name } : null
+    },
+    [sessionById, folderById],
+  )
+
   /** Entradas no escopo do modo atual (aplica o filtro de sessão uma vez só). */
   const scopedEntries = useMemo(
     () => entries.filter((entry) => !entry.sessionId || modeSessionIds.has(entry.sessionId)),
     [entries, modeSessionIds],
   )
+
+  /** Pastas da sidebar com mídia no escopo — os chips do filtro. */
+  const folderOptions = useMemo(() => {
+    const byId = new Map<string, string>()
+    for (const entry of scopedEntries) {
+      const f = folderOf(entry)
+      if (f && !byId.has(f.id)) byId.set(f.id, f.name)
+    }
+    return [...byId.entries()]
+      .map(([id, name]) => ({ id, name }))
+      .sort((a, b) => a.name.localeCompare(b.name))
+  }, [scopedEntries, folderOf])
 
   /** Projetos com mídia no escopo — os chips do filtro. */
   const projectOptions = useMemo(() => {
@@ -230,53 +318,91 @@ export function MediaGallery() {
       .sort((a, b) => a.label.localeCompare(b.label))
   }, [scopedEntries, projectOf])
 
-  const hasProjectless = useMemo(
-    () => scopedEntries.some((entry) => !projectOf(entry)),
-    [scopedEntries, projectOf],
+  const hasLoose = useMemo(
+    () => scopedEntries.some((entry) => !folderOf(entry) && !projectOf(entry)),
+    [scopedEntries, folderOf, projectOf],
   )
 
-  /** Projeto da pasta selecionada no workspace (folders[0]) — o filtro padrão. */
-  const defaultProjectKey = useMemo(() => {
-    if (!folders[0]) return null
-    return folderKey(normalizeFolderName(folders[0]))
-  }, [folders])
-
-  const defaultProjectHasMedia = useMemo(
-    () => !!defaultProjectKey && scopedEntries.some((entry) => projectOf(entry)?.key === defaultProjectKey),
-    [defaultProjectKey, scopedEntries, projectOf],
+  /** Uma entrada cai neste escopo? É a regra única — filtro, padrão e chips
+   *  perguntam todos aqui, então não há como divergirem. */
+  const matchesScope = useCallback(
+    (entry: MediaEntry, value: string): boolean => {
+      if (value === SCOPE_ALL) return true
+      if (value === SCOPE_SESSION) return !!activeSessionId && entry.sessionId === activeSessionId
+      if (value === SCOPE_LOOSE) return !folderOf(entry) && !projectOf(entry)
+      if (value.startsWith(FOLDER_PREFIX)) {
+        return folderOf(entry)?.id === value.slice(FOLDER_PREFIX.length)
+      }
+      if (value.startsWith(PROJECT_PREFIX)) {
+        return projectOf(entry)?.key === value.slice(PROJECT_PREFIX.length)
+      }
+      return true
+    },
+    [activeSessionId, folderOf, projectOf],
   )
 
-  const projectOptionKeys = useMemo(() => new Set(projectOptions.map((p) => p.key)), [projectOptions])
+  const activeSession = useMemo(
+    () => sessions.find((s) => s.id === activeSessionId),
+    [sessions, activeSessionId],
+  )
 
   /**
-   * Filtro efetivo: o escolhido pelo usuário quando é válido; se ele saiu do
-   * escopo (ex.: trocou de modo e o projeto não tem mídia aqui) ou nada foi
-   * escolhido, cai no padrão — o projeto da pasta selecionada, quando tem
-   * mídia — e só então "todos". Tudo derivado: nada de setState em effect.
+   * O escopo que a galeria abre quando o usuário ainda não escolheu.
+   *
+   * Do mais específico que o contexto oferece para o mais amplo: a pasta da
+   * sidebar da conversa, senão o repositório em que ela trabalha, senão — num
+   * CHAT SOLTO, que não pertence a nenhum dos dois — a própria conversa.
+   *
+   * Cada candidato só vale se tiver mídia: abrir a galeria vazia esconderia
+   * tudo que existe, e o usuário não teria como saber que o filtro é que está
+   * apertado.
    */
-  const project = useMemo(() => {
-    if (projectOverride === PROJECT_ALL || projectOverride === PROJECT_NONE) return projectOverride
-    if (projectOverride && projectOptionKeys.has(projectOverride)) return projectOverride
-    if (defaultProjectKey && defaultProjectHasMedia) return defaultProjectKey
-    return PROJECT_ALL
-  }, [projectOverride, projectOptionKeys, defaultProjectKey, defaultProjectHasMedia])
+  const defaultScope = useMemo(() => {
+    const has = (value: string) => scopedEntries.some((entry) => matchesScope(entry, value))
+    if (activeSession?.folderId) {
+      const value = `${FOLDER_PREFIX}${activeSession.folderId}`
+      if (has(value)) return value
+    }
+    const directory = activeSession?.directory ?? folders[0]
+    if (directory) {
+      const value = `${PROJECT_PREFIX}${folderKey(normalizeFolderName(directory))}`
+      if (has(value)) return value
+    }
+    if (activeSessionId && has(SCOPE_SESSION)) return SCOPE_SESSION
+    return SCOPE_ALL
+  }, [activeSession, activeSessionId, folders, scopedEntries, matchesScope])
+
+  /** Valores que existem agora — o override morre quando sai de cena (ex.: o
+   *  usuário troca de modo e aquela pasta não tem mídia aqui). */
+  const scopeValues = useMemo(
+    () =>
+      new Set([
+        SCOPE_ALL,
+        SCOPE_SESSION,
+        SCOPE_LOOSE,
+        ...folderOptions.map((f) => `${FOLDER_PREFIX}${f.id}`),
+        ...projectOptions.map((p) => `${PROJECT_PREFIX}${p.key}`),
+      ]),
+    [folderOptions, projectOptions],
+  )
+
+  /** Tudo derivado: nada de setState em effect. */
+  const scope = useMemo(
+    () => (scopeOverride && scopeValues.has(scopeOverride) ? scopeOverride : defaultScope),
+    [scopeOverride, scopeValues, defaultScope],
+  )
 
   const visible = useMemo(() => {
     const needle = query.trim().toLowerCase()
     const since = period === "all" ? 0 : Date.now() - PERIOD_MS[period]
     return scopedEntries.filter((entry) => {
       if (source !== "all" && entry.source !== source) return false
-      if (project === PROJECT_NONE) {
-        if (projectOf(entry)) return false
-      } else if (project !== PROJECT_ALL) {
-        const p = projectOf(entry)
-        if (!p || p.key !== project) return false
-      }
+      if (!matchesScope(entry, scope)) return false
       if (entry.createdAt < since) return false
       if (!needle) return true
       return `${entry.name ?? ""} ${entry.taskId ?? ""} ${entry.id}`.toLowerCase().includes(needle)
     })
-  }, [scopedEntries, source, period, query, project, projectOf])
+  }, [scopedEntries, source, period, query, scope, matchesScope])
 
   const toggle = useCallback((id: string) => {
     setSelected((prev) => {
@@ -334,12 +460,12 @@ export function MediaGallery() {
       }
       const sessionId = entry.sessionId ?? useSessionStore.getState().activeIds[mode]
       if (!sessionId) return
-      // Documento vai para o visualizador de documentos (o mesmo do PDF
-      // anexado); artefato continua na aba que renderiza a pagina HTML.
+      // Documento vivo abre no canvas de Markdown, arquivo pedido abre no
+      // visualizador — quem decide e o openDocumentInPanel, para a galeria e o
+      // card da conversa concordarem. Artefato continua na aba que renderiza a
+      // pagina HTML.
       if (kind === "document") {
-        usePanelStore
-          .getState()
-          .openSourceTab(sessionId, { docId: entry.id, page: 1, title: entry.name || entry.id })
+        void openDocumentInPanel(sessionId, entry.id, entry.name || entry.id)
         return
       }
       usePanelStore.getState().openArtifactTab(sessionId, entry.id, entry.name || entry.id)
@@ -372,53 +498,48 @@ export function MediaGallery() {
             <RefreshCw className="size-3.5" />
           </button>
         </div>
+        {/* Escopo: cada chip é um jeito de a mídia pertencer a algo. O ícone
+            é o que separa pasta da sidebar de repositório — os dois são
+            "pasta" no nome, mas não são a mesma coisa. */}
         <div className="flex flex-wrap items-center gap-1">
-          {projectOptions.length > 0 || hasProjectless ? (
-            <>
-              <Folder className="size-3.5 shrink-0 text-muted-foreground" />
-              <button
-                type="button"
-                onClick={() => setProjectOverride(PROJECT_ALL)}
-                className={cn(
-                  "rounded-full px-2 py-0.5 text-[11px] transition-colors",
-                  project === PROJECT_ALL
-                    ? "bg-sidebar-accent text-sidebar-accent-foreground"
-                    : "text-muted-foreground hover:bg-sidebar-accent/50",
-                )}
-              >
-                {t("media.project.all")}
-              </button>
-              {projectOptions.map((p) => (
-                <button
-                  key={p.key}
-                  type="button"
-                  onClick={() => setProjectOverride(p.key)}
-                  className={cn(
-                    "rounded-full px-2 py-0.5 text-[11px] transition-colors",
-                    project === p.key
-                      ? "bg-sidebar-accent text-sidebar-accent-foreground"
-                      : "text-muted-foreground hover:bg-sidebar-accent/50",
-                  )}
-                >
-                  {p.label}
-                </button>
-              ))}
-              {hasProjectless && (
-                <button
-                  type="button"
-                  onClick={() => setProjectOverride(PROJECT_NONE)}
-                  className={cn(
-                    "rounded-full px-2 py-0.5 text-[11px] transition-colors",
-                    project === PROJECT_NONE
-                      ? "bg-sidebar-accent text-sidebar-accent-foreground"
-                      : "text-muted-foreground hover:bg-sidebar-accent/50",
-                  )}
-                >
-                  {t("media.project.none")}
-                </button>
-              )}
-            </>
-          ) : null}
+          <ScopeChip
+            active={scope === SCOPE_ALL}
+            onClick={() => setScopeOverride(SCOPE_ALL)}
+            label={t("media.scope.all")}
+          />
+          {activeSessionId && (
+            <ScopeChip
+              active={scope === SCOPE_SESSION}
+              onClick={() => setScopeOverride(SCOPE_SESSION)}
+              label={t("media.scope.session")}
+              Icon={MessageSquare}
+            />
+          )}
+          {folderOptions.map((folder) => (
+            <ScopeChip
+              key={folder.id}
+              active={scope === `${FOLDER_PREFIX}${folder.id}`}
+              onClick={() => setScopeOverride(`${FOLDER_PREFIX}${folder.id}`)}
+              label={folder.name}
+              Icon={Folder}
+            />
+          ))}
+          {projectOptions.map((p) => (
+            <ScopeChip
+              key={p.key}
+              active={scope === `${PROJECT_PREFIX}${p.key}`}
+              onClick={() => setScopeOverride(`${PROJECT_PREFIX}${p.key}`)}
+              label={p.label}
+              Icon={FolderGit2}
+            />
+          ))}
+          {hasLoose && (
+            <ScopeChip
+              active={scope === SCOPE_LOOSE}
+              onClick={() => setScopeOverride(SCOPE_LOOSE)}
+              label={t("media.scope.loose")}
+            />
+          )}
         </div>
         <div className="flex flex-wrap items-center gap-1">
           {sourceFilters.map((value) => (
