@@ -699,7 +699,28 @@ export const initApi = {
   },
 }
 
+/** Recusa do `fs:writeFile`, com o que a UI precisa para oferecer a saída. */
+export type WriteFileResult =
+  | { ok: true; mtimeMs: number }
+  | { ok: false; reason: "stale"; content?: string; mtimeMs?: number }
+  | {
+      ok: false
+      reason: "outside-workspace" | "git-internal" | "not-a-file" | "binary" | "too-large" | "failed"
+      error?: string
+    }
+
 export const fsApi = {
+  /**
+   * Salva o arquivo aberto no painel. `roots` são as pastas do workspace e
+   * `expectedMtimeMs` é o mtime de quando o arquivo foi aberto — sem ele o
+   * save sobrescreve o que o agente (ou outro editor) tiver escrito no meio.
+   */
+  writeFile: (input: {
+    filePath: string
+    content: string
+    roots: string[]
+    expectedMtimeMs?: number
+  }) => window.ipcRenderer.invoke("fs:writeFile", input) as Promise<WriteFileResult>,
   listFilesRecursive: (dirPath: string) =>
     window.ipcRenderer.invoke("fs:listFilesRecursive", dirPath) as Promise<{ ok: true; files: string[] } | { ok: false; error: string }>,
   readFileAsDataUrl: (filePath: string) =>

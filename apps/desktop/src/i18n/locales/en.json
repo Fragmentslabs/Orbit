@@ -1049,7 +1049,7 @@
     "gitHistoryError": "Could not read this folder's git history.",
     "noCommits": "No commits found.",
     "historyEnd": "End of history",
-    "editMode": "Edit",
+    "sourceMode": "Source",
     "previewMode": "Preview",
     "uncommitted": "Uncommitted changes",
     "aheadBehind": "{{ahead}} ahead, {{behind}} behind {{branch}}",
@@ -1068,7 +1068,23 @@
     "standardMode": "View file",
     "diffMode": "View diff",
     "noChangesInDiff": "No changes in this file.",
-    "diffUnavailable": "Diff not available for this file."
+    "diffUnavailable": "Diff not available for this file.",
+    "unsaved": "Unsaved changes",
+    "autoSave": "Auto-save",
+    "conflictStale": "The file changed on disk since you opened it.",
+    "conflictAgent": "The agent changed a passage you had also edited — its change was not applied.",
+    "conflictReload": "Reload from disk",
+    "conflictOverwrite": "Overwrite",
+    "conflictKeepMine": "Keep mine",
+    "saveError": {
+      "outside-workspace": "This file is outside the workspace folders.",
+      "git-internal": "Files inside .git cannot be edited here.",
+      "not-a-file": "The file no longer exists on disk.",
+      "binary": "This file is binary.",
+      "too-large": "The content exceeds the maximum size.",
+      "failed": "Could not save."
+    },
+    "discardPrompt": "You have unsaved changes in this file. Discard them?"
   },
   "createRepo": {
     "titulo": "This project has no remote repository yet",

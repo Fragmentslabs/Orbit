@@ -1049,7 +1049,7 @@
     "gitHistoryError": "Não foi possível ler o histórico git desta pasta.",
     "noCommits": "Nenhum commit encontrado.",
     "historyEnd": "Fim do histórico",
-    "editMode": "Editar",
+    "sourceMode": "Fonte",
     "previewMode": "Visualizar",
     "uncommitted": "Mudanças não commitadas",
     "aheadBehind": "{{ahead}} à frente, {{behind}} atrás da {{branch}}",
@@ -1068,7 +1068,23 @@
     "standardMode": "Ver arquivo",
     "diffMode": "Ver diff",
     "noChangesInDiff": "Sem mudanças neste arquivo.",
-    "diffUnavailable": "Diff indisponível para este arquivo."
+    "diffUnavailable": "Diff indisponível para este arquivo.",
+    "unsaved": "Alterações não salvas",
+    "autoSave": "Salvamento automático",
+    "conflictStale": "O arquivo mudou em disco desde que você o abriu.",
+    "conflictAgent": "O agente alterou este trecho, que você também editou — a mudança dele não foi aplicada.",
+    "conflictReload": "Recarregar do disco",
+    "conflictOverwrite": "Gravar por cima",
+    "conflictKeepMine": "Manter o meu",
+    "saveError": {
+      "outside-workspace": "Este arquivo está fora das pastas do workspace.",
+      "git-internal": "Arquivos dentro de .git não podem ser editados aqui.",
+      "not-a-file": "O arquivo não existe mais em disco.",
+      "binary": "Este arquivo é binário.",
+      "too-large": "O conteúdo passou do tamanho máximo.",
+      "failed": "Não foi possível salvar."
+    },
+    "discardPrompt": "Você tem alterações não salvas neste arquivo. Descartar?"
   },
   "createRepo": {
     "titulo": "Este projeto ainda não tem repositório remoto",

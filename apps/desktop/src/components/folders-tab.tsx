@@ -26,7 +26,8 @@ import {
   HistoryIcon,
   FolderIcon,
   PanelRightCloseIcon,
-  PenLineIcon,
+  CodeIcon,
+  SaveIcon,
   TagIcon,
   UploadIcon,
   Loader2,
@@ -47,8 +48,9 @@ import {
 } from "@/components/ui/hover-card";
 import { cn } from "@/lib/utils";
 import { useWorkspace } from "@/lib/workspace-context";
-import { useTheme } from "@/components/theme-provider";
-import { highlightLines, type HighlightedToken } from "@/lib/code-highlighter";
+import { CodeEditor, type CodeEditorHandle } from "@/src/components/code-editor";
+import { agentWriteFromTool } from "@/src/lib/agent-merge";
+import { chatApi, fsApi } from "@/src/lib/ipc";
 import { FolderSelector } from "@/src/components/folder-selector";
 import { useBranchStore, type BranchSyncInfo, type SyncResult } from "@/src/stores/branch-store";
 import { CreateRemoteRepoDialog } from "@/src/components/create-remote-repo-dialog";
@@ -120,7 +122,7 @@ interface CommitEntry {
 type ReaddirResult =
   | { ok: true; entries: DirEntryInfo[] }
   | { ok: false; error: string };
-type ReadFileResult = { content: string } | { error: string };
+type ReadFileResult = { content: string; mtimeMs?: number } | { error: string };
 type GitLogResult =
   | { ok: true; commits: CommitEntry[]; hasMore: boolean }
   | { ok: false; error: string };
@@ -154,6 +156,11 @@ interface DeletedEntry {
 }
 
 const FILE_PANEL_MIN_PX = 200;
+
+/** Salvamento automático: preferência do painel, como as demais. */
+const AUTO_SAVE_KEY = "orbit-files-auto-save";
+/** Espera depois da última tecla antes do save automático. */
+const AUTO_SAVE_DEBOUNCE_MS = 1000;
 
 /** Junta a raiz do repo com um caminho relativo (separadores '/' no relPath). */
 function joinPath(root: string, relPath: string) {
@@ -459,49 +466,6 @@ function FolderQuickSwitch({
  * alturas empurraria todos os números seguintes para cima do conteúdo errado.
  * Assim o número acompanha a altura do que ele numera.
  */
-function CodeView({
-  content,
-  highlighted,
-  wrap = false,
-}: {
-  content: string;
-  highlighted: HighlightedToken[][] | null;
-  wrap?: boolean;
-}) {
-  const lines = content.split("\n");
-  // A calha é dimensionada pelo MAIOR número: com cada linha usando a largura
-  // do seu próprio, a coluna sairia serrilhada.
-  const gutter = `${String(lines.length).length + 1}ch`;
-  return (
-    <div className="min-w-0 py-4 font-mono text-xs">
-      {lines.map((line, i) => (
-        <div key={i} className="flex min-w-0">
-          <div
-            className="sticky left-0 z-10 shrink-0 select-none bg-code-viewer px-3 text-right leading-5 text-muted-foreground/50"
-            style={{ minWidth: gutter }}
-          >
-            {i + 1}
-          </div>
-          <div
-            className={cn(
-              "min-w-0 flex-1 px-4 leading-5",
-              wrap ? "whitespace-pre-wrap break-words" : "whitespace-pre",
-            )}
-          >
-            {highlighted?.[i]
-              ? highlighted[i].map((t, j) => (
-                  <span key={j} style={{ color: t.color }}>
-                    {t.content}
-                  </span>
-                ))
-              : line || " "}
-          </div>
-        </div>
-      ))}
-    </div>
-  );
-}
-
 /** Modo diff do visualizador: realça com a linguagem e só pinta o fundo. */
 function DiffCodeView({ patch, filePath }: { patch: string; filePath: string }) {
   const { t } = useTranslation();
@@ -527,12 +491,6 @@ function DiffCodeView({ patch, filePath }: { patch: string; filePath: string }) 
 export function FoldersTab() {
   const { t } = useTranslation();
   const { folders, setFolders } = useWorkspace();
-  const { theme } = useTheme();
-  const isDark =
-    theme === "dark" ||
-    (theme === "system" &&
-      window.matchMedia("(prefers-color-scheme: dark)").matches);
-
   const [viewMode, setViewMode] = useState<"files" | "commits">("files");
   const [expandedPaths, setExpandedPaths] = useState<Set<string>>(
     () => new Set(folders),
@@ -554,13 +512,27 @@ const [viewedFile, setViewedFile] = useState<ViewedFile>();
   const [fileImage, setFileImage] = useState<string | null>(null);
   const [fileError, setFileError] = useState<string | null>(null);
   const [fileLoading, setFileLoading] = useState(false);
-  const [highlighted, setHighlighted] = useState<HighlightedToken[][] | null>(
-    null,
+  /** mtime de quando o arquivo foi aberto — referência do save contra
+   *  escrita concorrente (agente, outro editor). */
+  const [fileMtime, setFileMtime] = useState<number | null>(null);
+  const [dirty, setDirty] = useState(false);
+  /** Espelho de `dirty` para leitura dentro de callbacks memoizados. */
+  const dirtyRef = useRef(false);
+  dirtyRef.current = dirty;
+  const [saving, setSaving] = useState(false);
+  /** Motivo pelo qual o último save ou a última escrita do agente não passou. */
+  const [conflict, setConflict] = useState<
+    null | { kind: "stale" } | { kind: "agent" } | { kind: "failed"; message: string }
+  >(null);
+  const [autoSave, setAutoSave] = useState(
+    () => localStorage.getItem(AUTO_SAVE_KEY) === "true",
   );
+  const editorRef = useRef<CodeEditorHandle>(null);
+  const autoSaveTimer = useRef<number>();
   const [copied, setCopied] = useState(false);
   const copyTimeoutRef = useRef<number>();
   const [fileBrowserOpen, setFileBrowserOpen] = useState(true);
-  const [mdMode, setMdMode] = useState<"edit" | "preview">("preview");
+  const [mdMode, setMdMode] = useState<"source" | "preview">("preview");
   // Status git do working tree, keyed por caminho absoluto (indicadores na árvore)
   const [gitStatus, setGitStatus] = useState<Record<string, GitStatusEntry>>({});
   // Modo diff do visualizador de arquivos (padrão vs patch)
@@ -702,8 +674,19 @@ const [viewedFile, setViewedFile] = useState<ViewedFile>();
     [dirCache, loadDir],
   );
 
-const openLiveFile = useCallback(
+  /**
+   * Trocar de arquivo joga fora o buffer atual. Sem esta confirmação o
+   * rascunho não salvo sumia em silêncio — um clique na árvore e o texto ia
+   * embora sem nada na tela dizendo que havia algo a perder.
+   */
+  const confirmDiscard = useCallback(() => {
+    if (!dirtyRef.current) return true;
+    return window.confirm(t("folders.discardPrompt"));
+  }, [t]);
+
+  const openLiveFile = useCallback(
     async (filePath: string, deleted = false) => {
+      if (!confirmDiscard()) return;
       const repo = folders[0];
       let relPath: string | null = null;
       if (repo) {
@@ -717,6 +700,11 @@ const openLiveFile = useCallback(
       setFileError(null);
       setFileContent(null);
       setFileImage(null);
+      // Estado de edição é por arquivo: o rascunho e o aviso de conflito do
+      // anterior não podem seguir para este.
+      setFileMtime(null);
+      setDirty(false);
+      setConflict(null);
       setMdMode("preview");
       setDiffMode(false);
       setDiffPatch(null);
@@ -761,15 +749,21 @@ const openLiveFile = useCallback(
         filePath,
       )) as ReadFileResult;
       setFileLoading(false);
-      if ("content" in result) setFileContent(result.content);
-      else setFileError(result.error);
+      if ("content" in result) {
+        setFileContent(result.content);
+        setFileMtime(result.mtimeMs ?? null);
+      } else setFileError(result.error);
     },
-    [folders, t],
+    [folders, t, confirmDiscard],
   );
 
   const openCommitFile = useCallback(
     async (repoPath: string, hash: string, path: string, deleted: boolean) => {
+      if (!confirmDiscard()) return;
       setViewedFile({ kind: "commit", repoPath, hash, path, deleted });
+      setFileMtime(null);
+      setDirty(false);
+      setConflict(null);
       setFileLoading(true);
       setFileError(null);
       setFileContent(null);
@@ -794,7 +788,7 @@ const openLiveFile = useCallback(
       if ("content" in result) setFileContent(result.content);
       else setFileError(result.error);
     },
-    [t],
+    [t, confirmDiscard],
   );
 
   const handleSelect = useCallback(
@@ -896,28 +890,157 @@ const openLiveFile = useCallback(
     [fileContent, previewImages],
   );
   const isImage = viewedFile ? isImageFile(viewedFile.path) : false;
+  /** O galho que renderiza o CodeEditor — quem rola é ele, não o pai. */
+  const showsEditor =
+    !fileLoading &&
+    !diffMode &&
+    !fileError &&
+    fileImage == null &&
+    fileContent != null &&
+    !(isMarkdownFile && mdMode === "preview");
 
-  useEffect(() => {
-    if (!fileContent || !viewedFile) {
-      setHighlighted(null);
-      return;
-    }
-    if (isMarkdownFile && mdMode === "preview") {
-      setHighlighted(null);
-      return;
-    }
-    let cancelled = false;
-    highlightLines(
-      fileContent,
+  /**
+   * Só arquivo do working tree é editável: o de um commit é histórico, e o
+   * excluído não existe mais em disco.
+   */
+  const canEdit =
+    viewedFile?.kind === "live" && !viewedFile.deleted && !isImage && !diffMode && folders.length > 0;
+
+  const saveFile = useCallback(
+    async (content: string) => {
+      if (!viewedFile || viewedFile.kind !== "live") return;
+      setSaving(true);
+      const result = await fsApi.writeFile({
+        filePath: viewedFile.path,
+        content,
+        roots: folders,
+        expectedMtimeMs: fileMtime ?? undefined,
+      });
+      setSaving(false);
+      if (result.ok) {
+        setConflict(null);
+        setFileMtime(result.mtimeMs);
+        // Vira a nova base do editor: o buffer passa a espelhar o disco e o
+        // indicador de rascunho apaga.
+        setFileContent(content);
+        return;
+      }
+      if (result.reason === "stale") {
+        // Alguém escreveu no meio. Não sobrescreve nada: mostra o aviso e
+        // deixa a pessoa escolher entre recarregar e insistir.
+        setConflict({ kind: "stale" });
+        return;
+      }
+      setConflict({
+        kind: "failed",
+        message: t(`folders.saveError.${result.reason}`, {
+          defaultValue: "error" in result ? (result.error ?? result.reason) : result.reason,
+        }),
+      });
+    },
+    [viewedFile, folders, fileMtime, t],
+  );
+
+  /** Descarta o rascunho e traz o que está em disco. */
+  const reloadFromDisk = useCallback(async () => {
+    if (!viewedFile || viewedFile.kind !== "live") return;
+    const result = (await window.ipcRenderer.invoke(
+      "fs:readFile",
       viewedFile.path,
-      isDark ? "dark" : "light",
-    ).then((result) => {
-      if (!cancelled) setHighlighted(result);
+    )) as ReadFileResult;
+    if ("content" in result) {
+      setFileContent(result.content);
+      setFileMtime(result.mtimeMs ?? null);
+      setConflict(null);
+    }
+  }, [viewedFile]);
+
+  /** Grava por cima, aceitando perder o que mudou em disco. */
+  const overwrite = useCallback(async () => {
+    const content = editorRef.current?.getContent();
+    if (content == null || !viewedFile || viewedFile.kind !== "live") return;
+    setSaving(true);
+    const result = await fsApi.writeFile({
+      filePath: viewedFile.path,
+      content,
+      roots: folders,
     });
-    return () => {
-      cancelled = true;
-    };
-  }, [fileContent, viewedFile, isDark, isMarkdownFile, mdMode]);
+    setSaving(false);
+    if (result.ok) {
+      setConflict(null);
+      setFileMtime(result.mtimeMs);
+      setFileContent(content);
+    }
+  }, [viewedFile, folders]);
+
+  /** Relê só o mtime, sem tocar no buffer — o conteúdo já foi fundido. */
+  const reloadMtime = useCallback(async (filePath: string) => {
+    const result = (await window.ipcRenderer.invoke("fs:readFile", filePath)) as ReadFileResult;
+    if ("content" in result) setFileMtime(result.mtimeMs ?? null);
+  }, []);
+
+  /**
+   * Escrita do agente no arquivo aberto.
+   *
+   * O evento `part` do chat já traz o input da tool, então dá para fundir a
+   * alteração no buffer em vez de recarregar por cima — cursor, seleção,
+   * scroll, undo e o rascunho em outras partes do arquivo sobrevivem.
+   *
+   * `bash` é ponto cego conhecido: escreve arquivo e não diz qual. Para esses
+   * casos o que protege é a checagem de mtime no save.
+   */
+  useEffect(() => {
+    const current = viewedFile;
+    if (!current || current.kind !== "live") return;
+    const open = current.path.replace(/\\/g, "/");
+    return chatApi.onEvent((event) => {
+      if (event.type !== "part" || event.part.type !== "tool") return;
+      // Só depois de gravado: 'running' ainda não escreveu em disco, e fundir
+      // ali deixaria o buffer adiantado em relação ao arquivo.
+      if (event.part.state !== "done") return;
+      const parsed = agentWriteFromTool(event.part.tool, event.part.input);
+      if (!parsed) return;
+      // O caminho da tool pode vir relativo à pasta de trabalho.
+      const target = parsed.filePath.replace(/\\/g, "/");
+      if (open !== target && !open.endsWith(`/${target}`)) return;
+      const outcome = editorRef.current?.applyAgentWrite(parsed.write);
+      if (!outcome) return;
+      if (outcome.kind === "conflict") {
+        setConflict({ kind: "agent" });
+        return;
+      }
+      // O disco mudou: sem renovar o mtime, o próximo save seria recusado por
+      // desatualizado mesmo já tendo incorporado a alteração do agente.
+      void reloadMtime(current.path);
+      if (outcome.wasClean) setFileContent(outcome.content);
+    });
+  }, [viewedFile, reloadMtime]);
+
+  /** Digitação no editor — só serve ao salvamento automático. */
+  const handleEditorChange = useCallback(
+    (content: string) => {
+      window.clearTimeout(autoSaveTimer.current);
+      if (!autoSave || !canEdit) return;
+      autoSaveTimer.current = window.setTimeout(() => {
+        void saveFile(content);
+      }, AUTO_SAVE_DEBOUNCE_MS);
+    },
+    [autoSave, canEdit, saveFile],
+  );
+
+  // Trocar de arquivo com save automático pendente gravaria o texto de um
+  // arquivo dentro do outro.
+  useEffect(() => {
+    return () => window.clearTimeout(autoSaveTimer.current);
+  }, [viewedFile]);
+
+  const toggleAutoSave = useCallback(() => {
+    setAutoSave((prev) => {
+      const next = !prev;
+      localStorage.setItem(AUTO_SAVE_KEY, String(next));
+      return next;
+    });
+  }, []);
 
   const handleCopy = useCallback(async () => {
     if (!fileContent) return;
@@ -1094,13 +1217,22 @@ const openLiveFile = useCallback(
                       {viewedFile.hash.slice(0, 7)}
                     </ArtifactTitle>
                   )}
-                  <ArtifactDescription className="truncate">
-                    {getBreadcrumbs(folders[0], viewedFile.path).map((part, i, arr) => (
-                      <span key={i}>
-                        {i > 0 && <span className="mx-0.5 text-muted-foreground/50">›</span>}
-                        <span className={cn(i === arr.length - 1 && "font-medium text-foreground")}>{part}</span>
-                      </span>
-                    ))}
+                  <ArtifactDescription className="flex min-w-0 items-center gap-1.5">
+                    <span className="truncate">
+                      {getBreadcrumbs(folders[0], viewedFile.path).map((part, i, arr) => (
+                        <span key={i}>
+                          {i > 0 && <span className="mx-0.5 text-muted-foreground/50">›</span>}
+                          <span className={cn(i === arr.length - 1 && "font-medium text-foreground")}>{part}</span>
+                        </span>
+                      ))}
+                    </span>
+                    {dirty && (
+                      <span
+                        title={t("folders.unsaved")}
+                        className="size-1.5 shrink-0 rounded-full bg-primary"
+                      />
+                    )}
+                    {saving && <Loader2 className="size-3 shrink-0 animate-spin text-muted-foreground" />}
                   </ArtifactDescription>
                 </>
               ) : (
@@ -1129,6 +1261,12 @@ const openLiveFile = useCallback(
                       {copied ? <CheckIcon className="size-4" /> : <CopyIcon className="size-4" />}
                       {t("folders.copyContent")}
                     </DropdownMenuItem>
+                    {canEdit && (
+                      <DropdownMenuItem onClick={toggleAutoSave}>
+                        {autoSave ? <CheckIcon className="size-4" /> : <SaveIcon className="size-4" />}
+                        {t("folders.autoSave")}
+                      </DropdownMenuItem>
+                    )}
                     {viewedFile.kind === "live" && (
                       <DropdownMenuItem onClick={handleReveal}>
                         <FolderOpenIcon className="size-4" />
@@ -1181,16 +1319,16 @@ const openLiveFile = useCallback(
                   <div className="flex items-center gap-0.5 rounded-full border border-border bg-popover/90 p-0.5 shadow-sm backdrop-blur-xl">
                     <button
                       type="button"
-                      onClick={() => setMdMode("edit")}
-                      title={t("folders.editMode")}
+                      onClick={() => setMdMode("source")}
+                      title={t("folders.sourceMode")}
                       className={cn(
                         "flex size-6 items-center justify-center rounded-full transition-colors",
-                        mdMode === "edit"
+                        mdMode === "source"
                           ? "bg-primary text-primary-foreground"
                           : "text-muted-foreground hover:bg-accent hover:text-accent-foreground",
                       )}
                     >
-                      <PenLineIcon className="size-3.5" />
+                      <CodeIcon className="size-3.5" />
                     </button>
                     <button
                       type="button"
@@ -1208,7 +1346,52 @@ const openLiveFile = useCallback(
                   </div>
                 )}
               </div>
-              <ArtifactContent className="min-h-0 min-w-0 flex-1 overflow-auto p-0">
+              {conflict && (
+                <div className="z-20 flex flex-wrap items-center gap-2 border-b border-amber-500/30 bg-amber-500/10 px-3 py-1.5 text-xs text-amber-700 dark:text-amber-400">
+                  <span className="flex-1 min-w-40">
+                    {conflict.kind === "stale"
+                      ? t("folders.conflictStale")
+                      : conflict.kind === "agent"
+                        ? t("folders.conflictAgent")
+                        : conflict.message}
+                  </span>
+                  {conflict.kind !== "failed" && (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => void reloadFromDisk()}
+                        className="rounded-md px-1.5 py-0.5 font-medium hover:bg-amber-500/20"
+                      >
+                        {t("folders.conflictReload")}
+                      </button>
+                      {conflict.kind === "stale" && (
+                        <button
+                          type="button"
+                          onClick={() => void overwrite()}
+                          className="rounded-md px-1.5 py-0.5 font-medium hover:bg-amber-500/20"
+                        >
+                          {t("folders.conflictOverwrite")}
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => setConflict(null)}
+                        className="rounded-md px-1.5 py-0.5 font-medium hover:bg-amber-500/20"
+                      >
+                        {t("folders.conflictKeepMine")}
+                      </button>
+                    </>
+                  )}
+                </div>
+              )}
+              <ArtifactContent
+                className={cn(
+                  "min-h-0 min-w-0 flex-1 p-0",
+                  // O editor rola por dentro (e só materializa as linhas
+                  // visíveis); os outros modos continuam rolando no pai.
+                  showsEditor ? "overflow-hidden" : "overflow-auto",
+                )}
+              >
                 {fileLoading ? (
                   <div className="p-4 text-sm text-muted-foreground">
                     {t("common.loading")}
@@ -1246,10 +1429,15 @@ const openLiveFile = useCallback(
                       </MessageResponse>
                     </div>
                   ) : (
-                    <CodeView
+                    <CodeEditor
+                      ref={editorRef}
                       content={fileContent}
-                      highlighted={highlighted}
+                      filePath={viewedFile.path}
                       wrap={isMarkdownFile}
+                      editable={canEdit}
+                      onSave={saveFile}
+                      onDirtyChange={setDirty}
+                      onChange={handleEditorChange}
                     />
                   )
                 ) : null}

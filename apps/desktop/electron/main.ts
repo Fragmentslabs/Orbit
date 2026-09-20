@@ -10,6 +10,8 @@ import path from 'node:path'
 import type * as NodePty from 'node-pty'
 import { listCredentialProviders, removeCredential, setCredential } from './lib/auth'
 import { getCatalog, ensureCustomProvidersSeeded } from './lib/catalog'
+import { checkWritePath } from './lib/file-write-guard'
+import { recordManualSave } from './lib/manual-saves'
 import { addCustomProvider, listCustomProviders, removeCustomProvider, updateCustomProvider } from './lib/custom-providers'
 import { detectLocal } from './lib/detect-local'
 import { killAll as killAllProcesses, listProcesses, killProcess, getProcessOutput } from './lib/process-manager'
@@ -498,7 +500,11 @@ async function listDirectory(dirPath: string): Promise<DirEntryInfo[]> {
 
 const MAX_FILE_SIZE = 2 * 1024 * 1024 // 2MB
 
-async function readTextFile(filePath: string): Promise<{ content: string } | { error: string }> {
+/** `mtimeMs` volta junto: é a referência que o painel devolve no save para
+ *  detectar que o arquivo mudou em disco desde que foi aberto. */
+async function readTextFile(
+  filePath: string,
+): Promise<{ content: string; mtimeMs: number } | { error: string }> {
   try {
     const stat = await fs.stat(filePath)
     if (stat.size > MAX_FILE_SIZE) {
@@ -508,7 +514,7 @@ async function readTextFile(filePath: string): Promise<{ content: string } | { e
     if (buffer.subarray(0, 8000).includes(0)) {
       return { error: 'Arquivo binário' }
     }
-    return { content: buffer.toString('utf8') }
+    return { content: buffer.toString('utf8'), mtimeMs: stat.mtimeMs }
   } catch (err) {
     return { error: (err as Error).message }
   }
@@ -1068,6 +1074,68 @@ app.whenReady().then(() => {
   ipcMain.handle('fs:readFile', async (_event, filePath: string) => {
     return readTextFile(filePath)
   })
+
+  /**
+   * Escrita do painel de arquivos. Único caminho pelo qual o renderer grava em
+   * disco — as tools do agente passam pelo `resolveSafePath`, não por aqui.
+   *
+   * O painel EDITA, não cria: o alvo tem que ser um arquivo de texto que já
+   * existe. Isso, mais a recusa de `.git`, é o que limita o estrago de um
+   * caminho errado — a contenção nas raízes é rede contra bug, já que quem
+   * informa as raízes é o próprio renderer (ver file-write-guard).
+   */
+  ipcMain.handle(
+    'fs:writeFile',
+    async (
+      _event,
+      input: { filePath: string; content: string; roots: string[]; expectedMtimeMs?: number },
+    ) => {
+      const verdict = checkWritePath(input.filePath, input.roots)
+      if (!verdict.ok) return { ok: false as const, reason: verdict.reason }
+      const file = verdict.resolved
+      try {
+        const stat = await fs.stat(file)
+        if (!stat.isFile()) return { ok: false as const, reason: 'not-a-file' as const }
+        if (Buffer.byteLength(input.content, 'utf8') > MAX_FILE_SIZE) {
+          return { ok: false as const, reason: 'too-large' as const }
+        }
+        // Mudou em disco desde que o painel abriu: pode ser o agente, pode ser
+        // outro editor. Sobrescrever aqui apagaria trabalho que ninguém viu,
+        // então devolvemos o conteúdo novo e quem decide é a pessoa.
+        // O alvo é binário? O painel só abre texto (readTextFile recusa
+        // binário), então chegar aqui significa caminho errado — e sobrescrever
+        // um .png com texto é o estrago que essas guardas existem para evitar.
+        const head = await fs.open(file, 'r')
+        try {
+          const probe = Buffer.alloc(Math.min(8000, stat.size))
+          if (probe.length > 0) await head.read(probe, 0, probe.length, 0)
+          if (probe.includes(0)) return { ok: false as const, reason: 'binary' as const }
+        } finally {
+          await head.close()
+        }
+        if (input.expectedMtimeMs != null && stat.mtimeMs !== input.expectedMtimeMs) {
+          const current = await readTextFile(file)
+          return {
+            ok: false as const,
+            reason: 'stale' as const,
+            ...('content' in current
+              ? { content: current.content, mtimeMs: current.mtimeMs }
+              : {}),
+          }
+        }
+        await fs.writeFile(file, input.content, 'utf8')
+        const after = await fs.stat(file)
+        // O turno em andamento precisa saber que este arquivo é do usuário,
+        // senão o snapshot da pasta o credita ao agente.
+        recordManualSave(file)
+        return { ok: true as const, mtimeMs: after.mtimeMs }
+      } catch (err) {
+        const code = (err as NodeJS.ErrnoException).code
+        if (code === 'ENOENT') return { ok: false as const, reason: 'not-a-file' as const }
+        return { ok: false as const, reason: 'failed' as const, error: (err as Error).message }
+      }
+    },
+  )
 
   ipcMain.handle('fs:listFilesRecursive', async (_event, dirPath: string) => {
     try {
