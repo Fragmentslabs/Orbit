@@ -1280,7 +1280,7 @@ const [viewedFile, setViewedFile] = useState<ViewedFile>();
           </ArtifactHeader>
           {viewedFile ? (
             <div className="relative flex min-h-0 min-w-0 flex-1 flex-col">
-              <div className="absolute top-3 right-3 z-20 flex flex-col items-end gap-1.5">
+              <div className="pointer-events-none absolute right-3 bottom-3 z-20 flex flex-col items-end gap-1.5 [&>*]:pointer-events-auto">
                 {!isImage && (
                   <div className="flex items-center gap-0.5 rounded-full border border-border bg-popover/90 p-0.5 shadow-sm backdrop-blur-xl">
                     <button
