@@ -51,29 +51,76 @@ function useRangeLabels(): Record<PresetRange, string> {
   };
 }
 
+type ChartMetric = "tokens" | "hours" | "cost";
+
+interface ChartEntry {
+  key: string;
+  label: string;
+  providerId: string;
+  value: number;
+  tokens: number;
+  hours: number;
+  cost: number;
+  opacity: number;
+}
+
+/** Botãozinho de alternância do cabeçalho do gráfico. */
+function ChartToggle<T extends string>({
+  options,
+  value,
+  onChange,
+}: {
+  options: { value: T; label: string }[];
+  value: T;
+  onChange: (v: T) => void;
+}) {
+  return (
+    <div className="flex gap-1">
+      {options.map((o) => (
+        <button
+          key={o.value}
+          type="button"
+          className={cn(
+            "rounded px-1.5 py-0.5 text-[10px] transition-colors",
+            value === o.value
+              ? "bg-primary/10 text-primary"
+              : "text-muted-foreground hover:text-foreground",
+          )}
+          onClick={() => onChange(o.value)}
+        >
+          {o.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 function ModelBarChart({ data }: { data: AnalyticsSummary }) {
   const { t } = useTranslation();
-  const [chartMode, setChartMode] = useState<"tokens" | "hours">("tokens")
+  const [metric, setMetric] = useState<ChartMetric>("tokens");
 
-  const chartData = useMemo(() => {
-    const vals = data.byModel.map((m) =>
-      chartMode === "tokens" ? m.tokens : m.hours,
-    )
-    const maxVal = Math.max(...vals, 1)
-    return data.byModel.map((m) => {
-      const raw = chartMode === "tokens" ? m.tokens : m.hours
-      return {
+  const chartData = useMemo<ChartEntry[]>(() => {
+    const pick = (m: { tokens: number; hours: number; cost: number }) =>
+      metric === "tokens" ? m.tokens : metric === "hours" ? m.hours : m.cost;
+    const maxVal = Math.max(...data.byModel.map(pick), Number.EPSILON);
+
+    return data.byModel
+      .slice()
+      .sort((a, b) => pick(b) - pick(a))
+      .map((m) => ({
         key: `${m.providerId}/${m.modelId}`,
         label: m.modelId,
         providerId: m.providerId,
-        value: chartMode === "tokens" ? raw : Math.round(raw * 100) / 100,
+        value: metric === "tokens" ? m.tokens : Math.round(pick(m) * 100) / 100,
         tokens: m.tokens,
         hours: Math.round(m.hours * 100) / 100,
         cost: m.cost,
-        opacity: 0.25 + (raw / maxVal) * 0.7,
-      }
-    })
-  }, [data, chartMode])
+        opacity: 0.25 + (pick(m) / maxVal) * 0.7,
+      }));
+  }, [data, metric]);
+
+  const formatMetric = (v: number) =>
+    metric === "tokens" ? formatTokens(v) : metric === "hours" ? `${v}h` : formatCost(v);
 
   if (chartData.length === 0) {
     return (
@@ -85,36 +132,19 @@ function ModelBarChart({ data }: { data: AnalyticsSummary }) {
 
   return (
     <div>
-      <div className="mb-2 flex items-center justify-between">
+      <div className="mb-2 flex items-center justify-between gap-2">
         <p className="text-xs font-medium text-muted-foreground">
           {t("analytics.usageByModel")}
         </p>
-        <div className="flex gap-1">
-          <button
-            type="button"
-            className={cn(
-              "rounded px-1.5 py-0.5 text-[10px] transition-colors",
-              chartMode === "tokens"
-                ? "bg-primary/10 text-primary"
-                : "text-muted-foreground hover:text-foreground",
-            )}
-            onClick={() => setChartMode("tokens")}
-          >
-            {t("analytics.tokens")}
-          </button>
-          <button
-            type="button"
-            className={cn(
-              "rounded px-1.5 py-0.5 text-[10px] transition-colors",
-              chartMode === "hours"
-                ? "bg-primary/10 text-primary"
-                : "text-muted-foreground hover:text-foreground",
-            )}
-            onClick={() => setChartMode("hours")}
-          >
-            {t("analytics.hours")}
-          </button>
-        </div>
+        <ChartToggle<ChartMetric>
+          options={[
+            { value: "tokens", label: t("analytics.tokens") },
+            { value: "hours", label: t("analytics.hours") },
+            { value: "cost", label: t("analytics.cost") },
+          ]}
+          value={metric}
+          onChange={setMetric}
+        />
       </div>
       <ResponsiveContainer width="100%" height={180}>
         <BarChart
@@ -132,18 +162,13 @@ function ModelBarChart({ data }: { data: AnalyticsSummary }) {
             axisLine={false}
             tickLine={false}
             width={45}
-            tickFormatter={(v) =>
-              chartMode === "tokens" ? formatTokens(v) : `${v}h`
-            }
+            tickFormatter={formatMetric}
           />
           <Tooltip
             cursor={{ fill: "hsl(var(--muted))", opacity: 0.3 }}
             content={({ active, payload }) => {
               if (!active || !payload?.[0]) return null;
-              const d = payload[0].payload as (typeof chartData)[number];
-              const val = chartMode === "tokens"
-                ? formatTokens(d.value)
-                : `${d.value}h`
+              const d = payload[0].payload as ChartEntry;
               return (
                 <div className="w-max min-w-[200px] rounded-lg border bg-popover px-3 py-2 text-xs shadow-md">
                   <p className="mb-1 flex items-center gap-1.5 font-medium">
@@ -153,10 +178,6 @@ function ModelBarChart({ data }: { data: AnalyticsSummary }) {
                     />
                     {d.label}
                   </p>
-                  <div className="flex items-center justify-between gap-4 text-muted-foreground">
-                    <span>{chartMode === "tokens" ? t("analytics.tokens") : t("analytics.hours")}:</span>
-                    <span className="font-medium text-foreground">{val}</span>
-                  </div>
                   <div className="flex items-center justify-between gap-4 text-muted-foreground">
                     <span>{t("analytics.totalTokens")}:</span>
                     <span className="tabular-nums text-foreground">{formatTokens(d.tokens)}</span>
@@ -199,11 +220,7 @@ function ModelBarChart({ data }: { data: AnalyticsSummary }) {
               className="size-2.5"
             />
             <span className="font-medium text-foreground">{entry.label}</span>
-            <span className="text-muted-foreground">
-              {chartMode === "tokens"
-                ? formatTokens(entry.tokens)
-                : `${entry.hours}h`}
-            </span>
+            <span className="text-muted-foreground">{formatMetric(entry.value)}</span>
           </div>
         ))}
       </div>
@@ -240,7 +257,7 @@ function ProjectHoursList({ data }: { data: AnalyticsSummary }) {
               </span>
               <span className="hidden shrink-0 text-[10px] text-muted-foreground sm:inline">
                 {t("analytics.messagesShort", { count: p.messages })} ·{" "}
-                {formatTokens(p.tokens)}
+                {formatTokens(p.tokens)} · {p.cost > 0 ? formatCost(p.cost) : "—"}
               </span>
             </div>
             <div className="hidden h-1.5 w-28 shrink-0 overflow-hidden rounded-full bg-muted sm:block">
@@ -356,6 +373,15 @@ function LimitsDialog({
 export function AnalyticsPanel() {
   const { t, i18n } = useTranslation();
   const { data, range, loading, load, setRange } = useAnalyticsStore();
+  const [heatmapBreakdown, setHeatmapBreakdown] = useState<"model" | "project">("model");
+  // O dia guarda só o projectId; o nome exibível vive no resumo do período.
+  const projectNames = useMemo(() => {
+    const map: Record<string, string> = {};
+    for (const p of data?.byProject ?? []) {
+      map[p.projectId] = p.directory ? p.name : t("analytics.noProject");
+    }
+    return map;
+  }, [data, t]);
   const [limitsOpen, setLimitsOpen] = useState(false);
   const [customOpen, setCustomOpen] = useState(false);
   const [customDraft, setCustomDraft] = useState<DateRange | undefined>();
@@ -465,7 +491,25 @@ export function AnalyticsPanel() {
               <StatsGrid data={data} />
             </div>
             <div className="flex flex-col gap-3 xl:items-end">
-              <ActivityHeatmap days={data.days} cellSize="size-4" />
+              <div className="flex w-full items-center justify-end gap-2">
+                <span className="text-[10px] text-muted-foreground">
+                  {t("analytics.heatmap.hoursPerDay")}
+                </span>
+                <ChartToggle<"model" | "project">
+                  options={[
+                    { value: "model", label: t("analytics.dimensions.model") },
+                    { value: "project", label: t("analytics.dimensions.project") },
+                  ]}
+                  value={heatmapBreakdown}
+                  onChange={setHeatmapBreakdown}
+                />
+              </div>
+              <ActivityHeatmap
+                days={data.days}
+                cellSize="size-4"
+                breakdown={heatmapBreakdown}
+                projectNames={projectNames}
+              />
               {/* Totals */}
               <div className="flex justify-end gap-3">
                 <div className="flex min-w-[110px] flex-col items-end justify-center rounded-lg border px-4 py-2">

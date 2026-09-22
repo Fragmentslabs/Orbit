@@ -7,6 +7,16 @@ export interface ModelDayBreakdown {
   cost: number
 }
 
+/** O mesmo dia visto por projeto — o que o heatmap usa quando o filtro sai de
+ *  "todos" e passa a mostrar as horas gastas num projeto só. */
+export interface ProjectDayBreakdown {
+  projectId: string
+  hours: number
+  tokens: number
+  messages: number
+  cost: number
+}
+
 export interface AnalyticsDay {
   date: string
   totalTokens: number
@@ -14,6 +24,7 @@ export interface AnalyticsDay {
   totalMessages: number
   totalCost: number
   byModel: ModelDayBreakdown[]
+  byProject: ProjectDayBreakdown[]
 }
 
 export interface ProjectBreakdown {

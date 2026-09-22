@@ -1,7 +1,7 @@
 import path from 'node:path'
 import type { ChatMessage, SessionInfo, TokenUsage } from '@shared/chat'
 import { StorageKeys } from '@shared/chat'
-import type { AnalyticsDay, AnalyticsRange, AnalyticsSummary, ModelDayBreakdown, ProjectBreakdown } from '@shared/analytics'
+import type { AnalyticsDay, AnalyticsRange, AnalyticsSummary, ModelDayBreakdown, ProjectBreakdown, ProjectDayBreakdown } from '@shared/analytics'
 import { listKeys, readJson } from './storage'
 import { projectIdOf } from './memory/domain'
 
@@ -162,12 +162,22 @@ export async function computeAnalytics(range: AnalyticsRange): Promise<Analytics
       msgsByDay.set(day, bucket)
     }
 
+    /** Fatia deste projeto dentro de um dia — o heatmap filtra por ela. */
+    const projectSlice = (entry: AnalyticsDay): ProjectDayBreakdown => {
+      let slice = entry.byProject.find((p) => p.projectId === projectId)
+      if (!slice) {
+        slice = { projectId, hours: 0, tokens: 0, messages: 0, cost: 0 }
+        entry.byProject.push(slice)
+      }
+      return slice
+    }
+
     for (const [day, msgs] of msgsByDay) {
       msgs.sort((a, b) => a.createdAt - b.createdAt)
 
       let entry = dayMap.get(day)
       if (!entry) {
-        entry = { date: day, totalTokens: 0, totalHours: 0, totalMessages: 0, totalCost: 0, byModel: [] }
+        entry = { date: day, totalTokens: 0, totalHours: 0, totalMessages: 0, totalCost: 0, byModel: [], byProject: [] }
         dayMap.set(day, entry)
       }
 
@@ -184,6 +194,11 @@ export async function computeAnalytics(range: AnalyticsRange): Promise<Analytics
         pt.tokens += tokens
         pt.messages++
         pt.cost += cost
+
+        const ps = projectSlice(entry)
+        ps.tokens += tokens
+        ps.messages++
+        ps.cost += cost
 
         const modelKey = `${msg.providerId ?? 'unknown'}::${msg.modelId ?? 'unknown'}`
         let mb = entry.byModel.find((m) => `${m.providerId}::${m.modelId}` === modelKey)
@@ -216,6 +231,7 @@ export async function computeAnalytics(range: AnalyticsRange): Promise<Analytics
       const hours = segment.ms / 3_600_000
       entry.totalHours += hours
       pt.hours += hours
+      projectSlice(entry).hours += hours
 
       const modelKey = `${segment.providerId}::${segment.modelId}`
       let mb = entry.byModel.find((m) => `${m.providerId}::${m.modelId}` === modelKey)

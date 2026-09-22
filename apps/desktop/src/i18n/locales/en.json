@@ -1271,6 +1271,10 @@
     "loading": "Loading...",
     "noData": "No usage data available.",
     "usageByModel": "Usage by model",
+    "dimensions": {
+      "model": "Models",
+      "project": "Projects"
+    },
     "hoursByProject": "Hours per project",
     "noProject": "No project",
     "messagesShort_one": "{{count}} msg",
@@ -1310,7 +1314,8 @@
       "less": "Less",
       "more": "More",
       "noActivity": "No activity",
-      "total": "Total"
+      "total": "Total",
+      "hoursPerDay": "Hours per day"
     }
   },
   "howto": {
