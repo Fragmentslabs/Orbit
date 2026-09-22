@@ -9,7 +9,7 @@ import {
   ResponsiveContainer,
   Cell,
 } from "recharts";
-import { CalendarIcon, Clock, Folder, Hash, Zap } from "lucide-react";
+import { CalendarIcon, Clock, Folder, Hash } from "lucide-react";
 import { format } from "date-fns";
 import { enUS, ptBR as dfPtBR } from "date-fns/locale";
 import type { DateRange } from "react-day-picker";
@@ -22,14 +22,6 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { SegmentedControl } from "@/components/ui/segmented-control";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { formatCost, formatTokens } from "@/src/lib/format";
 import { useAnalyticsStore } from "@/src/stores/analytics-store";
@@ -315,64 +307,6 @@ function StatsGrid({ data }: { data: AnalyticsSummary }) {
   );
 }
 
-function LimitsDialog({
-  open,
-  onOpenChange,
-}: {
-  open: boolean;
-  onOpenChange: (v: boolean) => void;
-}) {
-  const { t } = useTranslation();
-  const [tokenLimit, setTokenLimit] = useState("");
-  const [costLimit, setCostLimit] = useState("");
-
-  const save = async () => {
-    onOpenChange(false);
-  };
-
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-sm">
-        <DialogHeader>
-          <DialogTitle>{t("analytics.limits.title")}</DialogTitle>
-          <DialogDescription>
-            {t("analytics.limits.description")}
-          </DialogDescription>
-        </DialogHeader>
-        <div className="flex flex-col gap-3">
-          <div>
-            <p className="mb-1 text-xs font-medium">{t("analytics.limits.tokenLimit")}</p>
-            <Input
-              type="number"
-              placeholder={t("analytics.limits.tokenLimitPlaceholder")}
-              value={tokenLimit}
-              onChange={(e) => setTokenLimit(e.target.value)}
-            />
-          </div>
-          <div>
-            <p className="mb-1 text-xs font-medium">
-              {t("analytics.limits.costLimit")}
-            </p>
-            <Input
-              type="number"
-              step="0.01"
-              placeholder={t("analytics.limits.costLimitPlaceholder")}
-              value={costLimit}
-              onChange={(e) => setCostLimit(e.target.value)}
-            />
-          </div>
-        </div>
-        <div className="flex justify-end gap-2 pt-2">
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
-            {t("common.cancel")}
-          </Button>
-          <Button onClick={() => void save()}>{t("common.save")}</Button>
-        </div>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
 export function AnalyticsPanel() {
   const { t, i18n } = useTranslation();
   const { data, range, loading, load, setRange } = useAnalyticsStore();
@@ -385,7 +319,6 @@ export function AnalyticsPanel() {
     }
     return map;
   }, [data, t]);
-  const [limitsOpen, setLimitsOpen] = useState(false);
   const [customOpen, setCustomOpen] = useState(false);
   const [customDraft, setCustomDraft] = useState<DateRange | undefined>();
   const rangeLabels = useRangeLabels();
@@ -470,15 +403,6 @@ export function AnalyticsPanel() {
               />
             </PopoverContent>
           </Popover>
-          <Button
-            size="sm"
-            variant="outline"
-            className="gap-1 shrink-0 h-7 px-2"
-            onClick={() => setLimitsOpen(true)}
-          >
-            <Zap className="size-3" />
-            <span className="text-[11px]">{t("analytics.limits.button")}</span>
-          </Button>
         </div>
       </div>
 
@@ -555,8 +479,6 @@ export function AnalyticsPanel() {
 
         </>
       ) : null}
-
-      <LimitsDialog open={limitsOpen} onOpenChange={setLimitsOpen} />
     </div>
   );
 }

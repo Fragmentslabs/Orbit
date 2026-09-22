@@ -1301,15 +1301,6 @@
       "days_one": "{{count}} day",
       "days_other": "{{count}} days"
     },
-    "limits": {
-      "button": "Limits",
-      "title": "Usage limits",
-      "description": "Set monthly limits to control usage.",
-      "tokenLimit": "Monthly token limit",
-      "costLimit": "Monthly spend limit (USD)",
-      "tokenLimitPlaceholder": "e.g. 1000000",
-      "costLimitPlaceholder": "e.g. 10.00"
-    },
     "heatmap": {
       "less": "Less",
       "more": "More",
