@@ -1006,7 +1006,20 @@ app.whenReady().then(() => {
 
   // Identidade da app no Windows. Sem ela o sistema trata a janela como sendo
   // do electron.exe em modo dev, e a barra de tarefas mostra o icone dele.
-  if (process.platform === 'win32') app.setAppUserModelId('com.fragmentslabs.orbit.code')
+  //
+  // Em dev a identidade e OUTRA, de proposito. O Windows resolve o botao da
+  // barra de tarefas pelo AppUserModelID: ele procura um atalho do Menu
+  // Iniciar com esse id e usa o icone e o nome DO ATALHO, nao os da janela. E
+  // a primeira notificacao nativa faz o Chromium criar esse atalho sozinho —
+  // em dev, apontando para node_modules/electron/dist/electron.exe. Com o
+  // mesmo id nos dois lados, aquele "Electron.lnk" sequestra a identidade do
+  // app instalado: o .exe e o icone da janela continuam certos e mesmo assim
+  // a barra de tarefas mostra o logo do Electron.
+  if (process.platform === 'win32') {
+    app.setAppUserModelId(
+      app.isPackaged ? 'com.fragmentslabs.orbit.code' : 'com.fragmentslabs.orbit.code.dev',
+    )
+  }
 
   // Instância secundária: o lock não foi obtido e o app já está saindo.
   if (!gotSingleInstanceLock) return
