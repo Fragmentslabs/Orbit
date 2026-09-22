@@ -114,26 +114,36 @@ function computeSessionSegments(messages: ChatMessage[]): WorkSegment[] {
 
 export async function computeAnalytics(range: AnalyticsRange): Promise<AnalyticsSummary> {
   const { since, until } = computeRange(range)
+  const ate = until ?? Number.POSITIVE_INFINITY
 
   const sessionKeys = await listKeys(StorageKeys.sessionPrefix)
-  const sessions: SessionInfo[] = []
-
-  for (const key of sessionKeys) {
-    const session = await readJson<SessionInfo>(key)
-    if (session && session.createdAt >= since && (!until || session.createdAt <= until)) {
-      sessions.push(session)
-    }
-  }
 
   const dayMap = new Map<string, AnalyticsDay>()
   const modelTotals = new Map<string, ModelDayBreakdown>()
   const projectTotals = new Map<string, ProjectBreakdown>()
+  const hourCounts = new Array<number>(24).fill(0)
+  let sessoesComAtividade = 0
   let totalMessages = 0
   let totalTokensVal = 0
 
-  for (const session of sessions) {
-    const messages = await readJson<ChatMessage[]>(StorageKeys.messages(session.id))
-    if (!messages) continue
+  for (const key of sessionKeys) {
+    const session = await readJson<SessionInfo>(key)
+    if (!session) continue
+    // Uma leitura por sessão: o histórico completo serve para os segmentos de
+    // hora (um intervalo pode atravessar a borda do período) e o recorte sai
+    // dele, sem uma segunda passada pelo disco.
+    const historico = await readJson<ChatMessage[]>(StorageKeys.messages(session.id))
+    if (!historico) continue
+
+    // O período recorta MENSAGEM, não a data de criação da sessão. Filtrar
+    // pela sessão fazia "últimos 7 dias" esconder o trabalho desta semana numa
+    // conversa aberta no mês passado e, ao mesmo tempo, somar o histórico
+    // inteiro de uma conversa criada ontem.
+    const messages = historico.filter((m) => m.createdAt >= since && m.createdAt <= ate)
+    if (messages.length === 0) continue
+    sessoesComAtividade++
+
+    for (const msg of messages) hourCounts[new Date(msg.createdAt).getHours()]++
 
     // Projeto da sessão: directory do modo código; chat sem pasta = bucket próprio
     const projectId = session.directory ? projectIdOf(session.directory) : NO_PROJECT_ID
@@ -225,7 +235,8 @@ export async function computeAnalytics(range: AnalyticsRange): Promise<Analytics
     // passam nas regras de computeSessionSegments), não mais o span
     // primeiro-último-msg do dia. Sessões-worker da orquestração entram
     // normalmente (não são filtradas) — cada worker conta seu próprio tempo.
-    for (const segment of computeSessionSegments(messages)) {
+    for (const segment of computeSessionSegments(historico)) {
+      if (segment.at < since || segment.at > ate) continue
       const entry = dayMap.get(segment.day)
       if (!entry) continue // dia sem nenhuma mensagem (não deveria acontecer)
       const hours = segment.ms / 3_600_000
@@ -260,16 +271,7 @@ export async function computeAnalytics(range: AnalyticsRange): Promise<Analytics
   const activeDays = days.filter((d) => d.totalMessages > 0).length
   const { currentStreak, longestStreak } = computeStreaks(days)
 
-  // Peak hour: count messages by hour of day
-  const hourCounts = new Array(24).fill(0)
-  for (const session of sessions) {
-    const messages = await readJson<ChatMessage[]>(StorageKeys.messages(session.id))
-    if (!messages) continue
-    for (const msg of messages) {
-      const h = new Date(msg.createdAt).getHours()
-      hourCounts[h]++
-    }
-  }
+  // Pico de horário: contado na passada acima, sobre as mensagens do período.
   const peakHour = hourCounts.indexOf(Math.max(...hourCounts))
 
   const totalHours = days.reduce((s, d) => s + d.totalHours, 0)
@@ -279,7 +281,7 @@ export async function computeAnalytics(range: AnalyticsRange): Promise<Analytics
     days,
     byModel,
     byProject,
-    totalSessions: sessions.length,
+    totalSessions: sessoesComAtividade,
     totalMessages,
     totalTokens: totalTokensVal,
     totalHours,

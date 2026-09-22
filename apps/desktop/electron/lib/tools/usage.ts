@@ -33,15 +33,31 @@ const PERIODO = {
     .describe('Last N days counting today, when from/to are not given. Default: 30.'),
 }
 
-function resolverPeriodo(input: { from?: string; to?: string; days?: number }): {
-  since: number
-  until: number
-} {
-  const fim = input.to ? new Date(`${input.to}T00:00:00`) : new Date()
+/** Data local a partir de YYYY-MM-DD, ou null se o dia não existe. O formato
+ *  passa no regex do schema mas "2026-13-01" e "2026-02-31" não são datas, e
+ *  sem esta checagem viravam NaN — que compara falso com tudo e fazia o
+ *  relatório responder "nenhuma atividade" em vez de acusar o erro. */
+function lerData(texto: string): Date | null {
+  const [ano, mes, dia] = texto.split('-').map(Number)
+  const d = new Date(ano, mes - 1, dia)
+  if (d.getFullYear() !== ano || d.getMonth() !== mes - 1 || d.getDate() !== dia) return null
+  return d
+}
+
+type Periodo = { since: number; until: number }
+
+function resolverPeriodo(input: { from?: string; to?: string; days?: number }): Periodo | string {
+  const fim = input.to ? lerData(input.to) : new Date()
+  if (!fim) return `Erro: "${input.to}" não é uma data válida (use YYYY-MM-DD).`
   fim.setHours(23, 59, 59, 999)
 
   if (input.from) {
-    const inicio = new Date(`${input.from}T00:00:00`)
+    const inicio = lerData(input.from)
+    if (!inicio) return `Erro: "${input.from}" não é uma data válida (use YYYY-MM-DD).`
+    inicio.setHours(0, 0, 0, 0)
+    if (inicio.getTime() > fim.getTime()) {
+      return `Erro: o início (${input.from}) é depois do fim (${input.to ?? 'hoje'}).`
+    }
     return { since: inicio.getTime(), until: fim.getTime() }
   }
   const inicio = new Date(fim)
@@ -62,6 +78,29 @@ const horas = (h: number) => `${h.toFixed(2)}h`
 const dinheiro = (c: number) => (c > 0 ? `$${c.toFixed(c < 1 ? 4 : 2)}` : '$0')
 const tokens = (n: number) =>
   n >= 1_000_000 ? `${(n / 1_000_000).toFixed(1)}M` : n >= 1_000 ? `${(n / 1_000).toFixed(1)}k` : String(n)
+
+/**
+ * Teto do que uma chamada devolve. Um ano de histórico detalhado passa de um
+ * milhão de caracteres — o resultado sozinho estouraria a janela de contexto,
+ * levando junto a conversa em que a pergunta foi feita. Cortar e DIZER que
+ * cortou é melhor do que devolver tudo: o modelo reduz o período e pergunta
+ * de novo.
+ */
+const LIMITE_SAIDA = 20_000
+
+function cortarNoLimite(linhas: string[]): string {
+  let total = 0
+  for (let i = 0; i < linhas.length; i++) {
+    total += linhas[i].length + 1
+    if (total <= LIMITE_SAIDA) continue
+    return [
+      ...linhas.slice(0, i),
+      '',
+      `[relatório cortado em ${i} de ${linhas.length} linhas por tamanho. Reduza o período (from/to ou days), aponte um projeto (project) ou peça detail=false para ver só as horas.]`,
+    ].join('\n')
+  }
+  return linhas.join('\n')
+}
 
 function escreverProjeto(proj: WorkReportProject, comDetalhe: boolean): string[] {
   const linhas: string[] = []
@@ -115,7 +154,9 @@ export function createUsageTools(): ToolSet {
           ),
       }),
       execute: async ({ project, from, to, days, detail }) => {
-        const { since, until } = resolverPeriodo({ from, to, days })
+        const periodo = resolverPeriodo({ from, to, days })
+        if (typeof periodo === 'string') return periodo
+        const { since, until } = periodo
         const comDetalhe = detail !== false
         const relatorio = await computeWorkReport({
           since,
@@ -142,7 +183,7 @@ export function createUsageTools(): ToolSet {
           `Total: ${horas(relatorio.totalHours)} · ${tokens(relatorio.totalTokens)} tokens · ${dinheiro(relatorio.totalCost)}`,
         ]
         for (const proj of relatorio.projects) linhas.push(...escreverProjeto(proj, comDetalhe))
-        return linhas.join('\n')
+        return cortarNoLimite(linhas)
       },
     }),
 
@@ -157,7 +198,9 @@ export function createUsageTools(): ToolSet {
         ...PERIODO,
       }),
       execute: async ({ groupBy, from, to, days }) => {
-        const { since, until } = resolverPeriodo({ from, to, days })
+        const periodo = resolverPeriodo({ from, to, days })
+        if (typeof periodo === 'string') return periodo
+        const { since, until } = periodo
         const data = await computeAnalytics({ type: 'custom', from: since, to: until })
         const cabecalho = [
           `Período: ${dataCurta(since)} a ${dataCurta(until)}`,

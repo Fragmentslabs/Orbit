@@ -20,7 +20,7 @@ vi.mock('./memory/domain', () => ({
   projectIdOf: (dir: string) => dir.toLowerCase(),
 }))
 
-const { computeWorkReport } = await import('./analytics')
+const { computeAnalytics, computeWorkReport } = await import('./analytics')
 
 const DIA = (dia: number, hora: number, minuto = 0) =>
   new Date(2026, 2, dia, hora, minuto, 0, 0).getTime()
@@ -147,5 +147,58 @@ describe('computeWorkReport', () => {
     })
     expect(errado.projects).toHaveLength(0)
     expect(errado.knownProjects).toEqual(['alpha', 'beta'])
+  })
+})
+
+describe('computeAnalytics', () => {
+  it('recorta por mensagem, não pela data de criação da conversa', async () => {
+    // A conversa nasceu no dia 10 e continuou no dia 12. Pedir só o dia 12
+    // precisa trazer o trabalho do dia 12 — e nada do dia 10.
+    gravarSessao('a', '/repo/alpha', [
+      msg('user', DIA(10, 9, 0), 'dia um'),
+      msg('assistant', DIA(10, 10, 0), 'ok'),
+      msg('user', DIA(12, 9, 0), 'dia três'),
+      msg('assistant', DIA(12, 9, 30), 'ok'),
+    ])
+
+    const r = await computeAnalytics({ type: 'custom', from: DIA(12, 0), to: DIA(12, 23, 59) })
+    expect(r.days.map((d) => d.date)).toEqual(['2026-03-12'])
+    expect(r.totalHours).toBeCloseTo(0.5, 5)
+    expect(r.totalMessages).toBe(1)
+    expect(r.totalSessions).toBe(1)
+  })
+
+  it('conta a conversa antiga que continuou dentro do período', async () => {
+    // Era o que o filtro por createdAt escondia: sessão criada antes da
+    // janela, trabalho dentro dela.
+    gravarSessao('a', '/repo/alpha', [
+      msg('user', DIA(1, 9, 0), 'mês passado'),
+      msg('assistant', DIA(1, 10, 0), 'ok'),
+      msg('user', DIA(20, 9, 0), 'agora'),
+      msg('assistant', DIA(20, 10, 0), 'ok'),
+    ])
+
+    const r = await computeAnalytics({ type: 'custom', from: DIA(19, 0), to: DIA(21, 23, 59) })
+    expect(r.totalSessions).toBe(1)
+    expect(r.totalHours).toBeCloseTo(1, 5)
+    expect(r.byProject[0].name).toBe('alpha')
+  })
+
+  it('abre o dia por projeto, para o heatmap ler um dia por pasta', async () => {
+    gravarSessao('a', '/repo/alpha', [
+      msg('user', DIA(10, 9, 0), 'oi'),
+      msg('assistant', DIA(10, 10, 0), 'ok'),
+    ])
+    gravarSessao('b', '/repo/beta', [
+      msg('user', DIA(10, 14, 0), 'oi'),
+      msg('assistant', DIA(10, 14, 30), 'ok'),
+    ])
+
+    const r = await computeAnalytics({ type: 'custom', from: DIA(10, 0), to: DIA(10, 23, 59) })
+    const dia = r.days[0]
+    expect(dia.byProject).toHaveLength(2)
+    const alpha = dia.byProject.find((p) => p.projectId === '/repo/alpha')
+    expect(alpha?.hours).toBeCloseTo(1, 5)
+    expect(alpha?.messages).toBe(1)
   })
 })
