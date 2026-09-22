@@ -10,6 +10,7 @@ Read the exact versioned docs at https://docs.expo.dev/versions/v57.0.0/ before 
 3. **Visualizador de documento** — PDF/DOCX/planilha abrem no painel do desktop (com sumário, localizar, zoom, imprimir). No mobile o documento gerado é só anunciado, e a citação `#orbit-source/...` não tem para onde levar
 
 ## Concluído
+- Horas, tokens e custo por projeto na tela de uso (o `byProject` do resumo já vinha do companion e era descartado no app)
 - Rotação de modelos no mobile (tela de rotações + grupo no seletor), sincronizada com o desktop pelo companion (`GET /api/rotations`, WS `rotation:change` / `rotation:select` / `rotation:set`); quem roda a sequência continua sendo o engine do desktop
 - FilePart nas mensagens do assistente (`case 'file'` em ChatAssistantMessage.tsx)
 - DocumentPart anunciada em vez de virar buraco na mensagem (`case 'document'`) — mesmo tratamento que o artefato já tinha

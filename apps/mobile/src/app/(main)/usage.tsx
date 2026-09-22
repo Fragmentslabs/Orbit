@@ -11,6 +11,7 @@ import {
   Flame,
   CalendarDays,
   Layers,
+  Folder,
 } from 'lucide-react-native'
 import { useTranslation } from 'react-i18next'
 import type { AnalyticsSummary, AnalyticsRange, CustomAnalyticsRange } from '@orbit/shared'
@@ -93,6 +94,10 @@ export default function UsageScreen() {
 
   const topModels = [...(summary?.byModel ?? [])].sort((a, b) => b.tokens - a.tokens).slice(0, 8)
   const maxTokens = topModels[0]?.tokens ?? 1
+  // O resumo do companion já traz byProject; o desktop lê por projeto desde a
+  // tela de uso e aqui só faltava mostrar — os dados chegavam e eram jogados fora.
+  const topProjects = [...(summary?.byProject ?? [])].sort((a, b) => b.hours - a.hours).slice(0, 8)
+  const maxProjectHours = topProjects[0]?.hours ?? 1
 
   return (
     <SafeScreen style={s.container}>
@@ -192,6 +197,46 @@ export default function UsageScreen() {
                     </View>
                     <Text style={[s.modelMeta, { color: tokens.mutedForeground }]}>
                       {t('usageScreen.modelMeta', { messages: model.messages, hours: formatHours(model.hours), cost: formatCost(model.cost) })}
+                    </Text>
+                  </View>
+                </View>
+              )
+            })
+          )}
+        </View>
+
+        <Text style={[s.sectionLabel, { color: tokens.mutedForeground }]}>{t('usageScreen.byProject')}</Text>
+        <View style={[s.card, { borderColor: tokens.border, backgroundColor: tokens.card }]}>
+          {topProjects.length === 0 ? (
+            <View style={s.emptyBox}>
+              <Folder size={24} color={tokens.mutedForeground} />
+              <Text style={[s.emptyText, { color: tokens.mutedForeground }]}>{t('usageScreen.noUsageInPeriod')}</Text>
+            </View>
+          ) : (
+            topProjects.map((project, index) => {
+              const pct = Math.max(4, Math.round((project.hours / maxProjectHours) * 100))
+              return (
+                <View
+                  key={project.projectId}
+                  style={[s.modelRow, index < topProjects.length - 1 && { borderBottomWidth: 1, borderBottomColor: tokens.border }]}
+                >
+                  <Folder size={16} color={tokens.mutedForeground} />
+                  <View style={{ flex: 1, gap: 4 }}>
+                    <View style={s.modelTopRow}>
+                      <Text style={[s.modelName, { color: tokens.foreground }]} numberOfLines={1}>
+                        {project.directory ? project.name : t('usageScreen.noProject')}
+                      </Text>
+                      <Text style={[s.modelTokens, { color: tokens.mutedForeground }]}>{formatHours(project.hours)}</Text>
+                    </View>
+                    <View style={[s.barTrack, { backgroundColor: tokens.muted }]}>
+                      <View style={[s.barFill, { width: `${pct}%`, backgroundColor: tokens.primary }]} />
+                    </View>
+                    <Text style={[s.modelMeta, { color: tokens.mutedForeground }]}>
+                      {t('usageScreen.projectMeta', {
+                        sessions: project.sessions,
+                        tokens: formatTokens(project.tokens),
+                        cost: formatCost(project.cost),
+                      })}
                     </Text>
                   </View>
                 </View>

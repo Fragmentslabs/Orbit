@@ -808,7 +808,7 @@
     "authorizeHint": "The browser opens on your computer — finish signing in there."
   },
   "usageScreen": {
-    "title": "Usage & Limits",
+    "title": "Usage",
     "rangeToday": "Today",
     "range7d": "7 days",
     "range30d": "30 days",
@@ -828,6 +828,9 @@
     "noUsageInPeriod": "No usage recorded in this period.",
     "tokensLabel": "{{tokens}} tokens",
     "modelMeta": "{{messages}} msgs · {{hours}} · {{cost}}",
+    "byProject": "By project",
+    "noProject": "No project",
+    "projectMeta": "{{sessions}} chats · {{tokens}} · {{cost}}",
     "sessions": "Sessions",
     "sessionsInPeriod": "Sessions in period",
     "peakHour": "Peak hour"
