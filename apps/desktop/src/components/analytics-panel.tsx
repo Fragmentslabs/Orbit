@@ -111,7 +111,10 @@ function ModelBarChart({ data }: { data: AnalyticsSummary }) {
         key: `${m.providerId}/${m.modelId}`,
         label: m.modelId,
         providerId: m.providerId,
-        value: metric === "tokens" ? m.tokens : Math.round(pick(m) * 100) / 100,
+        // Custo NÃO é arredondado aqui: com duas casas, tudo abaixo de meio
+        // centavo virava barra de altura zero e o gráfico parecia vazio num
+        // período inteiro de modelos baratos. Quem arredonda é o formatador.
+        value: metric === "cost" ? m.cost : metric === "tokens" ? m.tokens : Math.round(m.hours * 100) / 100,
         tokens: m.tokens,
         hours: Math.round(m.hours * 100) / 100,
         cost: m.cost,

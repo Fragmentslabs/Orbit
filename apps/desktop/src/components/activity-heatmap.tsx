@@ -65,8 +65,13 @@ export function ActivityHeatmap({
   // A intensidade do quadrado é HORA trabalhada no dia — é o que este gráfico
   // se propõe a mostrar. Dia com mensagem mas sem hora contabilizada continua
   // pintado no tom mais fraco, e não apagado.
+  //
+  // Hora sem resposta também conta: o tempo é creditado ao dia da mensagem
+  // ANTERIOR, então uma pergunta às 23h55 respondida às 00h03 deixa o primeiro
+  // dia com horas e nenhuma resposta do assistente. Exigir só a resposta
+  // apagava esse dia do gráfico enquanto as horas dele seguiam no total.
   const scoreOf = (day: AnalyticsDay | null): number | null =>
-    day && day.totalMessages > 0 ? day.totalHours : null
+    day && (day.totalMessages > 0 || day.totalHours > 0) ? day.totalHours : null
 
   const { weeks, maxScore } = useMemo(() => {
     const dayMap = new Map<string, AnalyticsDay>()
@@ -130,7 +135,7 @@ export function ActivityHeatmap({
                           : `oklch(from var(--primary) l c h / ${OPACITIES[lvl - 1]})`,
                     }}
                     onMouseEnter={(e) => {
-                      if (cell.day && cell.day.totalMessages > 0) {
+                      if (cell.day && scoreOf(cell.day) !== null) {
                         const r = e.currentTarget.getBoundingClientRect()
                         setTooltip({
                           day: cell.day,
