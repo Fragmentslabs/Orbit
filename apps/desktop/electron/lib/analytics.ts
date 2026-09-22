@@ -49,6 +49,9 @@ function visibleTextLength(message: ChatMessage): number {
 
 interface WorkSegment {
   day: string
+  /** Instante em que o trecho começa — permite recortar por período sem
+   *  depender do createdAt da sessão, que pode ser bem anterior. */
+  at: number
   ms: number
   providerId: string
   modelId: string
@@ -78,6 +81,7 @@ function computeSessionSegments(messages: ChatMessage[]): WorkSegment[] {
     if (prev.role === 'user' && curr.role === 'assistant') {
       segments.push({
         day: getDateKey(prev.createdAt),
+        at: prev.createdAt,
         ms: gapMs,
         providerId: curr.providerId ?? 'unknown',
         modelId: curr.modelId ?? 'unknown',
@@ -96,6 +100,7 @@ function computeSessionSegments(messages: ChatMessage[]): WorkSegment[] {
       if (countedMs > 0) {
         segments.push({
           day: getDateKey(prev.createdAt),
+          at: prev.createdAt,
           ms: countedMs,
           providerId: prev.providerId ?? 'unknown',
           modelId: prev.modelId ?? 'unknown',
@@ -303,4 +308,204 @@ function computeStreaks(days: AnalyticsDay[]): { currentStreak: number; longestS
   }
 
   return { currentStreak, longestStreak: longest }
+}
+
+/* ------------------------------------------------------------------ *
+ * Relatório de trabalho — a mesma contagem de horas do painel, porém
+ * recortada por projeto e com o que foi conversado em cada dia, para o
+ * agente conseguir escrever "o que foi feito" sem inventar.
+ * ------------------------------------------------------------------ */
+
+export interface WorkReportSession {
+  id: string
+  title: string
+  hours: number
+  messages: number
+  /** Trechos do que o usuário pediu naquele dia, na ordem em que pediu. */
+  prompts: string[]
+}
+
+export interface WorkReportDay {
+  date: string
+  hours: number
+  messages: number
+  tokens: number
+  cost: number
+  /** Primeira e última mensagem do dia (ms) — dá o horário de início/fim. */
+  firstAt: number
+  lastAt: number
+  sessions: WorkReportSession[]
+}
+
+export interface WorkReportProject {
+  projectId: string
+  name: string
+  directory?: string
+  hours: number
+  tokens: number
+  cost: number
+  messages: number
+  sessions: number
+  days: WorkReportDay[]
+}
+
+export interface WorkReport {
+  since: number
+  until: number
+  projects: WorkReportProject[]
+  totalHours: number
+  totalTokens: number
+  totalCost: number
+  /** Nomes de todos os projetos com atividade no período, mesmo os que o
+   *  filtro descartou — é o que permite responder "esse projeto não existe,
+   *  os que existem são estes". */
+  knownProjects: string[]
+}
+
+export interface WorkReportOptions {
+  since: number
+  until: number
+  /** Casa com o caminho completo ou com o nome da pasta, sem acentuação de caixa. */
+  project?: string
+  /** Quantos prompts guardar por sessão/dia. 0 desliga o resumo do que foi feito. */
+  promptsPerDay?: number
+}
+
+/** Texto visível de uma mensagem (sem o que veio de anexo), numa linha só. */
+function visibleText(message: ChatMessage): string {
+  return message.parts
+    .filter((p): p is Extract<ChatMessage['parts'][number], { type: 'text' }> => p.type === 'text' && p.source !== 'attachment')
+    .map((p) => p.text)
+    .join(' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+function matchesProject(session: SessionInfo, filter: string): boolean {
+  const alvo = filter.toLowerCase()
+  if (!session.directory) return alvo === '__chat__' || alvo === 'sem projeto' || alvo === 'no project'
+  const dir = session.directory.toLowerCase().replace(/\\/g, '/')
+  return dir.includes(alvo.replace(/\\/g, '/')) || path.basename(dir).includes(alvo)
+}
+
+export async function computeWorkReport(options: WorkReportOptions): Promise<WorkReport> {
+  const { since, until, project, promptsPerDay = 6 } = options
+
+  const sessionKeys = await listKeys(StorageKeys.sessionPrefix)
+  const projects = new Map<string, WorkReportProject>()
+  const knownProjects = new Set<string>()
+
+  for (const key of sessionKeys) {
+    const session = await readJson<SessionInfo>(key)
+    if (!session) continue
+    const messages = await readJson<ChatMessage[]>(StorageKeys.messages(session.id))
+    if (!messages || messages.length === 0) continue
+
+    // O recorte é por mensagem, não pelo createdAt da sessão: uma sessão
+    // antiga que continuou esta semana precisa aparecer na semana.
+    const noPeriodo = messages.filter((m) => m.createdAt >= since && m.createdAt <= until)
+    if (noPeriodo.length === 0) continue
+
+    const nome = session.directory ? path.basename(session.directory) : ''
+    knownProjects.add(nome || 'Sem projeto')
+    if (project && !matchesProject(session, project)) continue
+
+    const projectId = session.directory ? projectIdOf(session.directory) : NO_PROJECT_ID
+    let proj = projects.get(projectId)
+    if (!proj) {
+      proj = {
+        projectId,
+        name: nome,
+        directory: session.directory,
+        hours: 0,
+        tokens: 0,
+        cost: 0,
+        messages: 0,
+        sessions: 0,
+        days: [],
+      }
+      projects.set(projectId, proj)
+    }
+    proj.sessions++
+
+    const dias = new Map<string, WorkReportDay>()
+    const pegarDia = (ts: number): WorkReportDay => {
+      const date = getDateKey(ts)
+      let dia = dias.get(date)
+      if (!dia) {
+        dia = { date, hours: 0, messages: 0, tokens: 0, cost: 0, firstAt: ts, lastAt: ts, sessions: [] }
+        dias.set(date, dia)
+      }
+      dia.firstAt = Math.min(dia.firstAt, ts)
+      dia.lastAt = Math.max(dia.lastAt, ts)
+      return dia
+    }
+    const pegarSessaoDoDia = (dia: WorkReportDay): WorkReportSession => {
+      let entrada = dia.sessions.find((s) => s.id === session.id)
+      if (!entrada) {
+        entrada = { id: session.id, title: session.title, hours: 0, messages: 0, prompts: [] }
+        dia.sessions.push(entrada)
+      }
+      return entrada
+    }
+
+    for (const msg of noPeriodo) {
+      const dia = pegarDia(msg.createdAt)
+      const entrada = pegarSessaoDoDia(dia)
+      if (msg.role === 'assistant') {
+        const tokens = sumTokens(msg.tokens)
+        dia.tokens += tokens
+        dia.cost += msg.tokens?.cost ?? 0
+        dia.messages++
+        entrada.messages++
+        proj.tokens += tokens
+        proj.cost += msg.tokens?.cost ?? 0
+        proj.messages++
+      } else if (msg.role === 'user' && promptsPerDay > 0 && entrada.prompts.length < promptsPerDay) {
+        const texto = visibleText(msg)
+        if (texto) entrada.prompts.push(texto.length > 400 ? `${texto.slice(0, 400)}…` : texto)
+      }
+    }
+
+    // Horas: as mesmas regras do painel, recortadas pelo período.
+    for (const segment of computeSessionSegments(messages)) {
+      if (segment.at < since || segment.at > until) continue
+      const horas = segment.ms / 3_600_000
+      const dia = pegarDia(segment.at)
+      dia.hours += horas
+      pegarSessaoDoDia(dia).hours += horas
+      proj.hours += horas
+    }
+
+    for (const dia of dias.values()) {
+      const existente = proj.days.find((d) => d.date === dia.date)
+      if (!existente) {
+        proj.days.push(dia)
+        continue
+      }
+      existente.hours += dia.hours
+      existente.messages += dia.messages
+      existente.tokens += dia.tokens
+      existente.cost += dia.cost
+      existente.firstAt = Math.min(existente.firstAt, dia.firstAt)
+      existente.lastAt = Math.max(existente.lastAt, dia.lastAt)
+      existente.sessions.push(...dia.sessions)
+    }
+  }
+
+  const lista = [...projects.values()].sort((a, b) => b.hours - a.hours)
+  for (const proj of lista) {
+    proj.days.sort((a, b) => a.date.localeCompare(b.date))
+    for (const dia of proj.days) dia.sessions.sort((a, b) => b.hours - a.hours)
+  }
+
+  return {
+    since,
+    until,
+    projects: lista,
+    totalHours: lista.reduce((s, p) => s + p.hours, 0),
+    totalTokens: lista.reduce((s, p) => s + p.tokens, 0),
+    totalCost: lista.reduce((s, p) => s + p.cost, 0),
+    knownProjects: [...knownProjects].sort(),
+  }
 }

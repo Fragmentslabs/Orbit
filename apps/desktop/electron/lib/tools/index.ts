@@ -13,6 +13,7 @@ import { createBrowserLinksTool, createBrowserOpenTool } from './browser'
 import { createBrowserScriptTools } from './browser-script'
 import { createEsteiraTools } from './esteira'
 import { createSessionTools } from './sessions'
+import { createUsageTools } from './usage'
 import type { ToolContext } from './context'
 import {
   createEditTool,
@@ -115,6 +116,10 @@ export function buildToolSet(input: SendMessageInput, ctx: ToolContext | null): 
       // das rotinas de limpeza. Fora dos workers pelo mesmo motivo da esteira —
       // quem decide o que sai da sidebar é a sessão principal.
       Object.assign(tools, createSessionTools())
+      // Relatório de horas/custo: a mesma conta da tela de uso, para o agente
+      // responder "quantas horas no projeto X" sem chutar. Fora dos workers
+      // porque quem escreve o relatório é a sessão que fala com o usuário.
+      Object.assign(tools, createUsageTools())
     }
     if (allowDelegation) tools.subagent = createSubagentTool(input, ctx)
     // Modo Visão: ver as imagens anexadas é decisão do agente — a tool
@@ -213,6 +218,7 @@ export function buildToolSet(input: SendMessageInput, ctx: ToolContext | null): 
     // das rotinas de limpeza. Fora dos workers pelo mesmo motivo da esteira —
     // quem decide o que sai da sidebar é a sessão principal.
     Object.assign(tools, createSessionTools())
+    Object.assign(tools, createUsageTools())
   }
   if (allowQuestion) tools.question = createQuestionTool(input, ctx?.abort)
   if (allowDelegation) tools.subagent = createSubagentTool(input, ctx)

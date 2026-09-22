@@ -109,6 +109,11 @@ const NATIVE_TOOLS = new Set([
   'chat_list',
   'chat_archive',
   'chat_delete',
+  // Relatorios de uso (leitura pura do proprio historico): horas por projeto,
+  // custo e tokens. Nativas — sem isto caem no catch-all de MCP como servidor
+  // 'work'/'usage' e pedem permissao a cada chamada.
+  'work_report',
+  'usage_stats',
   // Processos em background
   'bash_background',
   'bash_list',
