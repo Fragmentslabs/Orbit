@@ -150,14 +150,17 @@ export function createUsageTools(): ToolSet {
           .boolean()
           .optional()
           .describe(
-            'Default true: include what the user asked in each conversation. Pass false for hours only.',
+            'Include what the user asked in each conversation. Defaults to true when a project is given and false when it is not, so a sweep over everything stays a table of hours instead of quoting prompts from unrelated projects. Pass true explicitly to override.',
           ),
       }),
       execute: async ({ project, from, to, days, detail }) => {
         const periodo = resolverPeriodo({ from, to, days })
         if (typeof periodo === 'string') return periodo
         const { since, until } = periodo
-        const comDetalhe = detail !== false
+        // Sem projeto apontado, o padrão é só a contagem: os prompts do usuário
+        // são o conteúdo das conversas dele, e varrer todos os projetos os
+        // traria para dentro de uma conversa que é de um projeto só.
+        const comDetalhe = detail ?? Boolean(project)
         const relatorio = await computeWorkReport({
           since,
           until,

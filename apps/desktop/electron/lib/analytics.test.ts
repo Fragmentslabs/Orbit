@@ -123,6 +123,27 @@ describe('computeWorkReport', () => {
     expect(dia.messages).toBe(1)
   })
 
+  it('não confunde um projeto com a pasta vizinha de nome parecido', async () => {
+    // Substring pegaria os dois e o total sairia inflado com horas de um
+    // projeto que ninguém pediu.
+    gravarSessao('a', '/repo/orbit', [
+      msg('user', DIA(10, 9, 0), 'oi'),
+      msg('assistant', DIA(10, 10, 0), 'ok'),
+    ])
+    gravarSessao('b', '/repo/orbit-legacy', [
+      msg('user', DIA(10, 14, 0), 'oi'),
+      msg('assistant', DIA(10, 15, 0), 'ok'),
+    ])
+
+    const r = await computeWorkReport({
+      since: DIA(10, 0),
+      until: DIA(10, 23, 59),
+      project: 'orbit',
+    })
+    expect(r.projects.map((p) => p.name)).toEqual(['orbit'])
+    expect(r.totalHours).toBeCloseTo(1, 5)
+  })
+
   it('filtra por nome de pasta e lista os projetos existentes quando não casa', async () => {
     gravarSessao('a', '/repo/alpha', [
       msg('user', DIA(10, 9, 0), 'oi'),

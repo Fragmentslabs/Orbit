@@ -399,11 +399,23 @@ function visibleText(message: ChatMessage): string {
     .trim()
 }
 
+/**
+ * Casa o filtro com a pasta da sessão por SEGMENTO de caminho, nunca por
+ * substring solta: com "orbit", um substring traria junto "orbit-legacy" e o
+ * relatório somaria horas de um projeto que ninguém pediu. Um filtro com
+ * barra é tratado como trecho de caminho ("projects/orbit").
+ */
 function matchesProject(session: SessionInfo, filter: string): boolean {
-  const alvo = filter.toLowerCase()
+  const alvo = normalizarCaminho(filter)
   if (!session.directory) return alvo === '__chat__' || alvo === 'sem projeto' || alvo === 'no project'
-  const dir = session.directory.toLowerCase().replace(/\\/g, '/')
-  return dir.includes(alvo.replace(/\\/g, '/')) || path.basename(dir).includes(alvo)
+  const dir = normalizarCaminho(session.directory)
+  if (alvo.includes('/')) return dir === alvo || dir.endsWith(`/${alvo}`)
+  return dir.split('/').includes(alvo)
+}
+
+/** Minúsculas, barras normais e sem barra sobrando no fim. */
+function normalizarCaminho(valor: string): string {
+  return valor.toLowerCase().split('\\').join('/').replace(/\/+$/, '')
 }
 
 export async function computeWorkReport(options: WorkReportOptions): Promise<WorkReport> {
