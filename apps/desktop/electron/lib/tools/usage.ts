@@ -130,6 +130,9 @@ export function createUsageTools(): ToolSet {
     work_report: tool({
       description: [
         'Hours worked per day, taken from the real conversation history, optionally narrowed to one project.',
+        'It reads the WHOLE history, not just the folder open in this conversation: with no project argument',
+        'it sweeps every project and every chat, which is how it answers "what did I do this month" or finds',
+        'work done in another repository without the user having to point at each folder.',
         'This is the tool for questions like "how many hours did I work on project X?" or',
         '"write me a report of what was done each day". It returns, per day: hours worked, the',
         'start and end time, which conversations were active, and what the user actually asked in them —',
@@ -143,24 +146,25 @@ export function createUsageTools(): ToolSet {
           .string()
           .optional()
           .describe(
-            'Project folder name or part of its path. Omit for every project. Use "sem projeto" for chats with no working folder.',
+            'Project folder name, or a stretch of its path for two folders with the same name. Omit to sweep every project and chat, including ones unrelated to the folder open here. Use "sem projeto" for chats with no working folder.',
           ),
         ...PERIODO,
         detail: z
           .boolean()
           .optional()
           .describe(
-            'Include what the user asked in each conversation. Defaults to true when a project is given and false when it is not, so a sweep over everything stays a table of hours instead of quoting prompts from unrelated projects. Pass true explicitly to override.',
+            'Default true: include what the user asked in each conversation. Pass false for hours only, which is also what keeps a long period small.',
           ),
       }),
       execute: async ({ project, from, to, days, detail }) => {
         const periodo = resolverPeriodo({ from, to, days })
         if (typeof periodo === 'string') return periodo
         const { since, until } = periodo
-        // Sem projeto apontado, o padrão é só a contagem: os prompts do usuário
-        // são o conteúdo das conversas dele, e varrer todos os projetos os
-        // traria para dentro de uma conversa que é de um projeto só.
-        const comDetalhe = detail ?? Boolean(project)
+        // O relatório atravessa projetos de propósito: o histórico é todo do
+        // mesmo usuário, e exigir que ele apontasse pasta por pasta para ter o
+        // detalhe transformaria "o que eu fiz este mês" num interrogatório.
+        // Sai detalhado por padrão; detail=false devolve só as horas.
+        const comDetalhe = detail !== false
         const relatorio = await computeWorkReport({
           since,
           until,
