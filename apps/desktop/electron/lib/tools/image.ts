@@ -220,7 +220,7 @@ export function createImageTools(scope: DocumentToolScope, ctx: ToolContext | nu
           .boolean()
           .optional()
           .describe(
-            'Marks this result as a deliverable, not a step. By default an image you edit AGAIN in this same reply is discarded when the reply ends — it was a rung on the ladder, and keeping it only fills the gallery with junk. Pass true when the user asked to compare before/after or to see variants, so the intermediate survives.',
+            'Marks this result as one the user is meant to end up with, not a try. When a reply ends, two kinds of image are discarded: one you edited again (a rung on the ladder), and an earlier attempt at the same thing — two results from the SAME source image in one reply, where only the last survives. That second rule is what keeps a gallery clean when you look at a result and redo it with a different threshold. Pass keep=true on EACH image that must survive anyway: variants for the user to choose from, or a before/after they asked to compare. Without it, redoing an edit costs the user nothing; with it wrongly set, they get a gallery full of attempts.',
           ),
       }),
       execute: async ({ ref, savePath, alt, keep, ...edit }) => {

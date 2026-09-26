@@ -21,6 +21,7 @@ import { contextBudget, estimateTokens, maxStepsFor, trimTurnContext } from './c
 import { clearManualSaves, manualSavesUnder, stripFilesFromPatch } from './manual-saves'
 import { createToolApproval, takeDenialReason } from './permission'
 import { classifyProviderError, errorToText, isRecoverableErrorKind } from './errors'
+import { selectDraftImages } from './image-drafts'
 import { hasStreamedContent, resolveRotation } from './model-rotation'
 import { buildSystemPrompt } from './prompts'
 import { buildProviderOptions, interleavedReasoningField, normalizeMessages } from './reasoning'
@@ -944,25 +945,21 @@ async function runChatTurn(win: BrowserWindow, input: SendMessageInput): Promise
   }
 
   /**
-   * Rascunho é a imagem que este turno produziu e que serviu APENAS de degrau
-   * para outra imagem do mesmo turno. Ela some no fim da resposta: do disco,
-   * da galeria e da conversa.
-   *
-   * A decisão é do runtime, não do modelo — ele tem o grafo das chamadas
-   * (edit(edit(edit(x)))) e não precisa lembrar de nada. Pedir ao modelo que
-   * limpasse era o desenho anterior, e ele falha justamente quando mais
-   * produz. Duas coisas escapam por construção: o anexo do usuário, que nunca
-   * entra em turnMediaUrls, e o que o agente marcou com keep porque o usuário
-   * pediu para comparar.
+   * Rascunhos do turno somem no fim da resposta: do disco, da galeria e da
+   * conversa. Quem decide é o runtime, porque é ele que tem o grafo das
+   * chamadas — pedir ao modelo que limpasse foi o desenho anterior, e ele
+   * falha justamente quando mais produz. A regra mora em selectDraftImages,
+   * com os dois formatos (escada e leque) e os testes deles.
    */
   const purgeDraftImages = async () => {
-    const consumidas = new Set<string>()
-    for (const parent of turnParents.values()) {
-      if (turnMediaUrls.has(parent) && !turnKeep.has(parent)) consumidas.add(parent)
-    }
-    if (consumidas.size === 0) return
+    const rascunhos = selectDraftImages({
+      produced: turnMediaUrls,
+      parents: turnParents,
+      keep: turnKeep,
+    })
+    if (rascunhos.length === 0) return
     const apagadas: string[] = []
-    for (const url of consumidas) {
+    for (const url of rascunhos) {
       const id = mediaIdFromUrl(url)
       if (id && (await deleteMedia(id))) apagadas.push(url)
     }
