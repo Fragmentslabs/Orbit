@@ -55,6 +55,15 @@ export interface MediaEntry {
   messageId?: string
   /** Tarefa de run_browser_script/capture_batch que gerou a imagem */
   taskId?: string
+  /**
+   * Imagem da qual esta foi derivada (image_edit sobre um item da galeria).
+   *
+   * É o que transforma cinco arquivos soltos numa cadeia: a galeria colapsa a
+   * descendência num tile só, e o runtime sabe quais passos foram apenas
+   * degraus para o resultado. A origem continua sendo lida de `source`:
+   * 'user' é anexo do usuário (intocável), qualquer outra é do agente.
+   */
+  parentId?: string
   /** Rótulo dado pelo script (capture('home')), legenda do show_image ou
    *  título do artefato */
   name?: string

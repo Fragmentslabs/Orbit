@@ -73,6 +73,8 @@ export interface SaveMediaMeta {
   messageId?: string
   taskId?: string
   name?: string
+  /** Id da imagem de origem, quando esta nasceu de uma edição de outra. */
+  parentId?: string
 }
 
 function mediaDir(): string {
@@ -162,6 +164,7 @@ export async function saveMedia(buffer: Buffer, ext: string, meta?: SaveMediaMet
     messageId: meta?.messageId,
     taskId: meta?.taskId,
     name: meta?.name,
+    parentId: meta?.parentId,
     width,
     height,
   }

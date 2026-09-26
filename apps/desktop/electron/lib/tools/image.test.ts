@@ -174,3 +174,116 @@ describe('tools de imagem', () => {
     expect(out).toContain('Imagem não encontrada')
   })
 })
+
+describe('image_delete', () => {
+  it('apaga uma imagem do agente de um turno anterior (sem hooks do turno)', async () => {
+    // A limpeza retroativa é o caso que mais importa: a galeria já encheu de
+    // passos de uma conversa antiga e o usuário pede para arrumar. Antes isto
+    // era impossível — a trava olhava o turno em vez da origem.
+    const url = await media.saveMedia(await productShot(), 'png', {
+      source: 'chat',
+      sessionId: 'sessao1',
+      name: 'passo-de-ontem.png',
+    })
+    const out = (await tools.image_delete.execute({ refs: [url] })) as string
+    expect(out).toContain('excluída')
+    expect(await media.getMediaEntry(media.mediaIdFromUrl(url)!)).toBeNull()
+  })
+
+  it('apaga uma imagem gerada nesta mesma resposta e a tira do arquivo', async () => {
+    const { createImageTools } = await import('./image')
+    const turnMediaUrls = new Set<string>()
+    const removeImageParts = vi.fn()
+    const hookedTools = createImageTools({ sessionId: 'sessao2' }, null, {
+      turnMediaUrls,
+      removeImageParts,
+      noteDerived: vi.fn(),
+    }) as unknown as Record<string, ToolLike>
+
+    const original = await media.saveMedia(await productShot(), 'png', {
+      source: 'user',
+      sessionId: 'sessao2',
+      name: 'rascunho-base.png',
+    })
+    const edited = (await hookedTools.image_edit.execute({
+      ref: original,
+      resize: { width: 40 },
+    })) as { mediaUrl: string }
+    // O chat-engine registra a imagem em turnMediaUrls assim que ela entra na
+    // resposta — aqui simulamos esse passo.
+    turnMediaUrls.add(edited.mediaUrl)
+
+    const out = (await hookedTools.image_delete.execute({ refs: [edited.mediaUrl] })) as string
+    expect(out).toContain('excluída')
+    expect(removeImageParts).toHaveBeenCalledWith([edited.mediaUrl])
+    expect(await media.getMediaEntry(media.mediaIdFromUrl(edited.mediaUrl)!)).toBeNull()
+  })
+
+  it('nunca apaga o que o usuário anexou, nem no próprio turno', async () => {
+    const { createImageTools } = await import('./image')
+    const turnMediaUrls = new Set<string>()
+    const removeImageParts = vi.fn()
+    const hookedTools = createImageTools({ sessionId: 'sessao3' }, null, {
+      turnMediaUrls,
+      removeImageParts,
+      noteDerived: vi.fn(),
+    }) as unknown as Record<string, ToolLike>
+
+    const url = await media.saveMedia(await productShot(), 'png', {
+      source: 'user',
+      sessionId: 'sessao3',
+      name: 'anexo-do-usuario.png',
+    })
+    // Mesmo listada como imagem do turno, a foto do usuário é dele.
+    turnMediaUrls.add(url)
+
+    const out = (await hookedTools.image_delete.execute({ refs: [url] })) as string
+    expect(out).toContain('anexo do usuário')
+    expect(removeImageParts).not.toHaveBeenCalled()
+    expect(await media.getMediaEntry(media.mediaIdFromUrl(url)!)).not.toBeNull()
+  })
+
+  it('recusa apagar imagem de outra conversa', async () => {
+    const { createImageTools } = await import('./image')
+    const outrosTools = createImageTools({ sessionId: 'sessao-atual' }, null, {
+      turnMediaUrls: new Set<string>(),
+      removeImageParts: vi.fn(),
+      noteDerived: vi.fn(),
+    }) as unknown as Record<string, ToolLike>
+
+    const url = await media.saveMedia(await productShot(), 'png', {
+      source: 'chat',
+      sessionId: 'outra-sessao',
+      name: 'de-outro-chat.png',
+    })
+    const out = (await outrosTools.image_delete.execute({ refs: [url] })) as string
+    expect(out).toContain('outra conversa')
+    expect(await media.getMediaEntry(media.mediaIdFromUrl(url)!)).not.toBeNull()
+  })
+
+  it('a edição registra de qual imagem veio, e avisa o runtime', async () => {
+    const { createImageTools } = await import('./image')
+    const noteDerived = vi.fn()
+    const hookedTools = createImageTools({ sessionId: 'sessao4' }, null, {
+      turnMediaUrls: new Set<string>(),
+      removeImageParts: vi.fn(),
+      noteDerived,
+    }) as unknown as Record<string, ToolLike>
+
+    const original = await media.saveMedia(await productShot(), 'png', {
+      source: 'user',
+      sessionId: 'sessao4',
+      name: 'base.png',
+    })
+    const editada = (await hookedTools.image_edit.execute({
+      ref: original,
+      resize: { width: 40 },
+    })) as { mediaUrl: string }
+
+    // Sem o parentId a galeria não tem como empilhar as versões, e sem o aviso
+    // ao runtime o degrau nunca seria recolhido no fim do turno.
+    const entry = await media.getMediaEntry(media.mediaIdFromUrl(editada.mediaUrl)!)
+    expect(entry?.parentId).toBe(media.mediaIdFromUrl(original))
+    expect(noteDerived).toHaveBeenCalledWith(editada.mediaUrl, original, false)
+  })
+})

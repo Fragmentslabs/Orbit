@@ -26,7 +26,14 @@ import { buildSystemPrompt } from './prompts'
 import { buildProviderOptions, interleavedReasoningField, normalizeMessages } from './reasoning'
 import { resolveModel } from './providers'
 import { withProviderSession } from './provider-session'
-import { attachArtifactMessage, attachDocumentMessage, attachMediaMessage, saveMedia } from './media'
+import {
+  attachArtifactMessage,
+  attachDocumentMessage,
+  attachMediaMessage,
+  deleteMedia,
+  mediaIdFromUrl,
+  saveMedia,
+} from './media'
 import sharp from 'sharp'
 import { claimsCompletion, isNoCorrectionReply } from './overclaim'
 import {
@@ -49,7 +56,7 @@ import { isInitAborted, runProjectInit, type InitHooks } from './project-init'
 import { PROJECT_AREAS, type ProjectArea } from '@shared/memory'
 import { readJson, writeJson } from './storage'
 import { notifyChatError, notifyNewMessage } from './notifications'
-import { buildToolSet, type ToolContext, type TurnSnapshot } from './tools'
+import { buildToolSet, type ImageToolHooks, type ToolContext, type TurnSnapshot } from './tools'
 import { addTokenUsage, toStepUsage, toTokenUsage } from './usage'
 import { engineAnnotations, stripEngineMarkers } from './todo-context'
 import { forwardChatEvent } from './companion-server'
@@ -896,6 +903,72 @@ async function runChatTurn(win: BrowserWindow, input: SendMessageInput): Promise
     emit(win, { type: 'part', sessionId, messageId: assistantMessage.id, part })
   }
 
+  // Imagens inseridas NESTA resposta (show_image/image_edit/svg_*).
+  const turnMediaUrls = new Set<string>()
+  // Proveniência do turno: filho → pai, e o que o agente marcou como entrega.
+  const turnParents = new Map<string, string>()
+  const turnKeep = new Set<string>()
+
+  const removeImageParts = (mediaUrls: string[]) => {
+    const set = new Set(mediaUrls)
+    const before = assistantMessage.parts.length
+    assistantMessage.parts = assistantMessage.parts.filter(
+      (p) => !(p.type === 'image' && set.has(p.src)),
+    )
+    for (const url of mediaUrls) turnMediaUrls.delete(url)
+    if (assistantMessage.parts.length !== before) {
+      emit(win, { type: 'message', sessionId, message: assistantMessage })
+    }
+    // Imagem apagada de um turno ANTERIOR: sem tirar a parte do histórico, a
+    // conversa ficaria com um quadrado quebrado onde havia uma foto.
+    let mexeuNoHistorico = false
+    for (const msg of history) {
+      if (msg.id === assistantMessage.id) continue
+      const antes = msg.parts.length
+      msg.parts = msg.parts.filter((p) => !(p.type === 'image' && set.has(p.src)))
+      if (msg.parts.length !== antes) mexeuNoHistorico = true
+    }
+    if (mexeuNoHistorico) {
+      void saveMessages(sessionId, history)
+      emit(win, { type: 'messages', sessionId, messages: history })
+    }
+  }
+
+  const imageHooks: ImageToolHooks = {
+    turnMediaUrls,
+    removeImageParts,
+    noteDerived: (childUrl, parentUrl, keep) => {
+      if (parentUrl) turnParents.set(childUrl, parentUrl)
+      if (keep) turnKeep.add(childUrl)
+    },
+  }
+
+  /**
+   * Rascunho é a imagem que este turno produziu e que serviu APENAS de degrau
+   * para outra imagem do mesmo turno. Ela some no fim da resposta: do disco,
+   * da galeria e da conversa.
+   *
+   * A decisão é do runtime, não do modelo — ele tem o grafo das chamadas
+   * (edit(edit(edit(x)))) e não precisa lembrar de nada. Pedir ao modelo que
+   * limpasse era o desenho anterior, e ele falha justamente quando mais
+   * produz. Duas coisas escapam por construção: o anexo do usuário, que nunca
+   * entra em turnMediaUrls, e o que o agente marcou com keep porque o usuário
+   * pediu para comparar.
+   */
+  const purgeDraftImages = async () => {
+    const consumidas = new Set<string>()
+    for (const parent of turnParents.values()) {
+      if (turnMediaUrls.has(parent) && !turnKeep.has(parent)) consumidas.add(parent)
+    }
+    if (consumidas.size === 0) return
+    const apagadas: string[] = []
+    for (const url of consumidas) {
+      const id = mediaIdFromUrl(url)
+      if (id && (await deleteMedia(id))) apagadas.push(url)
+    }
+    if (apagadas.length > 0) removeImageParts(apagadas)
+  }
+
   try {
     // Loop de tentativas da rotação: cada tentativa usa o próximo modelo da
     // sequência. Só rotaciona falha recuperável (rate-limit/rede/moderação/
@@ -1210,7 +1283,7 @@ async function runChatTurn(win: BrowserWindow, input: SendMessageInput): Promise
                 ],
                 interleavedReasoningField(provider, primary.modelId),
               ),
-        tools: supportsTools ? buildToolSet(input, toolContext) : undefined,
+        tools: supportsTools ? buildToolSet(input, toolContext, imageHooks) : undefined,
         toolApproval,
         stopWhen: stepCountIs(maxSteps),
         abortSignal: controller.signal,
@@ -1418,6 +1491,7 @@ async function runChatTurn(win: BrowserWindow, input: SendMessageInput): Promise
                   src: output.mediaUrl,
                   alt: output.alt || undefined,
                 })
+                turnMediaUrls.add(output.mediaUrl)
                 // Completa o registro de mídia: a tool não conhece o id da
                 // mensagem (roda no meio do turno) — a galeria usa esse
                 // vínculo para o "abrir no chat".
@@ -1659,6 +1733,9 @@ async function runChatTurn(win: BrowserWindow, input: SendMessageInput): Promise
         part.state = 'done'
       }
     }
+    // Degraus da escada saem antes de a resposta ser gravada: o que fica é o
+    // resultado, não o caminho até ele.
+    await purgeDraftImages()
     assistantMessage.completedAt = Date.now()
     // TODO não fechada ao final do turno → lembrete persistente para o
     // próximo turno (messageContextText reemite o aviso via todoReminder).

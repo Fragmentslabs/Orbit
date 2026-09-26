@@ -4,9 +4,27 @@ import path from 'node:path'
 import { z } from 'zod'
 
 import { editImage, imageInfo, type ImageEdit } from '../image-ops'
-import { getMediaEntry, listMedia, mediaIdFromUrl, readMedia, saveMedia } from '../media'
+import { deleteMedia, getMediaEntry, listMedia, mediaIdFromUrl, readMedia, saveMedia } from '../media'
 import { resolveSafePath, type ToolContext } from './context'
 import type { DocumentToolScope } from './document'
+
+/**
+ * Ponte com o chat-engine.
+ *
+ * `turnMediaUrls` é a lista viva (cresce a cada show_image/image_edit/svg_*)
+ * das imagens inseridas NESTA resposta. `removeImageParts` tira a ImagePart
+ * correspondente da conversa — da mensagem em andamento e do histórico já
+ * gravado —, senão a imagem apagada ficaria quebrada no chat.
+ *
+ * `noteDerived` registra que uma imagem nasceu de outra. É com isso que o
+ * runtime faz a limpeza no fim do turno SEM depender de o modelo lembrar de
+ * pedir: quem só serviu de degrau para a imagem seguinte era rascunho.
+ */
+export interface ImageToolHooks {
+  turnMediaUrls: Set<string>
+  removeImageParts: (mediaUrls: string[]) => void
+  noteDerived: (childUrl: string, parentUrl: string | null, keep: boolean) => void
+}
 
 /**
  * Edição de imagem sem modelo de geração.
@@ -23,7 +41,7 @@ import type { DocumentToolScope } from './document'
 
 const IMAGE_EXTENSIONS = new Set(['png', 'jpg', 'jpeg', 'webp', 'gif', 'avif', 'tiff', 'heic'])
 
-export function createImageTools(scope: DocumentToolScope, ctx: ToolContext | null) {
+export function createImageTools(scope: DocumentToolScope, ctx: ToolContext | null, hooks?: ImageToolHooks) {
   /**
    * Resolve a imagem por galeria ou por caminho na pasta de trabalho.
    *
@@ -31,14 +49,14 @@ export function createImageTools(scope: DocumentToolScope, ctx: ToolContext | nu
    * registrado lá) e o que o próprio agente produziu antes — inclusive a saída
    * desta tool, que é como se encadeiam duas edições.
    */
-  const load = async (ref: string): Promise<{ bytes: Buffer; name: string } | string> => {
+  const load = async (ref: string): Promise<{ bytes: Buffer; name: string; id?: string } | string> => {
     const mediaId = mediaIdFromUrl(ref)
     if (mediaId) {
       const entry = await getMediaEntry(mediaId)
       if (entry) {
         const file = await readMedia(mediaId)
         if (!file) return `A imagem ${ref} está no registro mas o arquivo sumiu do disco.`
-        return { bytes: file.buffer, name: entry.name || mediaId }
+        return { bytes: file.buffer, name: entry.name || mediaId, id: mediaId }
       }
       if (ref.startsWith('orbit-media://')) return `Imagem não encontrada na galeria: ${ref}`
     }
@@ -198,8 +216,14 @@ export function createImageTools(scope: DocumentToolScope, ctx: ToolContext | nu
         savePath: z.string().optional()
           .describe('Relative path in the working folder to ALSO write the file to — only when the user asked'),
         alt: z.string().optional().describe('Short caption shown under the image in the chat'),
+        keep: z
+          .boolean()
+          .optional()
+          .describe(
+            'Marks this result as a deliverable, not a step. By default an image you edit AGAIN in this same reply is discarded when the reply ends — it was a rung on the ladder, and keeping it only fills the gallery with junk. Pass true when the user asked to compare before/after or to see variants, so the intermediate survives.',
+          ),
       }),
-      execute: async ({ ref, savePath, alt, ...edit }) => {
+      execute: async ({ ref, savePath, alt, keep, ...edit }) => {
         const src = await load(ref)
         if (typeof src === 'string') return src
 
@@ -220,7 +244,11 @@ export function createImageTools(scope: DocumentToolScope, ctx: ToolContext | nu
           source: 'chat',
           sessionId: scope.sessionId,
           name: `${base} (editada)`,
+          parentId: src.id,
         })
+        // Proveniência: é o que permite o runtime descartar os degraus no fim
+        // do turno e a galeria empilhar as versões em vez de espalhá-las.
+        hooks?.noteDerived(mediaUrl, src.id ? `orbit-media://${src.id}` : null, keep === true)
 
         let savedTo: string | null = null
         if (savePath && ctx) {
@@ -265,6 +293,49 @@ export function createImageTools(scope: DocumentToolScope, ctx: ToolContext | nu
           alt: alt ?? '',
           message: `${src.name} → ${notes.join(' · ')}. A imagem está na resposta; o original não foi alterado.`,
         }
+      },
+    }),
+
+    image_delete: tool({
+      description:
+        'Deletes image(s) from the gallery AND from the conversation, including images produced in EARLIER replies of this chat — the cleanup the user asks for when the gallery filled up with steps ("apaga essas imagens antigas"). What it refuses is what the user ATTACHED: their own photo is never yours to delete. It also refuses images belonging to another chat. Steps of a chain you edit again in the same reply are discarded automatically when the reply ends, so the usual reason to call this is a retroactive clean-up, not routine tidying.',
+      inputSchema: z.object({
+        refs: z
+          .array(z.string())
+          .min(1)
+          .describe('orbit-media:// URLs to delete — use image_list to get them'),
+      }),
+      execute: async ({ refs }) => {
+        const removed: string[] = []
+        const notes: string[] = []
+        for (const ref of refs) {
+          const id = mediaIdFromUrl(ref)
+          const entry = id ? await getMediaEntry(id) : null
+          if (!id || !entry) {
+            notes.push(`${ref}: não encontrada na galeria`)
+            continue
+          }
+          // A proteção mora na ORIGEM, não no turno: o anexo do usuário é dele
+          // em qualquer momento, e uma imagem que o agente produziu continua
+          // sendo dele três turnos depois. Prender a limpeza ao turno atual
+          // era o que tornava impossível arrumar a bagunça já feita.
+          if (entry.source === 'user') {
+            notes.push(`${ref}: anexo do usuário — não pode ser apagado`)
+            continue
+          }
+          if (entry.sessionId && entry.sessionId !== scope.sessionId) {
+            notes.push(`${ref}: pertence a outra conversa`)
+            continue
+          }
+          if (await deleteMedia(id)) {
+            removed.push(ref)
+            notes.push(`${ref}: excluída`)
+          } else {
+            notes.push(`${ref}: falhou ao excluir`)
+          }
+        }
+        if (removed.length > 0) hooks?.removeImageParts(removed)
+        return notes.join('\n')
       },
     }),
   }
