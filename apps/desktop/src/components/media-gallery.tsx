@@ -13,6 +13,7 @@ import { useTheme } from "@/components/theme-provider"
 import { openDocumentInPanel } from "@/src/lib/open-document"
 import { useWorkspace } from "@/lib/workspace-context"
 import { cn } from "@/lib/utils"
+import { expandToGroups, groupMediaByRoot } from "@/src/lib/media-groups"
 
 /**
  * Galeria de mídia: página dedicada (aba do painel direito) com o que o agente
@@ -420,13 +421,9 @@ export function MediaGallery() {
   )
 
   /**
-   * O que aparece na grade, com a cadeia de edições colapsada.
-   *
-   * Cinco passos de um mesmo meme eram cinco tiles — a galeria virava o
-   * rascunho do agente em vez do acervo do usuário. Aqui, quem foi editado
-   * depois sai da grade e passa a ser versão de quem o sucedeu; só as pontas
-   * ficam. Ramificação funciona pelo mesmo caminho: três variantes da mesma
-   * base são três pontas, e a base some atrás delas.
+   * O que a grade mostra: uma entrada por foto de origem, com as versões dela
+   * atrás. A regra (e o porquê de ser pela raiz, e não pela ponta) mora em
+   * media-groups.ts, junto dos testes.
    */
   const { visible, versionsByHead } = useMemo(() => {
     const needle = query.trim().toLowerCase()
@@ -438,49 +435,13 @@ export function MediaGallery() {
       if (!needle) return true
       return `${entry.name ?? ""} ${entry.taskId ?? ""} ${entry.id}`.toLowerCase().includes(needle)
     })
-
-    const porId = new Map(scopedEntries.map((e) => [e.id, e]))
-    const superadas = new Set<string>()
-    for (const entry of filtrados) if (entry.parentId) superadas.add(entry.parentId)
-
-    const pontas = filtrados.filter((entry) => !superadas.has(entry.id))
-    const cadeias = new Map<string, MediaEntry[]>()
-    for (const ponta of pontas) {
-      const cadeia: MediaEntry[] = []
-      const vistos = new Set<string>()
-      let atual: MediaEntry | undefined = ponta
-      // O ancestral entra mesmo filtrado de fora: a versão anterior continua
-      // sendo história desta imagem, e o filtro é sobre o que a grade mostra.
-      while (atual && !vistos.has(atual.id)) {
-        vistos.add(atual.id)
-        cadeia.unshift(atual)
-        atual = atual.parentId ? porId.get(atual.parentId) : undefined
-      }
-      if (cadeia.length > 1) cadeias.set(ponta.id, cadeia)
-    }
-    return { visible: pontas, versionsByHead: cadeias }
+    const { covers, versions } = groupMediaByRoot(scopedEntries, filtrados)
+    return { visible: covers, versionsByHead: versions }
   }, [scopedEntries, source, period, query, scope, matchesScope])
 
-  /**
-   * Ids a apagar de fato: apagar a ponta leva junto os degraus que levaram até
-   * ela, senão eles sobrariam órfãos e invisíveis, ocupando disco. A raiz
-   * anexada pelo usuário é onde a poda para — a foto dele não é rascunho.
-   */
-  const comAncestrais = useCallback(
-    (ids: string[]): string[] => {
-      const porId = new Map(scopedEntries.map((e) => [e.id, e]))
-      const alvo = new Set(ids)
-      for (const id of ids) {
-        let atual = porId.get(id)
-        while (atual?.parentId) {
-          const pai = porId.get(atual.parentId)
-          if (!pai || pai.source === "user" || alvo.has(pai.id)) break
-          alvo.add(pai.id)
-          atual = pai
-        }
-      }
-      return [...alvo]
-    },
+  /** Apagar um item da grade leva o grupo dele — ver expandToGroups. */
+  const comVersoes = useCallback(
+    (ids: string[]) => expandToGroups(ids, scopedEntries),
     [scopedEntries],
   )
 
@@ -494,13 +455,13 @@ export function MediaGallery() {
   }, [])
 
   const removeSelected = useCallback(async () => {
-    const ids = comAncestrais([...selected])
+    const ids = comVersoes([...selected])
     if (ids.length === 0) return
     await mediaApi.remove(ids)
     setSelected(new Set())
     setPreview((current) => (current && ids.includes(current.id) ? null : current))
     await refresh()
-  }, [selected, refresh, comAncestrais])
+  }, [selected, refresh, comVersoes])
 
   const cleanupScripts = useCallback(async () => {
     await mediaApi.cleanupScripts()
@@ -744,7 +705,7 @@ export function MediaGallery() {
                       key={version.id}
                       type="button"
                       onClick={() => setPreview(version)}
-                      title={`${index + 1}/${previewChain.length}`}
+                      title={`v${index + 1} de ${previewChain.length}`}
                       className={cn(
                         "relative size-10 shrink-0 overflow-hidden rounded border transition-colors",
                         version.id === preview.id
@@ -754,9 +715,14 @@ export function MediaGallery() {
                     >
                       <img
                         src={`orbit-media://${version.id}`}
-                        alt={`${index + 1}`}
+                        alt={`v${index + 1}`}
                         className="size-full object-cover"
                       />
+                      {/* O numero e como a pessoa fala da versao ("volta pra
+                          v2"), entao ele fica visivel, nao so no title. */}
+                      <span className="absolute inset-x-0 bottom-0 bg-black/60 text-center text-[9px] leading-tight text-white">
+                        v{index + 1}
+                      </span>
                     </button>
                   ))}
                   <span className="shrink-0 text-[11px] text-muted-foreground">
@@ -792,9 +758,10 @@ export function MediaGallery() {
                   <button
                     type="button"
                     onClick={async () => {
-                      // Apagar a versão atual leva os degraus dela junto: eles
-                      // só existiam como caminho até esta imagem.
-                      await mediaApi.remove(comAncestrais([preview.id]))
+                      // Aqui apaga-se a VERSÃO que está aberta, e só ela: no
+                      // visor a pessoa está olhando uma imagem específica. Para
+                      // levar o grupo inteiro existe a seleção na grade.
+                      await mediaApi.remove([preview.id])
                       setPreview(null)
                       setPreviewChain(null)
                       await refresh()
