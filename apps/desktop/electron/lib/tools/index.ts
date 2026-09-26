@@ -6,7 +6,7 @@ import { createDocumentTools, createPdfViewTool } from './documents'
 import { createSheetQueryTool } from './sheet'
 import { createDocumentAuthoringTools } from './document'
 import { createDocxEditTools } from './docx'
-import { createImageTools } from './image'
+import { createImageTools, type ImageToolHooks } from './image'
 import { createPdfOpsTools } from './pdf'
 import { createSvgTools } from './svg'
 import { createBrowserLinksTool, createBrowserOpenTool } from './browser'
@@ -38,14 +38,18 @@ import { createWebFetchTool, createWebSearchTool } from './web'
 
 export { destroyBrowserWindow } from './browser'
 export type { ToolContext, TurnSnapshot } from './context'
+export type { ImageToolHooks } from './image'
 
 /**
  * Monta o conjunto de ferramentas de acordo com o modo, seguindo a lógica de
  * agentes do opencode: "plan" só permite leitura; "build" (código) tem acesso
  * completo; no chat cada toggle controla estritamente sua capacidade —
  * Pesquisa habilita web, Browser habilita o browser nativo.
+ *
+ * `imageHooks` liga o image_delete ao estado vivo da resposta em andamento
+ * (chat-engine) — sem ele a tool ainda existe mas se recusa a apagar nada.
  */
-export function buildToolSet(input: SendMessageInput, ctx: ToolContext | null): ToolSet {
+export function buildToolSet(input: SendMessageInput, ctx: ToolContext | null, imageHooks?: ImageToolHooks): ToolSet {
   const tools: ToolSet = {}
   // Regra de ouro: workers podem usar subagentes, mas NUNCA orquestrar (sem recursão infinita).
   // Se orchestrate está ativo (este worker é um orquestrador), bloqueamos delegação.
@@ -100,7 +104,7 @@ export function buildToolSet(input: SendMessageInput, ctx: ToolContext | null): 
       // Editar imagem por processamento de pixel (redimensionar, comprimir,
       // ajustar tom, tirar o fundo). No chat a fonte e sempre a galeria — todo
       // anexo de imagem e registrado la —, por isso ctx entra como null.
-      Object.assign(tools, createImageTools({ sessionId: input.sessionId }, null))
+      Object.assign(tools, createImageTools({ sessionId: input.sessionId }, null, imageHooks))
       // SVG e imagem sao tools separadas porque a natureza e outra: uma
       // reprocessa pixel, a outra reescreve texto.
       Object.assign(tools, createSvgTools({ sessionId: input.sessionId }, null))
@@ -170,7 +174,7 @@ export function buildToolSet(input: SendMessageInput, ctx: ToolContext | null): 
     // versao editada de volta no repositorio quando o usuario pedir.
     Object.assign(
       tools,
-      createImageTools({ sessionId: input.sessionId, directory: input.directory }, ctx),
+      createImageTools({ sessionId: input.sessionId, directory: input.directory }, ctx, imageHooks),
     )
     Object.assign(
       tools,

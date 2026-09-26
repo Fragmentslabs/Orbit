@@ -72,6 +72,10 @@ const NATIVE_TOOLS = new Set([
   'image_list',
   'image_info',
   'image_edit',
+  // Limpeza da galeria: apaga imagens que o AGENTE produziu, inclusive de
+  // turnos anteriores. A trava é a origem — anexo do usuário é recusado pela
+  // própria tool —, e não o turno; mesmo padrão do memory_delete.
+  'image_delete',
   // SVG: mesma convencao. Editar e texto, nao pixel, mas a entrega e igual —
   // arquivo novo na galeria, projeto do usuario so com savePath.
   'svg_vectorize',
