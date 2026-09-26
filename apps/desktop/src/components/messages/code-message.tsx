@@ -2,7 +2,7 @@ import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "rea
 import { useTranslation } from "react-i18next"
 import { ChevronDownIcon } from "lucide-react"
 import { cn } from "@/lib/utils"
-import type { ChatMessage, MessagePart, ToolPart } from "@shared/chat"
+import type { ChatMessage, ImagePart, MessagePart, ToolPart } from "@shared/chat"
 import { usePanelStore } from "@/src/stores/panel-store"
 import {
   extractSources,
@@ -12,7 +12,7 @@ import {
   parseTestSummary,
   type TestSummary,
 } from "@/src/lib/message-utils"
-import { ImagePartView } from "@/src/components/ai/image"
+import { ImageGroupView } from "@/src/components/ai/image"
 import { ArtifactPartView } from "@/src/components/ai/artifact-part"
 import { DocumentPartView } from "@/src/components/ai/document-part"
 import { Shimmer } from "@/src/components/ai/shimmer"
@@ -236,6 +236,7 @@ function TaskGroup({ parts, snapshot, sessionId, messageId }: {
 
 type Segment =
   | { kind: "task"; id: string; parts: ToolPart[] }
+  | { kind: "image-group"; id: string; parts: ImagePart[] }
   | { kind: "part"; id: string; part: MessagePart }
 
 function segmentParts(parts: MessagePart[]): Segment[] {
@@ -258,6 +259,12 @@ function segmentParts(parts: MessagePart[]): Segment[] {
       const last = segments[segments.length - 1]
       if (last?.kind === "task") last.parts.push(part)
       else segments.push({ kind: "task", id: part.id, parts: [part] })
+    } else if (part.type === "image") {
+      // Imagens consecutivas (várias de uma vez, ou os passos de uma edição
+      // em cadeia) viram uma tira de miniaturas — ver ImageGroupView.
+      const last = segments[segments.length - 1]
+      if (last?.kind === "image-group") last.parts.push(part)
+      else segments.push({ kind: "image-group", id: part.id, parts: [part] })
     } else {
       segments.push({ kind: "part", id: part.id, part })
     }
@@ -310,6 +317,8 @@ export function CodeAssistantMessage({ message, sessionId, isLast, isBusy, busyL
             sessionId={sessionId}
             messageId={message.id}
           />
+        ) : segment.kind === "image-group" ? (
+          <ImageGroupView key={segment.id} parts={segment.parts} />
         ) : segment.part.type === "text" ? (
           segment.part.source === "internal" ? null : segment.part.source === "vision" ? (
             <VisionWorkingRow key={segment.id} />
@@ -332,8 +341,6 @@ export function CodeAssistantMessage({ message, sessionId, isLast, isBusy, busyL
           <TodoList key={segment.id} part={segment.part} stale={segment.part.id !== lastTodoId} />
         ) : segment.part.type === "tool" && segment.part.tool === "create_skill" ? (
           <SkillProposalCard key={segment.id} part={segment.part} />
-        ) : segment.part.type === "image" ? (
-          <ImagePartView key={segment.id} part={segment.part} />
         ) : segment.part.type === "artifact" ? (
           <ArtifactPartView key={segment.id} part={segment.part} sessionId={sessionId} />
         ) : segment.part.type === "document" ? (

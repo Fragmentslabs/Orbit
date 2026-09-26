@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { GlobeIcon, LinkIcon, SearchIcon, XCircleIcon } from "lucide-react"
-import type { ChatMessage, MessagePart, ToolPart } from "@shared/chat"
+import type { ChatMessage, ImagePart, MessagePart, ToolPart } from "@shared/chat"
 import { extractSources, hostnameOf, isEngineText, lastTextRunStart, parseSearchResults, WEB_TOOLS } from "@/src/lib/message-utils"
 import {
   ChainOfThought,
@@ -13,7 +13,7 @@ import {
 } from "@/src/components/ai/chain-of-thought"
 import { Shimmer } from "@/src/components/ai/shimmer"
 import { SubAgentCard } from "@/src/components/ai/sub-agent-card"
-import { ImagePartView } from "@/src/components/ai/image"
+import { ImageGroupView } from "@/src/components/ai/image"
 import { ArtifactPartView } from "@/src/components/ai/artifact-part"
 import { DocumentPartView } from "@/src/components/ai/document-part"
 import { Source, Sources, SourcesContent, SourcesTrigger } from "@/src/components/ai/sources"
@@ -109,9 +109,13 @@ function ResearchBlock({ parts }: { parts: ToolPart[] }) {
   )
 }
 
-/** Agrupa as parts: ferramentas web consecutivas viram um único bloco de pesquisa. */
+/** Agrupa as parts: ferramentas web consecutivas viram um único bloco de
+ *  pesquisa; imagens consecutivas (várias pedidas de uma vez, ou os passos
+ *  de uma edição em cadeia) viram uma tira de miniaturas em vez de N figuras
+ *  em largura cheia empilhadas — ver ImageGroupView. */
 type Segment =
   | { kind: "research"; id: string; parts: ToolPart[] }
+  | { kind: "image-group"; id: string; parts: ImagePart[] }
   | { kind: "part"; id: string; part: MessagePart }
 
 function segmentParts(parts: MessagePart[]): Segment[] {
@@ -121,6 +125,10 @@ function segmentParts(parts: MessagePart[]): Segment[] {
       const last = segments[segments.length - 1]
       if (last?.kind === "research") last.parts.push(part)
       else segments.push({ kind: "research", id: part.id, parts: [part] })
+    } else if (part.type === "image") {
+      const last = segments[segments.length - 1]
+      if (last?.kind === "image-group") last.parts.push(part)
+      else segments.push({ kind: "image-group", id: part.id, parts: [part] })
     } else {
       segments.push({ kind: "part", id: part.id, part })
     }
@@ -161,6 +169,8 @@ export function ChatAssistantMessage({ message, sessionId, isLast, isBusy, busyL
       {segments.map((segment, index) =>
         segment.kind === "research" ? (
           <ResearchBlock key={segment.id} parts={segment.parts} />
+        ) : segment.kind === "image-group" ? (
+          <ImageGroupView key={segment.id} parts={segment.parts} />
         ) : segment.part.type === "text" ? (
           segment.part.source === "internal" ? null : segment.part.source === "vision" ? (
             <VisionWorkingRow key={segment.id} />
@@ -175,15 +185,17 @@ export function ChatAssistantMessage({ message, sessionId, isLast, isBusy, busyL
           )
         ) : segment.part.type === "reasoning" ? (
           <ReasoningPartView key={segment.id} part={segment.part} />
-        ) : segment.part.type === "image" ? (
-          <ImagePartView key={segment.id} part={segment.part} />
         ) : segment.part.type === "agent" ? (
           <AgentPartView key={segment.id} part={segment.part} />
         ) : segment.part.type === "artifact" ? (
           <ArtifactPartView key={segment.id} part={segment.part} sessionId={sessionId} />
         ) : segment.part.type === "document" ? (
           <DocumentPartView key={segment.id} part={segment.part} sessionId={sessionId} />
-        ) : segment.part.type === "file" ? null : segment.part.tool === "subagent" ? (
+        ) : segment.part.type === "file" ? null : segment.part.type === "image" ? (
+          // Nunca acontece de fato — segmentParts sempre roteia "image" para
+          // um segmento "image-group" — mas o TS não sabe disso estaticamente.
+          null
+        ) : segment.part.tool === "subagent" ? (
           <SubAgentCard key={segment.id} part={segment.part} />
         ) : segment.part.tool === "create_skill" ? (
           <SkillProposalCard key={segment.id} part={segment.part} />

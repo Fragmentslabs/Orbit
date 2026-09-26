@@ -1,6 +1,6 @@
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { useTranslation } from "react-i18next"
-import { Check, Copy, Download, ImageOff } from "lucide-react"
+import { Check, ChevronLeft, ChevronRight, Copy, Download, ImageOff } from "lucide-react"
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog"
 import { mediaApi } from "@/src/lib/ipc"
 import { cn } from "@/lib/utils"
@@ -55,19 +55,61 @@ export function Image({ src, alt, className }: {
   )
 }
 
+export interface LightboxImage {
+  src: string
+  alt?: string
+}
+
 /**
  * Lightbox de imagem em dialog — mesmo padrão da galeria de mídia (painel
  * lateral). Usado pelas imagens do assistente e pelos anexos do chat/input.
+ *
+ * `images`/`index`/`onNavigate` são opcionais: quando presentes (mais de uma
+ * imagem no grupo), habilitam setas prev/next, contador e as setas do
+ * teclado — a mesma navegação que a galeria de mídia oferece. Sem eles o
+ * comportamento é o de sempre, uma imagem só.
  */
-export function ImageLightbox({ src, alt, open, onOpenChange }: {
+export function ImageLightbox({
+  src,
+  alt,
+  open,
+  onOpenChange,
+  images,
+  index = 0,
+  onNavigate,
+}: {
   src: string
   alt?: string
   open: boolean
   onOpenChange: (open: boolean) => void
+  images?: LightboxImage[]
+  index?: number
+  onNavigate?: (nextIndex: number) => void
 }) {
   const { t } = useTranslation()
   const [done, setDone] = useState<"copied" | "saved" | null>(null)
   const [busy, setBusy] = useState(false)
+
+  const hasGroup = (images?.length ?? 0) > 1
+  const total = images?.length ?? 0
+
+  const goTo = (next: number) => {
+    if (!images || !onNavigate) return
+    onNavigate(((next % total) + total) % total)
+  }
+
+  // Setas do teclado — só quando o lightbox está aberto num grupo de verdade,
+  // senão rouba o ←/→ de qualquer outro atalho da janela.
+  useEffect(() => {
+    if (!open || !hasGroup) return
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === "ArrowLeft") goTo(index - 1)
+      else if (e.key === "ArrowRight") goTo(index + 1)
+    }
+    window.addEventListener("keydown", handler)
+    return () => window.removeEventListener("keydown", handler)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, hasGroup, index, total])
 
   const flash = (what: "copied" | "saved") => {
     setDone(what)
@@ -98,12 +140,35 @@ export function ImageLightbox({ src, alt, open, onOpenChange }: {
           para distinguir "ficou transparente" de "ficou preto" — que é
           exatamente a pergunta que se faz ao ampliar um recorte.
         */}
-        <div className="overflow-hidden rounded-md bg-[length:16px_16px] bg-[position:0_0,8px_8px] bg-[image:linear-gradient(45deg,var(--muted)_25%,transparent_25%,transparent_75%,var(--muted)_75%),linear-gradient(45deg,var(--muted)_25%,transparent_25%,transparent_75%,var(--muted)_75%)]">
+        <div className="relative overflow-hidden rounded-md bg-[length:16px_16px] bg-[position:0_0,8px_8px] bg-[image:linear-gradient(45deg,var(--muted)_25%,transparent_25%,transparent_75%,var(--muted)_75%),linear-gradient(45deg,var(--muted)_25%,transparent_25%,transparent_75%,var(--muted)_75%)]">
           <img
             src={src}
             alt={alt ?? t("images.assistantImage")}
             className="max-h-[76vh] w-full object-contain"
           />
+          {hasGroup && (
+            <>
+              <button
+                type="button"
+                onClick={() => goTo(index - 1)}
+                title={t("images.previous")}
+                className="absolute top-1/2 left-2 flex size-8 -translate-y-1/2 cursor-pointer items-center justify-center rounded-full bg-background/80 text-foreground shadow-sm backdrop-blur transition-colors hover:bg-background"
+              >
+                <ChevronLeft className="size-4" />
+              </button>
+              <button
+                type="button"
+                onClick={() => goTo(index + 1)}
+                title={t("images.next")}
+                className="absolute top-1/2 right-2 flex size-8 -translate-y-1/2 cursor-pointer items-center justify-center rounded-full bg-background/80 text-foreground shadow-sm backdrop-blur transition-colors hover:bg-background"
+              >
+                <ChevronRight className="size-4" />
+              </button>
+              <span className="absolute bottom-2 left-1/2 -translate-x-1/2 rounded-full bg-background/80 px-2 py-0.5 text-[11px] tabular-nums text-muted-foreground backdrop-blur">
+                {t("images.counter", { current: index + 1, total })}
+              </span>
+            </>
+          )}
         </div>
         <div className="flex items-center gap-2 px-1 pb-1">
           <button
@@ -131,7 +196,74 @@ export function ImageLightbox({ src, alt, open, onOpenChange }: {
   )
 }
 
-/** Render direto de uma ImagePart de mensagem do assistente. */
+/** Direto de uma ImagePart única. */
 export function ImagePartView({ part }: { part: ImagePart }) {
   return <Image src={part.src} alt={part.alt} />
+}
+
+/**
+ * Filmstrip de miniaturas para quando a resposta traz mais de uma imagem —
+ * várias fotos pedidas de uma vez, ou os passos de uma edição em cadeia. Uma
+ * imagem só cai no caso normal (figura em largura cheia); mais de uma vira
+ * uma tira compacta, todas abrindo o MESMO lightbox com setas prev/next, em
+ * vez de empilhar N figuras inteiras e enterrar o resultado no meio delas.
+ */
+export function ImageGroupView({ parts }: { parts: ImagePart[] }) {
+  const { t } = useTranslation()
+  const [openIndex, setOpenIndex] = useState<number | null>(null)
+  const [failed, setFailed] = useState<Set<string>>(new Set())
+
+  if (parts.length <= 1) {
+    return parts[0] ? <ImagePartView part={parts[0]} /> : null
+  }
+
+  const images = parts.map((p) => ({ src: p.src, alt: p.alt }))
+
+  return (
+    <>
+      <div className="not-prose my-2 flex w-fit max-w-full flex-col gap-1.5">
+        <p className="px-0.5 text-[11px] text-muted-foreground">
+          {t("images.group", { count: parts.length })}
+        </p>
+        <div className="flex flex-wrap gap-1.5">
+          {parts.map((part, i) =>
+            failed.has(part.id) ? (
+              <div
+                key={part.id}
+                className="flex size-20 shrink-0 items-center justify-center rounded-lg border border-dashed text-muted-foreground"
+              >
+                <ImageOff className="size-4" />
+              </div>
+            ) : (
+              <button
+                key={part.id}
+                type="button"
+                onClick={() => setOpenIndex(i)}
+                title={part.alt ?? t("images.enlarge")}
+                className="block size-20 shrink-0 cursor-zoom-in overflow-hidden rounded-lg border bg-muted/30 transition-colors hover:border-ring"
+              >
+                <img
+                  src={part.src}
+                  alt={part.alt ?? t("images.assistantImage")}
+                  loading="lazy"
+                  onError={() => setFailed((prev) => new Set(prev).add(part.id))}
+                  className="size-full object-cover"
+                />
+              </button>
+            ),
+          )}
+        </div>
+      </div>
+
+      <ImageLightbox
+        src={openIndex !== null ? images[openIndex].src : images[0].src}
+        alt={openIndex !== null ? images[openIndex].alt : images[0].alt}
+        open={openIndex !== null}
+        onOpenChange={(next) => setOpenIndex(next ? (openIndex ?? 0) : null)}
+        images={images}
+        index={openIndex ?? 0}
+        onNavigate={setOpenIndex}
+      />
+    </>
+  )
 }
