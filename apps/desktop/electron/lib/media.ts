@@ -173,7 +173,23 @@ export async function saveMedia(buffer: Buffer, ext: string, meta?: SaveMediaMet
     entries.push(entry)
     await writeIndex(entries)
   })
+  notifyMediaChanged()
   return `${SCHEME}://${id}`
+}
+
+/**
+ * Avisa as janelas de que o acervo mudou.
+ *
+ * A galeria lia o índice só ao abrir: com o painel aberto, uma imagem gerada
+ * no meio da conversa não aparecia, e uma apagada continuava lá — era preciso
+ * fechar e abrir para ver a verdade. Emitido daqui pelo mesmo motivo do
+ * artifact:updated: passar pelo broadcast.ts criaria o ciclo media →
+ * broadcast → companion-server → companion-http → media.
+ */
+function notifyMediaChanged(): void {
+  for (const win of BrowserWindow.getAllWindows()) {
+    if (!win.isDestroyed()) win.webContents.send('media:changed')
+  }
 }
 
 /** Extrai o id de uma URL orbit-media:// (ou devolve a entrada se já for um id). */
@@ -261,6 +277,7 @@ export async function deleteMedia(id: string): Promise<boolean> {
     const next = entries.filter((e) => e.id !== id)
     if (next.length !== entries.length) await writeIndex(next)
   })
+  notifyMediaChanged()
   return true
 }
 

@@ -260,6 +260,21 @@ export function MediaGallery() {
   // refresh traz a revisão nova, que é o que desempata a URL da miniatura.
   useEffect(() => artifactApi.onUpdated(() => void refresh()), [refresh])
 
+  // Acervo mudou com o painel aberto (o agente gerou ou apagou uma imagem no
+  // meio da conversa). O respiro agrupa a rajada de um turno inteiro numa
+  // recarga só, em vez de uma por arquivo.
+  useEffect(() => {
+    let timer: ReturnType<typeof setTimeout> | null = null
+    const off = mediaApi.onChanged(() => {
+      if (timer) clearTimeout(timer)
+      timer = setTimeout(() => void refresh(), 250)
+    })
+    return () => {
+      if (timer) clearTimeout(timer)
+      off()
+    }
+  }, [refresh])
+
   /** Sessões do modo atual — escopo da galeria (chat mostra só chat, etc). */
   const modeSessionIds = useMemo(
     () => new Set(sessions.filter((s) => s.mode === mode).map((s) => s.id)),

@@ -516,6 +516,12 @@ export const mediaApi = {
   cleanupScripts: () => window.ipcRenderer.invoke("media:cleanupScripts") as Promise<number>,
   /** Indexa imagens anteriores ao registry — idempotente, roda na 1ª abertura. */
   backfill: () => window.ipcRenderer.invoke("media:backfill") as Promise<number>,
+  /** O acervo mudou (imagem salva ou apagada por qualquer caminho). A galeria
+   *  aberta não descobre sozinha: ela lê o índice uma vez. */
+  onChanged: (listener: () => void) => {
+    const wrapper = window.ipcRenderer.on("media:changed", () => listener())
+    return () => window.ipcRenderer.off("media:changed", wrapper)
+  },
   /** Salva a imagem em disco pelo diálogo do sistema. Aceita orbit-media://,
    *  o id cru ou um data URL (anexo que ainda não foi para a galeria). */
   exportImage: (ref: string, suggestedName?: string) =>
