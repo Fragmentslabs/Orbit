@@ -788,7 +788,12 @@
     "saved": "Salvo",
     "unavailable": "Imagem indisponível",
     "enlarge": "Ampliar imagem",
-    "assistantImage": "Imagem do assistente"
+    "assistantImage": "Imagem do assistente",
+    "group_one": "{{count}} imagem",
+    "group_other": "{{count}} imagens",
+    "previous": "Imagem anterior",
+    "next": "Próxima imagem",
+    "counter": "{{current}} de {{total}}"
   },
   "todo": {
     "stale": "TODO ({{count}}/{{total}} concluídos) — atualizada mais abaixo",
@@ -1722,7 +1727,10 @@
       "all": "Tudo",
       "session": "Neste chat",
       "loose": "Soltos"
-    }
+    },
+    "versions_one": "{{count}} versão",
+    "versions_other": "{{count}} versões",
+    "currentVersion": "atual"
   },
   "esteira": {
     "titulo": "Esteira",

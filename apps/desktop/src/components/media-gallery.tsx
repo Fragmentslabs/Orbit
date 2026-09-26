@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
-import { CheckIcon, CodeXml, FileText, Folder, FolderGit2, HardDriveIcon, ImageOff, MessageSquare, RefreshCw, Search, Trash2, X } from "lucide-react"
+import { CheckIcon, CodeXml, FileText, Folder, FolderGit2, HardDriveIcon, ImageOff, Layers, MessageSquare, RefreshCw, Search, Trash2, X } from "lucide-react"
 import type { LucideIcon } from "lucide-react"
 import { mediaKind, thumbUrl, type MediaEntry, type MediaSource } from "@shared/media"
 import { folderKey, normalizeFolderName } from "@shared/chat"
@@ -89,12 +89,14 @@ function scrollToMessage(id: string) {
   }, 700)
 }
 
-function Thumb({ entry, selected, selecting, onToggle, onOpen }: {
+function Thumb({ entry, selected, selecting, onToggle, onOpen, versions = 1 }: {
   entry: MediaEntry
   selected: boolean
   selecting: boolean
   onToggle: () => void
   onOpen: () => void
+  /** Quantas imagens existem na cadeia que este tile representa. */
+  versions?: number
 }) {
   const [failed, setFailed] = useState(false)
   const { theme } = useTheme()
@@ -149,6 +151,14 @@ function Thumb({ entry, selected, selecting, onToggle, onOpen }: {
         <span className="pointer-events-none absolute right-1.5 top-1.5 flex items-center gap-1 rounded bg-background/85 px-1.5 py-0.5 text-[10px] font-medium text-foreground">
           {isDocument ? <FileText className="size-3" /> : <CodeXml className="size-3" />}
           {badge}
+        </span>
+      )}
+      {/* Pilha de edições: o tile é a versão atual, e o selo diz que existe
+          histórico atrás dela — sem ele, o colapso pareceria perda. */}
+      {!badge && versions > 1 && (
+        <span className="pointer-events-none absolute right-1.5 top-1.5 flex items-center gap-1 rounded bg-background/85 px-1.5 py-0.5 text-[10px] font-medium text-foreground">
+          <Layers className="size-3" />
+          {versions}
         </span>
       )}
       <button
@@ -216,6 +226,8 @@ export function MediaGallery() {
   const [query, setQuery] = useState("")
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [preview, setPreview] = useState<MediaEntry | null>(null)
+  /** Versões da imagem aberta, da mais antiga para a atual. */
+  const [previewChain, setPreviewChain] = useState<MediaEntry[] | null>(null)
   const mounted = useRef(true)
 
   const refresh = useCallback(async () => {
@@ -392,17 +404,70 @@ export function MediaGallery() {
     [scopeOverride, scopeValues, defaultScope],
   )
 
-  const visible = useMemo(() => {
+  /**
+   * O que aparece na grade, com a cadeia de edições colapsada.
+   *
+   * Cinco passos de um mesmo meme eram cinco tiles — a galeria virava o
+   * rascunho do agente em vez do acervo do usuário. Aqui, quem foi editado
+   * depois sai da grade e passa a ser versão de quem o sucedeu; só as pontas
+   * ficam. Ramificação funciona pelo mesmo caminho: três variantes da mesma
+   * base são três pontas, e a base some atrás delas.
+   */
+  const { visible, versionsByHead } = useMemo(() => {
     const needle = query.trim().toLowerCase()
     const since = period === "all" ? 0 : Date.now() - PERIOD_MS[period]
-    return scopedEntries.filter((entry) => {
+    const filtrados = scopedEntries.filter((entry) => {
       if (source !== "all" && entry.source !== source) return false
       if (!matchesScope(entry, scope)) return false
       if (entry.createdAt < since) return false
       if (!needle) return true
       return `${entry.name ?? ""} ${entry.taskId ?? ""} ${entry.id}`.toLowerCase().includes(needle)
     })
+
+    const porId = new Map(scopedEntries.map((e) => [e.id, e]))
+    const superadas = new Set<string>()
+    for (const entry of filtrados) if (entry.parentId) superadas.add(entry.parentId)
+
+    const pontas = filtrados.filter((entry) => !superadas.has(entry.id))
+    const cadeias = new Map<string, MediaEntry[]>()
+    for (const ponta of pontas) {
+      const cadeia: MediaEntry[] = []
+      const vistos = new Set<string>()
+      let atual: MediaEntry | undefined = ponta
+      // O ancestral entra mesmo filtrado de fora: a versão anterior continua
+      // sendo história desta imagem, e o filtro é sobre o que a grade mostra.
+      while (atual && !vistos.has(atual.id)) {
+        vistos.add(atual.id)
+        cadeia.unshift(atual)
+        atual = atual.parentId ? porId.get(atual.parentId) : undefined
+      }
+      if (cadeia.length > 1) cadeias.set(ponta.id, cadeia)
+    }
+    return { visible: pontas, versionsByHead: cadeias }
   }, [scopedEntries, source, period, query, scope, matchesScope])
+
+  /**
+   * Ids a apagar de fato: apagar a ponta leva junto os degraus que levaram até
+   * ela, senão eles sobrariam órfãos e invisíveis, ocupando disco. A raiz
+   * anexada pelo usuário é onde a poda para — a foto dele não é rascunho.
+   */
+  const comAncestrais = useCallback(
+    (ids: string[]): string[] => {
+      const porId = new Map(scopedEntries.map((e) => [e.id, e]))
+      const alvo = new Set(ids)
+      for (const id of ids) {
+        let atual = porId.get(id)
+        while (atual?.parentId) {
+          const pai = porId.get(atual.parentId)
+          if (!pai || pai.source === "user" || alvo.has(pai.id)) break
+          alvo.add(pai.id)
+          atual = pai
+        }
+      }
+      return [...alvo]
+    },
+    [scopedEntries],
+  )
 
   const toggle = useCallback((id: string) => {
     setSelected((prev) => {
@@ -414,13 +479,13 @@ export function MediaGallery() {
   }, [])
 
   const removeSelected = useCallback(async () => {
-    const ids = [...selected]
+    const ids = comAncestrais([...selected])
     if (ids.length === 0) return
     await mediaApi.remove(ids)
     setSelected(new Set())
     setPreview((current) => (current && ids.includes(current.id) ? null : current))
     await refresh()
-  }, [selected, refresh])
+  }, [selected, refresh, comAncestrais])
 
   const cleanupScripts = useCallback(async () => {
     await mediaApi.cleanupScripts()
@@ -456,6 +521,9 @@ export function MediaGallery() {
       // HTML, e o lightbox só sabe mostrar <img>.
       if (kind !== "artifact" && kind !== "document") {
         setPreview(entry)
+        // A cadeia é fixada na abertura: trocar de versão dentro do visor não
+        // pode reescrever a lista por onde se está navegando.
+        setPreviewChain(versionsByHead.get(entry.id) ?? null)
         return
       }
       const sessionId = entry.sessionId ?? useSessionStore.getState().activeIds[mode]
@@ -470,7 +538,7 @@ export function MediaGallery() {
       }
       usePanelStore.getState().openArtifactTab(sessionId, entry.id, entry.name || entry.id)
     },
-    [mode],
+    [mode, versionsByHead],
   )
 
   const sourceFilters: SourceFilter[] = ["all", "user", "chat", "screenshot", "script", "batch"]
@@ -614,6 +682,7 @@ export function MediaGallery() {
                 selecting={selected.size > 0}
                 onToggle={() => toggle(entry.id)}
                 onOpen={() => openEntry(entry)}
+                versions={versionsByHead.get(entry.id)?.length ?? 1}
               />
             ))}
           </div>
@@ -633,7 +702,14 @@ export function MediaGallery() {
         </button>
       </div>
 
-      <Dialog open={!!preview} onOpenChange={(open) => !open && setPreview(null)}>
+      <Dialog
+        open={!!preview}
+        onOpenChange={(open) => {
+          if (open) return
+          setPreview(null)
+          setPreviewChain(null)
+        }}
+      >
         <DialogContent className="max-w-5xl p-2">
           <DialogTitle className="sr-only">{preview?.name ?? preview?.id ?? ""}</DialogTitle>
           {preview && (
@@ -643,6 +719,36 @@ export function MediaGallery() {
                 alt={preview.name ?? preview.id}
                 className="max-h-[76vh] w-full rounded-md object-contain"
               />
+              {previewChain && previewChain.length > 1 && (
+                <div className="flex items-center gap-1.5 overflow-x-auto px-1 pt-1">
+                  <span className="shrink-0 text-[11px] text-muted-foreground">
+                    {t("media.versions", { count: previewChain.length })}
+                  </span>
+                  {previewChain.map((version, index) => (
+                    <button
+                      key={version.id}
+                      type="button"
+                      onClick={() => setPreview(version)}
+                      title={`${index + 1}/${previewChain.length}`}
+                      className={cn(
+                        "relative size-10 shrink-0 overflow-hidden rounded border transition-colors",
+                        version.id === preview.id
+                          ? "border-primary ring-1 ring-primary"
+                          : "border-sidebar-border hover:border-ring",
+                      )}
+                    >
+                      <img
+                        src={`orbit-media://${version.id}`}
+                        alt={`${index + 1}`}
+                        className="size-full object-cover"
+                      />
+                    </button>
+                  ))}
+                  <span className="shrink-0 text-[11px] text-muted-foreground">
+                    {t("media.currentVersion")}
+                  </span>
+                </div>
+              )}
               <div className="flex flex-wrap items-center gap-2 px-1 pb-1 text-[11px] text-muted-foreground">
                 <span className="font-medium text-foreground">{preview.name || preview.id}</span>
                 <span>·</span>
@@ -671,8 +777,11 @@ export function MediaGallery() {
                   <button
                     type="button"
                     onClick={async () => {
-                      await mediaApi.remove([preview.id])
+                      // Apagar a versão atual leva os degraus dela junto: eles
+                      // só existiam como caminho até esta imagem.
+                      await mediaApi.remove(comAncestrais([preview.id]))
                       setPreview(null)
+                      setPreviewChain(null)
                       await refresh()
                     }}
                     className="flex items-center gap-1 rounded-md px-2 py-1 text-destructive hover:bg-destructive/10"

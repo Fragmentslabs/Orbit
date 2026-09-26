@@ -788,7 +788,12 @@
     "saved": "Saved",
     "unavailable": "Image unavailable",
     "enlarge": "Enlarge image",
-    "assistantImage": "Assistant image"
+    "assistantImage": "Assistant image",
+    "group_one": "{{count}} image",
+    "group_other": "{{count}} images",
+    "previous": "Previous image",
+    "next": "Next image",
+    "counter": "{{current}} of {{total}}"
   },
   "todo": {
     "stale": "TODO ({{count}}/{{total}} done) — updated below",
@@ -1723,7 +1728,10 @@
       "all": "Everything",
       "session": "In this chat",
       "loose": "Loose"
-    }
+    },
+    "versions_one": "{{count}} version",
+    "versions_other": "{{count}} versions",
+    "currentVersion": "current"
   },
   "esteira": {
     "titulo": "Pipelines",
