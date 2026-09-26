@@ -1730,7 +1730,18 @@
     },
     "versions_one": "{{count}} versão",
     "versions_other": "{{count}} versões",
-    "currentVersion": "atual"
+    "currentVersion": "atual",
+    "previousVersion": "Versão anterior",
+    "nextVersion": "Próxima versão",
+    "confirmDelete": {
+      "title": "Excluir imagens?",
+      "selection": "{{items}} item(ns) selecionado(s), {{files}} arquivo(s) no total — todas as versões de cada um vão junto. Não dá para desfazer.",
+      "viewerChain": "Você está vendo a versão {{version}} de {{count}}.",
+      "viewerSingle": "Esta imagem será excluída. Não dá para desfazer.",
+      "confirmAll": "Excluir tudo",
+      "allVersions": "Excluir as {{count}} versões",
+      "onlyThis": "Excluir só a v{{version}}"
+    }
   },
   "esteira": {
     "titulo": "Esteira",

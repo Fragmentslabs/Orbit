@@ -1731,7 +1731,18 @@
     },
     "versions_one": "{{count}} version",
     "versions_other": "{{count}} versions",
-    "currentVersion": "current"
+    "currentVersion": "current",
+    "previousVersion": "Previous version",
+    "nextVersion": "Next version",
+    "confirmDelete": {
+      "title": "Delete images?",
+      "selection": "{{items}} item(s) selected, {{files}} file(s) in total — every version of each one goes. This cannot be undone.",
+      "viewerChain": "You are looking at version {{version}} of {{count}}.",
+      "viewerSingle": "This image will be deleted. This cannot be undone.",
+      "confirmAll": "Delete everything",
+      "allVersions": "Delete all {{count}} versions",
+      "onlyThis": "Delete only v{{version}}"
+    }
   },
   "esteira": {
     "titulo": "Pipelines",

@@ -1,10 +1,18 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
-import { CheckIcon, CodeXml, FileText, Folder, FolderGit2, HardDriveIcon, ImageOff, Layers, MessageSquare, RefreshCw, Search, Trash2, X } from "lucide-react"
+import { CheckIcon, ChevronLeft, ChevronRight, CodeXml, FileText, Folder, FolderGit2, HardDriveIcon, ImageOff, Layers, MessageSquare, RefreshCw, Search, Trash2, X } from "lucide-react"
 import type { LucideIcon } from "lucide-react"
 import { mediaKind, thumbUrl, type MediaEntry, type MediaSource } from "@shared/media"
 import { folderKey, normalizeFolderName } from "@shared/chat"
-import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
+import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { artifactApi, mediaApi } from "@/src/lib/ipc"
 import { useSessionStore } from "@/src/stores/session-store"
@@ -229,6 +237,13 @@ export function MediaGallery() {
   const [preview, setPreview] = useState<MediaEntry | null>(null)
   /** Versões da imagem aberta, da mais antiga para a atual. */
   const [previewChain, setPreviewChain] = useState<MediaEntry[] | null>(null)
+  /**
+   * Exclusão pendente de confirmação. Apagar mídia não tem desfazer, e desde
+   * que um item da grade passou a representar um grupo, um clique podia levar
+   * versões que a pessoa nem sabia que estavam ali — por isso o passo a mais,
+   * e por isso ele diz quantas são.
+   */
+  const [confirmDelete, setConfirmDelete] = useState<"selection" | "viewer" | null>(null)
   const mounted = useRef(true)
 
   const refresh = useCallback(async () => {
@@ -454,15 +469,6 @@ export function MediaGallery() {
     })
   }, [])
 
-  const removeSelected = useCallback(async () => {
-    const ids = comVersoes([...selected])
-    if (ids.length === 0) return
-    await mediaApi.remove(ids)
-    setSelected(new Set())
-    setPreview((current) => (current && ids.includes(current.id) ? null : current))
-    await refresh()
-  }, [selected, refresh, comVersoes])
-
   const cleanupScripts = useCallback(async () => {
     await mediaApi.cleanupScripts()
     setSelected(new Set())
@@ -515,6 +521,34 @@ export function MediaGallery() {
       usePanelStore.getState().openArtifactTab(sessionId, entry.id, entry.name || entry.id)
     },
     [mode, versionsByHead],
+  )
+
+  /** Posição da versão aberta dentro da pilha, para as setas do visor. */
+  const previewIndex = useMemo(
+    () => (preview && previewChain ? previewChain.findIndex((v) => v.id === preview.id) : -1),
+    [preview, previewChain],
+  )
+  const stepVersion = useCallback(
+    (delta: number) => {
+      if (!previewChain || previewIndex < 0) return
+      const next = previewChain[previewIndex + delta]
+      if (next) setPreview(next)
+    },
+    [previewChain, previewIndex],
+  )
+
+  /** Apaga o que foi confirmado e fecha o que estiver aberto. */
+  const runDelete = useCallback(
+    async (ids: string[]) => {
+      if (ids.length === 0) return
+      await mediaApi.remove(ids)
+      setConfirmDelete(null)
+      setSelected(new Set())
+      setPreview((current) => (current && ids.includes(current.id) ? null : current))
+      setPreviewChain(null)
+      await refresh()
+    },
+    [refresh],
   )
 
   const sourceFilters: SourceFilter[] = ["all", "user", "chat", "screenshot", "script", "batch"]
@@ -627,7 +661,7 @@ export function MediaGallery() {
           </span>
           <button
             type="button"
-            onClick={() => void removeSelected()}
+            onClick={() => setConfirmDelete("selection")}
             className="flex items-center gap-1 rounded-md px-2 py-1 text-xs text-destructive hover:bg-destructive/10"
           >
             <Trash2 className="size-3" />
@@ -690,11 +724,40 @@ export function MediaGallery() {
           <DialogTitle className="sr-only">{preview?.name ?? preview?.id ?? ""}</DialogTitle>
           {preview && (
             <>
-              <img
-                src={`orbit-media://${preview.id}`}
-                alt={preview.name ?? preview.id}
-                className="max-h-[76vh] w-full rounded-md object-contain"
-              />
+              <div className="relative">
+                <img
+                  src={`orbit-media://${preview.id}`}
+                  alt={preview.name ?? preview.id}
+                  className="max-h-[76vh] w-full rounded-md object-contain"
+                />
+                {/* Setas só quando há para onde ir: numa foto sem histórico
+                    elas seriam dois botões mortos em cima da imagem. */}
+                {previewChain && previewIndex > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => stepVersion(-1)}
+                    title={t("media.previousVersion")}
+                    className="absolute left-2 top-1/2 flex size-8 -translate-y-1/2 items-center justify-center rounded-full bg-background/80 text-foreground shadow-md transition-colors hover:bg-background"
+                  >
+                    <ChevronLeft className="size-4" />
+                  </button>
+                )}
+                {previewChain && previewIndex >= 0 && previewIndex < previewChain.length - 1 && (
+                  <button
+                    type="button"
+                    onClick={() => stepVersion(1)}
+                    title={t("media.nextVersion")}
+                    className="absolute right-2 top-1/2 flex size-8 -translate-y-1/2 items-center justify-center rounded-full bg-background/80 text-foreground shadow-md transition-colors hover:bg-background"
+                  >
+                    <ChevronRight className="size-4" />
+                  </button>
+                )}
+                {previewChain && previewIndex >= 0 && (
+                  <span className="absolute bottom-2 left-1/2 -translate-x-1/2 rounded-full bg-background/80 px-2 py-0.5 text-[11px] text-foreground shadow-md">
+                    v{previewIndex + 1}/{previewChain.length}
+                  </span>
+                )}
+              </div>
               {previewChain && previewChain.length > 1 && (
                 <div className="flex items-center gap-1.5 overflow-x-auto px-1 pt-1">
                   <span className="shrink-0 text-[11px] text-muted-foreground">
@@ -757,15 +820,7 @@ export function MediaGallery() {
                   )}
                   <button
                     type="button"
-                    onClick={async () => {
-                      // Aqui apaga-se a VERSÃO que está aberta, e só ela: no
-                      // visor a pessoa está olhando uma imagem específica. Para
-                      // levar o grupo inteiro existe a seleção na grade.
-                      await mediaApi.remove([preview.id])
-                      setPreview(null)
-                      setPreviewChain(null)
-                      await refresh()
-                    }}
+                    onClick={() => setConfirmDelete("viewer")}
                     className="flex items-center gap-1 rounded-md px-2 py-1 text-destructive hover:bg-destructive/10"
                   >
                     <Trash2 className="size-3" />
@@ -775,6 +830,79 @@ export function MediaGallery() {
               </div>
             </>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Exclusão da SELEÇÃO: um item da grade é o grupo inteiro, então o
+          número que importa não é quantos tiles foram marcados, e sim quantos
+          arquivos vão embora. */}
+      <Dialog
+        open={confirmDelete === "selection"}
+        onOpenChange={(open) => !open && setConfirmDelete(null)}
+      >
+        <DialogContent className="sm:max-w-sm" showCloseButton={false}>
+          <DialogHeader>
+            <DialogTitle>{t("media.confirmDelete.title")}</DialogTitle>
+            <DialogDescription>
+              {t("media.confirmDelete.selection", {
+                items: selected.size,
+                files: comVersoes([...selected]).length,
+              })}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setConfirmDelete(null)}>
+              {t("common.cancel")}
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() => void runDelete(comVersoes([...selected]))}
+            >
+              {t("media.confirmDelete.confirmAll")}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Exclusão no VISOR: aqui a pessoa está olhando uma versão específica,
+          então as duas saídas ficam explícitas em vez de uma ser adivinhada. */}
+      <Dialog
+        open={confirmDelete === "viewer"}
+        onOpenChange={(open) => !open && setConfirmDelete(null)}
+      >
+        <DialogContent className="sm:max-w-md" showCloseButton={false}>
+          <DialogHeader>
+            <DialogTitle>{t("media.confirmDelete.title")}</DialogTitle>
+            <DialogDescription>
+              {previewChain && previewChain.length > 1
+                ? t("media.confirmDelete.viewerChain", {
+                    version: previewIndex + 1,
+                    count: previewChain.length,
+                  })
+                : t("media.confirmDelete.viewerSingle")}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="sm:flex-col sm:items-stretch sm:gap-2">
+            {previewChain && previewChain.length > 1 && (
+              <Button
+                variant="destructive"
+                onClick={() => void runDelete(comVersoes(preview ? [preview.id] : []))}
+              >
+                {t("media.confirmDelete.allVersions", { count: previewChain.length })}
+              </Button>
+            )}
+            <Button
+              variant="outline"
+              onClick={() => void runDelete(preview ? [preview.id] : [])}
+            >
+              {previewChain && previewChain.length > 1
+                ? t("media.confirmDelete.onlyThis", { version: previewIndex + 1 })
+                : t("media.delete")}
+            </Button>
+            <Button variant="ghost" onClick={() => setConfirmDelete(null)}>
+              {t("common.cancel")}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>
