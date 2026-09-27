@@ -158,6 +158,28 @@ export function ChatInput({ onSubmit, status, onStop, sessionId, draftKey, onPro
     <ChatInputDraft sessionId={sessionId} draftKey={draftKey} />
     <PendingAttachmentSync sessionId={sessionId} draftKey={draftKey} />
     <div className="w-full max-w-2xl mx-auto pb-4 @container">
+      {quotes.length > 0 && (
+        <div className="flex flex-wrap items-center gap-1.5 px-3 pb-1.5">
+          {quotes.map((q) => (
+            <span
+              key={q.id}
+              title={q.text}
+              className="flex items-center gap-1 rounded-md border border-primary/30 bg-primary/10 px-1.5 py-0.5 text-[11px] text-primary"
+            >
+              <Quote className="size-3" />
+              {q.name}
+              {q.page ? ` p${q.page}${q.fromLine ? `L${q.fromLine}` : ""}` : ""}
+              <button
+                type="button"
+                onClick={() => removeQuote(q.id)}
+                className="ml-0.5 cursor-pointer rounded-sm hover:bg-primary/20"
+              >
+                <X className="size-3" />
+              </button>
+            </span>
+          ))}
+        </div>
+      )}
       <QueueIndicator sessionId={sessionId} />
       <PromptInput
         multiple
@@ -199,28 +221,6 @@ export function ChatInput({ onSubmit, status, onStop, sessionId, draftKey, onPro
         }}
         className="rounded-xl border-2 border-sidebar-border [&>div]:!rounded-[calc(var(--radius-xl)-2px)] [&>div]:!border-none [&>div]:!bg-transparent"
       >
-        {quotes.length > 0 && (
-          <div className="flex flex-wrap items-center gap-1.5 px-3 pt-2">
-            {quotes.map((q) => (
-              <span
-                key={q.id}
-                title={q.text}
-                className="flex items-center gap-1 rounded-md border border-primary/30 bg-primary/10 px-1.5 py-0.5 text-[11px] text-primary"
-              >
-                <Quote className="size-3" />
-                {q.name}
-                {q.page ? ` p${q.page}${q.fromLine ? `L${q.fromLine}` : ""}` : ""}
-                <button
-                  type="button"
-                  onClick={() => removeQuote(q.id)}
-                  className="ml-0.5 cursor-pointer rounded-sm hover:bg-primary/20"
-                >
-                  <X className="size-3" />
-                </button>
-              </span>
-            ))}
-          </div>
-        )}
         <PromptInputAttachments className="!px-3 !py-1.5">
           {(attachment) => <PromptInputAttachment data={attachment} />}
         </PromptInputAttachments>
