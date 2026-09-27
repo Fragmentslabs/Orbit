@@ -16,6 +16,7 @@ import {
 import { docsApi, type OutlineItem, type RenderedPage, type SourceText } from "@/src/lib/ipc"
 import { locateText, selectionScaleX } from "@/src/lib/pdf-text"
 import { QuoteSelection, type QuoteAnchor } from "@/src/components/quote-selection"
+import { locateLines } from "@/src/lib/document-quote"
 import { cn } from "@/lib/utils"
 
 /**
@@ -486,6 +487,8 @@ export function SourceViewer({
             highlightPage={highlightPage}
             zoom={zoom}
             onOutline={setOutline}
+            docName={data.filename || docId}
+            textPages={data.pages}
           />
         ) : (
           <div
@@ -654,10 +657,17 @@ function OriginalPages({
   highlightPage,
   zoom,
   onOutline,
+  docName,
+  textPages,
 }: {
   sessionId: string
   docId: string
   total: number
+  /** Nome exibível, para o chip da citação. */
+  docName: string
+  /** As MESMAS linhas do modo Texto: é nelas que o trecho selecionado é
+   *  reencontrado para virar coordenada. */
+  textPages: { num: number; lines: string[] }[]
   focus: Focus | null
   highlight: string
   /** Página em que o destaque é esperado; null quando ele é uma busca, que
@@ -741,6 +751,30 @@ function OriginalPages({
 
   return (
     <div ref={containerRef} className="flex-1 overflow-auto bg-muted/40 p-3">
+      {/*
+        Aqui a seleção acontece na camada de texto desenhada sobre a imagem:
+        os pedaços são glifos posicionados, sem número de linha no DOM. A
+        página vem do data-page, e a linha sai de procurar o próprio texto de
+        volta na lista de linhas — a mesma que o modelo lê, que é o que faz a
+        citação apontar para o lugar certo.
+      */}
+      <QuoteSelection
+        containerRef={containerRef}
+        docId={docId}
+        name={docName}
+        resolve={(range, text) => {
+          const el =
+            range.startContainer instanceof HTMLElement
+              ? range.startContainer
+              : (range.startContainer.parentElement ?? null)
+          const pageEl = el?.closest<HTMLElement>("[data-page]")
+          const page = pageEl ? Number(pageEl.dataset.page) : undefined
+          if (!page) return {}
+          const lines = textPages.find((p) => p.num === page)?.lines
+          const found = lines ? locateLines(lines, text) : null
+          return found ? { page, ...found } : { page }
+        }}
+      />
       <div
         className="mx-auto flex flex-col gap-3"
         // O zoom é a largura EXIBIDA. Redesenhar numa escala maior só aumenta a

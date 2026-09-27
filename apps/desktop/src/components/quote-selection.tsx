@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, type RefObject } from "react"
+import { useCallback, useEffect, useRef, useState, type RefObject } from "react"
 import { useTranslation } from "react-i18next"
 import { createPortal } from "react-dom"
 import { Quote } from "lucide-react"
@@ -35,11 +35,21 @@ export function QuoteSelection({
   containerRef: RefObject<HTMLElement | null>
   docId: string
   name: string
-  /** Onde o trecho está no documento. Ausente = cita só o texto. */
-  resolve?: (range: Range) => QuoteAnchor
+  /**
+   * Onde o trecho está no documento. Ausente = cita só o texto.
+   *
+   * Recebe o texto já extraído da seleção porque nem todo visualizador
+   * descobre a posição pelo DOM: no PDF desenhado a única pista é o próprio
+   * texto, procurado de volta nas linhas da página.
+   */
+  resolve?: (range: Range, text: string) => QuoteAnchor
 }) {
   const { t } = useTranslation()
   const addQuote = usePanelStore((s) => s.addQuote)
+  // Guardado em ref para o chamador poder passar uma arrow inline sem que o
+  // listener seja reassinado a cada render.
+  const resolveRef = useRef(resolve)
+  resolveRef.current = resolve
   const [pending, setPending] = useState<
     { x: number; y: number; text: string; anchor: QuoteAnchor } | null
   >(null)
@@ -66,9 +76,9 @@ export function QuoteSelection({
       x: rect.left + rect.width / 2,
       y: rect.top,
       text: text.length > MAX_TEXT ? `${text.slice(0, MAX_TEXT)}…` : text,
-      anchor: resolve?.(range) ?? {},
+      anchor: resolveRef.current?.(range, text) ?? {},
     })
-  }, [containerRef, resolve])
+  }, [containerRef])
 
   useEffect(() => {
     const container = containerRef.current

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest"
 import { DOCUMENT_QUOTE_MIME } from "@shared/chat"
 import type { DocumentQuote } from "@/src/stores/panel-store"
-import { quoteLocationLabel, quotesToFileParts } from "./document-quote"
+import { locateLines, quoteLocationLabel, quotesToFileParts } from "./document-quote"
 
 /**
  * O formato é contrato entre três lugares: os dois compositores, que
@@ -58,5 +58,41 @@ describe("quotesToFileParts", () => {
     expect(part.filename).toBe("contrato.pdf")
     expect(payload.page).toBeUndefined()
     expect(payload.text).toBe(base.text)
+  })
+})
+
+describe("locateLines", () => {
+  const pagina = [
+    "CLÁUSULA QUARTA — DA VIGÊNCIA",
+    "O prazo de vigência do presente contrato",
+    "é de 12 (doze) meses, contados da assinatura.",
+    "Parágrafo único: a renovação é automática.",
+  ]
+
+  it("acha o trecho e devolve a linha", () => {
+    expect(locateLines(pagina, "é de 12 (doze) meses")).toEqual({ fromLine: 3, toLine: undefined })
+  })
+
+  it("devolve o intervalo quando o trecho atravessa linhas", () => {
+    // É o caso normal no PDF: a frase que a pessoa grifa raramente cabe numa
+    // linha só do texto extraído.
+    expect(locateLines(pagina, "do presente contrato é de 12")).toEqual({ fromLine: 2, toLine: 3 })
+  })
+
+  it("ignora as diferenças de espaço entre o desenho e o texto", () => {
+    // Na camada do PDF a frase chega partida em pedaços de glifo, e os espaços
+    // entre eles não são confiáveis.
+    expect(locateLines(pagina, "ren  ovação   é auto mática")).toEqual({
+      fromLine: 4,
+      toLine: undefined,
+    })
+  })
+
+  it("devolve null quando o trecho não está na página", () => {
+    expect(locateLines(pagina, "rescisão antecipada")).toBeNull()
+  })
+
+  it("não tenta adivinhar com uma letra só", () => {
+    expect(locateLines(pagina, "a")).toBeNull()
   })
 })
