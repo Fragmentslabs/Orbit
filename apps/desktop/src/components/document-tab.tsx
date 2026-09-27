@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next"
 import { EyeIcon, PenLineIcon, X } from "lucide-react"
 import { DocumentDownloadMenu, DocumentSourceBadge } from "@/src/components/ai/document-actions"
 import { MessageResponse } from "@/src/components/ai/message"
+import { QuoteSelection } from "@/src/components/quote-selection"
 import { artifactApi, documentApi } from "@/src/lib/ipc"
 import { cn } from "@/lib/utils"
 
@@ -41,6 +42,8 @@ export function DocumentTab({
 }) {
   const { t } = useTranslation()
   const [markdown, setMarkdown] = useState<string | null>(null)
+  /** Área de leitura — é dela que sai a seleção citável. */
+  const readRef = useRef<HTMLDivElement>(null)
   const [missing, setMissing] = useState(false)
   const [mode, setMode] = useState<"edit" | "preview">("preview")
   const [saving, setSaving] = useState(false)
@@ -275,7 +278,15 @@ export function DocumentTab({
           className="min-h-0 flex-1 resize-none bg-transparent px-4 py-4 font-mono text-xs leading-5 text-foreground outline-none"
         />
       ) : (
-        <div className="min-h-0 min-w-0 flex-1 overflow-auto px-4 py-4 text-sm text-foreground">
+        <div
+          ref={readRef}
+          className="min-h-0 min-w-0 flex-1 overflow-auto px-4 py-4 text-sm text-foreground"
+        >
+          {/* Sem resolve: o documento vivo não tem página nem linha — o
+              trecho citado é o texto, e é só isso que o chip carrega. */}
+          {documentId && (
+            <QuoteSelection containerRef={readRef} docId={documentId} name={title} />
+          )}
           <MessageResponse>{markdown}</MessageResponse>
         </div>
       )}

@@ -14,7 +14,7 @@ import type {
   TextPart,
   ToolPart,
 } from '@shared/chat'
-import { BROWSER_SELECTION_MIME, StorageKeys } from '@shared/chat'
+import { BROWSER_SELECTION_MIME, DOCUMENT_QUOTE_MIME, StorageKeys } from '@shared/chat'
 import { getProvider, modelSupportsVision } from './catalog'
 import { compactHistory, findLastSummaryIndex, shouldCompact } from './compaction'
 import { contextBudget, estimateTokens, maxStepsFor, trimTurnContext } from './context-budget'
@@ -404,6 +404,52 @@ async function preprocessAttachment(
         ].join('\n')
       } catch {
         // payload inválido — o filename do chip já dá contexto suficiente
+      }
+    }
+    return [
+      attachmentChip(file),
+      { id: newId('prt'), type: 'text', text, state: 'done', source: 'attachment' },
+    ]
+  }
+
+  // Trecho citado no visualizador de documento. O usuário grifou e mandou:
+  // o modelo recebe o texto JÁ AQUI, sem precisar de uma ida ao documento
+  // para responder, e recebe junto a citação clicável para devolver na
+  // resposta. A bolha mostra só o chip — o trecho pode ser longo, e repeti-lo
+  // na conversa seria mostrar ao usuário o que ele mesmo acabou de marcar.
+  if (file.mime === DOCUMENT_QUOTE_MIME) {
+    const raw = decodeDataUrlText(file.url)
+    let text = `[Trecho citado pelo usuário — ${file.filename || 'documento'}]`
+    if (raw) {
+      try {
+        const quote = JSON.parse(raw) as {
+          docId?: string
+          name?: string
+          page?: number
+          fromLine?: number
+          toLine?: number
+          text?: string
+        }
+        const onde = quote.page
+          ? `, página ${quote.page}${
+              quote.fromLine
+                ? `, linha${quote.toLine && quote.toLine > quote.fromLine ? `s ${quote.fromLine}-${quote.toLine}` : ` ${quote.fromLine}`}`
+                : ''
+            }`
+          : ''
+        const linhas = [`[Trecho citado pelo usuário — ${quote.name ?? 'documento'}${onde}]`]
+        // A âncora só existe onde há página: um documento vivo em Markdown
+        // não tem coordenada, e um link quebrado seria pior que nenhum.
+        if (quote.docId && quote.page) {
+          const alvo = `#orbit-source/${quote.docId}/p${quote.page}${
+            quote.fromLine ? `L${quote.fromLine}${quote.toLine ? `-${quote.toLine}` : ''}` : ''
+          }`
+          linhas.push(`Para citar de volta na resposta: [${quote.name ?? 'documento'}](${alvo})`)
+        }
+        linhas.push('---', quote.text ?? '')
+        text = linhas.join('\n')
+      } catch {
+        // payload inválido — o filename do chip já dá o contexto mínimo
       }
     }
     return [

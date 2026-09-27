@@ -1,6 +1,6 @@
 import { useCallback, useMemo } from "react"
 import { useTranslation } from "react-i18next"
-import { AlignLeft, BrainCircuit, Eye, Globe, PlusIcon, Search } from "lucide-react"
+import { AlignLeft, BrainCircuit, Eye, Globe, PlusIcon, Quote, Search, X } from "lucide-react"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -47,6 +47,7 @@ import { useSessionModel } from "@/src/stores/session-model-prefs"
 import { useReasoningPrefs } from "@/src/stores/reasoning-prefs"
 import { useSimpleMode, useSimplePrefs } from "@/src/stores/simple-prefs"
 import type { ChatStatus, FilePart, SendMessageOptions } from "@shared/chat"
+import { quotesToFileParts } from "@/src/lib/document-quote"
 import { toFileParts } from "@/src/lib/message-utils"
 import { resolveSlashAction } from "@/src/lib/slash-actions"
 import { useAppearanceStore } from "@/src/stores/appearance-store"
@@ -63,6 +64,8 @@ export function ChatInput({ onSubmit, status, onStop, sessionId, draftKey, onPro
   onProviderBlocked?: () => void
 }) {
   const { t } = useTranslation()
+  const quotes = usePanelStore((s) => s.quotes)
+  const removeQuote = usePanelStore((s) => s.removeQuote)
   const chatActiveModes = useModelModePrefs((s) => s.chatActiveModes)
   const search = useModeActive("search", sessionId, chatActiveModes.search)
   const browser = useModeActive("browser", sessionId, chatActiveModes.browser)
@@ -165,6 +168,13 @@ export function ChatInput({ onSubmit, status, onStop, sessionId, draftKey, onPro
         } : undefined}
         onSubmit={(message) => {
           const files = toFileParts(message.files ?? [])
+          // Trechos citados do visualizador viram anexo com MIME próprio: a
+          // bolha mostra o chip e o modelo recebe o texto com a citação.
+          const quoteFiles = quotesToFileParts(quotes)
+          if (quoteFiles.length > 0) {
+            files.push(...quoteFiles)
+            usePanelStore.getState().clearQuotes()
+          }
           // Comandos "/" viram o prompt do pipeline correspondente
           const resolveText = (raw: string) => {
             const resolved = resolveSlashAction(raw, "chat")
@@ -189,6 +199,28 @@ export function ChatInput({ onSubmit, status, onStop, sessionId, draftKey, onPro
         }}
         className="rounded-xl border-2 border-sidebar-border [&>div]:!rounded-[calc(var(--radius-xl)-2px)] [&>div]:!border-none [&>div]:!bg-transparent"
       >
+        {quotes.length > 0 && (
+          <div className="flex flex-wrap items-center gap-1.5 px-3 pt-2">
+            {quotes.map((q) => (
+              <span
+                key={q.id}
+                title={q.text}
+                className="flex items-center gap-1 rounded-md border border-primary/30 bg-primary/10 px-1.5 py-0.5 text-[11px] text-primary"
+              >
+                <Quote className="size-3" />
+                {q.name}
+                {q.page ? ` p${q.page}${q.fromLine ? `L${q.fromLine}` : ""}` : ""}
+                <button
+                  type="button"
+                  onClick={() => removeQuote(q.id)}
+                  className="ml-0.5 cursor-pointer rounded-sm hover:bg-primary/20"
+                >
+                  <X className="size-3" />
+                </button>
+              </span>
+            ))}
+          </div>
+        )}
         <PromptInputAttachments className="!px-3 !py-1.5">
           {(attachment) => <PromptInputAttachment data={attachment} />}
         </PromptInputAttachments>

@@ -214,6 +214,27 @@ export interface FilePart {
  * o detalhe completo, a bolha do usuário mostra só o chip. */
 export const BROWSER_SELECTION_MIME = "application/x-orbit-browser-selection"
 
+/** MIME marcador de um trecho selecionado no visualizador de documento. Mesmo
+ * contrato do BROWSER_SELECTION_MIME: o renderer serializa o payload
+ * (documento, página, linhas e o texto) como data URL neste MIME, e o
+ * preprocessAttachment do engine o transforma em chip (badge na bolha) +
+ * TextPart com source "attachment". O modelo recebe o trecho e a citação
+ * clicável; a bolha do usuário mostra só o chip. */
+export const DOCUMENT_QUOTE_MIME = "application/x-orbit-document-quote"
+
+/** O que o chip de citação carrega. `page`/`fromLine`/`toLine` só existem
+ * onde a fonte tem essa noção (PDF, DOCX, planilha — tudo que passa pelo
+ * texto extraído em páginas). Um documento vivo em Markdown cita só o
+ * trecho: ele não tem página, e inventar uma seria pior que não ter. */
+export interface DocumentQuotePayload {
+  docId: string
+  name: string
+  page?: number
+  fromLine?: number
+  toLine?: number
+  text: string
+}
+
 /** Agente do pipeline /init exibido como acordeon (estilo thinking): o
  * principal narra a revisão; cada worker mostra sua exploração em streaming. */
 export interface AgentPart {

@@ -2116,6 +2116,7 @@
     "download": "Baixar",
     "actionFailed": "Não foi possível concluir a ação.",
     "draftTitle": "Neste chat novo",
-    "draftHint": "Traga o material antes de perguntar: o que você anexar aqui passa a ser da conversa assim que você enviar a primeira mensagem."
+    "draftHint": "Traga o material antes de perguntar: o que você anexar aqui passa a ser da conversa assim que você enviar a primeira mensagem.",
+    "quoteInChat": "Citar no chat"
   }
 }

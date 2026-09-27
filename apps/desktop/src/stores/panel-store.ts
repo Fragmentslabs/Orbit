@@ -34,6 +34,24 @@ export interface BrowserSelection {
   url: string
 }
 
+/**
+ * Trecho citado do visualizador de documento, esperando para ser enviado.
+ *
+ * Vive no mesmo lugar das seleções do browser do painel porque é o mesmo
+ * gesto: algo selecionado num painel que vira anexo da próxima mensagem. O
+ * compositor lê daqui na hora de enviar.
+ */
+export interface DocumentQuote {
+  id: string
+  docId: string
+  /** Nome exibível do documento — é o que aparece no chip. */
+  name: string
+  page?: number
+  fromLine?: number
+  toLine?: number
+  text: string
+}
+
 export interface Viewport {
   width: number
   height: number
@@ -113,6 +131,10 @@ interface PanelState {
   addSelection: (selection: Omit<BrowserSelection, "id">) => void
   removeSelection: (id: string) => void
   clearSelections: () => void
+  quotes: DocumentQuote[]
+  addQuote: (quote: Omit<DocumentQuote, "id">) => void
+  removeQuote: (id: string) => void
+  clearQuotes: () => void
   viewport: Viewport | null
   setViewport: (viewport: Viewport | null) => void
   fullscreen: boolean
@@ -398,6 +420,14 @@ export const usePanelStore = create<PanelState>((set, get) => {
     removeSelection: (id) =>
       set((state) => ({ selections: state.selections.filter((s) => s.id !== id) })),
     clearSelections: () => set({ selections: [] }),
+
+    quotes: [],
+    addQuote: (quote) =>
+      set((state) => ({
+        quotes: [...state.quotes, { ...quote, id: `quote-${Date.now()}-${state.quotes.length}` }],
+      })),
+    removeQuote: (id) => set((state) => ({ quotes: state.quotes.filter((q) => q.id !== id) })),
+    clearQuotes: () => set({ quotes: [] }),
     viewport: null,
     setViewport: (viewport) => set({ viewport }),
     fullscreen: false,

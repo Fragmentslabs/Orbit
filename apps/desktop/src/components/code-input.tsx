@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
-import { AlignLeft, Bot, BrainCircuit, Eye, FileText, MousePointerClick, Network, PlusIcon, RefreshCw, Search, X } from "lucide-react"
+import { AlignLeft, Bot, BrainCircuit, Eye, FileText, MousePointerClick, Network, PlusIcon, Quote, RefreshCw, Search, X } from "lucide-react"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -44,6 +44,7 @@ import { useBrainEnabled, useBrainPrefs, useCodeContext } from "@/src/stores/bra
 import { useMessageQueueStore } from "@/src/stores/message-queue-store"
 import { useModeActive, useModeOverrides } from "@/src/stores/mode-overrides"
 import { usePanelStore } from "@/src/stores/panel-store"
+import { quotesToFileParts } from "@/src/lib/document-quote"
 import { usePermissionPrefs } from "@/src/stores/permission-prefs"
 import { useModelModePrefs } from "@/src/stores/model-mode-prefs"
 import { useProviderStore, useNoProviderConnected } from "@/src/stores/provider-store"
@@ -178,6 +179,8 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId, on
     return { directory, extraDirectories }
   }, [folders])
   const selections = usePanelStore((s) => s.selections)
+  const quotes = usePanelStore((s) => s.quotes)
+  const removeQuote = usePanelStore((s) => s.removeQuote)
   const removeSelection = usePanelStore((s) => s.removeSelection)
 
   const modeToggleItems = useMemo<ModeToggleDef[]>(() => [
@@ -262,6 +265,10 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId, on
       )
       usePanelStore.getState().clearSelections()
     }
+    if (quotes.length > 0) {
+      files.push(...quotesToFileParts(quotes))
+      usePanelStore.getState().clearQuotes()
+    }
     // A mensagem foi enviada: o rascunho da sessão (se existia de uma troca
     // anterior) não pode mais voltar ao input ao reabrir o chat.
     if (sessionId) clearInputDraft(sessionId)
@@ -272,7 +279,7 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId, on
       extraDirectories,
       files.length > 0 ? files : undefined,
     )
-  }, [busy, folders, sessionId, onStop, selections, getDirs, buildOptions, onSubmit, mode, enqueueForSend, sendMessage, createSession])
+  }, [busy, folders, sessionId, onStop, selections, quotes, getDirs, buildOptions, onSubmit, mode, enqueueForSend, sendMessage, createSession])
 
   const slashCommands = useMemo<SlashCommand[]>(() => {
     const toggle = (fn: () => void) => ({ setText }: { setText: (t: string) => void }) => {
@@ -329,6 +336,29 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId, on
         <PromptInputAttachments className="!w-auto !p-0 mb-2">
           {(attachment) => <PromptInputAttachment data={attachment} />}
         </PromptInputAttachments>
+        {/* Trechos citados do visualizador de documento */}
+        {quotes.length > 0 && (
+          <div className="flex flex-wrap items-center gap-1.5 px-3 pb-1.5">
+            {quotes.map((q) => (
+              <span
+                key={q.id}
+                title={q.text}
+                className="flex items-center gap-1 rounded-md border border-primary/30 bg-primary/10 px-1.5 py-0.5 text-[11px] text-primary"
+              >
+                <Quote className="size-3" />
+                {q.name}
+                {q.page ? ` p${q.page}${q.fromLine ? `L${q.fromLine}` : ""}` : ""}
+                <button
+                  type="button"
+                  onClick={() => removeQuote(q.id)}
+                  className="ml-0.5 cursor-pointer rounded-sm hover:bg-primary/20"
+                >
+                  <X className="size-3" />
+                </button>
+              </span>
+            ))}
+          </div>
+        )}
         {/* Elementos selecionados no browser do painel (modo seleção) */}
         {selections.length > 0 && (
           <div className="flex flex-wrap items-center gap-1.5 px-3 pb-1.5">

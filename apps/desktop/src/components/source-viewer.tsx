@@ -15,6 +15,7 @@ import {
 } from "lucide-react"
 import { docsApi, type OutlineItem, type RenderedPage, type SourceText } from "@/src/lib/ipc"
 import { locateText, selectionScaleX } from "@/src/lib/pdf-text"
+import { QuoteSelection, type QuoteAnchor } from "@/src/components/quote-selection"
 import { cn } from "@/lib/utils"
 
 /**
@@ -62,6 +63,36 @@ interface Focus {
   nonce: number
 }
 
+/**
+ * Página e linhas do trecho selecionado, lidas do próprio DOM: cada linha
+ * carrega o número que o modelo enxerga, e é esse número que vai na citação
+ * (#orbit-source/<doc>/p<página>L<linha>). Seleção que atravessa páginas cita
+ * a partir do início e sem linha final — dizer "linha 4 da página 3" quando o
+ * trecho termina na página 4 seria uma coordenada falsa.
+ *
+ * Fora do componente porque não depende de nada dele: é leitura de DOM.
+ */
+function resolveQuoteAnchor(range: Range): QuoteAnchor {
+  const at = (node: Node | null) => {
+    const el = node instanceof HTMLElement ? node : (node?.parentElement ?? null)
+    const lineEl = el?.closest<HTMLElement>("[data-line]")
+    const pageEl = el?.closest<HTMLElement>("[data-textpage]")
+    return {
+      page: pageEl ? Number(pageEl.dataset.textpage) : undefined,
+      line: lineEl ? Number(lineEl.dataset.line) : undefined,
+    }
+  }
+  const start = at(range.startContainer)
+  const end = at(range.endContainer)
+  if (!start.page || !start.line) return {}
+  const samePage = end.page === start.page
+  return {
+    page: start.page,
+    fromLine: start.line,
+    toLine: samePage && end.line && end.line > start.line ? end.line : undefined,
+  }
+}
+
 export function SourceViewer({
   sessionId,
   docId,
@@ -107,7 +138,7 @@ export function SourceViewer({
       // vindo de uma citação, porque agora o destaque também é desenhado lá.
       setMode(result?.hasOriginal ? "original" : "text")
     })
-    return () => {
+  return () => {
       alive = false
     }
   }, [sessionId, docId])
@@ -232,6 +263,7 @@ export function SourceViewer({
 
   const iconButton =
     "flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground disabled:cursor-default disabled:opacity-40"
+
 
   return (
     <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
@@ -460,6 +492,12 @@ export function SourceViewer({
             ref={textRef}
             className="flex-1 overflow-auto px-3 py-3 font-mono text-xs leading-relaxed"
           >
+            <QuoteSelection
+              containerRef={textRef}
+              docId={docId}
+              name={data.filename || docId}
+              resolve={resolveQuoteAnchor}
+            />
             {visiblePages.map((p) => (
               <div key={p.num} data-textpage={p.num}>
                 <div className="sticky top-0 z-10 -mx-3 mb-1 bg-background/95 px-3 py-1 text-[10px] uppercase tracking-wide text-muted-foreground backdrop-blur">
@@ -479,6 +517,7 @@ export function SourceViewer({
                   return (
                     <div
                       key={n}
+                      data-line={n}
                       ref={isAnchor ? anchorRef : undefined}
                       className={cn(
                         "flex gap-3 rounded px-1",
