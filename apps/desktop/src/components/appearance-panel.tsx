@@ -276,37 +276,41 @@ export function AppearancePanel() {
         {/* Três estados, e não um interruptor: a persona da saudação e a que
             flutua sobre a conversa custam coisas diferentes, e quem desliga
             costuma querer só a segunda fora do caminho. */}
-        {/* Rótulo em cima e seletor em baixo, ocupando a largura toda: o
-            painel é estreito e os rótulos das opções são frases — lado a lado
-            eles chegavam cortados no meio da palavra. */}
-        <div className="flex flex-col gap-2 rounded-lg border border-input bg-background px-3 py-2.5">
-          <div className="flex items-center gap-3">
-            <Smile className="size-4 shrink-0 text-muted-foreground" />
-            <span className="min-w-0 flex-1 text-sm">{t("appearance.persona.where")}</span>
-          </div>
-          <Select
-            value={personaVisibility}
-            onValueChange={(value) => value && setPersonaVisibility(value as PersonaVisibility)}
-          >
-            <SelectTrigger
-              size="sm"
-              className="w-full items-start whitespace-normal text-left data-[size=sm]:h-auto data-[size=sm]:py-1.5 *:data-[slot=select-value]:line-clamp-none"
+        <div className="rounded-lg border border-input bg-background px-3 py-2.5">
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex min-w-0 items-center gap-3">
+              <Smile className="size-4 shrink-0 text-muted-foreground" />
+              <span className="min-w-0 text-sm">{t("appearance.persona.where")}</span>
+            </div>
+            <Select
+              value={personaVisibility}
+              onValueChange={(value) => value && setPersonaVisibility(value as PersonaVisibility)}
             >
-              <SelectValue>{t(`appearance.persona.options.${personaVisibility}.label`)}</SelectValue>
-            </SelectTrigger>
-            <SelectContent alignItemWithTrigger={false} className="max-w-[min(20rem,90vw)]">
-              {PERSONA_VISIBILITY.map((option) => (
-                <SelectItem
-                  key={option}
-                  value={option}
-                  className="items-start [&_[data-slot=select-item-text]]:whitespace-normal"
-                >
-                  {t(`appearance.persona.options.${option}.label`)}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <p className="text-xs text-muted-foreground">
+              <SelectTrigger size="sm" className="shrink-0">
+                <SelectValue>{t(`appearance.persona.options.${personaVisibility}.label`)}</SelectValue>
+              </SelectTrigger>
+              {/* A lista aberta NÃO herda a largura do gatilho: por padrão ela é
+                  tão estreita quanto ele, e os rótulos das opções são frases —
+                  chegavam cortados. Aqui ela cresce até o texto caber e, se
+                  mesmo assim faltar espaço, quebra a linha. */}
+              <SelectContent
+                align="end"
+                alignItemWithTrigger={false}
+                className="w-max min-w-(--anchor-width) max-w-[min(20rem,90vw)]"
+              >
+                {PERSONA_VISIBILITY.map((option) => (
+                  <SelectItem
+                    key={option}
+                    value={option}
+                    className="items-start [&_[data-slot=select-item-text]]:whitespace-normal"
+                  >
+                    {t(`appearance.persona.options.${option}.label`)}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <p className="mt-1.5 text-xs text-muted-foreground">
             {t(`appearance.persona.options.${personaVisibility}.hint`)}
           </p>
         </div>
