@@ -14,6 +14,7 @@ import {
 import { Shimmer } from "@/src/components/ai/shimmer"
 import { SubAgentCard } from "@/src/components/ai/sub-agent-card"
 import { ImageGroupView } from "@/src/components/ai/image"
+import { ActionsGroup } from "@/src/components/ai/actions-group"
 import { ArtifactPartView } from "@/src/components/ai/artifact-part"
 import { DocumentPartView } from "@/src/components/ai/document-part"
 import { Source, Sources, SourcesContent, SourcesTrigger } from "@/src/components/ai/sources"
@@ -115,8 +116,27 @@ function ResearchBlock({ parts }: { parts: ToolPart[] }) {
  *  em largura cheia empilhadas — ver ImageGroupView. */
 type Segment =
   | { kind: "research"; id: string; parts: ToolPart[] }
+  | { kind: "actions"; id: string; parts: ToolPart[] }
   | { kind: "image-group"; id: string; parts: ImagePart[] }
   | { kind: "part"; id: string; part: MessagePart }
+
+/**
+ * Ferramentas que NÃO entram no acordeon: o que elas produzem já tem um card
+ * na conversa (o artefato, o documento, a imagem, o subagente), e repetir a
+ * chamada ao lado do resultado é ruído. A proposta de skill e a checklist de
+ * TODO são interativas — recolhê-las esconderia o que se espera que a pessoa
+ * responda.
+ */
+const RENDER_PROPRIO = new Set([
+  "subagent",
+  "create_skill",
+  "todowrite",
+  "show_image",
+  "create_artifact",
+  "update_artifact",
+  "create_document",
+  "update_document",
+])
 
 function segmentParts(parts: MessagePart[]): Segment[] {
   const segments: Segment[] = []
@@ -125,6 +145,12 @@ function segmentParts(parts: MessagePart[]): Segment[] {
       const last = segments[segments.length - 1]
       if (last?.kind === "research") last.parts.push(part)
       else segments.push({ kind: "research", id: part.id, parts: [part] })
+    } else if (part.type === "tool" && !RENDER_PROPRIO.has(part.tool)) {
+      // Memória, documentos, imagem, esteira: ferramentas que interessam
+      // ENQUANTO rodam e viram ruído depois. Uma linha só, como no código.
+      const last = segments[segments.length - 1]
+      if (last?.kind === "actions") last.parts.push(part)
+      else segments.push({ kind: "actions", id: part.id, parts: [part] })
     } else if (part.type === "image") {
       const last = segments[segments.length - 1]
       if (last?.kind === "image-group") last.parts.push(part)
@@ -169,6 +195,8 @@ export function ChatAssistantMessage({ message, sessionId, isLast, isBusy, busyL
       {segments.map((segment, index) =>
         segment.kind === "research" ? (
           <ResearchBlock key={segment.id} parts={segment.parts} />
+        ) : segment.kind === "actions" ? (
+          <ActionsGroup key={segment.id} parts={segment.parts} />
         ) : segment.kind === "image-group" ? (
           <ImageGroupView key={segment.id} parts={segment.parts} />
         ) : segment.part.type === "text" ? (

@@ -20,7 +20,8 @@ import { SubAgentCard } from "@/src/components/ai/sub-agent-card"
 import { TodoList } from "@/src/components/ai/todo-list"
 import { SkillProposalCard } from "@/src/components/skill-proposal-card"
 import { Source, Sources, SourcesContent, SourcesTrigger } from "@/src/components/ai/sources"
-import { Task, TaskContent, TaskItem, TaskItemFile, TaskTrigger } from "@/src/components/ai/task"
+import { Task, TaskContent, TaskTrigger } from "@/src/components/ai/task"
+import { ToolActionItem } from "@/src/components/ai/actions-group"
 import {
   TestResults,
   TestResultsHeader,
@@ -42,77 +43,11 @@ import {
  * plano com pesquisa — fontes consultadas.
  */
 
-function useActionLabels(): Record<string, string> {
-  const { t } = useTranslation()
-  return {
-    read: t("chat.actions.read"),
-    write: t("chat.actions.write"),
-    edit: t("chat.actions.edit"),
-    ls: t("chat.actions.ls"),
-    glob: t("chat.actions.glob"),
-    grep: t("chat.actions.grep"),
-    bash: t("chat.actions.bash"),
-    websearch: t("chat.actions.websearch"),
-    webfetch: t("chat.actions.webfetch"),
-  }
-}
-
-function toolChip(part: ToolPart): string | undefined {
-  const input = part.input ?? {}
-  const candidate = input.filePath ?? input.dirPath ?? input.pattern ?? input.query ?? input.url ?? input.command
-  if (typeof candidate !== "string" || !candidate) return undefined
-  // Para caminhos, mostra só o nome do arquivo/última pasta
-  const isPath = typeof input.filePath === "string" || typeof input.dirPath === "string"
-  return isPath ? candidate.split(/[\\/]/).pop() : candidate
-}
-
 function testSummaryOf(part: ToolPart): TestSummary | null {
   if (part.tool !== "bash" || part.state !== "done" || !part.output) return null
   const command = typeof part.input?.command === "string" ? part.input.command : ""
   if (!isTestCommand(command)) return null
   return parseTestSummary(part.output)
-}
-
-function ToolActionItem({ part }: { part: ToolPart }) {
-  const [showOutput, setShowOutput] = useState(false)
-  const actionLabels = useActionLabels()
-  const label = actionLabels[part.tool] ?? part.tool
-  const chip = toolChip(part)
-  const detail = part.error ?? (part.tool === "bash" ? part.output : undefined)
-
-  return (
-    <TaskItem>
-      <button
-        type="button"
-        className={cn(
-          "inline-flex max-w-full items-center gap-1.5 text-left",
-          detail && "cursor-pointer hover:text-foreground",
-          part.state === "error" && "text-destructive",
-        )}
-        onClick={() => detail && setShowOutput((v) => !v)}
-      >
-        {part.state === "running" ? <Shimmer>{label}</Shimmer> : <span>{label}</span>}
-        {chip && (
-          <TaskItemFile>
-            {/* title = comando/caminho completo no hover (o truncate corta em ~256px) */}
-            <span className="max-w-64 truncate font-mono" title={chip}>
-              {chip}
-            </span>
-          </TaskItemFile>
-        )}
-        {detail && (
-          <ChevronDownIcon
-            className={cn("size-3 shrink-0 transition-transform", showOutput && "rotate-180")}
-          />
-        )}
-      </button>
-      {showOutput && detail && (
-        <pre className="mt-1 max-h-56 overflow-auto rounded-md border bg-muted/30 p-2 font-mono text-[11px] leading-relaxed whitespace-pre-wrap">
-          {detail}
-        </pre>
-      )}
-    </TaskItem>
-  )
 }
 
 function TestResultsBlock({ summary }: { summary: TestSummary }) {
