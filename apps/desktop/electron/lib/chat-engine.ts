@@ -423,6 +423,7 @@ async function preprocessAttachment(
     if (raw) {
       try {
         const quote = JSON.parse(raw) as {
+          kind?: 'document' | 'source'
           docId?: string
           name?: string
           page?: number
@@ -438,8 +439,20 @@ async function preprocessAttachment(
             }`
           : ''
         const linhas = [`[Trecho citado pelo usuário — ${quote.name ?? 'documento'}${onde}]`]
-        // A âncora só existe onde há página: um documento vivo em Markdown
-        // não tem coordenada, e um link quebrado seria pior que nenhum.
+
+        // O ENDEREÇO do que foi citado, na linguagem da ferramenta que o
+        // alcança. Sem isto o modelo recebia um nome e um texto, ia procurar o
+        // arquivo com as tools que tinha e respondia que não achou — com o
+        // documento inteiro a um id de distância. O id vale por si: ler um
+        // documento não depende de ele ser fonte da conversa, nem de a
+        // conversa ser a mesma em que ele nasceu.
+        if (quote.docId) {
+          linhas.push(
+            quote.kind === 'source'
+              ? `Fonte desta conversa: ${quote.docId} — use doc_read/doc_search com este docId para ver o resto.`
+              : `Documento do agente: ${quote.docId} — use read_document com este documentId para ver o texto inteiro, e update_document para alterá-lo (leia antes: o baseRevision vem da leitura).`,
+          )
+        }
         if (quote.docId && quote.page) {
           const alvo = `#orbit-source/${quote.docId}/p${quote.page}${
             quote.fromLine ? `L${quote.fromLine}${quote.toLine ? `-${quote.toLine}` : ''}` : ''

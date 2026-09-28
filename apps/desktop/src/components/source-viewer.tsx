@@ -497,7 +497,8 @@ export function SourceViewer({
           >
             <QuoteSelection
               containerRef={textRef}
-              docId={docId}
+              kind="source"
+              docId={data.id || docId}
               name={data.filename || docId}
               resolve={resolveQuoteAnchor}
             />
@@ -760,6 +761,7 @@ function OriginalPages({
       */}
       <QuoteSelection
         containerRef={containerRef}
+        kind="source"
         docId={docId}
         name={docName}
         resolve={(range, text) => {

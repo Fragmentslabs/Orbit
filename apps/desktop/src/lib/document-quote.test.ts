@@ -12,6 +12,7 @@ import { locateLines, quoteLocationLabel, quotesToFileParts } from "./document-q
 
 const base: DocumentQuote = {
   id: "q1",
+  kind: "source",
   docId: "doc7",
   name: "contrato.pdf",
   text: "o prazo de vigência é de 12 meses",
@@ -43,6 +44,7 @@ describe("quotesToFileParts", () => {
 
     const payload = JSON.parse(decodeURIComponent(part.url.split(",")[1]))
     expect(payload).toMatchObject({
+      kind: "source",
       docId: "doc7",
       name: "contrato.pdf",
       page: 3,

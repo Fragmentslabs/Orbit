@@ -1,5 +1,6 @@
 import { tool } from 'ai'
 import { z } from 'zod'
+import { listMedia } from '../media'
 import fsp from 'node:fs/promises'
 import {
   documentHeader,
@@ -33,6 +34,25 @@ const MAX_HITS = 40
 /** Teto da imagem enviada ao modelo — acima disso o provedor recusa. */
 const MAX_MODEL_IMAGE_BYTES = 300 * 1024
 
+/**
+ * Os documentos que o AGENTE escreveu nesta conversa, que são outra lista.
+ *
+ * Um documento produzido aqui não é anexo nem fonte — a menos que o usuário o
+ * promova —, então ele não aparece no doc_list. E aí o modelo listava as
+ * fontes, via só a prova de matemática e respondia que o documento citado não
+ * existia, com ele salvo a um id de distância. O lembrete é curto de
+ * propósito: quem lê o conteúdo é o read_document, não esta lista.
+ */
+async function produzidosAqui(sessionId: string): Promise<string | null> {
+  const escritos = await listMedia({ kind: 'document', sessionId })
+  if (escritos.length === 0) return null
+  const nomes = escritos
+    .slice(0, 10)
+    .map((entry) => `${entry.id} (${entry.name ?? 'sem título'})`)
+    .join(', ')
+  return `Além destes, ${escritos.length} documento(s) escrito(s) por você nesta conversa — use read_document/update_document com o id: ${nomes}.`
+}
+
 export function createDocumentTools(sessionId: string) {
   return {
     doc_list: tool({
@@ -41,14 +61,16 @@ export function createDocumentTools(sessionId: string) {
       inputSchema: z.object({}),
       execute: async () => {
         const docs = await listSessionDocuments(sessionId)
-        if (docs.length === 0) return 'Nenhum documento disponível nesta conversa.'
-        return docs
-          .map((d) => {
-            const unit = d.kind === 'spreadsheet' ? 'abas' : d.kind === 'docx' ? 'blocos' : 'páginas'
-            const escopo = d.shared ? 'fonte da pasta' : 'anexo desta conversa'
-            return `${d.id}: ${d.filename} (${d.kind}, ${d.totalPages} ${unit}, ${escopo}${d.truncated ? ', cortado no limite de tamanho' : ''})`
-          })
-          .join('\n')
+        const escritos = await produzidosAqui(sessionId)
+        if (docs.length === 0 && !escritos) return 'Nenhum documento disponível nesta conversa.'
+        const linhas = docs.map((d) => {
+          const unit = d.kind === 'spreadsheet' ? 'abas' : d.kind === 'docx' ? 'blocos' : 'páginas'
+          const escopo = d.shared ? 'fonte da pasta' : 'anexo desta conversa'
+          return `${d.id}: ${d.filename} (${d.kind}, ${d.totalPages} ${unit}, ${escopo}${d.truncated ? ', cortado no limite de tamanho' : ''})`
+        })
+        if (docs.length === 0) linhas.push('Nenhum documento ANEXADO nesta conversa.')
+        if (escritos) linhas.push(escritos)
+        return linhas.join('\n')
       },
     }),
 

@@ -43,6 +43,8 @@ export interface BrowserSelection {
  */
 export interface DocumentQuote {
   id: string
+  /** Documento do agente ou fonte da conversa — ver DocumentQuotePayload. */
+  kind: "document" | "source"
   docId: string
   /** Nome exibível do documento — é o que aparece no chip. */
   name: string

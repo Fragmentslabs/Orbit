@@ -285,7 +285,7 @@ export function DocumentTab({
           {/* Sem resolve: o documento vivo não tem página nem linha — o
               trecho citado é o texto, e é só isso que o chip carrega. */}
           {documentId && (
-            <QuoteSelection containerRef={readRef} docId={documentId} name={title} />
+            <QuoteSelection containerRef={readRef} kind="document" docId={documentId} name={title} />
           )}
           <MessageResponse>{markdown}</MessageResponse>
         </div>

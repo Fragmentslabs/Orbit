@@ -227,6 +227,14 @@ export const DOCUMENT_QUOTE_MIME = "application/x-orbit-document-quote"
  * texto extraído em páginas). Um documento vivo em Markdown cita só o
  * trecho: ele não tem página, e inventar uma seria pior que não ter. */
 export interface DocumentQuotePayload {
+  /**
+   * De onde o trecho veio, porque decide o que o agente pode fazer com ele:
+   * "document" é um documento do agente (read_document/update_document, id
+   * doc_….md) e "source" é uma fonte da conversa (doc_read/doc_search, id
+   * doc1/src1). Sem essa distinção o id chega ao modelo sem endereço, e ele
+   * sai procurando o arquivo que estava na mão dele.
+   */
+  kind: "document" | "source"
   docId: string
   name: string
   page?: number

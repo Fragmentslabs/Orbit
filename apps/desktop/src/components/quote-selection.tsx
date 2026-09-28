@@ -28,11 +28,14 @@ const MAX_TEXT = 4_000
 
 export function QuoteSelection({
   containerRef,
+  kind,
   docId,
   name,
   resolve,
 }: {
   containerRef: RefObject<HTMLElement | null>
+  /** O que o agente pode fazer com o id — ver DocumentQuotePayload. */
+  kind: "document" | "source"
   docId: string
   name: string
   /**
@@ -108,7 +111,7 @@ export function QuoteSelection({
       type="button"
       onMouseDown={(e) => e.preventDefault()}
       onClick={() => {
-        addQuote({ docId, name, text: pending.text, ...pending.anchor })
+        addQuote({ kind, docId, name, text: pending.text, ...pending.anchor })
         window.getSelection()?.removeAllRanges()
         setPending(null)
       }}

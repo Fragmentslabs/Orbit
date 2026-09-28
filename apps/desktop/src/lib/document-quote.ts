@@ -22,6 +22,7 @@ export function quotesToFileParts(quotes: DocumentQuote[]): FilePart[] {
   return quotes.map((quote) => {
     const payload = encodeURIComponent(
       JSON.stringify({
+        kind: quote.kind,
         docId: quote.docId,
         name: quote.name,
         page: quote.page,
