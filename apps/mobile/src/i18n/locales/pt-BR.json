@@ -581,6 +581,7 @@
       }
     },
     "persona": {
+      "where": "Onde a persona aparece",
       "all": {
         "label": "No chat e na tela inicial",
         "hint": "Ela fica no cabeçalho da conversa."

@@ -17,8 +17,14 @@ import {
   Sun,
 } from "lucide-react"
 import { useTranslation } from "react-i18next"
-import { PERSONA_VISIBILITY } from "@shared/appearance"
-import { cn } from "@/lib/utils"
+import { PERSONA_VISIBILITY, type PersonaVisibility } from "@shared/appearance"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import { useTheme } from "@/components/theme-provider"
 import { useAppearanceStore, type ModeId, type ModeLabelStyle, type TabClosePosition } from "@/src/stores/appearance-store"
 
@@ -270,34 +276,30 @@ export function AppearancePanel() {
         {/* Três estados, e não um interruptor: a persona da saudação e a que
             flutua sobre a conversa custam coisas diferentes, e quem desliga
             costuma querer só a segunda fora do caminho. */}
-        <div className="flex flex-col gap-1.5">
-          {PERSONA_VISIBILITY.map((option) => (
-            <button
-              key={option}
-              type="button"
-              onClick={() => setPersonaVisibility(option)}
-              className={cn(
-                "flex cursor-pointer items-start gap-3 rounded-lg border px-3 py-2.5 text-left transition-colors",
-                personaVisibility === option
-                  ? "border-primary bg-primary/5"
-                  : "border-input bg-background hover:bg-accent/50",
-              )}
-            >
-              <Smile
-                className={cn(
-                  "mt-0.5 size-4",
-                  personaVisibility === option ? "text-primary" : "text-muted-foreground",
-                )}
-              />
-              <span className="flex min-w-0 flex-col">
-                <span className="text-sm">{t(`appearance.persona.options.${option}.label`)}</span>
-                <span className="text-xs text-muted-foreground">
-                  {t(`appearance.persona.options.${option}.hint`)}
-                </span>
-              </span>
-            </button>
-          ))}
+        <div className="flex items-center gap-3 rounded-lg border border-input bg-background px-3 py-2.5">
+          <Smile className="size-4 shrink-0 text-muted-foreground" />
+          <span className="min-w-0 flex-1 truncate text-sm">
+            {t("appearance.persona.where")}
+          </span>
+          <Select
+            value={personaVisibility}
+            onValueChange={(value) => value && setPersonaVisibility(value as PersonaVisibility)}
+          >
+            <SelectTrigger size="sm" className="max-w-56">
+              <SelectValue>{t(`appearance.persona.options.${personaVisibility}.label`)}</SelectValue>
+            </SelectTrigger>
+            <SelectContent alignItemWithTrigger={false}>
+              {PERSONA_VISIBILITY.map((option) => (
+                <SelectItem key={option} value={option}>
+                  {t(`appearance.persona.options.${option}.label`)}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
+        <p className="mt-1.5 text-xs text-muted-foreground">
+          {t(`appearance.persona.options.${personaVisibility}.hint`)}
+        </p>
       </div>
     </div>
   )

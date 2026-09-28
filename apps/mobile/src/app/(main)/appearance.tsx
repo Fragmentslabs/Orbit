@@ -3,7 +3,14 @@ import { useRouter } from 'expo-router'
 import { ArrowLeft, Sun, Moon, Monitor, ChevronRight, Smile } from 'lucide-react-native'
 import { useTranslation } from 'react-i18next'
 import { useThemeStore, type ThemePreference } from '~/stores/theme-store'
-import { PERSONA_VISIBILITY } from '@orbit/shared'
+import { PERSONA_VISIBILITY, type PersonaVisibility } from '@orbit/shared'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '~/components/ui/select'
 import { useAppearanceStore } from '~/stores/appearance-store'
 import { getThemeTokens } from '~/lib/theme-tokens'
 import { useThemeStore as useThemeTokensStore } from '~/stores/theme-store'
@@ -90,32 +97,36 @@ export default function AppearanceScreen() {
         {/* Três estados, e não um interruptor: a persona da saudação e a que
             fica no topo do chat custam coisas diferentes, e quem desliga
             costuma querer só a segunda fora do caminho. */}
-        <View style={[s.card, { borderColor: tokens.border, backgroundColor: tokens.card, gap: 4 }]}>
-          {PERSONA_VISIBILITY.map((option) => {
-            const active = personaVisibility === option
-            return (
-              <Pressable
-                key={option}
-                onPress={() => void setPersonaVisibility(option)}
-                style={{
-                  flexDirection: 'row',
-                  alignItems: 'flex-start',
-                  gap: 12,
-                  paddingVertical: 8,
-                }}
-              >
-                <Smile size={20} color={active ? tokens.primary : tokens.mutedForeground} />
-                <View style={{ flex: 1 }}>
-                  <Text style={{ fontSize: 14, color: active ? tokens.primary : tokens.foreground }}>
-                    {t(`appearanceScreen.persona.${option}.label`)}
-                  </Text>
-                  <Text style={{ fontSize: 12, color: tokens.mutedForeground }}>
-                    {t(`appearanceScreen.persona.${option}.hint`)}
-                  </Text>
-                </View>
-              </Pressable>
-            )
-          })}
+        <View style={[s.card, { borderColor: tokens.border, backgroundColor: tokens.card, gap: 8 }]}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+            <Smile size={20} color={tokens.mutedForeground} />
+            <Text style={{ flex: 1, fontSize: 14, color: tokens.foreground }}>
+              {t('appearanceScreen.persona.where')}
+            </Text>
+          </View>
+          <Select
+            value={{
+              value: personaVisibility,
+              label: t(`appearanceScreen.persona.${personaVisibility}.label`),
+            }}
+            onValueChange={(opt) => opt && void setPersonaVisibility(opt.value as PersonaVisibility)}
+          >
+            <SelectTrigger>
+              <SelectValue placeholder={t('appearanceScreen.persona.where')} />
+            </SelectTrigger>
+            <SelectContent>
+              {PERSONA_VISIBILITY.map((option) => (
+                <SelectItem
+                  key={option}
+                  label={t(`appearanceScreen.persona.${option}.label`)}
+                  value={option}
+                />
+              ))}
+            </SelectContent>
+          </Select>
+          <Text style={{ fontSize: 12, color: tokens.mutedForeground }}>
+            {t(`appearanceScreen.persona.${personaVisibility}.hint`)}
+          </Text>
         </View>
       </ScrollView>
     </SafeScreen>

@@ -1613,6 +1613,7 @@
       "system": "System"
     },
     "persona": {
+      "where": "Where the persona appears",
       "title": "Persona",
       "options": {
         "all": {

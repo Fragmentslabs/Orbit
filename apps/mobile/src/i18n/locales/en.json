@@ -581,6 +581,7 @@
       }
     },
     "persona": {
+      "where": "Where the persona appears",
       "all": {
         "label": "In the chat and on the welcome screen",
         "hint": "She stays in the header of the conversation."
