@@ -37,8 +37,9 @@ export function underscoreBlankWarning(markdown: string): string | null {
       : `as linhas ${atingidas.slice(0, 5).join(', ')}${atingidas.length > 5 ? '…' : ''}`
   return (
     `Atenção: ${onde} tem campos como "____/____/____", e em Markdown dois grupos de ` +
-    'underscores viram negrito — o usuário vai ver "//" no lugar do campo, na tela e no ' +
-    'PDF. Escreva "\\_\\_\\_\\_/\\_\\_\\_\\_/\\_\\_\\_\\_" (escapados) ou separe com espaço ' +
-    '("____ / ____ / ____") e chame update_document de novo.'
+    'underscores viram negrito — na TELA (resposta do chat e painel do documento) o usuário ' +
+    'vê "//" no lugar do campo. No PDF e no DOCX ele sai certo, mas o documento é lido nos ' +
+    'dois lugares. Escreva "\\_\\_\\_\\_/\\_\\_\\_\\_/\\_\\_\\_\\_" (escapados, que valem em ' +
+    'todos) ou separe com espaço ("____ / ____ / ____"), e chame update_document de novo.'
   )
 }

@@ -461,3 +461,28 @@ describe('fontFamily vinda como pilha de CSS', () => {
     )
   })
 })
+
+describe('barra invertida do Markdown', () => {
+  it('o campo de data escapado sai com os underscores, e sem a barra', () => {
+    // Veio de um caso real: o modelo escapa os underscores para o campo não
+    // virar negrito na TELA (onde `__` é ênfase), e o mesmo texto vira o PDF.
+    // Sem tratar o escape, o documento saía com "\_\_\_\_/\_\_\_\_" à mostra.
+    expect(parseInline('Data: \\_\\_\\_\\_/\\_\\_\\_\\_/\\_\\_\\_\\_\\_\\_')).toEqual([
+      { text: 'Data: ____/____/______' },
+    ])
+  })
+
+  it('asterisco escapado é asterisco, não começo de itálico', () => {
+    expect(parseInline('3 \\* 4 = 12')).toEqual([{ text: '3 * 4 = 12' }])
+  })
+
+  it('o escape não atrapalha a ênfase de verdade na mesma linha', () => {
+    const runs = parseInline('**Data:** \\_\\_\\_\\_/\\_\\_\\_\\_')
+    expect(runs).toEqual([{ text: 'Data:', bold: true }, { text: ' ____/____' }])
+  })
+
+  it('barra invertida sozinha continua sendo barra invertida', () => {
+    // Só a pontuação do Markdown é neutralizada; "C:\temp" não vira "C:temp".
+    expect(parseInline('caminho C:\\temp')).toEqual([{ text: 'caminho C:\\temp' }])
+  })
+})

@@ -302,6 +302,30 @@ const INLINE = /(\*\*[^*]+\*\*|\*[^*]+\*|`[^`]+`)/
 const LINE_BREAK = /<br\s*\/?>/gi
 
 /**
+ * Caracteres que a barra invertida neutraliza, como manda o Markdown.
+ *
+ * Aqui o motivo é concreto: o modelo escreve `\\_\\_\\_\\_/\\_\\_\\_\\_` para desenhar um
+ * campo de data que não vire negrito na TELA (onde o underscore é ênfase), e
+ * esse mesmo texto vira o PDF. Sem tratar o escape, o documento saía com a
+ * barra invertida à mostra — o problema trocava de lugar em vez de sumir.
+ */
+const ESCAPABLE = /\\([\\`*_{}[\]()#+\-.!|>~])/g
+/** Marcador do caractere escapado enquanto a ênfase é separada. Nunca aparece
+ *  num documento de verdade, que é o requisito para servir de marcador. */
+const MASK = '\u0000'
+
+function maskEscapes(text: string): string {
+  return text.replace(ESCAPABLE, (_all, char: string) => `${MASK}${char.charCodeAt(0)}${MASK}`)
+}
+
+function unmaskEscapes(text: string): string {
+  return text.replace(
+    new RegExp(`${MASK}(\\d+)${MASK}`, 'g'),
+    (_all, code: string) => String.fromCharCode(Number(code)),
+  )
+}
+
+/**
  * Quebra o texto em trechos com marcação. Um passo só, sem aninhamento:
  * negrito dentro de itálico é raro num documento gerado e o custo de suportar
  * (um parser de verdade) não se paga aqui.
@@ -313,12 +337,15 @@ export function parseInline(text: string): InlineRun[] {
   const segments = text.split(LINE_BREAK)
   segments.forEach((segment, index) => {
     if (index > 0) runs.push({ text: '', br: true })
-    for (const part of segment.split(INLINE)) {
+    // O caractere escapado sai de cena antes da separação da ênfase: é isso
+    // que faz `\*` ser um asterisco no texto, e não o começo de um itálico.
+    for (const part of maskEscapes(segment).split(INLINE)) {
       if (part === '') continue
-      if (/^\*\*[\s\S]+\*\*$/.test(part)) runs.push({ text: part.slice(2, -2), bold: true })
-      else if (/^`[\s\S]+`$/.test(part)) runs.push({ text: part.slice(1, -1), code: true })
-      else if (/^\*[\s\S]+\*$/.test(part)) runs.push({ text: part.slice(1, -1), italic: true })
-      else runs.push({ text: part })
+      const push = (run: InlineRun) => runs.push({ ...run, text: unmaskEscapes(run.text) })
+      if (/^\*\*[\s\S]+\*\*$/.test(part)) push({ text: part.slice(2, -2), bold: true })
+      else if (/^`[\s\S]+`$/.test(part)) push({ text: part.slice(1, -1), code: true })
+      else if (/^\*[\s\S]+\*$/.test(part)) push({ text: part.slice(1, -1), italic: true })
+      else push({ text: part })
     }
   })
   return runs.length > 0 ? runs : [{ text: '' }]
