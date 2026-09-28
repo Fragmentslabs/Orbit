@@ -1613,7 +1613,20 @@
     },
     "persona": {
       "title": "Persona",
-      "show": "Mostrar persona"
+      "options": {
+        "all": {
+          "label": "No chat e na tela inicial",
+          "hint": "Ela flutua sobre a conversa, que começa um pouco mais abaixo."
+        },
+        "welcome": {
+          "label": "Só na tela inicial",
+          "hint": "A saudação mantém a persona; a conversa fica limpa."
+        },
+        "none": {
+          "label": "Em lugar nenhum",
+          "hint": "Nenhuma persona na interface."
+        }
+      }
     },
     "tabClosePosition": {
       "title": "Botão de fechar das abas do painel",

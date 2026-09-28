@@ -1,8 +1,9 @@
-import { View, Text, Pressable, ScrollView, StyleSheet, Switch, useColorScheme } from 'react-native'
+import { View, Text, Pressable, ScrollView, StyleSheet, useColorScheme } from 'react-native'
 import { useRouter } from 'expo-router'
 import { ArrowLeft, Sun, Moon, Monitor, ChevronRight, Smile } from 'lucide-react-native'
 import { useTranslation } from 'react-i18next'
 import { useThemeStore, type ThemePreference } from '~/stores/theme-store'
+import { PERSONA_VISIBILITY } from '@orbit/shared'
 import { useAppearanceStore } from '~/stores/appearance-store'
 import { getThemeTokens } from '~/lib/theme-tokens'
 import { useThemeStore as useThemeTokensStore } from '~/stores/theme-store'
@@ -16,8 +17,8 @@ export default function AppearanceScreen() {
   const systemIsDark = systemScheme !== 'light'
   const themePref = useThemeStore((s) => s.preference)
   const setThemePref = useThemeStore((s) => s.setPreference)
-  const personaVisible = useAppearanceStore((s) => s.personaVisible)
-  const setPersonaVisible = useAppearanceStore((s) => s.setPersonaVisible)
+  const personaVisibility = useAppearanceStore((s) => s.personaVisibility)
+  const setPersonaVisibility = useAppearanceStore((s) => s.setPersonaVisibility)
   const tokens = getThemeTokens(useThemeTokensStore((s) => s.resolved))
 
   const handleTheme = (value: ThemePreference) => {
@@ -86,17 +87,35 @@ export default function AppearanceScreen() {
 
         <Text style={[s.sectionTitle, { color: tokens.mutedForeground, marginTop: 24 }]}>{t('appearanceScreen.personaSection')}</Text>
 
-        <View style={[s.card, { borderColor: tokens.border, backgroundColor: tokens.card }]}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-            <Smile size={20} color={tokens.mutedForeground} />
-            <Text style={{ flex: 1, fontSize: 14, color: tokens.foreground }}>{t('appearanceScreen.showPersona')}</Text>
-            <Switch
-              value={personaVisible}
-              onValueChange={setPersonaVisible}
-              trackColor={{ false: tokens.muted, true: tokens.primary }}
-              thumbColor={tokens.background}
-            />
-          </View>
+        {/* Três estados, e não um interruptor: a persona da saudação e a que
+            fica no topo do chat custam coisas diferentes, e quem desliga
+            costuma querer só a segunda fora do caminho. */}
+        <View style={[s.card, { borderColor: tokens.border, backgroundColor: tokens.card, gap: 4 }]}>
+          {PERSONA_VISIBILITY.map((option) => {
+            const active = personaVisibility === option
+            return (
+              <Pressable
+                key={option}
+                onPress={() => void setPersonaVisibility(option)}
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'flex-start',
+                  gap: 12,
+                  paddingVertical: 8,
+                }}
+              >
+                <Smile size={20} color={active ? tokens.primary : tokens.mutedForeground} />
+                <View style={{ flex: 1 }}>
+                  <Text style={{ fontSize: 14, color: active ? tokens.primary : tokens.foreground }}>
+                    {t(`appearanceScreen.persona.${option}.label`)}
+                  </Text>
+                  <Text style={{ fontSize: 12, color: tokens.mutedForeground }}>
+                    {t(`appearanceScreen.persona.${option}.hint`)}
+                  </Text>
+                </View>
+              </Pressable>
+            )
+          })}
         </View>
       </ScrollView>
     </SafeScreen>

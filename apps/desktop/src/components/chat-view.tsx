@@ -12,6 +12,7 @@ import { VisionHintCard } from "@/src/components/vision-hint-card"
 import { ProviderHintCard } from "@/src/components/provider-hint-card"
 import { Persona, type PersonaState } from "@/src/components/ai/persona"
 import { useAppearanceStore } from "@/src/stores/appearance-store"
+import { showsPersonaInChat, showsPersonaOnWelcome } from "@shared/appearance"
 import { usePanelStore } from "@/src/stores/panel-store"
 import { docsApi } from "@/src/lib/ipc"
 import { Conversation, ConversationContent, ConversationScrollButton } from "@/src/components/ai/conversation"
@@ -414,7 +415,11 @@ export function ChatView({ sessionId }: { sessionId?: string } = {}) {
 
   const isBusy = status === "submitted" || status === "streaming" || status === "cancelling" || status === "fallback"
   const hasChat = messages.length > 0
-  const personaVisible = useAppearanceStore((s) => s.personaVisible)
+  const personaVisibility = useAppearanceStore((s) => s.personaVisibility)
+  /** A flutuante do topo passa por cima da conversa; a da saudação não
+   *  disputa espaço com nada. São escolhas separadas — ver PersonaVisibility. */
+  const personaInChat = showsPersonaInChat(personaVisibility)
+  const personaOnWelcome = showsPersonaOnWelcome(personaVisibility)
   // Pasta alvo do card de init: a da sessão ou a selecionada no FolderSelector
   const initDirectory = session?.directory ?? (viewMode === "code" ? folders[0] : undefined)
 
@@ -570,7 +575,7 @@ export function ChatView({ sessionId }: { sessionId?: string } = {}) {
         </div>
       )}
       <div className="relative flex-1">
-        {topVisible && !simpleMode && personaVisible && (
+        {topVisible && !simpleMode && personaInChat && (
           <div
             className="absolute left-1/2 z-40 -translate-x-1/2 transition-all duration-500 ease-in-out opacity-100"
             style={{
@@ -589,7 +594,7 @@ export function ChatView({ sessionId }: { sessionId?: string } = {}) {
           }`}
         >
           <div className="flex flex-col items-center gap-6">
-            {personaVisible && (
+            {personaOnWelcome && (
               <div
                 className="flex justify-center transition-all duration-500 ease-in-out"
                 style={{
@@ -618,12 +623,12 @@ export function ChatView({ sessionId }: { sessionId?: string } = {}) {
             chatVisible ? "opacity-100" : "opacity-0 pointer-events-none"
           }`}
         >
-          <div className={`flex min-h-0 flex-1 flex-col ${topVisible && !simpleMode && personaVisible ? "pt-6" : "pt-2"}`}>
+          <div className={`flex min-h-0 flex-1 flex-col ${topVisible && !simpleMode && personaInChat ? "pt-6" : "pt-2"}`}>
             {/* Véu que dissolve a conversa por baixo da persona flutuante. Ele
                 existe POR CAUSA dela: sem a persona no topo não há o que
                 esconder, e a faixa vira só três centímetros de nada comendo o
                 começo da lista. Mesma condição do respiro acima. */}
-            {topVisible && !simpleMode && personaVisible && (
+            {topVisible && !simpleMode && personaInChat && (
               <div className="pointer-events-none sticky top-0 z-10 h-12 bg-linear-to-b to-transparent" style={{ backgroundImage: 'linear-gradient(to bottom, var(--panel-bg, var(--background)), transparent)' }} />
             )}
             {/* Vale nos dois modos: a conversa de código também tem histórico

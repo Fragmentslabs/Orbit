@@ -5,7 +5,7 @@ import { KeyboardAvoidingView } from 'react-native-keyboard-controller'
 import { Stack, useRouter } from 'expo-router'
 import { SafeScreen } from '~/components/layout/SafeScreen'
 import type { SendMessageOptions, FilePart } from '@orbit/shared'
-import { folderKey, normalizeFolderName } from '@orbit/shared'
+import { folderKey, normalizeFolderName, showsPersonaOnWelcome } from '@orbit/shared'
 import { PlanReviewCard } from '~/components/chat/PlanReviewCard'
 import { TaskProgress } from '~/components/chat/TaskProgress'
 import { OrchestrationPlanCard } from '~/components/chat/OrchestrationPlanCard'
@@ -386,7 +386,7 @@ export function ChatScreen({ sessionId }: ChatScreenProps) {
   }, [sessionId, deleteSession, router])
 
   const personaState = isEmpty ? 'idle' : isStreaming ? 'thinking' : 'idle'
-  const personaVisible = useAppearanceStore((s) => s.personaVisible)
+  const personaVisible = showsPersonaOnWelcome(useAppearanceStore((s) => s.personaVisibility))
 
   // O inset de baixo NÃO entra no SafeScreen: com o teclado aberto ele sobrava
   // entre o input e o teclado (o KAV já empurra a coluna inteira). Quem aplica

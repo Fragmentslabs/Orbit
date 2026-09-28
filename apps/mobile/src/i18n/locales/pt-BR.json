@@ -567,7 +567,6 @@
     "title": "Aparência",
     "themeSection": "Tema",
     "personaSection": "Persona",
-    "showPersona": "Mostrar persona",
     "themeLight": "Claro",
     "themeDark": "Escuro",
     "themeSystem": "Sistema",
@@ -579,6 +578,20 @@
         "both": "Ambos os modos",
         "chat": "Modo chat",
         "code": "Modo código"
+      }
+    },
+    "persona": {
+      "all": {
+        "label": "No chat e na tela inicial",
+        "hint": "Ela fica no cabeçalho da conversa."
+      },
+      "welcome": {
+        "label": "Só na tela inicial",
+        "hint": "A saudação mantém a persona; a conversa fica limpa."
+      },
+      "none": {
+        "label": "Em lugar nenhum",
+        "hint": "Nenhuma persona na interface."
       }
     }
   },

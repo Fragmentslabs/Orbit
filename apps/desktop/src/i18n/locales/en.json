@@ -1614,7 +1614,20 @@
     },
     "persona": {
       "title": "Persona",
-      "show": "Show persona"
+      "options": {
+        "all": {
+          "label": "In the chat and on the welcome screen",
+          "hint": "She floats above the conversation, which starts a little lower."
+        },
+        "welcome": {
+          "label": "Only on the welcome screen",
+          "hint": "The greeting keeps her; the conversation stays clean."
+        },
+        "none": {
+          "label": "Nowhere",
+          "hint": "No persona in the interface."
+        }
+      }
     },
     "tabClosePosition": {
       "title": "Panel tab close button",

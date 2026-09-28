@@ -17,6 +17,8 @@ import {
   Sun,
 } from "lucide-react"
 import { useTranslation } from "react-i18next"
+import { PERSONA_VISIBILITY } from "@shared/appearance"
+import { cn } from "@/lib/utils"
 import { useTheme } from "@/components/theme-provider"
 import { useAppearanceStore, type ModeId, type ModeLabelStyle, type TabClosePosition } from "@/src/stores/appearance-store"
 
@@ -117,8 +119,8 @@ export function AppearancePanel() {
   const setModesInRow = useAppearanceStore((s) => s.setModesInRow)
   const modeLabelStyle = useAppearanceStore((s) => s.modeLabelStyle)
   const setModeLabelStyle = useAppearanceStore((s) => s.setModeLabelStyle)
-  const personaVisible = useAppearanceStore((s) => s.personaVisible)
-  const setPersonaVisible = useAppearanceStore((s) => s.setPersonaVisible)
+  const personaVisibility = useAppearanceStore((s) => s.personaVisibility)
+  const setPersonaVisibility = useAppearanceStore((s) => s.setPersonaVisibility)
   const tabClosePosition = useAppearanceStore((s) => s.tabClosePosition)
   const setTabClosePosition = useAppearanceStore((s) => s.setTabClosePosition)
   const [view, setView] = useState<View>("main")
@@ -265,25 +267,37 @@ export function AppearancePanel() {
 
       <div className="border-t pt-4">
         <p className="mb-3 text-xs font-medium text-muted-foreground">{t("appearance.persona.title")}</p>
-        <label className="flex cursor-pointer items-center gap-3 rounded-lg border border-input bg-background px-3 py-2.5 transition-colors hover:bg-accent/50">
-          <Smile className="size-4 text-muted-foreground" />
-          <span className="flex-1 text-sm">{t("appearance.persona.show")}</span>
-          <button
-            type="button"
-            role="switch"
-            aria-checked={personaVisible}
-            onClick={() => setPersonaVisible(!personaVisible)}
-            className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors ${
-              personaVisible ? "bg-primary" : "bg-input"
-            }`}
-          >
-            <span
-              className={`pointer-events-none block size-4 rounded-full bg-background shadow-sm ring-0 transition-transform ${
-                personaVisible ? "translate-x-4" : "translate-x-0"
-              }`}
-            />
-          </button>
-        </label>
+        {/* Três estados, e não um interruptor: a persona da saudação e a que
+            flutua sobre a conversa custam coisas diferentes, e quem desliga
+            costuma querer só a segunda fora do caminho. */}
+        <div className="flex flex-col gap-1.5">
+          {PERSONA_VISIBILITY.map((option) => (
+            <button
+              key={option}
+              type="button"
+              onClick={() => setPersonaVisibility(option)}
+              className={cn(
+                "flex cursor-pointer items-start gap-3 rounded-lg border px-3 py-2.5 text-left transition-colors",
+                personaVisibility === option
+                  ? "border-primary bg-primary/5"
+                  : "border-input bg-background hover:bg-accent/50",
+              )}
+            >
+              <Smile
+                className={cn(
+                  "mt-0.5 size-4",
+                  personaVisibility === option ? "text-primary" : "text-muted-foreground",
+                )}
+              />
+              <span className="flex min-w-0 flex-col">
+                <span className="text-sm">{t(`appearance.persona.options.${option}.label`)}</span>
+                <span className="text-xs text-muted-foreground">
+                  {t(`appearance.persona.options.${option}.hint`)}
+                </span>
+              </span>
+            </button>
+          ))}
+        </div>
       </div>
     </div>
   )

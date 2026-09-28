@@ -4,6 +4,7 @@
  */
 
 export * from './analytics'
+export * from './appearance'
 export * from './chat'
 export * from './companion'
 export * from './esteira'

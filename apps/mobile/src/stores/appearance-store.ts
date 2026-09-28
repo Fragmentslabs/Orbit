@@ -1,4 +1,9 @@
 import { create } from 'zustand'
+import {
+  personaVisibilityFrom,
+  DEFAULT_PERSONA_VISIBILITY,
+  type PersonaVisibility,
+} from '@orbit/shared'
 import { Storage } from '~/lib/storage'
 import { useThemeStore, type ThemePreference } from './theme-store'
 
@@ -39,24 +44,25 @@ interface AppearanceState {
   /** Modos visíveis como toggles na barra inferior (o menu "+" mostra todos) */
   modesInRow: ModeId[]
   setModesInRow: (modes: ModeId[]) => Promise<void>
-  personaVisible: boolean
-  setPersonaVisible: (visible: boolean) => Promise<void>
+  /** Onde a persona aparece — ver PersonaVisibility no @orbit/shared. */
+  personaVisibility: PersonaVisibility
+  setPersonaVisibility: (visibility: PersonaVisibility) => Promise<void>
   /** Define tema e persiste (delega ao theme-store). */
   setTheme: (pref: ThemePreference) => void
 }
 
 export const useAppearanceStore = create<AppearanceState>((set) => ({
   modesInRow: DEFAULT_MODES_IN_ROW,
-  personaVisible: true,
+  personaVisibility: DEFAULT_PERSONA_VISIBILITY,
 
   setModesInRow: async (modes) => {
     set({ modesInRow: modes })
     await Storage.setItem(MODES_IN_ROW_KEY, JSON.stringify(modes))
   },
 
-  setPersonaVisible: async (visible) => {
-    set({ personaVisible: visible })
-    await Storage.setItem(PERSONA_VISIBLE_KEY, String(visible))
+  setPersonaVisibility: async (visibility) => {
+    set({ personaVisibility: visibility })
+    await Storage.setItem(PERSONA_VISIBLE_KEY, visibility)
   },
 
   setTheme: (pref) => {
@@ -79,10 +85,12 @@ export async function hydrateModesInRow(): Promise<ModeId[]> {
   return DEFAULT_MODES_IN_ROW
 }
 
-export async function hydratePersonaVisible(): Promise<boolean> {
+/** A chave é a mesma de quando isto era um booleano: personaVisibilityFrom
+ *  entende o "false" de quem já tinha desligado e o mantém desligado. */
+export async function hydratePersonaVisibility(): Promise<PersonaVisibility> {
   try {
-    const raw = await Storage.getItem(PERSONA_VISIBLE_KEY)
-    if (raw === 'false') return false
-  } catch { /* ignore */ }
-  return true
+    return personaVisibilityFrom(await Storage.getItem(PERSONA_VISIBLE_KEY))
+  } catch {
+    return DEFAULT_PERSONA_VISIBILITY
+  }
 }

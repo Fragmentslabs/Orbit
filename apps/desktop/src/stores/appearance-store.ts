@@ -1,4 +1,5 @@
 import { create } from "zustand"
+import { personaVisibilityFrom, type PersonaVisibility } from "@shared/appearance"
 
 const MODES_IN_ROW_KEY = "orbit_modes_in_row"
 const MODE_LABEL_STYLE_KEY = "orbit_mode_label_style"
@@ -47,8 +48,9 @@ interface AppearanceState {
   /** Ícone + texto ou somente ícone na barra inferior */
   modeLabelStyle: ModeLabelStyle
   setModeLabelStyle: (style: ModeLabelStyle) => void
-  personaVisible: boolean
-  setPersonaVisible: (visible: boolean) => void
+  /** Onde a persona aparece — ver PersonaVisibility no @shared. */
+  personaVisibility: PersonaVisibility
+  setPersonaVisibility: (visibility: PersonaVisibility) => void
   tabClosePosition: TabClosePosition
   setTabClosePosition: (position: TabClosePosition) => void
 }
@@ -77,10 +79,12 @@ export const useAppearanceStore = create<AppearanceState>((set) => ({
     localStorage.setItem(MODE_LABEL_STYLE_KEY, style)
     set({ modeLabelStyle: style })
   },
-  personaVisible: localStorage.getItem(PERSONA_VISIBLE_KEY) !== "false",
-  setPersonaVisible: (visible) => {
-    localStorage.setItem(PERSONA_VISIBLE_KEY, String(visible))
-    set({ personaVisible: visible })
+  // A chave é a mesma de quando isto era um booleano: personaVisibilityFrom
+  // entende o "false" de quem já tinha desligado e o mantém desligado.
+  personaVisibility: personaVisibilityFrom(localStorage.getItem(PERSONA_VISIBLE_KEY)),
+  setPersonaVisibility: (visibility) => {
+    localStorage.setItem(PERSONA_VISIBLE_KEY, visibility)
+    set({ personaVisibility: visibility })
   },
   tabClosePosition: (localStorage.getItem(TAB_CLOSE_POSITION_KEY) as TabClosePosition) ?? DEFAULT_TAB_CLOSE_POSITION,
   setTabClosePosition: (position) => {

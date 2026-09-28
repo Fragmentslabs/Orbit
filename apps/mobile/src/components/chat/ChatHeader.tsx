@@ -2,7 +2,7 @@ import { memo, useCallback, useState } from 'react'
 import { View, Animated, Pressable, Alert, StyleSheet } from 'react-native'
 import { useTranslation } from 'react-i18next'
 import { Menu, Ellipsis, Pencil, Pin, PinOff, Archive, ArchiveRestore, GitFork, GitBranch, Search, Trash2 } from 'lucide-react-native'
-import type { SessionInfo, BranchesResponse } from '@orbit/shared'
+import { showsPersonaInChat, type SessionInfo, type BranchesResponse } from '@orbit/shared'
 import { Persona, type PersonaState } from '~/components/ai/Persona'
 import { useWorkspaceStore } from '~/stores/workspace-store'
 import { useConnectionStore } from '~/stores/connection-store'
@@ -45,7 +45,8 @@ export const ChatHeader = memo(function ChatHeader({
 }: ChatHeaderProps) {
   const { t } = useTranslation()
   const openSidebar = useWorkspaceStore((s) => s.openSidebar)
-  const personaVisible = useAppearanceStore((s) => s.personaVisible)
+  // Só a persona do topo: a da saudação é outra escolha (ver PersonaVisibility).
+  const personaVisible = showsPersonaInChat(useAppearanceStore((s) => s.personaVisibility))
   const [menuOpen, setMenuOpen] = useState(false)
   const [branchOpen, setBranchOpen] = useState(false)
   const [branch, setBranch] = useState<string | null>(null)

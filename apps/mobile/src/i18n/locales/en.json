@@ -567,7 +567,6 @@
     "title": "Appearance",
     "themeSection": "Theme",
     "personaSection": "Persona",
-    "showPersona": "Show persona",
     "themeLight": "Light",
     "themeDark": "Dark",
     "themeSystem": "System",
@@ -579,6 +578,20 @@
         "both": "Both modes",
         "chat": "Chat mode",
         "code": "Code mode"
+      }
+    },
+    "persona": {
+      "all": {
+        "label": "In the chat and on the welcome screen",
+        "hint": "She stays in the header of the conversation."
+      },
+      "welcome": {
+        "label": "Only on the welcome screen",
+        "hint": "The greeting keeps her; the conversation stays clean."
+      },
+      "none": {
+        "label": "Nowhere",
+        "hint": "No persona in the interface."
       }
     }
   },
