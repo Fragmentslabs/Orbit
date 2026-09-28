@@ -53,6 +53,15 @@ function InputGroupAddon({
       data-align={align}
       className={cn(inputGroupAddonVariants({ align }), className)}
       onClick={(e) => {
+        // Só vale para clique DENTRO do addon no DOM. Um portal renderizado a
+        // partir daqui (o modal do seletor de modelo, um popover, um select)
+        // mora no <body>, mas o evento dele sobe pela árvore do React e
+        // chegava até aqui — e cada clique no campo de busca do modal
+        // devolvia o foco ao input do grupo, atrás do modal. Parecia que o
+        // campo não aceitava foco.
+        if (!e.currentTarget.contains(e.target as Node)) {
+          return
+        }
         if ((e.target as HTMLElement).closest("button")) {
           return
         }
