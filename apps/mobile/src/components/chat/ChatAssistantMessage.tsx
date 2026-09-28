@@ -609,7 +609,25 @@ function AssistantImage({ part }: { part: ImagePart }) {
 
 // ─── Segment Parts helper ────────────────────────────────────────────────────
 
-const SPECIAL_TOOLS = new Set(['subagent', 'todowrite', 'create_skill', 'show_image'])
+/**
+ * Ferramentas que NÃO entram no acordeon de ações: o que elas produzem já tem
+ * um card na conversa (o subagente, a imagem, o artefato, o documento), e a
+ * chamada ao lado do próprio resultado é ruído. A proposta de skill e a
+ * checklist de TODO ficam de fora por outro motivo: são interativas, e
+ * recolhê-las esconderia o que se espera que a pessoa responda.
+ *
+ * Mesma lista do desktop — as duas telas mostram a mesma conversa.
+ */
+const SPECIAL_TOOLS = new Set([
+  'subagent',
+  'todowrite',
+  'create_skill',
+  'show_image',
+  'create_artifact',
+  'update_artifact',
+  'create_document',
+  'update_document',
+])
 
 type Segment =
   | { kind: 'research'; id: string; parts: ToolPart[] }
