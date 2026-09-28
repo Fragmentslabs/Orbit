@@ -111,8 +111,13 @@ export default function AppearanceScreen() {
             }}
             onValueChange={(opt) => opt && void setPersonaVisibility(opt.value as PersonaVisibility)}
           >
-            <SelectTrigger>
-              <SelectValue placeholder={t('appearanceScreen.persona.where')} />
+            {/* Altura automática e a etiqueta podendo encolher: os rótulos
+                são frases, e com a altura fixa a segunda linha era cortada. */}
+            <SelectTrigger className="h-auto min-h-10 py-2">
+              <SelectValue
+                className="flex-1 pr-2 text-sm text-foreground"
+                placeholder={t('appearanceScreen.persona.where')}
+              />
             </SelectTrigger>
             <SelectContent>
               {PERSONA_VISIBILITY.map((option) => (
