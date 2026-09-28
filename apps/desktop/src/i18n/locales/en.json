@@ -2132,6 +2132,7 @@
     "actionFailed": "The action could not be completed.",
     "draftTitle": "In this new chat",
     "draftHint": "Bring the material before asking: whatever you attach here becomes part of the conversation as soon as you send the first message.",
-    "quoteInChat": "Quote in chat"
+    "quoteInChat": "Quote in chat",
+    "docxUnavailable": "This document could not be displayed as it looks. The Text view still shows its content."
   }
 }

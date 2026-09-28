@@ -625,6 +625,16 @@ export async function sessionDocumentFile(
   return { path: file, ext }
 }
 
+async function originalOf(
+  sessionId: string,
+  docId: string,
+  kind: DocumentKind,
+): Promise<{ hasOriginal: boolean; originalKind?: 'pdf' | 'docx' }> {
+  if (kind !== 'pdf' && kind !== 'docx') return { hasOriginal: false }
+  const file = await sessionDocumentFile(sessionId, docId)
+  return file ? { hasOriginal: true, originalKind: kind } : { hasOriginal: false }
+}
+
 /**
  * Todas as páginas em texto, para o painel rolar o documento inteiro.
  *
@@ -645,9 +655,12 @@ export interface SessionDocumentView {
   totalPages: number
   pages: { num: number; label?: string; lines: string[] }[]
   sourceUrl?: string
-  /** true quando existe arquivo original exibível (PDF) — é o que decide se o
-   *  modo Original aparece. */
+  /** true quando existe arquivo original exibível — é o que decide se o modo
+   *  Original aparece. */
   hasOriginal: boolean
+  /** COMO o original é desenhado: o PDF em páginas de imagem, o .docx como
+   *  documento em HTML. Só existe junto com hasOriginal. */
+  originalKind?: 'pdf' | 'docx'
 }
 
 export async function readSessionText(
@@ -668,12 +681,10 @@ export async function readSessionText(
       lines: page.text.split('\n'),
     })),
     sourceUrl: found.doc.sourceUrl,
-    // Só PDF: `hasOriginal` decide se o painel mostra o modo Original, e ele
-    // desenha as páginas com o pdfjs. Um .docx TEM arquivo guardado, mas não
-    // há o que desenhar — o painel abriria em branco, e o imprimir mandaria
-    // para o Chromium um formato que ele não renderiza.
-    hasOriginal:
-      found.doc.kind === 'pdf' && (await sessionDocumentFile(sessionId, docId)) !== null,
+    // O modo Original existe para o que tem forma além do texto: o PDF é
+    // desenhado em páginas, e o .docx vira documento em HTML (docx-view.ts).
+    // Antes só o PDF entrava, e o .docx anexado abria como lista de linhas.
+    ...(await originalOf(sessionId, docId, found.doc.kind)),
   }
 }
 

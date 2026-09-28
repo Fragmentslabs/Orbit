@@ -123,6 +123,11 @@ export function SourceViewer({
   // A busca foi preenchida pela citação (e não digitada): é o que mantém o
   // destaque preso à página citada em vez de marcar a frase onde ela repetir.
   const [fromCitation, setFromCitation] = useState(false)
+  // Lido na hora de escolher o modo inicial, e não dependência do efeito que
+  // carrega o arquivo: uma citação nova no MESMO documento só troca o trecho,
+  // e recarregar o texto inteiro por isso seria trabalho jogado fora.
+  const citadoRef = useRef(false)
+  citadoRef.current = page !== undefined && fromLine !== undefined
   const anchorRef = useRef<HTMLDivElement>(null)
   const textRef = useRef<HTMLDivElement>(null)
 
@@ -136,8 +141,14 @@ export function SourceViewer({
       setData(result)
       setLoading(false)
       // O documento abre como ele é sempre que houver original — inclusive
-      // vindo de uma citação, porque agora o destaque também é desenhado lá.
-      setMode(result?.hasOriginal ? "original" : "text")
+      // vindo de uma citação no PDF, onde o destaque também é desenhado. No
+      // .docx o documento em HTML não sabe grifar a linha citada: vindo de
+      // uma citação ele abre no Texto, que sabe.
+      setMode(
+        result?.hasOriginal && !(citadoRef.current && result.originalKind === "docx")
+          ? "original"
+          : "text",
+      )
     })
   return () => {
       alive = false
@@ -360,7 +371,9 @@ export function SourceViewer({
             <Download className="size-3.5" />
           )}
         </button>
-        {data?.hasOriginal && (
+        {/* Só o PDF: imprimir manda o arquivo ao Chromium, que pagina PDF para
+            papel e não sabe o que fazer com um .docx. */}
+        {data?.originalKind === "pdf" && (
           <button
             type="button"
             disabled={busy !== null}
@@ -477,6 +490,14 @@ export function SourceViewer({
           <div className="flex flex-1 items-center justify-center p-6 text-center text-xs text-muted-foreground">
             {loading ? "" : t("sources.viewerMissing", { id: docId })}
           </div>
+        ) : mode === "original" && data.originalKind === "docx" ? (
+          <DocxOriginal
+            sessionId={sessionId}
+            docId={docId}
+            zoom={zoom}
+            docName={data.filename || docId}
+            textPages={data.pages}
+          />
         ) : mode === "original" ? (
           <OriginalPages
             sessionId={sessionId}
@@ -795,6 +816,97 @@ function OriginalPages({
           />
         ))}
       </div>
+    </div>
+  )
+}
+
+/**
+ * O .docx anexado, como documento.
+ *
+ * O painel desenha PDF em páginas de imagem; Word ele não sabe desenhar, e por
+ * isso o arquivo chega convertido em HTML pelo main (docx-view.ts), já limpo.
+ * Aqui ele vira uma folha: fundo branco sobre o cinza do painel, como as
+ * páginas do PDF ao lado, porque é assim que um documento anexado se parece —
+ * não com o tema do app.
+ *
+ * Os estilos dos elementos são explícitos porque o reset do Tailwind zera
+ * títulos, listas e tabelas: sem eles o documento voltaria a ser um bloco de
+ * texto corrido, que é justamente o que se queria deixar para trás.
+ */
+function DocxOriginal({
+  sessionId,
+  docId,
+  zoom,
+  docName,
+  textPages,
+}: {
+  sessionId: string
+  docId: string
+  zoom: number
+  docName: string
+  textPages: { num: number; lines: string[] }[]
+}) {
+  const { t } = useTranslation()
+  const [html, setHtml] = useState<string | null>(null)
+  const [failed, setFailed] = useState(false)
+  const containerRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    let alive = true
+    setHtml(null)
+    setFailed(false)
+    void docsApi.html(sessionId, docId).then((result) => {
+      if (!alive) return
+      if (result) setHtml(result.html)
+      else setFailed(true)
+    })
+    return () => {
+      alive = false
+    }
+  }, [sessionId, docId])
+
+  const escala = zoom / ZOOM_BASE
+
+  return (
+    <div ref={containerRef} className="flex-1 overflow-auto bg-muted/40 p-3">
+      {/* O trecho selecionado é reencontrado nas linhas extraídas, as mesmas
+          que o modelo lê — é o que dá página e linha à citação de um
+          documento que, desenhado assim, não tem nenhuma das duas. */}
+      <QuoteSelection
+        containerRef={containerRef}
+        kind="source"
+        docId={docId}
+        name={docName}
+        resolve={(_range, text) => {
+          for (const page of textPages) {
+            const found = locateLines(page.lines, text)
+            if (found) return { page: page.num, ...found }
+          }
+          return {}
+        }}
+      />
+      {failed ? (
+        <p className="p-6 text-center text-xs text-muted-foreground">{t("sources.docxUnavailable")}</p>
+      ) : html === null ? null : (
+        <article
+          className={cn(
+            "mx-auto bg-white px-[3em] py-[2.5em] leading-relaxed text-neutral-900 shadow-sm",
+            "[&_h1]:mb-[0.5em] [&_h1]:mt-[0.8em] [&_h1]:text-[1.6em] [&_h1]:font-bold",
+            "[&_h2]:mb-[0.5em] [&_h2]:mt-[0.8em] [&_h2]:text-[1.35em] [&_h2]:font-bold",
+            "[&_h3]:mb-[0.4em] [&_h3]:mt-[0.7em] [&_h3]:text-[1.15em] [&_h3]:font-semibold",
+            "[&_p]:mb-[0.6em] [&_strong]:font-semibold [&_em]:italic [&_u]:underline",
+            "[&_ul]:mb-[0.6em] [&_ul]:list-disc [&_ul]:pl-[1.5em] [&_ol]:mb-[0.6em] [&_ol]:list-decimal [&_ol]:pl-[1.5em]",
+            "[&_table]:my-[0.8em] [&_table]:w-full [&_table]:border-collapse",
+            "[&_td]:border [&_td]:border-neutral-300 [&_td]:px-[0.5em] [&_td]:py-[0.3em] [&_td]:align-top",
+            "[&_th]:border [&_th]:border-neutral-300 [&_th]:px-[0.5em] [&_th]:py-[0.3em] [&_th]:text-left",
+            "[&_td_p]:mb-0 [&_th_p]:mb-0 [&_img]:max-w-full [&_a]:text-blue-700 [&_a]:underline",
+          )}
+          style={{ fontSize: `${14 * escala}px`, maxWidth: `${48 * escala}rem` }}
+          // Seguro por construção: o HTML sai do mammoth, que só escreve a
+          // estrutura do documento, e passa pelo sanitizeDocxHtml no main.
+          dangerouslySetInnerHTML={{ __html: html }}
+        />
+      )}
     </div>
   )
 }

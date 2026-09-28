@@ -591,6 +591,8 @@ export interface SourceText {
   /** true quando existe arquivo original servivel (PDF/DOCX) — o modo
    *  "original" do painel só aparece nesse caso. */
   hasOriginal: boolean
+  /** Como o original é desenhado: páginas (PDF) ou documento em HTML (.docx). */
+  originalKind?: "pdf" | "docx"
 }
 
 /**
@@ -638,6 +640,9 @@ export const docsApi = {
   text: (sessionId: string, docId: string) =>
     window.ipcRenderer.invoke("docs:text", sessionId, docId) as Promise<SourceText | null>,
   /** Paginas do PDF renderizadas, com os retangulos do trecho a grifar. */
+  /** O .docx anexado convertido em HTML, para o modo Original. */
+  html: (sessionId: string, docId: string) =>
+    window.ipcRenderer.invoke("docs:html", sessionId, docId) as Promise<{ html: string } | null>,
   render: (
     sessionId: string,
     docId: string,

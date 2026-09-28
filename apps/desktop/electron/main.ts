@@ -76,6 +76,7 @@ import {
   setSessionDocumentShared,
 } from './lib/session-documents'
 import { viewExport, viewPrint, viewRender, viewText } from './lib/document-view'
+import { renderSessionDocx } from './lib/docx-view'
 import { documentForSource, isDocumentSource, useDocumentAsSource } from './lib/document-source'
 import { loadMainLocale, setMainLocale } from './lib/i18n'
 import { loginShellArgs, userShellEnv } from './lib/shell-env'
@@ -1687,6 +1688,11 @@ app.whenReady().then(() => {
   )
   ipcMain.handle('docs:print', (_event, sessionId: string, docId: string) =>
     viewPrint(sessionId, docId),
+  )
+  // O .docx como documento: o painel não desenha Word, então o arquivo chega
+  // convertido em HTML — com títulos, tabelas e imagens, e sem nada ativo.
+  ipcMain.handle('docs:html', (_event, sessionId: string, docId: string) =>
+    renderSessionDocx(sessionId, docId),
   )
   ipcMain.handle('docs:export', (_event, sessionId: string, docId: string) =>
     viewExport(sessionId, docId),
