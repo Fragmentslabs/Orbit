@@ -9,6 +9,7 @@ import {
 import type { DocumentFormat, MediaFilter } from '@shared/media'
 import { StorageKeys, type SessionInfo } from '@shared/chat'
 import { readJson } from '../storage'
+import { underscoreBlankWarning } from '../markdown-blanks'
 
 /**
  * Documentos entregáveis: relatório, proposta, ata, especificação.
@@ -147,10 +148,16 @@ export function createDocumentAuthoringTools(scope: DocumentToolScope) {
           formats: ref.formats,
           thumb: ref.thumb,
           revision: ref.revision,
-          message:
+          message: [
             ref.formats.length > 0
               ? `Documento criado em ${ref.formats.join(' e ')} — o usuário já o vê na resposta e ele está na galeria. Para alterá-lo, use update_document com este documentId.`
               : 'Documento criado — o usuário já o vê na resposta e pode baixá-lo em PDF ou DOCX pelo próprio card quando quiser. Para alterá-lo, use update_document com este documentId.',
+            // O documento foi gravado como veio; o que volta é o aviso de que
+            // uma linha não vai chegar assim na tela de quem for ler.
+            underscoreBlankWarning(markdown),
+          ]
+            .filter(Boolean)
+            .join(' '),
         }
       },
     }),
@@ -196,7 +203,9 @@ export function createDocumentAuthoringTools(scope: DocumentToolScope) {
           formats: ref.formats,
           thumb: ref.thumb,
           revision: ref.revision,
-          message: 'Documento atualizado — o usuário já vê a nova versão.',
+          message: ['Documento atualizado — o usuário já vê a nova versão.', underscoreBlankWarning(markdown)]
+            .filter(Boolean)
+            .join(' '),
         }
       },
     }),
