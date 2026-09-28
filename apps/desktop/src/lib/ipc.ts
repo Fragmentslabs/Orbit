@@ -491,6 +491,11 @@ export const documentApi = {
     >,
   info: (id: string) =>
     window.ipcRenderer.invoke("document:info", id) as Promise<DocumentInfo | null>,
+  /** O documento que originou esta fonte, quando ela veio de uma promoção. */
+  forSource: (sourceId: string) =>
+    window.ipcRenderer.invoke("document:forSource", sourceId) as Promise<
+      { documentId: string; title: string } | null
+    >,
   /** Promove o documento a fonte da conversa. Idempotente: se ele já virou
    *  fonte e ela continua lá, devolve a mesma com `already`. */
   useAsSource: (sessionId: string, id: string) =>

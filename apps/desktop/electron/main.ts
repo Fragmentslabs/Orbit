@@ -76,7 +76,7 @@ import {
   setSessionDocumentShared,
 } from './lib/session-documents'
 import { viewExport, viewPrint, viewRender, viewText } from './lib/document-view'
-import { isDocumentSource, useDocumentAsSource } from './lib/document-source'
+import { documentForSource, isDocumentSource, useDocumentAsSource } from './lib/document-source'
 import { loadMainLocale, setMainLocale } from './lib/i18n'
 import { loginShellArgs, userShellEnv } from './lib/shell-env'
 import { searchSessions } from './lib/search-sessions'
@@ -1743,6 +1743,12 @@ app.whenReady().then(() => {
   // aba Fontes depois de promovida, e ai promover de novo e o certo.
   ipcMain.handle('document:isSource', (_event, sessionId: string, id: string) =>
     isDocumentSource(sessionId, id),
+  )
+  // O caminho de volta: clicar na fonte promovida tem que abrir o documento,
+  // e não o visualizador de arquivo — é o mesmo texto, no lugar onde ele se
+  // edita.
+  ipcMain.handle('document:forSource', (_event, sourceId: string) =>
+    documentForSource(sourceId),
   )
   // O documento nasce só em Markdown: o PDF/DOCX é renderizado AQUI, no
   // primeiro download, e fica em cache para os próximos.

@@ -1,12 +1,6 @@
 import fsp from 'node:fs/promises'
 import { mediaKind } from '@shared/media'
-import {
-  documentFilePath,
-  ensureDocumentRender,
-  getMediaEntry,
-  readDocumentSource,
-  setDocumentSourceId,
-} from './media'
+import { documentFilePath, ensureDocumentRender, getMediaEntry, listMedia, readDocumentSource, setDocumentSourceId } from './media'
 import { addSessionDocument, addSessionText, listSessionDocuments } from './session-documents'
 
 /**
@@ -47,6 +41,24 @@ export async function isDocumentSource(sessionId: string, documentId: string): P
   if (!entry?.sourceId) return false
   const current = await listSessionDocuments(sessionId)
   return current.some((doc) => doc.id === entry.sourceId)
+}
+
+/**
+ * O documento que ORIGINOU esta fonte, quando ela veio de uma promoção.
+ *
+ * Promover copia o conteúdo para uma fonte com id próprio, e a partir daí os
+ * dois existem em paralelo — mas quem clica na fonte está clicando no mesmo
+ * documento, e espera o canvas onde ele se lê e se edita, não o visualizador
+ * de arquivo. A volta é procurada no registro (o documento guarda `sourceId`)
+ * porque é lá que o vínculo já mora: gravá-lo também do lado da fonte criaria
+ * um segundo lugar para ele ficar desatualizado.
+ */
+export async function documentForSource(
+  sourceId: string,
+): Promise<{ documentId: string; title: string } | null> {
+  const entries = await listMedia({ kind: 'document' })
+  const owner = entries.find((entry) => entry.sourceId === sourceId)
+  return owner ? { documentId: owner.id, title: owner.name ?? owner.id } : null
 }
 
 export type UseAsSourceResult =

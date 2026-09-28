@@ -26,7 +26,8 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
-import { docsApi, type SourceDocument } from "@/src/lib/ipc"
+import { documentOpensAsFile } from "@shared/media"
+import { docsApi, documentApi, type SourceDocument } from "@/src/lib/ipc"
 import { useSessionStore } from "@/src/stores/session-store"
 import { usePanelStore } from "@/src/stores/panel-store"
 import { cn } from "@/lib/utils"
@@ -259,6 +260,40 @@ export function SourcesTab({ sessionId }: { sessionId?: string }) {
   const ownInput = useRef<HTMLInputElement>(null)
 
   const openSourceTab = usePanelStore((s) => s.openSourceTab)
+
+  /**
+   * Clicar numa fonte abre o que ela É.
+   *
+   * Uma fonte promovida a partir de um documento do agente continua sendo
+   * aquele documento: tem que abrir no canvas, com o alternador de edição,
+   * como quando se clica nele no chat. Abrir o visualizador de arquivo ali
+   * mostrava um Markdown paginado como se fosse um PDF. Quem decide é o
+   * openDocumentInPanel, o mesmo ponto que a galeria e o card da conversa
+   * usam — e ele sabe mandar de volta ao visualizador o documento que foi
+   * pedido como arquivo.
+   */
+  const abrir = useCallback(
+    async (doc: SourceDocument) => {
+      if (!sessionId) return
+      const origem = await documentApi.forSource(doc.id)
+      if (origem) {
+        const info = await documentApi.info(origem.documentId)
+        // Mesma decisão do openDocumentInPanel — documento vivo no canvas,
+        // documento pedido como arquivo no visualizador —, mas o caminho do
+        // arquivo continua sendo a FONTE, cujo id está aqui na mão. Mandar o
+        // id do documento seria depender de uma resolução que esta tela não
+        // precisa fazer.
+        if (info && !documentOpensAsFile(info)) {
+          usePanelStore
+            .getState()
+            .openDocumentTab(sessionId, { documentId: origem.documentId, title: origem.title })
+          return
+        }
+      }
+      openSourceTab(sessionId, { docId: doc.id, page: 1, title: doc.filename })
+    },
+    [sessionId, openSourceTab],
+  )
   const folders = useSessionStore((s) => s.folders)
   const sessions = useSessionStore((s) => s.sessions)
   // A pasta que o chat novo vai herdar, escolhida no "+" da sidebar. Só
@@ -451,10 +486,7 @@ export function SourcesTab({ sessionId }: { sessionId?: string }) {
                 moveLabel={isShared ? t("sources.unshare") : t("sources.share")}
                 MoveIcon={isShared ? ArrowDownToLine : ArrowUpToLine}
                 onMove={folderId ? () => void move(doc.id, !isShared) : undefined}
-                onOpen={() =>
-                  sessionId &&
-                  openSourceTab(sessionId, { docId: doc.id, page: 1, title: doc.filename })
-                }
+                onOpen={() => sessionId && void abrir(doc)}
                 onRemove={() => void remove(doc.id)}
               />
             ))}
