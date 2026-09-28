@@ -619,7 +619,13 @@ export function ChatView({ sessionId }: { sessionId?: string } = {}) {
           }`}
         >
           <div className={`flex min-h-0 flex-1 flex-col ${topVisible && !simpleMode && personaVisible ? "pt-6" : "pt-2"}`}>
-            <div className="pointer-events-none sticky top-0 z-10 h-12 bg-linear-to-b to-transparent" style={{ backgroundImage: 'linear-gradient(to bottom, var(--panel-bg, var(--background)), transparent)' }} />
+            {/* Véu que dissolve a conversa por baixo da persona flutuante. Ele
+                existe POR CAUSA dela: sem a persona no topo não há o que
+                esconder, e a faixa vira só três centímetros de nada comendo o
+                começo da lista. Mesma condição do respiro acima. */}
+            {topVisible && !simpleMode && personaVisible && (
+              <div className="pointer-events-none sticky top-0 z-10 h-12 bg-linear-to-b to-transparent" style={{ backgroundImage: 'linear-gradient(to bottom, var(--panel-bg, var(--background)), transparent)' }} />
+            )}
             {/* Vale nos dois modos: a conversa de código também tem histórico
                 para procurar, e o menu do header agora a oferece lá. */}
             {chatSearchOpen && <ChatMessageSearchBar messages={messages} />}
