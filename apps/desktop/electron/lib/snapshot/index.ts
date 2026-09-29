@@ -19,58 +19,89 @@ const MAX_BUFFER = 50 * 1024 * 1024
 /**
  * B3 — Resolução do binário do git no carregamento do módulo.
  *
- * Quando o app é aberto via Finder/dock (não pelo terminal), o PATH do
- * processo pode ser mínimo (ex.: sem /opt/homebrew/bin), fazendo `git`
- * falhar com ENOENT silencioso no execFile. Estratégia, em ordem:
- *   1. `which git` (scan do PATH, equivalente ao which do shell);
- *   2. caminhos conhecidos de instalação no macOS;
- *   3. fallback: `git` com PATH injetado (PATH padrão do macOS mesclado ao
- *      PATH atual) no env do execFile.
+ * Quando o app é aberto pelo Finder/dock ou pelo Menu Iniciar, e não pelo
+ * terminal, o PATH do processo pode não ter o diretório do git, e o execFile
+ * falha com ENOENT. A resolução procura o git no PATH, depois nos lugares
+ * onde os instaladores o deixam, e por fim entrega `git` com o PATH ampliado.
+ *
+ * Isto nasceu só para macOS, e no Windows o snapshot quebrava SEMPRE: o PATH
+ * era juntado com ":" (lá é ";"), o arquivo procurado era "git" (lá é
+ * "git.exe") e, como a variável do Windows se chama "Path", o código criava
+ * uma SEGUNDA chave "PATH" só com diretórios do macOS — o git rodava num PATH
+ * onde ele não existe, e todo turno do modo código perdia o snapshot, o revert
+ * por mensagem e a verificação de mudanças. Agora o separador, o nome do
+ * arquivo e a chave da variável vêm da plataforma.
  */
-const KNOWN_GIT_PATHS = ['/usr/bin/git', '/opt/homebrew/bin/git', '/usr/local/bin/git']
-const DEFAULT_PATH = '/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin:/usr/local/bin'
-
-function findGitInPath(pathValue: string): string | undefined {
-  for (const dir of pathValue.split(':').filter(Boolean)) {
-    const candidate = path.join(dir, 'git')
-    try {
-      accessSync(candidate, constants.X_OK)
-      return candidate
-    } catch {
-      // candidato não executável; segue para o próximo diretório
-    }
-  }
-  return undefined
+const KNOWN_GIT_PATHS: Partial<Record<NodeJS.Platform, string[]>> = {
+  darwin: ['/usr/bin/git', '/opt/homebrew/bin/git', '/usr/local/bin/git'],
+  linux: ['/usr/bin/git', '/usr/local/bin/git'],
+  win32: [
+    'C:\\Program Files\\Git\\cmd\\git.exe',
+    'C:\\Program Files\\Git\\bin\\git.exe',
+    'C:\\Program Files (x86)\\Git\\cmd\\git.exe',
+  ],
+}
+/** Diretórios somados ao PATH herdado — só onde o PATH mínimo é um risco. */
+const EXTRA_PATH: Partial<Record<NodeJS.Platform, string[]>> = {
+  darwin: ['/usr/bin', '/bin', '/usr/sbin', '/sbin', '/opt/homebrew/bin', '/usr/local/bin'],
+  linux: ['/usr/bin', '/bin', '/usr/local/bin'],
 }
 
-function resolveGit(): { binary: string; env: NodeJS.ProcessEnv } {
-  const env = { ...process.env }
-  const currentPath = env.PATH ?? ''
-  env.PATH = currentPath ? `${currentPath}:${DEFAULT_PATH}` : DEFAULT_PATH
+export function resolveGitBinary(
+  platform: NodeJS.Platform,
+  // Um ambiente qualquer, e não o ProcessEnv deste app: o tipo global declara
+  // as variáveis do Orbit como obrigatórias, e o ambiente de um processo filho
+  // não tem por que ter nenhuma delas.
+  baseEnv: Record<string, string | undefined>,
+  isExecutable: (file: string) => boolean,
+): { binary: string; env: NodeJS.ProcessEnv } {
+  const paths = platform === 'win32' ? path.win32 : path.posix
+  const env = { ...baseEnv } as NodeJS.ProcessEnv
 
-  // 1. `which git` via scan do PATH completo (PATH atual tem precedência)
-  const fromPath = findGitInPath(env.PATH)
-  if (fromPath) return { binary: fromPath, env }
+  // A chave como ela VEIO: "Path" no Windows. Escrever em "PATH" criaria uma
+  // segunda variável, e qual das duas o processo filho enxerga não é decisão
+  // nossa.
+  const pathKey = Object.keys(env).find((key) => key.toUpperCase() === 'PATH') ?? 'PATH'
+  const inherited = (env[pathKey] ?? '').split(paths.delimiter).filter(Boolean)
+  const extra = (EXTRA_PATH[platform] ?? []).filter((dir) => !inherited.includes(dir))
+  const searchPath = [...inherited, ...extra]
+  env[pathKey] = searchPath.join(paths.delimiter)
 
-  // 2. Caminhos conhecidos de instalação do git no macOS
-  for (const candidate of KNOWN_GIT_PATHS) {
-    try {
-      accessSync(candidate, constants.X_OK)
-      return { binary: candidate, env }
-    } catch {
-      // caminho não existe ou não é executável; segue
+  // 1. O PATH, na ordem (o que o usuário configurou tem precedência)
+  const names = platform === 'win32' ? ['git.exe', 'git.cmd'] : ['git']
+  for (const dir of searchPath) {
+    for (const name of names) {
+      const candidate = paths.join(dir, name)
+      if (isExecutable(candidate)) return { binary: candidate, env }
     }
   }
 
-  // 3. Fallback: deixa o PATH injetado decidir (ainda resolve em ambientes
-  //    não-macOS onde o git esteja em outro diretório do PATH)
+  // 2. Onde os instaladores costumam deixar o git
+  const localPrograms =
+    platform === 'win32' && env.LOCALAPPDATA
+      ? [paths.join(env.LOCALAPPDATA, 'Programs', 'Git', 'cmd', 'git.exe')]
+      : []
+  for (const candidate of [...(KNOWN_GIT_PATHS[platform] ?? []), ...localPrograms]) {
+    if (isExecutable(candidate)) return { binary: candidate, env }
+  }
+
+  // 3. Deixa o PATH ampliado decidir
   return { binary: 'git', env }
+}
+
+function canExecute(file: string): boolean {
+  try {
+    accessSync(file, constants.X_OK)
+    return true
+  } catch {
+    return false
+  }
 }
 
 /** Binário do git e PATH resolvidos no load — exportado para ferramentas
  * externas (ex.: verify_changes) que precisem invocar git com a mesma
  * resolução (B3: Finder/PATH mínimo) sem duplicá-la. */
-export const gitBinary = resolveGit()
+export const gitBinary = resolveGitBinary(process.platform, process.env, canExecute)
 
 /** Excludes padrão além do .gitignore do projeto (projetos sem .gitignore) */
 const DEFAULT_EXCLUDES = ['node_modules/', '.git/', 'dist/', 'dist-electron/', 'build/', 'out/', '.next/', 'target/']
