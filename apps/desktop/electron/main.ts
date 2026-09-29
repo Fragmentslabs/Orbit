@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url'
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 import fs from 'node:fs/promises'
-import { chmodSync, existsSync } from 'node:fs'
+import { chmodSync, existsSync, unlinkSync } from 'node:fs'
 import path from 'node:path'
 import type * as NodePty from 'node-pty'
 import { listCredentialProviders, removeCredential, setCredential } from './lib/auth'
@@ -135,6 +135,54 @@ process.env.VITE_PUBLIC = VITE_DEV_SERVER_URL ? path.join(process.env.APP_ROOT, 
  * dist-electron) e nem precisa: ali o próprio executável carrega o ícone. Por
  * isso a escolha é por EXISTÊNCIA do arquivo, não por ambiente.
  */
+const PROD_APP_USER_MODEL_ID = 'com.fragmentslabs.orbit.code'
+const DEV_APP_USER_MODEL_ID = 'com.fragmentslabs.orbit.code.dev'
+
+/**
+ * O atalho que dá cara ao Orbit em modo dev, na barra de tarefas do Windows.
+ *
+ * O Windows desenha o botão de um app pelo ATALHO do Menu Iniciar que tem o
+ * mesmo AppUserModelID do processo, e não pelo ícone da janela. Sem nenhum, o
+ * Chromium cria o seu na primeira notificação — um "Electron.lnk" apontando
+ * para node_modules/electron/dist/electron.exe, com o logo do Electron. O id
+ * de dev separado já impede esse atalho de sequestrar o app instalado; mas o
+ * dev continuava com a cara do Electron.
+ *
+ * Então o dev mantém o próprio atalho, com o ícone do Orbit. Existindo ele, o
+ * Chromium não cria o dele. E o Electron.lnk que ele já tenha criado sai —
+ * mas só quando carrega o NOSSO id de dev: um Electron.lnk de outro projeto
+ * na mesma máquina não é nosso para apagar.
+ *
+ * O atalho fica no Menu Iniciar como "Orbit (Dev)" porque é lá que o Windows
+ * procura; abri-lo por ali roda o electron.exe sobre esta pasta, sem o
+ * servidor do Vite — ele existe pela identidade, não para ser lançado.
+ */
+function ensureDevShortcut(): void {
+  try {
+    const icon = path.join(process.env.APP_ROOT, 'build', 'icon.ico')
+    if (!existsSync(icon)) return
+    const programs = path.join(app.getPath('appData'), 'Microsoft', 'Windows', 'Start Menu', 'Programs')
+    const link = path.join(programs, 'Orbit (Dev).lnk')
+    shell.writeShortcutLink(link, existsSync(link) ? 'update' : 'create', {
+      target: process.execPath,
+      args: `"${process.env.APP_ROOT}"`,
+      appUserModelId: DEV_APP_USER_MODEL_ID,
+      icon,
+      iconIndex: 0,
+      description: 'Orbit (modo de desenvolvimento)',
+    })
+
+    const chromium = path.join(programs, 'Electron.lnk')
+    if (existsSync(chromium) && shell.readShortcutLink(chromium).appUserModelId === DEV_APP_USER_MODEL_ID) {
+      unlinkSync(chromium)
+    }
+  } catch (err) {
+    // Identidade visual do dev: se falhar, o app segue — com o ícone errado,
+    // que é o que já acontecia.
+    console.warn('[dev] não foi possível ajustar o atalho do Orbit (Dev):', err)
+  }
+}
+
 function windowIconPath(): string {
   if (process.platform === 'win32') {
     const ico = path.join(process.env.APP_ROOT, 'build', 'icon.ico')
@@ -1017,9 +1065,8 @@ app.whenReady().then(() => {
   // app instalado: o .exe e o icone da janela continuam certos e mesmo assim
   // a barra de tarefas mostra o logo do Electron.
   if (process.platform === 'win32') {
-    app.setAppUserModelId(
-      app.isPackaged ? 'com.fragmentslabs.orbit.code' : 'com.fragmentslabs.orbit.code.dev',
-    )
+    app.setAppUserModelId(app.isPackaged ? PROD_APP_USER_MODEL_ID : DEV_APP_USER_MODEL_ID)
+    if (!app.isPackaged) ensureDevShortcut()
   }
 
   // Instância secundária: o lock não foi obtido e o app já está saindo.
