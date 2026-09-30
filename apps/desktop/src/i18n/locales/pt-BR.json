@@ -757,7 +757,8 @@
         "Refatore algo no código"
       ]
     },
-    "summaryCard": "Resumo das mensagens anteriores (contexto compactado)"
+    "summaryCard": "Resumo das mensagens anteriores (contexto compactado)",
+    "brokenMessage": "Não foi possível mostrar esta mensagem."
   },
   "usage": {
     "inputIn": "{{count}} de entrada",
@@ -2133,5 +2134,10 @@
     "draftHint": "Traga o material antes de perguntar: o que você anexar aqui passa a ser da conversa assim que você enviar a primeira mensagem.",
     "quoteInChat": "Citar no chat",
     "docxUnavailable": "Não foi possível mostrar o documento como ele é. O modo Texto continua mostrando o conteúdo."
+  },
+  "appCrash": {
+    "title": "Algo deu errado ao desenhar a tela.",
+    "hint": "O erro abaixo também está no log do terminal. Recarregar não apaga suas conversas.",
+    "reload": "Recarregar"
   }
 }

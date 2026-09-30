@@ -335,6 +335,19 @@ function createWindow() {
   // Frame customizado: some o menu nativo (Alt ainda o invocaria em win/linux)
   win.setMenuBarVisibility(false)
 
+  // O que quebra no renderer aparece no TERMINAL. Antes, um erro de React ou
+  // uma queda do processo da página só existiam no DevTools da janela — o log
+  // que as pessoas colam mostrava o main tranquilo enquanto a tela estava
+  // preta, e não havia como chegar à causa sem abrir o inspetor.
+  win.webContents.on('console-message', (details) => {
+    if (details.level !== 'error') return
+    const onde = details.sourceId ? ` (${details.sourceId}:${details.lineNumber})` : ''
+    console.error(`[renderer] ${details.message}${onde}`)
+  })
+  win.webContents.on('render-process-gone', (_event, details) => {
+    console.error(`[renderer] processo da janela encerrado: ${details.reason} (código ${details.exitCode})`)
+  })
+
   // Abre preenchendo a tela: maximizado (não tela cheia nativa), então menu bar
   // e semáforos continuam no lugar. O maximize é aplicado ao frame enquanto a
   // janela ainda está escondida — o primeiro frame já sai no tamanho da área

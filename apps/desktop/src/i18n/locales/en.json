@@ -757,7 +757,8 @@
         "Refactor something in the code"
       ]
     },
-    "summaryCard": "Summary of earlier messages (compacted context)"
+    "summaryCard": "Summary of earlier messages (compacted context)",
+    "brokenMessage": "This message could not be displayed."
   },
   "usage": {
     "inputIn": "{{count}} in",
@@ -2134,5 +2135,10 @@
     "draftHint": "Bring the material before asking: whatever you attach here becomes part of the conversation as soon as you send the first message.",
     "quoteInChat": "Quote in chat",
     "docxUnavailable": "This document could not be displayed as it looks. The Text view still shows its content."
+  },
+  "appCrash": {
+    "title": "Something went wrong while drawing the screen.",
+    "hint": "The error below is also in the terminal log. Reloading keeps your conversations.",
+    "reload": "Reload"
   }
 }

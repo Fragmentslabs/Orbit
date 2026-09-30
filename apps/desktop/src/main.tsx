@@ -1,6 +1,8 @@
 import React from 'react'
 import ReactDOM from 'react-dom/client'
 import App from './App.tsx'
+import { ErrorBoundary } from './components/error-boundary'
+import { AppCrash } from './components/app-crash'
 import './i18n'
 import './index.css'
 import { esteiraApi, rotinasApi } from './lib/ipc'
@@ -13,7 +15,11 @@ import './stores/preferences-sync'
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
-    <App />
+    {/* Última rede: o que escapar das redes de dentro mostra o erro e um
+        botão para recarregar, em vez de deixar a janela preta. */}
+    <ErrorBoundary label="app" fallback={(error) => <AppCrash error={error} />}>
+      <App />
+    </ErrorBoundary>
   </React.StrictMode>,
 )
 

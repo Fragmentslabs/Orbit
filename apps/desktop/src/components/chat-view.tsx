@@ -12,6 +12,7 @@ import { VisionHintCard } from "@/src/components/vision-hint-card"
 import { ProviderHintCard } from "@/src/components/provider-hint-card"
 import { Persona, type PersonaState } from "@/src/components/ai/persona"
 import { useAppearanceStore } from "@/src/stores/appearance-store"
+import { ErrorBoundary } from "@/src/components/error-boundary"
 import { showsPersonaInChat, showsPersonaOnWelcome } from "@shared/appearance"
 import { usePanelStore } from "@/src/stores/panel-store"
 import { docsApi } from "@/src/lib/ipc"
@@ -194,6 +195,16 @@ const MessageItem = memo(
     prev.index === next.index,
 )
 
+function BrokenMessage({ error }: { error: Error }) {
+  const { t } = useTranslation()
+  return (
+    <div className="my-2 rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2 text-xs">
+      <p className="font-medium text-destructive">{t("chat.brokenMessage")}</p>
+      <p className="mt-1 break-words font-mono text-[11px] text-muted-foreground">{error.message}</p>
+    </div>
+  )
+}
+
 function ChatMessages({ messages, isBusy, busyLabel, mode, sessionId, sendMessage, planIds, planReview, plan }: {
   messages: ChatMessage[]
   isBusy: boolean
@@ -303,19 +314,28 @@ function ChatMessages({ messages, isBusy, busyLabel, mode, sessionId, sendMessag
           return (
             <div key={msg.id}>
               {showSeparator && <DateSeparator timestamp={msg.createdAt} />}
-              <MessageItem
-                msg={msg}
-                isLast={isLast}
-                waiting={waiting}
-                finished={finished}
-                isBusy={isBusy}
-                busyLabel={busyLabel}
-                mode={mode}
-                sessionId={sessionId}
-                sendMessage={sendMessage}
-                messages={messages}
-                index={index}
-              />
+              {/* Uma mensagem que o renderer não sabe desenhar — em geral
+                  dado gravado por uma versão anterior — vira um aviso no
+                  lugar dela. Antes ela apagava a conversa inteira. */}
+              <ErrorBoundary
+                label={`mensagem ${msg.id}`}
+                resetKeys={[msg]}
+                fallback={(error) => <BrokenMessage error={error} />}
+              >
+                <MessageItem
+                  msg={msg}
+                  isLast={isLast}
+                  waiting={waiting}
+                  finished={finished}
+                  isBusy={isBusy}
+                  busyLabel={busyLabel}
+                  mode={mode}
+                  sessionId={sessionId}
+                  sendMessage={sendMessage}
+                  messages={messages}
+                  index={index}
+                />
+              </ErrorBoundary>
             </div>
           )
         })}
