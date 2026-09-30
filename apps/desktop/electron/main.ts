@@ -536,7 +536,31 @@ function createTerminal(id: string, cols = 80, rows = 24, cwd?: string) {
   return ptyProcess
 }
 
-const IGNORED_DIR_NAMES = new Set(['node_modules', '.git'])
+/**
+ * Pastas que a busca RECURSIVA não atravessa — por custo, não por segredo.
+ * Descer em node_modules é varrer centenas de milhares de arquivos, e a paleta
+ * travaria em qualquer projeto JS; o .git são milhares de objetos internos que
+ * ninguém procura pelo nome. Na árvore elas aparecem normalmente: lá cada pasta
+ * só é lida quando alguém a abre.
+ */
+const RECURSION_SKIPPED_DIRS = new Set([
+  'node_modules',
+  '.git',
+  // Pastas com ponto que o filtro antigo ("esconder o que começa com ponto")
+  // pulava por tabela, e que são tão pesadas quanto node_modules: ambientes
+  // virtuais do Python, saídas de build e caches de ferramentas.
+  '.venv',
+  '.next',
+  '.nuxt',
+  '.svelte-kit',
+  '.turbo',
+  '.cache',
+  '.parcel-cache',
+  '.gradle',
+  '.expo',
+  '.pytest_cache',
+  '.mypy_cache',
+])
 
 interface DirEntryInfo {
   name: string
@@ -546,8 +570,11 @@ interface DirEntryInfo {
 
 async function listDirectory(dirPath: string): Promise<DirEntryInfo[]> {
   const entries = await fs.readdir(dirPath, { withFileTypes: true })
+  // Tudo aparece, inclusive o que começa com ponto. Esconder "ocultos" tirava
+  // da árvore o .env, o .gitignore e a pasta .github — arquivos que se edita
+  // toda semana. Proteger segredo é papel da permissão do agente (o .env pede
+  // aprovação para ele), não de esconder o arquivo de quem é dono dele.
   const result: DirEntryInfo[] = entries
-    .filter(e => !(e.name.startsWith('.') || IGNORED_DIR_NAMES.has(e.name)))
     .map(e => ({
       name: e.name,
       path: path.join(dirPath, e.name),
@@ -586,7 +613,7 @@ async function listFilesRecursive(dirPath: string, prefix = ''): Promise<string[
   const entries = await fs.readdir(dirPath, { withFileTypes: true })
   const results: string[] = []
   for (const entry of entries) {
-    if (entry.name.startsWith('.') || IGNORED_DIR_NAMES.has(entry.name)) continue
+    if (entry.isDirectory() && RECURSION_SKIPPED_DIRS.has(entry.name)) continue
     const fullPath = path.join(dirPath, entry.name)
     const relPath = prefix ? `${prefix}/${entry.name}` : entry.name
     if (entry.isDirectory()) {
