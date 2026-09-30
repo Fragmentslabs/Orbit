@@ -218,7 +218,7 @@ export function ChatAssistantMessage({ message, sessionId, isLast, isBusy, busyL
         ) : segment.part.type === "artifact" ? (
           <ArtifactPartView key={segment.id} part={segment.part} sessionId={sessionId} />
         ) : segment.part.type === "document" ? (
-          <DocumentPartView key={segment.id} part={segment.part} sessionId={sessionId} />
+          <DocumentPartView key={segment.id} part={segment.part} sessionId={sessionId} live={isLast && isBusy} />
         ) : segment.part.type === "file" ? null : segment.part.type === "image" ? (
           // Nunca acontece de fato — segmentParts sempre roteia "image" para
           // um segmento "image-group" — mas o TS não sabe disso estaticamente.

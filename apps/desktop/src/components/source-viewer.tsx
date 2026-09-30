@@ -13,9 +13,10 @@ import {
   Search,
   X,
 } from "lucide-react"
-import { docsApi, type OutlineItem, type RenderedPage, type SourceText } from "@/src/lib/ipc"
+import { docsApi, documentApi, type OutlineItem, type RenderedPage, type SourceText } from "@/src/lib/ipc"
 import { locateText, selectionScaleX } from "@/src/lib/pdf-text"
 import { QuoteSelection, type QuoteAnchor } from "@/src/components/quote-selection"
+import { DocumentSourceBadge } from "@/src/components/ai/document-actions"
 import { locateLines } from "@/src/lib/document-quote"
 import { cn } from "@/lib/utils"
 
@@ -120,6 +121,25 @@ export function SourceViewer({
   const [focus, setFocus] = useState<Focus | null>(null)
   const [busy, setBusy] = useState<"print" | "export" | null>(null)
   const [erro, setErro] = useState<string | null>(null)
+  /**
+   * O que está aberto é um documento que o AGENTE escreveu (e não uma fonte
+   * anexada)? Os PDF/DOCX dele abrem aqui, e a conversa agora mostra só um
+   * card — então "usar como fonte", que morava no card, tem que morar onde o
+   * documento está. Só o registro de documentos sabe responder.
+   */
+  const [agentDocument, setAgentDocument] = useState(false)
+  useEffect(() => {
+    let alive = true
+    setAgentDocument(false)
+    if (docId) {
+      void documentApi.info(docId).then((info) => {
+        if (alive) setAgentDocument(info !== null)
+      })
+    }
+    return () => {
+      alive = false
+    }
+  }, [docId])
   // A busca foi preenchida pela citação (e não digitada): é o que mantém o
   // destaque preso à página citada em vez de marcar a frase onde ela repetir.
   const [fromCitation, setFromCitation] = useState(false)
@@ -358,6 +378,9 @@ export function SourceViewer({
         >
           <Search className="size-3.5" />
         </button>
+        {agentDocument && sessionId && docId && (
+          <DocumentSourceBadge documentId={docId} sessionId={sessionId} onError={setErro} />
+        )}
         <button
           type="button"
           disabled={busy !== null}

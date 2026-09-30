@@ -279,7 +279,7 @@ export function CodeAssistantMessage({ message, sessionId, isLast, isBusy, busyL
         ) : segment.part.type === "artifact" ? (
           <ArtifactPartView key={segment.id} part={segment.part} sessionId={sessionId} />
         ) : segment.part.type === "document" ? (
-          <DocumentPartView key={segment.id} part={segment.part} sessionId={sessionId} />
+          <DocumentPartView key={segment.id} part={segment.part} sessionId={sessionId} live={isLast && isBusy} />
         ) : null,
       )}
       {message.error && (

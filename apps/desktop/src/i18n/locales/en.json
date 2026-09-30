@@ -2083,7 +2083,8 @@
     "loadTheirs": "Load the agent's version",
     "keepMine": "Keep mine",
     "useAsSource": "Use as a source in this conversation",
-    "isSource": "Already a source in this conversation"
+    "isSource": "Already a source in this conversation",
+    "kindFile": "Document"
   },
   "sources": {
     "title": "Sources",

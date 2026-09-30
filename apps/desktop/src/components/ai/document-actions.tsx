@@ -31,12 +31,16 @@ export function DocumentDownloadMenu({
   documentId,
   onError,
   beforeDownload,
+  compact = false,
 }: {
   documentId: string
   onError: (message: string) => void
   /** Roda antes de baixar — o canvas grava o que estava na pausa da digitação,
    *  senão o arquivo sairia com o texto de antes. */
   beforeDownload?: () => Promise<void>
+  /** Só o ícone — para o card da conversa, onde o texto do botão competiria
+   *  com o título do documento. */
+  compact?: boolean
 }) {
   const { t } = useTranslation()
   const [busy, setBusy] = useState<DocumentDownload | null>(null)
@@ -59,11 +63,24 @@ export function DocumentDownloadMenu({
   return (
     <DropdownMenu>
       <DropdownMenuTrigger
-        render={<Button variant="outline" size="sm" className={PILL} disabled={busy !== null} />}
+        render={
+          compact ? (
+            <Button
+              variant="ghost"
+              size="icon"
+              className="size-7"
+              disabled={busy !== null}
+              aria-label={t("documents.download")}
+              title={t("documents.download")}
+            />
+          ) : (
+            <Button variant="outline" size="sm" className={PILL} disabled={busy !== null} />
+          )
+        }
       >
-        {busy ? <Loader2 className="size-3 animate-spin" /> : <Download className="size-3" />}
-        {t("documents.download")}
-        <ChevronDown className="size-3 opacity-60" />
+        {busy ? <Loader2 className="size-3.5 animate-spin" /> : <Download className={compact ? "size-3.5" : "size-3"} />}
+        {!compact && t("documents.download")}
+        {!compact && <ChevronDown className="size-3 opacity-60" />}
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
         {DOCUMENT_DOWNLOADS.map((format) => (
