@@ -19,6 +19,23 @@ import { sessionDocumentFile } from './session-documents'
  * rodando no painel.
  */
 
+/**
+ * Um arquivo .docx em HTML limpo, venha de onde vier. As duas origens — o
+ * anexo da conversa e o documento que o agente editou — passam por aqui, para
+ * nenhuma delas ficar sem o saneamento.
+ */
+export async function docxFileToHtml(filePath: string): Promise<{ html: string } | null> {
+  try {
+    const buffer = await fsp.readFile(filePath)
+    const { value } = await mammoth.convertToHtml({ buffer })
+    return { html: sanitizeDocxHtml(value) }
+  } catch {
+    // Arquivo corrompido ou num formato que o mammoth não lê: o painel cai
+    // para o modo Texto, que continua funcionando com o que foi extraído.
+    return null
+  }
+}
+
 export async function renderSessionDocx(
   sessionId: string,
   docId: string,
@@ -26,9 +43,7 @@ export async function renderSessionDocx(
   const file = await sessionDocumentFile(sessionId, docId)
   if (!file || file.ext !== 'docx') return null
   try {
-    const buffer = await fsp.readFile(file.path)
-    const { value } = await mammoth.convertToHtml({ buffer })
-    return { html: sanitizeDocxHtml(value) }
+    return await docxFileToHtml(file.path)
   } catch {
     // Arquivo corrompido ou num formato que o mammoth não lê: o painel cai
     // para o modo Texto, que continua funcionando com o que foi extraído.

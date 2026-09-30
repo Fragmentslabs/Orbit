@@ -2,6 +2,7 @@ import fsp from 'node:fs/promises'
 import { dialog } from 'electron'
 import { extractDocument } from './documents'
 import { documentFilePath, ensureDocumentRender, getMediaEntry } from './media'
+import { docxFileToHtml, renderSessionDocx } from './docx-view'
 import { printFile, rasterizePdf, type PdfOutlineItem, type PdfTextItem } from './pdf-raster'
 import {
   exportSessionDocument,
@@ -78,7 +79,12 @@ export async function viewText(
         label: p.label,
         lines: p.text.split('\n'),
       })),
-      hasOriginal: file.ext === 'pdf',
+      // O .docx também tem original: ele é desenhado como documento em HTML
+      // (viewHtml), e não em páginas. Antes só o PDF entrava, e o .docx que o
+      // agente editou abria como lista de linhas — o mesmo defeito que o
+      // anexo tinha, pelo outro caminho do painel.
+      hasOriginal: true,
+      originalKind: file.ext,
     }
   } catch {
     return null
@@ -121,6 +127,14 @@ export async function viewRender(
   } catch {
     return null
   }
+}
+
+/** O .docx como documento em HTML, para o modo Original do painel. */
+export async function viewHtml(sessionId: string, id: string): Promise<{ html: string } | null> {
+  if (isSessionDoc(id)) return renderSessionDocx(sessionId, id)
+  const file = await mediaFile(id)
+  if (!file || file.ext !== 'docx') return null
+  return docxFileToHtml(file.path)
 }
 
 export async function viewPrint(
