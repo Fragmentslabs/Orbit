@@ -20,6 +20,7 @@ import { buildDocx } from './docx-package'
 import mammoth from 'mammoth'
 import { rasterizePdf } from './pdf-raster'
 import { parseMarkdown, renderHtml, renderThumbHtml, type DocumentStyle } from './document-render'
+import { renderDiagrams } from './mermaid-render'
 
 export type { MediaEntry, MediaFilter, MediaSource, MediaUsage }
 
@@ -669,7 +670,8 @@ async function captureNativeThumbs(
 ): Promise<{ thumb?: string; thumbDark?: string }> {
   let win: BrowserWindow | null = null
   try {
-    win = openCaptureWindow(renderThumbHtml(parseMarkdown(markdown), title))
+    const blocks = parseMarkdown(markdown)
+    win = openCaptureWindow(renderThumbHtml(blocks, title, await renderDiagrams(blocks)))
     await loadForCapture(win, `${ARTIFACT_SCHEME}://${INLINE_THUMB_ID}`)
     const thumb = await shot(win, `${base}.png`)
     if (win.isDestroyed()) return { thumb }
@@ -897,6 +899,16 @@ async function renderPdf(htmlId: string): Promise<Buffer | null> {
 }
 
 /**
+ * O HTML do documento — a prévia e a matriz do PDF — com os diagramas Mermaid
+ * já desenhados em SVG. O PDF é a impressão desse arquivo, sem script rodando,
+ * então o diagrama tem que estar pronto nele.
+ */
+async function documentHtml(markdown: string, title: string, style?: DocumentStyle): Promise<string> {
+  const blocks = parseMarkdown(markdown)
+  return renderHtml(blocks, title, style, await renderDiagrams(blocks))
+}
+
+/**
  * Uma renderização, a partir do que já está em disco: o PDF nasce do .html
  * (printToPDF), o .docx nasce do Markdown. null quando falhou — um formato que
  * não saiu não pode constar no registro.
@@ -910,7 +922,8 @@ async function renderDocumentFormat(
 ): Promise<Buffer | null> {
   if (format === 'pdf') return renderPdf(`${base}.html`)
   try {
-    return await buildDocx(parseMarkdown(markdown), title, style)
+    const blocks = parseMarkdown(markdown)
+    return await buildDocx(blocks, title, style, await renderDiagrams(blocks))
   } catch {
     return null
   }
@@ -949,7 +962,7 @@ export async function saveDocument(
   meta: SaveDocumentMeta,
 ): Promise<DocumentRef> {
   const base = `doc_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`
-  const html = renderHtml(parseMarkdown(markdown), meta.title, meta.style)
+  const html = await documentHtml(markdown, meta.title, meta.style)
   const written = await writeDocumentFiles(base, markdown, html, formats, meta.title, meta.style)
   // A capa segue o DESTINO do documento: quem vai virar arquivo é fotografado
   // como folha; quem fica vivo em Markdown, como a tela nativa.
@@ -1047,7 +1060,7 @@ export async function updateDocument(
   // Estilo omitido = mantem o que o documento ja tinha. Sem isso, mexer no
   // texto ressetaria a fonte e as cores escolhidas antes.
   const style = (options.style ?? entry.style) as DocumentStyle | undefined
-  const html = renderHtml(parseMarkdown(markdown), title, style)
+  const html = await documentHtml(markdown, title, style)
   const written = await writeDocumentFiles(base, markdown, html, formats, title, style)
   const asFile = formats.length > 0
   const captured = asFile
@@ -1150,7 +1163,7 @@ export async function saveDocumentEdit(
   await fsp.writeFile(path.join(dir, `${base}.md`), markdown, 'utf8')
   await fsp.writeFile(
     path.join(dir, `${base}.html`),
-    renderHtml(parseMarkdown(markdown), title, entry.style as DocumentStyle | undefined),
+    await documentHtml(markdown, title, entry.style as DocumentStyle | undefined),
     'utf8',
   )
 

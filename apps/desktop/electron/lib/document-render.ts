@@ -29,6 +29,38 @@ export type Block =
   | { type: 'rule' }
   | { type: 'pageBreak' }
 
+// ─── Diagramas ───────────────────────────────────────────────────────────
+
+/**
+ * Um diagrama Mermaid já desenhado (ver mermaid-render.ts): o SVG vai para o
+ * HTML/PDF e o PNG para o .docx. Largura e altura em px CSS (96 dpi).
+ */
+export interface RenderedDiagram {
+  svg: string
+  png: Buffer
+  width: number
+  height: number
+}
+
+/**
+ * Encontra o diagrama de uma fonte Mermaid. Quem renderiza não sabe desenhar
+ * — isso exige DOM e vive no main —, só pergunta. Fonte sem resposta cai para
+ * o bloco de código, e o documento sai inteiro mesmo com um diagrama quebrado.
+ */
+export type DiagramLookup = (source: string) => RenderedDiagram | undefined
+
+export const isMermaid = (block: Block): block is Extract<Block, { type: 'code' }> =>
+  block.type === 'code' && block.lang?.toLowerCase() === 'mermaid'
+
+/** A fonte de um bloco ```mermaid, do jeito que o renderer do diagrama recebe. */
+export const mermaidSource = (block: Extract<Block, { type: 'code' }>) =>
+  block.lines.join('\n').trim()
+
+/** As fontes Mermaid do documento, na ordem em que aparecem. */
+export function mermaidSourcesOf(blocks: Block[]): string[] {
+  return blocks.filter(isMermaid).map(mermaidSource).filter((src) => src.length > 0)
+}
+
 // ─── Estilo do documento ─────────────────────────────────────────────────
 
 /**
@@ -414,6 +446,10 @@ function documentCss(style: ResolvedStyle): string {
         overflow-wrap: break-word; break-inside: avoid; }
   /* Dentro do bloco o <code> não repete o fundo nem o respiro do inline. */
   pre code { background: none; padding: 0; font-size: 1em; }
+  /* Diagrama Mermaid: o SVG vem com a largura natural e encolhe para caber na
+     coluna, sem nunca ser partido entre duas páginas. */
+  .diagram { margin: .4em 0 1em; text-align: center; break-inside: avoid; }
+  .diagram svg { max-width: 100%; height: auto; }
   hr { border: 0; border-top: 1px solid ${accent}; margin: 1.2em 0; opacity: .35; }
   table { border-collapse: collapse; width: 100%; margin: 0 0 .9em;
           font-size: ${Math.max(7, style.fontSize - 1)}pt; }
@@ -449,7 +485,7 @@ function documentCss(style: ResolvedStyle): string {
  * Os blocos em HTML, sem página nem estilo — é o que o documento impresso e a
  * miniatura nativa têm em comum. Cada um põe o seu CSS em volta.
  */
-function htmlBody(blocks: Block[]): string {
+function htmlBody(blocks: Block[], diagrams?: DiagramLookup): string {
   const parts: string[] = []
   let list: { ordered: boolean; items: string[] } | null = null
   /**
@@ -486,11 +522,18 @@ function htmlBody(blocks: Block[]): string {
       case 'quote':
         parts.push(`<blockquote${breakClass()}>${inlineHtml(block.text)}</blockquote>`)
         break
-      case 'code':
+      case 'code': {
+        const diagram = isMermaid(block) ? diagrams?.(mermaidSource(block)) : undefined
+        if (diagram) {
+          const brk = breakClass()
+          parts.push(`<figure class="diagram${brk ? ' page-break' : ''}">${diagram.svg}</figure>`)
+          break
+        }
         parts.push(
           `<pre${breakClass()}><code>${block.lines.map(escapeXml).join('\n')}</code></pre>`,
         )
         break
+      }
       case 'rule':
         parts.push(`<hr${breakClass()}>`)
         break
@@ -525,14 +568,19 @@ function htmlBody(blocks: Block[]): string {
   return parts.join('\n')
 }
 
-export function renderHtml(blocks: Block[], title: string, style?: DocumentStyle): string {
+export function renderHtml(
+  blocks: Block[],
+  title: string,
+  style?: DocumentStyle,
+  diagrams?: DiagramLookup,
+): string {
   return `<!doctype html>
 <html lang="pt-BR"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${escapeXml(title)}</title>
 <style>${documentCss(normalizeStyle(style))}</style>
 </head><body>
-${htmlBody(blocks)}
+${htmlBody(blocks, diagrams)}
 </body></html>`
 }
 
@@ -553,8 +601,12 @@ ${htmlBody(blocks)}
  * fonte não: a Geist é empacotada pelo renderer e não existe nesta janela, daí
  * a pilha de sistema.
  */
-export function renderThumbHtml(blocks: Block[], title: string): string {
-  const body = htmlBody(blocks)
+export function renderThumbHtml(
+  blocks: Block[],
+  title: string,
+  diagrams?: DiagramLookup,
+): string {
+  const body = htmlBody(blocks, diagrams)
   return `<!doctype html>
 <html lang="pt-BR"><head><meta charset="utf-8">
 <title>${escapeXml(title)}</title>
@@ -589,6 +641,11 @@ export function renderThumbHtml(blocks: Block[], title: string): string {
   th, td { border: 1px solid var(--border); padding: .35em .5em; text-align: left; }
   th { background: var(--muted); font-weight: 600; }
   .c { text-align: center; } .r { text-align: right; }
+  /* O diagrama é desenhado em fundo claro; no tema escuro ele vira um cartão
+     branco em vez de linhas escuras sumindo no fundo. */
+  .diagram { margin: 0 0 .8em; padding: .6em; background: #fff; border-radius: 8px;
+             text-align: center; }
+  .diagram svg { max-width: 100%; height: auto; }
 </style>
 </head><body>
 ${body}
@@ -621,10 +678,11 @@ function paragraphOoxml(
   opts: { style?: string; numId?: number; pageBreak?: boolean; after?: number } = {},
 ): string {
   const pPr: string[] = []
+  // Na ordem do schema do pPr: pStyle, pageBreakBefore, numPr, spacing.
   if (opts.style) pPr.push(`<w:pStyle w:val="${opts.style}"/>`)
+  if (opts.pageBreak) pPr.push('<w:pageBreakBefore/>')
   if (opts.numId) pPr.push(`<w:numPr><w:ilvl w:val="0"/><w:numId w:val="${opts.numId}"/></w:numPr>`)
   if (opts.after !== undefined) pPr.push(`<w:spacing w:after="${opts.after}"/>`)
-  if (opts.pageBreak) pPr.push('<w:pageBreakBefore/>')
   const props = pPr.length > 0 ? `<w:pPr>${pPr.join('')}</w:pPr>` : ''
   return `<w:p>${props}${content}</w:p>`
 }
@@ -663,11 +721,79 @@ function tableOoxml(
   return `<w:tbl><w:tblPr><w:tblW w:w="5000" w:type="pct"/><w:tblBorders>${borders}</w:tblBorders></w:tblPr>${headerRow}${bodyRows}</w:tbl>`
 }
 
-/** Corpo do document.xml a partir dos blocos. */
-export function renderOoxmlBody(blocks: Block[], style?: DocumentStyle): string {
+/**
+ * Uma imagem já registrada no pacote: o rId aponta para o PNG em word/media,
+ * e o tamanho é o natural do diagrama em px CSS.
+ */
+export interface DocxImage {
+  rId: string
+  width: number
+  height: number
+}
+
+/** EMU por px CSS (96 dpi) e por cm — as unidades de desenho do OOXML. */
+const EMU_PER_PX = 9525
+const EMU_PER_CM = 360000
+/** Teto de altura: um diagrama mais alto que isso não cabe numa folha A4. */
+const MAX_IMAGE_HEIGHT_CM = 22
+
+/**
+ * O parágrafo centralizado com a imagem inline. Encolhe (sem distorcer) para
+ * a largura útil da coluna — o PNG é 2x, então o encolhimento não perde nitidez.
+ */
+function imageOoxml(
+  image: DocxImage,
+  drawingId: number,
+  maxWidthEmu: number,
+  pageBreak: boolean,
+): string {
+  let cx = image.width * EMU_PER_PX
+  let cy = image.height * EMU_PER_PX
+  const k = Math.min(1, maxWidthEmu / cx, (MAX_IMAGE_HEIGHT_CM * EMU_PER_CM) / cy)
+  cx = Math.round(cx * k)
+  cy = Math.round(cy * k)
+  const name = `Diagrama ${drawingId}`
+  const A = 'http://schemas.openxmlformats.org/drawingml/2006/main'
+  const drawing =
+    `<w:r><w:drawing><wp:inline distT="0" distB="0" distL="0" distR="0">` +
+    `<wp:extent cx="${cx}" cy="${cy}"/><wp:docPr id="${drawingId}" name="${name}"/>` +
+    `<wp:cNvGraphicFramePr><a:graphicFrameLocks xmlns:a="${A}" noChangeAspect="1"/></wp:cNvGraphicFramePr>` +
+    `<a:graphic xmlns:a="${A}">` +
+    `<a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture">` +
+    `<pic:pic xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture">` +
+    `<pic:nvPicPr><pic:cNvPr id="${drawingId}" name="${name}"/><pic:cNvPicPr/></pic:nvPicPr>` +
+    `<pic:blipFill><a:blip r:embed="${image.rId}"/><a:stretch><a:fillRect/></a:stretch></pic:blipFill>` +
+    `<pic:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="${cx}" cy="${cy}"/></a:xfrm>` +
+    `<a:prstGeom prst="rect"><a:avLst/></a:prstGeom></pic:spPr>` +
+    `</pic:pic></a:graphicData></a:graphic></wp:inline></w:drawing></w:r>`
+  // jc no próprio parágrafo: o corpo pode estar justificado, e imagem
+  // "justificada" encosta na margem esquerda.
+  // A ordem dentro do pPr é a do schema (pageBreakBefore, spacing, jc): o
+  // Word recusa o arquivo quando ela vem trocada.
+  return `<w:p><w:pPr>${
+    pageBreak ? '<w:pageBreakBefore/>' : ''
+  }<w:spacing w:before="120" w:after="200"/><w:jc w:val="center"/></w:pPr>${drawing}</w:p>`
+}
+
+/**
+ * Corpo do document.xml a partir dos blocos. `images` responde, pela fonte
+ * Mermaid, a imagem que o pacote já registrou; o documento que a usa precisa
+ * declarar os namespaces wp e r (ver buildDocx).
+ */
+export function renderOoxmlBody(
+  blocks: Block[],
+  style?: DocumentStyle,
+  images?: (source: string) => DocxImage | undefined,
+): string {
   const resolved = normalizeStyle(style)
   const parts: string[] = []
   let pendingBreak = false
+  let drawingId = 0
+  // Largura útil de UMA coluna: A4 menos as margens laterais (as mesmas do
+  // buildDocx), dividida pelas colunas descontado o espaço entre elas.
+  const sideCm = Math.max(0.5, resolved.marginCm - 0.5)
+  const columnCm = (21 - 2 * sideCm - (resolved.columns - 1) * 0.75) / resolved.columns
+  const maxWidthEmu = Math.round(columnCm * EMU_PER_CM)
 
   for (const block of blocks) {
     switch (block.type) {
@@ -696,6 +822,11 @@ export function renderOoxmlBody(blocks: Block[], style?: DocumentStyle): string 
         parts.push(tableOoxml(block.header, block.rows, block.align, resolved))
         break
       case 'code': {
+        const image = isMermaid(block) ? images?.(mermaidSource(block)) : undefined
+        if (image) {
+          parts.push(imageOoxml(image, ++drawingId, maxWidthEmu, pendingBreak))
+          break
+        }
         // Uma linha por PARÁGRAFO: o OOXML não tem elemento de bloco
         // pré-formatado, e um parágrafo só com <w:br/> perderia o fundo
         // cinza linha a linha. Bloco vazio ainda rende um parágrafo, senão

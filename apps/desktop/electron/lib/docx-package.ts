@@ -3,7 +3,10 @@ import {
   headingSize,
   normalizeStyle,
   renderOoxmlBody,
+  mermaidSourcesOf,
   type Block,
+  type DiagramLookup,
+  type DocxImage,
   type DocumentStyle,
   type ResolvedStyle,
 } from './document-render'
@@ -28,6 +31,7 @@ const CONTENT_TYPES = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
 <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
 <Default Extension="xml" ContentType="application/xml"/>
+<Default Extension="png" ContentType="image/png"/>
 <Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>
 <Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/>
 <Override PartName="/word/numbering.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.numbering+xml"/>
@@ -40,11 +44,21 @@ const ROOT_RELS = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Relationship Id="rId2" Type="http://schemas.openxmlformats.org/package/2006/relationships/metadata/core-properties" Target="docProps/core.xml"/>
 </Relationships>`
 
-const DOC_RELS = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+/** rId1 e rId2 são fixos; as imagens dos diagramas vêm depois, a partir do rId3. */
+function docRels(media: string[]): string {
+  const images = media
+    .map(
+      (file, i) =>
+        `<Relationship Id="rId${i + 3}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/${file}"/>`,
+    )
+    .join('\n')
+  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
 <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>
 <Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/numbering" Target="numbering.xml"/>
+${images}
 </Relationships>`
+}
 
 /**
  * Estilos derivados do estilo do documento.
@@ -109,16 +123,34 @@ export async function buildDocx(
   blocks: Block[],
   title: string,
   style?: DocumentStyle,
+  diagrams?: DiagramLookup,
 ): Promise<Buffer> {
   const JSZip = _require('jszip') as typeof import('jszip')
   const resolved = normalizeStyle(style)
-  const body = renderOoxmlBody(blocks, style)
+
+  // Cada diagrama desenhado vira um PNG no pacote, uma vez só mesmo que a
+  // mesma fonte se repita. O que não desenhou fica sem imagem e o corpo o
+  // escreve como bloco de código.
+  const images = new Map<string, DocxImage & { png: Buffer; file: string }>()
+  for (const source of mermaidSourcesOf(blocks)) {
+    const diagram = diagrams?.(source)
+    if (!diagram || images.has(source)) continue
+    const n = images.size + 1
+    images.set(source, {
+      rId: `rId${n + 2}`,
+      width: diagram.width,
+      height: diagram.height,
+      png: diagram.png,
+      file: `diagram${n}.png`,
+    })
+  }
+  const body = renderOoxmlBody(blocks, style, (source) => images.get(source))
 
   const marginTwips = Math.round(resolved.marginCm * TWIPS_PER_CM)
   const sideTwips = Math.round(Math.max(0.5, resolved.marginCm - 0.5) * TWIPS_PER_CM)
   const cols = resolved.columns > 1 ? `<w:cols w:num="${resolved.columns}" w:space="425"/>` : ''
   const document = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>${body}<w:sectPr><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="${marginTwips}" w:right="${sideTwips}" w:bottom="${marginTwips}" w:left="${sideTwips}"/>${cols}</w:sectPr></w:body></w:document>`
+<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing"><w:body>${body}<w:sectPr><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="${marginTwips}" w:right="${sideTwips}" w:bottom="${marginTwips}" w:left="${sideTwips}"/>${cols}</w:sectPr></w:body></w:document>`
 
   const zip = new JSZip()
   zip.file('[Content_Types].xml', CONTENT_TYPES)
@@ -128,7 +160,8 @@ export async function buildDocx(
   word.file('document.xml', document)
   word.file('styles.xml', stylesXml(resolved))
   word.file('numbering.xml', NUMBERING)
-  word.folder('_rels')!.file('document.xml.rels', DOC_RELS)
+  word.folder('_rels')!.file('document.xml.rels', docRels([...images.values()].map((i) => i.file)))
+  for (const image of images.values()) word.folder('media')!.file(image.file, image.png)
 
   return zip.generateAsync({ type: 'nodebuffer', compression: 'DEFLATE' })
 }

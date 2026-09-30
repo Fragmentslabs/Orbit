@@ -1,6 +1,7 @@
 import type { FileUIPart, UIMessage } from "ai"
 import { useTranslation } from "react-i18next"
 import { code } from "@streamdown/code"
+import { mermaid } from "@streamdown/mermaid"
 import { ChevronLeftIcon, ChevronRightIcon, PaperclipIcon, XIcon } from "lucide-react"
 import type { ComponentProps, HTMLAttributes, ReactElement } from "react"
 import { createContext, memo, useContext, useEffect, useMemo, useState } from "react"
@@ -11,7 +12,10 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "~/comp
 import { ImageLightbox } from "~/src/components/ai/image"
 import { cn } from "~/lib/utils"
 
-const streamdownPlugins = { code }
+// Mermaid: um bloco ```mermaid vira diagrama em qualquer Markdown do app — a
+// resposta do chat e o canvas do documento. O mesmo bloco sai desenhado no PDF
+// e no .docx, pelo caminho do main (electron/lib/mermaid-render.ts).
+const streamdownPlugins = { code, mermaid }
 
 export type MessageProps = HTMLAttributes<HTMLDivElement> & {
   from: UIMessage["role"]

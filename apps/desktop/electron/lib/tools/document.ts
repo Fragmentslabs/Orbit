@@ -46,7 +46,7 @@ const formatSchema = z
   )
 
 const MARKDOWN_HELP =
-  'Markdown: # ## ### for headings, - or 1. for lists, | tables | (the divider row sets column alignment: |:---|:---:|---:|), > quote, **bold**, *italic*, `code`, ``` fenced blocks for code (write the language right after the opening fence), --- for a rule, <br> for a blank line, and \\pagebreak on its own line to force a page break.'
+  'Markdown: # ## ### for headings, - or 1. for lists, | tables | (the divider row sets column alignment: |:---|:---:|---:|), > quote, **bold**, *italic*, `code`, ``` fenced blocks for code (write the language right after the opening fence), --- for a rule, <br> for a blank line, and \\pagebreak on its own line to force a page break. Diagrams: a ```mermaid fenced block (flowchart, sequenceDiagram, classDiagram, erDiagram, stateDiagram-v2, gantt, pie, mindmap, timeline) is drawn as a diagram on screen, in the PDF and in the DOCX — use it when a flow, architecture, schema or timeline reads better as a picture than as prose. Keep node labels short and quote any label with parentheses or punctuation (A["Login (OAuth)"]); a diagram with invalid syntax falls back to showing its source as code.'
 
 /**
  * Estilo exposto como um conjunto FECHADO de opções, e não CSS livre: tudo
