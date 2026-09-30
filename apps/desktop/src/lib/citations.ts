@@ -46,3 +46,37 @@ export function rescueLegacyCitations(markdown: string): string {
     ? markdown.replaceAll('](orbit-source://', '](#orbit-source/')
     : markdown
 }
+
+/** Texto de link que é só um número: [1], 1, [23]. */
+const CITATION_TEXT = /^\[?\d{1,3}\]?$/
+const WEB_HREF = /^https?:\/\//i
+
+export type MarkdownLinkKind =
+  | { kind: "source"; source: SourceRef }
+  | { kind: "broken-source" }
+  | { kind: "web-citation" }
+  | { kind: "link" }
+
+/**
+ * O que um link do Markdown do assistente É, decidido num lugar só.
+ *
+ * Mora aqui, e não dentro do componente, porque foi ESTA decisão que derrubou
+ * uma conversa inteira: todo link cujo texto era um número ia para o cartão de
+ * citação da web, que monta uma URL a partir do href. Numa análise de código
+ * o modelo escreveu "[1](#orbit-source/src?/p1)" — uma citação de documento
+ * com id inventado — e o `new URL` desse href lançou durante a renderização.
+ *
+ * - source: citação de documento válida, abre a fonte no painel;
+ * - broken-source: tem o formato de citação de documento mas não aponta para
+ *   nada — vira texto, porque como link seria um clique morto;
+ * - web-citation: número apontando para a web, ganha o cartão;
+ * - link: todo o resto, inclusive "[1](src/app.ts)" e "[2](#secao)".
+ */
+export function classifyMarkdownLink(href: string | undefined, text: string): MarkdownLinkKind {
+  if (!href) return { kind: "link" }
+  const source = parseSourceHref(href)
+  if (source) return { kind: "source", source }
+  if (href.startsWith("#orbit-source/")) return { kind: "broken-source" }
+  if (CITATION_TEXT.test(text.trim()) && WEB_HREF.test(href)) return { kind: "web-citation" }
+  return { kind: "link" }
+}

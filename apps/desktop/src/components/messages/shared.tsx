@@ -34,7 +34,7 @@ import { hostnameOf, messageText, visibleMessageText } from "@/src/lib/message-u
 import { formatDuration, formatTime } from "@/src/lib/format"
 import { useSessionStore } from "@/src/stores/session-store"
 import { usePanelStore } from "@/src/stores/panel-store"
-import { parseSourceHref, rescueLegacyCitations, type SourceRef } from "@/src/lib/citations"
+import { classifyMarkdownLink, rescueLegacyCitations, type SourceRef } from "@/src/lib/citations"
 import { chatApi } from "@/src/lib/ipc"
 import { Actions, Action } from "@/src/components/ai/actions"
 import {
@@ -61,7 +61,7 @@ function childrenToText(children: ReactNode): string {
   return ""
 }
 
-const CITATION_TEXT = /^\[?\d{1,3}\]?$/
+
 
 /** Citação de documento: abre a fonte no painel, no trecho citado. */
 function SourceCitation({ source, label, sessionId }: {
@@ -96,9 +96,15 @@ function SourceCitation({ source, label, sessionId }: {
 function makeMarkdownLink(sessionId?: string): Components["a"] {
   return function MarkdownLink({ href, children, ...props }) {
     const text = childrenToText(children).trim()
-    const source = href ? parseSourceHref(href) : null
-    if (source) return <SourceCitation source={source} label={text} sessionId={sessionId} />
-    if (href && CITATION_TEXT.test(text)) {
+    // A decisão (e o porquê dela) mora em classifyMarkdownLink, com teste.
+    const link = classifyMarkdownLink(href, text)
+    if (link.kind === "source") {
+      return <SourceCitation source={link.source} label={text} sessionId={sessionId} />
+    }
+    if (link.kind === "broken-source") {
+      return <span className="text-muted-foreground">{children}</span>
+    }
+    if (link.kind === "web-citation" && href) {
       return (
         <InlineCitation>
           <InlineCitationCard>

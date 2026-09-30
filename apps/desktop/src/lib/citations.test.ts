@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { parseSourceHref, rescueLegacyCitations } from './citations'
+import { classifyMarkdownLink, parseSourceHref, rescueLegacyCitations } from './citations'
 import { sourceAnchor } from '@/electron/lib/document-pages'
 
 /**
@@ -67,5 +67,35 @@ describe('rescueLegacyCitations', () => {
   it('não reescreve a palavra solta fora de um link', () => {
     const texto = 'O esquema orbit-source:// foi trocado por fragmento.'
     expect(rescueLegacyCitations(texto)).toBe(texto)
+  })
+})
+
+describe('classifyMarkdownLink', () => {
+  it('a citação de documento com id inventado vira texto, e não cartão da web', () => {
+    // O link real que derrubou uma conversa: numa análise de código o modelo
+    // escreveu o formato de citação de documento com um id que não existe. Ia
+    // para o cartão da web, que fazia new URL(href) — e o href não é URL.
+    expect(classifyMarkdownLink('#orbit-source/src?/p1', '1')).toEqual({ kind: 'broken-source' })
+  })
+
+  it('número apontando para arquivo ou âncora é link comum', () => {
+    expect(classifyMarkdownLink('src/app/devolucao.ts', '1')).toEqual({ kind: 'link' })
+    expect(classifyMarkdownLink('#arquitetura', '[2]')).toEqual({ kind: 'link' })
+  })
+
+  it('só número apontando para a web vira cartão de citação', () => {
+    expect(classifyMarkdownLink('https://exemplo.com/artigo', '1')).toEqual({ kind: 'web-citation' })
+    expect(classifyMarkdownLink('https://exemplo.com', 'o artigo')).toEqual({ kind: 'link' })
+  })
+
+  it('citação de documento válida continua abrindo a fonte', () => {
+    const link = classifyMarkdownLink('#orbit-source/doc1/p4L10-14', '2')
+    expect(link.kind).toBe('source')
+  })
+
+  it('tudo que ele não sabe classificar é link, e nenhum caminho lança', () => {
+    for (const href of [undefined, '', '#', 'mailto:x@y.com', 'javascript:void(0)', 'caminho com espaço']) {
+      expect(() => classifyMarkdownLink(href, '1')).not.toThrow()
+    }
   })
 })
