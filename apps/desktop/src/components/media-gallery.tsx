@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
-import { CheckIcon, ChevronLeft, ChevronRight, CodeXml, FileText, Folder, FolderGit2, HardDriveIcon, ImageOff, Layers, MessageSquare, RefreshCw, Search, Trash2, X } from "lucide-react"
+import { CheckIcon, ChevronDown, ChevronLeft, ChevronRight, CodeXml, FileText, Filter, Folder, FolderGit2, HardDriveIcon, ImageOff, Layers, MessageSquare, RefreshCw, Search, Trash2, X } from "lucide-react"
 import type { LucideIcon } from "lucide-react"
 import { mediaKind, thumbUrl, type MediaEntry, type MediaSource } from "@shared/media"
 import { folderKey, normalizeFolderName } from "@shared/chat"
@@ -12,6 +12,14 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { artifactApi, mediaApi } from "@/src/lib/ipc"
@@ -217,6 +225,88 @@ function ScopeChip({
   )
 }
 
+/**
+ * Pastas e repositórios num dropdown, e não um chip por item: com um projeto
+ * ativo a barra de escopo virava uma parede de botões. "Everything" e "In
+ * this chat" continuam como chips — são sempre as duas opções mais usadas —
+ * e o resto (pasta específica, repositório específico, soltos) mora aqui.
+ */
+function ScopeFilterMenu({
+  scope,
+  folderOptions,
+  projectOptions,
+  hasLoose,
+  onSelect,
+}: {
+  scope: string
+  folderOptions: { id: string; name: string }[]
+  projectOptions: { key: string; label: string }[]
+  hasLoose: boolean
+  onSelect: (value: string) => void
+}) {
+  const { t } = useTranslation()
+  if (folderOptions.length === 0 && projectOptions.length === 0 && !hasLoose) return null
+
+  const activeFolder = folderOptions.find((f) => scope === `${FOLDER_PREFIX}${f.id}`)
+  const activeProject = projectOptions.find((p) => scope === `${PROJECT_PREFIX}${p.key}`)
+  const activeLoose = hasLoose && scope === SCOPE_LOOSE
+  const active = !!activeFolder || !!activeProject || activeLoose
+  const ActiveIcon = activeFolder ? Folder : activeProject ? FolderGit2 : Filter
+  const label = activeFolder?.name ?? activeProject?.label ?? (activeLoose ? t("media.scope.loose") : t("media.scope.filters"))
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger
+        className={cn(
+          "flex max-w-40 items-center gap-1 rounded-full px-2 py-0.5 text-[11px] transition-colors",
+          active
+            ? "bg-sidebar-accent text-sidebar-accent-foreground"
+            : "text-muted-foreground hover:bg-sidebar-accent/50",
+        )}
+      >
+        <ActiveIcon className="size-3 shrink-0" />
+        <span className="truncate">{label}</span>
+        <ChevronDown className="size-3 shrink-0" />
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start" className="max-h-80 w-56 overflow-y-auto">
+        {hasLoose && (
+          <DropdownMenuItem onClick={() => onSelect(SCOPE_LOOSE)}>
+            {t("media.scope.loose")}
+          </DropdownMenuItem>
+        )}
+        {folderOptions.length > 0 && (
+          <>
+            {hasLoose && <DropdownMenuSeparator />}
+            <DropdownMenuLabel className="text-[10px] text-muted-foreground">
+              {t("media.scope.folders")}
+            </DropdownMenuLabel>
+            {folderOptions.map((folder) => (
+              <DropdownMenuItem key={folder.id} onClick={() => onSelect(`${FOLDER_PREFIX}${folder.id}`)}>
+                <Folder className="size-3.5" />
+                <span className="truncate">{folder.name}</span>
+              </DropdownMenuItem>
+            ))}
+          </>
+        )}
+        {projectOptions.length > 0 && (
+          <>
+            {(hasLoose || folderOptions.length > 0) && <DropdownMenuSeparator />}
+            <DropdownMenuLabel className="text-[10px] text-muted-foreground">
+              {t("media.scope.projects")}
+            </DropdownMenuLabel>
+            {projectOptions.map((project) => (
+              <DropdownMenuItem key={project.key} onClick={() => onSelect(`${PROJECT_PREFIX}${project.key}`)}>
+                <FolderGit2 className="size-3.5" />
+                <span className="truncate">{project.label}</span>
+              </DropdownMenuItem>
+            ))}
+          </>
+        )}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  )
+}
+
 export function MediaGallery() {
   const { t, i18n } = useTranslation()
   const { mode, setMode, folders } = useWorkspace()
@@ -371,7 +461,14 @@ export function MediaGallery() {
   const matchesScope = useCallback(
     (entry: MediaEntry, value: string): boolean => {
       if (value === SCOPE_ALL) return true
-      if (value === SCOPE_SESSION) return !!activeSessionId && entry.sessionId === activeSessionId
+      // Sessão de origem OU uma sessão vinculada — um fork herda o que já
+      // existia na conversa original (ver linkMediaSessions, no main).
+      if (value === SCOPE_SESSION) {
+        return (
+          !!activeSessionId &&
+          (entry.sessionId === activeSessionId || !!entry.linkedSessionIds?.includes(activeSessionId))
+        )
+      }
       if (value === SCOPE_LOOSE) return !folderOf(entry) && !projectOf(entry)
       if (value.startsWith(FOLDER_PREFIX)) {
         return folderOf(entry)?.id === value.slice(FOLDER_PREFIX.length)
@@ -576,9 +673,9 @@ export function MediaGallery() {
             <RefreshCw className="size-3.5" />
           </button>
         </div>
-        {/* Escopo: cada chip é um jeito de a mídia pertencer a algo. O ícone
-            é o que separa pasta da sidebar de repositório — os dois são
-            "pasta" no nome, mas não são a mesma coisa. */}
+        {/* Escopo: "Tudo" e "Neste chat" são os dois mais usados e ficam
+            sempre visíveis; pasta/repositório/soltos — que podem ser muitos —
+            vão no dropdown ao lado, senão a barra vira uma parede de chips. */}
         <div className="flex flex-wrap items-center gap-1">
           <ScopeChip
             active={scope === SCOPE_ALL}
@@ -593,31 +690,13 @@ export function MediaGallery() {
               Icon={MessageSquare}
             />
           )}
-          {folderOptions.map((folder) => (
-            <ScopeChip
-              key={folder.id}
-              active={scope === `${FOLDER_PREFIX}${folder.id}`}
-              onClick={() => setScopeOverride(`${FOLDER_PREFIX}${folder.id}`)}
-              label={folder.name}
-              Icon={Folder}
-            />
-          ))}
-          {projectOptions.map((p) => (
-            <ScopeChip
-              key={p.key}
-              active={scope === `${PROJECT_PREFIX}${p.key}`}
-              onClick={() => setScopeOverride(`${PROJECT_PREFIX}${p.key}`)}
-              label={p.label}
-              Icon={FolderGit2}
-            />
-          ))}
-          {hasLoose && (
-            <ScopeChip
-              active={scope === SCOPE_LOOSE}
-              onClick={() => setScopeOverride(SCOPE_LOOSE)}
-              label={t("media.scope.loose")}
-            />
-          )}
+          <ScopeFilterMenu
+            scope={scope}
+            folderOptions={folderOptions}
+            projectOptions={projectOptions}
+            hasLoose={hasLoose}
+            onSelect={(value) => setScopeOverride(value)}
+          />
         </div>
         <div className="flex flex-wrap items-center gap-1">
           {sourceFilters.map((value) => (

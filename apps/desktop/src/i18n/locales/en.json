@@ -1742,7 +1742,10 @@
     "scope": {
       "all": "Everything",
       "session": "In this chat",
-      "loose": "Loose"
+      "loose": "Loose",
+      "filters": "Filters",
+      "folders": "Folders",
+      "projects": "Repositories"
     },
     "versions_one": "{{count}} version",
     "versions_other": "{{count}} versions",

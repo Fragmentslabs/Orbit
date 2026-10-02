@@ -1741,7 +1741,10 @@
     "scope": {
       "all": "Tudo",
       "session": "Neste chat",
-      "loose": "Soltos"
+      "loose": "Soltos",
+      "filters": "Filtros",
+      "folders": "Pastas",
+      "projects": "Repositórios"
     },
     "versions_one": "{{count}} versão",
     "versions_other": "{{count}} versões",
