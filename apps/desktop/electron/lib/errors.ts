@@ -253,3 +253,13 @@ const RECOVERABLE_ERROR_KINDS: ReadonlySet<MessageErrorKind> = new Set([
 export function isRecoverableErrorKind(kind: MessageErrorKind): boolean {
   return RECOVERABLE_ERROR_KINDS.has(kind)
 }
+
+/** Kinds que passam sozinhos com o tempo, no MESMO modelo — os únicos em que
+ *  vale repetir o turno depois de uma espera (SendMessageOptions.retries).
+ *  Moderação e modelo indisponível ficam de fora: são recuperáveis pela
+ *  rotação, mas repetir o mesmo pedido ao mesmo modelo falha igual. */
+const TRANSIENT_ERROR_KINDS: ReadonlySet<MessageErrorKind> = new Set(['rate-limit', 'network'])
+
+export function isTransientErrorKind(kind: MessageErrorKind): boolean {
+  return TRANSIENT_ERROR_KINDS.has(kind)
+}

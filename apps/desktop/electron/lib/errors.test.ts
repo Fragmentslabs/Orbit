@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { classifyProviderError, errorToText, isRecoverableErrorKind } from './errors'
+import { classifyProviderError, errorToText, isRecoverableErrorKind, isTransientErrorKind } from './errors'
 import { ProviderResolutionError } from './provider-errors'
 
 /**
@@ -242,5 +242,15 @@ describe('isRecoverableErrorKind', () => {
 
   it('não rotaciona unknown', () => {
     expect(isRecoverableErrorKind('unknown')).toBe(false)
+  })
+})
+
+describe('isTransientErrorKind', () => {
+  it('só rede e rate-limit valem uma nova rodada no mesmo modelo', () => {
+    expect(isTransientErrorKind('network')).toBe(true)
+    expect(isTransientErrorKind('rate-limit')).toBe(true)
+    expect(isTransientErrorKind('model-unavailable')).toBe(false)
+    expect(isTransientErrorKind('moderation')).toBe(false)
+    expect(isTransientErrorKind('context-length')).toBe(false)
   })
 })

@@ -362,12 +362,15 @@ export function MessageError({
   sessionId,
   error,
   kind,
+  attempts,
   failedModel,
   onRetry,
 }: {
   sessionId?: string
   error: string
   kind?: MessageErrorKind
+  /** Tentativas feitas em segundo plano antes de desistir (só quando > 1) */
+  attempts?: number
   failedModel?: { providerId?: string; modelId?: string }
   onRetry?: () => void
 }) {
@@ -385,7 +388,10 @@ export function MessageError({
   return (
     <div className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive">
       <div className="flex items-start justify-between gap-2">
-        <span className="flex-1">{explained ? t(`chat.errorKind.${kind}`) : error}</span>
+        <span className="flex-1">
+          {explained ? t(`chat.errorKind.${kind}`) : error}
+          {attempts && attempts > 1 && <> {t("chat.failedAfterAttempts", { count: attempts })}</>}
+        </span>
         <div className="flex shrink-0 items-center gap-1">
           {overflowed && sessionId && (
             <button

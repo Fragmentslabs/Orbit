@@ -36,6 +36,7 @@ export function SimpleAssistantMessage({ message, sessionId, isLast, isBusy, bus
           sessionId={sessionId}
           error={message.error}
           kind={message.errorKind}
+          attempts={message.attempts}
           failedModel={{ providerId: message.providerId, modelId: message.modelId }}
           onRetry={onRetry}
         />

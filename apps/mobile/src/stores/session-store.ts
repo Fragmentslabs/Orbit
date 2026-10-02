@@ -932,6 +932,11 @@ export const useSessionStore = create<SessionState>((set, get) => ({
 
     switch (event.type) {
       case 'status':
+        // Turno de verdade terminou: erro pausa a fila, sucesso (ou parada
+        // manual) a solta. Antes do set, para o onSessionIdle que o set
+        // dispara já ver a pausa.
+        if (event.status === 'error') useMessageQueueStore.getState().setPaused(sessionId, true)
+        if (event.status === 'idle') useMessageQueueStore.getState().setPaused(sessionId, false)
         set((state) => {
           const patch: Record<string, any> = {
             status: { ...state.status, [sessionId]: event.status },
@@ -972,8 +977,11 @@ export const useSessionStore = create<SessionState>((set, get) => ({
           const m = event.message
           const finished =
             m.role === 'assistant' && (m.tokens !== undefined || m.error !== undefined)
+          // Com erro, o estado é `error`, não `idle`: idle aqui soltava a fila
+          // no intervalo até o `status: error` chegar logo depois.
+          if (finished && m.error !== undefined) useMessageQueueStore.getState().setPaused(sessionId, true)
           const status = finished
-            ? { ...state.status, [sessionId]: 'idle' as ChatStatus }
+            ? { ...state.status, [sessionId]: (m.error !== undefined ? 'error' : 'idle') as ChatStatus }
             : state.status
 
           // Incrementa contador de não lidas se a sessão não está ativa.

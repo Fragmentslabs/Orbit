@@ -249,6 +249,7 @@ export function ChatAssistantMessage({ message, sessionId, isLast, isBusy, busyL
           sessionId={sessionId}
           error={message.error}
           kind={message.errorKind}
+          attempts={message.attempts}
           failedModel={{ providerId: message.providerId, modelId: message.modelId }}
           onRetry={onRetry}
         />

@@ -9,8 +9,6 @@ const QUEUE_STORAGE_KEY = StorageKeys.queuedMessages
 interface MessageQueueState {
   queues: Record<string, QueuedMessage[]>
   initialized: boolean
-  /** Última mensagem da fila que foi desenfileirada e aguarda resultado do envio */
-  _pendingQueueSend: Record<string, QueuedMessage | undefined>
 
   initialize: () => Promise<void>
   enqueue: (sessionId: string, msg: QueuedMessage) => void
@@ -20,8 +18,10 @@ interface MessageQueueState {
   hasPending: (sessionId: string) => boolean
   /** Retorna o número de mensagens na fila (não agendadas) */
   queueSize: (sessionId: string) => number
-  /** Processa a fila: se session idle/error, envia a próxima mensagem */
+  /** Processa a fila: se a sessão está idle, envia a próxima mensagem */
   processQueue: (sessionId: string) => void
+  /** Envia um item agora, fora da ordem — a saída da fila pausada por erro */
+  sendNow: (sessionId: string, msgId: string) => void
   /** Enfileira para envio imediato assim que o agente ficar idle */
   enqueueForSend: (
     sessionId: string,
@@ -55,7 +55,6 @@ function persist(queues: Record<string, QueuedMessage[]>) {
 export const useMessageQueueStore = create<MessageQueueState>((set, get) => ({
   queues: {},
   initialized: false,
-  _pendingQueueSend: {},
 
   initialize: async () => {
     const data = await storage.read<Record<string, QueuedMessage[]>>(QUEUE_STORAGE_KEY)
@@ -127,24 +126,23 @@ export const useMessageQueueStore = create<MessageQueueState>((set, get) => ({
     const next = current[0]
     if (next.scheduledAt && next.scheduledAt > Date.now()) return
 
-    const sessionState = useSessionStore.getState()
-    const status = sessionState.status[sessionId]
-    // Processa quando idle ou error (error permite retry ou skip)
-    if (status && status !== "idle" && status !== "error") return
+    // Só sai com a sessão livre. `error` NÃO conta: o turno anterior falhou, e
+    // a mensagem da fila quase sempre depende da resposta que não veio — a
+    // fila fica pausada até um turno terminar bem (ou a pessoa usar sendNow).
+    const status = useSessionStore.getState().status[sessionId]
+    if (status && status !== "idle") return
 
     const msg = get().dequeue(sessionId)
+    if (msg) send(sessionId, msg)
+  },
+
+  sendNow: (sessionId, msgId) => {
+    const status = useSessionStore.getState().status[sessionId]
+    if (status && status !== "idle" && status !== "error") return
+    const msg = get().queues[sessionId]?.find((m) => m.id === msgId)
     if (!msg) return
-
-    // Salva a mensagem que está sendo enviada para possível retry
-    set((s) => ({ _pendingQueueSend: { ...s._pendingQueueSend, [sessionId]: msg } }))
-
-    void sessionState.sendMessage(msg.mode, msg.text, {
-      options: msg.options,
-      sessionId: msg.sessionId ?? sessionId,
-      directory: msg.directory,
-      extraDirectories: msg.extraDirectories,
-      files: msg.files,
-    })
+    get().remove(sessionId, msgId)
+    send(sessionId, msg)
   },
 
   enqueueForSend: (sessionId, text, options, mode, extra) => {
@@ -179,28 +177,26 @@ export const useMessageQueueStore = create<MessageQueueState>((set, get) => ({
   },
 
   onSessionIdle: (sessionId) => {
-    const sessionState = useSessionStore.getState()
-    const status = sessionState.status[sessionId]
-
-    // Se a última mensagem da fila falhou, tenta retry ou pula
-    if (status === "error") {
-      const pending = get()._pendingQueueSend[sessionId]
-      if (pending) {
-        if ((pending.retryCount ?? 0) < MAX_QUEUE_RETRIES) {
-          // Re-enfileira com contador incrementado
-          get().enqueue(sessionId, { ...pending, retryCount: (pending.retryCount ?? 0) + 1 })
-        }
-        set((s) => {
-          const next = { ...s._pendingQueueSend }
-          delete next[sessionId]
-          return { _pendingQueueSend: next }
-        })
-      }
-    }
-
+    // Erro pausa a fila (ver processQueue). Não há reenvio daqui: a mensagem
+    // da fila já sai com `retries`, e o engine repete o MESMO turno em
+    // segundo plano — reenviar daqui duplicava a mensagem no chat a cada
+    // tentativa.
+    if (useSessionStore.getState().status[sessionId] === "error") return
     get().processQueue(sessionId)
   },
 }))
+
+/** A pessoa não está olhando quando um item da fila sai: falha transitória
+ *  ganha rodadas extras no engine, dentro do mesmo turno. */
+function send(sessionId: string, msg: QueuedMessage) {
+  void useSessionStore.getState().sendMessage(msg.mode, msg.text, {
+    options: { ...msg.options, retries: MAX_QUEUE_RETRIES },
+    sessionId: msg.sessionId ?? sessionId,
+    directory: msg.directory,
+    extraDirectories: msg.extraDirectories,
+    files: msg.files,
+  })
+}
 
 let schedulerTimer: ReturnType<typeof setInterval> | null = null
 

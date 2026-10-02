@@ -74,3 +74,26 @@ export function hasStreamedContent(parts: MessagePart[]): boolean {
     (p) => p.type === 'tool' || ((p.type === 'text' || p.type === 'reasoning') && (p.text?.length ?? 0) > 0),
   )
 }
+/** Espera antes de cada rodada extra do turno (SendMessageOptions.retries).
+ *  Crescente porque o caso típico é a rede caída: tentar de novo em segundos
+ *  só gasta as rodadas antes de ela voltar. Além do fim, repete o último. */
+export const RETRY_DELAYS_MS = [5_000, 15_000, 30_000]
+
+export function retryDelay(round: number): number {
+  return RETRY_DELAYS_MS[Math.min(round, RETRY_DELAYS_MS.length) - 1] ?? RETRY_DELAYS_MS[0]
+}
+
+/** Espera `ms`, mas volta na hora se o turno for interrompido — o botão de
+ *  parar não pode ficar preso atrás de uma espera de 30s. */
+export function waitUnlessAborted(ms: number, signal: AbortSignal): Promise<void> {
+  return new Promise((resolve) => {
+    if (signal.aborted) return resolve()
+    const done = () => {
+      clearTimeout(timer)
+      signal.removeEventListener('abort', done)
+      resolve()
+    }
+    const timer = setTimeout(done, ms)
+    signal.addEventListener('abort', done)
+  })
+}

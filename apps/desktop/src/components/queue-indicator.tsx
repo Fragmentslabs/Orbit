@@ -1,13 +1,14 @@
 import { useState } from "react"
 import { useTranslation } from "react-i18next"
 import type { TFunction } from "i18next"
-import { CalendarIcon, CheckIcon, ChevronDownIcon, CopyIcon, ListPlus, X } from "lucide-react"
+import { CalendarIcon, CheckIcon, ChevronDownIcon, CopyIcon, ListPlus, SendIcon, X } from "lucide-react"
 import {
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
 } from "~/components/ui/collapsible"
 import { useMessageQueueStore } from "@/src/stores/message-queue-store"
+import { useSessionStore } from "@/src/stores/session-store"
 import { cn } from "@/lib/utils"
 import { formatTime } from "@/src/lib/format"
 
@@ -33,6 +34,10 @@ export function QueueIndicator({ sessionId }: QueueIndicatorProps) {
   const [copiedId, setCopiedId] = useState<string | null>(null)
   const queues = useMessageQueueStore((s) => s.queues)
   const remove = useMessageQueueStore((s) => s.remove)
+  const sendNow = useMessageQueueStore((s) => s.sendNow)
+  // Turno anterior falhou: a fila não sai sozinha (ver processQueue) — sem
+  // avisar, pareceria travada.
+  const paused = useSessionStore((s) => (sessionId ? s.status[sessionId] === "error" : false))
   if (!sessionId) return null
   const items = queues[sessionId]
   if (!items || items.length === 0) return null
@@ -47,6 +52,7 @@ export function QueueIndicator({ sessionId }: QueueIndicatorProps) {
           {queueCount > 0 && <ListPlus className="size-3.5" />}
           {scheduledCount > 0 && <CalendarIcon className="size-3.5" />}
           <span>{t("queue.count", { count: items.length })}</span>
+          {paused && <span className="text-destructive/80">· {t("queue.paused")}</span>}
         </span>
         <ChevronDownIcon
           className={cn(
@@ -77,6 +83,16 @@ export function QueueIndicator({ sessionId }: QueueIndicatorProps) {
                 <span className="text-[10px] text-muted-foreground/60">
                   {msg.scheduledAt ? formatSchedule(msg.scheduledAt, i18n.language, t) : t("queue.badge")}
                 </span>
+                {paused && (
+                  <button
+                    type="button"
+                    onClick={() => sendNow(sessionId, msg.id)}
+                    title={t("queue.sendNow")}
+                    className="rounded p-0.5 text-muted-foreground/50 transition-colors hover:bg-accent hover:text-accent-foreground"
+                  >
+                    <SendIcon className="size-3.5" />
+                  </button>
+                )}
                 <button
                   type="button"
                   onClick={() => {

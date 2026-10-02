@@ -20,9 +20,9 @@ import { compactHistory, findLastSummaryIndex, shouldCompact } from './compactio
 import { contextBudget, estimateTokens, maxStepsFor, trimTurnContext } from './context-budget'
 import { clearManualSaves, manualSavesUnder, stripFilesFromPatch } from './manual-saves'
 import { createToolApproval, takeDenialReason } from './permission'
-import { classifyProviderError, errorToText, isRecoverableErrorKind } from './errors'
+import { classifyProviderError, errorToText, isRecoverableErrorKind, isTransientErrorKind } from './errors'
 import { selectDraftImages } from './image-drafts'
-import { hasStreamedContent, resolveRotation } from './model-rotation'
+import { hasStreamedContent, resolveRotation, retryDelay, waitUnlessAborted } from './model-rotation'
 import { buildSystemPrompt } from './prompts'
 import { buildProviderOptions, interleavedReasoningField, normalizeMessages } from './reasoning'
 import { resolveModel } from './providers'
@@ -1031,6 +1031,11 @@ async function runChatTurn(win: BrowserWindow, input: SendMessageInput): Promise
     // modelo indisponível) ANTES do primeiro token; abort e erros finais caem
     // no catch externo (comportamento atual).
     let attemptIndex = 0
+    // Rodadas extras do turno inteiro (sequência da rotação de novo do início)
+    // para falha transitória. Acontecem dentro do MESMO turno: a mensagem do
+    // usuário não é reenviada, e o chat só mostra o erro se todas falharem.
+    const maxRetryRounds = Math.max(0, input.options.retries ?? 0)
+    let retryRound = 0
     for (;;) {
       const primary = rotationSequence[attemptIndex] ?? primaryModel
       // Registra o modelo desta tentativa na mensagem (badge "via X" e
@@ -1883,6 +1888,26 @@ async function runChatTurn(win: BrowserWindow, input: SendMessageInput): Promise
           })
           continue
         }
+        if (
+          !aborted &&
+          !hasStreamedContent(assistantMessage.parts) &&
+          isTransientErrorKind(kind) &&
+          retryRound < maxRetryRounds
+        ) {
+          retryRound++
+          attemptIndex = 0
+          emit(win, {
+            type: 'status',
+            sessionId,
+            status: 'fallback',
+            fallback: { current: retryRound + 1, total: maxRetryRounds + 1, retry: true },
+          })
+          await waitUnlessAborted(retryDelay(retryRound), controller.signal)
+          // Parado durante a espera: cai no catch externo como abort (idle)
+          if (controller.signal.aborted) throw err
+          continue
+        }
+        if (retryRound > 0) assistantMessage.attempts = retryRound + 1
         throw err
       }
     }

@@ -408,6 +408,8 @@ export interface ChatMessage {
   /** Classificação da falha — a UI usa para explicar a causa e oferecer a ação
    *  certa (ex: moderação do provedor só é contornável trocando de modelo). */
   errorKind?: MessageErrorKind
+  /** Quantas vezes o turno foi tentado antes de desistir — só quando > 1 */
+  attempts?: number
   /** Gerada em modo simples: UI enxuta (sem tool/reasoning views); texto ainda com markdown */
   simple?: boolean
   /** Modo ativo do turno em que a mensagem foi enviada (user) — metadados
@@ -519,6 +521,10 @@ export interface SendMessageOptions {
   permissionMode?: PermissionMode
   /** /init: executa o pipeline de análise de projeto em vez de gerar texto */
   initMode?: boolean
+  /** Rodadas extras, em segundo plano, quando o turno falha por motivo
+   *  transitório (rede, rate-limit) antes do primeiro token. O turno é o mesmo:
+   *  nada novo aparece no chat entre uma tentativa e outra. */
+  retries?: number
 }
 
 export interface OrchestrationTask {
@@ -581,6 +587,9 @@ export interface RotationFallbackInfo {
   current: number
   /** Tamanho total da sequência */
   total: number
+  /** true quando não é troca de modelo, e sim uma nova rodada do turno depois
+   *  de uma falha transitória (ver SendMessageOptions.retries) */
+  retry?: boolean
 }
 
 export interface SendMessageInput {
@@ -724,10 +733,10 @@ export interface QueuedMessage {
   /** Timestamp MS para envio agendado; undefined = envia assim que possível */
   scheduledAt?: number
   createdAt: number
-  /** Número de tentativas já realizadas */
-  retryCount?: number
 }
 
+/** Rodadas extras que uma mensagem da fila ganha em falha transitória
+ *  (SendMessageOptions.retries) — a pessoa não está olhando quando ela sai. */
 export const MAX_QUEUE_RETRIES = 3
 
 export const StorageKeys = {

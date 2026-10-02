@@ -41,7 +41,12 @@ const QUEUE_STORAGE_KEY = StorageKeys.queuedMessages
 interface MessageQueueState {
   queues: Record<string, QueuedMessage[]>
   initialized: boolean
-  _pendingQueueSend: Record<string, QueuedMessage | undefined>
+  /** Sessões cujo último turno falhou: a fila não sai sozinha até um turno
+   *  terminar bem. Não dá para usar o status: offline, o session-store marca
+   *  `error` de propósito com a mensagem na fila, e ela tem que sair ao
+   *  reconectar. */
+  paused: Record<string, boolean>
+  setPaused: (sessionId: string, paused: boolean) => void
 
   initialize: () => Promise<void>
   enqueue: (sessionId: string, msg: QueuedMessage) => void
@@ -83,7 +88,12 @@ function persist(queues: Record<string, QueuedMessage[]>) {
 export const useMessageQueueStore = create<MessageQueueState>((set, get) => ({
   queues: {},
   initialized: false,
-  _pendingQueueSend: {},
+  paused: {},
+
+  setPaused: (sessionId, paused) => {
+    if (Boolean(get().paused[sessionId]) === paused) return
+    set((s) => ({ paused: { ...s.paused, [sessionId]: paused } }))
+  },
 
   initialize: async () => {
     try {
@@ -168,17 +178,18 @@ export const useMessageQueueStore = create<MessageQueueState>((set, get) => ({
     const next = current[0]
     if (next.scheduledAt && next.scheduledAt > Date.now()) return
 
+    if (state.paused[sessionId]) return
     const status = _getStatus ? _getStatus(sessionId) : undefined
     if (status && status !== 'idle' && status !== 'error') return
 
     const msg = get().dequeue(sessionId)
     if (!msg) return
 
-    set((s) => ({ _pendingQueueSend: { ...s._pendingQueueSend, [sessionId]: msg } }))
-
     if (_sendMessage) {
+      // Falha transitória ganha rodadas extras no engine, dentro do mesmo
+      // turno — a mensagem não aparece de novo no chat a cada tentativa.
       void _sendMessage(msg.text, {
-        options: msg.options,
+        options: { ...msg.options, retries: MAX_QUEUE_RETRIES },
         sessionId: msg.sessionId ?? sessionId,
         directory: msg.directory,
         extraDirectories: msg.extraDirectories,
@@ -219,22 +230,8 @@ export const useMessageQueueStore = create<MessageQueueState>((set, get) => ({
   },
 
   onSessionIdle: (sessionId) => {
-    const status = _getStatus ? _getStatus(sessionId) : undefined
-
-    if (status === 'error') {
-      const pending = get()._pendingQueueSend[sessionId]
-      if (pending) {
-        if ((pending.retryCount ?? 0) < MAX_QUEUE_RETRIES) {
-          get().enqueue(sessionId, { ...pending, retryCount: (pending.retryCount ?? 0) + 1 })
-        }
-        set((s) => {
-          const next = { ...s._pendingQueueSend }
-          delete next[sessionId]
-          return { _pendingQueueSend: next }
-        })
-      }
-    }
-
+    // Sem reenvio daqui: o engine já repete o turno em segundo plano, e
+    // reenviar duplicava a mensagem no chat a cada tentativa.
     get().processQueue(sessionId)
   },
 }))

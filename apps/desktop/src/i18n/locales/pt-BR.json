@@ -690,6 +690,8 @@
       "provider-config": "O provedor deste modelo não está pronto: falta a chave de API, ou o provedor/SDK não está disponível. Verifique as Configurações."
     },
     "fallbackStatus": "Tentando fallback {{current}}/{{total}}…",
+    "retryingStatus": "Falha temporária no provedor — tentando de novo ({{current}}/{{total}})…",
+    "failedAfterAttempts": "Tentou {{count}} vezes, sem sucesso.",
     "stopped": "Parou por atingir o limite de passos — pode ter ficado incompleto. Peça para continuar.",
     "copy": "Copiar",
     "revert": "Reverter até aqui",
@@ -2049,6 +2051,8 @@
     "count_other": "{{count}} mensagens na fila",
     "badge": "Fila",
     "copy": "Copiar mensagem",
+    "paused": "pausada — o último envio falhou",
+    "sendNow": "Enviar agora",
     "cancelSend": "Cancelar envio",
     "now": "Agora",
     "inSeconds": "Em segundos",

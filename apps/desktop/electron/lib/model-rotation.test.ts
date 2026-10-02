@@ -13,8 +13,16 @@ vi.mock('./companion-http', () => ({
   getSessionModelsCache: () => sessionModelsCache.current,
 }))
 
-const { MAX_ROTATION_ATTEMPTS, hasStreamedContent, resolveRotation, selectNext, setRotationConfigCache } =
-  await import('./model-rotation')
+const {
+  MAX_ROTATION_ATTEMPTS,
+  RETRY_DELAYS_MS,
+  hasStreamedContent,
+  resolveRotation,
+  retryDelay,
+  selectNext,
+  setRotationConfigCache,
+  waitUnlessAborted,
+} = await import('./model-rotation')
 
 const model = (id: string) => ({ providerId: 'openai', modelId: id })
 const fallback = model('fallback')
@@ -120,5 +128,32 @@ describe('hasStreamedContent', () => {
     expect(hasStreamedContent([text('oi')])).toBe(true)
     expect(hasStreamedContent([reasoning('pensando')])).toBe(true)
     expect(hasStreamedContent([tool()])).toBe(true)
+  })
+})
+
+describe('rodadas extras do turno', () => {
+  it('a espera cresce a cada rodada e para no último degrau', () => {
+    expect(retryDelay(1)).toBe(RETRY_DELAYS_MS[0])
+    expect(retryDelay(2)).toBe(RETRY_DELAYS_MS[1])
+    expect(retryDelay(3)).toBe(RETRY_DELAYS_MS[2])
+    expect(retryDelay(9)).toBe(RETRY_DELAYS_MS[RETRY_DELAYS_MS.length - 1])
+  })
+
+  it('parar o turno corta a espera na hora', async () => {
+    vi.useFakeTimers()
+    try {
+      const controller = new AbortController()
+      let done = false
+      const wait = waitUnlessAborted(30_000, controller.signal).then(() => {
+        done = true
+      })
+      await vi.advanceTimersByTimeAsync(1_000)
+      expect(done).toBe(false)
+      controller.abort()
+      await wait
+      expect(done).toBe(true)
+    } finally {
+      vi.useRealTimers()
+    }
   })
 })

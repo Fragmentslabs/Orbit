@@ -659,7 +659,10 @@ export function ChatView({ sessionId }: { sessionId?: string } = {}) {
               isBusy={isBusy}
               busyLabel={
                 status === "fallback" && fallback
-                  ? t("chat.fallbackStatus", { current: fallback.current, total: fallback.total })
+                  ? t(fallback.retry ? "chat.retryingStatus" : "chat.fallbackStatus", {
+                      current: fallback.current,
+                      total: fallback.total,
+                    })
                   : undefined
               }
               mode={viewMode}

@@ -690,6 +690,8 @@
       "provider-config": "This model's provider isn't ready: the API key is missing or the provider/SDK isn't available. Check Settings."
     },
     "fallbackStatus": "Trying fallback {{current}}/{{total}}…",
+    "retryingStatus": "Temporary provider failure — trying again ({{current}}/{{total}})…",
+    "failedAfterAttempts": "Tried {{count}} times, without success.",
     "stopped": "Stopped after reaching the step limit — it may be incomplete. Ask it to continue.",
     "copy": "Copy",
     "revert": "Revert to here",
@@ -2050,6 +2052,8 @@
     "count_other": "{{count}} messages queued",
     "badge": "Queued",
     "copy": "Copy message",
+    "paused": "paused — the last send failed",
+    "sendNow": "Send now",
     "cancelSend": "Cancel send",
     "now": "Now",
     "inSeconds": "In seconds",
