@@ -1,7 +1,7 @@
 import { useState } from "react"
 import { useTranslation } from "react-i18next"
 import type { TFunction } from "i18next"
-import { CalendarIcon, ChevronDownIcon, ListPlus, X } from "lucide-react"
+import { CalendarIcon, CheckIcon, ChevronDownIcon, CopyIcon, ListPlus, X } from "lucide-react"
 import {
   Collapsible,
   CollapsibleContent,
@@ -28,6 +28,9 @@ function formatSchedule(ts: number, locale: string, t: TFunction): string {
 export function QueueIndicator({ sessionId }: QueueIndicatorProps) {
   const { t, i18n } = useTranslation()
   const [open, setOpen] = useState(false)
+  // Id do item copiado por último — troca o ícone pra check por um instante.
+  // Um só vale porque copiar é instantâneo; não precisa ser um Set.
+  const [copiedId, setCopiedId] = useState<string | null>(null)
   const queues = useMessageQueueStore((s) => s.queues)
   const remove = useMessageQueueStore((s) => s.remove)
   if (!sessionId) return null
@@ -57,6 +60,7 @@ export function QueueIndicator({ sessionId }: QueueIndicatorProps) {
           {items.map((msg) => (
             <div
               key={msg.id}
+              title={msg.text}
               className="group/item flex items-center justify-between gap-2 rounded-md px-3 py-1.5 text-xs hover:bg-muted/50"
             >
               <span className="flex min-w-0 flex-1 items-center gap-2">
@@ -73,6 +77,18 @@ export function QueueIndicator({ sessionId }: QueueIndicatorProps) {
                 <span className="text-[10px] text-muted-foreground/60">
                   {msg.scheduledAt ? formatSchedule(msg.scheduledAt, i18n.language, t) : t("queue.badge")}
                 </span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    void navigator.clipboard.writeText(msg.text)
+                    setCopiedId(msg.id)
+                    setTimeout(() => setCopiedId((current) => (current === msg.id ? null : current)), 1500)
+                  }}
+                  title={t("queue.copy")}
+                  className="rounded p-0.5 text-muted-foreground/50 transition-colors hover:bg-accent hover:text-accent-foreground"
+                >
+                  {copiedId === msg.id ? <CheckIcon className="size-3.5" /> : <CopyIcon className="size-3.5" />}
+                </button>
                 <button
                   type="button"
                   onClick={() => remove(sessionId, msg.id)}

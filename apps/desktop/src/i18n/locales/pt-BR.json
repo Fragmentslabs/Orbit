@@ -2048,6 +2048,7 @@
     "count_one": "{{count}} mensagem na fila",
     "count_other": "{{count}} mensagens na fila",
     "badge": "Fila",
+    "copy": "Copiar mensagem",
     "cancelSend": "Cancelar envio",
     "now": "Agora",
     "inSeconds": "Em segundos",

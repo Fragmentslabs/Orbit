@@ -2049,6 +2049,7 @@
     "count_one": "{{count}} message queued",
     "count_other": "{{count}} messages queued",
     "badge": "Queued",
+    "copy": "Copy message",
     "cancelSend": "Cancel send",
     "now": "Now",
     "inSeconds": "In seconds",
