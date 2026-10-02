@@ -155,6 +155,26 @@ describe('classifyProviderError', () => {
       expect(classifyProviderError(err).kind).toBe('context-length')
     })
 
+    /**
+     * Mesmo defeito, outro campo: o APICallError também guarda
+     * `requestBodyValues` — o prompt inteiro (conversa, system, descrição das
+     * ferramentas). Um "is not supported" em qualquer ponto da conversa fazia
+     * uma falha de DNS chegar como "o provedor não serve este modelo".
+     */
+    it('ignora o corpo da requisição ao classificar', () => {
+      const apiError = Object.assign(new Error('Cannot connect to API: getaddrinfo ENOTFOUND opencode.ai'), {
+        requestBodyValues: {
+          model: 'deepseek-v4.1-flash',
+          messages: [{ role: 'user', content: 'o backup do SQL Server is not supported no docker?' }],
+        },
+      })
+      const retryError = Object.assign(
+        new Error('Failed after 3 attempts. Last error: Cannot connect to API: getaddrinfo ENOTFOUND opencode.ai'),
+        { errors: [apiError, apiError, apiError], lastError: apiError },
+      )
+      expect(classifyProviderError(retryError).kind).toBe('network')
+    })
+
     it('mas ainda reconhece o rate-limit de verdade, que vem no status/corpo', () => {
       const err = Object.assign(new Error('Upstream request failed'), {
         statusCode: 429,

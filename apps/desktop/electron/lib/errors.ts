@@ -189,6 +189,11 @@ function matchable(value: unknown): string {
       // real vem do corpo (`responseBody`, `code`, `type`) e do `statusCode`,
       // que continuam aqui.
       if (key === 'responseHeaders') return undefined
+      // O corpo da REQUISIÇÃO também fica de fora: é o prompt inteiro
+      // (conversa, system, descrição das ferramentas), escrito por nós e pelo
+      // usuário, não pelo provedor. Um "is not supported" em qualquer mensagem
+      // fazia uma falha de DNS virar "o provedor não serve este modelo".
+      if (key === 'requestBodyValues') return undefined
       if (typeof val === 'object' && val !== null) {
         if (seen.has(val)) return undefined
         seen.add(val)
