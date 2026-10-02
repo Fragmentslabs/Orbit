@@ -37,6 +37,7 @@ import {
   ensureDocumentRender,
   saveDocumentEdit,
   getMediaEntry,
+  linkMediaSessions,
   listMedia,
   mediaDiskUsage,
   mediaIdFromUrl,
@@ -1702,6 +1703,11 @@ app.whenReady().then(() => {
   ipcMain.handle('media:usage', () => mediaDiskUsage())
   ipcMain.handle('media:delete', (_event, ids: string[]) => deleteManyMedia(ids))
   ipcMain.handle('media:cleanupScripts', () => cleanupScriptMedia())
+  // Fork: vincula os ativos clonados à sessão nova, para "Neste chat" na
+  // galeria encontrá-los sem duplicar nada em disco (ver linkMediaSessions).
+  ipcMain.handle('media:linkSessions', (_event, ids: string[], sessionId: string) =>
+    linkMediaSessions(ids, sessionId),
+  )
   // Indexa imagens anteriores ao registry (roda na primeira abertura da galeria)
   ipcMain.handle('media:backfill', () => backfillMedia())
 

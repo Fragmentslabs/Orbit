@@ -519,6 +519,10 @@ export const mediaApi = {
   usage: () => window.ipcRenderer.invoke("media:usage") as Promise<MediaUsage>,
   remove: (ids: string[]) => window.ipcRenderer.invoke("media:delete", ids) as Promise<number>,
   cleanupScripts: () => window.ipcRenderer.invoke("media:cleanupScripts") as Promise<number>,
+  /** Vincula ativos (imagem/artefato/documento) a uma sessão adicional — usado
+   *  pelo fork, para "Neste chat" na galeria enxergar o que foi herdado. */
+  linkSessions: (ids: string[], sessionId: string) =>
+    window.ipcRenderer.invoke("media:linkSessions", ids, sessionId) as Promise<void>,
   /** Indexa imagens anteriores ao registry — idempotente, roda na 1ª abertura. */
   backfill: () => window.ipcRenderer.invoke("media:backfill") as Promise<number>,
   /** O acervo mudou (imagem salva ou apagada por qualquer caminho). A galeria

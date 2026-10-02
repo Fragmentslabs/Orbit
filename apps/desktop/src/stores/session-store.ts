@@ -19,7 +19,8 @@ import type {
 // projeto do mesmo jeito e precisa da MESMA regra de nome.
 import { folderKey, normalizeFolderName, StorageKeys } from "@shared/chat"
 import { planAutoFolder } from "@/src/lib/auto-folder"
-import { chatApi, companionApi, docsApi, sessionApi, storage } from "@/src/lib/ipc"
+import { chatApi, companionApi, docsApi, mediaApi, sessionApi, storage } from "@/src/lib/ipc"
+import { MEDIA_SCHEME } from "@shared/media"
 import { visibleMessageText } from "@/src/lib/message-utils"
 import { useBrainPrefs } from "@/src/stores/brain-prefs"
 import { useSimplePrefs } from "@/src/stores/simple-prefs"
@@ -568,6 +569,22 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     }))
     loadedMessages.add(fork.id)
     emitChatEvent({ type: "session", sessionId: fork.id, session: fork })
+
+    // Imagem/artefato/documento clonados apontam para o MESMO ativo da sessão
+    // original (nada é duplicado) — sem vincular o fork, o card continua
+    // visível na conversa dele mas some do filtro "Neste chat" da galeria.
+    const mediaImagePrefix = `${MEDIA_SCHEME}://`
+    const mediaIds = cloned
+      .flatMap((m) => m.parts)
+      .map((p) => {
+        if (p.type === "image") return p.src.startsWith(mediaImagePrefix) ? p.src.slice(mediaImagePrefix.length) : null
+        if (p.type === "artifact") return p.artifactId
+        if (p.type === "document") return p.documentId
+        return null
+      })
+      .filter((id): id is string => !!id)
+    if (mediaIds.length > 0) void mediaApi.linkSessions(mediaIds, fork.id)
+
     return fork
   },
 

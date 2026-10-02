@@ -200,6 +200,34 @@ export function mediaIdFromUrl(url: string): string | null {
 }
 
 /**
+ * Vincula ativos (imagem, artefato ou documento) a uma sessão ADICIONAL —
+ * hoje, só o fork: `forkSession` clona as mensagens com o MESMO
+ * documentId/artifactId/mediaUrl (nada é duplicado), então sem isto o card
+ * continua visível na conversa do fork mas some do filtro "Neste chat" da
+ * galeria, porque `sessionId` do registro é fixo na sessão original.
+ *
+ * Ids inválidos são ignorados em silêncio — o chamador passa tudo que achou
+ * nas parts clonadas, e nem toda part vira um id de mídia reconhecível.
+ */
+export async function linkMediaSessions(ids: string[], sessionId: string): Promise<void> {
+  if (ids.length === 0) return
+  const wanted = new Set(ids)
+  await withIndexLock(async () => {
+    const entries = await readIndex()
+    let changed = false
+    for (const entry of entries) {
+      if (!wanted.has(entry.id)) continue
+      if (entry.sessionId === sessionId) continue
+      if (entry.linkedSessionIds?.includes(sessionId)) continue
+      entry.linkedSessionIds = [...(entry.linkedSessionIds ?? []), sessionId]
+      changed = true
+    }
+    if (changed) await writeIndex(entries)
+  })
+  notifyMediaChanged()
+}
+
+/**
  * Vincula uma imagem já salva à mensagem onde ela apareceu. O show_image não
  * conhece o id da mensagem (a tool roda no meio do turno) — o chat-engine
  * completa o registro quando materializa a ImagePart.
@@ -226,7 +254,14 @@ function matches(entry: MediaEntry, filter: MediaFilter): boolean {
     const kinds = Array.isArray(filter.kind) ? filter.kind : [filter.kind]
     if (!kinds.includes(mediaKind(entry))) return false
   }
-  if (filter.sessionId && entry.sessionId !== filter.sessionId) return false
+  // Sessão de origem OU uma sessão vinculada (fork) — ver linkMediaSessions.
+  if (
+    filter.sessionId &&
+    entry.sessionId !== filter.sessionId &&
+    !entry.linkedSessionIds?.includes(filter.sessionId)
+  ) {
+    return false
+  }
   // Escopo de projeto: é o que faz o agente reencontrar, no modo código, o
   // que ele produziu antes no MESMO repositório — em qualquer sessão.
   if (filter.directory && entry.directory !== filter.directory) return false

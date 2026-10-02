@@ -51,6 +51,18 @@ export interface MediaEntry {
   kind?: MediaKind
   /** Chat que originou o ativo (quando veio de uma tool) */
   sessionId?: string
+  /**
+   * Outras sessões em que este ativo também deve aparecer em "Neste chat" —
+   * hoje, só forks. `forkSession` clona as mensagens com novos ids de part,
+   * mas aponta para o MESMO documentId/mediaUrl (nada é duplicado); sem isto,
+   * o card continua visível na conversa do fork, mas some do filtro "Neste
+   * chat" porque `sessionId` aqui é fixo na sessão original.
+   *
+   * `directory`/`folderId` continuam derivados de `sessionId` (a sessão de
+   * origem) — um fork herda o mesmo projeto na criação, então não há porque
+   * esses dois escopos também precisarem de uma lista.
+   */
+  linkedSessionIds?: string[]
   /** Mensagem do assistente onde o ativo aparece */
   messageId?: string
   /** Tarefa de run_browser_script/capture_batch que gerou a imagem */
