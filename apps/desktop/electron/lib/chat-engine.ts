@@ -1788,6 +1788,15 @@ async function runChatTurn(win: BrowserWindow, input: SendMessageInput): Promise
         if (part.type === 'text') part.text = stripEngineMarkers(part.text)
         part.state = 'done'
       }
+      // Backstop: uma tool-call sem resultado que não foi pega pelo ramo de
+      // auto-continue acima (ex.: teto de MAX_AUTO_CONTINUES esgotado com
+      // finish_reason 'length') ficaria 'running' para sempre — e o acordeon
+      // de ações (TaskGroup) lê isso como "ainda trabalhando": shimmer e
+      // "Working" eternos mesmo com o turno já encerrado e salvo.
+      if (part.type === 'tool' && part.state === 'running') {
+        part.state = 'error'
+        part.error = 'Chamada de ferramenta sem resultado — turno encerrado antes dela terminar.'
+      }
     }
     // Degraus da escada saem antes de a resposta ser gravada: o que fica é o
     // resultado, não o caminho até ele.
@@ -1886,6 +1895,15 @@ async function runChatTurn(win: BrowserWindow, input: SendMessageInput): Promise
       if ((part.type === 'text' || part.type === 'reasoning') && part.state === 'streaming') {
         if (part.type === 'text') part.text = stripEngineMarkers(part.text)
         part.state = 'done'
+      }
+      // tool-call chegou mas tool-result/tool-error nunca veio — abort no meio
+      // da execução, ou a conexão caiu antes do resultado. Sem isto a part
+      // fica 'running' para sempre, e o acordeon de ações (TaskGroup) lê isso
+      // como "ainda trabalhando": shimmer e "Working" eternos mesmo com o
+      // turno já encerrado.
+      if (part.type === 'tool' && part.state === 'running') {
+        part.state = 'error'
+        part.error = aborted ? 'Interrompida.' : (message ?? 'A execução não terminou.')
       }
     }
     assistantMessage.completedAt = Date.now()

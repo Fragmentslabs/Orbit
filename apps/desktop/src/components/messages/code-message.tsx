@@ -63,14 +63,21 @@ function TestResultsBlock({ summary }: { summary: TestSummary }) {
 
 const MAX_VISIBLE = 5
 
-function TaskGroup({ parts, snapshot, sessionId, messageId }: {
+function TaskGroup({ parts, snapshot, sessionId, messageId, live }: {
   parts: ToolPart[]
   snapshot?: { patch?: string; files?: string[] }
   sessionId?: string
   messageId?: string
+  /** A mensagem é a última e o turno ainda está em streaming — só nesse caso
+   *  uma part "running" é de verdade. Sem isto, uma mensagem antiga com uma
+   *  tool-call que nunca recebeu resultado (abort, conexão caída) ficava
+   *  mostrando "Working"/shimmer para sempre, mesmo fora de qualquer turno
+   *  ativo — o chat-engine agora fecha essas parts ao salvar, mas uma
+   *  mensagem já gravada quebrada antes desse fix se autocura aqui. */
+  live: boolean
 }) {
   const { t } = useTranslation()
-  const working = parts.some((p) => p.state === "running")
+  const working = live && parts.some((p) => p.state === "running")
   const errors = parts.filter((p) => p.state === "error").length
   const [open, setOpen] = useState(false)
   const [showAll, setShowAll] = useState(false)
@@ -251,6 +258,7 @@ export function CodeAssistantMessage({ message, sessionId, isLast, isBusy, busyL
             snapshot={message.snapshot}
             sessionId={sessionId}
             messageId={message.id}
+            live={isLast && isBusy}
           />
         ) : segment.kind === "image-group" ? (
           <ImageGroupView key={segment.id} parts={segment.parts} />
