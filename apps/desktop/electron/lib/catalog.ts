@@ -16,6 +16,18 @@ const REFRESH_INTERVAL = 24 * 60 * 60 * 1000 // 24h
 
 let cached: Catalog | null = null
 
+/**
+ * Quem quer saber que o catálogo mudou em segundo plano. A interface carrega o
+ * catálogo uma vez ao abrir; sem esse aviso ela seguia mostrando modelos e
+ * níveis do catálogo velho enquanto o engine já usava o novo. Registro por
+ * callback (e não BrowserWindow aqui) para o módulo não depender do electron.
+ */
+const refreshListeners = new Set<() => void>()
+export function onCatalogRefreshed(listener: () => void): () => void {
+  refreshListeners.add(listener)
+  return () => refreshListeners.delete(listener)
+}
+
 function cacheFile() {
   return path.join(dataDir(), 'models-dev.json')
 }
@@ -93,7 +105,9 @@ export async function getCatalog(): Promise<Catalog> {
     cached = enrichCatalog(cache.catalog)
     if (Date.now() - cache.fetchedAt > REFRESH_INTERVAL) {
       void fetchCatalog().then((fresh) => {
-        if (fresh) cached = fresh
+        if (!fresh) return
+        cached = fresh
+        for (const listener of refreshListeners) listener()
       })
     }
     return cached

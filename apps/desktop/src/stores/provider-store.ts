@@ -59,6 +59,8 @@ interface ProviderState {
   updateCustomProvider: (id: string, patch: { name?: string; baseURL?: string; apiKey?: string }) => Promise<void>
   removeCustomProvider: (id: string) => Promise<void>
   refreshCustomProviders: () => Promise<void>
+  /** Recarrega o catálogo do main (ex: depois da atualização em segundo plano) */
+  reloadCatalog: () => Promise<void>
 }
 
 function mergeIntoCatalog(catalog: Catalog, custom: CatalogProvider[]): Catalog {
@@ -222,6 +224,15 @@ export const useProviderStore = create<ProviderState>((set, get) => ({
     if (selectedModel?.providerId === providerId) {
       localStorage.removeItem(SELECTED_MODEL_KEY)
       set({ selectedModel: null })
+    }
+  },
+
+  reloadCatalog: async () => {
+    try {
+      const catalog = await catalogApi.get()
+      set((state) => ({ catalog: mergeIntoCatalog(catalog, state.customProviders) }))
+    } catch (err) {
+      console.error("[provider-store] reloadCatalog failed:", err)
     }
   },
 

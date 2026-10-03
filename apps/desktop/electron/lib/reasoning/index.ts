@@ -1,5 +1,6 @@
 import type { JSONValue, ModelMessage, ToolContent } from 'ai'
 import type { CatalogProvider, SendMessageInput } from '@shared/chat'
+import { closestVariant, findCatalogModel } from '@shared/chat'
 import { getProvider } from '../catalog'
 import { isServedByOpenAiCompatible } from '../providers'
 import { mergeOptions } from './merge'
@@ -40,15 +41,23 @@ export async function buildProviderOptions(
   if (!reasoning?.enabled) return undefined
 
   const provider = await getProvider(input.providerId)
-  const model = provider?.models[input.modelId]
-  if (!provider || !model?.reasoning) return undefined
+  // Segue renomeação do models.dev: com o id antigo salvo, o modelo "sumia"
+  // daqui e o turno saía sem reasoning nenhum, mesmo com o nível ligado na UI.
+  const found = provider && findCatalogModel({ [provider.id]: provider }, provider.id, input.modelId)
+  if (!provider || !found) {
+    console.warn('[reasoning] modelo fora do catálogo — turno sem reasoning', input.providerId, input.modelId)
+    return undefined
+  }
+  const model = found.model
+  if (!model.reasoning) return undefined
 
   const modelInput = toModelInput(input.providerId, provider.npm, model)
   const variants = generateVariants(modelInput)
 
-  // Variant desconhecida ou não selecionada: usa apenas o baseline.
-  const variantPayload =
-    reasoning.variantId && variants[reasoning.variantId] ? variants[reasoning.variantId] : {}
+  // Nível salvo que o modelo não tem vira o vizinho mais próximo; sem nível
+  // escolhido, fica só o baseline.
+  const variantId = closestVariant(Object.keys(variants), reasoning.variantId)
+  const variantPayload = variantId ? variants[variantId] : {}
 
   const base = buildBaseOptions(modelInput, input.sessionId)
   const merged = mergeOptions(base, variantPayload)

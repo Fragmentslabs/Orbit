@@ -11,7 +11,36 @@ export function toModelInput(providerId: string, npm: string | undefined, model:
     releaseDate: model.release_date ?? '',
     reasoning: model.reasoning,
     limit: model.limit ?? { context: 0, output: 0 },
+    efforts: catalogEfforts(model),
+    toggleOnly: isToggleOnly(model),
   }
+}
+
+function isToggleOnly(model: CatalogModel): boolean {
+  const types = new Set((model.reasoning_options ?? []).map((option) => option.type))
+  return types.has('toggle') && !types.has('effort') && !types.has('budget_tokens')
+}
+
+function catalogEfforts(model: CatalogModel): string[] | undefined {
+  for (const option of model.reasoning_options ?? []) {
+    if (option.type === 'effort' && 'values' in option && Array.isArray(option.values) && option.values.length > 0) {
+      return option.values
+    }
+  }
+  return undefined
+}
+
+/**
+ * Restringe o mapa aos níveis que o catálogo declara. A lista fixa por família
+ * de modelo chuta o que o provedor aceita, e errava: o DeepSeek V4.1 Flash no
+ * OpenCode Go aceita low/high/max, e o Orbit oferecia "medium" também. Se a
+ * interseção ficar vazia (catálogo com nomes que não conhecemos), vale o mapa
+ * original — melhor um nível a mais do que nenhum.
+ */
+function restrictToCatalog(variants: VariantMap, efforts: string[] | undefined): VariantMap {
+  if (!efforts) return variants
+  const kept = Object.fromEntries(Object.entries(variants).filter(([id]) => efforts.includes(id)))
+  return Object.keys(kept).length > 0 ? kept : variants
 }
 
 /**
@@ -209,14 +238,22 @@ function openaiVariants(model: ModelInput): VariantMap {
 }
 
 function openAiCompatibleVariants(model: ModelInput): VariantMap {
+  // Só liga/desliga: inventar low/medium/high mandava um `reasoning_effort`
+  // que o provedor não declara aceitar. E não há campo de liga/desliga comum
+  // entre gateways (`reasoning.enabled`, `thinking.type`, `enable_thinking`…),
+  // então fica o padrão do provedor — como nos modelos de isAlwaysOnModel.
+  if (model.toggleOnly) return {}
   const id = model.apiId.toLowerCase()
   if (GPT5_FAMILY_RE.test(id) || id.includes('gpt')) {
     return Object.fromEntries(
       openaiCompatibleReasoningEfforts(model.apiId).map((effort) => [effort, { reasoningEffort: effort }]),
     )
   }
-  const efforts = [...WIDELY_SUPPORTED_EFFORTS]
-  if (id.includes('deepseek-v4')) efforts.push('max')
+  // O adaptador só repassa `reasoning_effort`, então os níveis do catálogo
+  // valem direto. `none` fica de fora: desligar é o toggle, não um nível.
+  const fromCatalog = model.efforts?.filter((effort) => effort !== 'none')
+  const efforts = fromCatalog?.length ? fromCatalog : [...WIDELY_SUPPORTED_EFFORTS]
+  if (!fromCatalog?.length && id.includes('deepseek-v4')) efforts.push('max')
   return Object.fromEntries(efforts.map((effort) => [effort, { reasoningEffort: effort }]))
 }
 
@@ -260,16 +297,16 @@ export function generateVariants(model: ModelInput): VariantMap {
   switch (model.npm) {
     case '@ai-sdk/anthropic':
     case '@ai-sdk/google-vertex/anthropic':
-      return anthropicVariants(model)
+      return restrictToCatalog(anthropicVariants(model), model.efforts)
     case '@ai-sdk/google':
     case '@ai-sdk/google-vertex':
-      return googleVariants(model)
+      return restrictToCatalog(googleVariants(model), model.efforts)
     case '@ai-sdk/openai':
     case '@ai-sdk/azure':
-      return openaiVariants(model)
+      return restrictToCatalog(openaiVariants(model), model.efforts)
     default:
       // Provedores sem SDK dedicado caem no adaptador openai-compatible.
-      return openAiCompatibleVariants(model)
+      return restrictToCatalog(openAiCompatibleVariants(model), model.efforts)
   }
 }
 

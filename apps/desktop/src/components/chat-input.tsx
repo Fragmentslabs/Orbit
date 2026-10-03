@@ -47,6 +47,7 @@ import { useSessionModel } from "@/src/stores/session-model-prefs"
 import { useReasoningPrefs } from "@/src/stores/reasoning-prefs"
 import { useSimpleMode, useSimplePrefs } from "@/src/stores/simple-prefs"
 import type { ChatStatus, FilePart, SendMessageOptions } from "@shared/chat"
+import { closestVariant } from "@shared/chat"
 import { quotesToFileParts } from "@/src/lib/document-quote"
 import { toFileParts } from "@/src/lib/message-utils"
 import { resolveSlashAction } from "@/src/lib/slash-actions"
@@ -78,7 +79,10 @@ export function ChatInput({ onSubmit, status, onStop, sessionId, draftKey, onPro
   const selected = useSessionModel(sessionId)
   const catalog = useProviderStore((s) => s.catalog)
   const model = selected ? catalog[selected.providerId]?.models[selected.modelId] : undefined
-  const { enabled, variantId, update } = useReasoningPrefs(selected?.providerId, selected?.modelId)
+  const { enabled, variantId: savedVariant, update } = useReasoningPrefs(selected?.providerId, selected?.modelId)
+  // Nível salvo que este modelo não oferece (ex: "medium" onde só há
+  // low/high/max) vira o vizinho mais próximo — o mesmo que o engine envia.
+  const variantId = closestVariant(model?.variants?.map((v) => v.id) ?? [], savedVariant) ?? savedVariant
   // Thinking: o chip das preferências define o default; reasoning do modelo e
   // modelos com reasoningAlwaysOn continuam valendo como antes
   const thinking = chatActiveModes.thinking || enabled || !!model?.reasoningAlwaysOn

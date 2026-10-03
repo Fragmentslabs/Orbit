@@ -118,6 +118,12 @@ export const storage = {
 
 export const catalogApi = {
   get: () => window.ipcRenderer.invoke("catalog:get") as Promise<Catalog>,
+  /** O main atualizou o catálogo em segundo plano (models.dev, a cada 24h) */
+  onUpdated: (listener: () => void) => {
+    if (!window.ipcRenderer) return () => {}
+    const wrapper = window.ipcRenderer.on("catalog:updated", () => listener())
+    return () => window.ipcRenderer.off("catalog:updated", wrapper)
+  },
 }
 
 export const modelsApi = {

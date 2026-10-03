@@ -1,6 +1,6 @@
 import { useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
-import { BrainIcon, ChevronDownIcon, ListRestartIcon, Plug, SettingsIcon, XIcon } from "lucide-react"
+import { BrainIcon, ChevronDownIcon, ListRestartIcon, Plug, SettingsIcon, TriangleAlertIcon, XIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
   ModelSelector,
@@ -22,6 +22,7 @@ import { useSessionModel, useSessionModelPrefs } from "@/src/stores/session-mode
 import { useModelRotationStore, ROTATION_DRAFT_KEY } from "@/src/stores/model-rotation-store"
 import { useRotationUi } from "@/src/stores/rotation-ui"
 import { cn } from "@/lib/utils"
+import { isKnownModel } from "@/src/lib/model-migration"
 
 const MAX_MODELS_PER_PROVIDER = 40
 
@@ -124,6 +125,10 @@ export function ModelPicker({ sessionId, open: openProp, onOpenChange: onOpenCha
   )
 
   const selectedModel = selected ? catalog[selected.providerId]?.models[selected.modelId] : undefined
+  // Modelo salvo que saiu do catálogo sem sucessor (renomeações já foram
+  // migradas): avisa, em vez de um "Selecionar modelo" que parece só vazio —
+  // o envio seguiria para um id que o provedor talvez nem atenda mais.
+  const unavailable = !loading && !error && !isKnownModel(catalog, selected)
 
   const pick = (providerId: string, modelId: string) => {
     if (controlled) {
@@ -173,9 +178,20 @@ export function ModelPicker({ sessionId, open: openProp, onOpenChange: onOpenCha
                   </>
                 ) : (
                   <>
-                    <ModelSelectorLogo provider={selected?.providerId ?? "openai"} />
-                    <ModelSelectorName>
-                      {loading ? t("modelPicker.loading") : selectedModel?.name ?? (error ? t("modelPicker.error") : t("modelPicker.select"))}
+                    {unavailable ? (
+                      <TriangleAlertIcon className="size-3.5 shrink-0 text-destructive" aria-hidden />
+                    ) : (
+                      <ModelSelectorLogo provider={selected?.providerId ?? "openai"} />
+                    )}
+                    <ModelSelectorName
+                      className={unavailable ? "text-destructive" : undefined}
+                      title={unavailable ? t("modelPicker.unavailableHint", { model: selected?.modelId }) : undefined}
+                    >
+                      {loading
+                        ? t("modelPicker.loading")
+                        : unavailable
+                          ? t("modelPicker.unavailable")
+                          : selectedModel?.name ?? (error ? t("modelPicker.error") : t("modelPicker.select"))}
                     </ModelSelectorName>
                   </>
                 )}

@@ -9,6 +9,7 @@ import { createAzure } from '@ai-sdk/azure'
 import { createCohere } from '@ai-sdk/cohere'
 import type { LanguageModel } from 'ai'
 import { resolveApiKey } from './auth'
+import { findCatalogModel } from '@shared/chat'
 import { getProvider } from './catalog'
 import { ProviderResolutionError } from './provider-errors'
 import {
@@ -158,6 +159,9 @@ export async function resolveModel(
     // UI a partir do `reason`/kind (chat.errorKind.*, notif.chatError.kind.*).
     throw new ProviderResolutionError(`Unknown provider: ${providerId}`, 'unknown-provider')
   }
+  // Id renomeado no models.dev: pede ao provedor o sucessor, não o nome velho
+  // (que o gateway às vezes ainda aceita, mas com outro comportamento).
+  modelId = findCatalogModel({ [provider.id]: provider }, provider.id, modelId)?.modelId ?? modelId
 
   const npm = provider.npm ?? '@ai-sdk/openai-compatible'
 

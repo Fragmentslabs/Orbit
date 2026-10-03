@@ -9,7 +9,7 @@ import { chmodSync, existsSync, unlinkSync } from 'node:fs'
 import path from 'node:path'
 import type * as NodePty from 'node-pty'
 import { listCredentialProviders, removeCredential, setCredential } from './lib/auth'
-import { getCatalog, ensureCustomProvidersSeeded } from './lib/catalog'
+import { getCatalog, ensureCustomProvidersSeeded, onCatalogRefreshed } from './lib/catalog'
 import { checkWritePath } from './lib/file-write-guard'
 import { recordManualSave } from './lib/manual-saves'
 import { lintFile, stopLintWorkers } from './lib/eslint-service'
@@ -1499,6 +1499,11 @@ app.whenReady().then(() => {
 
   // Catálogo de provedores/modelos (models.dev)
   ipcMain.handle('catalog:get', () => getCatalog())
+  onCatalogRefreshed(() => {
+    for (const win of BrowserWindow.getAllWindows()) {
+      if (!win.isDestroyed()) win.webContents.send('catalog:updated')
+    }
+  })
 
   // Catálogo unificado da aba Models (OpenRouter + Artificial Analysis)
   ipcMain.handle('models:list', () => getModelsSnapshot())

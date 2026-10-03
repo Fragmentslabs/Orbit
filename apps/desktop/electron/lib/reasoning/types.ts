@@ -16,6 +16,12 @@ export interface ModelInput {
   releaseDate: string
   reasoning: boolean
   limit: { context: number; output: number }
+  /** Níveis que o models.dev declara para o modelo (reasoning_options →
+   *  effort). Ausente quando o catálogo não informa. */
+  efforts?: string[]
+  /** O catálogo declara só liga/desliga (reasoning_options sem `effort` nem
+   *  `budget_tokens`): o provedor não aceita níveis. */
+  toggleOnly?: boolean
 }
 
 /** Payload de providerOptions sem o namespace do SDK */

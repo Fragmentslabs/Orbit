@@ -690,6 +690,12 @@ export interface CatalogModel {
   cost?: { input: number; output: number }
   /** Estado no catálogo (models.dev): `deprecated` = removido do backend do provedor */
   status?: 'deprecated' | 'beta'
+  /** Família no models.dev (ex: "deepseek-flash"). Quando um id é renomeado,
+   *  o id antigo costuma virar a família dos sucessores — ver findCatalogModel. */
+  family?: string
+  /** Controles de reasoning que o models.dev declara para o modelo. `effort`
+   *  lista os níveis que o provedor aceita; `toggle` é liga/desliga. */
+  reasoning_options?: Array<{ type: 'effort'; values: string[] } | { type: 'toggle' } | { type: string }>
 }
 
 export interface CatalogProvider {
@@ -702,6 +708,55 @@ export interface CatalogProvider {
 }
 
 export type Catalog = Record<string, CatalogProvider>
+
+/**
+ * Acha o modelo no catálogo, seguindo renomeações. O models.dev às vezes troca
+ * o id de um modelo (ex: "deepseek-flash" → "deepseek-v4.1-flash") e o id
+ * antigo passa a ser a família dos sucessores. Uma escolha salva com o id
+ * antigo sumia do catálogo, e o engine deixava de mandar o nível de reasoning
+ * sem avisar ninguém — o modelo respondia sem pensar.
+ *
+ * Sem o id exato, procura no MESMO provedor os modelos cuja família é o id
+ * pedido e fica com o mais recente. `renamed` diz se houve troca.
+ */
+export function findCatalogModel(
+  catalog: Catalog,
+  providerId: string,
+  modelId: string,
+): { modelId: string; model: CatalogModel; renamed: boolean } | undefined {
+  const models = catalog[providerId]?.models
+  if (!models) return undefined
+  const exact = models[modelId]
+  if (exact) return { modelId, model: exact, renamed: false }
+  const successors = Object.entries(models)
+    .filter(([, m]) => m.family === modelId && m.status !== 'deprecated')
+    .sort(([, a], [, b]) => (b.release_date ?? '').localeCompare(a.release_date ?? ''))
+  const [id, model] = successors[0] ?? []
+  return id && model ? { modelId: id, model, renamed: true } : undefined
+}
+
+/** Níveis de reasoning do mais fraco ao mais forte — `closestVariant` usa a
+ *  ordem para trocar um nível que o modelo não tem pelo vizinho mais próximo. */
+export const REASONING_LEVELS = ['none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max']
+
+/**
+ * O nível que vale de fato para um modelo. Um nível salvo que o modelo não
+ * oferece (ex: "medium" num modelo que só tem low/high/max) era descartado em
+ * silêncio, e o turno saía sem reasoning nenhum. Aqui ele vira o próximo mais
+ * forte disponível; não havendo, o mais forte abaixo. Sem nível pedido, ou
+ * com um que não é da escala, fica `undefined`.
+ */
+export function closestVariant(available: string[], wanted: string | undefined): string | undefined {
+  if (!wanted || available.length === 0) return undefined
+  if (available.includes(wanted)) return wanted
+  const rank = REASONING_LEVELS.indexOf(wanted)
+  if (rank < 0) return undefined
+  const ranked = available
+    .map((id) => ({ id, rank: REASONING_LEVELS.indexOf(id) }))
+    .filter((v) => v.rank >= 0)
+    .sort((a, b) => a.rank - b.rank)
+  return (ranked.find((v) => v.rank > rank) ?? ranked[ranked.length - 1])?.id
+}
 
 /** O modelo aceita imagens como input? Usa as modalidades do models.dev
  * (input inclui 'image'); sem modalidades, cai no flag `attachment`. */

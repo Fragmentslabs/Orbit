@@ -239,7 +239,9 @@
     "recent": "Recentes",
     "removeRecent": "Remover dos recentes",
     "rotation": "Rotações",
-    "createRotation": "Criar rotação"
+    "createRotation": "Criar rotação",
+    "unavailable": "Modelo indisponível",
+    "unavailableHint": "\"{{model}}\" não existe mais no catálogo do provedor. Escolha outro modelo."
   },
   "rotation": {
     "title": "Rotação de modelos",

@@ -56,7 +56,7 @@ import { useSimpleMode, useSimplePrefs } from "@/src/stores/simple-prefs"
 import { useSkillsStore } from "@/src/stores/skills-store"
 import { useAppearanceStore } from "@/src/stores/appearance-store"
 import type { ChatStatus, FilePart, PermissionMode, SendMessageOptions } from "@shared/chat"
-import { BROWSER_SELECTION_MIME } from "@shared/chat"
+import { BROWSER_SELECTION_MIME, closestVariant } from "@shared/chat"
 import { toFileParts } from "@/src/lib/message-utils"
 import { resolveSlashAction } from "@/src/lib/slash-actions"
 
@@ -128,7 +128,10 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId, on
   const selected = useSessionModel(sessionId)
   const catalog = useProviderStore((s) => s.catalog)
   const model = selected ? catalog[selected.providerId]?.models[selected.modelId] : undefined
-  const { enabled, variantId, update } = useReasoningPrefs(selected?.providerId, selected?.modelId)
+  const { enabled, variantId: savedVariant, update } = useReasoningPrefs(selected?.providerId, selected?.modelId)
+  // Nível salvo que este modelo não oferece (ex: "medium" onde só há
+  // low/high/max) vira o vizinho mais próximo — o mesmo que o engine envia.
+  const variantId = closestVariant(model?.variants?.map((v) => v.id) ?? [], savedVariant) ?? savedVariant
   // Thinking: o chip das preferências define o default; reasoning do modelo e
   // modelos com reasoningAlwaysOn continuam valendo como antes
   const thinking = codeActiveModes.thinking || enabled || !!model?.reasoningAlwaysOn

@@ -239,7 +239,9 @@
     "recent": "Recent",
     "removeRecent": "Remove from recents",
     "rotation": "Rotations",
-    "createRotation": "Create rotation"
+    "createRotation": "Create rotation",
+    "unavailable": "Model unavailable",
+    "unavailableHint": "\"{{model}}\" is no longer in the provider's catalog. Pick another model."
   },
   "rotation": {
     "title": "Model rotation",

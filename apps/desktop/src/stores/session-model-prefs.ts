@@ -64,6 +64,9 @@ interface SessionModelPrefsState {
   /** Remove um modelo dos recentes (botão "x" no seletor). */
   removeRecent: (providerId: string, modelId: string) => void
   clear: (sessionId: string) => void
+  /** Troca, em overrides e recentes, os modelos que `next` mapear para outro
+   *  (renomeação no catálogo — ver model-migration-sync). */
+  remap: (next: (model: SelectedModel) => SelectedModel | undefined) => void
 }
 
 export const useSessionModelPrefs = create<SessionModelPrefsState>((set, get) => ({
@@ -124,6 +127,26 @@ selectModel: (sessionId, providerId, modelId) => {
     delete overrides[sessionId]
     persistRecord(overrides)
     set({ overrides })
+    sessionModelsApi.sync(overrides)
+  },
+
+  remap: (next) => {
+    let changed = false
+    const overrides: Record<string, SelectedModel> = {}
+    for (const [key, model] of Object.entries(get().overrides)) {
+      const renamed = next(model)
+      if (renamed) changed = true
+      overrides[key] = renamed ?? model
+    }
+    const recents = get().recents.map((model) => {
+      const renamed = next(model)
+      if (renamed) changed = true
+      return renamed ?? model
+    })
+    if (!changed) return
+    persistRecord(overrides)
+    persistRecents(recents)
+    set({ overrides, recents })
     sessionModelsApi.sync(overrides)
   },
 }))
