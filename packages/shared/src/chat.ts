@@ -694,8 +694,13 @@ export interface CatalogModel {
    *  o id antigo costuma virar a família dos sucessores — ver findCatalogModel. */
   family?: string
   /** Controles de reasoning que o models.dev declara para o modelo. `effort`
-   *  lista os níveis que o provedor aceita; `toggle` é liga/desliga. */
-  reasoning_options?: Array<{ type: 'effort'; values: string[] } | { type: 'toggle' } | { type: string }>
+   *  lista os níveis que o provedor aceita; `toggle` é liga/desliga;
+   *  `budget_tokens` é um orçamento em tokens, com limites opcionais. */
+  reasoning_options?: Array<
+    | { type: 'effort'; values: Array<string | null> }
+    | { type: 'toggle' }
+    | { type: 'budget_tokens'; min?: number; max?: number }
+  >
 }
 
 export interface CatalogProvider {

@@ -1,8 +1,13 @@
 import type { CatalogModel } from '@shared/chat'
-import type { ModelInput, VariantMap } from './types'
+import type { ModelInput, VariantMap, VariantPayload } from './types'
 
 /** Converte um modelo do catálogo models.dev no input interno do módulo. */
-export function toModelInput(providerId: string, npm: string | undefined, model: CatalogModel): ModelInput {
+export function toModelInput(
+  providerId: string,
+  npm: string | undefined,
+  model: CatalogModel,
+  apiUrl?: string,
+): ModelInput {
   return {
     providerId,
     modelId: model.id,
@@ -11,43 +16,15 @@ export function toModelInput(providerId: string, npm: string | undefined, model:
     releaseDate: model.release_date ?? '',
     reasoning: model.reasoning,
     limit: model.limit ?? { context: 0, output: 0 },
-    efforts: catalogEfforts(model),
-    toggleOnly: isToggleOnly(model),
+    reasoningOptions: model.reasoning_options,
+    apiUrl,
   }
 }
 
-function isToggleOnly(model: CatalogModel): boolean {
-  const types = new Set((model.reasoning_options ?? []).map((option) => option.type))
-  return types.has('toggle') && !types.has('effort') && !types.has('budget_tokens')
-}
-
-function catalogEfforts(model: CatalogModel): string[] | undefined {
-  for (const option of model.reasoning_options ?? []) {
-    if (option.type === 'effort' && 'values' in option && Array.isArray(option.values) && option.values.length > 0) {
-      return option.values
-    }
-  }
-  return undefined
-}
-
 /**
- * Restringe o mapa aos níveis que o catálogo declara. A lista fixa por família
- * de modelo chuta o que o provedor aceita, e errava: o DeepSeek V4.1 Flash no
- * OpenCode Go aceita low/high/max, e o Orbit oferecia "medium" também. Se a
- * interseção ficar vazia (catálogo com nomes que não conhecemos), vale o mapa
- * original — melhor um nível a mais do que nenhum.
- */
-function restrictToCatalog(variants: VariantMap, efforts: string[] | undefined): VariantMap {
-  if (!efforts) return variants
-  const kept = Object.fromEntries(Object.entries(variants).filter(([id]) => efforts.includes(id)))
-  return Object.keys(kept).length > 0 ? kept : variants
-}
-
-/**
- * Geração de níveis de reasoning (variants) por provedor, portada do
- * opencode (provider/transform.ts → variants()) e reestruturada em funções
- * por provider em vez de um switch monolítico. Cobre os SDKs empacotados no
- * Orbit: anthropic, google, openai e openai-compatible (fallback).
+ * Geração de níveis de reasoning (variants) por provedor. Primeiro vale o que
+ * o catálogo declara para o modelo naquele provedor (catalogVariants); sem
+ * isso, as regras por nome do modelo e por SDK (ruleVariants).
  */
 
 const WIDELY_SUPPORTED_EFFORTS = ['low', 'medium', 'high']
@@ -168,6 +145,173 @@ function anthropicOmitsThinking(apiId: string) {
   return anthropicOpus47OrLater(apiId) || anthropicSonnet5OrLater(apiId) || apiId.includes('fable-5')
 }
 
+function anthropicOpus45(apiId: string) {
+  return ['opus-4-5', 'opus-4.5'].some((v) => apiId.includes(v))
+}
+
+/** Kimi por qualquer caminho: id do provedor, id do modelo ou a URL da Moonshot. */
+export function isKimiFamily(model: ModelInput) {
+  if ([model.providerId, model.apiId].some((id) => /kimi|moonshot/i.test(id))) return true
+  const url = model.apiUrl?.toLowerCase() ?? ''
+  return ['api.kimi.com', 'api.moonshot.ai', 'api.moonshot.cn', 'api.moonshotai.cn'].some((host) => url.includes(host))
+}
+
+/** GLM-5.2 é o primeiro GLM com níveis de esforço — os anteriores só pensam. */
+function isGlm52(model: ModelInput) {
+  return [model.modelId, model.apiId].some((id) => /glm-5[.p-]2/i.test(id))
+}
+
+const isAnthropicSdk = (npm: string) => npm === '@ai-sdk/anthropic' || npm === '@ai-sdk/google-vertex/anthropic'
+
+/** Teto de tokens de saída usado no orçamento de reasoning. */
+const OUTPUT_TOKEN_MAX = 32_000
+
+function anthropicEffortPayload(model: ModelInput, effort: string): VariantPayload | undefined {
+  if (anthropicOpus45(model.apiId)) {
+    const output = model.limit.output || OUTPUT_TOKEN_MAX
+    return { thinking: { type: 'enabled', budgetTokens: Math.min(16_000, Math.floor(output / 2 - 1)) }, effort }
+  }
+  // Kimi omite o texto do thinking adaptativo sem display "summarized".
+  if (isKimiFamily(model)) return { thinking: { type: 'adaptive', display: 'summarized' }, effort }
+  if (!anthropicAdaptiveEfforts(model.apiId)) return undefined
+  return {
+    thinking: { type: 'adaptive', ...(anthropicOmitsThinking(model.apiId) ? { display: 'summarized' } : {}) },
+    effort,
+  }
+}
+
+/**
+ * Payload de um nível de esforço declarado pelo catálogo, no formato que o SDK
+ * do provedor lê. `undefined` = esse SDK não aceita níveis (o nível some).
+ */
+function effortPayload(model: ModelInput, effort: string): VariantPayload | undefined {
+  switch (model.npm) {
+    case '@openrouter/ai-sdk-provider':
+      return { reasoning: { effort } }
+    case '@ai-sdk/anthropic':
+    case '@ai-sdk/google-vertex/anthropic':
+      return anthropicEffortPayload(model, effort) ?? { effort }
+    case '@ai-sdk/google':
+    case '@ai-sdk/google-vertex':
+      return { thinkingConfig: { includeThoughts: true, thinkingLevel: effort } }
+    case '@ai-sdk/amazon-bedrock':
+      if (anthropicAdaptiveEfforts(model.apiId)) {
+        return {
+          reasoningConfig: {
+            type: 'adaptive',
+            maxReasoningEffort: effort,
+            ...(anthropicOmitsThinking(model.apiId) ? { display: 'summarized' } : {}),
+          },
+        }
+      }
+      if (anthropicOpus45(model.apiId)) {
+        const output = model.limit.output || OUTPUT_TOKEN_MAX
+        return {
+          reasoningConfig: {
+            type: 'enabled',
+            budgetTokens: Math.min(16_000, Math.floor(output / 2 - 1)),
+            maxReasoningEffort: effort,
+          },
+        }
+      }
+      if (model.apiId.includes('anthropic')) return undefined
+      return { reasoningConfig: { type: 'enabled', maxReasoningEffort: effort } }
+    case '@ai-sdk/openai':
+    case '@ai-sdk/azure':
+      return { reasoningEffort: effort, reasoningSummary: 'auto', include: INCLUDE_ENCRYPTED_REASONING }
+    case '@ai-sdk/cohere':
+    case '@ai-sdk/alibaba':
+    case '@ai-sdk/perplexity':
+    case '@ai-sdk/vercel':
+      return undefined
+    default:
+      // Adaptador openai-compatible e os demais que leem `reasoningEffort`.
+      return { reasoningEffort: effort }
+  }
+}
+
+/** Payload de um orçamento de tokens de reasoning, por SDK. */
+function budgetPayload(model: ModelInput, budget: number): VariantPayload | undefined {
+  switch (model.npm) {
+    case '@openrouter/ai-sdk-provider':
+      return { reasoning: { max_tokens: budget } }
+    case '@ai-sdk/anthropic':
+    case '@ai-sdk/google-vertex/anthropic':
+      return { thinking: { type: 'enabled', budgetTokens: budget } }
+    case '@ai-sdk/google':
+    case '@ai-sdk/google-vertex':
+      return { thinkingConfig: { includeThoughts: true, thinkingBudget: budget } }
+    case '@ai-sdk/amazon-bedrock':
+      return { reasoningConfig: { type: 'enabled', budgetTokens: budget } }
+    case '@ai-sdk/cohere':
+      return { thinking: { type: 'enabled', tokenBudget: budget } }
+    case '@ai-sdk/alibaba':
+      return { enableThinking: true, thinkingBudget: budget }
+    default:
+      return undefined
+  }
+}
+
+/**
+ * Liga/desliga declarado pelo catálogo. Só existe onde o SDK tem um campo
+ * conhecido para isso; nos demais (inclusive o adaptador openai-compatible)
+ * não há campo comum entre gateways, e o modelo cai nas regras por nome.
+ */
+function toggleVariants(model: ModelInput): VariantMap {
+  if (model.npm === '@ai-sdk/alibaba') return { none: { enableThinking: false }, high: { enableThinking: true } }
+  if (model.npm === '@ai-sdk/cohere') {
+    return { none: { thinking: { type: 'disabled' } }, high: { thinking: { type: 'enabled' } } }
+  }
+  return {}
+}
+
+function budgetVariants(model: ModelInput, min?: number, max?: number): VariantMap {
+  const output = model.limit.output || OUTPUT_TOKEN_MAX
+  const maximum = Math.min(max ?? OUTPUT_TOKEN_MAX - 1, output - 1, OUTPUT_TOKEN_MAX - 1)
+  if (maximum <= 0) return {}
+  const high = Math.min(Math.max(min ?? 0, Math.floor((maximum + 1) / 2)), maximum)
+  const variants: VariantMap = {}
+  for (const [id, budget] of [['high', high], ['max', maximum]] as const) {
+    const payload = budgetPayload(model, budget)
+    if (payload) variants[id] = payload
+  }
+  return variants
+}
+
+const nonEmpty = (variants: VariantMap): VariantMap | undefined =>
+  Object.keys(variants).length > 0 ? variants : undefined
+
+/**
+ * Níveis que o models.dev declara para o modelo NESTE provedor. O mesmo
+ * modelo aceita níveis diferentes em cada gateway (o DeepSeek V4.1 Flash é
+ * low/high/max num e none…max na DeepInfra), e a lista fixa por família
+ * errava — oferecia "medium" onde não existe.
+ *
+ * `undefined` = o catálogo não resolve, e valem as regras por nome do modelo.
+ */
+function catalogVariants(model: ModelInput): VariantMap | undefined {
+  const options = model.reasoningOptions
+  if (options === undefined) return undefined
+  if (options.length === 0) return {}
+
+  const effort = options.find((o) => o.type === 'effort')
+  if (effort) {
+    const variants: VariantMap = {}
+    for (const value of effort.values) {
+      const id = value === null ? 'none' : value
+      if (typeof id !== 'string') continue
+      const payload = effortPayload(model, id)
+      if (payload) variants[id] = payload
+    }
+    return variants
+  }
+
+  const toggle = options.some((o) => o.type === 'toggle')
+  const budget = options.find((o) => o.type === 'budget_tokens')
+  if (!budget) return toggle ? nonEmpty(toggleVariants(model)) : undefined
+  return nonEmpty({ ...(toggle ? toggleVariants(model) : {}), ...budgetVariants(model, budget.min, budget.max) })
+}
+
 function anthropicVariants(model: ModelInput): VariantMap {
   const adaptiveEfforts = anthropicAdaptiveEfforts(model.apiId)
   if (adaptiveEfforts) {
@@ -183,7 +327,7 @@ function anthropicVariants(model: ModelInput): VariantMap {
     )
   }
 
-  if (['opus-4-5', 'opus-4.5'].some((v) => model.apiId.includes(v))) {
+  if (anthropicOpus45(model.apiId)) {
     return Object.fromEntries(WIDELY_SUPPORTED_EFFORTS.map((effort) => [effort, { effort }]))
   }
 
@@ -196,6 +340,8 @@ function anthropicVariants(model: ModelInput): VariantMap {
 
 function googleThinkingLevelEfforts(apiId: string) {
   const id = apiId.toLowerCase()
+  // Gemma só liga/desliga: "minimal" desliga e "high" liga.
+  if (id.includes('gemma')) return ['minimal', 'high']
   if (!id.includes('gemini-3')) return ['low', 'high']
   if (id.includes('flash-image')) return ['minimal', 'high']
   if (id.includes('pro-image')) return ['high']
@@ -238,32 +384,27 @@ function openaiVariants(model: ModelInput): VariantMap {
 }
 
 function openAiCompatibleVariants(model: ModelInput): VariantMap {
-  // Só liga/desliga: inventar low/medium/high mandava um `reasoning_effort`
-  // que o provedor não declara aceitar. E não há campo de liga/desliga comum
-  // entre gateways (`reasoning.enabled`, `thinking.type`, `enable_thinking`…),
-  // então fica o padrão do provedor — como nos modelos de isAlwaysOnModel.
-  if (model.toggleOnly) return {}
   const id = model.apiId.toLowerCase()
   if (GPT5_FAMILY_RE.test(id) || id.includes('gpt')) {
     return Object.fromEntries(
       openaiCompatibleReasoningEfforts(model.apiId).map((effort) => [effort, { reasoningEffort: effort }]),
     )
   }
-  // O adaptador só repassa `reasoning_effort`, então os níveis do catálogo
-  // valem direto. `none` fica de fora: desligar é o toggle, não um nível.
-  const fromCatalog = model.efforts?.filter((effort) => effort !== 'none')
-  const efforts = fromCatalog?.length ? fromCatalog : [...WIDELY_SUPPORTED_EFFORTS]
-  if (!fromCatalog?.length && id.includes('deepseek-v4')) efforts.push('max')
+  const efforts = [...WIDELY_SUPPORTED_EFFORTS]
+  if (id.includes('deepseek-v4')) efforts.push('max')
   return Object.fromEntries(efforts.map((effort) => [effort, { reasoningEffort: effort }]))
 }
 
 /**
  * Modelos que sempre pensam (ou cujo nível não é controlável via API) — o
- * toggle de thinking fica travado e não há variant picker.
+ * toggle de thinking fica travado e não há variant picker. O GLM-5.2 sai da
+ * regra: é o primeiro GLM com níveis de esforço.
  */
 export function isAlwaysOnModel(modelId: string, apiId: string): boolean {
   const id = modelId.toLowerCase()
   const api = apiId.toLowerCase()
+  const has = (prefix: string) => id.includes(prefix) || api.includes(prefix)
+  if (has('glm') && [id, api].some((value) => /glm-5[.p-]2/.test(value))) return false
   return [
     'deepseek-chat',
     'deepseek-reasoner',
@@ -275,39 +416,89 @@ export function isAlwaysOnModel(modelId: string, apiId: string): boolean {
     'k2p',
     'qwen',
     'big-pickle',
-  ].some((prefix) => id.includes(prefix) || api.includes(prefix))
+  ].some(has)
 }
 
-/** Gera o mapa de variants (id → providerOptions sem namespace) de um modelo. */
-export function generateVariants(model: ModelInput): VariantMap {
-  if (!model.reasoning) return {}
-
+/**
+ * Regras por nome do modelo, para quando o catálogo não declara os níveis.
+ * Os casos especiais vêm antes da lista de "sempre pensa": alguns desses
+ * modelos têm, sim, um controle conhecido.
+ */
+function ruleVariants(model: ModelInput): VariantMap {
   const id = model.modelId.toLowerCase()
+  const api = model.apiId.toLowerCase()
+
+  // MiniMax M3: liga/desliga de verdade. NVIDIA e Lilac servem por template de chat.
+  if (api.includes('minimax-m3') && ['@ai-sdk/anthropic', '@ai-sdk/openai-compatible'].includes(model.npm)) {
+    if (['nvidia', 'lilac'].includes(model.providerId)) {
+      return {
+        none: { chat_template_kwargs: { thinking_mode: 'disabled' } },
+        thinking: { chat_template_kwargs: { thinking_mode: 'enabled' } },
+      }
+    }
+    return { none: { thinking: { type: 'disabled' } }, thinking: { thinking: { type: 'adaptive' } } }
+  }
+
+  if (isGlm52(model)) {
+    // No OpenRouter, xhigh é o "max" nativo do GLM-5.2.
+    if (model.npm === '@openrouter/ai-sdk-provider') {
+      return { high: { reasoning: { effort: 'high' } }, xhigh: { reasoning: { effort: 'xhigh' } } }
+    }
+    if (model.npm === '@ai-sdk/openai-compatible') {
+      return { high: { reasoningEffort: 'high' }, max: { reasoningEffort: 'max' } }
+    }
+    if (model.npm === '@ai-sdk/anthropic') return { high: { effort: 'high' }, max: { effort: 'max' } }
+  }
+
+  // Kimi pelos transportes compatíveis com a Anthropic: esforço adaptativo.
+  if (isKimiFamily(model) && isAnthropicSdk(model.npm)) {
+    return Object.fromEntries(
+      ['low', 'medium', 'high', 'xhigh', 'max'].map((effort) => [
+        effort,
+        { thinking: { type: 'adaptive', display: 'summarized' }, effort },
+      ]),
+    )
+  }
+
   if (isAlwaysOnModel(model.modelId, model.apiId)) return {}
 
   // xAI: só o grok-3-mini expõe controle de esforço.
   // https://docs.x.ai/docs/guides/reasoning#control-how-hard-the-model-thinks
   if (id.includes('grok')) {
-    if (id.includes('grok-3-mini')) {
-      return { low: { reasoningEffort: 'low' }, high: { reasoningEffort: 'high' } }
+    if (!id.includes('grok-3-mini')) return {}
+    if (model.npm === '@openrouter/ai-sdk-provider') {
+      return { low: { reasoning: { effort: 'low' } }, high: { reasoning: { effort: 'high' } } }
     }
-    return {}
+    return { low: { reasoningEffort: 'low' }, high: { reasoningEffort: 'high' } }
   }
 
   switch (model.npm) {
     case '@ai-sdk/anthropic':
     case '@ai-sdk/google-vertex/anthropic':
-      return restrictToCatalog(anthropicVariants(model), model.efforts)
+      return anthropicVariants(model)
     case '@ai-sdk/google':
     case '@ai-sdk/google-vertex':
-      return restrictToCatalog(googleVariants(model), model.efforts)
+      return googleVariants(model)
     case '@ai-sdk/openai':
     case '@ai-sdk/azure':
-      return restrictToCatalog(openaiVariants(model), model.efforts)
+      return openaiVariants(model)
+    case '@openrouter/ai-sdk-provider':
+      return Object.fromEntries(
+        (api.startsWith('openai/') || id.includes('gpt')
+          ? openaiCompatibleReasoningEfforts(model.apiId)
+          : WIDELY_SUPPORTED_EFFORTS
+        ).map((effort) => [effort, { reasoning: { effort } }]),
+      )
     default:
       // Provedores sem SDK dedicado caem no adaptador openai-compatible.
-      return restrictToCatalog(openAiCompatibleVariants(model), model.efforts)
+      return openAiCompatibleVariants(model)
   }
+}
+
+/** Gera o mapa de variants (id → providerOptions sem namespace) de um modelo. */
+export function generateVariants(model: ModelInput): VariantMap {
+  if (!model.reasoning) return {}
+  return catalogVariants(model) ?? ruleVariants(model)
 }
 
 const VARIANT_LABELS: Record<string, string> = {
@@ -318,6 +509,7 @@ const VARIANT_LABELS: Record<string, string> = {
   high: 'Alto',
   xhigh: 'Muito alto',
   max: 'Máximo',
+  thinking: 'Ligado',
 }
 
 /** Label de exibição para um id de variant (fallback: capitaliza o id). */

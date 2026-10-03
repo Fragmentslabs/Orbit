@@ -16,7 +16,7 @@ export { generateVariants, isAlwaysOnModel, toModelInput, variantLabel } from '.
  * Namespace de providerOptions lido por cada SDK empacotado. Provedores que
  * caem no adaptador openai-compatible usam o camelCase do id do provedor como
  * namespace (createOpenAICompatible({ name: provider.id }) em providers.ts) —
- * a forma crua (ex: "opencode-go") ainda é aceita pelo SDK, mas emite
+ * a forma crua (ex: "my-gateway") ainda é aceita pelo SDK, mas emite
  * DeprecationWarning. A regra é a mesma do to-camel-case.ts do adaptador.
  */
 const SDK_NAMESPACES: Record<string, string> = {
@@ -51,7 +51,7 @@ export async function buildProviderOptions(
   const model = found.model
   if (!model.reasoning) return undefined
 
-  const modelInput = toModelInput(input.providerId, provider.npm, model)
+  const modelInput = toModelInput(input.providerId, provider.npm, model, provider.api)
   const variants = generateVariants(modelInput)
 
   // Nível salvo que o modelo não tem vira o vizinho mais próximo; sem nível
@@ -68,8 +68,7 @@ export async function buildProviderOptions(
 }
 
 /**
- * Campo usado para reenviar o raciocínio na mensagem do assistente — portado
- * do opencode (provider.ts → interleaved default). Modelos DeepSeek servidos
+ * Campo usado para reenviar o raciocínio na mensagem do assistente. Modelos DeepSeek servidos
  * pelo adaptador openai-compatible usam `reasoning_content`; o DeepSeek exige
  * o campo em TODAS as mensagens de assistente em turnos seguintes, mesmo
  * quando vazio (senão a API retorna 400). O gate usa a regra de resolução real
@@ -141,7 +140,7 @@ function sanitizeToolContent(content: ToolContent): ToolContent {
 
 /**
  * Move o raciocínio das mensagens de assistente para o providerOptions do
- * SDK — portado do opencode (transform.ts → normalizeMessages). Sempre define
+ * SDK. Sempre define
  * o campo, mesmo vazio: provedores como o DeepSeek exigem o reasoning_content
  * de volta em todas as mensagens de assistente em turnos subsequentes, e o
  * conversor do @ai-sdk/openai-compatible descartaria um valor vazio vindo dos

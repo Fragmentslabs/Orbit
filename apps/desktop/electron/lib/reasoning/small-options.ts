@@ -2,7 +2,7 @@ import type { ModelInput, VariantMap, VariantPayload } from './types'
 
 /**
  * Options mínimas para tarefas auxiliares (título, compaction) — usa a
- * variant mais leve do modelo, equivalente ao smallOptions() do opencode.
+ * variant mais leve do modelo.
  */
 export function buildSmallOptions(model: ModelInput, variants: VariantMap): VariantPayload {
   const first = Object.values(variants)[0] ?? {}

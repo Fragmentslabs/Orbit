@@ -50,7 +50,7 @@ function enrichCatalog(catalog: Catalog): Catalog {
     for (const modelId in provider.models) {
       const model = provider.models[modelId]
       if (!model.reasoning) continue
-      const input = toModelInput(providerId, provider.npm, model)
+      const input = toModelInput(providerId, provider.npm, model, provider.api)
       model.reasoningAlwaysOn = isAlwaysOnModel(input.modelId, input.apiId) || undefined
       model.variants = Object.keys(generateVariants(input)).map((id) => ({
         id,

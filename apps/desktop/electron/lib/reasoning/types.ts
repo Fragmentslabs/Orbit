@@ -1,4 +1,5 @@
 import type { JSONValue } from 'ai'
+import type { CatalogModel } from '@shared/chat'
 
 /**
  * Tipos internos do módulo de reasoning — isolados de shared/ para que a
@@ -16,12 +17,11 @@ export interface ModelInput {
   releaseDate: string
   reasoning: boolean
   limit: { context: number; output: number }
-  /** Níveis que o models.dev declara para o modelo (reasoning_options →
-   *  effort). Ausente quando o catálogo não informa. */
-  efforts?: string[]
-  /** O catálogo declara só liga/desliga (reasoning_options sem `effort` nem
-   *  `budget_tokens`): o provedor não aceita níveis. */
-  toggleOnly?: boolean
+  /** Controles de reasoning que o models.dev declara para o modelo NESTE
+   *  provedor. Ausente quando o catálogo não informa. */
+  reasoningOptions?: CatalogModel['reasoning_options']
+  /** URL base do provedor — identifica a Moonshot (Kimi) por trás de um id genérico */
+  apiUrl?: string
 }
 
 /** Payload de providerOptions sem o namespace do SDK */
