@@ -1142,7 +1142,8 @@
       "title": "Official integrations",
       "description": "Connect Orbit to official tools from the Fragments ecosystem.",
       "nodaraDescription": "Control Android devices from Orbit using MCP.",
-      "download": "Download Nodara",
+      "download": "Download {{name}}",
+      "beta": "Beta",
       "connect": "Connect",
       "reconnect": "Reconnect",
       "disconnect": "Disconnect",
@@ -1172,6 +1173,24 @@
         "stopped": "Nodara is installed but closed — open the app to connect.",
         "disabled": "The MCP bridge is off — enable it in Nodara's settings.",
         "installed": "Nodara is running. Connect to expose its tools to the agent."
+      },
+      "fractaDescription": "Explore and query your databases from Orbit using MCP.",
+      "fractaTools_one": "{{count}} tool available in Code mode",
+      "fractaTools_other": "{{count}} tools available in Code mode",
+      "fractaStaleToken": "Stale token — reconnect to refresh the authorization.",
+      "fractaError": {
+        "unauthorized": "Fracta refused the token — reconnect to refresh it.",
+        "unreachable": "Could not reach Fracta's local server.",
+        "notRunning": "Open Fracta: its local server is not responding.",
+        "notFound": "Fracta was not found on this machine.",
+        "noToken": "Fracta published no token — open Settings → Agents (MCP) in Fracta.",
+        "disabled": "The MCP server is off — turn it on in Fracta under Settings → Agents (MCP)."
+      },
+      "fractaHint": {
+        "not-installed": "Install and open Fracta to work with your databases from Orbit.",
+        "stopped": "Fracta is installed but closed — open the app to connect.",
+        "disabled": "The MCP server is off — turn it on in Fracta under Settings → Agents (MCP).",
+        "installed": "Fracta is running. Connect to expose its tools to the agent."
       }
     },
     "servers": {

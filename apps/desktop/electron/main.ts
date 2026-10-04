@@ -26,6 +26,7 @@ import { replyOrResume } from './lib/ask-resume'
 import { approvePlan, getOrchestrationRunningSessionIds, rejectPlan } from './lib/orchestrator'
 import { authorizeMcp, initMcp, listMcpStatus, oauthRedirectUrl, readMcpConfig, reconnectMcp, saveMcpConfig } from './lib/mcp'
 import { connectNodara, disconnectNodara, discoverNodara, stopWatchingNodaraBridge, watchNodaraBridge } from './lib/nodara'
+import { connectFracta, disconnectFracta, discoverFracta, stopWatchingFractaSettings, watchFractaSettings } from './lib/fracta'
 import { loadTrustRules } from './lib/permission/trust-rules'
 import { abortSession, dispatchSend } from './lib/send-dispatch'
 import { savePlanFile, deletePlanFile, readPlanFile } from './lib/plan-file'
@@ -2196,7 +2197,14 @@ app.whenReady().then(() => {
   ipcMain.handle('nodara:discover', () => discoverNodara())
   ipcMain.handle('nodara:connect', () => connectNodara())
   ipcMain.handle('nodara:disconnect', () => disconnectNodara())
-  void initMcp().then(() => watchNodaraBridge())
+  // Fracta: integração oficial (beta) — mesmo fluxo, a partir do mcp.json do Fracta
+  ipcMain.handle('fracta:discover', () => discoverFracta())
+  ipcMain.handle('fracta:connect', () => connectFracta())
+  ipcMain.handle('fracta:disconnect', () => disconnectFracta())
+  void initMcp().then(() => {
+    watchNodaraBridge()
+    watchFractaSettings()
+  })
   void loadTrustRules()
 
   // Processos em background
@@ -2207,6 +2215,7 @@ app.whenReady().then(() => {
   app.on('before-quit', () => {
     killAllProcesses()
     stopWatchingNodaraBridge()
+    stopWatchingFractaSettings()
     // Esteira roda fora de qualquer sessão: sem isto, uma fase em execução
     // continuaria escrevendo no repositório com o app fechando.
     esteira.abortarTudo()

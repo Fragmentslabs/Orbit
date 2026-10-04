@@ -1142,7 +1142,8 @@
       "title": "Integrações oficiais",
       "description": "Conecte o Orbit a ferramentas oficiais do ecossistema Fragments.",
       "nodaraDescription": "Controle dispositivos Android pelo Orbit usando MCP.",
-      "download": "Baixar Nodara",
+      "download": "Baixar {{name}}",
+      "beta": "Beta",
       "connect": "Conectar",
       "reconnect": "Reconectar",
       "disconnect": "Desconectar",
@@ -1172,6 +1173,24 @@
         "stopped": "Nodara está instalado, mas fechado — abra o app para conectar.",
         "disabled": "A ponte MCP está desligada — ative-a nas configurações do Nodara.",
         "installed": "Nodara rodando. Conecte para liberar as ferramentas ao agente."
+      },
+      "fractaDescription": "Explore e consulte seus bancos de dados pelo Orbit usando MCP.",
+      "fractaTools_one": "{{count}} ferramenta disponível no modo Código",
+      "fractaTools_other": "{{count}} ferramentas disponíveis no modo Código",
+      "fractaStaleToken": "Token desatualizado — reconecte para renovar a autorização.",
+      "fractaError": {
+        "unauthorized": "O Fracta recusou o token — reconecte para renová-lo.",
+        "unreachable": "Não foi possível falar com o servidor do Fracta.",
+        "notRunning": "Abra o Fracta: o servidor local não está respondendo.",
+        "notFound": "Fracta não encontrado nesta máquina.",
+        "noToken": "O Fracta não publicou um token — abra Configurações → Agentes (MCP) no Fracta.",
+        "disabled": "O servidor MCP está desligado — ative em Configurações → Agentes (MCP) no Fracta."
+      },
+      "fractaHint": {
+        "not-installed": "Instale e abra o Fracta para trabalhar com seus bancos de dados pelo Orbit.",
+        "stopped": "Fracta está instalado, mas fechado — abra o app para conectar.",
+        "disabled": "O servidor MCP está desligado — ative em Configurações → Agentes (MCP) no Fracta.",
+        "installed": "Fracta rodando. Conecte para liberar as ferramentas ao agente."
       }
     },
     "servers": {

@@ -45,15 +45,17 @@ import {
 } from "@/components/ui/select"
 import { cn } from "@/lib/utils"
 import { useWorkspace } from "@/lib/workspace-context"
-import { mcpApi, nodaraApi, skillsApi } from "@/src/lib/ipc"
+import { fractaApi, mcpApi, nodaraApi, skillsApi } from "@/src/lib/ipc"
 import { AssistantMarkdown } from "@/src/components/messages/shared"
 import { useDraftInput } from "@/src/stores/draft-input"
 import { useSessionStore } from "@/src/stores/session-store"
 import { useSkillsStore } from "@/src/stores/skills-store"
 import type { McpServerConfig, McpServerStatus } from "@shared/mcp"
+import type { FractaStatus } from "@shared/fracta"
 import type { NodaraStatus } from "@shared/nodara"
 import type { Skill } from "@shared/skills"
 import nodaraLogo from "@/src/assets/nodara-logo.png"
+import fractaLogo from "@/src/assets/fracta-logo.png"
 
 /** Regex de slug válido: apenas minúsculas, números e underscores */
 const SLUG_REGEX = /^[a-z0-9_]+$/
@@ -605,15 +607,66 @@ function StatusBadge({ state, error }: { state: string; error?: string }) {
 }
 
 /* ------------------------------------------------------------------ */
-/*  Integração oficial: Nodara                                          */
+/*  Integrações oficiais: Nodara, Fracta                                */
 /* ------------------------------------------------------------------ */
 
-const NODARA_SITE = "https://nodaraapp.com"
-/** Enquanto o card está aberto, reflete o app Nodara abrindo/fechando. */
-const NODARA_POLL_MS = 15_000
+/** Nodara e Fracta expõem o mesmo formato de estado (ver @shared/nodara, @shared/fracta). */
+type IntegrationStatus = NodaraStatus | FractaStatus
+
+interface IntegrationDef {
+  name: string
+  icon: React.ReactNode
+  api: {
+    discover: () => Promise<IntegrationStatus>
+    connect: () => Promise<IntegrationStatus>
+    disconnect: () => Promise<IntegrationStatus>
+  }
+  /** Prefixo das chaves em mcp.integrations: <key>Description, <key>Tools, <key>Hint... */
+  i18nKey: "nodara" | "fracta"
+  /** Códigos que o main devolve normalizados (o 401 cru não ajuda ninguém). */
+  errorCodes: Record<string, string>
+  /** Página de download; sem ela, "não instalado" só re-checa o estado. */
+  site?: string
+  beta?: boolean
+}
+
+const INTEGRATIONS: IntegrationDef[] = [
+  {
+    name: "Nodara",
+    icon: <img src={nodaraLogo} alt="" className="size-8 shrink-0 rounded-lg object-cover" />,
+    api: nodaraApi,
+    i18nKey: "nodara",
+    site: "https://nodaraapp.com",
+    errorCodes: {
+      "nodara-unauthorized": "unauthorized",
+      "nodara-unreachable": "unreachable",
+      "nodara-not-running": "notRunning",
+      "nodara-not-found": "notFound",
+      "nodara-no-token": "noToken",
+    },
+  },
+  {
+    name: "Fracta",
+    icon: <img src={fractaLogo} alt="" className="size-8 shrink-0 rounded-lg object-cover" />,
+    api: fractaApi,
+    i18nKey: "fracta",
+    beta: true,
+    errorCodes: {
+      "fracta-unauthorized": "unauthorized",
+      "fracta-unreachable": "unreachable",
+      "fracta-not-running": "notRunning",
+      "fracta-not-found": "notFound",
+      "fracta-no-token": "noToken",
+      "fracta-disabled": "disabled",
+    },
+  },
+]
+
+/** Enquanto o card está aberto, reflete o app abrindo/fechando. */
+const INTEGRATION_POLL_MS = 15_000
 
 /** Cor do selo por estado: verde só quando as tools estão de fato no agente. */
-const NODARA_BADGE_TONE: Record<NodaraStatus["state"], string> = {
+const INTEGRATION_BADGE_TONE: Record<IntegrationStatus["state"], string> = {
   connected: "text-emerald-500",
   installed: "text-amber-500",
   error: "text-destructive",
@@ -622,51 +675,44 @@ const NODARA_BADGE_TONE: Record<NodaraStatus["state"], string> = {
   "not-installed": "text-muted-foreground",
 }
 
-/** Códigos que o main devolve normalizados (o 401 cru não ajuda ninguém). */
-const NODARA_ERROR_KEYS: Record<string, string> = {
-  "nodara-unauthorized": "mcp.integrations.nodaraError.unauthorized",
-  "nodara-unreachable": "mcp.integrations.nodaraError.unreachable",
-  "nodara-not-running": "mcp.integrations.nodaraError.notRunning",
-  "nodara-not-found": "mcp.integrations.nodaraError.notFound",
-  "nodara-no-token": "mcp.integrations.nodaraError.noToken",
-}
-
 /** Mensagem do estado atual — o card mostra sempre o que falta pra conectar. */
-function nodaraHint(status: NodaraStatus, t: TFunction): string {
+function integrationHint(def: IntegrationDef, status: IntegrationStatus, t: TFunction): string {
+  const prefix = `mcp.integrations.${def.i18nKey}`
   if (status.state === "connected") {
-    return t("mcp.integrations.nodaraTools", { count: status.toolCount })
+    return t(`${prefix}Tools`, { count: status.toolCount })
   }
-  if (status.tokenStale) return t("mcp.integrations.nodaraStaleToken")
+  if (status.tokenStale) return t(`${prefix}StaleToken`)
   if (status.error) {
-    const key = NODARA_ERROR_KEYS[status.error]
-    return key ? t(key) : status.error
+    const code = def.errorCodes[status.error]
+    return code ? t(`${prefix}Error.${code}`) : status.error
   }
-  return t(`mcp.integrations.nodaraHint.${status.state}`)
+  return t(`${prefix}Hint.${status.state}`)
 }
 
-function NodaraCard({ onChanged }: { onChanged: () => Promise<void> | void }) {
+function IntegrationCard({ def, onChanged }: { def: IntegrationDef; onChanged: () => Promise<void> | void }) {
   const { t } = useTranslation()
-  const [status, setStatus] = useState<NodaraStatus | null>(null)
+  const [status, setStatus] = useState<IntegrationStatus | null>(null)
   const [busy, setBusy] = useState(false)
+  const { api } = def
 
   useEffect(() => {
     let alive = true
     const load = async () => {
-      const next = await nodaraApi.discover().catch(() => null)
+      const next = await api.discover().catch(() => null)
       if (alive && next) setStatus(next)
     }
     void load()
-    const timer = setInterval(() => void load(), NODARA_POLL_MS)
+    const timer = setInterval(() => void load(), INTEGRATION_POLL_MS)
     return () => {
       alive = false
       clearInterval(timer)
     }
-  }, [])
+  }, [api])
 
   // Conectar cobre também o reparo: o main reescreve URL e token a partir do
-  // ~/.nodara/mcp.json antes de reconectar, então um 401 por token vencido se
-  // resolve no mesmo botão.
-  const run = async (action: () => Promise<NodaraStatus>) => {
+  // arquivo publicado pelo app antes de reconectar, então um 401 por token
+  // vencido se resolve no mesmo botão.
+  const run = async (action: () => Promise<IntegrationStatus>) => {
     setBusy(true)
     try {
       setStatus(await action())
@@ -679,33 +725,38 @@ function NodaraCard({ onChanged }: { onChanged: () => Promise<void> | void }) {
   const state = status?.state ?? "not-installed"
   const connected = state === "connected"
   const canConnect = state === "installed" || state === "error"
-  // "stopped"/"disabled" dependem de uma ação do usuário dentro do Nodara —
-  // o botão só re-checa o estado.
-  const canRetry = state === "stopped" || state === "disabled"
+  // "stopped"/"disabled" dependem de uma ação do usuário dentro do app — o
+  // botão só re-checa o estado. Sem página de download, "não instalado" também.
+  const canRetry = state === "stopped" || state === "disabled" || (state === "not-installed" && !def.site)
   const actionLabel = canConnect
     ? t(state === "installed" ? "mcp.integrations.connect" : "mcp.integrations.reconnect")
     : canRetry
       ? t("mcp.integrations.retry")
-      : t("mcp.integrations.download")
+      : t("mcp.integrations.download", { name: def.name })
 
   return (
     <div className="flex items-center gap-3 rounded-lg border p-3">
-      <img src={nodaraLogo} alt="" className="size-8 shrink-0 rounded-lg object-cover" />
+      {def.icon}
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2">
-          <span className="text-sm font-medium">Nodara</span>
+          <span className="text-sm font-medium">{def.name}</span>
+          {def.beta && (
+            <span className="rounded-full border border-primary/30 bg-primary/10 px-1.5 py-px text-[9px] font-semibold uppercase leading-tight tracking-wide text-primary">
+              {t("mcp.integrations.beta")}
+            </span>
+          )}
           {status && (
-            <span className={cn("text-[10px] font-medium", NODARA_BADGE_TONE[state])}>
+            <span className={cn("text-[10px] font-medium", INTEGRATION_BADGE_TONE[state])}>
               {t(`mcp.integrations.state.${state}`)}
             </span>
           )}
         </div>
-        <p className="mt-0.5 text-[11px] text-muted-foreground">{t("mcp.integrations.nodaraDescription")}</p>
-        {status && <p className="mt-0.5 truncate text-[11px] text-muted-foreground/80">{nodaraHint(status, t)}</p>}
+        <p className="mt-0.5 text-[11px] text-muted-foreground">{t(`mcp.integrations.${def.i18nKey}Description`)}</p>
+        {status && <p className="mt-0.5 truncate text-[11px] text-muted-foreground/80">{integrationHint(def, status, t)}</p>}
       </div>
       <div className="flex shrink-0 items-center gap-1">
         {connected && (
-          <Button size="sm" variant="ghost" className="gap-1" disabled={busy} onClick={() => void run(nodaraApi.disconnect)}>
+          <Button size="sm" variant="ghost" className="gap-1" disabled={busy} onClick={() => void run(api.disconnect)}>
             {t("mcp.integrations.disconnect")}
           </Button>
         )}
@@ -716,9 +767,9 @@ function NodaraCard({ onChanged }: { onChanged: () => Promise<void> | void }) {
             className="gap-1"
             disabled={busy}
             onClick={() => {
-              if (canConnect) return void run(nodaraApi.connect)
-              if (canRetry) return void run(nodaraApi.discover)
-              window.open(NODARA_SITE, "_blank")
+              if (canConnect) return void run(api.connect)
+              if (canRetry) return void run(api.discover)
+              if (def.site) window.open(def.site, "_blank")
             }}
           >
             {busy ? (
@@ -794,7 +845,11 @@ export function McpSkillsPanel() {
           <p className="text-sm font-semibold">{t("mcp.integrations.title")}</p>
           <p className="mt-0.5 text-xs text-muted-foreground">{t("mcp.integrations.description")}</p>
         </div>
-        <NodaraCard onChanged={refresh} />
+        <div className="flex flex-col gap-2">
+          {INTEGRATIONS.map((def) => (
+            <IntegrationCard key={def.name} def={def} onChanged={refresh} />
+          ))}
+        </div>
       </div>
 
       {/* Servidores MCP */}

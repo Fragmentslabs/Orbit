@@ -23,6 +23,7 @@ import type {
 } from "@shared/esteira"
 import type { ModelsSnapshot } from "@shared/models"
 import type { NodaraStatus } from "@shared/nodara"
+import type { FractaStatus } from "@shared/fracta"
 import type {
   NovaRotinaInput,
   ResultadoGeracao,
@@ -342,6 +343,13 @@ export const nodaraApi = {
   /** Registra/repara o servidor MCP do Nodara e devolve o estado pós-conexão */
   connect: () => window.ipcRenderer.invoke("nodara:connect") as Promise<NodaraStatus>,
   disconnect: () => window.ipcRenderer.invoke("nodara:disconnect") as Promise<NodaraStatus>,
+}
+
+export const fractaApi = {
+  discover: () => window.ipcRenderer.invoke("fracta:discover") as Promise<FractaStatus>,
+  /** Registra/repara o servidor MCP do Fracta e devolve o estado pós-conexão */
+  connect: () => window.ipcRenderer.invoke("fracta:connect") as Promise<FractaStatus>,
+  disconnect: () => window.ipcRenderer.invoke("fracta:disconnect") as Promise<FractaStatus>,
 }
 
 export const mcpApi = {
