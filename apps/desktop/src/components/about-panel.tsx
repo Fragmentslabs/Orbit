@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button"
 import { Globe, Heart, Star } from "lucide-react"
 import { windowApi } from "@/src/lib/ipc"
 import { GITHUB_URL, KO_FI_URL, WEBSITE_URL } from "@/src/lib/appLinks"
+import orbitLogo from "@/src/assets/logo.png"
 
 export function AboutPanel() {
   const { t } = useTranslation()
@@ -16,10 +17,14 @@ export function AboutPanel() {
 
   return (
     <div className="flex h-full flex-col gap-3 overflow-y-auto pr-1">
-      <div className="flex items-center justify-between gap-2">
-        <p className="text-sm font-semibold">{t("settings.about.title")}</p>
+      <div className="flex items-center gap-3">
+        <img src={orbitLogo} alt="" className="size-12 shrink-0 rounded-xl" />
+        <div className="min-w-0">
+          <p className="text-base font-semibold leading-tight">Orbit</p>
+          <p className="text-xs text-muted-foreground">by Fragments Labs</p>
+        </div>
         {version && (
-          <span className="shrink-0 rounded-full border px-2 py-0.5 font-mono text-[11px] text-muted-foreground">
+          <span className="ml-auto shrink-0 rounded-full border px-2 py-0.5 font-mono text-[11px] text-muted-foreground">
             {t("settings.about.version", { version })}
           </span>
         )}
