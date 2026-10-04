@@ -18,8 +18,8 @@ function NotificationToggle({
 }) {
   return (
     <div className="flex items-center gap-3 rounded-lg border border-border p-3 transition-colors hover:bg-accent/50">
-      <div className="flex size-8 shrink-0 items-center justify-center rounded-md bg-primary/10">
-        <Icon className="size-4 text-primary" />
+      <div className="flex size-8 shrink-0 items-center justify-center rounded-md bg-muted">
+        <Icon className="size-4 text-muted-foreground" />
       </div>
       <div className="min-w-0 flex-1">
         <p className="text-xs font-medium">{title}</p>
