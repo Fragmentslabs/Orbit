@@ -1,6 +1,7 @@
 import { tool, type ToolSet } from 'ai'
 import { z } from 'zod'
 import { StorageKeys, type FolderInfo, type SessionInfo } from '@shared/chat'
+import { setArchivedState } from '@shared/archive'
 import { listKeys, readJson, removeJson, writeJson } from '../storage'
 import { broadcastSessionEvent } from '../companion-server'
 import { abortChat } from '../chat-engine'
@@ -128,7 +129,7 @@ export function createSessionTools(): ToolSet {
             continue
           }
           if (sessao.archived === alvo) continue
-          const proxima: SessionInfo = { ...sessao, archived: alvo }
+          const proxima = setArchivedState(sessao, alvo)
           await writeJson(StorageKeys.session(id), proxima)
           broadcastSessionEvent({ type: 'session', sessionId: id, session: proxima })
           alterados++

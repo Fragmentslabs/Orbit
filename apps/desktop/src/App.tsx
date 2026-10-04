@@ -29,6 +29,7 @@ import { SettingsDialogHost } from "@/src/components/settings-dialog"
 import { RotationDialogHost } from "@/src/components/models/rotation-dialog"
 import { ChatSearch } from "@/src/components/chat-search"
 import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels"
+import { LinkRouter } from "@/src/components/link-router"
 
 const HOVER_ZONE_WIDTH = 6
 const SIDEBAR_HIDE_DELAY = 300
@@ -407,6 +408,7 @@ function App() {
             <TitleBar onSearchOpen={() => setSearchOpen(true)} />
             <ChatSearch open={searchOpen} onOpenChange={setSearchOpen} />
             <SettingsDialogHost />
+            <LinkRouter />
             <RotationDialogHost />
             <SidebarProvider className="min-h-0 flex-1 overflow-hidden" open={open} onOpenChange={setOpen}>
               <Layout />

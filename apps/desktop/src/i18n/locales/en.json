@@ -42,6 +42,10 @@
       "about": {
         "label": "About",
         "description": "Version, credits and support."
+      },
+      "browser": {
+        "label": "Browser",
+        "description": "The built-in browser and what the agent can do in it"
       }
     },
     "about": {
@@ -1575,6 +1579,9 @@
     "sameAsMainModel": "Same as main model",
     "none": "None",
     "searchModels": "Search models…",
+    "thinkingLevel": "Thinking level",
+    "thinkingUnavailable": "This model has no reasoning",
+    "thinkingNoModel": "Choose a model first",
     "noModelsFound": "No models found.",
     "configureProvider": "Configure a provider",
     "manageProviders": "Manage providers",
@@ -1619,6 +1626,55 @@
       "newMessageDescription": "Native notification when the assistant finishes a reply in a session you are not viewing.",
       "chatErrorTitle": "Chat error",
       "chatErrorDescription": "Native notification when a reply fails."
+    },
+    "byMode": "By conversation type",
+    "general": {
+      "auxModel": "Auxiliary model",
+      "auxModelNone": "Same as the conversation",
+      "auxModelHint": "Used for titles, history compaction and prompt suggestions. A fast, cheap model saves cost without affecting answers.",
+      "off": "Off",
+      "times_one": "{{count}} time",
+      "times_other": "{{count}} times",
+      "suggestions": {
+        "title": "Prompt suggestions",
+        "description": "Suggests your next message in the input after each answer. Tab completes it."
+      },
+      "view": {
+        "title": "Chat view",
+        "summary": "Summary",
+        "steps": "Step by step",
+        "detailed": "Detailed",
+        "hint": {
+          "summary": "Reasoning in a single block at the top, actions grouped and collapsed.",
+          "steps": "Each step where it happened: reasoning and actions in order, in collapsible blocks.",
+          "detailed": "Everything open, no collapsed blocks: full reasoning and every action listed."
+        }
+      },
+      "archive": {
+        "title": "Archive inactive conversations",
+        "description": "Archives conversations with no activity on its own. Pinned conversations and routines are left alone.",
+        "after_one": "After {{count}} day",
+        "after_other": "After {{count}} days"
+      },
+      "deleteArchived": {
+        "title": "Delete archived conversations",
+        "description": "Permanently deletes conversations that have been archived for a while, counted from the day they were archived. Pinned conversations are left alone."
+      },
+      "compact": {
+        "title": "Automatic compaction",
+        "description": "Summarizes the start of the conversation when the context fills up, so it keeps fitting the model.",
+        "auto": "Near the limit",
+        "75": "At 75% of context",
+        "50": "At 50% of context"
+      },
+      "retries": {
+        "title": "Retries on temporary failure",
+        "description": "Queued messages retry in the background when the connection or the provider's limit fails."
+      },
+      "continues": {
+        "title": "Automatic continuation",
+        "description": "How many times an answer continues on its own when cut by the model's output limit."
+      }
     }
   },
   "common": {
@@ -2175,5 +2231,29 @@
     "title": "Something went wrong while drawing the screen.",
     "hint": "The error below is also in the terminal log. Reloading keeps your conversations.",
     "reload": "Reload"
+  },
+  "browserSettings": {
+    "agent": {
+      "title": "Browser tools for the agent",
+      "description": "The agent opens pages, tests, takes screenshots and documents on its own. When off, it only uses the browser when you open it in fullscreen and ask from the browser's own chat."
+    },
+    "links": {
+      "title": "Open links",
+      "description": "Where links clicked in conversations open.",
+      "integrated": "Built-in browser",
+      "external": "System browser"
+    },
+    "cookies": {
+      "title": "Keep cookies",
+      "description": "How long the built-in browser keeps cookies and logins.",
+      "persistent": "Always",
+      "untilQuit": "Until Orbit closes"
+    },
+    "clear": {
+      "title": "Clear browsing data",
+      "description": "Deletes the built-in browser's cookies, logins and cache now.",
+      "button": "Clear",
+      "done": "Cleared"
+    }
   }
 }

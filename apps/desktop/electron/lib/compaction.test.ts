@@ -68,6 +68,18 @@ describe('shouldCompact', () => {
   })
 })
 
+describe('shouldCompact antecipado (Preferências → Compactação automática)', () => {
+  it('compacta ao passar da fração pedida, antes do limite', () => {
+    expect(shouldCompact(usage(80_000), model(200_000), 0, 0.5)).toBe(false)
+    expect(shouldCompact(usage(100_000), model(200_000), 0, 0.5)).toBe(true)
+    expect(shouldCompact(usage(150_000), model(200_000), 0, 0.75)).toBe(true)
+  })
+
+  it('o limite de sempre continua valendo', () => {
+    expect(shouldCompact(usage(95_000), model(100_000), 0, 0.99)).toBe(true)
+  })
+})
+
 describe('findLastSummaryIndex', () => {
   it('devolve -1 sem nenhum summary', () => {
     expect(findLastSummaryIndex(conversation(3))).toBe(-1)

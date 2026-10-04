@@ -166,8 +166,16 @@ export function VisionWorkingRow() {
   )
 }
 
-export function ReasoningPartView({ part }: { part: ReasoningPart }) {
+export function ReasoningPartView({ part, flat }: { part: ReasoningPart; flat?: boolean }) {
   if (!part.text) return null
+  // Modo detalhado: o raciocínio por extenso, sem acordeon.
+  if (flat) {
+    return (
+      <div className="w-full border-l-2 border-border pl-3 text-sm whitespace-pre-wrap text-muted-foreground">
+        {part.text}
+      </div>
+    )
+  }
   return (
     <Reasoning
       isStreaming={part.state === "streaming"}

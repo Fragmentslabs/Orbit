@@ -4,7 +4,9 @@ import { ChevronDownIcon } from "lucide-react"
 import { cn } from "@/lib/utils"
 import type { ChatMessage, ImagePart, MessagePart, ToolPart } from "@shared/chat"
 import { usePanelStore } from "@/src/stores/panel-store"
+import { useSetting } from "@/src/stores/app-settings"
 import {
+  arrangeForView,
   extractSources,
   isEngineText,
   isTestCommand,
@@ -63,8 +65,10 @@ function TestResultsBlock({ summary }: { summary: TestSummary }) {
 
 const MAX_VISIBLE = 5
 
-function TaskGroup({ parts, snapshot, sessionId, messageId, live }: {
+function TaskGroup({ parts, snapshot, sessionId, messageId, live, flat }: {
   parts: ToolPart[]
+  /** Modo detalhado: título e todas as ações abertas, sem acordeon. */
+  flat?: boolean
   snapshot?: { patch?: string; files?: string[] }
   sessionId?: string
   messageId?: string
@@ -132,6 +136,37 @@ function TaskGroup({ parts, snapshot, sessionId, messageId, live }: {
       ? t("chat.code.actionsWithError", { count: parts.length, errors })
       : t("chat.code.actionsDone", { count: parts.length })
 
+  const items = (flat ? parts : visibleParts).map((part) => {
+    const summary = testSummaryOf(part)
+    return (
+      <Fragment key={part.id}>
+        <ToolActionItem part={part} />
+        {summary && <TestResultsBlock summary={summary} />}
+      </Fragment>
+    )
+  })
+
+  if (flat) {
+    return (
+      <div className="not-prose my-2 flex w-full flex-col gap-1">
+        <div className="flex w-full items-center gap-2 text-sm text-muted-foreground">
+          {working ? <Shimmer>{title}</Shimmer> : <p className="text-sm">{title}</p>}
+          {showBadge && (
+            <button
+              type="button"
+              onClick={handleOpenDiff}
+              className="ml-auto flex items-center gap-1 rounded-md border border-border/50 px-1.5 py-0.5 font-mono text-[11px] leading-none transition-colors hover:bg-accent"
+            >
+              {diffCounts!.added > 0 && <span className="text-emerald-600 dark:text-emerald-400">+{diffCounts!.added}</span>}
+              {diffCounts!.removed > 0 && <span className="text-red-600 dark:text-red-400">-{diffCounts!.removed}</span>}
+            </button>
+          )}
+        </div>
+        {items}
+      </div>
+    )
+  }
+
   return (
     <Task open={open} onOpenChange={setOpen} className="not-prose my-2 w-full">
       <TaskTrigger title={title}>
@@ -153,15 +188,7 @@ function TaskGroup({ parts, snapshot, sessionId, messageId, live }: {
         </div>
       </TaskTrigger>
       <TaskContent>
-        {visibleParts.map((part) => {
-          const summary = testSummaryOf(part)
-          return (
-            <Fragment key={part.id}>
-              <ToolActionItem part={part} />
-              {summary && <TestResultsBlock summary={summary} />}
-            </Fragment>
-          )
-        })}
+        {items}
         {hiddenCount > 0 && !showAll && (
           <button
             type="button"
@@ -224,7 +251,9 @@ export function CodeAssistantMessage({ message, sessionId, isLast, isBusy, busyL
   onRetry?: () => void
 }) {
   const { t } = useTranslation()
-  const segments = useMemo(() => segmentParts(message.parts), [message.parts])
+  const view = useSetting("chatView")
+  const segments = useMemo(() => segmentParts(arrangeForView(message.parts, view)), [message.parts, view])
+  const flat = view === "detailed"
   const finished = !(isLast && isBusy)
   const sources = useMemo(() => (finished ? extractSources(message) : []), [finished, message])
   const waiting = isLast && isBusy && message.parts.length === 0
@@ -259,6 +288,7 @@ export function CodeAssistantMessage({ message, sessionId, isLast, isBusy, busyL
             sessionId={sessionId}
             messageId={message.id}
             live={isLast && isBusy}
+            flat={flat}
           />
         ) : segment.kind === "image-group" ? (
           <ImageGroupView key={segment.id} parts={segment.parts} />
@@ -275,7 +305,7 @@ export function CodeAssistantMessage({ message, sessionId, isLast, isBusy, busyL
             </AssistantMarkdown>
           )
         ) : segment.part.type === "reasoning" ? (
-          <ReasoningPartView key={segment.id} part={segment.part} />
+          <ReasoningPartView key={segment.id} part={segment.part} flat={flat} />
         ) : segment.part.type === "agent" ? (
           <AgentPartView key={segment.id} part={segment.part} />
         ) : segment.part.type === "file" ? null : segment.part.type === "tool" && segment.part.tool === "subagent" ? (

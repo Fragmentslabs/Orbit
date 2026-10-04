@@ -741,12 +741,17 @@ export const PromptInputBody = ({ className, ...props }: PromptInputBodyProps) =
   <div className={cn("contents", className)} {...props} />
 )
 
-export type PromptInputTextareaProps = ComponentProps<typeof InputGroupTextarea>
+export type PromptInputTextareaProps = ComponentProps<typeof InputGroupTextarea> & {
+  /** Próxima mensagem sugerida: com o campo vazio, aparece no lugar do
+   *  placeholder e Tab a coloca no campo. */
+  suggestion?: string
+}
 
 export const PromptInputTextarea = ({
   onChange,
   className,
   placeholder,
+  suggestion,
   ...props
 }: PromptInputTextareaProps) => {
   const { t } = useTranslation()
@@ -754,7 +759,17 @@ export const PromptInputTextarea = ({
   const attachments = usePromptInputAttachments()
   const [isComposing, setIsComposing] = useState(false)
 
+  const empty = (controller?.textInput.value ?? "") === ""
+  const showSuggestion = Boolean(suggestion && controller && empty)
+
   const handleKeyDown: KeyboardEventHandler<HTMLTextAreaElement> = e => {
+    // Sem sugestão o Tab segue o padrão (mover o foco) — só é capturado
+    // quando há algo para completar.
+    if (e.key === "Tab" && !e.shiftKey && showSuggestion && suggestion && controller) {
+      e.preventDefault()
+      controller.textInput.setInput(suggestion)
+      return
+    }
     if (e.key === "Enter") {
       if (isComposing || e.nativeEvent.isComposing) {
         return
@@ -828,7 +843,7 @@ export const PromptInputTextarea = ({
       onCompositionStart={() => setIsComposing(true)}
       onKeyDown={handleKeyDown}
       onPaste={handlePaste}
-      placeholder={placeholder ?? t("input.placeholderDefault")}
+      placeholder={showSuggestion ? `${suggestion}  ⇥ Tab` : (placeholder ?? t("input.placeholderDefault"))}
       {...props}
       {...controlledProps}
     />

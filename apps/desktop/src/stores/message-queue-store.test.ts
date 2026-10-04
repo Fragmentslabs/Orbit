@@ -1,5 +1,4 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
-import { MAX_QUEUE_RETRIES } from "@shared/chat"
 
 const status: Record<string, string> = {}
 const sendMessage = vi.fn()
@@ -30,7 +29,7 @@ describe("fila de mensagens", () => {
 
     expect(sendMessage).toHaveBeenCalledTimes(1)
     expect(sendMessage.mock.calls[0][1]).toBe("próxima")
-    expect(sendMessage.mock.calls[0][2].options.retries).toBe(MAX_QUEUE_RETRIES)
+    expect(sendMessage.mock.calls[0][2].options.retries).toBe(3)
   })
 
   it("pausa quando o turno anterior falha — nem o agendador a solta", () => {

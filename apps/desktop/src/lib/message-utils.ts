@@ -1,4 +1,5 @@
-import type { ChatMessage, FilePart, MessagePart, TextPart, ToolPart } from "@shared/chat"
+import type { ChatViewMode } from "@shared/app-settings"
+import type { ChatMessage, FilePart, MessagePart, ReasoningPart, TextPart, ToolPart } from "@shared/chat"
 
 /** Converte blob URLs dos anexos do input em data URLs estáveis. O input
  * trabalha com blob URLs (URL.createObjectURL) e os REVOGA ao limpar — a fila
@@ -240,4 +241,27 @@ export function parseTestSummary(output: string): TestSummary | null {
   }
 
   return null
+}
+
+/**
+ * Ordena as partes da resposta para o modo de visualização escolhido.
+ *
+ * - `summary`: o raciocínio de todos os passos vira um bloco só, no topo, e as
+ *   ações que ele separava se juntam num acordeon só. É a leitura de antes:
+ *   pensou → resposta → resumo das ações.
+ * - `steps` e `detailed`: cada parte no lugar em que aconteceu; o que muda
+ *   entre os dois é só se os blocos vêm recolhidos ou abertos.
+ */
+export function arrangeForView(parts: MessagePart[], mode: ChatViewMode): MessagePart[] {
+  if (mode !== "summary") return parts
+  const reasoning = parts.filter((p): p is ReasoningPart => p.type === "reasoning" && p.text.trim() !== "")
+  if (reasoning.length <= 1 && parts.indexOf(reasoning[0]) <= 0) return parts
+  const merged: ReasoningPart = {
+    id: reasoning[0].id,
+    type: "reasoning",
+    text: reasoning.map((p) => p.text.trim()).join("\n\n"),
+    state: reasoning.some((p) => p.state === "streaming") ? "streaming" : "done",
+    durationMs: reasoning.reduce((sum, p) => sum + (p.durationMs ?? 0), 0) || undefined,
+  }
+  return [merged, ...parts.filter((p) => p.type !== "reasoning")]
 }

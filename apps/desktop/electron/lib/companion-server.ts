@@ -44,6 +44,7 @@ import type {
 } from '@shared/companion'
 import type { ChatEvent, SessionInfo, FolderInfo, ChatMessage, MessagePart, SendMessageInput, PlanReview, OrchestrationPlan, RotationConfig } from '@shared/chat'
 import type { RotinaEvent } from '@shared/rotinas'
+import { setArchivedState } from '@shared/archive'
 import type { EsteiraEvent } from '@shared/esteira'
 import { StorageKeys } from '@shared/chat'
 import { readJson, writeJson, removeJson, listKeys } from './storage'
@@ -742,7 +743,7 @@ async function handleRequest(client: ConnectedClient, requestId: string, req: Co
           sendResponse(ws, requestId, false, undefined, 'Sessão não encontrada')
           break
         }
-        const updated: SessionInfo = { ...session, archived: req.archived, updatedAt: Date.now() }
+        const updated: SessionInfo = { ...setArchivedState(session, req.archived), updatedAt: Date.now() }
         await writeJson(StorageKeys.session(updated.id), updated)
         broadcastSessionEvent({ type: 'session', sessionId: updated.id, session: updated })
         sendResponse(ws, requestId, true, updated)
@@ -1113,7 +1114,7 @@ async function handleRequest(client: ConnectedClient, requestId: string, req: Co
         )
         for (const s of sessions) {
           if (s.folderId !== req.folderId || s.archived === req.archived) continue
-          const updated: SessionInfo = { ...s, archived: req.archived }
+          const updated = setArchivedState(s, req.archived)
           await writeJson(StorageKeys.session(updated.id), updated)
           broadcastSessionEvent({ type: 'session', sessionId: updated.id, session: updated })
         }

@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, dialog, shell, Menu, clipboard, nativeImage, ClipboardItem, type MenuItemConstructorOptions } from 'electron'
+import { app, BrowserWindow, ipcMain, dialog, shell, Menu, clipboard, nativeImage, ClipboardItem, session, type MenuItemConstructorOptions } from 'electron'
 import sharp from 'sharp'
 import { createRequire } from 'node:module'
 import { fileURLToPath } from 'node:url'
@@ -56,6 +56,9 @@ import { setRotationConfigCache } from './lib/model-rotation'
 import { readJson as readStorageJson } from './lib/storage'
 import { registerPanelWebContents } from './lib/panel-browser'
 import { setupMemoryScheduler } from './lib/memory/scheduler'
+import { getAppSettings, loadAppSettings, setAppSettings } from './lib/app-settings'
+import { setupAutoArchive } from './lib/auto-archive'
+import { BROWSER_PARTITION } from './lib/browser-script'
 import * as memoryService from './lib/memory/service'
 import { globalSkillsDir, loadSkills, notifySkillsChanged, setupSkillsWatcher } from './lib/skills'
 import { importSkillSelection } from './lib/skills/import'
@@ -378,9 +381,15 @@ function createWindow() {
     win?.webContents.send('main-process-message', (new Date).toLocaleString())
   })
 
-  // Links de fontes/citações abrem no browser do sistema, não em nova janela
+  // Links clicados no app (fontes, citações, markdown) nunca abrem janela
+  // nova: vão para o navegador integrado — o renderer decide a aba, porque é
+  // ele quem sabe qual conversa está aberta — ou para o navegador do sistema,
+  // conforme Preferências → Navegador.
   win.webContents.setWindowOpenHandler(({ url }) => {
-    if (url.startsWith('http://') || url.startsWith('https://')) void shell.openExternal(url)
+    if (url.startsWith('http://') || url.startsWith('https://')) {
+      if (getAppSettings().browser.links === 'integrated') win?.webContents.send('link:open', url)
+      else void shell.openExternal(url)
+    }
     return { action: 'deny' }
   })
 
@@ -2009,6 +2018,14 @@ app.whenReady().then(() => {
   })
   setupMemoryScheduler()
 
+  // Configurações gerais: o renderer empurra a cada mudança (ver app-settings).
+  ipcMain.on('settings:sync', (_event, raw: unknown) => void setAppSettings(raw))
+  ipcMain.handle('browser:clear-data', () => clearBrowserData())
+  // Link que o renderer não tinha onde abrir (nenhuma conversa aberta).
+  ipcMain.on('link:open-external', (_event, url: string) => {
+    if (typeof url === 'string' && /^https?:\/\//.test(url)) void shell.openExternal(url)
+  })
+
   // Skills: lista, cria, watcher da pasta global avisa o renderer
   ipcMain.handle('skills:list', (_event, directory?: string) => loadSkills(directory))
   ipcMain.handle('skills:create', async (_event, { name, description, content, slug, oldSlug }) => {
@@ -2271,5 +2288,20 @@ app.whenReady().then(() => {
   // Auto-update via GitHub (ignorado em MAS/Windows Store/linux-deb)
   setupAutoUpdater()
 
+  // A cópia em disco das configurações vale antes de o renderer empurrar a
+  // dele: "cookies até sair" limpa aqui, antes de qualquer aba do navegador
+  // abrir — limpar ao fechar dependeria de o app sair limpo.
+  void loadAppSettings().then(async (settings) => {
+    if (settings.browser.cookies === 'until-quit') await clearBrowserData().catch(() => {})
+    setupAutoArchive()
+  })
+
   createWindow()
 })
+
+/** Apaga cookies, logins, localStorage e cache do navegador integrado. */
+async function clearBrowserData(): Promise<void> {
+  const browser = session.fromPartition(BROWSER_PARTITION)
+  await browser.clearStorageData()
+  await browser.clearCache()
+}

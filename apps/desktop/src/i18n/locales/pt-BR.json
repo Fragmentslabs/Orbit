@@ -42,6 +42,10 @@
       "about": {
         "label": "Sobre",
         "description": "Versão, créditos e apoio."
+      },
+      "browser": {
+        "label": "Navegador",
+        "description": "O navegador integrado e o que o agente pode fazer nele"
       }
     },
     "about": {
@@ -1575,6 +1579,9 @@
     "sameAsMainModel": "Mesmo que o modelo principal",
     "none": "Nenhum",
     "searchModels": "Pesquisar modelos…",
+    "thinkingLevel": "Nível de raciocínio",
+    "thinkingUnavailable": "Este modelo não tem raciocínio",
+    "thinkingNoModel": "Escolha um modelo primeiro",
     "noModelsFound": "Nenhum modelo encontrado.",
     "configureProvider": "Configurar um provedor",
     "manageProviders": "Gerenciar provedores",
@@ -1619,6 +1626,55 @@
       "newMessageDescription": "Notificação nativa quando o assistente concluir uma resposta em uma sessão que você não está vendo.",
       "chatErrorTitle": "Erro no chat",
       "chatErrorDescription": "Notificação nativa quando uma resposta falhar."
+    },
+    "byMode": "Por tipo de conversa",
+    "general": {
+      "auxModel": "Modelo auxiliar",
+      "auxModelNone": "O mesmo da conversa",
+      "auxModelHint": "Usado para títulos, compactação do histórico e sugestões de prompt. Um modelo rápido e barato economiza sem afetar as respostas.",
+      "off": "Desligado",
+      "times_one": "{{count}} vez",
+      "times_other": "{{count}} vezes",
+      "suggestions": {
+        "title": "Sugestões de prompt",
+        "description": "Sugere a próxima mensagem no campo de texto depois de cada resposta. Tab completa."
+      },
+      "view": {
+        "title": "Visualização do chat",
+        "summary": "Resumido",
+        "steps": "Passo a passo",
+        "detailed": "Detalhado",
+        "hint": {
+          "summary": "O raciocínio num bloco só no topo e as ações agrupadas e recolhidas.",
+          "steps": "Cada passo onde aconteceu: raciocínio e ações em ordem, em blocos recolhíveis.",
+          "detailed": "Tudo aberto, sem blocos recolhidos: raciocínio por extenso e cada ação listada."
+        }
+      },
+      "archive": {
+        "title": "Arquivar conversas inativas",
+        "description": "Arquiva sozinho as conversas sem atividade. Conversas fixadas e rotinas ficam de fora.",
+        "after_one": "Após {{count}} dia",
+        "after_other": "Após {{count}} dias"
+      },
+      "deleteArchived": {
+        "title": "Excluir conversas arquivadas",
+        "description": "Exclui de vez as conversas arquivadas há um tempo, contado a partir do dia em que foram arquivadas. Conversas fixadas ficam de fora."
+      },
+      "compact": {
+        "title": "Compactação automática",
+        "description": "Resume o início da conversa quando o contexto enche, para ela continuar cabendo no modelo.",
+        "auto": "Perto do limite",
+        "75": "Aos 75% do contexto",
+        "50": "Aos 50% do contexto"
+      },
+      "retries": {
+        "title": "Novas tentativas em falha temporária",
+        "description": "Mensagens da fila tentam de novo, por trás, quando a conexão ou o limite do provedor falha."
+      },
+      "continues": {
+        "title": "Continuação automática",
+        "description": "Quantas vezes a resposta continua sozinha quando é cortada pelo limite de saída do modelo."
+      }
     }
   },
   "common": {
@@ -2174,5 +2230,29 @@
     "title": "Algo deu errado ao desenhar a tela.",
     "hint": "O erro abaixo também está no log do terminal. Recarregar não apaga suas conversas.",
     "reload": "Recarregar"
+  },
+  "browserSettings": {
+    "agent": {
+      "title": "Ferramentas do navegador para o agente",
+      "description": "O agente abre páginas, testa, tira prints e documenta por conta própria. Desligado, ele só usa o navegador quando você o abre em tela cheia e pede pelo chat do próprio navegador."
+    },
+    "links": {
+      "title": "Abrir links",
+      "description": "Onde abrem os links clicados nas conversas.",
+      "integrated": "Navegador integrado",
+      "external": "Navegador do sistema"
+    },
+    "cookies": {
+      "title": "Manter cookies",
+      "description": "Por quanto tempo o navegador integrado guarda cookies e logins.",
+      "persistent": "Sempre",
+      "untilQuit": "Até fechar o Orbit"
+    },
+    "clear": {
+      "title": "Limpar dados de navegação",
+      "description": "Apaga cookies, logins e cache do navegador integrado agora.",
+      "button": "Limpar",
+      "done": "Limpo"
+    }
   }
 }

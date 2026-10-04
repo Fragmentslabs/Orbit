@@ -98,9 +98,12 @@ export function ToolActionItem({ part }: { part: ToolPart }) {
 export function ActionsGroup({
   parts,
   className,
+  flat,
 }: {
   parts: ToolPart[]
   className?: string
+  /** Modo detalhado: cada ação listada, sem acordeon nem "mostrar mais". */
+  flat?: boolean
 }) {
   const { t } = useTranslation()
   const working = parts.some((p) => p.state === "running")
@@ -133,6 +136,16 @@ export function ActionsGroup({
     : errors > 0
       ? t("chat.code.actionsWithError", { count: parts.length, errors })
       : t("chat.code.actionsDone", { count: parts.length })
+
+  if (flat) {
+    return (
+      <div className={cn("not-prose my-2 flex w-full flex-col gap-1", className)}>
+        {parts.map((part) => (
+          <ToolActionItem key={part.id} part={part} />
+        ))}
+      </div>
+    )
+  }
 
   return (
     <Task open={open} onOpenChange={setOpen} className={cn("not-prose my-2 w-full", className)}>

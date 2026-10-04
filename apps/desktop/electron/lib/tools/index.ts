@@ -35,6 +35,7 @@ import { createSessionContextTool } from './session-context'
 import { createVerifyChangesTool } from './verify-changes'
 import { createDescribeImageTool } from './describe-image'
 import { createWebFetchTool, createWebSearchTool } from './web'
+import { agentMayUseBrowser } from '../app-settings'
 
 export { destroyBrowserWindow } from './browser'
 export type { ToolContext, TurnSnapshot } from './context'
@@ -206,11 +207,20 @@ export function buildToolSet(input: SendMessageInput, ctx: ToolContext | null, i
     }
   }
   // Browser do painel direito: teste de apps web + modo documentação.
-  // Workers ficam de fora — o painel é um recurso único e visível.
+  // Workers ficam de fora — o painel é um recurso único e visível. Com as
+  // ferramentas de navegador desligadas nas Preferências, só quando o pedido
+  // veio do próprio navegador em tela cheia (ver agentMayUseBrowser).
   if (ctx && input.orchestrationRole !== 'worker') {
-    Object.assign(tools, createPanelBrowserTools(ctx))
-    // Automação em lote: roda numa janela oculta, sem disputar o painel.
-    Object.assign(tools, createBrowserScriptTools(ctx))
+    const panelTools = createPanelBrowserTools(ctx)
+    if (agentMayUseBrowser(input)) {
+      Object.assign(tools, panelTools)
+      // Automação em lote: roda numa janela oculta, sem disputar o painel.
+      Object.assign(tools, createBrowserScriptTools(ctx))
+    } else {
+      // show_image também mostra imagens do projeto e da galeria — isso não é
+      // usar o navegador, então fica.
+      tools.show_image = panelTools.show_image
+    }
   }
   if (allowBrain && ctx) {
     Object.assign(tools, createCodeMemoryTools(input, ctx))

@@ -45,6 +45,7 @@ import { useModelModePrefs } from "@/src/stores/model-mode-prefs"
 import { useProviderStore, useNoProviderConnected } from "@/src/stores/provider-store"
 import { useSessionModel } from "@/src/stores/session-model-prefs"
 import { useReasoningPrefs } from "@/src/stores/reasoning-prefs"
+import { usePromptSuggestion } from "@/src/stores/prompt-suggestion"
 import { useSimpleMode, useSimplePrefs } from "@/src/stores/simple-prefs"
 import type { ChatStatus, FilePart, SendMessageOptions } from "@shared/chat"
 import { closestVariant } from "@shared/chat"
@@ -80,6 +81,7 @@ export function ChatInput({ onSubmit, status, onStop, sessionId, draftKey, onPro
   const catalog = useProviderStore((s) => s.catalog)
   const model = selected ? catalog[selected.providerId]?.models[selected.modelId] : undefined
   const { enabled, variantId: savedVariant, update } = useReasoningPrefs(selected?.providerId, selected?.modelId)
+  const suggestion = usePromptSuggestion(sessionId)
   // Nível salvo que este modelo não oferece (ex: "medium" onde só há
   // low/high/max) vira o vizinho mais próximo — o mesmo que o engine envia.
   const variantId = closestVariant(model?.variants?.map((v) => v.id) ?? [], savedVariant) ?? savedVariant
@@ -229,7 +231,7 @@ export function ChatInput({ onSubmit, status, onStop, sessionId, draftKey, onPro
           {(attachment) => <PromptInputAttachment data={attachment} />}
         </PromptInputAttachments>
         <PromptInputBody>
-          <PromptInputTextarea placeholder={t("input.placeholder")} className="px-3 text-base md:text-base" />
+          <PromptInputTextarea placeholder={t("input.placeholder")} suggestion={suggestion} className="px-3 text-base md:text-base" />
         </PromptInputBody>
         <PromptInputFooter>
           <div className="flex items-center gap-1">

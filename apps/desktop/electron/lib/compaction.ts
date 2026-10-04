@@ -1,4 +1,4 @@
-import { generateText, type LanguageModel } from 'ai'
+import { generateText, type JSONValue, type LanguageModel } from 'ai'
 import type { CatalogModel, ChatMessage, TokenUsage } from '@shared/chat'
 import { ABSOLUTE_CONTEXT_CAP } from './context-budget'
 import { messageContextText } from './todo-context'
@@ -45,6 +45,8 @@ export function shouldCompact(
   lastTokens: TokenUsage | undefined,
   model: CatalogModel | undefined,
   estimatedContext = 0,
+  /** Compacta mais cedo: ao passar desta fração da janela (ex: 0.75). */
+  earlyAt?: number,
 ): boolean {
   if (!model?.limit?.context) return false
   const reserve =
@@ -61,6 +63,7 @@ export function shouldCompact(
   // compactar, porque o gatilho só olhava o que o provedor tinha reportado.
   const used = Math.max(reported, estimatedContext)
   if (used === 0) return false
+  if (earlyAt && used >= effectiveContext * earlyAt) return true
   return used >= effectiveContext - reserve
 }
 
@@ -112,6 +115,7 @@ function newId(prefix: string) {
 export async function compactHistory(
   history: ChatMessage[],
   model: LanguageModel,
+  providerOptions?: Record<string, Record<string, JSONValue>>,
 ): Promise<ChatMessage | null> {
   const split = splitForCompaction(history)
   if (!split) return null
@@ -129,6 +133,7 @@ export async function compactHistory(
     model,
     system: COMPACT_PROMPT,
     prompt: transcript.slice(-MAX_SUMMARY_INPUT_CHARS),
+    providerOptions,
   })
   if (!text.trim()) return null
 

@@ -57,6 +57,8 @@ export interface SessionInfo {
   mode: SessionMode
   pinned: boolean
   archived: boolean
+  /** Quando foi arquivada (null/ausente = não arquivada, ou arquivada antes deste campo existir). */
+  archivedAt?: number | null
   folderId: string | null
   /** Pasta principal de trabalho (modo código) */
   directory?: string
@@ -521,6 +523,10 @@ export interface SendMessageOptions {
   permissionMode?: PermissionMode
   /** /init: executa o pipeline de análise de projeto em vez de gerar texto */
   initMode?: boolean
+  /** Enviada pelo chat do navegador em tela cheia: o usuário abriu o navegador
+   *  e está pedindo dali, então o agente pode usá-lo mesmo com as ferramentas
+   *  de navegador desligadas em Preferências → Navegador. */
+  fromBrowser?: boolean
   /** Rodadas extras, em segundo plano, quando o turno falha por motivo
    *  transitório (rede, rate-limit) antes do primeiro token. O turno é o mesmo:
    *  nada novo aparece no chat entre uma tentativa e outra. */
@@ -652,6 +658,8 @@ export type ChatEvent =
       delta: string
     }
   | { type: "title"; sessionId: string; title: string }
+  /** Próxima mensagem provável do usuário — o input a mostra apagada e Tab completa */
+  | { type: "suggestion"; sessionId: string; text: string }
   | { type: "orchestration:plan"; sessionId: string; plan: OrchestrationPlan }
   | { type: "plan:review"; sessionId: string; review: PlanReview }
   /** Session criada/atualizada pelo main process (workers da orquestração) */

@@ -537,7 +537,15 @@ function FullscreenComposer({ onSent }: { onSent?: () => void }) {
       extraDirectories: string[],
       files?: FilePart[],
     ) => {
-      void sendMessage("code", text, { options, directory, extraDirectories, sessionId, files })
+      // Pedido feito do próprio navegador: o agente pode usá-lo mesmo com as
+      // ferramentas de navegador desligadas nas Preferências.
+      void sendMessage("code", text, {
+        options: { ...options, fromBrowser: true },
+        directory,
+        extraDirectories,
+        sessionId,
+        files,
+      })
       // Abre o feed de conversa para o usuário acompanhar a resposta
       onSent?.()
     },

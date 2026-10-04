@@ -2,7 +2,8 @@ import { useEffect, useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { GlobeIcon, LinkIcon, SearchIcon, XCircleIcon } from "lucide-react"
 import type { ChatMessage, ImagePart, MessagePart, ToolPart } from "@shared/chat"
-import { extractSources, hostnameOf, isEngineText, lastTextRunStart, parseSearchResults, WEB_TOOLS } from "@/src/lib/message-utils"
+import { arrangeForView, extractSources, hostnameOf, isEngineText, lastTextRunStart, parseSearchResults, WEB_TOOLS } from "@/src/lib/message-utils"
+import { useSetting } from "@/src/stores/app-settings"
 import {
   ChainOfThought,
   ChainOfThoughtContent,
@@ -82,7 +83,7 @@ function ResearchStep({ part }: { part: ToolPart }) {
   )
 }
 
-function ResearchBlock({ parts }: { parts: ToolPart[] }) {
+function ResearchBlock({ parts, flat }: { parts: ToolPart[]; flat?: boolean }) {
   const { t } = useTranslation()
   const researching = parts.some((p) => p.state === "running")
   const [open, setOpen] = useState(researching)
@@ -93,7 +94,8 @@ function ResearchBlock({ parts }: { parts: ToolPart[] }) {
   }, [researching])
 
   return (
-    <ChainOfThought open={open} onOpenChange={setOpen} className="my-2">
+    // Modo detalhado: a cadeia de passos fica sempre aberta.
+    <ChainOfThought open={flat || open} onOpenChange={setOpen} className="my-2">
       <ChainOfThoughtHeader>
         {researching ? (
           <Shimmer>{t("chat.researching")}</Shimmer>
@@ -172,7 +174,9 @@ export function ChatAssistantMessage({ message, sessionId, isLast, isBusy, busyL
   onRetry?: () => void
 }) {
   const { t } = useTranslation()
-  const segments = useMemo(() => segmentParts(message.parts), [message.parts])
+  const view = useSetting("chatView")
+  const segments = useMemo(() => segmentParts(arrangeForView(message.parts, view)), [message.parts, view])
+  const flat = view === "detailed"
   const finished = !(isLast && isBusy)
   const sources = useMemo(() => (finished ? extractSources(message) : []), [finished, message])
   const waiting = isLast && isBusy && message.parts.length === 0
@@ -194,9 +198,9 @@ export function ChatAssistantMessage({ message, sessionId, isLast, isBusy, busyL
       {waiting && <Shimmer className="text-sm">{busyLabel ?? t("chat.thinking")}</Shimmer>}
       {segments.map((segment, index) =>
         segment.kind === "research" ? (
-          <ResearchBlock key={segment.id} parts={segment.parts} />
+          <ResearchBlock key={segment.id} parts={segment.parts} flat={flat} />
         ) : segment.kind === "actions" ? (
-          <ActionsGroup key={segment.id} parts={segment.parts} />
+          <ActionsGroup key={segment.id} parts={segment.parts} flat={flat} />
         ) : segment.kind === "image-group" ? (
           <ImageGroupView key={segment.id} parts={segment.parts} />
         ) : segment.part.type === "text" ? (
@@ -212,7 +216,7 @@ export function ChatAssistantMessage({ message, sessionId, isLast, isBusy, busyL
             </AssistantMarkdown>
           )
         ) : segment.part.type === "reasoning" ? (
-          <ReasoningPartView key={segment.id} part={segment.part} />
+          <ReasoningPartView key={segment.id} part={segment.part} flat={flat} />
         ) : segment.part.type === "agent" ? (
           <AgentPartView key={segment.id} part={segment.part} />
         ) : segment.part.type === "artifact" ? (

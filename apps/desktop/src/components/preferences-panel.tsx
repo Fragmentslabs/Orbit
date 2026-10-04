@@ -1,11 +1,9 @@
-import { useMemo, useRef, useState } from "react"
+import { useState } from "react"
 import { useTranslation } from "react-i18next"
 import {
   AlignLeft,
   Bot,
   BrainCircuit,
-  BrainIcon,
-  ChevronDownIcon,
   Eye,
   FileText,
   FolderIcon,
@@ -13,157 +11,21 @@ import {
   LanguagesIcon,
   Network,
   Search,
-  SettingsIcon,
   Sparkles,
 } from "lucide-react"
-import { Button } from "@/components/ui/button"
-import {
-  ModelSelector,
-  ModelSelectorContent,
-  ModelSelectorEmpty,
-  ModelSelectorGroup,
-  ModelSelectorInput,
-  ModelSelectorItem,
-  ModelSelectorList,
-  ModelSelectorLogo,
-  ModelSelectorName,
-  ModelSelectorTrigger,
-} from "@/src/components/ai/model-selector"
 import { SegmentedControl } from "@/components/ui/segmented-control"
+import { ModelField } from "@/src/components/model-field"
+import { ModelThinkingMenu, ThinkingMenu } from "@/src/components/thinking-menu"
+import { GeneralSettings } from "@/src/components/general-settings"
 import { useProviderStore } from "@/src/stores/provider-store"
-import { useSettingsUi } from "@/src/stores/settings-ui"
 import { useModelModePrefs } from "@/src/stores/model-mode-prefs"
-import type { DefaultModel, ActiveModeDefaults } from "@/src/stores/model-mode-prefs"
+import type { ActiveModeDefaults } from "@/src/stores/model-mode-prefs"
 import type { BrainContextMode } from "@/src/stores/brain-prefs"
 import { useBrainPrefs } from "@/src/stores/brain-prefs"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { LOCALE_LABELS, SUPPORTED_LOCALES, useLocaleStore, type AppLocale } from "@/src/stores/locale-store"
 
-const MAX_MODELS_PER_PROVIDER = 40
-
 type PrefsTab = "chat" | "code"
-
-function ModelField({
-  label,
-  value,
-  onChange,
-  nullLabel,
-}: {
-  label: string
-  value: DefaultModel | null
-  onChange: (v: DefaultModel | null) => void
-  nullLabel?: string
-}) {
-  const [open, setOpen] = useState(false)
-  const [skipFinalFocus, setSkipFinalFocus] = useState(false)
-  const pendingSettings = useRef(false)
-  const openSettings = useSettingsUi((s) => s.openSettings)
-  const catalog = useProviderStore((s) => s.catalog)
-  const connectedProviders = useProviderStore((s) => s.connectedProviders)
-
-  const groups = useMemo(
-    () =>
-      connectedProviders
-        .filter((id) => catalog[id])
-        .map((id) => ({
-          provider: catalog[id],
-          models: Object.values(catalog[id].models)
-            .sort((a, b) => (b.release_date ?? "").localeCompare(a.release_date ?? ""))
-            .slice(0, MAX_MODELS_PER_PROVIDER),
-        })),
-    [catalog, connectedProviders],
-  )
-
-  const selectedModel = value ? catalog[value.providerId]?.models[value.modelId] : undefined
-  const { t } = useTranslation()
-
-  return (
-    <div>
-      <p className="mb-1 text-xs font-medium">{label}</p>
-      <ModelSelector
-        open={open}
-        onOpenChange={setOpen}
-        onOpenChangeComplete={(isOpen) => {
-          if (isOpen) return
-          setSkipFinalFocus(false)
-          if (!pendingSettings.current) return
-          pendingSettings.current = false
-          openSettings("providers")
-        }}
-      >
-        <ModelSelectorTrigger render={<Button className="h-7 gap-1 px-1.5 text-xs" variant="outline" />}>
-          {value ? (
-            <>
-              <ModelSelectorLogo provider={value.providerId} />
-              <ModelSelectorName>{selectedModel?.name ?? value.modelId}</ModelSelectorName>
-            </>
-          ) : (
-            <span className="text-muted-foreground">{nullLabel ?? t("preferences.none")}</span>
-          )}
-          <ChevronDownIcon className="size-3 text-muted-foreground" />
-        </ModelSelectorTrigger>
-        <ModelSelectorContent finalFocus={skipFinalFocus ? false : undefined}>
-          <ModelSelectorInput placeholder={t("preferences.searchModels")} />
-          <ModelSelectorList>
-            {nullLabel && (
-              <ModelSelectorItem
-                onSelect={() => { onChange(null); setOpen(false) }}
-                value={nullLabel}
-                className={!value ? "bg-primary/10" : undefined}
-              >
-                <span className="text-muted-foreground">{nullLabel}</span>
-              </ModelSelectorItem>
-            )}
-            <ModelSelectorEmpty>{t("preferences.noModelsFound")}</ModelSelectorEmpty>
-            {groups.map(({ provider, models }) => (
-              <ModelSelectorGroup heading={provider.name} key={provider.id}>
-                {models.map((model) => (
-                  <ModelSelectorItem
-                    key={`${provider.id}/${model.id}`}
-                    onSelect={() => {
-                      onChange({ providerId: provider.id, modelId: model.id })
-                      setOpen(false)
-                    }}
-                    value={`${provider.name} ${model.name} ${model.id}`}
-                    className={
-                      value?.providerId === provider.id && value.modelId === model.id
-                        ? "bg-primary/10"
-                        : undefined
-                    }
-                  >
-                    <ModelSelectorLogo provider={provider.id} />
-                    <ModelSelectorName>{model.name}</ModelSelectorName>
-                    {model.reasoning && (
-                      <BrainIcon className="size-3 shrink-0 text-muted-foreground" />
-                    )}
-                  </ModelSelectorItem>
-                ))}
-              </ModelSelectorGroup>
-            ))}
-          </ModelSelectorList>
-          <div className="border-t p-1">
-            <Button
-              variant="ghost"
-              className="w-full justify-start gap-2 text-xs"
-              onClick={() => {
-                // Handoff determinístico: marca a intenção e fecha o seletor. O
-                // settings só abre no onOpenChangeComplete, quando este dialog
-                // terminou de sair — o setTimeout de 120ms disputava com a
-                // animação de saída de 100ms.
-                setSkipFinalFocus(true)
-                pendingSettings.current = true
-                setOpen(false)
-              }}
-            >
-              <SettingsIcon className="size-3.5" />
-              {groups.length === 0 ? t("preferences.configureProvider") : t("preferences.manageProviders")}
-            </Button>
-          </div>
-        </ModelSelectorContent>
-      </ModelSelector>
-    </div>
-  )
-}
 
 function ActiveModesSection({
   modes,
@@ -273,7 +135,7 @@ function ChatPrefs() {
 
   return (
     <div className="flex flex-col gap-4">
-      <ModelField label={t("preferences.defaultModel")} value={chatModel} onChange={setChatModel} />
+      <ModelField label={t("preferences.defaultModel")} value={chatModel} onChange={setChatModel} action={<ModelThinkingMenu model={chatModel} />} />
       <ActiveModesSection modes={chatActiveModes} onChange={setChatActiveMode} isCode={false} />
       <MemoriaSection isCode={false} />
     </div>
@@ -287,14 +149,16 @@ function CodePrefs() {
   // sincronizado com o celular — mudar aqui muda lá, e vice-versa.
   const workerModel = useProviderStore((s) => s.workerModel)
   const setWorkerModel = useProviderStore((s) => s.setWorkerModel)
+  const workerReasoning = useProviderStore((s) => s.workerReasoning)
   const setWorkerReasoning = useProviderStore((s) => s.setWorkerReasoning)
   const orchestratorModel = useProviderStore((s) => s.orchestratorModel)
   const setOrchestratorModel = useProviderStore((s) => s.setOrchestratorModel)
+  const orchestratorReasoning = useProviderStore((s) => s.orchestratorReasoning)
   const setOrchestratorReasoning = useProviderStore((s) => s.setOrchestratorReasoning)
 
   return (
     <div className="flex flex-col gap-4">
-      <ModelField label={t("preferences.defaultModel")} value={codeModel} onChange={setCodeModel} />
+      <ModelField label={t("preferences.defaultModel")} value={codeModel} onChange={setCodeModel} action={<ModelThinkingMenu model={codeModel} />} />
       {/* Limpar grava null: null é o que faz o worker (ou o condutor) seguir o
           modelo do chat — o mesmo contrato do diálogo do "+". Trocar de modelo
           volta o raciocínio a desligado: outro modelo, outros níveis. */}
@@ -306,6 +170,7 @@ function CodePrefs() {
           setWorkerModel(m)
           setWorkerReasoning(null)
         }}
+        action={<ThinkingMenu model={workerModel} value={workerReasoning} onChange={setWorkerReasoning} />}
       />
       <ModelField
         label={t("preferences.orchestraModel")}
@@ -315,12 +180,13 @@ function CodePrefs() {
           setOrchestratorModel(m)
           setOrchestratorReasoning(null)
         }}
+        action={<ThinkingMenu model={orchestratorModel} value={orchestratorReasoning} onChange={setOrchestratorReasoning} />}
       />
       <ActiveModesSection modes={codeActiveModes} onChange={setCodeActiveMode} isCode={true} />
       <MemoriaSection isCode={true} />
       <div className="flex items-center gap-3 rounded-lg border border-border p-3 transition-colors hover:bg-accent/50">
-        <div className="flex size-8 shrink-0 items-center justify-center rounded-md bg-primary/10">
-          <FolderIcon className="size-4 text-primary" />
+        <div className="flex size-8 shrink-0 items-center justify-center rounded-md bg-muted">
+          <FolderIcon className="size-4 text-muted-foreground" />
         </div>
         <div className="flex-1 min-w-0">
           <p className="text-xs font-medium">{t("preferences.autoFolders.title")}</p>
@@ -354,7 +220,7 @@ function LanguageSection() {
   const setLocale = useLocaleStore((s) => s.setLocale)
 
   return (
-    <div className="border-t pt-4">
+    <div>
       <p className="mb-2 text-xs font-medium text-muted-foreground">{t("preferences.language.title")}</p>
       <div className="flex gap-2">
         {SUPPORTED_LOCALES.map((value) => {
@@ -398,18 +264,24 @@ export function PreferencesPanel() {
         </p>
       </div>
 
-      <SegmentedControl
-        options={[
-          { value: "chat" as const, label: t("preferences.tabChat") },
-          { value: "code" as const, label: t("preferences.tabCode") },
-        ]}
-        value={tab}
-        onChange={(v) => setTab(v as PrefsTab)}
-        className="w-full"
-      />
+      {/* Opções que valem para o app inteiro vêm antes das abas por tipo de conversa. */}
+      <LanguageSection />
+      <GeneralSettings />
+
+      <div className="border-t pt-4">
+        <p className="mb-2 text-xs font-medium text-muted-foreground">{t("preferences.byMode")}</p>
+        <SegmentedControl
+          options={[
+            { value: "chat" as const, label: t("preferences.tabChat") },
+            { value: "code" as const, label: t("preferences.tabCode") },
+          ]}
+          value={tab}
+          onChange={(v) => setTab(v as PrefsTab)}
+          className="w-full"
+        />
+      </div>
 
       {tab === "chat" ? <ChatPrefs /> : <CodePrefs />}
-      <LanguageSection />
     </div>
   )
 }

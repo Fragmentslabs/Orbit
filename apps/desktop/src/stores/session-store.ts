@@ -18,6 +18,7 @@ import type {
 // normalizeFolderName/folderKey vivem no shared: o mobile agrupa chats por
 // projeto do mesmo jeito e precisa da MESMA regra de nome.
 import { folderKey, normalizeFolderName, StorageKeys } from "@shared/chat"
+import { planArchivedCleanup, setArchivedState } from "@shared/archive"
 import { planAutoFolder } from "@/src/lib/auto-folder"
 import { chatApi, companionApi, docsApi, mediaApi, sessionApi, storage } from "@/src/lib/ipc"
 import { MEDIA_SCHEME } from "@shared/media"
@@ -34,6 +35,7 @@ import { useLoopConfigStore } from "@/src/stores/loop-config-store"
 import { LOCALE_PROMPT_NAME, useLocaleStore } from "@/src/stores/locale-store"
 import { useModelRotationStore } from "@/src/stores/model-rotation-store"
 import { usePanelStore } from "@/src/stores/panel-store"
+import { useAppSettings } from "@/src/stores/app-settings"
 
 /**
  * Store de sessões/mensagens no padrão do opencode: sessões persistidas
@@ -65,6 +67,10 @@ interface SessionState {
   /** Fallback em andamento (rotação de modelos): tentativa atual/total por
    *  sessão — a UI mostra "tentando fallback X/Y" no lugar de "Pensando…" */
   fallback: Record<string, RotationFallbackInfo | undefined>
+  /** Próxima mensagem sugerida por sessão (Preferências → Sugestões de prompt).
+   *  Some quando a pessoa envia qualquer coisa — só vale para a última resposta. */
+  suggestions: Record<string, string | undefined>
+  clearSuggestion: (sessionId: string) => void
   activeIds: Record<SessionMode, string | null>
   /** Pasta a atribuir à próxima sessão criada pelo fluxo de novo chat.
    *  O "+" da pasta não cria sessão no clique — só ao enviar a 1ª mensagem. */
@@ -176,6 +182,55 @@ function persistFolders(folders: FolderInfo[]) {
   void storage.write(StorageKeys.folders, folders)
 }
 
+const ARCHIVED_CLEANUP_INTERVAL_MS = 6 * 60 * 60 * 1000
+
+/**
+ * Exclusão automática de conversas arquivadas (Preferências → Geral).
+ *
+ * Roda aqui, e não no main como o arquivamento automático, porque a cascata de
+ * exclusão (abort, mensagens, prefs, navegador do painel, fontes anexadas)
+ * vive no `deleteSessions` — duplicá-la no main daria duas verdades sobre o
+ * mesmo delete. Referências que sobrevivem à conversa são seguras: a memória
+ * guarda o sessionId de origem só para o link "abrir conversa", que some
+ * quando a sessão não existe; métricas de rotina órfãs são podadas.
+ */
+async function runArchivedCleanup(get: () => SessionState, set: (fn: (state: SessionState) => Partial<SessionState>) => void) {
+  const days = useAppSettings.getState().settings.deleteArchivedDays
+  if (!days) return
+  const now = Date.now()
+  const running = new Set(await chatApi.running().catch(() => [] as string[]))
+  const { expired, undated } = planArchivedCleanup(get().sessions, days, now, running)
+
+  if (undated.length > 0) {
+    // Arquivadas antes de archivedAt existir: o prazo começa agora. updatedAt
+    // fica como estava — datar não é atividade.
+    const ids = new Set(undated.map((s) => s.id))
+    set((state) => ({
+      sessions: state.sessions.map((s) => {
+        if (!ids.has(s.id)) return s
+        const next = { ...s, archivedAt: now }
+        persistSession(next)
+        return next
+      }),
+    }))
+  }
+  if (expired.length > 0) {
+    await get().deleteSessions(expired.map((s) => s.id))
+    console.log(`[archived-cleanup] ${expired.length} conversa(s) arquivada(s) excluída(s)`)
+  }
+}
+
+function setupArchivedCleanup(get: () => SessionState, set: (fn: (state: SessionState) => Partial<SessionState>) => void) {
+  const run = () => void runArchivedCleanup(get, set).catch((err) => console.error("[archived-cleanup] falhou:", err))
+  setInterval(run, ARCHIVED_CLEANUP_INTERVAL_MS)
+  // Ligar a opção (ou encurtar o prazo) vale na hora, não só na próxima rodada.
+  useAppSettings.subscribe((next, prev) => {
+    const days = next.settings.deleteArchivedDays
+    if (days && days !== prev.settings.deleteArchivedDays) run()
+  })
+  run()
+}
+
 function updateSessionIn(state: SessionState, id: string, patch: Partial<SessionInfo>) {
   const sessions = state.sessions.map((s) => {
     if (s.id !== id) return s
@@ -206,6 +261,9 @@ export const useSessionStore = create<SessionState>((set, get) => ({
   status: {},
   errors: {},
   fallback: {},
+  suggestions: {},
+  clearSuggestion: (sessionId) =>
+    set((state) => (state.suggestions[sessionId] ? { suggestions: { ...state.suggestions, [sessionId]: undefined } } : state)),
   activeIds: { chat: null, code: null },
   pendingFolderId: null,
   orchestration: {},
@@ -238,6 +296,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     })
 
     chatApi.onEvent((event) => applyChatEvent(event, set, get))
+    setupArchivedCleanup(get, set)
 
     // "Organizar" vindo do mobile: roda a mesma função da sidebar do desktop.
     companionApi.onOrganizeSidebar(() => get().organizeSidebar())
@@ -459,7 +518,9 @@ export const useSessionStore = create<SessionState>((set, get) => ({
   toggleArchive: (id) => {
     set((state) => {
       const session = state.sessions.find((s) => s.id === id)
-      return session ? updateSessionIn(state, id, { archived: !session.archived }) : state
+      if (!session) return state
+      const { archived, archivedAt } = setArchivedState(session, !session.archived)
+      return updateSessionIn(state, id, { archived, archivedAt })
     })
     emitSessionEvent(id)
   },
@@ -672,7 +733,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       const sessions = state.sessions.map((s) => {
         if (s.folderId !== id || s.archived === archived) return s
         affected.push(s.id)
-        const next = { ...s, archived }
+        const next = setArchivedState(s, archived)
         persistSession(next)
         return next
       })
@@ -830,6 +891,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     }
 
     let sessionId = config.sessionId ?? get().activeIds[mode]
+    if (sessionId) get().clearSuggestion(sessionId)
     let session = get().sessions.find((s) => s.id === sessionId)
     if (!session) {
       // A pasta pendente só vale se pertencer ao mesmo modo da sessão a criar
@@ -1197,7 +1259,11 @@ case "message": {
       loadedMessages.add(sessionId)
       break
 
-case "title":
+    case "suggestion":
+      set((state) => ({ suggestions: { ...state.suggestions, [sessionId]: event.text } }))
+      break
+
+    case "title":
       set((state) => {
         const sessions = state.sessions.map((s) => (s.id === sessionId ? { ...s, title: event.title } : s))
         return { sessions }

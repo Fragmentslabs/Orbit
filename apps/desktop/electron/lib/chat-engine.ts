@@ -56,6 +56,8 @@ import { capture, diff } from './snapshot'
 import { isInitAborted, runProjectInit, type InitHooks } from './project-init'
 import { PROJECT_AREAS, type ProjectArea } from '@shared/memory'
 import { readJson, writeJson } from './storage'
+import { getAppSettings } from './app-settings'
+import { MIN_COMPACTION_CONTEXT, resolveAuxModel } from './aux-model'
 import { notifyChatError, notifyNewMessage } from './notifications'
 import { buildToolSet, type ImageToolHooks, type ToolContext, type TurnSnapshot } from './tools'
 import { addTokenUsage, toStepUsage, toTokenUsage } from './usage'
@@ -96,7 +98,6 @@ Your response must:
 // continuação e o contexto completo, limitado por turno. Sem isso, a stream
 // cortava no meio de um texto/tool call silenciosamente, indistinguível de
 // conclusão normal — a causa raiz das "respostas interrompidas do nada".
-const MAX_AUTO_CONTINUES = 3
 const AUTO_CONTINUE_PROMPT = `[SYSTEM: the previous reply was cut off by the model's output token limit (finish_reason "length") — this is NOT the end of the turn. Continue exactly from where you left off: resume mid-sentence if the cut happened mid-sentence, do NOT repeat what was already written, do NOT restart the answer, and do NOT append a closing summary — the text you produce now is displayed as the direct continuation of the previous text, together forming one single answer. If you were mid-task, complete it.]`
 const AUTO_CONTINUE_TOOL_PROMPT = (toolNames: string) => `[SYSTEM: the previous reply was cut off by the model's output token limit (finish_reason "length") in the middle of a ${toolNames} tool call. That tool call was NOT executed. Do NOT retry it as one giant operation — split it into smaller operations (smaller file writes, shorter commands, less data per call) and continue from where you left off.]`
 // Nudge de fechamento da TODO: o turno terminou em 'stop' mas o modelo não
@@ -768,11 +769,12 @@ async function generateTitle(input: SendMessageInput, win: BrowserWindow) {
       session.title === 'Nova conversa' || session.title === 'Nova sessão de código'
     if (!isDefaultTitle) return
 
-    const model = await resolveModel(input.providerId, input.modelId)
+    const aux = await resolveAuxModel({ providerId: input.providerId, modelId: input.modelId }, { sessionId: input.sessionId })
     const isCommand = input.text.trim().startsWith('/')
     const projectName = input.directory ? basename(input.directory) : null
     const { text } = await generateText({
-      model,
+      model: aux.model,
+      providerOptions: aux.providerOptions,
       system:
         'Gere um título curto e descritivo para a conversa, em texto puro, no idioma da mensagem do usuário. ' +
         'Regras: sem negrito, sem asteriscos, sem aspas, sem emojis e sem formatação de qualquer tipo; no máximo 50 caracteres. ' +
@@ -794,6 +796,42 @@ async function generateTitle(input: SendMessageInput, win: BrowserWindow) {
     emit(win, { type: 'title', sessionId: input.sessionId, title })
   } catch {
     // título é cosmético; falha silenciosa
+  }
+}
+
+const SUGGESTION_SYSTEM =
+  'You predict the user\'s NEXT message in a conversation with an AI assistant. ' +
+  'Write it as the user would type it: short (at most 12 words), concrete, in the same language the user writes in, ' +
+  'a natural next step given the assistant\'s last reply (follow-up, verification, next task). ' +
+  'No quotes, no explanations, no prefixes — reply ONLY with the message. ' +
+  'If there is no obvious next step, reply with an empty line.'
+
+/**
+ * Próxima mensagem provável do usuário, com o modelo auxiliar. Cosmética como
+ * o título: qualquer falha só significa não mostrar sugestão.
+ */
+async function generateSuggestion(input: SendMessageInput, reply: ChatMessage, win: BrowserWindow) {
+  try {
+    const session = await readJson<SessionInfo>(StorageKeys.session(input.sessionId))
+    if (!session || session.routineId) return
+    const answer = reply.parts
+      // Texto com `source` é do engine (nudges, checklist) ou de anexo — não é resposta.
+      .filter((p): p is TextPart => p.type === 'text' && !p.source)
+      .map((p) => p.text)
+      .join('\n')
+      .trim()
+    if (!answer) return
+    const aux = await resolveAuxModel({ providerId: input.providerId, modelId: input.modelId }, { sessionId: input.sessionId })
+    const { text } = await generateText({
+      model: aux.model,
+      providerOptions: aux.providerOptions,
+      system: SUGGESTION_SYSTEM,
+      prompt: `User's last message:\n${input.text.slice(-1500)}\n\nAssistant's reply:\n${answer.slice(-3000)}`,
+    })
+    const suggestion = text.trim().split('\n')[0].replace(/^["'“]|["'”]$/g, '').trim().slice(0, 200)
+    if (suggestion) emit(win, { type: 'suggestion', sessionId: input.sessionId, text: suggestion })
+  } catch {
+    // sugestão é cosmética; falha silenciosa
   }
 }
 
@@ -866,8 +904,11 @@ async function runChatTurn(win: BrowserWindow, input: SendMessageInput): Promise
   // Comando /compact — compacta o histórico e não gera resposta do modelo
   if (input.text.trim() === '/compact') {
     try {
-      const model = await resolveModel(input.providerId, input.modelId)
-      const summary = await compactHistory(history, model)
+      const aux = await resolveAuxModel(
+        { providerId: input.providerId, modelId: input.modelId },
+        { sessionId, minContext: MIN_COMPACTION_CONTEXT },
+      )
+      const summary = await compactHistory(history, aux.model, aux.providerOptions)
       if (summary) {
         const lastSummary = findLastSummaryIndex(history)
         for (let i = lastSummary + 1; i < history.length; i++) {
@@ -955,6 +996,21 @@ async function runChatTurn(win: BrowserWindow, input: SendMessageInput): Promise
   if (input.visionModel && turnImages.length > 0) {
     registerTurnImages(sessionId, turnImages)
   }
+
+  // Ids de stream → id da part. O adaptador de vários provedores reusa os
+  // mesmos ids a cada passo do loop de ferramentas ("reasoning-0", "txt-0"), e
+  // o upsert por id fazia cada passo SOBRESCREVER a part do anterior: o
+  // raciocínio de 38 ações virava um bloco só no topo (o do último passo), e a
+  // resposta final ocupava o lugar da primeira narração, antes das ações que
+  // vieram depois. Cada start ganha um id próprio quando o do SDK já existe.
+  const streamIds = new Map<string, string>()
+  const startStreamPart = (sdkId: string): string => {
+    let id = sdkId
+    for (let n = 1; assistantMessage.parts.some((p) => p.id === id); n++) id = `${sdkId}~${n}`
+    streamIds.set(sdkId, id)
+    return id
+  }
+  const streamPartId = (sdkId: string): string => streamIds.get(sdkId) ?? sdkId
 
   const upsertPart = (part: MessagePart) => {
     const idx = assistantMessage.parts.findIndex((p) => p.id === part.id)
@@ -1068,9 +1124,15 @@ async function runChatTurn(win: BrowserWindow, input: SendMessageInput): Promise
     // que será enviado, então não depende de o provedor colaborar.
     const lastTokens = [...history].reverse().find((m) => m.role === 'assistant' && m.tokens)?.tokens
     const historyTokens = estimateTokens(toModelMessages(history, modelVision))
-    if (shouldCompact(lastTokens, catalogModel, historyTokens)) {
+    const { autoCompact } = getAppSettings()
+    const earlyAt = autoCompact === '75' ? 0.75 : autoCompact === '50' ? 0.5 : undefined
+    if (shouldCompact(lastTokens, catalogModel, historyTokens, earlyAt)) {
       try {
-        const summary = await compactHistory(history, model)
+        const aux = await resolveAuxModel(
+          { providerId: input.providerId, modelId: input.modelId },
+          { sessionId, minContext: MIN_COMPACTION_CONTEXT },
+        )
+        const summary = await compactHistory(history, aux.model, aux.providerOptions)
         if (summary) {
           // Zera .tokens das mensagens após o sumário — os tokens antigos
           // refletiam o contexto cheio (pré-compactação) e inflariam o meter
@@ -1417,7 +1479,7 @@ async function runChatTurn(win: BrowserWindow, input: SendMessageInput): Promise
             // (parecia que o texto final tinha sido substituído). 'todo'
             // nunca é promovido, nem quando o turno grava arquivos.
             upsertPart({
-              id: part.id,
+              id: startStreamPart(part.id),
               type: 'text',
               text: '',
               state: 'streaming',
@@ -1425,14 +1487,14 @@ async function runChatTurn(win: BrowserWindow, input: SendMessageInput): Promise
             })
             break
           case 'text-delta': {
-            const existing = assistantMessage.parts.find((p) => p.id === part.id)
+            const existing = assistantMessage.parts.find((p) => p.id === streamPartId(part.id))
             if (existing?.type === 'text') {
               existing.text += part.text
               emit(win, {
                 type: 'part-delta',
                 sessionId,
                 messageId: assistantMessage.id,
-                partId: part.id,
+                partId: existing.id,
                 kind: 'text',
                 delta: part.text,
               })
@@ -1440,7 +1502,7 @@ async function runChatTurn(win: BrowserWindow, input: SendMessageInput): Promise
             break
           }
           case 'text-end': {
-            const existing = assistantMessage.parts.find((p) => p.id === part.id)
+            const existing = assistantMessage.parts.find((p) => p.id === streamPartId(part.id))
             // Saneamento do texto visível: o modelo às vezes copia os
             // marcadores internos que recebeu no contexto ("[Verified
             // record: ...]", "[SYSTEM: ...]"). Aqui a part já está completa,
@@ -1451,19 +1513,21 @@ async function runChatTurn(win: BrowserWindow, input: SendMessageInput): Promise
             }
             break
           }
-          case 'reasoning-start':
-            reasoningStart.set(part.id, Date.now())
-            upsertPart({ id: part.id, type: 'reasoning', text: '', state: 'streaming' })
+          case 'reasoning-start': {
+            const id = startStreamPart(part.id)
+            reasoningStart.set(id, Date.now())
+            upsertPart({ id, type: 'reasoning', text: '', state: 'streaming' })
             break
+          }
           case 'reasoning-delta': {
-            const existing = assistantMessage.parts.find((p) => p.id === part.id)
+            const existing = assistantMessage.parts.find((p) => p.id === streamPartId(part.id))
             if (existing?.type === 'reasoning') {
               existing.text += part.text
               emit(win, {
                 type: 'part-delta',
                 sessionId,
                 messageId: assistantMessage.id,
-                partId: part.id,
+                partId: existing.id,
                 kind: 'reasoning',
                 delta: part.text,
               })
@@ -1471,9 +1535,9 @@ async function runChatTurn(win: BrowserWindow, input: SendMessageInput): Promise
             break
           }
           case 'reasoning-end': {
-            const existing = assistantMessage.parts.find((p) => p.id === part.id)
+            const existing = assistantMessage.parts.find((p) => p.id === streamPartId(part.id))
             if (existing?.type === 'reasoning') {
-              const started = reasoningStart.get(part.id)
+              const started = reasoningStart.get(existing.id)
               upsertPart({
                 ...existing,
                 state: 'done',
@@ -1710,7 +1774,7 @@ async function runChatTurn(win: BrowserWindow, input: SendMessageInput): Promise
       if (
         lastFinishReason === 'length' &&
         !controller.signal.aborted &&
-        autoContinues < MAX_AUTO_CONTINUES
+        autoContinues < getAppSettings().autoContinues
       ) {
         autoContinues++
         for (const pending of pendingToolCalls) {
@@ -1794,7 +1858,7 @@ async function runChatTurn(win: BrowserWindow, input: SendMessageInput): Promise
         part.state = 'done'
       }
       // Backstop: uma tool-call sem resultado que não foi pega pelo ramo de
-      // auto-continue acima (ex.: teto de MAX_AUTO_CONTINUES esgotado com
+      // auto-continue acima (ex.: teto de continuações esgotado com
       // finish_reason 'length') ficaria 'running' para sempre — e o acordeon
       // de ações (TaskGroup) lê isso como "ainda trabalhando": shimmer e
       // "Working" eternos mesmo com o turno já encerrado e salvo.
@@ -1865,6 +1929,11 @@ async function runChatTurn(win: BrowserWindow, input: SendMessageInput): Promise
 
     // Workers já nascem com título (task.title) — não sobrescrever
     if (isFirstExchange && input.orchestrationRole !== 'worker') void generateTitle(input, win)
+    // Sugestão só faz sentido para quem está conversando: workers e rotinas
+    // não têm ninguém digitando a próxima mensagem.
+    if (getAppSettings().promptSuggestions && !input.orchestrationRole && !assistantMessage.error) {
+      void generateSuggestion(input, assistantMessage, win)
+    }
         break
       } catch (err) {
         // Tentativa falhou: rotaciona se a falha é recuperável e ainda não
@@ -1975,8 +2044,8 @@ async function compactSessionTurn(win: BrowserWindow, sessionId: string): Promis
   if (!providerId || !modelId) return
 
   try {
-    const model = await resolveModel(providerId, modelId)
-    const summary = await compactHistory(history, model)
+    const aux = await resolveAuxModel({ providerId, modelId }, { sessionId, minContext: MIN_COMPACTION_CONTEXT })
+    const summary = await compactHistory(history, aux.model, aux.providerOptions)
     if (summary) {
       const lastSummary = findLastSummaryIndex(history)
       for (let i = lastSummary + 1; i < history.length; i++) {

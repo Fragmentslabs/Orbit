@@ -1,8 +1,9 @@
 import { create } from "zustand"
 import { storage } from "@/src/lib/ipc"
 import type { FilePart, QueuedMessage, SessionMode, SendMessageOptions } from "@shared/chat"
-import { MAX_QUEUE_RETRIES, StorageKeys } from "@shared/chat"
+import { StorageKeys } from "@shared/chat"
 import { useSessionStore } from "@/src/stores/session-store"
+import { useAppSettings } from "@/src/stores/app-settings"
 
 const QUEUE_STORAGE_KEY = StorageKeys.queuedMessages
 
@@ -187,10 +188,10 @@ export const useMessageQueueStore = create<MessageQueueState>((set, get) => ({
 }))
 
 /** A pessoa não está olhando quando um item da fila sai: falha transitória
- *  ganha rodadas extras no engine, dentro do mesmo turno. */
+ *  ganha rodadas extras no engine, dentro do mesmo turno (quantas: Preferências). */
 function send(sessionId: string, msg: QueuedMessage) {
   void useSessionStore.getState().sendMessage(msg.mode, msg.text, {
-    options: { ...msg.options, retries: MAX_QUEUE_RETRIES },
+    options: { ...msg.options, retries: useAppSettings.getState().settings.transientRetries },
     sessionId: msg.sessionId ?? sessionId,
     directory: msg.directory,
     extraDirectories: msg.extraDirectories,

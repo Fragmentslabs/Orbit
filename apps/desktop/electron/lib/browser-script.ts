@@ -24,7 +24,7 @@ import { panelActivity } from './panel-browser'
 
 /** Sessão persistente compartilhada com o `<webview>` do painel (cookies/logins).
  *  Precisa ser idêntica à BROWSER_PARTITION do renderer (webview-session.ts). */
-const BROWSER_PARTITION = 'persist:orbit-browser'
+export const BROWSER_PARTITION = 'persist:orbit-browser'
 
 /** Altura máxima de uma captura fullPage (evita estourar memória em páginas infinitas). */
 const MAX_FULL_PAGE_HEIGHT = 8000

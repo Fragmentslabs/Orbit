@@ -51,6 +51,7 @@ import { useProviderStore, useNoProviderConnected } from "@/src/stores/provider-
 import { useSessionModel } from "@/src/stores/session-model-prefs"
 import { useSettingsUi } from "@/src/stores/settings-ui"
 import { useReasoningPrefs } from "@/src/stores/reasoning-prefs"
+import { usePromptSuggestion } from "@/src/stores/prompt-suggestion"
 import { useSessionStore } from "@/src/stores/session-store"
 import { useSimpleMode, useSimplePrefs } from "@/src/stores/simple-prefs"
 import { useSkillsStore } from "@/src/stores/skills-store"
@@ -129,6 +130,7 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId, on
   const catalog = useProviderStore((s) => s.catalog)
   const model = selected ? catalog[selected.providerId]?.models[selected.modelId] : undefined
   const { enabled, variantId: savedVariant, update } = useReasoningPrefs(selected?.providerId, selected?.modelId)
+  const suggestion = usePromptSuggestion(sessionId)
   // Nível salvo que este modelo não oferece (ex: "medium" onde só há
   // low/high/max) vira o vizinho mais próximo — o mesmo que o engine envia.
   const variantId = closestVariant(model?.variants?.map((v) => v.id) ?? [], savedVariant) ?? savedVariant
@@ -398,6 +400,7 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId, on
           <PromptInputBody>
             <PromptInputTextarea
               placeholder={folders.length === 0 ? t("codeInput.placeholderNoFolder") : t("codeInput.placeholder")}
+              suggestion={suggestion}
               className="px-3 text-base md:text-base"
             />
           </PromptInputBody>

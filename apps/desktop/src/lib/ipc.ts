@@ -8,6 +8,7 @@ import type {
   SendMessageInput,
   SessionRevert,
 } from "@shared/chat"
+import type { AppSettings } from "@shared/app-settings"
 import type { AppPreferences, ChatModeKey, ModelReasoningPref, ReasoningPrefsMap, SessionModeOverrides, WorkerConfigSnapshot } from "@shared/companion"
 import type { McpConfig, McpServerStatus } from "@shared/mcp"
 import type { DocumentDownload, MediaEntry, MediaFilter, MediaUsage } from "@shared/media"
@@ -115,6 +116,19 @@ export const storage = {
   write: (key: string, value: unknown) => window.ipcRenderer.invoke("storage:write", key, value),
   remove: (key: string) => window.ipcRenderer.invoke("storage:remove", key),
   list: (prefix: string) => window.ipcRenderer.invoke("storage:list", prefix) as Promise<string[]>,
+}
+
+export const appSettingsApi = {
+  sync: (settings: AppSettings) => window.ipcRenderer?.send("settings:sync", settings),
+  /** Apaga cookies, logins e cache do navegador integrado */
+  clearBrowserData: () => window.ipcRenderer.invoke("browser:clear-data") as Promise<void>,
+  /** Link clicado no app que deve abrir no navegador integrado */
+  onLinkOpen: (listener: (url: string) => void) => {
+    if (!window.ipcRenderer) return () => {}
+    const wrapper = window.ipcRenderer.on("link:open", (url) => listener(url as string))
+    return () => window.ipcRenderer.off("link:open", wrapper)
+  },
+  openExternal: (url: string) => window.ipcRenderer?.send("link:open-external", url),
 }
 
 export const catalogApi = {
