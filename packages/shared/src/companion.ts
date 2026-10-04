@@ -233,6 +233,12 @@ export interface WorkerConfigSnapshot {
   workerModel: WorkerModelConfig | null
   workerReasoning: ReasoningConfig | null
   visionModel: WorkerModelConfig | null
+  /**
+   * Condutor da orquestra (planejamento e síntese). Opcional: um app que ainda
+   * não conhece o campo não o envia, e ausente = manter o que está.
+   */
+  orchestratorModel?: WorkerModelConfig | null
+  orchestratorReasoning?: ReasoningConfig | null
 }
 
 export interface SetWorkerConfigRequest {

@@ -3,8 +3,6 @@ import { create } from "zustand"
 const DEFAULT_MODE_KEY = "orbit-default-mode"
 const CHAT_MODEL_KEY = "orbit-chat-model"
 const CODE_MODEL_KEY = "orbit-code-model"
-const SUBAGENT_MODEL_KEY = "orbit-subagent-model"
-const ORCHESTRA_MODEL_KEY = "orbit-orchestra-model"
 const CHAT_ACTIVE_MODES_KEY = "orbit-chat-active-modes"
 const CODE_ACTIVE_MODES_KEY = "orbit-code-active-modes"
 const CHAT_PERM_MODE_KEY = "orbit-chat-perm-mode"
@@ -88,8 +86,6 @@ interface ModelModePrefsState {
   defaultMode: "chat" | "code"
   chatModel: DefaultModel | null
   codeModel: DefaultModel | null
-  subagentModel: DefaultModel | null
-  orchestraModel: DefaultModel | null
   chatActiveModes: ActiveModeDefaults
   codeActiveModes: ActiveModeDefaults
   chatPermissionMode: "ask" | "approve" | "full"
@@ -99,8 +95,6 @@ interface ModelModePrefsState {
   setDefaultMode: (mode: "chat" | "code") => void
   setChatModel: (model: DefaultModel | null) => void
   setCodeModel: (model: DefaultModel | null) => void
-  setSubagentModel: (model: DefaultModel | null) => void
-  setOrchestraModel: (model: DefaultModel | null) => void
   setChatActiveMode: (key: keyof ActiveModeDefaults, value: boolean) => void
   setCodeActiveMode: (key: keyof ActiveModeDefaults, value: boolean) => void
   setChatPermissionMode: (mode: "ask" | "approve" | "full") => void
@@ -112,8 +106,6 @@ export const useModelModePrefs = create<ModelModePrefsState>((set) => ({
   defaultMode: loadJson<"chat" | "code">(DEFAULT_MODE_KEY, "chat"),
   chatModel: loadJson<DefaultModel | null>(CHAT_MODEL_KEY, null),
   codeModel: loadJson<DefaultModel | null>(CODE_MODEL_KEY, null),
-  subagentModel: loadJson<DefaultModel | null>(SUBAGENT_MODEL_KEY, null),
-  orchestraModel: loadJson<DefaultModel | null>(ORCHESTRA_MODEL_KEY, null),
   chatActiveModes: loadModes(CHAT_ACTIVE_MODES_KEY, DEFAULT_CHAT_MODES),
   codeActiveModes: loadModes(CODE_ACTIVE_MODES_KEY, DEFAULT_CODE_MODES),
   chatPermissionMode: loadJson<"ask" | "approve" | "full">(CHAT_PERM_MODE_KEY, "ask"),
@@ -133,16 +125,6 @@ export const useModelModePrefs = create<ModelModePrefsState>((set) => ({
     if (model) localStorage.setItem(CODE_MODEL_KEY, JSON.stringify(model))
     else localStorage.removeItem(CODE_MODEL_KEY)
     set({ codeModel: model })
-  },
-  setSubagentModel: (model) => {
-    if (model) localStorage.setItem(SUBAGENT_MODEL_KEY, JSON.stringify(model))
-    else localStorage.removeItem(SUBAGENT_MODEL_KEY)
-    set({ subagentModel: model })
-  },
-  setOrchestraModel: (model) => {
-    if (model) localStorage.setItem(ORCHESTRA_MODEL_KEY, JSON.stringify(model))
-    else localStorage.removeItem(ORCHESTRA_MODEL_KEY)
-    set({ orchestraModel: model })
   },
   setChatActiveMode: (key, value) => {
     set((state) => {

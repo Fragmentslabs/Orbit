@@ -17,6 +17,7 @@ import { abortChat, runChat, toModelMessages } from './chat-engine'
 import { forwardChatEvent } from './companion-server'
 import { classifyProviderError, errorToText, isRecoverableErrorKind } from './errors'
 import { hasStreamedContent, resolveRotation } from './model-rotation'
+import { conductorInput } from './orchestrator-conductor'
 import { ORCHESTRATOR_PLAN_PROMPT, ORCHESTRATOR_SYNTHESIS_PROMPT } from './prompts'
 import { resolveModel } from './providers'
 import { withProviderSession } from './provider-session'
@@ -166,13 +167,14 @@ async function runOrchestrationTurn(win: BrowserWindow, input: SendMessageInput)
   history.push(userMessage)
   emit(win, { type: 'message', sessionId, message: userMessage })
 
+  const conductor = conductorInput(input)
   const assistantMessage: ChatMessage = {
     id: newId('msg'),
     role: 'assistant',
     parts: [],
     createdAt: Date.now(),
-    providerId: input.providerId,
-    modelId: input.modelId,
+    providerId: conductor.providerId,
+    modelId: conductor.modelId,
   }
   history.push(assistantMessage)
   await saveMessages(sessionId, history)
@@ -180,12 +182,15 @@ async function runOrchestrationTurn(win: BrowserWindow, input: SendMessageInput)
 
   // Rotação de modelos (mesma regra do chat-engine): rotação escolhida no
   // seletor para este chat; senão o modelo pinado; senão o default — com o
-  // primeiro modelo como ponto de partida do loop abaixo.
-  const rotationSequence = resolveRotation(input.sessionId, {
-    providerId: input.providerId,
-    modelId: input.modelId,
-  })
-  const primaryModel = rotationSequence[0] ?? { providerId: input.providerId, modelId: input.modelId }
+  // primeiro modelo como ponto de partida do loop abaixo. Um modelo de
+  // orquestra configurado vale por si: a rotação é do modelo do chat.
+  const rotationSequence = input.orchestratorModel
+    ? [{ providerId: conductor.providerId, modelId: conductor.modelId }]
+    : resolveRotation(input.sessionId, {
+        providerId: input.providerId,
+        modelId: input.modelId,
+      })
+  const primaryModel = rotationSequence[0] ?? { providerId: conductor.providerId, modelId: conductor.modelId }
 
   try {
     // Loop de tentativas do PLANEJAMENTO: falha recuperável antes do primeiro
@@ -263,7 +268,7 @@ async function runOrchestrationTurn(win: BrowserWindow, input: SendMessageInput)
       toModelMessages(history.slice(0, -1)),
       interleavedReasoningField(provider, primary.modelId),
     )
-    const providerOptions = await buildProviderOptions({ ...input, providerId: primary.providerId, modelId: primary.modelId })
+    const providerOptions = await buildProviderOptions({ ...conductor, providerId: primary.providerId, modelId: primary.modelId })
     const cost = provider?.models[primary.modelId]?.cost
 
     // Consome o stream de uma passada de planejamento, emitindo parts (texto,
@@ -578,13 +583,14 @@ async function approvePlanTurn(
 
     // Fase 3: síntese em streaming no chat principal
     const history = await loadMessages(sessionId)
+    const conductor = conductorInput(input)
     const synthesisMessage: ChatMessage = {
       id: newId('msg'),
       role: 'assistant',
       parts: [],
       createdAt: Date.now(),
-      providerId: input.providerId,
-      modelId: input.modelId,
+      providerId: conductor.providerId,
+      modelId: conductor.modelId,
     }
     history.push(synthesisMessage)
     emit(win, { type: 'message', sessionId, message: synthesisMessage })
@@ -593,20 +599,20 @@ async function approvePlanTurn(
       .map((r) => `## ${r.task.title} [${r.task.status === 'error' ? 'FAILED' : 'ok'}]\n\n${r.text}`)
       .join('\n\n---\n\n')
 
-    const model = await resolveModel(input.providerId, input.modelId)
-    const provider = await getProvider(input.providerId)
+    const model = await resolveModel(conductor.providerId, conductor.modelId)
+    const provider = await getProvider(conductor.providerId)
     const stream = streamText({
       model,
       system: ORCHESTRATOR_SYNTHESIS_PROMPT,
       messages: [
         ...normalizeMessages(
           toModelMessages(history.slice(0, -1)),
-          interleavedReasoningField(provider, input.modelId),
+          interleavedReasoningField(provider, conductor.modelId),
         ),
         { role: 'user', content: `Worker results:\n\n${resultsText}` },
       ],
       abortSignal: controller.signal,
-      providerOptions: await buildProviderOptions(input),
+      providerOptions: await buildProviderOptions(conductor),
     })
 
     const part: TextPart = { id: newId('prt'), type: 'text', text: '', state: 'streaming' }
@@ -631,7 +637,7 @@ async function approvePlanTurn(
     if (started) emit(win, { type: 'part', sessionId, messageId: synthesisMessage.id, part })
 
     // Usage da síntese: registrado na própria mensagem e somado ao plano
-    synthesisMessage.tokens = toTokenUsage(await stream.usage, provider?.models[input.modelId]?.cost)
+    synthesisMessage.tokens = toTokenUsage(await stream.usage, provider?.models[conductor.modelId]?.cost)
     plan.usage = addTokenUsage(plan.usage, synthesisMessage.tokens)
     await saveMessages(sessionId, history)
 

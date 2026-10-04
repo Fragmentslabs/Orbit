@@ -605,6 +605,11 @@ export interface SendMessageInput {
   extraDirectories?: string[]
   /** Modelo dos workers (subagents/orchestra), vindo do modal de configuração */
   workerModel?: WorkerModelConfig
+  /**
+   * Modelo que conduz a orquestra (planejamento e síntese). Ausente = o modelo
+   * do próprio chat. Os workers não o usam: seguem workerModel.
+   */
+  orchestratorModel?: WorkerModelConfig
   /** Modelo de visão delegado (modo Visão) — descreve imagens para modelos sem visão */
   visionModel?: WorkerModelConfig
   /** Preenchido pelo main process em execuções de worker — nunca pelo renderer */

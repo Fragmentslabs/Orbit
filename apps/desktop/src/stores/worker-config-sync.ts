@@ -1,6 +1,5 @@
 import type { WorkerConfigSnapshot } from "@shared/companion"
 import { workerConfigApi } from "@/src/lib/ipc"
-import { useModelModePrefs } from "@/src/stores/model-mode-prefs"
 import { useProviderStore } from "@/src/stores/provider-store"
 
 /**
@@ -13,11 +12,13 @@ import { useProviderStore } from "@/src/stores/provider-store"
  */
 
 function snapshot(): WorkerConfigSnapshot {
-  const { workerModel, workerReasoning, visionModel } = useProviderStore.getState()
+  const { workerModel, workerReasoning, visionModel, orchestratorModel, orchestratorReasoning } = useProviderStore.getState()
   return {
     workerModel: workerModel ?? null,
     workerReasoning: workerReasoning ?? null,
     visionModel: visionModel ?? null,
+    orchestratorModel: orchestratorModel ?? null,
+    orchestratorReasoning: orchestratorReasoning ?? null,
   }
 }
 
@@ -42,10 +43,8 @@ if (typeof window !== "undefined" && window.ipcRenderer) {
     store.setWorkerModel(config.workerModel ?? null)
     store.setWorkerReasoning(config.workerReasoning ?? null)
     store.setVisionModel(config.visionModel ?? null)
-    // O campo "Modelo dos subagentes" das preferências espelha o workerModel
-    // (escolher ali grava nos dois). Sem atualizar aqui, mudar o modelo pelo
-    // celular deixava o painel do desktop exibindo o modelo antigo, enquanto a
-    // execução já usava o novo.
-    useModelModePrefs.getState().setSubagentModel(config.workerModel ?? null)
+    // Ausente = o celular não conhece o campo: mantém o que está.
+    if ("orchestratorModel" in config) store.setOrchestratorModel(config.orchestratorModel ?? null)
+    if ("orchestratorReasoning" in config) store.setOrchestratorReasoning(config.orchestratorReasoning ?? null)
   })
 }

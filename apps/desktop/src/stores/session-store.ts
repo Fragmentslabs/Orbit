@@ -913,6 +913,13 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       needsWorker && worker
         ? { ...worker, reasoning: provider.workerReasoning ?? undefined }
         : undefined
+    // Quem conduz a orquestra (planejamento e síntese): o modelo de Preferências /
+    // "+" → Orquestra. Sem ele, o próprio modelo do chat — o mesmo contrato do worker.
+    const conductor = provider.orchestratorModel
+    const orchestratorModel =
+      config.options.orchestrate && conductor
+        ? { ...conductor, reasoning: provider.orchestratorReasoning ?? undefined }
+        : undefined
 
     // Modo Visão ativo = modelo configurado E modo ativo para esta sessão
     // (toggle por chat com default nas preferências)
@@ -931,6 +938,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       directory: config.directory ?? session.directory,
       extraDirectories: config.extraDirectories ?? session.extraDirectories,
       workerModel,
+      orchestratorModel,
       visionModel:
         provider.visionModel && modeActiveFor("vision", sessionId, visionPrefs.vision)
           ? provider.visionModel

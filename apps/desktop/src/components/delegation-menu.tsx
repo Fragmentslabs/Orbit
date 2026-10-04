@@ -17,7 +17,8 @@ export function DelegationMenuItems({ subagents, orchestra, loop, onSubagentsCha
   onSubagentsChange: (value: boolean) => void
   onOrchestraChange: (value: boolean) => void
   onLoopChange?: (value: boolean) => void
-  onOpenConfig: () => void
+  /** Engrenagem de Subagentes ou de Orquestra: cada uma abre a sua configuração */
+  onOpenConfig: (kind: "subagents" | "orchestra") => void
   onOpenLoopConfig?: () => void
   /** Orquestração é exclusiva do modo code */
   mode?: "chat" | "code"
@@ -54,7 +55,7 @@ export function DelegationMenuItems({ subagents, orchestra, loop, onSubagentsCha
       >
         <Bot className="size-4" />
         <span className="flex-1">{t("delegation.subagents")}</span>
-        {gear(onOpenConfig, subagents)}
+        {gear(() => onOpenConfig("subagents"), subagents)}
       </DropdownMenuCheckboxItem>
       {mode !== "chat" && (
       <DropdownMenuCheckboxItem
@@ -67,7 +68,7 @@ export function DelegationMenuItems({ subagents, orchestra, loop, onSubagentsCha
       >
         <Network className="size-4" />
         <span className="flex-1">{t("delegation.orchestra")}</span>
-        {gear(onOpenConfig, orchestra)}
+        {gear(() => onOpenConfig("orchestra"), orchestra)}
       </DropdownMenuCheckboxItem>
       )}
       {onLoopChange && (

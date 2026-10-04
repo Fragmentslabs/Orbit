@@ -964,14 +964,19 @@
     "dismiss": "Dispensar"
   },
   "orchestrationConfig": {
-    "title": "Configurar workers",
+    "titleSubagents": "Configurar subagentes",
+    "titleOrchestra": "Configurar orquestra",
     "attention": "Atenção:",
     "attentionText": "workers rodam em paralelo e consomem tokens sem limite por padrão — prefira um modelo econômico e acompanhe o custo exibido em cada execução.",
     "workerModel": "Modelo do worker",
     "useMainModel": "Usar o modelo principal",
     "noTools": "sem tools",
     "noSelectionHint": "Sem seleção, os workers usam o mesmo modelo do chat principal.",
-    "thinkingOnWorker": "Thinking no worker",
+    "thinking": "Thinking",
+    "conductorModel": "Modelo do orquestrador",
+    "conductorHint": "Planeja as tarefas e escreve a resposta final. Sem seleção, o modelo do chat faz isso.",
+    "useChatModel": "Usar o modelo do chat",
+    "workerSharedHint": "O mesmo modelo dos subagentes. Sem seleção, os workers usam o modelo do chat principal.",
     "clear": "Limpar",
     "done": "Concluir"
   },

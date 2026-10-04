@@ -80,6 +80,7 @@ import {
   isCompanionHttpRunning,
   HTTP_PORT as COMPANION_HTTP_PORT,
   createMediaToken,
+  getWorkerConfigCache,
 } from './companion-http'
 
 const execFileAsync = promisify(execFile)
@@ -137,6 +138,12 @@ async function registerDevice(deviceName: string): Promise<string> {
   devices.push({ token, deviceName, pairedAt: Date.now(), lastSeenAt: Date.now() })
   await writeJson(DEVICES_KEY, devices)
   return token
+}
+
+/** Condutor da orquestra configurado no desktop, no formato do SendMessageInput. */
+function conductorFromConfig(): SendMessageInput['orchestratorModel'] {
+  const { orchestratorModel, orchestratorReasoning } = getWorkerConfigCache()
+  return orchestratorModel ? { ...orchestratorModel, reasoning: orchestratorReasoning ?? undefined } : undefined
 }
 
 export async function validateDeviceToken(token: string): Promise<boolean> {
@@ -515,6 +522,9 @@ async function handleRequest(client: ConnectedClient, requestId: string, req: Co
           extraDirectories: req.extraDirectories ?? session.extraDirectories,
           workerModel: req.workerModel,
           visionModel: req.visionModel,
+          // O condutor da orquestra é config do desktop (Preferências / "+"):
+          // o celular não o manda, então vem da cópia que o renderer empurra.
+          ...(req.options?.orchestrate ? { orchestratorModel: conductorFromConfig() } : {}),
           loopConfig: req.loopConfig,
           // Idioma do app (publicado pelo renderer). Sem ele o agente cai no
           // idioma do PROMPT — o desktop manda em todo envio, e o caminho do

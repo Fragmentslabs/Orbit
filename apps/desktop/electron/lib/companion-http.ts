@@ -330,7 +330,13 @@ let workerConfigCache: WorkerConfigSnapshot = {
 }
 
 export function setWorkerConfigCache(config: WorkerConfigSnapshot): void {
-  workerConfigCache = config ?? { workerModel: null, workerReasoning: null, visionModel: null }
+  const next = config ?? { workerModel: null, workerReasoning: null, visionModel: null }
+  // Campos do condutor ausentes (app que não os conhece) mantêm o valor atual.
+  workerConfigCache = {
+    ...next,
+    orchestratorModel: 'orchestratorModel' in next ? next.orchestratorModel : workerConfigCache.orchestratorModel,
+    orchestratorReasoning: 'orchestratorReasoning' in next ? next.orchestratorReasoning : workerConfigCache.orchestratorReasoning,
+  }
 }
 
 export function getWorkerConfigCache(): WorkerConfigSnapshot {

@@ -282,16 +282,40 @@ function ChatPrefs() {
 
 function CodePrefs() {
   const { t } = useTranslation()
-  const { codeModel, setCodeModel, subagentModel, setSubagentModel, orchestraModel, setOrchestraModel, codeActiveModes, setCodeActiveMode, autoCreateFolders, setAutoCreateFolders } = useModelModePrefs()
+  const { codeModel, setCodeModel, codeActiveModes, setCodeActiveMode, autoCreateFolders, setAutoCreateFolders } = useModelModePrefs()
+  // Subagentes e orquestra: o mesmo estado das engrenagens do "+" (provider-store),
+  // sincronizado com o celular — mudar aqui muda lá, e vice-versa.
+  const workerModel = useProviderStore((s) => s.workerModel)
   const setWorkerModel = useProviderStore((s) => s.setWorkerModel)
+  const setWorkerReasoning = useProviderStore((s) => s.setWorkerReasoning)
+  const orchestratorModel = useProviderStore((s) => s.orchestratorModel)
+  const setOrchestratorModel = useProviderStore((s) => s.setOrchestratorModel)
+  const setOrchestratorReasoning = useProviderStore((s) => s.setOrchestratorReasoning)
 
   return (
     <div className="flex flex-col gap-4">
       <ModelField label={t("preferences.defaultModel")} value={codeModel} onChange={setCodeModel} />
-      {/* Limpar o campo grava null, não codeModel: null é o que faz o worker
-          seguir o modelo do chat, e é o mesmo contrato do diálogo de orquestra. */}
-      <ModelField label={t("preferences.subagentModel")} value={subagentModel} nullLabel={t("preferences.sameAsMainModel")} onChange={(m) => { setSubagentModel(m); setWorkerModel(m) }} />
-      <ModelField label={t("preferences.orchestraModel")} value={orchestraModel} onChange={setOrchestraModel} />
+      {/* Limpar grava null: null é o que faz o worker (ou o condutor) seguir o
+          modelo do chat — o mesmo contrato do diálogo do "+". Trocar de modelo
+          volta o raciocínio a desligado: outro modelo, outros níveis. */}
+      <ModelField
+        label={t("preferences.subagentModel")}
+        value={workerModel}
+        nullLabel={t("preferences.sameAsMainModel")}
+        onChange={(m) => {
+          setWorkerModel(m)
+          setWorkerReasoning(null)
+        }}
+      />
+      <ModelField
+        label={t("preferences.orchestraModel")}
+        value={orchestratorModel}
+        nullLabel={t("preferences.sameAsMainModel")}
+        onChange={(m) => {
+          setOrchestratorModel(m)
+          setOrchestratorReasoning(null)
+        }}
+      />
       <ActiveModesSection modes={codeActiveModes} onChange={setCodeActiveMode} isCode={true} />
       <MemoriaSection isCode={true} />
       <div className="flex items-center gap-3 rounded-lg border border-border p-3 transition-colors hover:bg-accent/50">

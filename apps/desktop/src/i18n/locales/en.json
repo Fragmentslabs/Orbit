@@ -964,14 +964,19 @@
     "dismiss": "Dismiss"
   },
   "orchestrationConfig": {
-    "title": "Configure workers",
+    "titleSubagents": "Configure subagents",
+    "titleOrchestra": "Configure orchestra",
     "attention": "Heads up:",
     "attentionText": "workers run in parallel and consume tokens with no limit by default — prefer an economical model and watch the cost shown on each run.",
     "workerModel": "Worker model",
     "useMainModel": "Use the main model",
     "noTools": "no tools",
     "noSelectionHint": "Without a selection, workers use the same model as the main chat.",
-    "thinkingOnWorker": "Thinking on worker",
+    "thinking": "Thinking",
+    "conductorModel": "Orchestrator model",
+    "conductorHint": "Plans the tasks and writes the final answer. Without a selection, the chat model does it.",
+    "useChatModel": "Use the chat model",
+    "workerSharedHint": "The same model as the subagents. Without a selection, workers use the main chat model.",
     "clear": "Clear",
     "done": "Done"
   },

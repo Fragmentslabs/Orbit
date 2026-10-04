@@ -24,7 +24,7 @@ import { VisionConfigDialog } from "@/src/components/vision-config-dialog"
 import { LoopConfigDialog } from "@/src/components/loop-config-dialog"
 import { ModelPicker } from "@/src/components/model-picker"
 import { ModeToggle } from "@/src/components/mode-toggle"
-import { OrchestrationConfigDialog } from "@/src/components/orchestration-config-dialog"
+import { OrchestrationConfigDialog, type DelegationConfigKind } from "@/src/components/orchestration-config-dialog"
 import { PermissionModePicker } from "@/src/components/permission-mode-picker"
 import { ReasoningPicker } from "@/src/components/reasoning-picker"
 import { QuickSettingsMenu } from "@/src/components/quick-settings-menu"
@@ -110,7 +110,7 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId, on
   useEffect(() => {
     if (mode === "chat" || isWorker) setModeActive("orchestra", sessionId, false)
   }, [mode, isWorker, sessionId, setModeActive])
-  const [configOpen, setConfigOpen] = useState(false)
+  const [configKind, setConfigKind] = useState<DelegationConfigKind | null>(null)
   const [loopConfigOpen, setLoopConfigOpen] = useState(false)
   const simple = useSimpleMode(sessionId, codeActiveModes.simple)
   const setSimple = useSimplePrefs((s) => s.setEnabled)
@@ -154,10 +154,10 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId, on
   const workerModel = useProviderStore((s) => s.workerModel)
   // Aviso da primeira vez: só abre na 1ª ativação do modo agente sem worker
   // configurado; depois disso o toggle só liga/desliga (padrão = modelo principal)
-  const maybePromptWorkerConfig = useCallback(() => {
+  const maybePromptWorkerConfig = useCallback((kind: DelegationConfigKind) => {
     if (workerModel || workerConfigPrompted()) return
     markWorkerConfigPrompted()
-    setConfigOpen(true)
+    setConfigKind(kind)
   }, [workerModel])
   const modesInRow = useAppearanceStore((s) => s.modesInRow)
   const modeLabelStyle = useAppearanceStore((s) => s.modeLabelStyle)
@@ -305,11 +305,11 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId, on
       { id: "brain", label: t("input.slash.brainLabel"), description: t("codeInput.slash.brainDescription"), keywords: ["memoria", "brain"], group: "Modos" as const, active: brain, run: toggle(() => setBrainEnabled(sessionId, !brain)) },
       { id: "subagents", label: t("codeInput.slash.subagentsLabel"), description: t("codeInput.slash.subagentsDescription"), keywords: ["worker", "delegar"], group: "Modos" as const, active: subagents, run: toggle(() => {
         setModeActive("subagents", sessionId, !subagents)
-        if (!subagents) maybePromptWorkerConfig()
+        if (!subagents) maybePromptWorkerConfig("subagents")
       }) },
       ...(mode === "code" && !isWorker ? [{ id: "orchestra", label: t("codeInput.slash.orchestraLabel"), description: t("codeInput.slash.orchestraDescription"), keywords: ["workers", "plano"], group: "Modos" as const, active: orchestra, run: toggle(() => {
         setModeActive("orchestra", sessionId, !orchestra)
-        if (!orchestra) maybePromptWorkerConfig()
+        if (!orchestra) maybePromptWorkerConfig("orchestra")
       }) }] : []),
       permission("ask", t("codeInput.slash.permAsk"), t("codeInput.slash.permAskDescription")),
       permission("approve", t("codeInput.slash.permApprove"), t("codeInput.slash.permApproveDescription")),
@@ -419,7 +419,7 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId, on
                       if (v) {
                         setModeActive("orchestra", sessionId, false)
                         // Aviso da primeira vez (só na 1ª ativação sem worker)
-                        maybePromptWorkerConfig()
+                        maybePromptWorkerConfig("subagents")
                       }
                     }}
                     onOrchestraChange={(v) => {
@@ -427,11 +427,11 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId, on
                       if (v) {
                         setModeActive("subagents", sessionId, false)
                         // Aviso da primeira vez (só na 1ª ativação sem worker)
-                        maybePromptWorkerConfig()
+                        maybePromptWorkerConfig("orchestra")
                       }
                     }}
                     onLoopChange={setLoop}
-                    onOpenConfig={() => setConfigOpen(true)}
+                    onOpenConfig={setConfigKind}
                     onOpenLoopConfig={() => setLoopConfigOpen(true)}
                     mode={mode}
                   />
@@ -544,7 +544,7 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId, on
                 if (next) {
                   setModeActive("orchestra", sessionId, false)
                   // Aviso da primeira vez (só na 1ª ativação sem worker)
-                  maybePromptWorkerConfig()
+                  maybePromptWorkerConfig("subagents")
                 }
               }}
               iconOnly={modeLabelStyle === "icon"}
@@ -562,7 +562,7 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId, on
                 if (next) {
                   setModeActive("subagents", sessionId, false)
                   // Aviso da primeira vez (só na 1ª ativação sem worker)
-                  maybePromptWorkerConfig()
+                  maybePromptWorkerConfig("orchestra")
                 }
               }}
               iconOnly={modeLabelStyle === "icon"}
@@ -597,7 +597,7 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId, on
           <ContextMeter sessionId={sessionId} />
         </div>
       </PromptInputTools>
-        <OrchestrationConfigDialog open={configOpen} onOpenChange={setConfigOpen} />
+        <OrchestrationConfigDialog kind={configKind} onOpenChange={(open) => { if (!open) setConfigKind(null) }} />
         <LoopConfigDialog open={loopConfigOpen} onOpenChange={setLoopConfigOpen} />
         <VisionConfigDialog open={visionConfigOpen} onOpenChange={setVisionConfigOpen} targetSession={sessionId} />
       </div>
