@@ -10,7 +10,7 @@ import { ChatInput } from "@/src/components/chat-input"
 import { CodeInput } from "@/src/components/code-input"
 import { VisionHintCard } from "@/src/components/vision-hint-card"
 import { ProviderHintCard } from "@/src/components/provider-hint-card"
-import { Persona, type PersonaState } from "@/src/components/ai/persona"
+import { Persona, retryPersona, type PersonaState } from "@/src/components/ai/persona"
 import { useAppearanceStore } from "@/src/stores/appearance-store"
 import { ErrorBoundary } from "@/src/components/error-boundary"
 import { showsPersonaInChat, showsPersonaOnWelcome } from "@shared/appearance"
@@ -464,6 +464,12 @@ export function ChatView({ sessionId }: { sessionId?: string } = {}) {
   useEffect(() => {
     if (!noProvider) setProviderHintVisible(false)
   }, [noProvider])
+
+  // Se o Rive quebrou, a persona some; trocar de chat (ou abrir um novo) é a
+  // hora de tentar trazê-la de volta com um wasm novo
+  useEffect(() => {
+    retryPersona()
+  }, [session?.id])
 
   useEffect(() => {
     // Decodifica o WAV de entrada durante o carregamento (idempotente), para

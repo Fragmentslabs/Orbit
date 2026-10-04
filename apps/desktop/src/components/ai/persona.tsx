@@ -2,14 +2,23 @@
 
 import {
   type RiveParameters,
+  RuntimeLoader,
   useRive,
   useStateMachineInput,
   useViewModel,
   useViewModelInstance,
   useViewModelInstanceColor,
 } from "@rive-app/react-webgl2"
-import type { FC } from "react"
-import { memo, useEffect, useMemo, useRef, useState } from "react"
+import type { ErrorInfo, FC, ReactNode } from "react"
+import {
+  Component,
+  memo,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react"
 import { cn } from "@/lib/utils"
 import { useTheme } from "@/components/theme-provider"
 
@@ -44,7 +53,96 @@ function useResolvedTheme(): "light" | "dark" {
   return theme === "system" ? (systemDark ? "dark" : "light") : theme
 }
 
-export const Persona: FC<PersonaProps> = memo(
+/* Quando o wasm do Rive aborta, o módulo morre para a página inteira: toda
+ * chamada seguinte aborta de novo, inclusive o `rive.bounds` que o useRive lê
+ * DURANTE o render. Sem contenção esse throw desmonta a árvore do React e o
+ * app fica preto. Por isso a falha é global: marcada uma vez, todas as
+ * personas somem até alguém pedir nova tentativa (retryPersona). */
+const MAX_RETRIES = 3
+
+let riveStatus = { broken: false, generation: 0 }
+let retries = 0
+const riveStatusListeners = new Set<() => void>()
+
+function setRiveStatus(next: typeof riveStatus) {
+  riveStatus = next
+  riveStatusListeners.forEach((listener) => listener())
+}
+
+function markRiveBroken() {
+  if (!riveStatus.broken) setRiveStatus({ ...riveStatus, broken: true })
+}
+
+function subscribeRiveStatus(listener: () => void) {
+  riveStatusListeners.add(listener)
+  return () => riveStatusListeners.delete(listener)
+}
+
+/* O RuntimeLoader guarda o módulo wasm num campo estático e todo Rive novo o
+ * pega por awaitInstance(). Zerado o cache, a próxima instância sobe um wasm
+ * novo, com memória limpa. Só é seguro com nenhuma persona montada — e com a
+ * falha marcada todas já estão no fallback. Limitado para um wasm que aborta
+ * sempre não virar um ciclo de recarga a cada troca de chat. */
+export function retryPersona() {
+  if (!riveStatus.broken || retries >= MAX_RETRIES) return
+  retries += 1
+  const loader = RuntimeLoader as unknown as { runtime?: unknown; isLoading: boolean }
+  loader.runtime = undefined
+  loader.isLoading = false
+  setRiveStatus({ broken: false, generation: riveStatus.generation + 1 })
+}
+
+// Aborts fora do render (loop de animação, microtask do bind) não passam pelo
+// boundary; o stack do RuntimeError aponta para o rive.wasm.
+function isRiveAbort(error: unknown) {
+  return error instanceof Error && (error.stack ?? "").includes("rive.wasm")
+}
+window.addEventListener("error", (e) => {
+  if (isRiveAbort(e.error)) markRiveBroken()
+})
+window.addEventListener("unhandledrejection", (e) => {
+  if (isRiveAbort(e.reason)) markRiveBroken()
+})
+
+/* Fica montado mesmo depois da falha: ao trocar o Rive pelo fallback, a
+ * limpeza do useRive chama o wasm morto e lança de novo — e esse erro precisa
+ * de um boundary ainda montado para não subir até a raiz. */
+class PersonaBoundary extends Component<
+  { fallback: ReactNode; children: ReactNode },
+  { failed: boolean }
+> {
+  state = { failed: false }
+
+  static getDerivedStateFromError() {
+    return { failed: true }
+  }
+
+  componentDidCatch(error: Error, info: ErrorInfo) {
+    console.error("[persona] Rive falhou, usando fallback", error, info.componentStack)
+    markRiveBroken()
+  }
+
+  render() {
+    return this.state.failed ? this.props.fallback : this.props.children
+  }
+}
+
+export const Persona: FC<PersonaProps> = memo((props) => {
+  const { broken, generation } = useSyncExternalStore(subscribeRiveStatus, () => riveStatus)
+  // Sem Rive a persona some: fica só o espaço dela, para o layout não pular.
+  const fallback = <div aria-hidden className={cn("size-32 shrink-0", props.className)} />
+
+  return (
+    // A key zera o boundary a cada nova tentativa
+    <PersonaBoundary key={generation} fallback={fallback}>
+      {broken ? fallback : <RivePersona {...props} />}
+    </PersonaBoundary>
+  )
+})
+
+Persona.displayName = "Persona"
+
+const RivePersona: FC<PersonaProps> = memo(
   ({
     state = "idle",
     onLoad,
@@ -152,4 +250,4 @@ export const Persona: FC<PersonaProps> = memo(
   },
 )
 
-Persona.displayName = "Persona"
+RivePersona.displayName = "RivePersona"
