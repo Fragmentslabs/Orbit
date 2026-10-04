@@ -16,6 +16,7 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuGroup,
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
@@ -277,29 +278,34 @@ function ScopeFilterMenu({
         {folderOptions.length > 0 && (
           <>
             {hasLoose && <DropdownMenuSeparator />}
-            <DropdownMenuLabel className="text-[10px] text-muted-foreground">
-              {t("media.scope.folders")}
-            </DropdownMenuLabel>
-            {folderOptions.map((folder) => (
-              <DropdownMenuItem key={folder.id} onClick={() => onSelect(`${FOLDER_PREFIX}${folder.id}`)}>
-                <Folder className="size-3.5" />
-                <span className="truncate">{folder.name}</span>
-              </DropdownMenuItem>
-            ))}
+            {/* O rótulo precisa de um grupo: fora de um Menu.Group o Base UI derruba a tela ao abrir. */}
+            <DropdownMenuGroup>
+              <DropdownMenuLabel className="text-[10px] text-muted-foreground">
+                {t("media.scope.folders")}
+              </DropdownMenuLabel>
+              {folderOptions.map((folder) => (
+                <DropdownMenuItem key={folder.id} onClick={() => onSelect(`${FOLDER_PREFIX}${folder.id}`)}>
+                  <Folder className="size-3.5" />
+                  <span className="truncate">{folder.name}</span>
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuGroup>
           </>
         )}
         {projectOptions.length > 0 && (
           <>
             {(hasLoose || folderOptions.length > 0) && <DropdownMenuSeparator />}
-            <DropdownMenuLabel className="text-[10px] text-muted-foreground">
-              {t("media.scope.projects")}
-            </DropdownMenuLabel>
-            {projectOptions.map((project) => (
-              <DropdownMenuItem key={project.key} onClick={() => onSelect(`${PROJECT_PREFIX}${project.key}`)}>
-                <FolderGit2 className="size-3.5" />
-                <span className="truncate">{project.label}</span>
-              </DropdownMenuItem>
-            ))}
+            <DropdownMenuGroup>
+              <DropdownMenuLabel className="text-[10px] text-muted-foreground">
+                {t("media.scope.projects")}
+              </DropdownMenuLabel>
+              {projectOptions.map((project) => (
+                <DropdownMenuItem key={project.key} onClick={() => onSelect(`${PROJECT_PREFIX}${project.key}`)}>
+                  <FolderGit2 className="size-3.5" />
+                  <span className="truncate">{project.label}</span>
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuGroup>
           </>
         )}
       </DropdownMenuContent>
