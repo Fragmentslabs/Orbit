@@ -48,10 +48,13 @@ export const ModelSelectorContent = ({
         // `top-2 right-2`, size-6) era desenhado POR CIMA do campo. Aqui o
         // wrapper do input abre espaço à direita (36px = 8px do botão +
         // 24px de largura + 4px de respiro) para os dois ficarem lado a
-        // lado. O centro vertical já bate: o campo vai de 4px a 36px
-        // (padding do wrapper + `h-8` do InputGroup) e o botão de 8px a
-        // 32px — ambos centrados em 20px.
+        // lado. No vertical, o campo vai de 8px a 40px (p-1 do Command +
+        // p-1 do wrapper + `h-8` do InputGroup), centrado em 24px. O
+        // `top-2` do dialog deixava o botão em 8..32 (centro em 20px) —
+        // 4px acima do campo; `top-3` o coloca em 12..36, no mesmo eixo
+        // central do campo.
         "[&_[data-slot=command-input-wrapper]]:pr-9",
+        "[&_[data-slot=dialog-close]]:top-3",
         className,
       )}
       {...props}
@@ -74,7 +77,12 @@ export const ModelSelectorInput = ({ className, ...props }: ModelSelectorInputPr
 
 export type ModelSelectorListProps = ComponentProps<typeof CommandList>
 
-export const ModelSelectorList = (props: ModelSelectorListProps) => <CommandList {...props} />
+// O wrapper da busca não tem padding embaixo (`pb-0`); quem dava o respiro
+// era o cabeçalho do primeiro grupo. Um item solto no topo ("O mesmo da
+// conversa", "Nenhum") encostava no campo — o espaço fica na lista.
+export const ModelSelectorList = ({ className, ...props }: ModelSelectorListProps) => (
+  <CommandList className={cn("pt-2", className)} {...props} />
+)
 
 export type ModelSelectorEmptyProps = ComponentProps<typeof CommandEmpty>
 
