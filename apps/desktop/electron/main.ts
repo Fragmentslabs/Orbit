@@ -1110,6 +1110,15 @@ app.whenReady().then(() => {
     if (!app.isPackaged) ensureDevShortcut()
   }
 
+  // No macOS o dock de dev mostra o ícone do bundle do Electron. O app
+  // empacotado traz o seu (build/icon.icns); em dev, o ícone entra aqui — já no
+  // formato do macOS (cantos arredondados e margem), senão fica um quadrado
+  // maior que os vizinhos no dock.
+  if (process.platform === 'darwin' && !app.isPackaged) {
+    const dockIcon = path.join(process.env.APP_ROOT, 'build', 'icon-dock.png')
+    if (existsSync(dockIcon)) app.dock?.setIcon(dockIcon)
+  }
+
   // Instância secundária: o lock não foi obtido e o app já está saindo.
   if (!gotSingleInstanceLock) return
 
