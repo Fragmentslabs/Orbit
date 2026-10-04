@@ -608,6 +608,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       useSessionModelPrefs.getState().clear(sid)
       useModelRotationStore.getState().selectRotation(sid, null)
       void storage.remove(StorageKeys.planReview(sid))
+      void storage.remove(StorageKeys.pendingAsks(sid))
       void docsApi.clearSession(sid)
       emitChatEvent({ type: "session:deleted", sessionId: sid })
     }
@@ -621,7 +622,11 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       }
       const planReviews = { ...state.planReviews }
       for (const sid of idSet) delete planReviews[sid]
-      return { sessions: state.sessions.filter((s) => !idSet.has(s.id)), messages, activeIds, planReviews }
+      const pendingAsks = { ...state.pendingAsks }
+      for (const sid of idSet) delete pendingAsks[sid]
+      const unreadCounts = { ...state.unreadCounts }
+      for (const sid of idSet) delete unreadCounts[sid]
+      return { sessions: state.sessions.filter((s) => !idSet.has(s.id)), messages, activeIds, planReviews, pendingAsks, unreadCounts }
     })
   },
 
@@ -1223,6 +1228,11 @@ case "title":
       break
 
     case "session:deleted":
+      // Excluída no main (ferramenta do agente, app mobile): limpa também o que
+      // esta janela guarda por conversa.
+      loadedMessages.delete(sessionId)
+      useBrainPrefs.getState().setEnabled(sessionId, true)
+      useSimplePrefs.getState().clear(sessionId)
       useSessionModelPrefs.getState().clear(sessionId)
       useModelRotationStore.getState().selectRotation(sessionId, null)
       set((state) => {
@@ -1237,7 +1247,9 @@ case "title":
         delete planReviews[sessionId]
         const unreadCounts = { ...state.unreadCounts }
         delete unreadCounts[sessionId]
-        return { sessions, messages, activeIds, planReviews, unreadCounts }
+        const pendingAsks = { ...state.pendingAsks }
+        delete pendingAsks[sessionId]
+        return { sessions, messages, activeIds, planReviews, unreadCounts, pendingAsks }
       })
       break
 
