@@ -633,12 +633,14 @@
     "processes": {
       "viewOutput": "Ver saída",
       "kill": "Encerrar processo",
+      "openInBrowser": "Abrir no browser",
       "outputEmpty": "Sem saída capturada ainda.",
       "status": {
         "running": "Em execução",
         "exited": "Finalizado",
         "killed": "Encerrado"
-      }
+      },
+      "serversTitle": "Servidores rodando"
     },
     "tabs": {
       "chat": {
@@ -648,6 +650,10 @@
       "terminal": {
         "label": "Terminal",
         "description": "Execute comandos e scripts"
+      },
+      "process": {
+        "label": "Processo",
+        "description": "Saída de um comando em segundo plano"
       },
       "folders": {
         "label": "Pastas",

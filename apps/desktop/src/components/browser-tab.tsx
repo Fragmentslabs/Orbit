@@ -48,6 +48,7 @@ import {
   navigateWebview,
   reloadWebview,
 } from "@/src/components/browser/webview-session"
+import { RunningServers } from "@/src/components/running-servers"
 import { usePanelStore, type Viewport } from "@/src/stores/panel-store"
 import {
   useActiveSession,
@@ -577,10 +578,13 @@ function FullscreenComposer({ onSent }: { onSent?: () => void }) {
 export function BrowserTab({
   initialUrl,
   persistKey,
+  sessionId,
   onUrlChange,
 }: {
   initialUrl?: string
   persistKey?: string
+  /** Sessão dona da aba — escopo dos processos mostrados na tela inicial. */
+  sessionId?: string
   /** Notifica a URL atual da página (did-navigate) — mantém tab.url sincronizado. */
   onUrlChange?: (url: string) => void
 }) {
@@ -615,6 +619,7 @@ export function BrowserTab({
   return (
     <WebPreview
       defaultUrl={initialUrl ?? ""}
+      emptyExtra={<RunningServers sessionId={sessionId} />}
       className={cn(
         "bg-sidebar",
         fullscreen

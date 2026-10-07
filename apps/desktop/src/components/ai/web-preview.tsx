@@ -33,6 +33,9 @@ export interface WebPreviewContextValue {
   canGoBack: boolean
   canGoForward: boolean
   refreshKey: number
+  /** Conteúdo extra do estado vazio (ex.: lista de servidores rodando no
+   *  browser do painel). Ausente no preview de mensagem, que é genérico. */
+  emptyExtra?: ReactNode
 }
 
 const WebPreviewContext = createContext<WebPreviewContextValue | null>(null)
@@ -48,6 +51,8 @@ export const useWebPreview = () => {
 export type WebPreviewProps = ComponentProps<"div"> & {
   defaultUrl?: string
   onUrlChange?: (url: string) => void
+  /** Renderizado no estado vazio, abaixo do campo de URL. */
+  emptyExtra?: ReactNode
 }
 
 function formatBrowserUrl(input: string): string {
@@ -75,6 +80,7 @@ export const WebPreview = ({
   children,
   defaultUrl = "",
   onUrlChange,
+  emptyExtra,
   ...props
 }: WebPreviewProps) => {
   const [history, setHistory] = useState<string[]>([defaultUrl])
@@ -132,6 +138,7 @@ export const WebPreview = ({
     canGoBack: currentIndex > 0,
     canGoForward: currentIndex < history.length - 1,
     refreshKey,
+    emptyExtra,
   }
 
   return (
@@ -276,7 +283,7 @@ export const WebPreviewBody = ({
   onNavigate,
   ...props
 }: WebPreviewBodyProps) => {
-  const { url, setUrl, syncUrl } = useWebPreview()
+  const { url, setUrl, syncUrl, emptyExtra } = useWebPreview()
   const { t } = useTranslation()
   const [localUrl, setLocalUrl] = useState("")
   const containerRef = useRef<HTMLDivElement | null>(null)
@@ -350,6 +357,7 @@ export const WebPreviewBody = ({
                 {t("webPreview.go")}
               </Button>
             </div>
+            {emptyExtra}
           </div>
         )}
         {loading}
@@ -383,6 +391,7 @@ export const WebPreviewBody = ({
             {t("webPreview.go")}
           </Button>
         </div>
+        {emptyExtra}
       </div>
     )
   }

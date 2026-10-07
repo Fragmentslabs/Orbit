@@ -1,6 +1,6 @@
 import { create } from "zustand"
 
-export type TabType = "chat" | "terminal" | "folders" | "browser" | "diff" | "media" | "artifact" | "sources" | "source" | "document"
+export type TabType = "chat" | "terminal" | "process" | "folders" | "browser" | "diff" | "media" | "artifact" | "sources" | "source" | "document"
 
 export interface PanelTab {
   id: string
@@ -14,6 +14,8 @@ export interface PanelTab {
   pending?: boolean
   /** URL inicial da aba Browser (ausente = abre a tela padrão com busca). */
   url?: string
+  /** Aba Processo: PID do processo em background cuja saída a aba acompanha. */
+  processPid?: number
   /** Aba Artefato: id do registro (art_xxx.html) que a aba renderiza. */
   artifactId?: string
   /** Aba Documento: id do registro (doc_xxx.md) aberto no canvas de Markdown. */
@@ -86,6 +88,14 @@ export const AGENT_BROWSER_FRESH_MS = 30_000
 interface PanelState {
   rightPanelOpen: boolean
   setRightPanelOpen: (open: boolean) => void
+
+  /** SelectorScreen aberto pelo "+" mesmo com aba ativa — a tela inicial do
+   *  painel, onde ficam a grade de abas e os processos em background. */
+  selectorOpen: boolean
+  setSelectorOpen: (open: boolean) => void
+  /** Abre (ou reaproveita) a aba que acompanha a saída de um processo em
+   *  background. `sessionId` é a chave do balde de abas (chat ativo ou órfão). */
+  openProcessTab: (sessionId: string, pid: number, title: string) => void
 
   /** Tabs por sessão de chat */
   tabsBySession: Record<string, PanelTab[]>
@@ -187,6 +197,27 @@ export const usePanelStore = create<PanelState>((set, get) => {
   return {
     rightPanelOpen: false,
     setRightPanelOpen: (open) => set({ rightPanelOpen: open }),
+
+    selectorOpen: false,
+    setSelectorOpen: (open) => set({ selectorOpen: open }),
+
+    // Uma aba por processo: clicar de novo no mesmo card foca a aba que já
+    // acompanha a saída em vez de empilhar duas visões do mesmo stdout.
+    openProcessTab: (sessionId, pid, title) =>
+      set((state) => {
+        const tabs = state.tabsBySession[sessionId] ?? []
+        const existing = tabs.find((t) => t.type === "process" && t.processPid === pid)
+        const id = existing?.id ?? `process-${nextTabId()}`
+        const nextTabs = existing
+          ? tabs
+          : [...tabs, { id, type: "process" as const, title, processPid: pid }]
+        return {
+          rightPanelOpen: true,
+          selectorOpen: false,
+          tabsBySession: { ...state.tabsBySession, [sessionId]: nextTabs },
+          activeTabBySession: { ...state.activeTabBySession, [sessionId]: id },
+        }
+      }),
 
     tabsBySession: {},
     activeTabBySession: {},
@@ -390,7 +421,7 @@ export const usePanelStore = create<PanelState>((set, get) => {
       if (!sessionId) return
       const { agentBrowser } = get()
       get().ensureAgentBrowserTab(sessionId, agentBrowser[sessionId]?.url)
-      set({ rightPanelOpen: true })
+      set({ rightPanelOpen: true, selectorOpen: false })
     },
 
     // Cada clique em link no terminal cria uma aba própria (semântica de
@@ -401,6 +432,9 @@ export const usePanelStore = create<PanelState>((set, get) => {
         const tabs = state.tabsBySession[sessionId] ?? []
         return {
           rightPanelOpen: true,
+          // Clique do usuário (link do terminal / card do processo): a aba nova
+          // assume a frente, então o selector deixa de estar em exibição.
+          selectorOpen: false,
           tabsBySession: {
             ...state.tabsBySession,
             [sessionId]: [...tabs, { id, type: "browser", title: "Browser", url }],

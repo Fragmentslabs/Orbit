@@ -181,6 +181,8 @@ export interface ProcessInfo {
   exitCode?: number
   /** Sessão de chat que iniciou o processo (filtro do footer e das tools bash_*). */
   sessionId?: string
+  /** URLs de servidor local anunciadas no output (ex.: http://localhost:5173). */
+  urls?: string[]
 }
 
 export const processApi = {

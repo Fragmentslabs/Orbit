@@ -1,13 +1,7 @@
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo } from "react"
 import { useTranslation } from "react-i18next"
 import { useDroppable, useDndContext } from "@dnd-kit/core"
 import { CodeXml, FileCode, FileText, Globe, Folder, Images, Library, Quote, MessageSquare, Terminal, X, PlusIcon, Bot, LoaderIcon, Loader2, XCircleIcon, Trash2, GripVertical } from "lucide-react"
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
 import { ChatView } from "@/src/components/chat-view"
 import { ChatInput } from "@/src/components/chat-input"
 import { BranchSelector } from "@/src/components/branch-selector"
@@ -20,18 +14,18 @@ import { destroyWebview } from "@/src/components/browser/webview-session"
 import { FoldersTab } from "@/src/components/folders-tab"
 import { DiffTab } from "@/src/components/diff-tab"
 import { MediaGallery } from "@/src/components/media-gallery"
+import { ProcessTab } from "@/src/components/process-tab"
 import { ArtifactTab } from "@/src/components/artifact-tab"
 import { DocumentTab } from "@/src/components/document-tab"
 import { SourcesTab } from "@/src/components/sources-tab"
 import { SourceViewer } from "@/src/components/source-viewer"
-import { ProcessOutputDialog } from "@/src/components/process-output-dialog"
+
 import { useWorkspace, type WorkspaceMode } from "@/lib/workspace-context"
 import { usePanelStore, nextTabId, ORPHAN_KEY, type TabType, type PanelTab } from "@/src/stores/panel-store"
 import { useSessionStore } from "@/src/stores/session-store"
 import { useProcessStore } from "@/src/stores/process-store"
 import { useTerminalStore } from "@/src/stores/terminal-store"
 import { useAppearanceStore } from "@/src/stores/appearance-store"
-import type { ProcessInfo } from "@/src/lib/ipc"
 import { cn } from "@/lib/utils"
 
 interface TabMeta {
@@ -56,7 +50,9 @@ interface TabMeta {
  * prompts.ts): era só a aba que faltava para o usuário poder declarar fonte.
  */
 function isSelectableTab(type: TabType, mode: WorkspaceMode): boolean {
-  if (type === "artifact" || type === "source" || type === "document") return false
+  // "process" também nunca entra: uma aba de processo só existe acompanhando um
+  // processo que já está rodando (abre pelo card no rodapé do selector).
+  if (type === "artifact" || type === "source" || type === "document" || type === "process") return false
   if (mode === "code") return true
   return type === "chat" || type === "media" || type === "sources"
 }
@@ -66,6 +62,7 @@ function useTabMeta(): Record<TabType, TabMeta> {
   return {
     chat: { icon: MessageSquare, label: t("panel.tabs.chat.label"), description: t("panel.tabs.chat.description") },
     terminal: { icon: Terminal, label: t("panel.tabs.terminal.label"), description: t("panel.tabs.terminal.description") },
+    process: { icon: Loader2, label: t("panel.tabs.process.label"), description: t("panel.tabs.process.description") },
     folders: { icon: Folder, label: t("panel.tabs.folders.label"), description: t("panel.tabs.folders.description") },
     browser: { icon: Globe, label: t("panel.tabs.browser.label"), description: t("panel.tabs.browser.description") },
     diff: { icon: FileCode, label: t("panel.tabs.diff.label"), description: t("panel.tabs.diff.description") },
@@ -193,6 +190,8 @@ function TabContent({ tab, sessionId, onUpdateTab }: { tab: PanelTab; sessionId?
       )
     case "terminal":
       return <TerminalTabContent tabId={tab.id} sessionId={sessionId} />
+    case "process":
+      return <ProcessTab pid={tab.processPid ?? 0} sessionId={tab.sessionId ?? sessionId} />
     case "folders":
       return (
         <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
@@ -204,6 +203,7 @@ function TabContent({ tab, sessionId, onUpdateTab }: { tab: PanelTab; sessionId?
         <div className="flex flex-1 flex-col overflow-hidden">
           <BrowserTab
             initialUrl={tab.url}
+            sessionId={tab.sessionId ?? sessionId}
             // Chave do webview no pool (webview-session.ts). Uma por aba e por
             // chat: cada aba tem sua própria página, e voltar ao chat retoma a
             // URL de onde parou. Sempre definida — é o pool que trata console,
@@ -315,8 +315,9 @@ function SelectorScreen({ onSelect, onOpenWorker }: {
   const processes = useProcessStore((s) => s.processes)
   const fetchProcesses = useProcessStore((s) => s.fetch)
   const killProcess = useProcessStore((s) => s.kill)
-  const [outputPid, setOutputPid] = useState<number | null>(null)
-  const outputProcess: ProcessInfo | null = processes.find((p) => p.pid === outputPid) ?? null
+  // Balde de abas da sessão ativa (ou o órfão, no chat novo ainda sem sessão):
+  // a aba de processo aberta aqui precisa cair no mesmo balde que o resto.
+  const bucketKey = activeId ?? ORPHAN_KEY
 
   const workers = useMemo(
     () => sessions.filter((s) => s.parentId === activeId),
@@ -397,9 +398,10 @@ function SelectorScreen({ onSelect, onOpenWorker }: {
                 key={p.pid}
                 role="button"
                 tabIndex={0}
-                onClick={() => setOutputPid(p.pid)}
+                onClick={() => usePanelStore.getState().openProcessTab(bucketKey, p.pid, p.label)}
                 onKeyDown={(e) => {
-                  if (e.key === "Enter" || e.key === " ") setOutputPid(p.pid)
+                  if (e.key === "Enter" || e.key === " ")
+                    usePanelStore.getState().openProcessTab(bucketKey, p.pid, p.label)
                 }}
                 className="flex w-40 shrink-0 flex-col gap-1 rounded-md border border-sidebar-border bg-sidebar-accent/50 px-2.5 py-1.5 text-left transition-colors hover:bg-sidebar-accent cursor-pointer"
                 title={`${p.command}\n\n${t("panel.processes.viewOutput")}`}
@@ -411,6 +413,18 @@ function SelectorScreen({ onSelect, onOpenWorker }: {
                     <span className="size-1.5 shrink-0 rounded-full bg-muted-foreground/50" />
                   )}
                   <span className="min-w-0 flex-1 truncate text-xs font-medium text-sidebar-foreground">{p.label}</span>
+                  {p.status === "running" && p.urls?.length ? (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        usePanelStore.getState().openTerminalLink(bucketKey, p.urls![0])
+                      }}
+                      title={`${t("panel.processes.openInBrowser")} — ${p.urls[0]}`}
+                      className="flex size-4 shrink-0 items-center justify-center rounded-sm text-sidebar-foreground/50 hover:text-foreground"
+                    >
+                      <Globe className="size-3" />
+                    </button>
+                  ) : null}
                   <button
                     onClick={(e) => {
                       e.stopPropagation()
@@ -438,7 +452,6 @@ function SelectorScreen({ onSelect, onOpenWorker }: {
           </div>
         </div>
       )}
-      <ProcessOutputDialog process={outputProcess} onOpenChange={(open) => !open && setOutputPid(null)} />
     </div>
   )
 }
@@ -476,13 +489,18 @@ export function RightPanel() {
   const dndContext = useDndContext()
   const isDragging = dndContext.active !== null
 
-  const availableTabs = useMemo(
-    () =>
-      (Object.entries(tabMeta) as [TabType, TabMeta][]).filter(([type]) =>
-        isSelectableTab(type, mode),
-      ),
-    [mode, tabMeta],
-  )
+  const selectorOpen = usePanelStore((s) => s.selectorOpen)
+  const setSelectorOpen = usePanelStore((s) => s.setSelectorOpen)
+
+  // Esc volta para a aba ativa; sem abas, o selector continua na tela de todo jeito.
+  useEffect(() => {
+    if (!selectorOpen) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setSelectorOpen(false)
+    }
+    window.addEventListener("keydown", onKey)
+    return () => window.removeEventListener("keydown", onKey)
+  }, [selectorOpen, setSelectorOpen])
 
   /**
    * Número da próxima aba numerada ("Terminal", "Terminal 2", "Terminal 3"…):
@@ -511,6 +529,9 @@ export function RightPanel() {
     // Pastas e diff seguem o repositório selecionado no workspace: só ficam
     // bloqueados quando não há projeto selecionado (mesmo sem chat ativo).
     if ((type === "folders" || type === "diff") && folders.length === 0) return
+
+    // Escolheu uma aba: o selector sai de cena e a aba aberta assume.
+    setSelectorOpen(false)
 
     if (sessionId) {
       const id = `chat-${sessionId}`
@@ -543,7 +564,7 @@ export function RightPanel() {
     const tabTitle = n > 1 ? `${meta.label} ${n}` : meta.label
     addTabToStore(sessionKey, { id, type, title: tabTitle })
     setActiveTabInStore(sessionKey, id)
-  }, [sessionKey, tabs, addTabToStore, setActiveTabInStore, folders, tabMeta, nextTabNumber])
+  }, [sessionKey, tabs, addTabToStore, setActiveTabInStore, folders, tabMeta, nextTabNumber, setSelectorOpen])
 
   const removeTab = useCallback((id: string) => {
     const sk = activeSessionId ?? ORPHAN_KEY
@@ -722,7 +743,10 @@ export function RightPanel() {
                     ? "bg-sidebar-accent text-sidebar-accent-foreground"
                     : "text-sidebar-foreground/50 hover:text-sidebar-foreground hover:bg-sidebar-accent/50",
                 )}
-                onClick={() => setActiveTabInStore(sessionKey, tab.id)}
+                onClick={() => {
+                  setActiveTabInStore(sessionKey, tab.id)
+                  setSelectorOpen(false)
+                }}
               >
                 {closeOnLeft && closeButton}
                 <TabIcon className="size-3.5 shrink-0" />
@@ -738,27 +762,26 @@ export function RightPanel() {
               </div>
             )
           })}
-          <DropdownMenu>
-            <DropdownMenuTrigger className="ml-auto flex size-5 shrink-0 items-center justify-center rounded-md text-sidebar-foreground/50 hover:text-sidebar-foreground hover:bg-sidebar-accent">
-              <PlusIcon className="size-3.5" />
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="min-w-32">
-              {availableTabs.map(([type, { icon: Icon, label }]) => {
-                const isDisabled = folders.length === 0 && (type === "folders" || type === "diff")
-                return (
-                  <DropdownMenuItem key={type} disabled={isDisabled} onClick={() => addTab(type)}>
-                    <Icon className="size-4" />
-                    {label}
-                  </DropdownMenuItem>
-                )
-              })}
-            </DropdownMenuContent>
-          </DropdownMenu>
+          {/* O "+" abre a tela inicial do painel (grade de abas + processos em
+              background) em vez de um dropdown: uma aba nova vira uma escolha
+              informada, e o rodapé de processos fica sempre alcançável. */}
+          <button
+            onClick={() => setSelectorOpen(!selectorOpen)}
+            title={t("panel.selector.title")}
+            className={cn(
+              "ml-auto flex size-5 shrink-0 items-center justify-center rounded-md transition-colors",
+              selectorOpen
+                ? "bg-sidebar-accent text-sidebar-accent-foreground"
+                : "text-sidebar-foreground/50 hover:text-sidebar-foreground hover:bg-sidebar-accent",
+            )}
+          >
+            <PlusIcon className="size-3.5" />
+          </button>
         </div>
       )}
 
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
-        {activeTab ? (
+        {activeTab && !selectorOpen ? (
           // key força remount ao trocar de aba: sem ela, o React reusa a mesma
           // instância para abas do mesmo tipo (browser↔browser) e elas passam a
           // compartilhar estado/histórico — era o "contexto compartilhado" e a

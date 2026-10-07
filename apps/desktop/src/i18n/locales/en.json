@@ -633,12 +633,14 @@
     "processes": {
       "viewOutput": "View output",
       "kill": "Kill process",
+      "openInBrowser": "Open in browser",
       "outputEmpty": "No output captured yet.",
       "status": {
         "running": "Running",
         "exited": "Exited",
         "killed": "Killed"
-      }
+      },
+      "serversTitle": "Running servers"
     },
     "tabs": {
       "chat": {
@@ -648,6 +650,10 @@
       "terminal": {
         "label": "Terminal",
         "description": "Run commands and scripts"
+      },
+      "process": {
+        "label": "Process",
+        "description": "Output of a background command"
       },
       "folders": {
         "label": "Folders",

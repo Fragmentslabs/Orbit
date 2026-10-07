@@ -15,11 +15,46 @@ export interface ProcessInfo {
   exitCode?: number
   /** Sessão de chat que iniciou o processo — escopo do painel e das tools bash_*. */
   sessionId?: string
+  /**
+   * URLs de servidor local anunciadas no output (Vite, Next, Expo…). Calculadas
+   * a partir do log em listProcesses — o buffer cresce, então derivar na leitura
+   * mantém a lista sempre atual, sem reescanear a cada chunk.
+   */
+  urls?: string[]
 }
 
 // Buffer de saída por processo — cap simples em caracteres, evita acumular
 // gigabytes de log de builds longos (ex.: eas build) na memória do main.
 const MAX_OUTPUT_CHARS = 200_000
+
+// Códigos ANSI de cor/controle: os dev servers pintam a URL, e o escape entre
+// "localhost" e o ":" quebraria o match da regex. O ESC vem de fromCharCode
+// porque um \x1b literal num regex é barrado pelo no-control-regex.
+const ANSI_RE = new RegExp(`${String.fromCharCode(27)}\\[[0-9;]*[A-Za-z]`, 'g')
+
+// Host local com porta obrigatória, com ou sem esquema (um "localhost" solto
+// aparece em log de build e não é servidor).
+const LOCAL_URL_RE = /(?:https?:\/\/)?(?:localhost|127\.0\.0\.1|0\.0\.0\.0|\[::1\]):\d{1,5}\b/gi
+
+/**
+ * URLs de servidor local que o processo anunciou no output.
+ *
+ * Normaliza para `localhost` (0.0.0.0 e [::1] são bind de escuta, não endereço
+ * navegável) e devolve só a origem — é o que o webview do painel precisa para
+ * abrir a aplicação em desenvolvimento.
+ */
+export function extractLocalUrls(output: string): string[] {
+  const found = new Set<string>()
+  for (const match of output.replace(ANSI_RE, '').matchAll(LOCAL_URL_RE)) {
+    const raw = match[0]
+    // Último ":" e não o primeiro: um bind IPv6 é "[::1]:8080" — o match
+    // ingênuo da esquerda pegaria o ":1" do endereço.
+    const port = raw.slice(raw.lastIndexOf(':') + 1)
+    if (!/^\d{1,5}$/.test(port)) continue
+    found.add(`${/^https:\/\//i.test(raw) ? 'https' : 'http'}://localhost:${port}`)
+  }
+  return [...found]
+}
 
 const processes = new Map<number, { info: ProcessInfo; child: ChildProcess; output: string }>()
 
@@ -180,7 +215,7 @@ export function listProcesses(sessionId?: string): ProcessInfo[] {
   const results: ProcessInfo[] = []
   for (const [, entry] of processes) {
     if (sessionId !== undefined && entry.info.sessionId !== sessionId) continue
-    results.push({ ...entry.info })
+    results.push({ ...entry.info, urls: extractLocalUrls(entry.output) })
   }
   return results
 }

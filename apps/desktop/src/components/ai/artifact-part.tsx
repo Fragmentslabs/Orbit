@@ -164,7 +164,7 @@ export function ArtifactPartView({
           linhas implícitas do grid são ESTICADAS (align-content normal vira
           stretch), e a linha do título ficava com metade do diálogo — a faixa
           vazia no topo, com o conteúdo empurrado para baixo. Mesmo padrão do
-          plan-dialog e do process-output-dialog.
+          plan-dialog.
         */}
         <DialogContent className="flex h-[88vh] max-w-[92vw] flex-col gap-0 p-0">
           <DialogTitle className="shrink-0 border-b px-4 py-2.5 pr-12 text-sm">
