@@ -29,6 +29,7 @@ import { useSimplePrefs } from './simple-prefs'
 import { useBrainPrefs } from './brain-prefs'
 import { DRAFT_KEY, useSessionModelPrefs, type SelectedModel } from './session-model-prefs'
 import { useModelRotationStore } from './model-rotation-store'
+import { saveLastSessionId } from './last-chat-store'
 
 export interface RevertResponse {
   revert: SessionRevert
@@ -375,6 +376,9 @@ export const useSessionStore = create<SessionState>((set, get) => ({
   },
 
   selectSession: async (id) => {
+    // Lembra o último chat aberto: ao reabrir o app ele volta para cá (e o
+    // rascunho do input vem junto). Chat novo (null) limpa a lembrança.
+    void saveLastSessionId(id)
     set((state) => ({
       activeSessionId: id,
       unreadCounts: id ? { ...state.unreadCounts, [id]: 0 } : state.unreadCounts,

@@ -1,7 +1,7 @@
 import "../global.css";
 import "../i18n";
 
-import { useEffect, useMemo } from "react"
+import { useEffect, useMemo, useRef } from "react"
 import { useColorScheme } from "react-native"
 import { setColorScheme } from "../lib/theme"
 
@@ -26,6 +26,8 @@ import { useSimplePrefs } from "../stores/simple-prefs";
 import { useBrainPrefs } from "../stores/brain-prefs";
 import { usePermissionPrefs } from "../stores/permission-prefs";
 import { useModelRotationStore } from "../stores/model-rotation-store";
+import { hydrateInputDrafts } from "../stores/chat-draft-store";
+import { loadLastSessionId, saveLastSessionId } from "../stores/last-chat-store";
 
 
 SplashScreen.preventAutoHideAsync();
@@ -86,6 +88,8 @@ export default function RootLayout() {
     void useBrainPrefs.getState().hydrate();
     void usePermissionPrefs.getState().hydrate();
     void useModelRotationStore.getState().hydrate();
+    // Rascunhos do input por chat (o PromptInput também garante antes de ler)
+    void hydrateInputDrafts();
     // Hidratação de boot: roda uma vez. Declarar as deps faria o app reidratar
     // todo estado persistido a cada mudança de tema do sistema.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -120,12 +124,36 @@ export default function RootLayout() {
   const config = useConnectionStore((s) => s.config);
 
   // ─── Routing lógico baseado no estado de conexão ──────────────────────
+  // A decisão de rota acontece uma única vez, no primeiro "connected": sem o
+  // ref, uma reconexão do socket no meio da sessão jogava o usuário para a
+  // tela de chat novo mesmo com outro chat aberto.
+  const routedRef = useRef(false);
   useEffect(() => {
     if (connection.status === "connected") {
-      router.replace("/(main)");
+      if (routedRef.current) return;
+      routedRef.current = true;
+      void (async () => {
+        // Volta ao último chat aberto (o rascunho do input vem junto), se ele
+        // ainda existir no desktop; senão cai na tela de chat novo.
+        const lastId = await loadLastSessionId();
+        if (lastId) {
+          if (useSessionStore.getState().sessions.length === 0) {
+            await useSessionStore.getState().fetchSessions();
+          }
+          const exists = useSessionStore.getState().sessions.some((s) => s.id === lastId);
+          if (exists) {
+            router.replace({ pathname: "/(main)/chat/[id]", params: { id: lastId } });
+            return;
+          }
+          void saveLastSessionId(null);
+        }
+        router.replace("/(main)");
+      })();
     } else if (!loadingConfig && connection.status === "disconnected") {
       // Só decide rota depois que o loadConfig() terminou
       if (connection.errorReason || !config) {
+        // Voltou para a tela de pareamento: a próxima conexão decide a rota.
+        routedRef.current = false;
         router.replace("/(connection)");
       }
       // Se tem config mas deu erro, a tela de conexão mostra o erro

@@ -49,7 +49,7 @@ import { ScheduleSheet } from './ScheduleSheet'
 import { useMessageQueueStore } from '~/stores/message-queue-store'
 import { useSessionStore, useSessionModel } from '~/stores/session-store'
 import { useDraftInput } from '~/stores/draft-input-store'
-import { setInputDraft, getInputDraft } from '~/stores/chat-draft-store'
+import { setInputDraft, getInputDraft, hydrateInputDrafts } from '~/stores/chat-draft-store'
 
 interface PromptInputProps {
   onSend: (text: string, options: SendMessageOptions, files?: FilePart[]) => void
@@ -105,12 +105,24 @@ export function PromptInput({
   const [loop, setLoop] = useState(false)
   const prevSessionIdRef = useRef(sessionId)
   const textRef = useRef(text)
+  // Último texto carregado/persistido para a sessão atual: o efeito de
+  // persistir compara com ele para não gravar '' por cima de um draft
+  // recém-carregado nem regravar o mesmo texto a cada keystroke.
+  const loadedDraftRef = useRef('')
+  // true quando o texto atual veio do draft-input (revert/adoção): o load do
+  // rascunho persistido, que resolve depois (async), não deve sobrescrevê-lo.
+  const consumedRef = useRef(false)
   // Sincronizado em efeito, não no corpo do render: escrever em ref durante o
   // render é justamente o que a regra react-hooks/refs proíbe. O único leitor
   // é o efeito de troca de sessão abaixo, que roda depois deste.
+  // Também persiste o rascunho por chat enquanto o usuário digita (debounce no
+  // store): sair do app no meio da digitação não perde o texto.
   useEffect(() => {
     textRef.current = text
-  }, [text])
+    if (text === loadedDraftRef.current) return
+    loadedDraftRef.current = text
+    setInputDraft(sessionId ?? 'draft', text)
+  }, [text, sessionId])
 
   // Plano aceito → desliga o toggle de modo plano: a próxima mensagem não
   // deve gerar outro plano.
@@ -119,19 +131,30 @@ export function PromptInput({
     if (planReview?.status === 'implementing') setModeActive('plan', sessionId, false)
   }, [planReview, sessionId, setModeActive])
 
-  // Restaura texto do input ao trocar de chat (per-chat draft)
+  // Restaura texto do input ao montar/trocar de chat (per-chat draft,
+  // persistido no aparelho — sobrevive a restart do app).
   useEffect(() => {
+    let cancelled = false
+    const key = sessionId ?? 'draft'
     const prev = prevSessionIdRef.current
     if (prev !== sessionId) {
       if (prev) setInputDraft(prev, textRef.current)
-      const saved = getInputDraft(sessionId ?? 'draft')
-    // Busca/sincronização de dados em efeito é o padrão documentado do React;
-    // o setState que a regra aponta é a marcação de carregando/reset que
-    // PRECISA acontecer antes do await, senão a tela mostra dado velho.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-      if (saved) setText(saved)
+      consumedRef.current = false
       prevSessionIdRef.current = sessionId
     }
+    void hydrateInputDrafts().then(() => {
+      if (cancelled) return
+      // Um revert devolvido ao input (draft-input-store) tem precedência sobre
+      // o rascunho persistido: o consume roda no efeito abaixo, antes deste
+      // callback (a hidratação é assíncrona).
+      if (consumedRef.current) return
+      const saved = getInputDraft(key)
+      loadedDraftRef.current = saved
+      // '' também restaura: sem draft, limpa o texto deixado pela sessão
+      // anterior (o PromptInput não remonta em toda troca de sessão).
+      setText(saved)
+    })
+    return () => { cancelled = true }
   }, [sessionId])
   const [attachments, setAttachments] = useState<FilePart[]>([])
   const [isLoadingFile, setIsLoadingFile] = useState(false)
@@ -211,6 +234,9 @@ export function PromptInput({
     if (pendingDraft === undefined) return
     const payload = useDraftInput.getState().consume(sessionId)
     if (!payload) return
+    // Marca antes do setText: o load do rascunho persistido (efeito acima)
+    // resolve depois e não deve sobrescrever o texto devolvido pelo revert.
+    consumedRef.current = true
     // Busca/sincronização de dados em efeito é o padrão documentado do React;
     // o setState que a regra aponta é a marcação de carregando/reset que
     // PRECISA acontecer antes do await, senão a tela mostra dado velho.
