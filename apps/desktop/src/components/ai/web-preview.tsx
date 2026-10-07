@@ -180,8 +180,12 @@ export const WebPreviewNavigationButton = ({
     <Tooltip>
       <TooltipTrigger render={<Button className="h-8 w-8 p-0 hover:text-foreground" disabled={disabled} onClick={onClick} size="sm" variant="ghost" {...props} />}>{children}</TooltipTrigger>
       {/* z-[80]: o tooltip é portaled ao body (z-50 base) e ficaria atrás do
-          overlay do browser em tela cheia (z-[70]), cortando a dica no header */}
-      <TooltipContent positionerClassName="z-[80]">
+          overlay do browser em tela cheia (z-[70]), cortando a dica no header.
+          side="bottom": o header do browser fica no topo da janela e, no macOS,
+          os botões fechar/minimizar/maximizar são nativos e sempre compostos
+          sobre o conteúdo web — nenhum z-index os vence. Abrindo a dica para
+          baixo, ela não entra na faixa da titlebar e não fica atrás deles. */}
+      <TooltipContent side="bottom" positionerClassName="z-[80]">
         <p>{tooltip}</p>
       </TooltipContent>
     </Tooltip>
