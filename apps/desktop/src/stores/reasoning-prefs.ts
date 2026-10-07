@@ -1,5 +1,6 @@
 import { useCallback } from "react"
 import { create } from "zustand"
+import type { ModelReasoningPref } from "@shared/companion"
 
 /**
  * Preferências de reasoning por modelo (toggle + variant selecionada),
@@ -7,11 +8,6 @@ import { create } from "zustand"
  */
 
 const STORAGE_KEY = "orbit-reasoning-prefs"
-
-export interface ModelReasoningPref {
-  enabled: boolean
-  variantId?: string
-}
 
 type ReasoningPrefs = Record<string, ModelReasoningPref>
 
@@ -28,7 +24,7 @@ interface ReasoningPrefsState {
   setPref: (modelKey: string, pref: ModelReasoningPref) => void
 }
 
-const useReasoningPrefsStore = create<ReasoningPrefsState>((set) => ({
+export const useReasoningPrefsStore = create<ReasoningPrefsState>((set) => ({
   prefs: load(),
   setPref: (modelKey, pref) =>
     set((state) => {

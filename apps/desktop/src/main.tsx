@@ -12,6 +12,8 @@ import { useRotinasStore } from './stores/rotinas-store'
 import './stores/session-modes-sync'
 import './stores/worker-config-sync'
 import './stores/preferences-sync'
+// Thinking por modelo (toggle + variante) com o mobile.
+import './stores/reasoning-sync'
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>

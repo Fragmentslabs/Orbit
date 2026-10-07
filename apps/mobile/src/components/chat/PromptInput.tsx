@@ -47,7 +47,7 @@ import { SendButtonGroup } from './SendButtonGroup'
 import { QueueIndicator } from './QueueIndicator'
 import { ScheduleSheet } from './ScheduleSheet'
 import { useMessageQueueStore } from '~/stores/message-queue-store'
-import { useSessionStore } from '~/stores/session-store'
+import { useSessionStore, useSessionModel } from '~/stores/session-store'
 import { useDraftInput } from '~/stores/draft-input-store'
 import { setInputDraft, getInputDraft } from '~/stores/chat-draft-store'
 
@@ -180,7 +180,10 @@ export function PromptInput({
   }, [http])
 
   const catalog = useSettingsStore((s) => s.catalog)
-  const selected = useSettingsStore((s) => s.selectedModel)
+  // Modelo EFETIVO da sessão (override por chat > draft > default global) —
+  // paridade com o desktop (chat-input), onde o thinking segue o modelo do
+  // chat aberto, não o default global do app.
+  const selected = useSessionModel(sessionId)
   const model = selected && catalog
     ? catalog[selected.providerId]?.models[selected.modelId]
     : undefined

@@ -6,7 +6,7 @@
  */
 
 import type { ConnectionConfig } from './types'
-import type { MediaEntry, MediaUsage, RotationConfig, WorkerConfigSnapshot } from '@orbit/shared'
+import type { MediaEntry, MediaUsage, ReasoningPrefsMap, RotationConfig, WorkerConfigSnapshot } from '@orbit/shared'
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -74,6 +74,13 @@ export class CompanionHttp {
    *  O mobile herda o estado do chat ao conectar. */
   async getSessionModes(): Promise<HttpResult<{ overrides: Record<string, Record<string, boolean>> }>> {
     return this.get('/api/session-modes')
+  }
+
+  /** Thinking por modelo (toggle + variante) mantido pelo renderer do desktop.
+   *  O mobile herda o estado ao conectar e depois acompanha pelo evento WS
+   *  'reasoning:change'. */
+  async getReasoningPrefs(): Promise<HttpResult<{ prefs: ReasoningPrefsMap }>> {
+    return this.get('/api/reasoning-prefs')
   }
 
   /** Rotação de modelos do desktop: lista de rotações + qual está escolhida

@@ -8,7 +8,7 @@ import type {
   SendMessageInput,
   SessionRevert,
 } from "@shared/chat"
-import type { AppPreferences, ChatModeKey, SessionModeOverrides, WorkerConfigSnapshot } from "@shared/companion"
+import type { AppPreferences, ChatModeKey, ModelReasoningPref, ReasoningPrefsMap, SessionModeOverrides, WorkerConfigSnapshot } from "@shared/companion"
 import type { McpConfig, McpServerStatus } from "@shared/mcp"
 import type { DocumentDownload, MediaEntry, MediaFilter, MediaUsage } from "@shared/media"
 import type {
@@ -243,6 +243,23 @@ export const rotationApi = {
       listener(data as { rotations: ModelRotation[] }),
     )
     return () => window.ipcRenderer.off("companion:rotation-set", wrapper)
+  },
+}
+
+/** Thinking por modelo: mesma via do sessionModelsApi. O renderer empurra o
+ *  mapa de reasoning-prefs e escuta os toggles feitos nos companions
+ *  (WS 'reasoning:select'). */
+export const reasoningApi = {
+  sync: (prefs: ReasoningPrefsMap) => {
+    window.ipcRenderer?.send("companion:reasoning-prefs", prefs)
+  },
+  onSelect: (
+    listener: (data: { providerId: string; modelId: string; pref: ModelReasoningPref }) => void,
+  ) => {
+    const wrapper = window.ipcRenderer.on("companion:reasoning-select", (data) =>
+      listener(data as { providerId: string; modelId: string; pref: ModelReasoningPref }),
+    )
+    return () => window.ipcRenderer.off("companion:reasoning-select", wrapper)
   },
 }
 

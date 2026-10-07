@@ -8,6 +8,7 @@ import type {
   RotinaEventMessage,
   SessionModeOverrides,
   WorkerConfigSnapshot,
+  ReasoningPrefsMap,
 } from '@orbit/shared'
 import { useConnectionStore } from '../stores/connection-store'
 import { useMessageQueueStore } from '../stores/message-queue-store'
@@ -17,6 +18,7 @@ import { useSettingsStore } from '../stores/settings-store'
 import { useSessionModelPrefs } from '~/stores/session-model-prefs'
 import { useModelRotationStore } from '~/stores/model-rotation-store'
 import { applyRemoteModes, fetchSessionModes } from '~/stores/session-modes-sync'
+import { applyReasoningPrefs, fetchReasoningPrefs } from '~/stores/reasoning-sync'
 import { applyAppPreferences, hydrateAppPreferences } from '~/stores/prefs-sync'
 import { useRotinasStore } from '~/stores/rotinas-store'
 import { useEsteiraStore } from '~/stores/esteira-store'
@@ -99,6 +101,8 @@ export function useCompanion() {
         void useModelRotationStore.getState().hydrate()
         // Modos ativos por chat (mesmo caminho: snapshot do renderer)
         void fetchSessionModes()
+        // Thinking por modelo (toggle + variante) — vive no renderer do desktop
+        void fetchReasoningPrefs()
         // Config de subagentes/orquestração e visão (global, mora no desktop)
         void useSettingsStore.getState().fetchWorkerConfig()
         // Preferências do desktop mandam: na conexão o celular adota as de lá
@@ -152,6 +156,13 @@ export function useCompanion() {
       if (msg?.overrides) applyRemoteModes(msg.overrides, true)
     })
 
+    // reasoning:change → thinking por modelo mudado no desktop (ou pelo
+    // próprio toggle daqui, que volta no broadcast como confirmação)
+    const unsubReasoning = conn.onEvent('reasoning:change', (event) => {
+      const msg = event as { prefs?: ReasoningPrefsMap }
+      if (msg?.prefs) void applyReasoningPrefs(msg.prefs, true)
+    })
+
     // worker-config:change → modelo dos workers / modelo de visão do desktop
     const unsubWorkerConfig = conn.onEvent('worker-config:change', (event) => {
       const msg = event as { config?: WorkerConfigSnapshot }
@@ -186,6 +197,7 @@ export function useCompanion() {
       unsubModels()
       unsubRotation()
       unsubModes()
+      unsubReasoning()
       unsubWorkerConfig()
       unsubPrefs()
       unsubRotinas()

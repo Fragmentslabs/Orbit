@@ -48,9 +48,9 @@ import {
   readMedia,
   registerMediaProtocol,
 } from './lib/media'
-import type { AppPreferences, SessionModeOverrides, WorkerConfigSnapshot } from '@shared/companion'
-import { startCompanionServer, getCompanionStatus, setPairingMode, forwardChatEvent, broadcastSessionModels, broadcastSessionModes, broadcastWorkerConfig, broadcastAppPreferences, broadcastRotationConfig } from './lib/companion-server'
-import { setSessionModelsCache, setSessionModesCache, setWorkerConfigCache, setRotationHttpCache } from './lib/companion-http'
+import type { AppPreferences, ReasoningPrefsMap, SessionModeOverrides, WorkerConfigSnapshot } from '@shared/companion'
+import { startCompanionServer, getCompanionStatus, setPairingMode, forwardChatEvent, broadcastSessionModels, broadcastSessionModes, broadcastWorkerConfig, broadcastAppPreferences, broadcastRotationConfig, broadcastReasoningPrefs } from './lib/companion-server'
+import { setSessionModelsCache, setSessionModesCache, setWorkerConfigCache, setRotationHttpCache, setReasoningPrefsCache } from './lib/companion-http'
 import { setRotationConfigCache } from './lib/model-rotation'
 import { readJson as readStorageJson } from './lib/storage'
 import { registerPanelWebContents } from './lib/panel-browser'
@@ -1605,6 +1605,13 @@ app.whenReady().then(() => {
   ipcMain.on('companion:session-modes', (_event, overrides: SessionModeOverrides) => {
     setSessionModesCache(overrides)
     broadcastSessionModes(overrides)
+  })
+
+  // Thinking por modelo: mesma via (cache HTTP para o connect + evento
+  // 'reasoning:change' para quem já está conectado).
+  ipcMain.on('companion:reasoning-prefs', (_event, prefs: ReasoningPrefsMap) => {
+    setReasoningPrefsCache(prefs)
+    broadcastReasoningPrefs(prefs)
   })
 
   // Preferências do app (defaults de modo, permissão, pastas automáticas):

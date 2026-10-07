@@ -34,6 +34,8 @@ import type {
   BranchesResponse,
   SessionModeOverrides,
   SessionModeChangeEvent,
+  ReasoningPrefsMap,
+  ReasoningPrefsChangeEvent,
   RotationChangeEvent,
   WorkerConfigSnapshot,
   WorkerConfigChangeEvent,
@@ -630,6 +632,23 @@ async function handleRequest(client: ConnectedClient, requestId: string, req: Co
               mode: req.mode,
               value: req.value,
               sessionId: req.sessionId ?? null,
+            })
+          }
+        }
+        sendResponse(ws, requestId, true)
+        break
+      }
+
+      case 'reasoning:select': {
+        // Mesma via do models:select: o thinking por modelo vive no renderer
+        // (localStorage), então o toggle feito no celular é aplicado lá — e de
+        // lá volta para todos os companions pelo broadcast 'reasoning:change'.
+        for (const win of BrowserWindow.getAllWindows()) {
+          if (!win.isDestroyed()) {
+            win.webContents.send('companion:reasoning-select', {
+              providerId: req.providerId,
+              modelId: req.modelId,
+              pref: req.pref,
             })
           }
         }
@@ -1378,6 +1397,15 @@ export function broadcastSessionModes(overrides: SessionModeOverrides): void {
   for (const client of clients) {
     if (!client.authenticated || client.ws.readyState !== WebSocket.OPEN) continue
     client.ws.send(wrap({ type: 'session:mode-change', overrides } satisfies SessionModeChangeEvent))
+  }
+}
+
+/** Thinking por modelo (toggle + variante) empurrado aos companions — sem isto
+ *  o mobile abre todo chat com o thinking dos defaults dele. */
+export function broadcastReasoningPrefs(prefs: ReasoningPrefsMap): void {
+  for (const client of clients) {
+    if (!client.authenticated || client.ws.readyState !== WebSocket.OPEN) continue
+    client.ws.send(wrap({ type: 'reasoning:change', prefs } satisfies ReasoningPrefsChangeEvent))
   }
 }
 

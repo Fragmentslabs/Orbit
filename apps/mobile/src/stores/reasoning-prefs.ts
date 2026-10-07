@@ -1,15 +1,12 @@
 import { useCallback } from 'react'
 import { create } from 'zustand'
+import type { ModelReasoningPref, ReasoningPrefsMap } from '@orbit/shared'
 import { Storage } from '~/lib/storage'
+import { useConnectionStore } from '~/stores/connection-store'
 
 const STORAGE_KEY = 'orbit-reasoning-prefs'
 
-export interface ModelReasoningPref {
-  enabled: boolean
-  variantId?: string
-}
-
-type ReasoningPrefs = Record<string, ModelReasoningPref>
+type ReasoningPrefs = ReasoningPrefsMap
 
 async function load(): Promise<ReasoningPrefs> {
   try {
@@ -25,9 +22,13 @@ interface ReasoningPrefsState {
   hydrated: boolean
   hydrate: () => Promise<void>
   setPref: (modelKey: string, pref: ModelReasoningPref) => Promise<void>
+  /** Aplica o mapa vindo do desktop. `fillOnly` (snapshot do connect) só
+   *  preenche o que o aparelho não tem — preserva toggle feito offline; sem
+   *  ele (evento ao vivo) o mapa do desktop substitui, como no session-modes. */
+  applySync: (remote: ReasoningPrefsMap, fillOnly?: boolean) => void
 }
 
-const useReasoningPrefsStore = create<ReasoningPrefsState>((set, get) => ({
+export const useReasoningPrefsStore = create<ReasoningPrefsState>((set, get) => ({
   prefs: {},
   hydrated: false,
 
@@ -40,6 +41,21 @@ const useReasoningPrefsStore = create<ReasoningPrefsState>((set, get) => ({
     const prefs = { ...get().prefs, [modelKey]: pref }
     await Storage.setItem(STORAGE_KEY, JSON.stringify(prefs))
     set({ prefs })
+  },
+
+  applySync: (remote, fillOnly = false) => {
+    if (!remote || typeof remote !== 'object') return
+    const prefs = fillOnly ? { ...get().prefs } : {}
+    let changed = false
+    for (const [modelKey, pref] of Object.entries(remote)) {
+      if (!pref || typeof pref.enabled !== 'boolean') continue
+      if (fillOnly && prefs[modelKey] !== undefined) continue
+      prefs[modelKey] = pref
+      changed = true
+    }
+    if (!changed) return
+    void Storage.setItem(STORAGE_KEY, JSON.stringify(prefs))
+    set({ prefs, hydrated: true })
   },
 }))
 
@@ -55,9 +71,20 @@ export function useReasoningPrefs(
 
   const update = useCallback(
     (next: ModelReasoningPref) => {
-      if (key) setPref(key, next)
+      if (!key) return
+      setPref(key, next)
+      // O desktop é a fonte da verdade do thinking por modelo: o toggle segue
+      // via WS ('reasoning:select'), o renderer de lá persiste e devolve o
+      // mapa inteiro a todos os aparelhos pelo broadcast 'reasoning:change'.
+      // Desconectado o send fica na fila do wsClient e sai na reconexão.
+      const { wsClient } = useConnectionStore.getState()
+      if (wsClient && providerId && modelId) {
+        void wsClient
+          .send({ type: 'reasoning:select', providerId, modelId, pref: next })
+          .catch(() => {})
+      }
     },
-    [key, setPref],
+    [key, setPref, providerId, modelId],
   )
 
   return {

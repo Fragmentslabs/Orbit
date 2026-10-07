@@ -201,6 +201,31 @@ export interface SessionModeChangeEvent {
   overrides: SessionModeOverrides
 }
 
+/** Preferência de reasoning de um modelo (toggle + variante escolhida). */
+export interface ModelReasoningPref {
+  enabled: boolean
+  variantId?: string
+}
+
+/** Thinking por modelo (chave `providerId/modelId`) — mesmo mapa que os dois
+ *  apps guardam em localStorage/AsyncStorage como `orbit-reasoning-prefs`. */
+export type ReasoningPrefsMap = Record<string, ModelReasoningPref>
+
+/** Toggle de thinking feito num companion — o renderer do desktop é a fonte da
+ *  verdade (persiste e devolve o mapa inteiro a todos pelo broadcast). */
+export interface SelectReasoningRequest {
+  type: 'reasoning:select'
+  providerId: string
+  modelId: string
+  pref: ModelReasoningPref
+}
+
+/** Mapa completo de thinking por modelo empurrado pelo desktop aos companions. */
+export interface ReasoningPrefsChangeEvent {
+  type: 'reasoning:change'
+  prefs: ReasoningPrefsMap
+}
+
 /** Configuração global dos modos delegados: o modelo (e o thinking) dos
  *  workers de subagentes/orquestração e o modelo do modo Visão. Diferente dos
  *  modos, isto não é por chat — vale para o app inteiro. */
@@ -622,6 +647,7 @@ export type CompanionRequest =
   | GetModelsRequest
   | SelectModelRequest
   | SelectSessionModeRequest
+  | SelectReasoningRequest
   | SelectRotationRequest
   | SetRotationsRequest
   | SetWorkerConfigRequest
@@ -766,6 +792,7 @@ export type CompanionEvent =
   | NewMessageNotification
   | SessionModelChangeEvent
   | SessionModeChangeEvent
+  | ReasoningPrefsChangeEvent
   | RotationChangeEvent
   | WorkerConfigChangeEvent
   | AppPreferencesChangeEvent

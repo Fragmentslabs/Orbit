@@ -31,7 +31,7 @@ import { authorizeMcp, listMcpStatus, readMcpConfig, reconnectMcp, saveMcpConfig
 import type { McpConfig } from '@shared/mcp'
 import { readMedia, listMedia, mediaDiskUsage, deleteMedia, deleteManyMedia } from './media'
 
-import type { SessionModeOverrides, WorkerConfigSnapshot } from '@shared/companion'
+import type { SessionModeOverrides, WorkerConfigSnapshot, ReasoningPrefsMap } from '@shared/companion'
 import type { RotationConfig } from '@shared/chat'
 
 const execFileAsync = promisify(execFile)
@@ -301,6 +301,23 @@ export function getSessionModesCache(): SessionModeOverrides {
 
 async function handleGetSessionModes(_req: IncomingMessage, res: ServerResponse) {
   jsonResponse(res, 200, { overrides: getSessionModesCache() })
+}
+
+// Thinking por modelo: mesma mecânica dos modos. O renderer empurra o mapa
+// (localStorage) a cada mudança; aqui fica o cache que o mobile lê no connect
+// (GET /api/reasoning-prefs) — em tempo real chega pelo WS 'reasoning:change'.
+let reasoningPrefsCache: ReasoningPrefsMap = {}
+
+export function setReasoningPrefsCache(prefs: ReasoningPrefsMap): void {
+  reasoningPrefsCache = prefs ?? {}
+}
+
+export function getReasoningPrefsCache(): ReasoningPrefsMap {
+  return reasoningPrefsCache
+}
+
+async function handleGetReasoningPrefs(_req: IncomingMessage, res: ServerResponse) {
+  jsonResponse(res, 200, { prefs: getReasoningPrefsCache() })
 }
 
 // Config dos modos delegados (modelo dos workers + modelo de visão): também
@@ -634,6 +651,7 @@ function createRouter(
     { pattern: /^GET \/api\/media\/usage$/, paramNames: [], handler: handleMediaUsage },
     { pattern: /^GET \/api\/session-models$/, paramNames: [], handler: handleGetSessionModels },
     { pattern: /^GET \/api\/session-modes$/, paramNames: [], handler: handleGetSessionModes },
+    { pattern: /^GET \/api\/reasoning-prefs$/, paramNames: [], handler: handleGetReasoningPrefs },
     { pattern: /^GET \/api\/rotations$/, paramNames: [], handler: handleGetRotations },
     { pattern: /^GET \/api\/worker-config$/, paramNames: [], handler: handleGetWorkerConfig },
 
