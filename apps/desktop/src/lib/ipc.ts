@@ -5,6 +5,7 @@ import type {
   ModelRotation,
   RotationConfig,
   SearchHit,
+  ReasoningConfig,
   SendMessageInput,
   SessionRevert,
 } from "@shared/chat"
@@ -451,6 +452,8 @@ export interface NovaEsteiraInput {
   providerId: string
   modelId: string
   thinkingNivel?: number
+  /** Raciocínio padrão das fases (cada fase pode trazer o seu) */
+  reasoning?: ReasoningConfig | null
   branch?: string
   worktree?: string
   pushAoFinal?: boolean

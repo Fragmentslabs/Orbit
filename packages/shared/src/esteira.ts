@@ -10,6 +10,8 @@
  * (o plano define assim) — o resto do código segue a convenção do repo.
  */
 
+import type { ReasoningConfig } from './chat'
+
 // ─── Projeto ─────────────────────────────────────────────────────────────────
 
 export interface Projeto {
@@ -46,8 +48,12 @@ export interface FaseConfig {
   /** Herda o modelo padrão da esteira; editável por fase */
   providerId: string
   modelId: string
-  /** 0 = desligado */
+  /** Legado (nunca lido na execução) — o nível de raciocínio vive em `reasoning`. */
   thinkingNivel: number
+  /** Raciocínio da fase; ausente/null = desligado */
+  reasoning?: ReasoningConfig | null
+  /** Template de origem (ausente em fase criada do zero ou gravada antes do campo) */
+  templateId?: string
   tools: ToolPermitida[]
   /** Posição na sequência — a execução segue a ordem crescente, sem pular */
   ordem: number
@@ -72,6 +78,8 @@ export interface FaseTemplate {
   custom?: boolean
   /** Chave de i18n do nome/descrição (fases embutidas). Ausente nas do usuário. */
   i18nKey?: string
+  /** Fase criada pelo usuário (não é sobrescrita de uma embutida) — pode ser excluída */
+  doUsuario?: boolean
   /** Papel da fase no pipeline (define responsabilidades além do nome/prompt). */
   tipo: FaseTipo
 }
@@ -87,6 +95,11 @@ export interface FaseEscolhida {
   tools: ToolPermitida[]
   /** Papel da fase no pipeline. */
   tipo: FaseTipo
+  /** Modelo próprio da fase; ausente = herda o modelo padrão da esteira */
+  providerId?: string
+  modelId?: string
+  /** Raciocínio próprio da fase; undefined = herda o da esteira, null = desligado */
+  reasoning?: ReasoningConfig | null
 }
 
 // ─── Política de comandos ────────────────────────────────────────────────────
@@ -270,6 +283,8 @@ export interface NovaEsteiraInput {
   providerId: string
   modelId: string
   thinkingNivel?: number
+  /** Raciocínio padrão das fases (cada fase pode trazer o seu) */
+  reasoning?: ReasoningConfig | null
   branch?: string
   worktree?: string
   pushAoFinal?: boolean

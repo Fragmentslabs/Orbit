@@ -76,7 +76,8 @@ export async function listarTemplates(): Promise<FaseTemplate[]> {
   for (const t of custom) {
     // Templates antigos (gravados antes do campo `tipo`) herdam o papel do
     // embutido de mesmo id; fases novas do usuário caem em 'generico'.
-    porId.set(t.id, { ...t, tipo: t.tipo ?? porId.get(t.id)?.tipo ?? 'generico', custom: true })
+    const embutido = FASE_TEMPLATES.some((e) => e.id === t.id)
+    porId.set(t.id, { ...t, tipo: t.tipo ?? porId.get(t.id)?.tipo ?? 'generico', custom: true, doUsuario: !embutido })
   }
   return [...porId.values()]
 }
@@ -162,14 +163,18 @@ async function copiarFases(input: NovaEsteiraInput): Promise<FaseConfig[]> {
       .map(comoEscolhida)
   }
 
+  // Modelo e raciocínio: o da fase quando ela traz um (editada no modal),
+  // senão o padrão da esteira.
   return escolhidas.map((fase, ordem) => ({
     id: novoId('fase_'),
     nome: fase.nome,
     descricao: fase.descricao,
     prompt: fase.prompt,
-    providerId: input.providerId,
-    modelId: input.modelId,
+    providerId: fase.providerId && fase.modelId ? fase.providerId : input.providerId,
+    modelId: fase.providerId && fase.modelId ? fase.modelId : input.modelId,
     thinkingNivel: input.thinkingNivel ?? 0,
+    reasoning: fase.reasoning !== undefined ? fase.reasoning : (input.reasoning ?? null),
+    ...(fase.templateId ? { templateId: fase.templateId } : {}),
     tools: [...fase.tools],
     tipo: fase.tipo,
     ordem,

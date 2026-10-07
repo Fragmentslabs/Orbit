@@ -223,6 +223,9 @@ function FormEsteiraCorpo({
       if (editando) {
         // Edição não recria a esteira: mantém id, tasks e histórico. As fases
         // viram FaseConfig preservando o modelo já configurado por fase.
+        const original = editando.fases[0]
+        const modeloMudou =
+          !original || original.providerId !== modelo.providerId || original.modelId !== modelo.modelId
         await atualizarEsteira(editando.id, {
           nome: nome.trim(),
           pushAoFinal,
@@ -231,17 +234,20 @@ function FormEsteiraCorpo({
           printsDoResultado: prints,
           fases: fases.map((fase, ordem): FaseConfig => {
             const anterior = editando.fases[ordem]
+            // Mudar o "Modelo padrão" troca o modelo de todas as fases. Sem
+            // mudança, cada fase mantém o modelo e o raciocínio que tem (o
+            // desktop permite um por fase).
+            const manter = !modeloMudou && !!anterior
             return {
               id: anterior?.id ?? `fase_${ordem}_${Date.now().toString(36)}`,
               nome: fase.nome,
               descricao: fase.descricao,
               prompt: fase.prompt,
-              // O "Modelo padrão" vale para o pipeline inteiro (sem override
-              // por fase na UI): mudá-lo troca o modelo de todas as fases.
-              // Antes `anterior ?? modelo` mantinha o modelo velho.
-              providerId: modelo.providerId,
-              modelId: modelo.modelId,
+              providerId: manter ? anterior.providerId : modelo.providerId,
+              modelId: manter ? anterior.modelId : modelo.modelId,
               thinkingNivel: anterior?.thinkingNivel ?? 0,
+              reasoning: manter ? (anterior.reasoning ?? null) : null,
+              ...(fase.templateId ? { templateId: fase.templateId } : {}),
               tools: [...fase.tools],
               tipo: fase.tipo,
               ordem,

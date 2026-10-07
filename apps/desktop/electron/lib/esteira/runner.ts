@@ -159,7 +159,11 @@ function sendInputSintetico(ctx: ContextoFase): SendMessageInput {
     providerId: ctx.fase.providerId,
     modelId: ctx.fase.modelId,
     mode: 'code',
-    options: { permissionMode: 'full', brain: true },
+    options: {
+      permissionMode: 'full',
+      brain: true,
+      ...(ctx.fase.reasoning?.enabled ? { reasoning: ctx.fase.reasoning } : {}),
+    },
     directory: ctx.pastas[0],
     extraDirectories: ctx.pastas.slice(1),
   }

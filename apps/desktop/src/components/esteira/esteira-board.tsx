@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { DndContext, PointerSensor, useDroppable, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core"
 import { ArrowLeftIcon, FolderIcon, LayersIcon, Loader2, MoreHorizontalIcon, PencilIcon, PlayIcon, PlusIcon, SquareIcon, Trash2Icon } from "lucide-react"
-import type { Esteira, Task } from "@shared/esteira"
+import type { Esteira, FaseConfig, FaseEscolhida, Task } from "@shared/esteira"
 import { Button } from "@/components/ui/button"
 import { SEM_TASKS, useEsteiraStore } from "@/src/stores/esteira-store"
 import { cn } from "@/lib/utils"
@@ -13,6 +13,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { EsteiraCreateDialog } from "./esteira-create-dialog"
+import { FaseEditor, useRotuloModelo, useSalvarTemplateDaFase, type DestinoFase } from "./fase-editor"
 import { TaskCreateDialog } from "./task-create-dialog"
 import { EsteiraFooter } from "./esteira-footer"
 import { TaskCard } from "./task-card"
@@ -169,6 +170,54 @@ function BoardDaEsteira({ esteira, onVoltar }: { esteira: Esteira; onVoltar: () 
   const [taskAberta, setTaskAberta] = useState<string | null>(null)
   const [criarTaskAberto, setCriarTaskAberto] = useState(false)
   const [editarAberto, setEditarAberto] = useState(false)
+  const [faseEditando, setFaseEditando] = useState<number | null>(null)
+  const atualizarEsteira = useEsteiraStore((s) => s.atualizarEsteira)
+  const salvarTemplateDaFase = useSalvarTemplateDaFase()
+
+  // A fase do board vira FaseEscolhida para o editor (o mesmo do modal), já
+  // com o modelo e o raciocínio que ela usa.
+  const faseAtual: FaseConfig | undefined = faseEditando == null ? undefined : esteira.fases[faseEditando]
+  const faseParaEditor = useMemo<FaseEscolhida | null>(
+    () =>
+      faseAtual
+        ? {
+            templateId: faseAtual.templateId,
+            nome: faseAtual.nome,
+            descricao: faseAtual.descricao,
+            prompt: faseAtual.prompt,
+            tools: [...faseAtual.tools],
+            tipo: faseAtual.tipo ?? "generico",
+            providerId: faseAtual.providerId,
+            modelId: faseAtual.modelId,
+            reasoning: faseAtual.reasoning ?? null,
+          }
+        : null,
+    [faseAtual],
+  )
+
+  const salvarFaseDoBoard = async (editada: FaseEscolhida, destino: DestinoFase) => {
+    const indice = faseEditando
+    if (indice == null) return
+    const fase = await salvarTemplateDaFase(editada, destino)
+    await atualizarEsteira(esteira.id, {
+      fases: esteira.fases.map((f, i) =>
+        i === indice
+          ? {
+              ...f,
+              nome: fase.nome,
+              descricao: fase.descricao,
+              prompt: fase.prompt,
+              tools: [...fase.tools],
+              tipo: fase.tipo,
+              providerId: fase.providerId ?? f.providerId,
+              modelId: fase.modelId ?? f.modelId,
+              reasoning: fase.reasoning !== undefined ? fase.reasoning : (f.reasoning ?? null),
+              ...(fase.templateId ? { templateId: fase.templateId } : {}),
+            }
+          : f,
+      ),
+    })
+  }
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }))
 
@@ -212,6 +261,7 @@ function BoardDaEsteira({ esteira, onVoltar }: { esteira: Esteira; onVoltar: () 
       ...esteira.fases.map((fase, indice) => ({
         id: `fase:${indice}`,
         titulo: fase.nome,
+        faseIndice: indice as number | undefined,
         tasks: tasks.filter(
           (x) => x.status !== "pendente" && x.status !== "concluida" && x.faseAtual === indice,
         ),
@@ -291,6 +341,8 @@ function BoardDaEsteira({ esteira, onVoltar }: { esteira: Esteira; onVoltar: () 
               key={coluna.id}
               id={coluna.id}
               titulo={coluna.titulo}
+              fase={"faseIndice" in coluna && coluna.faseIndice != null ? esteira.fases[coluna.faseIndice] : undefined}
+              onEditarFase={"faseIndice" in coluna && coluna.faseIndice != null ? () => setFaseEditando(coluna.faseIndice!) : undefined}
               tasks={coluna.tasks}
               esteira={esteira}
               proximaId={proximaId}
@@ -318,6 +370,15 @@ function BoardDaEsteira({ esteira, onVoltar }: { esteira: Esteira; onVoltar: () 
         editando={esteira}
       />
 
+      <FaseEditor
+        fase={faseParaEditor}
+        aberto={faseEditando != null && !!faseParaEditor}
+        modeloPadrao={faseAtual ? { providerId: faseAtual.providerId, modelId: faseAtual.modelId } : null}
+        reasoningPadrao={faseAtual?.reasoning ?? null}
+        onOpenChange={(v) => !v && setFaseEditando(null)}
+        onSalvar={(fase, destino) => void salvarFaseDoBoard(fase, destino)}
+      />
+
       <TaskModal
         esteira={esteira}
         task={tasks.find((x) => x.id === taskAberta) ?? null}
@@ -331,6 +392,8 @@ function BoardDaEsteira({ esteira, onVoltar }: { esteira: Esteira; onVoltar: () 
 function Coluna({
   id,
   titulo,
+  fase,
+  onEditarFase,
   tasks,
   esteira,
   proximaId,
@@ -339,6 +402,10 @@ function Coluna({
 }: {
   id: string
   titulo: string
+  /** Só nas colunas de fase: a fase (para mostrar o modelo sob o título) */
+  fase?: FaseConfig
+  /** Só nas colunas de fase: abre o editor da fase (nome, prompt, modelo…) */
+  onEditarFase?: () => void
   tasks: Task[]
   esteira: Esteira
   /** Id da task que a fila vai disparar (só a coluna de pendentes usa). */
@@ -347,6 +414,8 @@ function Coluna({
   aguardandoTitulo: (task: Task) => string | undefined
   onAbrir: (taskId: string) => void
 }) {
+  const { t } = useTranslation()
+  const rotuloModelo = useRotuloModelo(fase?.providerId, fase?.modelId, fase?.reasoning)
   const iniciarTask = useEsteiraStore((s) => s.iniciarTask)
   const pausarTask = useEsteiraStore((s) => s.pausarTask)
   const retomarTask = useEsteiraStore((s) => s.retomarTask)
@@ -362,9 +431,32 @@ function Coluna({
         isOver && aceitaDrop && "border-primary bg-primary/5",
       )}
     >
-      <div className="flex shrink-0 items-center justify-between px-2.5 py-2">
-        <span className="text-xs font-medium text-foreground">{titulo}</span>
+      <div className="flex shrink-0 items-center gap-1.5 px-2.5 py-2">
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-xs font-medium text-foreground">{titulo}</p>
+          {rotuloModelo && (
+            <p className="truncate text-[10px] text-muted-foreground" title={rotuloModelo}>
+              {rotuloModelo}
+            </p>
+          )}
+        </div>
         <span className="rounded-full bg-muted px-1.5 text-[10px] text-muted-foreground">{tasks.length}</span>
+        {onEditarFase && (
+          <DropdownMenu>
+            <DropdownMenuTrigger
+              aria-label={t("esteira.opcoesFase")}
+              className="-mr-1 flex size-5 items-center justify-center rounded text-muted-foreground hover:bg-accent hover:text-foreground"
+            >
+              <MoreHorizontalIcon className="size-3.5" />
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="min-w-36">
+              <DropdownMenuItem onClick={onEditarFase}>
+                <PencilIcon className="size-3.5" />
+                {t("esteira.editarFase")}
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        )}
       </div>
       <div className="flex min-h-0 flex-1 flex-col gap-1.5 overflow-y-auto px-1.5 pb-2">
         {tasks.map((task) => (
