@@ -2,6 +2,7 @@
   "name": "@orbit/mobile",
   "main": "expo-router/entry",
   "version": "0.1.4",
+  "license": "GPL-3.0-or-later",
   "dependencies": {
     "@babel/plugin-transform-arrow-functions": "^7.29.7",
     "@babel/plugin-transform-shorthand-properties": "^7.29.7",

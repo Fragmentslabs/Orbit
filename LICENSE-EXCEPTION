@@ -1,0 +1,39 @@
+Orbit — Additional Permission under Section 7 of the GNU GPL version 3
+Copyright (c) 2026 Fragments Labs
+
+This file states an additional permission that supplements the GNU General
+Public License, version 3 (the "GPL"), whose full text is in the LICENSE file.
+It does not replace or modify the GPL: the GPL remains the license of this work,
+and this permission is an exception from one of its conditions, as expressly
+allowed by section 7 of the GPL ("Additional Terms").
+
+Grant of additional permission
+------------------------------
+
+As an additional permission under section 7 of the GPL, the copyright holders of
+Orbit grant you permission to distribute Orbit, and modified versions of it,
+through an application store — including, without limitation, the Apple App
+Store, the Mac App Store, Google Play, and the Microsoft Store — notwithstanding
+any terms of service, distribution agreement, or other agreement imposed by that
+store that would otherwise be prohibited by the GPL.
+
+This additional permission is granted on the condition that you comply with the
+GPL in all other respects, including the obligation to make the complete
+Corresponding Source of the work, and of any modifications you make to it,
+available under the GPL.
+
+Removal
+-------
+
+Under section 7 of the GPL, you may remove this additional permission from any
+copy of the work that you convey. If you remove it, the work is governed by the
+plain GPL, with no exception for application stores.
+
+Why this exists
+---------------
+
+Application stores impose conditions (device limits, DRM, their own terms of
+use) that the GPL does not allow a distributor to add. Without this permission,
+publishing an Orbit build through those stores would conflict with the GPL.
+With it, the conflict is resolved: the store distribution is permitted, and the
+source code obligation — the part that keeps Orbit free software — is unchanged.

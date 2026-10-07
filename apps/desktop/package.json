@@ -2,6 +2,7 @@
   "name": "@orbit/desktop",
   "private": true,
   "version": "0.1.4",
+  "license": "GPL-3.0-or-later",
   "desktopName": "orbit.desktop",
   "description": "Orbit - AI-powered coding assistant",
   "author": "Orbit",

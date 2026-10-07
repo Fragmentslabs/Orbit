@@ -1,6 +1,7 @@
 {
   "name": "@orbit/companion-client",
   "version": "0.1.4",
+  "license": "GPL-3.0-or-later",
   "private": true,
   "type": "module",
   "main": "src/index.ts",

@@ -215,7 +215,7 @@ The agent engine runs locally in the desktop app — your code never leaves your
 
 ## 🤝 Contributing
 
-Orbit is **source-available** under the [Business Source License 1.1](./LICENSE) and welcomes contributions. By opening a pull request you agree that your contribution is licensed to Fragments Labs under the project's license terms, so the project can maintain its licensing model.
+Orbit is **free software** under the [GNU GPLv3](./LICENSE) (plus an [additional permission for app stores](./LICENSE-EXCEPTION)) and welcomes contributions — see [CONTRIBUTING.md](./CONTRIBUTING.md) for the terms that apply to pull requests.
 
 1. **Fork** the repo and create a branch from `homolog` (the active development line)
 2. Follow the existing code style — this is a TypeScript monorepo with strict typechecking and lint
@@ -251,25 +251,24 @@ If Orbit helps you build, consider supporting Fragments Labs — every coffee fu
 
 ## 📄 Licensing
 
-Orbit uses the **Business Source License 1.1**.
+Orbit is **free software**, licensed under the **GNU General Public License v3** (or any later version). You can use, modify and redistribute it — including commercially — as long as anything you distribute that is based on it stays free software under the same license.
 
-| ✅ Allowed | ❌ Not allowed |
+**One additional permission:** you may also distribute Orbit, or a modified version of it, through app stores — Apple App Store, Mac App Store, Google Play, Microsoft Store — even though those stores impose terms the GPL would otherwise forbid. The condition doesn't change: the source has to stay available under the GPL. See [LICENSE-EXCEPTION](./LICENSE-EXCEPTION).
+
+| ✅ You can | ⚠️ You must |
 |---|---|
-| Personal use | Competing hosted services |
-| Internal company use (within the Additional Use Grant) | Removing monetization features (ads, subscription) |
-| Reading, modifying and auditing the source | Redistributing commercial forks |
-| Running the app with your own models and providers | Using it beyond the grant without a commercial license |
+| Use it personally, at work, or in a company of any size | Keep [LICENSE](./LICENSE), [LICENSE-EXCEPTION](./LICENSE-EXCEPTION) and [NOTICE](./NOTICE) with any copy you distribute |
+| Read, modify, audit and fork the source | Publish the source of your modified version under the GPL |
+| Distribute it through app stores (that's the extra permission) | State that you changed the files, if you did |
+| Rename it and ship your own version | Not imply that Fragments Labs endorses your fork |
+| Sell it, host it, or build a product on top of it | — |
 
-After **four years**, each release automatically converts to **Apache-2.0**.
+**The app is free software. The parts that cost money to run are a paid service.** The core app is free and ad-supported; **Fragments Plus** (cloud memory, mobile access from anywhere, the relay that connects desktop and mobile outside your local network, hosted model inference, and access to the rest of the Fragments suite — Nodara, Fracta, ...) is a paid subscription running on Fragments Labs' closed-source servers. Nothing that was ever free is locked behind it.
 
-[Full license text](./LICENSE) · commercial licenses: [ko-fi.com/fragmentslabs](https://ko-fi.com/fragmentslabs)
+[Full license text](./LICENSE) · [Additional permission for app stores](./LICENSE-EXCEPTION)
 
-The core app is free with ads; **Fragments Plus** (cloud memory, mobile anywhere, and access to the Fragments app suite — Nodara, Fracta, ...) is a paid subscription powered by Fragments Labs' closed-source servers, in the spirit of n8n and Supabase.
-
-Orbit includes code derived from [opencode](https://github.com/sst/opencode) (MIT) — see [NOTICE](./NOTICE) for attribution and the full upstream license text.
-ds; **Fragments Plus** (cloud memory, mobile anywhere, and access to the Fragments app suite — Nodara, Fracta, ...) is a paid subscription powered by Fragments Labs' closed-source servers, in the spirit of n8n and Supabase.
+Releases published before October 2026 were made available under the Business Source License 1.1 and remain available under those terms.
 
 Orbit includes code derived from [opencode](https://github.com/sst/opencode) (MIT) — see [NOTICE](./NOTICE) for attribution and the full upstream license text.
-spirit of n8n and Supabase.
 
-Orbit includes code derived from [opencode](https://github.com/sst/opencode) (MIT) — see [NOTICE](./NOTICE) for attribution and the full upstream license text.
+Orbit and Fragments Labs are project names and trademarks of Fragments Labs. The GPL does not grant rights to use them: forks are welcome, but must stand on their own name.

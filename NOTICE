@@ -1,6 +1,19 @@
 Orbit
 Copyright (c) 2026 Fragments Labs
 
+Orbit is free software, licensed under the GNU General Public License, version 3
+(or any later version), with an additional permission under section 7 of that
+license allowing distribution through application stores. See the LICENSE file
+for the full license text and the LICENSE-EXCEPTION file for the additional
+permission.
+
+Releases published before October 2026 were made available under the Business
+Source License 1.1, and remain available under those terms. The Business Source
+License is not a trademark of, or affiliated with, this project.
+
+--------------------------------------------------------------------------------
+Third-party notices
+
 This product includes software derived from opencode
 (https://github.com/sst/opencode), which is licensed under the MIT License:
 
