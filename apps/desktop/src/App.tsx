@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
-import { DndContext, PointerSensor, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core"
+import { DndContext } from "@dnd-kit/core"
 
 import { SidebarProvider, useSidebar } from "@/components/ui/sidebar"
 import { TooltipProvider } from "@/components/ui/tooltip"
@@ -22,6 +22,7 @@ import { RotinasView } from "@/src/components/rotinas/rotinas-view"
 import { ToolsView } from "@/src/components/tools-view"
 import { UsageView } from "@/src/components/usage-view"
 import { RightPanel, RightPanelDropZone } from "@/src/components/right-panel"
+import { useSessionDragAndDrop } from "@/src/components/session-drag"
 import { ensureAgentBrowser, evictInactiveWebviews } from "@/src/components/browser/webview-session"
 import { TitleBar } from "@/src/components/titlebar"
 import { SettingsDialogHost } from "@/src/components/settings-dialog"
@@ -204,25 +205,9 @@ function Layout() {
     }
   }, [open, setOpen])
 
-  const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
-  )
-
-  const handleDragStart = useCallback(() => {
-  }, [])
-
-  const handleDragEnd = useCallback((event: DragEndEvent) => {
-    if (event.over?.id === "right-panel-drop-zone") {
-      const data = event.active.data.current as { sessionId: string; title: string } | undefined
-      if (data?.sessionId) {
-        const sessionStore = useSessionStore.getState()
-        if (sessionStore.activeIds[workspaceMode] === data.sessionId) {
-          sessionStore.createSession(workspaceMode, { setActive: true })
-        }
-        usePanelStore.getState().openChatTab(data.sessionId, data.title)
-      }
-    }
-  }, [workspaceMode])
+  // Arrastar uma conversa da sidebar: abre no painel lateral ou muda de lugar
+  // (pasta, fixados, conversas, arquivados) — mesma animação nos dois casos.
+  const sessionDnd = useSessionDragAndDrop(workspaceMode)
 
   // Esteira ABERTA (na lista não há nenhuma): o header do modo esteira reflete
   // o contexto dela — pastas e branch. O modelo fica em cada coluna de fase:
@@ -244,7 +229,8 @@ function Layout() {
   }, [folders])
 
   return (
-    <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
+    <DndContext {...sessionDnd.contextProps}>
+      {sessionDnd.overlay}
       <div
         className="relative flex min-w-0 flex-1"
         onDragEnter={handleDragEnter}

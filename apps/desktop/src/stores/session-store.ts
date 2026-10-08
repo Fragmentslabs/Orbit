@@ -109,6 +109,9 @@ interface SessionState {
   deleteSession: (id: string) => Promise<void>
   deleteSessions: (ids: string[]) => Promise<void>
   moveToFolder: (id: string, folderId: string | null) => void
+  /** Põe a sessão num lugar da sidebar de uma vez (arrastar e soltar): pasta,
+   *  fixado e arquivado mudam juntos, num único evento de sincronização. */
+  placeSession: (id: string, place: { folderId?: string | null; pinned?: boolean; archived?: boolean }) => void
   /** Atualiza as pastas de trabalho de uma sessão de código */
   setSessionDirectories: (id: string, directory: string | undefined, extraDirectories?: string[]) => void
   /** Duplica a sessão (até messageId, se informado) com novos IDs */
@@ -595,6 +598,18 @@ export const useSessionStore = create<SessionState>((set, get) => ({
 
   moveToFolder: (id, folderId) => {
     set((state) => updateSessionIn(state, id, { folderId }))
+    emitSessionEvent(id)
+  },
+
+  placeSession: (id, { archived, ...rest }) => {
+    set((state) => {
+      const session = state.sessions.find((s) => s.id === id)
+      if (!session) return state
+      const archive = archived !== undefined && archived !== session.archived
+        ? setArchivedState(session, archived)
+        : {}
+      return updateSessionIn(state, id, { ...rest, ...archive })
+    })
     emitSessionEvent(id)
   },
 

@@ -63,6 +63,7 @@ import { usePanelStore } from "@/src/stores/panel-store"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { ConfirmDialog } from "@/components/ui/alert-dialog"
 import {
   Dialog,
@@ -89,6 +90,12 @@ import { useMessageQueueStore, startMessageScheduler } from "@/src/stores/messag
 import { useSessionStore } from "@/src/stores/session-store"
 import { useSettingsUi } from "@/src/stores/settings-ui"
 import { KO_FI_URL } from "@/src/lib/appLinks"
+import {
+  useDraggedMovableSession,
+  useSidebarDropTarget,
+  type SessionDragData,
+  type SidebarDropTarget,
+} from "@/src/components/session-drag"
 import { ConnectAppDialog } from "@/components/connect-app-dialog"
 
 type MenuItem = { icon: React.ReactNode; label: string; onSelect: () => void; separator?: boolean; destructive?: boolean }
@@ -381,15 +388,39 @@ function ModeTabs() {
   )
 }
 
-function AccordionGroup({ label, defaultExpanded = true, action, children }: {
+/** Área que recebe uma conversa arrastada; acende só quando soltar ali muda
+ *  alguma coisa. */
+function DropArea({ target, className, children }: {
+  target: SidebarDropTarget
+  className?: string
+  children: React.ReactNode
+}) {
+  const { setNodeRef, highlighted } = useSidebarDropTarget(target)
+  return (
+    <div
+      ref={setNodeRef}
+      className={cn(
+        "rounded-lg transition-colors duration-150",
+        highlighted && "bg-sidebar-accent/60 ring-1 ring-inset ring-primary/40",
+        className,
+      )}
+    >
+      {children}
+    </div>
+  )
+}
+
+function AccordionGroup({ label, defaultExpanded = true, action, dropTarget, children }: {
   label: string
   defaultExpanded?: boolean
   action?: React.ReactNode
+  /** O grupo inteiro (título incluso, mesmo recolhido) aceita conversas soltas. */
+  dropTarget?: SidebarDropTarget
   children: React.ReactNode
 }) {
   const [expanded, setExpanded] = useState(defaultExpanded)
 
-  return (
+  const group = (
     <SidebarGroup>
       <SidebarGroupLabel
         className="flex cursor-pointer items-center gap-2"
@@ -402,6 +433,7 @@ function AccordionGroup({ label, defaultExpanded = true, action, children }: {
       {expanded && <SidebarGroupContent>{children}</SidebarGroupContent>}
     </SidebarGroup>
   )
+  return dropTarget ? <DropArea target={dropTarget}>{group}</DropArea> : group
 }
 
 function EllipsisMenu({ items, groupClass = "group-hover/menu-item:opacity-100", buttonClassName }: {
@@ -681,9 +713,16 @@ function SessionRow({ session, button: ButtonComponent, buttonClassName, actionB
   // mas a UI deve indicar "precisa da sua resposta", não um spinner de atividade.
   const hasPendingAsk = (pendingAsks[session.id]?.length ?? 0) > 0
 
+  const dragData: SessionDragData = {
+    kind: "session",
+    sessionId: session.id,
+    title: session.title,
+    icon: Icon,
+    movable: !session.parentId && !session.routineId,
+  }
   const { setNodeRef, listeners, attributes, isDragging } = useDraggable({
     id: session.id,
-    data: { sessionId: session.id, title: session.title },
+    data: dragData,
     disabled: selectionMode,
   })
 
@@ -747,7 +786,9 @@ function SessionRow({ session, button: ButtonComponent, buttonClassName, actionB
   }
 
   return (
-    <div ref={setNodeRef} className={cn("group/menu-row relative min-w-0", isDragging && "opacity-50")}>
+    // Arrastando: a linha some, mas o espaço fica — quem segue o cursor é o
+    // fantasma do DragOverlay (session-drag.tsx).
+    <div ref={setNodeRef} className={cn("group/menu-row relative min-w-0 transition-opacity duration-150", isDragging && "opacity-0")}>
       <ButtonComponent
         isActive={activeId === session.id}
         onClick={handleClick}
@@ -774,7 +815,14 @@ function SessionRow({ session, button: ButtonComponent, buttonClassName, actionB
           ) : (
             <Icon className="size-4 shrink-0" />
           )}
-          <span className="truncate">{session.title}</span>
+          <TooltipProvider delay={600}>
+            <Tooltip>
+              <TooltipTrigger render={<span className="truncate" />}>{session.title}</TooltipTrigger>
+              <TooltipContent side="right" align="start" sideOffset={6}>
+                {session.title}
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
           {(statusDot === "submitted" || statusDot === "streaming") && !hasPendingAsk && (
             <Loader2 className="size-3 shrink-0 animate-spin text-primary" />
           )}
@@ -937,7 +985,7 @@ function ArchivedFolderGroup({ folder, sessions }: {
   const [expanded, setExpanded] = useState(false)
   if (sessions.length === 0) return null
   return (
-    <>
+    <DropArea target={{ type: "archived", folderId: folder.id }}>
       <SidebarMenuItem>
         <SidebarMenuButton
           className="text-sidebar-foreground/70"
@@ -958,7 +1006,7 @@ function ArchivedFolderGroup({ folder, sessions }: {
           ))}
         </div>
       )}
-    </>
+    </DropArea>
   )
 }
 
@@ -996,6 +1044,7 @@ function FolderItem({ folder, sessions, childrenByParent = {} }: {
 
   return (
     <SidebarMenuItem>
+      <DropArea target={{ type: "folder", folderId: folder.id, archived: !!folder.archived }}>
       <div className="group/menu-row relative min-w-0">
         <SidebarMenuButton
           className={cn(
@@ -1094,6 +1143,7 @@ function FolderItem({ folder, sessions, childrenByParent = {} }: {
           })}
         </SidebarMenuSub>
       )}
+      </DropArea>
 
       <ConfirmDialog
         open={confirmDelete}
@@ -1128,6 +1178,9 @@ function ChatHistory() {
   const deleteFolder = useSessionStore((s) => s.deleteFolder)
 
   const totalSelected = selectedIds.size + selectedFolderIds.size
+  // Durante o arrasto, "Fixados" e "Arquivados" aparecem mesmo vazios para
+  // servirem de destino.
+  const draggingSession = !!useDraggedMovableSession()
 
   const handleBulkDelete = async () => {
     if (selectedIds.size > 0) {
@@ -1274,15 +1327,27 @@ function ChatHistory() {
         </SidebarMenu>
       </AccordionGroup>
 
-      <AccordionGroup label={t("sidebar.groups.chats")}>
+      {(pinned.length > 0 || draggingSession) && (
+        <AccordionGroup label={t("sidebar.groups.pinned")} dropTarget={{ type: "pinned" }}>
+          <SidebarMenu>
+            {pinned.map((session) => (
+              <SessionItem key={session.id} session={session} childSessions={childrenByParent[session.id]} />
+            ))}
+            {pinned.length === 0 && (
+              <div className="mx-2 rounded-md border border-dashed border-sidebar-border px-2 py-1.5 text-xs text-sidebar-foreground/50">
+                {t("sidebar.groups.dropToPin")}
+              </div>
+            )}
+          </SidebarMenu>
+        </AccordionGroup>
+      )}
+
+      <AccordionGroup label={t("sidebar.groups.chats")} dropTarget={{ type: "chats" }}>
         <SidebarMenu>
-          {pinned.map((session) => (
-            <SessionItem key={session.id} session={session} childSessions={childrenByParent[session.id]} />
-          ))}
           {recent.map((session) => (
             <SessionItem key={session.id} session={session} childSessions={childrenByParent[session.id]} />
           ))}
-          {pinned.length === 0 && recent.length === 0 && (
+          {recent.length === 0 && (
             <div className="px-3 py-1 text-xs text-sidebar-foreground/50">{t("sidebar.groups.noChats")}</div>
           )}
         </SidebarMenu>
@@ -1307,8 +1372,9 @@ function ChatHistory() {
 
       {(archived.length > 0 ||
         sortedArchivedFolders.length > 0 ||
-        activeFoldersWithArchived.length > 0) && (
-        <AccordionGroup label={t("sidebar.groups.archived")} defaultExpanded={false}>
+        activeFoldersWithArchived.length > 0 ||
+        draggingSession) && (
+        <AccordionGroup label={t("sidebar.groups.archived")} defaultExpanded={false} dropTarget={{ type: "archived" }}>
           <SidebarMenu>
             {sortedArchivedFolders.map((folder) => (
               <FolderItem

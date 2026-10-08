@@ -542,7 +542,9 @@
       "chats": "Conversas",
       "archived": "Arquivados",
       "noChats": "Nenhuma conversa ainda",
-      "routines": "Rotinas"
+      "routines": "Rotinas",
+      "pinned": "Fixados",
+      "dropToPin": "Solte aqui para fixar"
     },
     "account": {
       "localAssistant": "Assistente local",

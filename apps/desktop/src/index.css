@@ -181,3 +181,29 @@
   color: transparent;
   background: rgb(59 130 246 / 0.35);
 }
+
+/**
+ * Fantasma de uma conversa arrastada (session-drag.tsx): ao sair da lista ele
+ * "levanta" — cresce um pouco, inclina e ganha sombra —, e é assim que segue o
+ * cursor até ser solto.
+ */
+@keyframes session-drag-lift {
+  from {
+    transform: scale(1) rotate(0deg);
+    box-shadow: 0 0 0 0 rgb(0 0 0 / 0);
+  }
+  to {
+    transform: scale(1.03) rotate(-1.5deg);
+    box-shadow: 0 12px 28px -8px rgb(0 0 0 / 0.35);
+  }
+}
+
+.session-drag-ghost {
+  animation: session-drag-lift 160ms cubic-bezier(0.2, 0, 0, 1) forwards;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .session-drag-ghost {
+    animation: none;
+  }
+}
