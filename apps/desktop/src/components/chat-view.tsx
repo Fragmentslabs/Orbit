@@ -260,8 +260,10 @@ function EarlierMessages({ hiddenCount, onLoad, paused }: {
   )
 }
 
-function ChatMessages({ messages, isBusy, busyLabel, mode, sessionId, sendMessage, planIds, planReview, plan }: {
+function ChatMessages({ messages, historyPending, isBusy, busyLabel, mode, sessionId, sendMessage, planIds, planReview, plan }: {
   messages: ChatMessage[]
+  /** O histórico da sessão ainda não chegou do disco. */
+  historyPending: boolean
   isBusy: boolean
   busyLabel?: string
   mode: "chat" | "code"
@@ -335,6 +337,36 @@ function ChatMessages({ messages, isBusy, busyLabel, mode, sessionId, sendMessag
     const expected = anchor.top + (scroller.scrollHeight - anchor.height)
     if (Math.abs(scroller.scrollTop - expected) > 1) scroller.scrollTop = expected
   }, [startIndex])
+
+  // Abre no fim ANTES do primeiro quadro: o StickToBottom só desce num
+  // requestAnimationFrame, e até lá o chat aparecia no topo por um instante.
+  // Roda quando a conversa monta (troca de sessão ou histórico que chegou).
+  useLayoutEffect(() => {
+    if (historyPending) return
+    const scroller = stickRef.current?.scrollRef.current
+    if (scroller) scroller.scrollTop = scroller.scrollHeight
+  }, [sessionId, historyPending])
+
+  // A área do chat também muda de altura sem o conteúdo mudar: a persona do
+  // header entra com o véu (o chat encolhe ~64px), o campo de texto cresce,
+  // um card aparece acima do input. O StickToBottom só observa o conteúdo,
+  // então nesses casos o fim da conversa ficava escondido embaixo. Colado no
+  // fim antes da mudança, continua colado depois.
+  useEffect(() => {
+    if (historyPending) return
+    const scroller = stickRef.current?.scrollRef.current
+    if (!scroller) return
+    let lastHeight = scroller.clientHeight
+    const observer = new ResizeObserver(() => {
+      const height = scroller.clientHeight
+      if (height === lastHeight) return
+      const gapBefore = scroller.scrollHeight - scroller.scrollTop - lastHeight
+      lastHeight = height
+      if (stickRef.current?.isAtBottom || gapBefore <= 2) scroller.scrollTop = scroller.scrollHeight
+    })
+    observer.observe(scroller)
+    return () => observer.disconnect()
+  }, [sessionId, historyPending])
 
   // Pular para uma mensagem fora da janela (busca, navegador, galeria):
   // estende a janela até o turno dela. O stopScroll solta a trava do fim —
@@ -424,8 +456,15 @@ function ChatMessages({ messages, isBusy, busyLabel, mode, sessionId, sendMessag
     scroller.scrollTo({ top: Math.max(0, Math.min(target, max)), behavior: "smooth" })
   }, [])
 
+  // Sem o histórico, a conversa não monta. Montada vazia, a primeira medição
+  // do StickToBottom (a que rola sem animar) era gasta na lista vazia, e o
+  // histórico chegando depois virava "conteúdo cresceu": a mola suave descia
+  // o chat inteiro do topo até o fim, à vista.
+  if (historyPending) return <div className="relative flex-1" />
+
   return (
-    <Conversation key={sessionId ?? "no-session"} contextRef={stickRef} className="relative flex-1 -mt-10">
+    // initial="instant": o chat abre já no fim, sem rolar por tudo até lá.
+    <Conversation key={sessionId ?? "no-session"} contextRef={stickRef} initial="instant" className="relative flex-1 -mt-10">
       <ConversationContent className="mx-auto w-full max-w-3xl">
         {startIndex > 0 && (
           // key pela janela: cada carga remonta o observador, que reavalia na
@@ -576,7 +615,12 @@ export function ChatView({ sessionId, embedded = false }: { sessionId?: string; 
   }, [session?.id, session?.directory, session?.extraDirectories, viewMode, setFolders])
 
   const isBusy = status === "submitted" || status === "streaming" || status === "cancelling" || status === "fallback"
-  const hasChat = messages.length > 0
+  // Sessão cujo histórico ainda não chegou do disco conta como conversa: sem
+  // isso, trocar de chat passava pela tela de início (lista vazia por um
+  // instante) e rodava as animações de saída e entrada antes de mostrar o
+  // chat escolhido.
+  const historyPending = useSessionStore((s) => (session ? s.messages[session.id] === undefined : false))
+  const hasChat = messages.length > 0 || historyPending
   const personaVisibility = useAppearanceStore((s) => s.personaVisibility)
   /** A flutuante do topo passa por cima da conversa; a da saudação não
    *  disputa espaço com nada. São escolhas separadas — ver PersonaVisibility. */
@@ -805,6 +849,7 @@ export function ChatView({ sessionId, embedded = false }: { sessionId?: string; 
             {chatSearchOpen && <ChatMessageSearchBar messages={messages} />}
             <ChatMessages
               messages={messages}
+              historyPending={historyPending}
               isBusy={isBusy}
               busyLabel={
                 status === "fallback" && fallback
