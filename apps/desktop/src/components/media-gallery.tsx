@@ -31,6 +31,7 @@ import { openDocumentInPanel } from "@/src/lib/open-document"
 import { useWorkspace } from "@/lib/workspace-context"
 import { cn } from "@/lib/utils"
 import { expandToGroups, groupMediaByRoot } from "@/src/lib/media-groups"
+import { scrollToMessage } from "@/src/lib/message-jump"
 
 /**
  * Galeria de mídia: página dedicada (aba do painel direito) com o que o agente
@@ -90,21 +91,6 @@ function formatDate(timestamp: number, locale: string): string {
     hour: "2-digit",
     minute: "2-digit",
   })
-}
-
-/** Rola até a mensagem no chat e pisca o destaque (mesmo padrão da busca). */
-function scrollToMessage(id: string) {
-  const el = document.querySelector<HTMLElement>(`[data-msg-id="${id}"]`)
-  if (!el) return
-  el.scrollIntoView({ behavior: "smooth", block: "center" })
-  const prevBg = el.style.backgroundColor
-  const prevTransition = el.style.transition
-  el.style.transition = "background-color 0.4s ease"
-  el.style.backgroundColor = "var(--accent)"
-  setTimeout(() => {
-    el.style.backgroundColor = prevBg
-    setTimeout(() => { el.style.transition = prevTransition }, 400)
-  }, 700)
 }
 
 function Thumb({ entry, selected, selecting, onToggle, onOpen, versions = 1 }: {
@@ -589,7 +575,7 @@ export function MediaGallery() {
     setPreview(null)
     if (entry.messageId) {
       // espera o chat renderizar a lista antes de procurar a mensagem
-      setTimeout(() => scrollToMessage(entry.messageId!), 400)
+      setTimeout(() => void scrollToMessage(entry.messageId!), 400)
     }
   }, [setMode])
 

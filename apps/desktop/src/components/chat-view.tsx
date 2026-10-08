@@ -1,4 +1,5 @@
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react"
+import { useStickToBottomContext, type StickToBottomContext } from "use-stick-to-bottom"
 import { useTranslation } from "react-i18next"
 import { ChevronRight, PaperclipIcon } from "lucide-react"
 import { UserMessageNav } from "@/src/components/user-message-nav"
@@ -33,6 +34,8 @@ import { ChatMessageSearchBar } from "@/src/components/chat-message-search-bar"
 import { useChatSearchStore } from "@/src/stores/chat-search-store"
 import { Actions } from "@/src/components/ai/actions"
 import { messageText, visibleMessageText } from "@/src/lib/message-utils"
+import { PAGE_TURNS, defaultWindowStart, turnStart, windowStartFor } from "@/src/lib/message-window"
+import { registerMessageRevealer, revealMessage } from "@/src/lib/message-jump"
 import { playEntranceSound, prepareEntranceSound } from "@/src/lib/entrance-sound"
 import { useActiveSession, useSessionStatus, useSessionStore, type SendConfig } from "@/src/stores/session-store"
 import { brainEnabledFor } from "@/src/stores/brain-prefs"
@@ -205,6 +208,58 @@ function BrokenMessage({ error }: { error: Error }) {
   )
 }
 
+/**
+ * Topo da janela de mensagens: monta os turnos anteriores quando a pessoa
+ * rola até perto dele. Só reage depois que ela saiu do fim da conversa — ao
+ * abrir o chat o topo está na tela antes de a rolagem inicial descer, e
+ * carregar ali montaria o histórico inteiro, que é o que a janela evita.
+ * Também carrega quando a janela nem enche a tela (não há o que rolar).
+ */
+function EarlierMessages({ hiddenCount, onLoad, paused }: {
+  hiddenCount: number
+  onLoad: () => void
+  /** Durante um pulo para mensagem: carregar aqui mexeria no scroll no meio
+   *  da rolagem até o alvo. */
+  paused: () => boolean
+}) {
+  const { t } = useTranslation()
+  const { scrollRef, isAtBottom } = useStickToBottomContext()
+  const ref = useRef<HTMLButtonElement>(null)
+  const isAtBottomRef = useRef(isAtBottom)
+  isAtBottomRef.current = isAtBottom
+  const onLoadRef = useRef(onLoad)
+  onLoadRef.current = onLoad
+  const pausedRef = useRef(paused)
+  pausedRef.current = paused
+
+  useEffect(() => {
+    const scroller = scrollRef.current
+    const el = ref.current
+    if (!scroller || !el) return
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (!entry?.isIntersecting || pausedRef.current()) return
+        const fills = scroller.scrollHeight > scroller.clientHeight + 1
+        if (!fills || !isAtBottomRef.current) onLoadRef.current()
+      },
+      { root: scroller, rootMargin: "600px 0px 0px 0px" },
+    )
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [scrollRef])
+
+  return (
+    <button
+      ref={ref}
+      type="button"
+      onClick={onLoad}
+      className="mx-auto rounded-full px-3 py-1 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+    >
+      {t("chat.earlierMessages", { count: hiddenCount })}
+    </button>
+  )
+}
+
 function ChatMessages({ messages, isBusy, busyLabel, mode, sessionId, sendMessage, planIds, planReview, plan }: {
   messages: ChatMessage[]
   isBusy: boolean
@@ -226,6 +281,81 @@ function ChatMessages({ messages, isBusy, busyLabel, mode, sessionId, sendMessag
         .map((m) => ({ id: m.id, text: visibleMessageText(m), time: m.createdAt })),
     [messages],
   )
+
+  // ── Janela: só os últimos turnos ficam montados (ver message-window.ts) ──
+  // Guardada pelo ID da primeira mensagem, não pelo índice: mensagens novas
+  // chegam no fim e não podem deslocar a janela. Fica fixa depois de definida
+  // (o chat que cresce não desmonta o que está acima); trocar de sessão ou a
+  // mensagem sumir (revert, compactação) volta ao padrão.
+  const [windowState, setWindowState] = useState<{ sessionId?: string; startId: string | null }>({
+    sessionId,
+    startId: null,
+  })
+  // Atualizações de estado durante o render (estado derivado): o React
+  // descarta este render e refaz com o valor novo, sem passar pelo DOM.
+  const sameSession = windowState.sessionId === sessionId
+  if (!sameSession) setWindowState({ sessionId, startId: null })
+  let startIndex = 0
+  if (messages.length > 0) {
+    const saved = sameSession ? windowState.startId : null
+    const savedIndex = saved ? messages.findIndex((m) => m.id === saved) : -1
+    startIndex = savedIndex >= 0 ? savedIndex : defaultWindowStart(messages)
+    if (savedIndex < 0) setWindowState({ sessionId, startId: messages[startIndex].id })
+  }
+  const visibleMessages = startIndex > 0 ? messages.slice(startIndex) : messages
+
+  const stickRef = useRef<StickToBottomContext>(null)
+  /** Medidas do scroll antes de montar turnos acima — para manter na tela o
+   *  que a pessoa estava lendo quando o conteúdo cresce por cima. */
+  const anchorRef = useRef<{ height: number; top: number } | null>(null)
+  const messagesRef = useRef(messages)
+  messagesRef.current = messages
+  const startIndexRef = useRef(startIndex)
+  startIndexRef.current = startIndex
+  /** Até quando o carregamento automático do topo fica parado (pulo em curso). */
+  const jumpUntilRef = useRef(0)
+  const autoLoadPaused = useCallback(() => Date.now() < jumpUntilRef.current, [])
+
+  const loadEarlier = useCallback(() => {
+    const current = startIndexRef.current
+    if (current <= 0) return
+    const scroller = stickRef.current?.scrollRef.current
+    if (scroller) anchorRef.current = { height: scroller.scrollHeight, top: scroller.scrollTop }
+    const list = messagesRef.current
+    setWindowState({ sessionId, startId: list[turnStart(list, current, PAGE_TURNS)].id })
+  }, [sessionId])
+
+  useLayoutEffect(() => {
+    const anchor = anchorRef.current
+    const scroller = stickRef.current?.scrollRef.current
+    if (!anchor || !scroller) return
+    anchorRef.current = null
+    // O Chromium pode já ter compensado sozinho (scroll anchoring); só mexe
+    // se a posição não for a esperada.
+    const expected = anchor.top + (scroller.scrollHeight - anchor.height)
+    if (Math.abs(scroller.scrollTop - expected) > 1) scroller.scrollTop = expected
+  }, [startIndex])
+
+  // Pular para uma mensagem fora da janela (busca, navegador, galeria):
+  // estende a janela até o turno dela. O stopScroll solta a trava do fim —
+  // senão o conteúdo novo acima faria a conversa ser puxada de volta para
+  // baixo enquanto a busca tenta rolar até a mensagem.
+  useEffect(() => {
+    return registerMessageRevealer((messageId) => {
+      const list = messagesRef.current
+      const index = list.findIndex((m) => m.id === messageId)
+      if (index < 0) return false
+      if (index < startIndexRef.current) {
+        stickRef.current?.stopScroll()
+        jumpUntilRef.current = Date.now() + 1500
+        // Turnos extras acima do alvo: o topo da janela fica longe dele, e
+        // rolar um pouco para cima depois do pulo não esbarra no limite.
+        const start = turnStart(list, windowStartFor(list, index), PAGE_TURNS)
+        setWindowState({ sessionId, startId: list[start].id })
+      }
+      return true
+    })
+  }, [sessionId])
 
   const [activeUserMsgId, setActiveUserMsgId] = useState<string | null>(null)
   const observerRef = useRef<IntersectionObserver | null>(null)
@@ -266,11 +396,13 @@ function ChatMessages({ messages, isBusy, busyLabel, mode, sessionId, sendMessag
     for (const el of els) observer.observe(el)
 
     return () => observer.disconnect()
+    // Re-observa quando a janela cresce: as perguntas recém-montadas no topo
+    // também contam para o destaque do navegador.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [userMsgItems.map((i) => i.id).join(",")])
+  }, [userMsgItems.map((i) => i.id).join(","), startIndex])
 
-  const handleNavSelect = useCallback((id: string) => {
-    const el = document.querySelector<HTMLElement>(`[data-user-msg-id="${id}"]`)
+  const handleNavSelect = useCallback(async (id: string) => {
+    const el = await revealMessage(id)
     if (!el) return
     // Rola o container de scroll real (div interna do StickToBottom), que fica
     // sob um ancestral com overflow-y-hidden — scrollIntoView nem sempre rola
@@ -293,9 +425,17 @@ function ChatMessages({ messages, isBusy, busyLabel, mode, sessionId, sendMessag
   }, [])
 
   return (
-    <Conversation key={sessionId ?? "no-session"} className="relative flex-1 -mt-10">
+    <Conversation key={sessionId ?? "no-session"} contextRef={stickRef} className="relative flex-1 -mt-10">
       <ConversationContent className="mx-auto w-full max-w-3xl">
-        {messages.map((msg, index) => {
+        {startIndex > 0 && (
+          // key pela janela: cada carga remonta o observador, que reavalia na
+          // hora se o topo continua perto (rolagem rápida pede mais de uma)
+          <EarlierMessages key={messages[startIndex].id} hiddenCount={startIndex} onLoad={loadEarlier} paused={autoLoadPaused} />
+        )}
+        {visibleMessages.map((msg, visibleIndex) => {
+          // Índice no histórico inteiro: separador de data e retry olham a
+          // mensagem anterior de verdade, montada ou não.
+          const index = startIndex + visibleIndex
           const showSeparator = isNewDay(messages[index - 1]?.createdAt, msg.createdAt)
 
           if (msg.summary) {

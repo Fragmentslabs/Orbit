@@ -6,20 +6,7 @@ import type { ChatMessage } from "@shared/chat"
 import { Button } from "@/components/ui/button"
 import { messageText } from "@/src/lib/message-utils"
 import { useChatSearchStore } from "@/src/stores/chat-search-store"
-
-function scrollToMessage(id: string) {
-  const el = document.querySelector<HTMLElement>(`[data-msg-id="${id}"]`)
-  if (!el) return
-  el.scrollIntoView({ behavior: "smooth", block: "center" })
-  const prevBg = el.style.backgroundColor
-  const prevTransition = el.style.transition
-  el.style.transition = "background-color 0.4s ease"
-  el.style.backgroundColor = "var(--accent)"
-  setTimeout(() => {
-    el.style.backgroundColor = prevBg
-    setTimeout(() => { el.style.transition = prevTransition }, 400)
-  }, 700)
-}
+import { scrollToMessage } from "@/src/lib/message-jump"
 
 export function ChatMessageSearchBar({ messages }: { messages: ChatMessage[] }) {
   const { t } = useTranslation()
@@ -44,7 +31,7 @@ export function ChatMessageSearchBar({ messages }: { messages: ChatMessage[] }) 
 
   useEffect(() => {
     const current = matches[matchIndex]
-    if (current) scrollToMessage(current.id)
+    if (current) void scrollToMessage(current.id)
   }, [matches, matchIndex])
 
   const goNext = () => matches.length > 0 && setMatchIndex((i) => (i + 1) % matches.length)
@@ -57,7 +44,7 @@ export function ChatMessageSearchBar({ messages }: { messages: ChatMessage[] }) 
       const d = new Date(m.createdAt)
       return d.getFullYear() === year && d.getMonth() === month - 1 && d.getDate() === day
     })
-    if (hit) scrollToMessage(hit.id)
+    if (hit) void scrollToMessage(hit.id)
   }
 
   return (

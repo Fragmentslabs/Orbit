@@ -771,7 +771,9 @@
       ]
     },
     "summaryCard": "Summary of earlier messages (compacted context)",
-    "brokenMessage": "This message could not be displayed."
+    "brokenMessage": "This message could not be displayed.",
+    "earlierMessages_one": "Show {{count}} earlier message",
+    "earlierMessages_other": "Show {{count}} earlier messages"
   },
   "usage": {
     "inputIn": "{{count}} in",

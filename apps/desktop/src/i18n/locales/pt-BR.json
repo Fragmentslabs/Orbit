@@ -771,7 +771,9 @@
       ]
     },
     "summaryCard": "Resumo das mensagens anteriores (contexto compactado)",
-    "brokenMessage": "Não foi possível mostrar esta mensagem."
+    "brokenMessage": "Não foi possível mostrar esta mensagem.",
+    "earlierMessages_one": "Mostrar {{count}} mensagem anterior",
+    "earlierMessages_other": "Mostrar {{count}} mensagens anteriores"
   },
   "usage": {
     "inputIn": "{{count}} de entrada",
