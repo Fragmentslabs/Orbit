@@ -553,7 +553,7 @@ export function PromptInput({
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
-            className="py-1.5 mb-1"
+            className="pt-1.5 pb-3 mb-1"
             style={{ borderBottomWidth: 1, borderBottomColor: tokens.border }}
             contentContainerStyle={{ gap: 8 }}
           >
