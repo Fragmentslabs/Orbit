@@ -1,5 +1,6 @@
 import { stepCountIs, streamText, type ToolSet } from 'ai'
 import type { Esteira, FaseConfig, Task } from '@shared/esteira'
+import { anotacoesDaRodada, devolucaoDaRodada, rodadaDaTask } from '@shared/esteira'
 import { getProvider, modelSupportsVision } from '../catalog'
 import { classificarComando, mensagemBloqueio } from './command-policy'
 import { extrairAnotacao, extrairCommit } from './contrato'
@@ -191,10 +192,31 @@ function faseValidadora(fases: FaseConfig[]): number {
  * cada fase recebe a lista completa do pipeline para saber o que é dela e o que
  * deve deixar para a próxima.
  */
-function montarMensagem(ctx: ContextoFase): string {
+export function montarMensagem(ctx: ContextoFase): string {
   const partes: string[] = []
   partes.push(`# Task: ${ctx.task.titulo}`)
   if (ctx.task.descricao.trim()) partes.push(ctx.task.descricao.trim())
+
+  // Rodada de revisão: o comentário do usuário vem logo depois do brief, com
+  // prioridade sobre ele — é a razão de a task estar rodando de novo.
+  const rodada = rodadaDaTask(ctx.task)
+  const devolucao = devolucaoDaRodada(ctx.task, rodada)
+  if (devolucao) {
+    const anterioresDevolucoes = (ctx.task.devolucoes ?? []).filter((d) => d.rodada < rodada)
+    partes.push(
+      `\n## Review feedback (round ${rodada})\n` +
+        `The user reviewed the previous round and sent the task back with the feedback below. ` +
+        `It takes priority over the original description wherever they conflict. ` +
+        `The repository already contains the previous round's work: fix and adjust it — do not redo the task from scratch.\n\n` +
+        devolucao.texto,
+    )
+    if (anterioresDevolucoes.length > 0) {
+      partes.push(
+        `Earlier review feedback (already addressed in previous rounds):\n` +
+          anterioresDevolucoes.map((d) => `- Round ${d.rodada}: ${d.texto.replace(/\s+/g, ' ').slice(0, 300)}`).join('\n'),
+      )
+    }
+  }
 
   const fases = ctx.esteira.fases
   const indice = ctx.indiceFase
@@ -207,7 +229,7 @@ function montarMensagem(ctx: ContextoFase): string {
 
   partes.push(
     `\n## Pipeline\n` +
-      `This task runs through ${fases.length} phases in a fixed order, without going back. You are phase ${indice + 1}: **${ctx.fase.nome}**.\n\n` +
+      `This task runs through ${fases.length} phases in a fixed order, without going back${rodada > 1 ? ` (this is review round ${rodada})` : ''}. You are phase ${indice + 1}: **${ctx.fase.nome}**.\n\n` +
       `${listaFases}\n\n` +
       `Each phase does only its own job. Do NOT do the work of a later phase — leave it to them.\n\n` +
       `The task description above is your PRIMARY brief. Its instructions OVERRIDE this phase's default behavior wherever they conflict — including how to commit, whether to commit, how to validate, etc. ` +
@@ -226,14 +248,28 @@ function montarMensagem(ctx: ContextoFase): string {
     )
   }
 
-  const anteriores = ctx.task.anotacoes.filter((a) => a.status !== 'pulada')
+  // Só as notas desta rodada entram inteiras; da rodada anterior vai o
+  // resumo da última fase. Reenviar o histórico todo a cada rodada encarece
+  // e mistura o que já foi corrigido com o que vale agora.
+  const daRodada = anotacoesDaRodada(ctx.task, rodada)
+  if (rodada > 1) {
+    const resumoAnterior = anotacoesDaRodada(ctx.task, rodada - 1)
+      .filter((a) => a.status !== 'pulada')
+      .at(-1)
+    if (resumoAnterior) {
+      partes.push(
+        `\n## Previous round summary (round ${rodada - 1}, ${resumoAnterior.faseNome})\n${resumoAnterior.conteudo.slice(0, 3000)}`,
+      )
+    }
+  }
+  const anteriores = daRodada.filter((a) => a.status !== 'pulada')
   if (anteriores.length > 0) {
-    partes.push('\n## Notes from previous phases')
+    partes.push(rodada > 1 ? `\n## Notes from previous phases (this round)` : '\n## Notes from previous phases')
     for (const a of anteriores) {
       partes.push(`### ${a.faseNome} (${a.status})\n${a.conteudo}`)
     }
   }
-  const puladas = ctx.task.anotacoes.filter((a) => a.status === 'pulada')
+  const puladas = daRodada.filter((a) => a.status === 'pulada')
   if (puladas.length > 0) {
     partes.push(
       `\n## Skipped phases\n${puladas.map((a) => `- ${a.faseNome}`).join('\n')}\nThe task was started directly at a later phase — do not assume that work was done.`,

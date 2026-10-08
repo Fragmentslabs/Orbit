@@ -49,6 +49,7 @@ interface EsteiraState {
   iniciarTask: (esteiraId: string, taskId: string, fase?: number) => Promise<void>
   pausarTask: (esteiraId: string, taskId: string) => Promise<void>
   retomarTask: (esteiraId: string, taskId: string) => Promise<void>
+  devolverTask: (esteiraId: string, taskId: string, texto: string, fase?: number) => Promise<void>
   alternarFila: (esteiraId: string, ligar: boolean) => Promise<void>
 
   tasksDe: (esteiraId: string) => Task[]
@@ -248,6 +249,9 @@ export const useEsteiraStore = create<EsteiraState>((set, get) => ({
   },
   retomarTask: async (esteiraId, taskId) => {
     await esteiraApi.retomarTask(esteiraId, taskId)
+  },
+  devolverTask: async (esteiraId, taskId, texto, fase) => {
+    await esteiraApi.devolverTask(esteiraId, taskId, texto, fase)
   },
   alternarFila: async (esteiraId, ligar) => {
     const estado = await esteiraApi.ligarFila(esteiraId, ligar)

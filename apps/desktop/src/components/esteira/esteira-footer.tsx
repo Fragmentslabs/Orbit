@@ -22,6 +22,9 @@ export function EsteiraFooter({ esteira, tasks }: { esteira: Esteira; tasks: Tas
       custo += task.custo
       tempo += task.tempoTrabalhoMs
       for (const anotacao of task.anotacoes) if (anotacao.commitHash) commits.add(anotacao.commitHash)
+      // Commits finais do engine (rodada atual e anteriores), como no relatório
+      if (task.commitFinalHash) commits.add(task.commitFinalHash)
+      for (const hash of task.commitsAnteriores ?? []) commits.add(hash)
     }
     return {
       concluidas: tasks.filter((t) => t.status === "concluida").length,

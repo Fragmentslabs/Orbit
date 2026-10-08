@@ -172,6 +172,22 @@ export interface AnotacaoFase {
   custo: number
   iniciadoEm: string
   concluidoEm: string
+  /** Rodada em que a anotação foi escrita (ausente = 1, anterior às rodadas) */
+  rodada?: number
+}
+
+/**
+ * Revisão do usuário que devolveu uma task concluída para a esteira. Cada
+ * devolução abre uma rodada nova (a primeira abre a rodada 2).
+ */
+export interface Devolucao {
+  /** Rodada que esta devolução abre */
+  rodada: number
+  /** O que o usuário quer corrigido — instrução prioritária da rodada */
+  texto: string
+  /** Índice da fase por onde a rodada recomeça */
+  faseInicial: number
+  criadoEm: string
 }
 
 export interface Task {
@@ -212,6 +228,12 @@ export interface Task {
   commitFalha?: string
   /** Hash do commit final criado pelo engine (commitAoFinal ligado). */
   commitFinalHash?: string
+  /** Rodada atual (ausente = 1). Sobe a cada devolução. */
+  rodada?: number
+  /** Devoluções em ordem — o histórico de revisões da task */
+  devolucoes?: Devolucao[]
+  /** Commits finais das rodadas anteriores (o da rodada atual é commitFinalHash) */
+  commitsAnteriores?: string[]
   /** Origem da task, quando criada pelo agente a partir de um chat */
   origemSessionId?: string
   /**
@@ -231,6 +253,21 @@ export interface Task {
     arquivos: string[]
     patch: string
   }
+}
+
+/** Rodada atual da task (tasks anteriores às rodadas contam como 1). */
+export function rodadaDaTask(task: Pick<Task, 'rodada'>): number {
+  return task.rodada ?? 1
+}
+
+/** Anotações escritas numa rodada. */
+export function anotacoesDaRodada(task: Pick<Task, 'anotacoes'>, rodada: number): AnotacaoFase[] {
+  return task.anotacoes.filter((a) => (a.rodada ?? 1) === rodada)
+}
+
+/** Devolução que abriu a rodada (undefined na rodada 1). */
+export function devolucaoDaRodada(task: Pick<Task, 'devolucoes'>, rodada: number): Devolucao | undefined {
+  return task.devolucoes?.find((d) => d.rodada === rodada)
 }
 
 // ─── Relatório ───────────────────────────────────────────────────────────────

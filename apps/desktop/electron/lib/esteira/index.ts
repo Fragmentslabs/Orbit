@@ -12,6 +12,7 @@ import {
   atualizarTaskCampos,
   criarTask,
   desligarFila,
+  devolverTask,
   emitir,
   filaLigada,
   iniciarTask,
@@ -44,6 +45,7 @@ export {
   iniciarTask,
   pausarTask,
   retomarTask,
+  devolverTask,
   removerTask,
   atualizarTaskCampos,
   ligarFila,
@@ -275,6 +277,7 @@ export async function relatorio(esteiraId: string): Promise<RelatorioEsteira> {
     // Commit final do engine (commitAoFinal): hash fora da fase — entra no
     // relatório junto com os commits feitos pelas fases.
     if (task.commitFinalHash) commits.add(task.commitFinalHash)
+    for (const hash of task.commitsAnteriores ?? []) commits.add(hash)
   }
   return {
     esteiraId,

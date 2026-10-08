@@ -1720,6 +1720,9 @@ app.whenReady().then(() => {
   ipcMain.handle('esteira:retomarTask', (_e, esteiraId: string, taskId: string) =>
     esteira.retomarTask(esteiraId, taskId),
   )
+  ipcMain.handle('esteira:devolverTask', (_e, esteiraId: string, taskId: string, texto: string, fase?: number) =>
+    esteira.devolverTask(esteiraId, taskId, texto, fase ?? 0),
+  )
   ipcMain.handle('esteira:ligarFila', (_e, esteiraId: string, ligar: boolean) => {
     if (ligar) esteira.ligarFila(esteiraId)
     else esteira.desligarFila(esteiraId)

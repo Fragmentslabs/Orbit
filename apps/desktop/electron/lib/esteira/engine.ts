@@ -2,7 +2,13 @@ import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 import { generateText } from 'ai'
 import type { AnotacaoFase, Esteira, EsteiraEvent, Projeto, Task } from '@shared/esteira'
-import { ESTEIRA_COMMIT_PROMPT_PADRAO, ESTEIRA_RETRY_PADRAO } from '@shared/esteira'
+import {
+  ESTEIRA_COMMIT_PROMPT_PADRAO,
+  ESTEIRA_RETRY_PADRAO,
+  anotacoesDaRodada,
+  devolucaoDaRodada,
+  rodadaDaTask,
+} from '@shared/esteira'
 import type { SendMessageInput } from '@shared/chat'
 import { capture, diff } from '../snapshot'
 import { userShellEnv } from '../shell-env'
@@ -27,6 +33,11 @@ const execFileAsync = promisify(execFile)
  * não existe voltar nem pular automático. A única entrada fora da fase 1 é o
  * início manual por drag, e ainda assim as fases anteriores ficam registradas
  * como "pulada" — o histórico nunca finge que elas rodaram.
+ *
+ * Rodadas: uma task concluída pode ser DEVOLVIDA pelo usuário com um
+ * comentário (devolverTask). Isso abre uma rodada nova, que percorre a
+ * esteira de novo em cima do trabalho já feito — o linear vale dentro de cada
+ * rodada.
  */
 
 /** Execuções vivas por task: permite pausar/abortar e evita rodar duas vezes. */
@@ -186,8 +197,11 @@ async function rodarTask(esteiraId: string, taskId: string, retomandoInterrompid
         indiceFase: indice,
         pastas: projeto.pastas,
         tentativa: 1,
-        // Só na primeira fase depois de retomar: a interrupção foi nela.
-        interrompidaAntes: retomandoInterrompida && task.anotacoes.length === indice,
+        // Só na fase em que a interrupção aconteceu: a que ainda não tem
+        // anotação nesta rodada.
+        interrompidaAntes:
+          retomandoInterrompida &&
+          !anotacoesDaRodada(task, rodadaDaTask(task)).some((a) => a.faseId === fase.id),
         abort: controller.signal,
         ...progresso(indice),
       })
@@ -221,6 +235,7 @@ async function rodarTask(esteiraId: string, taskId: string, retomandoInterrompid
         custo: resultado.custo,
         iniciadoEm,
         concluidoEm: agora(),
+        rodada: rodadaDaTask(task),
       }
 
       if (resultado.erro) {
@@ -562,7 +577,17 @@ function montarPromptCommit(ctx: {
   const listaFases = fases.map((f) => `${f.nome} — ${f.descricao}`).join('\n')
   partes.push(`\n## Pipeline\nThis task ran through ${fases.length} phases:\n${listaFases}`)
 
-  const anteriores = ctx.task.anotacoes.filter((a) => a.status !== 'pulada')
+  // Rodada de revisão: o commit descreve a CORREÇÃO pedida pelo usuário, com
+  // as notas desta rodada (as anteriores já foram commitadas nas suas rodadas).
+  const rodada = rodadaDaTask(ctx.task)
+  const devolucao = devolucaoDaRodada(ctx.task, rodada)
+  if (devolucao) {
+    partes.push(
+      `\n## Review round ${rodada}\nThe user reviewed the previous round and sent the task back with this feedback — this commit is the fix for it:\n${devolucao.texto}`,
+    )
+  }
+
+  const anteriores = anotacoesDaRodada(ctx.task, rodada).filter((a) => a.status !== 'pulada')
   if (anteriores.length > 0) {
     partes.push('\n## Notes from the phases')
     for (const a of anteriores) {
@@ -739,6 +764,61 @@ export async function pausarTask(esteiraId: string, taskId: string): Promise<voi
       ? { ...t, status: 'pausada', pausaMotivo: 'manual', faseInterrompida: !!controller }
       : t,
   )
+}
+
+/**
+ * Devolve uma task concluída para a esteira com o comentário do usuário,
+ * abrindo uma rodada nova a partir de `faseInicial`.
+ *
+ * A rodada roda em cima do trabalho já feito (mesma pasta) e o diff da task
+ * continua acumulado desde o início — é o que interessa para revisar. As fases
+ * antes de `faseInicial` não viram 'pulada': o trabalho delas existe, da rodada
+ * anterior. Devolução é manual: não entra na fila automática.
+ */
+export async function devolverTask(
+  esteiraId: string,
+  taskId: string,
+  texto: string,
+  faseInicial = 0,
+): Promise<void> {
+  const comentario = texto.trim()
+  if (!comentario) throw new Error('O comentário da devolução é obrigatório.')
+  const contexto = await carregarContexto(esteiraId)
+  if (!contexto) return
+  const ultima = contexto.esteira.fases.length - 1
+  if (ultima < 0) throw new Error('A esteira não tem fases.')
+  const inicio = Math.min(Math.max(0, Math.trunc(faseInicial)), ultima)
+
+  await pararEsperando(taskId)
+  let devolvida = false
+  await persistir(esteiraId, taskId, (t) => {
+    // Só task concluída e parada: devolver no meio de uma execução misturaria
+    // as anotações de duas rodadas.
+    if (t.status !== 'concluida' || emExecucao.has(t.id)) return t
+    devolvida = true
+    const rodada = rodadaDaTask(t) + 1
+    return {
+      ...t,
+      rodada,
+      devolucoes: [...(t.devolucoes ?? []), { rodada, texto: comentario, faseInicial: inicio, criadoEm: agora() }],
+      status: 'em_progresso',
+      faseAtual: inicio,
+      pausaMotivo: undefined,
+      erro: undefined,
+      faseInterrompida: undefined,
+      commitFalha: undefined,
+      pushFalha: undefined,
+      // O commit final da rodada que terminou continua no histórico (relatório).
+      commitsAnteriores: t.commitFinalHash
+        ? [...(t.commitsAnteriores ?? []), t.commitFinalHash]
+        : t.commitsAnteriores,
+      commitFinalHash: undefined,
+      concluidoEm: undefined,
+      auto: undefined,
+    }
+  })
+  if (!devolvida) throw new Error('Só uma task concluída pode ser devolvida.')
+  void executarTask(esteiraId, taskId)
 }
 
 /** Retomar reinicia a MESMA fase e zera o contador de retries (§9.5). */

@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
-import { AlertTriangleIcon, CheckIcon, FileDiffIcon, LoaderIcon, PauseIcon, PlayIcon, PlusIcon, Trash2Icon, XIcon } from "lucide-react"
+import { AlertTriangleIcon, CheckIcon, CornerUpLeftIcon, FileDiffIcon, LoaderIcon, MessageSquareQuoteIcon, PauseIcon, PlayIcon, PlusIcon, Trash2Icon, XIcon } from "lucide-react"
 import type { Esteira, Task } from "@shared/esteira"
+import { anotacoesDaRodada, devolucaoDaRodada, rodadaDaTask } from "@shared/esteira"
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { ConfirmDialog } from "@/components/ui/alert-dialog"
@@ -12,6 +13,7 @@ import { Shimmer } from "@/src/components/ai/shimmer"
 import { BrowserTestChip } from "@/src/components/browser-test-chip"
 import { MediaEmbed } from "./media-embed"
 import { ListaTasksBuscavel } from "./task-picker"
+import { DevolverTaskDialog } from "./devolver-task-dialog"
 import { SEM_TASKS, useEsteiraStore } from "@/src/stores/esteira-store"
 import { usePanelStore } from "@/src/stores/panel-store"
 import { cn } from "@/lib/utils"
@@ -46,6 +48,14 @@ export function TaskModal({
   const [adicionandoDep, setAdicionandoDep] = useState(false)
   const [erroDep, setErroDep] = useState<string | null>(null)
   const [confirmandoExclusao, setConfirmandoExclusao] = useState(false)
+  const [devolvendo, setDevolvendo] = useState(false)
+  const rodadaAtual = task ? rodadaDaTask(task) : 1
+  // Rodada exibida nas abas de fase: a atual por padrão; as anteriores ficam a
+  // um clique, com o comentário que abriu cada uma.
+  const [rodadaVista, setRodadaVista] = useState(1)
+  useEffect(() => {
+    setRodadaVista(rodadaAtual)
+  }, [task?.id, rodadaAtual])
 
   useEffect(() => {
     if (!task) return
@@ -59,9 +69,9 @@ export function TaskModal({
 
   const anotacaoPorFase = useMemo(() => {
     const mapa = new Map<string, Task["anotacoes"][number]>()
-    for (const anotacao of task?.anotacoes ?? []) mapa.set(anotacao.faseId, anotacao)
+    if (task) for (const anotacao of anotacoesDaRodada(task, rodadaVista)) mapa.set(anotacao.faseId, anotacao)
     return mapa
-  }, [task?.anotacoes])
+  }, [task, rodadaVista])
 
   // +/- do patch, como no rodapé das mensagens do chat
   const linhasDoDiff = useMemo(() => {
@@ -77,6 +87,8 @@ export function TaskModal({
   if (!task) return null
 
   const comErro = task.pausaMotivo === "erro"
+  const naRodadaAtual = rodadaVista === rodadaAtual
+  const devolucaoVista = devolucaoDaRodada(task, rodadaVista)
   const dependencias = task.dependeDe
     .map((id) => tasks.find((t) => t.id === id))
     .filter((t): t is Task => !!t)
@@ -188,10 +200,44 @@ export function TaskModal({
               <MediaEmbed texto={descricao} />
             </div>
 
+            {/* Rodadas: só aparecem depois da primeira devolução. Cada uma
+                mostra o comentário que a abriu e as anotações dela. */}
+            {rodadaAtual > 1 && (
+              <div className="space-y-2">
+                <div className="flex flex-wrap items-center gap-1">
+                  {Array.from({ length: rodadaAtual }, (_, i) => i + 1).map((n) => (
+                    <button
+                      key={n}
+                      type="button"
+                      onClick={() => setRodadaVista(n)}
+                      className={cn(
+                        "rounded-full border px-2 py-0.5 text-[11px] transition-colors",
+                        rodadaVista === n
+                          ? "border-primary/40 bg-primary/10 text-primary"
+                          : "text-muted-foreground hover:bg-accent hover:text-foreground",
+                      )}
+                    >
+                      {t("esteira.rodada", { rodada: n })}
+                    </button>
+                  ))}
+                </div>
+                {devolucaoVista && (
+                  <div className="rounded-md border border-violet-500/30 bg-violet-500/5 px-2.5 py-2">
+                    <p className="mb-1 flex items-center gap-1.5 text-[11px] font-medium text-violet-600 dark:text-violet-400">
+                      <MessageSquareQuoteIcon className="size-3.5" />
+                      {t("esteira.comentarioRevisao")}
+                      <span className="font-normal text-muted-foreground">· {dataCurta(devolucaoVista.criadoEm)}</span>
+                    </p>
+                    <p className="whitespace-pre-wrap break-words text-xs text-foreground">{devolucaoVista.texto}</p>
+                  </div>
+                )}
+              </div>
+            )}
+
             <div className="flex shrink-0 gap-1 overflow-x-auto border-b">
               {esteira.fases.map((fase, indice) => {
                 const anotacao = anotacaoPorFase.get(fase.id)
-                const executando = task.status === "em_progresso" && task.faseAtual === indice
+                const executando = naRodadaAtual && task.status === "em_progresso" && task.faseAtual === indice
                 return (
                   <button
                     key={fase.id}
@@ -223,12 +269,19 @@ export function TaskModal({
                   const anotacao = fase ? anotacaoPorFase.get(fase.id) : undefined
                   // Fase em execução: mostra o agente rodando ao vivo (pensamento,
                   // ferramentas, browser) em vez do placeholder.
-                  const executando = fase && task.status === "em_progresso" && task.faseAtual === faseAtiva
+                  const executando = fase && naRodadaAtual && task.status === "em_progresso" && task.faseAtual === faseAtiva
                   if (executando) {
                     return <ExecucaoViva taskId={task.id} faseIndice={faseAtiva} />
                   }
                   if (!anotacao) {
-                    return <p className="text-xs text-muted-foreground">{t("esteira.semAnotacao")}</p>
+                    // Rodada que recomeçou numa fase posterior: as anteriores
+                    // não rodaram nela (o trabalho delas é da rodada anterior).
+                    const naoRodou = devolucaoVista && faseAtiva < devolucaoVista.faseInicial
+                    return (
+                      <p className="text-xs text-muted-foreground">
+                        {naoRodou ? t("esteira.naoRodouNaRodada") : t("esteira.semAnotacao")}
+                      </p>
+                    )
                   }
                   return (
                     <>
@@ -330,7 +383,13 @@ export function TaskModal({
                   : void iniciarTask(esteira.id, task.id)
               }
             />
-          ) : null}
+          ) : (
+            <BotaoAcao
+              icone={<CornerUpLeftIcon className="size-3.5" />}
+              rotulo={t("esteira.devolver")}
+              onClick={() => setDevolvendo(true)}
+            />
+          )}
           <button
             type="button"
             onClick={() => setConfirmandoExclusao(true)}
@@ -340,6 +399,8 @@ export function TaskModal({
             {t("esteira.excluirTask")}
           </button>
         </div>
+
+        <DevolverTaskDialog task={task} esteira={esteira} aberto={devolvendo} onOpenChange={setDevolvendo} />
 
         <ConfirmDialog
           open={confirmandoExclusao}

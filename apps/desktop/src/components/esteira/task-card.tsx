@@ -1,8 +1,9 @@
 import { useDraggable } from "@dnd-kit/core"
 import { useEffect, useState } from "react"
 import { useTranslation } from "react-i18next"
-import { AlertTriangleIcon, ClockIcon, GlobeIcon, Loader2Icon, PauseIcon, PlayIcon } from "lucide-react"
+import { AlertTriangleIcon, ClockIcon, CornerUpLeftIcon, GlobeIcon, Loader2Icon, PauseIcon, PlayIcon } from "lucide-react"
 import type { Esteira, Task } from "@shared/esteira"
+import { rodadaDaTask } from "@shared/esteira"
 import { cn } from "@/lib/utils"
 import { AGENT_BROWSER_FRESH_MS, usePanelStore } from "@/src/stores/panel-store"
 
@@ -32,6 +33,7 @@ export function TaskCard({
   onIniciar,
   onPausar,
   onRetomar,
+  onDevolver,
 }: {
   task: Task
   esteira: Esteira
@@ -44,6 +46,8 @@ export function TaskCard({
   onIniciar: () => void
   onPausar: () => void
   onRetomar: () => void
+  /** Task concluída: abre a devolução com comentário (rodada nova) */
+  onDevolver: () => void
 }) {
   const { t } = useTranslation()
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
@@ -54,6 +58,7 @@ export function TaskCard({
   const emExecucao = task.status === "em_progresso"
   const comErro = task.pausaMotivo === "erro"
   const faseNome = task.faseAtual != null ? esteira.fases[task.faseAtual]?.nome : undefined
+  const rodada = rodadaDaTask(task)
 
   // Browser do agente da task em uso (em segundo plano) — mesma mecânica do
   // chip "testando…" do chat: tick de 2s para o indicador sumir ao expirar.
@@ -106,10 +111,30 @@ export function TaskCard({
           >
             <PlayIcon className="size-3" />
           </button>
-        ) : null}
+        ) : (
+          <button
+            type="button"
+            title={t("esteira.devolver")}
+            onClick={(e) => {
+              e.stopPropagation()
+              onDevolver()
+            }}
+            className="flex size-5 shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-accent hover:text-foreground"
+          >
+            <CornerUpLeftIcon className="size-3" />
+          </button>
+        )}
       </div>
 
       <div className="mt-1.5 flex flex-wrap items-center gap-1.5 text-[10px] text-muted-foreground">
+        {rodada > 1 && (
+          <span
+            title={t("esteira.rodadaTitulo", { rodada })}
+            className="rounded-full bg-violet-500/10 px-1.5 py-0.5 font-medium text-violet-600 dark:text-violet-400"
+          >
+            {t("esteira.rodadaCurta", { rodada })}
+          </span>
+        )}
         {aguardandoTitulo && (
           <span
             title={t("esteira.aguardandoTitulo", { titulo: aguardandoTitulo })}
