@@ -447,7 +447,9 @@ async function handleRequest(client: ConnectedClient, requestId: string, req: Co
         ])
         sendResponse(ws, requestId, true, {
           planReview: planReview ?? undefined,
-          plan: plan ?? undefined,
+          // Plano dispensado no chat não volta como card — a leitura é a mesma do
+          // desktop, então a marca vale para os dois apps.
+          plan: plan?.dismissed ? undefined : plan ?? undefined,
           pendingAsks: pendingAsks ?? [],
         } satisfies SessionStateResponse)
         break

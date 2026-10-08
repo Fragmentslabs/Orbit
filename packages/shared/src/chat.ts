@@ -567,6 +567,11 @@ export interface OrchestrationPlan {
   status: "proposed" | "approved" | "running" | "done" | "rejected"
   /** Tokens/custo acumulados: planejamento + workers + síntese */
   usage?: TokenUsage
+  /** Card fechado pelo usuário. O plano CONTINUA guardado — tarefas, prompts e
+   *  uso acumulado são histórico e contexto do orquestrador se a conversa
+   *  continuar; a marca só diz que o card não deve voltar a aparecer. Plano novo
+   *  grava por cima e não herda a marca. */
+  dismissed?: boolean
 }
 
 export interface WorkerModelConfig {

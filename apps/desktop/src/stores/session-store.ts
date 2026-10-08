@@ -401,7 +401,9 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     // ao selectSession, o card de plano nao voltava ao reabrir o app.
     if (get().orchestration[sessionId] === undefined) {
       const plan = await storage.read<OrchestrationPlan>(StorageKeys.orchestration(sessionId))
-      if (plan) set((state) => ({ orchestration: { ...state.orchestration, [sessionId]: plan } }))
+      // Dispensado não vira card de novo (o arquivo fica: é histórico do
+      // orquestrador), e plano novo grava por cima sem a marca.
+      if (plan && !plan.dismissed) set((state) => ({ orchestration: { ...state.orchestration, [sessionId]: plan } }))
     }
     if (get().planReviews[sessionId] === undefined) {
       const review = await storage.read<PlanReview>(StorageKeys.planReview(sessionId))
@@ -449,12 +451,23 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     void chatApi.rejectPlan(sessionId)
   },
 
+  /** Fecha o card do plano concluído — em definitivo. A marca vai para o
+   *  ARQUIVO (o ensureMessages relê o plano ao abrir a sessão, então tirar só da
+   *  memória fazia o card voltar a cada reabertura), mas o plano NÃO é apagado:
+   *  tarefas, prompts e uso acumulado são histórico e contexto do orquestrador
+   *  se a conversa continuar. Um plano novo grava por cima sem a marca. */
   dismissOrchestration: (sessionId: string) => {
     set((state) => {
       const next = { ...state.orchestration }
       delete next[sessionId]
       return { orchestration: next }
     })
+    // Ler-marcar-gravar: só o campo `dismissed` muda, o resto do plano fica.
+    void (async () => {
+      const plan = await storage.read<OrchestrationPlan>(StorageKeys.orchestration(sessionId))
+      if (!plan || plan.dismissed) return
+      await storage.write(StorageKeys.orchestration(sessionId), { ...plan, dismissed: true })
+    })()
   },
 
   acceptPlanReview: (sessionId, permissionMode, orchestrate) => {
@@ -1024,9 +1037,10 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     }
     const orch = get().orchestration[sessionId!]
     if (orch && orch.status === "done") {
-      const next = { ...get().orchestration }
-      delete next[sessionId!]
-      set({ orchestration: next })
+      // Mesma porta do X do card: mensagem nova depois do plano concluído tira o
+      // card em definitivo — marcando no arquivo, sem apagar o plano (ver
+      // dismissOrchestration).
+      get().dismissOrchestration(sessionId!)
     }
 
     // Se está enviando em plan mode, marca para criar a review quando o streaming terminar
