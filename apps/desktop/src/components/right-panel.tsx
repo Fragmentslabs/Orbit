@@ -319,6 +319,15 @@ function SelectorScreen({ onSelect, onOpenWorker }: {
   // a aba de processo aberta aqui precisa cair no mesmo balde que o resto.
   const bucketKey = activeId ?? ORPHAN_KEY
 
+  // Só os processos DESTA conversa. O store é compartilhado — o browser do painel
+  // e a aba de processo também o alimentam, cada um com o seu escopo — então
+  // filtrar na hora de desenhar é o que garante que o rodapé não mostre processo
+  // de outro chat mesmo com a lista trocada por outro consumidor.
+  const ownProcesses = useMemo(
+    () => (activeId ? processes.filter((p) => p.sessionId === activeId) : []),
+    [processes, activeId],
+  )
+
   const workers = useMemo(
     () => sessions.filter((s) => s.parentId === activeId),
     [sessions, activeId],
@@ -332,10 +341,13 @@ function SelectorScreen({ onSelect, onOpenWorker }: {
     [mode, tabMeta],
   )
 
-  // Footer escopado por sessão: só processos iniciados pelo chat ativo.
+  // Footer escopado por sessão: só processos iniciados pelo chat ativo. Sem chat
+  // ativo (chat novo) não há processo desta conversa para buscar — e buscar sem
+  // escopo traz os de todos os chats, cada um com o seu dono.
   useEffect(() => {
-    fetchProcesses(activeId ?? undefined)
-    const interval = setInterval(() => fetchProcesses(activeId ?? undefined), 3_000)
+    if (!activeId) return
+    fetchProcesses(activeId)
+    const interval = setInterval(() => fetchProcesses(activeId), 3_000)
     return () => clearInterval(interval)
   }, [fetchProcesses, activeId])
 
@@ -390,10 +402,10 @@ function SelectorScreen({ onSelect, onOpenWorker }: {
         )}
       </div>
 
-      {processes.length > 0 && (
+      {ownProcesses.length > 0 && (
         <div className="border-t border-sidebar-border">
           <div className="flex gap-2 overflow-x-auto px-3 py-2">
-            {processes.map((p) => (
+            {ownProcesses.map((p) => (
               <div
                 key={p.pid}
                 role="button"

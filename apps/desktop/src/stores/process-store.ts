@@ -9,10 +9,24 @@ interface ProcessStore {
   kill: (pid: number, sessionId?: string) => Promise<void>
 }
 
-export const useProcessStore = create<ProcessStore>((set) => ({
+export const useProcessStore = create<ProcessStore>((set, get) => ({
   processes: [],
 
+  /**
+   * Os processos de UMA sessão.
+   *
+   * Sem sessão não existe "todos": quem chama sem escopo quer a lista da própria
+   * conversa, e a conversa ainda não existe (chat novo). O main, sem filtro,
+   * devolve os processos de TODO mundo — foi assim que o dev server de um chat
+   * de código apareceu no rodapé de um chat comum.
+   */
   fetch: async (sessionId?: string) => {
+    if (!sessionId) {
+      // Limpa o que ficou de outro chat. Condicional de propósito: um set() a
+      // cada poll (3s) com um array novo re-renderizaria o painel sem motivo.
+      if (get().processes.length > 0) set({ processes: [] })
+      return
+    }
     const processes = await processApi.list(sessionId)
     set({ processes })
   },
