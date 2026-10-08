@@ -638,6 +638,9 @@ export function ChatView({ sessionId, embedded = false }: { sessionId?: string; 
     hasChat ? (isBusy ? "thinking" : "idle") : "asleep",
   )
   const [topVisible, setTopVisible] = useState(hasChat)
+  /** Opacidade da persona do topo, separada da montagem: na saída ela some com
+   *  fade e só desmonta depois, quando a animação de dormir terminou. */
+  const [topOpaque, setTopOpaque] = useState(hasChat)
   const [centerVisible, setCenterVisible] = useState(!hasChat)
   const [centerPersonaVisible, setCenterPersonaVisible] = useState(!hasChat)
   const [chatVisible, setChatVisible] = useState(hasChat)
@@ -666,29 +669,46 @@ export function ChatView({ sessionId, embedded = false }: { sessionId?: string; 
     const timers: ReturnType<typeof setTimeout>[] = []
 
     if (hasChat && !wasChatting) {
-      // Entrando no chat: espera centro sair antes de mostrar mensagens
+      // Entrando no chat: o caminho da saída, ao contrário e nos mesmos tempos —
+      // o centro fecha (50ms) e sai (550ms); o topo nasce dormindo só depois
+      // que o centro terminou de fechar (650ms) e acorda 700ms depois
+      // (1350ms); as mensagens entram 150ms depois de o centro sair. Com o
+      // topo nascendo aos 300ms, ele aparecia com o centro ainda fechando — um
+      // bicho de cada lado ao mesmo tempo.
       setCenterVisible(true)
       setCenterPersonaVisible(true)
       setDisplayCenterState("idle")
       timers.push(setTimeout(() => setDisplayCenterState("asleep"), 50))
-      timers.push(setTimeout(() => { setCenterVisible(false); setCenterPersonaVisible(false) }, 700))
-      setDisplayTopState("asleep")
-      setTopVisible(true)
-      timers.push(setTimeout(() => setDisplayTopState(isBusyRef.current ? "thinking" : "idle"), 700))
-      timers.push(setTimeout(() => setChatVisible(true), 850))
-    } else if (!hasChat && wasChatting) {
-      // Saindo do chat: texto aparece, persona do centro depois
-      setChatVisible(false)
-      setDisplayTopState(isBusyRef.current ? "thinking" : "idle")
+      timers.push(setTimeout(() => { setCenterVisible(false); setCenterPersonaVisible(false) }, 550))
       timers.push(setTimeout(() => {
         setDisplayTopState("asleep")
-        timers.push(setTimeout(() => setTopVisible(false), 500))
-      }, 50))
+        setTopOpaque(true)
+        setTopVisible(true)
+      }, 650))
+      timers.push(setTimeout(() => setChatVisible(true), 700))
+      timers.push(setTimeout(() => setDisplayTopState(isBusyRef.current ? "thinking" : "idle"), 1350))
+    } else if (!hasChat && wasChatting) {
+      // Saindo do chat: a MESMA animação da entrada, com as personas trocando
+      // de papel. O topo faz o que o centro faz na entrada — dorme aos 50ms e
+      // some com fade de 300ms a partir dos 550ms (invisível aos 850ms; o fim
+      // da animação de dormir, que dura 1000ms, fica escondido no fade, como
+      // na entrada) — e só desmonta depois do fade. O centro surge de uma vez
+      // aos 650ms, dormindo, como o topo na entrada, mas acorda antes: aos
+      // 800ms em vez de 1350ms (o primeiro brilho sai ~125ms depois, quando o
+      // fade do topo acabou). Dormindo, a persona não desenha nada (medido
+      // no canvas) — ela só aparece ao acordar. Na entrada o olho está no chat
+      // e o atraso não se nota; aqui o centro é o foco da tela, e acordar aos
+      // 1350ms deixava um buraco vazio acima do texto depois de o topo sumir.
+      setChatVisible(false)
+      setDisplayTopState(isBusyRef.current ? "thinking" : "idle")
+      timers.push(setTimeout(() => setDisplayTopState("asleep"), 50))
+      timers.push(setTimeout(() => setTopOpaque(false), 550))
+      timers.push(setTimeout(() => setTopVisible(false), 900))
       setCenterVisible(true)
       setCenterPersonaVisible(false)
       setDisplayCenterState("asleep")
-      timers.push(setTimeout(() => setCenterPersonaVisible(true), 300))
-      timers.push(setTimeout(() => setDisplayCenterState("idle"), 1000))
+      timers.push(setTimeout(() => setCenterPersonaVisible(true), 650))
+      timers.push(setTimeout(() => setDisplayCenterState("idle"), 800))
     } else if (hasChat) {
       // Permanece no chat (isBusy mudou durante a transição de entrada e
       // cancelou os timers): convergem para o estado final — chat visível e
@@ -697,6 +717,11 @@ export function ChatView({ sessionId, embedded = false }: { sessionId?: string; 
       setChatVisible(true)
       setCenterVisible(false)
       setCenterPersonaVisible(false)
+      // O topo também: a entrada acima só o monta aos 650ms, e se o isBusy mudar
+      // antes disso é este ramo que termina a transição — sem esta linha a
+      // persona do topo não apareceria.
+      setTopOpaque(true)
+      setTopVisible(true)
       setDisplayTopState(isBusyRef.current ? "thinking" : "idle")
     } else {
       // Permanece sem chat (isBusy mudou durante a saída do chat) — garante
@@ -715,6 +740,7 @@ export function ChatView({ sessionId, embedded = false }: { sessionId?: string; 
       } else {
         setDisplayCenterState("idle")
       }
+      setTopOpaque(false)
       setTopVisible(false)
     }
 
@@ -790,11 +816,12 @@ export function ChatView({ sessionId, embedded = false }: { sessionId?: string; 
       <div className="relative flex-1">
         {showTopPersona && (
           <div
-            className="absolute left-1/2 z-40 -translate-x-1/2 transition-all duration-500 ease-in-out opacity-100"
+            className="absolute left-1/2 z-40 -translate-x-1/2 transition-opacity duration-300 ease-in-out"
             style={{
               top: "-1.7rem",
               width: "4rem",
               height: "4rem",
+              opacity: topOpaque ? 1 : 0,
             }}
           >
             <Persona state={topPersonaState} className="!size-full" />
@@ -809,11 +836,14 @@ export function ChatView({ sessionId, embedded = false }: { sessionId?: string; 
           <div className="flex flex-col items-center gap-6">
             {personaOnWelcome && (
               <div
-                className="flex justify-center transition-all duration-500 ease-in-out"
+                className="flex justify-center transition-all ease-in-out"
                 style={{
                   width: "8rem",
                   height: "8rem",
                   opacity: centerPersonaVisible ? 1 : 0,
+                  // Surge de uma vez ao voltar para a tela de novo chat (como
+                  // o topo surge ao entrar no chat) e sai com fade ao entrar.
+                  transitionDuration: centerPersonaVisible ? "0ms" : "500ms",
                 }}
               >
                 <Persona state={centerPersonaState} className="!size-full" />
