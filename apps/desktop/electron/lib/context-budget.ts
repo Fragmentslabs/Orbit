@@ -222,8 +222,13 @@ function signature(slot: ResultSlot, calls: Map<string, unknown>): string | null
   return input == null ? null : `${slot.toolName}${KEY_SEPARATOR}${input}`
 }
 
-function droppedText(toolName: string, chars: number, reason: 'superseded' | 'age'): string {
+type DropReason = 'superseded' | 'age' | 'oversized'
+
+function droppedText(toolName: string, chars: number, reason: DropReason): string {
   const tool = toolName || 'tool'
+  if (reason === 'oversized') {
+    return `${DROPPED_MARK} — the \`${tool}\` result (${chars} chars) was too large to fit in the context window on its own. Call it again asking for a narrower result (smaller range, filter, limit).]`
+  }
   if (reason === 'superseded') {
     return `${DROPPED_MARK} — this \`${tool}\` call was repeated later in the turn with identical arguments; only the newest result is kept. Look further down for it.]`
   }
@@ -309,7 +314,7 @@ export function trimTurnContext(messages: ModelMessage[], budgetTokens: number):
   // deixava o contador otimista alguns tokens por descarte — com centenas de
   // descartes num turno, a conta fechava dentro do orçamento e o request saía
   // fora dele, que é exatamente o erro que este módulo existe para evitar.
-  const drop = (slot: ResultSlot, reason: 'superseded' | 'age') => {
+  const drop = (slot: ResultSlot, reason: DropReason) => {
     const stub = droppedText(slot.toolName, slot.chars, reason)
     dropped.set(slot.at, stub)
     if (slot.toolCallId) droppedCallIds.add(slot.toolCallId)
@@ -341,6 +346,18 @@ export function trimTurnContext(messages: ModelMessage[], budgetTokens: number):
   // orçamento —, mas é o que garante um teto de verdade em vez de um teto que
   // vale só enquanto o turno colabora.
   evict(MIN_KEPT_RESULTS)
+  // O piso protege a mesa de trabalho, mas não pode proteger um resultado que
+  // sozinho não cabe: um screenshot em base64 de 3,3M caracteres era o último
+  // resultado do turno, o piso o preservava e o request saía com 917k tokens
+  // num modelo de 1M. Aqui o maior sai primeiro, até caber.
+  if (used > budgetTokens) {
+    const bySize = [...results].sort((a, b) => b.chars - a.chars)
+    for (const slot of bySize) {
+      if (used <= budgetTokens) break
+      if (dropped.has(slot.at)) continue
+      drop(slot, 'oversized')
+    }
+  }
 
   if (dropped.size === 0) return messages
   return rewrite(messages, dropped, droppedCallIds)
