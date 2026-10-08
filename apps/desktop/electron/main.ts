@@ -1287,6 +1287,25 @@ app.whenReady().then(() => {
     }
   })
 
+  // Quais destes caminhos ainda são pastas — em lote, uma ida só. Existe para a
+  // revalidação de pastas que sumiram do disco (renomeadas/movidas/apagadas):
+  // cada referência é uma string, e conferir uma a uma custaria uma ida ao main
+  // por caminho. Um caminho ilegível conta como ausente (é o que ele é, para
+  // quem ia usá-lo); quem decide o que fazer com isso é a UI.
+  ipcMain.handle('fs:existDirs', async (_event, dirs: string[]) => {
+    const result: Record<string, boolean> = {}
+    await Promise.all(
+      dirs.map(async (dir) => {
+        try {
+          result[dir] = (await fs.stat(dir)).isDirectory()
+        } catch {
+          result[dir] = false
+        }
+      }),
+    )
+    return result
+  })
+
   // Integração "Abrir com Orbit" no menu de contexto do Explorer
   ipcMain.handle('openwith:status', () => getOpenWithStatus())
   ipcMain.handle('openwith:register', () => registerOpenWith())

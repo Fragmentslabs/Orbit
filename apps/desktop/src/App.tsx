@@ -14,6 +14,7 @@ import { useEsteiraStore } from "@/src/stores/esteira-store"
 import { useActiveSession, useSessionStore } from "@/src/stores/session-store"
 import { ChatHeader } from "@/src/components/chat-header"
 import { ChatView } from "@/src/components/chat-view"
+import { MissingFoldersBanner } from "@/src/components/missing-folders-banner"
 import { MemoriesView } from "@/src/components/memories/memories-view"
 import { ModelsView } from "@/src/components/models/models-view"
 import { EsteiraBoard } from "@/src/components/esteira/esteira-board"
@@ -327,6 +328,7 @@ function Layout() {
                   }
                 />
                 <div className="flex min-w-0 flex-1 flex-col overflow-hidden p-4" style={{ '--panel-bg': 'var(--background)' } as React.CSSProperties}>
+                  <MissingFoldersBanner />
                   {view === "memories" ? (
                     <MemoriesView />
                   ) : view === "models" ? (

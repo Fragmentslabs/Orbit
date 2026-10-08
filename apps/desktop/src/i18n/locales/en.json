@@ -941,6 +941,13 @@
     "newFolder": "New folder",
     "remove": "Remove"
   },
+  "missingFolders": {
+    "title": "Folder not found",
+    "description": "These folders are no longer at their original path — they were renamed, moved or deleted. Point to where they are now so Orbit can use them again.",
+    "relocate": "Locate…",
+    "remove": "Remove",
+    "dismiss": "Dismiss"
+  },
   "initProject": {
     "title": "New project here",
     "description": "I can analyze the structure and generate memories by area (stack, architecture, design, business rules…) to gain context all at once — instead of discovering everything by trial and error.",

@@ -55,6 +55,9 @@ export type MenuAction =
 
 export const windowApi = {
   platform: window.platform,
+  /** Seletor nativo de pasta (main). `null` quando a pessoa cancela. */
+  selectFolder: () =>
+    (window.ipcRenderer?.invoke("select-folder") ?? Promise.resolve(null)) as Promise<string | null>,
   minimize: () => window.ipcRenderer?.invoke("window:minimize"),
   maximize: () => window.ipcRenderer?.invoke("window:maximize"),
   close: () => window.ipcRenderer?.invoke("window:close"),
@@ -823,6 +826,10 @@ export const fsApi = {
     window.ipcRenderer.invoke("fs:stat", filePath) as Promise<
       { ok: true; isDirectory: boolean; isFile: boolean; size: number } | { ok: false; error: string }
     >,
+  /** Quais destes caminhos ainda são pastas existentes. Vai tudo numa ida só:
+   *  é o que a revalidação de pastas que sumiram do disco pergunta. */
+  existingDirs: (dirs: string[]) =>
+    window.ipcRenderer.invoke("fs:existDirs", dirs) as Promise<Record<string, boolean>>,
 }
 
 export const searchApi = {

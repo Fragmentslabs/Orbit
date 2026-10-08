@@ -941,6 +941,13 @@
     "newFolder": "Nova pasta",
     "remove": "Remover"
   },
+  "missingFolders": {
+    "title": "Pasta não encontrada",
+    "description": "Estas pastas não estão mais no caminho original — foram renomeadas, movidas ou apagadas. Aponte onde elas estão agora para o Orbit voltar a usá-las.",
+    "relocate": "Localizar…",
+    "remove": "Remover",
+    "dismiss": "Ignorar"
+  },
   "initProject": {
     "title": "Projeto novo por aqui",
     "description": "Posso analisar a estrutura e gerar memórias por área (stack, arquitetura, design, regras de negócio…) para ganhar contexto de uma vez — em vez de descobrir tudo por tentativa e erro.",

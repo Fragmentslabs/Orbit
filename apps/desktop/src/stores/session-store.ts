@@ -20,6 +20,11 @@ import type {
 import { folderKey, normalizeFolderName, StorageKeys } from "@shared/chat"
 import { planArchivedCleanup, setArchivedState } from "@shared/archive"
 import { planAutoFolder } from "@/src/lib/auto-folder"
+import {
+  relocateAutoFolderEntry,
+  relocateSessionFolders,
+  relocatedFolderName,
+} from "@/src/lib/relocate"
 import { chatApi, companionApi, docsApi, mediaApi, sessionApi, storage } from "@/src/lib/ipc"
 import { MEDIA_SCHEME } from "@shared/media"
 import { visibleMessageText } from "@/src/lib/message-utils"
@@ -128,6 +133,14 @@ interface SessionState {
    *  chats soltos (modo código, com diretório) para a pasta do projeto —
    *  corrige pastas duplicadas quando o mapa automático foi perdido. */
   organizeSidebar: () => void
+
+  /** A pasta mudou de lugar no disco: reaponta tudo que apontava para o
+   *  caminho antigo. As pastas do workspace vivem no WorkspaceProvider, então
+   *  quem as atualiza é quem chama. */
+  relocateFolder: (oldPath: string, newPath: string) => void
+  /** Desiste de uma pasta que não existe mais: as sessões que a usavam ficam
+   *  sem pasta de trabalho e a pista do mapa automático morre junto. */
+  forgetFolder: (path: string) => void
 
   sendMessage: (mode: SessionMode, text: string, config: SendConfig) => Promise<void>
   stopStreaming: (sessionId: string) => void
@@ -877,6 +890,66 @@ export const useSessionStore = create<SessionState>((set, get) => ({
         }),
       }))
       for (const sid of moves.keys()) emitSessionEvent(sid)
+    }
+  },
+
+  relocateFolder: (oldPath, newPath) => {
+    if (!oldPath || !newPath || oldPath === newPath) return
+
+    const autoFolderMap = loadAutoFolderMap()
+    const folderId = autoFolderMap[oldPath]
+
+    const affected: string[] = []
+    set((state) => ({
+      sessions: state.sessions.map((s) => {
+        const patch = relocateSessionFolders(s, oldPath, newPath)
+        if (!patch) return s
+        affected.push(s.id)
+        const next = { ...s, ...patch, updatedAt: Date.now() }
+        persistSession(next)
+        return next
+      }),
+    }))
+    for (const sid of affected) emitSessionEvent(sid)
+
+    const nextMap = relocateAutoFolderEntry(autoFolderMap, oldPath, newPath)
+    if (nextMap) persistAutoFolderMap(nextMap)
+
+    // O nome da pasta acompanha o projeto — mas só quando ainda é o derivado do
+    // caminho antigo. Nome escolhido à mão não se toca.
+    const folder = folderId ? get().folders.find((f) => f.id === folderId) : undefined
+    if (folder) {
+      const name = relocatedFolderName(folder.name, oldPath, newPath)
+      if (name) get().renameFolder(folder.id, name)
+    }
+  },
+
+  forgetFolder: (path) => {
+    if (!path) return
+
+    const affected: string[] = []
+    set((state) => ({
+      sessions: state.sessions.map((s) => {
+        const extras = s.extraDirectories ?? []
+        const discardsMain = s.directory === path
+        const discardsExtra = extras.includes(path)
+        if (!discardsMain && !discardsExtra) return s
+        affected.push(s.id)
+        const next: SessionInfo = { ...s, updatedAt: Date.now() }
+        // Só a pasta que sumiu do disco sai: a principal quando é ela, e as
+        // extras as que restarem, na ordem em que estavam.
+        if (discardsMain) delete next.directory
+        if (discardsExtra) next.extraDirectories = extras.filter((extra) => extra !== path)
+        persistSession(next)
+        return next
+      }),
+    }))
+    for (const sid of affected) emitSessionEvent(sid)
+
+    const autoFolderMap = loadAutoFolderMap()
+    if (autoFolderMap[path]) {
+      delete autoFolderMap[path]
+      persistAutoFolderMap(autoFolderMap)
     }
   },
 
