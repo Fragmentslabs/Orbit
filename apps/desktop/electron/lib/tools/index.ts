@@ -138,7 +138,18 @@ export function buildToolSet(input: SendMessageInput, ctx: ToolContext | null, i
   }
 
   // Modo código: MCP disponível (servidores configurados) + skill flow
-  Object.assign(tools, getMcpTools())
+  // As imagens que um servidor devolve vão para a galeria deste chat; o
+  // resultado diz ao modelo como mostrá-las ou olhá-las — por isso o MCP
+  // precisa saber se show_image e describe_image existem neste turno (as
+  // condições espelham as de mais abaixo).
+  Object.assign(
+    tools,
+    getMcpTools({
+      sessionId: input.sessionId,
+      canShow: ctx !== null && input.orchestrationRole !== 'worker',
+      canDescribe: Boolean(input.visionModel),
+    }),
+  )
   if (input.orchestrationRole !== 'worker') {
     tools.create_skill = createSkillTool()
     // Artefatos também no código: relatório de análise, diagrama de

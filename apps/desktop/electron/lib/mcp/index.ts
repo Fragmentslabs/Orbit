@@ -6,9 +6,12 @@ import { UnauthorizedError } from '@modelcontextprotocol/sdk/client/auth.js'
 import { jsonSchema, tool, type ToolSet } from 'ai'
 import fsp from 'node:fs/promises'
 import path from 'node:path'
+import sharp from 'sharp'
 import type { McpConfig, McpServerConfig, McpServerStatus } from '@shared/mcp'
 import type { PermissionMode } from '@shared/chat'
 import { dataDir } from '../storage'
+import { saveMedia } from '../media'
+import { mcpResultToText, type SavedImage } from './result'
 import {
   awaitPendingAuth,
   cancelPendingAuth,
@@ -26,7 +29,7 @@ import {
  * Manager MCP: conecta os servidores do mcp-config.json (stdio/streamable
  * HTTP), descobre as ferramentas via tools/list e as expõe como ToolSet do
  * ai-sdk com nomes prefixados (<servidor>_<tool>). getMcpTools() é síncrono
- * (cache do manager) para encaixar no buildToolSet. Servidores com erro
+ * (lista do manager) para encaixar no buildToolSet. Servidores com erro
  * tentam reconectar em background com backoff exponencial.
  */
 
@@ -38,13 +41,30 @@ const RECONNECT_INTERVAL_MS = 10_000 // checa a cada 10s
 interface ServerRuntime {
   config: McpServerConfig
   client: Client | null
-  tools: ToolSet
+  /** Ferramentas descobertas no tools/list, já com o nome prefixado. O ToolSet
+   *  é montado por turno em getMcpTools: o resultado depende da sessão (onde
+   *  gravar as imagens) e do que o turno oferece (show_image, describe_image). */
+  tools: McpToolDef[]
   state: McpServerStatus['state']
   error?: string
   lastAttempt: number
   retryCount: number
   /** http com OAuth: já existe token salvo (autorizado alguma vez neste device) */
   authorized?: boolean
+}
+
+interface McpToolDef {
+  name: string
+  mcpName: string
+  description?: string
+  inputSchema?: unknown
+}
+
+/** O que o turno oferece ao resultado de uma tool MCP. */
+export interface McpToolScope {
+  sessionId: string
+  canShow: boolean
+  canDescribe: boolean
 }
 
 const servers = new Map<string, ServerRuntime>()
@@ -72,13 +92,33 @@ function sanitizeName(name: string): string {
   return name.replace(/[^a-zA-Z0-9_-]+/g, '_').slice(0, 40)
 }
 
-function contentToText(result: unknown): string {
-  const content = (result as { content?: Array<Record<string, unknown>> })?.content
-  if (!Array.isArray(content)) return JSON.stringify(result)
-  const parts = content.map((item) =>
-    item.type === 'text' && typeof item.text === 'string' ? item.text : JSON.stringify(item),
-  )
-  return parts.join('\n') || '(sem retorno)'
+const MIME_EXT: Record<string, string> = {
+  'image/png': 'png',
+  'image/jpeg': 'jpg',
+  'image/jpg': 'jpg',
+  'image/webp': 'webp',
+  'image/gif': 'gif',
+}
+
+/** Grava a imagem de um resultado MCP na galeria da conversa. Formatos fora
+ *  da lista viram PNG — a galeria e o describe_image só falam os comuns. */
+async function saveMcpImage(
+  data: Buffer,
+  mimeType: string,
+  sessionId: string,
+  name: string,
+): Promise<SavedImage | null> {
+  let buffer = data
+  let ext = MIME_EXT[mimeType.toLowerCase()]
+  if (!ext) {
+    buffer = await sharp(data).png().toBuffer()
+    ext = 'png'
+  }
+  const meta = await sharp(buffer).metadata().catch(() => null)
+  // 'script': material intermediário de automação — entra na limpeza rápida
+  // da galeria enquanto não for mostrado em nenhuma mensagem.
+  const url = await saveMedia(buffer, ext, { source: 'script', sessionId, name })
+  return { url, width: meta?.width, height: meta?.height, bytes: buffer.length }
 }
 
 function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
@@ -192,30 +232,20 @@ async function connect(runtime: ServerRuntime, interactive = false): Promise<voi
       runtime.config.name,
     )
 
-    const toolSet: ToolSet = {}
     const prefix = sanitizeName(runtime.config.name)
-    for (const mcpTool of discovered) {
-      toolSet[`${prefix}_${sanitizeName(mcpTool.name)}`] = tool({
-        description: `[MCP ${runtime.config.name}] ${mcpTool.description ?? mcpTool.name}`,
-        inputSchema: jsonSchema((mcpTool.inputSchema ?? { type: 'object' }) as Record<string, unknown>),
-        execute: async (input) => {
-          const result = await client.callTool({
-            name: mcpTool.name,
-            arguments: (input ?? {}) as Record<string, unknown>,
-          })
-          return contentToText(result)
-        },
-      })
-    }
-
     runtime.client = client
-    runtime.tools = toolSet
+    runtime.tools = discovered.map((mcpTool) => ({
+      name: `${prefix}_${sanitizeName(mcpTool.name)}`,
+      mcpName: mcpTool.name,
+      description: mcpTool.description,
+      inputSchema: mcpTool.inputSchema,
+    }))
     runtime.state = 'connected'
     runtime.retryCount = 0
     if (url) runtime.authorized = await hasOAuthTokens(url)
   } catch (err) {
     runtime.client = null
-    runtime.tools = {}
+    runtime.tools = []
     runtime.retryCount++
     runtime.error =
       describeOAuthError(err, Boolean(runtime.config.oauth?.clientId?.trim())) ??
@@ -243,7 +273,7 @@ async function disconnect(runtime: ServerRuntime): Promise<void> {
     // já caiu
   }
   runtime.client = null
-  runtime.tools = {}
+  runtime.tools = []
   if (runtime.config.type === 'http' && runtime.config.url) {
     cancelPendingAuth(runtime.config.url)
   }
@@ -283,7 +313,7 @@ async function reconcile(config: McpConfig): Promise<void> {
       const runtime: ServerRuntime = {
         config: serverConfig,
         client: null,
-        tools: {},
+        tools: [],
         state: 'disabled',
         lastAttempt: 0,
         retryCount: 0,
@@ -338,19 +368,35 @@ export function listMcpStatus(): McpServerStatus[] {
     config: runtime.config,
     state: runtime.config.enabled === false ? 'disabled' : runtime.state,
     error: runtime.error,
-    toolNames: Object.keys(runtime.tools),
+    toolNames: runtime.tools.map((t) => t.name),
     usesOAuth: Boolean(oauthUrl(runtime.config)),
     authorized: runtime.authorized ?? false,
   }))
 }
 
-/** ToolSet mesclado dos servidores conectados (síncrono — cache do manager). */
-export function getMcpTools(): ToolSet {
+/** ToolSet mesclado dos servidores conectados (síncrono — lista do manager). */
+export function getMcpTools(scope: McpToolScope): ToolSet {
   const merged: ToolSet = {}
   for (const runtime of servers.values()) {
     if (runtime.config.enabled === false) continue
-    if (runtime.state === 'connected') {
-      Object.assign(merged, runtime.tools)
+    if (runtime.state !== 'connected' || !runtime.client) continue
+    const client = runtime.client
+    for (const def of runtime.tools) {
+      merged[def.name] = tool({
+        description: `[MCP ${runtime.config.name}] ${def.description ?? def.mcpName}`,
+        inputSchema: jsonSchema((def.inputSchema ?? { type: 'object' }) as Record<string, unknown>),
+        execute: async (input) => {
+          const result = await client.callTool({
+            name: def.mcpName,
+            arguments: (input ?? {}) as Record<string, unknown>,
+          })
+          return mcpResultToText(result, {
+            saveImage: (data, mimeType) => saveMcpImage(data, mimeType, scope.sessionId, def.name),
+            canShow: scope.canShow,
+            canDescribe: scope.canDescribe,
+          })
+        },
+      })
     }
   }
   return merged
@@ -368,7 +414,7 @@ export function listMcpToolDescriptions(): string {
   const lines: string[] = []
   for (const runtime of servers.values()) {
     if (runtime.config.enabled === false || runtime.state !== 'connected') continue
-    const names = Object.keys(runtime.tools)
+    const names = runtime.tools.map((t) => t.name)
     lines.push(`- @mcp:${runtime.config.name}: ${names.join(', ')}`)
   }
   return lines.join('\n')
