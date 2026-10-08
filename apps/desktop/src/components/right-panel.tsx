@@ -183,9 +183,9 @@ function TabContent({ tab, sessionId, onUpdateTab }: { tab: PanelTab; sessionId?
         return <NewChatTab onCreated={(sessionId) => onUpdateTab(tab.id, { pending: false, sessionId })} />
       }
       return (
-        <div className="flex flex-1 flex-col overflow-hidden p-4" style={{ '--panel-bg': 'var(--sidebar)' } as React.CSSProperties}>
+        <div className="flex flex-1 flex-col overflow-hidden px-4 pt-2 pb-4" style={{ '--panel-bg': 'var(--sidebar)' } as React.CSSProperties}>
           <ChatTabHeader sessionId={tab.sessionId} />
-          <ChatView sessionId={tab.sessionId} />
+          <ChatView sessionId={tab.sessionId} embedded />
         </div>
       )
     case "terminal":

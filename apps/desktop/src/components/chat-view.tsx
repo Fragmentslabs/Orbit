@@ -370,7 +370,9 @@ function ChatMessages({ messages, isBusy, busyLabel, mode, sessionId, sendMessag
 let entranceWakeDone = false
 const isInitialLaunch = typeof window !== "undefined" && new URLSearchParams(window.location.search).has("entrance")
 
-export function ChatView({ sessionId }: { sessionId?: string } = {}) {
+/** `embedded`: o chat está numa aba do painel lateral. Lá o espaço vertical é
+ *  curto e a aba já diz qual chat é, então persona do topo e breadcrumb saem. */
+export function ChatView({ sessionId, embedded = false }: { sessionId?: string; embedded?: boolean } = {}) {
   const { mode, setMode, folders, setFolders } = useWorkspace()
   const activeSession = useActiveSession(mode)
   const explicitSession = useSessionStore((s) =>
@@ -537,6 +539,7 @@ export function ChatView({ sessionId }: { sessionId?: string } = {}) {
 
   const centerPersonaState = displayCenterState
   const topPersonaState = displayTopState
+  const showTopPersona = topVisible && !simpleMode && personaInChat && !embedded
 
   const handleChatSend = useCallback(
     (text: string, options: SendMessageOptions, files?: FilePart[]) => {
@@ -582,7 +585,7 @@ export function ChatView({ sessionId }: { sessionId?: string } = {}) {
   return (
     <div className="relative flex h-full min-w-0 flex-1 flex-col">
       {/* Breadcrumb de chat orquestrado: pai > worker */}
-      {session?.parentId && (
+      {session?.parentId && !embedded && (
         <div className="z-30 flex items-center gap-1 px-4 pt-2 text-xs text-muted-foreground">
           <button
             type="button"
@@ -601,7 +604,7 @@ export function ChatView({ sessionId }: { sessionId?: string } = {}) {
         </div>
       )}
       <div className="relative flex-1">
-        {topVisible && !simpleMode && personaInChat && (
+        {showTopPersona && (
           <div
             className="absolute left-1/2 z-40 -translate-x-1/2 transition-all duration-500 ease-in-out opacity-100"
             style={{
@@ -649,12 +652,12 @@ export function ChatView({ sessionId }: { sessionId?: string } = {}) {
             chatVisible ? "opacity-100" : "opacity-0 pointer-events-none"
           }`}
         >
-          <div className={`flex min-h-0 flex-1 flex-col ${topVisible && !simpleMode && personaInChat ? "pt-6" : "pt-2"}`}>
+          <div className={`flex min-h-0 flex-1 flex-col ${showTopPersona ? "pt-6" : "pt-2"}`}>
             {/* Véu que dissolve a conversa por baixo da persona flutuante. Ele
                 existe POR CAUSA dela: sem a persona no topo não há o que
                 esconder, e a faixa vira só três centímetros de nada comendo o
                 começo da lista. Mesma condição do respiro acima. */}
-            {topVisible && !simpleMode && personaInChat && (
+            {showTopPersona && (
               <div className="pointer-events-none sticky top-0 z-10 h-12 bg-linear-to-b to-transparent" style={{ backgroundImage: 'linear-gradient(to bottom, var(--panel-bg, var(--background)), transparent)' }} />
             )}
             {/* Vale nos dois modos: a conversa de código também tem histórico

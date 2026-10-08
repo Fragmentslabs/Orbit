@@ -258,6 +258,11 @@ export const usePanelStore = create<PanelState>((set, get) => {
         activeTabBySession: { ...state.activeTabBySession, [sessionId]: activeId },
       })),
 
+    // Abrir uma aba a partir da CONVERSA (card de artefato/documento, citação
+    // de fonte) aponta o painel para ela — então o selector de abas sai de
+    // cena, como já fazem o card de processo e o link do terminal. Sem isto,
+    // quem estava com a tela de seleção aberta (o "+") clicava "Abrir no
+    // painel" e nada acontecia: a aba nascia escondida atrás do selector.
     openArtifactTab: (sessionId, artifactId, title) =>
       set((state) => {
         const tabs = state.tabsBySession[sessionId] ?? []
@@ -267,6 +272,7 @@ export const usePanelStore = create<PanelState>((set, get) => {
         if (existing) {
           return {
             rightPanelOpen: true,
+            selectorOpen: false,
             activeTabBySession: { ...state.activeTabBySession, [sessionId]: existing.id },
           }
         }
@@ -279,6 +285,7 @@ export const usePanelStore = create<PanelState>((set, get) => {
         }
         return {
           rightPanelOpen: true,
+          selectorOpen: false,
           tabsBySession: { ...state.tabsBySession, [sessionId]: [...tabs, tab] },
           activeTabBySession: { ...state.activeTabBySession, [sessionId]: tab.id },
         }
@@ -293,6 +300,7 @@ export const usePanelStore = create<PanelState>((set, get) => {
         if (existing) {
           return {
             rightPanelOpen: true,
+            selectorOpen: false,
             activeTabBySession: { ...state.activeTabBySession, [sessionId]: existing.id },
           }
         }
@@ -305,6 +313,7 @@ export const usePanelStore = create<PanelState>((set, get) => {
         }
         return {
           rightPanelOpen: true,
+          selectorOpen: false,
           tabsBySession: { ...state.tabsBySession, [sessionId]: [...tabs, tab] },
           activeTabBySession: { ...state.activeTabBySession, [sessionId]: tab.id },
         }
@@ -325,6 +334,7 @@ export const usePanelStore = create<PanelState>((set, get) => {
         if (existing) {
           return {
             rightPanelOpen: true,
+            selectorOpen: false,
             tabsBySession: {
               ...state.tabsBySession,
               [sessionId]: tabs.map((t) => (t.id === existing.id ? { ...t, ...patch } : t)),
@@ -342,6 +352,7 @@ export const usePanelStore = create<PanelState>((set, get) => {
         }
         return {
           rightPanelOpen: true,
+          selectorOpen: false,
           tabsBySession: { ...state.tabsBySession, [sessionId]: [...tabs, tab] },
           activeTabBySession: { ...state.activeTabBySession, [sessionId]: tab.id },
         }
