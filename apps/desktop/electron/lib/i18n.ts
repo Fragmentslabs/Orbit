@@ -88,6 +88,10 @@ export const MESSAGES = {
     'pt-BR': 'a conversa passou da janela de contexto do modelo — compacte o histórico',
     en: 'the conversation outgrew the model context window — compact the history',
   },
+  'notif.chatError.kind.context-length-turn': {
+    'pt-BR': 'o trabalho desta resposta passou da janela de contexto — peça para continuar',
+    en: 'the work in this reply outgrew the context window — ask it to continue',
+  },
   'notif.chatError.kind.provider-config': {
     'pt-BR': 'o provedor não está configurado — verifique as Configurações',
     en: 'the provider is not configured — check Settings',

@@ -152,6 +152,7 @@ const CHAT_ERROR_KEYS: Record<Exclude<MessageErrorKind, 'unknown'>, MainMessageK
   'rate-limit': 'notif.chatError.kind.rate-limit',
   network: 'notif.chatError.kind.network',
   'context-length': 'notif.chatError.kind.context-length',
+  'context-length-turn': 'notif.chatError.kind.context-length-turn',
   'provider-config': 'notif.chatError.kind.provider-config',
 }
 

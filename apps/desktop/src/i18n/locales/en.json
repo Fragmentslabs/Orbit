@@ -699,6 +699,7 @@
       "rate-limit": "The provider hit its usage or request limit. Wait a bit or switch models.",
       "network": "Network error talking to the provider (timeout, outage). Try again or switch models.",
       "context-length": "The conversation grew past the model's context window, so the provider refused the request. Switching models won't help — compact the conversation (the button on the context meter, or /compact) or start a new one.",
+      "context-length-turn": "The work in this reply (tool results piling up across many steps) outgrew the model's context window, so the provider refused the next request. The conversation itself still fits, so compacting won't help: send a message asking it to continue — the new reply starts without this one's tool results.",
       "provider-config": "This model's provider isn't ready: the API key is missing or the provider/SDK isn't available. Check Settings."
     },
     "fallbackStatus": "Trying fallback {{current}}/{{total}}…",
@@ -794,6 +795,8 @@
     "compacted": "Compacted — previous history summarized",
     "nearLimit": "Near the limit — history will be compacted soon",
     "atLimit": "Limit reached — automatic compaction failed",
+    "estimated": "Estimate of the request about to be sent — the exact number arrives when the step finishes",
+    "live": "Updated at each step of this reply",
     "compactNow": "Compact history now"
   },
   "images": {

@@ -57,6 +57,14 @@ export interface SendConfig {
   files?: FilePart[]
 }
 
+/** Tamanho do contexto do turno em andamento (ver `liveContext`). */
+export interface LiveContext {
+  input: number
+  output: number
+  /** Medido no request antes do envio, não reportado pelo provedor. */
+  estimated: boolean
+}
+
 interface SessionState {
   initialized: boolean
   sessions: SessionInfo[]
@@ -67,6 +75,12 @@ interface SessionState {
   /** Fallback em andamento (rotação de modelos): tentativa atual/total por
    *  sessão — a UI mostra "tentando fallback X/Y" no lugar de "Pensando…" */
   fallback: Record<string, RotationFallbackInfo | undefined>
+  /** Contexto ao vivo do turno em andamento (evento `context`): o medidor o
+   *  prefere ao `tokens` da última resposta, que só chega no fim. Fica após uma
+   *  falha — é o tamanho do que o provedor recusou — e sai quando uma resposta
+   *  termina com `tokens` (aí o número persistido já é o mesmo) ou o histórico
+   *  é substituído (compactação). Só memória: não sobrevive a reiniciar. */
+  liveContext: Record<string, LiveContext | undefined>
   /** Próxima mensagem sugerida por sessão (Preferências → Sugestões de prompt).
    *  Some quando a pessoa envia qualquer coisa — só vale para a última resposta. */
   suggestions: Record<string, string | undefined>
@@ -261,6 +275,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
   status: {},
   errors: {},
   fallback: {},
+  liveContext: {},
   suggestions: {},
   clearSuggestion: (sessionId) =>
     set((state) => (state.suggestions[sessionId] ? { suggestions: { ...state.suggestions, [sessionId]: undefined } } : state)),
@@ -1192,8 +1207,12 @@ case "message": {
             ? { ...state.status, [sessionId]: "idle" as ChatStatus }
             : state.status
         const fallback = finished && stuck ? { ...state.fallback, [sessionId]: undefined } : state.fallback
+        const liveContext =
+          inbound.role === "assistant" && inbound.tokens !== undefined && state.liveContext[sessionId]
+            ? { ...state.liveContext, [sessionId]: undefined }
+            : state.liveContext
 
-        return { messages: { ...state.messages, [sessionId]: next }, unreadCounts, status, fallback }
+        return { messages: { ...state.messages, [sessionId]: next }, unreadCounts, status, fallback, liveContext }
       })
 
       // Um modelo só entra nos "recentes" quando foi de fato usado: a resposta
@@ -1255,8 +1274,20 @@ case "message": {
     case "messages":
       // Substituição completa (ex: compactação inseriu um resumo no meio) —
       // o evento traz a lista inteira, então a sessão já está carregada.
-      set((state) => ({ messages: { ...state.messages, [sessionId]: event.messages } }))
+      set((state) => ({
+        messages: { ...state.messages, [sessionId]: event.messages },
+        liveContext: { ...state.liveContext, [sessionId]: undefined },
+      }))
       loadedMessages.add(sessionId)
+      break
+
+    case "context":
+      set((state) => ({
+        liveContext: {
+          ...state.liveContext,
+          [sessionId]: { input: event.input, output: event.output, estimated: event.estimated === true },
+        },
+      }))
       break
 
     case "suggestion":

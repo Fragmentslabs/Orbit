@@ -1081,6 +1081,18 @@ async function runChatTurn(win: BrowserWindow, input: SendMessageInput): Promise
     if (apagadas.length > 0) removeImageParts(apagadas)
   }
 
+  // Passos concluídos na tentativa em andamento (todas as iterações de
+  // auto-continue). Distingue o estouro de contexto do histórico (a primeira
+  // chamada já falha) do estouro do trabalho do turno (falha depois de N
+  // passos) — os remédios são outros.
+  let turnSteps = 0
+  // Último tamanho de contexto enviado ao medidor nesta tentativa: a
+  // estimativa pré-envio só sai quando passa dele.
+  let lastContextInput = 0
+  const emitContext = (input: number, output: number, estimated?: boolean) => {
+    emit(win, { type: 'context', sessionId, messageId: assistantMessage.id, input, output, estimated })
+  }
+
   try {
     // Loop de tentativas da rotação: cada tentativa usa o próximo modelo da
     // sequência. Só rotaciona falha recuperável (rate-limit/rede/moderação/
@@ -1104,6 +1116,8 @@ async function runChatTurn(win: BrowserWindow, input: SendMessageInput): Promise
       assistantMessage.errorKind = undefined
       assistantMessage.tokens = undefined
       assistantMessage.truncated = undefined
+      turnSteps = 0
+      lastContextInput = 0
       emit(win, { type: 'message', sessionId, message: assistantMessage })
       try {
         const provider = await getProvider(primary.providerId)
@@ -1423,6 +1437,14 @@ async function runChatTurn(win: BrowserWindow, input: SendMessageInput): Promise
               `[context] step ${stepNumber}: contexto do turno cortado para caber em ${turnBudget} tokens`,
             )
           }
+          // Medidor ao vivo: o que está prestes a sair, quando cresceu além
+          // do último valor real. É o aviso que faltava num turno longo — o
+          // número só se mexia no fim da resposta (ou nunca, se ela falhasse).
+          const outgoing = estimateTokens(trimmed)
+          if (outgoing > lastContextInput) {
+            lastContextInput = outgoing
+            emitContext(outgoing, 0, true)
+          }
           // Reaplica a normalização de reasoning a cada passo do tool loop: o
           // SDK reconstrói as mensagens entre steps e pode descartar o
           // reasoning_content vazio retornado numa chamada de tool (DeepSeek
@@ -1463,6 +1485,12 @@ async function runChatTurn(win: BrowserWindow, input: SendMessageInput): Promise
           case 'finish-step':
             lastStepUsage = toStepUsage(part.usage)
             stepCount++
+            turnSteps++
+            // Provedor sem usage devolve zeros: aí fica valendo a estimativa.
+            if (lastStepUsage.input > 0) {
+              lastContextInput = lastStepUsage.input
+              emitContext(lastStepUsage.input, lastStepUsage.output)
+            }
             break
           case 'text-start':
             // Textos gerados na continuação do nudge de overclaim nascem
@@ -1982,7 +2010,12 @@ async function runChatTurn(win: BrowserWindow, input: SendMessageInput): Promise
     }
   } catch (err) {
     const aborted = controller.signal.aborted
-    const { kind, detail: message } = classifyProviderError(err)
+    const classified = classifyProviderError(err)
+    const message = classified.detail
+    // Estouro depois de passos concluídos: o histórico coube na primeira
+    // chamada, quem passou da janela foi o acúmulo do turno. Compactar não
+    // alcança isso — a orientação certa é outra (ver context-length-turn).
+    const kind = classified.kind === 'context-length' && turnSteps > 0 ? 'context-length-turn' : classified.kind
     assistantMessage.error = aborted ? undefined : message
     assistantMessage.errorKind = aborted || kind === 'unknown' ? undefined : kind
     for (const part of assistantMessage.parts) {
