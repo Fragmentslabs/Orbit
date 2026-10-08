@@ -944,6 +944,9 @@ async function runChatTurn(win: BrowserWindow, input: SendMessageInput): Promise
     // session_context os lê para responder "o que foi alterado no turno X?"
     mode: input.mode,
     permissionMode: input.options.permissionMode ?? 'ask',
+    // orchestrationRole só é preenchido pelo main: num worker, quem mandou foi
+    // o orquestrador. Sem a marca, foi o usuário digitando no chat do worker.
+    origin: input.orchestrationRole === 'worker' ? 'orchestrator' : undefined,
   }
   history.push(userMessage)
   emit(win, { type: 'message', sessionId, message: userMessage })

@@ -27,6 +27,7 @@ import { createSubagentTool, createTaskTool } from './tools/orchestration'
 import type { TaskModeCeiling } from './tools/orchestration'
 import { createGlobTool, createGrepTool, createListTool, createReadTool } from './tools/files'
 import { createQuestionTool } from './tools/question'
+import { buildWorkersNotice, createWorkerTools, loadWorkers } from './tools/workers'
 import type { ToolContext } from './tools/context'
 import { addTokenUsage, toTokenUsage } from './usage'
 
@@ -61,6 +62,8 @@ const PLAN_SUBAGENT_MAX_CALLS = 3
  */
 const PROMISED_PLAN_RE =
   /\b(create_task|vou (dividir|criar|planejar)|dividir em (tarefas|workers)|criar (as )?tarefas|I(’|')?ll (split|create|plan)|going to (split|create)|split .{0,20}into (tasks|workers))\b/i
+/** Resposta do retry que diz "a primeira resposta já estava certa". */
+const NO_PLAN_SENTINEL = '<<NO_PLAN>>'
 /**
  * Rodadas de revisão pós-síntese, no TOTAL (não por worker) — quem decide onde
  * gastá-las é o orquestrador, que é o único que vê o conjunto. Por worker, "3"
@@ -85,6 +88,11 @@ const pending = new Map<string, PendingOrchestration>()
 const controllers = new Map<string, AbortController>()
 // Workers em execução por orquestrador — para propagar o abort do pai
 const activeWorkers = new Map<string, string[]>()
+
+/** Comparação de títulos de worker: "Tela de Login " e "tela de login" são o mesmo nome na sidebar. */
+function normalizeTitle(title: string) {
+  return title.trim().replace(/\s+/g, ' ').toLowerCase()
+}
 
 function newId(prefix: string) {
   return `${prefix}_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 10)}`
@@ -120,6 +128,58 @@ async function saveMessages(sessionId: string, messages: ChatMessage[]) {
 async function persistPlan(win: BrowserWindow, sessionId: string, plan: OrchestrationPlan) {
   await writeJson(StorageKeys.orchestration(sessionId), plan)
   emit(win, { type: 'orchestration:plan', sessionId, plan })
+}
+
+/**
+ * Um turno num worker que já existe: a mensagem entra no chat dele (que
+ * lembra o que fez e o que o usuário disse lá) com os mesmos modos que ele
+ * recebeu do plano. Usado pela revisão e pela tool message_worker.
+ */
+async function runWorkerTurn(
+  win: BrowserWindow,
+  input: SendMessageInput,
+  worker: SessionInfo,
+  text: string,
+): Promise<{ text: string; error?: string; tokens?: ChatMessage['tokens'] }> {
+  const orchestratorId = input.sessionId
+  const workers = activeWorkers.get(orchestratorId) ?? []
+  activeWorkers.set(orchestratorId, [...workers, worker.id])
+  try {
+    await runChat(win, {
+      sessionId: worker.id,
+      text,
+      providerId: input.workerModel?.providerId ?? input.providerId,
+      modelId: input.workerModel?.modelId ?? input.modelId,
+      mode: 'code',
+      options: {
+        ...worker.orchestration?.options,
+        reasoning: input.workerModel?.reasoning,
+        // Worker nunca orquestra — seria recursão.
+        orchestrate: undefined,
+        // Gatekeeping: worker herda o modo de permissões do orquestrador
+        permissionMode: input.options.permissionMode,
+      },
+      directory: worker.directory ?? input.directory,
+      extraDirectories: worker.extraDirectories ?? input.extraDirectories,
+      visionModel: worker.orchestration?.vision ? input.visionModel : undefined,
+      orchestrationRole: 'worker',
+      parentSessionId: orchestratorId,
+      workerTitle: worker.title,
+      language: input.language,
+    })
+  } finally {
+    const rest = (activeWorkers.get(orchestratorId) ?? []).filter((id) => id !== worker.id)
+    if (rest.length > 0) activeWorkers.set(orchestratorId, rest)
+    else activeWorkers.delete(orchestratorId)
+  }
+  const messages = await loadMessages(worker.id)
+  const last = [...messages].reverse().find((m) => m.role === 'assistant')
+  const reply = last?.parts
+    .filter((p): p is TextPart => p.type === 'text')
+    .map((p) => p.text)
+    .join('\n')
+    .trim() ?? ''
+  return { text: reply, error: last?.error, tokens: last?.tokens }
 }
 
 export function abortOrchestration(sessionId: string) {
@@ -192,6 +252,12 @@ async function runOrchestrationTurn(win: BrowserWindow, input: SendMessageInput)
       })
   const primaryModel = rotationSequence[0] ?? { providerId: conductor.providerId, modelId: conductor.modelId }
 
+  // Aviso automático: workers que já existem e o que o usuário mandou direto
+  // neles desde o último turno do orquestrador (a resposta anterior dele).
+  const lastOrchestratorTurn = history.slice(0, -2).reverse().find((m) => m.role === 'assistant')
+  const workersNotice = await buildWorkersNotice(sessionId, lastOrchestratorTurn?.createdAt ?? 0)
+  const existingTitles = new Set((await loadWorkers(sessionId)).map((w) => normalizeTitle(w.title)))
+
   try {
     // Loop de tentativas do PLANEJAMENTO: falha recuperável antes do primeiro
     // token troca para o próximo modelo da sequência (os workers já herdam a
@@ -210,6 +276,7 @@ async function runOrchestrationTurn(win: BrowserWindow, input: SendMessageInput)
         emit(win, { type: 'status', sessionId, status: 'streaming' })
 
     const tasks: OrchestrationTask[] = []
+    let workersMessaged = 0
     // Tool context do planejamento (leitura do projeto + subagent). Sempre
     // existe: a guarda no topo garante a pasta de trabalho.
     const planCtx: ToolContext = {
@@ -227,14 +294,28 @@ async function runOrchestrationTurn(win: BrowserWindow, input: SendMessageInput)
       subagents: input.options.subagents === true,
     }
     const planTools: ToolSet = {
-      create_task: createTaskTool((task) => {
-        if (tasks.length >= MAX_TASKS) return false
-        tasks.push(task)
-        return true
-      }, ceiling),
+      create_task: createTaskTool(
+        (task) => {
+          if (tasks.length >= MAX_TASKS) return false
+          tasks.push(task)
+          return true
+        },
+        ceiling,
+        (title) => {
+          const key = normalizeTitle(title)
+          return existingTitles.has(key) || tasks.some((t) => normalizeTitle(t.title) === key)
+        },
+      ),
       // Perguntar antes de dividir: só vale quando a resposta muda o plano,
       // mas sem a tool ele não tinha como fazer isso nem quando valia.
       question: createQuestionTool(input, controller.signal),
+      // Workers de qualquer plano desta conversa: ver, ler e continuar. Sem
+      // isso o único caminho era create_task — sempre um worker novo, que
+      // não sabe nada do que os anteriores fizeram.
+      ...createWorkerTools(sessionId, async (worker, message) => {
+        workersMessaged++
+        return runWorkerTurn(win, input, worker, message)
+      }),
     }
     // Leitura direta do projeto. Antes o planejamento não tinha NENHUMA tool de
     // arquivo, então a única forma de olhar o código era gastar um subagente
@@ -262,7 +343,7 @@ async function runOrchestrationTurn(win: BrowserWindow, input: SendMessageInput)
       ceiling.subagents
         ? 'You also have the subagent tool for research while planning (3 calls max).'
         : 'You do NOT have subagents: research the project yourself with read/ls/glob/grep before splitting.',
-    ].join('\n')
+    ].join('\n') + workersNotice
     const provider = await getProvider(primary.providerId)
     const baseMessages = normalizeMessages(
       toModelMessages(history.slice(0, -1)),
@@ -288,39 +369,51 @@ async function runOrchestrationTurn(win: BrowserWindow, input: SendMessageInput)
       })
       let text = ''
       const reasoningStart = new Map<string, number>()
+      // Ids de stream → id da part (mesma regra do chat-engine). O SDK reusa
+      // "txt-0"/"reasoning-0" a cada passo E a cada passada: sem isso a
+      // passada da cutucada sobrescrevia o texto da primeira (a resposta
+      // "cortava" no meio) e o filtro de texto velho apagava as duas.
+      const streamIds = new Map<string, string>()
+      const startStreamPart = (sdkId: string): string => {
+        let id = sdkId
+        for (let n = 1; assistantMessage.parts.some((p) => p.id === id); n++) id = `${sdkId}~${n}`
+        streamIds.set(sdkId, id)
+        return id
+      }
+      const streamPartId = (sdkId: string): string => streamIds.get(sdkId) ?? sdkId
       for await (const part of stream.fullStream) {
         switch (part.type) {
           case 'text-start':
-            upsertPart(win, sessionId, assistantMessage, { id: part.id, type: 'text', text: '', state: 'streaming' })
+            upsertPart(win, sessionId, assistantMessage, { id: startStreamPart(part.id), type: 'text', text: '', state: 'streaming' })
             break
           case 'text-delta': {
-            const existing = assistantMessage.parts.find((p) => p.id === part.id)
+            const existing = assistantMessage.parts.find((p) => p.id === streamPartId(part.id))
             if (existing?.type === 'text') {
               existing.text += part.text
               text += part.text
-              emit(win, { type: 'part-delta', sessionId, messageId: assistantMessage.id, partId: part.id, kind: 'text', delta: part.text })
+              emit(win, { type: 'part-delta', sessionId, messageId: assistantMessage.id, partId: existing.id, kind: 'text', delta: part.text })
             }
             break
           }
           case 'text-end': {
-            const existing = assistantMessage.parts.find((p) => p.id === part.id)
+            const existing = assistantMessage.parts.find((p) => p.id === streamPartId(part.id))
             if (existing?.type === 'text') upsertPart(win, sessionId, assistantMessage, { ...existing, state: 'done' })
             break
           }
           case 'reasoning-start':
             reasoningStart.set(part.id, Date.now())
-            upsertPart(win, sessionId, assistantMessage, { id: part.id, type: 'reasoning', text: '', state: 'streaming' })
+            upsertPart(win, sessionId, assistantMessage, { id: startStreamPart(part.id), type: 'reasoning', text: '', state: 'streaming' })
             break
           case 'reasoning-delta': {
-            const existing = assistantMessage.parts.find((p) => p.id === part.id)
+            const existing = assistantMessage.parts.find((p) => p.id === streamPartId(part.id))
             if (existing?.type === 'reasoning') {
               existing.text += part.text
-              emit(win, { type: 'part-delta', sessionId, messageId: assistantMessage.id, partId: part.id, kind: 'reasoning', delta: part.text })
+              emit(win, { type: 'part-delta', sessionId, messageId: assistantMessage.id, partId: existing.id, kind: 'reasoning', delta: part.text })
             }
             break
           }
           case 'reasoning-end': {
-            const existing = assistantMessage.parts.find((p) => p.id === part.id)
+            const existing = assistantMessage.parts.find((p) => p.id === streamPartId(part.id))
             if (existing?.type === 'reasoning') {
               const started = reasoningStart.get(part.id)
               upsertPart(win, sessionId, assistantMessage, { ...existing, state: 'done', durationMs: started ? Date.now() - started : undefined })
@@ -360,23 +453,31 @@ async function runOrchestrationTurn(win: BrowserWindow, input: SendMessageInput)
     // agora é resultado legítimo — é o caminho 1 do prompt (pergunta simples,
     // ou oferta de "quer que eu implemente?"). Cutucar isso transformaria toda
     // conversa em plano, que é exatamente o que estamos consertando.
-    if (tasks.length === 0 && firstPass.text && PROMISED_PLAN_RE.test(firstPass.text)) {
-      const staleTextIds = new Set(assistantMessage.parts.filter((p) => p.type === 'text').map((p) => p.id))
+    // Quem continuou a conversa de um worker já agiu — não é plano vazio.
+    if (tasks.length === 0 && workersMessaged === 0 && firstPass.text && PROMISED_PLAN_RE.test(firstPass.text)) {
+      const firstPassIds = new Set(assistantMessage.parts.map((p) => p.id))
       const nudgeMessages: ModelMessage[] = [
         ...baseMessages,
         { role: 'assistant', content: firstPass.text },
         {
           role: 'user',
           content:
-            'You described the plan but registered no tasks. If the request needs to be split, call create_task NOW for each subtask. If it genuinely doesn\'t need splitting, answer directly without promising a plan.',
+            `[Engine check, not the user] Your reply mentioned splitting the work but no task was registered. If the request needs to be split, call create_task NOW for each subtask. If your previous reply was already the right answer (a question answered, or work only offered), reply with exactly ${NO_PLAN_SENTINEL} and nothing else. Otherwise, answer directly without promising a plan.`,
         },
       ]
       const retry = await runPlanningPass(nudgeMessages)
       planUsage = addTokenUsage(planUsage, toTokenUsage(retry.usage, cost))
-      // Ainda sem tarefas: a resposta final é a do retry — descarta a narração
-      // do primeiro passe pra não duplicar texto na bolha final do usuário.
       if (tasks.length === 0) {
-        assistantMessage.parts = assistantMessage.parts.filter((p) => !staleTextIds.has(p.id))
+        if (retry.text.includes(NO_PLAN_SENTINEL) || !retry.text) {
+          // Falso positivo da regex: a primeira resposta vale. Descarta tudo
+          // da cutucada (texto e raciocínio) — senão o usuário via o modelo
+          // discutindo uma mensagem interna que ele nunca mandou.
+          assistantMessage.parts = assistantMessage.parts.filter((p) => firstPassIds.has(p.id))
+        } else {
+          // A resposta final é a do retry — descarta a narração do primeiro
+          // passe pra não duplicar texto na bolha final do usuário.
+          assistantMessage.parts = assistantMessage.parts.filter((p) => p.type !== 'text' || !firstPassIds.has(p.id))
+        }
       }
     }
 
@@ -495,6 +596,7 @@ async function approvePlanTurn(
     // só acontecia depois de criar todas as sessions e persistir o plano).
     activeWorkers.set(sessionId, [])
     const now = Date.now()
+    const workerSessions: SessionInfo[] = []
     for (const task of selected) {
       const worker: SessionInfo = {
         id: newId('ses'),
@@ -505,12 +607,16 @@ async function approvePlanTurn(
         folderId: null,
         directory: input.directory,
         extraDirectories: input.extraDirectories,
-        orchestration: { role: 'worker', parentSessionId: sessionId, task: task.title },
+        // Os modos vêm do plano: o orquestrador escolheu tarefa a tarefa,
+        // dentro do teto da sessão. Ficam na sessão para quem continuar a
+        // conversa depois (revisão, message_worker) usar os mesmos.
+        orchestration: { role: 'worker', parentSessionId: sessionId, task: task.title, options: task.options, vision: task.vision },
         parentId: sessionId,
         createdAt: now,
         updatedAt: now,
       }
       await writeJson(StorageKeys.session(worker.id), worker)
+      workerSessions.push(worker)
       task.workerSessionId = worker.id
       task.status = 'submitted'
       activeWorkers.get(sessionId)?.push(worker.id)
@@ -522,49 +628,14 @@ async function approvePlanTurn(
     emit(win, { type: 'status', sessionId, status: 'streaming' })
 
     // Fase 2: workers em paralelo, cada um emitindo ChatEvents no próprio sessionId
-    const workerModel = input.workerModel
     const results = await Promise.all(
-      selected.map(async (task) => {
-        const workerInput: SendMessageInput = {
-          sessionId: task.workerSessionId!,
-          text: task.prompt,
-          providerId: workerModel?.providerId ?? input.providerId,
-          modelId: workerModel?.modelId ?? input.modelId,
-          mode: 'code',
-          options: {
-            // Os modos vêm do plano: o orquestrador escolheu tarefa a tarefa,
-            // dentro do teto da sessão. Antes `subagents: true` era fixo aqui,
-            // ignorando tanto a escolha dele quanto o toggle do usuário.
-            ...task.options,
-            reasoning: workerModel?.reasoning,
-            // Worker nunca orquestra — seria recursão.
-            orchestrate: undefined,
-            // Gatekeeping: worker herda o modo de permissões do orquestrador
-            permissionMode: input.options.permissionMode,
-          },
-          directory: input.directory,
-          extraDirectories: input.extraDirectories,
-          // Visão só quando a tarefa pediu (e o usuário tinha modelo de visão)
-          visionModel: task.vision ? input.visionModel : undefined,
-          orchestrationRole: 'worker',
-          parentSessionId: sessionId,
-          workerTitle: task.title,
-          language: input.language,
-        }
-        await runChat(win, workerInput)
-
-        const messages = await loadMessages(task.workerSessionId!)
-        const last = [...messages].reverse().find((m) => m.role === 'assistant')
-        const text = last?.parts
-          .filter((p): p is TextPart => p.type === 'text')
-          .map((p) => p.text)
-          .join('\n')
-          .trim()
-        task.status = last?.error ? 'error' : 'idle'
+      selected.map(async (task, i) => {
+        const result = await runWorkerTurn(win, input, workerSessions[i], task.prompt)
+        task.status = result.error ? 'error' : 'idle'
         return {
           task,
-          text: text || (last?.error ? `O worker falhou: ${last.error}` : '(o worker não retornou texto)'),
-          tokens: last?.tokens,
+          text: result.text || (result.error ? `O worker falhou: ${result.error}` : '(o worker não retornou texto)'),
+          tokens: result.tokens,
         }
       }),
     )
@@ -670,14 +741,14 @@ async function approvePlanTurn(
       // Rastreia workers existentes para reuso; a task carrega quantas rodadas
       // já foram gastas nele — o orçamento é global, mas mostrar o gasto por
       // worker evita que o orquestrador martele sempre o mesmo.
-      const workerSessions = new Map(selected.map((t) => [t.workerSessionId!, { title: t.title, task: t }]))
+      const reviewWorkers = new Map(selected.map((t, i) => [t.workerSessionId!, { title: t.title, task: t, session: workerSessions[i] }]))
 
       while (iteration < reviewRounds) {
         if (controller.signal.aborted) break
 
         // Coleta resultados atuais de todos os workers do plano
         const workersStatus = await Promise.all(
-          [...workerSessions.entries()].map(async ([wsId, info]) => {
+          [...reviewWorkers.entries()].map(async ([wsId, info]) => {
             const msgs = await loadMessages(wsId)
             const last = [...msgs].reverse().find((m) => m.role === 'assistant')
             const text = last?.parts
@@ -713,7 +784,7 @@ async function approvePlanTurn(
   "reason": "short explanation",
   "workerSessionId": "if action=message_worker, sessionId of the worker to message",
   "followUpPrompt": "if action=message_worker, new instruction for the existing worker",
-  "workerTitle": "if action=create_worker or create_test_worker, title of the new worker",
+  "workerTitle": "if action=create_worker or create_test_worker, name shown in the sidebar: 2-5 words naming the specific area or deliverable, in the user's language, different from every worker above",
   "workerPrompt": "if action=create_worker or create_test_worker, prompt for the new worker",
   "workerMode": "chat or code (if create_worker/create_test_worker)"
 }
@@ -758,53 +829,18 @@ Rules:
 
         iteration++
 
-        if (decision.action === 'message_worker' && decision.workerSessionId && workerSessions.has(decision.workerSessionId)) {
+        if (decision.action === 'message_worker' && decision.workerSessionId && reviewWorkers.has(decision.workerSessionId)) {
           // Reuso: envia nova instrução ao worker existente
-          const wsInfo = workerSessions.get(decision.workerSessionId)!
+          const wsInfo = reviewWorkers.get(decision.workerSessionId)!
           // O orçamento é global (a condição do while) — aqui só registramos
           // onde ele foi gasto, para o orquestrador ver na próxima decisão que
           // já bateu neste worker N vezes e considerar outro caminho.
           wsInfo.task.revisions = (wsInfo.task.revisions ?? 0) + 1
-          const followUp: ChatMessage = {
-            id: newId('msg'),
-            role: 'user',
-            parts: [{ id: newId('prt'), type: 'text', text: `[Revisão ${iteration}] ${decision.reason}\n\n${decision.followUpPrompt ?? 'Continue o trabalho.'}`, state: 'done' }],
-            createdAt: Date.now(),
-          }
-          const wsMsgs = await loadMessages(decision.workerSessionId)
-          wsMsgs.push(followUp)
-          await saveMessages(decision.workerSessionId, wsMsgs)
-          emit(win, { type: 'message', sessionId: decision.workerSessionId, message: followUp })
-
-          const reuseInput: SendMessageInput = {
-            sessionId: decision.workerSessionId,
-            text: decision.followUpPrompt ?? '',
-            providerId: input.workerModel?.providerId ?? input.providerId,
-            modelId: input.workerModel?.modelId ?? input.modelId,
-            mode: 'code',
-            // Mesmos modos que a tarefa recebeu no plano: a revisao continua a
-            // conversa do worker, nao comeca outra. Antes era simple/subagents
-            // fixos aqui, entao o worker trocava de modo no meio do proprio chat.
-            options: {
-              ...wsInfo.task.options,
-              reasoning: input.workerModel?.reasoning,
-              orchestrate: undefined,
-              permissionMode: input.options.permissionMode,
-            },
-            directory: input.directory,
-            extraDirectories: input.extraDirectories,
-            visionModel: wsInfo.task.vision ? input.visionModel : undefined,
-            orchestrationRole: 'worker',
-            parentSessionId: sessionId,
-            workerTitle: wsInfo.title,
-            language: input.language,
-          }
-          await runChat(win, reuseInput)
-
-          // Atualiza o resultado no plano
-          const updatedMsgs = await loadMessages(decision.workerSessionId)
-          const lastUp = [...updatedMsgs].reverse().find((m) => m.role === 'assistant')
-          const upText = lastUp?.parts.filter((p): p is TextPart => p.type === 'text').map((p) => p.text).join('\n').trim() || '(sem retorno)'
+          // Uma mensagem só: antes o follow-up era gravado aqui E o runChat
+          // gravava outra com o mesmo prompt — o worker via a ordem em dobro.
+          const followUpText = `[Revisão ${iteration}] ${decision.reason}\n\n${decision.followUpPrompt ?? 'Continue o trabalho.'}`
+          const reused = await runWorkerTurn(win, input, wsInfo.session, followUpText)
+          const upText = reused.text || '(sem retorno)'
           const loopPart: TextPart = { id: newId('prt'), type: 'text', text: `\n\n---\n### Loop ${iteration}: reuso de "${wsInfo.title}"\n\n${decision.reason}\n\n${upText}`, state: 'done' }
           synthesisMessage.parts.push(loopPart)
           emit(win, { type: 'part', sessionId, messageId: synthesisMessage.id, part: loopPart })
@@ -819,58 +855,35 @@ Rules:
             folderId: null,
             directory: input.directory,
             extraDirectories: input.extraDirectories,
-            orchestration: { role: 'worker', parentSessionId: sessionId, task: decision.reason },
+            // Sem modos extras alem do que a sessao permite — `subagents: true`
+            // fixo aqui ignorava o toggle do usuario.
+            orchestration: {
+              role: 'worker',
+              parentSessionId: sessionId,
+              task: decision.reason,
+              options: { subagents: input.options.subagents === true },
+            },
             parentId: sessionId,
             createdAt: Date.now(),
             updatedAt: Date.now(),
           }
           await writeJson(StorageKeys.session(loopWorker.id), loopWorker)
-          activeWorkers.get(sessionId)?.push(loopWorker.id)
           // Task sintetica: existe para o worker do loop ter o mesmo contador de
           // revisoes dos workers do plano.
           const loopTask: OrchestrationTask = {
             id: newId('task'),
             title: loopWorker.title,
             prompt: decision.workerPrompt ?? decision.reason,
-            options: {
-              subagents: input.options.subagents === true,
-              permissionMode: input.options.permissionMode,
-            },
+            options: loopWorker.orchestration!.options!,
             status: 'idle',
             workerSessionId: loopWorker.id,
             revisions: 0,
           }
-          workerSessions.set(loopWorker.id, { title: loopWorker.title, task: loopTask })
+          reviewWorkers.set(loopWorker.id, { title: loopWorker.title, task: loopTask, session: loopWorker })
           emit(win, { type: 'session', sessionId: loopWorker.id, session: loopWorker })
 
-          const wm = input.workerModel
-          const lwInput: SendMessageInput = {
-            sessionId: loopWorker.id,
-            text: decision.workerPrompt ?? decision.reason,
-            providerId: wm?.providerId ?? input.providerId,
-            modelId: wm?.modelId ?? input.modelId,
-            mode: loopWorker.mode,
-            // Sem modos extras alem do que a sessao permite — `subagents: true`
-            // fixo aqui ignorava o toggle do usuario, o mesmo problema que os
-            // workers do plano tinham.
-            options: {
-              ...loopTask.options,
-              reasoning: wm?.reasoning,
-              orchestrate: undefined,
-              permissionMode: input.options.permissionMode,
-            },
-            directory: input.directory,
-            extraDirectories: input.extraDirectories,
-            orchestrationRole: 'worker',
-            parentSessionId: sessionId,
-            workerTitle: loopWorker.title,
-            language: input.language,
-          }
-          await runChat(win, lwInput)
-
-          const lwMsgs = await loadMessages(loopWorker.id)
-          const lastLw = [...lwMsgs].reverse().find((m) => m.role === 'assistant')
-          const lwText = lastLw?.parts.filter((p): p is TextPart => p.type === 'text').map((p) => p.text).join('\n').trim() || '(sem retorno)'
+          const created = await runWorkerTurn(win, input, loopWorker, loopTask.prompt)
+          const lwText = created.text || '(sem retorno)'
           // Se é worker de teste e encontrou erro, o orquestrador na próxima iteração pode delegar ao worker original
           const label = isTest ? `🧪 Teste` : `Worker adicional`
           const loopPart: TextPart = { id: newId('prt'), type: 'text', text: `\n\n---\n### ${label} (loop ${iteration}): "${loopWorker.title}"\n\n${decision.reason}\n\n${lwText}`, state: 'done' }

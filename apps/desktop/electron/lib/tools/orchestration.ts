@@ -149,6 +149,9 @@ export interface TaskModeCeiling {
 export function createTaskTool(
   register: (task: OrchestrationTask) => boolean,
   ceiling: TaskModeCeiling,
+  /** O título já é de outro worker (deste plano ou de um anterior)? Na
+   *  sidebar o título é a única coisa que separa um worker do outro. */
+  titleTaken: (title: string) => boolean = () => false,
 ) {
   return tool({
     description: [
@@ -158,7 +161,11 @@ export function createTaskTool(
       'subagents multiply cost. Enable only what the task actually requires.',
     ].join(' '),
     inputSchema: z.object({
-      title: z.string().describe('Short task title (shown in the UI)'),
+      title: z.string().describe(
+        'Worker name shown in the sidebar, in the user\'s language. 2-5 words naming the concrete area or deliverable, '
+        + 'so the user tells workers apart at a glance — e.g. "Webhook de pagamentos", "Tela de login: validação", "Testes do parser CSV". '
+        + 'Never generic ("Implementação", "Análise", "Tarefa 1", "Backend") and never the same as another worker.',
+      ),
       prompt: z.string().describe('Self-contained prompt for the worker, with all necessary context'),
       research: z.boolean().optional().describe('Web search — only if the task needs information from the internet'),
       browser: z.boolean().optional().describe('JavaScript browser — only to open/test real web pages'),
@@ -168,6 +175,9 @@ export function createTaskTool(
       subagents: z.boolean().optional().describe('Lets the worker delegate to its own background subagents. Costly — only for broad tasks'),
     }),
     execute: async ({ title, prompt, research, browser, readonly: readOnly, simple, vision, subagents }: CreateTaskArgs) => {
+      if (titleTaken(title)) {
+        return `Já existe um worker chamado "${title}" nesta conversa — a tarefa NÃO foi registrada. Chame create_task de novo com um título que a diferencie (a área ou entrega específica), ou use message_worker se o trabalho é continuação desse worker.`
+      }
       // Rebaixa o que passa do teto e conta para avisar o modelo.
       const denied: string[] = []
       const clamp = (want: boolean | undefined, allowed: boolean, name: string) => {

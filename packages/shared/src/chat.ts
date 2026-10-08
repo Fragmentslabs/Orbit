@@ -23,6 +23,12 @@ export interface SessionOrchestration {
   parentSessionId?: string
   /** Descrição da tarefa delegada (workers) */
   task?: string
+  /** Modos que o orquestrador deu a este worker (workers). Ficam na sessão
+   *  porque o plano é sobrescrito a cada plano novo, e quem continua a
+   *  conversa depois (message_worker) precisa dos mesmos modos. */
+  options?: SendMessageOptions
+  /** Modo Visão do worker (ver OrchestrationTask.vision) */
+  vision?: boolean
 }
 
 /** Estado de revert ativo numa sessão. O revert trunca as mensagens a
@@ -434,6 +440,10 @@ export interface ChatMessage {
    * (o modelo não marcou como concluído). Vira lembrete para o modelo no
    * próximo turno (via messageContextText) e para a UI explicar o spinner. */
   todoReminder?: boolean
+  /** Mensagem de usuário escrita pelo orquestrador num worker (não pelo
+   *  usuário). Ausente = o usuário digitou no chat do worker — é assim que o
+   *  orquestrador sabe que você entrou num worker e deu um comando direto. */
+  origin?: "orchestrator"
 }
 
 export interface ModelVariant {
