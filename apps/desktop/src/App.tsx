@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next"
 import { DndContext } from "@dnd-kit/core"
 
 import { SidebarProvider, useSidebar } from "@/components/ui/sidebar"
+import { SidebarResizeHandle } from "@/components/sidebar-resize-handle"
 import { TooltipProvider } from "@/components/ui/tooltip"
 import { AppSidebar } from "@/components/app-sidebar"
 import { ThemeProvider } from "@/components/theme-provider"
@@ -249,10 +250,15 @@ function Layout() {
         )}
         {!open && mode === "hover" && <HoverEdge onShow={handleHoverShow} />}
         <div
+          className="relative"
           onMouseEnter={handleSidebarMouseEnter}
           onMouseLeave={handleSidebarMouseLeave}
         >
           <AppSidebar />
+          {/* A alça fica montada mesmo sem poder arrastar: é ela que aplica a
+              largura salva, então a sidebar abre já no tamanho escolhido. O
+              arrasto em si só vale com a sidebar fixada (ver o componente). */}
+          <SidebarResizeHandle active={open && mode === "pinned"} />
         </div>
         <PanelGroup direction="horizontal" className="min-w-0 flex-1">
           <Panel className="min-w-0" defaultSize={rightPanelOpen ? 65 : 100} id="main" minSize={30} order={1}>

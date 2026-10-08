@@ -45,6 +45,16 @@ describe('normalizeAppSettings', () => {
     expect(normalizeAppSettings({ autoArchiveDays: 3 }).autoArchiveDays).toBe(3)
     expect(normalizeAppSettings({ deleteArchivedDays: 30 }).deleteArchivedDays).toBe(30)
   })
+
+  it('a largura da sidebar fica dentro do arrastável, com o tamanho de sempre por padrão', () => {
+    expect(normalizeAppSettings(undefined).sidebarWidth).toBe(256)
+    expect(normalizeAppSettings({ sidebarWidth: 300 }).sidebarWidth).toBe(300)
+    // Salvo fora do domínio (janela de outro tamanho, valor corrompido): a
+    // largura é trazida para a borda em vez de descartada.
+    expect(normalizeAppSettings({ sidebarWidth: 9999 }).sidebarWidth).toBe(420)
+    expect(normalizeAppSettings({ sidebarWidth: 10 }).sidebarWidth).toBe(200)
+    expect(normalizeAppSettings({ sidebarWidth: Number.NaN }).sidebarWidth).toBe(256)
+  })
 })
 
 describe('agentMayUseBrowser', () => {

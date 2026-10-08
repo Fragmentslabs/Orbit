@@ -49,12 +49,25 @@ export interface AppSettings {
   transientRetries: number
   /** Continuações automáticas quando a resposta para no limite de passos. 0 = desligado. */
   autoContinues: number
+  /** Largura da sidebar esquerda, em px (arrastável pela borda). */
+  sidebarWidth: number
   browser: {
     links: LinkTarget
     /** O agente usa o navegador por conta própria (testar, capturar, documentar). */
     agentTools: boolean
     cookies: CookieRetention
   }
+}
+
+/** Largura da sidebar: 256px é o tamanho histórico (16rem), e o teto evita que
+ *  ela coma o conteúdo em janela estreita. */
+export const SIDEBAR_DEFAULT_WIDTH = 256
+export const SIDEBAR_MIN_WIDTH = 200
+export const SIDEBAR_MAX_WIDTH = 420
+
+/** Traz a largura para dentro do arrastável (usado ao normalizar e ao arrastar). */
+export function clampSidebarWidth(width: number): number {
+  return Math.min(SIDEBAR_MAX_WIDTH, Math.max(SIDEBAR_MIN_WIDTH, Math.round(width)))
 }
 
 export const DEFAULT_APP_SETTINGS: AppSettings = {
@@ -67,6 +80,7 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   autoCompact: 'auto',
   transientRetries: 3,
   autoContinues: 3,
+  sidebarWidth: SIDEBAR_DEFAULT_WIDTH,
   browser: {
     links: 'integrated',
     agentTools: true,
@@ -105,6 +119,10 @@ export function normalizeAppSettings(raw: unknown): AppSettings {
   const dayOption = (v: unknown, options: readonly number[]) =>
     typeof v === 'number' && options.includes(v) ? v : null
   const browser = (value.browser && typeof value.browser === 'object' ? value.browser : {}) as Partial<AppSettings['browser']>
+  const sidebarWidth =
+    typeof value.sidebarWidth === 'number' && Number.isFinite(value.sidebarWidth)
+      ? clampSidebarWidth(value.sidebarWidth)
+      : d.sidebarWidth
   return {
     auxModel: model(value.auxModel),
     auxReasoning: reasoning(value.auxReasoning),
@@ -116,6 +134,7 @@ export function normalizeAppSettings(raw: unknown): AppSettings {
     autoCompact: oneOf(value.autoCompact, ['auto', '75', '50'], d.autoCompact),
     transientRetries: count(value.transientRetries, MAX_TRANSIENT_RETRIES, d.transientRetries),
     autoContinues: count(value.autoContinues, MAX_AUTO_CONTINUES, d.autoContinues),
+    sidebarWidth,
     browser: {
       links: oneOf(browser.links, ['integrated', 'external'], d.browser.links),
       agentTools: typeof browser.agentTools === 'boolean' ? browser.agentTools : d.browser.agentTools,
