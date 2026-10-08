@@ -4,11 +4,14 @@ import type { FilePart, QueuedMessage, SessionMode, SendMessageOptions } from "@
 import { StorageKeys } from "@shared/chat"
 import { useSessionStore } from "@/src/stores/session-store"
 import { useAppSettings } from "@/src/stores/app-settings"
+import { useDraftInput } from "@/src/stores/draft-input"
 
 const QUEUE_STORAGE_KEY = StorageKeys.queuedMessages
 
 interface MessageQueueState {
   queues: Record<string, QueuedMessage[]>
+  /** sessionId → id do item que o input principal está editando agora */
+  editing: Record<string, string>
   initialized: boolean
 
   initialize: () => Promise<void>
@@ -16,6 +19,14 @@ interface MessageQueueState {
   dequeue: (sessionId: string) => QueuedMessage | undefined
   peek: (sessionId: string) => QueuedMessage | undefined
   remove: (sessionId: string, msgId: string) => void
+  /** Põe o item na FRENTE da fila (o próximo a sair), sem mexer nos outros */
+  moveToFront: (sessionId: string, msgId: string) => void
+  /** Grava o texto no item SEM mudar a posição dele na fila */
+  update: (sessionId: string, msgId: string, text: string) => void
+  /** O input principal entrou em modo edição de um item da fila */
+  startEdit: (sessionId: string, msgId: string) => void
+  /** Sai do modo edição (o texto do input fica onde está — nunca apagamos o que a pessoa escreveu) */
+  cancelEdit: (sessionId: string) => void
   hasPending: (sessionId: string) => boolean
   /** Retorna o número de mensagens na fila (não agendadas) */
   queueSize: (sessionId: string) => number
@@ -55,6 +66,7 @@ function persist(queues: Record<string, QueuedMessage[]>) {
 
 export const useMessageQueueStore = create<MessageQueueState>((set, get) => ({
   queues: {},
+  editing: {},
   initialized: false,
 
   initialize: async () => {
@@ -82,7 +94,12 @@ export const useMessageQueueStore = create<MessageQueueState>((set, get) => ({
       if (cleaned[key].length === 0) delete cleaned[key]
     }
     persist(cleaned)
-    set({ queues: cleaned })
+    // O item saiu da fila (enviado ou descartado): se era ele que o input
+    // estava editando, o modo edição acabou — senão o próximo Enter gravaria
+    // numa mensagem que não existe mais.
+    const editing = { ...state.editing }
+    if (editing[sessionId] === head.id) delete editing[sessionId]
+    set({ queues: cleaned, editing })
     return head
   },
 
@@ -103,7 +120,63 @@ export const useMessageQueueStore = create<MessageQueueState>((set, get) => ({
         if (cleaned[key].length === 0) delete cleaned[key]
       }
       persist(cleaned)
-      return { queues: cleaned }
+      const editing = { ...state.editing }
+      if (editing[sessionId] === msgId) delete editing[sessionId]
+      return { queues: cleaned, editing }
+    })
+  },
+
+  moveToFront: (sessionId, msgId) => {
+    set((state) => {
+      const current = state.queues[sessionId]
+      if (!current || current.length < 2 || current[0].id === msgId) return state
+      const target = current.find((m) => m.id === msgId)
+      if (!target) return state
+      // Só a posição muda: a mensagem leva consigo modo, opções, anexos e
+      // agendamento, e as outras mantêm a ordem entre si.
+      const next = {
+        ...state.queues,
+        [sessionId]: [target, ...current.filter((m) => m.id !== msgId)],
+      }
+      persist(next)
+      return { queues: next }
+    })
+  },
+
+  update: (sessionId, msgId, text) => {
+    set((state) => {
+      const current = state.queues[sessionId]
+      if (!current) return state
+      let found = false
+      // `map` (e não reenfileirar): o item fica EXATAMENTE onde estava — só o
+      // texto muda. O resto (modo, opções, agendamento, anexos) é preservado.
+      const next = current.map((m) => {
+        if (m.id !== msgId) return m
+        found = true
+        return { ...m, text }
+      })
+      if (!found) return state
+      const queues = { ...state.queues, [sessionId]: next }
+      persist(queues)
+      return { queues }
+    })
+  },
+
+  startEdit: (sessionId, msgId) => {
+    const msg = get().queues[sessionId]?.find((m) => m.id === msgId)
+    if (!msg) return
+    // O texto vai para o input principal (bridge do rascunho); o Enter depois
+    // grava de volta NESTE item, sem mexer na ordem.
+    useDraftInput.getState().setDraft(sessionId, msg.text)
+    set((state) => ({ editing: { ...state.editing, [sessionId]: msgId } }))
+  },
+
+  cancelEdit: (sessionId) => {
+    set((state) => {
+      if (state.editing[sessionId] === undefined) return state
+      const editing = { ...state.editing }
+      delete editing[sessionId]
+      return { editing }
     })
   },
 

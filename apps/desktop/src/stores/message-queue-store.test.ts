@@ -85,4 +85,67 @@ describe("fila de mensagens", () => {
     expect(sendMessage).not.toHaveBeenCalled()
     expect(q.queueSize("s1")).toBe(1)
   })
+
+  it("editar um item grava no mesmo lugar da fila", () => {
+    queue("primeira")
+    const store = useMessageQueueStore.getState()
+    store.enqueueForSend("s1", "segunda", {}, "code")
+    store.enqueueForSend("s1", "terceira", {}, "code")
+    // Depois dos enqueues: o snapshot do getState acima é velho.
+    const antes = useMessageQueueStore.getState().queues.s1.map((m) => m.id)
+
+    useMessageQueueStore.getState().update("s1", antes[1], "segunda (editada)")
+
+    const depois = useMessageQueueStore.getState().queues.s1
+    expect(depois.map((m) => m.id)).toEqual(antes)
+    expect(depois.map((m) => m.text)).toEqual(["primeira", "segunda (editada)", "terceira"])
+  })
+
+  it("editar não perde os campos do item (modo, opções, sessão)", () => {
+    queue("original")
+    const q = useMessageQueueStore.getState()
+    const antes = q.queues.s1[0]
+    q.update("s1", antes.id, "editada")
+
+    const depois = useMessageQueueStore.getState().queues.s1[0]
+    expect(depois.text).toBe("editada")
+    expect(depois.mode).toBe(antes.mode)
+    expect(depois.sessionId).toBe(antes.sessionId)
+    expect(depois.createdAt).toBe(antes.createdAt)
+  })
+
+  it("remover ou enviar o item em edição encerra o modo edição", () => {
+    useMessageQueueStore.setState({ editing: {} })
+    queue("alvo")
+    const q = useMessageQueueStore.getState()
+    const id = q.queues.s1[0].id
+    q.startEdit("s1", id)
+    expect(useMessageQueueStore.getState().editing.s1).toBe(id)
+
+    useMessageQueueStore.getState().remove("s1", id)
+    expect(useMessageQueueStore.getState().editing.s1).toBeUndefined()
+  })
+
+  it("enviar primeiro traz o item para a frente sem bagunçar o resto", () => {
+    queue("primeira")
+    const store = useMessageQueueStore.getState()
+    store.enqueueForSend("s1", "segunda", {}, "code")
+    store.enqueueForSend("s1", "terceira", {}, "code")
+    const ultima = useMessageQueueStore.getState().queues.s1[2]
+
+    useMessageQueueStore.getState().moveToFront("s1", ultima.id)
+
+    expect(useMessageQueueStore.getState().queues.s1.map((m) => m.text)).toEqual([
+      "terceira",
+      "primeira",
+      "segunda",
+    ])
+    // Quem já está na frente não muda de lugar — nem reordena à toa.
+    useMessageQueueStore.getState().moveToFront("s1", ultima.id)
+    expect(useMessageQueueStore.getState().queues.s1.map((m) => m.text)).toEqual([
+      "terceira",
+      "primeira",
+      "segunda",
+    ])
+  })
 })

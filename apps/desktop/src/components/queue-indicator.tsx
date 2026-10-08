@@ -1,7 +1,7 @@
 import { useState } from "react"
 import { useTranslation } from "react-i18next"
 import type { TFunction } from "i18next"
-import { CalendarIcon, CheckIcon, ChevronDownIcon, CopyIcon, ListPlus, SendIcon, X } from "lucide-react"
+import { ArrowUpToLine, CalendarIcon, CheckIcon, ChevronDownIcon, CopyIcon, ListPlus, PencilIcon, SendIcon, X } from "lucide-react"
 import {
   Collapsible,
   CollapsibleContent,
@@ -33,14 +33,19 @@ export function QueueIndicator({ sessionId }: QueueIndicatorProps) {
   // Um só vale porque copiar é instantâneo; não precisa ser um Set.
   const [copiedId, setCopiedId] = useState<string | null>(null)
   const queues = useMessageQueueStore((s) => s.queues)
+  const editing = useMessageQueueStore((s) => s.editing)
   const remove = useMessageQueueStore((s) => s.remove)
+  const moveToFront = useMessageQueueStore((s) => s.moveToFront)
   const sendNow = useMessageQueueStore((s) => s.sendNow)
+  const startEdit = useMessageQueueStore((s) => s.startEdit)
+  const cancelEdit = useMessageQueueStore((s) => s.cancelEdit)
   // Turno anterior falhou: a fila não sai sozinha (ver processQueue) — sem
   // avisar, pareceria travada.
   const paused = useSessionStore((s) => (sessionId ? s.status[sessionId] === "error" : false))
   if (!sessionId) return null
   const items = queues[sessionId]
   if (!items || items.length === 0) return null
+  const editingId = editing[sessionId]
 
   const queueCount = items.filter((m) => !m.scheduledAt).length
   const scheduledCount = items.filter((m) => m.scheduledAt).length
@@ -63,11 +68,14 @@ export function QueueIndicator({ sessionId }: QueueIndicatorProps) {
       </CollapsibleTrigger>
       <CollapsibleContent>
         <div className="mb-1 flex flex-col gap-0.5">
-          {items.map((msg) => (
+          {items.map((msg, index) => (
             <div
               key={msg.id}
               title={msg.text}
-              className="group/item flex items-center justify-between gap-2 rounded-md px-3 py-1.5 text-xs hover:bg-muted/50"
+              className={cn(
+                "group/item flex items-center justify-between gap-2 rounded-md px-3 py-1.5 text-xs hover:bg-muted/50",
+                editingId === msg.id && "bg-primary/10 ring-1 ring-primary/40",
+              )}
             >
               <span className="flex min-w-0 flex-1 items-center gap-2">
                 {msg.scheduledAt ? (
@@ -83,6 +91,18 @@ export function QueueIndicator({ sessionId }: QueueIndicatorProps) {
                 <span className="text-[10px] text-muted-foreground/60">
                   {msg.scheduledAt ? formatSchedule(msg.scheduledAt, i18n.language, t) : t("queue.badge")}
                 </span>
+                {/* O primeiro da fila é o próximo a sair: o botão não teria o
+                    que fazer nele. */}
+                {index > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => moveToFront(sessionId, msg.id)}
+                    title={t("queue.sendFirst")}
+                    className="rounded p-0.5 text-muted-foreground/50 transition-colors hover:bg-accent hover:text-accent-foreground"
+                  >
+                    <ArrowUpToLine className="size-3.5" />
+                  </button>
+                )}
                 {paused && (
                   <button
                     type="button"
@@ -93,6 +113,28 @@ export function QueueIndicator({ sessionId }: QueueIndicatorProps) {
                     <SendIcon className="size-3.5" />
                   </button>
                 )}
+                <button
+                  type="button"
+                  onClick={() => {
+                    // Era ESTE item que estava em edição: o lápis cancela (o
+                    // texto do input fica onde está — nunca apagamos o que a
+                    // pessoa escreveu).
+                    if (editingId === msg.id) {
+                      cancelEdit(sessionId)
+                      return
+                    }
+                    // O texto do item vai para o input principal; o Enter grava
+                    // de volta aqui, sem mudar a ordem da fila.
+                    startEdit(sessionId, msg.id)
+                  }}
+                  title={editingId === msg.id ? t("queue.cancelEdit") : t("queue.edit")}
+                  className={cn(
+                    "rounded p-0.5 transition-colors hover:bg-accent hover:text-accent-foreground",
+                    editingId === msg.id ? "text-primary" : "text-muted-foreground/50",
+                  )}
+                >
+                  <PencilIcon className="size-3.5" />
+                </button>
                 <button
                   type="button"
                   onClick={() => {
@@ -118,6 +160,23 @@ export function QueueIndicator({ sessionId }: QueueIndicatorProps) {
           ))}
         </div>
       </CollapsibleContent>
+      {/* Aviso do modo edição: fica fora do conteúdo recolhível, então continua
+          visível com a lista fechada — sem ele o Enter gravaria na fila sem a
+          pessoa perceber. */}
+      {editingId && (
+        <div className="mx-1 mb-1 flex items-center gap-1.5 rounded-md border border-primary/40 bg-primary/10 px-3 py-1 text-xs text-primary">
+          <PencilIcon className="size-3" />
+          {t("queue.editing")}
+          <button
+            type="button"
+            onClick={() => cancelEdit(sessionId)}
+            title={t("queue.cancelEdit")}
+            className="ml-auto rounded-sm p-0.5 transition-colors hover:bg-primary/20"
+          >
+            <X className="size-3" />
+          </button>
+        </div>
+      )}
     </Collapsible>
   )
 }

@@ -208,6 +208,21 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId, on
   ], [search, plan, simple, brain, vision, visionModel, sessionId, setBrainEnabled, setSimple, setModeActive, setVisionConfigOpen, t])
 
   const handleSubmit = useCallback((message: { text?: string; files?: { mediaType?: string; filename?: string; url?: string }[] }) => {
+    // Editando um item da fila (lápis na fila): o Enter grava a edição no
+    // MESMO item — a ordem da fila não muda — em vez de enfileirar outra.
+    // Com o input vazio o Enter cancela a edição e o fluxo normal segue.
+    const editingId = sessionId ? useMessageQueueStore.getState().editing[sessionId] : undefined
+    const rawText = message.text?.trim()
+    if (editingId && sessionId) {
+      if (rawText) {
+        const resolved = resolveSlashAction(rawText, "code")
+        useMessageQueueStore.getState().update(sessionId, editingId, resolved?.prompt ?? rawText)
+        useMessageQueueStore.getState().cancelEdit(sessionId)
+        clearInputDraft(sessionId)
+        return
+      }
+      useMessageQueueStore.getState().cancelEdit(sessionId)
+    }
     const files = toFileParts(message.files ?? [])
     const resolved = message.text ? resolveSlashAction(message.text, "code") : null
     if (resolved?.action.kind === "init" && !busy) {

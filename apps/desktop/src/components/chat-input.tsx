@@ -195,6 +195,22 @@ export function ChatInput({ onSubmit, status, onStop, sessionId, draftKey, onPro
           onProviderBlocked?.()
         } : undefined}
         onSubmit={(message) => {
+          // Editando um item da fila (lápis na fila): o Enter grava a edição no
+          // MESMO item — a ordem da fila não muda — em vez de enfileirar outra
+          // mensagem. Com o input vazio o Enter só cancela a edição e o fluxo
+          // normal segue (sem texto, Enter não faz nada aqui).
+          const editingId = sessionId ? useMessageQueueStore.getState().editing[sessionId] : undefined
+          const rawText = message.text?.trim()
+          if (editingId && sessionId) {
+            if (rawText) {
+              const resolved = resolveSlashAction(rawText, "chat")
+              useMessageQueueStore.getState().update(sessionId, editingId, resolved?.prompt ?? rawText)
+              useMessageQueueStore.getState().cancelEdit(sessionId)
+              clearInputDraft(sessionId)
+              return
+            }
+            useMessageQueueStore.getState().cancelEdit(sessionId)
+          }
           const files = toFileParts(message.files ?? [])
           // Trechos citados do visualizador viram anexo com MIME próprio: a
           // bolha mostra o chip e o modelo recebe o texto com a citação.
