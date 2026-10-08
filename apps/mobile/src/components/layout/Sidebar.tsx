@@ -377,7 +377,7 @@ export function Sidebar() {
     // (mesma lógica da esteira/rotinas do desktop).
     { label: t('sidebar.rotinas'), icon: CalendarClock, view: 'rotinas' },
     { label: t('sidebar.memories'), icon: BrainCircuit, view: 'memories' },
-    { label: t('sidebar.usageLimits'), icon: BarChart3, view: 'usage' },
+    { label: t('sidebar.usage'), icon: BarChart3, view: 'usage' },
     { label: t('sidebar.media'), icon: Images, view: 'media' },
     { label: t('sidebar.tools'), icon: Puzzle, view: 'tools', codeOnly: true },
   ]

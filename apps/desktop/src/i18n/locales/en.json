@@ -19,10 +19,6 @@
         "label": "How It Works",
         "description": "Explanation of modes and combinations."
       },
-      "analytics": {
-        "label": "Usage & Limits",
-        "description": "Usage statistics and token consumption."
-      },
       "appearance": {
         "label": "Appearance",
         "description": "Theme and display modes."
@@ -494,7 +490,7 @@
     "memories": "Memories",
     "resize": "Drag to resize (double-click resets)",
     "tools": "Tools",
-    "usage": "Usage & Limits",
+    "usage": "Usage",
     "code": "Code",
     "options": "Options",
     "create": "Create",
@@ -1330,6 +1326,8 @@
       "project": "Projects"
     },
     "hoursByProject": "Hours per project",
+    "hoursByProjectInfoTitle": "How hours are counted",
+    "hoursByProjectInfo": "The total estimates the combined working time (Orbit + you), not raw clock time. Orbit's generation time always counts. Your breaks enter with an inactivity margin: up to 30 min count in full (reading, testing or reviewing); 30–60 min count in full if you return with a detailed message; 1–1.5 h count only half, and only with a very long message. Longer breaks — or ones without a message that shows work — don't count.",
     "noProject": "No project",
     "messagesShort_one": "{{count}} msg",
     "messagesShort_other": "{{count}} msgs",

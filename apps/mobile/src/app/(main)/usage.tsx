@@ -12,6 +12,7 @@ import {
   CalendarDays,
   Layers,
   Folder,
+  HelpCircle,
 } from 'lucide-react-native'
 import { useTranslation } from 'react-i18next'
 import type { AnalyticsSummary, AnalyticsRange, CustomAnalyticsRange } from '@orbit/shared'
@@ -21,6 +22,7 @@ import { getThemeTokens } from '~/lib/theme-tokens'
 import { useThemeStore } from '~/stores/theme-store'
 import { SafeScreen } from '~/components/layout/SafeScreen'
 import { CustomRangeModal, rotuloPeriodo } from '~/components/usage/custom-range-modal'
+import { BottomSheet } from '~/components/ui/bottom-sheet'
 
 type PresetRange = 'today' | '7d' | '30d' | 'total'
 
@@ -64,6 +66,7 @@ export default function UsageScreen() {
   const [summary, setSummary] = useState<AnalyticsSummary | null>(null)
   const [loading, setLoading] = useState(false)
   const [customModalOpen, setCustomModalOpen] = useState(false)
+  const [hoursInfoOpen, setHoursInfoOpen] = useState(false)
 
   const rangeIsCustom = typeof range === 'object' && range.type === 'custom'
   const customRange = rangeIsCustom ? (range as CustomAnalyticsRange) : null
@@ -205,7 +208,26 @@ export default function UsageScreen() {
           )}
         </View>
 
-        <Text style={[s.sectionLabel, { color: tokens.mutedForeground }]}>{t('usageScreen.byProject')}</Text>
+        <BottomSheet
+          aberto={hoursInfoOpen}
+          aoFechar={() => setHoursInfoOpen(false)}
+          titulo={<Text style={[s.sheetTitle, { color: tokens.foreground }]}>{t('usageScreen.hoursByProjectInfoTitle')}</Text>}
+        >
+          <Text style={[s.sheetBody, { color: tokens.mutedForeground }]}>{t('usageScreen.hoursByProjectInfo')}</Text>
+        </BottomSheet>
+
+        <View style={s.sectionRow}>
+          <Text style={[s.sectionLabelFlat, { color: tokens.mutedForeground }]}>{t('usageScreen.byProject')}</Text>
+          <Pressable
+            onPress={() => setHoursInfoOpen(true)}
+            hitSlop={10}
+            accessibilityRole="button"
+            accessibilityLabel={t('usageScreen.hoursByProjectInfoTitle')}
+            style={s.sectionHelp}
+          >
+            <HelpCircle size={15} color={tokens.mutedForeground} />
+          </Pressable>
+        </View>
         <View style={[s.card, { borderColor: tokens.border, backgroundColor: tokens.card }]}>
           {topProjects.length === 0 ? (
             <View style={s.emptyBox}>
@@ -351,6 +373,19 @@ const s = StyleSheet.create({
     textTransform: 'uppercase',
     letterSpacing: 0.6,
   },
+  sectionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    width: '100%',
+    paddingHorizontal: 20,
+    paddingTop: 22,
+    paddingBottom: 8,
+  },
+  sectionLabelFlat: { fontSize: 11, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.6 },
+  sectionHelp: { padding: 2 },
+  sheetTitle: { fontSize: 15, fontWeight: '600', marginBottom: 10 },
+  sheetBody: { fontSize: 13, lineHeight: 20, paddingBottom: 4 },
   card: {
     marginHorizontal: 16,
     borderRadius: 14,

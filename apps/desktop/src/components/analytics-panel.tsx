@@ -9,7 +9,7 @@ import {
   ResponsiveContainer,
   Cell,
 } from "recharts";
-import { CalendarIcon, Clock, Folder, Hash } from "lucide-react";
+import { CalendarIcon, Clock, Folder, Hash, HelpCircle } from "lucide-react";
 import { format } from "date-fns";
 import { enUS, ptBR as dfPtBR } from "date-fns/locale";
 import type { DateRange } from "react-day-picker";
@@ -236,9 +236,33 @@ function ProjectHoursList({ data }: { data: AnalyticsSummary }) {
 
   return (
     <div className="rounded-lg border p-3">
-      <p className="mb-3 text-xs font-medium text-muted-foreground">
-        {t("analytics.hoursByProject")}
-      </p>
+      <div className="mb-3 flex w-full items-center justify-between gap-2">
+        <p className="text-xs font-medium text-muted-foreground">
+          {t("analytics.hoursByProject")}
+        </p>
+        <Popover>
+          <PopoverTrigger
+            render={
+              <Button
+                variant="ghost"
+                size="icon-xs"
+                className="shrink-0 text-muted-foreground"
+                aria-label={t("analytics.hoursByProjectInfoTitle")}
+              >
+                <HelpCircle />
+              </Button>
+            }
+          />
+          <PopoverContent align="end" className="w-72 p-3">
+            <p className="text-xs font-semibold text-foreground">
+              {t("analytics.hoursByProjectInfoTitle")}
+            </p>
+            <p className="mt-1.5 text-[11px] leading-relaxed text-muted-foreground">
+              {t("analytics.hoursByProjectInfo")}
+            </p>
+          </PopoverContent>
+        </Popover>
+      </div>
       <div className="flex flex-col gap-2">
         {projects.map((p: ProjectBreakdown) => (
           <div key={p.projectId} className="flex items-center gap-3">
