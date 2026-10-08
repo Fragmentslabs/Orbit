@@ -4,6 +4,16 @@ import path from 'node:path'
 import sharp from 'sharp'
 import { saveMedia, type MediaSource } from './media'
 import { panelActivity } from './panel-browser'
+import {
+  ConsoleBuffer,
+  attachConsole,
+  dragBetween,
+  formatConsoleEntries,
+  mouseMove,
+  mouseUp,
+  resolveTarget,
+  type BrowserTarget,
+} from './browser-input'
 
 /**
  * Engine de captura headless do Orbit.
@@ -127,6 +137,10 @@ const orbit = {
   waitFor: (selector, options) => call('waitFor', { selector, options: options || {} }),
   resize: (width, height) => call('resize', { width, height }),
   manifest: () => call('manifest', {}),
+  console: (options) => call('console', { options: options || {} }),
+  hover: (target) => call('hover', { target }),
+  drag: (from, to, options) => call('drag', { from, to, options: options || {} }),
+  mouseUp: () => call('mouseUp', {}),
   log: (...parts) => call('log', { message: parts.map((p) => (typeof p === 'string' ? p : JSON.stringify(p))).join(' ') }),
   wait: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
 }
@@ -216,6 +230,19 @@ export async function runBrowserScript(options: RunScriptOptions): Promise<Scrip
 
   const win = createHiddenWindow(viewport)
   let timedOut = false
+  // Console da página: erros também entram no resultado (o agente vê por que
+  // um print saiu em branco sem precisar pedir).
+  const pageConsole = new ConsoleBuffer()
+  attachConsole(win.webContents, () => pageConsole)
+  let heldPointer: { x: number; y: number } | null = null
+  /** Alvo do script: seletor CSS (string) ou { x, y } / { selector }. */
+  const toTarget = (raw: unknown): BrowserTarget =>
+    typeof raw === 'string' ? { selector: raw } : ((raw ?? {}) as BrowserTarget)
+  const point = async (raw: unknown, scroll: boolean) => {
+    const resolved = await resolveTarget(win.webContents, toTarget(raw), scroll)
+    if (typeof resolved === 'string') throw new Error(resolved)
+    return resolved
+  }
 
   const waitForLoad = async () => {
     const deadline = Date.now() + LOAD_TIMEOUT_MS
@@ -318,6 +345,35 @@ export async function runBrowserScript(options: RunScriptOptions): Promise<Scrip
       }
       case 'manifest':
         return captures
+      case 'console': {
+        const opts = (args.options ?? {}) as { level?: 'all' | 'warning' | 'error'; pattern?: string; limit?: number }
+        return pageConsole.query({ limit: 200, ...opts })
+      }
+      case 'hover': {
+        const target = await point(args.target, true)
+        mouseMove(win.webContents, target, heldPointer !== null)
+        await delay(250)
+        return target
+      }
+      case 'drag': {
+        const opts = (args.options ?? {}) as { steps?: number; release?: boolean }
+        if (args.from != null && heldPointer) {
+          mouseUp(win.webContents, heldPointer)
+          heldPointer = null
+        }
+        const from = args.from != null ? await point(args.from, true) : null
+        const to = await point(args.to, false)
+        const end = await dragBetween(win.webContents, from, to, { held: heldPointer, ...opts })
+        heldPointer = opts.release === false ? end : null
+        return end
+      }
+      case 'mouseUp':
+        if (heldPointer) {
+          mouseUp(win.webContents, heldPointer)
+          heldPointer = null
+          await delay(250)
+        }
+        return true
       case 'log':
         pushLog(String(args.message ?? ''))
         return true
@@ -380,6 +436,13 @@ export async function runBrowserScript(options: RunScriptOptions): Promise<Scrip
   }
   if (!win.isDestroyed()) win.destroy()
   if (!options.keep) await fsp.rm(taskDir, { recursive: true, force: true })
+
+  // Só os erros da página vão para o resultado sozinhos — o resto o script
+  // pede com orbit.console() quando quiser.
+  const pageErrors = pageConsole.query({ level: 'error', limit: 20 })
+  if (pageErrors.length > 0) {
+    pushLog(`[página] ${pageErrors.length} erro(s) no console:\n${formatConsoleEntries(pageErrors)}`)
+  }
 
   return { taskId, captures, logs, returned: outcome.returned, error: outcome.error, timedOut }
 }

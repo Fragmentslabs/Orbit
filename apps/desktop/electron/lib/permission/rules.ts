@@ -31,6 +31,13 @@ const NATIVE_TOOLS = new Set([
   'panel_type',
   'panel_resize',
   'panel_screenshot',
+  'panel_console',
+  'panel_hover',
+  'panel_drag',
+  // Executa JS na página do browser do painel: mesmo threat model do
+  // run_browser_script (o agente já roda código arbitrário), e a página é a
+  // que o próprio agente abriu.
+  'panel_eval',
   'show_image',
   // Artefatos HTML mostrados na resposta. Não pedem permissão: escrevem só no
   // storage do Orbit (orbit-data/artifacts), nunca no projeto do usuário, e

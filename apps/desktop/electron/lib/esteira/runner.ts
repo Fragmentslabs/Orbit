@@ -356,6 +356,10 @@ function resumirTool(tool: string, input: unknown): string {
       return args.ref != null ? `ref ${args.ref}: ${curto(args.text)}` : curto(args.selector)
     case 'panel_resize':
       return curto(args.preset ?? (args.width ? `${args.width}×${args.height}` : 'fit'))
+    case 'panel_eval':
+      return curto(args.code)
+    case 'panel_console':
+      return curto(args.level ?? 'all')
     case 'panel_screenshot':
       if (args.fullPage === true) return 'página inteira'
       if (typeof args.savePath === 'string') return curto(args.savePath)

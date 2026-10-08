@@ -1,5 +1,16 @@
 import { BrowserWindow, webContents, type NativeImage, type WebContents } from 'electron'
 import sharp from 'sharp'
+import {
+  ConsoleBuffer,
+  attachConsole,
+  dragBetween,
+  evaluateInPage,
+  formatConsoleEntries,
+  mouseMove,
+  mouseUp,
+  resolveTarget,
+  type BrowserTarget,
+} from './browser-input'
 
 /**
  * Browser do painel direito controlado pelo agente. O renderer monta um
@@ -50,10 +61,44 @@ export function panelLastViewport(): { width: number; height: number } | null {
   return lastViewport
 }
 
+/**
+ * Console de cada sessão. Vive por SESSÃO, não por webContents: o guest é
+ * recriado quando a aba troca de lugar, e o histórico (o erro que derrubou a
+ * página) não pode sumir junto.
+ */
+const consoleBySession = new Map<string, ConsoleBuffer>()
+/** webContents já ligados ao console → sessão dona deles agora. */
+const consoleOwners = new Map<number, string>()
+
+function consoleOf(sessionId: string): ConsoleBuffer {
+  let buffer = consoleBySession.get(sessionId)
+  if (!buffer) {
+    buffer = new ConsoleBuffer()
+    consoleBySession.set(sessionId, buffer)
+  }
+  return buffer
+}
+
+/** Ponteiro com o botão ainda pressionado (panel_drag com release: false). */
+const heldPointer = new Map<string, { x: number; y: number }>()
+
 export function registerPanelWebContents(sessionId: string | null, id: number | null): void {
   if (!sessionId) return
-  if (id == null) panelWcs.delete(sessionId)
-  else panelWcs.set(sessionId, id)
+  if (id == null) {
+    panelWcs.delete(sessionId)
+    return
+  }
+  panelWcs.set(sessionId, id)
+  const wc = webContents.fromId(id)
+  if (!wc || wc.isDestroyed()) return
+  const known = consoleOwners.has(id)
+  consoleOwners.set(id, sessionId)
+  if (known) return
+  attachConsole(wc, () => {
+    const owner = consoleOwners.get(id)
+    return owner ? consoleOf(owner) : undefined
+  })
+  wc.once('destroyed', () => consoleOwners.delete(id))
 }
 
 function getWc(sessionId: string): WebContents | null {
@@ -337,4 +382,76 @@ export async function panelScreenshot(
   } finally {
     await panelFullscreen(false)
   }
+}
+
+/** Mensagens do console da página do painel (erros, warnings, logs). */
+export function panelConsole(
+  sessionId: string,
+  options: { level?: 'all' | 'warning' | 'error'; pattern?: string; limit?: number; clear?: boolean },
+): string {
+  const buffer = consoleBySession.get(sessionId)
+  if (!buffer || buffer.size === 0) {
+    return getWc(sessionId)
+      ? 'Console vazio — nenhuma mensagem desde que o browser abriu.'
+      : 'O browser desta sessão ainda não abriu — use panel_navigate antes.'
+  }
+  const entries = buffer.query(options)
+  if (options.clear) buffer.clear()
+  const filtro = options.level && options.level !== 'all' ? ` (nível ${options.level}+)` : ''
+  if (entries.length === 0) return `Nenhuma mensagem${filtro}${options.pattern ? ` contendo "${options.pattern}"` : ''}.`
+  return `${entries.length} mensagem(ns)${filtro}${options.clear ? ' — console limpo em seguida' : ''}:\n${formatConsoleEntries(entries)}`
+}
+
+/** Roda JS na página do painel (a mesma que o usuário vê) e devolve o resultado. */
+export async function panelEval(sessionId: string, code: string): Promise<string> {
+  const wc = await ensurePanelBrowser(sessionId)
+  activity('Executando JavaScript na página', sessionId)
+  return evaluateInPage(wc, code)
+}
+
+/** Passa o mouse sobre um elemento (menus, tooltips, estados :hover). */
+export async function panelHover(sessionId: string, target: BrowserTarget): Promise<string> {
+  const wc = await ensurePanelBrowser(sessionId)
+  const point = await resolveTarget(wc, target, true)
+  if (typeof point === 'string') return point
+  activity('Passando o mouse', sessionId)
+  mouseMove(wc, point, heldPointer.has(sessionId))
+  await delay(300)
+  return `Mouse sobre (${Math.round(point.x)}, ${Math.round(point.y)}). Use panel_screenshot para ver o estado de hover.`
+}
+
+/**
+ * Arrasta com eventos de mouse reais. Com release: false o botão continua
+ * pressionado — o agente tira o print do meio do gesto e chama de novo (sem
+ * from) para continuar ou soltar.
+ */
+export async function panelDrag(
+  sessionId: string,
+  options: { from?: BrowserTarget; to: BrowserTarget; steps?: number; release?: boolean },
+): Promise<string> {
+  const wc = await ensurePanelBrowser(sessionId)
+  const held = heldPointer.get(sessionId) ?? null
+  if (options.from && held) {
+    // Um arrasto pendente com o botão pressionado: solta antes de começar outro
+    mouseUp(wc, held)
+    heldPointer.delete(sessionId)
+    await delay(150)
+  }
+  if (!options.from && !held) return 'Nenhum arrasto em andamento — informe from (ref, selector ou x/y).'
+  const from = options.from ? await resolveTarget(wc, options.from, true) : null
+  if (typeof from === 'string') return from
+  const to = await resolveTarget(wc, options.to, false)
+  if (typeof to === 'string') return to
+  activity(options.release === false ? 'Arrastando (segurando)' : 'Arrastando', sessionId)
+  const end = await dragBetween(wc, from, to, {
+    held: options.from ? null : held,
+    steps: options.steps,
+    release: options.release,
+  })
+  if (options.release === false) {
+    heldPointer.set(sessionId, end)
+    return `Arrastando — botão ainda pressionado em (${Math.round(end.x)}, ${Math.round(end.y)}). Tire o panel_screenshot agora; depois chame panel_drag sem from para mover mais ou soltar (release: true).`
+  }
+  heldPointer.delete(sessionId)
+  return `Solto em (${Math.round(end.x)}, ${Math.round(end.y)}). Agora em: ${wc.getTitle()} — ${wc.getURL()}`
 }

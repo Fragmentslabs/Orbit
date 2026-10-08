@@ -24,6 +24,10 @@ const API_DOC = `Available inside the script (global \`orbit\`, all async — us
 - await orbit.resize(width, height)
 - await orbit.wait(ms)
 - await orbit.manifest()  → captures so far
+- await orbit.console({ level: 'all'|'warning'|'error', pattern, limit })  → the PAGE's console messages ({ at, level, message, source }); page errors also come back in the result automatically
+- await orbit.hover(target)  → real mouse move over the target
+- await orbit.drag(from, to, { steps, release })  → real mouse drag; release: false keeps the button pressed so you can orbit.capture() mid-drag, then orbit.drag(null, to2) to continue/drop or orbit.mouseUp()
+  (target = CSS selector string or { x, y } in viewport px)
 - console.log(...)  → comes back in the result`
 
 function describeCaptures(captures: CaptureItem[]): string {

@@ -7,7 +7,11 @@ import { captureUrl } from '../browser-script'
 import {
   PanelCaptureError,
   panelClick,
+  panelConsole,
   panelCurrentUrl,
+  panelDrag,
+  panelEval,
+  panelHover,
   panelLastViewport,
   panelNavigate,
   panelRead,
@@ -56,6 +60,14 @@ const SCREENSHOT_SCHEMA = z.object({
     .describe(
       'Loads the image into your context so you can SEE it — natively if you have vision, or via the configured vision model description when the Vision mode is ON (the raw image never enters your context in that case). Default false — returns only the media URL (no image tokens). Use true when you actually need to see the screen.',
     ),
+})
+
+/** Alvo de mouse: ref do panel_read, seletor CSS ou coordenadas da viewport. */
+const TARGET_SCHEMA = z.object({
+  ref: z.number().int().optional().describe('Numeric ref from panel_read'),
+  selector: z.string().optional().describe('CSS selector (alternative to ref)'),
+  x: z.number().optional().describe('Viewport X in CSS px (with y, alternative to ref/selector)'),
+  y: z.number().optional().describe('Viewport Y in CSS px'),
 })
 
 const VIEWPORT_PRESETS: Record<string, { width: number | null; height: number | null; label: string }> = {
@@ -129,6 +141,45 @@ export function createPanelBrowserTools(ctx: ToolContext): ToolSet {
         if (ref == null && !selector) return 'Informe ref ou selector.'
         return panelType(ctx.sessionId, text, ref, selector, pressEnter)
       },
+    }),
+    panel_console: tool({
+      description:
+        'Reads the console of the page open in the panel browser: errors (uncaught exceptions and rejected promises included), warnings, logs, failed loads and crashes, with source:line. Check it whenever a page renders blank or broken, or after an interaction that should have done something.',
+      inputSchema: z.object({
+        level: z
+          .enum(['all', 'warning', 'error'])
+          .optional()
+          .describe("'error' = only errors, 'warning' = warnings and errors, 'all' (default)"),
+        pattern: z.string().optional().describe('Only messages containing this text (case-insensitive)'),
+        limit: z.number().int().min(1).max(500).optional().describe('Most recent N messages (default 50)'),
+        clear: z.boolean().optional().describe('Clears the console after reading (to see only what comes next)'),
+      }),
+      execute: async (options) => panelConsole(ctx.sessionId, options),
+    }),
+    panel_eval: tool({
+      description:
+        'Runs JavaScript in the page open in the panel browser — the same page the user sees, with its current state — and returns the result as JSON. A single expression returns its value (e.g. `document.title`, `[...document.querySelectorAll("li")].length`); for several statements use `return`. Top-level await works. Use it to inspect state (stores, DOM, localStorage) or to set up a scenario before a screenshot. For mouse interaction prefer panel_click/panel_hover/panel_drag, which send real input events.',
+      inputSchema: z.object({
+        code: z.string().describe('JavaScript to run in the page'),
+      }),
+      execute: async ({ code }) => panelEval(ctx.sessionId, code),
+    }),
+    panel_hover: tool({
+      description:
+        'Moves the mouse over an element (real mouse event) to reveal hover menus, tooltips and :hover styles. Then use panel_screenshot.',
+      inputSchema: TARGET_SCHEMA,
+      execute: async (target) => panelHover(ctx.sessionId, target),
+    }),
+    panel_drag: tool({
+      description:
+        'Drags with the left mouse button using real mouse events (down → several moves → up) — works with pointer-based drag and drop (dnd-kit, sortable lists, sliders, resize handles, canvases). Each end is a ref, CSS selector or x/y. With release: false the button stays pressed at `to`: take a panel_screenshot of the mid-drag state (drag ghost, drop highlight), then call panel_drag again WITHOUT from to keep moving and/or drop (release defaults to true). Native HTML5 draggable elements are best-effort.',
+      inputSchema: z.object({
+        from: TARGET_SCHEMA.optional().describe('Where to press the button. Omit to continue a held drag'),
+        to: TARGET_SCHEMA.describe('Where to move the pointer'),
+        steps: z.number().int().min(1).max(100).optional().describe('Intermediate moves (default 12)'),
+        release: z.boolean().optional().describe('Release the button at the end (default true)'),
+      }),
+      execute: async (options) => panelDrag(ctx.sessionId, options),
     }),
     panel_resize: tool({
       description:
