@@ -25,7 +25,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { artifactApi, mediaApi } from "@/src/lib/ipc"
 import { useSessionStore } from "@/src/stores/session-store"
-import { usePanelStore } from "@/src/stores/panel-store"
+import { ORPHAN_KEY, usePanelStore } from "@/src/stores/panel-store"
 import { useTheme } from "@/components/theme-provider"
 import { openDocumentInPanel } from "@/src/lib/open-document"
 import { useWorkspace } from "@/lib/workspace-context"
@@ -582,8 +582,10 @@ export function MediaGallery() {
   /**
    * Clique no tile: imagem abre o lightbox; artefato abre a aba própria (o
    * lightbox é um <img>, e uma página renderizável precisa de iframe e
-   * espaço). A aba nasce na sessão de ORIGEM do artefato quando ela é
-   * conhecida — é lá que o card dele está na conversa.
+   * espaço). A aba nasce no painel que está NA TELA, e não no da conversa de
+   * origem: aberta lá, ela ia para um painel escondido e o clique parecia não
+   * fazer nada. Artefato e documento da galeria se leem pelo próprio id, sem
+   * depender da conversa em que nasceram.
    */
   const openEntry = useCallback(
     (entry: MediaEntry) => {
@@ -597,8 +599,8 @@ export function MediaGallery() {
         setPreviewChain(versionsByHead.get(entry.id) ?? null)
         return
       }
-      const sessionId = entry.sessionId ?? useSessionStore.getState().activeIds[mode]
-      if (!sessionId) return
+      // Mesma chave com que o painel escolhe o balde que mostra.
+      const sessionId = useSessionStore.getState().activeIds[mode] ?? ORPHAN_KEY
       // Documento vivo abre no canvas de Markdown, arquivo pedido abre no
       // visualizador — quem decide e o openDocumentInPanel, para a galeria e o
       // card da conversa concordarem. Artefato continua na aba que renderiza a

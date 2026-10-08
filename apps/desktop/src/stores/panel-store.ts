@@ -179,6 +179,15 @@ interface PanelState {
 /** Balde das abas de um chat que ainda nao virou sessao (ver adoptOrphanTabs). */
 export const ORPHAN_KEY = "__orphan__"
 
+/**
+ * Sessão gravada na aba. No balde órfão não há sessão ainda: a aba fica sem
+ * dona, e o adoptOrphanTabs carimba a que nascer — gravar "__orphan__" nela
+ * a prenderia a um id que não existe.
+ */
+function tabSession(sessionId: string): string | undefined {
+  return sessionId === ORPHAN_KEY ? undefined : sessionId
+}
+
 let activeTimer: ReturnType<typeof setTimeout> | null = null
 const ACTIVE_TIMEOUT_MS = 6000
 
@@ -280,7 +289,7 @@ export const usePanelStore = create<PanelState>((set, get) => {
           id: `artifact-${nextTabId()}`,
           type: "artifact",
           title,
-          sessionId,
+          sessionId: tabSession(sessionId),
           artifactId,
         }
         return {
@@ -308,7 +317,7 @@ export const usePanelStore = create<PanelState>((set, get) => {
           id: `document-${nextTabId()}`,
           type: "document",
           title: ref.title,
-          sessionId,
+          sessionId: tabSession(sessionId),
           documentId: ref.documentId,
         }
         return {
@@ -346,7 +355,7 @@ export const usePanelStore = create<PanelState>((set, get) => {
           id: `source-${nextTabId()}`,
           type: "source",
           title: ref.title,
-          sessionId,
+          sessionId: tabSession(sessionId),
           sourceDocId: ref.docId,
           ...patch,
         }
