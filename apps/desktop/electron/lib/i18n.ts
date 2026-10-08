@@ -110,6 +110,75 @@ export const MESSAGES = {
     'pt-BR': 'erro desconhecido',
     en: 'unknown error',
   },
+  // ── Permissões de site no navegador integrado ──────────────────────────────
+  'browserPerm.title': {
+    'pt-BR': '{{site}} quer acessar',
+    en: '{{site}} wants to use',
+  },
+  'browserPerm.detail': {
+    'pt-BR': 'Pedido do site aberto no navegador do Orbit: {{what}}.',
+    en: 'Request from the site open in the Orbit browser: {{what}}.',
+  },
+  'browserPerm.allow': {
+    'pt-BR': 'Permitir',
+    en: 'Allow',
+  },
+  'browserPerm.block': {
+    'pt-BR': 'Bloquear',
+    en: 'Block',
+  },
+  'browserPerm.cancel': {
+    'pt-BR': 'Cancelar',
+    en: 'Cancel',
+  },
+  'browserPerm.remember': {
+    'pt-BR': 'Lembrar para este site',
+    en: 'Remember for this site',
+  },
+  'browserPerm.camera': {
+    'pt-BR': 'câmera',
+    en: 'camera',
+  },
+  'browserPerm.microphone': {
+    'pt-BR': 'microfone',
+    en: 'microphone',
+  },
+  'browserPerm.geolocation': {
+    'pt-BR': 'localização',
+    en: 'location',
+  },
+  'browserPerm.notifications': {
+    'pt-BR': 'notificações',
+    en: 'notifications',
+  },
+  'browserPerm.clipboard': {
+    'pt-BR': 'leitura da área de transferência',
+    en: 'clipboard reading',
+  },
+  'browserPerm.midi': {
+    'pt-BR': 'dispositivos MIDI',
+    en: 'MIDI devices',
+  },
+  'browserPerm.systemDenied.title': {
+    'pt-BR': 'O macOS bloqueou o acesso do Orbit ao {{what}}',
+    en: 'macOS blocked Orbit from using the {{what}}',
+  },
+  'browserPerm.systemDenied.detail': {
+    'pt-BR': 'Libere o Orbit em Ajustes do Sistema › Privacidade e Segurança › {{what}} e recarregue a página.',
+    en: 'Allow Orbit in System Settings › Privacy & Security › {{what}} and reload the page.',
+  },
+  'browserPerm.systemDenied.open': {
+    'pt-BR': 'Abrir Ajustes',
+    en: 'Open Settings',
+  },
+  'browserPerm.screen.title': {
+    'pt-BR': '{{site}} quer compartilhar sua tela',
+    en: '{{site}} wants to share your screen',
+  },
+  'browserPerm.screen.detail': {
+    'pt-BR': 'A tela principal será compartilhada com o site aberto no navegador do Orbit.',
+    en: 'Your main screen will be shared with the site open in the Orbit browser.',
+  },
 } as const satisfies Record<string, Record<MainLocale, string>>
 
 export type MainMessageKey = keyof typeof MESSAGES

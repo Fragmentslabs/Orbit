@@ -59,6 +59,7 @@ import { setupMemoryScheduler } from './lib/memory/scheduler'
 import { getAppSettings, loadAppSettings, setAppSettings } from './lib/app-settings'
 import { setupAutoArchive } from './lib/auto-archive'
 import { BROWSER_PARTITION } from './lib/browser-script'
+import { clearBrowserPermissions, setupBrowserPermissions } from './lib/browser-permissions'
 import * as memoryService from './lib/memory/service'
 import { globalSkillsDir, loadSkills, notifySkillsChanged, setupSkillsWatcher } from './lib/skills'
 import { importSkillSelection } from './lib/skills/import'
@@ -2318,12 +2319,17 @@ app.whenReady().then(() => {
     setupAutoArchive()
   })
 
+  // Câmera, microfone, localização etc. dos sites do navegador integrado:
+  // pergunta ao usuário por site (antes o Electron aprovava tudo calado).
+  setupBrowserPermissions(BROWSER_PARTITION)
+
   createWindow()
 })
 
-/** Apaga cookies, logins, localStorage e cache do navegador integrado. */
+/** Apaga cookies, logins, localStorage, cache e permissões do navegador integrado. */
 async function clearBrowserData(): Promise<void> {
   const browser = session.fromPartition(BROWSER_PARTITION)
   await browser.clearStorageData()
   await browser.clearCache()
+  await clearBrowserPermissions()
 }

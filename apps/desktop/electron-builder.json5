@@ -43,9 +43,24 @@
     "icon": "build/icon.icns",
     "minimumSystemVersion": "12.0.0",
     "bundleVersion": "3",
+    // Câmera/microfone/localização pedidos pelos sites do navegador integrado
+    // (browser-permissions.ts): o macOS exige o texto de uso no Info.plist e o
+    // entitlement no hardened runtime, senão nega sem perguntar.
+    "entitlements": "build/entitlements.mac.plist",
+    "entitlementsInherit": "build/entitlements.mac.plist",
     "extendInfo": {
-      "ITSAppUsesNonExemptEncryption": false
+      "ITSAppUsesNonExemptEncryption": false,
+      "NSCameraUsageDescription": "Sites abertos no navegador do Orbit podem pedir a câmera (videochamadas, leitura de QR code).",
+      "NSMicrophoneUsageDescription": "Sites abertos no navegador do Orbit podem pedir o microfone (videochamadas, gravação de áudio).",
+      "NSLocationWhenInUseUsageDescription": "Sites abertos no navegador do Orbit podem pedir sua localização.",
+      "NSLocationUsageDescription": "Sites abertos no navegador do Orbit podem pedir sua localização."
     }
+  },
+  // Mac App Store: entitlements próprios (sandbox). Explícitos para não
+  // herdarem os do "mac" acima, que são do hardened runtime sem sandbox.
+  "mas": {
+    "entitlements": "build/entitlements.mas.plist",
+    "entitlementsInherit": "build/entitlements.mas.inherit.plist"
   },
   "win": {
     "target": [
