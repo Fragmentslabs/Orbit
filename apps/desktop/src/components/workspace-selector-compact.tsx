@@ -46,6 +46,18 @@ export function CompactWorkspaceSelector({
         >
           <Folder className="size-3 shrink-0 text-sidebar-foreground/60" />
           <span className="truncate">{folders.length === 0 ? t("folderSelector.associate") : getFolderName(folders[0])}</span>
+          {/* O botão compacto só mostra a pasta principal: o contador avisa
+              quantas pastas anexadas ficaram fora (hover lista os nomes). */}
+          {folders.length > 1 && (
+            <span
+              className="flex shrink-0 items-center gap-0.5 text-muted-foreground"
+              title={folders.slice(1).map(getFolderName).join(" · ")}
+            >
+              <span className="size-1 rounded-full bg-current" aria-hidden />
+              {folders.length - 1}
+              <span className="sr-only">{t("folderSelector.others")}</span>
+            </span>
+          )}
           <ChevronDown className="size-3 shrink-0 text-muted-foreground" />
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-48 p-1">

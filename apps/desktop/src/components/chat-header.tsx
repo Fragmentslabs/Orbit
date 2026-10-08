@@ -89,10 +89,13 @@ export function ChatHeader({ title, hasMenu, session, sessionId, rightPanelOpen,
   const [renaming, setRenaming] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
   const toggleChatSearch = useChatSearchStore((s) => s.toggle)
-  // Com muitas pastas o modo inline não cabe nem perto do limite `@xl`
-  // (3 pastas + branch + título ≈ 750-800px; `@xl` = 36rem). Com mais de 3
-  // pastas, exige o container em `@5xl` (64rem = 1024px) para ficar solto;
-  // senão, usa o dropdown compacto.
+  // Com 4+ pastas os chips do modo inline não cabem de forma confiável em
+  // largura nenhuma: com a sidebar e o painel direito abertos, a régua de
+  // pastas quebra até acima do `@5xl` (64rem = 1024px) — subir o threshold
+  // só empurraria o problema para telas maiores. Então >3 pastas vai direto
+  // para o dropdown compacto, em qualquer largura, sem esperar o container
+  // query. Com até 3 pastas (3 pastas + branch + título ≈ 750-800px;
+  // `@xl` = 36rem) o inline segue valendo a partir do `@xl`.
   const manyFolders = (folders?.length ?? 0) > 3
 
   return (
@@ -107,6 +110,43 @@ export function ChatHeader({ title, hasMenu, session, sessionId, rightPanelOpen,
     // posterior, então com z-20 ela ficava por cima do header — e o dropdown de
     // pastas, preso no stacking context do @container, abria por baixo dela.
     <div className="@container relative z-50 flex h-12 items-center gap-2 px-4">
+      {/* O menu da sessão vira o primeiro item do header, à esquerda do botão
+          da sidebar: antes ficava solto depois do título e se deslocava junto
+          com o nome da conversa e a régua de pastas. */}
+      {hasMenu && (
+        <DropdownMenu open={menuOpen} onOpenChange={setMenuOpen}>
+          <DropdownMenuTrigger render={<Button variant="ghost" size="icon-sm" className="size-6 shrink-0" />}>
+            <Ellipsis className="size-3.5" />
+            <span className="sr-only">{t("header.options")}</span>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start" className="min-w-40">
+            <DropdownMenuItem onClick={() => toggleChatSearch()}>
+              <Search className="size-4" />
+              {t("header.searchInChat")}
+            </DropdownMenuItem>
+            {session && (
+              <>
+                <DropdownMenuItem onClick={() => useSessionStore.getState().togglePin(session.id)}>
+                  {session.pinned ? <PinOff className="size-4" /> : <Pin className="size-4" />}
+                  {session.pinned ? t("sidebar.session.unpin") : t("header.pin")}
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => setRenaming(true)}>
+                  <Pencil className="size-4" />
+                  {t("header.rename")}
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => useSessionStore.getState().toggleArchive(session.id)}>
+                  {session.archived ? <ArchiveRestore className="size-4" /> : <Archive className="size-4" />}
+                  {session.archived ? t("sidebar.session.unarchive") : t("header.archive")}
+                </DropdownMenuItem>
+                <DropdownMenuItem variant="destructive" onClick={() => setConfirmDelete(true)}>
+                  <Trash2 className="size-4" />
+                  {t("header.delete")}
+                </DropdownMenuItem>
+              </>
+            )}
+          </DropdownMenuContent>
+        </DropdownMenu>
+      )}
       {onToggleSidebar && (
         <Button variant="ghost" size="icon-sm" className="size-7 shrink-0" onClick={onToggleSidebar}>
           <PanelLeft className="size-4" />
@@ -121,14 +161,16 @@ export function ChatHeader({ title, hasMenu, session, sessionId, rightPanelOpen,
         <span className="truncate text-sm font-medium text-foreground">{title ?? t("header.newChat")}</span>
         {workspaceMode === 'code' && (
           <>
-            <div className={`hidden min-w-0 items-center gap-1 ${manyFolders ? "@5xl:flex" : "@xl:flex"}`}>
-              {repoPath && <BranchSelector repoPath={repoPath} onRequestAgentAction={onRequestAgentAction} />}
-              {folders && folders.length > 0 && onFoldersChange && (
-                <FolderSelector folders={folders} onFoldersChange={onFoldersChange} compact />
-              )}
-            </div>
+            {!manyFolders && (
+              <div className="hidden min-w-0 items-center gap-1 @xl:flex">
+                {repoPath && <BranchSelector repoPath={repoPath} onRequestAgentAction={onRequestAgentAction} />}
+                {folders && folders.length > 0 && onFoldersChange && (
+                  <FolderSelector folders={folders} onFoldersChange={onFoldersChange} compact />
+                )}
+              </div>
+            )}
             {(repoPath || (folders && folders.length > 0)) && onFoldersChange && (
-              <div className={`flex min-w-0 items-center ${manyFolders ? "@5xl:hidden" : "@xl:hidden"}`}>
+              <div className={manyFolders ? "flex min-w-0 items-center" : "flex min-w-0 items-center @xl:hidden"}>
                 <CompactWorkspaceSelector
                   repoPath={repoPath}
                   folders={folders ?? []}
@@ -138,40 +180,6 @@ export function ChatHeader({ title, hasMenu, session, sessionId, rightPanelOpen,
               </div>
             )}
           </>
-        )}
-        {hasMenu && (
-          <DropdownMenu open={menuOpen} onOpenChange={setMenuOpen}>
-            <DropdownMenuTrigger render={<Button variant="ghost" size="icon-sm" className="size-6 shrink-0" />}>
-              <Ellipsis className="size-3.5" />
-              <span className="sr-only">{t("header.options")}</span>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="start" className="min-w-40">
-              <DropdownMenuItem onClick={() => toggleChatSearch()}>
-                <Search className="size-4" />
-                {t("header.searchInChat")}
-              </DropdownMenuItem>
-              {session && (
-                <>
-                  <DropdownMenuItem onClick={() => useSessionStore.getState().togglePin(session.id)}>
-                    {session.pinned ? <PinOff className="size-4" /> : <Pin className="size-4" />}
-                    {session.pinned ? t("sidebar.session.unpin") : t("header.pin")}
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => setRenaming(true)}>
-                    <Pencil className="size-4" />
-                    {t("header.rename")}
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => useSessionStore.getState().toggleArchive(session.id)}>
-                    {session.archived ? <ArchiveRestore className="size-4" /> : <Archive className="size-4" />}
-                    {session.archived ? t("sidebar.session.unarchive") : t("header.archive")}
-                  </DropdownMenuItem>
-                  <DropdownMenuItem variant="destructive" onClick={() => setConfirmDelete(true)}>
-                    <Trash2 className="size-4" />
-                    {t("header.delete")}
-                  </DropdownMenuItem>
-                </>
-              )}
-            </DropdownMenuContent>
-          </DropdownMenu>
         )}
       </div>
       {extra}
