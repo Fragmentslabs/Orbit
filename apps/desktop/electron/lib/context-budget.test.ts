@@ -101,7 +101,7 @@ describe('trimTurnContext', () => {
       ...toolPair('2', 'bash', { command: 'npm run lint' }, filler(120_000)),
       ...toolPair('3', 'bash', { command: 'git status' }, filler(120_000)),
     ]
-    const trimmed = trimTurnContext(messages, 20_000)
+    const trimmed = trimTurnContext(messages, 65_000)
 
     // Nenhuma mensagem some: quebrar o par call/result derruba o turno com 400.
     expect(trimmed).toHaveLength(messages.length)
@@ -151,17 +151,34 @@ describe('trimTurnContext', () => {
     expect(outputs.some((o) => o.includes('tool output dropped'))).toBe(true)
   })
 
-  it('no pior caso avança sobre os recentes, mas nunca abaixo dos dois últimos', () => {
+  it('no pior caso avança sobre os recentes, parando nos dois últimos quando eles cabem', () => {
     // Poucas saídas gigantes sozinhas já passam do orçamento. Aqui o corte por
     // idade não tem o que descartar, e parar por aí devolveria ao provedor o
     // mesmo request que ele recusa — o defeito de origem.
     const messages = Array.from({ length: 6 }, (_, i) =>
       toolPair(String(i), 'bash', { command: `cmd ${i}` }, filler(80_000)),
     ).flat()
-    const outputs = outputsOf(trimTurnContext(messages, 1_000))
+    const outputs = outputsOf(trimTurnContext(messages, 45_000))
 
     expect(outputs.slice(0, 4).every((o) => o.includes('tool output dropped'))).toBe(true)
     expect(outputs.slice(-2).every((o) => o === filler(80_000))).toBe(true)
+  })
+
+  it('descarta até um resultado recente quando ele sozinho não cabe', () => {
+    // O caso real: um screenshot MCP serializado como 3,3M caracteres de
+    // base64 era o ÚLTIMO resultado do turno. O piso dos dois recentes o
+    // protegia e o request saía com 917k tokens num modelo de 1M.
+    const messages = [
+      ...toolPair('a', 'read', { filePath: 'src/app.ts' }, filler(4_000)),
+      ...toolPair('b', 'Nodara_adb_screenshot', {}, filler(3_300_000)),
+    ]
+    const budget = 200_000
+    const trimmed = trimTurnContext(messages, budget)
+    const outputs = outputsOf(trimmed)
+
+    expect(outputs[0]).toBe(filler(4_000))
+    expect(outputs[1]).toContain('too large to fit')
+    expect(estimateTokens(trimmed)).toBeLessThanOrEqual(budget)
   })
 
   it('segura o turno que originou o bug: 1M de janela, o teto de passos inteiro', () => {

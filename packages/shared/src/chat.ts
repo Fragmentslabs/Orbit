@@ -384,12 +384,17 @@ export interface AssistantSnapshot {
  * - `rate-limit`: limite de uso/requisições do provedor (429, FreeUsageLimit).
  * - `network`: falha de rede/indisponibilidade do endpoint (timeout, 5xx...).
  * - `context-length`: a requisição ficou maior que a janela do modelo.
+ * - `context-length-turn`: idem, mas o que estourou foi o trabalho do próprio
+ *   turno (resultados de ferramenta acumulados), não o histórico.
  * `moderation`, `model-unavailable`, `rate-limit` e `network` são resolvidas
  * trocando de modelo — é o que a rotação de modelos faz automaticamente (ver
  * `resolveRotation` no main). `provider-config` (provedor/SDK desconhecido,
  * chave ausente) e `unknown` NÃO são: trocar de modelo não conserta
  * configuração. `context-length` também não: o payload que estourou é o mesmo
- * em qualquer modelo — o que resolve é compactar a conversa.
+ * em qualquer modelo — o que resolve é compactar a conversa. Em
+ * `context-length-turn` nem isso: compactar só alcança o histórico, que
+ * cabia; o que resolve é um turno novo, que não reenvia os resultados de
+ * ferramenta deste.
  */
 export type MessageErrorKind =
   | "moderation"
@@ -398,6 +403,9 @@ export type MessageErrorKind =
   | "network"
   /** Requisição maior que a janela de contexto do modelo. Não rotacionável. */
   | "context-length"
+  /** Idem, mas estourou no meio do turno — o histórico cabia, o acúmulo de
+   *  resultados de ferramenta do turno é que passou da janela. */
+  | "context-length-turn"
   /** Configuração nossa, não falha do provedor: chave ausente, provedor/SDK desconhecido. */
   | "provider-config"
   | "unknown"
@@ -673,6 +681,24 @@ export type ChatEvent =
       delta: string
     }
   | { type: "title"; sessionId: string; title: string }
+  /**
+   * Tamanho do contexto DURANTE o turno, para o medidor andar a cada passo do
+   * tool loop em vez de esperar o fim da resposta. `estimated`: medido no
+   * request antes do envio (sem tokenizer, sem system prompt) — chega quando
+   * passa do último valor real, que é justamente o aviso de que o próximo
+   * envio vai crescer. O valor real vem do provedor ao fim de cada passo.
+   *
+   * Evento à parte, e não `tokens` na mensagem: a UI lê `tokens` como "o turno
+   * terminou" e destrava o input.
+   */
+  | {
+      type: "context"
+      sessionId: string
+      messageId: string
+      input: number
+      output: number
+      estimated?: boolean
+    }
   /** Próxima mensagem provável do usuário — o input a mostra apagada e Tab completa */
   | { type: "suggestion"; sessionId: string; text: string }
   | { type: "orchestration:plan"; sessionId: string; plan: OrchestrationPlan }

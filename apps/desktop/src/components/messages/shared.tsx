@@ -402,6 +402,11 @@ export function MessageError({
   // aqui mandaria a pessoa tentar de novo pelo caminho que não funciona — o
   // que resolve é encolher a conversa.
   const overflowed = kind === "context-length"
+  // Estouro no meio do turno: o histórico cabia, quem passou da janela foi o
+  // trabalho da própria resposta. Nem compactar nem trocar de modelo ajudam —
+  // a explicação orienta a pedir para continuar (o turno novo não reenvia os
+  // resultados de ferramenta deste).
+  const turnOverflowed = kind === "context-length-turn"
 
   return (
     <div className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive">
@@ -421,7 +426,7 @@ export function MessageError({
               {t("usage.compactNow")}
             </button>
           )}
-          {explained && !overflowed && (
+          {explained && !overflowed && !turnOverflowed && (
             <SwitchModelMenu sessionId={sessionId} failedModel={failedModel} onRetry={() => onRetry?.()} />
           )}
           {onRetry && (

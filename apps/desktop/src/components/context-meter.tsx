@@ -27,6 +27,7 @@ const NO_MSGS: import("@shared/chat").ChatMessage[] = []
 export function ContextMeter({ sessionId }: { sessionId?: string }) {
   const { t } = useTranslation()
   const messages = useSessionStore((s) => (sessionId ? s.messages[sessionId] ?? NO_MSGS : NO_MSGS))
+  const live = useSessionStore((s) => (sessionId ? s.liveContext[sessionId] : undefined))
   const selected = useSessionModel(sessionId)
   const model = useProviderStore((s) => {
     if (!selected) return undefined
@@ -44,13 +45,23 @@ export function ContextMeter({ sessionId }: { sessionId?: string }) {
     return { lastTokens: found, compacted: lastSummary >= 0 }
   }, [messages])
 
-  const used = lastTokens ? sumTokens(lastTokens) : 0
+  // O valor ao vivo (a cada passo do turno em andamento, ou o tamanho do que
+  // o provedor acabou de recusar) vale mais que o `tokens` da última resposta
+  // concluída — esse só chega no fim e deixava o medidor parado num turno
+  // longo, mostrando 23% enquanto o request real passava de 900k.
+  const used = live ? live.input + live.output : lastTokens ? sumTokens(lastTokens) : 0
   if (used === 0 && !limit) return null
 
   // Idem sumTokens: prioriza o último step (contexto real atual) sobre o
   // total do turno.
-  const displayInput = lastTokens?.lastStep?.input ?? lastTokens?.input ?? 0
-  const displayOutput = lastTokens?.lastStep?.output ?? lastTokens?.output ?? 0
+  const displayInput = live ? live.input : (lastTokens?.lastStep?.input ?? lastTokens?.input ?? 0)
+  const displayOutput = live ? live.output : (lastTokens?.lastStep?.output ?? lastTokens?.output ?? 0)
+  const showBreakdown = Boolean(live || lastTokens)
+  const liveNote = live && (
+    <p className="text-[10px] text-muted-foreground/60">
+      {live.estimated ? t("usage.estimated") : t("usage.live")}
+    </p>
+  )
 
   const pct = limit ? Math.min(used / limit, 1) : 0
   const atLimit = pct >= 1
@@ -95,16 +106,17 @@ export function ContextMeter({ sessionId }: { sessionId?: string }) {
               <div className="flex items-center justify-between">
                 <span>{t("usage.context")}</span>
                 <span className="tabular-nums">
-                  {formatTokens(used)} / {formatTokens(limit)}
+                  {live?.estimated ? "≈ " : ""}{formatTokens(used)} / {formatTokens(limit)}
                 </span>
               </div>
+              {liveNote}
               <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted-foreground/20">
                 <div
                   className={cn("h-full rounded-full transition-all", atLimit ? "bg-destructive" : "bg-primary")}
                   style={{ width: `${Math.min(pct * 100, 100)}%` }}
                 />
               </div>
-              {lastTokens && (
+              {showBreakdown && (
                 <div className="space-y-1 text-[10px] text-muted-foreground">
                   <div className="flex justify-between">
                     <span>{t("usage.input")}</span>
@@ -114,7 +126,7 @@ export function ContextMeter({ sessionId }: { sessionId?: string }) {
                     <span>{t("usage.output")}</span>
                     <span className="tabular-nums">{formatTokens(displayOutput)}</span>
                   </div>
-                  {lastTokens.reasoning > 0 && (
+                  {!live && lastTokens && lastTokens.reasoning > 0 && (
                     <div className="flex justify-between">
                       <span>{t("usage.reasoning")}</span>
                       <span className="tabular-nums">{formatTokens(lastTokens.reasoning)}</span>
@@ -145,9 +157,12 @@ export function ContextMeter({ sessionId }: { sessionId?: string }) {
             <>
               <div className="flex items-center justify-between">
                 <span>{t("usage.contextUsed")}</span>
-                <span className="tabular-nums">{formatTokens(used)} {t("usage.tokensWord")}</span>
+                <span className="tabular-nums">
+                  {live?.estimated ? "≈ " : ""}{formatTokens(used)} {t("usage.tokensWord")}
+                </span>
               </div>
-              {lastTokens && (
+              {liveNote}
+              {showBreakdown && (
                 <div className="space-y-1 text-[10px] text-muted-foreground">
                   <div className="flex justify-between">
                     <span>{t("usage.input")}</span>
@@ -157,7 +172,7 @@ export function ContextMeter({ sessionId }: { sessionId?: string }) {
                     <span>{t("usage.output")}</span>
                     <span className="tabular-nums">{formatTokens(displayOutput)}</span>
                   </div>
-                  {lastTokens.reasoning > 0 && (
+                  {!live && lastTokens && lastTokens.reasoning > 0 && (
                     <div className="flex justify-between">
                       <span>{t("usage.reasoning")}</span>
                       <span className="tabular-nums">{formatTokens(lastTokens.reasoning)}</span>
