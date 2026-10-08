@@ -14,7 +14,9 @@ import type {
   OrchestrationPlan,
   PermissionMode,
   SessionStateResponse,
+  QueuedMessage,
 } from '@orbit/shared'
+import { SESSION_BUSY_ERROR } from '@orbit/shared'
 import { Storage } from '~/lib/storage'
 import { visibleMessageText } from '~/lib/message-utils'
 import i18n from '~/i18n'
@@ -88,6 +90,8 @@ const MAX_CACHED_SESSIONS = 20
 const INITIAL_MESSAGES_LIMIT = 40
 const MAX_CACHED_MESSAGES = 200
 const MAX_INITIAL_CACHED_MESSAGES = INITIAL_MESSAGES_LIMIT
+/** Espera antes de reconferir uma sessão que o desktop disse estar ocupada. */
+const BUSY_RECHECK_MS = 2_500
 
 async function cacheSessions(sessions: SessionInfo[]) {
   const recent = sessions.slice(0, MAX_CACHED_SESSIONS)
@@ -177,6 +181,8 @@ interface SessionState {
       /** Pastas do modo código (principal + adicionais). */
       directory?: string
       extraDirectories?: string[]
+      /** A mensagem veio da fila: se o desktop recusar, ela volta para lá. */
+      queued?: QueuedMessage
     },
   ) => Promise<void>
   /** Cria uma sessão nova no desktop e retorna-a. */
@@ -581,7 +587,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       ? { maxIterations: settings.loopConfig.maxIterations }
       : undefined
     try {
-      await wsClient.send({
+      const res = await wsClient.send({
         type: 'messages:send',
         sessionId,
         text,
@@ -595,16 +601,60 @@ export const useSessionStore = create<SessionState>((set, get) => ({
         directory: config?.directory,
         extraDirectories: config?.extraDirectories,
       })
+      if (res.ok) return
+      if (res.error === SESSION_BUSY_ERROR) {
+        // O desktop ainda está no turno anterior (o status daqui estava velho:
+        // idle entre iterações do loop, reconexão...). Mandar agora abortaria
+        // aquele turno no meio — a mensagem volta à frente da fila e sai
+        // quando a sessão ficar livre de verdade.
+        const queue = useMessageQueueStore.getState()
+        if (config?.queued) {
+          queue.requeueFront(sessionId, config.queued)
+        } else {
+          queue.requeueFront(sessionId, {
+            id: `q_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`,
+            text,
+            files: config?.files?.length ? config.files : undefined,
+            options: config?.options ?? {},
+            mode: sessionMode,
+            sessionId,
+            directory: config?.directory,
+            extraDirectories: config?.extraDirectories,
+            createdAt: Date.now(),
+          })
+        }
+        set((state) => ({ status: { ...state.status, [sessionId]: 'streaming' as ChatStatus } }))
+        // O `status: idle` do fim do turno solta a fila; esta rechecagem cobre
+        // o caso de ele já ter passado (o desktop emite idle um instante antes
+        // de tirar a sessão da lista de execução).
+        setTimeout(() => {
+          void get().fetchRunningSessions().then(() => {
+            useMessageQueueStore.getState().processQueue(sessionId)
+          })
+        }, BUSY_RECHECK_MS)
+        return
+      }
+      failSend(res.error ?? i18n.t('sessionStore.sendFailed'))
     } catch (err) {
+      failSend(String(err))
+    }
+
+    /** O desktop não recebeu (ou recusou) a mensagem: em vez de ela sumir, o
+     *  texto e os anexos voltam ao input desta conversa para reenviar. */
+    function failSend(error: string) {
       set((state) => ({
-        status: { ...state.status, [sessionId]: 'error' },
-        errors: { ...state.errors, [sessionId]: String(err) },
+        status: { ...state.status, [sessionId!]: 'error' },
+        errors: { ...state.errors, [sessionId!]: error },
       }))
+      useDraftInput.getState().setDraft(sessionId, text, config?.files)
     }
   },
 
   createSession: async (mode, title) => {
-    const { wsClient } = useConnectionStore.getState()
+    const { wsClient, connection } = useConnectionStore.getState()
+    // Sem conexão não há onde criar: falha na hora (quem chamou devolve o texto
+    // ao input) em vez de esperar o socket voltar.
+    if (connection.status !== 'connected') return null
     try {
       const res = await wsClient.send({ type: 'sessions:create', mode, title })
       if (res.ok && res.data) {
@@ -1171,5 +1221,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
 
 __setSessionDeps({
   getStatus: (sessionId) => useSessionStore.getState().status[sessionId],
+  isOnline: () => useConnectionStore.getState().connection.status === 'connected',
+  refreshRunning: () => useSessionStore.getState().fetchRunningSessions(),
   sendMessage: (text, config) => useSessionStore.getState().sendMessage(text, config),
 })

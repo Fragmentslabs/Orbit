@@ -24,7 +24,15 @@ type StateChangeHandler = (state: ConnectionState) => void
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
-const HEARTBEAT_INTERVAL = 30_000
+const HEARTBEAT_INTERVAL = 15_000
+/** Sem nenhuma mensagem do desktop por este tempo depois de um ping, o socket
+ *  é dado como morto. No celular isso é comum: o iOS suspende o app em segundo
+ *  plano, a rede troca de Wi-Fi, e o socket volta com readyState OPEN mas sem
+ *  ninguém do outro lado — a UI dizia "conectado" e tudo que se mandava sumia. */
+const PONG_TIMEOUT = 8_000
+/** Ao voltar do segundo plano a checagem precisa ser rápida: a pessoa já está
+ *  com o dedo no botão de enviar. */
+const ALIVE_CHECK_TIMEOUT = 4_000
 const RECONNECT_BASE_DELAY = 1_000
 const RECONNECT_MAX_DELAY = 30_000
 const RECONNECT_MAX_ATTEMPTS = 5
@@ -53,12 +61,22 @@ export class CompanionWebSocket {
     string,
     { resolve: (v: ApiResponse) => void; reject: (e: Error) => void; timer: ReturnType<typeof setTimeout> }
   >()
-  private queuedRequests: { msg: WsMessage; resolve: (v: ApiResponse) => void; reject: (e: Error) => void }[] = []
+  private queuedRequests: {
+    msg: WsMessage
+    resolve: (v: ApiResponse) => void
+    reject: (e: Error) => void
+    timer: ReturnType<typeof setTimeout>
+  }[] = []
   private heartbeatTimer: ReturnType<typeof setInterval> | null = null
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null
   private reconnectAttempt = 0
   private shouldReconnect = false
   private lastPing = 0
+  /** Última vez que QUALQUER mensagem chegou do desktop (pong, resposta, evento). */
+  private lastInbound = 0
+  private pongTimer: ReturnType<typeof setTimeout> | null = null
+  /** disconnect() explícito: o checkAlive não pode ressuscitar a conexão. */
+  private closedByUser = false
 
   // ─── Public API ──────────────────────────────────────────────────────────
 
@@ -66,6 +84,7 @@ export class CompanionWebSocket {
   connect(config: ConnectionConfig): void {
     this.config = config
     this.shouldReconnect = true
+    this.closedByUser = false
     this.reconnectAttempt = 0
     this.setState({ reconnectAttempt: 0 })
 
@@ -93,6 +112,7 @@ export class CompanionWebSocket {
   /** Fecha a conexão (sem reconexão). */
   disconnect(): void {
     this.shouldReconnect = false
+    this.closedByUser = true
     this.cleanup()
     this.setState({ status: 'disconnected' })
   }
@@ -104,8 +124,20 @@ export class CompanionWebSocket {
       const msg: WsMessage = { id, payload: request }
 
       if (this.state.status !== 'connected') {
-        // Queue para enviar ao reconectar
-        this.queuedRequests.push({ msg, resolve, reject })
+        // Queue para enviar ao reconectar — com prazo. Sem ele a promise
+        // ficava pendurada até a próxima conexão, e um "criar chat" + "enviar"
+        // de minutos atrás disparava de repente, criando conversa e mandando
+        // mensagem quando a pessoa já estava em outro chat.
+        const entry = {
+          msg,
+          resolve,
+          reject,
+          timer: setTimeout(() => {
+            this.queuedRequests = this.queuedRequests.filter((q) => q !== entry)
+            reject(new Error(`Request ${request.type} timed out (offline)`))
+          }, REQUEST_TIMEOUT),
+        }
+        this.queuedRequests.push(entry)
         return
       }
 
@@ -130,6 +162,26 @@ export class CompanionWebSocket {
     this.stateHandlers.add(handler)
     return () => {
       this.stateHandlers.delete(handler)
+    }
+  }
+
+  /**
+   * Confere se o socket ainda tem alguém do outro lado — chamar quando o app
+   * volta ao primeiro plano. Conectado: manda um ping e, sem resposta em
+   * poucos segundos, derruba e reconecta. Desistiu de reconectar (esgotou as
+   * tentativas enquanto o app estava parado): recomeça do zero.
+   */
+  checkAlive(): void {
+    if (!this.config || this.closedByUser) return
+    if (this.state.status === 'connected') {
+      this.ping(ALIVE_CHECK_TIMEOUT)
+      return
+    }
+    if (this.state.status === 'disconnected' && this.state.errorReason !== 'invalid_pin') {
+      this.shouldReconnect = true
+      this.reconnectAttempt = 0
+      this.cleanup()
+      this.open()
     }
   }
 
@@ -204,6 +256,7 @@ export class CompanionWebSocket {
       return
     }
 
+    this.lastInbound = Date.now()
     const { payload } = msg
 
     // Auth responses
@@ -287,7 +340,8 @@ export class CompanionWebSocket {
     const queue = [...this.queuedRequests]
     this.queuedRequests = []
 
-    for (const { msg, resolve, reject } of queue) {
+    for (const { msg, resolve, reject, timer } of queue) {
+      clearTimeout(timer)
       if (this.state.status === 'connected') {
         this.sendWithCorrelation(msg.id, msg, resolve, reject)
       } else {
@@ -298,18 +352,50 @@ export class CompanionWebSocket {
 
   private startHeartbeat(): void {
     this.stopHeartbeat()
-    this.heartbeatTimer = setInterval(() => {
-      if (this.ws?.readyState === WebSocket.OPEN) {
-        this.lastPing = Date.now()
-        this.ws.send(JSON.stringify({ id: '', payload: { type: 'ping' } }))
-      }
-    }, HEARTBEAT_INTERVAL)
+    this.heartbeatTimer = setInterval(() => this.ping(PONG_TIMEOUT), HEARTBEAT_INTERVAL)
+  }
+
+  /** Manda um ping e espera QUALQUER mensagem do desktop dentro do prazo
+   *  (pong, resposta ou evento — tudo prova que o socket está vivo). */
+  private ping(timeout: number): void {
+    if (this.pongTimer) return
+    const ws = this.ws
+    if (!ws || ws.readyState !== WebSocket.OPEN) {
+      this.dropDeadSocket()
+      return
+    }
+    const sentAt = Date.now()
+    this.lastPing = sentAt
+    try {
+      ws.send(JSON.stringify({ id: '', payload: { type: 'ping' } }))
+    } catch {
+      this.dropDeadSocket()
+      return
+    }
+    this.pongTimer = setTimeout(() => {
+      this.pongTimer = null
+      if (this.ws === ws && this.lastInbound < sentAt) this.dropDeadSocket()
+    }, timeout)
+  }
+
+  /** Socket sem resposta: fecha (rejeitando o que estava pendente, em vez de
+   *  deixar cada request morrer sozinho no timeout) e reconecta. */
+  private dropDeadSocket(): void {
+    if (!this.shouldReconnect) return
+    this.cleanup()
+    this.reconnectAttempt = 0
+    this.setState({ status: 'connecting', reconnectAttempt: 0 })
+    this.open()
   }
 
   private stopHeartbeat(): void {
     if (this.heartbeatTimer) {
       clearInterval(this.heartbeatTimer)
       this.heartbeatTimer = null
+    }
+    if (this.pongTimer) {
+      clearTimeout(this.pongTimer)
+      this.pongTimer = null
     }
   }
 

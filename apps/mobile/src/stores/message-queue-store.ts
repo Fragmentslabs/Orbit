@@ -14,13 +14,19 @@ let _sendMessage:
         directory?: string
         extraDirectories?: string[]
         files?: FilePart[]
+        queued?: QueuedMessage
       },
     ) => Promise<void>)
   | null = null
+let _isOnline: (() => boolean) | null = null
+let _refreshRunning: (() => Promise<void>) | null = null
 
 /** Registered by session-store to break the import cycle. */
 export function __setSessionDeps(deps: {
   getStatus: (sessionId: string) => string | undefined
+  isOnline: () => boolean
+  /** Rebusca no desktop quais sessões estão rodando (corrige status velho). */
+  refreshRunning: () => Promise<void>
   sendMessage: (
     text: string,
     config?: {
@@ -29,11 +35,14 @@ export function __setSessionDeps(deps: {
       directory?: string
       extraDirectories?: string[]
       files?: FilePart[]
+      queued?: QueuedMessage
     },
   ) => Promise<void>
 }) {
   _getStatus = deps.getStatus
   _sendMessage = deps.sendMessage
+  _isOnline = deps.isOnline
+  _refreshRunning = deps.refreshRunning
 }
 
 const QUEUE_STORAGE_KEY = StorageKeys.queuedMessages
@@ -50,6 +59,8 @@ interface MessageQueueState {
 
   initialize: () => Promise<void>
   enqueue: (sessionId: string, msg: QueuedMessage) => void
+  /** Devolve uma mensagem à FRENTE da fila (o desktop recusou: sessão ocupada). */
+  requeueFront: (sessionId: string, msg: QueuedMessage) => void
   dequeue: (sessionId: string) => QueuedMessage | undefined
   peek: (sessionId: string) => QueuedMessage | undefined
   remove: (sessionId: string, msgId: string) => void
@@ -109,6 +120,15 @@ export const useMessageQueueStore = create<MessageQueueState>((set, get) => ({
     set((state) => {
       const current = state.queues[sessionId] ?? []
       const next = { ...state.queues, [sessionId]: [...current, msg] }
+      persist(next)
+      return { queues: next }
+    })
+  },
+
+  requeueFront: (sessionId, msg) => {
+    set((state) => {
+      const current = (state.queues[sessionId] ?? []).filter((m) => m.id !== msg.id)
+      const next = { ...state.queues, [sessionId]: [msg, ...current] }
       persist(next)
       return { queues: next }
     })
@@ -179,6 +199,10 @@ export const useMessageQueueStore = create<MessageQueueState>((set, get) => ({
     if (next.scheduledAt && next.scheduledAt > Date.now()) return
 
     if (state.paused[sessionId]) return
+    // Offline a mensagem fica onde está. Antes ela saía da fila, o envio via
+    // que não havia conexão e a enfileirava de novo — no FIM, trocando a ordem
+    // de quem estava esperando.
+    if (_isOnline && !_isOnline()) return
     const status = _getStatus ? _getStatus(sessionId) : undefined
     if (status && status !== 'idle' && status !== 'error') return
 
@@ -194,6 +218,7 @@ export const useMessageQueueStore = create<MessageQueueState>((set, get) => ({
         directory: msg.directory,
         extraDirectories: msg.extraDirectories,
         files: msg.files,
+        queued: msg,
       })
     }
   },
@@ -245,9 +270,15 @@ export function startMessageScheduler() {
 
   schedulerTimer = setInterval(() => {
     const state = useMessageQueueStore.getState()
-    for (const sessionId of Object.keys(state.queues)) {
-      state.processQueue(sessionId)
-    }
+    const sessionIds = Object.keys(state.queues)
+    if (sessionIds.length === 0) return
+    // Com mensagem esperando, confere no desktop quem ainda roda antes de
+    // decidir: se o `status: idle` se perdeu, a fila ficaria parada para
+    // sempre atrás de um "streaming" que já acabou.
+    const refresh = _isOnline?.() && _refreshRunning ? _refreshRunning() : Promise.resolve()
+    void refresh.finally(() => {
+      for (const sessionId of sessionIds) useMessageQueueStore.getState().processQueue(sessionId)
+    })
   }, 15_000)
 }
 

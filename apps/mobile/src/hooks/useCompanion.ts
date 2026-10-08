@@ -1,4 +1,5 @@
 import { useEffect } from 'react'
+import { AppState } from 'react-native'
 import type {
   AppPreferences,
   SessionModelChangeEvent,
@@ -57,6 +58,18 @@ export function useCompanion() {
     }
   }, [])
 
+  // ─── Volta do segundo plano ────────────────────────────────────────────
+  // O iOS/Android suspendem o app e o socket morre sem avisar: ele volta com
+  // cara de conectado e tudo que se envia some. Ao voltar ao primeiro plano o
+  // cliente confere se o desktop responde (e reconecta se não).
+
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (next) => {
+      if (next === 'active') useConnectionStore.getState().wsClient.checkAlive()
+    })
+    return () => sub.remove()
+  }, [])
+
   // ─── Escuta mudanças de estado WS ──────────────────────────────────────
 
   useEffect(() => {
@@ -89,7 +102,13 @@ export function useCompanion() {
         // Quem ainda esta rodando no desktop — sem isto, conectar no meio de
         // uma execucao mostra a conversa parada (e reconectar depois dela
         // terminar deixa o spinner preso).
-        void useSessionStore.getState().fetchRunningSessions()
+        // A fila offline só sai depois desta resposta: com o status velho (ou
+        // vazio, logo após abrir o app) ela mandava a mensagem com o desktop
+        // ainda no meio de um turno — e um envio novo aborta o turno atual.
+        void useSessionStore
+          .getState()
+          .fetchRunningSessions()
+          .finally(() => useMessageQueueStore.getState().processAllQueues())
         void useSessionStore.getState().fetchFolders()
         void useSettingsStore.getState().fetchSelectedModel()
         void useSettingsStore.getState().fetchPreferences()
@@ -108,8 +127,6 @@ export function useCompanion() {
         // Preferências do desktop mandam: na conexão o celular adota as de lá
         // (defaults de modo, permissão, pastas automáticas).
         void hydrateAppPreferences()
-        // Processa fila de mensagens offline
-        useMessageQueueStore.getState().processAllQueues()
       } else if (state.status === 'disconnected' && state.errorReason === 'invalid_pin') {
         // PIN expirou (TTL de 5 min no desktop) — esquece a config salva para
         // não ficar preso num loop de auto-reconexão que sempre falha

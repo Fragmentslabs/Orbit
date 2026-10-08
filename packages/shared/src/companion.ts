@@ -817,6 +817,14 @@ export interface WsMessage {
 // ─── Helper ──────────────────────────────────────────────────────────────────
 
 let _msgId = 0
+/**
+ * `error` do `messages:send` quando a sessão ainda está rodando no desktop.
+ * Um envio novo numa sessão em execução ABORTA o turno atual (é assim que a
+ * engine troca de turno), então o desktop recusa e o app devolve a mensagem à
+ * fila até a sessão ficar livre.
+ */
+export const SESSION_BUSY_ERROR = 'session_busy'
+
 export function newMessageId(): string {
   return `msg_${Date.now().toString(36)}_${(++_msgId).toString(36)}`
 }

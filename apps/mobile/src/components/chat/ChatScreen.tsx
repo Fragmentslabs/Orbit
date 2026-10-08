@@ -1,5 +1,5 @@
 import { useCallback, useState, useEffect, useRef, useMemo } from 'react'
-import { View, Text, Animated } from 'react-native'
+import { View, Text, Animated, Alert } from 'react-native'
 import { useTranslation } from 'react-i18next'
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller'
 import { Stack, useRouter } from 'expo-router'
@@ -24,6 +24,7 @@ import { RevertBar } from '~/components/chat/RevertBar'
 import { ChatHeader } from '~/components/chat/ChatHeader'
 import { FolderSelector } from '~/components/chat/FolderSelector'
 import { useDraftFolders } from '~/stores/draft-folders-store'
+import { useDraftInput } from '~/stores/draft-input-store'
 import { useBottomBreathing } from '~/lib/keyboard'
 import { Persona } from '~/components/ai/Persona'
 import { getThemeTokens } from '~/lib/theme-tokens'
@@ -203,6 +204,20 @@ export function ChatScreen({ sessionId }: ChatScreenProps) {
   const codeSuggestions = t('chatScreen.suggestions.code', { returnObjects: true }) as string[]
   const suggestions = isCode ? codeSuggestions : chatSuggestions
 
+  // A tela pode ser reaproveitada com outro id (trocar de chat na sidebar)
+  // ou desmontada enquanto o "criar chat" ainda espera o desktop.
+  const mountedRef = useRef(true)
+  const sessionIdRef = useRef(sessionId)
+  useEffect(() => {
+    sessionIdRef.current = sessionId
+  }, [sessionId])
+  useEffect(() => {
+    mountedRef.current = true
+    return () => {
+      mountedRef.current = false
+    }
+  }, [])
+
   const handleSend = useCallback(
     async (text: string, options?: SendMessageOptions, files?: FilePart[]) => {
       // Modo lido na hora do envio (getState) + pastas via ref: nada disso
@@ -221,11 +236,21 @@ export function ChatScreen({ sessionId }: ChatScreenProps) {
         sendMessage(text, { options, files, sessionId, ...dirConfig })
         return
       }
-      if (creating) return
+      // O input já se limpou ao chamar o envio: qualquer saída sem enviar
+      // devolve texto e anexos ao rascunho, senão a mensagem evapora.
+      const devolver = () => useDraftInput.getState().setDraft(null, text, files)
+      if (creating) {
+        devolver()
+        return
+      }
       setCreating(true)
       try {
         const created = await createSession(useWorkspaceStore.getState().mode)
-        if (!created) return
+        if (!created) {
+          devolver()
+          Alert.alert(t('sessionStore.createFailedTitle'), t('sessionStore.createFailed'))
+          return
+        }
 
         // Pasta escolhida no "+" da sidebar tem precedência: é uma decisão
         // explícita, não vale sobrescrever com o mapeamento automático.
@@ -274,12 +299,17 @@ export function ChatScreen({ sessionId }: ChatScreenProps) {
         }
 
         sendMessage(text, { options, files, sessionId: created.id, ...dirConfig })
-        router.replace({ pathname: '/(main)/chat/[id]', params: { id: created.id } })
+        // Só leva para o chat novo se a pessoa ainda está no rascunho: se ela
+        // já foi para outra conversa, puxá-la de volta parecia que a mensagem
+        // tinha caído no chat errado.
+        if (mountedRef.current && !sessionIdRef.current) {
+          router.replace({ pathname: '/(main)/chat/[id]', params: { id: created.id } })
+        }
       } finally {
-        setCreating(false)
+        if (mountedRef.current) setCreating(false)
       }
     },
-    [sessionId, sendMessage, createSession, router, creating],
+    [sessionId, sendMessage, createSession, router, creating, t],
   )
 
   const handleAbort = useCallback(() => {

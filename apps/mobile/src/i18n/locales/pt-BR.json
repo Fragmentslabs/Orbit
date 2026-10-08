@@ -924,7 +924,10 @@
     "newConversationDesc": "Começa um chat em branco"
   },
   "sessionStore": {
-    "queuedOffline": "Sem conexão com o desktop. Mensagem enfileirada para envio automático."
+    "queuedOffline": "Sem conexão com o desktop. Mensagem enfileirada para envio automático.",
+    "sendFailed": "O desktop não recebeu a mensagem. Ela voltou para o campo de texto.",
+    "createFailedTitle": "Não deu para criar a conversa",
+    "createFailed": "Sem resposta do desktop. Sua mensagem continua no campo de texto — tente de novo quando a conexão voltar."
   },
   "themeScreen": {
     "title": "Tema",

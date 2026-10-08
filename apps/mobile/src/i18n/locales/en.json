@@ -924,7 +924,10 @@
     "newConversationDesc": "Starts a blank chat"
   },
   "sessionStore": {
-    "queuedOffline": "No connection to the desktop. Message queued for automatic delivery."
+    "queuedOffline": "No connection to the desktop. Message queued for automatic delivery.",
+    "sendFailed": "The desktop didn't receive the message. It's back in the text field.",
+    "createFailedTitle": "Couldn't create the conversation",
+    "createFailed": "No response from the desktop. Your message is still in the text field — try again once the connection is back."
   },
   "themeScreen": {
     "title": "Theme",

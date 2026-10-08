@@ -42,6 +42,7 @@ import type {
   AppPreferences,
   AppPreferencesChangeEvent,
 } from '@shared/companion'
+import { SESSION_BUSY_ERROR } from '@shared/companion'
 import type { ChatEvent, SessionInfo, FolderInfo, ChatMessage, MessagePart, SendMessageInput, PlanReview, OrchestrationPlan, RotationConfig } from '@shared/chat'
 import type { RotinaEvent } from '@shared/rotinas'
 import { setArchivedState } from '@shared/archive'
@@ -313,6 +314,16 @@ const rewriteMessages = (msgs: ChatMessage[], base: string) =>
 const rewriteMediaPart = (part: MessagePart, base: string) =>
   rewriteMediaPartOne(part, base, createMediaToken)
 
+/** Sessões com algo em execução no main: chat, loop (entre iterações também)
+ *  e orquestra. */
+function runningSessionIds(): Set<string> {
+  return new Set([
+    ...getRunningSessionIds(),
+    ...getLoopRunningSessionIds(),
+    ...getOrchestrationRunningSessionIds(),
+  ])
+}
+
 // ─── Request Handlers ────────────────────────────────────────────────────────
 
 async function handleRequest(client: ConnectedClient, requestId: string, req: CompanionRequest) {
@@ -459,11 +470,7 @@ async function handleRequest(client: ConnectedClient, requestId: string, req: Co
         // Mesma fonte do IPC 'chat:running' do renderer: o engine vive no main,
         // entao so ele sabe o que ainda esta rodando. Sem isto o celular que
         // conecta no meio da execucao mostra a conversa parada.
-        sendResponse(ws, requestId, true, [
-          ...getRunningSessionIds(),
-          ...getLoopRunningSessionIds(),
-          ...getOrchestrationRunningSessionIds(),
-        ])
+        sendResponse(ws, requestId, true, [...runningSessionIds()])
         break
       }
 
@@ -493,6 +500,15 @@ async function handleRequest(client: ConnectedClient, requestId: string, req: Co
         const session = await readJson<SessionInfo>(StorageKeys.session(req.sessionId))
         if (!session) {
           sendResponse(ws, requestId, false, undefined, 'Sessão não encontrada')
+          return
+        }
+
+        // Sessão ainda rodando (inclusive entre as iterações do loop e durante
+        // a orquestra): um envio agora abortaria o turno no meio. Quem decide
+        // se a sessão está livre é o main — o status que o celular viu pode
+        // estar velho (reconexão, idle entre iterações do loop).
+        if (runningSessionIds().has(req.sessionId)) {
+          sendResponse(ws, requestId, false, undefined, SESSION_BUSY_ERROR)
           return
         }
 
