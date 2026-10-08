@@ -15,6 +15,7 @@ import {
 import { EsteiraCreateDialog } from "./esteira-create-dialog"
 import { FaseEditor, useRotuloModelo, useSalvarTemplateDaFase, type DestinoFase } from "./fase-editor"
 import { DevolverTaskDialog } from "./devolver-task-dialog"
+import { RetomarInstrucaoDialog } from "./retomar-instrucao-dialog"
 import { TaskCreateDialog } from "./task-create-dialog"
 import { EsteiraFooter } from "./esteira-footer"
 import { TaskCard } from "./task-card"
@@ -173,6 +174,7 @@ function BoardDaEsteira({ esteira, onVoltar }: { esteira: Esteira; onVoltar: () 
   const [editarAberto, setEditarAberto] = useState(false)
   const [faseEditando, setFaseEditando] = useState<number | null>(null)
   const [devolvendo, setDevolvendo] = useState<string | null>(null)
+  const [instruindo, setInstruindo] = useState<string | null>(null)
   const atualizarEsteira = useEsteiraStore((s) => s.atualizarEsteira)
   const salvarTemplateDaFase = useSalvarTemplateDaFase()
 
@@ -351,6 +353,7 @@ function BoardDaEsteira({ esteira, onVoltar }: { esteira: Esteira; onVoltar: () 
               aguardandoTitulo={aguardandoTitulo}
               onAbrir={setTaskAberta}
               onDevolver={setDevolvendo}
+              onRetomarComInstrucao={setInstruindo}
             />
           ))}
         </div>
@@ -389,6 +392,13 @@ function BoardDaEsteira({ esteira, onVoltar }: { esteira: Esteira; onVoltar: () 
         onOpenChange={(v) => !v && setDevolvendo(null)}
       />
 
+      <RetomarInstrucaoDialog
+        task={tasks.find((x) => x.id === instruindo) ?? null}
+        esteira={esteira}
+        aberto={!!instruindo}
+        onOpenChange={(v) => !v && setInstruindo(null)}
+      />
+
       <TaskModal
         esteira={esteira}
         task={tasks.find((x) => x.id === taskAberta) ?? null}
@@ -410,6 +420,7 @@ function Coluna({
   aguardandoTitulo,
   onAbrir,
   onDevolver,
+  onRetomarComInstrucao,
 }: {
   id: string
   titulo: string
@@ -425,6 +436,7 @@ function Coluna({
   aguardandoTitulo: (task: Task) => string | undefined
   onAbrir: (taskId: string) => void
   onDevolver: (taskId: string) => void
+  onRetomarComInstrucao: (taskId: string) => void
 }) {
   const { t } = useTranslation()
   const rotuloModelo = useRotuloModelo(fase?.providerId, fase?.modelId, fase?.reasoning)
@@ -484,6 +496,7 @@ function Coluna({
             onPausar={() => void pausarTask(esteira.id, task.id)}
             onRetomar={() => void retomarTask(esteira.id, task.id)}
             onDevolver={() => onDevolver(task.id)}
+            onRetomarComInstrucao={() => onRetomarComInstrucao(task.id)}
           />
         ))}
       </div>

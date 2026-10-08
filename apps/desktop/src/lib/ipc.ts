@@ -432,8 +432,9 @@ export const esteiraApi = {
     window.ipcRenderer.invoke("esteira:iniciarTask", esteiraId, taskId, fase) as Promise<void>,
   pausarTask: (esteiraId: string, taskId: string) =>
     window.ipcRenderer.invoke("esteira:pausarTask", esteiraId, taskId) as Promise<void>,
-  retomarTask: (esteiraId: string, taskId: string) =>
-    window.ipcRenderer.invoke("esteira:retomarTask", esteiraId, taskId) as Promise<void>,
+  /** `instrucao`: o que a fase deve fazer diferente ao retomar (task pausada) */
+  retomarTask: (esteiraId: string, taskId: string, instrucao?: string) =>
+    window.ipcRenderer.invoke("esteira:retomarTask", esteiraId, taskId, instrucao) as Promise<void>,
   /** Devolve uma task concluída com o comentário da revisão (abre uma rodada nova) */
   devolverTask: (esteiraId: string, taskId: string, texto: string, fase?: number) =>
     window.ipcRenderer.invoke("esteira:devolverTask", esteiraId, taskId, texto, fase) as Promise<void>,

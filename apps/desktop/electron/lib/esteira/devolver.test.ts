@@ -28,7 +28,7 @@ vi.mock('../memory/service', () => ({ loadPromptContext: vi.fn(), search: vi.fn(
 vi.mock('../catalog', () => ({ getProvider: vi.fn() }))
 vi.mock('../providers', () => ({ resolveModel: vi.fn() }))
 
-const { devolverTask } = await import('./engine')
+const { devolverTask, retomarTask } = await import('./engine')
 
 const fase = (id: string, ordem: number) => ({
   id,
@@ -131,5 +131,36 @@ describe('devolverTask', () => {
     await devolverTask('est_1', 't1', 'x', 99)
     await esperarExecucao()
     expect(db.tasks[0].devolucoes?.[0].faseInicial).toBe(1)
+  })
+})
+
+describe('retomarTask com instrução', () => {
+  it('registra a instrução na fase em que a task parou e roda a fase com ela', async () => {
+    db.tasks = [concluida({ status: 'pausada', pausaMotivo: 'erro', erro: 'npm test falhou', faseAtual: 1, rodada: 2 })]
+    await retomarTask('est_1', 't1', '  use npm run test:unit  ')
+    await esperarExecucao()
+
+    const t = db.tasks[0]
+    expect(t.instrucoes).toEqual([
+      { texto: 'use npm run test:unit', rodada: 2, faseId: 'val', faseNome: 'val', criadoEm: expect.any(String) },
+    ])
+    expect(executarFase).toHaveBeenCalledTimes(1)
+    expect(executarFase.mock.calls[0][0].task.instrucoes).toHaveLength(1)
+    // Não abre rodada nova
+    expect(t.rodada).toBe(2)
+    expect(t.status).toBe('concluida')
+  })
+
+  it('recusa instrução em task que não está pausada', async () => {
+    await expect(retomarTask('est_1', 't1', 'x')).rejects.toThrow()
+    expect(db.tasks[0].instrucoes).toBeUndefined()
+  })
+
+  it('sem instrução continua como antes', async () => {
+    db.tasks = [concluida({ status: 'pausada', pausaMotivo: 'manual', faseAtual: 0 })]
+    await retomarTask('est_1', 't1')
+    await esperarExecucao()
+    expect(db.tasks[0].instrucoes).toBeUndefined()
+    expect(executarFase).toHaveBeenCalledTimes(2)
   })
 })

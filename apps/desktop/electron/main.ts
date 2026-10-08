@@ -1718,8 +1718,8 @@ app.whenReady().then(() => {
   ipcMain.handle('esteira:pausarTask', (_e, esteiraId: string, taskId: string) =>
     esteira.pausarTask(esteiraId, taskId),
   )
-  ipcMain.handle('esteira:retomarTask', (_e, esteiraId: string, taskId: string) =>
-    esteira.retomarTask(esteiraId, taskId),
+  ipcMain.handle('esteira:retomarTask', (_e, esteiraId: string, taskId: string, instrucao?: string) =>
+    esteira.retomarTask(esteiraId, taskId, instrucao),
   )
   ipcMain.handle('esteira:devolverTask', (_e, esteiraId: string, taskId: string, texto: string, fase?: number) =>
     esteira.devolverTask(esteiraId, taskId, texto, fase ?? 0),

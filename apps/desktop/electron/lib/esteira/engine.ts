@@ -821,21 +821,42 @@ export async function devolverTask(
   void executarTask(esteiraId, taskId)
 }
 
-/** Retomar reinicia a MESMA fase e zera o contador de retries (§9.5). */
-export async function retomarTask(esteiraId: string, taskId: string): Promise<void> {
+/**
+ * Retomar reinicia a MESMA fase e zera o contador de retries (§9.5).
+ *
+ * `instrucao` (opcional, só em task pausada): o que o usuário quer que a fase
+ * faça diferente — uma informação que faltou, um rumo a corrigir. Fica
+ * registrada na task e entra no prompt da fase como instrução prioritária,
+ * sem abrir rodada nova (isso é a devolução, para task concluída).
+ */
+export async function retomarTask(esteiraId: string, taskId: string, instrucao?: string): Promise<void> {
+  const texto = instrucao?.trim()
+  const contexto = texto ? await carregarContexto(esteiraId) : null
   await pararEsperando(taskId)
   const tasks = await listarTasks(esteiraId)
   const task = tasks.find((t) => t.id === taskId)
   if (!task) return
+  if (texto && task.status !== 'pausada') throw new Error('Só uma task pausada pode ser retomada com instrução.')
   const interrompida = task.faseInterrompida === true
-  await persistir(esteiraId, taskId, (t) => ({
-    ...t,
-    status: 'em_progresso',
-    pausaMotivo: undefined,
-    erro: undefined,
-    faseAtual: t.faseAtual ?? 0,
-    faseInterrompida: undefined,
-  }))
+  await persistir(esteiraId, taskId, (t) => {
+    const indice = t.faseAtual ?? 0
+    const fase = contexto?.esteira.fases[indice]
+    return {
+      ...t,
+      status: 'em_progresso',
+      pausaMotivo: undefined,
+      erro: undefined,
+      faseAtual: indice,
+      faseInterrompida: undefined,
+      instrucoes:
+        texto && fase
+          ? [
+              ...(t.instrucoes ?? []),
+              { texto, rodada: rodadaDaTask(t), faseId: fase.id, faseNome: fase.nome, criadoEm: agora() },
+            ]
+          : t.instrucoes,
+    }
+  })
   void executarTask(esteiraId, taskId, interrompida)
 }
 

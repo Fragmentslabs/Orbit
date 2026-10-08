@@ -108,6 +108,17 @@ Quando `rodada > 1`:
 - `montarMensagem`: seção de feedback presente só com `rodada > 1`; notas filtradas pela rodada atual.
 - Agrupamento por rodada com anotações antigas sem `rodada`.
 
+### Retomar com instrução (task pausada)
+
+> **Status: implementada.** Complemento da etapa 1 para o meio do caminho.
+
+- Task pausada (por erro ou à mão) ganha **"Retomar com instrução"**: no card (ícone ao lado do play), no banner de erro e no rodapé do modal.
+- A instrução fica em `Task.instrucoes` (`InstrucaoRetomada`: texto, rodada, fase, data) e **não** abre rodada nova.
+- `retomarTask(esteiraId, taskId, instrucao?)`: parâmetro opcional — sem ele, o comportamento é o de antes (mobile e companion seguem iguais). Com ele, só aceita task pausada.
+- Prompt: as instruções da fase que vai rodar entram como prioritárias; as dadas a outras fases da mesma rodada entram como contexto (costumam ser fatos do projeto, como o comando de teste).
+- Modal: a instrução aparece no topo da fase a que se refere, na rodada em que foi dada.
+- Mobile: junto da etapa 3, como o restante.
+
 ---
 
 ## Etapa 2 — Worktree por task

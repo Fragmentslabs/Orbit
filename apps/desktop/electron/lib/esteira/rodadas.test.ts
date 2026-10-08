@@ -132,4 +132,17 @@ describe('prompt da fase com rodadas', () => {
     expect(texto).toContain('## Review feedback (round 3)')
     expect(texto).toContain('- Round 2: primeira correção')
   })
+
+  it('instrução ao retomar: prioritária na fase dela, contexto nas outras da rodada', () => {
+    const instrucoes = [
+      { texto: 'use npm run test:unit', rodada: 1, faseId: 'val', faseNome: 'Val', criadoEm: '' },
+      { texto: 'não mexa no schema', rodada: 1, faseId: 'dev', faseNome: 'Dev', criadoEm: '' },
+      { texto: 'instrução de outra rodada', rodada: 2, faseId: 'val', faseNome: 'Val', criadoEm: '' },
+    ]
+    const texto = prompt(task({ faseAtual: 1, instrucoes }), 1)
+    expect(texto).toContain('## Instructions from the user for this phase\n')
+    expect(texto).toContain('- use npm run test:unit')
+    expect(texto).toContain('## Instructions the user gave to other phases (context)\n- Dev: não mexa no schema')
+    expect(texto).not.toContain('instrução de outra rodada')
+  })
 })

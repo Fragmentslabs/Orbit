@@ -190,6 +190,18 @@ export interface Devolucao {
   criadoEm: string
 }
 
+/**
+ * Instrução que o usuário deu ao retomar uma task pausada. Vale para a fase em
+ * que a task parou, na rodada em que foi dada — sem abrir rodada nova.
+ */
+export interface InstrucaoRetomada {
+  texto: string
+  rodada: number
+  faseId: string
+  faseNome: string
+  criadoEm: string
+}
+
 export interface Task {
   id: string
   esteiraId: string
@@ -232,6 +244,8 @@ export interface Task {
   rodada?: number
   /** Devoluções em ordem — o histórico de revisões da task */
   devolucoes?: Devolucao[]
+  /** Instruções dadas ao retomar a task pausada, em ordem */
+  instrucoes?: InstrucaoRetomada[]
   /** Commits finais das rodadas anteriores (o da rodada atual é commitFinalHash) */
   commitsAnteriores?: string[]
   /** Origem da task, quando criada pelo agente a partir de um chat */
@@ -263,6 +277,11 @@ export function rodadaDaTask(task: Pick<Task, 'rodada'>): number {
 /** Anotações escritas numa rodada. */
 export function anotacoesDaRodada(task: Pick<Task, 'anotacoes'>, rodada: number): AnotacaoFase[] {
   return task.anotacoes.filter((a) => (a.rodada ?? 1) === rodada)
+}
+
+/** Instruções de retomada dadas numa rodada. */
+export function instrucoesDaRodada(task: Pick<Task, 'instrucoes'>, rodada: number): InstrucaoRetomada[] {
+  return (task.instrucoes ?? []).filter((i) => i.rodada === rodada)
 }
 
 /** Devolução que abriu a rodada (undefined na rodada 1). */

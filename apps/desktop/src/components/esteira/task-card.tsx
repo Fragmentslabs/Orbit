@@ -1,7 +1,7 @@
 import { useDraggable } from "@dnd-kit/core"
 import { useEffect, useState } from "react"
 import { useTranslation } from "react-i18next"
-import { AlertTriangleIcon, ClockIcon, CornerUpLeftIcon, GlobeIcon, Loader2Icon, PauseIcon, PlayIcon } from "lucide-react"
+import { AlertTriangleIcon, ClockIcon, CornerUpLeftIcon, GlobeIcon, Loader2Icon, MessageSquarePlusIcon, PauseIcon, PlayIcon } from "lucide-react"
 import type { Esteira, Task } from "@shared/esteira"
 import { rodadaDaTask } from "@shared/esteira"
 import { cn } from "@/lib/utils"
@@ -34,6 +34,7 @@ export function TaskCard({
   onPausar,
   onRetomar,
   onDevolver,
+  onRetomarComInstrucao,
 }: {
   task: Task
   esteira: Esteira
@@ -48,6 +49,8 @@ export function TaskCard({
   onRetomar: () => void
   /** Task concluída: abre a devolução com comentário (rodada nova) */
   onDevolver: () => void
+  /** Task pausada: retomar dizendo o que a fase deve fazer diferente */
+  onRetomarComInstrucao: () => void
 }) {
   const { t } = useTranslation()
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
@@ -99,6 +102,20 @@ export function TaskCard({
             <PauseIcon className="size-3" />
           </button>
         ) : task.status !== "concluida" ? (
+          <>
+          {task.status === "pausada" && (
+            <button
+              type="button"
+              title={t("esteira.retomarComInstrucao")}
+              onClick={(e) => {
+                e.stopPropagation()
+                onRetomarComInstrucao()
+              }}
+              className="flex size-5 shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-accent hover:text-foreground"
+            >
+              <MessageSquarePlusIcon className="size-3" />
+            </button>
+          )}
           <button
             type="button"
             title={comErro ? t("esteira.retomar") : t("esteira.iniciar")}
@@ -111,6 +128,7 @@ export function TaskCard({
           >
             <PlayIcon className="size-3" />
           </button>
+          </>
         ) : (
           <button
             type="button"

@@ -1985,6 +1985,11 @@
     "rodadaCurta": "R{{rodada}}",
     "rodadaTitulo": "Round {{rodada}}: the task was sent back for review",
     "comentarioRevisao": "Review comment",
+    "retomarComInstrucao": "Resume with instruction",
+    "retomarInstrucaoTitulo": "Resume “{{titulo}}”",
+    "retomarInstrucaoDica": "The “{{fase}}” phase runs again following your instruction. Later phases receive it too, as context.",
+    "retomarInstrucaoPlaceholder": "E.g.: Tests run with npm run test:unit, not npm test. Or: don't touch the database schema, only the API.",
+    "instrucaoAoRetomar": "Instruction on resume",
     "naoRodouNaRodada": "This phase did not run in this round: it restarted at a later phase. Its work is in the previous round.",
     "fase": {
       "desenvolvimento": {

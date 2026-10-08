@@ -1984,6 +1984,11 @@
     "rodadaCurta": "R{{rodada}}",
     "rodadaTitulo": "Rodada {{rodada}}: a task foi devolvida para revisão",
     "comentarioRevisao": "Comentário da revisão",
+    "retomarComInstrucao": "Retomar com instrução",
+    "retomarInstrucaoTitulo": "Retomar “{{titulo}}”",
+    "retomarInstrucaoDica": "A fase “{{fase}}” roda de novo seguindo sua instrução. As próximas fases também a recebem, como contexto.",
+    "retomarInstrucaoPlaceholder": "Ex.: Os testes rodam com npm run test:unit, não npm test. Ou: não mexa no schema do banco, só na API.",
+    "instrucaoAoRetomar": "Instrução ao retomar",
     "naoRodouNaRodada": "Esta fase não rodou nesta rodada: ela recomeçou numa fase posterior. O trabalho dela está na rodada anterior.",
     "fase": {
       "desenvolvimento": {

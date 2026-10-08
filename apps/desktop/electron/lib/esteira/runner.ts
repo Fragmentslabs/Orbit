@@ -1,6 +1,6 @@
 import { stepCountIs, streamText, type ToolSet } from 'ai'
 import type { Esteira, FaseConfig, Task } from '@shared/esteira'
-import { anotacoesDaRodada, devolucaoDaRodada, rodadaDaTask } from '@shared/esteira'
+import { anotacoesDaRodada, devolucaoDaRodada, instrucoesDaRodada, rodadaDaTask } from '@shared/esteira'
 import { getProvider, modelSupportsVision } from '../catalog'
 import { classificarComando, mensagemBloqueio } from './command-policy'
 import { extrairAnotacao, extrairCommit } from './contrato'
@@ -216,6 +216,26 @@ export function montarMensagem(ctx: ContextoFase): string {
           anterioresDevolucoes.map((d) => `- Round ${d.rodada}: ${d.texto.replace(/\s+/g, ' ').slice(0, 300)}`).join('\n'),
       )
     }
+  }
+
+  // Instruções dadas ao retomar: as desta fase são prioritárias (é por causa
+  // delas que a fase roda de novo); as de outras fases da rodada entram como
+  // contexto — costumam ser fatos do projeto (comando de teste, variável).
+  const instrucoes = instrucoesDaRodada(ctx.task, rodada)
+  const daFase = instrucoes.filter((i) => i.faseId === ctx.fase.id)
+  const deOutras = instrucoes.filter((i) => i.faseId !== ctx.fase.id)
+  if (daFase.length > 0) {
+    partes.push(
+      `\n## Instructions from the user for this phase\n` +
+        `This phase was paused and the user resumed it with the instructions below. Follow them — they take priority over the phase's default behavior and over the task description where they conflict.\n\n` +
+        daFase.map((i) => `- ${i.texto}`).join('\n'),
+    )
+  }
+  if (deOutras.length > 0) {
+    partes.push(
+      `\n## Instructions the user gave to other phases (context)\n` +
+        deOutras.map((i) => `- ${i.faseNome}: ${i.texto.replace(/\s+/g, ' ').slice(0, 300)}`).join('\n'),
+    )
   }
 
   const fases = ctx.esteira.fases

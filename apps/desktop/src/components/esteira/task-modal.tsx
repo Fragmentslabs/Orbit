@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
-import { AlertTriangleIcon, CheckIcon, CornerUpLeftIcon, FileDiffIcon, LoaderIcon, MessageSquareQuoteIcon, PauseIcon, PlayIcon, PlusIcon, Trash2Icon, XIcon } from "lucide-react"
+import { AlertTriangleIcon, CheckIcon, CornerUpLeftIcon, FileDiffIcon, LoaderIcon, MessageSquarePlusIcon, MessageSquareQuoteIcon, PauseIcon, PlayIcon, PlusIcon, Trash2Icon, XIcon } from "lucide-react"
 import type { Esteira, Task } from "@shared/esteira"
-import { anotacoesDaRodada, devolucaoDaRodada, rodadaDaTask } from "@shared/esteira"
+import { anotacoesDaRodada, devolucaoDaRodada, instrucoesDaRodada, rodadaDaTask } from "@shared/esteira"
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { ConfirmDialog } from "@/components/ui/alert-dialog"
@@ -14,6 +14,7 @@ import { BrowserTestChip } from "@/src/components/browser-test-chip"
 import { MediaEmbed } from "./media-embed"
 import { ListaTasksBuscavel } from "./task-picker"
 import { DevolverTaskDialog } from "./devolver-task-dialog"
+import { RetomarInstrucaoDialog } from "./retomar-instrucao-dialog"
 import { SEM_TASKS, useEsteiraStore } from "@/src/stores/esteira-store"
 import { usePanelStore } from "@/src/stores/panel-store"
 import { cn } from "@/lib/utils"
@@ -49,6 +50,7 @@ export function TaskModal({
   const [erroDep, setErroDep] = useState<string | null>(null)
   const [confirmandoExclusao, setConfirmandoExclusao] = useState(false)
   const [devolvendo, setDevolvendo] = useState(false)
+  const [instruindo, setInstruindo] = useState(false)
   const rodadaAtual = task ? rodadaDaTask(task) : 1
   // Rodada exibida nas abas de fase: a atual por padrão; as anteriores ficam a
   // um clique, com o comentário que abriu cada uma.
@@ -123,6 +125,13 @@ export function TaskModal({
               <p className="text-xs font-medium text-destructive">{t("esteira.pausadaPorErro")}</p>
               <p className="mt-0.5 text-[11px] text-destructive/90">{task.erro}</p>
             </div>
+            <button
+              type="button"
+              onClick={() => setInstruindo(true)}
+              className="shrink-0 rounded-md border border-destructive/40 px-3 py-1.5 text-[11px] font-medium text-destructive hover:bg-destructive/10"
+            >
+              {t("esteira.retomarComInstrucao")}
+            </button>
             <button
               type="button"
               onClick={() => void retomarTask(esteira.id, task.id)}
@@ -267,24 +276,52 @@ export function TaskModal({
                 {(() => {
                   const fase = esteira.fases[faseAtiva]
                   const anotacao = fase ? anotacaoPorFase.get(fase.id) : undefined
+                  // Instruções dadas ao retomar esta fase nesta rodada: ficam
+                  // no topo, antes da execução/anotação que elas orientaram.
+                  const instrucoes = fase
+                    ? instrucoesDaRodada(task, rodadaVista).filter((i) => i.faseId === fase.id)
+                    : []
+                  const blocoInstrucoes = instrucoes.length > 0 && (
+                    <div className="mb-3 space-y-1.5">
+                      {instrucoes.map((instrucao, i) => (
+                        <div key={i} className="rounded-md border border-sky-500/30 bg-sky-500/5 px-2.5 py-2">
+                          <p className="mb-1 flex items-center gap-1.5 text-[11px] font-medium text-sky-600 dark:text-sky-400">
+                            <MessageSquarePlusIcon className="size-3.5" />
+                            {t("esteira.instrucaoAoRetomar")}
+                            <span className="font-normal text-muted-foreground">· {dataCurta(instrucao.criadoEm)}</span>
+                          </p>
+                          <p className="whitespace-pre-wrap break-words text-xs text-foreground">{instrucao.texto}</p>
+                        </div>
+                      ))}
+                    </div>
+                  )
                   // Fase em execução: mostra o agente rodando ao vivo (pensamento,
                   // ferramentas, browser) em vez do placeholder.
                   const executando = fase && naRodadaAtual && task.status === "em_progresso" && task.faseAtual === faseAtiva
                   if (executando) {
-                    return <ExecucaoViva taskId={task.id} faseIndice={faseAtiva} />
+                    return (
+                      <>
+                        {blocoInstrucoes}
+                        <ExecucaoViva taskId={task.id} faseIndice={faseAtiva} />
+                      </>
+                    )
                   }
                   if (!anotacao) {
                     // Rodada que recomeçou numa fase posterior: as anteriores
                     // não rodaram nela (o trabalho delas é da rodada anterior).
                     const naoRodou = devolucaoVista && faseAtiva < devolucaoVista.faseInicial
                     return (
-                      <p className="text-xs text-muted-foreground">
-                        {naoRodou ? t("esteira.naoRodouNaRodada") : t("esteira.semAnotacao")}
-                      </p>
+                      <>
+                        {blocoInstrucoes}
+                        <p className="text-xs text-muted-foreground">
+                          {naoRodou ? t("esteira.naoRodouNaRodada") : t("esteira.semAnotacao")}
+                        </p>
+                      </>
                     )
                   }
                   return (
                     <>
+                      {blocoInstrucoes}
                       <AssistantMarkdown>{anotacao.conteudo}</AssistantMarkdown>
                       {anotacao.comandosControlados.length > 0 && (
                         <div className="mt-3 rounded-md bg-muted/50 p-2">
@@ -374,6 +411,7 @@ export function TaskModal({
           {task.status === "em_progresso" ? (
             <BotaoAcao icone={<PauseIcon className="size-3.5" />} rotulo={t("esteira.pausar")} onClick={() => void pausarTask(esteira.id, task.id)} />
           ) : task.status !== "concluida" ? (
+            <>
             <BotaoAcao
               icone={<PlayIcon className="size-3.5" />}
               rotulo={task.status === "pausada" ? t("esteira.retomar") : t("esteira.iniciar")}
@@ -383,6 +421,14 @@ export function TaskModal({
                   : void iniciarTask(esteira.id, task.id)
               }
             />
+            {task.status === "pausada" && (
+              <BotaoAcao
+                icone={<MessageSquarePlusIcon className="size-3.5" />}
+                rotulo={t("esteira.retomarComInstrucao")}
+                onClick={() => setInstruindo(true)}
+              />
+            )}
+            </>
           ) : (
             <BotaoAcao
               icone={<CornerUpLeftIcon className="size-3.5" />}
@@ -401,6 +447,7 @@ export function TaskModal({
         </div>
 
         <DevolverTaskDialog task={task} esteira={esteira} aberto={devolvendo} onOpenChange={setDevolvendo} />
+        <RetomarInstrucaoDialog task={task} esteira={esteira} aberto={instruindo} onOpenChange={setInstruindo} />
 
         <ConfirmDialog
           open={confirmandoExclusao}
