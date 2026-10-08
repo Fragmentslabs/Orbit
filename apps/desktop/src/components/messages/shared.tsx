@@ -167,6 +167,12 @@ export function VisionWorkingRow() {
 }
 
 export function ReasoningPartView({ part, flat }: { part: ReasoningPart; flat?: boolean }) {
+  // Só nasce aberto o raciocínio que está chegando agora (e fecha sozinho ao
+  // terminar). O já concluído nasce FECHADO: aberto, cada bloco montava o
+  // markdown inteiro só para fechar 1s depois — num chat com centenas de
+  // raciocínios, eram segundos de render ao abrir a conversa. Decidido na
+  // montagem: o fim do streaming não pode mudar o defaultOpen no meio.
+  const [openAtMount] = useState(part.state === "streaming")
   if (!part.text) return null
   // Modo detalhado: o raciocínio por extenso, sem acordeon.
   if (flat) {
@@ -179,6 +185,7 @@ export function ReasoningPartView({ part, flat }: { part: ReasoningPart; flat?: 
   return (
     <Reasoning
       isStreaming={part.state === "streaming"}
+      defaultOpen={openAtMount}
       duration={part.durationMs ? Math.max(1, Math.round(part.durationMs / 1000)) : undefined}
       className="w-full"
     >
@@ -222,9 +229,12 @@ function AgentTriggerBody({ part }: { part: AgentPart }) {
 /** Acordeon de agente do /init (estilo thinking): auto-abre enquanto o
  * agente trabalha (streaming do que ele está fazendo) e fecha ao concluir. */
 export function AgentPartView({ part }: { part: AgentPart }) {
+  // Mesmo motivo do ReasoningPartView: concluído nasce fechado.
+  const [openAtMount] = useState(part.state === "running")
   return (
     <Reasoning
       isStreaming={part.state === "running"}
+      defaultOpen={openAtMount}
       duration={part.durationMs ? Math.max(1, Math.round(part.durationMs / 1000)) : undefined}
       className="w-full !mb-1"
     >

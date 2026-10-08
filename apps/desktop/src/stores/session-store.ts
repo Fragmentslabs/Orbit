@@ -402,22 +402,33 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     // o chat-view chama ensureMessages sempre que exibe uma sessao (inclusive
     // na que ja estava ativa no boot, que nunca passa por selectSession). Preso
     // ao selectSession, o card de plano nao voltava ao reabrir o app.
-    if (get().orchestration[sessionId] === undefined) {
-      const plan = await storage.read<OrchestrationPlan>(StorageKeys.orchestration(sessionId))
-      // Dispensado não vira card de novo (o arquivo fica: é histórico do
-      // orquestrador), e plano novo grava por cima sem a marca.
-      if (plan && !plan.dismissed) set((state) => ({ orchestration: { ...state.orchestration, [sessionId]: plan } }))
+    // As quatro leituras saem juntas: em sequência, o histórico (o que a tela
+    // espera) só começava a ser lido depois de três idas e voltas ao main.
+    const needsMessages = !loadedMessages.has(sessionId)
+    const [plan, review, asks, persistedRaw] = await Promise.all([
+      get().orchestration[sessionId] === undefined
+        ? storage.read<OrchestrationPlan>(StorageKeys.orchestration(sessionId))
+        : null,
+      get().planReviews[sessionId] === undefined ? storage.read<PlanReview>(StorageKeys.planReview(sessionId)) : null,
+      get().pendingAsks[sessionId] === undefined
+        ? storage.read<PendingAskUI[]>(StorageKeys.pendingAsks(sessionId))
+        : null,
+      needsMessages ? storage.read<ChatMessage[]>(StorageKeys.messages(sessionId)) : null,
+    ])
+    // Dispensado não vira card de novo (o arquivo fica: é histórico do
+    // orquestrador), e plano novo grava por cima sem a marca. As checagens de
+    // undefined se repetem: um evento pode ter preenchido durante a leitura.
+    if (plan && !plan.dismissed && get().orchestration[sessionId] === undefined) {
+      set((state) => ({ orchestration: { ...state.orchestration, [sessionId]: plan } }))
     }
-    if (get().planReviews[sessionId] === undefined) {
-      const review = await storage.read<PlanReview>(StorageKeys.planReview(sessionId))
-      if (review) set((state) => ({ planReviews: { ...state.planReviews, [sessionId]: review } }))
+    if (review && get().planReviews[sessionId] === undefined) {
+      set((state) => ({ planReviews: { ...state.planReviews, [sessionId]: review } }))
     }
-    if (get().pendingAsks[sessionId] === undefined) {
-      const asks = await storage.read<PendingAskUI[]>(StorageKeys.pendingAsks(sessionId))
-      if (asks) set((state) => ({ pendingAsks: { ...state.pendingAsks, [sessionId]: asks } }))
+    if (asks && get().pendingAsks[sessionId] === undefined) {
+      set((state) => ({ pendingAsks: { ...state.pendingAsks, [sessionId]: asks } }))
     }
-    if (loadedMessages.has(sessionId)) return
-    const persisted = (await storage.read<ChatMessage[]>(StorageKeys.messages(sessionId))) ?? []
+    if (!needsMessages || loadedMessages.has(sessionId)) return
+    const persisted = persistedRaw ?? []
     set((state) => {
       // Eventos que chegaram antes do load (ex.: reload com agente rodando)
       // não podem impedir a carga do histórico — mescla com o disco em vez
