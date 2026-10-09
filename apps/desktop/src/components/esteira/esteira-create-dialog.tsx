@@ -76,6 +76,7 @@ export function EsteiraCreateDialog({
   const [commitPrompt, setCommitPrompt] = useState("")
   const [promptAberto, setPromptAberto] = useState(false)
   const [prints, setPrints] = useState(false)
+  const [worktreePorTask, setWorktreePorTask] = useState(false)
   const [salvando, setSalvando] = useState(false)
   const [editando, setEditando] = useState<{ indice: number | null; fase: FaseEscolhida | null } | null>(null)
   const [reasoningPadrao, setReasoningPadrao] = useState<ReasoningConfig | null>(null)
@@ -125,6 +126,7 @@ export function EsteiraCreateDialog({
       setCommitAoFinal(esteiraEditando.commitAoFinal !== false)
       setCommitPrompt(esteiraEditando.commitPrompt ?? "")
       setPrints(!!esteiraEditando.printsDoResultado)
+      setWorktreePorTask(!!esteiraEditando.worktreePorTask)
       // Edição parte das fases REAIS da esteira (já são cópias, D4), não dos
       // templates: o usuário pode tê-las editado só para esta pipeline. Cada
       // uma leva o modelo e o raciocínio que já tem.
@@ -150,6 +152,7 @@ export function EsteiraCreateDialog({
     setCommitAoFinal(true)
     setCommitPrompt("")
     setPrints(false)
+    setWorktreePorTask(false)
     setFases(templates.filter((tpl) => tpl.padrao).map(doTemplate))
     // O reset é disparado pela ABERTURA do modal; doTemplate é um helper
     // recriado a cada render e como dep limparia o formulário sozinho.
@@ -231,6 +234,7 @@ export function EsteiraCreateDialog({
           commitAoFinal,
           ...(commitPrompt.trim() ? { commitPrompt: commitPrompt.trim() } : { commitPrompt: "" }),
           printsDoResultado: prints,
+          worktreePorTask,
           fases: fases.map((fase, ordem) => {
             const anterior = esteiraEditando.fases[ordem]
             return {
@@ -267,6 +271,7 @@ export function EsteiraCreateDialog({
         commitAoFinal,
         ...(commitPrompt.trim() ? { commitPrompt: commitPrompt.trim() } : {}),
         printsDoResultado: prints,
+        worktreePorTask,
       })
       // Recentes são globais e compartilhados com os chats. O modelo entra na
       // lista aqui, e não ao ser escolhido: o critério do app é "usado de
@@ -390,6 +395,16 @@ export function EsteiraCreateDialog({
             </Campo>
 
             <div className="space-y-2">
+              {/* Worktree por task: cada task num branch e numa cópia próprios.
+                  Vale para tasks que ainda não começaram — as em andamento
+                  seguem onde estão. */}
+              <label className="flex cursor-pointer items-start gap-2">
+                <Switch checked={worktreePorTask} onCheckedChange={setWorktreePorTask} className="mt-0.5" />
+                <span>
+                  <span className="block text-xs text-foreground">{t("esteira.worktreePorTask")}</span>
+                  <span className="block text-[11px] text-muted-foreground">{t("esteira.worktreePorTaskDica")}</span>
+                </span>
+              </label>
               <div className="flex items-center gap-2">
                 <Switch checked={commitAoFinal} onCheckedChange={aoMudarCommit} />
                 <span className="text-xs text-foreground">{t("esteira.commit")}</span>

@@ -1,7 +1,7 @@
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 import { generateText } from 'ai'
-import type { AnotacaoFase, Esteira, EsteiraEvent, Projeto, Task } from '@shared/esteira'
+import type { AnotacaoFase, Esteira, EsteiraEvent, Projeto, Task, WorktreeDaTask } from '@shared/esteira'
 import {
   ESTEIRA_COMMIT_PROMPT_PADRAO,
   ESTEIRA_RETRY_PADRAO,
@@ -22,6 +22,8 @@ import { resolveModel } from '../providers'
 import { withProviderSession } from '../provider-session'
 import { buildProviderOptions, interleavedReasoningField, normalizeMessages } from '../reasoning'
 import { toTokenUsage } from '../usage'
+import { killProcess, listProcesses } from '../process-manager'
+import { criarWorktree, existe, limparOrfaos, removerWorktree } from './worktree'
 import type { Memory } from '@shared/memory'
 
 const execFileAsync = promisify(execFile)
@@ -95,6 +97,91 @@ async function persistir(esteiraId: string, taskId: string, patch: (t: Task) => 
 
 export { criaCiclo, dependenciasPendentes } from './contrato'
 
+// ─── Worktree da task ────────────────────────────────────────────────────────
+
+/**
+ * Worktree em que a task vai rodar, ou undefined para o repositório principal.
+ *
+ * Só nasce na PRIMEIRA execução (rodada 1, sem fase executada): ligar a opção
+ * com a task no meio do caminho mudaria a pasta de trabalho e esconderia o que
+ * as fases anteriores fizeram. Já existente, é reaproveitado; se a pasta sumiu
+ * (apagada à mão), é recriado no mesmo branch — o trabalho commitado volta.
+ */
+async function garantirWorktree(
+  esteiraId: string,
+  esteira: Esteira,
+  projeto: Projeto,
+  taskId: string,
+  signal: AbortSignal,
+): Promise<WorktreeDaTask | undefined> {
+  const tasks = await listarTasks(esteiraId)
+  const task = tasks.find((t) => t.id === taskId)
+  if (!task) return undefined
+  if (task.worktree) {
+    if (await existe(task.worktree.caminho)) return task.worktree
+  } else {
+    const primeiraExecucao = rodadaDaTask(task) === 1 && task.anotacoes.every((a) => a.status === 'pulada')
+    if (!esteira.worktreePorTask || !primeiraExecucao) return undefined
+  }
+  const pastaPrincipal = projeto.pastas[0]
+  if (!pastaPrincipal) throw new Error('O projeto não tem pasta principal.')
+
+  emitir({
+    type: 'fase-progresso',
+    esteiraId,
+    taskId,
+    faseIndice: task.faseAtual ?? 0,
+    texto: task.worktree ? 'Recriando o worktree da task…\n\n' : 'Preparando o worktree da task…\n\n',
+  })
+  const criado = await criarWorktree({
+    pastaPrincipal,
+    projetoId: projeto.id,
+    task,
+    base: task.worktree ? undefined : baseDasDependencias(task, tasks),
+    signal,
+  })
+  await persistir(esteiraId, taskId, (t) => ({ ...t, worktree: criado }))
+  return criado
+}
+
+/**
+ * Task que depende de UMA task com worktree parte do branch dela: o trabalho
+ * da dependência ainda não foi mesclado na base, e sem isso a dependente
+ * começaria sem ele. Com várias, não há um branch único — parte da base.
+ */
+function baseDasDependencias(task: Task, tasks: Task[]): string | undefined {
+  const comBranch = task.dependeDe
+    .map((id) => tasks.find((t) => t.id === id)?.worktree)
+    .filter((w): w is WorktreeDaTask => !!w)
+  return comBranch.length === 1 ? comBranch[0].branch : undefined
+}
+
+/**
+ * Remove o worktree de uma task que está saindo (task, esteira ou projeto
+ * removidos): para a execução, encerra os processos em background que ela
+ * deixou rodando lá dentro e apaga a pasta. O branch fica — o trabalho
+ * commitado continua acessível no repositório.
+ */
+async function descartarWorktreeDaTask(task: Task, pastaPrincipal: string | undefined): Promise<void> {
+  emExecucao.get(task.id)?.abort()
+  await pararEsperando(task.id)
+  if (!task.worktree) return
+  for (const processo of listProcesses(`esteira_${task.id}`)) {
+    if (processo.status === 'running') await killProcess(processo.pid).catch(() => false)
+  }
+  await removerWorktree(pastaPrincipal, task.worktree).catch((err) =>
+    console.error('[esteira] remoção do worktree falhou:', err),
+  )
+}
+
+/** Remove os worktrees de todas as tasks de uma esteira (antes de apagá-la). */
+export async function descartarWorktreesDaEsteira(esteiraId: string): Promise<void> {
+  const contexto = await carregarContexto(esteiraId)
+  for (const task of await listarTasks(esteiraId)) {
+    await descartarWorktreeDaTask(task, contexto?.projeto.pastas[0])
+  }
+}
+
 // ─── Execução de uma task ────────────────────────────────────────────────────
 
 /**
@@ -121,7 +208,30 @@ async function rodarTask(esteiraId: string, taskId: string, retomandoInterrompid
   const controller = new AbortController()
   emExecucao.set(taskId, controller)
   const inicioExecucao = Date.now()
-  const raiz = esteira.worktree || projeto.pastas[0]
+
+  // Worktree da task (esteira com worktreePorTask): criado antes da primeira
+  // fase e reaproveitado em retomadas e devoluções. Falhar aqui pausa a task
+  // com o motivo — rodar no repositório principal seria furar o isolamento.
+  let worktree: WorktreeDaTask | undefined
+  try {
+    worktree = await garantirWorktree(esteiraId, esteira, projeto, taskId, controller.signal)
+  } catch (err) {
+    emExecucao.delete(taskId)
+    if (!controller.signal.aborted) {
+      const motivo = err instanceof Error ? err.message : String(err)
+      console.error('[esteira] worktree da task falhou:', err)
+      await persistir(esteiraId, taskId, (t) =>
+        t.status === 'em_progresso'
+          ? { ...t, status: 'pausada', pausaMotivo: 'erro', erro: `Não foi possível preparar o worktree da task: ${motivo}` }
+          : t,
+      )
+    }
+    if (filasAtivas.has(esteiraId)) void avancarFila(esteiraId)
+    return
+  }
+  const raiz = worktree?.pasta || esteira.worktree || projeto.pastas[0]
+  // A pasta principal vira a do worktree; as extras continuam compartilhadas.
+  const pastas = worktree ? [worktree.pasta, ...projeto.pastas.slice(1)] : projeto.pastas
 
   /**
    * Snapshot do filesystem antes da primeira fase desta execução. O diff da
@@ -195,7 +305,7 @@ async function rodarTask(esteiraId: string, taskId: string, retomandoInterrompid
         task,
         fase,
         indiceFase: indice,
-        pastas: projeto.pastas,
+        pastas,
         tentativa: 1,
         // Só na fase em que a interrupção aconteceu: a que ainda não tem
         // anotação nesta rodada.
@@ -214,7 +324,7 @@ async function rodarTask(esteiraId: string, taskId: string, retomandoInterrompid
           task,
           fase,
           indiceFase: indice,
-          pastas: projeto.pastas,
+          pastas,
           tentativa,
           erroAnterior: resultado.erro,
           abort: controller.signal,
@@ -262,7 +372,7 @@ async function rodarTask(esteiraId: string, taskId: string, retomandoInterrompid
       // existe entrega de branch sem o estado final commitado.
       const querCommitFinal = ultimaFase && (esteira.commitAoFinal !== false || esteira.pushAoFinal)
       const commit = querCommitFinal
-        ? await tentarCommit(raiz, esteira, task, projeto.pastas, controller.signal)
+        ? await tentarCommit(raiz, esteira, task, pastas, controller.signal)
         : undefined
       const pushFalha =
         ultimaFase && esteira.pushAoFinal
@@ -596,7 +706,8 @@ function montarPromptCommit(ctx: {
   }
 
   const repo: string[] = [`Working folder: ${ctx.pastas[0] ?? '(none)'}`]
-  if (ctx.esteira.branch) repo.push(`Branch: ${ctx.esteira.branch}`)
+  if (ctx.task.worktree) repo.push(`Branch: ${ctx.task.worktree.branch} (isolated worktree of this task)`)
+  else if (ctx.esteira.branch) repo.push(`Branch: ${ctx.esteira.branch}`)
   if (ctx.esteira.worktree) repo.push(`Worktree: ${ctx.esteira.worktree}`)
   partes.push(`\n## Repository\n${repo.join('\n')}`)
 
@@ -886,6 +997,16 @@ export async function reconciliarExecucoes(): Promise<void> {
       )
     }
   }
+  // Worktrees de tasks que não existem mais (removidas com o app fechado ou
+  // numa remoção que falhou no meio) só ocupariam disco.
+  const projetos = await listarProjetos()
+  const vivas = new Map<string, Set<string>>()
+  for (const esteira of await listarEsteiras()) {
+    const ids = vivas.get(esteira.projetoId) ?? new Set<string>()
+    for (const task of await listarTasks(esteira.id)) if (task.worktree) ids.add(task.id)
+    vivas.set(esteira.projetoId, ids)
+  }
+  await limparOrfaos(projetos, vivas).catch((err) => console.error('[esteira] limpeza de worktrees falhou:', err))
 }
 
 /** Aborta tudo (fechamento do app). */
@@ -946,6 +1067,11 @@ export async function atualizarTaskCampos(
 
 export async function removerTask(esteiraId: string, taskId: string): Promise<void> {
   emExecucao.get(taskId)?.abort()
+  const removida = (await listarTasks(esteiraId)).find((t) => t.id === taskId)
+  if (removida?.worktree) {
+    const contexto = await carregarContexto(esteiraId)
+    await descartarWorktreeDaTask(removida, contexto?.projeto.pastas[0])
+  }
   // Filtra + limpa as dependências DENTRO do lock: remoção concorrente com
   // criação não ressuscita tasks nem deixa referência órfã.
   const restantes = await modificarTasks(esteiraId, (tasks) => {

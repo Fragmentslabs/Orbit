@@ -12,6 +12,7 @@ import {
   atualizarTaskCampos,
   criarTask,
   desligarFila,
+  descartarWorktreesDaEsteira,
   devolverTask,
   emitir,
   filaLigada,
@@ -133,6 +134,7 @@ export async function removerProjeto(id: string): Promise<void> {
   // rodando sem nenhuma tela onde aparecer.
   for (const esteira of esteiras.filter((e) => e.projetoId === id)) {
     desligarFila(esteira.id)
+    await descartarWorktreesDaEsteira(esteira.id)
     await removerTasks(esteira.id)
   }
   await salvarEsteiras(esteiras.filter((e) => e.projetoId !== id))
@@ -198,6 +200,7 @@ export async function criarEsteira(input: NovaEsteiraInput): Promise<Esteira> {
     fases: await copiarFases(input),
     branch: input.branch,
     worktree: input.worktree,
+    ...(input.worktreePorTask ? { worktreePorTask: true } : {}),
     modoOperacao: input.modoOperacao ?? 'manual',
     pushAoFinal: input.pushAoFinal ?? false,
     commitAoFinal: input.commitAoFinal ?? true,
@@ -248,6 +251,7 @@ export async function atualizarEsteira(
 
 export async function removerEsteira(id: string): Promise<void> {
   desligarFila(id)
+  await descartarWorktreesDaEsteira(id)
   const esteiras = await listarEsteiras()
   await salvarEsteiras(esteiras.filter((e) => e.id !== id))
   await removerTasks(id)

@@ -297,7 +297,25 @@ export function montarMensagem(ctx: ContextoFase): string {
   }
 
   const repo: string[] = [`Working folders: ${ctx.pastas.join(', ') || '(none)'}`]
-  if (ctx.esteira.branch) repo.push(`Branch: ${ctx.esteira.branch}`)
+  const wt = ctx.task.worktree
+  if (wt) {
+    // Worktree isolado: o agente precisa saber que a pasta é dele, que o
+    // repositório principal não é, e o que pode fazer com as dependências.
+    repo.push(
+      `Isolated worktree for this task: ${wt.caminho}, on branch \`${wt.branch}\` (created from \`${wt.base}\`). ` +
+        `Work, run commands and commit only inside it — the main checkout belongs to the user and to other tasks running in parallel.`,
+    )
+    repo.push(
+      wt.dependencias === 'clonadas'
+        ? 'Dependencies (node_modules) were cloned from the main checkout; if you change dependency manifests, run the install here.'
+        : wt.dependencias === 'vinculadas'
+          ? 'Dependencies (node_modules) are LINKED to the main checkout: do not run install commands — they would change the main checkout. If dependencies must change, say so in your note.'
+          : 'The repository has no node_modules; install dependencies here if a command needs them.',
+    )
+    repo.push('If a dev server port is busy (another task may be running one), use another port.')
+  } else if (ctx.esteira.branch) {
+    repo.push(`Branch: ${ctx.esteira.branch}`)
+  }
   if (ctx.esteira.worktree) repo.push(`Worktree: ${ctx.esteira.worktree}`)
   repo.push(
     `Push at the end: ${ctx.esteira.pushAoFinal ? 'yes — the engine runs git push when the last phase succeeds, do not push yourself' : 'no (local commits only)'}`,

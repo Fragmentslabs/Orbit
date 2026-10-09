@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
-import { AlertTriangleIcon, CheckIcon, CornerUpLeftIcon, FileDiffIcon, LoaderIcon, MessageSquarePlusIcon, MessageSquareQuoteIcon, PauseIcon, PlayIcon, PlusIcon, Trash2Icon, XIcon } from "lucide-react"
+import { AlertTriangleIcon, CheckIcon, CornerUpLeftIcon, FileDiffIcon, FolderOpenIcon, GitBranchIcon, LoaderIcon, MessageSquarePlusIcon, MessageSquareQuoteIcon, PauseIcon, PlayIcon, PlusIcon, Trash2Icon, XIcon } from "lucide-react"
 import type { Esteira, Task } from "@shared/esteira"
 import { anotacoesDaRodada, devolucaoDaRodada, instrucoesDaRodada, rodadaDaTask } from "@shared/esteira"
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog"
@@ -190,6 +190,28 @@ export function TaskModal({
             {linhasDoDiff.adicionadas > 0 && <span className="text-emerald-500">+{linhasDoDiff.adicionadas}</span>}
             {linhasDoDiff.removidas > 0 && <span className="text-red-500">-{linhasDoDiff.removidas}</span>}
           </button>
+        )}
+
+        {/* Worktree isolado da task: branch e atalho para a pasta (fica em
+            userData, fora do projeto — sem o atalho seria difícil de achar). */}
+        {task.worktree && (
+          <div className="mx-4 mt-2 flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
+            <span className="flex min-w-0 items-center gap-1.5" title={t("esteira.worktreeBase", { base: task.worktree.base })}>
+              <GitBranchIcon className="size-3.5 shrink-0" />
+              <span className="truncate font-mono text-foreground">{task.worktree.branch}</span>
+            </span>
+            <button
+              type="button"
+              onClick={() => void window.ipcRenderer.invoke("shell:showItemInFolder", task.worktree!.pasta)}
+              className="flex items-center gap-1 rounded-md border px-2 py-0.5 transition-colors hover:border-ring hover:text-foreground"
+            >
+              <FolderOpenIcon className="size-3" />
+              {t("esteira.abrirWorktree")}
+            </button>
+            {task.worktree.dependencias === "vinculadas" && (
+              <span className="text-yellow-600 dark:text-yellow-400">{t("esteira.dependenciasVinculadas")}</span>
+            )}
+          </div>
         )}
 
         <div className="flex min-h-0 gap-4 px-4 pb-4 pt-3">
@@ -453,7 +475,7 @@ export function TaskModal({
           open={confirmandoExclusao}
           onOpenChange={setConfirmandoExclusao}
           title={t("esteira.confirmarExclusaoTask", { titulo: task.titulo })}
-          description={t("esteira.exclusaoTaskDescricao")}
+          description={task.worktree ? t("esteira.exclusaoTaskDescricaoWorktree", { branch: task.worktree.branch }) : t("esteira.exclusaoTaskDescricao")}
           confirmLabel={t("esteira.excluirTask")}
           destructive
           onConfirm={() => {

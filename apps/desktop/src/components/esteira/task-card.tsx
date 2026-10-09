@@ -1,7 +1,7 @@
 import { useDraggable } from "@dnd-kit/core"
 import { useEffect, useState } from "react"
 import { useTranslation } from "react-i18next"
-import { AlertTriangleIcon, ClockIcon, CornerUpLeftIcon, GlobeIcon, Loader2Icon, MessageSquarePlusIcon, PauseIcon, PlayIcon } from "lucide-react"
+import { AlertTriangleIcon, ClockIcon, CornerUpLeftIcon, GitBranchIcon, GlobeIcon, Loader2Icon, MessageSquarePlusIcon, PauseIcon, PlayIcon } from "lucide-react"
 import type { Esteira, Task } from "@shared/esteira"
 import { rodadaDaTask } from "@shared/esteira"
 import { cn } from "@/lib/utils"
@@ -145,6 +145,11 @@ export function TaskCard({
       </div>
 
       <div className="mt-1.5 flex flex-wrap items-center gap-1.5 text-[10px] text-muted-foreground">
+        {task.worktree && (
+          <span title={task.worktree.branch} className="flex items-center">
+            <GitBranchIcon className="size-2.5" />
+          </span>
+        )}
         {rodada > 1 && (
           <span
             title={t("esteira.rodadaTitulo", { rodada })}

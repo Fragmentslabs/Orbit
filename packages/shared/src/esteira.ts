@@ -127,8 +127,14 @@ export interface Esteira {
   fases: FaseConfig[]
   /** Branch de trabalho (ausente = branch atual do repo) */
   branch?: string
-  /** Caminho do worktree dedicado, quando usado */
+  /** Legado: caminho fixo de um worktree para a esteira inteira (sem UI) */
   worktree?: string
+  /**
+   * Cada task trabalha num `git worktree` próprio, num branch próprio — tasks
+   * em paralelo não pisam uma na outra, e o trabalho de cada uma fica isolado
+   * até ser mesclado.
+   */
+  worktreePorTask?: boolean
   modoOperacao: ModoOperacao
   /** O engine faz push do branch ao concluir a última fase (padrão false — commit local) */
   pushAoFinal: boolean
@@ -202,6 +208,27 @@ export interface InstrucaoRetomada {
   criadoEm: string
 }
 
+/** Worktree isolado de uma task (esteira com `worktreePorTask`). */
+export interface WorktreeDaTask {
+  /** Raiz do worktree (fica em userData/orbit-data/worktrees) */
+  caminho: string
+  /**
+   * Pasta de trabalho dentro do worktree — difere da raiz quando a pasta
+   * principal do projeto é uma subpasta do repositório (monorepo).
+   */
+  pasta: string
+  branch: string
+  /** Branch (ou commit) de onde o worktree saiu */
+  base: string
+  /**
+   * Como os node_modules chegaram: 'clonadas' (cópia copy-on-write — dá para
+   * instalar à vontade), 'vinculadas' (link para as do repositório principal —
+   * instalar mexeria nelas) ou 'nenhuma' (o repositório não tem).
+   */
+  dependencias: 'clonadas' | 'vinculadas' | 'nenhuma'
+  criadoEm: string
+}
+
 export interface Task {
   id: string
   esteiraId: string
@@ -244,6 +271,8 @@ export interface Task {
   rodada?: number
   /** Devoluções em ordem — o histórico de revisões da task */
   devolucoes?: Devolucao[]
+  /** Worktree isolado da task (esteira com worktreePorTask) */
+  worktree?: WorktreeDaTask
   /** Instruções dadas ao retomar a task pausada, em ordem */
   instrucoes?: InstrucaoRetomada[]
   /** Commits finais das rodadas anteriores (o da rodada atual é commitFinalHash) */
@@ -343,6 +372,8 @@ export interface NovaEsteiraInput {
   reasoning?: ReasoningConfig | null
   branch?: string
   worktree?: string
+  /** Cada task num git worktree próprio */
+  worktreePorTask?: boolean
   pushAoFinal?: boolean
   /** Commit final do engine ao concluir a última fase (padrão true) */
   commitAoFinal?: boolean

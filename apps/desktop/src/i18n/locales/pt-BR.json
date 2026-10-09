@@ -1919,6 +1919,12 @@
     "excluirTask": "Excluir task",
     "confirmarExclusaoTask": "Excluir a task \"{{titulo}}\"?",
     "exclusaoTaskDescricao": "Essa ação não pode ser desfeita — a task e as anotações das fases serão perdidas.",
+    "exclusaoTaskDescricaoWorktree": "Essa ação não pode ser desfeita — a task, as anotações e o worktree dela serão apagados, com o que não foi commitado. O branch {{branch}} continua no repositório.",
+    "worktreePorTask": "Isolar cada task em um worktree",
+    "worktreePorTaskDica": "Cada task trabalha num branch e numa cópia próprios, então dá para rodar várias ao mesmo tempo sem uma mexer na outra. Parte do branch atual (alterações não commitadas ficam de fora) e vale para tasks que ainda não começaram.",
+    "worktreeBase": "Criado a partir de {{base}}",
+    "abrirWorktree": "Abrir pasta",
+    "dependenciasVinculadas": "node_modules vinculados ao repositório principal",
     "status": {
       "pendente": "Pendente",
       "em_progresso": "Em execução",

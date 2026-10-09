@@ -154,6 +154,15 @@ function maybeGc(directory: string) {
   void snapshotGit(directory, ['gc', '--quiet', '--prune=7.days']).catch(() => {})
 }
 
+/**
+ * Apaga o repositório auxiliar de snapshots de uma pasta que deixou de existir
+ * (ex.: o worktree de uma task da esteira, ao ser removido).
+ */
+export async function descartarSnapshots(directory: string): Promise<void> {
+  lastGc.delete(gitDirFor(directory))
+  await fs.rm(gitDirFor(directory), { recursive: true, force: true })
+}
+
 /** Captura o estado atual do worktree como tree hash. */
 export async function capture(directory: string): Promise<string> {
   await ensureRepo(directory)

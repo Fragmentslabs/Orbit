@@ -463,6 +463,8 @@ export interface NovaEsteiraInput {
   reasoning?: ReasoningConfig | null
   branch?: string
   worktree?: string
+  /** Cada task num git worktree próprio */
+  worktreePorTask?: boolean
   pushAoFinal?: boolean
   /** Commit final do engine ao concluir a última fase (padrão true) */
   commitAoFinal?: boolean

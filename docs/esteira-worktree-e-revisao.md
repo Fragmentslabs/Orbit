@@ -123,6 +123,13 @@ Quando `rodada > 1`:
 
 ## Etapa 2 — Worktree por task
 
+> **Status: implementada.** Diferenças em relação ao plano:
+> - Se a pasta principal do projeto é uma subpasta do repositório (monorepo), o worktree é do repositório inteiro e a task trabalha na mesma subpasta dentro dele (`WorktreeDaTask.pasta`).
+> - Task que depende de **exatamente uma** task com worktree parte do branch dela (o trabalho da dependência ainda não foi mesclado). Com várias, parte da base.
+> - Remover task, esteira ou projeto apaga o worktree (com o que não foi commitado — a confirmação avisa) e **mantém o branch**. O branch só sai no descarte da etapa 3.
+> - Medido no próprio Orbit: o clone APFS do `node_modules` (2,1 GB) leva ~16 s e não ocupa espaço perceptível. O card mostra "Preparando o worktree da task…" enquanto isso.
+> - Testes: `worktree.test.ts` (git de verdade em pasta temporária) e `engine-worktree.test.ts`.
+
 ### Opção na esteira
 
 - `Esteira.worktreePorTask?: boolean` — switch no formulário: **"Isolar cada task em um worktree"**, com dica: "Cada task trabalha num branch e numa cópia próprios; dá para rodar várias ao mesmo tempo sem uma mexer na outra."

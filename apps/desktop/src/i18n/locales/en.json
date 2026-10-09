@@ -1920,6 +1920,12 @@
     "excluirTask": "Delete task",
     "confirmarExclusaoTask": "Delete task \"{{titulo}}\"?",
     "exclusaoTaskDescricao": "This action cannot be undone — the task and its phase notes will be lost.",
+    "exclusaoTaskDescricaoWorktree": "This action cannot be undone — the task, its notes and its worktree will be deleted, along with anything not committed. The {{branch}} branch stays in the repository.",
+    "worktreePorTask": "Isolate each task in a worktree",
+    "worktreePorTaskDica": "Each task works on its own branch and copy, so several can run at once without touching each other. Starts from the current branch (uncommitted changes are left out) and applies to tasks that haven't started yet.",
+    "worktreeBase": "Created from {{base}}",
+    "abrirWorktree": "Open folder",
+    "dependenciasVinculadas": "node_modules linked to the main checkout",
     "status": {
       "pendente": "Pending",
       "em_progresso": "Running",
