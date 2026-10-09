@@ -115,7 +115,10 @@ export function TaskModal({
 
   return (
     <Dialog open={aberto} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-4xl p-0">
+      {/* Mesma altura do modal de configurações (600px), limitada à tela. Em
+          flex (não grid): no grid do DialogContent as linhas implícitas
+          esticam e o espaço não vai para quem precisa dele. */}
+      <DialogContent className="flex h-[600px] max-h-[90vh] max-w-4xl flex-col gap-0 p-0">
         <DialogTitle className="sr-only">{task.titulo}</DialogTitle>
 
         {comErro && (
@@ -214,27 +217,31 @@ export function TaskModal({
           </div>
         )}
 
-        <div className="flex min-h-0 gap-4 px-4 pb-4 pt-3">
+        <div className="flex min-h-0 flex-1 gap-4 px-4 pb-4 pt-3">
           {/* Esquerda: descrição + tabs de fases */}
-          <div className="flex min-w-0 flex-1 flex-col gap-3">
-            <div>
-              <p className="mb-1 text-[11px] font-medium text-muted-foreground">{t("esteira.descricao")}</p>
+          <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-3">
+            {/* Altura dividida 1:2 entre a descrição e a área da fase (as
+                anotações do modelo, que costumam ser bem mais longas). */}
+            <div className="flex min-h-28 flex-[1] flex-col">
+              <p className="mb-1 shrink-0 text-[11px] font-medium text-muted-foreground">{t("esteira.descricao")}</p>
               <textarea
                 value={descricao}
                 onChange={(e) => setDescricao(e.target.value)}
                 onBlur={() => descricao !== task.descricao && salvarCampo({ descricao })}
-                rows={3}
-                className="w-full resize-none rounded-md border bg-transparent px-2 py-1.5 text-xs outline-none focus-visible:border-ring"
+                className="min-h-0 w-full flex-1 resize-none rounded-md border bg-transparent px-2 py-1.5 text-xs outline-none focus-visible:border-ring"
               />
               {/* URLs orbit-media:// coladas na descrição viram imagens (o texto
-                  continua sendo a fonte de verdade para as fases) */}
-              <MediaEmbed texto={descricao} />
+                  continua sendo a fonte de verdade para as fases). Altura
+                  limitada para as imagens não empurrarem a área da fase. */}
+              <div className="max-h-28 shrink-0 overflow-y-auto">
+                <MediaEmbed texto={descricao} />
+              </div>
             </div>
 
             {/* Rodadas: só aparecem depois da primeira devolução. Cada uma
                 mostra o comentário que a abriu e as anotações dela. */}
             {rodadaAtual > 1 && (
-              <div className="space-y-2">
+              <div className="shrink-0 space-y-2">
                 <div className="flex flex-wrap items-center gap-1">
                   {Array.from({ length: rodadaAtual }, (_, i) => i + 1).map((n) => (
                     <button
@@ -259,7 +266,7 @@ export function TaskModal({
                       {t("esteira.comentarioRevisao")}
                       <span className="font-normal text-muted-foreground">· {dataCurta(devolucaoVista.criadoEm)}</span>
                     </p>
-                    <p className="whitespace-pre-wrap break-words text-xs text-foreground">{devolucaoVista.texto}</p>
+                    <p className="max-h-20 overflow-y-auto whitespace-pre-wrap break-words text-xs text-foreground">{devolucaoVista.texto}</p>
                   </div>
                 )}
               </div>
@@ -293,7 +300,7 @@ export function TaskModal({
 
             {/* Scroll como o da sidebar (ScrollArea): barra some quando parado
                 e só aparece ao rolar/hover, no lugar da scrollbar nativa. */}
-            <ScrollArea className="min-h-48 max-h-[46vh] rounded-md border">
+            <ScrollArea className="min-h-40 flex-[2] rounded-md border">
               <div className="p-3 [&_li]:break-words [&_p]:break-words">
                 {(() => {
                   const fase = esteira.fases[faseAtiva]
@@ -365,7 +372,7 @@ export function TaskModal({
           </div>
 
           {/* Direita: telemetria + dependências */}
-          <div className="w-56 shrink-0 space-y-3 text-[11px]">
+          <div className="w-56 shrink-0 space-y-3 overflow-y-auto text-[11px]">
             <dl className="space-y-1.5">
               <Linha rotulo={t("esteira.criadaEm")} valor={dataCurta(task.criadoEm)} />
               <Linha rotulo={t("esteira.concluidaEm")} valor={dataCurta(task.concluidoEm)} />
