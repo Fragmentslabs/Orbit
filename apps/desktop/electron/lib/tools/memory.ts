@@ -3,7 +3,6 @@ import { z } from 'zod'
 import type { SendMessageInput } from '@shared/chat'
 import type { Memory } from '@shared/memory'
 import { isCodeContext } from '@shared/memory'
-import { projectIdOf } from '../memory/domain'
 import * as memory from '../memory/service'
 import type { ToolContext } from './context'
 
@@ -84,7 +83,7 @@ function dias(desde: number): number {
  * agente conversacional não deveria topar com memórias de projeto sem pedir.
  * A rotina de consolidação pede — é ela que passa includeProjectMemories.
  */
-function createListTool(projectId?: string) {
+function createListTool(projectIdOf?: () => Promise<string>) {
   return tool({
     description: [
       'Lists memories ordered by DISUSE (fewest hits and oldest first), with hits, age and last use.',
@@ -109,6 +108,7 @@ function createListTool(projectId?: string) {
       limit: z.number().int().min(1).max(100).optional().describe('Default: 30'),
     }),
     execute: async ({ kind, category, maxHits, minAgeDays, onlyOrphans, includeProjectMemories, limit }) => {
+      const projectId = projectIdOf ? await projectIdOf() : undefined
       const todas = await memory.list()
       const agora = Date.now()
       const ids = new Set(todas.map((m) => m.id))
@@ -191,7 +191,7 @@ function createOpenTool() {
       id: z.string().describe('Memory id (e.g.: mem_abc123)'),
     }),
     execute: async ({ id }) => {
-      const full = await memory.getFull(id)
+      const full = await memory.open(id)
       if (!full) return `Memória #${id} não encontrada.`
       const parts = [describe(full.memory)]
       if (full.memory.relatedIds.length) parts.push(`Relacionadas: ${full.memory.relatedIds.join(', ')}`)
@@ -289,7 +289,18 @@ export function createChatMemoryTools(input: SendMessageInput): ToolSet {
   }
 }
 
+/**
+ * Escopo de memória da pasta da sessão, resolvido uma vez por conjunto de
+ * ferramentas. É o projeto da pasta mãe quando ela já tem árvore — ver
+ * resolveProjectScope — e não o projectIdOf da pasta crua.
+ */
+function scopeResolver(ctx: ToolContext): () => Promise<memory.ProjectScope> {
+  let pending: Promise<memory.ProjectScope> | undefined
+  return () => (pending ??= memory.resolveProjectScope(ctx.directory))
+}
+
 export function createGraphTool(_input: SendMessageInput, ctx: ToolContext) {
+  const scope = scopeResolver(ctx)
   return tool({
     description:
       'Searches the current project\'s memory graph. Returns nodes whose text or tags match the query, with their connections (relatedIds). Use when you need architectural context, decisions, or specific conventions — replaces re-analyzing the code.',
@@ -301,7 +312,7 @@ export function createGraphTool(_input: SendMessageInput, ctx: ToolContext) {
       const results = await memory.search({
         query,
         kinds: ['project'],
-        projectId: projectIdOf(ctx.directory),
+        projectId: (await scope()).projectId,
         limit,
       })
       if (results.length === 0) return 'Nenhuma memória encontrada para esta consulta.'
@@ -327,7 +338,8 @@ export function createGraphTool(_input: SendMessageInput, ctx: ToolContext) {
 }
 
 export function createCodeMemoryTools(input: SendMessageInput, ctx: ToolContext): ToolSet {
-  const projectId = projectIdOf(ctx.directory)
+  const scope = scopeResolver(ctx)
+  const projectId = async () => (await scope()).projectId
 
   return {
     memory_save: tool({
@@ -390,7 +402,7 @@ export function createCodeMemoryTools(input: SendMessageInput, ctx: ToolContext)
           return 'Erro: kind=general só aceita category="learning" (ou nenhuma category).'
         }
         if (resolvedKind === 'project') {
-          const missingParent = await requireParent(projectId, relatedIds)
+          const missingParent = await requireParent(await projectId(), relatedIds)
           if (missingParent) return missingParent
         }
         const result = await memory.save({
@@ -405,8 +417,9 @@ export function createCodeMemoryTools(input: SendMessageInput, ctx: ToolContext)
           relatedIds,
           relatedTypes: relatedTypes as Record<string, 'parent' | 'related'> | undefined,
           // Sempre enviado: define o projeto em memórias "project" e registra a
-          // origem nas "general", para o canvas ancorá-las na árvore certa.
-          directory: ctx.directory,
+          // origem nas "general", para o canvas ancorá-las na árvore certa. É
+          // a raiz do escopo: numa subpasta, a memória entra na árvore da mãe.
+          directory: (await scope()).directory,
           sessionId: input.sessionId,
         })
         return saveReply(result)
@@ -441,7 +454,7 @@ export function createCodeMemoryTools(input: SendMessageInput, ctx: ToolContext)
         try {
           const updated = await memory.revise(id, {
             text, addTags, tags, weight, kind, category, area, document,
-            directory: ctx.directory,
+            directory: (await scope()).directory,
           })
           if (!updated) return `Memória #${id} não encontrada.`
           return `Memória #${id} atualizada: ${describe(updated)}`
@@ -459,7 +472,7 @@ export function createCodeMemoryTools(input: SendMessageInput, ctx: ToolContext)
         'depth). Call it BEFORE saving to decide which node the new memory hangs from, and to spot a ' +
         'node that should be updated rather than duplicated.',
       inputSchema: z.object({}),
-      execute: async () => treeReply(await memory.tree(projectId)),
+      execute: async () => treeReply(await memory.tree(await projectId())),
     }),
 
     memory_search: tool({
@@ -480,7 +493,7 @@ export function createCodeMemoryTools(input: SendMessageInput, ctx: ToolContext)
         const results = await memory.search({
           query,
           kinds: kind ? [kind] : ['project', 'general'],
-          projectId,
+          projectId: await projectId(),
           category,
           limit,
         })

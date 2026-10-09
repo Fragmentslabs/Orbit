@@ -2,6 +2,7 @@ import type { SendMessageInput } from '@shared/chat'
 import type { Memory } from '@shared/memory'
 import { agentMayUseBrowser } from './app-settings'
 import { loadPromptContext } from './memory/service'
+import type { MapNode, ProjectMap } from './memory/project-map'
 import { buildPastChatsContext, detectPastChatsIntent } from './past-chats'
 import { loadSkills } from './skills'
 import { listMcpToolDescriptions } from './mcp'
@@ -344,17 +345,17 @@ Project memory is a TREE, not a pile of notes. Your job is to keep that tree acc
 so future sessions read the tree instead of re-analyzing the codebase.
 
 SHAPE OF THE TREE:
-  <project>                        <- overview node, the root
-    ├── front / back / api         <- one node per subproject, when the repo has them
-    │     ├── architecture         <- areas hanging off the subproject they describe
-    │     └── design
-    ├── business                   <- areas that span the WHOLE repo hang off the root
-    └── infrastructure
-Each area node is a parent; concrete facts (a decision, a convention, a schema) hang off the area
-they belong to. Depth is good: a fact about the login screen belongs under front > design, not under
-the root. In a repo with "Front" and "Back" folders, the root node is the project, the two
-subproject nodes are its children, everything specific hangs under the matching side, and only the
-cross-cutting knowledge (business rules, shared conventions) stays on the root.
+  <project>                        <- the root: what the project is and how its parts fit
+    ├── front / back / api         <- one node per part of the repo, when it has them
+    │     ├── auth flow            <- topics specific to that part hang under it
+    │     └── state management
+    ├── billing rules              <- cross-cutting knowledge hangs off the root, linked
+    └── front ↔ back contract         ("related") to every part it touches
+Nodes are topics, not fixed categories: name them for what they are. Concrete facts hang off the
+topic they belong to, and depth is good — a fact about the login screen belongs under front > auth
+flow, not under the root. The PROJECT MEMORY MAP below (when present) shows the top of this tree:
+use its ids as parents, and open a node with memory_open before re-reading code it already covers.
+Only save what is specific and non-obvious: a generic note costs tokens in every future session.
 
 BEFORE SAVING — always, no exceptions:
 1. memory_tree — see the existing tree and pick the node the new fact belongs under.
@@ -441,49 +442,96 @@ function memoryLines(memories: Memory[]): string {
     .join('\n')
 }
 
+function mapLine(node: MapNode, indent: string): string {
+  const text = node.text.length > 220 ? `${node.text.slice(0, 220)}…` : node.text
+  const notes = [node.hasDoc ? 'doc' : '', node.children > 0 ? `${node.children} below` : ''].filter(Boolean)
+  return `${indent}- #${node.id} ${text}${notes.length ? ` (${notes.join(', ')})` : ''}`
+}
+
+/**
+ * Mapa da árvore de memórias do projeto. É barato (uma linha por nó, só os
+ * primeiros níveis) e é o que transforma o /init em economia: o chat novo
+ * começa sabendo o que já foi aprendido, em vez de reexplorar o código.
+ */
+export function projectMapBlock(map: ProjectMap, projectName?: string, subproject?: string): string {
+  const lines = [
+    `Project memory map of "${projectName ?? 'current'}" — what earlier sessions already learned about this codebase.`,
+    'Read it before exploring: when the task touches a node, open it with memory_open (nodes marked "doc" hold the details)',
+    'instead of re-reading the code it summarizes. Nodes not listed here are reachable with memory_graph / memory_search.',
+    mapLine(map.root, ''),
+    ...map.children.map((n) => mapLine(n, '  ')),
+  ]
+  if (map.branch) {
+    lines.push(
+      `You are working inside "${subproject ?? map.branch.subproject}". Its branch of the tree:`,
+      mapLine(map.branch.node, ''),
+      ...map.branch.children.map((n) => mapLine(n, '  ')),
+    )
+  }
+  if (map.omitted > 0) lines.push(`(+${map.omitted} deeper nodes — memory_tree lists the whole tree.)`)
+  return lines.join('\n')
+}
+
+/**
+ * Conteúdo das memórias por sessão, calculado no primeiro turno e reaplicado
+ * em todos os seguintes.
+ *
+ * O system prompt é remontado a cada turno e NÃO fica no histórico. Antes, o
+ * conteúdo só entrava na primeira troca ("depois o histórico já tem
+ * contexto"), então do segundo turno em diante o agente perdia o mapa do
+ * projeto e os fatos do usuário — justamente o que o /init existe para não
+ * pedir de novo. Congelar por sessão, em vez de recalcular a cada turno,
+ * mantém o prompt estável (bom para o cache de prefixo dos provedores) e não
+ * faz o mapa mudar no meio da conversa só porque o próprio agente salvou algo.
+ */
+const memoryContentBySession = new Map<string, string[]>()
+const MEMORY_CONTENT_SESSIONS = 64
+
+async function memoryContent(input: SendMessageInput): Promise<string[]> {
+  const key = `${input.sessionId}|${input.mode}|${input.directory ?? ''}`
+  const cached = memoryContentBySession.get(key)
+  if (cached) return cached
+  const parts: string[] = []
+  if (input.mode === 'chat') {
+    const ctx = await loadPromptContext('chat')
+    if (ctx.core.length) parts.push(`Permanent facts about the user:\n${memoryLines(ctx.core)}`)
+    if (ctx.general.length) {
+      parts.push(`User's general preferences (apply in all modes):\n${memoryLines(ctx.general)}`)
+    }
+    if (ctx.seasonal.length) {
+      parts.push(
+        `Recent seasonal memories (use as tacit context, do NOT repeat verbatim):\n${memoryLines(ctx.seasonal)}`,
+      )
+    }
+    if (ctx.learning.length) {
+      parts.push(`Lessons learned in other contexts (use if relevant):\n${memoryLines(ctx.learning)}`)
+    }
+  } else {
+    const ctx = await loadPromptContext('code', input.directory)
+    // O mapa da árvore, e não só a raiz: com ele o agente sabe o que já foi
+    // aprendido e onde está, e abre só o ramo que a tarefa pede.
+    if (ctx.map) parts.push(projectMapBlock(ctx.map, ctx.projectName, ctx.subproject))
+    if (ctx.general.length) {
+      parts.push(`User's general work preferences:\n${memoryLines(ctx.general)}`)
+    }
+    if (ctx.learning.length) {
+      parts.push(
+        `Lessons from OTHER projects with a shared stack (workarounds, gotchas — reuse if applicable here):\n${memoryLines(ctx.learning)}`,
+      )
+    }
+  }
+  if (memoryContentBySession.size >= MEMORY_CONTENT_SESSIONS) {
+    memoryContentBySession.delete(memoryContentBySession.keys().next().value!)
+  }
+  memoryContentBySession.set(key, parts)
+  return parts
+}
+
 /** Bloco de memórias injetado silenciosamente quando o Brain está ativo. */
 async function buildBrainBlock(input: SendMessageInput): Promise<string[]> {
-  const parts: string[] = []
+  const parts: string[] = [input.mode === 'chat' ? BRAIN_CHAT_PROMPT : BRAIN_CODE_PROMPT]
   try {
-    if (input.mode === 'chat') {
-      parts.push(BRAIN_CHAT_PROMPT)
-      // Conteúdo real das memórias só na primeira troca — depois o histórico já tem contexto
-      if (input.isFirstExchange !== false) {
-        const ctx = await loadPromptContext('chat')
-        if (ctx.core.length) parts.push(`Permanent facts about the user:\n${memoryLines(ctx.core)}`)
-        if (ctx.general.length) {
-          parts.push(`User's general preferences (apply in all modes):\n${memoryLines(ctx.general)}`)
-        }
-        if (ctx.seasonal.length) {
-          parts.push(
-            `Recent seasonal memories (use as tacit context, do NOT repeat verbatim):\n${memoryLines(ctx.seasonal)}`,
-          )
-        }
-        if (ctx.learning.length) {
-          parts.push(`Lessons learned in other contexts (use if relevant):\n${memoryLines(ctx.learning)}`)
-        }
-      }
-    } else {
-      parts.push(BRAIN_CODE_PROMPT)
-      if (input.isFirstExchange !== false) {
-        const ctx = await loadPromptContext('code', input.directory)
-        // Apenas o node overview é injetado automaticamente — o agente usa
-        // memory_graph para buscar o restante do grafo sob demanda
-        const overview = ctx.project.find((m) => m.area === 'overview')
-        if (overview) {
-          const doc = overview.hasDoc ? ' (doc — use memory_open to read the full map)' : ''
-          parts.push(`Overview of the "${ctx.projectName ?? 'current'}" project:\n- ${overview.text}${doc}`)
-        }
-        if (ctx.general.length) {
-          parts.push(`User's general work preferences:\n${memoryLines(ctx.general)}`)
-        }
-        if (ctx.learning.length) {
-          parts.push(
-            `Lessons from OTHER projects with a shared stack (workarounds, gotchas — reuse if applicable here):\n${memoryLines(ctx.learning)}`,
-          )
-        }
-      }
-    }
+    parts.push(...(await memoryContent(input)))
   } catch (err) {
     // memória é contexto auxiliar — nunca derruba o chat
     console.error('[memory] falha ao carregar contexto para o prompt:', err)

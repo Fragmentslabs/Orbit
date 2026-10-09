@@ -69,6 +69,25 @@ export function put(memory: Memory): Promise<void> {
 }
 
 /**
+ * Várias memórias numa escrita só do índice. A busca marca uso em todos os
+ * resultados de uma vez; com put() um a um, cada resultado regravava o índice
+ * inteiro — uma busca de 12 resultados eram 12 índices escritos em sequência.
+ */
+export function putMany(memories: Memory[]): Promise<void> {
+  if (memories.length === 0) return Promise.resolve()
+  return enqueue(async () => {
+    const byId = new Map(memories.map((m) => [m.id, m]))
+    const index = await getIndex()
+    const next = index.map((m) => byId.get(m.id) ?? m)
+    for (const m of memories) {
+      if (!index.some((existing) => existing.id === m.id)) next.push(m)
+      await writeJson(StorageKeys.memory(m.id), m)
+    }
+    await persistIndex(next)
+  })
+}
+
+/**
  * Remove uma memória em cascata: item, doc anexado e a referência em
  * relatedIds das demais. Retorna as memórias que tiveram backlinks ajustados.
  */

@@ -954,7 +954,7 @@
   },
   "initProject": {
     "title": "New project here",
-    "description": "I can analyze the structure and generate memories by area (stack, architecture, design, business rules…) to gain context all at once — instead of discovering everything by trial and error.",
+    "description": "I can analyze the project and keep only what matters in a memory tree (business rules, how the parts talk, decisions, conventions) — so the next chats already start with the context, without you explaining it again.",
     "analyze": "Analyze project",
     "later": "Not now"
   },

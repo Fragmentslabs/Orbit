@@ -647,8 +647,6 @@ export interface SendMessageInput {
   parentSessionId?: string
   /** Título curto da tarefa do worker, para badges de origem (preenchido pelo main) */
   workerTitle?: string
-  /** True na primeira troca da sessão (sem histórico prévio). Controla injeção de conteúdo de memória. */
-  isFirstExchange?: boolean
   /** Configuração do modo loop (enviada do renderer) */
   loopConfig?: { maxIterations: number }
   /** Idioma preferido do usuário (nome em inglês, ex: "Portuguese", "English") —

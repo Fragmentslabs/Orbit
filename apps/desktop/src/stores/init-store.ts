@@ -140,8 +140,10 @@ function subscribe() {
           error: event.error,
         },
       },
+      // "done" também encerra um cancelamento e uma análise que não achou
+      // nada para gravar; só conta como inicializado quando algo foi salvo.
       initialized:
-        event.stage === "done"
+        event.stage === "done" && (event.areas?.length ?? 0) > 0
           ? { ...state.initialized, [event.directory]: true }
           : state.initialized,
     }))

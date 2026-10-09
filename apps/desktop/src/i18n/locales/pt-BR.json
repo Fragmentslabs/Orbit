@@ -954,7 +954,7 @@
   },
   "initProject": {
     "title": "Projeto novo por aqui",
-    "description": "Posso analisar a estrutura e gerar memórias por área (stack, arquitetura, design, regras de negócio…) para ganhar contexto de uma vez — em vez de descobrir tudo por tentativa e erro.",
+    "description": "Posso analisar o projeto e guardar numa árvore de memórias só o que importa (regras de negócio, como as partes conversam, decisões, convenções) — assim os próximos chats já começam sabendo o contexto, sem você explicar de novo.",
     "analyze": "Analisar projeto",
     "later": "Agora não"
   },

@@ -23,9 +23,57 @@ export function sha1(text: string): string {
  * letra do drive ainda deixaria "C:/Projects" e "C:/projects" duplicados.
  */
 export function projectIdOf(directory: string): string {
-  let normalized = path.resolve(directory).replace(/\\/g, '/').replace(/\/+$/, '')
-  if (process.platform === 'win32') normalized = normalized.toLowerCase()
-  return sha1(normalized)
+  return sha1(normalizeDirectory(directory))
+}
+
+/** Pasta na forma em que projetos são comparados: absoluta, com "/", sem barra final e, no Windows, minúscula. */
+export function normalizeDirectory(directory: string): string {
+  const normalized = path.resolve(directory).replace(/\\/g, '/').replace(/\/+$/, '')
+  return process.platform === 'win32' ? normalized.toLowerCase() : normalized
+}
+
+export interface ProjectRoot {
+  projectId: string
+  /** Pasta como foi gravada na memória raiz — é a que vira `directory` de novas memórias. */
+  directory: string
+}
+
+/**
+ * Projeto que cobre uma pasta: ela mesma, ou a pasta acima mais próxima que já
+ * tem árvore de memórias.
+ *
+ * O /init roda na pasta mãe ("app/", com "front/" e "backend/" dentro) e grava
+ * tudo sob o projectId dela. Sem esta subida, um chat aberto direto em
+ * "app/front" calculava o projectId de "front", não achava nada e começava do
+ * zero — exatamente o contexto que o /init existe para não pedir de novo.
+ *
+ * `subproject` é o caminho relativo até a pasta pedida ("front", "front/src"),
+ * em "/" e com a caixa original; undefined quando a pasta é a própria raiz.
+ */
+export function pickProjectRoot(
+  roots: ProjectRoot[],
+  directory: string,
+): { root: ProjectRoot; subproject?: string } | null {
+  const target = normalizeDirectory(directory)
+  let best: { root: ProjectRoot; normalized: string } | null = null
+  for (const root of roots) {
+    const normalized = normalizeDirectory(root.directory)
+    const covers = target === normalized || target.startsWith(`${normalized}/`)
+    if (covers && (!best || normalized.length > best.normalized.length)) best = { root, normalized }
+  }
+  if (!best) return null
+  if (target === best.normalized) return { root: best.root }
+  // O relativo sai do caminho real (não do normalizado) para manter a caixa
+  // com que a pasta existe — é o que aparece no rótulo do subprojeto.
+  const relative = path.relative(path.resolve(best.root.directory), path.resolve(directory)).replace(/\\/g, '/')
+  return { root: best.root, subproject: relative || undefined }
+}
+
+/** `child` é `scope` ou fica dentro dele ("front/src" está em "front"; "frontend" não). Sem caixa. */
+export function isWithinSubproject(child: string, scope: string): boolean {
+  const c = child.toLowerCase().replace(/\/+$/, '')
+  const s = scope.toLowerCase().replace(/\/+$/, '')
+  return c === s || c.startsWith(`${s}/`)
 }
 
 /** Hash do texto normalizado — chave de dedup exata. */

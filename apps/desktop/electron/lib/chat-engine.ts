@@ -53,8 +53,7 @@ import {
 } from './vision'
 import { cleanupRevert } from './session/revert'
 import { capture, diff } from './snapshot'
-import { isInitAborted, runProjectInit, type InitHooks } from './project-init'
-import { PROJECT_AREAS, type ProjectArea } from '@shared/memory'
+import { isInitAborted, runProjectInit, type InitHooks, type InitResult } from './project-init'
 import { readJson, writeJson } from './storage'
 import { getAppSettings } from './app-settings'
 import { MIN_COMPACTION_CONTEXT, resolveAuxModel } from './aux-model'
@@ -150,6 +149,29 @@ function hasTodoInProgress(parts: MessagePart[]): boolean {
     .find((p): p is ToolPart => p.type === 'tool' && p.tool === 'todowrite' && p.state === 'done')
   const items = (todo?.input?.items ?? []) as { status?: string }[]
   return items.some((i) => i.status === 'in_progress')
+}
+
+/** Mensagem final do /init: o que foi gravado na árvore, ou por que nada foi. */
+function initSummary(result: InitResult): string {
+  const note = result.note ? `\n\n${result.note}` : ''
+  const limit = result.unfinished
+    ? '\n\n_O coordenador parou sem confirmar a revisão final; o rascunho estava consistente e foi gravado como estava._'
+    : ''
+  if (!result.saved) {
+    return `## Nada para memorizar${note || '\n\nA análise não encontrou nada específico o bastante para valer uma memória.'}${limit}`
+  }
+  const counts = [
+    result.created ? `${result.created} nova(s)` : '',
+    result.updated ? `${result.updated} atualizada(s)` : '',
+    result.retired ? `${result.retired} antiga(s) removida(s)` : '',
+    result.learnings ? `${result.learnings} aprendizado(s) para outros projetos` : '',
+  ].filter(Boolean)
+  const titles = result.titles.length ? `: **${result.titles.join('**, **')}**` : ''
+  return (
+    `## Projeto memorizado\n\nÁrvore gravada (${counts.join(', ')})${titles}.${note}\n\n` +
+    'Todo chat novo nesta pasta, ou numa subpasta dela, começa com o mapa dessa árvore e abre os detalhes conforme a tarefa. Dá para ver e editar tudo na aba Memórias.' +
+    limit
+  )
 }
 
 function newId(prefix: string) {
@@ -1223,7 +1245,7 @@ async function runChatTurn(win: BrowserWindow, input: SendMessageInput): Promise
         id: newId('prt'),
         type: 'agent',
         role: 'main',
-        label: 'Agente principal',
+        label: 'Coordenador',
         text: '',
         state: 'running',
       }
@@ -1273,7 +1295,7 @@ async function runChatTurn(win: BrowserWindow, input: SendMessageInput): Promise
       }
 
       try {
-        const areas = await runProjectInit({
+        const result = await runProjectInit({
           directory: toolContext.directory,
           providerId: input.providerId,
           modelId: input.modelId,
@@ -1290,12 +1312,7 @@ async function runChatTurn(win: BrowserWindow, input: SendMessageInput): Promise
         mainPart.durationMs = Date.now() - mainStart
         upsertPart(mainPart)
 
-        const areaNames = areas.map((a) => PROJECT_AREAS[a as ProjectArea]?.label ?? a)
-        const summary =
-          areaNames.length > 0
-            ? `## Projeto analisado\n\nCriei ${areaNames.length} memórias por área — **${areaNames.join(', ')}** — ligadas ao node central no grafo (aba Memórias). Elas entram no meu contexto conforme a tarefa: mudanças de UI puxam Design System, deploy puxa Infraestrutura, e assim por diante.`
-            : '## Análise concluída\n\nNenhuma memória foi gerada — o projeto pode estar vazio ou inacessível.'
-        upsertPart({ id: newId('prt'), type: 'text', text: summary, state: 'done' })
+        upsertPart({ id: newId('prt'), type: 'text', text: initSummary(result), state: 'done' })
       } catch (err) {
         const cancelled = isInitAborted(err) || controller.signal.aborted
         mainPart.state = cancelled ? 'done' : 'error'
@@ -1310,11 +1327,11 @@ async function runChatTurn(win: BrowserWindow, input: SendMessageInput): Promise
         upsertPart({
           id: newId('prt'),
           type: 'text',
-          // Cancelar é uma escolha do usuário, não uma falha — as memórias já
-          // salvas até aqui permanecem.
+          // Cancelar é uma escolha do usuário, não uma falha. A árvore só é
+          // gravada no fim, depois da revisão, então nada ficou pela metade.
           text: cancelled
-            ? '## Análise cancelada\n\nO que já foi salvo permanece; rode `/init` de novo para continuar.'
-            : `## Análise falhou\n\n${errorToText(err)}`,
+            ? '## Análise cancelada\n\nNada foi gravado: as memórias só são salvas no fim, depois que a árvore inteira é revisada. Rode `/init` de novo quando quiser.'
+            : `## Análise falhou\n\n${errorToText(err)}\n\nNada foi gravado.`,
           state: 'done',
         })
       }
@@ -1378,9 +1395,6 @@ async function runChatTurn(win: BrowserWindow, input: SendMessageInput): Promise
           input.workerTitle,
         )
       : undefined
-
-    // Só injeta conteúdo de memória na primeira troca da sessão
-    input.isFirstExchange = isFirstExchange
 
     // Mensagens para a PRIMEIRA chamada da rodada (histórico até a última
     // mensagem do usuário). As continuações usam as mensagens de resposta

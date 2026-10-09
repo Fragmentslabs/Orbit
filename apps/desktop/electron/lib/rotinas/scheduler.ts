@@ -182,7 +182,6 @@ export async function executarRotina(rotina: Rotina, motivo: 'agenda' | 'manual'
     // para as rotinas já criadas. Sem isto o agente cai no "responda no idioma
     // do usuário" e segue o idioma do PROMPT — inglês nas rotinas de exemplo.
     ...(idioma ? { language: idioma } : {}),
-    isFirstExchange: true,
     ...(options.loop ? { loopConfig: { maxIterations: 5 } } : {}),
   }
 

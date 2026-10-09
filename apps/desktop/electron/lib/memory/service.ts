@@ -7,10 +7,13 @@ import {
   extendedExpiry,
   hashText,
   isExpired,
+  pickProjectRoot,
   projectIdOf,
   shouldPromote,
   ttlFor,
+  type ProjectRoot,
 } from './domain'
+import { buildProjectMap, rootOf, type ProjectMap } from './project-map'
 import * as repo from './repository'
 
 /**
@@ -71,6 +74,13 @@ export interface SaveMemoryInput {
   relatedIds?: string[]
   /** Tipo da relação por id de destino. "parent" = hierarquia, "related" = conexão livre */
   relatedTypes?: Record<string, RelationType>
+  /**
+   * Default true: texto idêntico ou tags quase iguais fundem com a memória
+   * existente. O /init desliga: ele já decidiu, nó a nó, o que atualiza e o
+   * que cria — e dois nós irmãos com tags parecidas ("frontend", "react")
+   * seriam fundidos num só, sumindo com um ramo inteiro da árvore.
+   */
+  dedup?: boolean
 }
 
 export interface SaveMemoryResult {
@@ -109,10 +119,12 @@ export async function save(input: SaveMemoryInput): Promise<SaveMemoryResult> {
   )
   const hash = hashText(input.text)
   const existing =
-    pool.find((m) => hashText(m.text) === hash) ??
-    (tags.length > 0
-      ? pool.find((m) => m.tags.length > 0 && jaccard(m.tags, tags) >= JACCARD_THRESHOLD)
-      : undefined)
+    input.dedup === false
+      ? undefined
+      : (pool.find((m) => hashText(m.text) === hash) ??
+        (tags.length > 0
+          ? pool.find((m) => m.tags.length > 0 && jaccard(m.tags, tags) >= JACCARD_THRESHOLD)
+          : undefined))
 
   if (existing) {
     const merged: Memory = {
@@ -226,20 +238,33 @@ export async function search(input: SearchMemoryInput): Promise<Memory[]> {
     }
   }
 
-  // Cada retorno conta como uso: incrementa hits e estende a expiração
-  const updated: Memory[] = []
-  for (const memory of [...results, ...expanded]) {
-    const next: Memory = {
-      ...memory,
-      hits: memory.hits + 1,
-      lastHitAt: now,
-      expiresAt: extendedExpiry(memory),
-    }
-    await repo.put(next)
-    emit('updated', next)
-    updated.push(next)
-  }
-  return updated
+  // Só o que casou com a busca conta como uso. Os vizinhos de grafo vêm de
+  // carona, como contexto: contá-los inflava hits de memórias que ninguém
+  // procurou — e hits decidem promoção (context → decision) e qual memória
+  // sobrevive quando a consolidação funde duplicatas.
+  const touched = results.map((memory) => hit(memory, now))
+  await repo.putMany(touched)
+  for (const next of touched) emit('updated', next)
+  return [...touched, ...expanded]
+}
+
+function hit(memory: Memory, now: number): Memory {
+  return { ...memory, hits: memory.hits + 1, lastHitAt: now, expiresAt: extendedExpiry(memory) }
+}
+
+/**
+ * Leitura de uma memória pelo agente (memory_open) — conta como uso. Com o mapa
+ * do projeto no prompt, abrir o nó pelo id virou o jeito normal de consultar a
+ * memória; sem contar, os nós mais lidos pareceriam "nunca usados".
+ */
+export async function open(id: string): Promise<{ memory: Memory; document: string | null } | null> {
+  const memory = await repo.get(id)
+  if (!memory) return null
+  const next = hit(memory, Date.now())
+  await repo.put(next)
+  emit('updated', next)
+  const document = next.hasDoc ? await repo.readDoc(id) : null
+  return { memory: next, document }
 }
 
 export async function getFull(id: string): Promise<{ memory: Memory; document: string | null } | null> {
@@ -281,6 +306,24 @@ export async function link(sourceId: string, targetId: string, type?: RelationTy
   return true
 }
 
+/** Desfaz a ligação entre duas memórias, dos dois lados. */
+export async function unlink(aId: string, bId: string): Promise<boolean> {
+  const [a, b] = await Promise.all([repo.get(aId), repo.get(bId)])
+  if (!a || !b) return false
+  const drop = (m: Memory, other: string): Memory => {
+    const relationTypes = { ...(m.relationTypes ?? {}) }
+    delete relationTypes[other]
+    return { ...m, relatedIds: m.relatedIds.filter((r) => r !== other), relationTypes }
+  }
+  const nextA = drop(a, bId)
+  const nextB = drop(b, aId)
+  await repo.put(nextA)
+  await repo.put(nextB)
+  emit('updated', nextA)
+  emit('updated', nextB)
+  return true
+}
+
 export async function linkAsParent(parentId: string, childId: string): Promise<boolean> {
   return link(parentId, childId, "parent")
 }
@@ -314,11 +357,14 @@ export interface ReviseMemoryInput {
   /** Reclassificação — é como um general/learning mal classificado vira project. */
   kind?: MemoryKind
   category?: ProjectCategory
-  area?: ProjectArea
+  /** null remove a área (o nó deixa de ser rotulado por ela no grafo). */
+  area?: ProjectArea | null
   /** Substitui o markdown anexado. */
   document?: string
   /** Pasta da sessão — necessária ao promover uma memória para kind="project". */
   directory?: string
+  /** Subpasta do projeto que a memória descreve (só kind="project"). */
+  subproject?: string
 }
 
 /**
@@ -352,8 +398,10 @@ export async function revise(id: string, input: ReviseMemoryInput): Promise<Memo
     weight,
     ...(input.text != null ? { text: input.text.trim() } : undefined),
     ...(input.area != null ? { area: input.area } : undefined),
+    ...(input.subproject != null && kind === 'project' ? { subproject: input.subproject } : undefined),
     category,
   }
+  if (input.area === null) delete next.area
 
   if (input.tags != null) next.tags = normalizeTags(input.tags)
   else if (input.addTags != null) next.tags = normalizeTags([...memory.tags, ...input.addTags])
@@ -417,9 +465,7 @@ export async function tree(projectId: string): Promise<TreeNodeSummary[]> {
   if (members.length === 0) return []
   const byId = new Map(members.map((m) => [m.id, m]))
 
-  const root =
-    members.find((m) => m.area === 'overview' && !m.subproject) ??
-    [...members].sort((a, b) => b.weight - a.weight)[0]
+  const root = rootOf(members)!
 
   const depth = new Map<string, number>([[root.id, 0]])
   const childrenOf = new Map<string, string[]>()
@@ -478,6 +524,42 @@ export async function list(): Promise<Memory[]> {
   return repo.getIndex()
 }
 
+export interface ProjectScope {
+  projectId: string
+  /** Pasta raiz do projeto — onde as memórias dele são gravadas. */
+  directory: string
+  projectName: string
+  /** Caminho relativo da pasta pedida dentro da raiz ("front", "front/src"). */
+  subproject?: string
+  /** Já existe árvore de memórias cobrindo a pasta (nela ou numa pasta acima). */
+  covered: boolean
+}
+
+/**
+ * Projeto de memória de uma pasta de trabalho. Tudo que lê ou grava memória de
+ * projeto passa por aqui, e não pelo projectIdOf direto: é o que faz um chat
+ * aberto em "app/front" enxergar (e alimentar) a árvore que o /init criou em
+ * "app/". Sem árvore acima, o projeto é a própria pasta, como sempre foi.
+ */
+export async function resolveProjectScope(directory: string): Promise<ProjectScope> {
+  const roots = new Map<string, ProjectRoot>()
+  for (const m of await alive()) {
+    if (m.kind !== 'project' || m.area !== 'overview' || m.subproject || !m.directory || !m.projectId) continue
+    if (!roots.has(m.projectId)) roots.set(m.projectId, { projectId: m.projectId, directory: m.directory })
+  }
+  const picked = pickProjectRoot([...roots.values()], directory)
+  if (!picked) {
+    return { projectId: projectIdOf(directory), directory, projectName: path.basename(directory), covered: false }
+  }
+  return {
+    projectId: picked.root.projectId,
+    directory: picked.root.directory,
+    projectName: path.basename(picked.root.directory),
+    subproject: picked.subproject,
+    covered: true,
+  }
+}
+
 export interface PromptContext {
   core: Memory[]
   seasonal: Memory[]
@@ -486,6 +568,10 @@ export interface PromptContext {
   learning: Memory[]
   project: Memory[]
   projectName?: string
+  /** Recorte da árvore do projeto para o prompt (modo código). */
+  map?: ProjectMap
+  /** Subpasta do projeto em que o chat está, quando não é a raiz. */
+  subproject?: string
 }
 
 const CATEGORY_PRIORITY: Record<ProjectCategory, number> = {
@@ -526,13 +612,14 @@ export async function loadPromptContext(
     }
   }
 
-  const projectId = directory ? projectIdOf(directory) : undefined
+  const scope = directory ? await resolveProjectScope(directory) : undefined
+  const projectId = scope?.projectId
+  const members = projectId ? pool.filter((m) => m.kind === 'project' && m.projectId === projectId) : []
   // O node central do grafo (área overview) entra sempre primeiro — é o mapa
   // que orienta o agente a buscar as áreas satélite conforme a tarefa
   const areaRank = (m: Memory) => (m.area === 'overview' ? -1 : 0)
   const project = projectId
-    ? pool
-        .filter((m) => m.kind === 'project' && m.projectId === projectId)
+    ? [...members]
         .sort(
           (a, b) =>
             areaRank(a) - areaRank(b) ||
@@ -553,7 +640,16 @@ export async function loadPromptContext(
     .slice(0, 5)
     .map(({ m }) => m)
 
-  return { core: [], seasonal: [], general: general.slice(0, 8), learning, project, projectName: project[0]?.projectName }
+  return {
+    core: [],
+    seasonal: [],
+    general: general.slice(0, 8),
+    learning,
+    project,
+    projectName: scope?.covered ? scope.projectName : project[0]?.projectName,
+    map: buildProjectMap(members, scope?.subproject) ?? undefined,
+    subproject: scope?.subproject,
+  }
 }
 
 /** Executado pelo scheduler: expira (com cascata do doc) e promove automaticamente. */
