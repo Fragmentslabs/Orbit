@@ -626,10 +626,13 @@
       "subtitle": "Type a message to get started"
     },
     "selector": {
-      "title": "What do you want to open?",
-      "workersTitle": "Active conversation's workers"
+      "title": "What do you want to open?"
     },
     "processes": {
+      "title": "Terminals",
+      "scopeChat": "This chat",
+      "scopeAll": "All",
+      "emptyScope": "No terminals in this chat",
       "viewOutput": "View output",
       "kill": "Kill process",
       "openInBrowser": "Open in browser",
@@ -792,6 +795,9 @@
     "input": "Input",
     "output": "Output",
     "reasoning": "Reasoning",
+    "cacheRead": "Read from cache",
+    "cacheWrite": "Written to cache",
+    "conversationCache": "Cache in this conversation",
     "tokensWord": "tokens",
     "compacted": "Compacted — previous history summarized",
     "nearLimit": "Near the limit — history will be compacted soon",

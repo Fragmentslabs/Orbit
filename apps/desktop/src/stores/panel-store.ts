@@ -95,7 +95,7 @@ interface PanelState {
   setSelectorOpen: (open: boolean) => void
   /** Abre (ou reaproveita) a aba que acompanha a saída de um processo em
    *  background. `sessionId` é a chave do balde de abas (chat ativo ou órfão). */
-  openProcessTab: (sessionId: string, pid: number, title: string) => void
+  openProcessTab: (sessionId: string, pid: number, title: string, ownerSessionId?: string) => void
 
   /** Tabs por sessão de chat */
   tabsBySession: Record<string, PanelTab[]>
@@ -212,14 +212,25 @@ export const usePanelStore = create<PanelState>((set, get) => {
 
     // Uma aba por processo: clicar de novo no mesmo card foca a aba que já
     // acompanha a saída em vez de empilhar duas visões do mesmo stdout.
-    openProcessTab: (sessionId, pid, title) =>
+    openProcessTab: (sessionId, pid, title, ownerSessionId) =>
       set((state) => {
         const tabs = state.tabsBySession[sessionId] ?? []
         const existing = tabs.find((t) => t.type === "process" && t.processPid === pid)
         const id = existing?.id ?? `process-${nextTabId()}`
         const nextTabs = existing
           ? tabs
-          : [...tabs, { id, type: "process" as const, title, processPid: pid }]
+          : [
+              {
+                id,
+                type: "process" as const,
+                title,
+                processPid: pid,
+                // Dono do processo: no modo "todos os chats" uma linha abre a
+                // saída de um processo de OUTRO chat, e o main só devolve output
+                // para o dono (getProcessOutput). A aba continua no balde atual.
+                sessionId: ownerSessionId,
+              },
+            ]
         return {
           rightPanelOpen: true,
           selectorOpen: false,

@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useMemo } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { useDroppable, useDndContext } from "@dnd-kit/core"
-import { CodeXml, FileCode, FileText, Globe, Folder, Images, Library, Quote, MessageSquare, Terminal, X, PlusIcon, Bot, LoaderIcon, Loader2, XCircleIcon, Trash2, GripVertical } from "lucide-react"
+import { CodeXml, FileCode, FileText, Globe, Folder, Images, Library, Quote, MessageSquare, Terminal, X, PlusIcon, Bot, Loader2, Trash2, GripVertical } from "lucide-react"
 import { ChatView } from "@/src/components/chat-view"
 import { ChatInput } from "@/src/components/chat-input"
 import { BranchSelector } from "@/src/components/branch-selector"
@@ -293,45 +293,46 @@ export function RightPanelDropZone() {
   )
 }
 
-function WorkerStatusIcon({ status }: { status: string }) {
-  if (status === "submitted" || status === "streaming" || status === "cancelling" || status === "fallback") {
-    return <LoaderIcon className="size-3 shrink-0 animate-spin text-muted-foreground" />
-  }
-  if (status === "error") return <XCircleIcon className="size-3 shrink-0 text-destructive" />
-  return <span className="size-1.5 shrink-0 rounded-full bg-emerald-500" />
-}
-
-function SelectorScreen({ onSelect, onOpenWorker }: {
-  onSelect: (type: TabType) => void
-  onOpenWorker: (sessionId: string, title: string) => void
-}) {
+function SelectorScreen({ onSelect }: { onSelect: (type: TabType) => void }) {
   const { t } = useTranslation()
   const tabMeta = useTabMeta()
   const { mode, folders } = useWorkspace()
   const activeId = useSessionStore((s) => s.activeIds[mode])
-  const sessions = useSessionStore((s) => s.sessions)
-  const statusMap = useSessionStore((s) => s.status)
 
-  const processes = useProcessStore((s) => s.processes)
-  const fetchProcesses = useProcessStore((s) => s.fetch)
+  const allProcesses = useProcessStore((s) => s.allProcesses)
+  const fetchAllProcesses = useProcessStore((s) => s.fetchAll)
   const killProcess = useProcessStore((s) => s.kill)
   // Balde de abas da sessão ativa (ou o órfão, no chat novo ainda sem sessão):
   // a aba de processo aberta aqui precisa cair no mesmo balde que o resto.
   const bucketKey = activeId ?? ORPHAN_KEY
 
-  // Só os processos DESTA conversa. O store é compartilhado — o browser do painel
-  // e a aba de processo também o alimentam, cada um com o seu escopo — então
-  // filtrar na hora de desenhar é o que garante que o rodapé não mostre processo
-  // de outro chat mesmo com a lista trocada por outro consumidor.
+  // Escopo do rodapé: só esta conversa (padrão) ou todos os chats. Fica no
+  // localStorage porque o seletor desmonta ao abrir uma aba — sem isso o modo
+  // voltaria ao padrão a cada navegação.
+  const [scope, setScope] = useState<"chat" | "all">(() =>
+    localStorage.getItem("orbit.panel.processScope") === "all" ? "all" : "chat",
+  )
+  const changeScope = useCallback((next: "chat" | "all") => {
+    setScope(next)
+    localStorage.setItem("orbit.panel.processScope", next)
+  }, [])
+
+  // Só os processos DESTA conversa, tirados da lista GLOBAL — é a mesma lista
+  // que o main devolveria filtrada por sessão. Filtrar na hora de desenhar
+  // garante que o modo "este chat" não mostre processo de outro chat mesmo que
+  // outro consumidor do store troque a lista.
   const ownProcesses = useMemo(
-    () => (activeId ? processes.filter((p) => p.sessionId === activeId) : []),
-    [processes, activeId],
+    () => (activeId ? allProcesses.filter((p) => p.sessionId === activeId) : []),
+    [allProcesses, activeId],
   )
 
-  const workers = useMemo(
-    () => sessions.filter((s) => s.parentId === activeId),
-    [sessions, activeId],
-  )
+  // No modo global, os desta conversa em cima; os de outros chats depois.
+  const visibleProcesses = useMemo(() => {
+    if (scope === "chat") return ownProcesses
+    return [...allProcesses].sort(
+      (a, b) => (a.sessionId === activeId ? 0 : 1) - (b.sessionId === activeId ? 0 : 1),
+    )
+  }, [scope, ownProcesses, allProcesses, activeId])
 
   const availableTabs = useMemo(
     () =>
@@ -341,21 +342,24 @@ function SelectorScreen({ onSelect, onOpenWorker }: {
     [mode, tabMeta],
   )
 
-  // Footer escopado por sessão: só processos iniciados pelo chat ativo. Sem chat
-  // ativo (chat novo) não há processo desta conversa para buscar — e buscar sem
-  // escopo traz os de todos os chats, cada um com o seu dono.
+  // O rodapé busca a lista GLOBAL (sem filtro) de propósito: o modo "este chat"
+  // é filtrado logo acima, e é essa mesma lista que sustenta o "todos os chats".
+  // Buscar sem filtro era o que o store evitava; agora é explícito (fetchAll) e
+  // cada linha diz se é deste chat ou de outro.
   useEffect(() => {
-    if (!activeId) return
-    fetchProcesses(activeId)
-    const interval = setInterval(() => fetchProcesses(activeId), 3_000)
+    fetchAllProcesses()
+    const interval = setInterval(fetchAllProcesses, 3_000)
     return () => clearInterval(interval)
-  }, [fetchProcesses, activeId])
+  }, [fetchAllProcesses])
 
   return (
-    <div className="flex flex-1 flex-col overflow-hidden">
-      <div className="flex flex-1 flex-col items-center justify-center gap-4 p-6">
+    <div className="@container flex flex-1 flex-col overflow-hidden">
+      <div className="flex flex-1 flex-col items-center justify-center gap-4 overflow-y-auto p-6">
         <p className="text-sm font-medium text-foreground">{t("panel.selector.title")}</p>
-        <div className={cn("grid gap-3 w-full max-w-xs", availableTabs.length === 1 ? "grid-cols-1 justify-items-center" : "grid-cols-2")}>
+        <div className={cn(
+          "grid w-full max-w-xs gap-3 @xl:max-w-md @2xl:max-w-lg @4xl:max-w-2xl",
+          availableTabs.length === 1 ? "grid-cols-1 justify-items-center" : "grid-cols-2 @3xl:grid-cols-3",
+        )}>
           {availableTabs.map(([type, { icon: Icon, label, description }]) => {
             // Pastas e diff seguem o repositório selecionado no workspace: sem
             // chat ativo ainda é possível abrir (novo chat), desde que haja projeto.
@@ -380,87 +384,94 @@ function SelectorScreen({ onSelect, onOpenWorker }: {
           })}
         </div>
 
-        {workers.length > 0 && (
-          <div className="mt-2 flex w-full max-w-xs flex-col gap-1">
-            <p className="px-1 text-[11px] font-medium text-muted-foreground">{t("panel.selector.workersTitle")}</p>
-            {workers.map((worker) => (
-              <button
-                key={worker.id}
-                onClick={() => onOpenWorker(worker.id, worker.title)}
-                className="flex items-center gap-2 rounded-md border border-sidebar-border bg-sidebar-accent/20 px-2.5 py-1.5 text-left text-xs transition-colors hover:bg-sidebar-accent"
-              >
-                {worker.mode === "code" ? (
-                  <Terminal className="size-3.5 shrink-0 text-muted-foreground" />
-                ) : (
-                  <Bot className="size-3.5 shrink-0 text-muted-foreground" />
-                )}
-                <span className="min-w-0 flex-1 truncate">{worker.title}</span>
-                <WorkerStatusIcon status={statusMap[worker.id] ?? "idle"} />
-              </button>
-            ))}
-          </div>
-        )}
       </div>
 
-      {ownProcesses.length > 0 && (
-        <div className="border-t border-sidebar-border">
-          <div className="flex gap-2 overflow-x-auto px-3 py-2">
-            {ownProcesses.map((p) => (
-              <div
-                key={p.pid}
-                role="button"
-                tabIndex={0}
-                onClick={() => usePanelStore.getState().openProcessTab(bucketKey, p.pid, p.label)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" || e.key === " ")
-                    usePanelStore.getState().openProcessTab(bucketKey, p.pid, p.label)
-                }}
-                className="flex w-40 shrink-0 flex-col gap-1 rounded-md border border-sidebar-border bg-sidebar-accent/50 px-2.5 py-1.5 text-left transition-colors hover:bg-sidebar-accent cursor-pointer"
-                title={`${p.command}\n\n${t("panel.processes.viewOutput")}`}
-              >
-                <div className="flex items-center gap-1.5">
-                  {p.status === "running" ? (
-                    <span className="size-1.5 shrink-0 rounded-full bg-emerald-500" />
-                  ) : (
-                    <span className="size-1.5 shrink-0 rounded-full bg-muted-foreground/50" />
+      {allProcesses.length > 0 && (
+        <div className="flex max-h-56 shrink-0 flex-col border-t border-sidebar-border">
+          <div className="flex items-center gap-2 px-3 pt-2 pb-1">
+            <p className="text-[11px] font-medium text-muted-foreground">{t("panel.processes.title")}</p>
+            <span className="text-[10px] text-muted-foreground/70">{visibleProcesses.length}</span>
+            <div className="ml-auto inline-flex items-center gap-0.5 rounded-md border border-sidebar-border bg-sidebar-accent/40 p-0.5">
+              {(["chat", "all"] as const).map((value) => (
+                <button
+                  key={value}
+                  onClick={() => changeScope(value)}
+                  className={cn(
+                    "rounded px-1.5 py-0.5 text-[10px] font-medium transition-colors",
+                    scope === value
+                      ? "bg-sidebar-accent text-sidebar-accent-foreground"
+                      : "text-muted-foreground hover:text-sidebar-foreground",
                   )}
-                  <span className="min-w-0 flex-1 truncate text-xs font-medium text-sidebar-foreground">{p.label}</span>
-                  {p.status === "running" && p.urls?.length ? (
+                >
+                  {t(value === "chat" ? "panel.processes.scopeChat" : "panel.processes.scopeAll")}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="flex flex-col gap-0.5 overflow-y-auto px-1.5 pb-1.5">
+            {visibleProcesses.length === 0 ? (
+              <p className="px-2 py-1 text-[10px] text-muted-foreground/70">{t("panel.processes.emptyScope")}</p>
+            ) : (
+              visibleProcesses.map((p) => {
+                const openTab = () =>
+                  usePanelStore.getState().openProcessTab(bucketKey, p.pid, p.label, p.sessionId)
+                return (
+                  <div
+                    key={p.pid}
+                    role="button"
+                    tabIndex={0}
+                    onClick={openTab}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") openTab()
+                    }}
+                    className="flex min-w-0 items-center gap-2 rounded-md px-2 py-1.5 text-left transition-colors hover:bg-sidebar-accent cursor-pointer"
+                    title={`${p.command}\n\n${t("panel.processes.viewOutput")}`}
+                  >
+                    <span
+                      className={cn(
+                        "size-1.5 shrink-0 rounded-full",
+                        p.status === "running" ? "bg-emerald-500" : "bg-muted-foreground/50",
+                      )}
+                    />
+                    <Terminal className="size-3.5 shrink-0 text-muted-foreground" />
+                    <span className="min-w-0 flex-1 truncate text-xs font-medium text-sidebar-foreground">{p.label}</span>
+                    <span className="hidden shrink-0 items-center gap-1 text-[10px] text-sidebar-foreground/60 @xl:flex">
+                      <span>PID {p.pid}</span>
+                      <span>·</span>
+                      <span>{formatUptime(p.startTime)}</span>
+                      {p.status !== "running" && (
+                        <>
+                          <span>·</span>
+                          <span>{t(`panel.processes.status.${p.status}`)}</span>
+                        </>
+                      )}
+                    </span>
+                    {p.status === "running" && p.urls?.length ? (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          usePanelStore.getState().openTerminalLink(bucketKey, p.urls![0])
+                        }}
+                        title={`${t("panel.processes.openInBrowser")} — ${p.urls[0]}`}
+                        className="flex size-5 shrink-0 items-center justify-center rounded-sm text-sidebar-foreground/50 hover:text-foreground"
+                      >
+                        <Globe className="size-3" />
+                      </button>
+                    ) : null}
                     <button
                       onClick={(e) => {
                         e.stopPropagation()
-                        usePanelStore.getState().openTerminalLink(bucketKey, p.urls![0])
+                        void killProcess(p.pid, p.sessionId)
                       }}
-                      title={`${t("panel.processes.openInBrowser")} — ${p.urls[0]}`}
-                      className="flex size-4 shrink-0 items-center justify-center rounded-sm text-sidebar-foreground/50 hover:text-foreground"
+                      title={t("panel.processes.kill")}
+                      className="flex size-5 shrink-0 items-center justify-center rounded-sm text-sidebar-foreground/50 hover:text-destructive"
                     >
-                      <Globe className="size-3" />
+                      <Trash2 className="size-3" />
                     </button>
-                  ) : null}
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      void killProcess(p.pid, activeId ?? undefined)
-                    }}
-                    title={t("panel.processes.kill")}
-                    className="flex size-4 shrink-0 items-center justify-center rounded-sm text-sidebar-foreground/50 hover:text-destructive"
-                  >
-                    <Trash2 className="size-3" />
-                  </button>
-                </div>
-                <div className="flex flex-wrap items-center gap-x-1 text-[10px] text-sidebar-foreground/60">
-                  <span>PID {p.pid}</span>
-                  <span>·</span>
-                  <span>{formatUptime(p.startTime)}</span>
-                  {p.status !== "running" && (
-                    <>
-                      <span>·</span>
-                      <span>{t(`panel.processes.status.${p.status}`)}</span>
-                    </>
-                  )}
-                </div>
-              </div>
-            ))}
+                  </div>
+                )
+              })
+            )}
           </div>
         </div>
       )}
@@ -803,7 +814,6 @@ export function RightPanel() {
         ) : (
           <SelectorScreen
             onSelect={addTab}
-            onOpenWorker={(sessionId, title) => addTab("chat", sessionId, title)}
           />
         )}
       </div>
