@@ -14,7 +14,7 @@ export function MessageUsage({ tokens }: { tokens: TokenUsage }) {
   const summary = [
     t("usage.inputIn", { count: formatTokens(tokens.input) }),
     t("usage.outputOut", { count: formatTokens(tokens.output) }),
-    tokens.cost !== undefined ? formatCost(tokens.cost) : null,
+    tokens.cost !== undefined ? `~${formatCost(tokens.cost)}` : null,
   ]
     .filter(Boolean)
     .join(" · ")
@@ -28,14 +28,26 @@ export function MessageUsage({ tokens }: { tokens: TokenUsage }) {
       >
         {summary}
       </TooltipTrigger>
-      <TooltipContent side="top">
+      <TooltipContent side="top" className="bg-popover text-popover-foreground">
         <div className="flex flex-col gap-0.5 text-xs">
           <span>{t("usage.inputLine", { count: nf.format(tokens.input) })}</span>
+          {/* Entrada = sem cache + lido + gravado: sub-linhas que somam o total. */}
+          {tokens.cacheRead + (tokens.cacheWrite ?? 0) > 0 && (
+            <span className="pl-2 text-muted-foreground">
+              ↳ {t("usage.noCache")}: {nf.format(Math.max(0, tokens.input - tokens.cacheRead - (tokens.cacheWrite ?? 0)))}
+            </span>
+          )}
+          {tokens.cacheRead > 0 && (
+            <span className="pl-2 text-muted-foreground">↳ {t("usage.cacheRead")}: {nf.format(tokens.cacheRead)}</span>
+          )}
+          {(tokens.cacheWrite ?? 0) > 0 && (
+            <span className="pl-2 text-muted-foreground">↳ {t("usage.cacheWrite")}: {nf.format(tokens.cacheWrite ?? 0)}</span>
+          )}
           <span>{t("usage.outputLine", { count: nf.format(tokens.output) })}</span>
-          {tokens.reasoning > 0 && <span>{t("usage.reasoningLine", { count: nf.format(tokens.reasoning) })}</span>}
-          {tokens.cacheRead > 0 && <span>{t("usage.cacheReadLine", { count: nf.format(tokens.cacheRead) })}</span>}
-          {tokens.cacheWrite > 0 && <span>{t("usage.cacheWriteLine", { count: nf.format(tokens.cacheWrite) })}</span>}
-          {tokens.cost !== undefined && <span>{t("usage.costLine", { cost: formatCost(tokens.cost) })}</span>}
+          {tokens.reasoning > 0 && (
+            <span className="pl-2 text-muted-foreground">↳ {t("usage.reasoning")}: {nf.format(tokens.reasoning)}</span>
+          )}
+          {tokens.cost !== undefined && <span>{t("usage.costLine", { cost: `~${formatCost(tokens.cost)}` })}</span>}
           {tokens.lastStep && (
             <>
               <div className="my-0.5 border-t border-border" />

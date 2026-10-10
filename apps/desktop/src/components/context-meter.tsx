@@ -57,6 +57,33 @@ export function ContextMeter({ sessionId }: { sessionId?: string }) {
   const displayInput = live ? live.input : (lastTokens?.lastStep?.input ?? lastTokens?.input ?? 0)
   const displayOutput = live ? live.output : (lastTokens?.lastStep?.output ?? lastTokens?.output ?? 0)
   const showBreakdown = Boolean(live || lastTokens)
+  // Cache da chamada atual: quanto da entrada acima veio do cache do provedor
+  // e quanto foi gravado nele. A estimativa pré-envio não tem esse dado.
+  const cacheRead = live ? live.cacheRead : lastTokens?.lastStep?.cacheRead
+  const cacheWrite = live ? live.cacheWrite : lastTokens?.lastStep?.cacheWrite
+
+  const row = (label: string, value: number, indent = false) => (
+    <div className={cn("flex justify-between gap-4", indent && "pl-2 text-muted-foreground/80")}>
+      <span>{label}</span>
+      <span className="tabular-nums">{formatTokens(value)}</span>
+    </div>
+  )
+  // Entrada = sem cache + lido do cache + gravado no cache. Os três somam o
+  // total, então a divisão vai como sub-linhas (a de custo é diferente entre si).
+  const hasCache = (cacheRead ?? 0) + (cacheWrite ?? 0) > 0
+  const noCache = Math.max(0, displayInput - (cacheRead ?? 0) - (cacheWrite ?? 0))
+  // Raciocínio é parte da saída DESTE passo: só o do passo bate com o output mostrado.
+  const stepReasoning = live ? undefined : lastTokens?.lastStep?.reasoning
+  const breakdown = (
+    <div className="space-y-1 text-[10px] text-muted-foreground">
+      {row(t("usage.input"), displayInput)}
+      {hasCache && row(`↳ ${t("usage.noCache")}`, noCache, true)}
+      {(cacheRead ?? 0) > 0 && row(`↳ ${t("usage.cacheRead")}`, cacheRead ?? 0, true)}
+      {(cacheWrite ?? 0) > 0 && row(`↳ ${t("usage.cacheWrite")}`, cacheWrite ?? 0, true)}
+      {row(t("usage.output"), displayOutput)}
+      {stepReasoning !== undefined && stepReasoning > 0 && row(`↳ ${t("usage.reasoning")}`, stepReasoning, true)}
+    </div>
+  )
   const liveNote = live && (
     <p className="text-[10px] text-muted-foreground/60">
       {live.estimated ? t("usage.estimated") : t("usage.live")}
@@ -99,7 +126,7 @@ export function ContextMeter({ sessionId }: { sessionId?: string }) {
           </button>
         }
       />
-      <TooltipContent side="top" align="center" sideOffset={6} className="w-auto min-w-48 bg-popover text-popover-foreground">
+      <TooltipContent side="top" align="center" sideOffset={6} className="w-56 bg-popover text-popover-foreground">
         <div className="space-y-2 text-xs w-full">
           {limit ? (
             <>
@@ -116,24 +143,7 @@ export function ContextMeter({ sessionId }: { sessionId?: string }) {
                   style={{ width: `${Math.min(pct * 100, 100)}%` }}
                 />
               </div>
-              {showBreakdown && (
-                <div className="space-y-1 text-[10px] text-muted-foreground">
-                  <div className="flex justify-between">
-                    <span>{t("usage.input")}</span>
-                    <span className="tabular-nums">{formatTokens(displayInput)}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span>{t("usage.output")}</span>
-                    <span className="tabular-nums">{formatTokens(displayOutput)}</span>
-                  </div>
-                  {!live && lastTokens && lastTokens.reasoning > 0 && (
-                    <div className="flex justify-between">
-                      <span>{t("usage.reasoning")}</span>
-                      <span className="tabular-nums">{formatTokens(lastTokens.reasoning)}</span>
-                    </div>
-                  )}
-                </div>
-              )}
+              {showBreakdown && breakdown}
               {compacted && (
                 <p className="text-[10px] text-muted-foreground/60">{t("usage.compacted")}</p>
               )}
@@ -162,24 +172,7 @@ export function ContextMeter({ sessionId }: { sessionId?: string }) {
                 </span>
               </div>
               {liveNote}
-              {showBreakdown && (
-                <div className="space-y-1 text-[10px] text-muted-foreground">
-                  <div className="flex justify-between">
-                    <span>{t("usage.input")}</span>
-                    <span className="tabular-nums">{formatTokens(displayInput)}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span>{t("usage.output")}</span>
-                    <span className="tabular-nums">{formatTokens(displayOutput)}</span>
-                  </div>
-                  {!live && lastTokens && lastTokens.reasoning > 0 && (
-                    <div className="flex justify-between">
-                      <span>{t("usage.reasoning")}</span>
-                      <span className="tabular-nums">{formatTokens(lastTokens.reasoning)}</span>
-                    </div>
-                  )}
-                </div>
-              )}
+              {showBreakdown && breakdown}
               <div className="pt-1 border-t border-border" />
               <Button
                 size="sm"

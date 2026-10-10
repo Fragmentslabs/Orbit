@@ -626,10 +626,13 @@
       "subtitle": "Digite uma mensagem para começar"
     },
     "selector": {
-      "title": "O que deseja abrir?",
-      "workersTitle": "Workers da conversa ativa"
+      "title": "O que deseja abrir?"
     },
     "processes": {
+      "title": "Terminais",
+      "scopeChat": "Este chat",
+      "scopeAll": "Todos",
+      "emptyScope": "Nenhum terminal neste chat",
       "viewOutput": "Ver saída",
       "kill": "Encerrar processo",
       "openInBrowser": "Abrir no browser",
@@ -781,9 +784,6 @@
     "outputOut": "{{count}} de saída",
     "inputLine": "Entrada: {{count}} tokens",
     "outputLine": "Saída: {{count}} tokens",
-    "reasoningLine": "Raciocínio: {{count}}",
-    "cacheReadLine": "Cache lido: {{count}}",
-    "cacheWriteLine": "Cache gravado: {{count}}",
     "costLine": "Custo: {{cost}}",
     "currentContext": "Contexto atual: {{count}} tokens",
     "note": "(entrada/saída acima somam todas as chamadas de tool desta resposta — não é o tamanho do contexto)",
@@ -792,12 +792,15 @@
     "input": "Entrada",
     "output": "Saída",
     "reasoning": "Raciocínio",
+    "noCache": "Sem cache",
+    "cacheRead": "Lido do cache",
+    "cacheWrite": "Gravado no cache",
     "tokensWord": "tokens",
     "compacted": "Compactado — histórico anterior resumido",
     "nearLimit": "Próximo do limite — o histórico será compactado em breve",
     "atLimit": "Limite atingido — a compactação automática falhou",
-    "estimated": "Estimativa do envio que está saindo — o número exato chega quando o passo termina",
-    "live": "Atualizado a cada passo desta resposta",
+    "estimated": "Estimativa",
+    "live": "Ao vivo",
     "compactNow": "Compactar histórico agora"
   },
   "images": {

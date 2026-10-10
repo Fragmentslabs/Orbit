@@ -59,7 +59,7 @@ import { getAppSettings } from './app-settings'
 import { MIN_COMPACTION_CONTEXT, resolveAuxModel } from './aux-model'
 import { notifyChatError, notifyNewMessage } from './notifications'
 import { buildToolSet, type ImageToolHooks, type ToolContext, type TurnSnapshot } from './tools'
-import { addTokenUsage, toStepUsage, toTokenUsage } from './usage'
+import { addTokenUsage, costOfUsage, toStepUsage, toTokenUsage } from './usage'
 import { engineAnnotations, stripEngineMarkers } from './todo-context'
 import { forwardChatEvent } from './companion-server'
 
@@ -1118,8 +1118,13 @@ async function runChatTurn(win: BrowserWindow, input: SendMessageInput): Promise
   // Último tamanho de contexto enviado ao medidor nesta tentativa: a
   // estimativa pré-envio só sai quando passa dele.
   let lastContextInput = 0
-  const emitContext = (input: number, output: number, estimated?: boolean) => {
-    emit(win, { type: 'context', sessionId, messageId: assistantMessage.id, input, output, estimated })
+  const emitContext = (
+    input: number,
+    output: number,
+    estimated?: boolean,
+    cache?: { cacheRead?: number; cacheWrite?: number },
+  ) => {
+    emit(win, { type: 'context', sessionId, messageId: assistantMessage.id, input, output, estimated, ...cache })
   }
 
   try {
@@ -1494,6 +1499,9 @@ async function runChatTurn(win: BrowserWindow, input: SendMessageInput): Promise
       // total do turno (soma de todos os steps), reflete o tamanho real do
       // contexto no momento em que a resposta terminou.
       let lastStepUsage: ReturnType<typeof toStepUsage> | undefined
+      // Custo somado passo a passo: a faixa de preço depende do tamanho de CADA
+      // chamada (ex.: acima de 200k tokens), então o total do turno não basta.
+      let turnCost: number | undefined
       let stepCount = 0
 
       for await (const part of result.fullStream) {
@@ -1505,12 +1513,16 @@ async function runChatTurn(win: BrowserWindow, input: SendMessageInput): Promise
         switch (part.type) {
           case 'finish-step':
             lastStepUsage = toStepUsage(part.usage)
+            {
+              const price = provider?.models[primary.modelId]?.cost
+              if (price) turnCost = (turnCost ?? 0) + costOfUsage(part.usage, price)
+            }
             stepCount++
             turnSteps++
             // Provedor sem usage devolve zeros: aí fica valendo a estimativa.
             if (lastStepUsage.input > 0) {
               lastContextInput = lastStepUsage.input
-              emitContext(lastStepUsage.input, lastStepUsage.output)
+              emitContext(lastStepUsage.input, lastStepUsage.output, false, lastStepUsage)
             }
             break
           case 'text-start':
@@ -1768,7 +1780,11 @@ async function runChatTurn(win: BrowserWindow, input: SendMessageInput): Promise
             // Em auto-continue, soma a cada iteração do loop (a mensagem é a
             // mesma, mas cada chamada ao modelo tem seu próprio uso).
             {
-              const stepTokens = toTokenUsage(part.totalUsage, provider?.models[primary.modelId]?.cost)
+              // Com os passos já somados, o custo vem deles; sem nenhum passo
+              // (provedor que não reporta), cai no total do turno.
+              const price = provider?.models[primary.modelId]?.cost
+              const stepTokens = toTokenUsage(part.totalUsage, turnCost === undefined ? price : undefined)
+              if (turnCost !== undefined) stepTokens.cost = turnCost
               assistantMessage.tokens = {
                 ...addTokenUsage(assistantMessage.tokens, stepTokens),
                 lastStep: lastStepUsage,

@@ -626,10 +626,13 @@
       "subtitle": "Type a message to get started"
     },
     "selector": {
-      "title": "What do you want to open?",
-      "workersTitle": "Active conversation's workers"
+      "title": "What do you want to open?"
     },
     "processes": {
+      "title": "Terminals",
+      "scopeChat": "This chat",
+      "scopeAll": "All",
+      "emptyScope": "No terminals in this chat",
       "viewOutput": "View output",
       "kill": "Kill process",
       "openInBrowser": "Open in browser",
@@ -781,9 +784,6 @@
     "outputOut": "{{count}} out",
     "inputLine": "Input: {{count}} tokens",
     "outputLine": "Output: {{count}} tokens",
-    "reasoningLine": "Reasoning: {{count}}",
-    "cacheReadLine": "Cache read: {{count}}",
-    "cacheWriteLine": "Cache write: {{count}}",
     "costLine": "Cost: {{cost}}",
     "currentContext": "Current context: {{count}} tokens",
     "note": "(input/output above sum all tool calls in this reply — not the context size)",
@@ -792,12 +792,15 @@
     "input": "Input",
     "output": "Output",
     "reasoning": "Reasoning",
+    "noCache": "No cache",
+    "cacheRead": "Read from cache",
+    "cacheWrite": "Written to cache",
     "tokensWord": "tokens",
     "compacted": "Compacted — previous history summarized",
     "nearLimit": "Near the limit — history will be compacted soon",
     "atLimit": "Limit reached — automatic compaction failed",
-    "estimated": "Estimate of the request about to be sent — the exact number arrives when the step finishes",
-    "live": "Updated at each step of this reply",
+    "estimated": "Estimate",
+    "live": "Live",
     "compactNow": "Compact history now"
   },
   "images": {
