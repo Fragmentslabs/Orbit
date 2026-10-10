@@ -1664,7 +1664,7 @@
         "steps": "Step by step",
         "detailed": "Detailed",
         "hint": {
-          "summary": "Reasoning in a single block at the top, actions grouped and collapsed.",
+          "summary": "Reasoning in a single block at the top, the answer right after it and the actions grouped and collapsed — intermediate narration is left out.",
           "steps": "Each step where it happened: reasoning and actions in order, in collapsible blocks.",
           "detailed": "Everything open, no collapsed blocks: full reasoning and every action listed."
         }

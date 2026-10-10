@@ -54,9 +54,17 @@ export function isEngineText(source: TextPart["source"]): boolean {
  * roubarem o lugar da resposta final, não apagam o bloco real à esquerda
  * quando aparecem depois dele.
  */
-export function lastTextRunStart(segments: { kind: string; part?: MessagePart }[]): number {
+export function lastTextRunStart(
+  segments: { kind: string; part?: MessagePart }[],
+  /** Exige prosa (texto do modelo, sem source) dentro do bloco: um bloco só de
+   *  raciocínio — turno que terminou pensando, sem escrever de novo — não conta
+   *  como resposta final. Sem isto, a última prosa da mensagem viraria
+   *  "narração" e o resumo não teria resposta nenhuma para mostrar. */
+  requireProse = false,
+): number {
   let runStart = -1
   let lastRunStart = -1
+  let runHasProse = false
   for (let i = 0; i < segments.length; i++) {
     const part = segments[i].part
     // Texto do engine (nudge/todo/internal) é INVISÍVEL para o run: o source
@@ -71,10 +79,15 @@ export function lastTextRunStart(segments: { kind: string; part?: MessagePart }[
       part !== undefined &&
       (part.type === "text" || part.type === "reasoning")
     if (textish) {
-      if (runStart === -1) runStart = i
-      lastRunStart = runStart
+      if (runStart === -1) {
+        runStart = i
+        runHasProse = false
+      }
+      if (part.type === "text" && part.source === undefined) runHasProse = true
+      if (!requireProse || runHasProse) lastRunStart = runStart
     } else {
       runStart = -1
+      runHasProse = false
     }
   }
   return lastRunStart
@@ -248,20 +261,63 @@ export function parseTestSummary(output: string): TestSummary | null {
  *
  * - `summary`: o raciocínio de todos os passos vira um bloco só, no topo, e as
  *   ações que ele separava se juntam num acordeon só. É a leitura de antes:
- *   pensou → resposta → resumo das ações.
+ *   pensou → resposta → resumo das ações. A narração intermediária ("pensando
+ *   alto": o texto anterior ao último bloco) sai da leitura e a resposta final
+ *   toma o lugar do primeiro trecho dela — que é como a mensagem ficava antes,
+ *   quando o texto final sobrescrevia o primeiro e só ele aparecia. O que a
+ *   pessoa não vê aqui continua inteiro em `steps`/`detailed`.
  * - `steps` e `detailed`: cada parte no lugar em que aconteceu; o que muda
  *   entre os dois é só se os blocos vêm recolhidos ou abertos.
  */
 export function arrangeForView(parts: MessagePart[], mode: ChatViewMode): MessagePart[] {
   if (mode !== "summary") return parts
+
   const reasoning = parts.filter((p): p is ReasoningPart => p.type === "reasoning" && p.text.trim() !== "")
-  if (reasoning.length <= 1 && parts.indexOf(reasoning[0]) <= 0) return parts
-  const merged: ReasoningPart = {
-    id: reasoning[0].id,
-    type: "reasoning",
-    text: reasoning.map((p) => p.text.trim()).join("\n\n"),
-    state: reasoning.some((p) => p.state === "streaming") ? "streaming" : "done",
-    durationMs: reasoning.reduce((sum, p) => sum + (p.durationMs ?? 0), 0) || undefined,
-  }
-  return [merged, ...parts.filter((p) => p.type !== "reasoning")]
+  const merged: ReasoningPart | null =
+    reasoning.length > 0
+      ? {
+          id: reasoning[0].id,
+          type: "reasoning",
+          text: reasoning.map((p) => p.text.trim()).join("\n\n"),
+          state: reasoning.some((p) => p.state === "streaming") ? "streaming" : "done",
+          durationMs: reasoning.reduce((sum, p) => sum + (p.durationMs ?? 0), 0) || undefined,
+        }
+      : null
+
+  // Só o texto escrito pelo modelo sem source (a prosa) conta como narração ou
+  // resposta: o texto do engine ('nudge'/'todo'/'internal') e o da visão ficam
+  // onde estão, com o tratamento que já têm na UI.
+  const isProse = (part: MessagePart) => part.type === "text" && part.source === undefined
+  const lastRunStart = lastTextRunStart(
+    parts.map((part) => ({ kind: "part", part })),
+    true,
+  )
+
+  const rest: MessagePart[] = []
+  let narrationAt = -1
+  parts.forEach((part, index) => {
+    if (part.type === "reasoning") return
+    // Narração intermediária: fora do resumo (o modo passo a passo mostra)
+    if (isProse(part) && index < lastRunStart) {
+      if (narrationAt === -1) narrationAt = rest.length
+      return
+    }
+    rest.push(part)
+  })
+
+  // Sem raciocínio para subir e sem narração para tirar, nada muda
+  if (!merged && narrationAt === -1) return parts
+
+  // Sem narração a resposta já está no lugar dela; com narração, sobe para onde
+  // o primeiro trecho narrado estava
+  const ordered =
+    narrationAt === -1
+      ? rest
+      : [
+          ...rest.slice(0, narrationAt).filter((p) => !isProse(p)),
+          ...rest.filter(isProse),
+          ...rest.slice(narrationAt).filter((p) => !isProse(p)),
+        ]
+
+  return merged ? [merged, ...ordered] : ordered
 }

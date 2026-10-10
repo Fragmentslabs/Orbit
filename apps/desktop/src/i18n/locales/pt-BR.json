@@ -1664,7 +1664,7 @@
         "steps": "Passo a passo",
         "detailed": "Detalhado",
         "hint": {
-          "summary": "O raciocínio num bloco só no topo e as ações agrupadas e recolhidas.",
+          "summary": "O raciocínio num bloco só no topo, a resposta em seguida e as ações agrupadas e recolhidas — a narração intermediária sai da leitura.",
           "steps": "Cada passo onde aconteceu: raciocínio e ações em ordem, em blocos recolhíveis.",
           "detailed": "Tudo aberto, sem blocos recolhidos: raciocínio por extenso e cada ação listada."
         }
