@@ -813,7 +813,11 @@ async function generateTitle(input: SendMessageInput, win: BrowserWindow) {
     // Persiste no disco ANTES de propagar: os eventos "session" seguintes
     // (bumpSessionActivity) leem a sessão do disco — sem esta escrita o título
     // gerado reverte para o padrão na troca seguinte.
-    await writeJson(StorageKeys.session(input.sessionId), { ...session, title })
+    // Relê antes de gravar: o título leva segundos e a sessão pode ter mudado
+    // nesse meio-tempo (ex.: o agente trocou o chat de worktree) — gravar a
+    // cópia lida no início desfaria a mudança.
+    const atual = (await readJson<SessionInfo>(StorageKeys.session(input.sessionId))) ?? session
+    await writeJson(StorageKeys.session(input.sessionId), { ...atual, title })
     await bumpSessionActivity(win, input.sessionId)
     emit(win, { type: 'title', sessionId: input.sessionId, title })
   } catch {
