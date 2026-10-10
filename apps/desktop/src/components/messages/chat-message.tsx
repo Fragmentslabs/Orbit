@@ -19,6 +19,7 @@ import { ActionsGroup } from "@/src/components/ai/actions-group"
 import { ArtifactPartView } from "@/src/components/ai/artifact-part"
 import { DocumentPartView } from "@/src/components/ai/document-part"
 import { Source, Sources, SourcesContent, SourcesTrigger } from "@/src/components/ai/sources"
+import { McpProposalCard } from "@/src/components/mcp-proposal-card"
 import { SkillProposalCard } from "@/src/components/skill-proposal-card"
 import {
   AgentPartView,
@@ -132,6 +133,9 @@ type Segment =
 const RENDER_PROPRIO = new Set([
   "subagent",
   "create_skill",
+  // Conexão MCP e uma decisão do usuário no card — igual à proposta de skill.
+  "mcp_connect",
+  "mcp_update",
   "todowrite",
   "show_image",
   "create_artifact",
@@ -231,6 +235,8 @@ export function ChatAssistantMessage({ message, sessionId, isLast, isBusy, busyL
           <SubAgentCard key={segment.id} part={segment.part} />
         ) : segment.part.tool === "create_skill" ? (
           <SkillProposalCard key={segment.id} part={segment.part} />
+        ) : segment.part.tool === "mcp_connect" || segment.part.tool === "mcp_update" ? (
+          <McpProposalCard key={segment.id} part={segment.part} />
         ) : // O card do artefato já é o resultado destas tools — o chip genérico
         // ao lado dele seria ruído
         segment.part.tool === "show_image" ||

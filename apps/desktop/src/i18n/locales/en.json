@@ -1063,6 +1063,20 @@
     "add": "Add skill",
     "discarded": "Proposal discarded."
   },
+  "mcpProposal": {
+    "building": "Preparing the connection.",
+    "connect": "Connect",
+    "discard": "Discard",
+    "discarded": "Proposal discarded.",
+    "connected": "Connected - {{count}} tool(s) available",
+    "needsAuth": "This server requires a login: the button opens the authorization page in your browser.",
+    "authorize": "Authorize",
+    "authorizing": "Authorizing...",
+    "reauthorize": "Authorize again",
+    "retry": "Try again",
+    "retrying": "Reconnecting...",
+    "failed": "Connection failed: {{error}}"
+  },
   "taskProgress": {
     "title": "Tasks",
     "inProgress": "{{title}} in progress",
