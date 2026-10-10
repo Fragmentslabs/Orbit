@@ -15,6 +15,7 @@ import {
 } from './domain'
 import { buildProjectMap, rootOf, type ProjectMap } from './project-map'
 import * as repo from './repository'
+import { pastaNoRepositorioPrincipal } from '../worktrees/principal'
 
 /**
  * Casos de uso da memória Brain. Ferramentas do agente, IPC da UI e a injeção
@@ -541,7 +542,9 @@ export interface ProjectScope {
  * aberto em "app/front" enxergar (e alimentar) a árvore que o /init criou em
  * "app/". Sem árvore acima, o projeto é a própria pasta, como sempre foi.
  */
-export async function resolveProjectScope(directory: string): Promise<ProjectScope> {
+export async function resolveProjectScope(pasta: string): Promise<ProjectScope> {
+  // Worktree é o mesmo projeto em outro caminho: a memória é a do principal.
+  const directory = await pastaNoRepositorioPrincipal(pasta)
   const roots = new Map<string, ProjectRoot>()
   for (const m of await alive()) {
     if (m.kind !== 'project' || m.area !== 'overview' || m.subproject || !m.directory || !m.projectId) continue
