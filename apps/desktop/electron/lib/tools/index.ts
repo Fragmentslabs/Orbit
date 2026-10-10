@@ -25,6 +25,7 @@ import {
   createWriteTool,
 } from './files'
 import { createSkillTool } from './create-skill'
+import { createMcpTools } from './mcp'
 import { createChatMemoryTools, createCodeMemoryTools, createGraphTool } from './memory'
 import { createSubagentTool } from './orchestration'
 import { createPanelBrowserTools } from './panel-browser'
@@ -135,6 +136,10 @@ export function buildToolSet(input: SendMessageInput, ctx: ToolContext | null, i
     if (input.orchestrationRole !== 'worker' && input.text.trimStart().startsWith('/create-skill')) {
       tools.create_skill = createSkillTool()
     }
+    // Conexões MCP: propor uma conexão nova, corrigir uma existente e ler o
+    // estado. Elas só propõem — quem aplica é o card na conversa —, então não
+    // são um toggle: valem em qualquer conversa, como a esteira e os chats.
+    if (input.orchestrationRole !== 'worker') Object.assign(tools, createMcpTools())
     return tools
   }
 
@@ -153,6 +158,9 @@ export function buildToolSet(input: SendMessageInput, ctx: ToolContext | null, i
   )
   if (input.orchestrationRole !== 'worker') {
     tools.create_skill = createSkillTool()
+    // Conexões MCP: propor uma conexão nova, corrigir uma existente e ler o
+    // estado. Só propõem — quem aplica é o card na conversa.
+    Object.assign(tools, createMcpTools())
     // Artefatos também no código: relatório de análise, diagrama de
     // arquitetura, comparativo — coisas que o usuário quer VER e que não
     // deveriam virar arquivo solto no repositório dele.

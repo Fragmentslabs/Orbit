@@ -1,5 +1,5 @@
 import { useTranslation } from "react-i18next"
-import { Archive, FoldVertical, LayoutList, Lightbulb, RotateCw, StepForward, Trash2 } from "lucide-react"
+import { Archive, FoldVertical, LayoutList, Lightbulb, Minimize2, RotateCw, Rocket, StepForward, Trash2 } from "lucide-react"
 import { AUTO_ARCHIVE_DAY_OPTIONS, DELETE_ARCHIVED_DAY_OPTIONS, type AutoCompactMode, type ChatViewMode } from "@shared/app-settings"
 import { ModelField } from "@/src/components/model-field"
 import { SettingRow, SettingSelect, SettingSwitch } from "@/src/components/settings-row"
@@ -140,6 +140,30 @@ export function GeneralSettings() {
           value={String(settings.autoContinues)}
           onChange={(v) => update({ autoContinues: Number(v) })}
           options={countOptions}
+        />
+      </SettingRow>
+
+      <SettingRow
+        icon={Rocket}
+        title={t("preferences.general.launchAtLogin.title")}
+        description={t("preferences.general.launchAtLogin.description")}
+      >
+        <SettingSwitch
+          checked={settings.launchAtLogin}
+          onChange={(launchAtLogin) => update({ launchAtLogin })}
+          label={t("preferences.general.launchAtLogin.title")}
+        />
+      </SettingRow>
+
+      <SettingRow
+        icon={Minimize2}
+        title={t("preferences.general.closeToTray.title")}
+        description={t("preferences.general.closeToTray.description")}
+      >
+        <SettingSwitch
+          checked={settings.closeToTray}
+          onChange={(closeToTray) => update({ closeToTray })}
+          label={t("preferences.general.closeToTray.title")}
         />
       </SettingRow>
     </div>

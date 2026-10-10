@@ -982,4 +982,7 @@ export const StorageKeys = {
    *  O scheduler de rotinas roda sem renderer no laço e precisa dele. */
   appLanguage: "app-language",
   queuedMessages: "message-queue",
+  /** Modelo selecionado no desktop. Lido por quem responde sem conversa no
+   *  laço: o companion HTTP e o sampling de um app conectado (lib/mcp). */
+  selectedModel: "companion/selected-model",
 } as const

@@ -40,6 +40,11 @@ export function ThemeProvider({
 
     root.classList.remove("light", "dark")
 
+    // O tema também vale para o que é NATIVO no main (menu da bandeja,
+    // diálogos do sistema): o main não lê o localStorage, então ele é
+    // publicado a cada troca.
+    window.ipcRenderer?.send("theme:sync", theme)
+
     if (theme === "system") {
       const systemTheme = window.matchMedia("(prefers-color-scheme: dark)")
         .matches
