@@ -31,7 +31,6 @@ import { getThemeTokens } from '~/lib/theme-tokens'
 import { useThemeStore } from '~/stores/theme-store'
 import { useChatSearchStore } from '~/stores/chat-search-store'
 import { useShallow } from 'zustand/react/shallow'
-import { startMessageScheduler, useMessageQueueStore } from '~/stores/message-queue-store'
 import { Storage } from '~/lib/storage'
 
 const AUTO_FOLDER_MAP_KEY = 'orbit_auto_folder_map'
@@ -131,20 +130,6 @@ export function ChatScreen({ sessionId }: ChatScreenProps) {
     void selectSession(sessionId ?? null)
     closeChatSearch()
   }, [sessionId, selectSession, closeChatSearch])
-
-  useEffect(() => {
-    startMessageScheduler()
-  }, [])
-
-  useEffect(() => {
-    if (!sessionId) return
-    return useSessionStore.subscribe((state) => {
-      const status = state.status[sessionId]
-      if (status === 'idle' || status === 'error') {
-        useMessageQueueStore.getState().onSessionIdle(sessionId)
-      }
-    })
-  }, [sessionId])
 
   // Cria a sessão no primeiro envio quando ainda é um rascunho (sem id).
   const [creating, setCreating] = useState(false)

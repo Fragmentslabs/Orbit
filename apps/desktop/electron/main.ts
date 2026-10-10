@@ -50,8 +50,8 @@ import {
   readMedia,
   registerMediaProtocol,
 } from './lib/media'
-import type { AppPreferences, ReasoningPrefsMap, SessionModeOverrides, WorkerConfigSnapshot } from '@shared/companion'
-import { startCompanionServer, getCompanionStatus, setPairingMode, forwardChatEvent, broadcastSessionModels, broadcastSessionModes, broadcastWorkerConfig, broadcastAppPreferences, broadcastRotationConfig, broadcastReasoningPrefs } from './lib/companion-server'
+import type { AppPreferences, MessageQueueSnapshot, ReasoningPrefsMap, SessionModeOverrides, WorkerConfigSnapshot } from '@shared/companion'
+import { startCompanionServer, getCompanionStatus, setPairingMode, forwardChatEvent, broadcastSessionModels, broadcastSessionModes, broadcastWorkerConfig, broadcastAppPreferences, broadcastRotationConfig, broadcastReasoningPrefs, broadcastMessageQueue } from './lib/companion-server'
 import { setSessionModelsCache, setSessionModesCache, setWorkerConfigCache, setRotationHttpCache, setReasoningPrefsCache } from './lib/companion-http'
 import { setRotationConfigCache } from './lib/model-rotation'
 import { readJson as readStorageJson } from './lib/storage'
@@ -1801,6 +1801,12 @@ app.whenReady().then(() => {
   // mesma via, com o renderer como fonte da verdade.
   ipcMain.on('companion:preferences', (_event, prefs: AppPreferences) => {
     broadcastAppPreferences(prefs)
+  })
+
+  // Fila de mensagens: o renderer é o dono (é ele quem envia o próximo item)
+  // e empurra a fila inteira a cada mudança; o celular lê e opera nela.
+  ipcMain.on('companion:message-queue', (_event, queues: MessageQueueSnapshot) => {
+    broadcastMessageQueue(queues)
   })
 
   // Config dos modos delegados (workers + visão), pelo mesmo caminho.

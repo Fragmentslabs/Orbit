@@ -41,6 +41,8 @@ import type {
   WorkerConfigChangeEvent,
   AppPreferences,
   AppPreferencesChangeEvent,
+  MessageQueueSnapshot,
+  MessageQueueChangeEvent,
 } from '@shared/companion'
 import { SESSION_BUSY_ERROR } from '@shared/companion'
 import type { ChatEvent, SessionInfo, FolderInfo, ChatMessage, MessagePart, SendMessageInput, PlanReview, OrchestrationPlan, RotationConfig } from '@shared/chat'
@@ -647,6 +649,25 @@ async function handleRequest(client: ConnectedClient, requestId: string, req: Co
             win.webContents.send('companion:rotation-set', { rotations: req.rotations ?? [] })
           }
         }
+        sendResponse(ws, requestId, true)
+        break
+      }
+
+      case 'queue:get': {
+        sendResponse(ws, requestId, true, messageQueueCache)
+        break
+      }
+
+      case 'queue:op': {
+        // A fila mora no renderer (é ele quem envia o próximo item): a
+        // operação vai para lá, e a fila resultante volta a todos pelo
+        // 'queue:change'.
+        const wins = BrowserWindow.getAllWindows().filter((w) => !w.isDestroyed())
+        if (wins.length === 0) {
+          sendResponse(ws, requestId, false, undefined, 'Janela principal indisponível')
+          return
+        }
+        for (const win of wins) win.webContents.send('companion:queue-op', req.op)
         sendResponse(ws, requestId, true)
         break
       }
@@ -1426,6 +1447,26 @@ export function broadcastSessionModes(overrides: SessionModeOverrides): void {
   for (const client of clients) {
     if (!client.authenticated || client.ws.readyState !== WebSocket.OPEN) continue
     client.ws.send(wrap({ type: 'session:mode-change', overrides } satisfies SessionModeChangeEvent))
+  }
+}
+
+/** Última fila empurrada pelo renderer — o 'queue:get' do celular ao conectar. */
+let messageQueueCache: MessageQueueSnapshot = {}
+
+/** Fila de mensagens do renderer, empurrada aos companions a cada mudança. Os
+ *  anexos vão sem o conteúdo: o celular só mostra que existem, e uma foto em
+ *  data URL atravessaria a rede a cada edição da fila. */
+export function broadcastMessageQueue(queues: MessageQueueSnapshot): void {
+  const leve: MessageQueueSnapshot = {}
+  for (const [sessionId, items] of Object.entries(queues)) {
+    leve[sessionId] = items.map((m) =>
+      m.files?.length ? { ...m, files: m.files.map((f) => ({ ...f, url: '' })) } : m,
+    )
+  }
+  messageQueueCache = leve
+  for (const client of clients) {
+    if (!client.authenticated || client.ws.readyState !== WebSocket.OPEN) continue
+    client.ws.send(wrap({ type: 'queue:change', queues: leve } satisfies MessageQueueChangeEvent))
   }
 }
 

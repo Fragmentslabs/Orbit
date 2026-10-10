@@ -1241,7 +1241,9 @@
     "now": "Now",
     "inSeconds": "In seconds",
     "inMinutes": "In {{count}}min",
-    "inHours": "In {{count}}h"
+    "inHours": "In {{count}}h",
+    "offline": "Waiting for connection",
+    "remove": "Remove from queue"
   },
   "modelPicker": {
     "select": "Select model",

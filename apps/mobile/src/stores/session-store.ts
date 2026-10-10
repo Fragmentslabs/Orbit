@@ -14,7 +14,6 @@ import type {
   OrchestrationPlan,
   PermissionMode,
   SessionStateResponse,
-  QueuedMessage,
 } from '@orbit/shared'
 import { SESSION_BUSY_ERROR } from '@orbit/shared'
 import { Storage } from '~/lib/storage'
@@ -22,7 +21,7 @@ import { visibleMessageText } from '~/lib/message-utils'
 import i18n from '~/i18n'
 import { useConnectionStore } from './connection-store'
 import { useDraftInput } from './draft-input-store'
-import { useMessageQueueStore, __setSessionDeps } from './message-queue-store'
+import { newQueueId, useMessageQueueStore } from './message-queue-store'
 import { useSettingsStore } from './settings-store'
 import { useChatStore, loadCachedAsks, CACHE_ASKS_PREFIX } from './chat-store'
 import { useModeOverrides, modeActiveFor } from './mode-overrides'
@@ -90,8 +89,6 @@ const MAX_CACHED_SESSIONS = 20
 const INITIAL_MESSAGES_LIMIT = 40
 const MAX_CACHED_MESSAGES = 200
 const MAX_INITIAL_CACHED_MESSAGES = INITIAL_MESSAGES_LIMIT
-/** Espera antes de reconferir uma sessão que o desktop disse estar ocupada. */
-const BUSY_RECHECK_MS = 2_500
 
 async function cacheSessions(sessions: SessionInfo[]) {
   const recent = sessions.slice(0, MAX_CACHED_SESSIONS)
@@ -181,8 +178,6 @@ interface SessionState {
       /** Pastas do modo código (principal + adicionais). */
       directory?: string
       extraDirectories?: string[]
-      /** A mensagem veio da fila: se o desktop recusar, ela volta para lá. */
-      queued?: QueuedMessage
     },
   ) => Promise<void>
   /** Cria uma sessão nova no desktop e retorna-a. */
@@ -605,33 +600,20 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       if (res.error === SESSION_BUSY_ERROR) {
         // O desktop ainda está no turno anterior (o status daqui estava velho:
         // idle entre iterações do loop, reconexão...). Mandar agora abortaria
-        // aquele turno no meio — a mensagem volta à frente da fila e sai
-        // quando a sessão ficar livre de verdade.
-        const queue = useMessageQueueStore.getState()
-        if (config?.queued) {
-          queue.requeueFront(sessionId, config.queued)
-        } else {
-          queue.requeueFront(sessionId, {
-            id: `q_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`,
-            text,
-            files: config?.files?.length ? config.files : undefined,
-            options: config?.options ?? {},
-            mode: sessionMode,
-            sessionId,
-            directory: config?.directory,
-            extraDirectories: config?.extraDirectories,
-            createdAt: Date.now(),
-          })
-        }
+        // aquele turno no meio — a mensagem entra na FRENTE da fila
+        // compartilhada, e o desktop a envia quando a sessão ficar livre.
+        useMessageQueueStore.getState().enqueueFront(sessionId, {
+          id: newQueueId(),
+          text,
+          files: config?.files?.length ? config.files : undefined,
+          options: config?.options ?? {},
+          mode: sessionMode,
+          sessionId,
+          directory: config?.directory,
+          extraDirectories: config?.extraDirectories,
+          createdAt: Date.now(),
+        })
         set((state) => ({ status: { ...state.status, [sessionId]: 'streaming' as ChatStatus } }))
-        // O `status: idle` do fim do turno solta a fila; esta rechecagem cobre
-        // o caso de ele já ter passado (o desktop emite idle um instante antes
-        // de tirar a sessão da lista de execução).
-        setTimeout(() => {
-          void get().fetchRunningSessions().then(() => {
-            useMessageQueueStore.getState().processQueue(sessionId)
-          })
-        }, BUSY_RECHECK_MS)
         return
       }
       failSend(res.error ?? i18n.t('sessionStore.sendFailed'))
@@ -982,11 +964,6 @@ export const useSessionStore = create<SessionState>((set, get) => ({
 
     switch (event.type) {
       case 'status':
-        // Turno de verdade terminou: erro pausa a fila, sucesso (ou parada
-        // manual) a solta. Antes do set, para o onSessionIdle que o set
-        // dispara já ver a pausa.
-        if (event.status === 'error') useMessageQueueStore.getState().setPaused(sessionId, true)
-        if (event.status === 'idle') useMessageQueueStore.getState().setPaused(sessionId, false)
         set((state) => {
           const patch: Record<string, any> = {
             status: { ...state.status, [sessionId]: event.status },
@@ -1027,9 +1004,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
           const m = event.message
           const finished =
             m.role === 'assistant' && (m.tokens !== undefined || m.error !== undefined)
-          // Com erro, o estado é `error`, não `idle`: idle aqui soltava a fila
-          // no intervalo até o `status: error` chegar logo depois.
-          if (finished && m.error !== undefined) useMessageQueueStore.getState().setPaused(sessionId, true)
+          // Com erro, o estado é `error`, não `idle`.
           const status = finished
             ? { ...state.status, [sessionId]: (m.error !== undefined ? 'error' : 'idle') as ChatStatus }
             : state.status
@@ -1219,9 +1194,3 @@ export const useSessionStore = create<SessionState>((set, get) => ({
   },
 }))
 
-__setSessionDeps({
-  getStatus: (sessionId) => useSessionStore.getState().status[sessionId],
-  isOnline: () => useConnectionStore.getState().connection.status === 'connected',
-  refreshRunning: () => useSessionStore.getState().fetchRunningSessions(),
-  sendMessage: (text, config) => useSessionStore.getState().sendMessage(text, config),
-})

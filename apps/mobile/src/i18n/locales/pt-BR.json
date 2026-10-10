@@ -1241,7 +1241,9 @@
     "now": "Agora",
     "inSeconds": "Em segundos",
     "inMinutes": "Em {{count}}min",
-    "inHours": "Em {{count}}h"
+    "inHours": "Em {{count}}h",
+    "offline": "Aguardando conexão",
+    "remove": "Remover da fila"
   },
   "modelPicker": {
     "select": "Selecionar modelo",

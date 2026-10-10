@@ -4,7 +4,7 @@
  * e o handshake de autenticação.
  */
 
-import type { SendMessageOptions, SessionMode, FilePart, WorkerModelConfig, ReasoningConfig, PermissionMode, PlanReview, OrchestrationPlan, AskItem, ModelRotation, RotationConfig } from './chat'
+import type { SendMessageOptions, SessionMode, FilePart, WorkerModelConfig, ReasoningConfig, PermissionMode, PlanReview, OrchestrationPlan, AskItem, ModelRotation, RotationConfig, QueuedMessage } from './chat'
 import type { AnalyticsRange } from './analytics'
 import type { NovaRotinaInput, Rotina, RotinaEvent, RotinaModelo } from './rotinas'
 import type {
@@ -224,6 +224,40 @@ export interface SelectReasoningRequest {
 export interface ReasoningPrefsChangeEvent {
   type: 'reasoning:change'
   prefs: ReasoningPrefsMap
+}
+
+// ─── Fila de mensagens compartilhada ─────────────────────────────────────────
+// A fila mora no renderer do desktop — é ele quem envia o próximo item quando
+// a sessão fica livre, então só existe UMA fila por chat, vista e editada
+// igual pelo desktop e pelo celular. O celular só guarda localmente o que
+// escreveu sem conexão, e entrega aqui ao reconectar.
+
+/** sessionId → itens da fila, na ordem de saída. */
+export type MessageQueueSnapshot = Record<string, QueuedMessage[]>
+
+/** Operação na fila feita por um companion; o desktop aplica e devolve a fila
+ *  inteira a todos pelo 'queue:change'. */
+export type MessageQueueOp =
+  | { op: 'enqueue'; sessionId: string; msg: QueuedMessage; front?: boolean }
+  | { op: 'remove'; sessionId: string; msgId: string }
+  | { op: 'move-to-front'; sessionId: string; msgId: string }
+  | { op: 'update'; sessionId: string; msgId: string; text: string }
+  | { op: 'send-now'; sessionId: string; msgId: string }
+
+export interface GetMessageQueueRequest {
+  type: 'queue:get'
+}
+
+export interface MessageQueueOpRequest {
+  type: 'queue:op'
+  op: MessageQueueOp
+}
+
+/** Fila inteira empurrada pelo desktop a cada mudança. Os anexos viajam sem o
+ *  conteúdo (`url` vazio): uma foto em data URL ia junto a cada tecla. */
+export interface MessageQueueChangeEvent {
+  type: 'queue:change'
+  queues: MessageQueueSnapshot
 }
 
 /** Configuração global dos modos delegados: o modelo (e o thinking) dos
@@ -710,6 +744,8 @@ export type CompanionRequest =
   | RevisePlanReviewRequest
   | ApproveOrchestrationRequest
   | RejectOrchestrationRequest
+  | GetMessageQueueRequest
+  | MessageQueueOpRequest
 
 // ─── Server → Client (Responses + Events) ────────────────────────────────────
 
@@ -802,6 +838,7 @@ export type CompanionEvent =
   | RotationChangeEvent
   | WorkerConfigChangeEvent
   | AppPreferencesChangeEvent
+  | MessageQueueChangeEvent
   | StatusUpdate
 
 // ─── Wire Protocol ───────────────────────────────────────────────────────────

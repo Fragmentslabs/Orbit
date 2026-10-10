@@ -19,7 +19,7 @@ import { useSessionStore } from "../stores/session-store";
 import { useThemeStore, hydrateThemePreference } from "../stores/theme-store";
 import { useAppearanceStore, hydratePersonaVisibility, hydrateModesInRow } from "../stores/appearance-store";
 import { useLocaleStore, hydrateLocale } from "../stores/locale-store";
-import { startMessageScheduler } from "../stores/message-queue-store";
+import { useMessageQueueStore } from "../stores/message-queue-store";
 import { useModelModePrefs } from "../stores/model-mode-prefs";
 import { useModeOverrides } from "../stores/mode-overrides";
 import { useSimplePrefs } from "../stores/simple-prefs";
@@ -168,7 +168,8 @@ export default function RootLayout() {
   }, [loadingConfig]);
 
   useEffect(() => {
-    startMessageScheduler();
+    // O que foi escrito sem conexão aparece na fila antes de o socket abrir.
+    void useMessageQueueStore.getState().initialize();
     void useNotificationPrefsStore.getState().loadPrefs();
     // Carrega cache de sessões para aparecerem imediatamente
     // (o fetch real via WS acontece quando conectar)

@@ -1,73 +1,41 @@
 import { create } from 'zustand'
-import type { FilePart, QueuedMessage, SessionMode, SendMessageOptions } from '@orbit/shared'
-import { MAX_QUEUE_RETRIES, StorageKeys } from '@orbit/shared'
+import type { FilePart, MessageQueueOp, MessageQueueSnapshot, QueuedMessage, SessionMode, SendMessageOptions } from '@orbit/shared'
+import { StorageKeys } from '@orbit/shared'
 import { Storage } from '~/lib/storage'
+import { useConnectionStore } from './connection-store'
 
-// Injected deps to avoid circular import with session-store
-let _getStatus: ((sessionId: string) => string | undefined) | null = null
-let _sendMessage:
-  | ((
-      text: string,
-      config?: {
-        options?: SendMessageOptions
-        sessionId?: string
-        directory?: string
-        extraDirectories?: string[]
-        files?: FilePart[]
-        queued?: QueuedMessage
-      },
-    ) => Promise<void>)
-  | null = null
-let _isOnline: (() => boolean) | null = null
-let _refreshRunning: (() => Promise<void>) | null = null
+/**
+ * Fila de mensagens do celular.
+ *
+ * A fila de verdade mora no desktop — é ele quem envia o próximo item quando a
+ * sessão fica livre —, então só existe uma fila por chat, a mesma nos dois
+ * aparelhos. Aqui ficam:
+ *  - `remote`: o espelho dela, recebido no connect ('queue:get') e a cada
+ *    mudança ('queue:change');
+ *  - `outbox`: o que foi escrito SEM conexão. Não há onde entregar, então fica
+ *    guardado no aparelho e entra na fila do desktop ao reconectar.
+ *
+ * O celular nunca tira itens da fila para enviar: antes cada aparelho tinha a
+ * sua e as duas disputavam a sessão — e um envio com a sessão ainda rodando
+ * aborta o turno atual no meio.
+ */
 
-/** Registered by session-store to break the import cycle. */
-export function __setSessionDeps(deps: {
-  getStatus: (sessionId: string) => string | undefined
-  isOnline: () => boolean
-  /** Rebusca no desktop quais sessões estão rodando (corrige status velho). */
-  refreshRunning: () => Promise<void>
-  sendMessage: (
-    text: string,
-    config?: {
-      options?: SendMessageOptions
-      sessionId?: string
-      directory?: string
-      extraDirectories?: string[]
-      files?: FilePart[]
-      queued?: QueuedMessage
-    },
-  ) => Promise<void>
-}) {
-  _getStatus = deps.getStatus
-  _sendMessage = deps.sendMessage
-  _isOnline = deps.isOnline
-  _refreshRunning = deps.refreshRunning
-}
-
-const QUEUE_STORAGE_KEY = StorageKeys.queuedMessages
+const OUTBOX_STORAGE_KEY = StorageKeys.queuedMessages
 
 interface MessageQueueState {
+  remote: MessageQueueSnapshot
+  outbox: Record<string, QueuedMessage[]>
+  /** remote + outbox por sessão — o que a UI mostra, na ordem de saída. */
   queues: Record<string, QueuedMessage[]>
   initialized: boolean
-  /** Sessões cujo último turno falhou: a fila não sai sozinha até um turno
-   *  terminar bem. Não dá para usar o status: offline, o session-store marca
-   *  `error` de propósito com a mensagem na fila, e ela tem que sair ao
-   *  reconectar. */
-  paused: Record<string, boolean>
-  setPaused: (sessionId: string, paused: boolean) => void
 
   initialize: () => Promise<void>
-  enqueue: (sessionId: string, msg: QueuedMessage) => void
-  /** Devolve uma mensagem à FRENTE da fila (o desktop recusou: sessão ocupada). */
-  requeueFront: (sessionId: string, msg: QueuedMessage) => void
-  dequeue: (sessionId: string) => QueuedMessage | undefined
-  peek: (sessionId: string) => QueuedMessage | undefined
-  remove: (sessionId: string, msgId: string) => void
-  hasPending: (sessionId: string) => boolean
-  queueSize: (sessionId: string) => number
-  processQueue: (sessionId: string) => void
-  processAllQueues: () => void
+  /** Fila inteira vinda do desktop. */
+  applySync: (queues: MessageQueueSnapshot) => void
+  /** Busca a fila do desktop (connect). */
+  fetchRemote: () => Promise<void>
+  /** Entrega ao desktop o que foi escrito sem conexão, na ordem. */
+  flushOutbox: () => Promise<void>
   enqueueForSend: (
     sessionId: string,
     text: string,
@@ -83,164 +51,93 @@ interface MessageQueueState {
     scheduledAt: number,
     extra?: { directory?: string; extraDirectories?: string[]; files?: FilePart[] },
   ) => void
-  onSessionIdle: (sessionId: string) => void
+  /** Item que era para sair agora, mas a sessão estava ocupada: fura a fila. */
+  enqueueFront: (sessionId: string, msg: QueuedMessage) => void
+  remove: (sessionId: string, msgId: string) => void
 }
 
-function persist(queues: Record<string, QueuedMessage[]>) {
-  // Persiste TODAS as mensagens da fila (não só as agendadas)
-  // para que mensagens offline não se percam em reinicialização do app.
-  const all: Record<string, QueuedMessage[]> = {}
-  for (const [sid, msgs] of Object.entries(queues)) {
-    if (msgs.length > 0) all[sid] = msgs
+export function newQueueId(): string {
+  return `q_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`
+}
+
+function merge(remote: MessageQueueSnapshot, outbox: Record<string, QueuedMessage[]>) {
+  const queues: Record<string, QueuedMessage[]> = {}
+  for (const sessionId of new Set([...Object.keys(remote), ...Object.keys(outbox)])) {
+    const items = [...(remote[sessionId] ?? []), ...(outbox[sessionId] ?? [])]
+    if (items.length > 0) queues[sessionId] = items
   }
-  void Storage.setItem(QUEUE_STORAGE_KEY, JSON.stringify(all))
+  return queues
 }
 
-export const useMessageQueueStore = create<MessageQueueState>((set, get) => ({
-  queues: {},
-  initialized: false,
-  paused: {},
+function cleaned(map: Record<string, QueuedMessage[]>) {
+  const next: Record<string, QueuedMessage[]> = {}
+  for (const [sid, msgs] of Object.entries(map)) if (msgs.length > 0) next[sid] = msgs
+  return next
+}
 
-  setPaused: (sessionId, paused) => {
-    if (Boolean(get().paused[sessionId]) === paused) return
-    set((s) => ({ paused: { ...s.paused, [sessionId]: paused } }))
-  },
+function persistOutbox(outbox: Record<string, QueuedMessage[]>) {
+  void Storage.setItem(OUTBOX_STORAGE_KEY, JSON.stringify(outbox))
+}
 
-  initialize: async () => {
-    try {
-      const raw = await Storage.getItem(QUEUE_STORAGE_KEY)
-      const data = raw ? JSON.parse(raw) : null
-      set({ queues: data ?? {}, initialized: true })
-    } catch {
-      set({ initialized: true })
+function isOnline(): boolean {
+  return useConnectionStore.getState().connection.status === 'connected'
+}
+
+async function sendOp(op: MessageQueueOp): Promise<boolean> {
+  try {
+    const res = await useConnectionStore.getState().wsClient.send({ type: 'queue:op', op })
+    return res.ok
+  } catch {
+    return false
+  }
+}
+
+export const useMessageQueueStore = create<MessageQueueState>((set, get) => {
+  function setOutbox(outbox: Record<string, QueuedMessage[]>) {
+    const next = cleaned(outbox)
+    persistOutbox(next)
+    set((s) => ({ outbox: next, queues: merge(s.remote, next) }))
+  }
+
+  function setRemote(remote: MessageQueueSnapshot) {
+    const next = cleaned(remote)
+    set((s) => ({ remote: next, queues: merge(next, s.outbox) }))
+  }
+
+  /** Online: vai para a fila do desktop (já aparece na tela, sem esperar o
+   *  eco). Sem conexão, ou se a entrega falhar: fica no outbox. */
+  function add(sessionId: string, msg: QueuedMessage, front: boolean) {
+    const toOutbox = () => {
+      const current = (get().outbox[sessionId] ?? []).filter((m) => m.id !== msg.id)
+      setOutbox({ ...get().outbox, [sessionId]: front ? [msg, ...current] : [...current, msg] })
     }
-  },
-
-  enqueue: (sessionId, msg) => {
-    set((state) => {
-      const current = state.queues[sessionId] ?? []
-      const next = { ...state.queues, [sessionId]: [...current, msg] }
-      persist(next)
-      return { queues: next }
-    })
-  },
-
-  requeueFront: (sessionId, msg) => {
-    set((state) => {
-      const current = (state.queues[sessionId] ?? []).filter((m) => m.id !== msg.id)
-      const next = { ...state.queues, [sessionId]: [msg, ...current] }
-      persist(next)
-      return { queues: next }
-    })
-  },
-
-  dequeue: (sessionId) => {
-    const state = get()
-    const current = state.queues[sessionId]
-    if (!current || current.length === 0) return undefined
-    const [head, ...rest] = current
-    const next = { ...state.queues, [sessionId]: rest }
-    const cleaned = { ...next }
-    for (const key of Object.keys(cleaned)) {
-      if (cleaned[key].length === 0) delete cleaned[key]
+    if (!isOnline()) {
+      toOutbox()
+      return
     }
-    persist(cleaned)
-    set({ queues: cleaned })
-    return head
-  },
-
-  peek: (sessionId) => {
-    const current = get().queues[sessionId]
-    return current && current.length > 0 ? current[0] : undefined
-  },
-
-  remove: (sessionId, msgId) => {
-    set((state) => {
-      const current = state.queues[sessionId]
-      if (!current) return state
-      const filtered = current.filter((m) => m.id !== msgId)
-      if (filtered.length === current.length) return state
-      const next = { ...state.queues, [sessionId]: filtered }
-      const cleaned = { ...next }
-      for (const key of Object.keys(cleaned)) {
-        if (cleaned[key].length === 0) delete cleaned[key]
-      }
-      persist(cleaned)
-      return { queues: cleaned }
-    })
-  },
-
-  hasPending: (sessionId) => {
-    const current = get().queues[sessionId]
-    if (!current || current.length === 0) return false
-    return current.some((m) => !m.scheduledAt || m.scheduledAt <= Date.now())
-  },
-
-  queueSize: (sessionId) => {
-    const current = get().queues[sessionId]
-    if (!current) return 0
-    return current.filter((m) => !m.scheduledAt).length
-  },
-
-  /** Processa a fila de todas as sessões. */
-  processAllQueues: () => {
-    const state = get()
-    for (const sessionId of Object.keys(state.queues)) {
-      state.processQueue(sessionId)
-    }
-  },
-
-  processQueue: (sessionId) => {
-    const state = get()
-    const current = state.queues[sessionId]
-    if (!current || current.length === 0) return
-
-    const next = current[0]
-    if (next.scheduledAt && next.scheduledAt > Date.now()) return
-
-    if (state.paused[sessionId]) return
-    // Offline a mensagem fica onde está. Antes ela saía da fila, o envio via
-    // que não havia conexão e a enfileirava de novo — no FIM, trocando a ordem
-    // de quem estava esperando.
-    if (_isOnline && !_isOnline()) return
-    const status = _getStatus ? _getStatus(sessionId) : undefined
-    if (status && status !== 'idle' && status !== 'error') return
-
-    const msg = get().dequeue(sessionId)
-    if (!msg) return
-
-    if (_sendMessage) {
-      // Falha transitória ganha rodadas extras no engine, dentro do mesmo
-      // turno — a mensagem não aparece de novo no chat a cada tentativa.
-      void _sendMessage(msg.text, {
-        options: { ...msg.options, retries: MAX_QUEUE_RETRIES },
-        sessionId: msg.sessionId ?? sessionId,
-        directory: msg.directory,
-        extraDirectories: msg.extraDirectories,
-        files: msg.files,
-        queued: msg,
+    const current = get().remote[sessionId] ?? []
+    setRemote({ ...get().remote, [sessionId]: front ? [msg, ...current] : [...current, msg] })
+    void sendOp({ op: 'enqueue', sessionId, msg, front }).then((ok) => {
+      if (ok) return
+      // Não chegou: sai do espelho otimista e espera a próxima conexão.
+      setRemote({
+        ...get().remote,
+        [sessionId]: (get().remote[sessionId] ?? []).filter((m) => m.id !== msg.id),
       })
-    }
-  },
+      toOutbox()
+    })
+  }
 
-  enqueueForSend: (sessionId, text, options, mode, extra) => {
-    const msg: QueuedMessage = {
-      id: `q_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`,
-      text,
-      files: extra?.files?.length ? extra.files : undefined,
-      options,
-      mode,
-      sessionId,
-      directory: extra?.directory,
-      extraDirectories: extra?.extraDirectories,
-      createdAt: Date.now(),
-    }
-    get().enqueue(sessionId, msg)
-  },
-
-  enqueueScheduled: (sessionId, text, options, mode, scheduledAt, extra) => {
-    const msg: QueuedMessage = {
-      id: `q_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`,
+  function build(
+    sessionId: string,
+    text: string,
+    options: SendMessageOptions,
+    mode: SessionMode,
+    extra?: { directory?: string; extraDirectories?: string[]; files?: FilePart[] },
+    scheduledAt?: number,
+  ): QueuedMessage {
+    return {
+      id: newQueueId(),
       text,
       files: extra?.files?.length ? extra.files : undefined,
       options,
@@ -251,40 +148,72 @@ export const useMessageQueueStore = create<MessageQueueState>((set, get) => ({
       extraDirectories: extra?.extraDirectories,
       createdAt: Date.now(),
     }
-    get().enqueue(sessionId, msg)
-  },
-
-  onSessionIdle: (sessionId) => {
-    // Sem reenvio daqui: o engine já repete o turno em segundo plano, e
-    // reenviar duplicava a mensagem no chat a cada tentativa.
-    get().processQueue(sessionId)
-  },
-}))
-
-let schedulerTimer: ReturnType<typeof setInterval> | null = null
-
-export function startMessageScheduler() {
-  if (schedulerTimer) return
-
-  useMessageQueueStore.getState().initialize()
-
-  schedulerTimer = setInterval(() => {
-    const state = useMessageQueueStore.getState()
-    const sessionIds = Object.keys(state.queues)
-    if (sessionIds.length === 0) return
-    // Com mensagem esperando, confere no desktop quem ainda roda antes de
-    // decidir: se o `status: idle` se perdeu, a fila ficaria parada para
-    // sempre atrás de um "streaming" que já acabou.
-    const refresh = _isOnline?.() && _refreshRunning ? _refreshRunning() : Promise.resolve()
-    void refresh.finally(() => {
-      for (const sessionId of sessionIds) useMessageQueueStore.getState().processQueue(sessionId)
-    })
-  }, 15_000)
-}
-
-export function stopMessageScheduler() {
-  if (schedulerTimer) {
-    clearInterval(schedulerTimer)
-    schedulerTimer = null
   }
-}
+
+  return {
+    remote: {},
+    outbox: {},
+    queues: {},
+    initialized: false,
+
+    initialize: async () => {
+      if (get().initialized) return
+      try {
+        const raw = await Storage.getItem(OUTBOX_STORAGE_KEY)
+        const outbox = cleaned(raw ? (JSON.parse(raw) as Record<string, QueuedMessage[]>) : {})
+        set((s) => ({ outbox, queues: merge(s.remote, outbox), initialized: true }))
+      } catch {
+        set({ initialized: true })
+      }
+    },
+
+    applySync: (queues) => setRemote(queues),
+
+    fetchRemote: async () => {
+      try {
+        const res = await useConnectionStore.getState().wsClient.send({ type: 'queue:get' })
+        if (res.ok && res.data) setRemote(res.data as MessageQueueSnapshot)
+      } catch {
+        // O próximo 'queue:change' traz a fila.
+      }
+    },
+
+    flushOutbox: async () => {
+      await get().initialize()
+      for (const [sessionId, msgs] of Object.entries(get().outbox)) {
+        for (const msg of msgs) {
+          if (!isOnline()) return
+          // O desktop ignora um id que já tem: reentregar depois de uma
+          // resposta perdida não duplica a mensagem.
+          if (!(await sendOp({ op: 'enqueue', sessionId, msg }))) return
+          setOutbox({
+            ...get().outbox,
+            [sessionId]: (get().outbox[sessionId] ?? []).filter((m) => m.id !== msg.id),
+          })
+        }
+      }
+    },
+
+    enqueueForSend: (sessionId, text, options, mode, extra) => {
+      add(sessionId, build(sessionId, text, options, mode, extra), false)
+    },
+
+    enqueueScheduled: (sessionId, text, options, mode, scheduledAt, extra) => {
+      add(sessionId, build(sessionId, text, options, mode, extra, scheduledAt), false)
+    },
+
+    enqueueFront: (sessionId, msg) => add(sessionId, msg, true),
+
+    remove: (sessionId, msgId) => {
+      if (get().outbox[sessionId]?.some((m) => m.id === msgId)) {
+        setOutbox({ ...get().outbox, [sessionId]: get().outbox[sessionId].filter((m) => m.id !== msgId) })
+        return
+      }
+      setRemote({
+        ...get().remote,
+        [sessionId]: (get().remote[sessionId] ?? []).filter((m) => m.id !== msgId),
+      })
+      void sendOp({ op: 'remove', sessionId, msgId })
+    },
+  }
+})

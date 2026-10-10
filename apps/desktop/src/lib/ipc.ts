@@ -10,7 +10,7 @@ import type {
   SessionRevert,
 } from "@shared/chat"
 import type { AppSettings } from "@shared/app-settings"
-import type { AppPreferences, ChatModeKey, ModelReasoningPref, ReasoningPrefsMap, SessionModeOverrides, WorkerConfigSnapshot } from "@shared/companion"
+import type { AppPreferences, ChatModeKey, MessageQueueOp, MessageQueueSnapshot, ModelReasoningPref, ReasoningPrefsMap, SessionModeOverrides, WorkerConfigSnapshot } from "@shared/companion"
 import type { McpConfig, McpServerStatus } from "@shared/mcp"
 import type { DocumentDownload, MediaEntry, MediaFilter, MediaUsage } from "@shared/media"
 import type {
@@ -287,6 +287,18 @@ export const reasoningApi = {
       listener(data as { providerId: string; modelId: string; pref: ModelReasoningPref }),
     )
     return () => window.ipcRenderer.off("companion:reasoning-select", wrapper)
+  },
+}
+
+/** Fila de mensagens compartilhada com os companions: o renderer empurra a
+ *  fila inteira e aplica as operações feitas no celular (WS 'queue:op'). */
+export const messageQueueApi = {
+  sync: (queues: MessageQueueSnapshot) => {
+    window.ipcRenderer?.send("companion:message-queue", queues)
+  },
+  onOp: (listener: (op: MessageQueueOp) => void) => {
+    const wrapper = window.ipcRenderer.on("companion:queue-op", (data) => listener(data as MessageQueueOp))
+    return () => window.ipcRenderer.off("companion:queue-op", wrapper)
   },
 }
 

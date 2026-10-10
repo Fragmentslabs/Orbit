@@ -1,5 +1,5 @@
 import { create } from "zustand"
-import { storage } from "@/src/lib/ipc"
+import { chatApi, storage } from "@/src/lib/ipc"
 import type { FilePart, QueuedMessage, SessionMode, SendMessageOptions } from "@shared/chat"
 import { StorageKeys } from "@shared/chat"
 import { useSessionStore } from "@/src/stores/session-store"
@@ -16,6 +16,9 @@ interface MessageQueueState {
 
   initialize: () => Promise<void>
   enqueue: (sessionId: string, msg: QueuedMessage) => void
+  /** Põe um item novo na FRENTE da fila (o celular recebeu "sessão ocupada"
+   *  ao enviar: a mensagem era para sair agora, então fura a fila). */
+  enqueueFront: (sessionId: string, msg: QueuedMessage) => void
   dequeue: (sessionId: string) => QueuedMessage | undefined
   peek: (sessionId: string) => QueuedMessage | undefined
   remove: (sessionId: string, msgId: string) => void
@@ -55,13 +58,16 @@ interface MessageQueueState {
   onSessionIdle: (sessionId: string) => void
 }
 
+/** A fila inteira vai para o disco — não só as agendadas: ela é a fila de
+ *  todos os aparelhos, e fechar o desktop não pode apagar o que a pessoa
+ *  deixou esperando (no celular ou aqui). Ao reabrir, os itens saem quando a
+ *  sessão estiver livre, pelo agendador. */
 function persist(queues: Record<string, QueuedMessage[]>) {
-  const scheduled: Record<string, QueuedMessage[]> = {}
+  const all: Record<string, QueuedMessage[]> = {}
   for (const [sid, msgs] of Object.entries(queues)) {
-    const sched = msgs.filter((m) => m.scheduledAt)
-    if (sched.length > 0) scheduled[sid] = sched
+    if (msgs.length > 0) all[sid] = msgs
   }
-  void storage.write(QUEUE_STORAGE_KEY, scheduled)
+  void storage.write(QUEUE_STORAGE_KEY, all)
 }
 
 export const useMessageQueueStore = create<MessageQueueState>((set, get) => ({
@@ -70,14 +76,34 @@ export const useMessageQueueStore = create<MessageQueueState>((set, get) => ({
   initialized: false,
 
   initialize: async () => {
-    const data = await storage.read<Record<string, QueuedMessage[]>>(QUEUE_STORAGE_KEY)
-    set({ queues: data ?? {}, initialized: true })
+    const data = (await storage.read<Record<string, QueuedMessage[]>>(QUEUE_STORAGE_KEY)) ?? {}
+    // O que entrou enquanto o disco era lido (ex.: o celular entregando o que
+    // escreveu offline logo na abertura) vai depois do que já estava salvo —
+    // e o resultado é regravado, porque o persist desse item já tinha
+    // sobrescrito o arquivo só com ele.
+    const queues: Record<string, QueuedMessage[]> = { ...data }
+    for (const [sid, msgs] of Object.entries(get().queues)) {
+      const saved = queues[sid] ?? []
+      const ids = new Set(saved.map((m) => m.id))
+      queues[sid] = [...saved, ...msgs.filter((m) => !ids.has(m.id))]
+    }
+    persist(queues)
+    set({ queues, initialized: true })
   },
 
   enqueue: (sessionId, msg) => {
     set((state) => {
       const current = state.queues[sessionId] ?? []
       const next = { ...state.queues, [sessionId]: [...current, msg] }
+      persist(next)
+      return { queues: next }
+    })
+  },
+
+  enqueueFront: (sessionId, msg) => {
+    set((state) => {
+      const current = (state.queues[sessionId] ?? []).filter((m) => m.id !== msg.id)
+      const next = { ...state.queues, [sessionId]: [msg, ...current] }
       persist(next)
       return { queues: next }
     })
@@ -206,8 +232,29 @@ export const useMessageQueueStore = create<MessageQueueState>((set, get) => ({
     const status = useSessionStore.getState().status[sessionId]
     if (status && status !== "idle") return
 
-    const msg = get().dequeue(sessionId)
-    if (msg) send(sessionId, msg)
+    // O status do renderer não basta: o loop emite idle ao fim de cada
+    // iteração e segue rodando, e o idle do fim do turno sai um instante antes
+    // de o main liberar a sessão. Um envio nessa hora abortava o turno no
+    // meio — quem diz se a sessão está livre é o main.
+    if (checking.has(sessionId)) return
+    checking.add(sessionId)
+    void chatApi
+      .running()
+      .catch(() => [] as string[])
+      .then((running) => {
+        checking.delete(sessionId)
+        if (running.includes(sessionId)) {
+          scheduleRecheck(sessionId)
+          return
+        }
+        // Reconfere depois do await: a fila ou o status podem ter mudado.
+        const head = get().queues[sessionId]?.[0]
+        if (!head || (head.scheduledAt && head.scheduledAt > Date.now())) return
+        const now = useSessionStore.getState().status[sessionId]
+        if (now && now !== "idle") return
+        const msg = get().dequeue(sessionId)
+        if (msg) send(sessionId, msg)
+      })
   },
 
   sendNow: (sessionId, msgId) => {
@@ -259,6 +306,24 @@ export const useMessageQueueStore = create<MessageQueueState>((set, get) => ({
     get().processQueue(sessionId)
   },
 }))
+
+/** Sessões com a checagem de "rodando no main" em voo — evita dois envios. */
+const checking = new Set<string>()
+const recheckTimers = new Map<string, ReturnType<typeof setTimeout>>()
+const BUSY_RECHECK_MS = 2_500
+
+/** Sessão ainda rodando no main: tenta de novo em instantes, enquanto ela
+ *  rodar (o idle que destravaria a fila pode já ter passado). */
+function scheduleRecheck(sessionId: string) {
+  if (recheckTimers.has(sessionId)) return
+  recheckTimers.set(
+    sessionId,
+    setTimeout(() => {
+      recheckTimers.delete(sessionId)
+      useMessageQueueStore.getState().processQueue(sessionId)
+    }, BUSY_RECHECK_MS),
+  )
+}
 
 /** A pessoa não está olhando quando um item da fila sai: falha transitória
  *  ganha rodadas extras no engine, dentro do mesmo turno (quantas: Preferências). */

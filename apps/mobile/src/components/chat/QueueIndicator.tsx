@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react'
 import { View, Text, Pressable, LayoutAnimation, Platform, UIManager } from 'react-native'
-import { CalendarIcon, ListPlus, ChevronDown } from 'lucide-react-native'
+import { CalendarIcon, ListPlus, ChevronDown, X } from 'lucide-react-native'
 import { useTranslation } from 'react-i18next'
 import type { TFunction } from 'i18next'
 import { useMessageQueueStore } from '~/stores/message-queue-store'
@@ -30,8 +30,16 @@ export function QueueIndicator({ sessionId }: QueueIndicatorProps) {
   const { t, i18n } = useTranslation()
   const tokens = getThemeTokens(useThemeStore((s) => s.resolved))
   const queues = useMessageQueueStore((s) => s.queues)
+  const outbox = useMessageQueueStore((s) => s.outbox)
+  const remove = useMessageQueueStore((s) => s.remove)
   const [expanded, setExpanded] = useState(false)
   const items = sessionId ? queues[sessionId] : undefined
+  // A fila é a mesma do desktop; o que ainda não chegou lá (escrito sem
+  // conexão) ganha um aviso no lugar do selo.
+  const pendentes = useMemo(
+    () => new Set((sessionId ? outbox[sessionId] : undefined)?.map((m) => m.id)),
+    [outbox, sessionId],
+  )
 
   const toggle = useMemo(() => {
     if (!items || items.length === 0) return null
@@ -86,8 +94,20 @@ export function QueueIndicator({ sessionId }: QueueIndicatorProps) {
                 {msg.text}
               </Text>
               <Text className="text-[10px]" style={{ color: tokens.mutedForeground, opacity: 0.6 }}>
-                {msg.scheduledAt ? formatSchedule(msg.scheduledAt, i18n.language, t) : t('queue.badge')}
+                {pendentes.has(msg.id)
+                  ? t('queue.offline')
+                  : msg.scheduledAt
+                    ? formatSchedule(msg.scheduledAt, i18n.language, t)
+                    : t('queue.badge')}
               </Text>
+              <Pressable
+                onPress={() => remove(sessionId!, msg.id)}
+                hitSlop={8}
+                accessibilityRole="button"
+                accessibilityLabel={t('queue.remove')}
+              >
+                <X size={13} color={tokens.mutedForeground} />
+              </Pressable>
             </View>
           ))}
         </View>

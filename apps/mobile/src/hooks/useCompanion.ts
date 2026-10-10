@@ -10,6 +10,7 @@ import type {
   SessionModeOverrides,
   WorkerConfigSnapshot,
   ReasoningPrefsMap,
+  MessageQueueChangeEvent,
 } from '@orbit/shared'
 import { useConnectionStore } from '../stores/connection-store'
 import { useMessageQueueStore } from '../stores/message-queue-store'
@@ -102,13 +103,12 @@ export function useCompanion() {
         // Quem ainda esta rodando no desktop — sem isto, conectar no meio de
         // uma execucao mostra a conversa parada (e reconectar depois dela
         // terminar deixa o spinner preso).
-        // A fila offline só sai depois desta resposta: com o status velho (ou
-        // vazio, logo após abrir o app) ela mandava a mensagem com o desktop
-        // ainda no meio de um turno — e um envio novo aborta o turno atual.
-        void useSessionStore
-          .getState()
-          .fetchRunningSessions()
-          .finally(() => useMessageQueueStore.getState().processAllQueues())
+        void useSessionStore.getState().fetchRunningSessions()
+        // Fila compartilhada: o espelho da fila do desktop, e a entrega do que
+        // foi escrito aqui sem conexão (o desktop envia quando a sessão ficar
+        // livre — o celular nunca dispara a fila por conta própria).
+        void useMessageQueueStore.getState().fetchRemote()
+        void useMessageQueueStore.getState().flushOutbox()
         void useSessionStore.getState().fetchFolders()
         void useSettingsStore.getState().fetchSelectedModel()
         void useSettingsStore.getState().fetchPreferences()
@@ -193,6 +193,13 @@ export function useCompanion() {
       if (msg?.prefs) applyAppPreferences(msg.prefs)
     })
 
+    // queue:change → fila de mensagens compartilhada, mudada no desktop ou em
+    // outro aparelho
+    const unsubQueue = conn.onEvent('queue:change', (event) => {
+      const msg = event as Partial<MessageQueueChangeEvent>
+      if (msg?.queues) useMessageQueueStore.getState().applySync(msg.queues)
+    })
+
     // rotinas:event → rotinas store (criar/editar/excluir/execução pelo scheduler)
     const unsubRotinas = conn.onEvent('rotinas:event', (event) => {
       const msg = event as RotinaEventMessage
@@ -217,6 +224,7 @@ export function useCompanion() {
       unsubReasoning()
       unsubWorkerConfig()
       unsubPrefs()
+      unsubQueue()
       unsubRotinas()
       unsubEsteira()
     }
