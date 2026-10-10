@@ -93,3 +93,14 @@ async function carregarAgora(pasta: string): Promise<ListaWorktrees | null> {
     set((s) => ({ carregando: { ...s.carregando, [pasta]: false } }))
   }
 }
+
+/**
+ * Pastas do chat ativo depois que a pasta principal dele mudou fora da tela
+ * (o agente trocou de worktree). A sessão em disco só tem as extras do último
+ * envio; o workspace tem as atuais — uma pasta associada (ou removida) depois
+ * daquele envio só existe nele. Por isso as extras vêm do workspace: copiar
+ * a sessão perderia a pasta recém-associada e traria de volta a removida.
+ */
+export function pastasAposTroca(principal: string, pastasDoWorkspace: string[]): string[] {
+  return [principal, ...new Set(pastasDoWorkspace.slice(1).filter((p) => p !== principal))]
+}
