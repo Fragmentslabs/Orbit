@@ -65,7 +65,14 @@ export function SidebarResizeHandle({ active = true }: SidebarResizeHandleProps)
       document.body.style.cursor = "col-resize"
 
       const startX = e.clientX
-      const startWidth = wrapper.getBoundingClientRect().width
+      // A largura de partida é a da SIDEBAR (o vão que ela reserva no layout),
+      // não a do wrapper — ele envolve o app inteiro, e medir nele fazia o
+      // primeiro movimento saltar para o teto, como se a largura fosse fixa.
+      const gap = wrapper.querySelector<HTMLElement>('[data-slot="sidebar-gap"]')
+      const startWidth =
+        gap?.getBoundingClientRect().width ||
+        Number.parseFloat(getComputedStyle(wrapper).getPropertyValue("--sidebar-width")) ||
+        useAppSettings.getState().settings.sidebarWidth
       const widthAt = (clientX: number) => clampSidebarWidth(startWidth + (clientX - startX))
 
       const onMove = (ev: PointerEvent) => {
