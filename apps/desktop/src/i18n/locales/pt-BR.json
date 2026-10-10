@@ -1801,6 +1801,12 @@
       "onlyThis": "Excluir só a v{{version}}"
     }
   },
+  "excluirChat": {
+    "worktree": "Este chat trabalhava no worktree {{nome}} ({{branch}}).",
+    "removerWorktree": "Remover o worktree também",
+    "descartar": "Entendo que isso será perdido",
+    "perdas": "Será perdido: {{itens}}."
+  },
   "worktree": {
     "titulo": "Worktree",
     "principal": "Principal",

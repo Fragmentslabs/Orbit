@@ -8,7 +8,6 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { Button } from "@/components/ui/button"
-import { ConfirmDialog } from "@/components/ui/alert-dialog"
 import {
   Dialog,
   DialogContent,
@@ -20,6 +19,7 @@ import { Input } from "@/components/ui/input"
 import type { SessionInfo } from "@shared/chat"
 import { BranchSelector } from "@/src/components/branch-selector"
 import { WorktreeSelector } from "@/src/components/worktree-selector"
+import { ExcluirChatDialog } from "@/src/components/excluir-chat-dialog"
 import { BrowserTestChip } from "@/src/components/browser-test-chip"
 import { FolderSelector } from "@/src/components/folder-selector"
 import { CompactWorkspaceSelector } from "@/src/components/workspace-selector-compact"
@@ -209,15 +209,7 @@ export function ChatHeader({ title, hasMenu, session, sessionId, rightPanelOpen,
             initialValue={session.title}
             onSubmit={(value) => useSessionStore.getState().renameSession(session.id, value)}
           />
-          <ConfirmDialog
-            open={confirmDelete}
-            onOpenChange={setConfirmDelete}
-            title={t("sidebar.session.deleteTitle")}
-            description={t("sidebar.session.deleteDescription", { title: session.title })}
-            confirmLabel={t("sidebar.session.confirmDelete")}
-            destructive
-            onConfirm={() => void useSessionStore.getState().deleteSession(session.id)}
-          />
+          <ExcluirChatDialog session={session} open={confirmDelete} onOpenChange={setConfirmDelete} />
         </>
       )}
     </div>

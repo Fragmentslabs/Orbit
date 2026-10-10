@@ -59,6 +59,7 @@ import {
 import { cn } from "@/lib/utils"
 import { useTheme } from "@/components/theme-provider"
 import { useWorkspace, WorkspaceMode } from "@/lib/workspace-context"
+import { ExcluirChatDialog } from "@/src/components/excluir-chat-dialog"
 import { usePanelStore } from "@/src/stores/panel-store"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
@@ -701,7 +702,6 @@ function SessionRow({ session, button: ButtonComponent, buttonClassName, actionB
   const pendingAsks = useSessionStore((s) => s.pendingAsks)
   const togglePin = useSessionStore((s) => s.togglePin)
   const toggleArchive = useSessionStore((s) => s.toggleArchive)
-  const deleteSession = useSessionStore((s) => s.deleteSession)
   const renameSession = useSessionStore((s) => s.renameSession)
   const forkSession = useSessionStore((s) => s.forkSession)
   const { selectionMode, selectedIds, toggle, enterSelectionMode } = useSelection()
@@ -844,15 +844,7 @@ function SessionRow({ session, button: ButtonComponent, buttonClassName, actionB
         buttonClassName={cn("w-0 overflow-hidden group-hover/menu-row:w-5", actionButtonClassName)}
         items={menuItems}
       />
-      <ConfirmDialog
-        open={confirmDelete}
-        onOpenChange={setConfirmDelete}
-        title={t("sidebar.session.deleteTitle")}
-        description={t("sidebar.session.deleteDescription", { title: session.title })}
-        confirmLabel={t("sidebar.session.confirmDelete")}
-        destructive
-        onConfirm={() => void deleteSession(session.id)}
-      />
+      <ExcluirChatDialog session={session} open={confirmDelete} onOpenChange={setConfirmDelete} />
       <PromptDialog
         open={renaming}
         onOpenChange={setRenaming}

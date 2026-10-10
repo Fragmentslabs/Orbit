@@ -1802,6 +1802,12 @@
       "onlyThis": "Delete only v{{version}}"
     }
   },
+  "excluirChat": {
+    "worktree": "This chat worked in the {{nome}} worktree ({{branch}}).",
+    "removerWorktree": "Also remove the worktree",
+    "descartar": "I understand this will be lost",
+    "perdas": "Will be lost: {{itens}}."
+  },
   "worktree": {
     "titulo": "Worktree",
     "principal": "Main",
