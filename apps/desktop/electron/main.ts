@@ -20,6 +20,7 @@ import { getModelsSnapshot, invalidateModelsSnapshot } from './lib/models'
 import { revert as revertSession, unrevert as unrevertSession } from './lib/session/revert'
 import { abortProjectInit, getInitStatus, runProjectInit, type RunInitInput } from './lib/project-init'
 import { createRemoteRepo } from './lib/github-repo'
+import { discoverGitRepos } from './lib/git-repos'
 import { compactSession, getRunningSessionIds } from './lib/chat-engine'
 import { getLoopRunningSessionIds } from './lib/loop-engine'
 import { replyOrResume } from './lib/ask-resume'
@@ -1040,10 +1041,12 @@ async function getGitStatus(
       // Registro "XY path" — com -z o path não sofre escaping (path separado por \0).
       const code = raw.slice(0, 2)
       const path = raw.slice(3)
-      // Rename/copy com -z: "R  old\0new\0" — o campo seguinte é o path novo.
+      // Rename/copy com -z: "R  novo\0antigo\0" — o -z INVERTE a ordem do
+      // formato legível ("antigo -> novo"), então o primeiro campo já é o
+      // caminho que existe agora; o seguinte é o antigo, que saiu do disco.
       if ((code.startsWith('R') || code.startsWith('C')) && parts[i + 1]) {
         entries.push({
-          path: parts[i + 1],
+          path,
           status: code.startsWith('R') ? 'renamed' : 'added',
         })
         i++
@@ -1052,6 +1055,123 @@ async function getGitStatus(
       entries.push({ path, status: classifyGitStatus(code) })
     }
     return { ok: true, entries }
+  } catch (err) {
+    return { ok: false, error: (err as Error).message }
+  }
+}
+
+/**
+ * Linhas adicionadas/removidas por arquivo, do working tree contra o HEAD.
+ *
+ * Alimenta o "+N -N" da lista de alterações. Arquivos não rastreados ficam de
+ * fora: não existem em nenhuma árvore do git, então não há com o que comparar —
+ * para eles a lista mostra só o indicador de status.
+ */
+async function getWorkingNumstat(
+  repoPath: string,
+): Promise<
+  | { ok: true; stats: Record<string, { added: number; deleted: number }> }
+  | { ok: false; error: string }
+> {
+  try {
+    // --no-renames: um rename vira excluído + adicionado, cada lado com um
+    // caminho simples. Sem isso o git escreve "dir/{antigo => novo}", que não
+    // casa com o caminho que o `git status` reporta.
+    const { stdout } = await runGit(
+      repoPath,
+      ['diff', 'HEAD', '--numstat', '--no-renames'],
+      30_000,
+    )
+    const stats: Record<string, { added: number; deleted: number }> = {}
+    for (const line of stdout.split('\n')) {
+      if (!line) continue
+      const [addedRaw, deletedRaw, ...pathParts] = line.split('\t')
+      const path = pathParts.join('\t')
+      if (!path) continue
+      const added = Number(addedRaw)
+      const deleted = Number(deletedRaw)
+      // Binário: o git escreve "-" nos dois campos.
+      if (!Number.isFinite(added) || !Number.isFinite(deleted)) continue
+      stats[path] = { added, deleted }
+    }
+
+    // Arquivo não rastreado não aparece no diff contra o HEAD: o git só sabe
+    // contá-lo comparando com o vazio, e isso é um comando por arquivo. O teto
+    // existe porque uma árvore com centenas de arquivos novos viraria centenas
+    // de processos só para desenhar um número.
+    const { stdout: others } = await runGit(
+      repoPath,
+      ['ls-files', '--others', '--exclude-standard'],
+      20_000,
+    )
+    const novos = others.split('\n').filter(Boolean).slice(0, 40)
+    await Promise.all(
+      novos.map(async (rel) => {
+        const apply = (stdout: string) => {
+          const [addedRaw, deletedRaw] = stdout.split('\t')
+          const added = Number(addedRaw)
+          const deleted = Number(deletedRaw)
+          if (!Number.isFinite(added) || !Number.isFinite(deleted)) return
+          stats[rel] = { added, deleted }
+        }
+        try {
+          const { stdout } = await runGit(
+            repoPath,
+            ['diff', '--no-index', '--numstat', '--', '/dev/null', rel],
+            15_000,
+          )
+          apply(stdout)
+        } catch (err) {
+          // `--no-index` sai com código 1 quando há diferenças — o stdout
+          // ainda traz o numstat.
+          const e = err as { stdout?: string }
+          if (e.stdout) apply(e.stdout)
+        }
+      }),
+    )
+
+    return { ok: true, stats }
+  } catch (err) {
+    return { ok: false, error: (err as Error).message }
+  }
+}
+
+/**
+ * Patch completo do working tree: tudo o que a lista de alterações mostra, num
+ * comando só. Os não rastreados entram depois, um a um — o diff contra o HEAD
+ * não os enxerga, e sem eles a visão empilhada ficaria com buracos que a lista
+ * ao lado anuncia.
+ */
+async function getWorkingDiff(
+  repoPath: string,
+): Promise<{ ok: true; patch: string } | { ok: false; error: string }> {
+  try {
+    const { stdout } = await runGit(repoPath, ['diff', 'HEAD'], 60_000)
+    const { stdout: others } = await runGit(
+      repoPath,
+      ['ls-files', '--others', '--exclude-standard'],
+      20_000,
+    )
+    const patches = await Promise.all(
+      others
+        .split('\n')
+        .filter(Boolean)
+        .map(async (rel) => {
+          try {
+            const { stdout: out } = await runGit(
+              repoPath,
+              ['diff', '--no-index', '--', '/dev/null', rel],
+              20_000,
+            )
+            return out
+          } catch (err) {
+            // `--no-index` sai com código 1 quando há diferenças.
+            const e = err as { stdout?: string }
+            return e.stdout ?? ''
+          }
+        }),
+    )
+    return { ok: true, patch: [stdout, ...patches].filter(Boolean).join('\n') }
   } catch (err) {
     return { ok: false, error: (err as Error).message }
   }
@@ -1392,6 +1512,17 @@ app.whenReady().then(() => {
     shell.showItemInFolder(filePath)
   })
 
+  // Quais repositórios vivem nesta pasta de trabalho: a própria pasta quando é
+  // repo, mais as subpastas com git próprio (front/back de um espaço). O painel
+  // usa a lista para escolher com quem falar; sem lista, fala com a raiz.
+  ipcMain.handle('git:repos', async (_event, root: string) => {
+    try {
+      return { ok: true as const, repos: await discoverGitRepos(root) }
+    } catch (err) {
+      return { ok: false as const, error: (err as Error).message }
+    }
+  })
+
   ipcMain.handle('git:log', async (_event, repoPath: string, skip?: number) => {
     return getGitLog(repoPath, skip ?? 0)
   })
@@ -1402,6 +1533,14 @@ app.whenReady().then(() => {
 
   ipcMain.handle('git:status', async (_event, repoPath: string) => {
     return getGitStatus(repoPath)
+  })
+
+  ipcMain.handle('git:workingNumstat', async (_event, repoPath: string) => {
+    return getWorkingNumstat(repoPath)
+  })
+
+  ipcMain.handle('git:workingDiff', async (_event, repoPath: string) => {
+    return getWorkingDiff(repoPath)
   })
 
   ipcMain.handle('git:diffWorkingFile', async (_event, repoPath: string, relPath: string) => {

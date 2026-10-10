@@ -1,37 +1,62 @@
-import { useCallback, useEffect, useMemo } from "react"
-import { useTranslation } from "react-i18next"
-import { useDroppable, useDndContext } from "@dnd-kit/core"
-import { CodeXml, FileCode, FileText, Globe, Folder, Images, Library, Quote, MessageSquare, Terminal, X, PlusIcon, Bot, LoaderIcon, Loader2, XCircleIcon, Trash2, GripVertical } from "lucide-react"
-import { ChatView } from "@/src/components/chat-view"
-import { ChatInput } from "@/src/components/chat-input"
-import { BranchSelector } from "@/src/components/branch-selector"
-import { FolderSelector } from "@/src/components/folder-selector"
-import { CompactWorkspaceSelector } from "@/src/components/workspace-selector-compact"
-import type { SendMessageOptions, FilePart } from "@shared/chat"
-import { ManagedTerminalTab } from "@/src/components/terminal-tab"
-import { BrowserTab } from "@/src/components/browser-tab"
-import { destroyWebview } from "@/src/components/browser/webview-session"
-import { FoldersTab } from "@/src/components/folders-tab"
-import { DiffTab } from "@/src/components/diff-tab"
-import { MediaGallery } from "@/src/components/media-gallery"
-import { ProcessTab } from "@/src/components/process-tab"
-import { ArtifactTab } from "@/src/components/artifact-tab"
-import { DocumentTab } from "@/src/components/document-tab"
-import { SourcesTab } from "@/src/components/sources-tab"
-import { SourceViewer } from "@/src/components/source-viewer"
+import { useCallback, useEffect, useMemo } from "react";
+import { useTranslation } from "react-i18next";
+import { useDroppable, useDndContext } from "@dnd-kit/core";
+import {
+  CodeXml,
+  FileCode,
+  FileText,
+  Globe,
+  Folder,
+  Images,
+  Library,
+  Quote,
+  MessageSquare,
+  Terminal,
+  X,
+  PlusIcon,
+  Bot,
+  LoaderIcon,
+  Loader2,
+  XCircleIcon,
+  Trash2,
+  GripVertical,
+} from "lucide-react";
+import { ChatView } from "@/src/components/chat-view";
+import { ChatInput } from "@/src/components/chat-input";
+import { BranchSelector } from "@/src/components/branch-selector";
+import { FolderSelector } from "@/src/components/folder-selector";
+import { CompactWorkspaceSelector } from "@/src/components/workspace-selector-compact";
+import type { SendMessageOptions, FilePart } from "@shared/chat";
+import { ManagedTerminalTab } from "@/src/components/terminal-tab";
+import { BrowserTab } from "@/src/components/browser-tab";
+import { destroyWebview } from "@/src/components/browser/webview-session";
+import { FoldersTab } from "@/src/components/folders-tab";
+import { DiffTab } from "@/src/components/diff-tab";
+import { MediaGallery } from "@/src/components/media-gallery";
+import { ProcessTab } from "@/src/components/process-tab";
+import { ArtifactTab } from "@/src/components/artifact-tab";
+import { DocumentTab } from "@/src/components/document-tab";
+import { SourcesTab } from "@/src/components/sources-tab";
+import { SourceViewer } from "@/src/components/source-viewer";
 
-import { useWorkspace, type WorkspaceMode } from "@/lib/workspace-context"
-import { usePanelStore, nextTabId, ORPHAN_KEY, type TabType, type PanelTab } from "@/src/stores/panel-store"
-import { useSessionStore } from "@/src/stores/session-store"
-import { useProcessStore } from "@/src/stores/process-store"
-import { useTerminalStore } from "@/src/stores/terminal-store"
-import { useAppearanceStore } from "@/src/stores/appearance-store"
-import { cn } from "@/lib/utils"
+import { useWorkspace, type WorkspaceMode } from "@/lib/workspace-context";
+import {
+  usePanelStore,
+  nextTabId,
+  ORPHAN_KEY,
+  type TabType,
+  type PanelTab,
+} from "@/src/stores/panel-store";
+import { useSessionStore } from "@/src/stores/session-store";
+import { useProcessStore } from "@/src/stores/process-store";
+import { useTerminalStore } from "@/src/stores/terminal-store";
+import { useAppearanceStore } from "@/src/stores/appearance-store";
+import { cn } from "@/lib/utils";
 
 interface TabMeta {
-  icon: typeof MessageSquare
-  label: string
-  description: string
+  icon: typeof MessageSquare;
+  label: string;
+  description: string;
 }
 
 /**
@@ -52,100 +77,208 @@ interface TabMeta {
 function isSelectableTab(type: TabType, mode: WorkspaceMode): boolean {
   // "process" também nunca entra: uma aba de processo só existe acompanhando um
   // processo que já está rodando (abre pelo card no rodapé do selector).
-  if (type === "artifact" || type === "source" || type === "document" || type === "process") return false
-  if (mode === "code") return true
-  return type === "chat" || type === "media" || type === "sources"
+  //
+  // "diff" saiu junto: ela só existe apontando para UMA mensagem do chat ou UMA
+  // task da esteira. As mudanças ATUAIS se leem na aba de pastas (Alterações), e
+  // o diff de um turno é contexto da conversa — não uma aba que se abre vazia.
+  if (
+    type === "artifact" ||
+    type === "source" ||
+    type === "document" ||
+    type === "process" ||
+    type === "diff"
+  )
+    return false;
+  if (mode === "code") return true;
+  return type === "chat" || type === "media" || type === "sources";
 }
 
 function useTabMeta(): Record<TabType, TabMeta> {
-  const { t } = useTranslation()
+  const { t } = useTranslation();
   return {
-    chat: { icon: MessageSquare, label: t("panel.tabs.chat.label"), description: t("panel.tabs.chat.description") },
-    terminal: { icon: Terminal, label: t("panel.tabs.terminal.label"), description: t("panel.tabs.terminal.description") },
-    process: { icon: Loader2, label: t("panel.tabs.process.label"), description: t("panel.tabs.process.description") },
-    folders: { icon: Folder, label: t("panel.tabs.folders.label"), description: t("panel.tabs.folders.description") },
-    browser: { icon: Globe, label: t("panel.tabs.browser.label"), description: t("panel.tabs.browser.description") },
-    diff: { icon: FileCode, label: t("panel.tabs.diff.label"), description: t("panel.tabs.diff.description") },
-    media: { icon: Images, label: t("panel.tabs.media.label"), description: t("panel.tabs.media.description") },
-    artifact: { icon: CodeXml, label: t("panel.tabs.artifact.label"), description: t("panel.tabs.artifact.description") },
-    sources: { icon: Library, label: t("panel.tabs.sources.label"), description: t("panel.tabs.sources.description") },
-    source: { icon: Quote, label: t("panel.tabs.source.label"), description: t("panel.tabs.source.description") },
-    document: { icon: FileText, label: t("panel.tabs.document.label"), description: t("panel.tabs.document.description") },
-  }
+    chat: {
+      icon: MessageSquare,
+      label: t("panel.tabs.chat.label"),
+      description: t("panel.tabs.chat.description"),
+    },
+    terminal: {
+      icon: Terminal,
+      label: t("panel.tabs.terminal.label"),
+      description: t("panel.tabs.terminal.description"),
+    },
+    process: {
+      icon: Loader2,
+      label: t("panel.tabs.process.label"),
+      description: t("panel.tabs.process.description"),
+    },
+    folders: {
+      icon: Folder,
+      label: t("panel.tabs.folders.label"),
+      description: t("panel.tabs.folders.description"),
+    },
+    browser: {
+      icon: Globe,
+      label: t("panel.tabs.browser.label"),
+      description: t("panel.tabs.browser.description"),
+    },
+    diff: {
+      icon: FileCode,
+      label: t("panel.tabs.diff.label"),
+      description: t("panel.tabs.diff.description"),
+    },
+    media: {
+      icon: Images,
+      label: t("panel.tabs.media.label"),
+      description: t("panel.tabs.media.description"),
+    },
+    artifact: {
+      icon: CodeXml,
+      label: t("panel.tabs.artifact.label"),
+      description: t("panel.tabs.artifact.description"),
+    },
+    sources: {
+      icon: Library,
+      label: t("panel.tabs.sources.label"),
+      description: t("panel.tabs.sources.description"),
+    },
+    source: {
+      icon: Quote,
+      label: t("panel.tabs.source.label"),
+      description: t("panel.tabs.source.description"),
+    },
+    document: {
+      icon: FileText,
+      label: t("panel.tabs.document.label"),
+      description: t("panel.tabs.document.description"),
+    },
+  };
 }
 
 function NewChatTab({ onCreated }: { onCreated: (sessionId: string) => void }) {
-  const { t } = useTranslation()
-  const { folders, setFolders } = useWorkspace()
-  const handleSubmit = async (text: string, options: SendMessageOptions, files?: FilePart[]) => {
+  const { t } = useTranslation();
+  const { folders, setFolders } = useWorkspace();
+  const handleSubmit = async (
+    text: string,
+    options: SendMessageOptions,
+    files?: FilePart[],
+  ) => {
     if (folders.length > 0) {
       // Espelha o painel principal: novo chat com pasta vira sessão de código
-      const [directory, ...extraDirectories] = folders
-      const newSession = await useSessionStore.getState().createSession("code", { setActive: false, directory, extraDirectories })
-      onCreated(newSession.id)
-      await useSessionStore.getState().sendMessage("code", text, { options, sessionId: newSession.id, directory, extraDirectories, files })
+      const [directory, ...extraDirectories] = folders;
+      const newSession = await useSessionStore
+        .getState()
+        .createSession("code", {
+          setActive: false,
+          directory,
+          extraDirectories,
+        });
+      onCreated(newSession.id);
+      await useSessionStore
+        .getState()
+        .sendMessage("code", text, {
+          options,
+          sessionId: newSession.id,
+          directory,
+          extraDirectories,
+          files,
+        });
     } else {
-      const newSession = await useSessionStore.getState().createSession("chat", { setActive: false })
-      onCreated(newSession.id)
-      await useSessionStore.getState().sendMessage("chat", text, { options, sessionId: newSession.id, files })
+      const newSession = await useSessionStore
+        .getState()
+        .createSession("chat", { setActive: false });
+      onCreated(newSession.id);
+      await useSessionStore
+        .getState()
+        .sendMessage("chat", text, {
+          options,
+          sessionId: newSession.id,
+          files,
+        });
     }
-  }
+  };
 
   return (
-    <div className="flex flex-1 flex-col overflow-hidden p-4" style={{ '--panel-bg': 'var(--sidebar)' } as React.CSSProperties}>
+    <div
+      className="flex flex-1 flex-col overflow-hidden p-4"
+      style={{ "--panel-bg": "var(--sidebar)" } as React.CSSProperties}
+    >
       <div className="flex flex-wrap items-center gap-2 px-3 py-1.5">
         <FolderSelector folders={folders} onFoldersChange={setFolders} />
       </div>
       <div className="flex flex-1 flex-col items-center justify-center gap-4">
         <div className="flex flex-col items-center gap-2">
-          <p className="text-lg font-medium text-foreground">{t("panel.newChat.title")}</p>
-          <p className="text-sm text-muted-foreground">{t("panel.newChat.subtitle")}</p>
+          <p className="text-lg font-medium text-foreground">
+            {t("panel.newChat.title")}
+          </p>
+          <p className="text-sm text-muted-foreground">
+            {t("panel.newChat.subtitle")}
+          </p>
         </div>
       </div>
       <ChatInput onSubmit={handleSubmit} draftKey="panel" />
     </div>
-  )
+  );
 }
 
 /** Header de um chat aberto em aba: nome + pasta + branch, como o header do painel principal */
 function ChatTabHeader({ sessionId }: { sessionId?: string }) {
-  const session = useSessionStore((s) => (sessionId ? s.sessions.find((x) => x.id === sessionId) : undefined))
-  const setSessionDirectories = useSessionStore((s) => s.setSessionDirectories)
-  const setFolders = useWorkspace().setFolders
+  const session = useSessionStore((s) =>
+    sessionId ? s.sessions.find((x) => x.id === sessionId) : undefined,
+  );
+  const setSessionDirectories = useSessionStore((s) => s.setSessionDirectories);
+  const setFolders = useWorkspace().setFolders;
   const folders = useMemo(() => {
-    if (!session?.directory) return []
-    return [session.directory, ...(session.extraDirectories ?? [])]
-  }, [session])
+    if (!session?.directory) return [];
+    return [session.directory, ...(session.extraDirectories ?? [])];
+  }, [session]);
 
-  const handleAgentAction = useCallback((instruction: string) => {
-    if (!sessionId) return
-    const s = useSessionStore.getState().sessions.find((x) => x.id === sessionId)
-    void useSessionStore.getState().sendMessage("code", instruction, {
-      options: { simple: true },
-      sessionId,
-      directory: s?.directory,
-      extraDirectories: s?.extraDirectories,
-    })
-  }, [sessionId])
+  const handleAgentAction = useCallback(
+    (instruction: string) => {
+      if (!sessionId) return;
+      const s = useSessionStore
+        .getState()
+        .sessions.find((x) => x.id === sessionId);
+      void useSessionStore.getState().sendMessage("code", instruction, {
+        options: { simple: true },
+        sessionId,
+        directory: s?.directory,
+        extraDirectories: s?.extraDirectories,
+      });
+    },
+    [sessionId],
+  );
 
-  if (!session) return null
+  if (!session) return null;
 
-  const isCode = session.mode === "code" && !!session.directory
+  const isCode = session.mode === "code" && !!session.directory;
 
   const handleFoldersChange = (next: string[]) => {
-    setSessionDirectories(session.id, next[0], next.slice(1))
+    setSessionDirectories(session.id, next[0], next.slice(1));
     // Mantém o workspace sincronizado (o input do painel envia com as pastas do workspace)
-    setFolders(next)
-  }
+    setFolders(next);
+  };
 
   return (
     // z-20: o `@container` cria stacking context (layout containment), então
     // sem ele o dropdown de pastas fica preso abaixo do degrade do topo do chat
     <div className="@container relative z-20 flex min-w-0 items-center gap-2 px-1 pb-2">
-      <span className="min-w-0 truncate text-sm font-medium text-foreground">{session.title}</span>
+      <span className="min-w-0 truncate text-sm font-medium text-foreground">
+        {session.title}
+      </span>
       <div className="hidden min-w-0 items-center gap-2 @xl:flex">
-        {isCode && session.directory && <BranchSelector repoPath={session.directory} onRequestAgentAction={handleAgentAction} />}
-        {folders.length > 0 && <FolderSelector folders={folders} onFoldersChange={handleFoldersChange} compact />}
+        {isCode && session.directory && (
+          <BranchSelector
+            repoPath={session.directory}
+            onRequestAgentAction={handleAgentAction}
+          />
+        )}
+        {folders.length > 0 && (
+          <FolderSelector
+            folders={folders}
+            onFoldersChange={handleFoldersChange}
+            compact
+          />
+        )}
       </div>
       <div className="flex min-w-0 items-center @xl:hidden">
         <CompactWorkspaceSelector
@@ -156,48 +289,76 @@ function ChatTabHeader({ sessionId }: { sessionId?: string }) {
         />
       </div>
     </div>
-  )
+  );
 }
 
-function TerminalTabContent({ tabId, sessionId }: { tabId: string; sessionId?: string }) {
-  const { t } = useTranslation()
-  const terminalEntry = useTerminalStore((s) => s.entries[tabId])
+function TerminalTabContent({
+  tabId,
+  sessionId,
+}: {
+  tabId: string;
+  sessionId?: string;
+}) {
+  const { t } = useTranslation();
+  const terminalEntry = useTerminalStore((s) => s.entries[tabId]);
   if (!terminalEntry) {
     return (
       <div className="flex flex-1 items-center justify-center text-xs text-muted-foreground">
         {t("panel.terminalNotFound")}
       </div>
-    )
+    );
   }
   return (
     <div className="flex flex-1 flex-col overflow-hidden">
       <ManagedTerminalTab ptyId={terminalEntry.ptyId} sessionId={sessionId} />
     </div>
-  )
+  );
 }
 
-function TabContent({ tab, sessionId, onUpdateTab }: { tab: PanelTab; sessionId?: string; onUpdateTab: (id: string, updates: Partial<PanelTab>) => void }) {
+function TabContent({
+  tab,
+  sessionId,
+  onUpdateTab,
+}: {
+  tab: PanelTab;
+  sessionId?: string;
+  onUpdateTab: (id: string, updates: Partial<PanelTab>) => void;
+}) {
   switch (tab.type) {
     case "chat":
       if (tab.pending) {
-        return <NewChatTab onCreated={(sessionId) => onUpdateTab(tab.id, { pending: false, sessionId })} />
+        return (
+          <NewChatTab
+            onCreated={(sessionId) =>
+              onUpdateTab(tab.id, { pending: false, sessionId })
+            }
+          />
+        );
       }
       return (
-        <div className="flex flex-1 flex-col overflow-hidden px-4 pt-2 pb-4" style={{ '--panel-bg': 'var(--sidebar)' } as React.CSSProperties}>
+        <div
+          className="flex flex-1 flex-col overflow-hidden px-4 pt-2 pb-4"
+          style={{ "--panel-bg": "var(--sidebar)" } as React.CSSProperties}
+        >
           <ChatTabHeader sessionId={tab.sessionId} />
           <ChatView sessionId={tab.sessionId} embedded />
         </div>
-      )
+      );
     case "terminal":
-      return <TerminalTabContent tabId={tab.id} sessionId={sessionId} />
+      return <TerminalTabContent tabId={tab.id} sessionId={sessionId} />;
     case "process":
-      return <ProcessTab pid={tab.processPid ?? 0} sessionId={tab.sessionId ?? sessionId} />
+      return (
+        <ProcessTab
+          pid={tab.processPid ?? 0}
+          sessionId={tab.sessionId ?? sessionId}
+        />
+      );
     case "folders":
       return (
         <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
           <FoldersTab />
         </div>
-      )
+      );
     case "browser":
       return (
         <div className="flex flex-1 flex-col overflow-hidden">
@@ -212,7 +373,7 @@ function TabContent({ tab, sessionId, onUpdateTab }: { tab: PanelTab; sessionId?
             onUrlChange={(url) => onUpdateTab(tab.id, { url })}
           />
         </div>
-      )
+      );
     case "diff":
       return (
         <div className="flex flex-1 flex-col overflow-hidden p-4">
@@ -223,19 +384,19 @@ function TabContent({ tab, sessionId, onUpdateTab }: { tab: PanelTab; sessionId?
             taskId={tab.taskId}
           />
         </div>
-      )
+      );
     case "media":
       return (
         <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
           <MediaGallery />
         </div>
-      )
+      );
     case "artifact":
       return (
         <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
           <ArtifactTab artifactId={tab.artifactId} title={tab.title} />
         </div>
-      )
+      );
     case "document":
       return (
         <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
@@ -245,13 +406,13 @@ function TabContent({ tab, sessionId, onUpdateTab }: { tab: PanelTab; sessionId?
             sessionId={tab.sessionId ?? sessionId}
           />
         </div>
-      )
+      );
     case "sources":
       return (
         <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
           <SourcesTab sessionId={tab.sessionId ?? sessionId} />
         </div>
-      )
+      );
     case "source":
       return (
         <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
@@ -263,17 +424,17 @@ function TabContent({ tab, sessionId, onUpdateTab }: { tab: PanelTab; sessionId?
             toLine={tab.sourceToLine}
           />
         </div>
-      )
+      );
   }
 }
 
 export function RightPanelDropZone() {
-  const { t } = useTranslation()
-  const { active } = useDndContext()
-  const { setNodeRef, isOver } = useDroppable({ id: "right-panel-drop-zone" })
-  const isDragging = active !== null
+  const { t } = useTranslation();
+  const { active } = useDndContext();
+  const { setNodeRef, isOver } = useDroppable({ id: "right-panel-drop-zone" });
+  const isDragging = active !== null;
 
-  if (!isDragging) return null
+  if (!isDragging) return null;
 
   return (
     <div
@@ -287,37 +448,50 @@ export function RightPanelDropZone() {
     >
       <div className="flex flex-col items-center gap-2 text-primary">
         <GripVertical className="size-6" />
-        <span className="text-sm font-medium whitespace-nowrap">{t("panel.dropToOpen")}</span>
+        <span className="text-sm font-medium whitespace-nowrap">
+          {t("panel.dropToOpen")}
+        </span>
       </div>
     </div>
-  )
+  );
 }
 
 function WorkerStatusIcon({ status }: { status: string }) {
-  if (status === "submitted" || status === "streaming" || status === "cancelling" || status === "fallback") {
-    return <LoaderIcon className="size-3 shrink-0 animate-spin text-muted-foreground" />
+  if (
+    status === "submitted" ||
+    status === "streaming" ||
+    status === "cancelling" ||
+    status === "fallback"
+  ) {
+    return (
+      <LoaderIcon className="size-3 shrink-0 animate-spin text-muted-foreground" />
+    );
   }
-  if (status === "error") return <XCircleIcon className="size-3 shrink-0 text-destructive" />
-  return <span className="size-1.5 shrink-0 rounded-full bg-emerald-500" />
+  if (status === "error")
+    return <XCircleIcon className="size-3 shrink-0 text-destructive" />;
+  return <span className="size-1.5 shrink-0 rounded-full bg-emerald-500" />;
 }
 
-function SelectorScreen({ onSelect, onOpenWorker }: {
-  onSelect: (type: TabType) => void
-  onOpenWorker: (sessionId: string, title: string) => void
+function SelectorScreen({
+  onSelect,
+  onOpenWorker,
+}: {
+  onSelect: (type: TabType) => void;
+  onOpenWorker: (sessionId: string, title: string) => void;
 }) {
-  const { t } = useTranslation()
-  const tabMeta = useTabMeta()
-  const { mode, folders } = useWorkspace()
-  const activeId = useSessionStore((s) => s.activeIds[mode])
-  const sessions = useSessionStore((s) => s.sessions)
-  const statusMap = useSessionStore((s) => s.status)
+  const { t } = useTranslation();
+  const tabMeta = useTabMeta();
+  const { mode, folders } = useWorkspace();
+  const activeId = useSessionStore((s) => s.activeIds[mode]);
+  const sessions = useSessionStore((s) => s.sessions);
+  const statusMap = useSessionStore((s) => s.status);
 
-  const processes = useProcessStore((s) => s.processes)
-  const fetchProcesses = useProcessStore((s) => s.fetch)
-  const killProcess = useProcessStore((s) => s.kill)
+  const processes = useProcessStore((s) => s.processes);
+  const fetchProcesses = useProcessStore((s) => s.fetch);
+  const killProcess = useProcessStore((s) => s.kill);
   // Balde de abas da sessão ativa (ou o órfão, no chat novo ainda sem sessão):
   // a aba de processo aberta aqui precisa cair no mesmo balde que o resto.
-  const bucketKey = activeId ?? ORPHAN_KEY
+  const bucketKey = activeId ?? ORPHAN_KEY;
 
   // Só os processos DESTA conversa. O store é compartilhado — o browser do painel
   // e a aba de processo também o alimentam, cada um com o seu escopo — então
@@ -326,12 +500,12 @@ function SelectorScreen({ onSelect, onOpenWorker }: {
   const ownProcesses = useMemo(
     () => (activeId ? processes.filter((p) => p.sessionId === activeId) : []),
     [processes, activeId],
-  )
+  );
 
   const workers = useMemo(
     () => sessions.filter((s) => s.parentId === activeId),
     [sessions, activeId],
-  )
+  );
 
   const availableTabs = useMemo(
     () =>
@@ -339,27 +513,36 @@ function SelectorScreen({ onSelect, onOpenWorker }: {
         isSelectableTab(type, mode),
       ),
     [mode, tabMeta],
-  )
+  );
 
   // Footer escopado por sessão: só processos iniciados pelo chat ativo. Sem chat
   // ativo (chat novo) não há processo desta conversa para buscar — e buscar sem
   // escopo traz os de todos os chats, cada um com o seu dono.
   useEffect(() => {
-    if (!activeId) return
-    fetchProcesses(activeId)
-    const interval = setInterval(() => fetchProcesses(activeId), 3_000)
-    return () => clearInterval(interval)
-  }, [fetchProcesses, activeId])
+    if (!activeId) return;
+    fetchProcesses(activeId);
+    const interval = setInterval(() => fetchProcesses(activeId), 3_000);
+    return () => clearInterval(interval);
+  }, [fetchProcesses, activeId]);
 
   return (
     <div className="flex flex-1 flex-col overflow-hidden">
       <div className="flex flex-1 flex-col items-center justify-center gap-4 p-6">
-        <p className="text-sm font-medium text-foreground">{t("panel.selector.title")}</p>
-        <div className={cn("grid gap-3 w-full max-w-xs", availableTabs.length === 1 ? "grid-cols-1 justify-items-center" : "grid-cols-2")}>
+        <p className="text-sm font-medium text-foreground">
+          {t("panel.selector.title")}
+        </p>
+        <div
+          className={cn(
+            "grid gap-3 w-full max-w-xs",
+            availableTabs.length === 1
+              ? "grid-cols-1 justify-items-center"
+              : "grid-cols-2",
+          )}
+        >
           {availableTabs.map(([type, { icon: Icon, label, description }]) => {
-            // Pastas e diff seguem o repositório selecionado no workspace: sem
-            // chat ativo ainda é possível abrir (novo chat), desde que haja projeto.
-            const isDisabled = folders.length === 0 && (type === "folders" || type === "diff")
+            // Pastas seguem o repositório selecionado no workspace: sem chat
+            // ativo ainda é possível abrir (novo chat), desde que haja projeto.
+            const isDisabled = folders.length === 0 && type === "folders";
             return (
               <button
                 key={type}
@@ -374,15 +557,19 @@ function SelectorScreen({ onSelect, onOpenWorker }: {
               >
                 <Icon className="size-6 shrink-0" />
                 <span className="text-xs font-medium">{label}</span>
-                <span className="text-[10px] leading-tight text-muted-foreground line-clamp-2">{description}</span>
+                <span className="text-[10px] leading-tight text-muted-foreground line-clamp-2">
+                  {description}
+                </span>
               </button>
-            )
+            );
           })}
         </div>
 
         {workers.length > 0 && (
           <div className="mt-2 flex w-full max-w-xs flex-col gap-1">
-            <p className="px-1 text-[11px] font-medium text-muted-foreground">{t("panel.selector.workersTitle")}</p>
+            <p className="px-1 text-[11px] font-medium text-muted-foreground">
+              {t("panel.selector.workersTitle")}
+            </p>
             {workers.map((worker) => (
               <button
                 key={worker.id}
@@ -410,10 +597,16 @@ function SelectorScreen({ onSelect, onOpenWorker }: {
                 key={p.pid}
                 role="button"
                 tabIndex={0}
-                onClick={() => usePanelStore.getState().openProcessTab(bucketKey, p.pid, p.label)}
+                onClick={() =>
+                  usePanelStore
+                    .getState()
+                    .openProcessTab(bucketKey, p.pid, p.label)
+                }
                 onKeyDown={(e) => {
                   if (e.key === "Enter" || e.key === " ")
-                    usePanelStore.getState().openProcessTab(bucketKey, p.pid, p.label)
+                    usePanelStore
+                      .getState()
+                      .openProcessTab(bucketKey, p.pid, p.label);
                 }}
                 className="flex w-40 shrink-0 flex-col gap-1 rounded-md border border-sidebar-border bg-sidebar-accent/50 px-2.5 py-1.5 text-left transition-colors hover:bg-sidebar-accent cursor-pointer"
                 title={`${p.command}\n\n${t("panel.processes.viewOutput")}`}
@@ -424,12 +617,16 @@ function SelectorScreen({ onSelect, onOpenWorker }: {
                   ) : (
                     <span className="size-1.5 shrink-0 rounded-full bg-muted-foreground/50" />
                   )}
-                  <span className="min-w-0 flex-1 truncate text-xs font-medium text-sidebar-foreground">{p.label}</span>
+                  <span className="min-w-0 flex-1 truncate text-xs font-medium text-sidebar-foreground">
+                    {p.label}
+                  </span>
                   {p.status === "running" && p.urls?.length ? (
                     <button
                       onClick={(e) => {
-                        e.stopPropagation()
-                        usePanelStore.getState().openTerminalLink(bucketKey, p.urls![0])
+                        e.stopPropagation();
+                        usePanelStore
+                          .getState()
+                          .openTerminalLink(bucketKey, p.urls![0]);
                       }}
                       title={`${t("panel.processes.openInBrowser")} — ${p.urls[0]}`}
                       className="flex size-4 shrink-0 items-center justify-center rounded-sm text-sidebar-foreground/50 hover:text-foreground"
@@ -439,8 +636,8 @@ function SelectorScreen({ onSelect, onOpenWorker }: {
                   ) : null}
                   <button
                     onClick={(e) => {
-                      e.stopPropagation()
-                      void killProcess(p.pid, activeId ?? undefined)
+                      e.stopPropagation();
+                      void killProcess(p.pid, activeId ?? undefined);
                     }}
                     title={t("panel.processes.kill")}
                     className="flex size-4 shrink-0 items-center justify-center rounded-sm text-sidebar-foreground/50 hover:text-destructive"
@@ -465,54 +662,57 @@ function SelectorScreen({ onSelect, onOpenWorker }: {
         </div>
       )}
     </div>
-  )
+  );
 }
 
 function formatUptime(startTime: number): string {
-  const seconds = Math.floor((Date.now() - startTime) / 1000)
-  if (seconds < 60) return `${seconds}s`
-  const minutes = Math.floor(seconds / 60)
-  if (minutes < 60) return `${minutes}m ${seconds % 60}s`
-  const hours = Math.floor(minutes / 60)
-  return `${hours}h ${minutes % 60}m`
+  const seconds = Math.floor((Date.now() - startTime) / 1000);
+  if (seconds < 60) return `${seconds}s`;
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes}m ${seconds % 60}s`;
+  const hours = Math.floor(minutes / 60);
+  return `${hours}h ${minutes % 60}m`;
 }
 
 export function RightPanel() {
-  const { t } = useTranslation()
-  const tabClosePosition = useAppearanceStore((s) => s.tabClosePosition)
-  const tabMeta = useTabMeta()
-  const { mode, folders } = useWorkspace()
-  const activeSessionId = useSessionStore((s) => s.activeIds[mode])
-  const sessions = useSessionStore((s) => s.sessions)
-  const statusMap = useSessionStore((s) => s.status)
-  const unreadCounts = useSessionStore((s) => s.unreadCounts)
+  const { t } = useTranslation();
+  const tabClosePosition = useAppearanceStore((s) => s.tabClosePosition);
+  const tabMeta = useTabMeta();
+  const { mode, folders } = useWorkspace();
+  const activeSessionId = useSessionStore((s) => s.activeIds[mode]);
+  const sessions = useSessionStore((s) => s.sessions);
+  const statusMap = useSessionStore((s) => s.status);
+  const unreadCounts = useSessionStore((s) => s.unreadCounts);
 
-  const tabsBySession = usePanelStore((s) => s.tabsBySession)
-  const activeTabBySession = usePanelStore((s) => s.activeTabBySession)
-  const sessionKey = activeSessionId ?? ORPHAN_KEY
+  const tabsBySession = usePanelStore((s) => s.tabsBySession);
+  const activeTabBySession = usePanelStore((s) => s.activeTabBySession);
+  const sessionKey = activeSessionId ?? ORPHAN_KEY;
   // `?? []` cria um array novo a cada render: memoizado, os callbacks e
   // efeitos abaixo param de se recriar junto.
-  const tabs = useMemo(() => tabsBySession[sessionKey] ?? [], [tabsBySession, sessionKey])
-  const activeTabId = activeTabBySession[sessionKey] ?? null
-  const addTabToStore = usePanelStore((s) => s.addTab)
-  const removeTabFromStore = usePanelStore((s) => s.removeTab)
-  const setActiveTabInStore = usePanelStore((s) => s.setActiveTab)
-  const { setNodeRef, isOver } = useDroppable({ id: "right-panel-drop-zone" })
-  const dndContext = useDndContext()
-  const isDragging = dndContext.active !== null
+  const tabs = useMemo(
+    () => tabsBySession[sessionKey] ?? [],
+    [tabsBySession, sessionKey],
+  );
+  const activeTabId = activeTabBySession[sessionKey] ?? null;
+  const addTabToStore = usePanelStore((s) => s.addTab);
+  const removeTabFromStore = usePanelStore((s) => s.removeTab);
+  const setActiveTabInStore = usePanelStore((s) => s.setActiveTab);
+  const { setNodeRef, isOver } = useDroppable({ id: "right-panel-drop-zone" });
+  const dndContext = useDndContext();
+  const isDragging = dndContext.active !== null;
 
-  const selectorOpen = usePanelStore((s) => s.selectorOpen)
-  const setSelectorOpen = usePanelStore((s) => s.setSelectorOpen)
+  const selectorOpen = usePanelStore((s) => s.selectorOpen);
+  const setSelectorOpen = usePanelStore((s) => s.setSelectorOpen);
 
   // Esc volta para a aba ativa; sem abas, o selector continua na tela de todo jeito.
   useEffect(() => {
-    if (!selectorOpen) return
+    if (!selectorOpen) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setSelectorOpen(false)
-    }
-    window.addEventListener("keydown", onKey)
-    return () => window.removeEventListener("keydown", onKey)
-  }, [selectorOpen, setSelectorOpen])
+      if (e.key === "Escape") setSelectorOpen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [selectorOpen, setSelectorOpen]);
 
   /**
    * Número da próxima aba numerada ("Terminal", "Terminal 2", "Terminal 3"…):
@@ -523,87 +723,115 @@ export function RightPanel() {
    */
   const nextTabNumber = useCallback(
     (type: TabType): number => {
-      const label = tabMeta[type].label
-      const used = new Set<number>()
+      const label = tabMeta[type].label;
+      const used = new Set<number>();
       for (const tab of tabs) {
-        if (tab.type !== type) continue
-        const m = tab.title.match(new RegExp(`^${label}(?: (\\d+))?$`))
-        if (m) used.add(m[1] ? parseInt(m[1], 10) : 1)
+        if (tab.type !== type) continue;
+        const m = tab.title.match(new RegExp(`^${label}(?: (\\d+))?$`));
+        if (m) used.add(m[1] ? parseInt(m[1], 10) : 1);
       }
-      let n = 1
-      while (used.has(n)) n++
-      return n
+      let n = 1;
+      while (used.has(n)) n++;
+      return n;
     },
     [tabs, tabMeta],
-  )
+  );
 
-  const addTab = useCallback(async (type: TabType, sessionId?: string, title?: string) => {
-    // Pastas e diff seguem o repositório selecionado no workspace: só ficam
-    // bloqueados quando não há projeto selecionado (mesmo sem chat ativo).
-    if ((type === "folders" || type === "diff") && folders.length === 0) return
+  const addTab = useCallback(
+    async (type: TabType, sessionId?: string, title?: string) => {
+      // Pastas seguem o repositório selecionado no workspace: só ficam
+      // bloqueadas quando não há projeto selecionado (mesmo sem chat ativo).
+      if (type === "folders" && folders.length === 0) return;
 
-    // Escolheu uma aba: o selector sai de cena e a aba aberta assume.
-    setSelectorOpen(false)
+      // Escolheu uma aba: o selector sai de cena e a aba aberta assume.
+      setSelectorOpen(false);
 
-    if (sessionId) {
-      const id = `chat-${sessionId}`
-      const exists = tabs.some((t) => t.id === id)
-      if (!exists) {
-        addTabToStore(sessionKey, { id, type: "chat", title: title ?? "Chat", sessionId })
+      if (sessionId) {
+        const id = `chat-${sessionId}`;
+        const exists = tabs.some((t) => t.id === id);
+        if (!exists) {
+          addTabToStore(sessionKey, {
+            id,
+            type: "chat",
+            title: title ?? "Chat",
+            sessionId,
+          });
+        }
+        setActiveTabInStore(sessionKey, id);
+        return;
       }
-      setActiveTabInStore(sessionKey, id)
-      return
-    }
-    if (type === "chat") {
-      const id = `chat-new-${nextTabId()}`
-      addTabToStore(sessionKey, { id, type: "chat", title: "Chat", pending: true })
-      setActiveTabInStore(sessionKey, id)
-      return
-    }
-    if (type === "terminal") {
-      const n = nextTabNumber("terminal")
-      const id = `terminal-${nextTabId()}`
-      const tabTitle = n > 1 ? `Terminal ${n}` : "Terminal"
-      const cwdFolder = folders[0]
-      await useTerminalStore.getState().createTerminal(id, cwdFolder)
-      addTabToStore(sessionKey, { id, type: "terminal", title: tabTitle })
-      setActiveTabInStore(sessionKey, id)
-      return
-    }
-    const meta = tabMeta[type]
-    const n = nextTabNumber(type)
-    const id = `${type}-${nextTabId()}`
-    const tabTitle = n > 1 ? `${meta.label} ${n}` : meta.label
-    addTabToStore(sessionKey, { id, type, title: tabTitle })
-    setActiveTabInStore(sessionKey, id)
-  }, [sessionKey, tabs, addTabToStore, setActiveTabInStore, folders, tabMeta, nextTabNumber, setSelectorOpen])
+      if (type === "chat") {
+        const id = `chat-new-${nextTabId()}`;
+        addTabToStore(sessionKey, {
+          id,
+          type: "chat",
+          title: "Chat",
+          pending: true,
+        });
+        setActiveTabInStore(sessionKey, id);
+        return;
+      }
+      if (type === "terminal") {
+        const n = nextTabNumber("terminal");
+        const id = `terminal-${nextTabId()}`;
+        const tabTitle = n > 1 ? `Terminal ${n}` : "Terminal";
+        const cwdFolder = folders[0];
+        await useTerminalStore.getState().createTerminal(id, cwdFolder);
+        addTabToStore(sessionKey, { id, type: "terminal", title: tabTitle });
+        setActiveTabInStore(sessionKey, id);
+        return;
+      }
+      const meta = tabMeta[type];
+      const n = nextTabNumber(type);
+      const id = `${type}-${nextTabId()}`;
+      const tabTitle = n > 1 ? `${meta.label} ${n}` : meta.label;
+      addTabToStore(sessionKey, { id, type, title: tabTitle });
+      setActiveTabInStore(sessionKey, id);
+    },
+    [
+      sessionKey,
+      tabs,
+      addTabToStore,
+      setActiveTabInStore,
+      folders,
+      tabMeta,
+      nextTabNumber,
+      setSelectorOpen,
+    ],
+  );
 
-  const removeTab = useCallback((id: string) => {
-    const sk = activeSessionId ?? ORPHAN_KEY
-    const tab = tabs.find((t) => t.id === id)
-    if (tab?.type === "terminal") {
-      useTerminalStore.getState().killTerminal(id)
-    }
-    if (tab?.type === "browser") {
-      // Fechou a aba: destrói o webview do pool e desregistra no main (senão a
-      // página continuaria viva no host oculto e o agente navegaria um browser órfão).
-      destroyWebview(`${activeSessionId ?? "__orphan__"}:${id}`)
-    }
-    removeTabFromStore(sk, id)
-  }, [activeSessionId, tabs, removeTabFromStore])
+  const removeTab = useCallback(
+    (id: string) => {
+      const sk = activeSessionId ?? ORPHAN_KEY;
+      const tab = tabs.find((t) => t.id === id);
+      if (tab?.type === "terminal") {
+        useTerminalStore.getState().killTerminal(id);
+      }
+      if (tab?.type === "browser") {
+        // Fechou a aba: destrói o webview do pool e desregistra no main (senão a
+        // página continuaria viva no host oculto e o agente navegaria um browser órfão).
+        destroyWebview(`${activeSessionId ?? "__orphan__"}:${id}`);
+      }
+      removeTabFromStore(sk, id);
+    },
+    [activeSessionId, tabs, removeTabFromStore],
+  );
 
-  const updateTab = useCallback((id: string, updates: Partial<PanelTab>) => {
-    const sk = activeSessionId ?? "__orphan__"
-    // Lê do store em vez do closure: did-navigate pode chegar depois de outras
-    // mudanças de abas — com o closure, o map sobre uma lista antiga descartaria
-    // abas adicionadas entretanto.
-    const current = usePanelStore.getState().tabsBySession[sk] ?? []
-    usePanelStore.getState().setTabsForSession(
-      sk,
-      current.map((t) => (t.id === id ? { ...t, ...updates } : t)),
-      usePanelStore.getState().getActiveTabId(sk),
-    )
-  }, [activeSessionId])
+  const updateTab = useCallback(
+    (id: string, updates: Partial<PanelTab>) => {
+      const sk = activeSessionId ?? "__orphan__";
+      // Lê do store em vez do closure: did-navigate pode chegar depois de outras
+      // mudanças de abas — com o closure, o map sobre uma lista antiga descartaria
+      // abas adicionadas entretanto.
+      const current = usePanelStore.getState().tabsBySession[sk] ?? [];
+      usePanelStore.getState().setTabsForSession(
+        sk,
+        current.map((t) => (t.id === id ? { ...t, ...updates } : t)),
+        usePanelStore.getState().getActiveTabId(sk),
+      );
+    },
+    [activeSessionId],
+  );
 
   // O browser do agente NÃO abre o painel sozinho: o evento 'ensure' cria o
   // webview no host oculto (App.tsx) e a aba no store (ensureAgentBrowserTab).
@@ -611,44 +839,60 @@ export function RightPanel() {
   // indicador "testando…" (openAgentBrowser) ou no toggle manual.
 
   // "Enviar para chat lateral" vindo do input: abre aba de chat
-  const pendingChatTab = usePanelStore((s) => s.pendingChatTab)
-  const pendingChatTabSession = usePanelStore((s) => s.pendingChatTabSession)
-  const pendingChatTabTitle = usePanelStore((s) => s.pendingChatTabTitle)
+  const pendingChatTab = usePanelStore((s) => s.pendingChatTab);
+  const pendingChatTabSession = usePanelStore((s) => s.pendingChatTabSession);
+  const pendingChatTabTitle = usePanelStore((s) => s.pendingChatTabTitle);
   useEffect(() => {
     if (pendingChatTab > 0 && pendingChatTabSession && activeSessionId) {
-      const id = `chat-${pendingChatTabSession}`
-      const exists = tabs.some((t) => t.id === id)
+      const id = `chat-${pendingChatTabSession}`;
+      const exists = tabs.some((t) => t.id === id);
       if (!exists) {
-        addTabToStore(activeSessionId, { id, type: "chat", title: pendingChatTabTitle ?? "Chat", sessionId: pendingChatTabSession })
+        addTabToStore(activeSessionId, {
+          id,
+          type: "chat",
+          title: pendingChatTabTitle ?? "Chat",
+          sessionId: pendingChatTabSession,
+        });
       }
-      setActiveTabInStore(activeSessionId, id)
-      usePanelStore.setState({ pendingChatTab: 0, pendingChatTabSession: undefined, pendingChatTabTitle: undefined })
+      setActiveTabInStore(activeSessionId, id);
+      usePanelStore.setState({
+        pendingChatTab: 0,
+        pendingChatTabSession: undefined,
+        pendingChatTabTitle: undefined,
+      });
     }
     // Reage ao PEDIDO (pendingChatTab), lendo as abas do momento. `tabs` como
     // dep faria o efeito rodar de novo pela aba que ele mesmo acabou de criar.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pendingChatTab, pendingChatTabSession, pendingChatTabTitle, activeSessionId])
+  }, [
+    pendingChatTab,
+    pendingChatTabSession,
+    pendingChatTabTitle,
+    activeSessionId,
+  ]);
 
   // Diff solicitado pelo chat: abre aba Diff
-  const pendingDiff = usePanelStore((s) => s.pendingDiff)
-  const pendingDiffSessionId = usePanelStore((s) => s.pendingDiffSessionId)
-  const pendingDiffMessageId = usePanelStore((s) => s.pendingDiffMessageId)
-  const pendingDiffEsteiraId = usePanelStore((s) => s.pendingDiffEsteiraId)
-  const pendingDiffTaskId = usePanelStore((s) => s.pendingDiffTaskId)
-  const pendingDiffTitle = usePanelStore((s) => s.pendingDiffTitle)
+  const pendingDiff = usePanelStore((s) => s.pendingDiff);
+  const pendingDiffSessionId = usePanelStore((s) => s.pendingDiffSessionId);
+  const pendingDiffMessageId = usePanelStore((s) => s.pendingDiffMessageId);
+  const pendingDiffEsteiraId = usePanelStore((s) => s.pendingDiffEsteiraId);
+  const pendingDiffTaskId = usePanelStore((s) => s.pendingDiffTaskId);
+  const pendingDiffTitle = usePanelStore((s) => s.pendingDiffTitle);
   useEffect(() => {
-    if (pendingDiff === 0) return
+    if (pendingDiff === 0) return;
     // A esteira não tem sessão de chat: as abas dela ficam na chave órfã, que
     // é a mesma usada quando nenhum chat está ativo.
-    const daEsteira = !!(pendingDiffEsteiraId && pendingDiffTaskId)
-    const chave = daEsteira ? activeSessionId ?? "__orphan__" : activeSessionId
-    if (!chave) return
-    if (!daEsteira && !(pendingDiffSessionId && pendingDiffMessageId)) return
+    const daEsteira = !!(pendingDiffEsteiraId && pendingDiffTaskId);
+    const chave = daEsteira
+      ? (activeSessionId ?? "__orphan__")
+      : activeSessionId;
+    if (!chave) return;
+    if (!daEsteira && !(pendingDiffSessionId && pendingDiffMessageId)) return;
 
     const id = daEsteira
       ? `diff-task-${pendingDiffTaskId}`
-      : `diff-${pendingDiffSessionId}-${pendingDiffMessageId}`
-    const atuais = usePanelStore.getState().tabsBySession[chave] ?? []
+      : `diff-${pendingDiffSessionId}-${pendingDiffMessageId}`;
+    const atuais = usePanelStore.getState().tabsBySession[chave] ?? [];
     if (!atuais.some((t) => t.id === id)) {
       addTabToStore(chave, {
         id,
@@ -658,9 +902,9 @@ export function RightPanel() {
         messageId: pendingDiffMessageId,
         esteiraId: pendingDiffEsteiraId,
         taskId: pendingDiffTaskId,
-      })
+      });
     }
-    setActiveTabInStore(chave, id)
+    setActiveTabInStore(chave, id);
     usePanelStore.setState({
       pendingDiff: 0,
       pendingDiffSessionId: undefined,
@@ -668,35 +912,53 @@ export function RightPanel() {
       pendingDiffEsteiraId: undefined,
       pendingDiffTaskId: undefined,
       pendingDiffTitle: undefined,
-    })
+    });
     // Idem: o gatilho é o pedido de diff, não a lista de abas.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pendingDiff, pendingDiffSessionId, pendingDiffMessageId, pendingDiffEsteiraId, pendingDiffTaskId, pendingDiffTitle, activeSessionId])
+  }, [
+    pendingDiff,
+    pendingDiffSessionId,
+    pendingDiffMessageId,
+    pendingDiffEsteiraId,
+    pendingDiffTaskId,
+    pendingDiffTitle,
+    activeSessionId,
+  ]);
 
   // Workers da orquestração em execução abrem tabs automaticamente
   useEffect(() => {
-    if (!activeSessionId) return
+    if (!activeSessionId) return;
     for (const session of sessions) {
-      const status = statusMap[session.id]
+      const status = statusMap[session.id];
       if (
         session.parentId === activeSessionId &&
-        (status === "submitted" || status === "streaming" || status === "cancelling" || status === "fallback")
+        (status === "submitted" ||
+          status === "streaming" ||
+          status === "cancelling" ||
+          status === "fallback")
       ) {
-        const id = `chat-${session.id}`
-        const exists = tabs.some((t) => t.id === id)
+        const id = `chat-${session.id}`;
+        const exists = tabs.some((t) => t.id === id);
         if (!exists) {
-          addTabToStore(activeSessionId, { id, type: "chat", title: session.title, sessionId: session.id })
+          addTabToStore(activeSessionId, {
+            id,
+            type: "chat",
+            title: session.title,
+            sessionId: session.id,
+          });
         }
-        const currentActive = usePanelStore.getState().getActiveTabId(activeSessionId)
-        if (!currentActive) setActiveTabInStore(activeSessionId, id)
+        const currentActive = usePanelStore
+          .getState()
+          .getActiveTabId(activeSessionId);
+        if (!currentActive) setActiveTabInStore(activeSessionId, id);
       }
     }
     // Abre aba para worker que entrou em execução; `tabs` é lido no momento
     // (o guard `exists` evita duplicar) e como dep re-dispararia a si mesmo.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sessions, statusMap, activeSessionId])
+  }, [sessions, statusMap, activeSessionId]);
 
-  const activeTab = tabs.find(t => t.id === activeTabId)
+  const activeTab = tabs.find((t) => t.id === activeTabId);
 
   return (
     <div
@@ -706,38 +968,45 @@ export function RightPanel() {
       )}
     >
       {isDragging && (
-        <div className={cn(
-          "absolute inset-0 z-20 flex items-center justify-center rounded-lg transition-all pointer-events-none",
-          isOver
-            ? "bg-primary/20 border-2 border-primary/50"
-            : "bg-black/30",
-        )}>
+        <div
+          className={cn(
+            "absolute inset-0 z-20 flex items-center justify-center rounded-lg transition-all pointer-events-none",
+            isOver ? "bg-primary/20 border-2 border-primary/50" : "bg-black/30",
+          )}
+        >
           <div className="flex flex-col items-center gap-2 text-primary">
             <GripVertical className="size-6" />
-            <span className="text-sm font-medium whitespace-nowrap">{t("panel.dropToOpen")}</span>
+            <span className="text-sm font-medium whitespace-nowrap">
+              {t("panel.dropToOpen")}
+            </span>
           </div>
         </div>
       )}
       {tabs.length > 0 && (
         <div className="flex items-center gap-0.5 px-2 pt-2 overflow-x-auto">
           {tabs.map((tab) => {
-            const { icon: Icon } = tabMeta[tab.type]
-            const TabIcon = tab.type === "chat" && tab.sessionId ? Bot : Icon
+            const { icon: Icon } = tabMeta[tab.type];
+            const TabIcon = tab.type === "chat" && tab.sessionId ? Bot : Icon;
             // Os três indicadores falam da CONVERSA — está respondendo, deu
             // erro, chegou mensagem — e só a aba de chat mostra uma conversa.
             // Várias outras carregam um sessionId por serem daquele chat (a
             // aba Fontes, o visualizador de documento, o diff), e sem este
             // recorte todas elas giravam junto com o turno: o PDF que a pessoa
             // está lendo não fica "carregando" porque o agente está escrevendo.
-            const isChatTab = tab.type === "chat" && !!tab.sessionId
-            const tabStatus = isChatTab ? statusMap[tab.sessionId!] : undefined
-            const isWorking = tabStatus === "submitted" || tabStatus === "streaming"
-            const isError = tabStatus === "error"
-            const hasUnread = isChatTab && (unreadCounts[tab.sessionId!] ?? 0) > 0
-            const closeOnLeft = tabClosePosition === "left"
+            const isChatTab = tab.type === "chat" && !!tab.sessionId;
+            const tabStatus = isChatTab ? statusMap[tab.sessionId!] : undefined;
+            const isWorking =
+              tabStatus === "submitted" || tabStatus === "streaming";
+            const isError = tabStatus === "error";
+            const hasUnread =
+              isChatTab && (unreadCounts[tab.sessionId!] ?? 0) > 0;
+            const closeOnLeft = tabClosePosition === "left";
             const closeButton = (
               <button
-                onClick={(e) => { e.stopPropagation(); removeTab(tab.id) }}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  removeTab(tab.id);
+                }}
                 className={cn(
                   "flex size-3.5 shrink-0 items-center justify-center rounded-sm opacity-0 transition-opacity group-hover:opacity-100 hover:bg-sidebar-foreground/10",
                   closeOnLeft ? "mr-0.5" : "ml-0.5",
@@ -745,7 +1014,7 @@ export function RightPanel() {
               >
                 <X className="size-2.5" />
               </button>
-            )
+            );
             return (
               <div
                 key={tab.id}
@@ -756,23 +1025,31 @@ export function RightPanel() {
                     : "text-sidebar-foreground/50 hover:text-sidebar-foreground hover:bg-sidebar-accent/50",
                 )}
                 onClick={() => {
-                  setActiveTabInStore(sessionKey, tab.id)
-                  setSelectorOpen(false)
+                  setActiveTabInStore(sessionKey, tab.id);
+                  setSelectorOpen(false);
                 }}
               >
                 {closeOnLeft && closeButton}
                 <TabIcon className="size-3.5 shrink-0" />
                 <span className="truncate max-w-24">{tab.title}</span>
-                {isWorking && <Loader2 className="size-3 shrink-0 animate-spin text-primary" />}
+                {isWorking && (
+                  <Loader2 className="size-3 shrink-0 animate-spin text-primary" />
+                )}
                 {isError && (
                   <span className="size-1.5 shrink-0 rounded-full bg-destructive" />
                 )}
-                {!isWorking && !isError && hasUnread && tab.id !== activeTabId && (
-                  <span className="size-2 shrink-0 rounded-full bg-primary" title={t("panel.unreadMessages")} />
-                )}
+                {!isWorking &&
+                  !isError &&
+                  hasUnread &&
+                  tab.id !== activeTabId && (
+                    <span
+                      className="size-2 shrink-0 rounded-full bg-primary"
+                      title={t("panel.unreadMessages")}
+                    />
+                  )}
                 {!closeOnLeft && closeButton}
               </div>
-            )
+            );
           })}
           {/* O "+" abre a tela inicial do painel (grade de abas + processos em
               background) em vez de um dropdown: uma aba nova vira uma escolha
@@ -799,14 +1076,21 @@ export function RightPanel() {
           // compartilhar estado/histórico — era o "contexto compartilhado" e a
           // alternância que não funcionava. Com persistKey, o remount apenas
           // reanexa o webview daquela aba vindo do pool.
-          <TabContent key={activeTab.id} tab={activeTab} sessionId={activeSessionId ?? undefined} onUpdateTab={updateTab} />
+          <TabContent
+            key={activeTab.id}
+            tab={activeTab}
+            sessionId={activeSessionId ?? undefined}
+            onUpdateTab={updateTab}
+          />
         ) : (
           <SelectorScreen
             onSelect={addTab}
-            onOpenWorker={(sessionId, title) => addTab("chat", sessionId, title)}
+            onOpenWorker={(sessionId, title) =>
+              addTab("chat", sessionId, title)
+            }
           />
         )}
       </div>
     </div>
-  )
+  );
 }

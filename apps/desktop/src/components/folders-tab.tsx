@@ -1,678 +1,99 @@
-import {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  type ReactNode,
-} from "react";
+"use client";
+
+/**
+ * A aba de pastas: o painel de leitura à esquerda, o índice à direita.
+ *
+ * O índice à direita tem três abas — Arquivos, Alterações e Commits — e o painel
+ * da esquerda tem dois modos, escolhidos pelas duas primeiras:
+ *
+ * - **Arquivos** — a árvore completa à direita, um arquivo só à esquerda. É o
+ *   modo de trabalho: procurar, abrir, editar.
+ * - **Alterações** — a lista dos modificados à direita, todos os diffs
+ *   empilhados à esquerda. É o modo de leitura: comparar o que mudou sem
+ *   perder de vista o que já foi lido. Aqui clicar num arquivo não troca o que
+ *   está na tela — só rola até a seção dele.
+ * - **Commits** — o histórico, que é só do índice: a esquerda fica como estava,
+ *   e o arquivo de um commit abre nela quando se clica nele.
+ *
+ * Aqui vive só o que é do conjunto: qual modo está ativo, que arquivo está em
+ * foco, com que lente ele abre, até onde rolar e se há rascunho a perder.
+ */
+
+import { useCallback, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import {
-  CheckIcon,
-  ChevronUpIcon,
-  CloudIcon,
-  CopyIcon,
-  DownloadIcon,
-  Ellipsis,
-  EyeIcon,
-  FileTextIcon,
-  FolderGit2Icon,
-  FolderOpenIcon,
-  FolderTreeIcon,
-  GitBranchIcon,
-  GitCompareArrowsIcon,
-  ArrowDownIcon,
-  ArrowUpIcon,
-  HistoryIcon,
-  FolderIcon,
-  PanelRightCloseIcon,
-  CodeIcon,
-  SaveIcon,
-  TagIcon,
-  UploadIcon,
-  Loader2,
-} from "lucide-react";
 import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ScrollArea } from "@/components/ui/scroll-area";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import {
-  HoverCard,
-  HoverCardContent,
-  HoverCardTrigger,
-} from "@/components/ui/hover-card";
-import { cn } from "@/lib/utils";
 import { useWorkspace } from "@/lib/workspace-context";
-import { CodeEditor, type CodeEditorHandle } from "@/src/components/code-editor";
-import { agentWriteFromTool } from "@/src/lib/agent-merge";
-import { chatApi, fsApi } from "@/src/lib/ipc";
 import { FolderSelector } from "@/src/components/folder-selector";
-import { useBranchStore, type BranchSyncInfo, type SyncResult } from "@/src/stores/branch-store";
-import { CreateRemoteRepoDialog } from "@/src/components/create-remote-repo-dialog";
-import {
-  FileTree,
-  FileTreeFile,
-  FileTreeFolder,
-  type GitFileStatus,
-} from "@/src/components/ai/file-tree";
-import { parsePatch } from "@/lib/unified-diff";
-import { HighlightedDiffFile } from "@/src/components/diff-lines";
-import {
-  Artifact,
-  ArtifactAction,
-  ArtifactActions,
-  ArtifactContent,
-  ArtifactDescription,
-  ArtifactHeader,
-  ArtifactTitle,
-} from "@/src/components/ai/artifact";
-import {
-  Commit,
-  CommitContent,
-  CommitFile,
-  CommitFileIcon,
-  CommitFileInfo,
-  CommitFilePath,
-  CommitFiles,
-  CommitFileStatus,
-  CommitHash,
-  CommitHeader,
-  CommitInfo,
-  CommitMessage,
-  CommitMetadata,
-  CommitSeparator,
-  CommitTimestamp,
-} from "@/src/components/ai/commit";
-import { MessageResponse } from "@/src/components/ai/message";
-import {
-  markdownImageSources,
-  withResolvedImages,
-} from "@/src/lib/markdown-images";
-import { localImageRehypePlugins } from "@/src/lib/local-image-plugins";
-import { Image } from "@/src/components/ai/image";
-
-interface DirEntryInfo {
-  name: string;
-  path: string;
-  isDirectory: boolean;
-}
-
-interface CommitFileEntry {
-  status: "added" | "modified" | "deleted" | "renamed";
-  path: string;
-}
-
-interface CommitEntry {
-  hash: string;
-  author: string;
-  date: string;
-  message: string;
-  body: string;
-  files: CommitFileEntry[];
-  refs: string[];
-  onDefault: boolean;
-  pushed: boolean;
-}
-
-type ReaddirResult =
-  | { ok: true; entries: DirEntryInfo[] }
-  | { ok: false; error: string };
-type ReadFileResult = { content: string; mtimeMs?: number } | { error: string };
-type GitLogResult =
-  | { ok: true; commits: CommitEntry[]; hasMore: boolean }
-  | { ok: false; error: string };
-
-type ViewedFile =
-  | { kind: "live"; path: string; relPath: string | null; deleted: boolean }
-  | {
-      kind: "commit";
-      repoPath: string;
-      hash: string;
-      path: string;
-      deleted: boolean;
-    };
-
-/** Entrada do git status por caminho absoluto (chave do mapa). */
-interface GitStatusEntry {
-  path: string;
-  status: GitFileStatus;
-}
-
-type GitStatusResult =
-  | { ok: true; entries: GitStatusEntry[] }
-  | { ok: false; error: string };
-
-type DiffResult = { ok: true; patch: string } | { ok: false; error: string };
-
-/** Arquivo excluído no working tree (fantasma no tree, não existe em disco). */
-interface DeletedEntry {
-  path: string;
-  name: string;
-}
+import { FileViewer } from "@/src/components/file-viewer";
+import { FileBrowser, type BrowserTab } from "@/src/components/file-browser";
+import { ChangesView, type RevealRequest } from "@/src/components/changes-view";
+import type { ViewedFile, ViewerLens } from "@/src/lib/folders";
+import { useGitRepos } from "@/src/lib/use-git-repos";
 
 const FILE_PANEL_MIN_PX = 200;
 
-/** Salvamento automático: preferência do painel, como as demais. */
-const AUTO_SAVE_KEY = "orbit-files-auto-save";
-/** Espera depois da última tecla antes do save automático. */
-const AUTO_SAVE_DEBOUNCE_MS = 1000;
-
-/** Junta a raiz do repo com um caminho relativo (separadores '/' no relPath). */
-function joinPath(root: string, relPath: string) {
-  const base = root.replace(/[\\/]+$/, "");
-  return `${base}/${relPath.replace(/\\/g, "/")}`;
-}
-
-function getBaseName(p: string) {
-  const parts = p.replace(/\\/g, "/").split("/");
-  return parts[parts.length - 1] || p;
-}
-
-const IMAGE_FILE_RE = /\.(png|jpe?g|gif|webp|svg|bmp|avif|ico)$/i;
-
-function isImageFile(p: string) {
-  return IMAGE_FILE_RE.test(p);
-}
-
-
-function getBreadcrumbs(rootPath: string, filePath: string): string[] {
-  const root = rootPath.replace(/\\/g, "/").replace(/\/$/, "");
-  const file = filePath.replace(/\\/g, "/");
-  if (!file.startsWith(root)) return [];
-  const relative = file.slice(root.length + 1);
-  const parts = relative.split("/");
-  return [getBaseName(rootPath), ...parts];
-}
-
-// ── Regiões do log de commits (estilo VS Code) ──────────────────────────
-type CommitRegionKind = "default" | "pushed" | "local";
-
-interface CommitRegion {
-  kind: CommitRegionKind;
-  label: string;
-}
-
-interface CommitRow {
-  divider?: CommitRegion;
-  commit?: CommitEntry;
-}
-
-const REGION_STYLES: Record<CommitRegionKind, { line: string; chip: string }> = {
-  local: {
-    line: "bg-amber-500/40",
-    chip: "border-amber-500/40 bg-amber-500/10 text-amber-600 dark:text-amber-400",
-  },
-  pushed: {
-    line: "bg-emerald-500/40",
-    chip: "border-emerald-500/40 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
-  },
-  default: {
-    line: "bg-border",
-    chip: "border-border bg-muted text-muted-foreground",
-  },
-};
-
-/** Região de um commit: branch principal, branch atual já no remoto, ou branch atual só local. */
-function commitRegion(commit: CommitEntry, info: BranchSyncInfo | undefined): CommitRegion | null {
-  if (!info?.current) return null;
-  if (info.defaultBranch && info.defaultBranch !== info.current) {
-    if (commit.onDefault) return { kind: "default", label: info.defaultBranch };
-    return commit.pushed
-      ? { kind: "pushed", label: info.upstream ?? info.current }
-      : { kind: "local", label: info.current };
-  }
-  return commit.pushed
-    ? { kind: "pushed", label: info.upstream ?? info.current }
-    : { kind: "local", label: info.current };
-}
-
-// ── Badges de refs nos cards ────────────────────────────────────────────
-type RefKind = "current" | "default" | "remote" | "tag" | "head" | "other";
-
-function classifyRef(
-  ref: string,
-  current: string | null | undefined,
-  defaultBranch: string | null | undefined,
-): { kind: RefKind; name: string } {
-  if (ref.startsWith("refs/heads/")) {
-    const name = ref.slice("refs/heads/".length);
-    if (name === current) return { kind: "current", name };
-    if (name === defaultBranch) return { kind: "default", name };
-    return { kind: "head", name };
-  }
-  if (ref.startsWith("refs/remotes/")) {
-    return { kind: "remote", name: ref.slice("refs/remotes/".length) };
-  }
-  if (ref.startsWith("refs/tags/")) {
-    return { kind: "tag", name: ref.slice("refs/tags/".length) };
-  }
-  return { kind: "other", name: ref };
-}
-
-const REF_BADGE_STYLES: Record<RefKind, string> = {
-  current: "border-primary/30 bg-primary/10 text-primary",
-  default: "border-emerald-500/40 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
-  remote: "border-sky-500/40 bg-sky-500/10 text-sky-600 dark:text-sky-400",
-  tag: "border-amber-500/40 bg-amber-500/10 text-amber-600 dark:text-amber-400",
-  head: "border-border bg-muted text-muted-foreground",
-  other: "border-border bg-muted text-muted-foreground",
-};
-
-const REF_PRIORITY: Record<RefKind, number> = {
-  current: 0,
-  default: 1,
-  remote: 2,
-  tag: 3,
-  head: 4,
-  other: 5,
-};
-
-const MAX_BRANCH_BADGES = 3;
-const MAX_TAG_BADGES = 2;
-
-function RefBadge({ kind, name }: { kind: RefKind; name: string }) {
-  return (
-    <span
-      title={name}
-      className={cn(
-        "inline-flex max-w-32 items-center gap-1 truncate rounded-full border px-1.5 py-px text-[9px] font-medium",
-        REF_BADGE_STYLES[kind],
-      )}
-    >
-      {kind === "tag" && <TagIcon className="size-2.5 shrink-0" />}
-      {kind === "remote" && <CloudIcon className="size-2.5 shrink-0" />}
-      {kind === "current" && <GitBranchIcon className="size-2.5 shrink-0" />}
-      <span className="truncate">{name}</span>
-    </span>
-  );
-}
-
-function CommitRefBadges({
-  refs,
-  current,
-  defaultBranch,
-}: {
-  refs: string[];
-  current?: string | null;
-  defaultBranch?: string | null;
-}) {
-  if (!refs.length) return null;
-  const classified = refs.map((ref) => classifyRef(ref, current, defaultBranch));
-  // Branches e tags em grupos independentes: tags sempre aparecem ao lado
-  // das branches, sem serem descartadas pelo limite de badges de branch.
-  const branches = classified
-    .filter((b) => b.kind !== "tag")
-    .sort((a, b) => REF_PRIORITY[a.kind] - REF_PRIORITY[b.kind]);
-  const tags = classified
-    .filter((b) => b.kind === "tag")
-    .sort((a, b) => a.name.localeCompare(b.name));
-  const visibleBranches = branches.slice(0, MAX_BRANCH_BADGES);
-  const visibleTags = tags.slice(0, MAX_TAG_BADGES);
-  const rest = [
-    ...branches.slice(MAX_BRANCH_BADGES),
-    ...tags.slice(MAX_TAG_BADGES),
-  ];
-  return (
-    <div className="flex flex-wrap items-center gap-1 pt-1.5">
-      {visibleBranches.map((b) => (
-        <RefBadge key={b.name} kind={b.kind} name={b.name} />
-      ))}
-      {visibleTags.map((b) => (
-        <RefBadge key={b.name} kind={b.kind} name={b.name} />
-      ))}
-      {rest.length > 0 && (
-        <span
-          title={rest.map((b) => b.name).join(", ")}
-          className="inline-flex shrink-0 items-center rounded-full border border-border bg-muted px-1.5 py-px text-[9px] font-medium text-muted-foreground"
-        >
-          +{rest.length}
-        </span>
-      )}
-    </div>
-  );
-}
-
-function renderEntries(
-  dirPath: string,
-  entries: DirEntryInfo[] | undefined,
-  dirCache: Record<string, DirEntryInfo[]>,
-  expandedPaths: Set<string>,
-  gitStatus: Record<string, GitStatusEntry>,
-  deletedByDir: Record<string, DeletedEntry[]>,
-): ReactNode[] | null {
-  if (!entries) return null;
-  const children: ReactNode[] = entries.map((entry) =>
-    entry.isDirectory ? (
-      <FileTreeFolder key={entry.path} name={entry.name} path={entry.path}>
-        {expandedPaths.has(entry.path) &&
-          renderEntries(
-            entry.path,
-            dirCache[entry.path],
-            dirCache,
-            expandedPaths,
-            gitStatus,
-            deletedByDir,
-          )}
-      </FileTreeFolder>
-    ) : (
-      <FileTreeFile
-        key={entry.path}
-        name={entry.name}
-        path={entry.path}
-        status={gitStatus[entry.path]?.status}
-      />
-    ),
-  );
-  // Arquivos excluídos (não existem em disco): entram como fantasmas no
-  // diretório pai, com indicador D — clicar abre o arquivo como excluído.
-  const deleted = deletedByDir[dirPath];
-  if (deleted) {
-    for (const d of deleted) {
-      children.push(
-        <FileTreeFile key={d.path} name={d.name} path={d.path} status="deleted" />,
-      );
-    }
-  }
-  return children;
-}
-
-function FolderQuickSwitch({
-  folders,
-  onFoldersChange,
-}: {
-  folders: string[];
-  onFoldersChange: (f: string[]) => void;
-}) {
-  const { t } = useTranslation();
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!open) return;
-    function handleClickOutside(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node))
-        setOpen(false);
-    }
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, [open]);
-
-  const primaryName =
-    folders.length === 0 ? t("folders.noFolder") : getBaseName(folders[0]);
-
-  const handleSelectFolder = (path: string) => {
-    setOpen(false);
-    if (folders[0] === path) return;
-    onFoldersChange([path, ...folders.filter((f) => f !== path)]);
-  };
-
-  return (
-    <div
-      className="relative shrink-0 border-t border-sidebar-border p-2 pt-2.5"
-      ref={ref}
-    >
-      <button
-        onClick={() => setOpen((v) => !v)}
-        className="flex h-8 w-full items-center gap-1.5 rounded-md border border-border px-2.5 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
-      >
-        <FolderIcon className="size-3.5 shrink-0" />
-        <span className="flex-1 truncate text-left">{primaryName}</span>
-        <ChevronUpIcon
-          className={cn(
-            "size-3 shrink-0 transition-transform",
-            open && "rotate-180",
-          )}
-        />
-      </button>
-      {open && (
-        <div className="absolute bottom-full left-2 right-2 z-50 mb-1 overflow-hidden rounded-lg border bg-popover/70 p-1 text-popover-foreground shadow-md ring-1 ring-foreground/10 backdrop-blur-2xl backdrop-saturate-150">
-          <p className="px-2 py-1 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
-            {t("folders.associated")}
-          </p>
-          {folders.map((f) => (
-            <button
-              key={f}
-              onClick={() => handleSelectFolder(f)}
-              className="flex w-full min-h-7 items-center gap-2 rounded-md px-2 py-1 text-xs hover:bg-foreground/10"
-            >
-              <FolderIcon className="size-3.5 shrink-0 text-muted-foreground" />
-              <span className="flex-1 truncate text-left">
-                {getBaseName(f)}
-              </span>
-              {folders[0] === f && <CheckIcon className="size-3.5 shrink-0" />}
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
-  );
+/**
+ * O que está em foco: o arquivo E a lente sobre ele.
+ *
+ * Os dois andam juntos porque descrevem a mesma tela — o arquivo sozinho não
+ * diz se o painel mostra o texto ou o diff dele. Quem escolhe a lente é quem
+ * abre: a lista de alterações abre no diff, a árvore completa no conteúdo.
+ */
+interface ViewerTarget {
+  file: ViewedFile;
+  lens: ViewerLens;
 }
 
 /**
- * O fonte do arquivo, com número de linha.
+ * Identidade do arquivo aberto no visualizador.
  *
- * `wrap` existe porque texto e código querem coisas opostas: em código,
- * quebrar a linha sozinho falseia a indentação e é melhor rolar na horizontal;
- * em Markdown, o parágrafo é UMA linha só, e sem quebra ele sai para fora da
- * div — foi o que apareceu ao ler um .md no modo edição.
- *
- * Por isso cada linha é uma LINHA de verdade (número e conteúdo lado a lado), e
- * não duas colunas paralelas: com a quebra ligada, um parágrafo que ocupa três
- * alturas empurraria todos os números seguintes para cima do conteúdo errado.
- * Assim o número acompanha a altura do que ele numera.
+ * A chave existe para o visualizador renascer ao trocar de arquivo: o estado
+ * interno dele (rascunho, conflito, patch) é todo do arquivo anterior. Ela é
+ * derivada do arquivo, e não um contador, para que reabrir o MESMO arquivo não
+ * jogue fora o que está na tela — a lente fica de fora de propósito: trocar de
+ * lente é do visualizador, e remontá-lo perderia o rascunho.
  */
-/** Modo diff do visualizador: realça com a linguagem e só pinta o fundo. */
-function DiffCodeView({ patch, filePath }: { patch: string; filePath: string }) {
-  const { t } = useTranslation();
-  const files = useMemo(() => parsePatch(patch), [patch]);
-
-  if (files.length === 0) {
-    return (
-      <div className="p-4 text-sm text-muted-foreground">
-        {t("folders.noChangesInDiff")}
-      </div>
-    );
-  }
-
-  return (
-    <div className="min-w-0 font-mono text-xs">
-      {files.map((file, fi) => (
-        <HighlightedDiffFile key={fi} file={file} filePath={filePath} />
-      ))}
-    </div>
-  );
+function viewerKey(file: ViewedFile | undefined): string {
+  if (!file) return "empty";
+  return file.kind === "commit"
+    ? `commit:${file.hash}:${file.path}`
+    : `live:${file.path}:${file.deleted ? "deleted" : "file"}`;
 }
 
 export function FoldersTab() {
   const { t } = useTranslation();
   const { folders, setFolders } = useWorkspace();
-  const [viewMode, setViewMode] = useState<"files" | "commits">("files");
-  const [expandedPaths, setExpandedPaths] = useState<Set<string>>(
-    () => new Set(folders),
-  );
-  const [dirCache, setDirCache] = useState<Record<string, DirEntryInfo[]>>({});
-  const loadingRef = useRef<Set<string>>(new Set());
-  const entryIsDirRef = useRef<Map<string, boolean>>(new Map());
+  // Quem tem git nesta pasta: a raiz e/ou as subpastas com repo próprio. A
+  // leitura das alterações usa a lista para mostrar o espaço inteiro, com cada
+  // projeto debaixo do seu nome — e não só o diff da pasta raiz, que num
+  // workspace não é repo nenhum.
+  const repos = useGitRepos(folders);
 
-  // Recarrega diretórios quando o branch git muda
-  const currentBranch = useBranchStore((s) => (folders[0] ? s.byDir[folders[0]]?.current : undefined))
-  const branchInfo = useBranchStore((s) => (folders[0] ? s.infoByDir[folders[0]] : undefined))
-  const syncBusyDir = useBranchStore((s) => s.syncBusyDir)
-  const refreshInfo = useBranchStore((s) => s.refreshInfo)
-  const pullChanges = useBranchStore((s) => s.pullChanges)
-  const pushChanges = useBranchStore((s) => s.pushChanges)
-
-const [viewedFile, setViewedFile] = useState<ViewedFile>();
-  const [fileContent, setFileContent] = useState<string | null>(null);
-  const [fileImage, setFileImage] = useState<string | null>(null);
-  const [fileError, setFileError] = useState<string | null>(null);
-  const [fileLoading, setFileLoading] = useState(false);
-  /** mtime de quando o arquivo foi aberto — referência do save contra
-   *  escrita concorrente (agente, outro editor). */
-  const [fileMtime, setFileMtime] = useState<number | null>(null);
-  const [dirty, setDirty] = useState(false);
-  /** Espelho de `dirty` para leitura dentro de callbacks memoizados. */
-  const dirtyRef = useRef(false);
-  dirtyRef.current = dirty;
-  const [saving, setSaving] = useState(false);
-  /** Motivo pelo qual o último save ou a última escrita do agente não passou. */
-  const [conflict, setConflict] = useState<
-    null | { kind: "stale" } | { kind: "agent" } | { kind: "failed"; message: string }
-  >(null);
-  const [autoSave, setAutoSave] = useState(
-    () => localStorage.getItem(AUTO_SAVE_KEY) === "true",
-  );
-  const editorRef = useRef<CodeEditorHandle>(null);
-  const autoSaveTimer = useRef<number>();
-  const [copied, setCopied] = useState(false);
-  const copyTimeoutRef = useRef<number>();
+  const [tab, setTab] = useState<BrowserTab>("files");
+  /**
+   * O modo do painel da esquerda. Ele NÃO é a aba do índice: a aba de commits é
+   * só do índice, e os diffs empilhados (ou o arquivo aberto) não têm por que
+   * sumir porque se foi olhar o histórico.
+   */
+  const [leftMode, setLeftMode] = useState<"files" | "changes">("files");
+  const [target, setTarget] = useState<ViewerTarget>();
+  const [reveal, setReveal] = useState<RevealRequest | null>(null);
+  const [changesReload, setChangesReload] = useState(0);
   const [fileBrowserOpen, setFileBrowserOpen] = useState(true);
-  const [mdMode, setMdMode] = useState<"source" | "preview">("preview");
-  // Status git do working tree, keyed por caminho absoluto (indicadores na árvore)
-  const [gitStatus, setGitStatus] = useState<Record<string, GitStatusEntry>>({});
-  // Modo diff do visualizador de arquivos (padrão vs patch)
-  const [diffMode, setDiffMode] = useState(false);
-  const [diffPatch, setDiffPatch] = useState<string | null>(null);
-  const [diffLoading, setDiffLoading] = useState(false);
-  const [diffError, setDiffError] = useState<string | null>(null);
+  /** Espelho de "há rascunho" para leitura dentro dos callbacks de troca. */
+  const dirtyRef = useRef(false);
+  /** Cresce a cada pedido de foco: repetir o clique no mesmo arquivo vale de novo. */
+  const revealNonce = useRef(0);
 
-  const [commits, setCommits] = useState<CommitEntry[] | null>(null);
-  const [commitsError, setCommitsError] = useState<string | null>(null);
-  const [commitsLoading, setCommitsLoading] = useState(false);
-  const [commitsReload, setCommitsReload] = useState(0);
-  const [commitsHasMore, setCommitsHasMore] = useState(false);
-  const [commitsLoadingMore, setCommitsLoadingMore] = useState(false);
-  // Ref de exclusão mútua síncrona (evita duas páginas simultâneas com o mesmo skip)
-  const commitsLoadingMoreRef = useRef(false);
-  // Época da carga inicial: descarta appends de uma página velha que chegue
-  // depois de um reload (pull/push/troca de pasta).
-  const commitsEpochRef = useRef(0);
-  const commitsEndRef = useRef<HTMLDivElement | null>(null);
-
-  // Linhas do log com divisores de região (main vs branch atual vs remoto)
-  const commitRows = useMemo<CommitRow[]>(() => {
-    if (!commits) return [];
-    const rows: CommitRow[] = [];
-    let prevKey: string | null = null;
-    for (const commit of commits) {
-      const region = commitRegion(commit, branchInfo);
-      const key = region ? `${region.kind}\u0000${region.label}` : null;
-      if (region && key !== prevKey) rows.push({ divider: region });
-      prevKey = key;
-      rows.push({ commit });
-    }
-    return rows;
-  }, [commits, branchInfo]);
-  const [syncStatus, setSyncStatus] = useState<
-    { kind: "error" | "info"; text: string } | null
-  >(null);
-
-  const loadDir = useCallback(async (dirPath: string) => {
-    if (loadingRef.current.has(dirPath)) return;
-    loadingRef.current.add(dirPath);
-    const result = (await window.ipcRenderer.invoke(
-      "fs:readdir",
-      dirPath,
-    )) as ReaddirResult;
-    loadingRef.current.delete(dirPath);
-    if (result.ok) {
-      for (const e of result.entries)
-        entryIsDirRef.current.set(e.path, e.isDirectory);
-      setDirCache((prev) => ({ ...prev, [dirPath]: result.entries }));
-    }
+  const handleDirtyChange = useCallback((next: boolean) => {
+    dirtyRef.current = next;
   }, []);
 
-  const reloadRootDir = useCallback(
-    (dir: string) => {
-      setDirCache((prev) => {
-        if (!prev[dir]) return prev
-        const next = { ...prev }
-        delete next[dir]
-        return next
-      })
-      loadDir(dir)
-    },
-    [loadDir],
-  )
+  const handleLensChange = useCallback((lens: ViewerLens) => {
+    setTarget((prev) => (prev ? { ...prev, lens } : prev));
+  }, []);
 
-  // Status git do repo raiz: alimenta os indicadores M/D/A/U/R na árvore e os
-  // fantasmas de arquivos excluídos.
-  const loadGitStatus = useCallback(async () => {
-    const repo = folders[0]
-    if (!repo) {
-      setGitStatus({})
-      return
-    }
-    const result = (await window.ipcRenderer.invoke(
-      "git:status",
-      repo,
-    )) as GitStatusResult
-    if (!result.ok) {
-      setGitStatus({})
-      return
-    }
-    const map: Record<string, GitStatusEntry> = {}
-    for (const entry of result.entries) {
-      map[joinPath(repo, entry.path)] = entry
-    }
-    setGitStatus(map)
-  }, [folders])
-
-  // Recarrega os indicadores ao montar, trocar de pasta/branch ou voltar à
-  // aba de arquivos (pull/push/disco podem ter mudado o working tree).
-  useEffect(() => {
-    if (viewMode !== "files") return
-    void loadGitStatus()
-  }, [viewMode, loadGitStatus, currentBranch])
-
-  // Agrupa arquivos excluídos por diretório pai (camada de fantasma no tree).
-  const deletedByDir = useMemo(() => {
-    const map: Record<string, DeletedEntry[]> = {}
-    for (const [absPath, entry] of Object.entries(gitStatus)) {
-      if (entry.status !== "deleted") continue
-      const idx = absPath.lastIndexOf("/")
-      const dir = idx >= 0 ? absPath.slice(0, idx) : absPath
-      const name = idx >= 0 ? absPath.slice(idx + 1) : absPath
-      const list = map[dir] ?? []
-      list.push({ path: absPath, name })
-      map[dir] = list
-    }
-    return map
-  }, [gitStatus])
-
-  useEffect(() => {
-    if (!currentBranch || folders.length === 0) return
-    reloadRootDir(folders[0])
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentBranch])
-
-  useEffect(() => {
-    for (const f of folders) entryIsDirRef.current.set(f, true);
-    setExpandedPaths((prev) => {
-      const next = new Set(prev);
-      for (const f of folders) next.add(f);
-      return next;
-    });
-    for (const f of folders) {
-      if (!dirCache[f]) loadDir(f);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [folders]);
-
-  const handleExpandedChange = useCallback(
-    (next: Set<string>) => {
-      setExpandedPaths(next);
-      for (const p of next) {
-        if (!dirCache[p] && entryIsDirRef.current.get(p) !== false) loadDir(p);
-      }
-    },
-    [dirCache, loadDir],
-  );
+  const toggleBrowser = useCallback(() => setFileBrowserOpen((v) => !v), []);
 
   /**
    * Trocar de arquivo joga fora o buffer atual. Sem esta confirmação o
@@ -684,9 +105,56 @@ const [viewedFile, setViewedFile] = useState<ViewedFile>();
     return window.confirm(t("folders.discardPrompt"));
   }, [t]);
 
+  /**
+   * Entrar no modo Alterações desmonta o editor, e o rascunho morre com ele —
+   * a mesma perda da troca de arquivo, com a mesma confirmação.
+   */
+  const goToChanges = useCallback(() => {
+    if (!confirmDiscard()) return false;
+    dirtyRef.current = false;
+    setTab("changes");
+    setLeftMode("changes");
+    return true;
+  }, [confirmDiscard]);
+
+  const handleTabChange = useCallback(
+    (next: BrowserTab) => {
+      if (next === "changes") {
+        goToChanges();
+        return;
+      }
+      // A aba de commits é só do índice: o painel da esquerda fica como estava.
+      if (next === "files") setLeftMode("files");
+      setTab(next);
+    },
+    [goToChanges],
+  );
+
+  /**
+   * Trazer um arquivo à vista: o índice à direita manda o caminho ABSOLUTO —
+   * com mais de um repositório é o único que não deixa dúvida de qual projeto
+   * é — e a visão empilhada resolve o repo e o caminho relativo a partir dele.
+   */
+  const handleReveal = useCallback(
+    (filePath: string) => {
+      if (!goToChanges()) return;
+      revealNonce.current += 1;
+      setReveal({ path: filePath, nonce: revealNonce.current });
+    },
+    [goToChanges],
+  );
+
+  /**
+   * Põe um arquivo do working tree em foco — ou o fantasma de um excluído,
+   * que o visualizador abre pelo conteúdo do HEAD. Ler o arquivo é do
+   * visualizador: aqui só se decide qual é, e com que lente.
+   *
+   * Devolve se abriu: quem precisa trocar de modo junto com a abertura só
+   * deve fazê-lo depois de a confirmação passar.
+   */
   const openLiveFile = useCallback(
-    async (filePath: string, deleted = false) => {
-      if (!confirmDiscard()) return;
+    (filePath: string, deleted = false, lens: ViewerLens = "content") => {
+      if (!confirmDiscard()) return false;
       const repo = folders[0];
       let relPath: string | null = null;
       if (repo) {
@@ -695,503 +163,52 @@ const [viewedFile, setViewedFile] = useState<ViewedFile>();
         if (filePath.startsWith(root + sep))
           relPath = filePath.slice(root.length + 1).replace(/\\/g, "/");
       }
-      setViewedFile({ kind: "live", path: filePath, relPath, deleted });
-      setFileLoading(true);
-      setFileError(null);
-      setFileContent(null);
-      setFileImage(null);
-      // Estado de edição é por arquivo: o rascunho e o aviso de conflito do
-      // anterior não podem seguir para este.
-      setFileMtime(null);
-      setDirty(false);
-      setConflict(null);
-      setMdMode("preview");
-      setDiffMode(false);
-      setDiffPatch(null);
-      setDiffError(null);
-      if (isImageFile(filePath)) {
-        setFileLoading(false);
-        if (deleted) {
-          setFileError(t("folders.imageNotAvailable"));
-          return;
-        }
-        const result = (await window.ipcRenderer.invoke(
-          "fs:readFileAsDataUrl",
-          filePath,
-        )) as { dataUrl: string } | { error: string };
-        setFileLoading(false);
-        if ("dataUrl" in result) setFileImage(result.dataUrl);
-        else setFileError(result.error);
-        return;
-      }
-      if (deleted) {
-        // Arquivo excluído no working tree: o modo padrão mostra o conteúdo
-        // no HEAD (o arquivo não existe mais em disco).
-        if (repo && relPath) {
-          const result = (await window.ipcRenderer.invoke(
-            "git:showFile",
-            repo,
-            "HEAD",
-            relPath,
-            false,
-          )) as ReadFileResult;
-          setFileLoading(false);
-          if ("content" in result) setFileContent(result.content);
-          else setFileError(result.error);
-        } else {
-          setFileLoading(false);
-          setFileError(t("folders.diffUnavailable"));
-        }
-        return;
-      }
-      const result = (await window.ipcRenderer.invoke(
-        "fs:readFile",
-        filePath,
-      )) as ReadFileResult;
-      setFileLoading(false);
-      if ("content" in result) {
-        setFileContent(result.content);
-        setFileMtime(result.mtimeMs ?? null);
-      } else setFileError(result.error);
+      setTarget({
+        file: { kind: "live", path: filePath, relPath, deleted },
+        lens,
+      });
+      return true;
     },
-    [folders, t, confirmDiscard],
+    [folders, confirmDiscard],
   );
 
+  /**
+   * Põe em foco um arquivo congelado em um commit. A leitura vai para o modo
+   * Arquivos: o que se quer ver é o arquivo do commit, e ele não está no working
+   * tree — na leitura de Alterações não haveria seção dele para onde rolar.
+   */
   const openCommitFile = useCallback(
-    async (repoPath: string, hash: string, path: string, deleted: boolean) => {
+    (
+      repoPath: string,
+      hash: string,
+      path: string,
+      deleted: boolean,
+      lens: ViewerLens = "content",
+    ) => {
       if (!confirmDiscard()) return;
-      setViewedFile({ kind: "commit", repoPath, hash, path, deleted });
-      setFileMtime(null);
-      setDirty(false);
-      setConflict(null);
-      setFileLoading(true);
-      setFileError(null);
-      setFileContent(null);
-      setFileImage(null);
-      setDiffMode(false);
-      setDiffPatch(null);
-      setDiffError(null);
-      if (isImageFile(path)) {
-        setFileLoading(false);
-        setFileError(t("folders.imageNotAvailable"));
-        return;
-      }
-    const result = (await window.ipcRenderer.invoke(
-        "git:showFile",
-        repoPath,
-        hash,
-        path,
-        deleted,
-      )) as ReadFileResult;
-      setFileLoading(false);
-      setMdMode("preview");
-      if ("content" in result) setFileContent(result.content);
-      else setFileError(result.error);
-    },
-    [t, confirmDiscard],
-  );
-
-  const handleSelect = useCallback(
-    (path: string) => {
-      // Fantasma de arquivo excluído: abre o arquivo como excluído (HEAD + diff)
-      if (gitStatus[path]?.status === "deleted") {
-        void openLiveFile(path, true);
-        return;
-      }
-      if (entryIsDirRef.current.get(path) === false) openLiveFile(path);
-    },
-    [openLiveFile, gitStatus],
-  );
-
-  // Alterna o visualizador entre o arquivo padrão e o modo diff (patch unificado).
-  const handleToggleDiff = useCallback(
-    async (target: boolean) => {
-      if (!viewedFile || fileLoading || diffLoading || target === diffMode) return;
-      if (!target) {
-        setDiffMode(false);
-        setDiffPatch(null);
-        setDiffError(null);
-        return;
-      }
-      setDiffLoading(true);
-      setDiffError(null);
-      try {
-        const result: DiffResult =
-          viewedFile.kind === "live"
-            ? viewedFile.relPath && folders[0]
-              ? ((await window.ipcRenderer.invoke(
-                  "git:diffWorkingFile",
-                  folders[0],
-                  viewedFile.relPath,
-                )) as DiffResult)
-              : { ok: false, error: t("folders.diffUnavailable") }
-            : ((await window.ipcRenderer.invoke(
-                "git:showCommitDiff",
-                viewedFile.repoPath,
-                viewedFile.hash,
-                viewedFile.path,
-              )) as DiffResult);
-        if (result.ok) {
-          setDiffPatch(result.patch);
-          setDiffMode(true);
-        } else {
-          setDiffError(result.error);
-        }
-      } finally {
-        setDiffLoading(false);
-      }
-    },
-    [viewedFile, fileLoading, diffLoading, diffMode, folders, t],
-  );
-
-  const isMarkdownFile = viewedFile ? /(?:\.md|\.markdown)$/i.test(viewedFile.path) : false;
-
-  /**
-   * Figuras do Markdown aberto, resolvidas contra a pasta DELE.
-   *
-   * O preview roda na origem do app, então um `./imagens/x.png` não resolve
-   * contra o arquivo e a imagem aparecia quebrada. Quem sabe a pasta é o main,
-   * que devolve cada caminho como data URL.
-   */
-  const [previewImages, setPreviewImages] = useState<Record<string, string>>({});
-
-  useEffect(() => {
-    if (!fileContent || !viewedFile || !isMarkdownFile || mdMode !== "preview") {
-      setPreviewImages({});
-      return;
-    }
-    const sources = markdownImageSources(fileContent);
-    if (sources.length === 0) {
-      setPreviewImages({});
-      return;
-    }
-    // No arquivo de commit o caminho é relativo ao repositório; juntar com "/"
-    // basta, porque o main resolve com path.resolve.
-    const base =
-      viewedFile.kind === "live"
-        ? viewedFile.path
-        : `${viewedFile.repoPath}/${viewedFile.path}`;
-    let cancelled = false;
-    window.ipcRenderer
-      .invoke("fs:markdownImages", base, sources)
-      .then((map) => {
-        if (!cancelled) setPreviewImages(map as Record<string, string>);
-      })
-      .catch(() => {
-        // figura é enfeite: falhar aqui não pode derrubar a leitura do texto
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [fileContent, viewedFile, isMarkdownFile, mdMode]);
-
-  const previewMarkdown = useMemo(
-    () => (fileContent ? withResolvedImages(fileContent, previewImages) : ""),
-    [fileContent, previewImages],
-  );
-  const isImage = viewedFile ? isImageFile(viewedFile.path) : false;
-  /** O galho que renderiza o CodeEditor — quem rola é ele, não o pai. */
-  const showsEditor =
-    !fileLoading &&
-    !diffMode &&
-    !fileError &&
-    fileImage == null &&
-    fileContent != null &&
-    !(isMarkdownFile && mdMode === "preview");
-
-  /**
-   * Só arquivo do working tree é editável: o de um commit é histórico, e o
-   * excluído não existe mais em disco.
-   */
-  const canEdit =
-    viewedFile?.kind === "live" && !viewedFile.deleted && !isImage && !diffMode && folders.length > 0;
-
-  const saveFile = useCallback(
-    async (content: string) => {
-      if (!viewedFile || viewedFile.kind !== "live") return;
-      setSaving(true);
-      const result = await fsApi.writeFile({
-        filePath: viewedFile.path,
-        content,
-        roots: folders,
-        expectedMtimeMs: fileMtime ?? undefined,
-      });
-      setSaving(false);
-      if (result.ok) {
-        setConflict(null);
-        setFileMtime(result.mtimeMs);
-        // Vira a nova base do editor: o buffer passa a espelhar o disco e o
-        // indicador de rascunho apaga.
-        setFileContent(content);
-        return;
-      }
-      if (result.reason === "stale") {
-        // Alguém escreveu no meio. Não sobrescreve nada: mostra o aviso e
-        // deixa a pessoa escolher entre recarregar e insistir.
-        setConflict({ kind: "stale" });
-        return;
-      }
-      setConflict({
-        kind: "failed",
-        message: t(`folders.saveError.${result.reason}`, {
-          defaultValue: "error" in result ? (result.error ?? result.reason) : result.reason,
-        }),
+      setLeftMode("files");
+      setTarget({
+        file: { kind: "commit", repoPath, hash, path, deleted },
+        lens,
       });
     },
-    [viewedFile, folders, fileMtime, t],
+    [confirmDiscard],
   );
 
-  /** Descarta o rascunho e traz o que está em disco. */
-  const reloadFromDisk = useCallback(async () => {
-    if (!viewedFile || viewedFile.kind !== "live") return;
-    const result = (await window.ipcRenderer.invoke(
-      "fs:readFile",
-      viewedFile.path,
-    )) as ReadFileResult;
-    if ("content" in result) {
-      setFileContent(result.content);
-      setFileMtime(result.mtimeMs ?? null);
-      setConflict(null);
-    }
-  }, [viewedFile]);
-
-  /** Grava por cima, aceitando perder o que mudou em disco. */
-  const overwrite = useCallback(async () => {
-    const content = editorRef.current?.getContent();
-    if (content == null || !viewedFile || viewedFile.kind !== "live") return;
-    setSaving(true);
-    const result = await fsApi.writeFile({
-      filePath: viewedFile.path,
-      content,
-      roots: folders,
-    });
-    setSaving(false);
-    if (result.ok) {
-      setConflict(null);
-      setFileMtime(result.mtimeMs);
-      setFileContent(content);
-    }
-  }, [viewedFile, folders]);
-
-  /** Relê só o mtime, sem tocar no buffer — o conteúdo já foi fundido. */
-  const reloadMtime = useCallback(async (filePath: string) => {
-    const result = (await window.ipcRenderer.invoke("fs:readFile", filePath)) as ReadFileResult;
-    if ("content" in result) setFileMtime(result.mtimeMs ?? null);
-  }, []);
-
-  /**
-   * Escrita do agente no arquivo aberto.
-   *
-   * O evento `part` do chat já traz o input da tool, então dá para fundir a
-   * alteração no buffer em vez de recarregar por cima — cursor, seleção,
-   * scroll, undo e o rascunho em outras partes do arquivo sobrevivem.
-   *
-   * `bash` é ponto cego conhecido: escreve arquivo e não diz qual. Para esses
-   * casos o que protege é a checagem de mtime no save.
-   */
-  useEffect(() => {
-    const current = viewedFile;
-    if (!current || current.kind !== "live") return;
-    const open = current.path.replace(/\\/g, "/");
-    return chatApi.onEvent((event) => {
-      if (event.type !== "part" || event.part.type !== "tool") return;
-      // Só depois de gravado: 'running' ainda não escreveu em disco, e fundir
-      // ali deixaria o buffer adiantado em relação ao arquivo.
-      if (event.part.state !== "done") return;
-      const parsed = agentWriteFromTool(event.part.tool, event.part.input);
-      if (!parsed) return;
-      // O caminho da tool pode vir relativo à pasta de trabalho.
-      const target = parsed.filePath.replace(/\\/g, "/");
-      if (open !== target && !open.endsWith(`/${target}`)) return;
-      const outcome = editorRef.current?.applyAgentWrite(parsed.write);
-      if (!outcome) return;
-      if (outcome.kind === "conflict") {
-        setConflict({ kind: "agent" });
-        return;
-      }
-      // O disco mudou: sem renovar o mtime, o próximo save seria recusado por
-      // desatualizado mesmo já tendo incorporado a alteração do agente.
-      void reloadMtime(current.path);
-      if (outcome.wasClean) setFileContent(outcome.content);
-    });
-  }, [viewedFile, reloadMtime]);
-
-  /** Digitação no editor — só serve ao salvamento automático. */
-  const handleEditorChange = useCallback(
-    (content: string) => {
-      window.clearTimeout(autoSaveTimer.current);
-      if (!autoSave || !canEdit) return;
-      autoSaveTimer.current = window.setTimeout(() => {
-        void saveFile(content);
-      }, AUTO_SAVE_DEBOUNCE_MS);
+  /** Do diff empilhado para o editor: é a única porta de saída da leitura. */
+  const handleOpenFromDiff = useCallback(
+    (absPath: string) => {
+      if (!openLiveFile(absPath, false, "content")) return;
+      setLeftMode("files");
+      setTab("files");
     },
-    [autoSave, canEdit, saveFile],
+    [openLiveFile],
   );
-
-  // Trocar de arquivo com save automático pendente gravaria o texto de um
-  // arquivo dentro do outro.
-  useEffect(() => {
-    return () => window.clearTimeout(autoSaveTimer.current);
-  }, [viewedFile]);
-
-  const toggleAutoSave = useCallback(() => {
-    setAutoSave((prev) => {
-      const next = !prev;
-      localStorage.setItem(AUTO_SAVE_KEY, String(next));
-      return next;
-    });
-  }, []);
-
-  const handleCopy = useCallback(async () => {
-    if (!fileContent) return;
-    await navigator.clipboard.writeText(fileContent);
-    setCopied(true);
-    window.clearTimeout(copyTimeoutRef.current);
-    copyTimeoutRef.current = window.setTimeout(() => setCopied(false), 2000);
-  }, [fileContent]);
-
-  const handleCopyPath = useCallback(async () => {
-    if (!viewedFile) return;
-    await navigator.clipboard.writeText(viewedFile.path);
-  }, [viewedFile]);
-
-  const handleReveal = useCallback(() => {
-    if (viewedFile?.kind !== "live") return;
-    window.ipcRenderer
-      .invoke("shell:showItemInFolder", viewedFile.path)
-      .catch(console.error);
-  }, [viewedFile]);
-
-  const syncErrorMessage = useCallback(
-    (result: Extract<SyncResult, { ok: false }>) => {
-      if (result.kind === "noRemote") return t("folders.noRemote");
-      if (result.kind === "noUpstream") return t("folders.noUpstreamPull");
-      if (result.kind === "auth")
-        return `${t("folders.authFailed")}\n${result.message}`;
-      return result.message;
-    },
-    [t],
-  );
-
-  const handlePull = useCallback(async () => {
-    const repo = folders[0];
-    if (!repo || syncBusyDir) return;
-    setSyncStatus(null);
-    const result = await pullChanges(repo);
-    if (result.ok) {
-      reloadRootDir(repo);
-      void loadGitStatus();
-      setCommitsReload((n) => n + 1);
-      setSyncStatus({ kind: "info", text: t("folders.pulledOk") });
-    } else {
-      setSyncStatus({ kind: "error", text: syncErrorMessage(result) });
-    }
-  }, [folders, syncBusyDir, pullChanges, reloadRootDir, loadGitStatus, syncErrorMessage, t]);
-
-  const [criarRepoOpen, setCriarRepoOpen] = useState(false);
-
-  const handlePush = useCallback(async () => {
-    const repo = folders[0];
-    if (!repo || syncBusyDir) return;
-    setSyncStatus(null);
-    const result = await pushChanges(repo);
-    if (result.ok) {
-      void loadGitStatus();
-      setCommitsReload((n) => n + 1);
-      setSyncStatus({
-        kind: "info",
-        text: result.created ? t("folders.pushedCreated") : t("folders.pushedOk"),
-      });
-      return;
-    }
-    // Sem remote não é erro do usuário, é um passo que falta: o modal oferece
-    // criar o repositório em vez de só informar que não dá para enviar.
-    if (result.kind === "noRemote") {
-      setCriarRepoOpen(true);
-      return;
-    }
-    setSyncStatus({ kind: "error", text: syncErrorMessage(result) });
-  }, [folders, syncBusyDir, pushChanges, loadGitStatus, syncErrorMessage, t]);
-
-  useEffect(() => {
-    if (viewMode !== "commits" || folders.length === 0) return;
-    let cancelled = false;
-    ++commitsEpochRef.current;
-    setCommitsLoading(true);
-    setCommitsError(null);
-    setCommitsHasMore(false);
-    setCommitsLoadingMore(false);
-    commitsLoadingMoreRef.current = false;
-    void refreshInfo(folders[0]);
-    window.ipcRenderer.invoke("git:log", folders[0]).then((result) => {
-      if (cancelled) return;
-      const r = result as GitLogResult;
-      setCommitsLoading(false);
-      if (r.ok) {
-        setCommits(r.commits);
-        setCommitsHasMore(r.hasMore);
-      } else {
-        setCommits([]);
-        setCommitsHasMore(false);
-        setCommitsError(r.error);
-      }
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [viewMode, folders, commitsReload, refreshInfo]);
-
-  const loadMoreCommits = useCallback(() => {
-    const repo = folders[0];
-    if (!repo || !commits || commitsLoading || commitsHasMore === false) return;
-    // commitsLoadingMore do estado não é síncrono: a ref garante exclusão mútua
-    // mesmo com o IntersectionObserver disparando várias vezes no mesmo tick.
-    if (commitsLoadingMoreRef.current) return;
-    commitsLoadingMoreRef.current = true;
-    const epoch = commitsEpochRef.current;
-    setCommitsLoadingMore(true);
-    void window.ipcRenderer
-      .invoke("git:log", repo, commits.length)
-      .then((result) => {
-        if (epoch !== commitsEpochRef.current) return;
-        const r = result as GitLogResult;
-        if (r.ok) {
-          setCommits((prev) => [...(prev ?? []), ...r.commits]);
-          setCommitsHasMore(r.hasMore);
-        }
-      })
-      .finally(() => {
-        commitsLoadingMoreRef.current = false;
-        setCommitsLoadingMore(false);
-      });
-  }, [folders, commits, commitsLoading, commitsHasMore]);
-
-  // Sentinela no fim da lista: quando o viewport do ScrollArea se aproxima do
-  // fim (rootMargin de 300px), carrega a próxima página -> scroll contínuo.
-  useEffect(() => {
-    const el = commitsEndRef.current;
-    if (!el) return;
-    const viewport = el.closest('[data-slot="scroll-area-viewport"]');
-    const observer = new IntersectionObserver(
-      (entries) => {
-        if (entries.some((e) => e.isIntersecting)) {
-          void loadMoreCommits();
-        }
-      },
-      { root: viewport, rootMargin: "300px 0px" },
-    );
-    observer.observe(el);
-    return () => observer.disconnect();
-  }, [commits, loadMoreCommits]);
-
-  useEffect(() => () => window.clearTimeout(copyTimeoutRef.current), []);
 
   if (folders.length === 0) {
     return (
       <div className="flex flex-1 flex-col items-center justify-center gap-3 p-6 text-center">
-        <p className="text-sm text-muted-foreground">
-          {t("folders.empty")}
-        </p>
+        <p className="text-sm text-muted-foreground">{t("folders.empty")}</p>
         <FolderSelector folders={folders} onFoldersChange={setFolders} />
       </div>
     );
@@ -1206,253 +223,26 @@ const [viewedFile, setViewedFile] = useState<ViewedFile>();
         minSize={25}
         order={1}
       >
-        <Artifact className="h-full min-w-0 rounded-none border-0 bg-sidebar mt-2">
-          <ArtifactHeader className="min-w-0 bg-sidebar">
-            <div className="min-w-0">
-              {viewedFile ? (
-                <>
-                  {viewedFile.kind === "commit" && (
-                    <ArtifactTitle className="flex items-center gap-1.5 truncate">
-                      <HistoryIcon className="size-3.5 shrink-0 text-muted-foreground" />
-                      {viewedFile.hash.slice(0, 7)}
-                    </ArtifactTitle>
-                  )}
-                  <ArtifactDescription className="flex min-w-0 items-center gap-1.5">
-                    <span className="truncate">
-                      {getBreadcrumbs(folders[0], viewedFile.path).map((part, i, arr) => (
-                        <span key={i}>
-                          {i > 0 && <span className="mx-0.5 text-muted-foreground/50">›</span>}
-                          <span className={cn(i === arr.length - 1 && "font-medium text-foreground")}>{part}</span>
-                        </span>
-                      ))}
-                    </span>
-                    {dirty && (
-                      <span
-                        title={t("folders.unsaved")}
-                        className="size-1.5 shrink-0 rounded-full bg-primary"
-                      />
-                    )}
-                    {saving && <Loader2 className="size-3 shrink-0 animate-spin text-muted-foreground" />}
-                  </ArtifactDescription>
-                </>
-              ) : (
-                <ArtifactTitle className="flex items-center gap-1.5 truncate">
-                  <FolderTreeIcon className="size-3.5 shrink-0 text-muted-foreground" />
-                  {t("folders.explorer")}
-                </ArtifactTitle>
-              )}
-            </div>
-            <ArtifactActions>
-              <ArtifactAction
-                icon={PanelRightCloseIcon}
-                onClick={() => setFileBrowserOpen((v) => !v)}
-              />
-              {viewedFile && (
-                <DropdownMenu>
-                  <DropdownMenuTrigger className="flex size-7 items-center justify-center rounded-md text-sidebar-foreground/50 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground">
-                    <Ellipsis className="size-4" />
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end" className="min-w-40">
-                    <DropdownMenuItem onClick={handleCopyPath}>
-                      <CopyIcon className="size-4" />
-                      {t("folders.copyPath")}
-                    </DropdownMenuItem>
-<DropdownMenuItem onClick={handleCopy} disabled={isImage}>
-                      {copied ? <CheckIcon className="size-4" /> : <CopyIcon className="size-4" />}
-                      {t("folders.copyContent")}
-                    </DropdownMenuItem>
-                    {canEdit && (
-                      <DropdownMenuItem onClick={toggleAutoSave}>
-                        {autoSave ? <CheckIcon className="size-4" /> : <SaveIcon className="size-4" />}
-                        {t("folders.autoSave")}
-                      </DropdownMenuItem>
-                    )}
-                    {viewedFile.kind === "live" && (
-                      <DropdownMenuItem onClick={handleReveal}>
-                        <FolderOpenIcon className="size-4" />
-                        {t("folders.reveal")}
-                      </DropdownMenuItem>
-                    )}
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              )}
-            </ArtifactActions>
-          </ArtifactHeader>
-          {viewedFile ? (
-            <div className="relative flex min-h-0 min-w-0 flex-1 flex-col">
-              <div className="pointer-events-none absolute right-3 bottom-3 z-20 flex flex-col items-end gap-1.5 [&>*]:pointer-events-auto">
-                {!isImage && (
-                  <div className="flex items-center gap-0.5 rounded-full border border-border bg-popover/90 p-0.5 shadow-sm backdrop-blur-xl">
-                    <button
-                      type="button"
-                      onClick={() => void handleToggleDiff(false)}
-                      title={t("folders.standardMode")}
-                      className={cn(
-                        "flex size-6 items-center justify-center rounded-full transition-colors",
-                        !diffMode
-                          ? "bg-primary text-primary-foreground"
-                          : "text-muted-foreground hover:bg-accent hover:text-accent-foreground",
-                      )}
-                    >
-                      <FileTextIcon className="size-3.5" />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => void handleToggleDiff(true)}
-                      title={t("folders.diffMode")}
-                      className={cn(
-                        "flex size-6 items-center justify-center rounded-full transition-colors",
-                        diffMode
-                          ? "bg-primary text-primary-foreground"
-                          : "text-muted-foreground hover:bg-accent hover:text-accent-foreground",
-                      )}
-                    >
-                      {diffLoading ? (
-                        <Loader2 className="size-3.5 animate-spin" />
-                      ) : (
-                        <GitCompareArrowsIcon className="size-3.5" />
-                      )}
-                    </button>
-                  </div>
-                )}
-                {isMarkdownFile && !diffMode && (
-                  <div className="flex items-center gap-0.5 rounded-full border border-border bg-popover/90 p-0.5 shadow-sm backdrop-blur-xl">
-                    <button
-                      type="button"
-                      onClick={() => setMdMode("source")}
-                      title={t("folders.sourceMode")}
-                      className={cn(
-                        "flex size-6 items-center justify-center rounded-full transition-colors",
-                        mdMode === "source"
-                          ? "bg-primary text-primary-foreground"
-                          : "text-muted-foreground hover:bg-accent hover:text-accent-foreground",
-                      )}
-                    >
-                      <CodeIcon className="size-3.5" />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setMdMode("preview")}
-                      title={t("folders.previewMode")}
-                      className={cn(
-                        "flex size-6 items-center justify-center rounded-full transition-colors",
-                        mdMode === "preview"
-                          ? "bg-primary text-primary-foreground"
-                          : "text-muted-foreground hover:bg-accent hover:text-accent-foreground",
-                      )}
-                    >
-                      <EyeIcon className="size-3.5" />
-                    </button>
-                  </div>
-                )}
-              </div>
-              {conflict && (
-                <div className="z-20 flex flex-wrap items-center gap-2 border-b border-amber-500/30 bg-amber-500/10 px-3 py-1.5 text-xs text-amber-700 dark:text-amber-400">
-                  <span className="flex-1 min-w-40">
-                    {conflict.kind === "stale"
-                      ? t("folders.conflictStale")
-                      : conflict.kind === "agent"
-                        ? t("folders.conflictAgent")
-                        : conflict.message}
-                  </span>
-                  {conflict.kind !== "failed" && (
-                    <>
-                      <button
-                        type="button"
-                        onClick={() => void reloadFromDisk()}
-                        className="rounded-md px-1.5 py-0.5 font-medium hover:bg-amber-500/20"
-                      >
-                        {t("folders.conflictReload")}
-                      </button>
-                      {conflict.kind === "stale" && (
-                        <button
-                          type="button"
-                          onClick={() => void overwrite()}
-                          className="rounded-md px-1.5 py-0.5 font-medium hover:bg-amber-500/20"
-                        >
-                          {t("folders.conflictOverwrite")}
-                        </button>
-                      )}
-                      <button
-                        type="button"
-                        onClick={() => setConflict(null)}
-                        className="rounded-md px-1.5 py-0.5 font-medium hover:bg-amber-500/20"
-                      >
-                        {t("folders.conflictKeepMine")}
-                      </button>
-                    </>
-                  )}
-                </div>
-              )}
-              <ArtifactContent
-                className={cn(
-                  "min-h-0 min-w-0 flex-1 p-0",
-                  // O editor rola por dentro (e só materializa as linhas
-                  // visíveis); os outros modos continuam rolando no pai.
-                  showsEditor ? "overflow-hidden" : "overflow-auto",
-                )}
-              >
-                {fileLoading ? (
-                  <div className="p-4 text-sm text-muted-foreground">
-                    {t("common.loading")}
-                  </div>
-                ) : diffMode ? (
-                  diffLoading ? (
-                    <div className="p-4 text-sm text-muted-foreground">
-                      {t("common.loading")}
-                    </div>
-                  ) : diffError ? (
-                    <div className="p-4 text-sm text-muted-foreground">
-                      {diffError}
-                    </div>
-                  ) : diffPatch != null ? (
-                    <DiffCodeView patch={diffPatch} filePath={viewedFile.path} />
-                  ) : null
-                ) : fileError ? (
-                  <div className="p-4 text-sm text-muted-foreground">
-                    {fileError}
-                  </div>
-                ) : fileImage != null ? (
-                  <div className="flex min-w-0 items-start justify-center p-4">
-                    <Image
-                      src={fileImage}
-                      alt={viewedFile ? getBaseName(viewedFile.path) : undefined}
-                    />
-                  </div>
-                ) : fileContent != null ? (
-                  isMarkdownFile && mdMode === "preview" ? (
-                    <div className="min-w-0 px-4 py-4 text-sm text-foreground">
-                      {/* O pipeline padrão descarta `src` em data URL, que é
-                          o que a figura local vira depois de resolvida. */}
-                      <MessageResponse rehypePlugins={localImageRehypePlugins}>
-                        {previewMarkdown}
-                      </MessageResponse>
-                    </div>
-                  ) : (
-                    <CodeEditor
-                      ref={editorRef}
-                      content={fileContent}
-                      filePath={viewedFile.path}
-                      wrap={isMarkdownFile}
-                      editable={canEdit}
-                      workspaceRoot={folders[0]}
-                      onSave={saveFile}
-                      onDirtyChange={setDirty}
-                      onChange={handleEditorChange}
-                    />
-                  )
-                ) : null}
-              </ArtifactContent>
-            </div>
-          ) : (
-            <div className="flex min-h-0 min-w-0 flex-1 flex-col items-center justify-center gap-4 p-6 text-center">
-              <FolderTreeIcon className="size-16 text-muted-foreground/20" />
-              <p className="text-sm text-muted-foreground">
-                {t("folders.selectFileHint")}
-              </p>
-            </div>
-          )}
-        </Artifact>
+        {leftMode === "changes" ? (
+          <ChangesView
+            onOpenFile={handleOpenFromDiff}
+            reloadToken={changesReload}
+            repoRoot={folders[0]}
+            repos={repos}
+            reveal={reveal}
+          />
+        ) : (
+          <FileViewer
+            key={viewerKey(target?.file)}
+            file={target?.file ?? null}
+            lens={target?.lens ?? "content"}
+            onDirtyChange={handleDirtyChange}
+            onLensChange={handleLensChange}
+            onToggleBrowser={toggleBrowser}
+            repoRoot={folders[0]}
+            roots={folders}
+          />
+        )}
       </Panel>
       {fileBrowserOpen && (
         <PanelResizeHandle className="group relative flex w-0.5 items-center justify-center ">
@@ -1468,330 +258,20 @@ const [viewedFile, setViewedFile] = useState<ViewedFile>();
           order={2}
           style={{ minWidth: FILE_PANEL_MIN_PX }}
         >
-          <div className="flex h-full min-h-0 min-w-0 flex-col bg-code-viewer rounded-lg m-1">
-            <Tabs
-              className="flex min-h-0 min-w-0 flex-1 flex-col"
-              onValueChange={(v) => setViewMode(v as "files" | "commits")}
-              value={viewMode}
-            >
-              <div className="shrink-0 px-3 pt-4 ">
-                <TabsList className="w-full">
-                  <TabsTrigger className="flex-1 gap-1.5" value="files">
-                    <FolderTreeIcon className="size-3.5" />
-                    {t("folders.filesTab")}
-                  </TabsTrigger>
-                  <TabsTrigger className="flex-1 gap-1.5" value="commits">
-                    <FolderGit2Icon className="size-3.5" />
-                    {t("folders.commitsTab")}
-                  </TabsTrigger>
-                </TabsList>
-              </div>
-              <TabsContent
-                className="min-h-0 min-w-0 flex-1 overflow-hidden"
-                value="files"
-              >
-                <ScrollArea className="h-full">
-                  <FileTree
-                    className="rounded-none border-0 bg-transparent mr-2 "
-                    expanded={expandedPaths}
-                    onExpandedChange={handleExpandedChange}
-                    onSelect={handleSelect}
-                    selectedPath={
-                      viewedFile?.kind === "live" ? viewedFile.path : undefined
-                    }
-                  >
-                    {folders.map((folderPath) => (
-                      <FileTreeFolder
-                        key={folderPath}
-                        name={getBaseName(folderPath)}
-                        path={folderPath}
-                      >
-                        {expandedPaths.has(folderPath) &&
-                          renderEntries(
-                            folderPath,
-                            dirCache[folderPath],
-                            dirCache,
-                            expandedPaths,
-                            gitStatus,
-                            deletedByDir,
-                          )}
-                      </FileTreeFolder>
-                    ))}
-                  </FileTree>
-                </ScrollArea>
-              </TabsContent>
-              <TabsContent
-                className="min-h-0 min-w-0 flex-1 overflow-hidden"
-                value="commits"
-              >
-                <div className="flex shrink-0 flex-col gap-1 border-b border-border/60 px-2 py-1.5">
-                  <div className="flex items-center gap-1.5 text-xs">
-                    <GitBranchIcon className="size-3.5 shrink-0 text-muted-foreground" />
-                    <span
-                      className="max-w-24 truncate font-medium"
-                      title={branchInfo?.current ?? undefined}
-                    >
-                      {branchInfo?.current || t("branch.detached")}
-                    </span>
-                    {branchInfo?.dirty && (
-                      <span
-                        className="shrink-0 text-amber-500"
-                        title={t("folders.uncommitted")}
-                      >
-                        *
-                      </span>
-                    )}
-                    {branchInfo?.defaultBranch &&
-                      branchInfo.current &&
-                      branchInfo.defaultBranch !== branchInfo.current && (
-                        <span
-                          className="flex shrink-0 items-center gap-0.5 rounded bg-muted px-1.5 py-px text-[10px] text-muted-foreground"
-                          title={t("folders.aheadBehind", {
-                            ahead: branchInfo.ahead,
-                            behind: branchInfo.behind,
-                            branch: branchInfo.defaultBranch,
-                          })}
-                        >
-                          <ArrowUpIcon className="size-2.5 text-emerald-500" />
-                          {branchInfo.ahead}
-                          <ArrowDownIcon className="ml-1 size-2.5 text-rose-500" />
-                          {branchInfo.behind}
-                          <span className="ml-1 text-foreground/50">
-                            ⇄ {branchInfo.defaultBranch}
-                          </span>
-                        </span>
-                      )}
-                    <span className="flex-1" />
-                    <button
-                      type="button"
-                      onClick={() => void handlePull()}
-                      disabled={
-                        syncBusyDir !== null ||
-                        !branchInfo?.current ||
-                        !branchInfo?.hasRemote
-                      }
-                      title={t("folders.pullHint")}
-                      className="flex h-6 shrink-0 items-center gap-1 rounded border border-border px-1.5 text-[11px] transition-colors hover:bg-accent disabled:opacity-40"
-                    >
-                      <DownloadIcon className="size-3" />
-                      {t("folders.pull")}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => void handlePush()}
-                      disabled={syncBusyDir !== null || !branchInfo?.current}
-                      title={t("folders.pushHint")}
-                      className="flex h-6 shrink-0 items-center gap-1 rounded border border-border px-1.5 text-[11px] transition-colors hover:bg-accent disabled:opacity-40"
-                    >
-                      {syncBusyDir ? (
-                        <span className="size-3 animate-spin rounded-full border-2 border-current border-t-transparent" />
-                      ) : (
-                        <UploadIcon className="size-3" />
-                      )}
-                      {t("folders.push")}
-                    </button>
-                  </div>
-                  {syncStatus && (
-                    <p
-                      className={cn(
-                        "break-words text-[10px] leading-snug",
-                        syncStatus.kind === "error"
-                          ? "text-destructive"
-                          : "text-muted-foreground",
-                      )}
-                    >
-                      {syncStatus.text}
-                    </p>
-                  )}
-                </div>
-                <ScrollArea className="h-full">
-                  <div className="flex flex-col gap-2 p-2 text-xs">
-                    {commitsLoading && (
-                      <div className="p-4 text-center text-muted-foreground">
-                        {t("folders.loadingCommits")}
-                      </div>
-                    )}
-                    {!commitsLoading && commitsError && (
-                      <div className="p-4 text-center text-muted-foreground">
-                        {t("folders.gitHistoryError")}
-                      </div>
-                    )}
-                    {!commitsLoading &&
-                      !commitsError &&
-                      commits?.length === 0 && (
-                        <div className="p-4 text-center text-muted-foreground">
-                          {t("folders.noCommits")}
-                        </div>
-                      )}
-                    {commitRows.map((row) =>
-                      row.divider ? (
-                        <div
-                          key={`divider-${row.divider.kind}-${row.divider.label}`}
-                          aria-hidden
-                          className="flex items-center gap-2 px-1"
-                        >
-                          <div
-                            className={cn(
-                              "h-px flex-1",
-                              REGION_STYLES[row.divider.kind].line,
-                            )}
-                          />
-                          <span
-                            className={cn(
-                              "shrink-0 rounded-full border px-2 py-px text-[9px] font-medium",
-                              REGION_STYLES[row.divider.kind].chip,
-                            )}
-                          >
-                            {row.divider.kind === "local"
-                              ? t("folders.localBranch", {
-                                  branch: row.divider.label,
-                                })
-                              : row.divider.label}
-                          </span>
-                          <div
-                            className={cn(
-                              "h-px flex-1",
-                              REGION_STYLES[row.divider.kind].line,
-                            )}
-                          />
-                        </div>
-                      ) : (
-                        <Commit key={row.commit!.hash}>
-                          <CommitHeader className="p-2">
-                            <CommitInfo className="min-w-0 gap-1">
-                              <HoverCard>
-                                <HoverCardTrigger
-                                  delay={300}
-                                  render={
-                                    <CommitMessage className="line-clamp-2 cursor-default break-words text-xs leading-snug font-medium">
-                                      {row.commit!.message}
-                                    </CommitMessage>
-                                  }
-                                />
-                                <HoverCardContent
-                                  align="start"
-                                  className="w-64 space-y-1.5"
-                                  side="right"
-                                >
-                                  <p className="font-medium leading-snug break-words">
-                                    {row.commit!.message}
-                                  </p>
-                                  {row.commit!.body && (
-                                    <p className="whitespace-pre-line break-words text-muted-foreground text-[11px] leading-relaxed">
-                                      {row.commit!.body}
-                                    </p>
-                                  )}
-                                  <div className="flex items-center gap-1.5 pt-1 text-[10px] text-muted-foreground">
-                                    <CommitHash className="shrink-0 text-[10px]">
-                                      {row.commit!.hash.slice(0, 7)}
-                                    </CommitHash>
-                                    <CommitSeparator className="shrink-0" />
-                                    <span className="truncate">
-                                      {row.commit!.author}
-                                    </span>
-                                    <CommitSeparator className="shrink-0" />
-                                    <CommitTimestamp
-                                      className="shrink-0 text-[10px]"
-                                      date={new Date(row.commit!.date)}
-                                    />
-                                  </div>
-                                </HoverCardContent>
-                              </HoverCard>
-                              {/* O autor e o separador dele saem juntos quando a
-                                  coluna aperta: truncar só o texto deixava os dois
-                                  pontos colados com um vão vazio no meio. */}
-                              <CommitMetadata className="@container min-w-0 text-[10px]">
-                                <CommitHash className="shrink-0 text-[10px]">
-                                  {row.commit!.hash.slice(0, 7)}
-                                </CommitHash>
-                                <span className="hidden min-w-0 items-center gap-2 @[16rem]:flex">
-                                  <CommitSeparator className="shrink-0" />
-                                  <span className="truncate">{row.commit!.author}</span>
-                                </span>
-                                <CommitSeparator className="shrink-0" />
-                                <CommitTimestamp
-                                  className="shrink-0 text-[10px]"
-                                  date={new Date(row.commit!.date)}
-                                />
-                              </CommitMetadata>
-                              <CommitRefBadges
-                                refs={row.commit!.refs}
-                                current={branchInfo?.current}
-                                defaultBranch={branchInfo?.defaultBranch}
-                              />
-                            </CommitInfo>
-                          </CommitHeader>
-                          {row.commit!.files.length > 0 && (
-                            <CommitContent className="p-2">
-                              <CommitFiles>
-                                {row.commit!.files.map((f) => (
-                                  <CommitFile
-                                    key={f.path}
-                                    className="cursor-pointer text-[11px]"
-                                    onClick={() =>
-                                      openCommitFile(
-                                        folders[0],
-                                        row.commit!.hash,
-                                        f.path,
-                                        f.status === "deleted",
-                                      )
-                                    }
-                                  >
-                                    <CommitFileInfo>
-                                      <CommitFileStatus status={f.status} />
-                                      <CommitFileIcon />
-                                      <CommitFilePath>{f.path}</CommitFilePath>
-                                    </CommitFileInfo>
-                                  </CommitFile>
-                                ))}
-                              </CommitFiles>
-                            </CommitContent>
-                          )}
-                        </Commit>
-                      ),
-                    )}
-                    {!commitsLoading &&
-                      !commitsError &&
-                      commits !== null &&
-                      commits.length > 0 && (
-                        <div
-                          ref={commitsEndRef}
-                          className="flex min-h-6 items-center justify-center gap-2 p-1"
-                        >
-                          {commitsLoadingMore && (
-                            <Loader2 className="size-3.5 animate-spin text-muted-foreground" />
-                          )}
-                          {!commitsLoadingMore && !commitsHasMore && (
-                            <span className="text-[10px] text-muted-foreground">
-                              {t("folders.historyEnd")}
-                            </span>
-                          )}
-                        </div>
-                      )}
-                  </div>
-                </ScrollArea>
-              </TabsContent>
-            </Tabs>
-            <FolderQuickSwitch folders={folders} onFoldersChange={setFolders} />
-          </div>
+          <FileBrowser
+            folders={folders}
+            onFoldersChange={setFolders}
+            onOpenCommitFile={openCommitFile}
+            onRefreshChanges={() => setChangesReload((n) => n + 1)}
+            onReveal={handleReveal}
+            onSelectFile={openLiveFile}
+            onTabChange={handleTabChange}
+            selectedPath={
+              target?.file.kind === "live" ? target.file.path : undefined
+            }
+            tab={tab}
+          />
         </Panel>
-      )}
-      {folders[0] && (
-        <CreateRemoteRepoDialog
-          repoPath={folders[0]}
-          open={criarRepoOpen}
-          onOpenChange={setCriarRepoOpen}
-          onCreated={(result) => {
-            setCommitsReload((n) => n + 1);
-            void refreshInfo(folders[0]);
-            setSyncStatus({
-              kind: result.pushed ? "info" : "error",
-              text: result.pushed
-                ? t("createRepo.sucesso", { repo: result.fullName })
-                : t("createRepo.criadoSemPush", { repo: result.fullName }),
-            });
-          }}
-        />
       )}
     </PanelGroup>
   );

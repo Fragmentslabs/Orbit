@@ -16,9 +16,16 @@ interface BranchSelectorProps {
   onOpenChange?: (open: boolean) => void
   /** Omite o botão gatilho — usado quando outro componente abre este dropdown */
   hideTrigger?: boolean
+  /**
+   * Lado em que o dropdown abre. O rodapé das pastas fica no fim do painel,
+   * então lá ele abre para CIMA — para baixo sairia da janela.
+   */
+  side?: "top" | "bottom"
+  /** Gatilho enxuto (sem borda, mais baixo) para barras estreitas. */
+  compact?: boolean
 }
 
-export function BranchSelector({ repoPath, onRequestAgentAction, open: openProp, onOpenChange, hideTrigger }: BranchSelectorProps) {
+export function BranchSelector({ repoPath, onRequestAgentAction, open: openProp, onOpenChange, hideTrigger, side = "bottom", compact = false }: BranchSelectorProps) {
   const { t } = useTranslation()
   const byDir = useBranchStore((s) => s.byDir[repoPath])
   const loading = useBranchStore((s) => s.loading)
@@ -183,7 +190,10 @@ export function BranchSelector({ repoPath, onRequestAgentAction, open: openProp,
                 type="button"
                 disabled={loading || checkoutLoading}
                 title={data.current || t("branch.detached")}
-                className="flex h-7 items-center gap-1 rounded-md border border-border px-1.5 text-xs transition-colors hover:bg-accent hover:text-accent-foreground"
+                className={cn(
+                  "flex h-7 items-center gap-1 rounded-md border border-border px-1.5 text-xs transition-colors hover:bg-accent hover:text-accent-foreground",
+                  compact && "h-6 min-w-0 flex-1 border-0 px-1",
+                )}
               />
             }
           >
@@ -192,9 +202,13 @@ export function BranchSelector({ repoPath, onRequestAgentAction, open: openProp,
             ) : (
               <GitBranch className="size-3 text-muted-foreground" />
             )}
-            <span className="max-w-20 truncate">{data.current || t("branch.detached")}</span>
+            <span
+              className={cn("truncate", compact ? "min-w-0 flex-1 text-left" : "max-w-20")}
+            >
+              {data.current || t("branch.detached")}
+            </span>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-44 p-1">
+          <DropdownMenuContent align={compact ? "start" : "end"} className="w-44 p-1" side={side}>
             {branchItems}
           </DropdownMenuContent>
         </DropdownMenu>

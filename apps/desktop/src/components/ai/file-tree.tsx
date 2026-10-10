@@ -148,7 +148,7 @@ export const FileTreeFolder = ({
             <FileTreeName>{name}</FileTreeName>
           </CollapsibleTrigger>
           <CollapsibleContent>
-            <div className="ml-4 border-l pl-2">{children}</div>
+            <div className="ml-2 border-l pl-1.5">{children}</div>
           </CollapsibleContent>
         </div>
       </Collapsible>
@@ -195,6 +195,8 @@ export type FileTreeFileProps = HTMLAttributes<HTMLDivElement> & {
   icon?: ReactNode;
   /** Status git do arquivo — renderiza o indicador (M/D/A/U/R) à direita. */
   status?: GitFileStatus;
+  /** Linhas adicionadas/removidas — o "+N -N" da lista de alterações. */
+  stat?: { added: number; deleted: number };
 };
 
 export const FileTreeFile = ({
@@ -202,6 +204,7 @@ export const FileTreeFile = ({
   name,
   icon,
   status,
+  stat,
   className,
   children,
   ...props
@@ -247,10 +250,22 @@ export const FileTreeFile = ({
             >
               {name}
             </FileTreeName>
+            {stat && (
+              <span className="ml-auto flex shrink-0 items-center gap-1 pl-2 font-mono text-[10px] tabular-nums">
+                <span className="text-green-600 dark:text-green-400">
+                  +{stat.added}
+                </span>
+                <span className="text-red-600 dark:text-red-400">
+                  -{stat.deleted}
+                </span>
+              </span>
+            )}
             {status && (
               <span
                 className={cn(
-                  "ml-auto shrink-0 pl-2 font-mono text-[10px] font-semibold",
+                  "shrink-0 pl-2 font-mono text-[10px] font-semibold",
+                  // Sem o +N/-N é o indicador que empurra para a direita.
+                  !stat && "ml-auto",
                   GIT_STATUS_STYLE[status],
                 )}
                 title={status}

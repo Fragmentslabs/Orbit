@@ -1080,15 +1080,25 @@
     "reveal": "Mostrar na pasta",
     "selectFileHint": "Selecione um arquivo no explorador ao lado",
     "filesTab": "Arquivos",
+    "changesTab": "Alterações",
+    "changesEmpty": "Nenhum arquivo alterado.",
+    "changesCount_one": "{{count}} arquivo",
+    "changesCount_other": "{{count}} arquivos",
+    "changesLoading": "Carregando alterações…",
+    "showMoreLines_one": "Mostrar mais {{count}} linha",
+    "showMoreLines_other": "Mostrar as outras {{count}} linhas",
+    "openFile": "Abrir arquivo",
+    "refresh": "Atualizar",
     "commitsTab": "Commits",
     "loadingCommits": "Carregando commits...",
     "gitHistoryError": "Não foi possível ler o histórico git desta pasta.",
     "noCommits": "Nenhum commit encontrado.",
     "historyEnd": "Fim do histórico",
+    "reposPick": "Escolha um repositório para ver o histórico.",
     "sourceMode": "Fonte",
     "previewMode": "Visualizar",
     "uncommitted": "Mudanças não commitadas",
-    "aheadBehind": "{{ahead}} à frente, {{behind}} atrás da {{branch}}",
+    "repoSwitch": "Trocar de repositório",
     "pull": "Puxar",
     "push": "Enviar",
     "pullHint": "Puxar commits do remoto",
@@ -1382,52 +1392,31 @@
       {
         "id": "search",
         "label": "Pesquisa",
-        "modes": [
-          "Chat",
-          "Código"
-        ],
+        "modes": ["Chat", "Código"],
         "description": "Busca e lê páginas da web via HTTP.",
         "detail": "Adiciona as ferramentas websearch e webfetch ao agente. Rápido e eficiente para consultar documentação, APIs e informações públicas. Não executa JavaScript — ideal para conteúdo estático.",
-        "combo": [
-          "Browser",
-          "Thinking"
-        ]
+        "combo": ["Browser", "Thinking"]
       },
       {
         "id": "browser",
         "label": "Browser",
-        "modes": [
-          "Chat"
-        ],
+        "modes": ["Chat"],
         "description": "Navega em páginas como um browser real.",
         "detail": "Abre o painel direito com um navegador completo. Executa JavaScript, ideal para SPAs, formulários e páginas dinâmicas. O agente pode navegar, clicar, preencher campos e tirar screenshots.",
-        "combo": [
-          "Pesquisa",
-          "Thinking"
-        ]
+        "combo": ["Pesquisa", "Thinking"]
       },
       {
         "id": "thinking",
         "label": "Thinking",
-        "modes": [
-          "Chat",
-          "Código"
-        ],
+        "modes": ["Chat", "Código"],
         "description": "Raciocínio estendido do modelo.",
         "detail": "Ativa o modo reasoning/thinking do modelo (quando suportado). O modelo \"pensa\" antes de responder, resultando em respostas mais profundas e bem fundamentadas. Consome mais tokens e tempo.",
-        "combo": [
-          "Pesquisa",
-          "Browser",
-          "Loop"
-        ]
+        "combo": ["Pesquisa", "Browser", "Loop"]
       },
       {
         "id": "simple",
         "label": "Simples",
-        "modes": [
-          "Chat",
-          "Código"
-        ],
+        "modes": ["Chat", "Código"],
         "description": "Respostas diretas em texto puro.",
         "detail": "Remove formatação avançada, citações e blocos de ferramentas da resposta. Útil quando você quer apenas o conteúdo essencial, sem enfeites.",
         "combo": []
@@ -1435,10 +1424,7 @@
       {
         "id": "brain",
         "label": "Memória (Brain)",
-        "modes": [
-          "Chat",
-          "Código"
-        ],
+        "modes": ["Chat", "Código"],
         "description": "Orbit lembra fatos e preferências entre conversas.",
         "detail": "Adiciona as ferramentas memory_save/search/link/open/graph. O Orbit pode salvar fatos, preferências e decisões e recuperá-los automaticamente em conversas futuras. Desative por chat se preferir uma interação sem contexto.",
         "combo": []
@@ -1446,63 +1432,39 @@
       {
         "id": "subagents",
         "label": "Subagentes",
-        "modes": [
-          "Chat",
-          "Código"
-        ],
+        "modes": ["Chat", "Código"],
         "description": "Workers efêmeros em background para tarefas paralelas.",
         "detail": "Adiciona a ferramenta subagent ao agente. Quando ele identifica subtarefas independentes, pode delegá-las a workers efêmeros que rodam em background com o modelo configurado. Os workers são descartados ao fim da tarefa — não aparecem na sidebar. No modo Orquestra, este toggle também é o que libera o orquestrador a delegar pesquisa durante o planejamento: sem ele, ele investiga o projeto sozinho, lendo os arquivos.",
-        "combo": [
-          "Loop",
-          "Orquestra"
-        ]
+        "combo": ["Loop", "Orquestra"]
       },
       {
         "id": "orchestra",
         "label": "Orquestra",
-        "modes": [
-          "Código"
-        ],
+        "modes": ["Código"],
         "description": "Planeja e divide o trabalho em workers persistentes — quando o pedido pede isso.",
         "detail": "O orquestrador primeiro decide o que o pedido é: dúvida simples ele responde na hora (e pode oferecer \"quer que eu implemente?\"), ambiguidade que mudaria a divisão ele pergunta, e só trabalho de verdade vira plano. Ao planejar, ele lê o projeto por conta própria e registra as subtarefas com create_task, propondo o plano para sua aprovação. Cada tarefa aprovada vira uma sessão filha persistente, sempre em modo código na pasta de trabalho, rodando em paralelo com o modelo worker. Os modos de cada worker são escolhidos por ele conforme a necessidade da tarefa, dentro do que você ativou nesta conversa. No fim ele sintetiza tudo e revisa: se algo ficou errado, manda outra rodada para o worker responsável, dentro do chat dele. Nas mensagens seguintes ele continua enxergando os workers da conversa (de qualquer plano): lê o que cada um fez, vê o que você digitou direto num worker e pode continuar a conversa de um worker em vez de criar outro.",
-        "combo": [
-          "Loop",
-          "Subagentes"
-        ]
+        "combo": ["Loop", "Subagentes"]
       },
       {
         "id": "loop",
         "label": "Loop",
-        "modes": [
-          "Código"
-        ],
+        "modes": ["Código"],
         "description": "Agente revisa e itera até completar a tarefa.",
         "detail": "Depois de cada resposta, o resultado é revisado criticamente. Se o objetivo não foi atingido, o agente continua sozinho numa nova iteração, com o que falta descrito explicitamente. O único ajuste é o máximo de iterações (na engrenagem) — e ele é um teto, não uma meta: o loop para assim que a revisão diz que terminou. Em modo Orquestra esse mesmo número passa a valer como o total de rodadas de revisão somando todos os workers.",
-        "combo": [
-          "Subagentes",
-          "Orquestra",
-          "Thinking"
-        ]
+        "combo": ["Subagentes", "Orquestra", "Thinking"]
       },
       {
         "id": "plan",
         "label": "Modo Plano",
-        "modes": [
-          "Código"
-        ],
+        "modes": ["Código"],
         "description": "Apenas leitura — produz um plano sem editar arquivos.",
         "detail": "Bloqueia ferramentas de escrita (write, edit, bash). O agente apenas lê o código e produz um plano de implementação detalhado. Útil para revisão e planejamento antes de executar alterações.",
-        "combo": [
-          "Thinking",
-          "Pesquisa"
-        ]
+        "combo": ["Thinking", "Pesquisa"]
       },
       {
         "id": "permissions",
         "label": "Permissões",
-        "modes": [
-          "Código"
-        ],
+        "modes": ["Código"],
         "description": "Controle de segurança sobre ações do agente.",
         "detail": "Três níveis: Ask (pergunta antes de cada ação crítica), Approve (mostra resumo para aprovação), Full (executa automaticamente). Configurável no modal de Preferências ou diretamente no input.",
         "combo": []
@@ -1510,10 +1472,7 @@
       {
         "id": "vision",
         "label": "Visão",
-        "modes": [
-          "Chat",
-          "Código"
-        ],
+        "modes": ["Chat", "Código"],
         "description": "Delega a visão para um modelo específico.",
         "detail": "Com o modo ativo, imagens (screenshots e anexos) são descritas por um modelo de visão configurado e apenas a descrição em texto entra no contexto do agente — nunca a imagem em si. É benéfico mesmo em modelos com visão nativa: em conversas longas, a imagem não fica sendo recarregada no contexto a cada turno, economizando tokens e mantendo o contexto enxuto.",
         "combo": []
@@ -1522,61 +1481,37 @@
     "combos": [
       {
         "label": "Pesquisa aprofundada",
-        "items": [
-          "Pesquisa",
-          "Browser",
-          "Thinking"
-        ],
+        "items": ["Pesquisa", "Browser", "Thinking"],
         "description": "Ative Pesquisa + Browser + Thinking juntos. O agente searching, navega em páginas complexas e raciocina profundamente sobre o que encontrou. Ideal para investigar tópicos técnicos, comparar documentações ou fazer análise competitiva."
       },
       {
         "label": "Refinamento automático",
-        "items": [
-          "Loop",
-          "Thinking"
-        ],
+        "items": ["Loop", "Thinking"],
         "description": "Loop + Thinking: o agente revisa o próprio resultado com raciocínio estendido, identificando gaps e refinando até o objetivo ser atingido. Excelente para gerar código robusto, testes completos ou documentação detalhada."
       },
       {
         "label": "Orquestração com revisão",
-        "items": [
-          "Orquestra",
-          "Loop"
-        ],
+        "items": ["Orquestra", "Loop"],
         "description": "Orquestra + Loop: sem o Loop, o orquestrador tem 2 rodadas de revisão depois da síntese — o suficiente para corrigir o erro óbvio. Com o Loop ligado, o orçamento passa a ser o máximo de iterações que você configurou (padrão 5). São rodadas no TOTAL, não por worker: quem decide onde gastá-las é o orquestrador, que é o único que vê o conjunto."
       },
       {
         "label": "Workers em múltiplas frentes",
-        "items": [
-          "Orquestra",
-          "Subagentes"
-        ],
+        "items": ["Orquestra", "Subagentes"],
         "description": "Orquestra + Subagentes: libera delegação nos dois níveis. No planejamento, o orquestrador pode acionar subagentes para pesquisar antes de dividir (sem o toggle, ele lê o projeto sozinho). E ele passa a poder dar subagentes próprios a um worker, quando a tarefa é ampla demais para um só."
       },
       {
         "label": "Orquestra + Subagentes + Loop",
-        "items": [
-          "Orquestra",
-          "Subagentes",
-          "Loop"
-        ],
+        "items": ["Orquestra", "Subagentes", "Loop"],
         "description": "Orquestra + Subagentes + Loop: a configuração mais autónoma — e a mais cara. Pesquisa delegada no planejamento, workers que podem se subdividir, e o orçamento maior de revisão do Loop. Vale para tarefas grandes de verdade; confira o custo estimado no card do plano antes de aprovar."
       },
       {
         "label": "Planejamento cuidadoso",
-        "items": [
-          "Modo Plano",
-          "Thinking",
-          "Pesquisa"
-        ],
+        "items": ["Modo Plano", "Thinking", "Pesquisa"],
         "description": "Modo Plano + Thinking + Pesquisa: antes de qualquer alteração, o agente pesquisa documentação, raciocina profundamente e produz um plano detalhado de implementação sem modificar arquivos. Aprove o plano e depois execute com as ferramentas normais."
       },
       {
         "label": "Código com segurança",
-        "items": [
-          "Permissão: Ask",
-          "Loop"
-        ],
+        "items": ["Permissão: Ask", "Loop"],
         "description": "Permissão Ask + Loop: a cada iteração do loop, o agente pode pedir permissão antes de ações sensíveis (editar arquivos, executar comandos). Seguro para revisar código de terceiros ou fazer alterações em produção."
       }
     ]
