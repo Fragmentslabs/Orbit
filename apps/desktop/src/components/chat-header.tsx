@@ -111,43 +111,6 @@ export function ChatHeader({ title, hasMenu, session, sessionId, rightPanelOpen,
     // posterior, então com z-20 ela ficava por cima do header — e o dropdown de
     // pastas, preso no stacking context do @container, abria por baixo dela.
     <div className="@container relative z-50 flex h-12 items-center gap-2 px-4">
-      {/* O menu da sessão vira o primeiro item do header, à esquerda do botão
-          da sidebar: antes ficava solto depois do título e se deslocava junto
-          com o nome da conversa e a régua de pastas. */}
-      {hasMenu && (
-        <DropdownMenu open={menuOpen} onOpenChange={setMenuOpen}>
-          <DropdownMenuTrigger render={<Button variant="ghost" size="icon-sm" className="size-6 shrink-0" />}>
-            <Ellipsis className="size-3.5" />
-            <span className="sr-only">{t("header.options")}</span>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="start" className="min-w-40">
-            <DropdownMenuItem onClick={() => toggleChatSearch()}>
-              <Search className="size-4" />
-              {t("header.searchInChat")}
-            </DropdownMenuItem>
-            {session && (
-              <>
-                <DropdownMenuItem onClick={() => useSessionStore.getState().togglePin(session.id)}>
-                  {session.pinned ? <PinOff className="size-4" /> : <Pin className="size-4" />}
-                  {session.pinned ? t("sidebar.session.unpin") : t("header.pin")}
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => setRenaming(true)}>
-                  <Pencil className="size-4" />
-                  {t("header.rename")}
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => useSessionStore.getState().toggleArchive(session.id)}>
-                  {session.archived ? <ArchiveRestore className="size-4" /> : <Archive className="size-4" />}
-                  {session.archived ? t("sidebar.session.unarchive") : t("header.archive")}
-                </DropdownMenuItem>
-                <DropdownMenuItem variant="destructive" onClick={() => setConfirmDelete(true)}>
-                  <Trash2 className="size-4" />
-                  {t("header.delete")}
-                </DropdownMenuItem>
-              </>
-            )}
-          </DropdownMenuContent>
-        </DropdownMenu>
-      )}
       {onToggleSidebar && (
         <Button variant="ghost" size="icon-sm" className="size-7 shrink-0" onClick={onToggleSidebar}>
           <PanelLeft className="size-4" />
@@ -195,6 +158,45 @@ export function ChatHeader({ title, hasMenu, session, sessionId, rightPanelOpen,
       </div>
       {extra}
       {sessionId && <BrowserTestChip sessionId={sessionId} compact className="self-center" />}
+      {/* O menu da sessão fica no grupo da direita, colado ao botão do painel:
+          fora do trecho elástico, ele não se desloca com o título nem com a
+          régua de pastas (que crescem e encolhem no meio do header), e o menu
+          abre alinhado pela direita — na borda da janela, um menu alinhado
+          pela esquerda vazaria para fora. */}
+      {hasMenu && (
+        <DropdownMenu open={menuOpen} onOpenChange={setMenuOpen}>
+          <DropdownMenuTrigger render={<Button variant="ghost" size="icon-sm" className="size-6 shrink-0" />}>
+            <Ellipsis className="size-3.5" />
+            <span className="sr-only">{t("header.options")}</span>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="min-w-40">
+            <DropdownMenuItem onClick={() => toggleChatSearch()}>
+              <Search className="size-4" />
+              {t("header.searchInChat")}
+            </DropdownMenuItem>
+            {session && (
+              <>
+                <DropdownMenuItem onClick={() => useSessionStore.getState().togglePin(session.id)}>
+                  {session.pinned ? <PinOff className="size-4" /> : <Pin className="size-4" />}
+                  {session.pinned ? t("sidebar.session.unpin") : t("header.pin")}
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => setRenaming(true)}>
+                  <Pencil className="size-4" />
+                  {t("header.rename")}
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => useSessionStore.getState().toggleArchive(session.id)}>
+                  {session.archived ? <ArchiveRestore className="size-4" /> : <Archive className="size-4" />}
+                  {session.archived ? t("sidebar.session.unarchive") : t("header.archive")}
+                </DropdownMenuItem>
+                <DropdownMenuItem variant="destructive" onClick={() => setConfirmDelete(true)}>
+                  <Trash2 className="size-4" />
+                  {t("header.delete")}
+                </DropdownMenuItem>
+              </>
+            )}
+          </DropdownMenuContent>
+        </DropdownMenu>
+      )}
       {onToggleRightPanel && (
         <Button variant="ghost" size="icon-sm" className="size-7 shrink-0" onClick={onToggleRightPanel}>
           {rightPanelOpen ? <PanelRightClose className="size-4" /> : <PanelRightOpen className="size-4" />}
