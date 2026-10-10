@@ -191,6 +191,8 @@
     "configure": "Configure"
   },
   "permissions": {
+    "allowOnce": "Allow this time",
+    "moreOptions": "More permission options",
     "title": "Permission mode",
     "ask": "Ask",
     "askDescription": "Confirms sensitive actions before running",

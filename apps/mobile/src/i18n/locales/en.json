@@ -267,6 +267,7 @@
     "documentDesktopOnly": "document available on the desktop app"
   },
   "askCard": {
+    "allowOnce": "Allow this time",
     "permissionRequired": "Permission required",
     "criticalAction": "Critical action: ",
     "deny": "Deny",

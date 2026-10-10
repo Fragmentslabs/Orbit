@@ -191,6 +191,8 @@
     "configure": "Configurar"
   },
   "permissions": {
+    "allowOnce": "Permitir esta vez",
+    "moreOptions": "Mais opções de permissão",
     "title": "Modo de permissões",
     "ask": "Perguntar",
     "askDescription": "Confirma ações sensíveis antes de executar",
