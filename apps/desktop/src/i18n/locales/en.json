@@ -903,6 +903,8 @@
     "downloadLink": "Install now"
   },
   "branch": {
+    "emUsoTitulo": "The {{branch}} branch is open in another worktree",
+    "emUsoDescricao": "Git doesn't allow the same branch in two working copies at once. To work on it, switch this chat to that worktree with the worktree selector, or close it there.",
     "previous": "Previous branch",
     "next": "Next branch",
     "page": "{{current}} of {{total}}",
@@ -1799,6 +1801,39 @@
       "allVersions": "Delete all {{count}} versions",
       "onlyThis": "Delete only v{{version}}"
     }
+  },
+  "worktree": {
+    "titulo": "Worktree",
+    "principal": "Main",
+    "tituloAtual": "This chat's worktree: {{nome}}",
+    "novo": "New worktree…",
+    "detached": "no branch ({{head}})",
+    "alteracoes_one": "{{count}} change",
+    "alteracoes_other": "{{count}} changes",
+    "aFrente_one": "{{count}} commit ahead",
+    "aFrente_other": "{{count}} commits ahead",
+    "daEsteira": "pipeline",
+    "externo": "created outside Orbit",
+    "ausente": "folder no longer exists",
+    "remover": "Remove worktree",
+    "criarTitulo": "New worktree",
+    "criarDescricao": "A separate working copy of the repository, on its own branch. What this chat does there doesn't touch the main checkout or other chats.",
+    "nome": "Name",
+    "nomePlaceholder": "E.g.: refactor-login",
+    "nomeDica": "Becomes the folder name and the orbit/<name> branch.",
+    "base": "Start from",
+    "baseAtual": "Current branch ({{branch}})",
+    "trocarParaEle": "Switch this chat to it",
+    "preparando": "Preparing the worktree — copying dependencies can take a few seconds…",
+    "criar": "Create",
+    "removerTitulo": "Remove the “{{nome}}” worktree?",
+    "removerDescricao": "The worktree folder is deleted and processes running in it are stopped.",
+    "removerAlteracoes_one": "{{count}} file has uncommitted changes — it will be lost.",
+    "removerAlteracoes_other": "{{count}} files have uncommitted changes — they will be lost.",
+    "removerExterno": "This worktree was created outside Orbit ({{caminho}}). Make sure no other tool uses it.",
+    "apagarBranch": "Also delete the {{branch}} branch",
+    "apagarBranchAviso_one": "{{count}} commit that only exists there will be lost.",
+    "apagarBranchAviso_other": "{{count}} commits that only exist there will be lost."
   },
   "esteira": {
     "titulo": "Pipelines",

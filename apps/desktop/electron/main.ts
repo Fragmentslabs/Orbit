@@ -95,6 +95,8 @@ import type { ChatEvent } from '@shared/chat'
 import type { RotationConfig } from '@shared/chat'
 import { StorageKeys } from '@shared/chat'
 import * as esteira from './lib/esteira'
+import { criarWorktreeDoChat, listarWorktrees, removerWorktreeDoChat } from './lib/worktrees/servico'
+import { pastaNoRepositorioPrincipal } from './lib/worktrees/principal'
 import * as rotinas from './lib/rotinas'
 import type { DocumentDownload, MediaFilter } from '@shared/media'
 import { documentFileName } from '@shared/media'
@@ -1614,6 +1616,17 @@ app.whenReady().then(() => {
   // (ver github-repo.ts).
   ipcMain.handle('git:createRemoteRepo', (_event, repoPath: string, name: string, isPrivate: boolean) =>
     createRemoteRepo(repoPath, name, isPrivate))
+
+  // Worktrees nos chats (seletor do header): listar com estado, criar e
+  // remover. O mesmo serviço das ferramentas worktree_* do agente.
+  ipcMain.handle('worktree:listar', (_event, pasta: string) => listarWorktrees(pasta))
+  ipcMain.handle('worktree:criar', (_event, pasta: string, nome: string, base?: string) =>
+    criarWorktreeDoChat({ pasta, nome, base }),
+  )
+  ipcMain.handle('worktree:remover', (_event, pasta: string, caminho: string, apagarBranch?: boolean) =>
+    removerWorktreeDoChat({ pasta, caminho, apagarBranch }),
+  )
+  ipcMain.handle('worktree:principal', (_event, pasta: string) => pastaNoRepositorioPrincipal(pasta))
 
   ipcMain.handle('git:push', async (_event, repoPath: string) => {
     try {

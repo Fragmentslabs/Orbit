@@ -1,9 +1,10 @@
 import { useState } from "react"
 import { useTranslation } from "react-i18next"
-import { ChevronDown, ChevronRight, Folder, GitBranch } from "lucide-react"
+import { ChevronDown, ChevronRight, Folder, FolderGit2, GitBranch } from "lucide-react"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { BranchSelector } from "@/src/components/branch-selector"
-import { FolderSelector, getFolderName } from "@/src/components/folder-selector"
+import { FolderSelector, getFolderName, useNomeDaPastaPrincipal } from "@/src/components/folder-selector"
+import { useRotuloWorktreeAtual, WorktreeSelector } from "@/src/components/worktree-selector"
 import { useBranchStore } from "@/src/stores/branch-store"
 
 /**
@@ -17,11 +18,14 @@ export function CompactWorkspaceSelector({
   folders,
   onFoldersChange,
   onRequestAgentAction,
+  sugestaoNomeWorktree,
 }: {
   repoPath?: string
   folders: string[]
   onFoldersChange: (folders: string[]) => void
   onRequestAgentAction?: (instruction: string) => void
+  /** Sugestão de nome para um worktree novo (título do chat) */
+  sugestaoNomeWorktree?: string
 }) {
   const { t } = useTranslation()
   const byDir = useBranchStore((s) => (repoPath ? s.byDir[repoPath] : undefined))
@@ -30,6 +34,10 @@ export function CompactWorkspaceSelector({
   const [menuOpen, setMenuOpen] = useState(false)
   const [branchOpen, setBranchOpen] = useState(false)
   const [folderOpen, setFolderOpen] = useState(false)
+  const [worktreeOpen, setWorktreeOpen] = useState(false)
+  // Null fora de repositório git: o atalho de worktree some do menu.
+  const worktreeAtual = useRotuloWorktreeAtual(folders[0])
+  const nomePrincipal = useNomeDaPastaPrincipal(folders[0])
 
   if (!repoPath && folders.length === 0) return null
 
@@ -45,7 +53,7 @@ export function CompactWorkspaceSelector({
           }
         >
           <Folder className="size-3 shrink-0 text-sidebar-foreground/60" />
-          <span className="truncate">{folders.length === 0 ? t("folderSelector.associate") : getFolderName(folders[0])}</span>
+          <span className="truncate">{folders.length === 0 ? t("folderSelector.associate") : nomePrincipal}</span>
           {/* O botão compacto só mostra a pasta principal: o contador avisa
               quantas pastas anexadas ficaram fora (hover lista os nomes). */}
           {folders.length > 1 && (
@@ -74,6 +82,18 @@ export function CompactWorkspaceSelector({
               </span>
             </DropdownMenuItem>
           )}
+          {folders[0] && worktreeAtual && (
+            <DropdownMenuItem onClick={() => setWorktreeOpen(true)} className="justify-between">
+              <span className="flex items-center gap-2">
+                <FolderGit2 className="size-3.5" />
+                {t("worktree.titulo")}
+              </span>
+              <span className="flex items-center gap-1 text-muted-foreground">
+                <span className="max-w-16 truncate" title={worktreeAtual}>{worktreeAtual}</span>
+                <ChevronRight className="size-3" />
+              </span>
+            </DropdownMenuItem>
+          )}
           <DropdownMenuItem onClick={() => setFolderOpen(true)} className="justify-between">
             <span className="flex items-center gap-2">
               <Folder className="size-3.5" />
@@ -90,6 +110,16 @@ export function CompactWorkspaceSelector({
           onRequestAgentAction={onRequestAgentAction}
           open={branchOpen}
           onOpenChange={setBranchOpen}
+          hideTrigger
+        />
+      )}
+      {folders[0] && (
+        <WorktreeSelector
+          pasta={folders[0]}
+          onTrocar={(pasta) => onFoldersChange([pasta, ...folders.slice(1)])}
+          sugestaoNome={sugestaoNomeWorktree}
+          open={worktreeOpen}
+          onOpenChange={setWorktreeOpen}
           hideTrigger
         />
       )}

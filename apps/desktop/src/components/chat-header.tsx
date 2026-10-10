@@ -19,6 +19,7 @@ import {
 import { Input } from "@/components/ui/input"
 import type { SessionInfo } from "@shared/chat"
 import { BranchSelector } from "@/src/components/branch-selector"
+import { WorktreeSelector } from "@/src/components/worktree-selector"
 import { BrowserTestChip } from "@/src/components/browser-test-chip"
 import { FolderSelector } from "@/src/components/folder-selector"
 import { CompactWorkspaceSelector } from "@/src/components/workspace-selector-compact"
@@ -163,6 +164,15 @@ export function ChatHeader({ title, hasMenu, session, sessionId, rightPanelOpen,
           <>
             {!manyFolders && (
               <div className="hidden min-w-0 items-center gap-1 @xl:flex">
+                {/* Worktree antes do branch: é ele que define em que branch o
+                    chat está. Só aparece em repositório git. */}
+                {folders?.[0] && onFoldersChange && (
+                  <WorktreeSelector
+                    pasta={folders[0]}
+                    onTrocar={(pasta) => onFoldersChange([pasta, ...folders.slice(1)])}
+                    sugestaoNome={title}
+                  />
+                )}
                 {repoPath && <BranchSelector repoPath={repoPath} onRequestAgentAction={onRequestAgentAction} />}
                 {folders && folders.length > 0 && onFoldersChange && (
                   <FolderSelector folders={folders} onFoldersChange={onFoldersChange} compact />
@@ -176,6 +186,7 @@ export function ChatHeader({ title, hasMenu, session, sessionId, rightPanelOpen,
                   folders={folders ?? []}
                   onFoldersChange={onFoldersChange}
                   onRequestAgentAction={onRequestAgentAction}
+                  sugestaoNomeWorktree={title}
                 />
               </div>
             )}

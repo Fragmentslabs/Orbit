@@ -6,6 +6,7 @@ import type { MapNode, ProjectMap } from './memory/project-map'
 import { buildPastChatsContext, detectPastChatsIntent } from './past-chats'
 import { loadSkills } from './skills'
 import { listMcpToolDescriptions } from './mcp'
+import { pastaNoRepositorioPrincipal } from './worktrees/principal'
 
 /**
  * Prompts de sistema por modo, adaptados dos agentes do opencode
@@ -568,6 +569,16 @@ export async function buildSystemPrompt(
         ? `\nAdditional attached folders: ${input.extraDirectories.join(', ')}`
         : ''
       parts.push(`Main working folder: ${input.directory}${extra}\nPlatform: ${process.platform}`)
+      // Num worktree: o agente precisa saber que a pasta é uma cópia isolada
+      // e onde está o principal (que é de outros chats e do usuário).
+      const principal = await pastaNoRepositorioPrincipal(input.directory)
+      if (principal !== input.directory) {
+        parts.push(
+          `This folder is a git worktree of the repository at ${principal}: a separate working copy on its own branch. ` +
+            `Work and commit here; the main checkout belongs to the user and other chats. ` +
+            `worktree_list / worktree_switch move this chat between worktrees (from the next message).`,
+        )
+      }
     }
     const permissionMode = input.options.permissionMode ?? 'ask'
     if (permissionMode === 'ask') parts.push(PERMISSION_ASK_INSTRUCTION)

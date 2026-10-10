@@ -6,6 +6,11 @@ import type { PermissionClaim } from '@shared/chat'
 export interface Assessment {
   claim: PermissionClaim
   ruleId: string
+  /**
+   * Pergunta mesmo no modo de permissão total e ignora "sempre permitir":
+   * ações destrutivas que o usuário precisa ver uma a uma.
+   */
+  sempre?: boolean
 }
 
 function shorten(text: string, max = 80): string {
@@ -130,6 +135,11 @@ const NATIVE_TOOLS = new Set([
   'bash_list',
   'bash_kill',
   'bash_output',
+  // Worktrees do chat: listar, criar e trocar a pasta são reversíveis (o
+  // worktree_remove fica fora: pede confirmação sempre — ver assess)
+  'worktree_list',
+  'worktree_create',
+  'worktree_switch',
   // Esteira (board de tasks)
   'esteira_create',
   'esteira_list',
@@ -286,6 +296,22 @@ export function assess(toolName: string, input: unknown, dir: string | null): As
   }
   if ((toolName === 'write' || toolName === 'edit') && typeof args.filePath === 'string') {
     return assessFileWrite(toolName, args.filePath)
+  }
+  // Remover worktree apaga a pasta e o que não foi commitado nela: pergunta
+  // sempre, mesmo no modo total (a regra do plano de worktrees nos chats).
+  if (toolName === 'worktree_remove') {
+    const destino = typeof args.destino === 'string' ? args.destino : '?'
+    return {
+      ruleId: 'worktree:remove',
+      sempre: true,
+      claim: {
+        tool: toolName,
+        title: `Remover o worktree ${shorten(destino, 60)}`,
+        detail:
+          'Apaga a pasta do worktree — alterações não commitadas nela são perdidas.' +
+          (args.apagarBranch === true ? ' O branch dele também é apagado.' : ' O branch é mantido.'),
+      },
+    }
   }
   // Catch-all "_" exclusivo para servidores MCP (Nodara_*, N8N_-_Vlk_*, ...)
   if (toolName.includes('_')) {

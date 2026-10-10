@@ -11,6 +11,7 @@ import type {
 } from "@shared/chat"
 import type { AppSettings } from "@shared/app-settings"
 import type { AppPreferences, ChatModeKey, MessageQueueOp, MessageQueueSnapshot, ModelReasoningPref, ReasoningPrefsMap, SessionModeOverrides, WorkerConfigSnapshot } from "@shared/companion"
+import type { CriarWorktreeResultado, ListaWorktrees } from "@shared/worktrees"
 import type { McpConfig, McpServerStatus } from "@shared/mcp"
 import type { DocumentDownload, MediaEntry, MediaFilter, MediaUsage } from "@shared/media"
 import type {
@@ -411,6 +412,19 @@ export const panelApi = {
     const wrapper = window.ipcRenderer.on("panel:event", (event) => listener(event as PanelEvent))
     return () => window.ipcRenderer.off("panel:event", wrapper)
   },
+}
+
+/** Worktrees nos chats: o seletor do header e a sidebar. */
+export const worktreeApi = {
+  /** null quando a pasta não está num repositório git */
+  listar: (pasta: string) => window.ipcRenderer.invoke("worktree:listar", pasta) as Promise<ListaWorktrees | null>,
+  criar: (pasta: string, nome: string, base?: string) =>
+    window.ipcRenderer.invoke("worktree:criar", pasta, nome, base) as Promise<CriarWorktreeResultado>,
+  /** `pasta`: a do chat (viva) — o worktree a remover pode ser um cuja pasta sumiu */
+  remover: (pasta: string, caminho: string, apagarBranch?: boolean) =>
+    window.ipcRenderer.invoke("worktree:remover", pasta, caminho, apagarBranch) as Promise<void>,
+  /** Pasta equivalente no repositório principal (a própria pasta fora de worktree) */
+  principal: (pasta: string) => window.ipcRenderer.invoke("worktree:principal", pasta) as Promise<string>,
 }
 
 /** Modo esteira — board de projetos/esteiras/tasks (orbit-data/esteira). */

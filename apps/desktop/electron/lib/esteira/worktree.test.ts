@@ -158,4 +158,14 @@ describe('removerWorktree e limparOrfaos', () => {
     expect(fs.existsSync(orfa.caminho)).toBe(false)
     expect(git(repo, 'worktree', 'list')).not.toContain('task_orfa0000')
   })
+
+  it('não toca nos worktrees dos chats, que moram na mesma raiz', async () => {
+    const doChat = path.join(userData.dir, 'orbit-data', 'worktrees', 'chats', 'repo-abc123', 'login')
+    fs.mkdirSync(doChat, { recursive: true })
+    fs.writeFileSync(path.join(doChat, 'trabalho.txt'), 'nao commitado')
+
+    await limparOrfaos([{ id: 'proj_1', pastas: [repo] }], new Map())
+
+    expect(fs.readFileSync(path.join(doChat, 'trabalho.txt'), 'utf8')).toBe('nao commitado')
+  })
 })

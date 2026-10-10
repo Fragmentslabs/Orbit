@@ -12,6 +12,7 @@ import { createSvgTools } from './svg'
 import { createBrowserLinksTool, createBrowserOpenTool } from './browser'
 import { createBrowserScriptTools } from './browser-script'
 import { createEsteiraTools } from './esteira'
+import { createWorktreeTools } from './worktrees'
 import { createSessionTools } from './sessions'
 import { createUsageTools } from './usage'
 import type { ToolContext } from './context'
@@ -244,6 +245,9 @@ export function buildToolSet(input: SendMessageInput, ctx: ToolContext | null, i
     // quem decide o que sai da sidebar é a sessão principal.
     Object.assign(tools, createSessionTools())
     Object.assign(tools, createUsageTools())
+    // Worktrees: trocar a pasta do chat é decisão da sessão principal — um
+    // worker mudando a pasta de quem o chamou desorientaria a conversa.
+    if (ctx) Object.assign(tools, createWorktreeTools(ctx))
   }
   if (allowQuestion) tools.question = createQuestionTool(input, ctx?.abort)
   if (allowDelegation) tools.subagent = createSubagentTool(input, ctx)

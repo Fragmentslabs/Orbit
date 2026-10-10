@@ -53,14 +53,14 @@ export function createToolApproval(
     if (!assessment) return 'approved' as const
 
     const mcpMode = effectiveMode(toolCall.toolName, mode)
-    if (mcpMode === 'full') return 'approved' as const
+    if (mcpMode === 'full' && !assessment.sempre) return 'approved' as const
 
     const ruleId = assessment.ruleId
 
-    if (checkTrust(ruleId)) return 'approved' as const
+    if (!assessment.sempre && checkTrust(ruleId)) return 'approved' as const
 
     const targetSession = sessionTrust.get(sessionId)
-    if (targetSession?.has(ruleId)) return 'approved' as const
+    if (!assessment.sempre && targetSession?.has(ruleId)) return 'approved' as const
 
     const requestId = newRequestId()
     const isWorker = !!parentSessionId

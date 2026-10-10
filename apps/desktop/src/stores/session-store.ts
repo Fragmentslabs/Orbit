@@ -41,6 +41,7 @@ import { LOCALE_PROMPT_NAME, useLocaleStore } from "@/src/stores/locale-store"
 import { useModelRotationStore } from "@/src/stores/model-rotation-store"
 import { usePanelStore } from "@/src/stores/panel-store"
 import { useAppSettings } from "@/src/stores/app-settings"
+import { principalConhecido } from "@/src/stores/worktree-store"
 
 /**
  * Store de sessões/mensagens no padrão do opencode: sessões persistidas
@@ -364,7 +365,9 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       ...rest,
     }
 
-    const directory = partial?.directory
+    // Chat num worktree entra na pasta da sidebar do repositório principal:
+    // é o mesmo projeto, só em outra cópia de trabalho.
+    const directory = partial?.directory ? principalConhecido(partial.directory) : undefined
     if (mode === "code" && directory && useModelModePrefs.getState().autoCreateFolders) {
       const autoFolderMap = loadAutoFolderMap()
       const plano = planAutoFolder({

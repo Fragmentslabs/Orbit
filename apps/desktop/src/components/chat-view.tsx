@@ -38,6 +38,7 @@ import { PAGE_TURNS, defaultWindowStart, turnStart, windowStartFor } from "@/src
 import { registerMessageRevealer, revealMessage } from "@/src/lib/message-jump"
 import { playEntranceSound, prepareEntranceSound } from "@/src/lib/entrance-sound"
 import { useActiveSession, useSessionStatus, useSessionStore, type SendConfig } from "@/src/stores/session-store"
+import { useWorktreeStore } from "@/src/stores/worktree-store"
 import { brainEnabledFor } from "@/src/stores/brain-prefs"
 import { useProviderStore, useNoProviderConnected } from "@/src/stores/provider-store"
 import { useModelModePrefs } from "@/src/stores/model-mode-prefs"
@@ -605,12 +606,23 @@ export function ChatView({ sessionId, embedded = false }: { sessionId?: string; 
     useChatSearchStore.getState().close()
   }, [session?.id])
 
-  // Sincroniza pasta da sessão (ex.: vinda do mobile) com o workspace
+  // Sincroniza pasta da sessão (ex.: vinda do mobile) com o workspace. Além
+  // da troca de chat, segue a troca de pasta da MESMA sessão feita fora da
+  // tela — o agente mudando o chat de worktree (worktree_switch/create).
+  // Sem isso, o próximo envio gravaria de volta a pasta antiga.
   const prevSessionId = useRef(session?.id)
+  const prevDirectory = useRef(session?.directory)
   useEffect(() => {
-    if (viewMode === "code" && session?.directory && session.id !== prevSessionId.current) {
-      prevSessionId.current = session.id
+    if (viewMode !== "code" || !session?.directory) return
+    const trocouChat = session.id !== prevSessionId.current
+    const trocouPasta = !trocouChat && session.directory !== prevDirectory.current
+    prevSessionId.current = session.id
+    prevDirectory.current = session.directory
+    if (trocouChat || trocouPasta) {
       setFolders([session.directory, ...(session.extraDirectories ?? [])])
+      // Pasta que chegou de fora pode ser um worktree: registra o principal
+      // dela para a sidebar agrupar os próximos chats no projeto certo.
+      void useWorktreeStore.getState().resolverPrincipal(session.directory)
     }
   }, [session?.id, session?.directory, session?.extraDirectories, viewMode, setFolders])
 

@@ -903,6 +903,8 @@
     "downloadLink": "Instale agora"
   },
   "branch": {
+    "emUsoTitulo": "O branch {{branch}} está aberto em outro worktree",
+    "emUsoDescricao": "O git não deixa o mesmo branch em duas cópias de trabalho ao mesmo tempo. Para trabalhar nele, troque este chat para aquele worktree pelo seletor de worktree, ou feche-o lá.",
     "previous": "Ramo anterior",
     "next": "Próximo ramo",
     "page": "{{current}} de {{total}}",
@@ -1798,6 +1800,39 @@
       "allVersions": "Excluir as {{count}} versões",
       "onlyThis": "Excluir só a v{{version}}"
     }
+  },
+  "worktree": {
+    "titulo": "Worktree",
+    "principal": "Principal",
+    "tituloAtual": "Worktree deste chat: {{nome}}",
+    "novo": "Novo worktree…",
+    "detached": "sem branch ({{head}})",
+    "alteracoes_one": "{{count}} alteração",
+    "alteracoes_other": "{{count}} alterações",
+    "aFrente_one": "{{count}} commit à frente",
+    "aFrente_other": "{{count}} commits à frente",
+    "daEsteira": "esteira",
+    "externo": "criado fora do Orbit",
+    "ausente": "pasta não existe mais",
+    "remover": "Remover worktree",
+    "criarTitulo": "Novo worktree",
+    "criarDescricao": "Uma cópia de trabalho separada do repositório, num branch próprio. O que este chat fizer lá não mexe no principal nem nos outros chats.",
+    "nome": "Nome",
+    "nomePlaceholder": "Ex.: refatorar-login",
+    "nomeDica": "Vira o nome da pasta e o branch orbit/<nome>.",
+    "base": "A partir de",
+    "baseAtual": "Branch atual ({{branch}})",
+    "trocarParaEle": "Trocar este chat para ele",
+    "preparando": "Preparando o worktree — copiar as dependências pode levar alguns segundos…",
+    "criar": "Criar",
+    "removerTitulo": "Remover o worktree “{{nome}}”?",
+    "removerDescricao": "A pasta do worktree é apagada e processos rodando nela são encerrados.",
+    "removerAlteracoes_one": "Há {{count}} arquivo com alterações não commitadas — ele será perdido.",
+    "removerAlteracoes_other": "Há {{count}} arquivos com alterações não commitadas — eles serão perdidos.",
+    "removerExterno": "Este worktree foi criado fora do Orbit ({{caminho}}). Confira se nenhuma outra ferramenta o usa.",
+    "apagarBranch": "Apagar também o branch {{branch}}",
+    "apagarBranchAviso_one": "{{count}} commit que só existe nele será perdido.",
+    "apagarBranchAviso_other": "{{count}} commits que só existem nele serão perdidos."
   },
   "esteira": {
     "titulo": "Esteira",

@@ -8,6 +8,15 @@ import { Input } from "@/components/ui/input"
 import { useBranchStore } from "@/src/stores/branch-store"
 import { cn } from "@/lib/utils"
 
+/**
+ * Checkout de um branch aberto em outro worktree: o git recusa ("already used
+ * by worktree at '…'", ou "already checked out at" em versões antigas). Não é
+ * caso de alterações não commitadas — o diálogo certo é outro.
+ */
+export function branchEmUsoEm(erro: string): string | null {
+  return /already (?:used by worktree|checked out) at '([^']+)'/.exec(erro)?.[1] ?? null
+}
+
 interface BranchSelectorProps {
   repoPath: string
   onRequestAgentAction?: (instruction: string) => void
@@ -38,6 +47,7 @@ export function BranchSelector({ repoPath, onRequestAgentAction, open: openProp,
   const setOpen = onOpenChange ?? setUncontrolledOpen
   const [checkoutLoading, setCheckoutLoading] = useState(false)
   const [conflictError, setConflictError] = useState<string | null>(null)
+  const [emUso, setEmUso] = useState<{ branch: string; caminho: string } | null>(null)
   const [pendingBranch, setPendingBranch] = useState<string | null>(null)
   const [commitDialogOpen, setCommitDialogOpen] = useState(false)
   const [commitMessage, setCommitMessage] = useState("")
@@ -70,6 +80,11 @@ export function BranchSelector({ repoPath, onRequestAgentAction, open: openProp,
     const result = await checkoutBranch(repoPath, branch)
     setCheckoutLoading(false)
     if (!result.ok) {
+      const caminho = branchEmUsoEm(result.error ?? "")
+      if (caminho) {
+        setEmUso({ branch, caminho })
+        return
+      }
       setConflictError(result.error ?? t("branch.unknownError"))
       setPendingBranch(branch)
     }
@@ -82,6 +97,11 @@ export function BranchSelector({ repoPath, onRequestAgentAction, open: openProp,
     const result = await checkoutBranch(repoPath, branch)
     setCheckoutLoading(false)
     if (!result.ok) {
+      const caminho = branchEmUsoEm(result.error ?? "")
+      if (caminho) {
+        setEmUso({ branch, caminho })
+        return
+      }
       setConflictError(result.error ?? t("branch.unknownError"))
       setPendingBranch(branch)
     }
@@ -234,6 +254,22 @@ export function BranchSelector({ repoPath, onRequestAgentAction, open: openProp,
             <Button variant="outline" className="w-full" onClick={() => { setConflictError(null); setPendingBranch(null) }}>
               {t("common.cancel")}
             </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Branch aberto em outro worktree */}
+      <Dialog open={emUso !== null} onOpenChange={(v) => !v && setEmUso(null)}>
+        <DialogContent className="sm:max-w-md" showCloseButton={false}>
+          <DialogHeader>
+            <DialogTitle>{t("branch.emUsoTitulo", { branch: emUso?.branch })}</DialogTitle>
+            <DialogDescription>
+              {t("branch.emUsoDescricao")}
+              <span className="mt-2 block break-all rounded bg-muted p-2 font-mono text-xs text-muted-foreground">{emUso?.caminho}</span>
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button onClick={() => setEmUso(null)}>{t("common.close")}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

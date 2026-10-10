@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { Check, Folder, Plus, X } from "lucide-react"
+import { useWorktreeStore } from "@/src/stores/worktree-store"
 
 const RECENT_FOLDERS_KEY = "orbit-recent-folders"
 
@@ -23,6 +24,16 @@ async function pickFolder(): Promise<string | null> {
   }
 }
 
+/**
+ * Nome da pasta principal do chat. Num worktree, é o nome do projeto (o
+ * repositório principal): o worktree em si já aparece no seletor ao lado, e o
+ * nome da pasta dele não diz de que projeto se trata.
+ */
+export function useNomeDaPastaPrincipal(pasta: string | undefined): string {
+  const principal = useWorktreeStore((s) => (pasta ? s.principalDe[pasta] : undefined))
+  return pasta ? getFolderName(principal ?? pasta) : ""
+}
+
 export function getFolderName(path: string): string {
   const parts = path.replace(/\\/g, "/").split("/")
   return parts[parts.length - 1] || path
@@ -43,6 +54,7 @@ interface FolderSelectorProps {
 
 export function FolderSelector({ folders, onFoldersChange, compact, open: openProp, onOpenChange, hideTrigger }: FolderSelectorProps) {
   const { t } = useTranslation()
+  const nomePrincipal = useNomeDaPastaPrincipal(folders[0])
   const [uncontrolledOpen, setUncontrolledOpen] = useState(false)
   const recentOpen = openProp ?? uncontrolledOpen
   const setRecentOpen = onOpenChange ?? setUncontrolledOpen
@@ -176,7 +188,7 @@ export function FolderSelector({ folders, onFoldersChange, compact, open: openPr
         // era antes de existir o dropdown.
         <button type="button" onClick={() => setPrimaryFolder()} className={triggerClassName}>
           <Folder className="size-3 shrink-0 text-sidebar-foreground/60" />
-          <span className="truncate">{folders.length === 0 ? t("folderSelector.associate") : getFolderName(folders[0])}</span>
+          <span className="truncate">{folders.length === 0 ? t("folderSelector.associate") : nomePrincipal}</span>
         </button>
       )}
       {/* Pastas extras + "+" ao lado do trigger. No header (compact) quem
