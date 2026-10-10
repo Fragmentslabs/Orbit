@@ -1,6 +1,6 @@
 import { create } from "zustand"
-import type { Catalog, CatalogModel, CatalogProvider, ReasoningConfig } from "@shared/chat"
-import { modelSupportsVision } from "@shared/chat"
+import type { Catalog, CatalogModel, CatalogProvider, OrchestrationSettings, ReasoningConfig } from "@shared/chat"
+import { modelSupportsVision, normalizeOrchestrationSettings } from "@shared/chat"
 import { authApi, catalogApi, customProvidersApi } from "@/src/lib/ipc"
 
 const SELECTED_MODEL_KEY = "orbit-selected-model"
@@ -8,6 +8,8 @@ const WORKER_MODEL_KEY = "orbit-worker-model"
 const WORKER_REASONING_KEY = "orbit-worker-reasoning"
 const ORCHESTRATOR_MODEL_KEY = "orbit-orchestrator-model"
 const ORCHESTRATOR_REASONING_KEY = "orbit-orchestrator-reasoning"
+/** Comportamento do orquestrador (Só orquestrar / Acompanhar / Rigoroso, ajustes, worktrees) */
+const ORCHESTRATION_SETTINGS_KEY = "orbit-orchestration-settings"
 /** "Modelo de orquestra" das Preferências antes de ele conduzir a orquestra de fato. */
 const LEGACY_ORCHESTRA_MODEL_KEY = "orbit-orchestra-model"
 const VISION_MODEL_KEY = "orbit-vision-model"
@@ -42,6 +44,7 @@ interface ProviderState {
   /** Modelo que conduz a orquestra (planejamento e síntese). null = o modelo do chat. */
   orchestratorModel: SelectedModel | null
   orchestratorReasoning: ReasoningConfig | null
+  orchestrationSettings: OrchestrationSettings
   /** Modelo de visão delegado (modo Visão) — descreve imagens/screenshots
    * para modelos sem visão; null = sem modelo configurado.
    * A ATIVAÇÃO é por chat (mode-overrides): o modelo é global, o toggle é
@@ -61,6 +64,7 @@ interface ProviderState {
   setWorkerReasoning: (reasoning: ReasoningConfig | null) => void
   setOrchestratorModel: (model: SelectedModel | null) => void
   setOrchestratorReasoning: (reasoning: ReasoningConfig | null) => void
+  setOrchestrationSettings: (settings: Partial<OrchestrationSettings>) => void
   setVisionModel: (model: SelectedModel | null) => void
   setVisionConfigOpen: (open: boolean) => void
   getModel: (providerId: string, modelId: string) => CatalogModel | undefined
@@ -89,6 +93,7 @@ export const useProviderStore = create<ProviderState>((set, get) => ({
   workerReasoning: loadJson<ReasoningConfig>(WORKER_REASONING_KEY),
   orchestratorModel: loadJson<SelectedModel>(ORCHESTRATOR_MODEL_KEY) ?? loadJson<SelectedModel>(LEGACY_ORCHESTRA_MODEL_KEY),
   orchestratorReasoning: loadJson<ReasoningConfig>(ORCHESTRATOR_REASONING_KEY),
+  orchestrationSettings: normalizeOrchestrationSettings(loadJson(ORCHESTRATION_SETTINGS_KEY)),
   visionModel: storedVisionModel,
   visionConfigOpen: false,
   loading: true,
@@ -208,6 +213,12 @@ export const useProviderStore = create<ProviderState>((set, get) => ({
     if (reasoning) localStorage.setItem(ORCHESTRATOR_REASONING_KEY, JSON.stringify(reasoning))
     else localStorage.removeItem(ORCHESTRATOR_REASONING_KEY)
     set({ orchestratorReasoning: reasoning })
+  },
+
+  setOrchestrationSettings: (patch) => {
+    const next = normalizeOrchestrationSettings({ ...get().orchestrationSettings, ...patch })
+    localStorage.setItem(ORCHESTRATION_SETTINGS_KEY, JSON.stringify(next))
+    set({ orchestrationSettings: next })
   },
 
   setVisionModel: (model) => {

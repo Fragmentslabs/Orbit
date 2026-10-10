@@ -188,7 +188,8 @@
     "subagents": "Subagents",
     "orchestra": "Orchestra",
     "loop": "Loop",
-    "configure": "Configure"
+    "configure": "Configure",
+    "loopOffInOrchestra": "In the orchestra the orchestrator does the reviewing — adjust it in the Orchestra settings."
   },
   "permissions": {
     "allowOnce": "Allow this time",
@@ -1006,7 +1007,22 @@
     "useChatModel": "Use the chat model",
     "workerSharedHint": "The same model as the subagents. Without a selection, workers use the main chat model.",
     "clear": "Clear",
-    "done": "Done"
+    "done": "Done",
+    "behavior": {
+      "title": "Orchestrator behavior",
+      "orquestrar": "Orchestrate only",
+      "orquestrarHint": "Splits the work, runs the workers and writes the final answer. No review.",
+      "acompanhar": "Follow along",
+      "acompanharHint": "Reviews each worker as soon as it finishes, asks for adjustments while the others keep working, creates extra workers if something is missing and reviews the integration at the end.",
+      "rigoroso": "Strict",
+      "rigorosoHint": "Follow along + only accepts a worker's work after running the project's checks (typecheck, tests, lint). Slower.",
+      "ajustes": "Adjustments per worker",
+      "ajustesHint": "How many times the orchestrator can send a worker back to redo something. This is what weighs most on cost: each adjustment is a full worker turn.",
+      "menos": "Fewer adjustments",
+      "mais": "More adjustments",
+      "worktrees": "Isolate workers in worktrees",
+      "worktreesHint": "Each worker works on its own branch and copy, and the orchestrator merges everything at the end. Keeps workers from touching each other's files; git repositories only."
+    }
   },
   "orchestration": {
     "runningWorkers": "Running workers…",
@@ -1023,7 +1039,8 @@
     "reject": "Reject",
     "approveRun": "Approve and run",
     "approveRunWithCount_one": "Approve and run ({{count}})",
-    "approveRunWithCount_other": "Approve and run ({{count}})"
+    "approveRunWithCount_other": "Approve and run ({{count}})",
+    "dependsOn": "After: {{tarefas}}"
   },
   "planDialog": {
     "doneCount": "({{checked}}/{{total}} done)",
@@ -1066,10 +1083,19 @@
     "discarded": "Proposal discarded."
   },
   "taskProgress": {
+    "juntarDeNovo": "Merge again",
     "title": "Tasks",
     "inProgress": "{{title}} in progress",
     "errors": "{{title}} with errors",
-    "done": "{{title}} done"
+    "done": "{{title}} done",
+    "ajustes": "Adjustments: {{usados}}/{{teto}}",
+    "extra": "extra",
+    "fase": {
+      "fila": "queued",
+      "revisao": "in review",
+      "ajuste": "adjustment {{n}}",
+      "falhou": "failed"
+    }
   },
   "diff": {
     "noChanges": "No changes found",
@@ -1449,16 +1475,16 @@
         "label": "Orchestra",
         "modes": ["Code"],
         "description": "Plans and splits work across persistent workers — when the request calls for it.",
-        "detail": "The orchestrator first decides what the message actually is: a simple question it answers on the spot (and may offer \"want me to implement this?\"), an ambiguity that would change the split it asks about, and only real work becomes a plan. When planning, it reads the project itself and registers subtasks with create_task, proposing the plan for your approval. Each approved task becomes a persistent child session, always in code mode in the working folder, running in parallel with the worker model. It picks each worker’s modes based on what that task needs, within what you enabled in this conversation. At the end it synthesises everything and reviews: if something came out wrong, it sends another round to the worker responsible, inside that worker’s own chat. In later messages it still sees this conversation’s workers (from any plan): it reads what each one did, sees what you typed directly in a worker, and can continue a worker’s conversation instead of creating a new one.",
-        "combo": ["Loop", "Subagents"]
+        "detail": "The orchestrator first decides what the request is: a simple question it answers right away (and may offer \"want me to implement it?\"), an ambiguity that would change the split it asks about, and only real work becomes a plan. While planning it reads the project and registers the subtasks, with dependencies when order matters (tests after the feature, for example), and proposes the plan for your approval. Each task becomes a persistent child session, in code mode, running with the worker model — up to 4 at a time. In the gear you choose how it behaves after splitting: Orchestrate only (runs and synthesizes), Follow along (reviews each worker as it finishes, looking at the diff, asks for adjustments and creates extra workers, within the adjustments-per-worker limit) or Strict (also runs the project's checks before accepting). You can also isolate each worker in its own worktree and let the orchestrator merge everything at the end. In later messages it still sees the conversation's workers and can continue one of them instead of creating another.",
+        "combo": ["Subagents"]
       },
       {
         "id": "loop",
         "label": "Loop",
         "modes": ["Code"],
         "description": "The agent reviews and iterates until the task is complete.",
-        "detail": "After each answer the result is critically reviewed. If the goal wasn’t met, the agent keeps going on its own in a new iteration, with the gap spelled out. The only setting is max iterations (in the gear) — and it is a ceiling, not a target: the loop stops as soon as the review says it is done. In Orchestra mode that same number becomes the total review rounds across all workers.",
-        "combo": ["Subagents", "Orchestra", "Thinking"]
+        "detail": "After each answer, the result is critically reviewed. If the goal wasn't reached, the agent keeps going on its own in a new iteration, with what's missing spelled out. The only setting is the maximum number of iterations (in the gear) — a ceiling, not a target: the loop stops as soon as the review says it's done. It doesn't apply to the Orchestra: there, the orchestrator does the reviewing.",
+        "combo": ["Subagents", "Thinking"]
       },
       {
         "id": "plan",
@@ -1497,19 +1523,9 @@
         "description": "Loop + Thinking: the agent reviews its own result with extended reasoning, spotting gaps and refining until the goal is achieved. Great for generating robust code, thorough tests, or detailed documentation."
       },
       {
-        "label": "Orchestration with review",
-        "items": ["Orchestra", "Loop"],
-        "description": "Orchestra + Loop: without Loop, the orchestrator gets 2 review rounds after synthesis — enough to fix the obvious mistake. With Loop on, the budget becomes the max iterations you configured (default 5). These are TOTAL rounds, not per worker: the orchestrator decides where to spend them, since it is the only one seeing the whole picture."
-      },
-      {
         "label": "Workers on multiple fronts",
         "items": ["Orchestra", "Subagents"],
         "description": "Orchestra + Subagents: unlocks delegation at both levels. While planning, the orchestrator may call subagents to research before splitting (without the toggle it reads the project itself). And it can hand a worker its own subagents when a task is too broad for one."
-      },
-      {
-        "label": "Orchestra + Subagents + Loop",
-        "items": ["Orchestra", "Subagents", "Loop"],
-        "description": "Orchestra + Subagents + Loop: the most autonomous setup — and the most expensive. Delegated research while planning, workers that can split themselves further, and Loop’s larger review budget. Worth it for genuinely large jobs; check the estimated cost on the plan card before approving."
       },
       {
         "label": "Careful planning",

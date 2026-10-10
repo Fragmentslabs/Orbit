@@ -16,7 +16,7 @@ import { useAppearanceStore } from "@/src/stores/appearance-store"
 import { ErrorBoundary } from "@/src/components/error-boundary"
 import { showsPersonaInChat, showsPersonaOnWelcome } from "@shared/appearance"
 import { usePanelStore } from "@/src/stores/panel-store"
-import { docsApi } from "@/src/lib/ipc"
+import { chatApi, docsApi } from "@/src/lib/ipc"
 import { Conversation, ConversationContent, ConversationScrollButton } from "@/src/components/ai/conversation"
 import { Message, MessageAttachment, MessageAttachments, MessageContent } from "@/src/components/ai/message"
 import { Suggestion } from "@/src/components/ai/suggestion"
@@ -946,7 +946,18 @@ export function ChatView({ sessionId, embedded = false }: { sessionId?: string; 
       {session && plan && (plan.status === "approved" || plan.status === "running" || plan.status === "done") && (
         <div className="mx-auto w-full max-w-2xl pb-2">
           <TaskProgress
-            tasks={plan.tasks.map((t) => ({ id: t.id, title: t.title, status: t.status, mode: "code" as const }))}
+            tasks={plan.tasks.map((t) => ({
+              id: t.id,
+              title: t.title,
+              status: t.status,
+              mode: "code" as const,
+              fase: t.fase,
+              extra: t.extra,
+              revisions: t.revisions,
+              nota: t.notaRevisao,
+            }))}
+            acompanhamento={plan.revisao}
+            onJuntarDeNovo={() => chatApi.juntarOrquestracao(session.id)}
             title={t("chat.orchestrationTitle")}
             defaultExpanded={plan.status !== "done"}
             onDismiss={plan.status === "done" ? () => useSessionStore.getState().dismissOrchestration(session.id) : undefined}

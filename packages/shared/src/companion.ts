@@ -4,7 +4,7 @@
  * e o handshake de autenticação.
  */
 
-import type { SendMessageOptions, SessionMode, FilePart, WorkerModelConfig, ReasoningConfig, PermissionMode, PlanReview, OrchestrationPlan, AskItem, ModelRotation, RotationConfig, QueuedMessage } from './chat'
+import type { SendMessageOptions, SessionMode, FilePart, WorkerModelConfig, ReasoningConfig, PermissionMode, PlanReview, OrchestrationPlan, AskItem, ModelRotation, RotationConfig, QueuedMessage, OrchestrationSettings } from './chat'
 import type { AnalyticsRange } from './analytics'
 import type { NovaRotinaInput, Rotina, RotinaEvent, RotinaModelo } from './rotinas'
 import type {
@@ -273,6 +273,8 @@ export interface WorkerConfigSnapshot {
    */
   orchestratorModel?: WorkerModelConfig | null
   orchestratorReasoning?: ReasoningConfig | null
+  /** Comportamento do orquestrador. Ausente = manter o que está. */
+  orchestration?: OrchestrationSettings
 }
 
 export interface SetWorkerConfigRequest {

@@ -585,12 +585,93 @@ export interface OrchestrationTask {
   status: ChatStatus
   /** Quantas rodadas de revisão o orquestrador já mandou para este worker. */
   revisions?: number
+  /**
+   * Etapa no acompanhamento do orquestrador. `status` continua sendo o estado
+   * do chat do worker (o que apps antigos leem); `fase` diz o que o
+   * orquestrador fez com ele.
+   */
+  fase?: FaseTarefaOrquestra
+  /** Ids de tarefas que precisam ser aceitas antes desta começar */
+  dependeDe?: string[]
+  /** Criada pelo orquestrador durante a revisão (não estava no plano aprovado) */
+  extra?: boolean
+  /** Última nota da revisão: o que foi pedido no ajuste, ou por que falhou */
+  notaRevisao?: string
+  /** Worktree próprio do worker (orquestra com "Isolar workers em worktrees") */
+  worktree?: { caminho: string; pasta: string; branch: string; base: string }
+  /** O branch do worker já foi juntado no chat */
+  juntada?: boolean
+}
+
+export type FaseTarefaOrquestra =
+  /** Esperando a vez (dependências ou o teto de workers simultâneos) */
+  | "fila"
+  | "rodando"
+  /** Terminou e está com o orquestrador */
+  | "revisao"
+  /** Voltou a rodar com um pedido de ajuste */
+  | "ajuste"
+  | "aceita"
+  | "falhou"
+
+/** Comportamento do orquestrador depois de dividir (configurações da Orquestra). */
+export interface OrchestrationSettings {
+  /**
+   * `orquestrar`: divide, roda e sintetiza, sem revisão.
+   * `acompanhar`: revisa cada worker ao terminar, pede ajustes, cria workers
+   * extras e faz a revisão de integração no fim.
+   * `rigoroso`: acompanhar + só aceita depois de rodar as verificações do
+   * projeto (typecheck, testes, lint).
+   */
+  comportamento: "orquestrar" | "acompanhar" | "rigoroso"
+  /** Ajustes que cada worker pode receber; o teto global é isso × workers do plano */
+  ajustesPorWorker: number
+  /** Cada worker num git worktree próprio, juntado no fim */
+  worktrees: boolean
+}
+
+export const ORCHESTRATION_SETTINGS_PADRAO: OrchestrationSettings = {
+  comportamento: "acompanhar",
+  ajustesPorWorker: 2,
+  worktrees: false,
+}
+
+export const MAX_AJUSTES_POR_WORKER = 5
+
+/** Completa/saneia o que veio do renderer ou do celular. Nunca lança. */
+export function normalizeOrchestrationSettings(raw: unknown): OrchestrationSettings {
+  const v = (raw && typeof raw === "object" ? raw : {}) as Partial<OrchestrationSettings>
+  const d = ORCHESTRATION_SETTINGS_PADRAO
+  const ajustes = typeof v.ajustesPorWorker === "number" && Number.isInteger(v.ajustesPorWorker)
+    ? Math.min(MAX_AJUSTES_POR_WORKER, Math.max(0, v.ajustesPorWorker))
+    : d.ajustesPorWorker
+  return {
+    comportamento: v.comportamento === "orquestrar" || v.comportamento === "rigoroso" ? v.comportamento : d.comportamento,
+    ajustesPorWorker: ajustes,
+    worktrees: typeof v.worktrees === "boolean" ? v.worktrees : d.worktrees,
+  }
 }
 
 export interface OrchestrationPlan {
   id: string
   tasks: OrchestrationTask[]
   status: "proposed" | "approved" | "running" | "done" | "rejected"
+  /** Configuração vigente quando o plano foi aprovado */
+  config?: OrchestrationSettings
+  /** Acompanhamento em andamento: orçamento de ajustes e o que o orquestrador está fazendo */
+  revisao?: {
+    ajustesUsados: number
+    tetoAjustes: number
+    /** Ex.: "Revisando: Motores de STT" — vazio quando ele não está fazendo nada */
+    atividade?: string
+    /** Resultado do merge dos worktrees dos workers, quando houve */
+    merge?: {
+      ok: boolean
+      detalhe: string
+      /** Ainda há trabalho aceito por juntar — o card oferece "Juntar de novo" */
+      pendente?: boolean
+    }
+  }
   /** Tokens/custo acumulados: planejamento + workers + síntese */
   usage?: TokenUsage
   /** Card fechado pelo usuário. O plano CONTINUA guardado — tarefas, prompts e

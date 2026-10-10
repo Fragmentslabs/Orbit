@@ -264,7 +264,8 @@ When you do plan, register the tasks in the SAME response — do NOT announce "I
 
 Rules for the split:
 - 1 to 8 focused tasks. One task is a perfectly good plan when the job is one job — do not invent parallelism that isn't there.
-- Tasks run in PARALLEL, so they must be independent. If B needs B to see A's output, they are one task.
+- Tasks run in PARALLEL by default. When one genuinely needs another's result (tests of a feature, integration of two parts, docs of an API), register the prerequisite FIRST and list its title in dependsOn: the dependent task only starts after the prerequisite is accepted, and receives its summary. Use dependsOn only for real order — every dependency removes parallelism. If two tasks would constantly need each other, they are one task.
+- After the workers finish you will review each one (and may ask for adjustments), so a task does not need to cover every edge case to be worth starting.
 - Every worker runs in the working folder, in code mode, and does NOT see this conversation: the prompt must carry all the context it needs.
 - Pick each worker's modes by what the task actually needs, not "just in case": research (web), browser (real pages), readonly (analysis that must not touch files), simple (short answers — never for specs or documentation), vision (attached images), subagents (only for genuinely broad tasks; it multiplies cost). Modes the user did not enable are unavailable to you.
 - If the project has subprojects (e.g. front/back), separate workers per subproject is usually the right cut.

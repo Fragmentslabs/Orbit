@@ -135,6 +135,7 @@ export interface CreateTaskArgs {
   simple?: boolean
   vision?: boolean
   subagents?: boolean
+  dependsOn?: string[]
 }
 
 /**
@@ -156,6 +157,8 @@ export function createTaskTool(
   /** O título já é de outro worker (deste plano ou de um anterior)? Na
    *  sidebar o título é a única coisa que separa um worker do outro. */
   titleTaken: (title: string) => boolean = () => false,
+  /** Id de uma tarefa JÁ registrada neste plano, pelo título (dependsOn). */
+  taskIdByTitle: (title: string) => string | undefined = () => undefined,
 ) {
   return tool({
     description: [
@@ -177,8 +180,22 @@ export function createTaskTool(
       simple: z.boolean().optional().describe('Direct answers with no formatting. Good for short lookups, bad for specs and documentation'),
       vision: z.boolean().optional().describe('Lets the worker describe attached images'),
       subagents: z.boolean().optional().describe('Lets the worker delegate to its own background subagents. Costly — only for broad tasks'),
+      dependsOn: z
+        .array(z.string())
+        .optional()
+        .describe('Titles of tasks ALREADY registered in this plan that must be accepted before this one starts. Only for real order (tests after the feature, integration after its parts).'),
     }),
-    execute: async ({ title, prompt, research, browser, readonly: readOnly, simple, vision, subagents }: CreateTaskArgs) => {
+    execute: async ({ title, prompt, research, browser, readonly: readOnly, simple, vision, subagents, dependsOn }: CreateTaskArgs) => {
+      // Dependência só de tarefa já registrada: além de dar o id, isso torna
+      // ciclo impossível (ninguém depende de quem ainda não existe).
+      const dependeDe: string[] = []
+      for (const titulo of dependsOn ?? []) {
+        const id = taskIdByTitle(titulo)
+        if (!id) {
+          return `A tarefa "${title}" NÃO foi registrada: "${titulo}" não é uma tarefa já registrada neste plano. Registre os pré-requisitos primeiro e repita, usando o título exato em dependsOn.`
+        }
+        if (!dependeDe.includes(id)) dependeDe.push(id)
+      }
       if (titleTaken(title)) {
         return `Já existe um worker chamado "${title}" nesta conversa — a tarefa NÃO foi registrada. Chame create_task de novo com um título que a diferencie (a área ou entrega específica), ou use message_worker se o trabalho é continuação desse worker.`
       }
@@ -204,6 +221,7 @@ export function createTaskTool(
         },
         vision: clamp(vision, ceiling.vision, 'vision'),
         status: 'idle',
+        ...(dependeDe.length > 0 ? { dependeDe } : {}),
       })
       if (!accepted) return 'Limite de tarefas do plano atingido — não registre mais tarefas.'
       if (denied.length > 0) {

@@ -1,4 +1,4 @@
-import { generateText, stepCountIs, streamText, type ModelMessage, type ToolSet } from 'ai'
+import { stepCountIs, streamText, type ModelMessage, type ToolSet } from 'ai'
 import type { BrowserWindow } from 'electron'
 import type {
   ChatEvent,
@@ -11,7 +11,7 @@ import type {
   TextPart,
   ToolPart,
 } from '@shared/chat'
-import { StorageKeys } from '@shared/chat'
+import { StorageKeys, normalizeOrchestrationSettings } from '@shared/chat'
 import { getProvider } from './catalog'
 import { abortChat, runChat, toModelMessages } from './chat-engine'
 import { forwardChatEvent } from './companion-server'
@@ -30,6 +30,19 @@ import { createQuestionTool } from './tools/question'
 import { buildWorkersNotice, createWorkerTools, loadWorkers } from './tools/workers'
 import type { ToolContext } from './tools/context'
 import { addTokenUsage, toTokenUsage } from './usage'
+import { getWorkerConfigCache } from './companion-http'
+import { executarPlano } from './orquestra/execucao'
+import { revisarComModelo } from './orquestra/revisor'
+import { descobrirVerificacoes, rodarVerificacao } from './orquestra/verificacoes'
+import {
+  commitarTrabalho,
+  criarWorktreeDoWorker,
+  diffDoWorktree,
+  juntarBranches,
+  removerWorktreeDoWorker,
+  repositorioDoChat,
+} from './orquestra/worktrees'
+import { raizDoRepositorio } from './worktrees/nucleo'
 
 /**
  * OrchestratorEngine (modo Orchestra), em quatro fases:
@@ -39,10 +52,12 @@ import { addTokenUsage, toTokenUsage } from './usage'
  * 2. Execução: cada tarefa aprovada vira uma session filha real (persistida,
  *    aparece na sidebar/painel), sempre em modo código, com os modos que o
  *    orquestrador escolheu para ela dentro do teto da sessão do usuário.
- * 3. Síntese: o orquestrador consolida os resultados na resposta final.
- * 4. Revisão: espera todos terminarem, relê o resultado de cada worker e manda
- *    outra rodada para quem precisa, dentro de um orçamento GLOBAL de rodadas
- *    (ver ORCHESTRATION_REVIEW_ROUNDS).
+ * 3. Acompanhamento (orquestra/execucao.ts): cada worker que termina é revisado
+ *    pelo orquestrador enquanto os outros seguem; ele aceita, pede ajuste, marca
+ *    falha ou cria worker extra, dentro do orçamento "ajustes por worker" das
+ *    configurações da Orquestra. Dependências entre tarefas e, opcionalmente,
+ *    um worktree por worker (juntado no fim).
+ * 4. Síntese: o orquestrador consolida os resultados na resposta final.
  */
 
 const MAX_TASKS = 8
@@ -64,17 +79,6 @@ const PROMISED_PLAN_RE =
   /\b(create_task|vou (dividir|criar|planejar)|dividir em (tarefas|workers)|criar (as )?tarefas|I(’|')?ll (split|create|plan)|going to (split|create)|split .{0,20}into (tasks|workers))\b/i
 /** Resposta do retry que diz "a primeira resposta já estava certa". */
 const NO_PLAN_SENTINEL = '<<NO_PLAN>>'
-/**
- * Rodadas de revisão pós-síntese, no TOTAL (não por worker) — quem decide onde
- * gastá-las é o orquestrador, que é o único que vê o conjunto. Por worker, "3"
- * viraria 15 rodadas num plano de 5, um multiplicador que o usuário não
- * escolheu.
- *
- * Este é o teto de quem NÃO ligou o modo Loop: existe para o erro óbvio ser
- * corrigido sem virar uma segunda rodada de trabalho. Com o Loop ligado vale o
- * maxIterations do diálogo de Loop, que por padrão é maior.
- */
-const ORCHESTRATION_REVIEW_ROUNDS = 2
 
 interface PendingOrchestration {
   input: SendMessageInput
@@ -307,6 +311,7 @@ async function runOrchestrationTurn(win: BrowserWindow, input: SendMessageInput)
           const key = normalizeTitle(title)
           return existingTitles.has(key) || tasks.some((t) => normalizeTitle(t.title) === key)
         },
+        (title) => tasks.find((t) => normalizeTitle(t.title) === normalizeTitle(title))?.id,
       ),
       // Perguntar antes de dividir: só vale quando a resposta muda o plano,
       // mas sem a tool ele não tinha como fazer isso nem quando valia.
@@ -593,13 +598,25 @@ async function approvePlanTurn(
       emit(win, { type: 'session', sessionId, session: next })
     }
 
-    // Cria as sessions filhas dos workers. Registra cada worker em activeWorkers
-    // JÁ NA CRIAÇÃO — um abort nesta janela precisa alcançá-los (antes o registro
-    // só acontecia depois de criar todas as sessions e persistir o plano).
+    // Configuração vigente (diálogo da Orquestra, via cache que o renderer
+    // empurra). Fica no plano: o card mostra o orçamento, e um plano em
+    // andamento não muda de comportamento se o usuário mexer no diálogo.
+    const config = normalizeOrchestrationSettings(getWorkerConfigCache().orchestration)
+    plan.config = config
+    // Worktree por worker só faz sentido num repositório git.
+    const repoDoChat = config.worktrees ? await repositorioDoChat(input.directory!) : null
+
+    // Tarefas fora da seleção não rodam — e dependência delas deixa de existir.
+    const ids = new Set(selected.map((t) => t.id))
+    for (const t of selected) if (t.dependeDe) t.dependeDe = t.dependeDe.filter((id) => ids.has(id))
+    plan.tasks = selected
+
+    // Sessões filhas dos workers. Registra cada worker em activeWorkers JÁ NA
+    // CRIAÇÃO — um abort nesta janela precisa alcançá-los.
     activeWorkers.set(sessionId, [])
-    const now = Date.now()
-    const workerSessions: SessionInfo[] = []
-    for (const task of selected) {
+    const workerSessions = new Map<string, SessionInfo>()
+    const criarSessao = async (task: OrchestrationTask): Promise<SessionInfo> => {
+      const now = Date.now()
       const worker: SessionInfo = {
         id: newId('ses'),
         title: task.title,
@@ -618,41 +635,120 @@ async function approvePlanTurn(
         updatedAt: now,
       }
       await writeJson(StorageKeys.session(worker.id), worker)
-      workerSessions.push(worker)
+      workerSessions.set(task.id, worker)
       task.workerSessionId = worker.id
-      task.status = 'submitted'
       activeWorkers.get(sessionId)?.push(worker.id)
       emit(win, { type: 'session', sessionId: worker.id, session: worker })
+      return worker
     }
+    // Todos aparecem na sidebar desde já, mesmo os que esperam dependência.
+    for (const task of selected) await criarSessao(task)
 
     plan.status = 'running'
     await persistPlan(win, sessionId, plan)
     emit(win, { type: 'status', sessionId, status: 'streaming' })
 
-    // Fase 2: workers em paralelo, cada um emitindo ChatEvents no próprio sessionId
-    const results = await Promise.all(
-      selected.map(async (task, i) => {
-        const result = await runWorkerTurn(win, input, workerSessions[i], task.prompt)
-        task.status = result.error ? 'error' : 'idle'
-        return {
-          task,
-          text: result.text || (result.error ? `O worker falhou: ${result.error}` : '(o worker não retornou texto)'),
-          tokens: result.tokens,
-        }
-      }),
-    )
-    activeWorkers.delete(sessionId)
-    // Acumula o custo dos workers no plano (planejamento já está em plan.usage)
-    plan.usage = results.reduce((acc, r) => (r.tokens ? addTokenUsage(acc, r.tokens) : acc), plan.usage)
-    await persistPlan(win, sessionId, plan)
+    // Gravações em fila: workers e revisões mudam o plano o tempo todo, e duas
+    // escritas simultâneas no mesmo arquivo se atropelariam.
+    let gravacoes = Promise.resolve()
+    const persistir = () => {
+      gravacoes = gravacoes.then(() => persistPlan(win, sessionId, plan)).catch(() => {})
+      return gravacoes
+    }
 
-    // Abort durante a fase 2: workers já pararam, não faz sentido sintetizar
+    // O revisor é o condutor (o mesmo modelo do planejamento e da síntese).
+    const revisor = conductorInput(input)
+    const revisorModel = await resolveModel(revisor.providerId, revisor.modelId)
+    const revisorProvider = await getProvider(revisor.providerId)
+    const revisorOptions = await buildProviderOptions(revisor)
+    const raizRepo = await raizDoRepositorio(input.directory!).catch(() => undefined)
+
+    const diffDaTarefa = async (task: OrchestrationTask): Promise<string> => {
+      if (task.worktree) return diffDoWorktree(task.worktree)
+      // Sem worktree: os snapshots dos turnos do worker. Na pasta compartilhada
+      // podem incluir mudanças de outros workers rodando ao mesmo tempo — o
+      // revisor é avisado disso no prompt.
+      if (!task.workerSessionId) return ''
+      const msgs = await loadMessages(task.workerSessionId)
+      return msgs
+        .filter((m) => m.role === 'assistant' && m.snapshot?.patch)
+        .map((m) => `${(m.snapshot!.files ?? []).map((f) => `- ${f}`).join('\n')}\n${m.snapshot!.patch}`)
+        .join('\n\n')
+    }
+
+    const workerResultados = await executarPlano({
+      plan,
+      config,
+      signal: controller.signal,
+      opcoesExtra: { subagents: input.options.subagents === true },
+      persistir,
+      rodarWorker: async (task, texto) => {
+        const worker = workerSessions.get(task.id) ?? (await criarSessao(task))
+        const r = await runWorkerTurn(win, input, worker, texto)
+        // Cada turno (o primeiro e os ajustes) entra no custo do plano.
+        if (r.tokens) plan.usage = addTokenUsage(plan.usage, r.tokens)
+        return r
+      },
+      prepararTarefa: repoDoChat
+        ? async (task) => {
+            const worker = workerSessions.get(task.id) ?? (await criarSessao(task))
+            const dependencias = (task.dependeDe ?? [])
+              .map((id) => plan.tasks.find((t) => t.id === id)?.worktree)
+              .filter((w): w is NonNullable<OrchestrationTask['worktree']> => !!w)
+            const { worktree, avisos } = await criarWorktreeDoWorker({ pastaDoChat: input.directory!, planId: plan.id, task, dependencias })
+            task.worktree = worktree
+            // A sessão do worker passa a trabalhar no worktree dele.
+            const next = { ...worker, directory: worktree.pasta, updatedAt: Date.now() }
+            await writeJson(StorageKeys.session(next.id), next)
+            workerSessions.set(task.id, next)
+            emit(win, { type: 'session', sessionId: next.id, session: next })
+            return [
+              `You work in an isolated git worktree (${worktree.pasta}) on branch ${worktree.branch}, created from ${worktree.base}. Other workers have their own. You don't need to commit: the orchestrator commits your work when it is accepted and merges it at the end.`,
+              ...avisos,
+            ]
+          }
+        : undefined,
+      aoAceitar: repoDoChat
+        ? async (task) => {
+            if (task.worktree) await commitarTrabalho(task.worktree, task.title).catch(() => {})
+          }
+        : undefined,
+      revisar:
+        config.comportamento === 'orquestrar'
+          ? undefined
+          : (pedido, acoes) =>
+              revisarComModelo(
+                {
+                  model: revisorModel,
+                  providerOptions: revisorOptions,
+                  prepareStep: reasoningPrepareStep(revisorProvider, revisor.modelId),
+                  pedidoOriginal: input.text,
+                  plan,
+                  config,
+                  signal: controller.signal,
+                  diff: diffDaTarefa,
+                  verificacoes: (task) => descobrirVerificacoes(task.worktree?.pasta ?? input.directory!, task.worktree?.caminho ?? raizRepo),
+                  rodarVerificacao: (_task, v) => rodarVerificacao(v, controller.signal),
+                  aoUsar: (usage) => {
+                    plan.usage = addTokenUsage(plan.usage, toTokenUsage(usage as Parameters<typeof toTokenUsage>[0], revisorProvider?.models[revisor.modelId]?.cost))
+                  },
+                },
+                pedido,
+                acoes,
+              ),
+    })
+    activeWorkers.delete(sessionId)
+
+    // Abort durante a execução: workers já pararam, não faz sentido sintetizar
     if (controller.signal.aborted) {
       plan.status = 'done'
       await persistPlan(win, sessionId, plan)
       emit(win, { type: 'status', sessionId, status: 'idle' })
       return
     }
+
+    // Worktrees: junta no chat o trabalho aceito, dependências antes.
+    if (repoDoChat) await juntarTrabalho(win, sessionId, plan, input.directory!)
 
     // Fase 3: síntese em streaming no chat principal
     const history = await loadMessages(sessionId)
@@ -668,9 +764,14 @@ async function approvePlanTurn(
     history.push(synthesisMessage)
     emit(win, { type: 'message', sessionId, message: synthesisMessage })
 
-    const resultsText = results
-      .map((r) => `## ${r.task.title} [${r.task.status === 'error' ? 'FAILED' : 'ok'}]\n\n${r.text}`)
-      .join('\n\n---\n\n')
+    const resultsText = plan.tasks
+      .map((t) => {
+        const estado = t.fase === 'aceita' ? 'accepted' : t.fase === 'falhou' ? 'FAILED' : t.fase ?? 'unknown'
+        const nota = t.notaRevisao ? `\nOrchestrator note: ${t.notaRevisao}` : ''
+        const texto = workerResultados.get(t.id)?.text || '(no reply)'
+        return `## ${t.title}${t.extra ? ' (extra)' : ''} [${estado}${t.revisions ? `, ${t.revisions} adjustment(s)` : ''}]${nota}\n\n${texto}`
+      })
+      .join('\n\n---\n\n') + (plan.revisao?.merge ? `\n\n---\n\nMerge of the workers' branches: ${plan.revisao.merge.detalhe}` : '')
 
     const model = await resolveModel(conductor.providerId, conductor.modelId)
     const provider = await getProvider(conductor.providerId)
@@ -721,187 +822,6 @@ async function approvePlanTurn(
     await persistPlan(win, sessionId, plan)
     emit(win, { type: 'message', sessionId, message: synthesisMessage })
 
-    // ─── Fase 4: revisão pós-síntese ───────────────────────────────────
-    // O orquestrador é chamado a cada iteração para decidir a ação:
-    //   - "message_worker": envia follow-up a um worker existente
-    //   - "create_worker": cria novo worker (continuação, teste, etc.)
-    //   - "done": finaliza
-    // Revisar passou a ser sempre parte do trabalho do orquestrador — antes só
-    // acontecia com loopConfig. O que o modo Loop muda agora é o TAMANHO do
-    // orçamento: desligado vale ORCHESTRATION_REVIEW_ROUNDS, ligado vale o
-    // maxIterations do diálogo de Loop. Em ambos o orçamento é global, e
-    // esperamos todos os workers terminarem antes de revisar — as revisões que
-    // valem são as de integração, e essas só existem com tudo pronto.
-    {
-      // Com o modo Loop ligado o orçamento vem do diálogo de Loop (default 5);
-      // sem ele, do teto próprio da orquestração (2).
-      const reviewRounds =
-        input.options.loop === true
-          ? (input.loopConfig?.maxIterations ?? ORCHESTRATION_REVIEW_ROUNDS)
-          : ORCHESTRATION_REVIEW_ROUNDS
-      let iteration = 0
-      // Rastreia workers existentes para reuso; a task carrega quantas rodadas
-      // já foram gastas nele — o orçamento é global, mas mostrar o gasto por
-      // worker evita que o orquestrador martele sempre o mesmo.
-      const reviewWorkers = new Map(selected.map((t, i) => [t.workerSessionId!, { title: t.title, task: t, session: workerSessions[i] }]))
-
-      while (iteration < reviewRounds) {
-        if (controller.signal.aborted) break
-
-        // Coleta resultados atuais de todos os workers do plano
-        const workersStatus = await Promise.all(
-          [...reviewWorkers.entries()].map(async ([wsId, info]) => {
-            const msgs = await loadMessages(wsId)
-            const last = [...msgs].reverse().find((m) => m.role === 'assistant')
-            const text = last?.parts
-              .filter((p): p is TextPart => p.type === 'text')
-              .map((p) => p.text)
-              .join('\n')
-              .trim() || '(no output)'
-            return {
-              sessionId: wsId,
-              title: info.title,
-              text: text.slice(0, 2000),
-              error: last?.error,
-              spent: info.task.revisions ?? 0,
-            }
-          }),
-        )
-
-        // Orquestrador decide o que fazer
-        const workersBlock = workersStatus
-          .map((w) => `## Worker "${w.title}" (sessionId: ${w.sessionId}, rounds already spent here: ${w.spent})\n${w.error ? `**ERROR**: ${w.error}\n` : ''}${w.text}`)
-          .join('\n\n---\n\n')
-
-        const { text: decisionText } = await generateText({
-          model,
-          system: `You are the Orbit orchestrator. The workers have finished. Review their results and decide the next action.`,
-          messages: [
-            { role: 'user', content: `## Original request\n${input.text}\n\n## Worker results\n${workersBlock}\n\n## Review round\n${iteration + 1} of ${reviewRounds} (budget shared across all workers)` },
-            {
-              role: 'user',
-              content: `Analyze whether the goal was achieved. Reply with JSON:
-{
-  "action": "done" | "message_worker" | "create_worker" | "create_test_worker",
-  "reason": "short explanation",
-  "workerSessionId": "if action=message_worker, sessionId of the worker to message",
-  "followUpPrompt": "if action=message_worker, new instruction for the existing worker",
-  "workerTitle": "if action=create_worker or create_test_worker, name shown in the sidebar: 2-5 words naming the specific area or deliverable, in the user's language, different from every worker above",
-  "workerPrompt": "if action=create_worker or create_test_worker, prompt for the new worker",
-  "workerMode": "chat or code (if create_worker/create_test_worker)"
-}
-
-Rules:
-- "done": goal achieved, finish
-- "message_worker": reuse an existing worker with new instructions — always prefer this over a new worker when the worker already has the context. It continues inside that worker's own chat, so it remembers what it did.
-- "create_worker": create an additional worker to continue/expand
-- "create_test_worker": create a worker to TEST what was implemented; if it finds errors, the next round can delegate the fix to the worker that implemented it
-- You have a TOTAL budget of review rounds shared across all workers, and you decide where to spend it. "rounds already spent here" tells you how many went to each one — if a worker already took several and still isn't right, messaging it again is probably not the answer.
-- Don't invent work to look busy. If the request was met, say "done" — an extra round costs the user money.`,
-            },
-          ],
-          abortSignal: controller.signal,
-        })
-
-        interface LoopDecision {
-          action: 'done' | 'message_worker' | 'create_worker' | 'create_test_worker'
-          reason: string
-          workerSessionId?: string
-          followUpPrompt?: string
-          workerTitle?: string
-          workerPrompt?: string
-          workerMode?: 'chat' | 'code'
-        }
-
-        let decision: LoopDecision = { action: 'done', reason: 'Falha ao interpretar decisão.' }
-        try {
-          const j = decisionText.trim().replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/, '')
-          const start = j.indexOf('{')
-          const end = j.lastIndexOf('}')
-          decision = JSON.parse(j.slice(start, end + 1)) as LoopDecision
-        } catch { decision = { action: 'done', reason: 'Erro ao parsear JSON da decisão.' } }
-
-        if (decision.action === 'done' || !['message_worker', 'create_worker', 'create_test_worker'].includes(decision.action)) {
-          // Anexa o veredito à síntese
-          const verdictPart: TextPart = { id: newId('prt'), type: 'text', text: `\n\n---\n### Loop ${iteration + 1}: ${decision.action === 'done' ? '✓ Concluído' : 'Encerrado'}\n\n${decision.reason}`, state: 'done' }
-          synthesisMessage.parts.push(verdictPart)
-          emit(win, { type: 'part', sessionId, messageId: synthesisMessage.id, part: verdictPart })
-          break
-        }
-
-        iteration++
-
-        if (decision.action === 'message_worker' && decision.workerSessionId && reviewWorkers.has(decision.workerSessionId)) {
-          // Reuso: envia nova instrução ao worker existente
-          const wsInfo = reviewWorkers.get(decision.workerSessionId)!
-          // O orçamento é global (a condição do while) — aqui só registramos
-          // onde ele foi gasto, para o orquestrador ver na próxima decisão que
-          // já bateu neste worker N vezes e considerar outro caminho.
-          wsInfo.task.revisions = (wsInfo.task.revisions ?? 0) + 1
-          // Uma mensagem só: antes o follow-up era gravado aqui E o runChat
-          // gravava outra com o mesmo prompt — o worker via a ordem em dobro.
-          const followUpText = `[Revisão ${iteration}] ${decision.reason}\n\n${decision.followUpPrompt ?? 'Continue o trabalho.'}`
-          const reused = await runWorkerTurn(win, input, wsInfo.session, followUpText)
-          const upText = reused.text || '(sem retorno)'
-          const loopPart: TextPart = { id: newId('prt'), type: 'text', text: `\n\n---\n### Loop ${iteration}: reuso de "${wsInfo.title}"\n\n${decision.reason}\n\n${upText}`, state: 'done' }
-          synthesisMessage.parts.push(loopPart)
-          emit(win, { type: 'part', sessionId, messageId: synthesisMessage.id, part: loopPart })
-        } else if ((decision.action === 'create_worker' || decision.action === 'create_test_worker') && decision.workerTitle) {
-          const isTest = decision.action === 'create_test_worker'
-          const loopWorker: SessionInfo = {
-            id: newId('ses'),
-            title: isTest ? `🧪 ${decision.workerTitle}` : decision.workerTitle!,
-            mode: 'code',
-            pinned: false,
-            archived: false,
-            folderId: null,
-            directory: input.directory,
-            extraDirectories: input.extraDirectories,
-            // Sem modos extras alem do que a sessao permite — `subagents: true`
-            // fixo aqui ignorava o toggle do usuario.
-            orchestration: {
-              role: 'worker',
-              parentSessionId: sessionId,
-              task: decision.reason,
-              options: { subagents: input.options.subagents === true },
-            },
-            parentId: sessionId,
-            createdAt: Date.now(),
-            updatedAt: Date.now(),
-          }
-          await writeJson(StorageKeys.session(loopWorker.id), loopWorker)
-          // Task sintetica: existe para o worker do loop ter o mesmo contador de
-          // revisoes dos workers do plano.
-          const loopTask: OrchestrationTask = {
-            id: newId('task'),
-            title: loopWorker.title,
-            prompt: decision.workerPrompt ?? decision.reason,
-            options: loopWorker.orchestration!.options!,
-            status: 'idle',
-            workerSessionId: loopWorker.id,
-            revisions: 0,
-          }
-          reviewWorkers.set(loopWorker.id, { title: loopWorker.title, task: loopTask, session: loopWorker })
-          emit(win, { type: 'session', sessionId: loopWorker.id, session: loopWorker })
-
-          const created = await runWorkerTurn(win, input, loopWorker, loopTask.prompt)
-          const lwText = created.text || '(sem retorno)'
-          // Se é worker de teste e encontrou erro, o orquestrador na próxima iteração pode delegar ao worker original
-          const label = isTest ? `🧪 Teste` : `Worker adicional`
-          const loopPart: TextPart = { id: newId('prt'), type: 'text', text: `\n\n---\n### ${label} (loop ${iteration}): "${loopWorker.title}"\n\n${decision.reason}\n\n${lwText}`, state: 'done' }
-          synthesisMessage.parts.push(loopPart)
-          emit(win, { type: 'part', sessionId, messageId: synthesisMessage.id, part: loopPart })
-        }
-
-        // Salva `history`, nao um reload: as parts da revisao sao empurradas
-        // no synthesisMessage em memoria, e esse objeto vive dentro de
-        // `history`. Um loadMessages aqui traria uma COPIA sem elas, e gravar
-        // essa copia apagava do disco tudo que a revisao escreveu.
-        await saveMessages(sessionId, history)
-      }
-      activeWorkers.delete(sessionId)
-    }
-
     emit(win, { type: 'status', sessionId, status: 'idle' })
   } catch (err) {
     const aborted = controller.signal.aborted
@@ -927,4 +847,66 @@ export async function rejectPlan(win: BrowserWindow, sessionId: string): Promise
   entry.plan.status = 'rejected'
   await persistPlan(win, sessionId, entry.plan)
   emit(win, { type: 'status', sessionId, status: 'idle' })
+}
+
+/** Tarefas em ordem de dependência (pré-requisitos antes) — a ordem do merge. */
+function ordemDeDependencia(tasks: OrchestrationTask[]): OrchestrationTask[] {
+  const ordem: OrchestrationTask[] = []
+  const vistos = new Set<string>()
+  const visitar = (t: OrchestrationTask) => {
+    if (vistos.has(t.id)) return
+    vistos.add(t.id)
+    for (const id of t.dependeDe ?? []) {
+      const dep = tasks.find((x) => x.id === id)
+      if (dep) visitar(dep)
+    }
+    ordem.push(t)
+  }
+  for (const t of tasks) visitar(t)
+  return ordem
+}
+
+/**
+ * Junta no chat os branches das tarefas aceitas que ainda não entraram, em
+ * ordem de dependência. O resultado fica no plano (card + síntese); se algo
+ * ficou de fora (alteração não commitada no chat, conflito, erro do git), o
+ * card oferece "Juntar de novo".
+ */
+async function juntarTrabalho(win: BrowserWindow, sessionId: string, plan: OrchestrationPlan, pastaDoChat: string): Promise<void> {
+  const aceitas = ordemDeDependencia(plan.tasks).filter((t) => t.fase === 'aceita' && t.worktree && !t.juntada)
+  if (aceitas.length === 0) return
+  const revisao = plan.revisao ?? { ajustesUsados: 0, tetoAjustes: 0 }
+  plan.revisao = { ...revisao, atividade: 'Juntando o trabalho dos workers' }
+  await persistPlan(win, sessionId, plan)
+
+  const r = await juntarBranches(pastaDoChat, aceitas.map((t) => ({ titulo: t.title, worktree: t.worktree! })))
+  for (const t of aceitas) {
+    if (!r.juntados.includes(t.title)) continue
+    t.juntada = true
+    await removerWorktreeDoWorker(t.worktree!, true).catch(() => {})
+  }
+  const faltam = aceitas.filter((t) => !t.juntada)
+  const resumo = `${r.juntados.length} de ${aceitas.length} juntado(s)`
+  const detalhe = r.bloqueio
+    ? `Nada foi juntado: a pasta do chat tem alterações não commitadas em arquivos que os workers mudaram (${r.bloqueio.arquivos.join(', ')}). Commite ou guarde (git stash) e use "Juntar de novo".`
+    : r.conflito
+      ? `Conflito ao juntar "${r.conflito.titulo}"${r.conflito.arquivos.length ? ` (${r.conflito.arquivos.join(', ')})` : ''}. ${resumo}; o restante continua nos branches dos workers. Resolva no chat e use "Juntar de novo", ou junte os branches à mão.`
+      : r.erro
+        ? `O git recusou juntar "${r.erro.titulo}": ${r.erro.mensagem}. ${resumo}; use "Juntar de novo" depois de resolver.`
+        : `${r.juntados.length} branch(es) juntado(s) no chat.`
+  plan.revisao = { ...plan.revisao, atividade: undefined, merge: { ok: faltam.length === 0, detalhe, pendente: faltam.length > 0 } }
+  await persistPlan(win, sessionId, plan)
+}
+
+/**
+ * "Juntar de novo" (card da orquestração): tenta de novo juntar o trabalho
+ * aceito que ficou de fora — depois de o usuário commitar/guardar as
+ * alterações do chat ou resolver um conflito.
+ */
+export async function juntarDeNovo(win: BrowserWindow, sessionId: string): Promise<void> {
+  if (controllers.has(sessionId)) return // o plano ainda está rodando
+  const plan = await readJson<OrchestrationPlan>(StorageKeys.orchestration(sessionId))
+  const session = await readJson<SessionInfo>(StorageKeys.session(sessionId))
+  if (!plan || !session?.directory) return
+  await juntarTrabalho(win, sessionId, plan, session.directory)
 }

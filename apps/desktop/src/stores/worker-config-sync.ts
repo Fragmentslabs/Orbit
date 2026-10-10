@@ -12,13 +12,14 @@ import { useProviderStore } from "@/src/stores/provider-store"
  */
 
 function snapshot(): WorkerConfigSnapshot {
-  const { workerModel, workerReasoning, visionModel, orchestratorModel, orchestratorReasoning } = useProviderStore.getState()
+  const { workerModel, workerReasoning, visionModel, orchestratorModel, orchestratorReasoning, orchestrationSettings } = useProviderStore.getState()
   return {
     workerModel: workerModel ?? null,
     workerReasoning: workerReasoning ?? null,
     visionModel: visionModel ?? null,
     orchestratorModel: orchestratorModel ?? null,
     orchestratorReasoning: orchestratorReasoning ?? null,
+    orchestration: orchestrationSettings,
   }
 }
 
@@ -46,5 +47,6 @@ if (typeof window !== "undefined" && window.ipcRenderer) {
     // Ausente = o celular não conhece o campo: mantém o que está.
     if ("orchestratorModel" in config) store.setOrchestratorModel(config.orchestratorModel ?? null)
     if ("orchestratorReasoning" in config) store.setOrchestratorReasoning(config.orchestratorReasoning ?? null)
+    if (config.orchestration) store.setOrchestrationSettings(config.orchestration)
   })
 }

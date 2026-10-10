@@ -336,6 +336,7 @@ export function setWorkerConfigCache(config: WorkerConfigSnapshot): void {
     ...next,
     orchestratorModel: 'orchestratorModel' in next ? next.orchestratorModel : workerConfigCache.orchestratorModel,
     orchestratorReasoning: 'orchestratorReasoning' in next ? next.orchestratorReasoning : workerConfigCache.orchestratorReasoning,
+    orchestration: 'orchestration' in next ? next.orchestration : workerConfigCache.orchestration,
   }
 }
 
