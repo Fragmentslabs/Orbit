@@ -183,6 +183,19 @@ export const MESSAGES = {
     'pt-BR': 'A tela principal será compartilhada com o site aberto no navegador do Orbit.',
     en: 'Your main screen will be shared with the site open in the Orbit browser.',
   },
+  // ── Bandeja do sistema ────────────────────────────────────────────────────
+  'tray.open': {
+    'pt-BR': 'Abrir o Orbit',
+    en: 'Open Orbit',
+  },
+  'tray.quit': {
+    'pt-BR': 'Fechar o Orbit',
+    en: 'Quit Orbit',
+  },
+  'tray.tooltip': {
+    'pt-BR': 'Orbit — clique para abrir',
+    en: 'Orbit — click to open',
+  },
 } as const satisfies Record<string, Record<MainLocale, string>>
 
 export type MainMessageKey = keyof typeof MESSAGES

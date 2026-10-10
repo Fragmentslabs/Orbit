@@ -1633,6 +1633,14 @@
       "continues": {
         "title": "Automatic continuation",
         "description": "How many times an answer continues on its own when cut by the model's output limit."
+      },
+      "launchAtLogin": {
+        "title": "Open at login",
+        "description": "Starts Orbit when you sign in to the system."
+      },
+      "closeToTray": {
+        "title": "Close to tray",
+        "description": "The close button hides Orbit in the tray instead of quitting — it keeps serving the connected apps. To exit for good, use Quit in the icon's menu."
       }
     }
   },

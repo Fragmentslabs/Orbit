@@ -1633,6 +1633,14 @@
       "continues": {
         "title": "Continuação automática",
         "description": "Quantas vezes a resposta continua sozinha quando é cortada pelo limite de saída do modelo."
+      },
+      "launchAtLogin": {
+        "title": "Abrir junto com o sistema",
+        "description": "Inicia o Orbit quando você entra na sessão do sistema."
+      },
+      "closeToTray": {
+        "title": "Fechar para a bandeja",
+        "description": "O botão fechar esconde o Orbit na bandeja em vez de encerrar — ele continua servindo os apps conectados. Para sair de vez, use Fechar no menu do ícone."
       }
     }
   },

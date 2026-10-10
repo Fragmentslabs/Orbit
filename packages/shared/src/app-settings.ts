@@ -61,6 +61,10 @@ export interface AppSettings {
   autoContinues: number
   /** Largura da sidebar esquerda, em px (arrastável pela borda). */
   sidebarWidth: number
+  /** Abre o Orbit junto com o sistema (login do usuário). */
+  launchAtLogin: boolean
+  /** O botão fechar esconde na bandeja do sistema em vez de encerrar o app. */
+  closeToTray: boolean
   browser: {
     links: LinkTarget
     /** O agente usa o navegador por conta própria (testar, capturar, documentar). */
@@ -96,6 +100,11 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   transientRetries: 3,
   autoContinues: 3,
   sidebarWidth: SIDEBAR_DEFAULT_WIDTH,
+  // Abrir junto com o sistema é intrusivo: só quando a pessoa pedir.
+  launchAtLogin: false,
+  // Fechar para a bandeja é o comportamento pedido (como Claude/Codex): o X
+  // esconde o app, que continua vivo servindo os apps conectados.
+  closeToTray: true,
   browser: {
     links: 'integrated',
     agentTools: true,
@@ -154,6 +163,8 @@ export function normalizeAppSettings(raw: unknown): AppSettings {
     transientRetries: count(value.transientRetries, MAX_TRANSIENT_RETRIES, d.transientRetries),
     autoContinues: count(value.autoContinues, MAX_AUTO_CONTINUES, d.autoContinues),
     sidebarWidth,
+    launchAtLogin: typeof value.launchAtLogin === 'boolean' ? value.launchAtLogin : d.launchAtLogin,
+    closeToTray: typeof value.closeToTray === 'boolean' ? value.closeToTray : d.closeToTray,
     browser: {
       links: oneOf(browser.links, ['integrated', 'external'], d.browser.links),
       agentTools: typeof browser.agentTools === 'boolean' ? browser.agentTools : d.browser.agentTools,
