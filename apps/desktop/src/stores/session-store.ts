@@ -68,6 +68,9 @@ export interface LiveContext {
   output: number
   /** Medido no request antes do envio, não reportado pelo provedor. */
   estimated: boolean
+  /** Da entrada da última chamada: quanto veio do cache e quanto foi gravado nele. */
+  cacheRead?: number
+  cacheWrite?: number
 }
 
 interface SessionState {
@@ -1398,7 +1401,13 @@ case "message": {
       set((state) => ({
         liveContext: {
           ...state.liveContext,
-          [sessionId]: { input: event.input, output: event.output, estimated: event.estimated === true },
+          [sessionId]: {
+            input: event.input,
+            output: event.output,
+            estimated: event.estimated === true,
+            cacheRead: event.cacheRead,
+            cacheWrite: event.cacheWrite,
+          },
         },
       }))
       break

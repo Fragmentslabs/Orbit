@@ -339,7 +339,16 @@ export interface TokenUsage {
   /** Usage só do ÚLTIMO step do turno — essa sim é a métrica correta de
    * "tamanho do contexto atual", usada pelo medidor de contexto e pelo
    * gatilho de compactação. Ausente em mensagens persistidas antes desse campo existir. */
-  lastStep?: { input: number; output: number }
+  lastStep?: {
+    input: number
+    output: number
+    /** Da entrada desta chamada, quanto veio do cache do provedor. Ausente em mensagens antigas. */
+    cacheRead?: number
+    /** Da entrada desta chamada, quanto foi gravado no cache. Ausente em mensagens antigas. */
+    cacheWrite?: number
+    /** Da saída desta chamada, quanto foi raciocínio (já incluído no output). Ausente em mensagens antigas. */
+    reasoning?: number
+  }
 }
 
 /** Snapshots do filesystem capturados em volta de uma resposta do assistente
@@ -696,6 +705,9 @@ export type ChatEvent =
       input: number
       output: number
       estimated?: boolean
+      /** Cache lido/gravado nesta chamada (só no valor medido, não na estimativa). */
+      cacheRead?: number
+      cacheWrite?: number
     }
   /** Próxima mensagem provável do usuário — o input a mostra apagada e Tab completa */
   | { type: "suggestion"; sessionId: string; text: string }
@@ -739,7 +751,21 @@ export interface CatalogModel {
   modalities?: ModelModalities
   release_date?: string
   limit?: { context: number; output: number }
-  cost?: { input: number; output: number }
+  /** Preço por 1M tokens (models.dev). Os campos de cache podem faltar em modelos sem cache. */
+  cost?: {
+    input: number
+    output: number
+    cache_read?: number
+    cache_write?: number
+    /** Faixas por tamanho de contexto (ex.: acima de 200k tokens, outro preço). */
+    tiers?: {
+      input: number
+      output: number
+      cache_read?: number
+      cache_write?: number
+      tier?: { type: string; size: number }
+    }[]
+  }
   /** Estado no catálogo (models.dev): `deprecated` = removido do backend do provedor */
   status?: 'deprecated' | 'beta'
   /** Família no models.dev (ex: "deepseek-flash"). Quando um id é renomeado,
