@@ -8,6 +8,7 @@ import { resolveModel } from '../providers'
 import { buildProviderOptions, reasoningPrepareStep } from '../reasoning'
 import type { ToolContext } from './context'
 import { buildToolSet } from './index'
+import { modoGlobal } from '../permission/modo-global'
 
 /**
  * Ferramentas de delegação:
@@ -72,8 +73,10 @@ export function createSubagentTool(
           brain: brain ?? true,
           simple: simple ?? true,
           reasoning: worker.reasoning,
-          // Gatekeeping: worker herda o modo de permissões do pai
+          // Gatekeeping: worker herda o modo de permissões do pai — e, se o
+          // pai segue o seletor global, a troca no meio vale para ele também
           permissionMode: input.options.permissionMode,
+          followGlobalPermission: input.options.followGlobalPermission,
         },
         directory: input.directory,
         extraDirectories: input.extraDirectories,
@@ -93,8 +96,9 @@ export function createSubagentTool(
       // a cada passo do tool loop — o mesmo prepareStep do agente principal.
       const workerProvider = await getProvider(worker.providerId)
       const tools = buildToolSet(workerInput, workerCtx)
+      const modoWorker = workerInput.options.permissionMode ?? 'ask'
       const toolApproval = createToolApproval(
-        workerInput.options.permissionMode ?? 'ask',
+        workerInput.options.followGlobalPermission ? () => modoGlobal(modoWorker) : modoWorker,
         workerInput.sessionId,
         ctx?.directory ?? null,
         workerInput.sessionId,

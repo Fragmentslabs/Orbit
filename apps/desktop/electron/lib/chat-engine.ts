@@ -62,6 +62,7 @@ import { buildToolSet, type ImageToolHooks, type ToolContext, type TurnSnapshot 
 import { addTokenUsage, costOfUsage, toStepUsage, toTokenUsage } from './usage'
 import { engineAnnotations, stripEngineMarkers } from './todo-context'
 import { forwardChatEvent } from './companion-server'
+import { modoGlobal } from './permission/modo-global'
 
 /**
  * Motor de chat portado do processador de sessões do opencode: converte o
@@ -1395,7 +1396,9 @@ async function runChatTurn(win: BrowserWindow, input: SendMessageInput): Promise
     const mode: PermissionMode = input.options.permissionMode ?? 'ask'
     const toolApproval = supportsTools
       ? createToolApproval(
-          mode,
+          // Turno do seletor global: trocar o modo no meio da resposta vale
+          // já na próxima ferramenta. Modo explícito (plano, rotina) fica fixo.
+          input.options.followGlobalPermission ? () => modoGlobal(mode) : mode,
           input.sessionId,
           toolContext?.directory ?? null,
           assistantMessage.id,

@@ -173,6 +173,8 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId, on
     brain,
     brainContext: brainContext === "all" ? true : brainContext === "memory" ? brain : false,
     permissionMode,
+    // Modo vindo do seletor: trocar no meio da resposta vale na hora.
+    followGlobalPermission: true,
     reasoning: { enabled: thinking, variantId },
     subagents,
     orchestrate: orchestra && mode === "code" ? {} : undefined,

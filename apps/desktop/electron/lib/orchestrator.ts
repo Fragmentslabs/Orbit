@@ -156,8 +156,10 @@ async function runWorkerTurn(
         reasoning: input.workerModel?.reasoning,
         // Worker nunca orquestra — seria recursão.
         orchestrate: undefined,
-        // Gatekeeping: worker herda o modo de permissões do orquestrador
+        // Gatekeeping: worker herda o modo de permissões do orquestrador (e se
+        // segue o seletor global — a troca no meio vale para ele também)
         permissionMode: input.options.permissionMode,
+        followGlobalPermission: input.options.followGlobalPermission,
       },
       directory: worker.directory ?? input.directory,
       extraDirectories: worker.extraDirectories ?? input.extraDirectories,

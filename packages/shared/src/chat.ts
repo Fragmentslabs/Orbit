@@ -490,6 +490,9 @@ export interface PermissionClaim {
   detail?: string
   /** Ação crítica (nível deny) — a UI destaca o aviso */
   critical?: boolean
+  /** Pergunta mesmo no modo irrestrito (ex.: remover worktree): trocar o modo
+   *  para irrestrito não aprova este pedido sozinho. */
+  alwaysAsk?: boolean
 }
 
 /** Pergunta estruturada da tool question */
@@ -548,6 +551,12 @@ export interface SendMessageOptions {
   loop?: boolean
   /** Modo de permissões (code-mode e workers): default efetivo "ask" */
   permissionMode?: PermissionMode
+  /**
+   * O modo acima veio do seletor global (desktop ou celular), e não de uma
+   * escolha explícita (aceitar plano com um modo, rotina). Só esses turnos
+   * seguem a troca do seletor no meio da resposta.
+   */
+  followGlobalPermission?: boolean
   /** /init: executa o pipeline de análise de projeto em vez de gerar texto */
   initMode?: boolean
   /** Enviada pelo chat do navegador em tela cheia: o usuário abriu o navegador
