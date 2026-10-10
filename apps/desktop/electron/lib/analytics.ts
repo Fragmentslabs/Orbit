@@ -4,6 +4,7 @@ import { StorageKeys } from '@shared/chat'
 import type { AnalyticsDay, AnalyticsRange, AnalyticsSummary, ModelDayBreakdown, ProjectBreakdown, ProjectDayBreakdown } from '@shared/analytics'
 import { listKeys, readJson } from './storage'
 import { projectIdOf } from './memory/domain'
+import { pastaNoRepositorioPrincipal } from './worktrees/principal'
 
 function computeRange(range: AnalyticsRange): { since: number; until?: number } {
   const now = Date.now()
@@ -145,14 +146,16 @@ export async function computeAnalytics(range: AnalyticsRange): Promise<Analytics
 
     for (const msg of messages) hourCounts[new Date(msg.createdAt).getHours()]++
 
-    // Projeto da sessão: directory do modo código; chat sem pasta = bucket próprio
-    const projectId = session.directory ? projectIdOf(session.directory) : NO_PROJECT_ID
+    // Projeto da sessão: directory do modo código; chat sem pasta = bucket próprio.
+    // Chat num worktree conta no projeto do repositório principal.
+    const pastaProjeto = session.directory ? await pastaNoRepositorioPrincipal(session.directory) : undefined
+    const projectId = pastaProjeto ? projectIdOf(pastaProjeto) : NO_PROJECT_ID
     let pt = projectTotals.get(projectId)
     if (!pt) {
       pt = {
         projectId,
-        name: session.directory ? path.basename(session.directory) : '',
-        directory: session.directory,
+        name: pastaProjeto ? path.basename(pastaProjeto) : '',
+        directory: pastaProjeto,
         hours: 0,
         tokens: 0,
         messages: 0,
@@ -436,17 +439,20 @@ export async function computeWorkReport(options: WorkReportOptions): Promise<Wor
     const noPeriodo = messages.filter((m) => m.createdAt >= since && m.createdAt <= until)
     if (noPeriodo.length === 0) continue
 
-    const nome = session.directory ? path.basename(session.directory) : ''
+    // Chat num worktree conta no projeto do repositório principal (nome,
+    // filtro e totais), não como um projeto à parte com o nome do worktree.
+    const pastaProjeto = session.directory ? await pastaNoRepositorioPrincipal(session.directory) : undefined
+    const nome = pastaProjeto ? path.basename(pastaProjeto) : ''
     knownProjects.add(nome || 'Sem projeto')
-    if (project && !matchesProject(session, project)) continue
+    if (project && !matchesProject({ ...session, directory: pastaProjeto }, project)) continue
 
-    const projectId = session.directory ? projectIdOf(session.directory) : NO_PROJECT_ID
+    const projectId = pastaProjeto ? projectIdOf(pastaProjeto) : NO_PROJECT_ID
     let proj = projects.get(projectId)
     if (!proj) {
       proj = {
         projectId,
         name: nome,
-        directory: session.directory,
+        directory: pastaProjeto,
         hours: 0,
         tokens: 0,
         cost: 0,

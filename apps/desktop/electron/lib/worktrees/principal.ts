@@ -25,13 +25,17 @@ export async function pastaNoRepositorioPrincipal(pasta: string): Promise<string
   if (pronta) return pronta
   const resolvida = resolver(chave)
   cache.set(chave, resolvida.then((r) => r.pasta))
-  // Roda a cada turno (prompt, memória): o resultado fica em cache — menos
-  // quando o git falhou, porque a pasta pode virar repositório depois.
-  resolvida.then((r) => !r.cachear && cache.delete(chave)).catch(() => cache.delete(chave))
+  // Roda a cada turno (prompt, memória, relatório de uso): o resultado fica em
+  // cache. Quando o git falha (pasta sem repositório, apagada) a resposta vale
+  // por um minuto — a pasta pode virar repositório depois, mas um relatório
+  // com dezenas de chats em pastas apagadas não deve chamar o git por chat.
+  const esquecer = () => setTimeout(() => cache.delete(chave), FALHA_TTL_MS).unref?.()
+  resolvida.then((r) => !r.cachear && esquecer()).catch(esquecer)
   return resolvida.then((r) => r.pasta)
 }
 
 const cache = new Map<string, Promise<string>>()
+const FALHA_TTL_MS = 60_000
 
 async function resolver(pasta: string): Promise<{ pasta: string; cachear: boolean }> {
   const resultado = await resolverNoGit(pasta)

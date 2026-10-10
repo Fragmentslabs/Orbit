@@ -23,31 +23,22 @@ interface WorktreeState {
   resolverPrincipal: (pasta: string) => Promise<string>
 }
 
+const consultas = new Map<string, Promise<ListaWorktrees | null>>()
+
 export const useWorktreeStore = create<WorktreeState>((set, get) => ({
   porPasta: {},
   carregando: {},
   principalDe: {},
 
-  carregar: async (pasta) => {
-    set((s) => ({ carregando: { ...s.carregando, [pasta]: true } }))
-    try {
-      const lista = await worktreeApi.listar(pasta)
-      set((s) => {
-        const principalDe = { ...s.principalDe }
-        const principal = lista?.worktrees.find((w) => w.principal)
-        if (lista && principal) {
-          // Quando a subpasta do chat não existe num worktree, a pasta dele é a
-          // raiz — e o equivalente no principal também é a raiz.
-          for (const w of lista.worktrees) {
-            if (!w.principal) principalDe[w.pasta] = w.pasta === w.caminho ? principal.caminho : principal.pasta
-          }
-        }
-        return { porPasta: { ...s.porPasta, [pasta]: lista }, principalDe }
-      })
-      return lista
-    } finally {
-      set((s) => ({ carregando: { ...s.carregando, [pasta]: false } }))
-    }
+  carregar: (pasta) => {
+    // O chip do header e o menu compacto montam juntos e pedem a mesma lista:
+    // uma consulta em andamento é compartilhada (cada uma roda git status em
+    // todos os worktrees).
+    const emAndamento = consultas.get(pasta)
+    if (emAndamento) return emAndamento
+    const consulta = carregarAgora(pasta).finally(() => consultas.delete(pasta))
+    consultas.set(pasta, consulta)
+    return consulta
   },
 
   criar: async (pasta, nome, base) => {
@@ -77,4 +68,28 @@ export const useWorktreeStore = create<WorktreeState>((set, get) => ({
 /** Pasta no repositório principal, quando já conhecida (síncrono, para a sidebar). */
 export function principalConhecido(pasta: string): string {
   return useWorktreeStore.getState().principalDe[pasta] ?? pasta
+}
+
+/** Consulta de fato: lista os worktrees e atualiza o mapa worktree → principal. */
+async function carregarAgora(pasta: string): Promise<ListaWorktrees | null> {
+  const set = useWorktreeStore.setState
+  set((s) => ({ carregando: { ...s.carregando, [pasta]: true } }))
+  try {
+    const lista = await worktreeApi.listar(pasta)
+    set((s) => {
+      const principalDe = { ...s.principalDe }
+      const principal = lista?.worktrees.find((w) => w.principal)
+      if (lista && principal) {
+        // Quando a subpasta do chat não existe num worktree, a pasta dele é a
+        // raiz — e o equivalente no principal também é a raiz.
+        for (const w of lista.worktrees) {
+          if (!w.principal) principalDe[w.pasta] = w.pasta === w.caminho ? principal.caminho : principal.pasta
+        }
+      }
+      return { porPasta: { ...s.porPasta, [pasta]: lista }, principalDe }
+    })
+    return lista
+  } finally {
+    set((s) => ({ carregando: { ...s.carregando, [pasta]: false } }))
+  }
 }
