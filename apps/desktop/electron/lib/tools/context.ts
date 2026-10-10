@@ -58,4 +58,6 @@ export function resolveSafePath(ctx: ToolContext, target: string): string {
   return resolved
 }
 
-export const IGNORED_DIRS = new Set(['node_modules', '.git', 'dist', 'dist-electron', '.next', 'build', 'out', '.turbo', '.cache'])
+// .orbit: worktrees do Orbit no modo "dentro do projeto" — cópias inteiras do
+// repositório que duplicariam cada resultado de busca.
+export const IGNORED_DIRS = new Set(['node_modules', '.git', '.orbit', 'dist', 'dist-electron', '.next', 'build', 'out', '.turbo', '.cache'])

@@ -5,7 +5,9 @@ import path from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const userData = vi.hoisted(() => ({ dir: '' }))
+const config = vi.hoisted(() => ({ worktrees: { local: 'padrao' as 'padrao' | 'projeto' | 'personalizada', pasta: null as string | null } }))
 vi.mock('electron', () => ({ app: { getPath: () => userData.dir } }))
+vi.mock('../app-settings', () => ({ getAppSettings: () => config }))
 vi.mock('../shell-env', () => ({ userShellEnv: () => process.env }))
 vi.mock('../snapshot', () => ({ descartarSnapshots: vi.fn(async () => {}) }))
 
@@ -25,6 +27,7 @@ function escrever(raiz: string, relativo: string, conteudo = 'x') {
 }
 
 beforeEach(() => {
+  config.worktrees = { local: 'padrao', pasta: null }
   tmp = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'orbit-wt-')))
   userData.dir = path.join(tmp, 'userData')
   repo = path.join(tmp, 'repo')
@@ -167,5 +170,35 @@ describe('removerWorktree e limparOrfaos', () => {
     await limparOrfaos([{ id: 'proj_1', pastas: [repo] }], new Map())
 
     expect(fs.readFileSync(path.join(doChat, 'trabalho.txt'), 'utf8')).toBe('nao commitado')
+  })
+
+  it('dentro do projeto: cria em .orbit/worktrees/esteira e varre os órfãos de lá', async () => {
+    config.worktrees = { local: 'projeto', pasta: null }
+    const viva = await criarWorktree({ pastaPrincipal: repo, projetoId: 'proj_1', task })
+    const orfa = await criarWorktree({ pastaPrincipal: repo, projetoId: 'proj_1', task: { ...task, id: 'task_orfa0000' } })
+    expect(viva.caminho).toBe(path.join(repo, '.orbit', 'worktrees', 'esteira', task.id))
+
+    await limparOrfaos([{ id: 'proj_1', pastas: [repo] }], new Map([['proj_1', new Set([task.id])]]))
+    expect(fs.existsSync(viva.caminho)).toBe(true)
+    expect(fs.existsSync(orfa.caminho)).toBe(false)
+  })
+
+  it('pasta escolhida: cria lá e varre os órfãos de lá também', async () => {
+    const escolhida = path.join(tmp, 'escolhida')
+    config.worktrees = { local: 'personalizada', pasta: escolhida }
+    const orfa = await criarWorktree({ pastaPrincipal: repo, projetoId: 'proj_1', task })
+    expect(orfa.caminho).toBe(path.join(escolhida, 'proj_1', task.id))
+
+    await limparOrfaos([{ id: 'proj_1', pastas: [repo] }], new Map())
+    expect(fs.existsSync(orfa.caminho)).toBe(false)
+  })
+
+  it('worktree sem task mas com alteração não commitada não é apagado', async () => {
+    const orfa = await criarWorktree({ pastaPrincipal: repo, projetoId: 'proj_1', task: { ...task, id: 'task_suja0000' } })
+    fs.writeFileSync(path.join(orfa.caminho, 'trabalho.txt'), 'nao commitado')
+
+    await limparOrfaos([{ id: 'proj_1', pastas: [repo] }], new Map())
+
+    expect(fs.readFileSync(path.join(orfa.caminho, 'trabalho.txt'), 'utf8')).toBe('nao commitado')
   })
 })

@@ -1801,6 +1801,21 @@
       "onlyThis": "Excluir só a v{{version}}"
     }
   },
+  "worktreeSettings": {
+    "title": "Pasta dos worktrees",
+    "description": "Onde ficam os worktrees que o Orbit cria para chats e tasks da esteira.",
+    "padrao": "Dados do Orbit",
+    "projeto": "Dentro do projeto",
+    "personalizada": "Pasta escolhida",
+    "dicaPadrao": "Fora de qualquer projeto, na pasta de dados do Orbit: não aparece nas buscas nem no editor. Vale para worktrees novos.",
+    "dicaProjeto": "Em .orbit/worktrees dentro de cada repositório, visível no editor. O Orbit tira a pasta do git sozinho (.git/info/exclude); ferramentas que varrem o projeto inteiro sem respeitar o git podem enxergá-la. Vale para worktrees novos.",
+    "dicaPersonalizada": "Numa pasta sua, fora de projetos. Vale para worktrees novos; os existentes continuam onde estão.",
+    "escolher": "Escolher…",
+    "naoExiste": "A pasta não existe mais (disco desconectado?). Os worktrees novos voltam a ser criados quando ela estiver disponível.",
+    "dentroDeRepositorio": "A pasta está dentro de um repositório git: os worktrees apareceriam no status e nas buscas dele.",
+    "outroDisco": "A pasta está em outro disco que a sua pasta pessoal: as dependências (node_modules) não podem ser clonadas sem ocupar espaço e serão vinculadas às do projeto — o agente não poderá instalar pacotes no worktree.",
+    "recusadaRepositorio": "{{pasta}} está dentro de um repositório git. Escolha uma pasta fora de projetos — ou use \"Dentro do projeto\", que tira os worktrees do git sozinho."
+  },
   "excluirChat": {
     "worktree": "Este chat trabalhava no worktree {{nome}} ({{branch}}).",
     "removerWorktree": "Remover o worktree também",
@@ -1828,6 +1843,7 @@
     "nomeDica": "Vira o nome da pasta e o branch orbit/<nome>.",
     "base": "A partir de",
     "baseAtual": "Branch atual ({{branch}})",
+    "baseRemoto": "Remoto atualizado ({{remoto}})",
     "trocarParaEle": "Trocar este chat para ele",
     "preparando": "Preparando o worktree — copiar as dependências pode levar alguns segundos…",
     "criar": "Criar",

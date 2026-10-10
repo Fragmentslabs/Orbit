@@ -3,7 +3,7 @@ import { tool, type ToolSet } from 'ai'
 import { z } from 'zod'
 import type { SessionInfo } from '@shared/chat'
 import { StorageKeys } from '@shared/chat'
-import type { WorktreeInfo } from '@shared/worktrees'
+import { BASE_REMOTO, type WorktreeInfo } from '@shared/worktrees'
 import { broadcastChatEvent } from '../broadcast'
 import { readJson, writeJson } from '../storage'
 import { criarWorktreeDoChat, listarWorktrees, removerWorktreeDoChat } from '../worktrees/servico'
@@ -77,7 +77,12 @@ export function createWorktreeTools(ctx: ToolContext): ToolSet {
       ].join(' '),
       inputSchema: z.object({
         nome: z.string().describe('Short name, becomes the folder and the branch orbit/<name> (e.g. "login-refactor")'),
-        base: z.string().optional().describe("Branch or commit to start from (default: the main checkout's current branch)"),
+        base: z
+          .string()
+          .optional()
+          .describe(
+            `Branch or commit to start from. Default: the main checkout's current branch. "${BASE_REMOTO}" = the remote's default branch (origin/main) after a fetch, without unpushed local commits.`,
+          ),
         trocar: z.boolean().optional().describe('Switch this chat to the new worktree (default true)'),
       }),
       execute: async ({ nome, base, trocar }) => {

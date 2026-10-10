@@ -17,6 +17,7 @@ import { SegmentedControl } from "@/components/ui/segmented-control"
 import { ModelField } from "@/src/components/model-field"
 import { ModelThinkingMenu, ThinkingMenu } from "@/src/components/thinking-menu"
 import { GeneralSettings } from "@/src/components/general-settings"
+import { WorktreeSettings } from "@/src/components/worktree-settings"
 import { useProviderStore } from "@/src/stores/provider-store"
 import { useModelModePrefs } from "@/src/stores/model-mode-prefs"
 import type { ActiveModeDefaults } from "@/src/stores/model-mode-prefs"
@@ -210,6 +211,7 @@ function CodePrefs() {
           />
         </button>
       </div>
+      <WorktreeSettings />
     </div>
   )
 }

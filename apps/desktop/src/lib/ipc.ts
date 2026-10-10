@@ -11,7 +11,7 @@ import type {
 } from "@shared/chat"
 import type { AppSettings } from "@shared/app-settings"
 import type { AppPreferences, ChatModeKey, MessageQueueOp, MessageQueueSnapshot, ModelReasoningPref, ReasoningPrefsMap, SessionModeOverrides, WorkerConfigSnapshot } from "@shared/companion"
-import type { CriarWorktreeResultado, ListaWorktrees } from "@shared/worktrees"
+import type { CriarWorktreeResultado, ListaWorktrees, ValidacaoPastaWorktrees } from "@shared/worktrees"
 import type { McpConfig, McpServerStatus } from "@shared/mcp"
 import type { DocumentDownload, MediaEntry, MediaFilter, MediaUsage } from "@shared/media"
 import type {
@@ -425,6 +425,9 @@ export const worktreeApi = {
     window.ipcRenderer.invoke("worktree:remover", pasta, caminho, apagarBranch) as Promise<void>,
   /** Pasta equivalente no repositório principal (a própria pasta fora de worktree) */
   principal: (pasta: string) => window.ipcRenderer.invoke("worktree:principal", pasta) as Promise<string>,
+  /** Confere a pasta escolhida nas Preferências para guardar os worktrees */
+  validarPasta: (pasta: string) =>
+    window.ipcRenderer.invoke("worktree:validarPasta", pasta) as Promise<ValidacaoPastaWorktrees>,
 }
 
 /** Modo esteira — board de projetos/esteiras/tasks (orbit-data/esteira). */

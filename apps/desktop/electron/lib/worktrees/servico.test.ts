@@ -6,7 +6,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const userData = vi.hoisted(() => ({ dir: '' }))
 const processos = vi.hoisted(() => ({ lista: [] as Array<{ pid: number; cwd: string; status: string }>, mortos: [] as number[] }))
+const config = vi.hoisted(() => ({ worktrees: { local: 'padrao' as 'padrao' | 'projeto' | 'personalizada', pasta: null as string | null } }))
 vi.mock('electron', () => ({ app: { getPath: () => userData.dir } }))
+vi.mock('../app-settings', () => ({ getAppSettings: () => config }))
 vi.mock('../shell-env', () => ({ userShellEnv: () => process.env }))
 vi.mock('../snapshot', () => ({ descartarSnapshots: vi.fn(async () => {}) }))
 vi.mock('../process-manager', () => ({
@@ -17,7 +19,7 @@ vi.mock('../process-manager', () => ({
   }),
 }))
 
-const { criarWorktreeDoChat, lerPorcelain, listarWorktrees, removerWorktreeDoChat } = await import('./servico')
+const { criarWorktreeDoChat, lerPorcelain, listarWorktrees, removerWorktreeDoChat, validarPastaDosWorktrees } = await import('./servico')
 const { limparCachePrincipal } = await import('./principal')
 
 let tmp: string
@@ -35,6 +37,7 @@ function escrever(raiz: string, relativo: string, conteudo = 'x') {
 
 beforeEach(() => {
   limparCachePrincipal()
+  config.worktrees = { local: 'padrao', pasta: null }
   processos.lista = []
   processos.mortos = []
   tmp = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'orbit-wt-chat-')))
@@ -176,5 +179,85 @@ describe('pasta equivalente', () => {
     escrever(repo, 'so-no-principal/a.txt')
     const lista = await listarWorktrees(path.join(repo, 'so-no-principal'))
     expect(lista!.worktrees.find((w) => w.caminho === criado.caminho)?.pasta).toBe(criado.caminho)
+  })
+})
+
+describe('local dos worktrees (preferência)', () => {
+  it('dentro do projeto: .orbit/worktrees, fora do git do principal', async () => {
+    config.worktrees = { local: 'projeto', pasta: null }
+    const a = await criarWorktreeDoChat({ pasta: repo, nome: 'dentro' })
+    await criarWorktreeDoChat({ pasta: repo, nome: 'outro' })
+
+    expect(a.caminho).toBe(path.join(repo, '.orbit', 'worktrees', 'dentro'))
+    // O principal não enxerga os worktrees como arquivos novos
+    expect(git(repo, 'status', '--porcelain')).toBe('')
+    const exclude = fs.readFileSync(path.join(repo, '.git', 'info', 'exclude'), 'utf8')
+    expect(exclude.match(/^\/\.orbit\/$/gm)).toHaveLength(1)
+    // Não copia para o worktree as dependências de outros worktrees
+    expect(fs.existsSync(path.join(a.caminho, '.orbit'))).toBe(false)
+
+    const lista = await listarWorktrees(repo)
+    expect(lista!.worktrees.filter((w) => w.origem === 'chat')).toHaveLength(2)
+  })
+
+  it('pasta escolhida: chats/<repo>/<nome> dentro dela', async () => {
+    const escolhida = path.join(tmp, 'meus-worktrees')
+    config.worktrees = { local: 'personalizada', pasta: escolhida }
+    const criado = await criarWorktreeDoChat({ pasta: repo, nome: 'fora' })
+    expect(criado.caminho.startsWith(path.join(escolhida, 'chats', 'meu-projeto-'))).toBe(true)
+  })
+
+  it('reconhece pela branch: esteira/ dentro do projeto é da esteira; orbit/ fora do Orbit é de chat', async () => {
+    const daEsteira = path.join(repo, '.orbit', 'worktrees', 'esteira', 'task_1')
+    git(repo, 'worktree', 'add', '-q', '-b', 'esteira/t', daEsteira)
+    const solto = path.join(tmp, 'solto')
+    git(repo, 'worktree', 'add', '-q', '-b', 'orbit/antigo', solto)
+
+    const lista = await listarWorktrees(repo)
+    const origem = (c: string) => lista!.worktrees.find((w) => w.caminho === c)?.origem
+    expect(origem(daEsteira)).toBe('esteira')
+    expect(origem(solto)).toBe('chat')
+  })
+
+  it('confere a pasta escolhida', async () => {
+    expect((await validarPastaDosWorktrees(path.join(repo, 'apps'))).dentroDeRepositorio).toBe(true)
+    const fora = path.join(tmp, 'fora')
+    fs.mkdirSync(fora)
+    expect(await validarPastaDosWorktrees(fora)).toMatchObject({ existe: true, dentroDeRepositorio: false })
+    expect((await validarPastaDosWorktrees(path.join(tmp, 'nao-existe'))).existe).toBe(false)
+  })
+})
+
+describe('base remoto atualizado', () => {
+  it('parte do origin/main depois de um fetch, sem commits locais não enviados e sem upstream', async () => {
+    const remoto = path.join(tmp, 'remoto.git')
+    git(tmp, 'init', '-q', '--bare', '-b', 'main', remoto)
+    git(repo, 'remote', 'add', 'origin', remoto)
+    git(repo, 'push', '-q', 'origin', 'main')
+    git(repo, 'remote', 'set-head', 'origin', 'main')
+    // Alguém subiu um commit no remoto…
+    const outraCopia = path.join(tmp, 'outra')
+    git(tmp, 'clone', '-q', remoto, outraCopia)
+    escrever(outraCopia, 'do-remoto.txt')
+    git(outraCopia, 'add', '-A')
+    git(outraCopia, 'commit', '-qm', 'remoto')
+    git(outraCopia, 'push', '-q', 'origin', 'main')
+    // …e aqui há um commit local que não subiu.
+    escrever(repo, 'so-local.txt')
+    git(repo, 'add', '-A')
+    git(repo, 'commit', '-qm', 'local')
+
+    const lista = await listarWorktrees(repo)
+    expect(lista!.remotoPadrao).toBe('origin/main')
+    const criado = await criarWorktreeDoChat({ pasta: repo, nome: 'fresh', base: '@remoto' })
+
+    expect(criado.base).toBe('origin/main')
+    expect(fs.existsSync(path.join(criado.caminho, 'do-remoto.txt'))).toBe(true)
+    expect(fs.existsSync(path.join(criado.caminho, 'so-local.txt'))).toBe(false)
+    expect(() => git(criado.caminho, 'rev-parse', '--abbrev-ref', '@{u}')).toThrow()
+  })
+
+  it('sem remoto, explica em vez de criar', async () => {
+    await expect(criarWorktreeDoChat({ pasta: repo, nome: 'x', base: '@remoto' })).rejects.toThrow(/remoto/)
   })
 })

@@ -7,6 +7,10 @@ import {
   branchExiste,
   git,
   pastaDosWorktrees,
+  raizConfigurada,
+  raizNoProjeto,
+  worktreesDentroDoProjeto,
+  PASTA_NO_PROJETO,
   prepararDependencias,
   raizDoRepositorio,
   slug,
@@ -22,8 +26,10 @@ export { acharExtras, existe, pastaDosWorktrees, prepararDependencias, raizDoRep
  * núcleo compartilhado com os chats (../worktrees/nucleo).
  */
 
-function caminhoDoWorktree(projetoId: string, taskId: string): string {
-  return path.join(pastaDosWorktrees(), projetoId, taskId)
+/** Onde o worktree de uma task nasce — segue a preferência "Pasta dos worktrees". */
+async function caminhoDoWorktree(repo: string, projetoId: string, taskId: string): Promise<string> {
+  if (worktreesDentroDoProjeto()) return path.join(await raizNoProjeto(repo), 'esteira', taskId)
+  return path.join(raizConfigurada(), projetoId, taskId)
 }
 
 /** Branch da task: legível no `git branch` e único pelo sufixo do id. */
@@ -51,7 +57,7 @@ export async function criarWorktree(opts: {
   } catch {
     throw new Error('O repositório ainda não tem nenhum commit — o worktree precisa de um ponto de partida.')
   }
-  const caminho = opts.task.worktree?.caminho ?? caminhoDoWorktree(opts.projetoId, opts.task.id)
+  const caminho = opts.task.worktree?.caminho ?? (await caminhoDoWorktree(repo, opts.projetoId, opts.task.id))
   const branch = opts.task.worktree?.branch ?? nomeDoBranch(opts.task)
   const base = opts.task.worktree?.base ?? opts.base ?? (await baseAtual(repo))
 
@@ -107,34 +113,59 @@ export async function limparOrfaos(
   projetos: Array<{ id: string; pastas: string[] }>,
   vivas: Map<string, Set<string>>,
 ): Promise<void> {
-  const raiz = pastaDosWorktrees()
-  let pastasProjeto: string[]
-  try {
-    pastasProjeto = await fs.readdir(raiz)
-  } catch {
-    return // nenhum worktree criado ainda
-  }
-  for (const projetoId of pastasProjeto) {
-    // Só as pastas de projeto da esteira (proj_…): a mesma raiz guarda os
-    // worktrees dos chats (chats/), que não são dela e não podem ser varridos.
-    if (!projetoId.startsWith('proj_')) continue
-    const projeto = projetos.find((p) => p.id === projetoId)
-    const tasksVivas = vivas.get(projetoId) ?? new Set<string>()
-    let tasks: string[]
+  // Fora do projeto: a raiz padrão e a personalizada (a preferência pode ter
+  // mudado com worktrees já criados) guardam <projeto>/<task>.
+  for (const raiz of new Set([pastaDosWorktrees(), raizConfigurada()])) {
+    let pastasProjeto: string[]
     try {
-      tasks = await fs.readdir(path.join(raiz, projetoId))
+      pastasProjeto = await fs.readdir(raiz)
     } catch {
+      continue // nenhum worktree criado aqui
+    }
+    for (const projetoId of pastasProjeto) {
+      // Só as pastas de projeto da esteira (proj_…): a mesma raiz guarda os
+      // worktrees dos chats (chats/), que não são dela e não podem ser varridos.
+      if (!projetoId.startsWith('proj_')) continue
+      const projeto = projetos.find((p) => p.id === projetoId)
+      await varrer(path.join(raiz, projetoId), vivas.get(projetoId) ?? new Set())
+      const repo = projeto?.pastas[0] ? await raizDoRepositorio(projeto.pastas[0]).catch(() => undefined) : undefined
+      if (repo) await git(repo, ['worktree', 'prune']).catch(() => {})
+      if (!projeto) await fs.rm(path.join(raiz, projetoId), { recursive: true, force: true })
+    }
+  }
+  // Dentro do projeto: <repo>/.orbit/worktrees/esteira/<task>.
+  for (const projeto of projetos) {
+    const repo = projeto.pastas[0] ? await raizDoRepositorio(projeto.pastas[0]).catch(() => undefined) : undefined
+    if (!repo) continue
+    if (await varrer(path.join(repo, PASTA_NO_PROJETO, 'esteira'), vivas.get(projeto.id) ?? new Set())) {
+      await git(repo, ['worktree', 'prune']).catch(() => {})
+    }
+  }
+}
+
+/** Apaga as pastas de task sem task viva. Devolve se apagou alguma. */
+async function varrer(pasta: string, tasksVivas: Set<string>): Promise<boolean> {
+  let tasks: string[]
+  try {
+    tasks = await fs.readdir(pasta)
+  } catch {
+    return false
+  }
+  let apagou = false
+  for (const taskId of tasks) {
+    if (tasksVivas.has(taskId)) continue
+    const caminho = path.join(pasta, taskId)
+    // Rede de segurança: a lista de tasks lida do disco pode ter vindo vazia
+    // (arquivo corrompido) — com alteração não commitada, a pasta fica.
+    const sujo = await git(caminho, ['status', '--porcelain']).then((s) => s.length > 0, () => false)
+    if (sujo) {
+      console.warn(`[esteira] worktree sem task, mas com alterações não commitadas — mantido: ${caminho}`)
       continue
     }
-    for (const taskId of tasks) {
-      if (tasksVivas.has(taskId)) continue
-      const caminho = path.join(raiz, projetoId, taskId)
-      console.log(`[esteira] removendo worktree órfão ${caminho}`)
-      await fs.rm(caminho, { recursive: true, force: true })
-      await descartarSnapshots(caminho).catch(() => {})
-    }
-    const repo = projeto?.pastas[0] ? await raizDoRepositorio(projeto.pastas[0]).catch(() => undefined) : undefined
-    if (repo) await git(repo, ['worktree', 'prune']).catch(() => {})
-    if (!projeto) await fs.rm(path.join(raiz, projetoId), { recursive: true, force: true })
+    console.log(`[esteira] removendo worktree órfão ${caminho}`)
+    await fs.rm(caminho, { recursive: true, force: true })
+    await descartarSnapshots(caminho).catch(() => {})
+    apagou = true
   }
+  return apagou
 }

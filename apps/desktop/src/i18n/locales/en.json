@@ -1802,6 +1802,21 @@
       "onlyThis": "Delete only v{{version}}"
     }
   },
+  "worktreeSettings": {
+    "title": "Worktrees folder",
+    "description": "Where the worktrees Orbit creates for chats and pipeline tasks are stored.",
+    "padrao": "Orbit data",
+    "projeto": "Inside the project",
+    "personalizada": "Chosen folder",
+    "dicaPadrao": "Outside any project, in Orbit's data folder: it doesn't show up in searches or the editor. Applies to new worktrees.",
+    "dicaProjeto": "In .orbit/worktrees inside each repository, visible in the editor. Orbit keeps the folder out of git by itself (.git/info/exclude); tools that scan the whole project without honoring git may still see it. Applies to new worktrees.",
+    "dicaPersonalizada": "In a folder of yours, outside projects. Applies to new worktrees; existing ones stay where they are.",
+    "escolher": "Choose…",
+    "naoExiste": "The folder no longer exists (disconnected drive?). New worktrees will be created there again once it's available.",
+    "dentroDeRepositorio": "The folder is inside a git repository: the worktrees would show up in its status and searches.",
+    "outroDisco": "The folder is on a different disk than your home folder: dependencies (node_modules) can't be cloned without using space and will be linked to the project's — the agent won't be able to install packages in the worktree.",
+    "recusadaRepositorio": "{{pasta}} is inside a git repository. Pick a folder outside projects — or use \"Inside the project\", which keeps the worktrees out of git by itself."
+  },
   "excluirChat": {
     "worktree": "This chat worked in the {{nome}} worktree ({{branch}}).",
     "removerWorktree": "Also remove the worktree",
@@ -1829,6 +1844,7 @@
     "nomeDica": "Becomes the folder name and the orbit/<name> branch.",
     "base": "Start from",
     "baseAtual": "Current branch ({{branch}})",
+    "baseRemoto": "Up-to-date remote ({{remoto}})",
     "trocarParaEle": "Switch this chat to it",
     "preparando": "Preparing the worktree — copying dependencies can take a few seconds…",
     "criar": "Create",

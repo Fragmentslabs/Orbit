@@ -1,10 +1,23 @@
 import crypto from 'node:crypto'
 import fs from 'node:fs/promises'
+import os from 'node:os'
 import path from 'node:path'
-import type { CriarWorktreeResultado, ListaWorktrees, WorktreeInfo } from '@shared/worktrees'
+import { BASE_REMOTO, type CriarWorktreeResultado, type ListaWorktrees, type ValidacaoPastaWorktrees, type WorktreeInfo } from '@shared/worktrees'
 import { killProcess, listProcesses } from '../process-manager'
 import { descartarSnapshots } from '../snapshot'
-import { baseAtual, branchExiste, existe, git, pastaDosWorktrees, prepararDependencias, raizDoRepositorio, slug } from './nucleo'
+import {
+  baseAtual,
+  branchExiste,
+  existe,
+  git,
+  prepararDependencias,
+  raizConfigurada,
+  raizDoRepositorio,
+  raizesDoOrbit,
+  raizNoProjeto,
+  slug,
+  worktreesDentroDoProjeto,
+} from './nucleo'
 import { pastaNoRepositorioPrincipal } from './principal'
 
 /**
@@ -12,16 +25,36 @@ import { pastaNoRepositorioPrincipal } from './principal'
  * agente (worktree_*) passam por aqui.
  *
  * A lista vem do próprio git (`git worktree list`), então aparecem também os
- * worktrees criados fora do Orbit. Os criados pelos chats moram em
- * orbit-data/worktrees/chats/<repo>/<nome>, num branch `orbit/<nome>`; os da
- * esteira (orbit-data/worktrees/<projeto>/<task>) aparecem, mas quem cuida
- * deles é a esteira.
+ * worktrees criados fora do Orbit. Os criados pelos chats ficam num branch
+ * `orbit/<nome>`, e os da esteira em `esteira/…` (quem cuida deles é a
+ * esteira). Onde moram segue a preferência "Pasta dos worktrees": na pasta de
+ * dados do Orbit (chats/<repo>/<nome>), numa pasta personalizada (idem) ou
+ * dentro do projeto (.orbit/worktrees/<nome>).
  */
 
 const PASTA_CHATS = 'chats'
 
-function pastaDosChats(): string {
-  return path.join(pastaDosWorktrees(), PASTA_CHATS)
+/** Pasta onde os worktrees de chat deste repositório nascem, conforme a preferência. */
+async function raizDosChats(repo: string): Promise<string> {
+  if (worktreesDentroDoProjeto()) return raizNoProjeto(repo)
+  return path.join(raizConfigurada(), PASTA_CHATS, idDoRepositorio(repo))
+}
+
+/**
+ * Branch padrão do remoto `origin` (ex.: origin/main) — a base "remoto
+ * atualizado". Sem o HEAD do remoto configurado, tenta main e master.
+ */
+async function remotoPadrao(repo: string): Promise<string | undefined> {
+  try {
+    return await git(repo, ['symbolic-ref', '--short', 'refs/remotes/origin/HEAD'])
+  } catch {
+    for (const candidato of ['origin/main', 'origin/master']) {
+      if (await git(repo, ['rev-parse', '--verify', '--quiet', `refs/remotes/${candidato}`]).then(() => true, () => false)) {
+        return candidato
+      }
+    }
+    return undefined
+  }
 }
 
 /** `<nome>-<hash>`: legível no Finder e sem colidir entre repositórios homônimos. */
@@ -87,6 +120,19 @@ async function commitsAFrente(repo: string, base: string | undefined, branch: st
 }
 
 /**
+ * De onde o worktree veio. O branch é o sinal principal — vale em qualquer
+ * pasta, inclusive depois de a preferência de local mudar; a pasta desempata
+ * os do Orbit que tiveram o branch trocado.
+ */
+function origemDe(bloco: BlocoPorcelain, principal: boolean, raizes: string[]): WorktreeInfo['origem'] {
+  if (principal) return 'principal'
+  const doOrbit = raizes.some((raiz) => dentro(bloco.caminho, raiz))
+  if (bloco.branch?.startsWith('esteira/') && doOrbit) return 'esteira'
+  if (bloco.branch?.startsWith('orbit/') || doOrbit) return 'chat'
+  return 'externo'
+}
+
+/**
  * Worktrees do repositório da pasta, com o estado de cada um e a pasta
  * equivalente nele (mesma subpasta em que o chat está). null quando a pasta
  * não está num repositório git.
@@ -116,8 +162,7 @@ export async function listarWorktrees(pasta: string): Promise<ListaWorktrees | n
   })
   const relativo = melhor >= 0 ? path.relative(raizesReais[atual], pastaReal) : ''
 
-  const doOrbit = pastaDosWorktrees()
-  const dosChats = pastaDosChats()
+  const raizes = raizesDoOrbit(repo)
   const branchPrincipal = blocos[0].branch
   const worktrees: WorktreeInfo[] = await Promise.all(
     blocos.map(async (bloco, i): Promise<WorktreeInfo> => {
@@ -133,13 +178,7 @@ export async function listarWorktrees(pasta: string): Promise<ListaWorktrees | n
         branch: bloco.branch,
         head: bloco.head.slice(0, 7),
         principal: principalDoRepo,
-        origem: principalDoRepo
-          ? 'principal'
-          : dentro(bloco.caminho, dosChats)
-            ? 'chat'
-            : dentro(bloco.caminho, doOrbit)
-              ? 'esteira'
-              : 'externo',
+        origem: origemDe(bloco, principalDoRepo, raizes),
         disponivel: ativo,
         travado: bloco.travado,
         alteracoes: ativo ? await contarAlteracoes(bloco.caminho) : 0,
@@ -147,7 +186,7 @@ export async function listarWorktrees(pasta: string): Promise<ListaWorktrees | n
       }
     }),
   )
-  return { repo, atual: worktrees[atual].caminho, worktrees }
+  return { repo, atual: worktrees[atual].caminho, worktrees, remotoPadrao: await remotoPadrao(repo) }
 }
 
 /**
@@ -167,8 +206,17 @@ export async function criarWorktreeDoChat(opts: {
   } catch {
     throw new Error('O repositório ainda não tem nenhum commit — o worktree precisa de um ponto de partida.')
   }
-  const base = opts.base?.trim() || (await baseAtual(repo))
-  const raizChats = path.join(pastaDosChats(), idDoRepositorio(repo))
+  let base = opts.base?.trim()
+  if (base === BASE_REMOTO) {
+    // "Remoto atualizado" (o fresh do Claude Code): parte do branch padrão do
+    // origin depois de um fetch, sem levar commits locais ainda não enviados.
+    const remoto = await remotoPadrao(repo)
+    if (!remoto) throw new Error('O repositório não tem um remoto "origin" com branch padrão para partir dele.')
+    await git(repo, ['fetch', 'origin', remoto.slice('origin/'.length)], opts.signal).catch(() => {})
+    base = remoto
+  }
+  base ||= await baseAtual(repo)
+  const raizChats = await raizDosChats(repo)
   const nomeBase = slug(opts.nome)
   let nome = nomeBase
   for (let n = 2; (await branchExiste(repo, `orbit/${nome}`)) || (await existe(path.join(raizChats, nome))); n++) {
@@ -179,7 +227,9 @@ export async function criarWorktreeDoChat(opts: {
 
   await git(repo, ['worktree', 'prune']).catch(() => {})
   await fs.mkdir(raizChats, { recursive: true })
-  await git(repo, ['worktree', 'add', '-b', branch, caminho, base], opts.signal)
+  // --no-track: partindo de origin/main, o git configuraria origin/main como
+  // upstream do branch novo, e um push dele iria parar no main.
+  await git(repo, ['worktree', 'add', '--no-track', '-b', branch, caminho, base], opts.signal)
   const dependencias = await prepararDependencias(repo, caminho)
 
   // A mesma subpasta do principal (monorepo): o chat continua onde estava.
@@ -221,4 +271,18 @@ export async function removerWorktreeDoChat(opts: {
   if (opts.apagarBranch && alvo.branch) await git(lista.repo, ['branch', '-D', alvo.branch]).catch(() => {})
   await descartarSnapshots(alvo.caminho).catch(() => {})
   if (alvo.pasta !== alvo.caminho) await descartarSnapshots(alvo.pasta).catch(() => {})
+}
+
+/**
+ * Confere a pasta escolhida para os worktrees (Preferências): dentro de um
+ * repositório, eles entrariam nas buscas e no status dele; em outro disco que
+ * a pasta pessoal (onde os projetos costumam ficar), as dependências não são
+ * clonadas copy-on-write e acabam vinculadas.
+ */
+export async function validarPastaDosWorktrees(pasta: string): Promise<ValidacaoPastaWorktrees> {
+  const stat = await fs.stat(pasta).catch(() => null)
+  if (!stat?.isDirectory()) return { existe: false, dentroDeRepositorio: false, outroDisco: false }
+  const dentroDeRepositorio = await git(pasta, ['rev-parse', '--show-toplevel']).then(() => true, () => false)
+  const casa = await fs.stat(os.homedir()).catch(() => null)
+  return { existe: true, dentroDeRepositorio, outroDisco: !!casa && casa.dev !== stat.dev }
 }

@@ -35,9 +35,14 @@ export interface WorktreeInfo {
   aFrente: number
 }
 
+/** Valor de base que significa "branch padrão do origin, depois de um fetch". */
+export const BASE_REMOTO = '@remoto'
+
 export interface ListaWorktrees {
   /** Raiz do repositório principal */
   repo: string
+  /** Branch padrão do remoto (ex.: origin/main), quando há um */
+  remotoPadrao?: string
   /** Raiz do worktree em que a pasta consultada está */
   atual: string
   /** O principal vem primeiro */
@@ -51,4 +56,13 @@ export interface CriarWorktreeResultado {
   branch: string
   base: string
   dependencias: 'clonadas' | 'vinculadas' | 'nenhuma'
+}
+
+/** Resultado da conferência da pasta escolhida para os worktrees. */
+export interface ValidacaoPastaWorktrees {
+  existe: boolean
+  /** A pasta está dentro de um repositório git */
+  dentroDeRepositorio: boolean
+  /** Outro disco que o da pasta pessoal: dependências viram links, não clones */
+  outroDisco: boolean
 }

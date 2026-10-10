@@ -95,7 +95,7 @@ import type { ChatEvent } from '@shared/chat'
 import type { RotationConfig } from '@shared/chat'
 import { StorageKeys } from '@shared/chat'
 import * as esteira from './lib/esteira'
-import { criarWorktreeDoChat, listarWorktrees, removerWorktreeDoChat } from './lib/worktrees/servico'
+import { criarWorktreeDoChat, listarWorktrees, removerWorktreeDoChat, validarPastaDosWorktrees } from './lib/worktrees/servico'
 import { pastaNoRepositorioPrincipal } from './lib/worktrees/principal'
 import * as rotinas from './lib/rotinas'
 import type { DocumentDownload, MediaFilter } from '@shared/media'
@@ -1627,6 +1627,7 @@ app.whenReady().then(() => {
     removerWorktreeDoChat({ pasta, caminho, apagarBranch }),
   )
   ipcMain.handle('worktree:principal', (_event, pasta: string) => pastaNoRepositorioPrincipal(pasta))
+  ipcMain.handle('worktree:validarPasta', (_event, pasta: string) => validarPastaDosWorktrees(pasta))
 
   ipcMain.handle('git:push', async (_event, repoPath: string) => {
     try {

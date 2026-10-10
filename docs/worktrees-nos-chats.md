@@ -8,7 +8,9 @@ Plano para os chats do modo código trabalharem num `git worktree`, além do rep
 
 Diferenças em relação ao plano abaixo:
 - **Sem registro próprio** (`worktrees.json`): a origem de cada worktree sai do caminho (`orbit-data/worktrees/chats/…` = chat, `orbit-data/worktrees/<projeto>/…` = esteira, fora disso = externo) e o estado sai do git. "À frente" conta commits que o branch do principal ainda não tem — dá o mesmo aviso que "mesclado", sem precisar saber a base.
-- **Excluir o chat não remove o worktree dele** (ainda): o worktree fica na lista do seletor para ser removido à mão. Entra junto da etapa 3.
+- **Excluir o chat** pergunta se o worktree vai junto, como o Claude Code faz ao sair de um worktree (padrão: manter). Só vale para worktree criado por chat que nenhum outro chat usa. Remover o worktree perde as alterações não commitadas; os commits só se perdem se o branch também for apagado — e qualquer perda exige confirmar.
+- **Pasta dos worktrees** (Preferências → modo código): dados do Orbit (padrão), dentro do projeto (`.orbit/worktrees`, que o Orbit põe no `.git/info/exclude` e as buscas do agente ignoram) ou uma pasta escolhida — recusada se estiver dentro de um repositório, com aviso se estiver em outro disco que a pasta pessoal (dependências vinculadas em vez de clonadas). Vale para a esteira também, e só para worktrees novos. A origem de cada worktree passou a vir do branch (`orbit/` = chat, `esteira/` = esteira), que vale em qualquer pasta.
+- **Base "remoto atualizado"** (o *fresh* do Claude Code) no "Novo worktree…" e na ferramenta (`base: "@remoto"`): parte do branch padrão do `origin` depois de um fetch, sem levar commits locais não enviados. Os branches novos nascem sem upstream (`--no-track`), para um push não ir parar no `main`.
 - **Seletor de branch**: trocar para um branch aberto em outro worktree mostra um aviso próprio, em vez do diálogo de alterações não commitadas.
 - **Pastas recentes**: sem mudança — a lista guarda as pastas do workspace, e voltar a um chat num worktree reabre o worktree, que é o certo.
 

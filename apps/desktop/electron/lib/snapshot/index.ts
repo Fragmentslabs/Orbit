@@ -104,7 +104,15 @@ function canExecute(file: string): boolean {
 export const gitBinary = resolveGitBinary(process.platform, process.env, canExecute)
 
 /** Excludes padrão além do .gitignore do projeto (projetos sem .gitignore) */
-const DEFAULT_EXCLUDES = ['node_modules/', '.git/', 'dist/', 'dist-electron/', 'build/', 'out/', '.next/', 'target/']
+/**
+ * `.orbit/`: worktrees do Orbit no modo "dentro do projeto". O repositório
+ * auxiliar não lê o .git/info/exclude do projeto — sem isto cada snapshot
+ * levaria cópias inteiras do repositório, e desfazer um turno apagaria um
+ * worktree criado depois dele.
+ */
+const DEFAULT_EXCLUDES = ['node_modules/', '.git/', '.orbit/', 'dist/', 'dist-electron/', 'build/', 'out/', '.next/', 'target/']
+/** Repositórios auxiliares cujo exclude já foi conferido nesta execução. */
+const excludesConferidos = new Set<string>()
 
 const GC_INTERVAL = 60 * 60 * 1000 // 1h
 const lastGc = new Map<string, number>()
@@ -140,9 +148,20 @@ async function ensureRepo(directory: string): Promise<void> {
       cwd: directory,
       env: gitBinary.env,
     })
-    await fs.mkdir(path.join(gitDir, 'info'), { recursive: true })
-    await fs.writeFile(path.join(gitDir, 'info', 'exclude'), DEFAULT_EXCLUDES.join('\n') + '\n', 'utf8')
   }
+  // Também nos repositórios que já existiam: a lista de excludes cresce entre
+  // versões (ex.: .orbit/), e só escrevê-la no init deixaria os antigos sem.
+  if (excludesConferidos.has(gitDir)) return
+  const exclude = path.join(gitDir, 'info', 'exclude')
+  const atual = await fs.readFile(exclude, 'utf8').catch(() => '')
+  const linhas = new Set(atual.split('\n').map((l) => l.trim()))
+  const faltando = DEFAULT_EXCLUDES.filter((e) => !linhas.has(e))
+  if (faltando.length > 0) {
+    await fs.mkdir(path.dirname(exclude), { recursive: true })
+    const prefixo = atual && !atual.endsWith('\n') ? '\n' : ''
+    await fs.appendFile(exclude, prefixo + faltando.join('\n') + '\n', 'utf8')
+  }
+  excludesConferidos.add(gitDir)
 }
 
 /** git gc --prune=7.days em background, no máximo 1x/hora por projeto. */

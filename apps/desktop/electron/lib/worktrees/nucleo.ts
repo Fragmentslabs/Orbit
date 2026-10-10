@@ -4,6 +4,7 @@ import path from 'node:path'
 import { promisify } from 'node:util'
 import { app } from 'electron'
 import type { WorktreeDaTask } from '@shared/esteira'
+import { getAppSettings } from '../app-settings'
 import { userShellEnv } from '../shell-env'
 
 const execFileAsync = promisify(execFile)
@@ -24,20 +25,75 @@ const execFileAsync = promisify(execFile)
  * mas necessários para rodar o projeto) são copiados.
  */
 
-/** Pastas que não valem a descida na busca por node_modules e .env. */
-const IGNORAR = new Set(['.git', 'dist', 'dist-electron', 'build', 'out', '.next', 'target', 'coverage', '.turbo', '.expo'])
+/**
+ * Pastas que não valem a descida na busca por node_modules e .env. `.orbit`
+ * guarda os worktrees no modo "dentro do projeto": descer nela copiaria para
+ * o worktree novo as dependências dos outros worktrees.
+ */
+const IGNORAR = new Set(['.git', '.orbit', 'dist', 'dist-electron', 'build', 'out', '.next', 'target', 'coverage', '.turbo', '.expo'])
 /** Profundidade da busca: raiz + workspaces (apps/x, packages/y) com folga. */
 const PROFUNDIDADE = 4
 const ENV = /^\.env(\..+)?$/
 
+/** Raiz padrão: a pasta de dados do Orbit, fora de qualquer projeto. */
 export function pastaDosWorktrees(): string {
   return path.join(app.getPath('userData'), 'orbit-data', 'worktrees')
+}
+
+/** No modo "dentro do projeto": <repo>/.orbit/worktrees. */
+export const PASTA_NO_PROJETO = path.join('.orbit', 'worktrees')
+
+/**
+ * Raiz configurada fora do projeto (padrão ou pasta personalizada). No modo
+ * "dentro do projeto" cada repositório tem a sua — ver raizNoProjeto.
+ */
+export function raizConfigurada(): string {
+  const { local, pasta } = getAppSettings().worktrees
+  return local === 'personalizada' && pasta ? pasta : pastaDosWorktrees()
+}
+
+export function worktreesDentroDoProjeto(): boolean {
+  return getAppSettings().worktrees.local === 'projeto'
+}
+
+/**
+ * <repo>/.orbit/worktrees, já fora do git: a pasta entra no info/exclude do
+ * repositório (um .gitignore local, que não vai para commit nenhum). Sem isso
+ * cada worktree apareceria como milhares de arquivos novos no principal.
+ */
+export async function raizNoProjeto(repo: string): Promise<string> {
+  const raiz = path.join(repo, PASTA_NO_PROJETO)
+  try {
+    const comum = path.resolve(repo, await git(repo, ['rev-parse', '--git-common-dir']))
+    const exclude = path.join(comum, 'info', 'exclude')
+    const atual = await fs.readFile(exclude, 'utf8').catch(() => '')
+    if (!atual.split('\n').some((linha) => linha.trim() === '/.orbit/')) {
+      await fs.mkdir(path.dirname(exclude), { recursive: true })
+      const prefixo = atual && !atual.endsWith('\n') ? '\n' : ''
+      await fs.appendFile(exclude, `${prefixo}# Worktrees do Orbit\n/.orbit/\n`)
+    }
+  } catch {
+    // Sem como escrever o exclude, o worktree ainda funciona — só aparece no status.
+  }
+  return raiz
+}
+
+/**
+ * Todas as raízes onde o Orbit pode ter posto worktrees deste repositório: a
+ * padrão, a personalizada atual e a do projeto. Serve para reconhecer os
+ * worktrees do Orbit mesmo depois de a preferência mudar.
+ */
+export function raizesDoOrbit(repo: string): string[] {
+  const raizes = new Set([pastaDosWorktrees(), raizConfigurada(), path.join(repo, PASTA_NO_PROJETO)])
+  return [...raizes]
 }
 
 export async function git(cwd: string, args: string[], signal?: AbortSignal): Promise<string> {
   const { stdout } = await execFileAsync('git', args, {
     cwd,
-    env: userShellEnv(),
+    // Nada aqui é interativo: um fetch que pedisse senha ficaria pendurado
+    // até o timeout em vez de falhar na hora.
+    env: { ...userShellEnv(), GIT_TERMINAL_PROMPT: '0' },
     timeout: 120_000,
     maxBuffer: 10 * 1024 * 1024,
     signal,

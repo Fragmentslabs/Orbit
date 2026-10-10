@@ -32,6 +32,16 @@ export type LinkTarget = 'integrated' | 'external'
 /** Por quanto tempo o navegador integrado guarda cookies e logins. */
 export type CookieRetention = 'persistent' | 'until-quit'
 
+/**
+ * Onde os worktrees criados pelo Orbit (chats e tasks da esteira) ficam.
+ *  - `padrao`: na pasta de dados do Orbit, fora de qualquer projeto;
+ *  - `projeto`: dentro do repositório, em .orbit/worktrees (o Orbit tira a
+ *    pasta do git pelo .git/info/exclude) — visível no editor;
+ *  - `personalizada`: numa pasta escolhida pelo usuário.
+ * Vale para worktrees novos: os existentes continuam onde estão.
+ */
+export type LocalWorktrees = 'padrao' | 'projeto' | 'personalizada'
+
 export interface AppSettings {
   /** Modelo para tarefas auxiliares (título, compactação, sugestões). null = o modelo da conversa. */
   auxModel: { providerId: string; modelId: string } | null
@@ -56,6 +66,11 @@ export interface AppSettings {
     /** O agente usa o navegador por conta própria (testar, capturar, documentar). */
     agentTools: boolean
     cookies: CookieRetention
+  }
+  worktrees: {
+    local: LocalWorktrees
+    /** Só com local = 'personalizada' */
+    pasta: string | null
   }
 }
 
@@ -85,6 +100,10 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
     links: 'integrated',
     agentTools: true,
     cookies: 'persistent',
+  },
+  worktrees: {
+    local: 'padrao',
+    pasta: null,
   },
 }
 
@@ -140,5 +159,12 @@ export function normalizeAppSettings(raw: unknown): AppSettings {
       agentTools: typeof browser.agentTools === 'boolean' ? browser.agentTools : d.browser.agentTools,
       cookies: oneOf(browser.cookies, ['persistent', 'until-quit'], d.browser.cookies),
     },
+    worktrees: (() => {
+      const w = (value.worktrees && typeof value.worktrees === 'object' ? value.worktrees : {}) as Partial<AppSettings['worktrees']>
+      const pasta = typeof w.pasta === 'string' && w.pasta.trim() ? w.pasta.trim() : null
+      const local = oneOf(w.local, ['padrao', 'projeto', 'personalizada'], d.worktrees.local)
+      // Personalizada sem pasta escolhida não tem para onde ir: volta ao padrão.
+      return local === 'personalizada' && !pasta ? { local: d.worktrees.local, pasta: null } : { local, pasta }
+    })(),
   }
 }

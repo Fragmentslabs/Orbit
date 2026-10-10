@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { Check, FolderGit2, LoaderIcon, PlusIcon, XIcon } from "lucide-react"
-import type { WorktreeInfo } from "@shared/worktrees"
+import { BASE_REMOTO, type WorktreeInfo } from "@shared/worktrees"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Button } from "@/components/ui/button"
@@ -163,6 +163,7 @@ export function WorktreeSelector({
         onOpenChange={setCriando}
         pasta={pasta}
         repo={lista.repo}
+        remotoPadrao={lista.remotoPadrao}
         sugestaoNome={sugestaoNome}
         onCriado={(novaPasta) => onTrocar(novaPasta)}
       />
@@ -237,6 +238,7 @@ function CriarWorktreeDialog({
   onOpenChange,
   pasta,
   repo,
+  remotoPadrao,
   sugestaoNome,
   onCriado,
 }: {
@@ -244,6 +246,8 @@ function CriarWorktreeDialog({
   onOpenChange: (aberto: boolean) => void
   pasta: string
   repo: string
+  /** Branch padrão do origin (ex.: origin/main) — a base "remoto atualizado" */
+  remotoPadrao?: string
   sugestaoNome?: string
   onCriado: (pasta: string) => void
 }) {
@@ -317,6 +321,13 @@ function CriarWorktreeDialog({
               <option value="" className="bg-popover text-popover-foreground">
                 {t("worktree.baseAtual", { branch: branches?.current ?? "HEAD" })}
               </option>
+              {/* O "fresh" do Claude Code: parte do remoto depois de um fetch,
+                  sem levar commits locais que ainda não subiram. */}
+              {remotoPadrao && (
+                <option value={BASE_REMOTO} className="bg-popover text-popover-foreground">
+                  {t("worktree.baseRemoto", { remoto: remotoPadrao })}
+                </option>
+              )}
               {(branches?.branches ?? [])
                 .filter((b) => b !== branches?.current)
                 .map((b) => (
