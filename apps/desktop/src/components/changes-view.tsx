@@ -6,12 +6,15 @@ import {
   ChevronDownIcon,
   FileCode2Icon,
   GitCompareArrowsIcon,
+  HistoryIcon,
   Loader2,
+  PanelRightCloseIcon,
 } from "lucide-react";
 import { parsePatch, type FileDiff } from "@/lib/unified-diff";
 import { HighlightedDiffFile } from "@/src/components/diff-lines";
 import {
   Artifact,
+  ArtifactAction,
   ArtifactActions,
   ArtifactContent,
   ArtifactHeader,
@@ -48,6 +51,14 @@ export interface ChangesViewProps {
   onOpenFile: (path: string) => void;
   /** Muda quando o rodapé manda recarregar. */
   reloadToken?: number;
+  /**
+   * A aba do índice que está à vista. Não muda o que se lê — os diffs do
+   * working tree são os mesmos nas duas — só o ícone do estado vazio, que
+   * acompanha a aba para a leitura não parecer de outro lugar.
+   */
+  mode?: "changes" | "commits";
+  /** Fecha (e reabre) o painel da direita — o mesmo botão da aba Arquivos. */
+  onToggleBrowser: () => void;
 }
 
 /**
@@ -263,6 +274,8 @@ export function ChangesView({
   reveal,
   onOpenFile,
   reloadToken = 0,
+  mode = "changes",
+  onToggleBrowser,
 }: ChangesViewProps) {
   const { t } = useTranslation();
 
@@ -461,16 +474,16 @@ export function ChangesView({
     // mesmo painel em dois modos, e alternar entre eles não pode deslocar o topo
     // nem trocar a cor da faixa.
     <Artifact className="h-full min-w-0 rounded-none border-0 bg-sidebar mt-2">
-      <ArtifactHeader className="min-w-0 bg-sidebar justify-between gap-2">
-        <div className="flex min-w-0 items-center gap-1.5">
-          <GitCompareArrowsIcon className="size-3.5 shrink-0 text-muted-foreground" />
-          <ArtifactTitle className="truncate">
+      <ArtifactHeader className="min-w-0 bg-sidebar">
+        <div className="min-w-0">
+          <ArtifactTitle className="flex items-center gap-1.5 truncate">
+            <GitCompareArrowsIcon className="size-3.5 shrink-0 text-muted-foreground" />
             {t("folders.changesTab")}
           </ArtifactTitle>
         </div>
-        <ArtifactActions className="gap-3">
+        <ArtifactActions>
           {changeCount > 0 && (
-            <span className="flex shrink-0 items-center gap-2 font-mono text-[11px] tabular-nums">
+            <span className="flex shrink-0 items-center gap-2 pr-2 font-mono text-[11px] tabular-nums">
               <span className="text-muted-foreground">
                 {t("folders.changesCount", { count: changeCount })}
               </span>
@@ -482,6 +495,14 @@ export function ChangesView({
               </span>
             </span>
           )}
+          {/* O botão que fecha o painel da direita é o mesmo da aba Arquivos —
+              e é ele que dá a altura da faixa: sem um alvo de 32px do lado, o
+              cabeçalho encolhia e as duas abas não batiam. Vem por último: o
+              canto é justamente o que ele fecha, e é ali que se procura. */}
+          <ArtifactAction
+            icon={PanelRightCloseIcon}
+            onClick={onToggleBrowser}
+          />
         </ArtifactActions>
       </ArtifactHeader>
 
@@ -494,9 +515,19 @@ export function ChangesView({
             {t("folders.changesLoading")}
           </div>
         ) : changeCount === 0 && !groups.some((g) => g.error) ? (
-          <p className="p-2 text-sm text-muted-foreground">
-            {t("folders.changesEmpty")}
-          </p>
+          // Mesmo vazio da aba Arquivos: ícone grande ao centro e a frase
+          // embaixo. O ícone segue a aba — no histórico a leitura é a mesma,
+          // mas o painel inteiro está falando de commits.
+          <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col items-center justify-center gap-4 p-6 text-center">
+            {mode === "commits" ? (
+              <HistoryIcon className="size-16 text-muted-foreground/20" />
+            ) : (
+              <GitCompareArrowsIcon className="size-16 text-muted-foreground/20" />
+            )}
+            <p className="text-sm text-muted-foreground">
+              {t("folders.changesEmpty")}
+            </p>
+          </div>
         ) : (
           <div ref={scrollRef} className="h-full overflow-y-auto pr-0.5">
             {groups.map((group) => {

@@ -225,7 +225,9 @@ export function FoldersTab() {
       >
         {leftMode === "changes" ? (
           <ChangesView
+            mode={tab === "commits" ? "commits" : "changes"}
             onOpenFile={handleOpenFromDiff}
+            onToggleBrowser={toggleBrowser}
             reloadToken={changesReload}
             repoRoot={folders[0]}
             repos={repos}
