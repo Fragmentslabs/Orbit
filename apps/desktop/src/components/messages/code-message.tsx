@@ -20,6 +20,7 @@ import { DocumentPartView } from "@/src/components/ai/document-part"
 import { Shimmer } from "@/src/components/ai/shimmer"
 import { SubAgentCard } from "@/src/components/ai/sub-agent-card"
 import { TodoList } from "@/src/components/ai/todo-list"
+import { McpProposalCard } from "@/src/components/mcp-proposal-card"
 import { SkillProposalCard } from "@/src/components/skill-proposal-card"
 import { Source, Sources, SourcesContent, SourcesTrigger } from "@/src/components/ai/sources"
 import { Task, TaskContent, TaskTrigger } from "@/src/components/ai/task"
@@ -211,14 +212,16 @@ type Segment =
 function segmentParts(parts: MessagePart[]): Segment[] {
   const segments: Segment[] = []
   for (const part of parts) {
-    // Subagentes, TODO viva, propostas de skill, show_image e artefatos têm
-    // render próprio — a chamada não entra no acordeon de ações (o card do
-    // artefato JÁ é o resultado dela)
+    // Subagentes, TODO viva, propostas de skill e de conexão MCP, show_image e
+    // artefatos têm render próprio — a chamada não entra no acordeon de ações (o
+    // card do artefato JÁ é o resultado dela; o de MCP espera uma decisão sua)
     if (
       part.type === "tool" &&
       part.tool !== "subagent" &&
       part.tool !== "todowrite" &&
       part.tool !== "create_skill" &&
+      part.tool !== "mcp_connect" &&
+      part.tool !== "mcp_update" &&
       part.tool !== "show_image" &&
       part.tool !== "create_artifact" &&
       part.tool !== "update_artifact" &&
@@ -314,6 +317,9 @@ export function CodeAssistantMessage({ message, sessionId, isLast, isBusy, busyL
           <TodoList key={segment.id} part={segment.part} stale={segment.part.id !== lastTodoId} />
         ) : segment.part.type === "tool" && segment.part.tool === "create_skill" ? (
           <SkillProposalCard key={segment.id} part={segment.part} />
+        ) : segment.part.type === "tool" &&
+          (segment.part.tool === "mcp_connect" || segment.part.tool === "mcp_update") ? (
+          <McpProposalCard key={segment.id} part={segment.part} />
         ) : segment.part.type === "artifact" ? (
           <ArtifactPartView key={segment.id} part={segment.part} sessionId={sessionId} />
         ) : segment.part.type === "document" ? (
