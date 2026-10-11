@@ -27,6 +27,12 @@ export const voiceApi = {
    */
   sttWarm: (input: { modelId?: string; engine?: string; threads?: number } = {}) =>
     window.ipcRenderer.invoke("voice:stt:warm", input) as Promise<unknown>,
+  /**
+   * Solta na hora o que os motores de ditado carregaram. É o que o painel chama
+   * ao DESLIGAR o pré-carregamento: a RAM volta na hora, em vez de no ciclo
+   * ocioso. Com ditado em curso o main adia, em vez de arrancar o modelo.
+   */
+  sttRelease: () => window.ipcRenderer.invoke("voice:stt:release") as Promise<unknown>,
   onDownloadProgress: (listener: (progress: VoiceDownloadProgress) => void) => {
     const wrapper = window.ipcRenderer.on("voice:download-progress", (payload) =>
       listener(payload as VoiceDownloadProgress),

@@ -568,7 +568,12 @@ export function VoicePanel() {
         >
           <SettingSwitch
             checked={stt.preload}
-            onChange={(preload) => updateVoice({ tts, stt: { ...stt, preload } })}
+            onChange={(preload) => {
+              updateVoice({ tts, stt: { ...stt, preload } })
+              // Desligar devolve a RAM NA HORA: o main solta o modelo que já
+              // estava carregado, em vez de esperar o ciclo ocioso de 5 min.
+              if (!preload) void voiceApi.sttRelease()
+            }}
             label={t("voice.settings.stt.preloadTitle")}
           />
         </SettingRow>

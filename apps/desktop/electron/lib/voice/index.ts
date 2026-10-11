@@ -22,6 +22,7 @@ import {
   cancelSttSession,
   prepareSttModel,
   pushSttAudio,
+  releaseSttModels,
   startSttSession,
   sttEngineStatus,
   stopSttSession,
@@ -191,6 +192,16 @@ export function registerVoiceIpc(): void {
       return { warming }
     },
   )
+
+  /**
+   * Solta na hora o que os motores de ditado carregaram. A aba Voz dispara isto
+   * ao desligar o pré-carregamento: a RAM volta na hora, em vez de esperar o
+   * ciclo ocioso. Com ditado em curso, o modelo adia a liberação.
+   */
+  ipcMain.handle("voice:stt:release", () => {
+    releaseSttModels()
+    return { released: true }
+  })
 
   ipcMain.handle("voice:download", async (_event, payload: { modelId?: string }) => {
     const modelId = String(payload?.modelId ?? "")

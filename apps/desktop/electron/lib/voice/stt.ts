@@ -107,6 +107,31 @@ const IDLE_RELEASE_MS = 5 * 60_000
 let idleTimer: ReturnType<typeof setTimeout> | null = null
 
 /**
+ * Solta AGORA o que os motores carregaram, sem esperar o ciclo ocioso. É o que a
+ * troca da preferência de pré-carregamento dispara: desligar o preload devolve a
+ * RAM na hora, em vez de daqui a cinco minutos.
+ *
+ * Com sessão aberta o modelo está em uso: não o solta no meio dela, adia.
+ */
+export function releaseSttModels(): void {
+  if (idleTimer) {
+    clearTimeout(idleTimer)
+    idleTimer = null
+  }
+  if (sessions.size > 0) {
+    agendarLiberacao()
+    return
+  }
+  for (const engine of Object.values(ENGINES)) {
+    try {
+      engine.release?.()
+    } catch {
+      // soltar é melhor-esforço: nunca derruba o main
+    }
+  }
+}
+
+/**
  * Marca atividade do ditado e (re)agenda a liberação: passado o tempo ocioso sem
  * sessão aberta, o que foi carregado é solto — no Parakeet são centenas de MB
  * residentes. Uma sessão em curso adia a liberação.
@@ -115,17 +140,7 @@ function agendarLiberacao(): void {
   if (idleTimer) clearTimeout(idleTimer)
   idleTimer = setTimeout(() => {
     idleTimer = null
-    if (sessions.size > 0) {
-      agendarLiberacao()
-      return
-    }
-    for (const engine of Object.values(ENGINES)) {
-      try {
-        engine.release?.()
-      } catch {
-        // soltar é melhor-esforço: nunca derruba o main
-      }
-    }
+    releaseSttModels()
   }, IDLE_RELEASE_MS)
   idleTimer.unref?.()
 }
