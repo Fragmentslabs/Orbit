@@ -5,6 +5,7 @@ import { descartarSnapshots } from '../snapshot'
 import {
   baseAtual,
   branchExiste,
+  desvincularDependencias,
   git,
   pastaDosWorktrees,
   raizConfigurada,
@@ -94,6 +95,9 @@ export async function removerWorktree(
   opts: { apagarBranch?: boolean } = {},
 ): Promise<void> {
   const repo = pastaPrincipal ? await raizDoRepositorio(pastaPrincipal).catch(() => undefined) : undefined
+  // Antes do git: ele atravessa os vínculos de node_modules e apagaria o
+  // repositório principal (ver desvincularDependencias).
+  await desvincularDependencias(worktree.caminho)
   if (repo) {
     await git(repo, ['worktree', 'remove', '--force', worktree.caminho]).catch(() => {})
   }

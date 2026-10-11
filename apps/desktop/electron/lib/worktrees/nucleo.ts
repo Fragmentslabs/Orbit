@@ -226,3 +226,49 @@ export async function prepararDependencias(
   }
   return vinculou ? 'vinculadas' : 'clonadas'
 }
+
+/** Não desce aqui: dentro de node_modules só há cópia (ou o alvo de um vínculo,
+ *  que já foi solto antes desta decisão), e percorrer isso custa caro. */
+const SEM_DESCER = new Set([...IGNORAR, 'node_modules'])
+
+/**
+ * Solta os vínculos que `prepararDependencias` criou dentro do worktree.
+ *
+ * Existe por causa de uma armadilha do Windows: lá o clone copy-on-write nunca
+ * está disponível (o `clonar` desiste antes de tentar), então TODO worktree
+ * recebe os node_modules como *junction* para os do repositório principal. O
+ * `fs.rm` do Node sabe que um junction é um vínculo e o remove sem descer — mas
+ * o `git worktree remove --force` não sabe: a remoção recursiva do próprio git
+ * atravessa o junction e apaga o conteúdo do ALVO, ou seja, o node_modules do
+ * repositório principal. Desvincular antes é o que impede isso.
+ *
+ * Não desce em vínculo nenhum: o que interessa está na árvore do worktree, e
+ * descer num junction seria caminhar dentro do principal.
+ */
+export async function desvincularDependencias(pasta: string): Promise<void> {
+  const soltar = async (relativo: string, profundidade: number): Promise<void> => {
+    let entradas
+    try {
+      entradas = await fs.readdir(path.join(pasta, relativo), { withFileTypes: true })
+    } catch {
+      return
+    }
+    for (const entrada of entradas) {
+      const caminho = relativo ? path.join(relativo, entrada.name) : entrada.name
+      // lstat, e não o dirent: no Windows o junction chega como vínculo
+      // (isSymbolicLink) e não como pasta — é o que o distingue de um
+      // node_modules de verdade, e é justamente onde o git se engana.
+      const info = await fs.lstat(path.join(pasta, caminho)).catch(() => null)
+      if (!info) continue
+      if (info.isSymbolicLink()) {
+        // Sem `recursive`: remove só o vínculo, nunca o alvo.
+        await fs.rm(path.join(pasta, caminho), { force: true }).catch(() => {})
+        continue
+      }
+      if (info.isDirectory() && !SEM_DESCER.has(entrada.name) && profundidade < PROFUNDIDADE) {
+        await soltar(caminho, profundidade + 1)
+      }
+    }
+  }
+  await soltar('', 1)
+}

@@ -7,6 +7,7 @@ import {
   acharExtras,
   baseAtual,
   branchExiste,
+  desvincularDependencias,
   git,
   prepararDependencias,
   raizConfigurada,
@@ -176,6 +177,9 @@ export async function removerWorktreeDoWorker(worktree: WorktreeDoWorker, apagar
   // worktree, a pasta sumiria debaixo do comando.
   const principal = await pastaNoRepositorioPrincipal(worktree.caminho)
   const repo = principal !== path.resolve(worktree.caminho) ? principal : null
+  // Antes do git: ele atravessa os vínculos de node_modules e apagaria o
+  // repositório principal (ver desvincularDependencias).
+  await desvincularDependencias(worktree.caminho)
   if (repo) await git(repo, ['worktree', 'remove', '--force', worktree.caminho]).catch(() => {})
   await fs.rm(worktree.caminho, { recursive: true, force: true })
   if (repo) {

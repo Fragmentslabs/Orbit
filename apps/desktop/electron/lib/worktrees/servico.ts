@@ -8,6 +8,7 @@ import { descartarSnapshots } from '../snapshot'
 import {
   baseAtual,
   branchExiste,
+  desvincularDependencias,
   existe,
   git,
   prepararDependencias,
@@ -265,6 +266,9 @@ export async function removerWorktreeDoChat(opts: {
       await killProcess(processo.pid).catch(() => false)
     }
   }
+  // Antes do git: ele atravessa os vínculos de node_modules e apagaria o
+  // repositório principal (ver desvincularDependencias).
+  await desvincularDependencias(alvo.caminho)
   await git(lista.repo, ['worktree', 'remove', '--force', alvo.caminho]).catch(() => {})
   await fs.rm(alvo.caminho, { recursive: true, force: true })
   await git(lista.repo, ['worktree', 'prune']).catch(() => {})
