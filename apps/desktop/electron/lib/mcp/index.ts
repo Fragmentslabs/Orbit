@@ -24,6 +24,7 @@ import {
   oauthRedirectUrl,
   setOAuthInteractive,
 } from './oauth'
+import { attachSamplingHandler, samplingCapabilities } from './sampling'
 
 /**
  * Manager MCP: conecta os servidores do mcp-config.json (stdio/streamable
@@ -198,7 +199,7 @@ async function connect(runtime: ServerRuntime, interactive = false): Promise<voi
   runtime.lastAttempt = Date.now()
   const url = oauthUrl(runtime.config)
   try {
-    let client = new Client({ name: 'orbit', version: app.getVersion() })
+    let client = createClient(runtime.config.name)
     if (url) {
       await ensureOAuthLoopback()
       runtime.authorized = await hasOAuthTokens(url)
@@ -222,7 +223,7 @@ async function connect(runtime: ServerRuntime, interactive = false): Promise<voi
       // fechado no erro) — o SDK recusa reiniciar o mesmo transport. Com o
       // token salvo pelo finishAuth, a conexão vai em instâncias novas.
       await transport.close().catch(() => {})
-      client = new Client({ name: 'orbit', version: app.getVersion() })
+      client = createClient(runtime.config.name)
       transport = await buildTransport(runtime.config)
       await withTimeout(client.connect(transport), CONNECT_TIMEOUT_MS, runtime.config.name)
     }
@@ -372,6 +373,23 @@ export function listMcpStatus(): McpServerStatus[] {
     usesOAuth: Boolean(oauthUrl(runtime.config)),
     authorized: runtime.authorized ?? false,
   }))
+}
+
+/**
+ * Client MCP do Orbit.
+ *
+ * A capacidade `sampling` é deliberada: é o que permite um app conectado pedir
+ * uma resposta ao modelo daqui — o "MCP inverso" (ver sampling.ts). Sem ela o
+ * `sampling/createMessage` do app levaria "method not found", porque um client
+ * MCP comum só FALA com o servidor, nunca responde a ele.
+ */
+function createClient(serverName: string): Client {
+  const client = new Client(
+    { name: 'orbit', version: app.getVersion() },
+    { capabilities: samplingCapabilities() },
+  )
+  attachSamplingHandler(client, serverName)
+  return client
 }
 
 /** ToolSet mesclado dos servidores conectados (síncrono — lista do manager). */

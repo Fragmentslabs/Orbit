@@ -123,7 +123,7 @@ export function AskCard({ ask, onReply }: AskCardProps) {
           </Text>
         )}
 
-        {/* Actions row: Negar | Uma vez [˅] */}
+        {/* Actions row: Negar | Permitir esta vez [˅] — a seta abre só as permissões duradouras */}
         <View style={{ flexDirection: 'row', gap: 8, position: 'relative' }}>
           <Pressable
             onPress={() => reply('deny')}
@@ -144,7 +144,7 @@ export function AskCard({ ask, onReply }: AskCardProps) {
               }}
             >
               <Text style={{ fontSize: 12, fontWeight: '600', color: tokens.primaryForeground }}>
-                {t('askCard.once')}
+                {t('askCard.allowOnce')}
               </Text>
             </Pressable>
             <Pressable
@@ -181,13 +181,6 @@ export function AskCard({ ask, onReply }: AskCardProps) {
               overflow: 'hidden',
             }}
           >
-            <Pressable
-              onPress={() => { setPermitOpen(false); reply('allow') }}
-              style={{ paddingVertical: 11, paddingHorizontal: 14 }}
-            >
-              <Text style={{ fontSize: 13, color: tokens.foreground }}>{t('askCard.once')}</Text>
-            </Pressable>
-            <View style={{ height: 1, backgroundColor: tokens.border }} />
             <Pressable
               onPress={() => { setPermitOpen(false); reply('always_chat') }}
               style={{ paddingVertical: 11, paddingHorizontal: 14 }}

@@ -73,6 +73,7 @@ import {
 } from './memory/service'
 import * as rotinas from './rotinas'
 import * as esteira from './esteira'
+import { definirModoGlobal } from './permission/modo-global'
 import {
   rewriteMediaPart as rewriteMediaPartOne,
   rewriteMessage as rewriteMessageMedia,
@@ -538,7 +539,9 @@ async function handleRequest(client: ConnectedClient, requestId: string, req: Co
           providerId: req.providerId ?? connected[0] ?? 'openai',
           modelId: req.modelId ?? 'gpt-4o',
           mode: session.mode,
-          options: req.options ?? {},
+          // O celular manda o modo do seletor global (sincronizado com o
+          // desktop): o turno segue a troca dele no meio da resposta.
+          options: req.options?.permissionMode ? { ...req.options, followGlobalPermission: true } : (req.options ?? {}),
           directory: req.directory ?? session.directory,
           extraDirectories: req.extraDirectories ?? session.extraDirectories,
           workerModel: req.workerModel,
@@ -1499,6 +1502,8 @@ export function getAppPreferences(): AppPreferences | null {
 /** Preferencias mudaram no desktop → espelha em todos os companions. */
 export function broadcastAppPreferences(prefs: AppPreferences): void {
   appPreferences = prefs
+  // Turnos em andamento que seguem o seletor leem daqui a cada ferramenta.
+  definirModoGlobal(prefs.permissionMode)
   const payload = wrap({ type: 'prefs:change', prefs } satisfies AppPreferencesChangeEvent)
   for (const client of clients) {
     if (!client.authenticated || client.ws.readyState !== WebSocket.OPEN) continue

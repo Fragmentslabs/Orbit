@@ -20,6 +20,7 @@ import fsSync from 'node:fs'
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 import { app, BrowserWindow } from 'electron'
+import { StorageKeys } from '@shared/chat'
 import { readJson, writeJson, listKeys } from './storage'
 import { getCatalog } from './catalog'
 import { listCredentialProviders } from './auth'
@@ -153,7 +154,9 @@ function readBody(req: IncomingMessage): Promise<Record<string, unknown>> {
 // ─── Storage Keys for Companion Preferences ──────────────────────────────────
 
 const PREFS_KEY = 'companion/preferences'
-const SELECTED_MODEL_KEY = 'companion/selected-model'
+// Chave compartilhada: o sampling de um app conectado (lib/mcp/sampling.ts)
+// precisa do mesmo "modelo atual" quando não há conversa nenhuma no laço.
+const SELECTED_MODEL_KEY = StorageKeys.selectedModel
 
 interface CompanionPreferences {
   brain: boolean
@@ -339,6 +342,7 @@ export function setWorkerConfigCache(config: WorkerConfigSnapshot): void {
     ...next,
     orchestratorModel: 'orchestratorModel' in next ? next.orchestratorModel : workerConfigCache.orchestratorModel,
     orchestratorReasoning: 'orchestratorReasoning' in next ? next.orchestratorReasoning : workerConfigCache.orchestratorReasoning,
+    orchestration: 'orchestration' in next ? next.orchestration : workerConfigCache.orchestration,
   }
 }
 

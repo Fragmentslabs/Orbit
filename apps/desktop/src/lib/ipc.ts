@@ -217,6 +217,8 @@ export const chatApi = {
   compact: (sessionId: string) => window.ipcRenderer.invoke("chat:compact", sessionId),
   approvePlan: (sessionId: string, planId: string, taskIds?: string[]) =>
     window.ipcRenderer.invoke("chat:approvePlan", sessionId, planId, taskIds),
+  /** Tenta de novo juntar no chat o trabalho aceito dos workers (worktrees) */
+  juntarOrquestracao: (sessionId: string) => window.ipcRenderer.invoke("chat:juntarOrquestracao", sessionId) as Promise<void>,
   rejectPlan: (sessionId: string) => window.ipcRenderer.invoke("chat:rejectPlan", sessionId),
   savePlanFile: (directory: string, content: string) =>
     window.ipcRenderer.invoke("plan:saveFile", directory, content),

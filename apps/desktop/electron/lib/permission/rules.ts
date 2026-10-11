@@ -157,6 +157,14 @@ const NATIVE_TOOLS = new Set([
   // toda chamada — o que fazia o modelo pular a verificação.
   'verify_changes',
   'session_context',
+  // Conexões MCP (mcp_connect/mcp_update/mcp_servers): só PROPÕEM — a conexão
+  // passa a existir quando o usuário aceita no card da conversa, e é o card
+  // que grava. Sem entrar nesta lista elas caíam no catch-all de MCP como se
+  // fossem do servidor "mcp", pedindo permissão a cada chamada exatamente
+  // para depois o usuário decidir no card.
+  'mcp_connect',
+  'mcp_update',
+  'mcp_servers',
 ])
 
 const USER_RULES_FILE = () => path.join(dataDir(), 'permissions.json')

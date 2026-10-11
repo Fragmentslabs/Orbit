@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, dialog, shell, Menu, clipboard, nativeImage, ClipboardItem, session, type MenuItemConstructorOptions } from 'electron'
+import { app, BrowserWindow, ipcMain, dialog, shell, Menu, clipboard, nativeImage, nativeTheme, ClipboardItem, session, type MenuItemConstructorOptions } from 'electron'
 import sharp from 'sharp'
 import { createRequire } from 'node:module'
 import { fileURLToPath } from 'node:url'
@@ -24,7 +24,7 @@ import { discoverGitRepos } from './lib/git-repos'
 import { compactSession, getRunningSessionIds } from './lib/chat-engine'
 import { getLoopRunningSessionIds } from './lib/loop-engine'
 import { replyOrResume } from './lib/ask-resume'
-import { approvePlan, getOrchestrationRunningSessionIds, rejectPlan } from './lib/orchestrator'
+import { approvePlan, getOrchestrationRunningSessionIds, juntarDeNovo, rejectPlan } from './lib/orchestrator'
 import { authorizeMcp, initMcp, listMcpStatus, oauthRedirectUrl, readMcpConfig, reconnectMcp, saveMcpConfig } from './lib/mcp'
 import { connectNodara, disconnectNodara, discoverNodara, stopWatchingNodaraBridge, watchNodaraBridge } from './lib/nodara'
 import { connectFracta, disconnectFracta, discoverFracta, stopWatchingFractaSettings, watchFractaSettings } from './lib/fracta'
@@ -58,7 +58,9 @@ import { readJson as readStorageJson } from './lib/storage'
 import { registerPanelWebContents } from './lib/panel-browser'
 import { registerVoiceIpc } from './lib/voice'
 import { setupMemoryScheduler } from './lib/memory/scheduler'
-import { getAppSettings, loadAppSettings, setAppSettings } from './lib/app-settings'
+import { getAppSettings, loadAppSettings, onAppSettingsChange, setAppSettings } from './lib/app-settings'
+import { applyLaunchAtLogin } from './lib/autostart'
+import { createTray, destroyTray, hasTray, refreshTray } from './lib/tray'
 import { setupAutoArchive } from './lib/auto-archive'
 import { BROWSER_PARTITION } from './lib/browser-script'
 import { clearBrowserPermissions, setupBrowserPermissions } from './lib/browser-permissions'
@@ -85,7 +87,7 @@ import {
 } from './lib/session-documents'
 import { viewExport, viewHtml, viewPrint, viewRender, viewText } from './lib/document-view'
 import { documentForSource, isDocumentSource, useDocumentAsSource } from './lib/document-source'
-import { loadMainLocale, setMainLocale } from './lib/i18n'
+import { loadMainLocale, setMainLocale, t as tMain } from './lib/i18n'
 import { loginShellArgs, userShellEnv } from './lib/shell-env'
 import { searchSessions } from './lib/search-sessions'
 import { tocarSom, caminhoSom } from './lib/sound'
@@ -208,6 +210,66 @@ registerArtifactSchemePrivileges()
 
 let win: BrowserWindow | null
 let entranceWindowCreated = false
+
+/**
+ * O app está saindo DE VERDADE? O `close` da janela consulta isto antes de
+ * decidir: numa saída real (menu, bandeja, Cmd+Q) o evento segue o caminho
+ * normal; fora dela, com "fechar para a bandeja" ligado, o X só esconde.
+ */
+let quitting = false
+
+// ─── Bandeja do sistema ──────────────────────────────────────────────────────
+
+/** Rótulos da bandeja no idioma do app (o main tem i18n próprio — lib/i18n). */
+async function trayLabels() {
+  return {
+    open: await tMain('tray.open'),
+    quit: await tMain('tray.quit'),
+    tooltip: await tMain('tray.tooltip'),
+  }
+}
+
+/** Traz a janela de volta, recriando-a se ela já não existir. */
+function showMainWindow(): void {
+  if (!win || win.isDestroyed()) {
+    createWindow()
+    return
+  }
+  if (win.isMinimized()) win.restore()
+  win.show()
+  win.focus()
+}
+
+/** Encerra de verdade: marca a saída para o `close` da janela não a esconder. */
+function quitApp(): void {
+  quitting = true
+  app.quit()
+}
+
+function trayHandlers() {
+  return { onOpen: showMainWindow, onQuit: quitApp }
+}
+
+/**
+ * Liga/desliga a bandeja conforme a preferência. Ela existe exatamente para
+ * hospedar o app sem janela: desligada, o X volta a encerrar e o ícone sai
+ * junto — deixá-lo seria um ícone de um app que não fica vivo.
+ *
+ * Se a bandeja não puder ser criada (sem ícone), `hasTray()` fica falso e o
+ * fechar continua encerrando: esconder a janela seria perder o app.
+ */
+async function syncTray(): Promise<void> {
+  if (!getAppSettings().closeToTray) {
+    destroyTray()
+    // Preferência desligada com a janela escondida: sem bandeja não haveria
+    // como voltar, então ela reaparece.
+    if (win && !win.isDestroyed() && !win.isVisible()) showMainWindow()
+    return
+  }
+  const labels = await trayLabels()
+  if (hasTray()) refreshTray(labels, trayHandlers())
+  else createTray(labels, trayHandlers())
+}
 
 // ─── "Abrir com Orbit" (menu de contexto do Explorer) ───────────────────────
 // Registra em HKCU (sem admin) as entradas que fazem o botão direito em uma
@@ -381,6 +443,16 @@ function createWindow() {
   win.on('enter-full-screen', () => win?.webContents.send('window:fullscreen-change', true))
   win.on('leave-full-screen', () => win?.webContents.send('window:fullscreen-change', false))
 
+  // Fechar para a bandeja: o X (e o "Fechar Janela" do menu do macOS) esconde
+  // o app em vez de encerrá-lo — é o que o mantém vivo servindo os apps
+  // conectados por MCP enquanto não há janela à vista. Sem bandeja criada, o
+  // close segue normal: esconder sem ter como voltar seria perder o app.
+  win.on('close', (event) => {
+    if (quitting || !getAppSettings().closeToTray || !hasTray()) return
+    event.preventDefault()
+    win?.hide()
+  })
+
   // Test active push message to Renderer-process.
   win.webContents.on('did-finish-load', () => {
     win?.webContents.send('main-process-message', (new Date).toLocaleString())
@@ -490,6 +562,9 @@ function createAppMenu() {
 // explicitly with Cmd + Q.
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {
+    // Com a bandeja ativa o app segue vivo sem janela — sair daqui destruiria
+    // o ícone junto e o app ficaria inalcançável.
+    if (getAppSettings().closeToTray && hasTray()) return
     app.quit()
     win = null
   }
@@ -1723,8 +1798,9 @@ app.whenReady().then(() => {
   // pedido do renderer (rotinas agendadas).
   ipcMain.handle('app:setLanguage', (_event, language: string) => {
     // O idioma também vale para as notificações nativas, que nascem aqui
-    // (ver lib/i18n.ts).
+    // (ver lib/i18n.ts) — e para os rótulos da bandeja, que são texto do main.
     setMainLocale(language)
+    void syncTray()
     return writeJson(StorageKeys.appLanguage, language)
   })
   ipcMain.handle('init:status', (_event, directory: string) => getInitStatus(directory))
@@ -1754,6 +1830,9 @@ app.whenReady().then(() => {
   // volta para a conversa como mensagem (ver ask-resume).
   ipcMain.handle('chat:askReply', (_event, requestId: string, value: unknown) =>
     replyOrResume(win, requestId, value))
+  // "Juntar de novo": o trabalho aceito dos workers que ficou fora do chat
+  // (alteração não commitada no caminho, conflito resolvido depois).
+  ipcMain.handle('chat:juntarOrquestracao', (_event, sessionId: string) => (win ? juntarDeNovo(win, sessionId) : undefined))
   ipcMain.handle('chat:approvePlan', (_event, sessionId: string, planId: string, taskIds?: string[]) => {
     if (win) void approvePlan(win, sessionId, planId, taskIds)
   })
@@ -2206,6 +2285,23 @@ app.whenReady().then(() => {
 
   // Configurações gerais: o renderer empurra a cada mudança (ver app-settings).
   ipcMain.on('settings:sync', (_event, raw: unknown) => void setAppSettings(raw))
+
+  // O que depende do SISTEMA reage à preferência, em vez de ser lido no boot:
+  // a bandeja existe enquanto "fechar para a bandeja" estiver ligado, e a
+  // abertura automática é registrada/removida na hora em que a pessoa decide.
+  onAppSettingsChange((next, prev) => {
+    if (next.closeToTray !== prev.closeToTray) void syncTray()
+    if (next.launchAtLogin !== prev.launchAtLogin) void applyLaunchAtLogin(next.launchAtLogin)
+  })
+
+  // Tema do app → aparência NATIVA (menus de bandeja, diálogos do sistema). O
+  // renderer decide o tema; aqui ele só é espelhado, e o menu da bandeja é
+  // reconstruído para nascer já no tema novo.
+  ipcMain.on('theme:sync', (_event, theme: unknown) => {
+    nativeTheme.themeSource = theme === 'light' || theme === 'dark' ? theme : 'system'
+    if (hasTray()) void syncTray()
+  })
+
   ipcMain.handle('browser:clear-data', () => clearBrowserData())
   // Link que o renderer não tinha onde abrir (nenhuma conversa aberta).
   ipcMain.on('link:open-external', (_event, url: string) => {
@@ -2425,6 +2521,10 @@ app.whenReady().then(() => {
   ipcMain.handle('process:output', (_event, pid: number, sessionId?: string) => getProcessOutput(pid, sessionId))
 
   app.on('before-quit', () => {
+    // A saída real começa aqui: daqui para baixo o `close` da janela não pode
+    // mais ser convertido em esconder.
+    quitting = true
+    destroyTray()
     killAllProcesses()
     stopWatchingNodaraBridge()
     stopWatchingFractaSettings()
@@ -2480,6 +2580,10 @@ app.whenReady().then(() => {
   void loadAppSettings().then(async (settings) => {
     if (settings.browser.cookies === 'until-quit') await clearBrowserData().catch(() => {})
     setupAutoArchive()
+    // Bandeja e abertura automática valem antes de qualquer renderer montar —
+    // é o caso do app que subiu no login do sistema, sem ninguém pedir nada.
+    void syncTray()
+    if (settings.launchAtLogin) await applyLaunchAtLogin(true)
   })
 
   // Câmera, microfone, localização etc. dos sites do navegador integrado:

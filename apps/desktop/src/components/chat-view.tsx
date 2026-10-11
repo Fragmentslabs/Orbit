@@ -17,7 +17,7 @@ import { useAppearanceStore } from "@/src/stores/appearance-store"
 import { ErrorBoundary } from "@/src/components/error-boundary"
 import { showsPersonaInChat, showsPersonaOnWelcome } from "@shared/appearance"
 import { usePanelStore } from "@/src/stores/panel-store"
-import { docsApi } from "@/src/lib/ipc"
+import { chatApi, docsApi } from "@/src/lib/ipc"
 import { Conversation, ConversationContent, ConversationScrollButton } from "@/src/components/ai/conversation"
 import { Message, MessageAttachment, MessageAttachments, MessageContent } from "@/src/components/ai/message"
 import { Suggestion } from "@/src/components/ai/suggestion"
@@ -39,7 +39,7 @@ import { PAGE_TURNS, defaultWindowStart, turnStart, windowStartFor } from "@/src
 import { registerMessageRevealer, revealMessage } from "@/src/lib/message-jump"
 import { playEntranceSound, prepareEntranceSound } from "@/src/lib/entrance-sound"
 import { useActiveSession, useSessionStatus, useSessionStore, type SendConfig } from "@/src/stores/session-store"
-import { useWorktreeStore } from "@/src/stores/worktree-store"
+import { pastasAposTroca, useWorktreeStore } from "@/src/stores/worktree-store"
 import { brainEnabledFor } from "@/src/stores/brain-prefs"
 import { useProviderStore, useNoProviderConnected } from "@/src/stores/provider-store"
 import { useModelModePrefs } from "@/src/stores/model-mode-prefs"
@@ -621,13 +621,25 @@ export function ChatView({ sessionId, embedded = false }: { sessionId?: string; 
     const trocouPasta = !trocouChat && session.directory !== prevDirectory.current
     prevSessionId.current = session.id
     prevDirectory.current = session.directory
-    if (trocouChat || trocouPasta) {
+    if (trocouChat) {
       setFolders([session.directory, ...(session.extraDirectories ?? [])])
+    } else if (trocouPasta && useSessionStore.getState().activeIds.code === session.id) {
+      // Mesma sessão, pasta trocada pelo agente: as extras do workspace ficam
+      // (inclusive as associadas depois do último envio) e vão para a sessão.
+      // Só no chat ativo — o workspace é dele; um chat no painel lateral não
+      // mexe nas pastas da tela.
+      const proximas = pastasAposTroca(session.directory, folders)
+      setFolders(proximas)
+      useSessionStore.getState().setSessionDirectories(session.id, session.directory, proximas.slice(1))
+    }
+    if (trocouChat || trocouPasta) {
       // Pasta que chegou de fora pode ser um worktree: registra o principal
       // dela para a sidebar agrupar os próximos chats no projeto certo.
       void useWorktreeStore.getState().resolverPrincipal(session.directory)
     }
-  }, [session?.id, session?.directory, session?.extraDirectories, viewMode, setFolders])
+    // folders entra só para a troca ler as extras atuais; mudar só as pastas
+    // não dispara nada (nem chat nem pasta principal da sessão mudaram).
+  }, [session?.id, session?.directory, session?.extraDirectories, viewMode, setFolders, folders])
 
   const isBusy = status === "submitted" || status === "streaming" || status === "cancelling" || status === "fallback"
   // Sessão cujo histórico ainda não chegou do disco conta como conversa: sem
@@ -943,7 +955,18 @@ export function ChatView({ sessionId, embedded = false }: { sessionId?: string; 
       {session && plan && (plan.status === "approved" || plan.status === "running" || plan.status === "done") && (
         <div className="mx-auto w-full max-w-2xl pb-2">
           <TaskProgress
-            tasks={plan.tasks.map((t) => ({ id: t.id, title: t.title, status: t.status, mode: "code" as const }))}
+            tasks={plan.tasks.map((t) => ({
+              id: t.id,
+              title: t.title,
+              status: t.status,
+              mode: "code" as const,
+              fase: t.fase,
+              extra: t.extra,
+              revisions: t.revisions,
+              nota: t.notaRevisao,
+            }))}
+            acompanhamento={plan.revisao}
+            onJuntarDeNovo={() => chatApi.juntarOrquestracao(session.id)}
             title={t("chat.orchestrationTitle")}
             defaultExpanded={plan.status !== "done"}
             onDismiss={plan.status === "done" ? () => useSessionStore.getState().dismissOrchestration(session.id) : undefined}

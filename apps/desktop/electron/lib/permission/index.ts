@@ -35,7 +35,8 @@ function effectiveMode(toolName: string, globalMode: PermissionMode): Permission
 }
 
 export function createToolApproval(
-  mode: PermissionMode,
+  /** Fixo, ou consultado a cada ferramenta (turno que segue o seletor global) */
+  mode: PermissionMode | (() => PermissionMode),
   sessionId: string,
   dir: string | null,
   assistantMessageId: string,
@@ -52,7 +53,7 @@ export function createToolApproval(
     const assessment = assess(toolCall.toolName, toolCall.input, dir)
     if (!assessment) return 'approved' as const
 
-    const mcpMode = effectiveMode(toolCall.toolName, mode)
+    const mcpMode = effectiveMode(toolCall.toolName, typeof mode === 'function' ? mode() : mode)
     if (mcpMode === 'full' && !assessment.sempre) return 'approved' as const
 
     const ruleId = assessment.ruleId
@@ -72,7 +73,7 @@ export function createToolApproval(
         {
           requestId,
           kind: 'permission',
-          claim: assessment.claim,
+          claim: assessment.sempre ? { ...assessment.claim, alwaysAsk: true } : assessment.claim,
           origin: isWorker
             ? { workerSessionId: sessionId, workerTitle: workerTitle ?? 'worker' }
             : undefined,

@@ -174,10 +174,13 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId, on
     brain,
     brainContext: brainContext === "all" ? true : brainContext === "memory" ? brain : false,
     permissionMode,
+    // Modo vindo do seletor: trocar no meio da resposta vale na hora.
+    followGlobalPermission: true,
     reasoning: { enabled: thinking, variantId },
     subagents,
     orchestrate: orchestra && mode === "code" ? {} : undefined,
-    loop,
+    // Na orquestra o Loop não vale (quem revisa é o orquestrador)
+    loop: orchestra && mode === "code" ? undefined : loop,
   }), [plan, search, simple, brain, brainContext, permissionMode, thinking, variantId, subagents, orchestra, loop, mode])
 
   const getDirs = useCallback(() => {
@@ -327,7 +330,10 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId, on
       }) },
       ...(mode === "code" && !isWorker ? [{ id: "orchestra", label: t("codeInput.slash.orchestraLabel"), description: t("codeInput.slash.orchestraDescription"), keywords: ["workers", "plano"], group: "Modos" as const, active: orchestra, run: toggle(() => {
         setModeActive("orchestra", sessionId, !orchestra)
-        if (!orchestra) maybePromptWorkerConfig("orchestra")
+        if (!orchestra) {
+          setLoop(false)
+          maybePromptWorkerConfig("orchestra")
+        }
       }) }] : []),
       permission("ask", t("codeInput.slash.permAsk"), t("codeInput.slash.permAskDescription")),
       permission("approve", t("codeInput.slash.permApprove"), t("codeInput.slash.permApproveDescription")),
@@ -450,6 +456,7 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId, on
                       setModeActive("orchestra", sessionId, v)
                       if (v) {
                         setModeActive("subagents", sessionId, false)
+                        setLoop(false)
                         // Aviso da primeira vez (só na 1ª ativação sem worker)
                         maybePromptWorkerConfig("orchestra")
                       }
@@ -585,6 +592,7 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId, on
                 setModeActive("orchestra", sessionId, next)
                 if (next) {
                   setModeActive("subagents", sessionId, false)
+                  setLoop(false)
                   // Aviso da primeira vez (só na 1ª ativação sem worker)
                   maybePromptWorkerConfig("orchestra")
                 }
@@ -596,8 +604,9 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId, on
             <ModeToggle
               icon={RefreshCw}
               label={t("codeInput.modes.loop.label")}
-              description={t("codeInput.modes.loop.description")}
-              active={loop}
+              description={orchestra ? t("delegation.loopOffInOrchestra") : t("codeInput.modes.loop.description")}
+              active={loop && !orchestra}
+              disabled={orchestra}
               onToggle={() => setLoop((v) => !v)}
               iconOnly={modeLabelStyle === "icon"}
             />
