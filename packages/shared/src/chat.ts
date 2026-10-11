@@ -503,6 +503,27 @@ export interface Question {
   multi?: boolean
 }
 
+/**
+ * Resposta de uma pergunta como texto (a tool recebe `answers: string[]`).
+ * Opção marcada e texto livre ficam em linhas separadas, com o texto rotulado:
+ * unidos por vírgula o agente não distinguia "A, B" (duas opções) de "A, mas
+ * só no backend" (uma opção com ressalva). Sem opção marcada, o texto É a
+ * resposta e vai sem rótulo. O rótulo vem traduzido de quem respondeu.
+ */
+export function formatAskAnswer(picks: string[], note: string | undefined, noteLabel: string): string {
+  const text = note?.trim() ?? ""
+  const chosen = picks.join(", ")
+  if (!chosen) return text
+  if (!text) return chosen
+  return `${chosen}\n${noteLabel}: ${text}`
+}
+
+/** Uma pergunta e sua resposta no texto devolvido ao agente (e na mensagem
+ *  de retomada): as linhas extras da resposta ficam alinhadas sob a seta. */
+export function formatAskLine(index: number, question: string, answer: string): string {
+  return `${index + 1}. ${question}\n   → ${answer.replace(/\n/g, "\n     ")}`
+}
+
 /** Origem de um pedido vindo de worker (exibido no chat do orquestrador) */
 export interface AskOrigin {
   workerSessionId: string

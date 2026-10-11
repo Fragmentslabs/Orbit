@@ -1,6 +1,6 @@
 import type { BrowserWindow } from 'electron'
 import type { AskItem, ChatMessage, SendMessageInput, SessionInfo } from '@shared/chat'
-import { StorageKeys } from '@shared/chat'
+import { StorageKeys, formatAskLine } from '@shared/chat'
 import { reply as askReply } from './ask-broker'
 import { readAppLanguage } from './app-language'
 import { listCredentialProviders } from './auth'
@@ -110,7 +110,7 @@ function blocoDaResposta(item: PedidoSalvo, value: unknown, textos: Textos): str
   const perguntas = item.questions ?? []
   if (perguntas.length === 0) return null
   const linhas = perguntas
-    .map((q, i) => `${i + 1}. ${q.text}\n   → ${resposta.answers?.[i] || textos.semResposta}`)
+    .map((q, i) => formatAskLine(i, q.text, resposta.answers?.[i] || textos.semResposta))
     .join('\n')
   return origem ? `${origem.trim()}\n${linhas}` : linhas
 }

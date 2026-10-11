@@ -275,7 +275,10 @@
     "alwaysThisChat": "Sempre neste chat",
     "always": "Sempre",
     "questionLabel": "Pergunta",
-    "otherAnswerPlaceholder": "Outra resposta…",
+    "otherAnswerPlaceholder": "Ou escreva outra resposta…",
+    "noteOn": "Observação sobre \"{{option}}\" (opcional)",
+    "noteMulti": "Observação sobre sua escolha (opcional)",
+    "noteLabel": "Observação",
     "dismiss": "Dispensar",
     "advance": "Avançar",
     "answer": "Responder"

@@ -878,7 +878,10 @@
   },
   "ask": {
     "critical": "Ação crítica: ",
-    "otherAnswer": "Outra resposta…",
+    "otherAnswer": "Ou escreva outra resposta…",
+    "noteOn": "Observação sobre \"{{option}}\" (opcional)",
+    "noteMulti": "Observação sobre sua escolha (opcional)",
+    "noteLabel": "Observação",
     "questionOf": "Pergunta {{current}} de {{total}}",
     "dismiss": "Dispensar",
     "advance": "Avançar",

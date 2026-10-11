@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { View, Text, Pressable, TextInput, Platform } from 'react-native'
 import { ShieldAlert, HelpCircle, TriangleAlert, User, ChevronDown } from 'lucide-react-native'
 import { useTranslation } from 'react-i18next'
+import { formatAskAnswer } from '@orbit/shared'
 import type { PendingAsk } from '~/stores/chat-store'
 import { getThemeTokens } from '~/lib/theme-tokens'
 import { useThemeStore } from '~/stores/theme-store'
@@ -219,7 +220,9 @@ export function AskCard({ ask, onReply }: AskCardProps) {
               : [...current, opt],
           }
         }
-        return { ...prev, [q.id]: [opt] }
+        // Tocar de novo desmarca, como no desktop: é assim que se volta a
+        // responder só com o texto.
+        return { ...prev, [q.id]: current.includes(opt) ? [] : [opt] }
       })
     }
 
@@ -227,13 +230,20 @@ export function AskCard({ ask, onReply }: AskCardProps) {
     // perguntas (ela interpola direto no retorno para o agente). Enviar objetos
     // aqui virava "[object Object]" no lado do modelo: o card fechava e a
     // resposta do usuario se perdia. Mesmo formato do card do desktop:
-    // opcoes marcadas + texto livre, unidos por virgula.
-    const answerOf = (qq: (typeof questions)[number]) => {
-      const picks = [...(selectedOptions[qq.id] ?? [])]
-      const txt = textAnswers[qq.id]?.trim()
-      if (txt) picks.push(txt)
-      return picks.join(', ')
-    }
+    // opcoes marcadas e, em outra linha, o texto livre como observacao.
+    const answerOf = (qq: (typeof questions)[number]) =>
+      formatAskAnswer([...(selectedOptions[qq.id] ?? [])], textAnswers[qq.id], t('askCard.noteLabel'))
+
+    // O campo diz o que o texto vai ser: com opcao marcada e uma observacao
+    // SOBRE ela; sem nenhuma, e a propria resposta.
+    const freePlaceholder =
+      selected.length === 0
+        ? t('askCard.otherAnswerPlaceholder')
+        : selected.length > 1
+          ? t('askCard.noteMulti')
+          : t('askCard.noteOn', {
+              option: selected[0].length > 40 ? `${selected[0].slice(0, 39)}…` : selected[0],
+            })
 
     const allAnswered = questions.every((qq) => answerOf(qq).length > 0)
 
@@ -349,7 +359,7 @@ export function AskCard({ ask, onReply }: AskCardProps) {
         <TextInput
           value={textAnswer}
           onChangeText={(v) => setTextAnswers((prev) => ({ ...prev, [q.id]: v }))}
-          placeholder={t('askCard.otherAnswerPlaceholder')}
+          placeholder={freePlaceholder}
           placeholderTextColor={tokens.mutedForeground}
           multiline
           editable={!submitted}
