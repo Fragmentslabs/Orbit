@@ -42,6 +42,10 @@
       "browser": {
         "label": "Browser",
         "description": "The built-in browser and what the agent can do in it"
+      },
+      "voice": {
+        "label": "Voice",
+        "description": "Reading aloud, dictation and voice models."
       }
     },
     "about": {
@@ -188,9 +192,12 @@
     "subagents": "Subagents",
     "orchestra": "Orchestra",
     "loop": "Loop",
-    "configure": "Configure"
+    "configure": "Configure",
+    "loopOffInOrchestra": "In the orchestra the orchestrator does the reviewing — adjust it in the Orchestra settings."
   },
   "permissions": {
+    "allowOnce": "Allow this time",
+    "moreOptions": "More permission options",
     "title": "Permission mode",
     "ask": "Ask",
     "askDescription": "Confirms sensitive actions before running",
@@ -1004,7 +1011,22 @@
     "useChatModel": "Use the chat model",
     "workerSharedHint": "The same model as the subagents. Without a selection, workers use the main chat model.",
     "clear": "Clear",
-    "done": "Done"
+    "done": "Done",
+    "behavior": {
+      "title": "Orchestrator behavior",
+      "orquestrar": "Orchestrate only",
+      "orquestrarHint": "Splits the work, runs the workers and writes the final answer. No review.",
+      "acompanhar": "Follow along",
+      "acompanharHint": "Reviews each worker as soon as it finishes, asks for adjustments while the others keep working, creates extra workers if something is missing and reviews the integration at the end.",
+      "rigoroso": "Strict",
+      "rigorosoHint": "Follow along + only accepts a worker's work after running the project's checks (typecheck, tests, lint). Slower.",
+      "ajustes": "Adjustments per worker",
+      "ajustesHint": "How many times the orchestrator can send a worker back to redo something. This is what weighs most on cost: each adjustment is a full worker turn.",
+      "menos": "Fewer adjustments",
+      "mais": "More adjustments",
+      "worktrees": "Isolate workers in worktrees",
+      "worktreesHint": "Each worker works on its own branch and copy, and the orchestrator merges everything at the end. Keeps workers from touching each other's files; git repositories only."
+    }
   },
   "orchestration": {
     "runningWorkers": "Running workers…",
@@ -1021,7 +1043,8 @@
     "reject": "Reject",
     "approveRun": "Approve and run",
     "approveRunWithCount_one": "Approve and run ({{count}})",
-    "approveRunWithCount_other": "Approve and run ({{count}})"
+    "approveRunWithCount_other": "Approve and run ({{count}})",
+    "dependsOn": "After: {{tarefas}}"
   },
   "planDialog": {
     "doneCount": "({{checked}}/{{total}} done)",
@@ -1078,10 +1101,19 @@
     "failed": "Connection failed: {{error}}"
   },
   "taskProgress": {
+    "juntarDeNovo": "Merge again",
     "title": "Tasks",
     "inProgress": "{{title}} in progress",
     "errors": "{{title}} with errors",
-    "done": "{{title}} done"
+    "done": "{{title}} done",
+    "ajustes": "Adjustments: {{usados}}/{{teto}}",
+    "extra": "extra",
+    "fase": {
+      "fila": "queued",
+      "revisao": "in review",
+      "ajuste": "adjustment {{n}}",
+      "falhou": "failed"
+    }
   },
   "diff": {
     "noChanges": "No changes found",
@@ -1461,16 +1493,16 @@
         "label": "Orchestra",
         "modes": ["Code"],
         "description": "Plans and splits work across persistent workers — when the request calls for it.",
-        "detail": "The orchestrator first decides what the message actually is: a simple question it answers on the spot (and may offer \"want me to implement this?\"), an ambiguity that would change the split it asks about, and only real work becomes a plan. When planning, it reads the project itself and registers subtasks with create_task, proposing the plan for your approval. Each approved task becomes a persistent child session, always in code mode in the working folder, running in parallel with the worker model. It picks each worker’s modes based on what that task needs, within what you enabled in this conversation. At the end it synthesises everything and reviews: if something came out wrong, it sends another round to the worker responsible, inside that worker’s own chat. In later messages it still sees this conversation’s workers (from any plan): it reads what each one did, sees what you typed directly in a worker, and can continue a worker’s conversation instead of creating a new one.",
-        "combo": ["Loop", "Subagents"]
+        "detail": "The orchestrator first decides what the request is: a simple question it answers right away (and may offer \"want me to implement it?\"), an ambiguity that would change the split it asks about, and only real work becomes a plan. While planning it reads the project and registers the subtasks, with dependencies when order matters (tests after the feature, for example), and proposes the plan for your approval. Each task becomes a persistent child session, in code mode, running with the worker model — up to 4 at a time. In the gear you choose how it behaves after splitting: Orchestrate only (runs and synthesizes), Follow along (reviews each worker as it finishes, looking at the diff, asks for adjustments and creates extra workers, within the adjustments-per-worker limit) or Strict (also runs the project's checks before accepting). You can also isolate each worker in its own worktree and let the orchestrator merge everything at the end. In later messages it still sees the conversation's workers and can continue one of them instead of creating another.",
+        "combo": ["Subagents"]
       },
       {
         "id": "loop",
         "label": "Loop",
         "modes": ["Code"],
         "description": "The agent reviews and iterates until the task is complete.",
-        "detail": "After each answer the result is critically reviewed. If the goal wasn’t met, the agent keeps going on its own in a new iteration, with the gap spelled out. The only setting is max iterations (in the gear) — and it is a ceiling, not a target: the loop stops as soon as the review says it is done. In Orchestra mode that same number becomes the total review rounds across all workers.",
-        "combo": ["Subagents", "Orchestra", "Thinking"]
+        "detail": "After each answer, the result is critically reviewed. If the goal wasn't reached, the agent keeps going on its own in a new iteration, with what's missing spelled out. The only setting is the maximum number of iterations (in the gear) — a ceiling, not a target: the loop stops as soon as the review says it's done. It doesn't apply to the Orchestra: there, the orchestrator does the reviewing.",
+        "combo": ["Subagents", "Thinking"]
       },
       {
         "id": "plan",
@@ -1509,19 +1541,9 @@
         "description": "Loop + Thinking: the agent reviews its own result with extended reasoning, spotting gaps and refining until the goal is achieved. Great for generating robust code, thorough tests, or detailed documentation."
       },
       {
-        "label": "Orchestration with review",
-        "items": ["Orchestra", "Loop"],
-        "description": "Orchestra + Loop: without Loop, the orchestrator gets 2 review rounds after synthesis — enough to fix the obvious mistake. With Loop on, the budget becomes the max iterations you configured (default 5). These are TOTAL rounds, not per worker: the orchestrator decides where to spend them, since it is the only one seeing the whole picture."
-      },
-      {
         "label": "Workers on multiple fronts",
         "items": ["Orchestra", "Subagents"],
         "description": "Orchestra + Subagents: unlocks delegation at both levels. While planning, the orchestrator may call subagents to research before splitting (without the toggle it reads the project itself). And it can hand a worker its own subagents when a task is too broad for one."
-      },
-      {
-        "label": "Orchestra + Subagents + Loop",
-        "items": ["Orchestra", "Subagents", "Loop"],
-        "description": "Orchestra + Subagents + Loop: the most autonomous setup — and the most expensive. Delegated research while planning, workers that can split themselves further, and Loop’s larger review budget. Worth it for genuinely large jobs; check the estimated cost on the plan card before approving."
       },
       {
         "label": "Careful planning",
@@ -2338,6 +2360,132 @@
       "description": "Deletes the built-in browser's cookies, logins and cache now.",
       "button": "Clear",
       "done": "Cleared"
+    }
+  },
+  "voice": {
+    "tts": {
+      "speak": "Read aloud",
+      "stop": "Stop",
+      "error": "Could not read this message aloud.",
+      "needsModel": "Download a reading voice in Settings → Voice.",
+      "setupModel": "Set up a reading voice in Settings → Voice."
+    },
+    "stt": {
+      "dictate": "Dictate",
+      "listening": "Listening…",
+      "error": "Could not transcribe the audio.",
+      "needsModel": "Download a speech model in Settings → Voice.",
+      "setupModel": "Set up dictation in Settings → Voice."
+    },
+    "settings": {
+      "sections": {
+        "tts": "Text to speech",
+        "ttsHint": "Reads the assistant's answers aloud.",
+        "stt": "Speech to text",
+        "sttHint": "Turns your voice into text in the message field.",
+        "models": "Models",
+        "modelsHint": "Download and remove the models used for reading and transcription."
+      },
+      "languages": {
+        "auto": "Detect automatically",
+        "pt": "Portuguese",
+        "en": "English",
+        "es": "Spanish",
+        "fr": "French",
+        "de": "German",
+        "it": "Italian",
+        "ja": "Japanese",
+        "zh": "Chinese",
+        "na": "Language-agnostic"
+      },
+      "status": {
+        "errorTitle": "Could not read the voice state",
+        "loadError": "The voice status and the hardware report did not respond. Try again — the settings above keep working.",
+        "retry": "Try again"
+      },
+      "tts": {
+        "enableTitle": "Read replies aloud",
+        "enableHint": "Adds a speak button to each answer.",
+        "engineTitle": "Audio priority",
+        "engineHint": "Where the reading voice comes from. \"Voice model\" uses a configured provider when one can speak; \"Local model\" reads offline.",
+        "engineModel": "Voice model",
+        "engineLocal": "Local model",
+        "readyModel": "Reading through the voice model ({{model}}).",
+        "engineModelFallback": "The voice model is not available, so reading uses the local engine. {{reason}}",
+        "voiceTitle": "Voice",
+        "voiceHint": "Voice used for reading. F1–F5 are female, M1–M5 male.",
+        "voiceF1": "F1",
+        "voiceF2": "F2 (default)",
+        "voiceF3": "F3",
+        "voiceF4": "F4",
+        "voiceF5": "F5",
+        "voiceM1": "M1",
+        "voiceM2": "M2",
+        "voiceM3": "M3",
+        "voiceM4": "M4",
+        "voiceM5": "M5",
+        "langTitle": "Language",
+        "langHint": "Language the voice speaks.",
+        "speedTitle": "Speed",
+        "speedHint": "Reading pace.",
+        "ready": "The reading voice is ready.",
+        "downloadedNotReady": "The reading model is on disk, but the speech engine is not available in this build.",
+        "notReady": "No reading model is downloaded yet — see the models below."
+      },
+      "stt": {
+        "enableTitle": "Dictate with your voice",
+        "enableHint": "Adds a dictate button to the message field.",
+        "engineTitle": "Engine",
+        "engineHint": "How your voice is transcribed. Parakeet is usually faster.",
+        "engineParakeet": "Parakeet",
+        "engineWhisper": "whisper.cpp",
+        "enginePreferred": "{{engine}} (recommended)",
+        "engineInstalled": "Ready",
+        "enginePreparing": "Downloaded — needs setup",
+        "engineMissing": "Not ready",
+        "engineUnavailable": "Unavailable",
+        "engineReason": "Reason: {{reason}}",
+        "enginePreferHint": "Recommended for this machine: {{engine}}.",
+        "prepareNow": "Prepare now",
+        "prepareHint": "The package is on disk; the extraction and the VAD run on the first dictation.",
+        "modelTitle": "Model",
+        "modelHint": "Transcription model. Bigger models understand more, but are slower.",
+        "modelAuto": "Automatic (recommended)",
+        "modelNone": "No model available for this engine.",
+        "modelNotDownloaded": "This model is not downloaded yet.",
+        "modelInUse": "In use: {{model}}",
+        "modelInUseAuto": "In use: {{model}} (this machine's recommendation)",
+        "modelNoneSelected": "No model chosen — the engine uses this machine's recommendation.",
+        "downloadNow": "Download {{size}}",
+        "langTitle": "Language",
+        "langHint": "The language you speak.",
+        "liveTitle": "Live preview",
+        "liveHint": "Shows the text while you speak, before sending it.",
+        "preloadTitle": "Preload the model",
+        "preloadHint": "Loads the model as soon as the download finishes and frees it after a few idle minutes. The first dictation is instant, but the model takes up RAM while it is loaded.",
+        "threadsTitle": "Threads",
+        "threadsHint": "CPU threads used for transcription. More threads are faster, but leave the machine busier.",
+        "hardwareSummary": "{{platform}}/{{arch}} · {{cpus}} cores · {{memory}} GB of RAM",
+        "recommendTitle": "Recommendation",
+        "recommendPick": "{{engine}} with the {{model}} model",
+        "recommendReason": "Why: {{reason}}",
+        "recommendWarnings": "Warnings",
+        "recommendApply": "Apply recommendation"
+      },
+      "models": {
+        "empty": "No models available.",
+        "download": "Download",
+        "cancel": "Cancel",
+        "remove": "Remove",
+        "downloading": "Downloading… {{percent}}%",
+        "installed": "Downloaded",
+        "notInstalled": "Not downloaded",
+        "preparing": "Prepares on first use.",
+        "sizeUnknown": "Unknown size",
+        "failedWith": "Download failed: {{error}}",
+        "kindTts": "Text to speech",
+        "kindStt": "Speech to text"
+      }
     }
   }
 }

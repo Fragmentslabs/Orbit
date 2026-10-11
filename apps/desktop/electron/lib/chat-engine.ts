@@ -62,6 +62,7 @@ import { buildToolSet, type ImageToolHooks, type ToolContext, type TurnSnapshot 
 import { addTokenUsage, costOfUsage, toStepUsage, toTokenUsage } from './usage'
 import { engineAnnotations, stripEngineMarkers } from './todo-context'
 import { forwardChatEvent } from './companion-server'
+import { modoGlobal } from './permission/modo-global'
 
 /**
  * Motor de chat portado do processador de sessões do opencode: converte o
@@ -1395,7 +1396,9 @@ async function runChatTurn(win: BrowserWindow, input: SendMessageInput): Promise
     const mode: PermissionMode = input.options.permissionMode ?? 'ask'
     const toolApproval = supportsTools
       ? createToolApproval(
-          mode,
+          // Turno do seletor global: trocar o modo no meio da resposta vale
+          // já na próxima ferramenta. Modo explícito (plano, rotina) fica fixo.
+          input.options.followGlobalPermission ? () => modoGlobal(mode) : mode,
           input.sessionId,
           toolContext?.directory ?? null,
           assistantMessage.id,
@@ -1479,7 +1482,12 @@ async function runChatTurn(win: BrowserWindow, input: SendMessageInput): Promise
             trimmed,
             interleavedReasoningField(provider, primary.modelId),
           )
-          if (stepNumber < maxSteps) return normalized === messages ? {} : { messages: normalized }
+          // Último passo EXECUTADO é maxSteps - 1: o SDK chama o prepareStep com
+          // stepNumber = passos já concluídos e o do-while para quando
+          // steps.length === maxSteps (isStepCount usa igualdade). Com
+          // `stepNumber >= maxSteps` o guard abaixo nunca disparava — era o turno
+          // terminar numa tool call sem texto.
+          if (stepNumber < maxSteps - 1) return normalized === messages ? {} : { messages: normalized }
           return {
             activeTools: [],
             toolChoice: 'none' as const,

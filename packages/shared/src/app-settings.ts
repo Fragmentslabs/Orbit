@@ -1,4 +1,5 @@
 import type { ReasoningConfig } from './chat'
+import { VOICE_DEFAULTS, type VoiceEngineId, type VoiceSettings, type VoiceTtsEngine } from './voice'
 
 /**
  * Configurações gerais do app (Preferências → Geral e Navegador).
@@ -76,6 +77,8 @@ export interface AppSettings {
     /** Só com local = 'personalizada' */
     pasta: string | null
   }
+  /** Núcleo de voz (TTS local e ditado/STT). Ver voice.ts. */
+  voice: VoiceSettings
 }
 
 /** Largura da sidebar: 256px é o tamanho histórico (16rem), e o teto evita que
@@ -114,12 +117,68 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
     local: 'padrao',
     pasta: null,
   },
+  // Cópia própria dos padrões: o objeto do voice.ts é constante compartilhada e
+  // não pode virar o alvo de uma edição acidental da UI.
+  voice: { tts: { ...VOICE_DEFAULTS.tts }, stt: { ...VOICE_DEFAULTS.stt } },
 }
 
 export const AUTO_ARCHIVE_DAY_OPTIONS = [2, 3, 7, 14, 30, 90] as const
 export const DELETE_ARCHIVED_DAY_OPTIONS = [7, 14, 30, 90] as const
 export const MAX_TRANSIENT_RETRIES = 5
 export const MAX_AUTO_CONTINUES = 5
+
+/** Ids de voz do Supertonic 3: M1–M5 (masculinas) e F1–F5 (femininas). */
+const VOICE_ID = /^[MF][1-5]$/
+/** Código de idioma curto (`pt`, `en`, `na`); o STT também aceita `auto`. */
+const VOICE_LANG = /^[a-z]{2,8}$/
+
+/**
+ * Normaliza o bloco de voz. Os campos do Supertonic seguem o contrato do motor
+ * (voz no formato M#/F#, `speed` entre 0,5 e 2 limitado lá também), então um
+ * valor salvo fora do domínio vira o padrão em vez de derrubar a síntese.
+ */
+function voiceSettings(raw: unknown, d: VoiceSettings): VoiceSettings {
+  const v = (raw && typeof raw === 'object' ? raw : {}) as Partial<VoiceSettings>
+  const tts = (v.tts && typeof v.tts === 'object' ? v.tts : {}) as Partial<VoiceSettings['tts']>
+  const stt = (v.stt && typeof v.stt === 'object' ? v.stt : {}) as Partial<VoiceSettings['stt']>
+  const voz = typeof tts.voice === 'string' ? tts.voice.trim().toUpperCase() : ''
+  const lang = typeof tts.lang === 'string' ? tts.lang.trim().toLowerCase() : ''
+  const speed = typeof tts.speed === 'number' && Number.isFinite(tts.speed)
+    ? Math.min(2, Math.max(0.5, tts.speed))
+    : d.tts.speed
+  const language = typeof stt.language === 'string' ? stt.language.trim().toLowerCase() : ''
+  const threads = typeof stt.threads === 'number' && Number.isInteger(stt.threads) && stt.threads >= 1 && stt.threads <= 16
+    ? stt.threads
+    : d.stt.threads
+  return {
+    tts: {
+      enabled: typeof tts.enabled === 'boolean' ? tts.enabled : d.tts.enabled,
+      voice: VOICE_ID.test(voz) ? voz : d.tts.voice,
+      lang: VOICE_LANG.test(lang) ? lang : d.tts.lang,
+      speed,
+      // Prioridade de áudio: valor fora do domínio volta ao padrão ("model").
+      engine: oneOfVoiceTtsEngine(tts.engine, d.tts.engine),
+    },
+    stt: {
+      enabled: typeof stt.enabled === 'boolean' ? stt.enabled : d.stt.enabled,
+      engine: oneOfVoiceEngine(stt.engine, d.stt.engine),
+      modelId: typeof stt.modelId === 'string' && stt.modelId.trim() ? stt.modelId.trim() : null,
+      language: VOICE_LANG.test(language) ? language : d.stt.language,
+      live: typeof stt.live === 'boolean' ? stt.live : d.stt.live,
+      preload: typeof stt.preload === 'boolean' ? stt.preload : d.stt.preload,
+      threads,
+    },
+  }
+}
+
+function oneOfVoiceEngine(value: unknown, fallback: VoiceEngineId): VoiceEngineId {
+  return value === 'parakeet' || value === 'whisper' ? value : fallback
+}
+
+/** Prioridade de áudio do TTS: `model` (rota pelo modelo) ou `local`. */
+function oneOfVoiceTtsEngine(value: unknown, fallback: VoiceTtsEngine): VoiceTtsEngine {
+  return value === 'model' || value === 'local' ? value : fallback
+}
 
 /**
  * Completa um objeto parcial (versão antiga salva, ou o que veio de outro
@@ -177,5 +236,6 @@ export function normalizeAppSettings(raw: unknown): AppSettings {
       // Personalizada sem pasta escolhida não tem para onde ir: volta ao padrão.
       return local === 'personalizada' && !pasta ? { local: d.worktrees.local, pasta: null } : { local, pasta }
     })(),
+    voice: voiceSettings(value.voice, d.voice),
   }
 }

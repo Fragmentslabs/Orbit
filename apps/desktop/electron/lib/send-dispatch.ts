@@ -36,16 +36,20 @@ export async function dispatchSend(win: BrowserWindow, input: SendMessageInput):
   if (input.options.orchestrate && input.mode !== 'code') {
     input = { ...input, options: { ...input.options, orchestrate: undefined } }
   }
-  // Orquestração: desativa plano (incompatível), ativa loop e subagentes por padrão
+  // Orquestração: desativa plano (incompatível) e o Loop — na orquestra quem
+  // revisa é o orquestrador, com o orçamento das configurações da Orquestra
+  // ("Ajustes por worker"). Antes o Loop era ligado aqui e as iterações dele
+  // viravam, sem o usuário ver, o orçamento de revisão. Subagentes por padrão.
   if (input.options.orchestrate) {
     input = {
       ...input,
       options: {
         ...input.options,
         plan: undefined,
-        loop: input.options.loop !== false,
+        loop: undefined,
         subagents: input.options.subagents !== false,
       },
+      loopConfig: undefined,
     }
     void runOrchestration(win, input)
     return

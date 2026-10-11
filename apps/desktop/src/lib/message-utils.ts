@@ -128,6 +128,37 @@ export function messageBody(message: ChatMessage): string {
   return parseMessageReply(visibleMessageText(message)).body
 }
 
+/**
+ * Texto que a LEITURA EM VOZ ALTA fala: a resposta final da mensagem, e só ela.
+ *
+ * O recorte é o que a UI mostra como resposta final:
+ * - só mensagem do assistente (o prompt do usuário nunca é lido — retorna "");
+ * - só prosa do modelo (text part sem `source`), o que deixa de fora o texto
+ *   extraído de anexo (`attachment`), a legenda da visão (`vision`) e o texto
+ *   do engine (`nudge`/`todo`/`internal`);
+ * - só o ÚLTIMO bloco de texto contíguo: a prosa anterior a uma ferramenta é
+ *   narração ("pensando alto"), que o modo resumo também esconde da leitura;
+ * - nada de histórico: o recorte é sempre desta mensagem.
+ *
+ * Diferente de `messageText` (conteúdo real, para retry) e de
+ * `visibleMessageText` (o que a pessoa digitou, sem anexo).
+ */
+export function speakableText(message: ChatMessage): string {
+  if (message.role !== "assistant") return ""
+  const parts = message.parts
+  const isProse = (part: MessagePart) => part.type === "text" && part.source === undefined
+  const start = lastTextRunStart(
+    parts.map((part) => ({ kind: "part", part })),
+    true,
+  )
+  const answer = start === -1 ? parts : parts.slice(start)
+  return answer
+    .filter((part): part is TextPart => isProse(part))
+    .map((part) => part.text)
+    .join("\n")
+    .trim()
+}
+
 /** Converte anexos do PromptInput (FileUIPart, url já em data URL) em FileParts */
 export function toFileParts(files: { mediaType?: string; filename?: string; url?: string }[]): FilePart[] {
   return files

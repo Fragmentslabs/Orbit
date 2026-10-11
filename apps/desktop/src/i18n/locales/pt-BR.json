@@ -42,6 +42,10 @@
       "browser": {
         "label": "Navegador",
         "description": "O navegador integrado e o que o agente pode fazer nele"
+      },
+      "voice": {
+        "label": "Voz",
+        "description": "Leitura em voz alta, ditado e modelos de voz."
       }
     },
     "about": {
@@ -188,9 +192,12 @@
     "subagents": "Subagentes",
     "orchestra": "Orquestra",
     "loop": "Loop",
-    "configure": "Configurar"
+    "configure": "Configurar",
+    "loopOffInOrchestra": "Na orquestra quem revisa é o orquestrador — ajuste em Configurações da orquestra."
   },
   "permissions": {
+    "allowOnce": "Permitir esta vez",
+    "moreOptions": "Mais opções de permissão",
     "title": "Modo de permissões",
     "ask": "Perguntar",
     "askDescription": "Confirma ações sensíveis antes de executar",
@@ -1004,7 +1011,22 @@
     "useChatModel": "Usar o modelo do chat",
     "workerSharedHint": "O mesmo modelo dos subagentes. Sem seleção, os workers usam o modelo do chat principal.",
     "clear": "Limpar",
-    "done": "Concluir"
+    "done": "Concluir",
+    "behavior": {
+      "title": "Comportamento do orquestrador",
+      "orquestrar": "Só orquestrar",
+      "orquestrarHint": "Divide, roda os workers e escreve a resposta final. Sem revisão.",
+      "acompanhar": "Acompanhar",
+      "acompanharHint": "Revisa cada worker assim que termina, pede ajustes enquanto os outros trabalham, cria workers extras se faltar algo e revisa a integração no fim.",
+      "rigoroso": "Rigoroso",
+      "rigorosoHint": "Acompanhar + só aceita o trabalho de um worker depois de rodar as verificações do projeto (typecheck, testes, lint). Mais lento.",
+      "ajustes": "Ajustes por worker",
+      "ajustesHint": "Quantas vezes o orquestrador pode mandar um worker refazer algo. É o que mais pesa no custo: cada ajuste é um turno inteiro do worker.",
+      "menos": "Menos ajustes",
+      "mais": "Mais ajustes",
+      "worktrees": "Isolar workers em worktrees",
+      "worktreesHint": "Cada worker trabalha num branch e numa cópia próprios, e o orquestrador junta tudo no fim. Evita um worker mexer no arquivo do outro; só em repositório git."
+    }
   },
   "orchestration": {
     "runningWorkers": "Executando workers…",
@@ -1021,7 +1043,8 @@
     "reject": "Rejeitar",
     "approveRun": "Aprovar e executar",
     "approveRunWithCount_one": "Aprovar e executar ({{count}})",
-    "approveRunWithCount_other": "Aprovar e executar ({{count}})"
+    "approveRunWithCount_other": "Aprovar e executar ({{count}})",
+    "dependsOn": "Depois de: {{tarefas}}"
   },
   "planDialog": {
     "doneCount": "({{checked}}/{{total}} concluídas)",
@@ -1078,10 +1101,19 @@
     "failed": "Falha na conexão: {{error}}"
   },
   "taskProgress": {
+    "juntarDeNovo": "Juntar de novo",
     "title": "Tarefas",
     "inProgress": "{{title}} em andamento",
     "errors": "{{title}} com erros",
-    "done": "{{title}} concluídas"
+    "done": "{{title}} concluídas",
+    "ajustes": "Ajustes: {{usados}}/{{teto}}",
+    "extra": "extra",
+    "fase": {
+      "fila": "na fila",
+      "revisao": "em revisão",
+      "ajuste": "ajuste {{n}}",
+      "falhou": "falhou"
+    }
   },
   "diff": {
     "noChanges": "Nenhuma alteração encontrada",
@@ -1461,16 +1493,16 @@
         "label": "Orquestra",
         "modes": ["Código"],
         "description": "Planeja e divide o trabalho em workers persistentes — quando o pedido pede isso.",
-        "detail": "O orquestrador primeiro decide o que o pedido é: dúvida simples ele responde na hora (e pode oferecer \"quer que eu implemente?\"), ambiguidade que mudaria a divisão ele pergunta, e só trabalho de verdade vira plano. Ao planejar, ele lê o projeto por conta própria e registra as subtarefas com create_task, propondo o plano para sua aprovação. Cada tarefa aprovada vira uma sessão filha persistente, sempre em modo código na pasta de trabalho, rodando em paralelo com o modelo worker. Os modos de cada worker são escolhidos por ele conforme a necessidade da tarefa, dentro do que você ativou nesta conversa. No fim ele sintetiza tudo e revisa: se algo ficou errado, manda outra rodada para o worker responsável, dentro do chat dele. Nas mensagens seguintes ele continua enxergando os workers da conversa (de qualquer plano): lê o que cada um fez, vê o que você digitou direto num worker e pode continuar a conversa de um worker em vez de criar outro.",
-        "combo": ["Loop", "Subagentes"]
+        "detail": "O orquestrador primeiro decide o que o pedido é: dúvida simples ele responde na hora (e pode oferecer \"quer que eu implemente?\"), ambiguidade que mudaria a divisão ele pergunta, e só trabalho de verdade vira plano. Ao planejar, ele lê o projeto e registra as subtarefas, com dependências quando a ordem importa (testes depois da funcionalidade, por exemplo), e propõe o plano para sua aprovação. Cada tarefa vira uma sessão filha persistente, em modo código, rodando com o modelo worker — até 4 ao mesmo tempo. Na engrenagem você escolhe o comportamento dele depois de dividir: Só orquestrar (roda e sintetiza), Acompanhar (revisa cada worker ao terminar, olhando o diff, pede ajustes e cria workers extras, dentro do limite de ajustes por worker) ou Rigoroso (ainda roda as verificações do projeto antes de aceitar). Também dá para isolar cada worker num worktree próprio e deixar o orquestrador juntar tudo no fim. Nas mensagens seguintes ele continua enxergando os workers da conversa e pode continuar a conversa de um deles em vez de criar outro.",
+        "combo": ["Subagentes"]
       },
       {
         "id": "loop",
         "label": "Loop",
         "modes": ["Código"],
         "description": "Agente revisa e itera até completar a tarefa.",
-        "detail": "Depois de cada resposta, o resultado é revisado criticamente. Se o objetivo não foi atingido, o agente continua sozinho numa nova iteração, com o que falta descrito explicitamente. O único ajuste é o máximo de iterações (na engrenagem) — e ele é um teto, não uma meta: o loop para assim que a revisão diz que terminou. Em modo Orquestra esse mesmo número passa a valer como o total de rodadas de revisão somando todos os workers.",
-        "combo": ["Subagentes", "Orquestra", "Thinking"]
+        "detail": "Depois de cada resposta, o resultado é revisado criticamente. Se o objetivo não foi atingido, o agente continua sozinho numa nova iteração, com o que falta descrito explicitamente. O único ajuste é o máximo de iterações (na engrenagem) — e ele é um teto, não uma meta: o loop para assim que a revisão diz que terminou. Não se aplica à Orquestra: lá quem revisa é o orquestrador.",
+        "combo": ["Subagentes", "Thinking"]
       },
       {
         "id": "plan",
@@ -1509,19 +1541,9 @@
         "description": "Loop + Thinking: o agente revisa o próprio resultado com raciocínio estendido, identificando gaps e refinando até o objetivo ser atingido. Excelente para gerar código robusto, testes completos ou documentação detalhada."
       },
       {
-        "label": "Orquestração com revisão",
-        "items": ["Orquestra", "Loop"],
-        "description": "Orquestra + Loop: sem o Loop, o orquestrador tem 2 rodadas de revisão depois da síntese — o suficiente para corrigir o erro óbvio. Com o Loop ligado, o orçamento passa a ser o máximo de iterações que você configurou (padrão 5). São rodadas no TOTAL, não por worker: quem decide onde gastá-las é o orquestrador, que é o único que vê o conjunto."
-      },
-      {
         "label": "Workers em múltiplas frentes",
         "items": ["Orquestra", "Subagentes"],
         "description": "Orquestra + Subagentes: libera delegação nos dois níveis. No planejamento, o orquestrador pode acionar subagentes para pesquisar antes de dividir (sem o toggle, ele lê o projeto sozinho). E ele passa a poder dar subagentes próprios a um worker, quando a tarefa é ampla demais para um só."
-      },
-      {
-        "label": "Orquestra + Subagentes + Loop",
-        "items": ["Orquestra", "Subagentes", "Loop"],
-        "description": "Orquestra + Subagentes + Loop: a configuração mais autónoma — e a mais cara. Pesquisa delegada no planejamento, workers que podem se subdividir, e o orçamento maior de revisão do Loop. Vale para tarefas grandes de verdade; confira o custo estimado no card do plano antes de aprovar."
       },
       {
         "label": "Planejamento cuidadoso",
@@ -1665,7 +1687,8 @@
     "loading": "Carregando...",
     "close": "Fechar",
     "previous": "Anterior",
-    "next": "Próximo"
+    "next": "Próximo",
+    "back": "Voltar"
   },
   "appearance": {
     "title": "Aparência",
@@ -2337,6 +2360,132 @@
       "description": "Apaga cookies, logins e cache do navegador integrado agora.",
       "button": "Limpar",
       "done": "Limpo"
+    }
+  },
+  "voice": {
+    "tts": {
+      "speak": "Ler em voz alta",
+      "stop": "Parar",
+      "error": "Não foi possível ler esta mensagem em voz alta.",
+      "needsModel": "Baixe uma voz de leitura em Configurações → Voz.",
+      "setupModel": "Configure uma voz de leitura em Configurações → Voz."
+    },
+    "stt": {
+      "dictate": "Ditar",
+      "listening": "Ouvindo…",
+      "error": "Não foi possível transcrever o áudio.",
+      "needsModel": "Baixe um modelo de fala em Configurações → Voz.",
+      "setupModel": "Configure o ditado em Configurações → Voz."
+    },
+    "settings": {
+      "sections": {
+        "tts": "Texto em fala",
+        "ttsHint": "Lê em voz alta as respostas do assistente.",
+        "stt": "Fala em texto",
+        "sttHint": "Transforma sua voz em texto no campo de mensagem.",
+        "models": "Modelos",
+        "modelsHint": "Baixe e remova os modelos usados na leitura e na transcrição."
+      },
+      "languages": {
+        "auto": "Detectar automaticamente",
+        "pt": "Português",
+        "en": "Inglês",
+        "es": "Espanhol",
+        "fr": "Francês",
+        "de": "Alemão",
+        "it": "Italiano",
+        "ja": "Japonês",
+        "zh": "Chinês",
+        "na": "Agnóstico de idioma"
+      },
+      "status": {
+        "errorTitle": "Não foi possível ler o estado da voz",
+        "loadError": "O estado da voz e o relatório da máquina não responderam. Tente de novo — as preferências acima continuam valendo.",
+        "retry": "Tentar de novo"
+      },
+      "tts": {
+        "enableTitle": "Ler respostas em voz alta",
+        "enableHint": "Adiciona um botão de falar em cada resposta.",
+        "engineTitle": "Prioridade de áudio",
+        "engineHint": "De onde vem a voz da leitura. \"Modelo de voz\" usa um provedor configurado quando ele sabe falar; \"Modelo local\" lê offline.",
+        "engineModel": "Modelo de voz",
+        "engineLocal": "Modelo local",
+        "readyModel": "Leitura pelo modelo de voz ({{model}}).",
+        "engineModelFallback": "O modelo de voz não está disponível, então a leitura usa o motor local. {{reason}}",
+        "voiceTitle": "Voz",
+        "voiceHint": "Voz usada na leitura. F1–F5 são femininas, M1–M5 masculinas.",
+        "voiceF1": "F1",
+        "voiceF2": "F2 (padrão)",
+        "voiceF3": "F3",
+        "voiceF4": "F4",
+        "voiceF5": "F5",
+        "voiceM1": "M1",
+        "voiceM2": "M2",
+        "voiceM3": "M3",
+        "voiceM4": "M4",
+        "voiceM5": "M5",
+        "langTitle": "Idioma",
+        "langHint": "Idioma falado pela voz.",
+        "speedTitle": "Velocidade",
+        "speedHint": "Ritmo da leitura.",
+        "ready": "A voz de leitura está pronta.",
+        "downloadedNotReady": "O modelo de leitura está no disco, mas o motor de fala não está disponível nesta versão.",
+        "notReady": "Nenhum modelo de leitura baixado ainda — veja os modelos abaixo."
+      },
+      "stt": {
+        "enableTitle": "Ditar com a voz",
+        "enableHint": "Adiciona um botão de ditar no campo de mensagem.",
+        "engineTitle": "Motor",
+        "engineHint": "Como sua voz é transcrita. O Parakeet costuma ser mais rápido.",
+        "engineParakeet": "Parakeet",
+        "engineWhisper": "whisper.cpp",
+        "enginePreferred": "{{engine}} (recomendado)",
+        "engineInstalled": "Pronto",
+        "enginePreparing": "Baixado — precisa preparar",
+        "engineMissing": "Não pronto",
+        "engineUnavailable": "Indisponível",
+        "engineReason": "Motivo: {{reason}}",
+        "enginePreferHint": "Recomendado para esta máquina: {{engine}}.",
+        "prepareNow": "Preparar agora",
+        "prepareHint": "O pacote já está no disco; a extração e o VAD rodam no primeiro ditado.",
+        "modelTitle": "Modelo",
+        "modelHint": "Modelo de transcrição. Modelos maiores entendem mais, mas são mais lentos.",
+        "modelAuto": "Automático (recomendado)",
+        "modelNone": "Nenhum modelo disponível para este motor.",
+        "modelNotDownloaded": "Este modelo ainda não foi baixado.",
+        "modelInUse": "Em uso: {{model}}",
+        "modelInUseAuto": "Em uso: {{model}} (recomendação desta máquina)",
+        "modelNoneSelected": "Nenhum modelo escolhido — o motor usa a recomendação desta máquina.",
+        "downloadNow": "Baixar {{size}}",
+        "langTitle": "Idioma",
+        "langHint": "O idioma que você fala.",
+        "liveTitle": "Prévia ao vivo",
+        "liveHint": "Mostra o texto enquanto você fala, antes de enviar.",
+        "preloadTitle": "Pré-carregar o modelo",
+        "preloadHint": "Carrega o modelo assim que o download termina e o solta depois de alguns minutos sem ditado. O primeiro ditado fica instantâneo, mas o modelo ocupa RAM enquanto está carregado.",
+        "threadsTitle": "Threads",
+        "threadsHint": "Threads de CPU usadas na transcrição. Mais threads são mais rápidas, mas deixam a máquina mais ocupada.",
+        "hardwareSummary": "{{platform}}/{{arch}} · {{cpus}} núcleos · {{memory}} GB de RAM",
+        "recommendTitle": "Recomendação",
+        "recommendPick": "{{engine}} com o modelo {{model}}",
+        "recommendReason": "Motivo: {{reason}}",
+        "recommendWarnings": "Avisos",
+        "recommendApply": "Aplicar recomendação"
+      },
+      "models": {
+        "empty": "Nenhum modelo disponível.",
+        "download": "Baixar",
+        "cancel": "Cancelar",
+        "remove": "Remover",
+        "downloading": "Baixando… {{percent}}%",
+        "installed": "Baixado",
+        "notInstalled": "Não baixado",
+        "preparing": "Prepara no primeiro uso.",
+        "sizeUnknown": "Tamanho desconhecido",
+        "failedWith": "Falha no download: {{error}}",
+        "kindTts": "Texto em fala",
+        "kindStt": "Fala em texto"
+      }
     }
   }
 }

@@ -39,7 +39,13 @@ export default defineConfig({
               // @napi-rs/canvas também é externalizado: é um módulo nativo
               // (.node), impossível de bundlar, e é usado para polyfill do
               // DOMMatrix exigido pelo pdfjs-dist.
-              external: ['node-pty', 'pdf-parse', '@napi-rs/canvas'],
+              //
+              // onnxruntime-node é o runtime do TTS local: nativo (.node + a
+              // libonnxruntime), carregado pelo processo filho do motor de voz
+              // (electron/voice-engine). Fica fora do bundle pelo mesmo motivo
+              // do canvas — e porque quem o importa é o processo filho, não
+              // este bundle; externalizar garante que continue assim.
+              external: ['node-pty', 'pdf-parse', '@napi-rs/canvas', 'onnxruntime-node'],
             },
           },
         },

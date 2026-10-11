@@ -34,7 +34,7 @@ import { useReplyLabel } from "@/src/components/reply-bar"
 import { ModalityIcons } from "@/src/components/ai/modality-icons"
 import { useProviderStore } from "@/src/stores/provider-store"
 import { useSessionModelPrefs } from "@/src/stores/session-model-prefs"
-import { hostnameOf, messageText, visibleMessageText } from "@/src/lib/message-utils"
+import { hostnameOf, messageText, speakableText, visibleMessageText } from "@/src/lib/message-utils"
 import { formatDuration, formatTime } from "@/src/lib/format"
 import { useSessionStore } from "@/src/stores/session-store"
 import { usePanelStore } from "@/src/stores/panel-store"
@@ -50,6 +50,7 @@ import {
 } from "@/src/components/ai/inline-citation"
 import { MessageResponse } from "@/src/components/ai/message"
 import { MessageUsage } from "@/src/components/messages/message-usage"
+import { SpeakAction } from "@/src/components/messages/speak-action"
 import { Reasoning, ReasoningContent, ReasoningTrigger, useReasoning } from "@/src/components/ai/reasoning"
 import { Shimmer } from "@/src/components/ai/shimmer"
 
@@ -534,12 +535,15 @@ export function ReplyAction({ message, sessionId }: { message: ChatMessage; sess
   )
 }
 
-/** Barra de ações do assistente: copiar + responder + horário + tokens/custo. */
+/** Barra de ações do assistente: copiar + responder + falar + horário + tokens/custo. */
 export function AssistantMessageActions({ message, sessionId }: { message: ChatMessage; sessionId?: string }) {
   return (
     <Actions className="mt-1 items-center">
       <CopyAction text={messageText(message)} />
       <ReplyAction message={message} sessionId={sessionId} />
+      {/* A fala lê a RESPOSTA FINAL (ver speakableText), não o conteúdo todo
+          que o copiar leva — anexo, raciocínio e narração ficam de fora. */}
+      <SpeakAction text={speakableText(message)} />
       <MessageTimestamp timestamp={message.completedAt ?? message.createdAt} />
       {message.completedAt && <MessageDuration startedAt={message.createdAt} completedAt={message.completedAt} />}
       {message.tokens && <MessageUsage tokens={message.tokens} />}

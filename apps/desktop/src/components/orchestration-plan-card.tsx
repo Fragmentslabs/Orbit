@@ -123,8 +123,21 @@ export function OrchestrationPlanCard({ sessionId, plan }: {
               <TaskStatusIcon status={task.status} />
             )}
             <TaskModeIcon />
-            <span className="min-w-0 flex-1 truncate text-xs" title={task.prompt}>
-              {task.title}
+            <span className="min-w-0 flex-1" title={task.prompt}>
+              <span className="block truncate text-xs">{task.title}</span>
+              {/* Ordem que o orquestrador definiu: esta só começa depois
+                  destas serem aceitas. Desmarcar uma delas tira a dependência. */}
+              {(() => {
+                const deps = (task.dependeDe ?? [])
+                  .map((id) => plan.tasks.find((x) => x.id === id))
+                  .filter((x): x is NonNullable<typeof x> => !!x && !excluded.has(x.id))
+                if (deps.length === 0) return null
+                return (
+                  <span className="block truncate text-[10px] text-muted-foreground">
+                    {t("orchestration.dependsOn", { tarefas: deps.map((x) => x.title).join(", ") })}
+                  </span>
+                )
+              })()}
             </span>
             <TaskChips task={task} t={t} />
           </div>

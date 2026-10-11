@@ -24,7 +24,7 @@ import { discoverGitRepos } from './lib/git-repos'
 import { compactSession, getRunningSessionIds } from './lib/chat-engine'
 import { getLoopRunningSessionIds } from './lib/loop-engine'
 import { replyOrResume } from './lib/ask-resume'
-import { approvePlan, getOrchestrationRunningSessionIds, rejectPlan } from './lib/orchestrator'
+import { approvePlan, getOrchestrationRunningSessionIds, juntarDeNovo, rejectPlan } from './lib/orchestrator'
 import { authorizeMcp, initMcp, listMcpStatus, oauthRedirectUrl, readMcpConfig, reconnectMcp, saveMcpConfig } from './lib/mcp'
 import { connectNodara, disconnectNodara, discoverNodara, stopWatchingNodaraBridge, watchNodaraBridge } from './lib/nodara'
 import { connectFracta, disconnectFracta, discoverFracta, stopWatchingFractaSettings, watchFractaSettings } from './lib/fracta'
@@ -56,6 +56,7 @@ import { setSessionModelsCache, setSessionModesCache, setWorkerConfigCache, setR
 import { setRotationConfigCache } from './lib/model-rotation'
 import { readJson as readStorageJson } from './lib/storage'
 import { registerPanelWebContents } from './lib/panel-browser'
+import { registerVoiceIpc } from './lib/voice'
 import { setupMemoryScheduler } from './lib/memory/scheduler'
 import { getAppSettings, loadAppSettings, onAppSettingsChange, setAppSettings } from './lib/app-settings'
 import { applyLaunchAtLogin } from './lib/autostart'
@@ -1764,6 +1765,9 @@ app.whenReady().then(() => {
    */
   ipcMain.handle('search:sessions', (_event, query: string) => searchSessions(query))
 
+  // Núcleo de voz: TTS local (streaming) e o catálogo/status dos modelos de voz.
+  registerVoiceIpc()
+
   // Catálogo de provedores/modelos (models.dev)
   ipcMain.handle('catalog:get', () => getCatalog())
   onCatalogRefreshed(() => {
@@ -1826,6 +1830,9 @@ app.whenReady().then(() => {
   // volta para a conversa como mensagem (ver ask-resume).
   ipcMain.handle('chat:askReply', (_event, requestId: string, value: unknown) =>
     replyOrResume(win, requestId, value))
+  // "Juntar de novo": o trabalho aceito dos workers que ficou fora do chat
+  // (alteração não commitada no caminho, conflito resolvido depois).
+  ipcMain.handle('chat:juntarOrquestracao', (_event, sessionId: string) => (win ? juntarDeNovo(win, sessionId) : undefined))
   ipcMain.handle('chat:approvePlan', (_event, sessionId: string, planId: string, taskIds?: string[]) => {
     if (win) void approvePlan(win, sessionId, planId, taskIds)
   })

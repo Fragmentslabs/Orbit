@@ -75,6 +75,10 @@ export function DelegationMenuItems({ subagents, orchestra, loop, onSubagentsCha
         <DropdownMenuCheckboxItem
           checked={loop ?? false}
           onCheckedChange={(checked) => onLoopChange(checked)}
+          // Na orquestra quem revisa é o orquestrador (Configurações da
+          // Orquestra) — o Loop não se aplica.
+          disabled={orchestra}
+          title={orchestra ? t("delegation.loopOffInOrchestra") : undefined}
           className={cn(loop && "pr-14")}
         >
           <RefreshCw className="size-4" />

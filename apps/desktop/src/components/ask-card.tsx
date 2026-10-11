@@ -50,23 +50,29 @@ function PermissionBody({ ask, submitted, onReply }: {
         <Button size="sm" variant="outline" disabled={submitted} onClick={() => onReply("deny")}>
           {t("permissions.deny")}
         </Button>
-        <DropdownMenu open={open} onOpenChange={setOpen}>
-          <DropdownMenuTrigger render={<Button size="sm" disabled={submitted} />}>
-            {t("permissions.allow")}
-            <ChevronDown className="ml-1 size-3" />
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            <DropdownMenuItem onClick={() => { setOpen(false); onReply("allow") }}>
-              {t("permissions.once")}
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => { setOpen(false); onReply("always_chat") }}>
-              {t("permissions.alwaysChat")}
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => { setOpen(false); onReply("always") }}>
-              {t("permissions.always")}
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
+        {/* Botão dividido: o caso comum (só desta vez) num clique; a seta
+            abre as permissões duradouras, que pedem uma escolha consciente. */}
+        <div className="flex">
+          <Button size="sm" className="rounded-r-none" disabled={submitted} onClick={() => onReply("allow")}>
+            {t("permissions.allowOnce")}
+          </Button>
+          <DropdownMenu open={open} onOpenChange={setOpen}>
+            <DropdownMenuTrigger
+              aria-label={t("permissions.moreOptions")}
+              render={<Button size="sm" className="rounded-l-none border-l border-primary-foreground/20 px-1.5" disabled={submitted} />}
+            >
+              <ChevronDown className="size-3" />
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={() => { setOpen(false); onReply("always_chat") }}>
+                {t("permissions.alwaysChat")}
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => { setOpen(false); onReply("always") }}>
+                {t("permissions.always")}
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
       </div>
     </>
   )

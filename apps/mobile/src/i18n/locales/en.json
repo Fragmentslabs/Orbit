@@ -183,6 +183,17 @@
   "promptInput": {
     "placeholder": "Ask anything...",
     "loadingFile": "Loading file...",
+    "voice": {
+      "record": "Dictate",
+      "stop": "Stop recording",
+      "recording": "Recording… tap the microphone to stop and transcribe",
+      "permission": "Allow microphone access to dictate",
+      "unsupported": "Dictation is not available on this device",
+      "empty": "Nothing was recorded",
+      "noSpeech": "Nothing was recognized — try speaking closer to the microphone",
+      "offline": "No connection to the desktop — dictation runs there",
+      "failed": "Could not transcribe the audio"
+    },
     "modes": {
       "research": "Research",
       "browser": "Browser",
@@ -273,6 +284,7 @@
     "documentDesktopOnly": "document available on the desktop app"
   },
   "askCard": {
+    "allowOnce": "Allow this time",
     "permissionRequired": "Permission required",
     "criticalAction": "Critical action: ",
     "deny": "Deny",

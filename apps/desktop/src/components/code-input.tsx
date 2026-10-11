@@ -32,6 +32,7 @@ import { DraftInputBridge } from "@/src/components/draft-input-bridge"
 import { ChatInputDraft } from "@/src/components/chat-input-draft"
 import { ReplyBar } from "@/src/components/reply-bar"
 import { withReplyPrefix } from "@/src/stores/message-reply"
+import { DictationButton } from "@/src/components/dictation-button"
 import { PendingAttachmentSync } from "@/src/components/pending-attachment-sync"
 import { clearInputDraft } from "@/src/stores/chat-draft"
 import { QueueIndicator } from "@/src/components/queue-indicator"
@@ -178,10 +179,13 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId, on
     brain,
     brainContext: brainContext === "all" ? true : brainContext === "memory" ? brain : false,
     permissionMode,
+    // Modo vindo do seletor: trocar no meio da resposta vale na hora.
+    followGlobalPermission: true,
     reasoning: { enabled: thinking, variantId },
     subagents,
     orchestrate: orchestra && mode === "code" ? {} : undefined,
-    loop,
+    // Na orquestra o Loop não vale (quem revisa é o orquestrador)
+    loop: orchestra && mode === "code" ? undefined : loop,
   }), [plan, search, simple, brain, brainContext, permissionMode, thinking, variantId, subagents, orchestra, loop, mode])
 
   const getDirs = useCallback(() => {
@@ -332,7 +336,10 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId, on
       }) },
       ...(mode === "code" && !isWorker ? [{ id: "orchestra", label: t("codeInput.slash.orchestraLabel"), description: t("codeInput.slash.orchestraDescription"), keywords: ["workers", "plano"], group: "Modos" as const, active: orchestra, run: toggle(() => {
         setModeActive("orchestra", sessionId, !orchestra)
-        if (!orchestra) maybePromptWorkerConfig("orchestra")
+        if (!orchestra) {
+          setLoop(false)
+          maybePromptWorkerConfig("orchestra")
+        }
       }) }] : []),
       permission("ask", t("codeInput.slash.permAsk"), t("codeInput.slash.permAskDescription")),
       permission("approve", t("codeInput.slash.permApprove"), t("codeInput.slash.permApproveDescription")),
@@ -416,14 +423,19 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId, on
             onProviderBlocked?.()
           } : undefined}
           onSubmit={handleSubmit}
-          className="rounded-xl border-2 border-sidebar-border [&>div]:!rounded-[calc(var(--radius-xl)-2px)] [&>div]:!border-none [&>div]:!bg-transparent"
+          className="relative rounded-xl border-2 border-sidebar-border [&>div]:!rounded-[calc(var(--radius-xl)-2px)] [&>div]:!border-none [&>div]:!bg-transparent"
         >
           <ReplyBar replyKey={replyKey} />
+          {/* Microfone no canto SUPERIOR direito, no nível da primeira linha do
+              texto — a mesma posição do input do chat. */}
+          <div className="absolute right-2 top-2 z-10 flex items-center">
+            <DictationButton sessionId={sessionId} />
+          </div>
           <PromptInputBody>
             <PromptInputTextarea
               placeholder={folders.length === 0 ? t("codeInput.placeholderNoFolder") : t("codeInput.placeholder")}
               suggestion={suggestion}
-              className="px-3 text-base md:text-base"
+              className="px-3 pr-10 text-base md:text-base"
             />
           </PromptInputBody>
           <PromptInputFooter>
@@ -451,6 +463,7 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId, on
                       setModeActive("orchestra", sessionId, v)
                       if (v) {
                         setModeActive("subagents", sessionId, false)
+                        setLoop(false)
                         // Aviso da primeira vez (só na 1ª ativação sem worker)
                         maybePromptWorkerConfig("orchestra")
                       }
@@ -586,6 +599,7 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId, on
                 setModeActive("orchestra", sessionId, next)
                 if (next) {
                   setModeActive("subagents", sessionId, false)
+                  setLoop(false)
                   // Aviso da primeira vez (só na 1ª ativação sem worker)
                   maybePromptWorkerConfig("orchestra")
                 }
@@ -597,8 +611,9 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId, on
             <ModeToggle
               icon={RefreshCw}
               label={t("codeInput.modes.loop.label")}
-              description={t("codeInput.modes.loop.description")}
-              active={loop}
+              description={orchestra ? t("delegation.loopOffInOrchestra") : t("codeInput.modes.loop.description")}
+              active={loop && !orchestra}
+              disabled={orchestra}
               onToggle={() => setLoop((v) => !v)}
               iconOnly={modeLabelStyle === "icon"}
             />

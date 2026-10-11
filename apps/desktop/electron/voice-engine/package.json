@@ -1,0 +1,7 @@
+{
+  "name": "orbit-voice-engine",
+  "private": true,
+  "version": "0.0.0",
+  "description": "Motor de TTS do Orbit (Supertonic 3 + ONNX Runtime) rodando como processo filho do main",
+  "type": "module"
+}

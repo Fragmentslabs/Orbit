@@ -183,6 +183,17 @@
   "promptInput": {
     "placeholder": "Pergunte qualquer coisa...",
     "loadingFile": "Carregando arquivo...",
+    "voice": {
+      "record": "Ditar",
+      "stop": "Parar de gravar",
+      "recording": "Gravando… toque no microfone para parar e transcrever",
+      "permission": "Permita o acesso ao microfone para ditar",
+      "unsupported": "Ditado indisponível neste aparelho",
+      "empty": "Nada foi gravado",
+      "noSpeech": "Nada foi reconhecido — tente falar mais perto do microfone",
+      "offline": "Sem conexão com o desktop — o ditado roda lá",
+      "failed": "Falha ao transcrever o áudio"
+    },
     "modes": {
       "research": "Pesquisa",
       "browser": "Browser",
@@ -273,6 +284,7 @@
     "documentDesktopOnly": "documento disponível no app desktop"
   },
   "askCard": {
+    "allowOnce": "Permitir esta vez",
     "permissionRequired": "Permissão necessária",
     "criticalAction": "Ação crítica: ",
     "deny": "Negar",

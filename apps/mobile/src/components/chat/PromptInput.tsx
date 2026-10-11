@@ -12,6 +12,8 @@ import {
   Settings2,
   RefreshCw,
   Eye,
+  Mic,
+  X,
 } from 'lucide-react-native'
 import {  } from 'expo-image'
 import { useTranslation } from 'react-i18next'
@@ -28,6 +30,7 @@ import { InputAttachment } from './Attachment'
 import { ConfigSheet } from './ConfigSheet'
 import { SlashPalette } from './SlashPalette'
 import { useSlashCommands } from '~/hooks/useSlashCommands'
+import { useDictation } from '~/hooks/useDictation'
 import { useConnectionStore } from '~/stores/connection-store'
 import { uriToFilePart } from '~/lib/attachments'
 import { useWorkspaceStore } from '~/stores/workspace-store'
@@ -248,6 +251,15 @@ export function PromptInput({
   }, [pendingDraft, sessionId])
 
   const inputRef = useRef<TextInput>(null)
+
+  // Ditado: grava no aparelho (PCM16 mono 16 kHz) e pede a transcrição ao
+  // desktop (o celular não roda modelo de voz). O texto volta para o input
+  // como se tivesse sido digitado, respeitando o rascunho por chat.
+  const insertDictation = useCallback((dictated: string) => {
+    setText((prev) => (prev.trim() ? `${prev.trimEnd()} ${dictated}` : dictated))
+    inputRef.current?.focus()
+  }, [])
+  const dictation = useDictation(insertDictation)
 
   // Workers: aviso da primeira vez — abre só na 1ª ativação sem worker
   // configurado ("usar o mesmo modelo" é válido); depois nunca mais.
@@ -580,6 +592,28 @@ export function PromptInput({
         {/* Mensagem respondida — citação acima do campo, como no WhatsApp */}
         <ReplyBar sessionId={sessionId} />
 
+        {/* Ditado: gravando agora */}
+        {dictation.recording && (
+          <View className="flex-row items-center gap-2 py-1 mb-1"
+            style={{ borderBottomWidth: 1, borderBottomColor: tokens.border }}
+          >
+            <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: tokens.destructive }} />
+            <Text className="text-xs" style={{ color: tokens.mutedForeground }}>{t('promptInput.voice.recording')}</Text>
+          </View>
+        )}
+
+        {/* Ditado: erro visível (permissão, offline, motor de voz indisponível) */}
+        {dictation.error && (
+          <View className="flex-row items-center gap-2 py-1 mb-1"
+            style={{ borderBottomWidth: 1, borderBottomColor: tokens.border }}
+          >
+            <Text className="text-xs flex-1" style={{ color: tokens.destructive }}>{dictation.error}</Text>
+            <TouchableOpacity onPress={dictation.clearError} activeOpacity={0.7}>
+              <X size={14} color={tokens.mutedForeground} />
+            </TouchableOpacity>
+          </View>
+        )}
+
         {/* Text Area Input */}
         <View className="flex-row items-end">
           <TextInput
@@ -619,6 +653,18 @@ export function PromptInput({
               className="p-1.5 rounded-md cursor-pointer"
             >
               <Settings2 size={18} color={tokens.mutedForeground} />
+            </TouchableOpacity>
+            {/* Ditado: toque para gravar, toque de novo para parar e transcrever */}
+            <TouchableOpacity
+              onPress={dictation.toggle}
+              disabled={disabled || dictation.transcribing}
+              activeOpacity={0.7}
+              className="p-1.5 rounded-md cursor-pointer"
+              accessibilityLabel={dictation.recording ? t('promptInput.voice.stop') : t('promptInput.voice.record')}
+            >
+              {dictation.transcribing
+                ? <ActivityIndicator size="small" color={tokens.mutedForeground} />
+                : <Mic size={20} color={dictation.recording ? tokens.destructive : tokens.mutedForeground} />}
             </TouchableOpacity>
           </View>
 

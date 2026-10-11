@@ -1,8 +1,11 @@
 import { useState } from "react"
 import { useTranslation } from "react-i18next"
-import { BrainIcon, ChevronDownIcon } from "lucide-react"
-import type { ReasoningConfig } from "@shared/chat"
+import { BrainIcon, ChevronDownIcon, MinusIcon, PlusIcon } from "lucide-react"
+import type { OrchestrationSettings, ReasoningConfig } from "@shared/chat"
+import { MAX_AJUSTES_POR_WORKER } from "@shared/chat"
 import { Button } from "@/components/ui/button"
+import { Switch } from "@/components/ui/switch"
+import { cn } from "@/lib/utils"
 import {
   Dialog,
   DialogContent,
@@ -132,7 +135,7 @@ export function OrchestrationConfigDialog({ kind, onOpenChange }: {
 
   return (
     <Dialog open={kind !== null} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-sm" showCloseButton={false}>
+      <DialogContent className={orchestra ? "sm:max-w-md" : "sm:max-w-sm"} showCloseButton={false}>
         <DialogHeader>
           <DialogTitle>{orchestra ? t("orchestrationConfig.titleOrchestra") : t("orchestrationConfig.titleSubagents")}</DialogTitle>
         </DialogHeader>
@@ -161,6 +164,7 @@ export function OrchestrationConfigDialog({ kind, onOpenChange }: {
             onModelChange={setWorkerModel}
             onReasoningChange={setWorkerReasoning}
           />
+          {orchestra && <BehaviorSection />}
         </div>
 
         <DialogFooter>
@@ -173,5 +177,82 @@ export function OrchestrationConfigDialog({ kind, onOpenChange }: {
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  )
+}
+
+/**
+ * Como o orquestrador se comporta depois de dividir o trabalho. Vale para os
+ * próximos planos aprovados — um plano em andamento segue a configuração com
+ * que foi aprovado.
+ */
+function BehaviorSection() {
+  const { t } = useTranslation()
+  const settings = useProviderStore((s) => s.orchestrationSettings)
+  const update = useProviderStore((s) => s.setOrchestrationSettings)
+  const opcoes: Array<{ id: OrchestrationSettings["comportamento"]; label: string; hint: string }> = [
+    { id: "orquestrar", label: t("orchestrationConfig.behavior.orquestrar"), hint: t("orchestrationConfig.behavior.orquestrarHint") },
+    { id: "acompanhar", label: t("orchestrationConfig.behavior.acompanhar"), hint: t("orchestrationConfig.behavior.acompanharHint") },
+    { id: "rigoroso", label: t("orchestrationConfig.behavior.rigoroso"), hint: t("orchestrationConfig.behavior.rigorosoHint") },
+  ]
+  const revisa = settings.comportamento !== "orquestrar"
+
+  return (
+    <div className="flex flex-col gap-3 border-t pt-3">
+      <div className="flex flex-col gap-1.5">
+        <span className="text-xs font-medium">{t("orchestrationConfig.behavior.title")}</span>
+        {opcoes.map((o) => (
+          <button
+            key={o.id}
+            type="button"
+            onClick={() => update({ comportamento: o.id })}
+            className={cn(
+              "flex flex-col items-start rounded-md border px-2.5 py-1.5 text-left transition-colors",
+              settings.comportamento === o.id ? "border-primary/50 bg-primary/10" : "hover:bg-accent/50",
+            )}
+          >
+            <span className="text-xs font-medium">{o.label}</span>
+            <span className="text-[11px] leading-tight text-muted-foreground">{o.hint}</span>
+          </button>
+        ))}
+      </div>
+
+      <div className={cn("flex items-center gap-3", !revisa && "opacity-50")}>
+        <div className="min-w-0 flex-1">
+          <p className="text-xs font-medium">{t("orchestrationConfig.behavior.ajustes")}</p>
+          <p className="text-[11px] leading-tight text-muted-foreground">{t("orchestrationConfig.behavior.ajustesHint")}</p>
+        </div>
+        <div className="flex items-center gap-1">
+          <Button
+            variant="outline"
+            size="icon-sm"
+            className="size-6"
+            disabled={!revisa || settings.ajustesPorWorker <= 0}
+            onClick={() => update({ ajustesPorWorker: settings.ajustesPorWorker - 1 })}
+            aria-label={t("orchestrationConfig.behavior.menos")}
+          >
+            <MinusIcon className="size-3" />
+          </Button>
+          <span className="w-5 text-center text-xs tabular-nums">{settings.ajustesPorWorker}</span>
+          <Button
+            variant="outline"
+            size="icon-sm"
+            className="size-6"
+            disabled={!revisa || settings.ajustesPorWorker >= MAX_AJUSTES_POR_WORKER}
+            onClick={() => update({ ajustesPorWorker: settings.ajustesPorWorker + 1 })}
+            aria-label={t("orchestrationConfig.behavior.mais")}
+          >
+            <PlusIcon className="size-3" />
+          </Button>
+        </div>
+      </div>
+
+      <label className="flex cursor-pointer items-start gap-3">
+        <div className="min-w-0 flex-1">
+          <p className="text-xs font-medium">{t("orchestrationConfig.behavior.worktrees")}</p>
+          <p className="text-[11px] leading-tight text-muted-foreground">{t("orchestrationConfig.behavior.worktreesHint")}</p>
+        </div>
+        <Switch checked={settings.worktrees} onCheckedChange={(v) => update({ worktrees: v })} />
+      </label>
+    </div>
   )
 }

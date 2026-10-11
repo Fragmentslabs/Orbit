@@ -59,7 +59,7 @@ function apply(prefs: AppPreferences) {
     modes.setAutoCreateFolders(prefs.autoCreateFolders)
   }
   if (prefs.permissionMode && prefs.permissionMode !== usePermissionPrefs.getState().mode) {
-    usePermissionPrefs.getState().setMode(prefs.permissionMode)
+    usePermissionPrefs.getState().applyRemoteMode(prefs.permissionMode)
   }
 }
 
