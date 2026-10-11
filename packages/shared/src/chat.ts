@@ -251,6 +251,92 @@ export interface DocumentQuotePayload {
   text: string
 }
 
+/**
+ * Mensagem respondida ("responder", como no WhatsApp).
+ *
+ * Diferente da citação de documento (DOCUMENT_QUOTE_MIME), que viaja como
+ * anexo, aqui o trecho citado entra no TEXTO da mensagem enviada, como uma
+ * citação de Markdown (`> …`) com um marcador de quem escreveu:
+ *
+ *     > [assistant] primeira linha do trecho
+ *     > segunda linha
+ *
+ *     resposta do usuário
+ *
+ * O motivo de ir no texto, e não num anexo: a resposta é sobre a conversa em
+ * si — ela precisa aparecer na bolha, no histórico gravado e na cópia da
+ * mensagem, que são justamente as coisas que um anexo não alcança. O
+ * marcador é `[user]`/`[assistant]`, e não o rótulo traduzido, porque o
+ * idioma da interface muda e o texto gravado não pode mudar junto.
+ */
+export interface MessageReplyQuote {
+  role: "user" | "assistant"
+  /** O trecho citado, já recortado por quem cria a resposta. */
+  text: string
+}
+
+/** Teto do trecho citado. A mensagem inteira já está no histórico do modelo —
+ *  o que a citação precisa é APONTAR para ela, não repeti-la por completo em
+ *  toda mensagem seguinte da conversa. */
+export const MESSAGE_REPLY_MAX_CHARS = 1200
+
+const REPLY_HEADER = /^\[(user|assistant)\]\s?/
+
+/** Recorta o trecho que vira resposta. */
+export function replyExcerpt(text: string, max: number = MESSAGE_REPLY_MAX_CHARS): string {
+  const trimmed = text.trim()
+  return trimmed.length > max ? `${trimmed.slice(0, max)}…` : trimmed
+}
+
+/** O trecho como citação de Markdown. Linhas vazias viram `>` para a citação
+ *  não ser cortada em duas no meio. */
+export function formatMessageReply(reply: MessageReplyQuote): string {
+  const [first = "", ...rest] = reply.text.split("\n")
+  return [
+    `> [${reply.role}] ${first}`,
+    ...rest.map((line) => (line.trim() === "" ? ">" : `> ${line}`)),
+  ].join("\n")
+}
+
+/** O que se prepende no texto enviado (com a linha em branco que separa a
+ *  citação da resposta). */
+export function messageReplyPrefix(reply: MessageReplyQuote | null | undefined): string {
+  if (!reply) return ""
+  return `${formatMessageReply(reply)}\n\n`
+}
+
+/**
+ * Separa a citação do corpo da mensagem.
+ *
+ * Texto que não abre com `>` — ou cujo bloco citado não traz o marcador — não
+ * tem resposta: devolve o texto intacto e `reply: null`. É o caso do usuário
+ * que escreveu uma citação por conta própria.
+ */
+export function parseMessageReply(text: string): { reply: MessageReplyQuote | null; body: string } {
+  const lines = text.split("\n")
+  if (!lines[0]?.startsWith(">")) return { reply: null, body: text }
+
+  let end = 0
+  while (end < lines.length && lines[end].startsWith(">")) end++
+  const quoted = lines.slice(0, end).map((line) => line.replace(/^>\s?/, ""))
+  const header = quoted[0]?.match(REPLY_HEADER)
+  if (!header) return { reply: null, body: text }
+
+  const quotedText = [quoted[0].slice(header[0].length), ...quoted.slice(1)].join("\n").trim()
+  let bodyStart = end
+  while (bodyStart < lines.length && lines[bodyStart].trim() === "") bodyStart++
+  return {
+    reply: { role: header[1] as MessageReplyQuote["role"], text: quotedText },
+    body: lines.slice(bodyStart).join("\n"),
+  }
+}
+
+/** O trecho numa linha só, para a prévia (barra do compositor, bolha). */
+export function replySnippet(text: string, max = 140): string {
+  const oneLine = text.replace(/\s+/g, " ").trim()
+  return oneLine.length > max ? `${oneLine.slice(0, max)}…` : oneLine
+}
+
 /** Agente do pipeline /init exibido como acordeon (estilo thinking): o
  * principal narra a revisão; cada worker mostra sua exploração em streaming. */
 export interface AgentPart {

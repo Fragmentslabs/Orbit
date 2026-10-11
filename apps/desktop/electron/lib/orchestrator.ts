@@ -79,6 +79,34 @@ const PROMISED_PLAN_RE =
   /\b(create_task|vou (dividir|criar|planejar)|dividir em (tarefas|workers)|criar (as )?tarefas|I(’|')?ll (split|create|plan)|going to (split|create)|split .{0,20}into (tasks|workers))\b/i
 /** Resposta do retry que diz "a primeira resposta já estava certa". */
 const NO_PLAN_SENTINEL = '<<NO_PLAN>>'
+/**
+ * Teto DURO de leituras diretas (read/ls/glob/grep/subagent) numa passada de
+ * planejamento. O prompt manda o orquestrador ler o projeto sozinho; sem teto,
+ * o reconhecimento de um repo grande consome o orçamento inteiro, a passada
+ * termina numa tool call de leitura — sem texto e sem create_task — e o usuário
+ * via só os cards de ferramenta: o orquestrador "parava no meio, sem responder".
+ */
+const PLAN_READ_MAX_CALLS = 8
+/** Devolvido no lugar do resultado quando o orçamento de leitura acabou. */
+const PLAN_READ_BUDGET_NOTICE =
+  'Planning read budget exhausted. Stop researching: register the tasks you already have with create_task, or answer in plain text saying what you still need.'
+/**
+ * Último passo da passada de planejamento: tools desligadas e resposta em TEXTO
+ * forçada. É o mesmo guard do chat-engine (mesma ideia do max-steps.ts do
+ * opencode): em vez de cortar a stream no meio de uma tool call, o modelo é
+ * obrigado a dizer o que tem. Sem isso a passada terminava numa tool call, com
+ * text vazio, e o turno acabava sem bolha nenhuma.
+ */
+const PLAN_MAX_STEPS_PROMPT = `MAXIMUM STEPS REACHED while planning. Tools are now disabled — respond with text ONLY.
+
+Your response must:
+- State that the planning step limit was reached
+- Summarize what you learned about the project so far
+- Say plainly whether the request needs to be split, and that you did NOT register the tasks if that is the case
+- Suggest what to do next (the user can say "continue" to resume)`
+/** Última rede: nenhuma bolha de assistente termina sem texto. */
+const PLAN_EMPTY_FALLBACK =
+  'O orçamento de passos do planejamento acabou antes de eu conseguir responder e não registrei nenhuma tarefa. Diga "continue" que eu retomo de onde parei — ou me diga se prefere que eu divida o trabalho em tarefas.'
 
 interface PendingOrchestration {
   input: SendMessageInput
@@ -299,6 +327,25 @@ async function runOrchestrationTurn(win: BrowserWindow, input: SendMessageInput)
       vision: Boolean(input.visionModel),
       subagents: input.options.subagents === true,
     }
+    // Orçamento de leitura das passadas de planejamento. Fica fora do
+    // runPlanningPass porque as tools são criadas uma vez e reusadas pela
+    // cutucada; cada passada zera o contador no início.
+    let planReadCalls = 0
+    // Envolve uma tool de leitura para que ela pare de EXECUTAR quando o
+    // orçamento acaba: o modelo recebe um aviso no lugar do resultado e decide
+    // registrar o plano, em vez de a passada morrer sem texto.
+    const capReadTool = (readTool: ToolSet[string]): ToolSet[string] => {
+      const run = readTool.execute
+      if (!run) return readTool
+      return {
+        ...readTool,
+        execute: async (callInput: never, callOptions: never) => {
+          if (planReadCalls >= PLAN_READ_MAX_CALLS) return PLAN_READ_BUDGET_NOTICE
+          planReadCalls++
+          return run(callInput, callOptions)
+        },
+      } as ToolSet[string]
+    }
     const planTools: ToolSet = {
       create_task: createTaskTool(
         (task) => {
@@ -328,15 +375,17 @@ async function runOrchestrationTurn(win: BrowserWindow, input: SendMessageInput)
     // arquivo, então a única forma de olhar o código era gastar um subagente
     // inteiro — daí a enxurrada de chamadas. Ler não é delegar: continua
     // disponível mesmo com o modo Subagentes desligado.
-    planTools.read = createReadTool(planCtx)
-    planTools.ls = createListTool(planCtx)
-    planTools.glob = createGlobTool(planCtx)
-    planTools.grep = createGrepTool(planCtx)
+    planTools.read = capReadTool(createReadTool(planCtx))
+    planTools.ls = capReadTool(createListTool(planCtx))
+    planTools.glob = capReadTool(createGlobTool(planCtx))
+    planTools.grep = capReadTool(createGrepTool(planCtx))
     // Delegar pesquisa a outro modelo é o que o modo Subagentes controla no
     // resto do app (allowDelegation em tools/index) — a orquestração era a
     // única exceção. Agora segue a mesma regra.
     if (ceiling.subagents) {
-      planTools.subagent = createSubagentTool(input, planCtx, PLAN_SUBAGENT_MAX_STEPS, PLAN_SUBAGENT_MAX_CALLS)
+      planTools.subagent = capReadTool(
+        createSubagentTool(input, planCtx, PLAN_SUBAGENT_MAX_STEPS, PLAN_SUBAGENT_MAX_CALLS),
+      )
     }
 
     // O teto entra no prompt: sem isso o modelo pede research/browser e só
@@ -363,6 +412,39 @@ async function runOrchestrationTurn(win: BrowserWindow, input: SendMessageInput)
     // raciocínio, tool-calls) para a UI mostrar o orquestrador trabalhando —
     // pesquisando com subagent e planejando — em vez de um "Analisando" mudo.
     const runPlanningPass = async (messages: ModelMessage[]) => {
+      // Cada passada tem o PRÓPRIO orçamento de leitura: a cutucada reusa as
+      // mesmas tools, mas não herda o que a primeira já gastou.
+      planReadCalls = 0
+      const reasoningStep = reasoningPrepareStep(provider, primary.modelId)
+      let lastStepNumber = 0
+      let sawFinish = false
+      // Guard do último passo. O SDK chama o prepareStep com stepNumber = passos
+      // JÁ concluídos (o do-while roda com steps.length 0..PLAN_MAX_STEPS-1 e
+      // para quando steps.length === PLAN_MAX_STEPS), então o último passo
+      // executado é PLAN_MAX_STEPS - 1 — em `>= PLAN_MAX_STEPS` o guard nunca
+      // dispararia.
+      const prepareStep = ({
+        stepNumber,
+        messages: stepMessages,
+      }: {
+        stepNumber: number
+        messages: ModelMessage[]
+      }) => {
+        lastStepNumber = Math.max(lastStepNumber, stepNumber)
+        const base = reasoningStep({ messages: stepMessages })
+        const normalized = 'messages' in base && base.messages ? base.messages : stepMessages
+        if (stepNumber >= PLAN_MAX_STEPS - 1) {
+          // Sem tools e com resposta em texto obrigatória: em vez de terminar a
+          // passada numa tool call (text vazio, plano vazio, turno sem
+          // resposta), o modelo diz o que tem.
+          return {
+            activeTools: [],
+            toolChoice: 'none' as const,
+            messages: [...normalized, { role: 'user' as const, content: PLAN_MAX_STEPS_PROMPT }],
+          }
+        }
+        return base
+      }
       const stream = streamText({
         model,
         system: ORCHESTRATOR_PLAN_PROMPT + contextNote,
@@ -371,7 +453,7 @@ async function runOrchestrationTurn(win: BrowserWindow, input: SendMessageInput)
         stopWhen: stepCountIs(PLAN_MAX_STEPS),
         abortSignal: controller.signal,
         providerOptions,
-        prepareStep: reasoningPrepareStep(provider, primary.modelId),
+        prepareStep,
         onError: () => { /* tratado no loop do fullStream */ },
       })
       let text = ''
@@ -442,38 +524,60 @@ async function runOrchestrationTurn(win: BrowserWindow, input: SendMessageInput)
             })
             break
           }
+          case 'finish':
+            sawFinish = true
+            break
           case 'error':
             throw part.error instanceof Error ? part.error : new Error(errorToText(part.error))
         }
       }
-      return { text: text.trim(), usage: await stream.usage }
+      const hitCeiling = lastStepNumber >= PLAN_MAX_STEPS - 1
+      return {
+        text: text.trim(),
+        usage: await stream.usage,
+        // Estourou o orçamento de passos (o último passo foi forçado a texto) —
+        // o plano pode ter ficado pela metade.
+        hitCeiling,
+        // Stream encerrada sem `finish` (provedor/gateway que corta a conexão):
+        // sem isso o turno parecia concluído normalmente. É o mesmo diagnóstico
+        // do chat-engine.
+        lostFinish: !sawFinish && !controller.signal.aborted,
+      }
     }
 
     const firstPass = await runPlanningPass(baseMessages)
     let planUsage = toTokenUsage(firstPass.usage, cost)
+    let planTruncated = firstPass.hitCeiling || firstPass.lostFinish
 
     // Rede de segurança: o orquestrador às vezes narra "vou dividir em tarefas"
     // e para sem chamar create_task (plano vazio). Damos UMA cutucada explícita
     // antes de desistir e tratar como resposta trivial.
     //
-    // Só cutuca quando ele REALMENTE prometeu um plano. Responder sem tarefas
-    // agora é resultado legítimo — é o caminho 1 do prompt (pergunta simples,
-    // ou oferta de "quer que eu implemente?"). Cutucar isso transformaria toda
-    // conversa em plano, que é exatamente o que estamos consertando.
-    // Quem continuou a conversa de um worker já agiu — não é plano vazio.
-    if (tasks.length === 0 && workersMessaged === 0 && firstPass.text && PROMISED_PLAN_RE.test(firstPass.text)) {
+    // Só cutuca quando ele REALMENTE prometeu um plano, OU quando a passada
+    // estourou o orçamento sem produzir texto nenhum (o caso mais comum: gastar
+    // os passos lendo o projeto e terminar numa tool call). Responder sem
+    // tarefas agora é resultado legítimo — é o caminho 1 do prompt (pergunta
+    // simples, ou oferta de "quer que eu implemente?"). Cutucar isso
+    // transformaria toda conversa em plano, que é exatamente o que estamos
+    // consertando. Quem continuou a conversa de um worker já agiu — não é plano
+    // vazio.
+    const promisedPlan = Boolean(firstPass.text) && PROMISED_PLAN_RE.test(firstPass.text)
+    const silentOverrun = !firstPass.text && firstPass.hitCeiling
+    if (tasks.length === 0 && workersMessaged === 0 && (promisedPlan || silentOverrun)) {
       const firstPassIds = new Set(assistantMessage.parts.map((p) => p.id))
-      const nudgeMessages: ModelMessage[] = [
-        ...baseMessages,
-        { role: 'assistant', content: firstPass.text },
-        {
-          role: 'user',
-          content:
-            `[Engine check, not the user] Your reply mentioned splitting the work but no task was registered. If the request needs to be split, call create_task NOW for each subtask. If your previous reply was already the right answer (a question answered, or work only offered), reply with exactly ${NO_PLAN_SENTINEL} and nothing else. Otherwise, answer directly without promising a plan.`,
-        },
-      ]
+      const nudgeMessages: ModelMessage[] = [...baseMessages]
+      // Sem texto na primeira passada não há resposta de assistente para
+      // reenviar — o nudge vai só como mensagem de engine.
+      if (firstPass.text) nudgeMessages.push({ role: 'assistant', content: firstPass.text })
+      nudgeMessages.push({
+        role: 'user',
+        content: silentOverrun
+          ? `[Engine check, not the user] You spent the whole planning budget (${PLAN_MAX_STEPS} steps) researching and produced NO reply and NO task. Do not promise anything. Either call create_task NOW, one per subtask, or answer in plain text with what you already have.`
+          : `[Engine check, not the user] Your reply mentioned splitting the work but no task was registered. If the request needs to be split, call create_task NOW for each subtask. If your previous reply was already the right answer (a question answered, or work only offered), reply with exactly ${NO_PLAN_SENTINEL} and nothing else. Otherwise, answer directly without promising a plan.`,
+      })
       const retry = await runPlanningPass(nudgeMessages)
       planUsage = addTokenUsage(planUsage, toTokenUsage(retry.usage, cost))
+      planTruncated = planTruncated || retry.hitCeiling || retry.lostFinish
       if (tasks.length === 0) {
         if (retry.text.includes(NO_PLAN_SENTINEL) || !retry.text) {
           // Falso positivo da regex: a primeira resposta vale. Descarta tudo
@@ -487,6 +591,25 @@ async function runOrchestrationTurn(win: BrowserWindow, input: SendMessageInput)
         }
       }
     }
+
+    // Backstop: bolha de assistente sem NENHUM texto não é resposta. Se a
+    // passada (e a cutucada) morreram sem texto — orçamento gasto em leitura,
+    // provedor que encerrou a stream sem `finish` — escrevemos o que aconteceu
+    // em vez de entregar os cards de ferramenta e mais nada, que é como o
+    // orquestrador "parava no meio, sem responder" para o usuário.
+    const hasText = assistantMessage.parts.some((p) => p.type === 'text' && p.text.trim().length > 0)
+    if (tasks.length === 0 && !hasText) {
+      upsertPart(win, sessionId, assistantMessage, {
+        id: newId('prt'),
+        type: 'text',
+        text: PLAN_EMPTY_FALLBACK,
+        state: 'done',
+      })
+      planTruncated = true
+    }
+    // Estouro sem plano: marca a mensagem para o próximo turno receber o
+    // lembrete de continuação (mesmo tratamento do chat-engine).
+    if (tasks.length === 0 && planTruncated) assistantMessage.truncated = true
 
     await saveMessages(sessionId, history)
 

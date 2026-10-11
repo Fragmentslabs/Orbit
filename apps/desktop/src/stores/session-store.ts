@@ -17,7 +17,7 @@ import type {
 } from "@shared/chat"
 // normalizeFolderName/folderKey vivem no shared: o mobile agrupa chats por
 // projeto do mesmo jeito e precisa da MESMA regra de nome.
-import { folderKey, normalizeFolderName, StorageKeys } from "@shared/chat"
+import { folderKey, normalizeFolderName, parseMessageReply, StorageKeys } from "@shared/chat"
 import { planArchivedCleanup, setArchivedState } from "@shared/archive"
 import { planAutoFolder } from "@/src/lib/auto-folder"
 import {
@@ -32,6 +32,7 @@ import { useBrainPrefs } from "@/src/stores/brain-prefs"
 import { useSimplePrefs } from "@/src/stores/simple-prefs"
 import { modeActiveFor, useModeOverrides } from "@/src/stores/mode-overrides"
 import { useDraftInput } from "@/src/stores/draft-input"
+import { useMessageReply } from "@/src/stores/message-reply"
 import { useMessageQueueStore } from "@/src/stores/message-queue-store"
 import { useModelModePrefs } from "@/src/stores/model-mode-prefs"
 import { useProviderStore } from "@/src/stores/provider-store"
@@ -1044,6 +1045,8 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       useSimplePrefs.getState().adopt(sessionId)
       useModeOverrides.getState().adopt(sessionId)
       useDraftInput.getState().adopt(sessionId)
+      // A mensagem respondida no chat novo (chave "draft") vira da sessão
+      useMessageReply.getState().adopt(sessionId)
       // Fontes anexadas na aba ANTES de existir sessão. É aguardado, e não
       // disparado em paralelo: o turno começa logo abaixo, e o agente precisa
       // encontrar os documentos já no escopo da sessão quando chamar doc_list.
@@ -1179,7 +1182,13 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     const prompt = revert.discardedMessages?.find((m) => m.role === "user")
     if (prompt) {
       const files = prompt.parts.filter((p): p is FilePart => p.type === "file")
-      useDraftInput.getState().setDraft(sessionId, visibleMessageText(prompt), files)
+      // A citação volta como resposta ARMADA (barra no compositor), e não como
+      // `> [assistant] …` dentro do campo de texto: no input o marcador
+      // apareceria cru, e o envio voltaria com a resposta marcada do mesmo
+      // jeito — só que por acidente, sem a pessoa ter escolhido.
+      const { reply, body } = parseMessageReply(visibleMessageText(prompt))
+      if (reply) useMessageReply.getState().setReply(sessionId, reply)
+      useDraftInput.getState().setDraft(sessionId, body, files)
     }
   },
 

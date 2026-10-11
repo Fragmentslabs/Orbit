@@ -9,6 +9,7 @@ import {
   FileTextIcon,
   LoaderIcon,
   RefreshCwIcon,
+  ReplyIcon,
   RotateCwIcon,
   SparklesIcon,
   TerminalIcon,
@@ -26,11 +27,14 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { cn } from "@/lib/utils"
+import { parseMessageReply, replyExcerpt } from "@shared/chat"
 import type { AgentPart, ChatMessage, MessageErrorKind, ReasoningPart, ToolPart } from "@shared/chat"
+import { useMessageReply } from "@/src/stores/message-reply"
+import { useReplyLabel } from "@/src/components/reply-bar"
 import { ModalityIcons } from "@/src/components/ai/modality-icons"
 import { useProviderStore } from "@/src/stores/provider-store"
 import { useSessionModelPrefs } from "@/src/stores/session-model-prefs"
-import { hostnameOf, messageText, visibleMessageText } from "@/src/lib/message-utils"
+import { hostnameOf, messageText, speakableText, visibleMessageText } from "@/src/lib/message-utils"
 import { formatDuration, formatTime } from "@/src/lib/format"
 import { useSessionStore } from "@/src/stores/session-store"
 import { usePanelStore } from "@/src/stores/panel-store"
@@ -46,6 +50,7 @@ import {
 } from "@/src/components/ai/inline-citation"
 import { MessageResponse } from "@/src/components/ai/message"
 import { MessageUsage } from "@/src/components/messages/message-usage"
+import { SpeakAction } from "@/src/components/messages/speak-action"
 import { Reasoning, ReasoningContent, ReasoningTrigger, useReasoning } from "@/src/components/ai/reasoning"
 import { Shimmer } from "@/src/components/ai/shimmer"
 
@@ -505,15 +510,66 @@ export function CopyAction({ text }: { text: string }) {
   )
 }
 
-/** Barra de ações do assistente: copiar + horário + tokens/custo. */
-export function AssistantMessageActions({ message }: { message: ChatMessage }) {
+/**
+ * Responder: marca a mensagem como contexto no compositor.
+ *
+ * O trecho entra no TEXTO do próximo envio (ver formatMessageReply), então o
+ * que sai daqui é só o recorte — quem monta e limpa é o compositor. Mensagem
+ * sem texto (uma resposta só de ferramentas, por exemplo) não oferece a ação:
+ * não haveria o que citar.
+ */
+export function ReplyAction({ message, sessionId }: { message: ChatMessage; sessionId?: string }) {
+  const { t } = useTranslation()
+  const setReply = useMessageReply((s) => s.setReply)
+  const text = replyExcerpt(visibleMessageText(message))
+  if (!text) return null
+
+  return (
+    <Action
+      tooltip={t("reply.action")}
+      label={t("reply.action")}
+      onClick={() => setReply(sessionId, { role: message.role, text })}
+    >
+      <ReplyIcon className="size-3.5" />
+    </Action>
+  )
+}
+
+/** Barra de ações do assistente: copiar + responder + falar + horário + tokens/custo. */
+export function AssistantMessageActions({ message, sessionId }: { message: ChatMessage; sessionId?: string }) {
   return (
     <Actions className="mt-1 items-center">
       <CopyAction text={messageText(message)} />
+      <ReplyAction message={message} sessionId={sessionId} />
+      {/* A fala lê a RESPOSTA FINAL (ver speakableText), não o conteúdo todo
+          que o copiar leva — anexo, raciocínio e narração ficam de fora. */}
+      <SpeakAction text={speakableText(message)} />
       <MessageTimestamp timestamp={message.completedAt ?? message.createdAt} />
       {message.completedAt && <MessageDuration startedAt={message.createdAt} completedAt={message.completedAt} />}
       {message.tokens && <MessageUsage tokens={message.tokens} />}
     </Actions>
+  )
+}
+
+/**
+ * Texto da mensagem do usuário, com a citação da mensagem respondida em
+ * destaque (como no WhatsApp). O texto gravado guarda a citação junto do
+ * corpo — é o que faz o modelo e a cópia da mensagem receberem as duas coisas
+ * —, e aqui ela é separada só para a leitura.
+ */
+export function UserMessageText({ text }: { text: string }) {
+  const label = useReplyLabel()
+  const { reply, body } = parseMessageReply(text)
+  if (!reply) return <p className="whitespace-pre-wrap">{text}</p>
+
+  return (
+    <div className="flex flex-col gap-1">
+      <div className="rounded-r-md border-l-2 border-primary/60 bg-muted/50 px-2 py-1">
+        <p className="text-[11px] font-medium text-primary">{label(reply.role)}</p>
+        <p className="line-clamp-3 text-xs whitespace-pre-wrap text-muted-foreground">{reply.text}</p>
+      </div>
+      {body.trim() && <p className="whitespace-pre-wrap">{body}</p>}
+    </div>
   )
 }
 
@@ -544,14 +600,15 @@ export function RevertAction({ messageId, sessionId }: {
   )
 }
 
-/** Mensagem do usuário: texto + ações (copiar + horário de envio). */
-export function UserMessageBody({ message }: { message: ChatMessage }) {
+/** Mensagem do usuário: texto + ações (copiar + responder + horário de envio). */
+export function UserMessageBody({ message, sessionId }: { message: ChatMessage; sessionId?: string }) {
   return (
     <div className="group/user-msg flex flex-col gap-0.5">
-      <p className="whitespace-pre-wrap">{visibleMessageText(message)}</p>
+      <UserMessageText text={visibleMessageText(message)} />
       <Actions className="-mb-1 items-center justify-end opacity-0 transition-opacity group-hover/user-msg:opacity-100">
         <MessageTimestamp timestamp={message.createdAt} />
         <CopyAction text={visibleMessageText(message)} />
+        <ReplyAction message={message} sessionId={sessionId} />
       </Actions>
     </div>
   )

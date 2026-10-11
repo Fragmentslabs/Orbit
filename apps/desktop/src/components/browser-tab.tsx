@@ -40,6 +40,7 @@ import { Message, MessageContent } from "@/src/components/ai/message"
 import { AskCard } from "@/src/components/ask-card"
 import { AskCardBatch } from "@/src/components/ask-card-batch"
 import { CodeAssistantMessage } from "@/src/components/messages/code-message"
+import { UserMessageText } from "@/src/components/messages/shared"
 import { CodeInput } from "@/src/components/code-input"
 import { visibleMessageText } from "@/src/lib/message-utils"
 import { windowApi } from "@/src/lib/ipc"
@@ -477,7 +478,12 @@ function FullscreenChatFeed({ pinned, onTogglePin }: { pinned: boolean; onToggle
                       return (
                         <Message from="user" key={msg.id} data-msg-id={msg.id}>
                           <MessageContent>
-                            <p className="whitespace-pre-wrap text-sm">{visibleMessageText(msg)}</p>
+                            {/* Mesmo corpo do chat principal: a citação da
+                                mensagem respondida não pode sair como texto
+                                cru (`> [assistant] …`) na tela cheia. */}
+                            <div className="text-sm">
+                              <UserMessageText text={visibleMessageText(msg)} />
+                            </div>
                           </MessageContent>
                         </Message>
                       )

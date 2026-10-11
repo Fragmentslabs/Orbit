@@ -6,7 +6,16 @@
  */
 
 import type { ConnectionConfig } from './types'
-import type { MediaEntry, MediaUsage, ReasoningPrefsMap, RotationConfig, WorkerConfigSnapshot } from '@orbit/shared'
+import type {
+  MediaEntry,
+  MediaUsage,
+  ReasoningPrefsMap,
+  RotationConfig,
+  VoiceEngineId,
+  VoiceStatusResponse,
+  VoiceTranscribeResponse,
+  WorkerConfigSnapshot,
+} from '@orbit/shared'
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -164,6 +173,27 @@ export class CompanionHttp {
    */
   async authorizeMcp(name: string): Promise<HttpResult> {
     return this.request('POST', `/api/mcp/servers/${encodeURIComponent(name)}/authorize`)
+  }
+
+  // ─── Voz (ditado) ────────────────────────────────────────────────────────
+  // O celular não roda modelo de voz: grava, converte para PCM16 mono e manda
+  // o base64 para o desktop transcrever (nenhum áudio sai para a nuvem).
+
+  /**
+   * Transcreve áudio PCM16 (base64, little-endian) no desktop.
+   * `sampleRate` é a taxa do PCM enviado (o app grava a 16 kHz, mono).
+   */
+  async transcribePcm(
+    pcm: string,
+    sampleRate: number,
+    opts?: { engine?: VoiceEngineId; modelId?: string | null; language?: string },
+  ): Promise<HttpResult<VoiceTranscribeResponse>> {
+    return this.request('POST', '/api/voice/transcribe', { pcm, sampleRate, ...opts })
+  }
+
+  /** Estado dos motores de voz do desktop (ready + installed por motor). */
+  async getVoiceStatus(): Promise<HttpResult<VoiceStatusResponse>> {
+    return this.get('/api/voice/status')
   }
 
   // ─── Git Branches ────────────────────────────────────────────────────────

@@ -43,9 +43,11 @@ import {
   parseSearchResults,
   hostnameOf,
 } from '~/lib/message-utils'
-import { getThemeTokens } from '~/lib/theme-tokens'
+import { getThemeTokens, withAlpha } from '~/lib/theme-tokens'
 import { useThemeStore } from '~/stores/theme-store'
 import { hslToRgba } from '~/lib/theme'
+import { parseMessageReply } from '@orbit/shared'
+import { useReplyLabel } from '~/components/chat/ReplyBar'
 
 interface ChatAssistantMessageProps {
   message: ChatMessage
@@ -53,14 +55,21 @@ interface ChatAssistantMessageProps {
   isLast?: boolean
   isBusy?: boolean
   onRevert?: () => void
+  /** Responder esta mensagem (vira citação do próximo envio). */
+  onReply?: (message: ChatMessage) => void
 }
 
 // ─── User Message Attachments & Bubble ───────────────────────────────────────
 
-function UserMessage({ message, onRevert }: { message: ChatMessage; onRevert?: () => void }) {
+function UserMessage({ message, onRevert, onReply }: { message: ChatMessage; onRevert?: () => void; onReply?: () => void }) {
   const text = visibleMessageText(message)
   const files = message.parts.filter((p): p is FilePart => p.type === 'file')
   const tokens = getThemeTokens(useThemeStore((s) => s.resolved))
+  const replyLabel = useReplyLabel()
+  // A citação da mensagem respondida vive no TEXTO gravado (ver
+  // formatMessageReply); aqui ela só é separada para aparecer em destaque,
+  // dentro da própria bolha — como no WhatsApp.
+  const { reply, body } = useMemo(() => parseMessageReply(text), [text])
 
   const handleCopy = useCallback(async () => {
     await Clipboard.setStringAsync(text)
@@ -78,13 +87,34 @@ function UserMessage({ message, onRevert }: { message: ChatMessage; onRevert?: (
 
       {text.trim().length > 0 && (
         <View className="px-4 py-2.5 rounded-2xl rounded-tr-sm" style={{ backgroundColor: tokens.muted }}>
-          <Text className="text-sm leading-relaxed" style={{ color: tokens.foreground }}>
-            {text}
-          </Text>
+          {reply && (
+            <View
+              className="mb-1.5 rounded-r-md"
+              style={{
+                borderLeftWidth: 2,
+                borderLeftColor: tokens.primary,
+                backgroundColor: withAlpha(tokens.background, 0.5),
+                paddingHorizontal: 8,
+                paddingVertical: 4,
+              }}
+            >
+              <Text style={{ fontSize: 11, fontWeight: '600', color: tokens.primary }}>
+                {replyLabel(reply.role)}
+              </Text>
+              <Text numberOfLines={3} style={{ fontSize: 12, color: tokens.mutedForeground }}>
+                {reply.text}
+              </Text>
+            </View>
+          )}
+          {body.trim().length > 0 && (
+            <Text className="text-sm leading-relaxed" style={{ color: tokens.foreground }}>
+              {body}
+            </Text>
+          )}
         </View>
       )}
 
-      <MessageActions message={message} onCopy={handleCopy} onRevert={onRevert} />
+      <MessageActions message={message} onCopy={handleCopy} onRevert={onRevert} onReply={onReply} />
     </View>
   )
 }
@@ -652,9 +682,12 @@ function segmentParts(parts: MessagePart[]): Segment[] {
   return segments
 }
 
-export function ChatAssistantMessage({ message, compact, isLast, isBusy, onRevert }: ChatAssistantMessageProps) {
+export function ChatAssistantMessage({ message, compact, isLast, isBusy, onRevert, onReply }: ChatAssistantMessageProps) {
   const { t } = useTranslation()
   const isUser = message.role === 'user'
+  // Estável por mensagem: closure nova a cada render derrubaria o memo do
+  // MessageBubble — o mesmo motivo do handleRevert.
+  const handleReply = useCallback(() => onReply?.(message), [onReply, message])
   const tokens = getThemeTokens(useThemeStore((s) => s.resolved))
 
   const segments = useMemo(() => segmentParts(message.parts), [message.parts])
@@ -684,7 +717,7 @@ export function ChatAssistantMessage({ message, compact, isLast, isBusy, onRever
   }, [message])
 
   if (isUser) {
-    return <UserMessage message={message} onRevert={onRevert} />
+    return <UserMessage message={message} onRevert={onRevert} onReply={onReply ? handleReply : undefined} />
   }
 
   return (
@@ -795,7 +828,12 @@ export function ChatAssistantMessage({ message, compact, isLast, isBusy, onRever
         </View>
       )}
 
-      <MessageActions message={message} onCopy={handleCopy} onRevert={onRevert} />
+      <MessageActions
+        message={message}
+        onCopy={handleCopy}
+        onRevert={onRevert}
+        onReply={onReply ? handleReply : undefined}
+      />
 
       {/* Sources list */}
       {finished && sources.length > 0 && <SourcesBlock sources={sources} />}

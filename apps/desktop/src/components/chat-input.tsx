@@ -27,6 +27,9 @@ import { ReasoningPicker } from "@/src/components/reasoning-picker"
 import { QuickSettingsMenu } from "@/src/components/quick-settings-menu"
 import { DraftInputBridge } from "@/src/components/draft-input-bridge"
 import { ChatInputDraft } from "@/src/components/chat-input-draft"
+import { ReplyBar } from "@/src/components/reply-bar"
+import { withReplyPrefix } from "@/src/stores/message-reply"
+import { DictationButton } from "@/src/components/dictation-button"
 import { PendingAttachmentSync } from "@/src/components/pending-attachment-sync"
 import { clearInputDraft } from "@/src/stores/chat-draft"
 import { QueueIndicator } from "@/src/components/queue-indicator"
@@ -66,6 +69,9 @@ export function ChatInput({ onSubmit, status, onStop, sessionId, draftKey, onPro
   onProviderBlocked?: () => void
 }) {
   const { t } = useTranslation()
+  // Chave do rascunho (e da mensagem respondida): a mesma regra do
+  // ChatInputDraft, para a citação de um chat não aparecer em outro.
+  const replyKey = draftKey ?? sessionId ?? "draft"
   const quotes = usePanelStore((s) => s.quotes)
   const removeQuote = usePanelStore((s) => s.removeQuote)
   const chatActiveModes = useModelModePrefs((s) => s.chatActiveModes)
@@ -231,7 +237,7 @@ export function ChatInput({ onSubmit, status, onStop, sessionId, draftKey, onPro
             const text = message.text?.trim()
             if (!text) return
             if (sessionId) {
-              enqueueForSend(sessionId, resolveText(text), buildOptions(), mode, { files })
+              enqueueForSend(sessionId, withReplyPrefix(replyKey, resolveText(text)), buildOptions(), mode, { files })
               clearInputDraft(sessionId)
             }
             return
@@ -239,15 +245,25 @@ export function ChatInput({ onSubmit, status, onStop, sessionId, draftKey, onPro
           const text = message.text?.trim()
           if (!text) return
           if (sessionId) clearInputDraft(sessionId)
-          return onSubmit(resolveText(text), buildOptions(), files.length > 0 ? files : undefined)
+          // A citação é prependada DEPOIS do comando "/" ser resolvido: na
+          // frente dela, o texto deixaria de começar com "/" e o comando
+          // viraria conversa.
+          return onSubmit(withReplyPrefix(replyKey, resolveText(text)), buildOptions(), files.length > 0 ? files : undefined)
         }}
-        className="rounded-xl border-2 border-sidebar-border [&>div]:!rounded-[calc(var(--radius-xl)-2px)] [&>div]:!border-none [&>div]:!bg-transparent"
+        className="relative rounded-xl border-2 border-sidebar-border [&>div]:!rounded-[calc(var(--radius-xl)-2px)] [&>div]:!border-none [&>div]:!bg-transparent"
       >
+        {/* Microfone no canto SUPERIOR direito, no nível da primeira linha do
+            texto: absoluto para não empurrar o conteúdo, com a folga à direita
+            reservada no próprio textarea (pr-10). */}
+        <div className="absolute right-2 top-2 z-10 flex items-center">
+          <DictationButton sessionId={sessionId} />
+        </div>
         <PromptInputAttachments className="!px-3 !py-1.5">
           {(attachment) => <PromptInputAttachment data={attachment} />}
         </PromptInputAttachments>
+        <ReplyBar replyKey={replyKey} />
         <PromptInputBody>
-          <PromptInputTextarea placeholder={t("input.placeholder")} suggestion={suggestion} className="px-3 text-base md:text-base" />
+          <PromptInputTextarea placeholder={t("input.placeholder")} suggestion={suggestion} className="px-3 pr-10 text-base md:text-base" />
         </PromptInputBody>
         <PromptInputFooter>
           <div className="flex items-center gap-1">
@@ -282,20 +298,20 @@ export function ChatInput({ onSubmit, status, onStop, sessionId, draftKey, onPro
               disabled={false}
               onStop={() => onStop?.()}
               onQueue={(text, files) => {
-                if (sessionId) enqueueForSend(sessionId, text, buildOptions(), mode, { files: toFileParts(files ?? []) })
+                if (sessionId) enqueueForSend(sessionId, withReplyPrefix(replyKey, text), buildOptions(), mode, { files: toFileParts(files ?? []) })
               }}
               onStopAndSend={(text, files) => {
                 onStop?.()
-                if (sessionId) enqueueForSend(sessionId, text, buildOptions(), mode, { files: toFileParts(files ?? []) })
+                if (sessionId) enqueueForSend(sessionId, withReplyPrefix(replyKey, text), buildOptions(), mode, { files: toFileParts(files ?? []) })
               }}
               onSchedule={(text, timestamp, files) => {
-                if (sessionId) enqueueScheduled(sessionId, text, buildOptions(), mode, timestamp, { files: toFileParts(files ?? []) })
+                if (sessionId) enqueueScheduled(sessionId, withReplyPrefix(replyKey, text), buildOptions(), mode, timestamp, { files: toFileParts(files ?? []) })
               }}
               onSendToSidePanel={async (text, files) => {
                 // Novo chat na mesma pasta da sessão atual (se ela estiver em uma)
                 const current = useSessionStore.getState().sessions.find((s) => s.id === sessionId)
                 const newSession = await createSession(mode, { setActive: false, folderId: current?.folderId ?? null })
-                await sendMessage(mode, text, { options: buildOptions(), sessionId: newSession.id, files: toFileParts(files ?? []) })
+                await sendMessage(mode, withReplyPrefix(replyKey, text), { options: buildOptions(), sessionId: newSession.id, files: toFileParts(files ?? []) })
                 openChatTab(newSession.id, newSession.title)
               }}
             />

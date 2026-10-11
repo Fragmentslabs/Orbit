@@ -42,6 +42,10 @@
       "browser": {
         "label": "Browser",
         "description": "The built-in browser and what the agent can do in it"
+      },
+      "voice": {
+        "label": "Voice",
+        "description": "Reading aloud, dictation and voice models."
       }
     },
     "about": {
@@ -2253,6 +2257,9 @@
     "openInPanel": "Open in panel",
     "export": "Export HTML",
     "expand": "Expand",
+    "zoomIn": "Zoom in",
+    "zoomOut": "Zoom out",
+    "zoomReset": "Reset zoom (100%)",
     "unavailable": "Artifact unavailable"
   },
   "documents": {
@@ -2322,6 +2329,13 @@
     "quoteInChat": "Quote in chat",
     "docxUnavailable": "This document could not be displayed as it looks. The Text view still shows its content."
   },
+  "reply": {
+    "action": "Reply",
+    "excerpt": "Reply to excerpt",
+    "cancel": "Cancel reply",
+    "you": "You",
+    "assistant": "Assistant"
+  },
   "appCrash": {
     "title": "Something went wrong while drawing the screen.",
     "hint": "The error below is also in the terminal log. Reloading keeps your conversations.",
@@ -2349,6 +2363,132 @@
       "description": "Deletes the built-in browser's cookies, logins and cache now.",
       "button": "Clear",
       "done": "Cleared"
+    }
+  },
+  "voice": {
+    "tts": {
+      "speak": "Read aloud",
+      "stop": "Stop",
+      "error": "Could not read this message aloud.",
+      "needsModel": "Download a reading voice in Settings → Voice.",
+      "setupModel": "Set up a reading voice in Settings → Voice."
+    },
+    "stt": {
+      "dictate": "Dictate",
+      "listening": "Listening…",
+      "error": "Could not transcribe the audio.",
+      "needsModel": "Download a speech model in Settings → Voice.",
+      "setupModel": "Set up dictation in Settings → Voice."
+    },
+    "settings": {
+      "sections": {
+        "tts": "Text to speech",
+        "ttsHint": "Reads the assistant's answers aloud.",
+        "stt": "Speech to text",
+        "sttHint": "Turns your voice into text in the message field.",
+        "models": "Models",
+        "modelsHint": "Download and remove the models used for reading and transcription."
+      },
+      "languages": {
+        "auto": "Detect automatically",
+        "pt": "Portuguese",
+        "en": "English",
+        "es": "Spanish",
+        "fr": "French",
+        "de": "German",
+        "it": "Italian",
+        "ja": "Japanese",
+        "zh": "Chinese",
+        "na": "Language-agnostic"
+      },
+      "status": {
+        "errorTitle": "Could not read the voice state",
+        "loadError": "The voice status and the hardware report did not respond. Try again — the settings above keep working.",
+        "retry": "Try again"
+      },
+      "tts": {
+        "enableTitle": "Read replies aloud",
+        "enableHint": "Adds a speak button to each answer.",
+        "engineTitle": "Audio priority",
+        "engineHint": "Where the reading voice comes from. \"Voice model\" uses a configured provider when one can speak; \"Local model\" reads offline.",
+        "engineModel": "Voice model",
+        "engineLocal": "Local model",
+        "readyModel": "Reading through the voice model ({{model}}).",
+        "engineModelFallback": "The voice model is not available, so reading uses the local engine. {{reason}}",
+        "voiceTitle": "Voice",
+        "voiceHint": "Voice used for reading. F1–F5 are female, M1–M5 male.",
+        "voiceF1": "F1",
+        "voiceF2": "F2 (default)",
+        "voiceF3": "F3",
+        "voiceF4": "F4",
+        "voiceF5": "F5",
+        "voiceM1": "M1",
+        "voiceM2": "M2",
+        "voiceM3": "M3",
+        "voiceM4": "M4",
+        "voiceM5": "M5",
+        "langTitle": "Language",
+        "langHint": "Language the voice speaks.",
+        "speedTitle": "Speed",
+        "speedHint": "Reading pace.",
+        "ready": "The reading voice is ready.",
+        "downloadedNotReady": "The reading model is on disk, but the speech engine is not available in this build.",
+        "notReady": "No reading model is downloaded yet — see the models below."
+      },
+      "stt": {
+        "enableTitle": "Dictate with your voice",
+        "enableHint": "Adds a dictate button to the message field.",
+        "engineTitle": "Engine",
+        "engineHint": "How your voice is transcribed. Parakeet is usually faster.",
+        "engineParakeet": "Parakeet",
+        "engineWhisper": "whisper.cpp",
+        "enginePreferred": "{{engine}} (recommended)",
+        "engineInstalled": "Ready",
+        "enginePreparing": "Downloaded — needs setup",
+        "engineMissing": "Not ready",
+        "engineUnavailable": "Unavailable",
+        "engineReason": "Reason: {{reason}}",
+        "enginePreferHint": "Recommended for this machine: {{engine}}.",
+        "prepareNow": "Prepare now",
+        "prepareHint": "The package is on disk; the extraction and the VAD run on the first dictation.",
+        "modelTitle": "Model",
+        "modelHint": "Transcription model. Bigger models understand more, but are slower.",
+        "modelAuto": "Automatic (recommended)",
+        "modelNone": "No model available for this engine.",
+        "modelNotDownloaded": "This model is not downloaded yet.",
+        "modelInUse": "In use: {{model}}",
+        "modelInUseAuto": "In use: {{model}} (this machine's recommendation)",
+        "modelNoneSelected": "No model chosen — the engine uses this machine's recommendation.",
+        "downloadNow": "Download {{size}}",
+        "langTitle": "Language",
+        "langHint": "The language you speak.",
+        "liveTitle": "Live preview",
+        "liveHint": "Shows the text while you speak, before sending it.",
+        "preloadTitle": "Preload the model",
+        "preloadHint": "Loads the model as soon as the download finishes and frees it after a few idle minutes. The first dictation is instant, but the model takes up RAM while it is loaded.",
+        "threadsTitle": "Threads",
+        "threadsHint": "CPU threads used for transcription. More threads are faster, but leave the machine busier.",
+        "hardwareSummary": "{{platform}}/{{arch}} · {{cpus}} cores · {{memory}} GB of RAM",
+        "recommendTitle": "Recommendation",
+        "recommendPick": "{{engine}} with the {{model}} model",
+        "recommendReason": "Why: {{reason}}",
+        "recommendWarnings": "Warnings",
+        "recommendApply": "Apply recommendation"
+      },
+      "models": {
+        "empty": "No models available.",
+        "download": "Download",
+        "cancel": "Cancel",
+        "remove": "Remove",
+        "downloading": "Downloading… {{percent}}%",
+        "installed": "Downloaded",
+        "notInstalled": "Not downloaded",
+        "preparing": "Prepares on first use.",
+        "sizeUnknown": "Unknown size",
+        "failedWith": "Download failed: {{error}}",
+        "kindTts": "Text to speech",
+        "kindStt": "Speech to text"
+      }
     }
   }
 }

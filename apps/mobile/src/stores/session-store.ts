@@ -15,7 +15,8 @@ import type {
   PermissionMode,
   SessionStateResponse,
 } from '@orbit/shared'
-import { SESSION_BUSY_ERROR } from '@orbit/shared'
+import { parseMessageReply, SESSION_BUSY_ERROR } from '@orbit/shared'
+import { useReply } from '~/stores/reply-store'
 import { Storage } from '~/lib/storage'
 import { visibleMessageText } from '~/lib/message-utils'
 import i18n from '~/i18n'
@@ -927,7 +928,11 @@ export const useSessionStore = create<SessionState>((set, get) => ({
         const prompt = revert?.discardedMessages?.find((m) => m.role === 'user')
         if (prompt) {
           const files = prompt.parts.filter((p): p is FilePart => p.type === 'file')
-          useDraftInput.getState().setDraft(sessionId, visibleMessageText(prompt), files)
+          // A citação volta como resposta ARMADA (barra no compositor), e não
+          // como `> [assistant] …` dentro do campo de texto — ver o desktop.
+          const { reply, body } = parseMessageReply(visibleMessageText(prompt))
+          if (reply) useReply.getState().setReply(sessionId, reply)
+          useDraftInput.getState().setDraft(sessionId, body, files)
         }
       }
     } catch {

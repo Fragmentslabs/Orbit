@@ -552,6 +552,47 @@ const ARTIFACT_CONTENT_TYPES: Record<string, string> = {
   docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
 }
 
+/**
+ * Barra de rolagem no visual do Orbit, injetada no HTML servido.
+ *
+ * O artefato roda num iframe de origem opaca (ver artifact-part.tsx), então
+ * NÃO carrega a folha do app: o ::-webkit-scrollbar / scrollbar-color de
+ * src/index.css não chega lá e a página mostra a barra nativa do Chromium,
+ * grossa e deslocada do resto da interface. Como quem serve é este handler, o
+ * estilo viaja junto com o documento — e vale para fragmento E para documento
+ * completo, que é justamente onde o wrapper do `ensureDocument`
+ * (lib/tools/artifact.ts) desiste, por já reconhecer um HTML inteiro.
+ *
+ * São as mesmas duas declarações do index.css: as regras ::-webkit-scrollbar
+ * valem onde `scrollbar-color` não existe, e onde existe ele vence — igual ao
+ * app. A cor vem resolvida em variável local porque o documento não tem os
+ * tokens do Orbit.
+ */
+const ARTIFACT_CHROME_MARK = '<!-- orbit-artifact-chrome -->'
+const ARTIFACT_CHROME = `${ARTIFACT_CHROME_MARK}
+<style>
+  :root { --orbit-scroll-thumb: oklch(0.92 0.004 286.32); }
+  @media (prefers-color-scheme: dark) { :root { --orbit-scroll-thumb: oklch(1 0 0 / 18%); } }
+  *::-webkit-scrollbar { width: 6px; height: 6px; }
+  *::-webkit-scrollbar-button { display: none; }
+  *::-webkit-scrollbar-track { background: transparent; }
+  *::-webkit-scrollbar-thumb { background: var(--orbit-scroll-thumb); border-radius: 9999px; min-height: 20px; }
+  *::-webkit-scrollbar-corner { background: transparent; }
+  * { scrollbar-width: thin; scrollbar-color: var(--orbit-scroll-thumb) transparent; }
+</style>`
+
+/**
+ * Injeta a barra uma única vez, imediatamente antes do fecho do body (o
+ * marcador evita duplicar caso o próprio artefato já traga o bloco).
+ */
+function injectArtifactChrome(html: string): string {
+  if (html.includes(ARTIFACT_CHROME_MARK)) return html
+  const closes = [...html.matchAll(/<\/body\s*>/gi)]
+  const at = closes.length > 0 ? closes[closes.length - 1].index : undefined
+  if (at === undefined) return html + ARTIFACT_CHROME
+  return html.slice(0, at) + ARTIFACT_CHROME + html.slice(at)
+}
+
 async function handleArtifactRequest(request: Request): Promise<Response> {
   // Scheme standard: a URL tem host + path (orbit-artifact://art_x.html/?rev=2),
   // diferente do orbit-media://, onde o id inteiro cai no host e não há query.
@@ -561,7 +602,13 @@ async function handleArtifactRequest(request: Request): Promise<Response> {
   try {
     const buffer = await fsp.readFile(path.join(assetFileDir(id), id))
     const ext = id.split('.').pop() ?? ''
-    return new Response(new Uint8Array(buffer), {
+    // HTML sai com a barra de rolagem do app injetada (ver ARTIFACT_CHROME).
+    // A anotação é BodyInit (e não a união) para o Uint8Array manter o generic
+    // que o construtor infere — declarar `string | Uint8Array` o alargaria para
+    // Uint8Array<ArrayBufferLike>, que o lib DOM não aceita no Response.
+    const body: BodyInit =
+      ext === 'html' ? injectArtifactChrome(buffer.toString('utf8')) : new Uint8Array(buffer)
+    return new Response(body, {
       status: 200,
       headers: {
         'Content-Type': ARTIFACT_CONTENT_TYPES[ext] ?? 'application/octet-stream',

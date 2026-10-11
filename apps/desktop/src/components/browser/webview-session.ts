@@ -44,8 +44,10 @@ interface WebviewRecord {
   currentUrl: string
   /** URL que já pedimos para este guest. Impede que o restauro se repita
    *  quando a URL carregada não bate exatamente com a pedida (o Chromium
-   *  normaliza URLs) — sem esse trava, dom-ready e loadURL se realimentam num
-   *  laço infinito de ERR_ABORTED. Zerado a cada guest novo (mount/unmount). */
+   *  normaliza URLs) — sem essa trava, dom-ready e loadURL se realimentam num
+   *  laço infinito de ERR_ABORTED. Zerado a cada guest novo (mount/unmount) e
+   *  também quando a navegação não chega a commitar: com o guest em branco a
+   *  trava não vale, senão ele fica preso em about:blank para sempre. */
   requestedUrl: string | null
   /** true quando o elemento está no container visível de uma aba. */
   mounted: boolean
@@ -199,6 +201,37 @@ function isRealUrl(url: string | undefined): url is string {
   return !!url && url !== "about:blank"
 }
 
+/**
+ * Decide se o restauro deve pedir a URL ao guest.
+ *
+ * PURA de propósito: é a única parte desta corrida que dá para testar sem
+ * Electron, e é exatamente onde morava o defeito. `requestedUrl` existe para o
+ * laço de normalização do Chromium (a URL carregada não bate exatamente com a
+ * pedida, então `guestUrl !== target` sozinho nunca fecharia e dom-ready +
+ * loadURL se realimentariam num ERR_ABORTED infinito). Mas a trava só pode valer
+ * se o guest chegou a carregar ALGO: com o guest em branco a tentativa anterior
+ * não commitou, e insistir é o certo — sem isso nada mais carrega, porque o
+ * guarda de navigateWebview também só olhava a URL PEDIDA, nunca o guest.
+ */
+export function shouldRestoreGuest(
+  target: string,
+  guestUrl: string,
+  requestedUrl: string | null,
+): boolean {
+  if (!isRealUrl(target) || guestUrl === target) return false
+  return !(requestedUrl === target && isRealUrl(guestUrl))
+}
+
+/**
+ * Decide se navigateWebview deve agir. Pura pelo mesmo motivo: pular só porque
+ * `currentUrl === url` deixava a aba presa quando o guest estava em branco — a
+ * URL atual já era a certa, ninguém carregava nada e o restauro também recusava.
+ */
+export function shouldNavigate(currentUrl: string, url: string, guestUrl: string): boolean {
+  if (!isRealUrl(url)) return false
+  return !(currentUrl === url && isRealUrl(guestUrl))
+}
+
 let hiddenHost: HTMLDivElement | null = null
 
 function getHiddenHost(): HTMLDivElement {
@@ -270,10 +303,13 @@ function restoreGuest(record: WebviewRecord): void {
   }
 
   const target = record.currentUrl
-  if (isRealUrl(target) && record.requestedUrl !== target && safeWebviewURL(el) !== target) {
+  if (shouldRestoreGuest(target, safeWebviewURL(el), record.requestedUrl)) {
     record.requestedUrl = target
     try {
-      void el.loadURL(target).catch(() => {})
+      void el.loadURL(target).catch(() => {
+        // Não commitou: solta a trava para o próximo dom-ready tentar de novo.
+        if (records.get(record.key) === record) record.requestedUrl = null
+      })
     } catch {
       record.requestedUrl = null
     }
@@ -420,7 +456,8 @@ export function ensureAgentBrowser(sessionId: string, url?: string): void {
 /** Navega a aba. Guest não pronto: a URL fica como atual e o dom-ready aplica. */
 export function navigateWebview(key: string, url: string): void {
   const record = records.get(key)
-  if (!record || !isRealUrl(url) || record.currentUrl === url) return
+  if (!record) return
+  if (!shouldNavigate(record.currentUrl, url, safeWebviewURL(record.el))) return
   record.lastUsed = Date.now()
   record.currentUrl = url
   if (!isWebviewReady(record.el)) {
@@ -430,7 +467,10 @@ export function navigateWebview(key: string, url: string): void {
   }
   record.requestedUrl = url
   try {
-    void record.el.loadURL(url).catch(() => {})
+    void record.el.loadURL(url).catch(() => {
+      // Não commitou: solta a trava para a próxima tentativa carregar de novo.
+      if (records.get(key) === record) record.requestedUrl = null
+    })
   } catch {
     record.requestedUrl = null // dom-ready seguinte restaura
   }

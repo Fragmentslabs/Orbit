@@ -1,5 +1,5 @@
 import { View, Text, Pressable } from 'react-native'
-import { Copy, RotateCcw, CheckCircle } from 'lucide-react-native'
+import { Copy, Reply, RotateCcw, CheckCircle } from 'lucide-react-native'
 import { useTranslation } from 'react-i18next'
 import type { ChatMessage } from '@orbit/shared'
 import { getThemeTokens } from '~/lib/theme-tokens'
@@ -11,6 +11,8 @@ interface MessageActionsProps {
   message: ChatMessage
   onCopy?: () => void
   onRevert?: () => void
+  /** Marca a mensagem como contexto no compositor (ver formatMessageReply). */
+  onReply?: () => void
 }
 
 function formatDuration(ms: number): string {
@@ -35,8 +37,8 @@ function formatCost(cost: number): string {
   return `$${cost.toFixed(4)}`
 }
 
-export function MessageActions({ message, onCopy, onRevert }: MessageActionsProps) {
-  const { i18n } = useTranslation()
+export function MessageActions({ message, onCopy, onRevert, onReply }: MessageActionsProps) {
+  const { t, i18n } = useTranslation()
   const tokens = getThemeTokens(useThemeStore((s) => s.resolved))
   const [copied, setCopied] = useState(false)
 
@@ -74,6 +76,22 @@ export function MessageActions({ message, onCopy, onRevert }: MessageActionsProp
           : <Copy size={13} color={tokens.mutedForeground} />
         }
       </Pressable>
+
+      {/* Responder: a mensagem vira citação do próximo envio (barra acima do
+          campo de texto), como no WhatsApp. */}
+      {onReply && (
+        <Pressable
+          onPress={onReply}
+          accessibilityLabel={t('reply.action')}
+          style={({ pressed }) => ({
+            padding: 4,
+            borderRadius: 4,
+            opacity: pressed ? 0.6 : 1,
+          })}
+        >
+          <Reply size={13} color={tokens.mutedForeground} />
+        </Pressable>
+      )}
 
       {/* Revert parte da mensagem do usuário: descarta esse turno e tudo
           depois dele e devolve texto/anexos ao input, como se estivesse

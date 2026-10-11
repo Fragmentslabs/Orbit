@@ -42,6 +42,10 @@
       "browser": {
         "label": "Navegador",
         "description": "O navegador integrado e o que o agente pode fazer nele"
+      },
+      "voice": {
+        "label": "Voz",
+        "description": "Leitura em voz alta, ditado e modelos de voz."
       }
     },
     "about": {
@@ -1686,7 +1690,8 @@
     "loading": "Carregando...",
     "close": "Fechar",
     "previous": "Anterior",
-    "next": "Próximo"
+    "next": "Próximo",
+    "back": "Voltar"
   },
   "appearance": {
     "title": "Aparência",
@@ -2252,6 +2257,9 @@
     "openInPanel": "Abrir no painel",
     "export": "Exportar HTML",
     "expand": "Expandir",
+    "zoomIn": "Aumentar zoom",
+    "zoomOut": "Diminuir zoom",
+    "zoomReset": "Zoom padrão (100%)",
     "unavailable": "Artefato indisponível"
   },
   "documents": {
@@ -2321,6 +2329,13 @@
     "quoteInChat": "Citar no chat",
     "docxUnavailable": "Não foi possível mostrar o documento como ele é. O modo Texto continua mostrando o conteúdo."
   },
+  "reply": {
+    "action": "Responder",
+    "excerpt": "Responder trecho",
+    "cancel": "Cancelar resposta",
+    "you": "Você",
+    "assistant": "Assistente"
+  },
   "appCrash": {
     "title": "Algo deu errado ao desenhar a tela.",
     "hint": "O erro abaixo também está no log do terminal. Recarregar não apaga suas conversas.",
@@ -2348,6 +2363,132 @@
       "description": "Apaga cookies, logins e cache do navegador integrado agora.",
       "button": "Limpar",
       "done": "Limpo"
+    }
+  },
+  "voice": {
+    "tts": {
+      "speak": "Ler em voz alta",
+      "stop": "Parar",
+      "error": "Não foi possível ler esta mensagem em voz alta.",
+      "needsModel": "Baixe uma voz de leitura em Configurações → Voz.",
+      "setupModel": "Configure uma voz de leitura em Configurações → Voz."
+    },
+    "stt": {
+      "dictate": "Ditar",
+      "listening": "Ouvindo…",
+      "error": "Não foi possível transcrever o áudio.",
+      "needsModel": "Baixe um modelo de fala em Configurações → Voz.",
+      "setupModel": "Configure o ditado em Configurações → Voz."
+    },
+    "settings": {
+      "sections": {
+        "tts": "Texto em fala",
+        "ttsHint": "Lê em voz alta as respostas do assistente.",
+        "stt": "Fala em texto",
+        "sttHint": "Transforma sua voz em texto no campo de mensagem.",
+        "models": "Modelos",
+        "modelsHint": "Baixe e remova os modelos usados na leitura e na transcrição."
+      },
+      "languages": {
+        "auto": "Detectar automaticamente",
+        "pt": "Português",
+        "en": "Inglês",
+        "es": "Espanhol",
+        "fr": "Francês",
+        "de": "Alemão",
+        "it": "Italiano",
+        "ja": "Japonês",
+        "zh": "Chinês",
+        "na": "Agnóstico de idioma"
+      },
+      "status": {
+        "errorTitle": "Não foi possível ler o estado da voz",
+        "loadError": "O estado da voz e o relatório da máquina não responderam. Tente de novo — as preferências acima continuam valendo.",
+        "retry": "Tentar de novo"
+      },
+      "tts": {
+        "enableTitle": "Ler respostas em voz alta",
+        "enableHint": "Adiciona um botão de falar em cada resposta.",
+        "engineTitle": "Prioridade de áudio",
+        "engineHint": "De onde vem a voz da leitura. \"Modelo de voz\" usa um provedor configurado quando ele sabe falar; \"Modelo local\" lê offline.",
+        "engineModel": "Modelo de voz",
+        "engineLocal": "Modelo local",
+        "readyModel": "Leitura pelo modelo de voz ({{model}}).",
+        "engineModelFallback": "O modelo de voz não está disponível, então a leitura usa o motor local. {{reason}}",
+        "voiceTitle": "Voz",
+        "voiceHint": "Voz usada na leitura. F1–F5 são femininas, M1–M5 masculinas.",
+        "voiceF1": "F1",
+        "voiceF2": "F2 (padrão)",
+        "voiceF3": "F3",
+        "voiceF4": "F4",
+        "voiceF5": "F5",
+        "voiceM1": "M1",
+        "voiceM2": "M2",
+        "voiceM3": "M3",
+        "voiceM4": "M4",
+        "voiceM5": "M5",
+        "langTitle": "Idioma",
+        "langHint": "Idioma falado pela voz.",
+        "speedTitle": "Velocidade",
+        "speedHint": "Ritmo da leitura.",
+        "ready": "A voz de leitura está pronta.",
+        "downloadedNotReady": "O modelo de leitura está no disco, mas o motor de fala não está disponível nesta versão.",
+        "notReady": "Nenhum modelo de leitura baixado ainda — veja os modelos abaixo."
+      },
+      "stt": {
+        "enableTitle": "Ditar com a voz",
+        "enableHint": "Adiciona um botão de ditar no campo de mensagem.",
+        "engineTitle": "Motor",
+        "engineHint": "Como sua voz é transcrita. O Parakeet costuma ser mais rápido.",
+        "engineParakeet": "Parakeet",
+        "engineWhisper": "whisper.cpp",
+        "enginePreferred": "{{engine}} (recomendado)",
+        "engineInstalled": "Pronto",
+        "enginePreparing": "Baixado — precisa preparar",
+        "engineMissing": "Não pronto",
+        "engineUnavailable": "Indisponível",
+        "engineReason": "Motivo: {{reason}}",
+        "enginePreferHint": "Recomendado para esta máquina: {{engine}}.",
+        "prepareNow": "Preparar agora",
+        "prepareHint": "O pacote já está no disco; a extração e o VAD rodam no primeiro ditado.",
+        "modelTitle": "Modelo",
+        "modelHint": "Modelo de transcrição. Modelos maiores entendem mais, mas são mais lentos.",
+        "modelAuto": "Automático (recomendado)",
+        "modelNone": "Nenhum modelo disponível para este motor.",
+        "modelNotDownloaded": "Este modelo ainda não foi baixado.",
+        "modelInUse": "Em uso: {{model}}",
+        "modelInUseAuto": "Em uso: {{model}} (recomendação desta máquina)",
+        "modelNoneSelected": "Nenhum modelo escolhido — o motor usa a recomendação desta máquina.",
+        "downloadNow": "Baixar {{size}}",
+        "langTitle": "Idioma",
+        "langHint": "O idioma que você fala.",
+        "liveTitle": "Prévia ao vivo",
+        "liveHint": "Mostra o texto enquanto você fala, antes de enviar.",
+        "preloadTitle": "Pré-carregar o modelo",
+        "preloadHint": "Carrega o modelo assim que o download termina e o solta depois de alguns minutos sem ditado. O primeiro ditado fica instantâneo, mas o modelo ocupa RAM enquanto está carregado.",
+        "threadsTitle": "Threads",
+        "threadsHint": "Threads de CPU usadas na transcrição. Mais threads são mais rápidas, mas deixam a máquina mais ocupada.",
+        "hardwareSummary": "{{platform}}/{{arch}} · {{cpus}} núcleos · {{memory}} GB de RAM",
+        "recommendTitle": "Recomendação",
+        "recommendPick": "{{engine}} com o modelo {{model}}",
+        "recommendReason": "Motivo: {{reason}}",
+        "recommendWarnings": "Avisos",
+        "recommendApply": "Aplicar recomendação"
+      },
+      "models": {
+        "empty": "Nenhum modelo disponível.",
+        "download": "Baixar",
+        "cancel": "Cancelar",
+        "remove": "Remover",
+        "downloading": "Baixando… {{percent}}%",
+        "installed": "Baixado",
+        "notInstalled": "Não baixado",
+        "preparing": "Prepara no primeiro uso.",
+        "sizeUnknown": "Tamanho desconhecido",
+        "failedWith": "Falha no download: {{error}}",
+        "kindTts": "Texto em fala",
+        "kindStt": "Fala em texto"
+      }
     }
   }
 }
