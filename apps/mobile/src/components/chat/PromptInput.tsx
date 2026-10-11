@@ -50,6 +50,8 @@ import { useMessageQueueStore } from '~/stores/message-queue-store'
 import { useSessionStore, useSessionModel } from '~/stores/session-store'
 import { useDraftInput } from '~/stores/draft-input-store'
 import { setInputDraft, getInputDraft, hydrateInputDrafts } from '~/stores/chat-draft-store'
+import { ReplyBar } from '~/components/chat/ReplyBar'
+import { withReplyPrefix } from '~/stores/reply-store'
 
 interface PromptInputProps {
   onSend: (text: string, options: SendMessageOptions, files?: FilePart[]) => void
@@ -390,7 +392,9 @@ export function PromptInput({
     if (!trimmed || !sessionId) return
     const modeNow = useWorkspaceStore.getState().mode
     const resolved = resolveSlashAction(trimmed, modeNow)
-    enqueueForSend(sessionId, resolved?.prompt ?? trimmed, buildOptions(), modeNow, {
+    // A citação entra DEPOIS do comando "/" ser resolvido: na frente dela, o
+    // texto deixaria de começar com "/" e o comando viraria conversa.
+    enqueueForSend(sessionId, withReplyPrefix(sessionId, resolved?.prompt ?? trimmed), buildOptions(), modeNow, {
       files: attachments.length > 0 ? attachments : undefined,
     })
     setText('')
@@ -403,7 +407,7 @@ export function PromptInput({
     const modeNow = useWorkspaceStore.getState().mode
     const resolved = resolveSlashAction(trimmed, modeNow)
     onAbort()
-    enqueueForSend(sessionId, resolved?.prompt ?? trimmed, buildOptions(), modeNow, {
+    enqueueForSend(sessionId, withReplyPrefix(sessionId, resolved?.prompt ?? trimmed), buildOptions(), modeNow, {
       files: attachments.length > 0 ? attachments : undefined,
     })
     setText('')
@@ -433,7 +437,7 @@ export function PromptInput({
 
     // Comandos "/" viram o prompt do pipeline correspondente
     const resolved = resolveSlashAction(trimmed, modeNow)
-    const finalText = resolved?.prompt ?? trimmed
+    const finalText = withReplyPrefix(sessionId, resolved?.prompt ?? trimmed)
 
     onSend(finalText, options, attachments.length > 0 ? attachments : undefined)
     setText('')
@@ -461,7 +465,7 @@ export function PromptInput({
 
       const modeNow = useWorkspaceStore.getState().mode
       const resolved = resolveSlashAction(trimmed, modeNow)
-      enqueueScheduled(sid, resolved?.prompt ?? trimmed, buildOptions(), modeNow, timestamp, {
+      enqueueScheduled(sid, withReplyPrefix(sessionId, resolved?.prompt ?? trimmed), buildOptions(), modeNow, timestamp, {
         files: attachments.length > 0 ? attachments : undefined,
       })
       setText('')
@@ -572,6 +576,9 @@ export function PromptInput({
             <Text className="text-xs" style={{ color: tokens.mutedForeground }}>{t('promptInput.loadingFile')}</Text>
           </View>
         )}
+
+        {/* Mensagem respondida — citação acima do campo, como no WhatsApp */}
+        <ReplyBar sessionId={sessionId} />
 
         {/* Text Area Input */}
         <View className="flex-row items-end">

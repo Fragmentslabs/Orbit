@@ -12,6 +12,7 @@ interface MessageListProps {
   messages: ChatMessage[]
   isStreaming?: boolean
   onRevert?: (messageId: string) => void
+  onReply?: (message: ChatMessage) => void
   ListFooterComponent?: React.ReactElement
   onLoadOlder?: () => void
 }
@@ -26,7 +27,7 @@ export interface MessageListHandle {
 // o memo segura e a lista fica intocada.
 export const MessageList = memo(
   forwardRef<MessageListHandle, MessageListProps>(function MessageList(
-    { messages, isStreaming, onRevert, ListFooterComponent, onLoadOlder },
+    { messages, isStreaming, onRevert, onReply, ListFooterComponent, onLoadOlder },
     ref,
   ) {
     const listRef = useRef<FlatList<ChatMessage>>(null)
@@ -105,11 +106,12 @@ export const MessageList = memo(
               isLast={index === messages.length - 1}
               isBusy={isStreaming}
               onRevert={onRevert}
+              onReply={onReply}
             />
           )}
         </View>
       ),
-      [messages, isStreaming, onRevert],
+      [messages, isStreaming, onRevert, onReply],
     )
 
     return (

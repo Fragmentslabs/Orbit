@@ -196,6 +196,12 @@
       "vision": "Visão"
     }
   },
+  "reply": {
+    "action": "Responder",
+    "cancel": "Cancelar resposta",
+    "you": "Você",
+    "assistant": "Assistente"
+  },
   "chatScreen": {
     "newConversationTitle": "Nova conversa",
     "newConversationSubtitle": "Comece a conversar com o assistente.",

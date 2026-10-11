@@ -4,8 +4,10 @@ import { useTranslation } from 'react-i18next'
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller'
 import { Stack, useRouter } from 'expo-router'
 import { SafeScreen } from '~/components/layout/SafeScreen'
-import type { SendMessageOptions, FilePart } from '@orbit/shared'
-import { folderKey, normalizeFolderName, showsPersonaOnWelcome } from '@orbit/shared'
+import type { ChatMessage, SendMessageOptions, FilePart } from '@orbit/shared'
+import { folderKey, normalizeFolderName, replyExcerpt, showsPersonaOnWelcome } from '@orbit/shared'
+import { visibleMessageText } from '~/lib/message-utils'
+import { useReply } from '~/stores/reply-store'
 import { PlanReviewCard } from '~/components/chat/PlanReviewCard'
 import { TaskProgress } from '~/components/chat/TaskProgress'
 import { OrchestrationPlanCard } from '~/components/chat/OrchestrationPlanCard'
@@ -339,6 +341,18 @@ export function ChatScreen({ sessionId }: ChatScreenProps) {
     [sessionId, revertToMessage],
   )
 
+  const setReply = useReply((s) => s.setReply)
+
+  // Responder: marca a mensagem no compositor (a barra acima do campo de
+  // texto). O recorte sai daqui — o PromptInput só prepende e limpa.
+  const handleReply = useCallback(
+    (message: ChatMessage) => {
+      const text = replyExcerpt(visibleMessageText(message))
+      if (text) setReply(sessionId, { role: message.role, text })
+    },
+    [sessionId, setReply],
+  )
+
   // Closure inline aqui virava prop nova a cada render e derrubava o memo do
   // MessageList — que existe justamente para a lista não reconciliar à toa.
   const handleLoadOlder = useCallback(() => {
@@ -479,6 +493,7 @@ export function ChatScreen({ sessionId }: ChatScreenProps) {
                 messages={activeMessages}
                 isStreaming={isStreaming}
                 onRevert={handleRevert}
+                onReply={handleReply}
                 onLoadOlder={handleLoadOlder}
                 ListFooterComponent={listFooter}
               />
