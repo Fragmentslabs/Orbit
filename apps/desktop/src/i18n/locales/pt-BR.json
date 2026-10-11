@@ -2303,6 +2303,13 @@
     "quoteInChat": "Citar no chat",
     "docxUnavailable": "Não foi possível mostrar o documento como ele é. O modo Texto continua mostrando o conteúdo."
   },
+  "reply": {
+    "action": "Responder",
+    "excerpt": "Responder trecho",
+    "cancel": "Cancelar resposta",
+    "you": "Você",
+    "assistant": "Assistente"
+  },
   "appCrash": {
     "title": "Algo deu errado ao desenhar a tela.",
     "hint": "O erro abaixo também está no log do terminal. Recarregar não apaga suas conversas.",

@@ -30,6 +30,8 @@ import { ReasoningPicker } from "@/src/components/reasoning-picker"
 import { QuickSettingsMenu } from "@/src/components/quick-settings-menu"
 import { DraftInputBridge } from "@/src/components/draft-input-bridge"
 import { ChatInputDraft } from "@/src/components/chat-input-draft"
+import { ReplyBar } from "@/src/components/reply-bar"
+import { withReplyPrefix } from "@/src/stores/message-reply"
 import { PendingAttachmentSync } from "@/src/components/pending-attachment-sync"
 import { clearInputDraft } from "@/src/stores/chat-draft"
 import { QueueIndicator } from "@/src/components/queue-indicator"
@@ -92,6 +94,9 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId, on
   onProviderBlocked?: () => void
 }) {
   const { t } = useTranslation()
+  // Chave da mensagem respondida: o chat de código não tem rascunho por
+  // painel, então é a sessão (ou "draft" no chat novo).
+  const replyKey = sessionId ?? "draft"
   const codeActiveModes = useModelModePrefs((s) => s.codeActiveModes)
   const plan = useModeActive("plan", sessionId, codeActiveModes.plan)
   const search = useModeActive("search", sessionId, codeActiveModes.search)
@@ -246,7 +251,7 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId, on
         onStop?.()
       } else if (sessionId && folders.length > 0) {
         const { directory, extraDirectories } = getDirs()
-        enqueueForSend(sessionId, resolveText(text), buildOptions(), mode, { directory, extraDirectories, files })
+        enqueueForSend(sessionId, withReplyPrefix(replyKey, resolveText(text)), buildOptions(), mode, { directory, extraDirectories, files })
         clearInputDraft(sessionId)
       }
       return
@@ -292,14 +297,15 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId, on
     // A mensagem foi enviada: o rascunho da sessão (se existia de uma troca
     // anterior) não pode mais voltar ao input ao reabrir o chat.
     if (sessionId) clearInputDraft(sessionId)
+    // A citação é prependada DEPOIS do comando "/" ser resolvido (ver chat-input)
     return onSubmit(
-      text,
+      withReplyPrefix(replyKey, text),
       buildOptions(),
       directory,
       extraDirectories,
       files.length > 0 ? files : undefined,
     )
-  }, [busy, folders, sessionId, onStop, selections, quotes, getDirs, buildOptions, onSubmit, mode, enqueueForSend, sendMessage, createSession])
+  }, [busy, folders, sessionId, replyKey, onStop, selections, quotes, getDirs, buildOptions, onSubmit, mode, enqueueForSend, sendMessage, createSession])
 
   const slashCommands = useMemo<SlashCommand[]>(() => {
     const toggle = (fn: () => void) => ({ setText }: { setText: (t: string) => void }) => {
@@ -412,6 +418,7 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId, on
           onSubmit={handleSubmit}
           className="rounded-xl border-2 border-sidebar-border [&>div]:!rounded-[calc(var(--radius-xl)-2px)] [&>div]:!border-none [&>div]:!bg-transparent"
         >
+          <ReplyBar replyKey={replyKey} />
           <PromptInputBody>
             <PromptInputTextarea
               placeholder={folders.length === 0 ? t("codeInput.placeholderNoFolder") : t("codeInput.placeholder")}
@@ -483,25 +490,25 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId, on
                 onQueue={(text, files) => {
                   if (!sessionId) return
                   const { directory, extraDirectories } = getDirs()
-                  enqueueForSend(sessionId, text, buildOptions(), mode, { directory, extraDirectories, files: toFileParts(files ?? []) })
+                  enqueueForSend(sessionId, withReplyPrefix(replyKey, text), buildOptions(), mode, { directory, extraDirectories, files: toFileParts(files ?? []) })
                 }}
                 onStopAndSend={(text, files) => {
                   onStop?.()
                   if (!sessionId) return
                   const { directory, extraDirectories } = getDirs()
-                  enqueueForSend(sessionId, text, buildOptions(), mode, { directory, extraDirectories, files: toFileParts(files ?? []) })
+                  enqueueForSend(sessionId, withReplyPrefix(replyKey, text), buildOptions(), mode, { directory, extraDirectories, files: toFileParts(files ?? []) })
                 }}
                 onSchedule={(text, timestamp, files) => {
                   if (!sessionId) return
                   const { directory, extraDirectories } = getDirs()
-                  enqueueScheduled(sessionId, text, buildOptions(), mode, timestamp, { directory, extraDirectories, files: toFileParts(files ?? []) })
+                  enqueueScheduled(sessionId, withReplyPrefix(replyKey, text), buildOptions(), mode, timestamp, { directory, extraDirectories, files: toFileParts(files ?? []) })
                 }}
                 onSendToSidePanel={async (text, files) => {
                   const { directory, extraDirectories } = getDirs()
                   // Novo chat na mesma pasta da sessão atual (se ela estiver em uma)
                   const current = useSessionStore.getState().sessions.find((s) => s.id === sessionId)
                   const newSession = await createSession(mode, { setActive: false, directory, extraDirectories, folderId: current?.folderId ?? null })
-                  await sendMessage(mode, text, { options: buildOptions(), sessionId: newSession.id, directory, extraDirectories, files: toFileParts(files ?? []) })
+                  await sendMessage(mode, withReplyPrefix(replyKey, text), { options: buildOptions(), sessionId: newSession.id, directory, extraDirectories, files: toFileParts(files ?? []) })
                   openChatTab(newSession.id, newSession.title)
                 }}
               />

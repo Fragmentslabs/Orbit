@@ -1,4 +1,5 @@
 import type { ChatViewMode } from "@shared/app-settings"
+import { parseMessageReply } from "@shared/chat"
 import type { ChatMessage, FilePart, MessagePart, ReasoningPart, TextPart, ToolPart } from "@shared/chat"
 
 /** Converte blob URLs dos anexos do input em data URLs estáveis. O input
@@ -118,6 +119,13 @@ export function visibleMessageText(message: ChatMessage): string {
     .filter((p): p is Extract<MessagePart, { type: "text" }> => p.type === "text" && p.source !== "attachment")
     .map((p) => p.text)
     .join("\n")
+}
+
+/** Só o corpo da mensagem: sem a citação da mensagem respondida, que a bolha
+ *  desenha em destaque. Para previews (navegador de mensagens), onde o trecho
+ *  citado só empurraria o texto da pessoa para fora do lugar. */
+export function messageBody(message: ChatMessage): string {
+  return parseMessageReply(visibleMessageText(message)).body
 }
 
 /** Converte anexos do PromptInput (FileUIPart, url já em data URL) em FileParts */

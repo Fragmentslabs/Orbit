@@ -2304,6 +2304,13 @@
     "quoteInChat": "Quote in chat",
     "docxUnavailable": "This document could not be displayed as it looks. The Text view still shows its content."
   },
+  "reply": {
+    "action": "Reply",
+    "excerpt": "Reply to excerpt",
+    "cancel": "Cancel reply",
+    "you": "You",
+    "assistant": "Assistant"
+  },
   "appCrash": {
     "title": "Something went wrong while drawing the screen.",
     "hint": "The error below is also in the terminal log. Reloading keeps your conversations.",

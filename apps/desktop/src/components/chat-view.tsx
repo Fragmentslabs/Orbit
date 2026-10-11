@@ -28,12 +28,20 @@ import { TaskProgress } from "@/src/components/task-progress"
 import { PlanReviewCard } from "@/src/components/plan-review-card"
 import { InitProjectCard } from "@/src/components/init-project-card"
 import { RevertBar } from "@/src/components/revert-bar"
-import { AssistantMessageActions, CopyAction, MessageTimestamp, RevertAction } from "@/src/components/messages/shared"
+import {
+  AssistantMessageActions,
+  CopyAction,
+  MessageTimestamp,
+  ReplyAction,
+  RevertAction,
+  UserMessageText,
+} from "@/src/components/messages/shared"
+import { MessageReplySelection } from "@/src/components/message-reply-selection"
 import { DateSeparator, isNewDay } from "@/src/components/messages/date-separator"
 import { ChatMessageSearchBar } from "@/src/components/chat-message-search-bar"
 import { useChatSearchStore } from "@/src/stores/chat-search-store"
 import { Actions } from "@/src/components/ai/actions"
-import { messageText, visibleMessageText } from "@/src/lib/message-utils"
+import { messageBody, messageText, visibleMessageText } from "@/src/lib/message-utils"
 import { PAGE_TURNS, defaultWindowStart, turnStart, windowStartFor } from "@/src/lib/message-window"
 import { registerMessageRevealer, revealMessage } from "@/src/lib/message-jump"
 import { playEntranceSound, prepareEntranceSound } from "@/src/lib/entrance-sound"
@@ -129,7 +137,7 @@ const MessageItem = memo(
   if (msg.role === "user") {
     const files = msg.parts.filter((p): p is FilePart => p.type === "file")
     return (
-      <Message from="user" data-user-msg-id={msg.id} data-msg-id={msg.id}>
+      <Message from="user" data-user-msg-id={msg.id} data-msg-id={msg.id} data-msg-role="user">
         <div className="group/user-msg flex flex-col">
           {files.length > 0 && (
             <MessageAttachments className="mb-1">
@@ -159,11 +167,12 @@ const MessageItem = memo(
             </MessageAttachments>
           )}
           <MessageContent>
-            <p className="whitespace-pre-wrap">{visibleMessageText(msg)}</p>
+            <UserMessageText text={visibleMessageText(msg)} />
           </MessageContent>
           <Actions className="-mb-1 items-center justify-end opacity-0 transition-opacity group-hover/user-msg:opacity-100">
             <MessageTimestamp timestamp={msg.createdAt} />
             <CopyAction text={visibleMessageText(msg)} />
+            <ReplyAction message={msg} sessionId={sessionId} />
             <RevertAction messageId={msg.id} sessionId={sessionId} />
           </Actions>
         </div>
@@ -172,7 +181,7 @@ const MessageItem = memo(
   }
 
   return (
-    <Message from="assistant" data-msg-id={msg.id}>
+    <Message from="assistant" data-msg-id={msg.id} data-msg-role="assistant">
       <MessageContent>
         <AssistantMessage
           message={msg}
@@ -183,7 +192,7 @@ const MessageItem = memo(
           onRetry={handleRetry}
         />
       </MessageContent>
-      {finished && !waiting && <AssistantMessageActions message={msg} />}
+      {finished && !waiting && <AssistantMessageActions message={msg} sessionId={sessionId} />}
     </Message>
   )
   },
@@ -281,7 +290,7 @@ function ChatMessages({ messages, historyPending, isBusy, busyLabel, mode, sessi
     () =>
       messages
         .filter((m) => m.role === "user")
-        .map((m) => ({ id: m.id, text: visibleMessageText(m), time: m.createdAt })),
+        .map((m) => ({ id: m.id, text: messageBody(m), time: m.createdAt })),
     [messages],
   )
 
@@ -538,6 +547,9 @@ function ChatMessages({ messages, historyPending, isBusy, busyLabel, mode, sessi
       </ConversationContent>
       <ConversationScrollButton />
       <UserMessageNav items={userMsgItems} activeId={activeUserMsgId} onSelect={handleNavSelect} planIds={planIds} />
+      {/* Selecionar um trecho e responder só ele — dentro do Conversation
+          porque é o elemento de rolagem dele que delimita a área válida. */}
+      <MessageReplySelection sessionId={sessionId} />
     </Conversation>
   )
 }
