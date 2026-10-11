@@ -54,9 +54,17 @@ describe('descobrirVerificacoes', () => {
 
 describe('rodarVerificacao', () => {
   it('passa e falha pelo código de saída, com a saída junto', async () => {
-    const ok = await rodarVerificacao({ nome: 'ok', comando: 'sh', args: ['-c', 'echo tudo certo'], pasta: tmp })
+    // `node -e` no lugar de `sh -c`: o `sh` não existe no Windows, e o que o
+    // teste verifica é o código de saída e a saída capturada, não o shell.
+    const node = process.execPath
+    const ok = await rodarVerificacao({ nome: 'ok', comando: node, args: ['-e', 'console.log("tudo certo")'], pasta: tmp })
     expect(ok).toEqual({ ok: true, saida: 'tudo certo' })
-    const falha = await rodarVerificacao({ nome: 'x', comando: 'sh', args: ['-c', 'echo erro em a.ts >&2; exit 2'], pasta: tmp })
+    const falha = await rodarVerificacao({
+      nome: 'x',
+      comando: node,
+      args: ['-e', 'console.error("erro em a.ts"); process.exit(2)'],
+      pasta: tmp,
+    })
     expect(falha.ok).toBe(false)
     expect(falha.saida).toContain('erro em a.ts')
   })

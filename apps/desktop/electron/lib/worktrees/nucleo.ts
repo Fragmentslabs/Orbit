@@ -127,7 +127,11 @@ export function slug(texto: string): string {
 /** Raiz do repositório que contém a pasta (a pasta pode ser uma subpasta). */
 export async function raizDoRepositorio(pasta: string): Promise<string> {
   try {
-    return await git(pasta, ['rev-parse', '--show-toplevel'])
+    // path.normalize: o git devolve a raiz com barras normais mesmo no Windows,
+    // enquanto tudo que este serviço constrói usa path.join (barras invertidas
+    // lá). Sem isto a mesma função entregava dois dialetos de caminho, e as
+    // comparações por string crua não casavam no Windows.
+    return path.normalize(await git(pasta, ['rev-parse', '--show-toplevel']))
   } catch {
     throw new Error(`A pasta principal não é um repositório git: ${pasta}`)
   }

@@ -146,7 +146,13 @@ export async function listarWorktrees(pasta: string): Promise<ListaWorktrees | n
   } catch {
     return null
   }
-  const blocos = lerPorcelain(await git(repo, ['worktree', 'list', '--porcelain'])).filter((b) => !b.bare)
+  // `path.normalize` nos caminhos do porcelain: o git os devolve com barras
+  // normais mesmo no Windows, enquanto tudo que o serviço constrói (e o
+  // `criarWorktreeDoChat`) usa barras invertidas lá. Sem isto a mesma lista
+  // trazia dois dialetos e as comparações por string crua não casavam.
+  const blocos = lerPorcelain(await git(repo, ['worktree', 'list', '--porcelain']))
+    .filter((b) => !b.bare)
+    .map((b) => ({ ...b, caminho: path.normalize(b.caminho) }))
   if (blocos.length === 0) return null
 
   // Subpasta em que o chat está, relativa ao worktree atual — o equivalente

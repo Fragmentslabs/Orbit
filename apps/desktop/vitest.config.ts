@@ -22,5 +22,12 @@ export default defineConfig({
   test: {
     environment: 'node',
     include: ['electron/**/*.test.ts', 'lib/**/*.test.ts', 'src/**/*.test.ts'],
+    // A suíte mexe com git e disco de verdade (worktrees, repositórios
+    // temporários, merges). Os 5s padrão do vitest são curtos demais quando o
+    // arquivo roda em paralelo com os outros e a máquina satura: o teste estoura
+    // no meio e ainda deixa um processo do git segurando a pasta temporária, que
+    // então falha com EPERM no afterEach.
+    testTimeout: 30_000,
+    hookTimeout: 30_000,
   },
 })

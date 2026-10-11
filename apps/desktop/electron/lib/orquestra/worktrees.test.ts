@@ -28,6 +28,10 @@ beforeEach(() => {
   repo = path.join(tmp, 'repo')
   fs.mkdirSync(repo)
   git(repo, 'init', '-q', '-b', 'main')
+  // O git no Windows vem com core.autocrlf=true e reescreve os arquivos com
+  // CRLF no checkout; os testes leem o conteúdo esperando \n. O repositório é
+  // temporário, então a configuração fica local.
+  git(repo, 'config', 'core.autocrlf', 'false')
   fs.writeFileSync(path.join(repo, '.gitignore'), '.env\n')
   fs.writeFileSync(path.join(repo, 'a.txt'), 'linha 1\n')
   git(repo, 'add', '-A')

@@ -73,8 +73,10 @@ describe('nomes', () => {
 describe('acharExtras', () => {
   it('acha os node_modules dos workspaces sem descer neles, e os .env', async () => {
     const { modulos, envs } = await acharExtras(repo)
-    expect(modulos.sort()).toEqual(['apps/web/node_modules', 'node_modules'])
-    expect(envs.sort()).toEqual(['.env', '.env.example', 'apps/web/.env.local'])
+    // path.join: o serviço devolve caminhos relativos com o separador do
+    // sistema, então a expectativa não pode fixar '/'.
+    expect(modulos.sort()).toEqual([path.join('apps/web', 'node_modules'), 'node_modules'])
+    expect(envs.sort()).toEqual(['.env', '.env.example', path.join('apps/web', '.env.local')])
   })
 })
 

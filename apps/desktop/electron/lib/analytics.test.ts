@@ -218,7 +218,11 @@ describe('computeAnalytics', () => {
     const r = await computeAnalytics({ type: 'custom', from: DIA(10, 0), to: DIA(10, 23, 59) })
     const dia = r.days[0]
     expect(dia.byProject).toHaveLength(2)
-    const alpha = dia.byProject.find((p) => p.projectId === '/repo/alpha')
+    // A fatia do dia é filtrada pelo MESMO id de projeto que o topo usa — é o
+    // contrato de que o heatmap depende. O id é um hash do caminho, não o
+    // caminho: comparar com '/repo/alpha' nunca casaria, em sistema nenhum.
+    const alphaId = r.byProject.find((p) => p.name === 'alpha')!.projectId
+    const alpha = dia.byProject.find((p) => p.projectId === alphaId)
     expect(alpha?.hours).toBeCloseTo(1, 5)
     expect(alpha?.messages).toBe(1)
   })
