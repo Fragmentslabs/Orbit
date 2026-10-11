@@ -2231,6 +2231,9 @@
     "openInPanel": "Abrir no painel",
     "export": "Exportar HTML",
     "expand": "Expandir",
+    "zoomIn": "Aumentar zoom",
+    "zoomOut": "Diminuir zoom",
+    "zoomReset": "Zoom padrão (100%)",
     "unavailable": "Artefato indisponível"
   },
   "documents": {

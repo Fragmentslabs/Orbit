@@ -3,8 +3,7 @@ import { useTranslation } from "react-i18next"
 import { Download, RotateCw } from "lucide-react"
 import { ARTIFACT_SCHEME } from "@shared/media"
 import type { MediaEntry } from "@shared/media"
-import { Button } from "@/components/ui/button"
-import { ArtifactFrame } from "@/src/components/ai/artifact-part"
+import { ArtifactFrame, ArtifactToolbar, IconAction } from "@/src/components/ai/artifact-part"
 import { artifactApi, mediaApi } from "@/src/lib/ipc"
 
 /**
@@ -65,30 +64,20 @@ export function ArtifactTab({ artifactId, title }: { artifactId?: string; title:
   const src = `${ARTIFACT_SCHEME}://${fileId}?rev=${entry?.revision ?? 1}&r=${reloads}`
 
   return (
-    <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
-      <div className="flex items-center justify-between gap-2 border-b px-3 py-2">
-        <span className="truncate text-xs font-medium">{entry?.name || title}</span>
-        <div className="flex shrink-0 items-center gap-0.5">
-          <Button
-            variant="ghost"
-            size="icon"
-            className="size-6"
-            aria-label={t("artifacts.reload")}
-            onClick={() => setReloads((n) => n + 1)}
-          >
-            <RotateCw className="size-3.5" />
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="size-6"
-            aria-label={t("artifacts.export")}
-            onClick={onExport}
-          >
-            <Download className="size-3.5" />
-          </Button>
-        </div>
-      </div>
+    <div className="group/artifact flex min-w-0 flex-1 flex-col overflow-hidden">
+      <ArtifactToolbar
+        title={entry?.name || title}
+        actions={
+          <>
+            <IconAction
+              icon={RotateCw}
+              label={t("artifacts.reload")}
+              onClick={() => setReloads((n) => n + 1)}
+            />
+            <IconAction icon={Download} label={t("artifacts.export")} onClick={onExport} />
+          </>
+        }
+      />
       <ArtifactFrame
         src={src}
         title={entry?.name || title}

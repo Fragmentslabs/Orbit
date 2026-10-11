@@ -2232,6 +2232,9 @@
     "openInPanel": "Open in panel",
     "export": "Export HTML",
     "expand": "Expand",
+    "zoomIn": "Zoom in",
+    "zoomOut": "Zoom out",
+    "zoomReset": "Reset zoom (100%)",
     "unavailable": "Artifact unavailable"
   },
   "documents": {
