@@ -79,9 +79,10 @@ export interface AppSettings {
 }
 
 /** Largura da sidebar: 256px é o tamanho histórico (16rem), e o teto evita que
- *  ela coma o conteúdo em janela estreita. */
+ *  ela coma o conteúdo em janela estreita. O piso é 15rem: abaixo disso as
+ *  linhas (ícone + título + selos) ficam espremidas e a sidebar parece quebrada. */
 export const SIDEBAR_DEFAULT_WIDTH = 256
-export const SIDEBAR_MIN_WIDTH = 200
+export const SIDEBAR_MIN_WIDTH = 240
 export const SIDEBAR_MAX_WIDTH = 420
 
 /** Traz a largura para dentro do arrastável (usado ao normalizar e ao arrastar). */
