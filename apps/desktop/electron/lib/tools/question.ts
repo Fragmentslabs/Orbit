@@ -1,6 +1,7 @@
 import { generateText, tool } from 'ai'
 import { z } from 'zod'
 import type { Question, SendMessageInput } from '@shared/chat'
+import { formatAskLine } from '@shared/chat'
 import { newRequestId } from '../ask-broker'
 import { dispatchAsk } from '../ask-dispatch'
 import { broadcastChatEvent } from '../broadcast'
@@ -75,7 +76,7 @@ export function createQuestionTool(input: SendMessageInput, signal?: AbortSignal
         )
         if (reply?.rejected || !reply?.answers) return DISMISSED
         return questions
-          .map((q, i) => `${i + 1}. ${q.text}\n   → ${reply.answers?.[i] || '(sem resposta)'}`)
+          .map((q, i) => formatAskLine(i, q.text, reply.answers?.[i] || '(sem resposta)'))
           .join('\n')
       } catch {
         return DISMISSED

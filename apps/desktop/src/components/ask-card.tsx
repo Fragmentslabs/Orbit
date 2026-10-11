@@ -7,6 +7,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { Input } from "@/components/ui/input"
 import { cn } from "@/lib/utils"
 import type { Question } from "@shared/chat"
+import { formatAskAnswer } from "@shared/chat"
 import { chatApi } from "@/src/lib/ipc"
 import { usePanelStore } from "@/src/stores/panel-store"
 import { useSessionStore } from "@/src/stores/session-store"
@@ -86,6 +87,15 @@ export function QuestionItem({ question, selected, free, onToggle, onFree }: {
   onFree: (text: string) => void
 }) {
   const { t } = useTranslation()
+  // O campo diz o que o texto vai ser: com opção marcada é uma observação
+  // SOBRE ela (vai junto, rotulada); sem nenhuma, é a própria resposta.
+  const [only] = selected
+  const placeholder =
+    selected.size === 0
+      ? t("ask.otherAnswer")
+      : selected.size > 1
+        ? t("ask.noteMulti")
+        : t("ask.noteOn", { option: only.length > 40 ? `${only.slice(0, 39)}…` : only })
   return (
     <div className="flex min-w-0 flex-col gap-1.5">
       <p className="min-w-0 whitespace-pre-wrap break-words text-sm">{question.text}</p>
@@ -110,7 +120,8 @@ export function QuestionItem({ question, selected, free, onToggle, onFree }: {
       <Input
         value={free}
         onChange={(e) => onFree(e.target.value)}
-        placeholder={t("ask.otherAnswer")}
+        placeholder={placeholder}
+        title={placeholder}
         className="h-7 text-xs"
       />
     </div>
@@ -198,12 +209,8 @@ function QuestionBody({ ask, submitted, onReply, sessionId }: {
   const [selected, setSelected] = useState<Record<string, Set<string>>>({})
   const [free, setFree] = useState<Record<string, string>>({})
 
-  const answerOf = (q: Question): string => {
-    const picks = [...(selected[q.id] ?? [])]
-    const text = free[q.id]?.trim()
-    if (text) picks.push(text)
-    return picks.join(", ")
-  }
+  const answerOf = (q: Question): string =>
+    formatAskAnswer([...(selected[q.id] ?? [])], free[q.id], t("ask.noteLabel"))
   const allAnswered = questions.every((q) => answerOf(q).length > 0)
   const current = questions[currentIndex]
 

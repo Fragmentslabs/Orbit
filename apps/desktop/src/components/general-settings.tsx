@@ -5,6 +5,7 @@ import { ModelField } from "@/src/components/model-field"
 import { SettingRow, SettingSelect, SettingSwitch } from "@/src/components/settings-row"
 import { useAppSettings } from "@/src/stores/app-settings"
 import { ThinkingMenu } from "@/src/components/thinking-menu"
+import { windowApi } from "@/src/lib/ipc"
 
 /** Raciocínio do modelo auxiliar: o mesmo botão dos outros modelos das Preferências. */
 function AuxThinkingMenu() {
@@ -20,6 +21,7 @@ export function GeneralSettings() {
   const { t } = useTranslation()
   const settings = useAppSettings((s) => s.settings)
   const update = useAppSettings((s) => s.update)
+  const isMac = windowApi.platform === "darwin"
 
   const countOptions = COUNT_OPTIONS.map((n) => ({
     value: String(n),
@@ -155,17 +157,21 @@ export function GeneralSettings() {
         />
       </SettingRow>
 
-      <SettingRow
-        icon={Minimize2}
-        title={t("preferences.general.closeToTray.title")}
-        description={t("preferences.general.closeToTray.description")}
-      >
-        <SettingSwitch
-          checked={settings.closeToTray}
-          onChange={(closeToTray) => update({ closeToTray })}
-          label={t("preferences.general.closeToTray.title")}
-        />
-      </SettingRow>
+      {/* No macOS não há bandeja — fechar já deixa o app vivo no Dock —, então
+          a preferência não teria o que governar lá. */}
+      {!isMac && (
+        <SettingRow
+          icon={Minimize2}
+          title={t("preferences.general.closeToTray.title")}
+          description={t("preferences.general.closeToTray.description")}
+        >
+          <SettingSwitch
+            checked={settings.closeToTray}
+            onChange={(closeToTray) => update({ closeToTray })}
+            label={t("preferences.general.closeToTray.title")}
+          />
+        </SettingRow>
+      )}
     </div>
   )
 }

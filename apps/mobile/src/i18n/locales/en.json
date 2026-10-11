@@ -292,7 +292,10 @@
     "alwaysThisChat": "Always in this chat",
     "always": "Always",
     "questionLabel": "Question",
-    "otherAnswerPlaceholder": "Other answer…",
+    "otherAnswerPlaceholder": "Or write another answer…",
+    "noteOn": "Note on \"{{option}}\" (optional)",
+    "noteMulti": "Note on your choice (optional)",
+    "noteLabel": "Note",
     "dismiss": "Dismiss",
     "advance": "Next",
     "answer": "Answer"

@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { cn } from "@/lib/utils"
 import type { Question } from "@shared/chat"
+import { formatAskAnswer } from "@shared/chat"
 import { chatApi } from "@/src/lib/ipc"
 import { QuestionItem } from "@/src/components/ask-card"
 import type { PendingAskUI } from "@/src/stores/session-store"
@@ -72,10 +73,7 @@ export function AskCardBatch({ items }: { items: PendingAskUI[] }) {
   const keyOf = (requestId: string, questionId: string) => `${requestId}:${questionId}`
   const answerOf = (requestId: string, q: Question): string => {
     const key = keyOf(requestId, q.id)
-    const picks = [...(selected[key] ?? [])]
-    const text = free[key]?.trim()
-    if (text) picks.push(text)
-    return picks.join(", ")
+    return formatAskAnswer([...(selected[key] ?? [])], free[key], t("ask.noteLabel"))
   }
   const allAnswered = items.every(
     (item) =>

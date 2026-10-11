@@ -255,10 +255,18 @@ function trayHandlers() {
  * hospedar o app sem janela: desligada, o X volta a encerrar e o ícone sai
  * junto — deixá-lo seria um ícone de um app que não fica vivo.
  *
+ * No macOS ela não existe: fechar a janela já deixa o app vivo no Dock (ver
+ * `window-all-closed`), que é o caminho de volta — o ícone seria uma segunda
+ * porta para a mesma coisa, ocupando a barra de menus.
+ *
  * Se a bandeja não puder ser criada (sem ícone), `hasTray()` fica falso e o
  * fechar continua encerrando: esconder a janela seria perder o app.
  */
 async function syncTray(): Promise<void> {
+  if (process.platform === 'darwin') {
+    destroyTray()
+    return
+  }
   if (!getAppSettings().closeToTray) {
     destroyTray()
     // Preferência desligada com a janela escondida: sem bandeja não haveria
@@ -362,15 +370,17 @@ function queueOpenFolder(directory: string) {
     win.webContents.send("app:open-folder", directory)
     return
   }
+  // A pasta fica pendente para o renderer buscar ao montar — mas no macOS pode
+  // não haver janela nenhuma para montar: fechada a última, o app segue vivo no
+  // Dock, e quem abre a pasta precisa poder trazê-la de volta.
   pendingOpenFolder = directory
+  ensureWindow()
 }
 
 app.on("second-instance", (_event, argv) => {
-  if (win) {
-    if (win.isMinimized()) win.restore()
-    win.show()
-    win.focus()
-  }
+  // Relançar o app é um pedido por janela: no macOS ela pode ter sido fechada
+  // (o app segue vivo no Dock), e sem isto o relançamento não faria nada.
+  showMainWindow()
   void findFolderArg(argv).then((dir) => {
     if (dir) queueOpenFolder(dir)
   })
@@ -443,14 +453,25 @@ function createWindow() {
   win.on('enter-full-screen', () => win?.webContents.send('window:fullscreen-change', true))
   win.on('leave-full-screen', () => win?.webContents.send('window:fullscreen-change', false))
 
-  // Fechar para a bandeja: o X (e o "Fechar Janela" do menu do macOS) esconde
-  // o app em vez de encerrá-lo — é o que o mantém vivo servindo os apps
-  // conectados por MCP enquanto não há janela à vista. Sem bandeja criada, o
-  // close segue normal: esconder sem ter como voltar seria perder o app.
+  // Fechar para a bandeja: o X esconde o app em vez de encerrá-lo — é o que o
+  // mantém vivo servindo os apps conectados por MCP enquanto não há janela à
+  // vista. Sem bandeja criada, o close segue normal: esconder sem ter como
+  // voltar seria perder o app — é o que acontece no macOS, onde não há bandeja
+  // e quem traz a janela de volta é o Dock (ver `window-all-closed`).
   win.on('close', (event) => {
     if (quitting || !getAppSettings().closeToTray || !hasTray()) return
     event.preventDefault()
     win?.hide()
+  })
+
+  // A janela morreu de verdade (macOS: o X fecha e o app segue vivo no Dock):
+  // a referência precisa morrer junto. Uma `win` destruída faria todo
+  // `win?.webContents.send` do main falar com o vazio, e o `showMainWindow`
+  // deixaria de recriar a janela por achar que ela ainda está lá.
+  const created = win
+  created.on('closed', () => {
+    // Reaberta antes disto, já há outra no lugar — essa referência não é dela.
+    if (win === created) win = null
   })
 
   // Test active push message to Renderer-process.
@@ -479,17 +500,47 @@ function createWindow() {
   }
 }
 
+/** A janela viva, recriando-a se não houver. `null` só se a criação falhar. */
+function ensureWindow(): BrowserWindow | null {
+  if (win && !win.isDestroyed()) return win
+  createWindow()
+  return win && !win.isDestroyed() ? win : null
+}
+
+/**
+ * Entrega um evento do menu ao renderer, criando a janela se preciso. No macOS
+ * a barra de menus sobrevive à janela — o X fecha de verdade e o app segue vivo
+ * no Dock —, então uma ação dela (Cmd+N, Preferências…) precisa trazer a janela
+ * de volta. Recém-criada ela ainda está carregando, e mandar agora perderia a
+ * mensagem: daí esperar o load terminar.
+ */
+function sendToWindow(channel: string, payload: string): void {
+  const target = ensureWindow()
+  if (!target) return
+  if (target.webContents.isLoading()) {
+    target.webContents.once('did-finish-load', () => {
+      if (!target.isDestroyed()) target.webContents.send(channel, payload)
+    })
+    return
+  }
+  target.webContents.send(channel, payload)
+}
+
 // Menu nativo do macOS: no Mac a barra de menus fica no topo da tela, então as
 // ações do hamburger (que o renderer esconde nesse SO) migram para cá, com
 // atalhos nativos (Cmd+N, Cmd+Shift+N, Cmd+O, Cmd+,). Em win/linux nada muda:
 // o menu bar continua escondido e o hamburger segue no app.
 function createAppMenu() {
   if (process.platform !== 'darwin') return
-  const send = (action: string) => win?.webContents.send('menu:action', action)
+  const send = (action: string) => sendToWindow('menu:action', action)
   const openFolder = async () => {
-    const result = await dialog.showOpenDialog(win!, { properties: ['openDirectory'] })
+    // A pasta escolhida precisa de uma janela viva para onde ir — com a janela
+    // fechada, o diálogo é o que a faz nascer.
+    const target = ensureWindow()
+    if (!target) return
+    const result = await dialog.showOpenDialog(target, { properties: ['openDirectory'] })
     if (result.canceled || result.filePaths.length === 0) return
-    win?.webContents.send('app:open-folder', result.filePaths[0])
+    sendToWindow('app:open-folder', result.filePaths[0])
   }
   const template: MenuItemConstructorOptions[] = [
     {

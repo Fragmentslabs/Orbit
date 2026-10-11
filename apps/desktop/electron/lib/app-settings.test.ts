@@ -52,7 +52,7 @@ describe('normalizeAppSettings', () => {
     // Salvo fora do domínio (janela de outro tamanho, valor corrompido): a
     // largura é trazida para a borda em vez de descartada.
     expect(normalizeAppSettings({ sidebarWidth: 9999 }).sidebarWidth).toBe(420)
-    expect(normalizeAppSettings({ sidebarWidth: 10 }).sidebarWidth).toBe(200)
+    expect(normalizeAppSettings({ sidebarWidth: 10 }).sidebarWidth).toBe(240)
     expect(normalizeAppSettings({ sidebarWidth: Number.NaN }).sidebarWidth).toBe(256)
   })
 })

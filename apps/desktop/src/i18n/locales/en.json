@@ -882,7 +882,10 @@
   },
   "ask": {
     "critical": "Critical action: ",
-    "otherAnswer": "Another answer…",
+    "otherAnswer": "Or write another answer…",
+    "noteOn": "Note on \"{{option}}\" (optional)",
+    "noteMulti": "Note on your choice (optional)",
+    "noteLabel": "Note",
     "questionOf": "Question {{current}} of {{total}}",
     "dismiss": "Dismiss",
     "advance": "Next",
