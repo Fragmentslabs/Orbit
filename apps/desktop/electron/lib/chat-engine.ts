@@ -1479,7 +1479,12 @@ async function runChatTurn(win: BrowserWindow, input: SendMessageInput): Promise
             trimmed,
             interleavedReasoningField(provider, primary.modelId),
           )
-          if (stepNumber < maxSteps) return normalized === messages ? {} : { messages: normalized }
+          // Último passo EXECUTADO é maxSteps - 1: o SDK chama o prepareStep com
+          // stepNumber = passos já concluídos e o do-while para quando
+          // steps.length === maxSteps (isStepCount usa igualdade). Com
+          // `stepNumber >= maxSteps` o guard abaixo nunca disparava — era o turno
+          // terminar numa tool call sem texto.
+          if (stepNumber < maxSteps - 1) return normalized === messages ? {} : { messages: normalized }
           return {
             activeTools: [],
             toolChoice: 'none' as const,
