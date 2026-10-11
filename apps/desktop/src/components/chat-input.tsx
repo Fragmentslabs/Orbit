@@ -27,6 +27,7 @@ import { ReasoningPicker } from "@/src/components/reasoning-picker"
 import { QuickSettingsMenu } from "@/src/components/quick-settings-menu"
 import { DraftInputBridge } from "@/src/components/draft-input-bridge"
 import { ChatInputDraft } from "@/src/components/chat-input-draft"
+import { DictationButton } from "@/src/components/dictation-button"
 import { PendingAttachmentSync } from "@/src/components/pending-attachment-sync"
 import { clearInputDraft } from "@/src/stores/chat-draft"
 import { QueueIndicator } from "@/src/components/queue-indicator"
@@ -241,13 +242,19 @@ export function ChatInput({ onSubmit, status, onStop, sessionId, draftKey, onPro
           if (sessionId) clearInputDraft(sessionId)
           return onSubmit(resolveText(text), buildOptions(), files.length > 0 ? files : undefined)
         }}
-        className="rounded-xl border-2 border-sidebar-border [&>div]:!rounded-[calc(var(--radius-xl)-2px)] [&>div]:!border-none [&>div]:!bg-transparent"
+        className="relative rounded-xl border-2 border-sidebar-border [&>div]:!rounded-[calc(var(--radius-xl)-2px)] [&>div]:!border-none [&>div]:!bg-transparent"
       >
+        {/* Microfone no canto SUPERIOR direito, no nível da primeira linha do
+            texto: absoluto para não empurrar o conteúdo, com a folga à direita
+            reservada no próprio textarea (pr-10). */}
+        <div className="absolute right-2 top-2 z-10 flex items-center">
+          <DictationButton sessionId={sessionId} />
+        </div>
         <PromptInputAttachments className="!px-3 !py-1.5">
           {(attachment) => <PromptInputAttachment data={attachment} />}
         </PromptInputAttachments>
         <PromptInputBody>
-          <PromptInputTextarea placeholder={t("input.placeholder")} suggestion={suggestion} className="px-3 text-base md:text-base" />
+          <PromptInputTextarea placeholder={t("input.placeholder")} suggestion={suggestion} className="px-3 pr-10 text-base md:text-base" />
         </PromptInputBody>
         <PromptInputFooter>
           <div className="flex items-center gap-1">

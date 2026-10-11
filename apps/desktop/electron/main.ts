@@ -56,6 +56,7 @@ import { setSessionModelsCache, setSessionModesCache, setWorkerConfigCache, setR
 import { setRotationConfigCache } from './lib/model-rotation'
 import { readJson as readStorageJson } from './lib/storage'
 import { registerPanelWebContents } from './lib/panel-browser'
+import { registerVoiceIpc } from './lib/voice'
 import { setupMemoryScheduler } from './lib/memory/scheduler'
 import { getAppSettings, loadAppSettings, setAppSettings } from './lib/app-settings'
 import { setupAutoArchive } from './lib/auto-archive'
@@ -1688,6 +1689,9 @@ app.whenReady().then(() => {
    * Retorna hits planos ordenados por recência da sessão.
    */
   ipcMain.handle('search:sessions', (_event, query: string) => searchSessions(query))
+
+  // Núcleo de voz: TTS local (streaming) e o catálogo/status dos modelos de voz.
+  registerVoiceIpc()
 
   // Catálogo de provedores/modelos (models.dev)
   ipcMain.handle('catalog:get', () => getCatalog())

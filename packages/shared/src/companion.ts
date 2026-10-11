@@ -5,6 +5,7 @@
  */
 
 import type { SendMessageOptions, SessionMode, FilePart, WorkerModelConfig, ReasoningConfig, PermissionMode, PlanReview, OrchestrationPlan, AskItem, ModelRotation, RotationConfig, QueuedMessage } from './chat'
+import type { VoiceEngineId, VoiceEngineStatus } from './voice'
 import type { AnalyticsRange } from './analytics'
 import type { NovaRotinaInput, Rotina, RotinaEvent, RotinaModelo } from './rotinas'
 import type {
@@ -840,6 +841,47 @@ export type CompanionEvent =
   | AppPreferencesChangeEvent
   | MessageQueueChangeEvent
   | StatusUpdate
+
+// ─── Voz (STT) ───────────────────────────────────────────────────────────────
+// Ditado do app companion: o celular grava, converte para PCM16 mono e manda o
+// base64 pela rota REST POST /api/voice/transcribe; a transcrição roda no
+// desktop, com motor local (ver docs/voz.md). Nada de áudio sai para a nuvem.
+
+/** Corpo do POST /api/voice/transcribe. */
+export interface VoiceTranscribeRequest {
+  /** Áudio PCM16 com sinal, little-endian, em base64. */
+  pcm: string
+  /** Taxa de amostragem do PCM, em Hz (o app grava a 16 kHz). */
+  sampleRate: number
+  /** Motor de transcrição; ausente = o padrão do desktop. */
+  engine?: VoiceEngineId
+  modelId?: string | null
+  /** Idioma esperado (ex.: 'pt'); ausente = detecção automática. */
+  language?: string
+}
+
+/** Resposta do POST /api/voice/transcribe. */
+export interface VoiceTranscribeResponse {
+  /** Texto reconhecido (string vazia quando ninguém falou). */
+  text: string
+  /** Duração do áudio recebido, em milissegundos. */
+  audioMs: number
+  /** Tempo gasto na transcrição, em milissegundos. */
+  ms: number
+}
+
+/**
+ * Resposta do GET /api/voice/status.
+ *
+ * `engines` é o mesmo retrato que a tela de voz do desktop usa
+ * (`VoiceEngineStatus`, de @shared/voice): o app mostra o motivo quando o
+ * ditado não está pronto (motor sem binário, modelo não baixado).
+ */
+export interface VoiceStatusResponse {
+  /** Há pelo menos um motor apto a transcrever agora. */
+  ready: boolean
+  engines: VoiceEngineStatus[]
+}
 
 // ─── Wire Protocol ───────────────────────────────────────────────────────────
 

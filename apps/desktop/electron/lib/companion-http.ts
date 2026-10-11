@@ -31,7 +31,10 @@ import { authorizeMcp, listMcpStatus, readMcpConfig, reconnectMcp, saveMcpConfig
 import type { McpConfig } from '@shared/mcp'
 import { readMedia, listMedia, mediaDiskUsage, deleteMedia, deleteManyMedia } from './media'
 
+import { transcribePcm, voiceStatus } from './voice'
+
 import type { SessionModeOverrides, WorkerConfigSnapshot, ReasoningPrefsMap } from '@shared/companion'
+import type { VoiceEngineId } from '@shared/voice'
 import type { RotationConfig } from '@shared/chat'
 
 const execFileAsync = promisify(execFile)
@@ -611,6 +614,66 @@ async function handlePostCheckout(req: IncomingMessage, res: ServerResponse) {
   }
 }
 
+// ─── Voice Handlers ───────────────────────────────────────────────────────────
+
+/**
+ * Ditado do app companion: o celular manda o áudio PCM16 cru (base64) e recebe
+ * o texto. Quem transcreve é o motor local do desktop (ver docs/voz.md) — o
+ * aparelho não roda modelo de voz e nenhum áudio sai para a nuvem.
+ *
+ * Motor indisponível ou modelo não baixado vira 503 com { error, reason }: o app
+ * mostra a razão ("baixe o modelo...") em vez de um 500 opaco.
+ */
+async function handlePostVoiceTranscribe(req: IncomingMessage, res: ServerResponse) {
+  try {
+    const body = await readBody(req)
+
+    if (typeof body.pcm !== 'string' || !body.pcm) {
+      jsonResponse(res, 400, { error: 'pcm (base64) é obrigatório' })
+      return
+    }
+    if (typeof body.sampleRate !== 'number' || !Number.isFinite(body.sampleRate) || body.sampleRate <= 0) {
+      jsonResponse(res, 400, { error: 'sampleRate deve ser um número positivo (Hz)' })
+      return
+    }
+    if (body.engine !== undefined && body.engine !== 'parakeet' && body.engine !== 'whisper') {
+      jsonResponse(res, 400, { error: 'engine deve ser "parakeet" ou "whisper"' })
+      return
+    }
+
+    const pcm = Buffer.from(body.pcm, 'base64')
+    if (pcm.length === 0) {
+      jsonResponse(res, 400, { error: 'pcm vazio ou base64 inválido' })
+      return
+    }
+
+    const result = await transcribePcm(pcm, {
+      sampleRate: body.sampleRate,
+      engine: body.engine as VoiceEngineId | undefined,
+      modelId: typeof body.modelId === 'string' && body.modelId ? body.modelId : null,
+      language: typeof body.language === 'string' && body.language ? body.language : undefined,
+    })
+    jsonResponse(res, 200, result)
+  } catch (err) {
+    jsonResponse(res, 503, {
+      error: 'Voz indisponível',
+      reason: (err as Error)?.message || String(err),
+    })
+  }
+}
+
+/** Estado dos motores de voz do desktop — o app decide se mostra o microfone. */
+async function handleGetVoiceStatus(_req: IncomingMessage, res: ServerResponse) {
+  try {
+    jsonResponse(res, 200, await voiceStatus())
+  } catch (err) {
+    jsonResponse(res, 503, {
+      error: 'Voz indisponível',
+      reason: (err as Error)?.message || String(err),
+    })
+  }
+}
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -660,6 +723,7 @@ function createRouter(
     { pattern: /^GET \/api\/reasoning-prefs$/, paramNames: [], handler: handleGetReasoningPrefs },
     { pattern: /^GET \/api\/rotations$/, paramNames: [], handler: handleGetRotations },
     { pattern: /^GET \/api\/worker-config$/, paramNames: [], handler: handleGetWorkerConfig },
+    { pattern: /^GET \/api\/voice\/status$/, paramNames: [], handler: handleGetVoiceStatus },
 
     // Mutation endpoints
     { pattern: /^PATCH \/api\/preferences$/, paramNames: [], handler: handlePatchPreferences },
@@ -675,6 +739,7 @@ function createRouter(
     { pattern: /^POST \/api\/mcp\/servers\/([^/]+)\/reconnect$/, paramNames: ['name'], handler: handleReconnectMcp },
     { pattern: /^POST \/api\/mcp\/servers\/([^/]+)\/authorize$/, paramNames: ['name'], handler: handleAuthorizeMcp },
     { pattern: /^POST \/api\/mcp\/servers\/reconnect$/, paramNames: [], handler: (_r, res) => handleReconnectMcp(_r, res, undefined) },
+    { pattern: /^POST \/api\/voice\/transcribe$/, paramNames: [], handler: handlePostVoiceTranscribe },
     { pattern: /^POST \/api\/git\/branches$/, paramNames: [], handler: handleGetBranches },
     { pattern: /^POST \/api\/git\/checkout$/, paramNames: [], handler: handlePostCheckout },
   ]

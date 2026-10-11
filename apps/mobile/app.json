@@ -51,6 +51,14 @@
       ],
       "expo-secure-store",
       [
+        "expo-audio",
+        {
+          "microphonePermission": "O Orbit precisa do microfone para ditar as mensagens — o áudio vira texto no seu computador e nada é enviado para a nuvem.",
+          "enableBackgroundPlayback": false,
+          "enableBackgroundRecording": false
+        }
+      ],
+      [
         "expo-camera",
         {
           "cameraPermission": "O Orbit precisa de acesso à câmera para escanear o QR code de conexão."

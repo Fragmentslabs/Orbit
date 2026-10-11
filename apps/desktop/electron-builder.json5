@@ -9,7 +9,10 @@
     "**/node_modules/node-pty/**",
     "**/node_modules/pdf-parse/**",
     "**/node_modules/pdfjs-dist/**",
-    "**/node_modules/@napi-rs/canvas*/**"
+    "**/node_modules/@napi-rs/canvas*/**",
+    // Runtime do TTS local: tem binário nativo (.node) e a libonnxruntime
+    // (.dylib/.so/.dll) ao lado — nada disso carrega de dentro do asar.
+    "**/node_modules/onnxruntime-node/**"
   ],
   "productName": "Orbit",
   "directories": {
@@ -19,12 +22,20 @@
   "files": [
     "dist",
     "dist-electron",
+    // Motor de voz (TTS): vai como ESTÁ, fora do bundle do main — o processo
+    // filho o carrega por caminho, e só o código (MIT) entra aqui: os pesos são
+    // baixados para userData, nunca empacotados.
+    "electron/voice-engine/**/*",
     "node_modules/sharp/**/*",
     "node_modules/@img/**/*",
     "node_modules/node-pty/**/*",
     "node_modules/pdf-parse/**/*",
     "node_modules/pdfjs-dist/**/*",
-    "node_modules/@napi-rs/canvas*/**/*"
+    "node_modules/@napi-rs/canvas*/**/*",
+    // Dependências do motor de voz. Ficam em node_modules/ porque o processo
+    // filho resolve por nome, a partir da pasta do motor.
+    "node_modules/onnxruntime-node/**/*",
+    "node_modules/onnxruntime-common/**/*"
   ],
   "extraResources": [
     {

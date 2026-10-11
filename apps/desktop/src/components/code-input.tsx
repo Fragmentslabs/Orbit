@@ -30,6 +30,7 @@ import { ReasoningPicker } from "@/src/components/reasoning-picker"
 import { QuickSettingsMenu } from "@/src/components/quick-settings-menu"
 import { DraftInputBridge } from "@/src/components/draft-input-bridge"
 import { ChatInputDraft } from "@/src/components/chat-input-draft"
+import { DictationButton } from "@/src/components/dictation-button"
 import { PendingAttachmentSync } from "@/src/components/pending-attachment-sync"
 import { clearInputDraft } from "@/src/stores/chat-draft"
 import { QueueIndicator } from "@/src/components/queue-indicator"
@@ -410,13 +411,18 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId, on
             onProviderBlocked?.()
           } : undefined}
           onSubmit={handleSubmit}
-          className="rounded-xl border-2 border-sidebar-border [&>div]:!rounded-[calc(var(--radius-xl)-2px)] [&>div]:!border-none [&>div]:!bg-transparent"
+          className="relative rounded-xl border-2 border-sidebar-border [&>div]:!rounded-[calc(var(--radius-xl)-2px)] [&>div]:!border-none [&>div]:!bg-transparent"
         >
+          {/* Microfone no canto SUPERIOR direito, no nível da primeira linha do
+              texto — a mesma posição do input do chat. */}
+          <div className="absolute right-2 top-2 z-10 flex items-center">
+            <DictationButton sessionId={sessionId} />
+          </div>
           <PromptInputBody>
             <PromptInputTextarea
               placeholder={folders.length === 0 ? t("codeInput.placeholderNoFolder") : t("codeInput.placeholder")}
               suggestion={suggestion}
-              className="px-3 text-base md:text-base"
+              className="px-3 pr-10 text-base md:text-base"
             />
           </PromptInputBody>
           <PromptInputFooter>

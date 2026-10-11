@@ -12,6 +12,7 @@ import { CodeInput } from "@/src/components/code-input"
 import { VisionHintCard } from "@/src/components/vision-hint-card"
 import { ProviderHintCard } from "@/src/components/provider-hint-card"
 import { Persona, retryPersona, type PersonaState } from "@/src/components/ai/persona"
+import { useVoiceActivity, voiceActivityState } from "@/src/stores/voice-activity"
 import { useAppearanceStore } from "@/src/stores/appearance-store"
 import { ErrorBoundary } from "@/src/components/error-boundary"
 import { showsPersonaInChat, showsPersonaOnWelcome } from "@shared/appearance"
@@ -164,6 +165,8 @@ const MessageItem = memo(
           <Actions className="-mb-1 items-center justify-end opacity-0 transition-opacity group-hover/user-msg:opacity-100">
             <MessageTimestamp timestamp={msg.createdAt} />
             <CopyAction text={visibleMessageText(msg)} />
+            {/* Falar lê a RESPOSTA do assistente — a mensagem do usuário não
+                ganha o botão (nada dela é lido em voz alta). */}
             <RevertAction messageId={msg.id} sessionId={sessionId} />
           </Actions>
         </div>
@@ -645,6 +648,9 @@ export function ChatView({ sessionId, embedded = false }: { sessionId?: string; 
   const isBusyRef = useRef(isBusy)
   isBusyRef.current = isBusy
 
+  // Voz em curso (fala do TTS ou ditado) — publicada pelos próprios botões em
+  // `stores/voice-activity`, porque a persona não tem ligação com eles.
+  const voiceActivity = useVoiceActivity()
   const [displayCenterState, setDisplayCenterState] = useState<PersonaState>("asleep")
   const [displayTopState, setDisplayTopState] = useState<PersonaState>(
     hasChat ? (isBusy ? "thinking" : "idle") : "asleep",
@@ -759,8 +765,11 @@ export function ChatView({ sessionId, embedded = false }: { sessionId?: string; 
     return () => timers.forEach(clearTimeout)
   }, [hasChat, isBusy])
 
-  const centerPersonaState = displayCenterState
-  const topPersonaState = displayTopState
+  // A voz em curso ganha dos estados do chat: com o áudio saindo a persona fala,
+  // com o microfone aberto ela escuta. Sem voz, valem as animações de sempre.
+  const voiceState = voiceActivityState(voiceActivity)
+  const centerPersonaState = voiceState ?? displayCenterState
+  const topPersonaState = voiceState ?? displayTopState
   const showTopPersona = topVisible && !simpleMode && personaInChat && !embedded
 
   const handleChatSend = useCallback(
