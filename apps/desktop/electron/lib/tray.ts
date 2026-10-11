@@ -9,6 +9,10 @@ import path from 'node:path'
  * ligado, o X esconde o Orbit (que continua servindo os apps conectados por
  * MCP) e só a bandeja o traz de volta. Sem bandeja, esconder seria perder o app.
  *
+ * Só o Windows e o Linux a têm: no macOS o X fecha a janela e o app segue vivo
+ * no Dock, que já é o caminho de volta — o main nem chega a criá-la lá. Os
+ * ramos `darwin` abaixo ficam como o que ela exigiria para voltar ao Mac.
+ *
  * Tema: o menu é NATIVO, então quem o desenha segue o `nativeTheme.themeSource`
  * — é o main que o ajusta a partir do tema do app (canal `theme:sync`), e é por
  * isso que `refreshTray` é chamado quando o tema troca. No Linux o menu é
