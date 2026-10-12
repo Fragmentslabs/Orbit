@@ -22,7 +22,7 @@ import { NotificationsPanel } from "@/src/components/notifications-panel"
 import { AboutPanel } from "@/src/components/about-panel"
 import { BrowserPanel } from "@/src/components/browser-panel"
 import { useProviderStore } from "@/src/stores/provider-store"
-import { customProvidersApi } from "@/src/lib/ipc"
+import { customProvidersApi, windowApi } from "@/src/lib/ipc"
 import { cn } from "@/lib/utils"
 
 import { useSettingsUi, type SettingsTab } from "@/src/stores/settings-ui"
@@ -39,7 +39,7 @@ interface TabDef {
 
 function useTabs(): TabDef[] {
   const { t } = useTranslation()
-  return [
+  const tabs: TabDef[] = [
     { id: "providers", label: t("settings.tabs.providers.label"), icon: KeyRound, description: t("settings.tabs.providers.description") },
     { id: "autonomy", label: t("settings.tabs.autonomy.label"), icon: Shield, description: t("settings.tabs.autonomy.description") },
     { id: "howto", label: t("settings.tabs.howto.label"), icon: BookOpen, description: t("settings.tabs.howto.description") },
@@ -47,10 +47,13 @@ function useTabs(): TabDef[] {
     { id: "notifications", label: t("settings.tabs.notifications.label"), icon: Bell, description: t("settings.tabs.notifications.description") },
     { id: "voice", label: t("settings.tabs.voice.label"), icon: Volume2, description: t("settings.tabs.voice.description"), beta: true },
     { id: "browser", label: t("settings.tabs.browser.label"), icon: Globe, description: t("settings.tabs.browser.description") },
+    // Sistema só tem o "Abrir com Orbit" do Explorer, que é exclusivo do
+    // Windows: em macOS/Linux a aba nem aparece (ver `visibleTabs` abaixo).
     { id: "system", label: t("settings.tabs.system.label"), icon: Settings2, description: t("settings.tabs.system.description") },
     { id: "data", label: t("settings.tabs.data.label"), icon: Database, description: t("settings.tabs.data.description") },
     { id: "about", label: t("settings.tabs.about.label"), icon: Info, description: t("settings.tabs.about.description") },
   ]
+  return tabs.filter((tab) => tab.id !== "system" || windowApi.platform === "win32")
 }
 
 /**
@@ -615,7 +618,7 @@ export function SettingsDialog({ open, onOpenChange, initialTab = "providers" }:
               <p className="text-[11px] text-muted-foreground">{active.description}</p>
             </div>
             <div className="h-[520px] min-w-0">
-              {tab === "providers" ? <ProvidersTab searchInputRef={providerSearchRef} /> : tab === "autonomy" ? <PreferencesPanel /> : tab === "appearance" ? <AppearancePanel /> : tab === "notifications" ? <NotificationsPanel /> : tab === "voice" ? <VoicePanel /> : tab === "system" ? <SystemPanel /> : tab === "browser" ? <BrowserPanel /> : tab === "howto" ? <HowToPanel /> : tab === "about" ? <AboutPanel /> : <DataPanel />}
+              {active.id === "providers" ? <ProvidersTab searchInputRef={providerSearchRef} /> : active.id === "autonomy" ? <PreferencesPanel /> : active.id === "appearance" ? <AppearancePanel /> : active.id === "notifications" ? <NotificationsPanel /> : active.id === "voice" ? <VoicePanel /> : active.id === "system" ? <SystemPanel /> : active.id === "browser" ? <BrowserPanel /> : active.id === "howto" ? <HowToPanel /> : active.id === "about" ? <AboutPanel /> : <DataPanel />}
             </div>
           </div>
         </div>
