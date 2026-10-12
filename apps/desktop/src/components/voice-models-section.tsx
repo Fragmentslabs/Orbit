@@ -58,6 +58,10 @@ export function enginePhase(engine: EngineStatusLike | null | undefined, modelDo
   const ready =
     typeof engine.ready === "boolean" ? engine.ready : engine.available === true && engine.installed === true
   if (ready) return "ready"
+  // Motor que não roda nesta máquina (whisper sem o `whisper-server`, sherpa que
+  // não carregou) não tem preparo a oferecer: o "Preparar agora" virava um
+  // botão sem efeito. Fica "missing", e o selo/motivo dizem o porquê.
+  if (engine.available === false) return "missing"
   // Com os bytes no disco já não é "missing": o que falta é o PREPARO (extração
   // do pacote e VAD) — ou o motor não roda nesta máquina, e aí o `reason` diz
   // exatamente isso. Chamar de "não instalado" o que está baixado era o bug.

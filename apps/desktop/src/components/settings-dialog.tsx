@@ -33,6 +33,8 @@ interface TabDef {
   label: string
   icon: typeof Shield
   description: string
+  /** Recurso ainda em teste: ganha o selo "Beta" na lista e no título. */
+  beta?: boolean
 }
 
 function useTabs(): TabDef[] {
@@ -43,7 +45,7 @@ function useTabs(): TabDef[] {
     { id: "howto", label: t("settings.tabs.howto.label"), icon: BookOpen, description: t("settings.tabs.howto.description") },
     { id: "appearance", label: t("settings.tabs.appearance.label"), icon: Palette, description: t("settings.tabs.appearance.description") },
     { id: "notifications", label: t("settings.tabs.notifications.label"), icon: Bell, description: t("settings.tabs.notifications.description") },
-    { id: "voice", label: t("settings.tabs.voice.label"), icon: Volume2, description: t("settings.tabs.voice.description") },
+    { id: "voice", label: t("settings.tabs.voice.label"), icon: Volume2, description: t("settings.tabs.voice.description"), beta: true },
     { id: "browser", label: t("settings.tabs.browser.label"), icon: Globe, description: t("settings.tabs.browser.description") },
     { id: "system", label: t("settings.tabs.system.label"), icon: Settings2, description: t("settings.tabs.system.description") },
     { id: "data", label: t("settings.tabs.data.label"), icon: Database, description: t("settings.tabs.data.description") },
@@ -575,7 +577,7 @@ export function SettingsDialog({ open, onOpenChange, initialTab = "providers" }:
               </DialogDescription>
             </DialogHeader>
             <ul className="mt-1 flex flex-col gap-0.5">
-              {TABS.map(({ id, label, icon: Icon, description }) => (
+              {TABS.map(({ id, label, icon: Icon, description, beta }) => (
                 <li key={id}>
                   <button
                     type="button"
@@ -590,6 +592,11 @@ export function SettingsDialog({ open, onOpenChange, initialTab = "providers" }:
                   >
                     <Icon className="size-3.5 shrink-0" />
                     {label}
+                    {beta && (
+                      <Badge variant="outline" className="ml-auto h-4 px-1 text-[9px] font-medium uppercase">
+                        {t("settings.beta")}
+                      </Badge>
+                    )}
                   </button>
                 </li>
               ))}
@@ -600,6 +607,11 @@ export function SettingsDialog({ open, onOpenChange, initialTab = "providers" }:
             <div className="mb-3 flex items-center gap-2 border-b pb-2">
               <active.icon className="size-4 text-muted-foreground" />
               <p className="text-sm font-medium">{active.label}</p>
+              {active.beta && (
+                <Badge variant="outline" className="h-4 px-1 text-[9px] font-medium uppercase">
+                  {t("settings.beta")}
+                </Badge>
+              )}
               <p className="text-[11px] text-muted-foreground">{active.description}</p>
             </div>
             <div className="h-[520px] min-w-0">

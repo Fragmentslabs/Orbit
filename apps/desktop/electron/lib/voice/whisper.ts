@@ -18,9 +18,9 @@
  *    primeira fala do usuário.
  *
  * O que NÃO vive aqui: o modelo ggml (baixado sob demanda por `models-store`) e
- * o binário do `whisper-server`, que o app não compila. O binário é procurado,
- * nesta ordem: `ORBIT_WHISPER_SERVER`, `<userData>/voice/whisper/whisper-server`
- * e o PATH. Sem ele o motor fica indisponível com o motivo escrito — em vez de
+ * o binário do `whisper-server`, compilado no build (scripts/build-whisper-server.mjs).
+ * O binário é procurado, nesta ordem: `ORBIT_WHISPER_SERVER`, o que vem com o
+ * app, `<userData>/voice/whisper/whisper-server` e o PATH. Sem ele o motor fica indisponível com o motivo escrito — em vez de
  * falhar silenciosamente no meio de uma fala.
  */
 
@@ -35,6 +35,7 @@ import type { SttEngine, SttEngineStatus, SttHandle, SttStartInput } from './eng
 import { encodeWavPcm16, SampleBuffer, samplesToMs, STT_SAMPLE_RATE } from './audio'
 import { getSttModel } from './catalog'
 import {
+  bundledWhisperServerPath,
   isWhisperModelInstalled,
   localWhisperServerPath,
   modelFileFor,
@@ -75,6 +76,8 @@ function findInPath(name: string): string | null {
 export function resolveWhisperServer(): string | null {
   const env = process.env.ORBIT_WHISPER_SERVER
   if (env && fs.existsSync(env)) return env
+  const bundled = bundledWhisperServerPath()
+  if (bundled && fs.existsSync(bundled)) return bundled
   const local = localWhisperServerPath()
   if (fs.existsSync(local)) return local
   return findInPath(serverBinaryName())
@@ -367,7 +370,7 @@ async function status(): Promise<SttEngineStatus> {
       available: false,
       installed: installed.length > 0,
       reason:
-        'whisper-server não encontrado — compile o whisper.cpp (alvo whisper-server) e ponha o binário em ' +
+        'whisper-server não encontrado — rode `npm run whisper:build` (apps/desktop), ponha o binário em ' +
         `${localWhisperServerPath()}, ou defina ORBIT_WHISPER_SERVER`,
       detail,
     }

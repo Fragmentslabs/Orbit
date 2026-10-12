@@ -178,6 +178,12 @@ export function VoicePanel() {
     void refresh()
   }, [refresh])
 
+  // O main avisa a cada mudança de estado (download, extração do pacote, VAD,
+  // remoção, falha) e a tela reconsulta. Sem esta assinatura o "Preparar agora"
+  // parecia não ter função: a extração rodava no main e o selo ficava em
+  // "Preparando…" para sempre, mesmo depois de o modelo ficar pronto.
+  useEffect(() => voiceApi.onStatusChanged(() => void refresh()), [refresh])
+
   const engineLabel = useCallback(
     (engine: string): string => {
       if (engine === "parakeet") return t("voice.settings.stt.engineParakeet")

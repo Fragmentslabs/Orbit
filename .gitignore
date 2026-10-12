@@ -19,6 +19,10 @@ apps/*/node_modules
 apps/*/dist
 apps/*/dist-electron
 apps/*/.expo
+# whisper-server do ditado: fonte/build e o binário gerado
+# (apps/desktop/scripts/build-whisper-server.mjs)
+apps/desktop/.whisper-build
+apps/desktop/resources/whisper
 
 # Packages
 packages/*/node_modules

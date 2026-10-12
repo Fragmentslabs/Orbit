@@ -5,6 +5,7 @@ import {
   PCM_WORKLET_PROCESSOR,
   dictationSupported,
   pcm16ToBase64,
+  pcmLevel,
   pcmWorkletUrl,
   resolveVoiceSttSettings,
   type VoiceSttSettings,
@@ -59,6 +60,8 @@ export interface DictationCallbacks {
   /** Fim da captura. Vem vazio quando ninguém falou — quem mostrou provisório
    *  usa isso para devolver o input ao que era. */
   onFinal?: (text: string) => void
+  /** Nível (0..1) de cada bloco do microfone (~64 ms) — alimenta a onda. */
+  onLevel?: (level: number) => void
 }
 
 export interface Dictation {
@@ -68,6 +71,7 @@ export interface Dictation {
   /** Permissão/motor a caminho — o botão já pode se mostrar ativo. */
   starting: boolean
   error: string | null
+  dismissError: () => void
   start: () => Promise<void>
   stop: () => Promise<void>
   cancel: () => void
@@ -217,6 +221,7 @@ export function useDictation(callbacks: DictationCallbacks = {}): Dictation {
       node.port.onmessage = (event) => {
         const pcm = (event.data as { pcm?: Int16Array } | undefined)?.pcm
         if (!pcm || pcm.length === 0) return
+        callbacksRef.current.onLevel?.(pcmLevel(pcm))
         capture.pending.push(pcm)
         capture.frames += pcm.length
         if (capture.frames >= DICTATION_CHUNK_FRAMES) void pushPending(capture).catch(() => {})
@@ -287,5 +292,8 @@ export function useDictation(callbacks: DictationCallbacks = {}): Dictation {
   }, [listening, starting])
   useEffect(() => () => useVoiceActivity.getState().setListening(false), [])
 
-  return { settings: voice, listening, starting, error, start, stop, cancel }
+  /** Some com o aviso de erro (o botão volta ao normal sem nova tentativa). */
+  const dismissError = useCallback(() => setError(null), [])
+
+  return { settings: voice, listening, starting, error, start, stop, cancel, dismissError }
 }

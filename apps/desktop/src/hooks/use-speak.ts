@@ -357,6 +357,14 @@ export function useTtsStatus(enabled: boolean, engine: VoiceTtsEngine = "model")
  */
 export function useSpeak() {
   const [speaking, setSpeaking] = useState(false)
+  /** Pediu a fala e nenhum pedaço chegou ainda: o motor está gerando o áudio. */
+  const [generating, setGenerating] = useState(false)
+  const generatingRef = useRef(false)
+  const setGen = useCallback((value: boolean) => {
+    if (generatingRef.current === value) return
+    generatingRef.current = value
+    setGenerating(value)
+  }, [])
   const [error, setError] = useState<string | null>(null)
 
   const playerRef = useRef<ChunkPlayer | null>(null)
@@ -364,6 +372,9 @@ export function useSpeak() {
   /** `voice:tts:start` ainda não devolveu o id (pedaços podem ter chegado antes). */
   const awaitingRef = useRef(false)
   const earlyRef = useRef<ChunkPayload[]>([])
+  /** `done` que chegou antes do id: sem guardá-lo, um erro imediato do main se
+   *  perdia e o botão ficava "falando" (vermelho, pulsando) para sempre. */
+  const earlyDoneRef = useRef<DonePayload | null>(null)
   const doneRef = useRef(false)
   const cancelledRef = useRef(false)
   const guardRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -387,10 +398,12 @@ export function useSpeak() {
     idRef.current = null
     awaitingRef.current = false
     earlyRef.current = []
+    earlyDoneRef.current = null
     doneRef.current = false
     cancelledRef.current = false
     setSpeaking(false)
-  }, [clearGuard, getPlayer])
+    setGen(false)
+  }, [clearGuard, getPlayer, setGen])
 
   /** Fim normal: o áudio acabou e o main confirmou a fala. */
   const finish = useCallback(() => {
@@ -429,9 +442,10 @@ export function useSpeak() {
       if (samples.length === 0) return
       const sampleRate = typeof chunk.sr === "number" && chunk.sr > 0 ? chunk.sr : TTS_SAMPLE_RATE
       getPlayer().schedule(samples, sampleRate)
+      setGen(false)
       armGuard()
     },
-    [armGuard, getPlayer],
+    [armGuard, getPlayer, setGen],
   )
 
   useEffect(() => {
@@ -461,7 +475,12 @@ export function useSpeak() {
 
     const onDone = (...args: unknown[]) => {
       const payload = args[0] as DonePayload | undefined
-      if (!payload || payload.id !== idRef.current) return
+      if (!payload) return
+      if (idRef.current === null) {
+        if (awaitingRef.current && !cancelledRef.current) earlyDoneRef.current = payload
+        return
+      }
+      if (payload.id !== idRef.current) return
       if (payload.error) {
         finishWithError(payload.error)
         return
@@ -487,11 +506,13 @@ export function useSpeak() {
     idRef.current = null
     awaitingRef.current = false
     earlyRef.current = []
+    earlyDoneRef.current = null
     doneRef.current = false
     setSpeaking(false)
+    setGen(false)
     setError(null)
     if (id) cancelRequest(id)
-  }, [clearGuard, getPlayer])
+  }, [clearGuard, getPlayer, setGen])
 
   const speak = useCallback(
     (text: string, request: SpeakRequest = {}) => {
@@ -508,6 +529,7 @@ export function useSpeak() {
       cancelledRef.current = false
       setError(null)
       setSpeaking(true)
+      setGen(true)
       awaitingRef.current = true
       // O contexto nasce no gesto do clique — é ele que libera o áudio no Chromium.
       try {
@@ -542,12 +564,22 @@ export function useSpeak() {
           for (const chunk of early) {
             if (chunk.id === id || chunk.id === undefined) playChunk(chunk)
           }
+          const earlyDone = earlyDoneRef.current
+          earlyDoneRef.current = null
+          if (earlyDone && (earlyDone.id === id || earlyDone.id === undefined)) {
+            if (earlyDone.error) {
+              finishWithError(earlyDone.error)
+              return
+            }
+            doneRef.current = true
+            maybeFinish()
+          }
         })
         .catch((reason: unknown) => {
           finishWithError(reason instanceof Error ? reason.message : String(reason))
         })
     },
-    [finishWithError, getPlayer, playChunk, stop],
+    [finishWithError, getPlayer, maybeFinish, playChunk, setGen, stop],
   )
 
   // A persona reage ao áudio que está SAINDO, e ela vive em outro ramo da
@@ -570,5 +602,8 @@ export function useSpeak() {
     }
   }, [clearGuard])
 
-  return { speak, stop, speaking, error }
+  /** Some com o aviso de erro sem tocar em fala nenhuma (o botão volta ao normal). */
+  const dismissError = useCallback(() => setError(null), [])
+
+  return { speak, stop, speaking, generating, error, dismissError }
 }

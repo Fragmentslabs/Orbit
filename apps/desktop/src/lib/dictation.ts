@@ -174,3 +174,21 @@ export function dictationSupported(): boolean {
   if (typeof navigator === "undefined" || !navigator.mediaDevices) return false
   return typeof navigator.mediaDevices.getUserMedia === "function"
 }
+
+/**
+ * Nível de um bloco de PCM16 para a onda da gravação, em 0..1. Sai do RMS em
+ * dB, numa faixa de -50 dB (silêncio de sala) a -5 dB (voz perto do microfone):
+ * a escala linear deixaria a fala normal quase rente ao chão.
+ */
+export function pcmLevel(pcm: Int16Array): number {
+  if (pcm.length === 0) return 0
+  let sum = 0
+  for (let i = 0; i < pcm.length; i++) {
+    const sample = pcm[i] / 32768
+    sum += sample * sample
+  }
+  const rms = Math.sqrt(sum / pcm.length)
+  if (rms <= 0) return 0
+  const db = 20 * Math.log10(rms)
+  return Math.min(1, Math.max(0, (db + 50) / 45))
+}

@@ -8,7 +8,8 @@ import type {
   VoiceTtsEngine,
 } from "@shared/voice"
 import type { VoiceStatusResponse } from "@shared/companion"
-import { getAppSettings } from "../app-settings"
+import type { AppSettings } from "@shared/app-settings"
+import { getAppSettings, onAppSettingsChange } from "../app-settings"
 import { VOICE_MODELS, TTS_MODEL_ID, modelInfo } from "./manifest"
 import { cancelDownload, isModelDownloaded, removeModel, startDownload } from "./download"
 import { onParakeetExtractPhaseChange } from "./models-store"
@@ -16,6 +17,7 @@ import { speakWithModel } from "./model-tts"
 import { downloadedModelIds, voiceStatusSnapshot } from "./status"
 import { detectHardware } from "./hardware"
 import { shutdownTts, speak, ttsStatus } from "./tts"
+import { shutdownWhisperServers } from "./whisper"
 // STT é o outro worker: aqui só se consome o que ele exporta (ver o rodapé).
 import {
   STT_MODELS,
@@ -162,7 +164,34 @@ async function rodarFala(id: string, texto: string, payload: FalaPedido, signal:
  * Registra os canais de voz. Chamado uma vez, junto dos outros registros do
  * main (ver main.ts) — nada aqui pode ser registrado duas vezes.
  */
+/**
+ * Whisper escolhido como motor do ditado: o `whisper-server` sobe JÁ, junto com o
+ * app, em vez de no primeiro aperto do microfone (o spawn + a carga do ggml
+ * levam segundos). Trocar para outro motor derruba o servidor na hora.
+ *
+ * Chamado no boot (com o que está no disco) e a cada mudança das configurações.
+ * Respeita o pré-carregamento: desligado, o servidor sobe no primeiro ditado.
+ * O próprio servidor se encerra depois de ocioso (ver whisper.ts).
+ */
+export function syncWhisperServer(next: AppSettings, prev?: AppSettings): void {
+  const stt = next.voice.stt
+  const before = prev?.voice.stt
+  const wanted = stt.enabled && stt.preload && stt.engine === "whisper"
+  if (before?.engine === "whisper" && stt.engine !== "whisper") shutdownWhisperServers()
+  if (!wanted) return
+  const changed =
+    !before ||
+    before.engine !== stt.engine ||
+    before.modelId !== stt.modelId ||
+    before.threads !== stt.threads ||
+    !before.enabled ||
+    !before.preload
+  if (changed) void warmSttModel(stt.modelId, "whisper", stt.threads)
+}
+
 export function registerVoiceIpc(): void {
+  onAppSettingsChange((next, prev) => syncWhisperServer(next, prev))
+
   // A extração do pacote começa por dois caminhos (logo após o download ou no
   // primeiro uso, dentro do motor). Um só aviso cobre os dois: cada mudança de
   // fase publica o estado novo em `voice:status-changed`.
@@ -214,7 +243,23 @@ export function registerVoiceIpc(): void {
     // completos, e a tela não mudava.
     if (await isModelDownloaded(modelId)) {
       const model = modelInfo(modelId)
-      if (model?.archive) await prepareSttModel(modelId).catch(() => {})
+      if (model?.archive) {
+        try {
+          await prepareSttModel(modelId)
+        } catch (err) {
+          // O erro morria aqui (`.catch(() => {})`): a extração falhava em
+          // silêncio e o botão "Preparar agora" parecia não fazer nada. O aviso
+          // vai pelo canal de progresso, que a lista de modelos já mostra.
+          const falha: VoiceDownloadProgress = {
+            modelId,
+            received: 0,
+            total: model.bytes,
+            done: true,
+            error: (err as Error).message ?? String(err),
+          }
+          emitir("voice:download-progress", falha)
+        }
+      }
       await emitStatusChanged()
       return { started: false }
     }
@@ -273,6 +318,49 @@ export function registerVoiceIpc(): void {
   ipcMain.handle("voice:tts:cancel", (_event, payload: { id?: string }) => {
     falas.get(String(payload?.id ?? ""))?.abort()
   })
+
+  // Ditado. Os canais faltavam: o renderer chamava `voice:stt:start` e o main
+  // respondia "No handler registered" — a ponte abaixo existia sem ninguém
+  // ligando-a ao IPC.
+  ipcMain.handle(
+    "voice:stt:start",
+    async (event, payload: Partial<VoiceSttSessionStart> = {}): Promise<{ id: string }> => {
+      const sender = event.sender
+      // O parcial vai só para a janela que abriu a sessão; o id só existe depois
+      // do start, e o motor só produz parcial depois do primeiro push.
+      let id = ""
+      const sessao = await startVoiceSttSession(
+        {
+          engine: payload.engine as VoiceEngineId,
+          modelId: payload.modelId ?? null,
+          language: payload.language,
+          threads: payload.threads,
+          sampleRate: Number(payload.sampleRate) || 16000,
+          live: payload.live ?? true,
+        },
+        (text) => {
+          if (id && !sender.isDestroyed()) sender.send("voice:stt:partial", { id, text })
+        },
+      )
+      id = sessao.id
+      // Janela fechada no meio da fala: a sessão (e o motor) não ficam órfãos.
+      sender.once("destroyed", () => void cancelVoiceSttSession(id).catch(() => {}))
+      return sessao
+    },
+  )
+
+  ipcMain.handle("voice:stt:push", (_event, payload: { id?: string; pcm?: string }) => {
+    if (!payload?.id || !payload.pcm) return
+    pushVoiceSttAudio(payload.id, Buffer.from(payload.pcm, "base64"))
+  })
+
+  ipcMain.handle("voice:stt:stop", (_event, payload: { id?: string }) =>
+    stopVoiceSttSession(String(payload?.id ?? "")),
+  )
+
+  ipcMain.handle("voice:stt:cancel", (_event, payload: { id?: string }) =>
+    cancelVoiceSttSession(String(payload?.id ?? "")),
+  )
 }
 
 // ---------------------------------------------------------------------- STT

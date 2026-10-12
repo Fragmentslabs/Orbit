@@ -56,7 +56,7 @@ import { setSessionModelsCache, setSessionModesCache, setWorkerConfigCache, setR
 import { setRotationConfigCache } from './lib/model-rotation'
 import { readJson as readStorageJson } from './lib/storage'
 import { registerPanelWebContents } from './lib/panel-browser'
-import { registerVoiceIpc } from './lib/voice'
+import { registerVoiceIpc, syncWhisperServer } from './lib/voice'
 import { setupMemoryScheduler } from './lib/memory/scheduler'
 import { getAppSettings, loadAppSettings, onAppSettingsChange, setAppSettings } from './lib/app-settings'
 import { applyLaunchAtLogin } from './lib/autostart'
@@ -2635,6 +2635,8 @@ app.whenReady().then(() => {
     // é o caso do app que subiu no login do sistema, sem ninguém pedir nada.
     void syncTray()
     if (settings.launchAtLogin) await applyLaunchAtLogin(true)
+    // Ditado pelo Whisper: o servidor dele sobe junto com o app.
+    syncWhisperServer(settings)
   })
 
   // Câmera, microfone, localização etc. dos sites do navegador integrado:

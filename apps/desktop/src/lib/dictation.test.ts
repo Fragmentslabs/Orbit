@@ -3,6 +3,7 @@ import type { AppSettings } from "@shared/app-settings"
 import {
   appendDictation,
   pcm16ToBase64,
+  pcmLevel,
   pcmWorkletUrl,
   parseVoiceStatus,
   resolveVoiceSttSettings,
@@ -183,5 +184,21 @@ describe("pcmWorkletUrl", () => {
   it("resolve na raiz do documento (dev e file:// do build)", () => {
     expect(pcmWorkletUrl("http://localhost:5173/")).toBe("http://localhost:5173/pcm-capture-worklet.js")
     expect(pcmWorkletUrl("file:///opt/orbit/dist/index.html")).toBe("file:///opt/orbit/dist/pcm-capture-worklet.js")
+  })
+})
+
+describe("pcmLevel", () => {
+  it("silêncio e bloco vazio ficam no chão", () => {
+    expect(pcmLevel(new Int16Array(0))).toBe(0)
+    expect(pcmLevel(new Int16Array(1024))).toBe(0)
+  })
+
+  it("sobe com o volume e satura em 1", () => {
+    const tone = (amp: number) => Int16Array.from({ length: 1024 }, (_, i) => Math.round(amp * Math.sin(i / 4)))
+    const baixo = pcmLevel(tone(300))
+    const medio = pcmLevel(tone(3000))
+    expect(baixo).toBeGreaterThan(0)
+    expect(medio).toBeGreaterThan(baixo)
+    expect(pcmLevel(tone(32767))).toBe(1)
   })
 })

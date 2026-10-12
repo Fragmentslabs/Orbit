@@ -1,5 +1,6 @@
 {
   "settings": {
+    "beta": "Beta",
     "title": "Settings",
     "description": "Orbit settings",
     "tabs": {
@@ -2368,6 +2369,7 @@
   "voice": {
     "tts": {
       "speak": "Read aloud",
+      "generating": "Generating audio… click to cancel",
       "stop": "Stop",
       "error": "Could not read this message aloud.",
       "needsModel": "Download a reading voice in Settings → Voice.",
@@ -2376,6 +2378,7 @@
     "stt": {
       "dictate": "Dictate",
       "listening": "Listening…",
+      "listeningTap": "Listening… click to stop (Esc discards)",
       "error": "Could not transcribe the audio.",
       "needsModel": "Download a speech model in Settings → Voice.",
       "setupModel": "Set up dictation in Settings → Voice."

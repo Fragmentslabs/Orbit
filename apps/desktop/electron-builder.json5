@@ -12,7 +12,10 @@
     "**/node_modules/@napi-rs/canvas*/**",
     // Runtime do TTS local: tem binário nativo (.node) e a libonnxruntime
     // (.dylib/.so/.dll) ao lado — nada disso carrega de dentro do asar.
-    "**/node_modules/onnxruntime-node/**"
+    "**/node_modules/onnxruntime-node/**",
+    // Motor do ditado (Parakeet): o addon N-API do sherpa-onnx vem num pacote
+    // por plataforma (sherpa-onnx-darwin-arm64 etc.), com .node e dylibs.
+    "**/node_modules/sherpa-onnx-*/**"
   ],
   "productName": "Orbit",
   "directories": {
@@ -35,12 +38,22 @@
     // Dependências do motor de voz. Ficam em node_modules/ porque o processo
     // filho resolve por nome, a partir da pasta do motor.
     "node_modules/onnxruntime-node/**/*",
-    "node_modules/onnxruntime-common/**/*"
+    "node_modules/onnxruntime-common/**/*",
+    // Ditado (Parakeet). Sem estes o `voice:status` dá o motor como
+    // indisponível e o microfone só sabe mandar para as Preferências.
+    "node_modules/sherpa-onnx-node/**/*",
+    "node_modules/sherpa-onnx-*/**/*"
   ],
   "extraResources": [
     {
       "from": "assets/sounds",
       "to": "sounds"
+    },
+    // whisper-server do ditado (motor Whisper), um por plataforma/arquitetura:
+    // gerado por `npm run whisper:build` antes do electron-builder.
+    {
+      "from": "resources/whisper/${platform}-${arch}",
+      "to": "whisper"
     }
   ],
   "mac": {

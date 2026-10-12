@@ -71,6 +71,19 @@ export function sileroVadPath(): string {
   return path.join(modelsDir(), SILERO_VAD_FILE)
 }
 
+/**
+ * `whisper-server` que vem com o app (scripts/build-whisper-server.mjs): em
+ * `Resources/whisper` no empacotado, em `resources/whisper/<plataforma>-<arch>`
+ * no dev. `null` quando o ambiente não diz onde o app está (testes).
+ */
+export function bundledWhisperServerPath(): string | null {
+  const exe = process.platform === 'win32' ? 'whisper-server.exe' : 'whisper-server'
+  if (app.isPackaged) return path.join(process.resourcesPath, 'whisper', exe)
+  const appPath = typeof app.getAppPath === 'function' ? app.getAppPath() : null
+  if (!appPath) return null
+  return path.join(appPath, 'resources', 'whisper', `${process.platform}-${process.arch}`, exe)
+}
+
 /** Caminho do binário opcional do `whisper-server` posto pelo usuário. */
 export function localWhisperServerPath(): string {
   return path.join(voiceDir(), 'whisper', process.platform === 'win32' ? 'whisper-server.exe' : 'whisper-server')

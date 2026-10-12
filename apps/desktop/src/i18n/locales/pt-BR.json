@@ -1,5 +1,6 @@
 {
   "settings": {
+    "beta": "Beta",
     "title": "Configurações",
     "description": "Configurações do Orbit",
     "tabs": {
@@ -2368,6 +2369,7 @@
   "voice": {
     "tts": {
       "speak": "Ler em voz alta",
+      "generating": "Gerando o áudio… clique para cancelar",
       "stop": "Parar",
       "error": "Não foi possível ler esta mensagem em voz alta.",
       "needsModel": "Baixe uma voz de leitura em Configurações → Voz.",
@@ -2376,6 +2378,7 @@
     "stt": {
       "dictate": "Ditar",
       "listening": "Ouvindo…",
+      "listeningTap": "Ouvindo… clique para parar (Esc descarta)",
       "error": "Não foi possível transcrever o áudio.",
       "needsModel": "Baixe um modelo de fala em Configurações → Voz.",
       "setupModel": "Configure o ditado em Configurações → Voz."
