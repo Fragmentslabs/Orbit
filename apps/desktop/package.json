@@ -9,6 +9,7 @@
   "homepage": "https://orbit.fragmentslabs.com",
   "type": "module",
   "scripts": {
+    "predev": "node scripts/fetch-ffmpeg.mjs --soft",
     "dev": "vite",
     "postinstall": "node scripts/fix-pty-permissions.mjs",
     "clean": "node scripts/clean-electron-output.mjs",

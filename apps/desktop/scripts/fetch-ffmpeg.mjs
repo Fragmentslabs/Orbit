@@ -3,7 +3,13 @@
  * Baixa o ffmpeg e o ffprobe ESTÁTICOS que o Orbit leva junto (edição de
  * vídeo do agente — ver electron/lib/video/ffmpeg.ts).
  *
- *   node scripts/fetch-ffmpeg.mjs [--arch arm64|x64] [--force]
+ *   node scripts/fetch-ffmpeg.mjs [--arch arm64|x64] [--force] [--soft]
+ *
+ * O `npm run dev` chama com `--soft` (predev): o ffmpeg sobe junto na primeira
+ * vez, e depois o carimbo faz a chamada custar nada. No modo soft uma falha
+ * (sem rede, fonte fora do ar) só avisa — o dev abre igual, sem as tools de
+ * vídeo, em vez de travar quem nem vai mexer com vídeo. No build a falha é
+ * fatal: um release sem ffmpeg seria um release quebrado.
  *
  * Saída: resources/ffmpeg/<platform>-<arch>/{ffmpeg,ffprobe} — é de lá que o
  * dev lê, e é essa pasta que o electron-builder copia para `Resources/ffmpeg`
@@ -52,6 +58,7 @@ const argValue = (name) => {
 }
 const arch = argValue('--arch') || process.arch
 const force = args.includes('--force')
+const soft = args.includes('--soft')
 const platform = process.platform
 const key = `${platform}-${arch}`
 const sources = TARGETS[key]
@@ -93,52 +100,70 @@ function findFile(dir, name) {
   return null
 }
 
-fs.rmSync(work, { recursive: true, force: true })
-fs.mkdirSync(work, { recursive: true })
-fs.mkdirSync(outDir, { recursive: true })
+async function fetchAll() {
+  fs.rmSync(work, { recursive: true, force: true })
+  fs.mkdirSync(work, { recursive: true })
+  fs.mkdirSync(outDir, { recursive: true })
 
-for (const url of sources) {
-  const archive = path.join(work, path.basename(new URL(url).pathname))
-  console.log(`» baixando ${url}`)
-  await download(url, archive)
-  const into = path.join(work, `x-${path.basename(archive)}`)
-  fs.mkdirSync(into)
-  // bsdtar (Windows 10+ e macOS) abre zip; no Linux as fontes são .tar.xz. No
-  // Windows o caminho é explícito: o tar do Git Bash (GNU) vem antes no PATH e
-  // não abre zip.
-  const tar = platform === 'win32' ? path.join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'tar.exe') : 'tar'
-  execFileSync(tar, ['-xf', archive, '-C', into], { stdio: 'inherit' })
-  for (const name of wanted) {
-    const found = findFile(into, name)
-    if (!found) continue
-    const out = path.join(outDir, name)
-    fs.copyFileSync(found, out)
-    fs.chmodSync(out, 0o755)
+  for (const url of sources) {
+    const archive = path.join(work, path.basename(new URL(url).pathname))
+    console.log(`» baixando ${url}`)
+    await download(url, archive)
+    const into = path.join(work, `x-${path.basename(archive)}`)
+    fs.mkdirSync(into)
+    // bsdtar (Windows 10+ e macOS) abre zip; no Linux as fontes são .tar.xz. No
+    // Windows o caminho é explícito: o tar do Git Bash (GNU) vem antes no PATH e
+    // não abre zip.
+    const tar = platform === 'win32' ? path.join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'tar.exe') : 'tar'
+    execFileSync(tar, ['-xf', archive, '-C', into], { stdio: 'inherit' })
+    for (const name of wanted) {
+      const found = findFile(into, name)
+      if (!found) continue
+      const out = path.join(outDir, name)
+      fs.copyFileSync(found, out)
+      fs.chmodSync(out, 0o755)
+    }
+  }
+
+  const missing = wanted.filter((name) => !fs.existsSync(path.join(outDir, name)))
+  if (missing.length) throw new Error(`os pacotes não trouxeram: ${missing.join(', ')}`)
+
+  // Verificação: só dá para executar o binário da arquitetura desta máquina (ou
+  // Intel num Mac com Rosetta). Quando não roda aqui, o build segue com aviso.
+  try {
+    const ffmpeg = path.join(outDir, wanted[0])
+    const filters = execFileSync(ffmpeg, ['-hide_banner', '-filters'], { encoding: 'utf8' })
+    const encoders = execFileSync(ffmpeg, ['-hide_banner', '-encoders'], { encoding: 'utf8' })
+    const hasWord = (text, word) => new RegExp(`\\s${word}\\s`).test(text)
+    const lacking = [
+      ...REQUIRED_FILTERS.filter((f) => !hasWord(filters, f)).map((f) => `filtro ${f}`),
+      ...REQUIRED_ENCODERS.filter((e) => !hasWord(encoders, e)).map((e) => `encoder ${e}`),
+    ]
+    if (lacking.length) throw Object.assign(new Error(`o build não tem: ${lacking.join(', ')}`), { fatal: true })
+    const version = execFileSync(ffmpeg, ['-hide_banner', '-version'], { encoding: 'utf8' }).split('\n')[0]
+    console.log(`» ${version}`)
+  } catch (err) {
+    if (err.fatal) throw err
+    console.warn(`» aviso: não deu para executar o ffmpeg de ${key} nesta máquina (${err.code ?? err.message}); verificação pulada`)
+  }
+
+  fs.writeFileSync(stamp, `${signature}\n`)
+  fs.rmSync(work, { recursive: true, force: true })
+  console.log(`» pronto: ${path.relative(root, outDir)}`)
+}
+
+// Sem process.exit aqui: no Windows, sair no meio de um fetch que falhou
+// derruba o Node numa assertion da libuv (código 127), e o predev quebraria o
+// dev justamente no caso que o --soft existe para tolerar.
+try {
+  await fetchAll()
+} catch (err) {
+  fs.rmSync(work, { recursive: true, force: true })
+  if (soft) {
+    console.warn(`» ffmpeg: ${err?.message ?? err}`)
+    console.warn('» seguindo sem ffmpeg — as tools de vídeo ficam desligadas até `npm run ffmpeg:fetch` dar certo')
+  } else {
+    console.error(err)
+    process.exitCode = 1
   }
 }
-
-const missing = wanted.filter((name) => !fs.existsSync(path.join(outDir, name)))
-if (missing.length) throw new Error(`os pacotes não trouxeram: ${missing.join(', ')}`)
-
-// Verificação: só dá para executar o binário da arquitetura desta máquina (ou
-// Intel num Mac com Rosetta). Quando não roda aqui, o build segue com aviso.
-try {
-  const ffmpeg = path.join(outDir, wanted[0])
-  const filters = execFileSync(ffmpeg, ['-hide_banner', '-filters'], { encoding: 'utf8' })
-  const encoders = execFileSync(ffmpeg, ['-hide_banner', '-encoders'], { encoding: 'utf8' })
-  const hasWord = (text, word) => new RegExp(`\\s${word}\\s`).test(text)
-  const lacking = [
-    ...REQUIRED_FILTERS.filter((f) => !hasWord(filters, f)).map((f) => `filtro ${f}`),
-    ...REQUIRED_ENCODERS.filter((e) => !hasWord(encoders, e)).map((e) => `encoder ${e}`),
-  ]
-  if (lacking.length) throw Object.assign(new Error(`o build não tem: ${lacking.join(', ')}`), { fatal: true })
-  const version = execFileSync(ffmpeg, ['-hide_banner', '-version'], { encoding: 'utf8' }).split('\n')[0]
-  console.log(`» ${version}`)
-} catch (err) {
-  if (err.fatal) throw err
-  console.warn(`» aviso: não deu para executar o ffmpeg de ${key} nesta máquina (${err.code ?? err.message}); verificação pulada`)
-}
-
-fs.writeFileSync(stamp, `${signature}\n`)
-fs.rmSync(work, { recursive: true, force: true })
-console.log(`» pronto: ${path.relative(root, outDir)}`)
