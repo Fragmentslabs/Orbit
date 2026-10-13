@@ -1,4 +1,8 @@
 {
+  "audio": {
+    "generated": "Generated audio",
+    "attachment": "Attached audio"
+  },
   "settings": {
     "beta": "Beta",
     "title": "Settings",
@@ -809,6 +813,7 @@
     "atLimit": "Limit reached — automatic compaction failed",
     "estimated": "Estimate",
     "live": "Live",
+    "compactWaitTurn": "Wait for the reply to finish to compact.",
     "compactNow": "Compact history now"
   },
   "images": {
@@ -2442,6 +2447,8 @@
         "engineModelFallback": "The voice model is not available, so reading uses the local engine. {{reason}}",
         "voiceTitle": "Voice",
         "voiceHint": "Voice used for reading. F1–F5 are female, M1–M5 male.",
+        "preview": "Listen to this voice",
+        "previewStop": "Stop",
         "voiceF1": "F1",
         "voiceF2": "F2 (default)",
         "voiceF3": "F3",

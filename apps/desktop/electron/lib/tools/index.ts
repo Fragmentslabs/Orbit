@@ -37,7 +37,8 @@ import { createSessionContextTool } from './session-context'
 import { createVerifyChangesTool } from './verify-changes'
 import { createDescribeImageTool } from './describe-image'
 import { createWebFetchTool, createWebSearchTool } from './web'
-import { agentMayUseBrowser } from '../app-settings'
+import { agentMayUseBrowser, getAppSettings } from '../app-settings'
+import { createAudioGenerateTool, createAudioTranscribeTool } from './audio'
 
 export { destroyBrowserWindow } from './browser'
 export type { ToolContext, TurnSnapshot } from './context'
@@ -54,6 +55,16 @@ export type { ImageToolHooks } from './image'
  */
 export function buildToolSet(input: SendMessageInput, ctx: ToolContext | null, imageHooks?: ImageToolHooks): ToolSet {
   const tools: ToolSet = {}
+  // Áudio: sem interruptor próprio — cada metade segue a da voz nas
+  // Preferências (Fala em texto → transcrever; Texto em fala → gerar).
+  // Desligada, a tool nem existe e o prompt explica ao agente como ativar.
+  const voice = getAppSettings().voice
+  const addAudioTools = (scope: ToolContext | null) => {
+    if (voice.stt.enabled) {
+      tools.audio_transcribe = createAudioTranscribeTool({ sessionId: input.sessionId, directory: input.directory, language: input.language }, scope)
+    }
+    if (voice.tts.enabled) tools.audio_generate = createAudioGenerateTool(input.sessionId, scope)
+  }
   // Regra de ouro: workers podem usar subagentes, mas NUNCA orquestrar (sem recursão infinita).
   // Se orchestrate está ativo (este worker é um orquestrador), bloqueamos delegação.
   const allowDelegation = input.options.subagents === true && !input.options.orchestrate
@@ -111,6 +122,8 @@ export function buildToolSet(input: SendMessageInput, ctx: ToolContext | null, i
       // SVG e imagem sao tools separadas porque a natureza e outra: uma
       // reprocessa pixel, a outra reescreve texto.
       Object.assign(tools, createSvgTools({ sessionId: input.sessionId }, null))
+      // No chat o áudio vem sempre de um anexo (não há pasta de trabalho).
+      addAudioTools(null)
     }
     if (allowBrain) Object.assign(tools, createChatMemoryTools(input))
     // Esteira: transformar o que foi discutido no chat em esteira/task de um
@@ -201,6 +214,9 @@ export function buildToolSet(input: SendMessageInput, ctx: ToolContext | null, i
       tools,
       createSvgTools({ sessionId: input.sessionId, directory: input.directory }, ctx),
     )
+    // No código o áudio também pode ser um arquivo da pasta (e o gerado pode
+    // ser gravado nela).
+    addAudioTools(ctx)
   }
 
   if (input.options.research) {

@@ -168,3 +168,77 @@ export function encodeWavPcm16(samples: Float32Array, sampleRate: number = STT_S
   header.writeUInt32LE(pcm.length, 40)
   return Buffer.concat([header, pcm])
 }
+
+/**
+ * Teto de caracteres por pedido de síntese: a rota do provedor aceita ~4 mil;
+ * a folga cobre a contagem diferente de cada API.
+ */
+export const SYNTHESIS_MAX_CHARS = 3500
+
+/**
+ * Corta um texto longo em partes de até `max` caracteres, preferindo quebra de
+ * parágrafo, depois fim de frase, depois espaço — nunca no meio de uma palavra
+ * quando há alternativa.
+ */
+export function splitForSynthesis(text: string, max = SYNTHESIS_MAX_CHARS): string[] {
+  const parts: string[] = []
+  let rest = text.trim()
+  while (rest.length > max) {
+    const window = rest.slice(0, max)
+    const cut =
+      [window.lastIndexOf('\n\n'), Math.max(window.lastIndexOf('. '), window.lastIndexOf('! '), window.lastIndexOf('? ')) + 1, window.lastIndexOf(' ')]
+        .find((at) => at > max * 0.5) ?? max
+    parts.push(rest.slice(0, cut).trim())
+    rest = rest.slice(cut).trim()
+  }
+  if (rest) parts.push(rest)
+  return parts
+}
+
+/**
+ * Janelas [início, fim) para transcrever um áudio longo em partes de cerca de
+ * `windowSec`. Cada corte cai no trecho de 100 ms mais quieto a até `searchSec`
+ * da fronteira — uma pausa, quase sempre — para não partir uma palavra ao meio.
+ */
+export function splitPcmWindows(
+  samples: Float32Array,
+  rate: number = STT_SAMPLE_RATE,
+  windowSec = 240,
+  searchSec = 3,
+): [number, number][] {
+  const windows: [number, number][] = []
+  const frame = Math.round(rate * 0.1)
+  let start = 0
+  while (samples.length - start > (windowSec + searchSec) * rate) {
+    const target = start + windowSec * rate
+    let best = target
+    let bestEnergy = Infinity
+    for (let at = target - searchSec * rate; at + frame <= target + searchSec * rate; at += frame) {
+      let energy = 0
+      for (let i = at; i < at + frame; i++) energy += samples[i] * samples[i]
+      if (energy < bestEnergy) {
+        bestEnergy = energy
+        best = at + Math.floor(frame / 2)
+      }
+    }
+    windows.push([start, best])
+    start = best
+  }
+  windows.push([start, samples.length])
+  return windows
+}
+
+/** Reamostragem linear simples (para emendar pedaços de taxas diferentes). */
+export function resampleLinear(samples: Float32Array, from: number, to: number): Float32Array {
+  if (from === to || samples.length === 0) return samples
+  const out = new Float32Array(Math.max(1, Math.round((samples.length * to) / from)))
+  const ratio = from / to
+  for (let i = 0; i < out.length; i++) {
+    const pos = i * ratio
+    const base = Math.floor(pos)
+    const next = Math.min(base + 1, samples.length - 1)
+    const frac = pos - base
+    out[i] = samples[base] * (1 - frac) + samples[next] * frac
+  }
+  return out
+}

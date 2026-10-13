@@ -1,4 +1,5 @@
 import { app, BrowserWindow, ipcMain, dialog, shell, Menu, clipboard, nativeImage, nativeTheme, ClipboardItem, session, type MenuItemConstructorOptions } from 'electron'
+import { registerAudioProtocol } from './lib/audio-store'
 import sharp from 'sharp'
 import { createRequire } from 'node:module'
 import { fileURLToPath } from 'node:url'
@@ -1976,6 +1977,8 @@ app.whenReady().then(() => {
 
   // Imagens das respostas do assistente (orbit-media://)
   registerMediaProtocol()
+  // Áudios anexados e gerados (orbit-audio://)
+  registerAudioProtocol()
   // Artefatos HTML das respostas (orbit-artifact://) — os privilégios do
   // scheme já foram declarados no topo do módulo.
   registerArtifactProtocol()

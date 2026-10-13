@@ -29,6 +29,7 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Select, SelectContent, SelectItem, SelectTrigger } from "@/components/ui/select"
 import { SettingRow, SettingSelect, SettingSwitch } from "@/src/components/settings-row"
+import { VoicePreviewButton } from "@/src/components/voice-preview-button"
 import {
   VoiceModelsSection,
   enginePhase,
@@ -347,11 +348,15 @@ export function VoicePanel() {
           title={t("voice.settings.tts.voiceTitle")}
           description={t("voice.settings.tts.voiceHint")}
         >
-          <SettingSelect<string>
-            value={tts.voice}
-            onChange={(next) => updateVoice({ tts: { ...tts, voice: next }, stt })}
-            options={VOICE_IDS.map((id) => ({ value: id, label: t(`voice.settings.tts.voice${id}`) }))}
-          />
+          <div className="flex items-center gap-1.5">
+            <SettingSelect<string>
+              value={tts.voice}
+              onChange={(next) => updateVoice({ tts: { ...tts, voice: next }, stt })}
+              options={VOICE_IDS.map((id) => ({ value: id, label: t(`voice.settings.tts.voice${id}`) }))}
+            />
+            {/* Ouvir antes de escolher: a amostra sai pelo mesmo caminho da leitura. */}
+            <VoicePreviewButton voice={tts.voice} lang={tts.lang} speed={tts.speed} engine={tts.engine} />
+          </div>
         </SettingRow>
 
         <SettingRow

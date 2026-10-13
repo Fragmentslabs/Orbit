@@ -1,4 +1,8 @@
 {
+  "audio": {
+    "generated": "Áudio gerado",
+    "attachment": "Áudio anexado"
+  },
   "settings": {
     "beta": "Beta",
     "title": "Configurações",
@@ -809,6 +813,7 @@
     "atLimit": "Limite atingido — a compactação automática falhou",
     "estimated": "Estimativa",
     "live": "Ao vivo",
+    "compactWaitTurn": "Espere a resposta terminar para compactar.",
     "compactNow": "Compactar histórico agora"
   },
   "images": {
@@ -2442,6 +2447,8 @@
         "engineModelFallback": "O modelo de voz não está disponível, então a leitura usa o motor local. {{reason}}",
         "voiceTitle": "Voz",
         "voiceHint": "Voz usada na leitura. F1–F5 são femininas, M1–M5 masculinas.",
+        "preview": "Ouvir esta voz",
+        "previewStop": "Parar",
         "voiceF1": "F1",
         "voiceF2": "F2 (padrão)",
         "voiceF3": "F3",

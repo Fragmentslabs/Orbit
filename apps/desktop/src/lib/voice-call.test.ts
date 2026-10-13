@@ -64,6 +64,11 @@ describe("callSpeech", () => {
     expect(speech.final).toBe("Abre às oito e fecha às dez.")
   })
 
+  it("o resumo da compactação nunca é falado", () => {
+    const summary = { ...msg([{ type: "text", text: "Summary of the conversation so far:\n\nUser prefers brief replies." }]), summary: true }
+    expect(callSpeech(summary as ChatMessage)).toEqual({ lead: "", hasTool: false, final: null })
+  })
+
   it("terminou numa ferramenta: não há resposta final para falar", () => {
     expect(callSpeech(msg([{ type: "text", text: "Vou ver." }, { type: "tool", tool: "x" }])).final).toBeNull()
   })

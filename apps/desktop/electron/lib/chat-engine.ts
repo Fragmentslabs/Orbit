@@ -56,6 +56,7 @@ import { capture, diff } from './snapshot'
 import { isInitAborted, runProjectInit, type InitHooks, type InitResult } from './project-init'
 import { readJson, writeJson } from './storage'
 import { getAppSettings } from './app-settings'
+import { audioExt, audioIdFrom, isAudioFile, saveAudio } from './audio-store'
 import { MIN_COMPACTION_CONTEXT, resolveAuxModel } from './aux-model'
 import { notifyChatError, notifyNewMessage } from './notifications'
 import { buildToolSet, type ImageToolHooks, type ToolContext, type TurnSnapshot } from './tools'
@@ -387,6 +388,25 @@ async function saveUserImage(
   }
 }
 
+/**
+ * Nota que o agente recebe por um anexo de áudio. Com a transcrição ligada,
+ * a referência e quando usá-la; desligada, o que dizer ao usuário.
+ */
+function audioAttachmentNote(filename: string, id: string, file: string): string {
+  const head = `[Audio attached: ${filename || 'unnamed'} — ref ${id}]\nFile: ${file} (in this chat's media)`
+  if (!getAppSettings().voice.stt.enabled) {
+    return (
+      `${head}\n(Attachment, not a user message. Audio transcription is DISABLED in Settings → Voice → Speech to text: ` +
+      "if the request depends on what is said in it, tell the user you can't listen to it because the feature is off, " +
+      'and that they can enable it there if this machine has a dictation engine ready.)'
+    )
+  }
+  return (
+    `${head}\n(Attachment, not a user message. NOT transcribed: if what is SPOKEN in it matters for the request, call audio_transcribe with ref "${id}". ` +
+    'If it is music, a sound effect or audio to be used somewhere, do not transcribe it.)'
+  )
+}
+
 /** Pré-processa um anexo NOVO antes de persistir: PDF, planilha e skill viram
  * texto extraído (evita data URLs enormes no histórico) + um chip sem dados
  * pra UI continuar mostrando o anexo; imagem continua nativa (o modelo lê
@@ -572,6 +592,35 @@ async function preprocessAttachment(
     }
   }
 
+  // Áudio: vai para o acervo de áudio (a bolha toca o anexo pelo chip) e NÃO é
+  // transcrito aqui — pode ser uma música ou um efeito para usar em algum
+  // lugar. O agente recebe a referência e decide (tool audio_transcribe). A
+  // transcrição, quando houver, volta para ESTA nota (ver
+  // persistAudioTranscript): é conteúdo do anexo, não fala do usuário.
+  if (isAudioFile(file.mime, filename)) {
+    const bytes = decodeDataUrlBytes(file.url)
+    const ext = audioExt(file.mime, filename)
+    if (!bytes || !ext) {
+      return [
+        attachmentChip(file),
+        { id: newId('prt'), type: 'text', text: `[Audio attached: ${filename || 'unnamed'}] (unsupported format or unreadable file)`, state: 'done', source: 'attachment' },
+      ]
+    }
+    const saved = await saveAudio(Buffer.from(bytes), ext, {
+      sessionId: deps.sessionId,
+      messageId: deps.messageId,
+      name: filename || undefined,
+      source: 'user',
+    })
+    // O agente recebe só a referência e o caminho — nunca o conteúdo: o áudio
+    // não ocupa o contexto, e ele escolhe o que fazer (transcrever, usar o
+    // arquivo num projeto, nada).
+    return [
+      attachmentChip(file, undefined, undefined, saved.url),
+      { id: newId('prt'), type: 'text', text: audioAttachmentNote(filename, saved.id, saved.path), state: 'done', source: 'attachment' },
+    ]
+  }
+
   // Imagem: com o modo Visão ativo (visionModel configurado), a imagem NÃO
   // entra no contexto e não é descrita automaticamente — o agente decide ver
   // (tool describe_image, com o contexto que ele quiser passar) e a descrição
@@ -654,6 +703,46 @@ async function persistImageDescription(opts: {
   opts.history[opts.history.indexOf(userMsg)] = updated
   await saveMessages(opts.sessionId, opts.history)
   emit(opts.win, { type: 'message', sessionId: opts.sessionId, message: updated })
+}
+
+/**
+ * Transcrição de um anexo de áudio (tool audio_transcribe) gravada na NOTA do
+ * anexo, como a descrição do modo Visão: a ToolPart não volta nos próximos
+ * turnos, e sem isto o agente teria de transcrever de novo a cada pergunta
+ * sobre o mesmo áudio. A nota segue com `source: 'attachment'` — o texto é
+ * conteúdo do anexo, nunca aparece como fala do usuário na bolha.
+ *
+ * Procura em todas as mensagens do usuário: o áudio pode ter chegado vários
+ * turnos antes de alguém perguntar o que ele diz.
+ */
+async function persistAudioTranscript(opts: {
+  sessionId: string
+  audioId: string
+  /** O que entra na nota no lugar das instruções: a transcrição, ou onde ela está. */
+  body: string
+  history: ChatMessage[]
+  win: BrowserWindow
+}): Promise<void> {
+  const marker = `ref ${opts.audioId}]`
+  const isAudioNote = (text: string) => text.startsWith('[Audio attached:') || text.startsWith('[Áudio anexado:')
+  for (let m = opts.history.length - 1; m >= 0; m--) {
+    const msg = opts.history[m]
+    if (msg.role !== 'user') continue
+    const idx = msg.parts.findIndex(
+      (p) => p.type === 'text' && p.source === 'attachment' && isAudioNote(p.text) && p.text.includes(marker),
+    )
+    if (idx < 0) continue
+    const part = msg.parts[idx] as TextPart
+    // Cabeçalho = a linha da referência e a do arquivo; o resto é substituído.
+    const lines = part.text.split('\n')
+    const head = lines.slice(0, lines[1]?.startsWith('File:') ? 2 : 1).join('\n')
+    const text = `${head}\n${opts.body}`
+    const updated: ChatMessage = { ...msg, parts: msg.parts.map((p, i) => (i === idx ? { ...part, text } : p)) }
+    opts.history[m] = updated
+    await saveMessages(opts.sessionId, opts.history)
+    emit(opts.win, { type: 'message', sessionId: opts.sessionId, message: updated })
+    return
+  }
 }
 
 /**
@@ -1666,6 +1755,36 @@ async function runChatTurn(win: BrowserWindow, input: SendMessageInput): Promise
                 })
               }
             }
+            // Transcrição de um anexo de áudio: volta para a nota do anexo.
+            // Duas formas, conforme o destino escolhido pelo agente: o texto
+            // (no contexto) ou só onde ele está (documento para o usuário).
+            if (part.toolName === 'audio_transcribe') {
+              const ref = (existing?.input as { ref?: string } | undefined)?.ref ?? ''
+              const audioId = audioIdFrom(ref)
+              const output = part.output as { documentId?: string } | string
+              const body =
+                typeof output === 'string' && output.startsWith('Transcript of the audio')
+                  ? `(Attachment, not a user message — already transcribed with audio_transcribe.)\n\n${output}`
+                  : typeof output === 'object' && output?.documentId
+                    ? `(Attachment, not a user message. Its transcript was delivered to the user as document ${output.documentId} and is NOT in your context — call read_document with that id if you need it.)`
+                    : null
+              if (audioId && body) await persistAudioTranscript({ sessionId, audioId, body, history, win })
+            }
+            // Áudio gerado: um player na resposta, como a imagem do show_image.
+            if (part.toolName === 'audio_generate') {
+              const output = part.output as { audioUrl?: string; title?: string; durationMs?: number } | string
+              if (typeof output === 'object' && output?.audioUrl) {
+                upsertPart({
+                  id: `${part.toolCallId}-audio`,
+                  type: 'audio',
+                  src: output.audioUrl,
+                  title: output.title || undefined,
+                  durationMs: output.durationMs,
+                })
+                // Liga o registro do acervo à mensagem ("abrir no chat" da galeria).
+                void attachMediaMessage(output.audioUrl, assistantMessage.id, sessionId)
+              }
+            }
             // show_image e image_edit: a imagem vira parte da resposta
             // (renderizada pelo ai/image). No image_edit isso é o ponto — uma
             // edição descrita em texto obrigaria o usuário a abrir a galeria
@@ -1720,6 +1839,8 @@ async function runChatTurn(win: BrowserWindow, input: SendMessageInput): Promise
             if (
               part.toolName === 'create_document' ||
               part.toolName === 'update_document' ||
+              // Transcrição entregue ao usuário: é um documento do chat.
+              part.toolName === 'audio_transcribe' ||
               part.toolName === 'docx_edit' ||
               part.toolName === 'pdf_merge' ||
               part.toolName === 'pdf_transform' ||
@@ -2106,12 +2227,24 @@ async function runChatTurn(win: BrowserWindow, input: SendMessageInput): Promise
   }
 }
 
-/** Compactação manual acionada pelo botão na UI ou pelo comando /compact. */
+/**
+ * Compactação manual acionada pelo botão na UI.
+ *
+ * Com um turno da conversa em andamento ela NÃO roda: ela lê o histórico do
+ * disco, insere o resumo, grava e reemite a lista inteira — e o turno, que tem
+ * a própria cópia do histórico, grava por cima no fim. Era o que acontecia: a
+ * lista reemitida não tinha a mensagem que o usuário acabara de mandar (a bolha
+ * sumia da tela), o resumo chegava ao renderer como "a resposta" (e o modo
+ * chamada o lia em voz alta), e no fim o turno apagava o resumo do disco. A
+ * compactação automática roda DENTRO do turno, com a cópia certa.
+ */
 export async function compactSession(
   win: BrowserWindow,
   sessionId: string,
-): Promise<void> {
-  return withProviderSession(sessionId, () => compactSessionTurn(win, sessionId))
+): Promise<{ compacted: boolean; reason?: 'running' }> {
+  if (abortControllers.has(sessionId)) return { compacted: false, reason: 'running' }
+  await withProviderSession(sessionId, () => compactSessionTurn(win, sessionId))
+  return { compacted: true }
 }
 
 async function compactSessionTurn(win: BrowserWindow, sessionId: string): Promise<void> {

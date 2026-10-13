@@ -26,7 +26,16 @@ export const COMPACT_PROMPT = `You compact a conversation's history to free up c
 
 For item 1, "what's been done" MUST be grounded in the "[Verified record: ...]" lines, which are measured by the engine from filesystem snapshots — not in the assistant's own prose. Where they disagree, the verified record wins. Summarize their verdicts in your own words with the exact file counts (e.g. "engine-verified: 18 files modified", "engine-verified: no files changed"), WITHOUT quoting the "[Verified record: ...]" line itself — it is internal bookkeeping and must never appear in the summary. Never merge a turn marked "NO file was modified" into a list of completed work.
 
+Write the notes in English — they are internal context for the model, not a message to the user — but keep the user's own words, names, file contents and quoted text verbatim, in their original language.
+
 Omit greetings, discarded attempts, and repetition. Reply with ONLY the summary, no preamble.`
+
+/**
+ * Cabeçalho da mensagem de resumo. Em inglês, como todo texto que é do sistema
+ * para o modelo; a tela não o mostra (ver SummaryCard), e resumos antigos com o
+ * cabeçalho em português continuam valendo.
+ */
+export const SUMMARY_PREFIX = 'Summary of the conversation so far:'
 
 export function findLastSummaryIndex(history: ChatMessage[]): number {
   for (let i = history.length - 1; i >= 0; i--) {
@@ -123,7 +132,7 @@ export async function compactHistory(
   const transcript = split.old
     .map((m) => {
       const text = textOf(m)
-      return text ? `${m.role === 'user' ? 'Usuário' : 'Assistente'}: ${text}` : null
+      return text ? `${m.role === 'user' ? 'User' : 'Assistant'}: ${text}` : null
     })
     .filter(Boolean)
     .join('\n\n')
@@ -145,7 +154,7 @@ export async function compactHistory(
       {
         id: newId('prt'),
         type: 'text',
-        text: `Resumo da conversa até aqui:\n\n${text.trim()}`,
+        text: `${SUMMARY_PREFIX}\n\n${text.trim()}`,
         state: 'done',
       },
     ],

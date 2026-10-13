@@ -18,6 +18,18 @@ import { downloadedModelIds, voiceStatusSnapshot } from "./status"
 import { detectHardware } from "./hardware"
 import { shutdownTts, speak, ttsStatus } from "./tts"
 import { shutdownWhisperServers } from "./whisper"
+import type { SttSegment } from "./engine"
+import {
+  STT_SAMPLE_RATE,
+  concatFloat32,
+  encodeWavPcm16,
+  float32ToPcm16,
+  pcm16ToFloat32,
+  resampleLinear,
+  samplesToMs,
+  splitForSynthesis,
+  splitPcmWindows,
+} from "./audio"
 // STT é o outro worker: aqui só se consome o que ele exporta (ver o rodapé).
 import {
   STT_MODELS,
@@ -199,10 +211,23 @@ async function rodarFala(
   /** Número da frase na fala contínua: o renderer mostra a frase que está tocando. */
   seg?: number,
 ): Promise<void> {
-  const pedido = { voice: payload?.voice, lang: payload?.lang, speed: payload?.speed }
-  const emitirChunk = (chunk: FalaChunk) =>
-    emitir("voice:tts:chunk", { id, pcm: chunk.pcm.toString("base64"), sr: chunk.sr, i: chunk.i, n: chunk.n, seg })
+  await sintetizar(texto, payload, signal, (chunk) =>
+    emitir("voice:tts:chunk", { id, pcm: chunk.pcm.toString("base64"), sr: chunk.sr, i: chunk.i, n: chunk.n, seg }),
+  )
+}
 
+/**
+ * A síntese em si, sem destino fixo: a fala ao vivo manda os pedaços para as
+ * janelas (`rodarFala`); o arquivo de áudio do agente (`synthesizeToWav`) os
+ * junta num WAV.
+ */
+async function sintetizar(
+  texto: string,
+  payload: FalaPedido,
+  signal: AbortSignal,
+  emitirChunk: (chunk: FalaChunk) => void,
+): Promise<void> {
+  const pedido = { voice: payload?.voice, lang: payload?.lang, speed: payload?.speed }
   const engine: VoiceTtsEngine = payload?.engine ?? getAppSettings().voice.tts.engine
   if (engine === "model") {
     let entregou = false
@@ -481,12 +506,15 @@ export interface VoiceSttSessionStart {
   threads?: number
   /** Texto ao vivo enquanto a fala acontece (padrão: sim). */
   live?: boolean
+  /** Trechos com tempo (transcrição de arquivo). */
+  timestamps?: boolean
 }
 
 export interface VoiceTranscribeResult {
   text: string
   audioMs: number
   ms: number
+  segments?: SttSegment[]
 }
 
 /** Estado dos motores de ditado — é o retrato que o celular consulta. */
@@ -511,6 +539,7 @@ export async function startVoiceSttSession(
       threads: options.threads,
       sampleRate: options.sampleRate,
       live: options.live ?? true,
+      timestamps: options.timestamps,
     },
     onPartial,
   )
@@ -525,7 +554,7 @@ export function pushVoiceSttAudio(id: string, pcm: Buffer): void {
 /** Fim da fala: fecha o último trecho e devolve o texto final. */
 export async function stopVoiceSttSession(id: string): Promise<VoiceTranscribeResult> {
   const out = await stopSttSession(id)
-  return { text: out.text, audioMs: out.audioMs, ms: out.ms }
+  return { text: out.text, audioMs: out.audioMs, ms: out.ms, segments: out.segments }
 }
 
 /** Cancela a sessão sem esperar texto (Esc, janela fechou…). */
@@ -544,7 +573,13 @@ export async function cancelVoiceSttSession(id: string): Promise<void> {
  */
 export async function transcribePcm(
   pcm: Buffer,
-  opts: { sampleRate: number; engine?: VoiceEngineId; modelId?: string | null; language?: string },
+  opts: {
+    sampleRate: number
+    engine?: VoiceEngineId
+    modelId?: string | null
+    language?: string
+    timestamps?: boolean
+  },
 ): Promise<VoiceTranscribeResult> {
   if (!pcm || pcm.length === 0) throw new Error("PCM vazio")
   const engine = opts.engine ?? (await enginePadrao())
@@ -556,6 +591,7 @@ export async function transcribePcm(
       sampleRate: opts.sampleRate,
       // Sem valor ao vivo: uma passada só, sem parcial no meio do áudio.
       live: false,
+      timestamps: opts.timestamps,
     },
     () => {},
   )
@@ -589,4 +625,80 @@ export async function voiceTtsStatus(): Promise<Awaited<ReturnType<typeof ttsSta
 /** Desliga o motor de TTS agora (o desligamento por ociosidade é automático). */
 export function shutdownVoice(): void {
   shutdownTts()
+}
+
+// ------------------------------------------------- arquivos de áudio (tools)
+
+/**
+ * Texto → arquivo WAV, pelo mesmo motor da leitura em voz alta (prioridade de
+ * áudio das preferências: provedor, com o local como reserva). É o que a tool
+ * audio_generate entrega. Texto longo vai em partes (a rota do provedor aceita
+ * ~4 mil caracteres por pedido); os pedaços são emendados num arquivo só.
+ */
+export async function synthesizeToWav(
+  text: string,
+  opts: { voice?: string; lang?: string; speed?: number } = {},
+  signal: AbortSignal = new AbortController().signal,
+): Promise<{ wav: Buffer; durationMs: number }> {
+  const tts = getAppSettings().voice.tts
+  const payload: FalaPedido = {
+    voice: opts.voice ?? tts.voice,
+    lang: opts.lang ?? tts.lang,
+    speed: opts.speed ?? tts.speed,
+    engine: tts.engine,
+  }
+  const pieces: Float32Array[] = []
+  let rate = 0
+  for (const parte of splitForSynthesis(text)) {
+    await sintetizar(parte, payload, signal, (chunk) => {
+      const samples = pcm16ToFloat32(chunk.pcm)
+      if (!rate) rate = chunk.sr
+      // A reserva local pode falar noutra taxa que o provedor: tudo na primeira.
+      pieces.push(chunk.sr === rate ? samples : resampleLinear(samples, chunk.sr, rate))
+    })
+  }
+  if (!rate || pieces.length === 0) throw new Error("the speech engine returned no audio")
+  const all = concatFloat32(pieces)
+  return { wav: encodeWavPcm16(all, rate), durationMs: samplesToMs(all.length, rate) }
+}
+
+/**
+ * PCM16 mono 16 kHz (de `decodeAudioFile`) → texto, pelo motor de ditado das
+ * preferências. Arquivos longos vão em janelas de alguns minutos, cortadas no
+ * trecho mais quieto perto de cada fronteira (ver `splitPcmWindows`): o
+ * encerramento de uma sessão de ditado tem prazo curto, feito para a fala ao
+ * vivo, e um arquivo de meia hora numa sessão só estouraria esse prazo.
+ */
+export async function transcribeAudioPcm(
+  pcm: Buffer,
+  opts: { language?: string; timestamps?: boolean } = {},
+): Promise<{ text: string; engine: VoiceEngineId; segments: SttSegment[] }> {
+  const stt = getAppSettings().voice.stt
+  const engines = await sttEngineStatus()
+  const escolhido = engines.find((e) => e.engine === stt.engine)
+  if (!escolhido?.available || !escolhido.installed) {
+    throw new Error(
+      `the dictation engine (${stt.engine}) is not ready${escolhido?.reason ? `: ${escolhido.reason}` : ""} — see Settings → Voice`,
+    )
+  }
+  const samples = pcm16ToFloat32(pcm)
+  const textos: string[] = []
+  const segments: SttSegment[] = []
+  for (const [start, end] of splitPcmWindows(samples, STT_SAMPLE_RATE)) {
+    const janela = float32ToPcm16(samples.subarray(start, end))
+    const out = await transcribePcm(janela, {
+      sampleRate: STT_SAMPLE_RATE,
+      engine: stt.engine,
+      modelId: stt.modelId,
+      language: opts.language || stt.language,
+      timestamps: opts.timestamps,
+    })
+    if (out.text.trim()) textos.push(out.text.trim())
+    // Os tempos de cada janela começam em zero: desloca para o tempo do arquivo.
+    const offset = samplesToMs(start, STT_SAMPLE_RATE)
+    for (const seg of out.segments ?? []) {
+      segments.push({ startMs: seg.startMs + offset, endMs: seg.endMs + offset, text: seg.text })
+    }
+  }
+  return { text: textos.join(" "), engine: stt.engine, segments }
 }

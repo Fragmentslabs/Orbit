@@ -41,7 +41,7 @@ import {
 } from './models-store'
 import { PARAKEET_FILES, SILERO_VAD_URL } from './catalog'
 import { SampleBuffer, samplesToMs, STT_SAMPLE_RATE } from './audio'
-import type { SttEngine, SttEngineStatus, SttHandle, SttStartInput } from './engine'
+import type { SttEngine, SttEngineStatus, SttHandle, SttStartInput, SttSegment } from './engine'
 
 // ---------------------------------------------------------------------------
 // Carregamento do módulo nativo (opcional: o app funciona sem ele, sem o motor)
@@ -225,6 +225,8 @@ interface ParakeetSession {
   stopping: boolean
   cancelled: boolean
   segments: number
+  /** Trechos confirmados com a posição no áudio — os tempos da transcrição. */
+  timed: SttSegment[]
 }
 
 /** Enfileira trabalho na sessão: nunca em paralelo, nunca fora de ordem. */
@@ -274,6 +276,7 @@ function commitSegment(s: ParakeetSession, seg: SherpaSpeechSegment): void {
   void enqueue(s, async () => {
     const text = await decode(s, samples)
     if (s.cancelled) return
+    if (text) s.timed.push({ startMs: samplesToMs(from), endMs: samplesToMs(end), text })
     s.confirmed.push(text)
     s.provisional = ''
     publish(s)
@@ -444,6 +447,7 @@ async function start(input: SttStartInput, onPartial: (text: string) => void): P
     stopping: false,
     cancelled: false,
     segments: 0,
+    timed: [],
   }
 
   return {
@@ -455,7 +459,7 @@ async function start(input: SttStartInput, onPartial: (text: string) => void): P
       scheduleTail(s)
     },
 
-    async stop(): Promise<{ text: string; audioMs: number }> {
+    async stop(): Promise<{ text: string; audioMs: number; segments: SttSegment[] }> {
       s.stopping = true
       s.gen += 1 // descarta provisório em voo
       // Fecha o resto do buffer no VAD para o último trecho virar confirmado.
@@ -471,7 +475,9 @@ async function start(input: SttStartInput, onPartial: (text: string) => void): P
       if (s.segments === 0 && s.buffer.samples >= RATE * 0.3) {
         const all = s.buffer.slice(0, s.buffer.samples)
         void enqueue(s, async () => {
-          s.confirmed.push(await decode(s, all))
+          const text = await decode(s, all)
+          if (text) s.timed.push({ startMs: 0, endMs: samplesToMs(all.length), text })
+          s.confirmed.push(text)
         })
       }
 
@@ -483,7 +489,7 @@ async function start(input: SttStartInput, onPartial: (text: string) => void): P
       s.lastView = ['', '']
       publish(s)
       if (timedOut) throw new Error(`a transcrição não terminou em ${STOP_TIMEOUT_MS / 1000} s`)
-      return { text: s.confirmed.filter(Boolean).join(' '), audioMs: samplesToMs(s.buffer.samples) }
+      return { text: s.confirmed.filter(Boolean).join(' '), audioMs: samplesToMs(s.buffer.samples), segments: s.timed }
     },
 
     async cancel(): Promise<void> {

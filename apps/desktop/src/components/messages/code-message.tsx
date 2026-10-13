@@ -1,4 +1,5 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { AudioPartView } from "@/src/components/messages/audio-part"
 import { useTranslation } from "react-i18next"
 import { ChevronDownIcon } from "lucide-react"
 import { cn } from "@/lib/utils"
@@ -324,6 +325,8 @@ export function CodeAssistantMessage({ message, sessionId, isLast, isBusy, busyL
           <ArtifactPartView key={segment.id} part={segment.part} sessionId={sessionId} />
         ) : segment.part.type === "document" ? (
           <DocumentPartView key={segment.id} part={segment.part} sessionId={sessionId} live={isLast && isBusy} />
+        ) : segment.part.type === "audio" ? (
+          <AudioPartView key={segment.id} part={segment.part} />
         ) : null,
       )}
       {message.error && (

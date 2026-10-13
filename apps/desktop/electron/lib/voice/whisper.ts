@@ -31,7 +31,7 @@ import os from 'node:os'
 import path from 'node:path'
 import { randomUUID } from 'node:crypto'
 import { userShellEnv } from '../shell-env'
-import type { SttEngine, SttEngineStatus, SttHandle, SttStartInput } from './engine'
+import type { SttEngine, SttEngineStatus, SttHandle, SttSegment, SttStartInput } from './engine'
 import { encodeWavPcm16, SampleBuffer, samplesToMs, STT_SAMPLE_RATE } from './audio'
 import { getSttModel } from './catalog'
 import {
@@ -242,15 +242,16 @@ async function ensureServer(modelId: string, threads: number): Promise<WhisperSe
 // ---------------------------------------------------------------------------
 
 /** Monta o multipart do `/inference` (o servidor só aceita arquivo, não PCM). */
-function inferenceForm(wav: Buffer, language: string): FormData {
+function inferenceForm(wav: Buffer, language: string, timestamps = false): FormData {
   const form = new FormData()
   form.append('file', new Blob([new Uint8Array(wav)], { type: 'audio/wav' }), 'audio.wav')
-  form.append('response_format', 'json')
+  // Com tempos pedidos, o verbose_json traz os segmentos (início/fim em s).
+  form.append('response_format', timestamps ? 'verbose_json' : 'json')
   form.append('language', language || 'auto')
   // Greedy explícito: é `beam_size > 1` que liga o beam search no servidor.
   form.append('beam_size', '1')
   form.append('best_of', '1')
-  form.append('no_timestamps', 'true')
+  form.append('no_timestamps', timestamps ? 'false' : 'true')
   form.append('temperature', '0')
   return form
 }
@@ -261,17 +262,27 @@ async function transcribe(
   threads: number,
   samples: Float32Array,
   language: string,
-): Promise<string> {
+  timestamps = false,
+): Promise<{ text: string; segments?: SttSegment[] }> {
   const server = await ensureServer(modelId, threads)
   const run = server.queue.then(async () => {
     const wav = encodeWavPcm16(samples, STT_SAMPLE_RATE)
     const res = await fetch(`http://127.0.0.1:${server.port}/inference`, {
       method: 'POST',
-      body: inferenceForm(wav, language),
+      body: inferenceForm(wav, language, timestamps),
     })
     if (!res.ok) throw new Error(`o whisper-server respondeu HTTP ${res.status}: ${await res.text()}`)
-    const json = (await res.json()) as { text?: string }
-    return String(json.text || '').trim()
+    const json = (await res.json()) as { text?: string; segments?: { start?: number; end?: number; text?: string }[] }
+    const text = String(json.text || '').trim()
+    if (!timestamps || !Array.isArray(json.segments)) return { text }
+    const segments = json.segments
+      .map((seg) => ({
+        startMs: Math.round((seg.start ?? 0) * 1000),
+        endMs: Math.round((seg.end ?? 0) * 1000),
+        text: String(seg.text ?? '').trim(),
+      }))
+      .filter((seg) => seg.text)
+    return { text, segments }
   })
   server.queue = run.then(
     () => undefined,
@@ -291,6 +302,8 @@ interface WhisperSession {
   threads: number
   language: string
   live: boolean
+  /** Arquivo transcrito com tempos: o fim pede os segmentos ao servidor. */
+  timestamps: boolean
   onPartial: (text: string) => void
   buffer: SampleBuffer
   chain: Promise<unknown>
@@ -337,7 +350,7 @@ function runPreview(s: WhisperSession): Promise<void> {
   return enqueue(s, async () => {
     if (s.stopping || s.cancelled || gen !== s.gen) return
     try {
-      const text = await transcribe(s.modelId, s.threads, samples, s.language)
+      const { text } = await transcribe(s.modelId, s.threads, samples, s.language)
       if (s.stopping || s.cancelled || gen !== s.gen || !text) return
       try {
         s.onPartial(text)
@@ -410,6 +423,7 @@ async function start(input: SttStartInput, onPartial: (text: string) => void): P
     threads,
     language,
     live: input.live,
+    timestamps: Boolean(input.timestamps),
     onPartial,
     buffer: new SampleBuffer(),
     chain: Promise.resolve(),
@@ -429,7 +443,7 @@ async function start(input: SttStartInput, onPartial: (text: string) => void): P
       schedulePreview(s)
     },
 
-    async stop(): Promise<{ text: string; audioMs: number }> {
+    async stop(): Promise<{ text: string; audioMs: number; segments?: SttSegment[] }> {
       s.stopping = true
       s.gen += 1
       if (s.previewTimer) {
@@ -440,8 +454,8 @@ async function start(input: SttStartInput, onPartial: (text: string) => void): P
       const samples = s.buffer.slice(0, s.buffer.samples)
       const audioMs = samplesToMs(samples.length)
       if (samples.length < STT_SAMPLE_RATE * 0.1) return { text: '', audioMs }
-      const text = await transcribe(modelId, threads, samples, language)
-      return { text, audioMs }
+      const { text, segments } = await transcribe(modelId, threads, samples, language, s.timestamps)
+      return { text, audioMs, segments }
     },
 
     async cancel(): Promise<void> {

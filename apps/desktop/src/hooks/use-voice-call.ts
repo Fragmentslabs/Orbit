@@ -106,6 +106,8 @@ export function useVoiceCall({
 
   const lastPartialRef = useRef("")
   const onPartial = useCallback((text: string) => {
+    // Chamada encerrada: parcial atrasado de uma captura que já foi cancelada.
+    if (!activeRef.current) return
     setPartial(text)
     // Texto ao vivo é prova de fala, mesmo que o nível tenha ficado baixo: cada
     // palavra nova que o motor reconhece adia o fim da vez (fala baixa, final
@@ -181,7 +183,9 @@ export function useVoiceCall({
     const message = messages
       ?.slice()
       .reverse()
-      .find((item) => item.role === "assistant" && item.createdAt >= reply.sentAt)
+      // A compactação grava o resumo como mensagem do assistente, criada no
+      // meio do turno e antes da resposta: ele não é a resposta e não se fala.
+      .find((item) => item.role === "assistant" && !item.summary && item.createdAt >= reply.sentAt)
     if (status === "submitted" || status === "streaming" || status === "fallback") reply.sawBusy = true
     const finished = reply.sawBusy && (status === "idle" || status === "error")
     if (!message) {
@@ -248,6 +252,9 @@ export function useVoiceCall({
     replyRef.current = idleReply()
     // Um erro de um ditado anterior derrubaria a chamada logo ao começar.
     dictationRef.current.dismissError()
+    // Rede: uma captura que ficou aberta (não deveria) é descartada, senão o
+    // start() a reaproveitaria — com o texto antigo dentro.
+    dictationRef.current.cancel()
     useVoiceActivity.getState().setInCall(true)
     listen()
   }, [listen])

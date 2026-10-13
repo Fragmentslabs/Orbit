@@ -13,10 +13,11 @@ export type MediaSource = "chat" | "user" | "screenshot" | "script" | "batch"
 
 /**
  * Imagem (o caso histórico), artefato HTML renderizável, ou documento
- * (relatório/proposta autorado pelo agente, entregue em PDF e/ou DOCX).
+ * (relatório/proposta autorado pelo agente, entregue em PDF e/ou DOCX), ou
+ * áudio (anexado pelo usuário ou gerado pelo agente).
  * Ausente em registros gravados antes disso existir = "image".
  */
-export type MediaKind = "image" | "artifact" | "document"
+export type MediaKind = "image" | "artifact" | "document" | "audio"
 
 /** Formatos de entrega de um documento. O fonte é sempre Markdown; estes são
  *  os arquivos renderizados a partir dele. */
@@ -179,6 +180,8 @@ export interface MediaUsage {
 
 export const MEDIA_SCHEME = "orbit-media"
 export const ARTIFACT_SCHEME = "orbit-artifact"
+/** Áudios (anexados e gerados): scheme próprio, com o privilégio `stream` que o <audio> exige. */
+export const AUDIO_SCHEME = "orbit-audio"
 
 /** `kind` normalizado — registros antigos não têm o campo. */
 export function mediaKind(entry: Pick<MediaEntry, "kind">): MediaKind {
@@ -195,6 +198,7 @@ export function assetUrl(entry: Pick<MediaEntry, "id" | "kind">): string {
   const kind = mediaKind(entry)
   if (kind === "artifact") return `${ARTIFACT_SCHEME}://${entry.id}`
   if (kind === "document") return `${ARTIFACT_SCHEME}://${documentPreviewId(entry.id)}`
+  if (kind === "audio") return `${AUDIO_SCHEME}://${entry.id}`
   return `${MEDIA_SCHEME}://${entry.id}`
 }
 
@@ -216,6 +220,8 @@ export function thumbUrl(
   dark = false,
 ): string | null {
   if (mediaKind(entry) === "image") return `${MEDIA_SCHEME}://${entry.id}`
+  // Áudio não tem capa: o tile mostra o ícone (e toca no clique).
+  if (mediaKind(entry) === "audio") return null
   // Só o documento vivo tem capa escura; o resto cai na clara, que é a única.
   const thumb = (dark && entry.thumbDark) || entry.thumb
   return thumb ? `${ARTIFACT_SCHEME}://${thumb}?rev=${entry.revision ?? 1}` : null

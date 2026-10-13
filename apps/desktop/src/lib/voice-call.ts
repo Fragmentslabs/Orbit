@@ -80,7 +80,8 @@ export function stripThinking(text: string): string {
  * Textos do engine (com `source`) não existem para a fala, como na tela.
  */
 export function callSpeech(message: ChatMessage): CallSpeech {
-  if (message.role !== "assistant") return { lead: "", hasTool: false, final: null }
+  // Resumo da compactação: contexto para o modelo, nunca fala.
+  if (message.role !== "assistant" || message.summary) return { lead: "", hasTool: false, final: null }
   const parts = message.parts.filter((part) => !(part.type === "text" && part.source !== undefined))
   let i = 0
   let lead = ""

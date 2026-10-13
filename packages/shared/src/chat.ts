@@ -177,6 +177,19 @@ export interface ImagePart {
   alt?: string
 }
 
+/**
+ * Áudio produzido pelo agente (tool audio_generate): a resposta mostra um
+ * player. O arquivo mora em orbit-data/audio e é servido por orbit-audio://.
+ */
+export interface AudioPart {
+  id: string
+  type: "audio"
+  /** URL orbit-audio://aud_xxx.wav */
+  src: string
+  title?: string
+  durationMs?: number
+}
+
 /** Arquivo anexado pelo usuário à mensagem (data URL vinda do input) */
 export interface FilePart {
   id: string
@@ -406,6 +419,7 @@ export type MessagePart =
   | ReasoningPart
   | ToolPart
   | ImagePart
+  | AudioPart
   | FilePart
   | AgentPart
   | ArtifactPart

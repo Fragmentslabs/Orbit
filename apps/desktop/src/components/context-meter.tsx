@@ -2,7 +2,7 @@ import { useMemo } from "react"
 import { useTranslation } from "react-i18next"
 import { cn } from "@/lib/utils"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
-import { useSessionStore } from "@/src/stores/session-store"
+import { useSessionStatus, useSessionStore } from "@/src/stores/session-store"
 import { useProviderStore } from "@/src/stores/provider-store"
 import { useSessionModel } from "@/src/stores/session-model-prefs"
 import { formatTokens } from "@/src/lib/format"
@@ -26,6 +26,10 @@ const NO_MSGS: import("@shared/chat").ChatMessage[] = []
 
 export function ContextMeter({ sessionId }: { sessionId?: string }) {
   const { t } = useTranslation()
+  // Compactar com o turno rodando não acontece (o main recusa): o resumo seria
+  // feito de uma cópia velha do histórico e se perderia no fim do turno.
+  const status = useSessionStatus(sessionId)
+  const turnRunning = status === "submitted" || status === "streaming" || status === "cancelling" || status === "fallback"
   const messages = useSessionStore((s) => (sessionId ? s.messages[sessionId] ?? NO_MSGS : NO_MSGS))
   const live = useSessionStore((s) => (sessionId ? s.liveContext[sessionId] : undefined))
   const selected = useSessionModel(sessionId)
@@ -158,6 +162,8 @@ export function ContextMeter({ sessionId }: { sessionId?: string }) {
                 size="sm"
                 variant="outline"
                 className="w-full text-xs h-7"
+                disabled={turnRunning}
+                title={turnRunning ? t("usage.compactWaitTurn") : undefined}
                 onClick={() => sessionId && chatApi.compact(sessionId)}
               >
                 {t("usage.compactNow")}
@@ -178,6 +184,8 @@ export function ContextMeter({ sessionId }: { sessionId?: string }) {
                 size="sm"
                 variant="outline"
                 className="w-full text-xs h-7"
+                disabled={turnRunning}
+                title={turnRunning ? t("usage.compactWaitTurn") : undefined}
                 onClick={() => sessionId && chatApi.compact(sessionId)}
               >
                 {t("usage.compactNow")}
