@@ -2383,6 +2383,18 @@
       "needsModel": "Baixe um modelo de fala em Configurações → Voz.",
       "setupModel": "Configure o ditado em Configurações → Voz."
     },
+    "call": {
+      "start": "Iniciar chamada de voz",
+      "setup": "Configure o ditado em Configurações → Voz para usar a chamada.",
+      "listening": "Ouvindo… pode falar",
+      "thinking": "Pensando…",
+      "speaking": "Falando…",
+      "interrupt": "Interromper e falar",
+      "interruptShort": "Interromper",
+      "hangUp": "Encerrar chamada",
+      "failed": "A chamada caiu.",
+      "replyError": "O agente não conseguiu responder."
+    },
     "settings": {
       "sections": {
         "tts": "Texto em fala",
@@ -2390,7 +2402,17 @@
         "stt": "Fala em texto",
         "sttHint": "Transforma sua voz em texto no campo de mensagem.",
         "models": "Modelos",
-        "modelsHint": "Baixe e remova os modelos usados na leitura e na transcrição."
+        "modelsHint": "Baixe e remova os modelos usados na leitura e na transcrição.",
+        "call": "Modo chamada",
+        "callHint": "Conversa por voz em tempo real: você fala, o agente responde curto e em voz alta."
+      },
+      "call": {
+        "enableTitle": "Botão de chamada",
+        "enableHint": "Mostra o botão de chamada ao lado do microfone. As respostas na chamada vêm curtas e sem formatação.",
+        "silenceTitle": "Pausa para responder",
+        "silenceHint": "Quanto silêncio depois da sua fala encerra a sua vez e envia a mensagem.",
+        "silenceValue": "{{seconds}} s",
+        "needs": "A chamada usa o motor de ditado e a leitura em voz alta configurados acima."
       },
       "languages": {
         "auto": "Detectar automaticamente",

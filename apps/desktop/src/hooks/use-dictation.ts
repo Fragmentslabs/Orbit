@@ -108,9 +108,17 @@ function releaseCapture(capture: Capture) {
   void capture.ctx.close().catch(() => {})
 }
 
-export function useDictation(callbacks: DictationCallbacks = {}): Dictation {
+export function useDictation(
+  callbacks: DictationCallbacks = {},
+  /** Força preferências nesta captura (a chamada sempre quer o texto ao vivo). */
+  overrides: { live?: boolean } = {},
+): Dictation {
   const settings = useAppSettings((s) => s.settings)
-  const voice = useMemo(() => resolveVoiceSttSettings(settings), [settings])
+  const forceLive = overrides.live
+  const voice = useMemo(() => {
+    const resolved = resolveVoiceSttSettings(settings)
+    return forceLive === undefined ? resolved : { ...resolved, live: forceLive }
+  }, [settings, forceLive])
   const [listening, setListening] = useState(false)
   const [starting, setStarting] = useState(false)
   const [error, setError] = useState<string | null>(null)

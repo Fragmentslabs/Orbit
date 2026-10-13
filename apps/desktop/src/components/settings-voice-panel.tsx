@@ -8,6 +8,7 @@ import {
   Gauge,
   Languages,
   Mic,
+  Phone,
   RefreshCw,
   Sparkles,
   Timer,
@@ -15,6 +16,7 @@ import {
   Volume2,
 } from "lucide-react"
 import {
+  VOICE_CALL_SILENCE_OPTIONS,
   VOICE_DEFAULTS,
   type VoiceEngineId,
   type VoiceHardwareInfo,
@@ -75,14 +77,23 @@ function catalogRows(catalog: VoiceModelInfo[] | null): VoiceModelRow[] {
   return modelViews(catalog).map((view) => ({ ...view, langs: byId.get(view.id)?.langs ?? [] }))
 }
 
-function useVoicePrefs(): { voice: VoiceSettings; updateVoice: (next: VoiceSettings) => void } {
+function useVoicePrefs(): { voice: VoiceSettings; updateVoice: (next: Partial<VoiceSettings>) => void } {
   const voice = useAppSettings((s) => s.settings.voice)
   const update = useAppSettings((s) => s.update)
-  const safe: VoiceSettings = {
-    tts: { ...VOICE_DEFAULTS.tts, ...(voice?.tts ?? {}) },
-    stt: { ...VOICE_DEFAULTS.stt, ...(voice?.stt ?? {}) },
-  }
-  const updateVoice = useCallback((next: VoiceSettings) => update({ voice: next }), [update])
+  const safe: VoiceSettings = useMemo(
+    () => ({
+      tts: { ...VOICE_DEFAULTS.tts, ...(voice?.tts ?? {}) },
+      stt: { ...VOICE_DEFAULTS.stt, ...(voice?.stt ?? {}) },
+      call: { ...VOICE_DEFAULTS.call, ...(voice?.call ?? {}) },
+    }),
+    [voice],
+  )
+  // Mescla com o que já está salvo: quem mexe em `tts`/`stt` não apaga o
+  // bloco `call` (nem o contrário).
+  const updateVoice = useCallback(
+    (next: Partial<VoiceSettings>) => update({ voice: { ...safe, ...next } }),
+    [update, safe],
+  )
   return { voice: safe, updateVoice }
 }
 
@@ -152,7 +163,7 @@ function phaseBadgeVariant(phase: EnginePhase): "secondary" | "outline" {
 export function VoicePanel() {
   const { t } = useTranslation()
   const { voice, updateVoice } = useVoicePrefs()
-  const { tts, stt } = voice
+  const { tts, stt, call } = voice
   const [hardware, setHardware] = useState<VoiceHardwareInfo | null>(null)
   const [catalog, setCatalog] = useState<VoiceModelInfo[] | null>(null)
   const [status, setStatus] = useState<VoiceStatusSnapshot | null>(null)
@@ -662,6 +673,43 @@ export function VoicePanel() {
             })}
           </p>
         )}
+      </div>
+
+      {/* ── Modo chamada ──────────────────────────────────────────────────── */}
+      <div className="flex flex-col gap-2 border-t pt-4">
+        <div>
+          <p className="text-xs font-medium text-muted-foreground">{t("voice.settings.sections.call")}</p>
+          <p className="mt-0.5 text-[11px] text-muted-foreground/70">{t("voice.settings.sections.callHint")}</p>
+        </div>
+
+        <SettingRow
+          icon={Phone}
+          title={t("voice.settings.call.enableTitle")}
+          description={t("voice.settings.call.enableHint")}
+        >
+          <SettingSwitch
+            checked={call.enabled}
+            onChange={(enabled) => updateVoice({ call: { ...call, enabled } })}
+            label={t("voice.settings.call.enableTitle")}
+          />
+        </SettingRow>
+
+        <SettingRow
+          icon={Timer}
+          title={t("voice.settings.call.silenceTitle")}
+          description={t("voice.settings.call.silenceHint")}
+        >
+          <SettingSelect<string>
+            value={String(call.silenceMs)}
+            onChange={(next) => updateVoice({ call: { ...call, silenceMs: Number(next) } })}
+            options={VOICE_CALL_SILENCE_OPTIONS.map((ms) => ({
+              value: String(ms),
+              label: t("voice.settings.call.silenceValue", { seconds: (ms / 1000).toLocaleString() }),
+            }))}
+          />
+        </SettingRow>
+
+        <p className="px-1 text-[11px] text-muted-foreground/70">{t("voice.settings.call.needs")}</p>
       </div>
 
       {/* ── Modelos ───────────────────────────────────────────────────────── */}

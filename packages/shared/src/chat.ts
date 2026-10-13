@@ -644,6 +644,9 @@ export interface SendMessageOptions {
   planReview?: PlanReview
   /** Modo simples: respostas diretas em texto puro, sem formatação */
   simple?: boolean
+  /** Modo chamada (conversa por voz): a resposta será LIDA em voz alta, então
+   *  vem curta, direta e sem formatação. */
+  voiceCall?: boolean
   /** Configuração de reasoning/thinking do modelo quando suportado */
   reasoning?: ReasoningConfig
   /** Modo subagents: expõe a tool subagent (workers efêmeros em background) */

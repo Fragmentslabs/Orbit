@@ -32,6 +32,14 @@ interface SendButtonGroupProps {
   onSendToSidePanel: (text: string, files?: QueueAttachment[]) => void;
   onStop: () => void;
   disabled?: boolean;
+  /**
+   * No lugar do "Enviar" quando o campo está vazio e o agente parado (o botão
+   * de chamada). Com `emptySlotAlways` ele fica em qualquer caso — em chamada o
+   * slot é o "desligar", que não pode sumir porque alguém digitou ou o agente
+   * está respondendo.
+   */
+  emptySlot?: React.ReactNode;
+  emptySlotAlways?: boolean;
 }
 
 export function SendButtonGroup({
@@ -43,6 +51,8 @@ export function SendButtonGroup({
   onSendToSidePanel,
   onStop,
   disabled,
+  emptySlot,
+  emptySlotAlways,
 }: SendButtonGroupProps) {
   const { t } = useTranslation();
   const [scheduleOpen, setScheduleOpen] = useState(false);
@@ -92,6 +102,9 @@ export function SendButtonGroup({
     },
     [pendingText, pendingFiles, onSchedule, attachments],
   );
+
+  // Campo vazio com um botão próprio para esse caso (a chamada de voz).
+  if (emptySlot && (emptySlotAlways || (!hasText && !busy))) return <>{emptySlot}</>;
 
   // Apenas botão de parar (sem texto, agente rodando)
   if (busy && !hasText) {

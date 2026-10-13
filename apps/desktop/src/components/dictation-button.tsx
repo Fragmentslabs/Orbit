@@ -18,6 +18,7 @@ import { useAppSettings } from "@/src/stores/app-settings"
 import { useProviderStore } from "@/src/stores/provider-store"
 import { useSessionModel } from "@/src/stores/session-model-prefs"
 import { useSettingsUi } from "@/src/stores/settings-ui"
+import { useVoiceActivity } from "@/src/stores/voice-activity"
 import { cn } from "@/lib/utils"
 
 /**
@@ -68,6 +69,8 @@ export function DictationButton({ className, sessionId }: { className?: string; 
   // A aba de voz é onde o modelo é baixado: fechá-la é o sinal para reavaliar
   // o estado do alvo (ainda não há evento reativo de status de voz).
   const settingsOpen = useSettingsUi((s) => s.open)
+  // Em chamada, quem usa o microfone é ela: o botão de ditado sai de cena.
+  const inCall = useVoiceActivity((s) => s.inCall)
   const [status, setStatus] = useState<VoiceStatus | null>(null)
   const [partial, setPartial] = useState("")
   // Texto do input ao começar o ditado e o último valor que NÓS escrevemos:
@@ -308,7 +311,7 @@ export function DictationButton({ className, sessionId }: { className?: string; 
   // clique com `needsModel` abre as Preferências na aba de voz). Exigir `usable`
   // aqui escondia o microfone de quem ainda não baixou modelo — que é
   // exatamente quem precisa vê-lo para baixar.
-  if (!enabled || !dictationSupported()) return null
+  if (!enabled || !dictationSupported() || inCall) return null
 
   // Sem texto ao vivo no campo (preferência desligada, ou o áudio indo para o
   // modelo) a onda é o retorno de que está gravando.

@@ -33,6 +33,7 @@ import { ChatInputDraft } from "@/src/components/chat-input-draft"
 import { ReplyBar } from "@/src/components/reply-bar"
 import { withReplyPrefix } from "@/src/stores/message-reply"
 import { DictationButton } from "@/src/components/dictation-button"
+import { VoiceCallButton, VoiceCallPanel, useVoiceCallControl } from "@/src/components/voice-call"
 import { PendingAttachmentSync } from "@/src/components/pending-attachment-sync"
 import { clearInputDraft } from "@/src/stores/chat-draft"
 import { QueueIndicator } from "@/src/components/queue-indicator"
@@ -192,6 +193,28 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId, on
     const [directory, ...extraDirectories] = folders
     return { directory, extraDirectories }
   }, [folders])
+  /** Turno do modo chamada: mesmo caminho do Enter (fila quando ocupado), com
+   *  `voiceCall` para o agente responder curto e falado. */
+  const submitVoice = useCallback(
+    (text: string): boolean => {
+      if (noProvider) {
+        onProviderBlocked?.()
+        return false
+      }
+      if (folders.length === 0) return false
+      const options = { ...buildOptions(), voiceCall: true }
+      const { directory, extraDirectories } = getDirs()
+      if (busy) {
+        if (!sessionId) return false
+        enqueueForSend(sessionId, text, options, mode, { directory, extraDirectories, files: [] })
+        return true
+      }
+      void onSubmit(text, options, directory, extraDirectories)
+      return true
+    },
+    [noProvider, onProviderBlocked, folders.length, buildOptions, getDirs, busy, sessionId, enqueueForSend, mode, onSubmit],
+  )
+  const voiceCall = useVoiceCallControl({ sessionId, submit: submitVoice })
   const selections = usePanelStore((s) => s.selections)
   const quotes = usePanelStore((s) => s.quotes)
   const removeQuote = usePanelStore((s) => s.removeQuote)
@@ -428,7 +451,8 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId, on
           <ReplyBar replyKey={replyKey} />
           {/* Microfone no canto SUPERIOR direito, no nível da primeira linha do
               texto — a mesma posição do input do chat. */}
-          <div className="absolute right-2 top-2 z-10 flex items-center">
+          <div className="absolute right-2 top-2 z-10 flex items-center gap-0.5">
+            <VoiceCallPanel control={voiceCall} />
             <DictationButton sessionId={sessionId} />
           </div>
           <PromptInputBody>
@@ -496,6 +520,8 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId, on
                 <ModelPicker sessionId={sessionId} />
               </div>
               <SendButtonGroup
+                emptySlot={voiceCall.inSlot ? <VoiceCallButton control={voiceCall} /> : undefined}
+                emptySlotAlways={voiceCall.call.active}
                 busy={busy}
                 cancelling={status === "cancelling"}
                 disabled={folders.length === 0}

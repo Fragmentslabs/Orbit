@@ -48,9 +48,15 @@ import {
  *   invoke "voice:tts:start"         { text, voice?, lang?, speed?, engine? } -> { id }
  *                                     (`engine`: prioridade de áudio "model" | "local";
  *                                      sem ele, vale a das configurações)
- *   evento "voice:tts:chunk"         -> { id, pcm (base64 PCM16), sr, i, n }
+ *   evento "voice:tts:chunk"         -> { id, pcm (base64 PCM16), sr, i, n, seg? }
+ *                                     (`seg`: nº da frase, só na fala contínua)
  *   evento "voice:tts:done"          -> { id, error? }
  *   invoke "voice:tts:cancel"        { id } -> void
+ *   invoke "voice:tts:stream-start"  { voice?, lang?, speed?, engine? } -> { id }
+ *   invoke "voice:tts:stream-append" { id, text }   (frase nova, na ordem)
+ *   invoke "voice:tts:stream-clear"  { id }         (descarta as frases ainda não geradas)
+ *   invoke "voice:tts:stream-end"    { id }         (não chegam mais frases)
+ *                                     fala contínua: chunk/done/cancel como acima
  *
  * Os modelos de STT ficam no catálogo (`voice:models`) e no `voice:status`
  * (motores disponíveis); as sessões de ditado em si são do worker de STT, que
@@ -106,6 +112,59 @@ async function aposDownload(modelId: string, progress: VoiceDownloadProgress): P
 /** Falas em andamento, por id — é como o `voice:tts:cancel` acha o pedido. */
 const falas = new Map<string, AbortController>()
 
+/** Fala contínua: frases esperando síntese, na ordem em que chegaram. */
+interface Fluxo {
+  pedido: FalaPedido
+  /** `seg` é dado na CHEGADA da frase (a ordem do append), não na geração: as
+   *  descartadas por um clear também consomem número, e o renderer — que conta
+   *  as que mandou — continua alinhado com o main. */
+  fila: { texto: string; seg: number }[]
+  /** Número da próxima frase que chegar (vai nos pedaços como `seg`). */
+  proxima: number
+  /** Não chegam mais frases: com a fila vazia, a fala termina. */
+  fechado: boolean
+  rodando: boolean
+  signal: AbortSignal
+}
+
+const fluxos = new Map<string, Fluxo>()
+
+/**
+ * Sintetiza a fila de uma fala contínua, uma frase por vez, sem esperar o
+ * renderer tocar nada — a geração corre à frente da reprodução. Termina (com
+ * `done`) quando a fala foi fechada e a fila esvaziou, ou no primeiro erro.
+ */
+async function drenarFluxo(id: string): Promise<void> {
+  const fluxo = fluxos.get(id)
+  if (!fluxo || fluxo.rodando) return
+  fluxo.rodando = true
+  try {
+    while (fluxo.fila.length > 0 && !fluxo.signal.aborted) {
+      const { texto, seg } = fluxo.fila.shift() as { texto: string; seg: number }
+      await rodarFala(id, texto, fluxo.pedido, fluxo.signal, seg)
+    }
+  } catch (err) {
+    fluxos.delete(id)
+    falas.delete(id)
+    // Cancelada pelo renderer (interromper/desligar): ninguém espera mais nada.
+    if (!fluxo.signal.aborted) emitir("voice:tts:done", { id, error: (err as Error).message ?? String(err) })
+    return
+  }
+  fluxo.rodando = false
+  if (fluxo.signal.aborted) {
+    fluxos.delete(id)
+    falas.delete(id)
+    return
+  }
+  // Chegou frase enquanto a última era gerada: o laço acima já a pegou; aqui
+  // só sobra decidir se a fala acabou.
+  if (fluxo.fechado && fluxo.fila.length === 0) {
+    fluxos.delete(id)
+    falas.delete(id)
+    emitir("voice:tts:done", { id })
+  }
+}
+
 /** Pedido de fala vindo do renderer (`voice:tts:start`). */
 interface FalaPedido {
   text?: string
@@ -132,10 +191,17 @@ interface FalaChunk {
  * leitura muda. Com áudio já entregue, trocar de motor no meio emendaria duas
  * vozes diferentes, então a falha sobe como erro.
  */
-async function rodarFala(id: string, texto: string, payload: FalaPedido, signal: AbortSignal): Promise<void> {
+async function rodarFala(
+  id: string,
+  texto: string,
+  payload: FalaPedido,
+  signal: AbortSignal,
+  /** Número da frase na fala contínua: o renderer mostra a frase que está tocando. */
+  seg?: number,
+): Promise<void> {
   const pedido = { voice: payload?.voice, lang: payload?.lang, speed: payload?.speed }
   const emitirChunk = (chunk: FalaChunk) =>
-    emitir("voice:tts:chunk", { id, pcm: chunk.pcm.toString("base64"), sr: chunk.sr, i: chunk.i, n: chunk.n })
+    emitir("voice:tts:chunk", { id, pcm: chunk.pcm.toString("base64"), sr: chunk.sr, i: chunk.i, n: chunk.n, seg })
 
   const engine: VoiceTtsEngine = payload?.engine ?? getAppSettings().voice.tts.engine
   if (engine === "model") {
@@ -317,6 +383,44 @@ export function registerVoiceIpc(): void {
 
   ipcMain.handle("voice:tts:cancel", (_event, payload: { id?: string }) => {
     falas.get(String(payload?.id ?? ""))?.abort()
+  })
+
+  // Fala CONTÍNUA (modo chamada): uma fala só, aberta antes de existir texto, que
+  // recebe frases conforme o agente as escreve. O main sintetiza a próxima
+  // frase enquanto a anterior ainda toca no renderer — com uma fala por frase,
+  // cada uma esperava a anterior terminar de tocar para começar a ser gerada, e
+  // o silêncio entre "Claro." e o resto era exatamente esse tempo de síntese.
+  // Os pedaços saem pelos mesmos `voice:tts:chunk`/`done`, com o mesmo id.
+  ipcMain.handle("voice:tts:stream-start", (_event, payload: FalaPedido = {}): { id: string } => {
+    const id = randomUUID()
+    const controller = new AbortController()
+    falas.set(id, controller)
+    fluxos.set(id, { pedido: payload, fila: [], proxima: 0, fechado: false, rodando: false, signal: controller.signal })
+    return { id }
+  })
+
+  ipcMain.handle("voice:tts:stream-append", (_event, payload: { id?: string; text?: string }) => {
+    const fluxo = fluxos.get(String(payload?.id ?? ""))
+    const texto = String(payload?.text ?? "").trim()
+    if (!fluxo || fluxo.fechado || !texto) return
+    fluxo.fila.push({ texto, seg: fluxo.proxima++ })
+    void drenarFluxo(String(payload.id))
+  })
+
+  // Descarta as frases que ainda não começaram a ser geradas (a fala segue
+  // aberta). O modo chamada usa quando o agente parte para as ferramentas: o
+  // que ele narrou antes disso, além da frase de espera, não deve ser lido.
+  ipcMain.handle("voice:tts:stream-clear", (_event, payload: { id?: string }) => {
+    const fluxo = fluxos.get(String(payload?.id ?? ""))
+    if (fluxo) fluxo.fila = []
+  })
+
+  ipcMain.handle("voice:tts:stream-end", (_event, payload: { id?: string }) => {
+    const id = String(payload?.id ?? "")
+    const fluxo = fluxos.get(id)
+    if (!fluxo) return
+    fluxo.fechado = true
+    void drenarFluxo(id)
   })
 
   // Ditado. Os canais faltavam: o renderer chamava `voice:stt:start` e o main

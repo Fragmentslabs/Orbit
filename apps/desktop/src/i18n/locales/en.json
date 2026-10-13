@@ -2383,6 +2383,18 @@
       "needsModel": "Download a speech model in Settings → Voice.",
       "setupModel": "Set up dictation in Settings → Voice."
     },
+    "call": {
+      "start": "Start voice call",
+      "setup": "Set up dictation in Settings → Voice to use calls.",
+      "listening": "Listening… go ahead",
+      "thinking": "Thinking…",
+      "speaking": "Speaking…",
+      "interrupt": "Interrupt and talk",
+      "interruptShort": "Interrupt",
+      "hangUp": "End call",
+      "failed": "The call dropped.",
+      "replyError": "The agent couldn't reply."
+    },
     "settings": {
       "sections": {
         "tts": "Text to speech",
@@ -2390,7 +2402,17 @@
         "stt": "Speech to text",
         "sttHint": "Turns your voice into text in the message field.",
         "models": "Models",
-        "modelsHint": "Download and remove the models used for reading and transcription."
+        "modelsHint": "Download and remove the models used for reading and transcription.",
+        "call": "Call mode",
+        "callHint": "Real-time voice conversation: you talk, the agent answers briefly and out loud."
+      },
+      "call": {
+        "enableTitle": "Call button",
+        "enableHint": "Shows the call button next to the microphone. Replies during a call are short and unformatted.",
+        "silenceTitle": "Pause before replying",
+        "silenceHint": "How much silence after you speak ends your turn and sends the message.",
+        "silenceValue": "{{seconds}} s",
+        "needs": "Calls use the dictation engine and the read-aloud voice set above."
       },
       "languages": {
         "auto": "Detect automatically",
