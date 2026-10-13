@@ -188,8 +188,8 @@ interface StartSttInput {
   threads?: number
   /** Pedir texto ao vivo enquanto a fala acontece. */
   live: boolean
-  /** Pedir os trechos com tempo (transcrição de arquivo). */
-  timestamps?: boolean
+  /** Pedir os trechos com tempo (transcrição de arquivo); 'words' = por palavra. */
+  timestamps?: boolean | 'words'
 }
 
 /**
@@ -219,7 +219,7 @@ export async function startSttSession(
       language: input.language || 'pt',
       threads: input.threads,
       live: Boolean(input.live),
-      timestamps: Boolean(input.timestamps),
+      timestamps: input.timestamps || false,
     },
     partial,
   )

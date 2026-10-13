@@ -22,8 +22,16 @@ export interface SttStartInput {
   threads?: number
   /** Pedir texto ao vivo enquanto a fala acontece. */
   live: boolean
-  /** Pedir os trechos com tempo (transcrição de arquivo com timestamps). */
-  timestamps?: boolean
+  /** Pedir os trechos com tempo (transcrição de arquivo com timestamps);
+   *  `'words'` pede também o tempo de cada palavra (edição de vídeo). */
+  timestamps?: boolean | 'words'
+}
+
+/** Palavra com a posição no áudio (só com `timestamps: 'words'`). */
+export interface SttWord {
+  startMs: number
+  endMs: number
+  text: string
 }
 
 /** Trecho transcrito com a posição no áudio da sessão. */
@@ -31,6 +39,7 @@ export interface SttSegment {
   startMs: number
   endMs: number
   text: string
+  words?: SttWord[]
 }
 
 /** Sessão de um motor, já com o modelo carregado/pronto. */

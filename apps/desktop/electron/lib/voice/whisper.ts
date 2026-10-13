@@ -242,7 +242,7 @@ async function ensureServer(modelId: string, threads: number): Promise<WhisperSe
 // ---------------------------------------------------------------------------
 
 /** Monta o multipart do `/inference` (o servidor só aceita arquivo, não PCM). */
-function inferenceForm(wav: Buffer, language: string, timestamps = false): FormData {
+function inferenceForm(wav: Buffer, language: string, timestamps: boolean | 'words' = false): FormData {
   const form = new FormData()
   form.append('file', new Blob([new Uint8Array(wav)], { type: 'audio/wav' }), 'audio.wav')
   // Com tempos pedidos, o verbose_json traz os segmentos (início/fim em s).
@@ -253,6 +253,12 @@ function inferenceForm(wav: Buffer, language: string, timestamps = false): FormD
   form.append('best_of', '1')
   form.append('no_timestamps', timestamps ? 'false' : 'true')
   form.append('temperature', '0')
+  // Por palavra (edição de vídeo): um segmento por palavra, quebrado na
+  // fronteira da palavra — liga os tempos por token no servidor.
+  if (timestamps === 'words') {
+    form.append('max_len', '1')
+    form.append('split_on_word', 'true')
+  }
   return form
 }
 
@@ -262,7 +268,7 @@ async function transcribe(
   threads: number,
   samples: Float32Array,
   language: string,
-  timestamps = false,
+  timestamps: boolean | 'words' = false,
 ): Promise<{ text: string; segments?: SttSegment[] }> {
   const server = await ensureServer(modelId, threads)
   const run = server.queue.then(async () => {
@@ -272,7 +278,10 @@ async function transcribe(
       body: inferenceForm(wav, language, timestamps),
     })
     if (!res.ok) throw new Error(`o whisper-server respondeu HTTP ${res.status}: ${await res.text()}`)
-    const json = (await res.json()) as { text?: string; segments?: { start?: number; end?: number; text?: string }[] }
+    const json = (await res.json()) as {
+      text?: string
+      segments?: { start?: number; end?: number; text?: string; words?: { word?: string; start?: number; end?: number }[] }[]
+    }
     const text = String(json.text || '').trim()
     if (!timestamps || !Array.isArray(json.segments)) return { text }
     const segments = json.segments
@@ -280,6 +289,18 @@ async function transcribe(
         startMs: Math.round((seg.start ?? 0) * 1000),
         endMs: Math.round((seg.end ?? 0) * 1000),
         text: String(seg.text ?? '').trim(),
+        ...(timestamps === 'words'
+          ? {
+              // Com max_len=1 cada segmento JÁ é uma palavra; quando o servidor
+              // também manda `words`, eles são a fonte mais fina.
+              words: (seg.words?.length
+                ? seg.words.map((w) => ({ text: String(w.word ?? ''), start: w.start ?? 0, end: w.end ?? 0 }))
+                : [{ text: String(seg.text ?? ''), start: seg.start ?? 0, end: seg.end ?? 0 }]
+              )
+                .map((w) => ({ startMs: Math.round(w.start * 1000), endMs: Math.round(w.end * 1000), text: w.text.trim() }))
+                .filter((w) => w.text),
+            }
+          : {}),
       }))
       .filter((seg) => seg.text)
     return { text, segments }
@@ -303,7 +324,7 @@ interface WhisperSession {
   language: string
   live: boolean
   /** Arquivo transcrito com tempos: o fim pede os segmentos ao servidor. */
-  timestamps: boolean
+  timestamps: boolean | 'words'
   onPartial: (text: string) => void
   buffer: SampleBuffer
   chain: Promise<unknown>
@@ -423,7 +444,7 @@ async function start(input: SttStartInput, onPartial: (text: string) => void): P
     threads,
     language,
     live: input.live,
-    timestamps: Boolean(input.timestamps),
+    timestamps: input.timestamps || false,
     onPartial,
     buffer: new SampleBuffer(),
     chain: Promise.resolve(),

@@ -41,7 +41,7 @@ import {
 } from './models-store'
 import { PARAKEET_FILES, SILERO_VAD_URL } from './catalog'
 import { SampleBuffer, samplesToMs, STT_SAMPLE_RATE } from './audio'
-import type { SttEngine, SttEngineStatus, SttHandle, SttStartInput, SttSegment } from './engine'
+import type { SttEngine, SttEngineStatus, SttHandle, SttStartInput, SttSegment, SttWord } from './engine'
 
 // ---------------------------------------------------------------------------
 // Carregamento do módulo nativo (opcional: o app funciona sem ele, sem o motor)
@@ -52,7 +52,14 @@ interface SherpaStream {
 }
 interface SherpaRecognizer {
   createStream(): SherpaStream
-  decodeAsync(stream: SherpaStream): Promise<{ text?: string }>
+  decodeAsync(stream: SherpaStream): Promise<SherpaResult>
+}
+/** Resultado do transducer: tokens BPE com o início (s) e, no TDT, a duração (s). */
+interface SherpaResult {
+  text?: string
+  tokens?: string[]
+  timestamps?: number[]
+  durations?: number[]
 }
 interface SherpaOfflineRecognizer {
   createAsync(config: Record<string, unknown>): Promise<SherpaRecognizer>
@@ -209,6 +216,8 @@ interface ParakeetSession {
   id: string
   threads: number
   live: boolean
+  /** Montar o tempo de cada palavra (transcrição para edição de vídeo). */
+  words: boolean
   onPartial: (text: string) => void
   vad: SherpaVad
   buffer: SampleBuffer
@@ -239,14 +248,56 @@ function enqueue(s: ParakeetSession, fn: () => Promise<void>): Promise<void> {
   return run
 }
 
-async function decode(s: ParakeetSession, samples: Float32Array): Promise<string> {
+async function decodeFull(s: ParakeetSession, samples: Float32Array): Promise<SherpaResult> {
   const rec = await warmRecognizer(s.threads)
   return withRecognizer(async () => {
     const stream = rec.createStream()
     stream.acceptWaveform({ sampleRate: RATE, samples })
-    const r = await rec.decodeAsync(stream)
-    return String(r.text || '').trim()
+    return rec.decodeAsync(stream)
   })
+}
+
+async function decode(s: ParakeetSession, samples: Float32Array): Promise<string> {
+  return String((await decodeFull(s, samples)).text || '').trim()
+}
+
+/**
+ * Palavras a partir dos tokens do transducer. O token que abre palavra vem com
+ * espaço na frente (" H", "ello" → "Hello"); pontuação gruda na anterior. O fim
+ * é o início do último token + a duração dele (TDT); sem duração, o início do
+ * próximo token. `offsetMs` é onde o trecho decodificado começa no áudio.
+ */
+export function tokensToWords(r: SherpaResult, offsetMs: number): SttWord[] {
+  const tokens = r.tokens ?? []
+  const starts = r.timestamps ?? []
+  const durations = r.durations ?? []
+  const words: SttWord[] = []
+  let current: { text: string; start: number; end: number } | null = null
+  const close = () => {
+    const text = current?.text.trim()
+    if (current && text) {
+      words.push({ startMs: Math.round(offsetMs + current.start * 1000), endMs: Math.round(offsetMs + current.end * 1000), text })
+    }
+    current = null
+  }
+  tokens.forEach((token, i) => {
+    const start = starts[i] ?? 0
+    const end = start + (durations[i] || (starts[i + 1] !== undefined ? starts[i + 1] - start : 0.08))
+    const opens = /^[\s▁]/.test(token) || !current
+    const punctuation = /^[.,!?;:…]+$/.test(token.trim())
+    if (opens && !punctuation) {
+      close()
+      current = { text: token.replace(/^[\s▁]+/, ''), start, end }
+      // Token de espaço puro (" "): a palavra começa no próximo.
+      if (!current.text) current = null
+      return
+    }
+    if (!current) current = { text: '', start, end }
+    current.text += token.replace(/▁/g, '')
+    current.end = Math.max(current.end, end)
+  })
+  close()
+  return words
 }
 
 /** Publica o texto ao vivo: confirmado + provisório, só quando muda. */
@@ -274,9 +325,13 @@ function commitSegment(s: ParakeetSession, seg: SherpaSpeechSegment): void {
   s.segments += 1
   const samples = s.buffer.slice(from, end)
   void enqueue(s, async () => {
-    const text = await decode(s, samples)
+    const result = await decodeFull(s, samples)
+    const text = String(result.text || '').trim()
     if (s.cancelled) return
-    if (text) s.timed.push({ startMs: samplesToMs(from), endMs: samplesToMs(end), text })
+    if (text) {
+      const words = s.words ? tokensToWords(result, samplesToMs(from)) : undefined
+      s.timed.push({ startMs: samplesToMs(from), endMs: samplesToMs(end), text, ...(words ? { words } : {}) })
+    }
     s.confirmed.push(text)
     s.provisional = ''
     publish(s)
@@ -415,6 +470,7 @@ async function start(input: SttStartInput, onPartial: (text: string) => void): P
     id: randomUUID(),
     threads,
     live: input.live,
+    words: input.timestamps === 'words',
     onPartial,
     vad: new mod.Vad(
       {
@@ -475,8 +531,12 @@ async function start(input: SttStartInput, onPartial: (text: string) => void): P
       if (s.segments === 0 && s.buffer.samples >= RATE * 0.3) {
         const all = s.buffer.slice(0, s.buffer.samples)
         void enqueue(s, async () => {
-          const text = await decode(s, all)
-          if (text) s.timed.push({ startMs: 0, endMs: samplesToMs(all.length), text })
+          const result = await decodeFull(s, all)
+          const text = String(result.text || '').trim()
+          if (text) {
+            const words = s.words ? tokensToWords(result, 0) : undefined
+            s.timed.push({ startMs: 0, endMs: samplesToMs(all.length), text, ...(words ? { words } : {}) })
+          }
           s.confirmed.push(text)
         })
       }

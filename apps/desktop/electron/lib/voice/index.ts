@@ -506,8 +506,8 @@ export interface VoiceSttSessionStart {
   threads?: number
   /** Texto ao vivo enquanto a fala acontece (padrão: sim). */
   live?: boolean
-  /** Trechos com tempo (transcrição de arquivo). */
-  timestamps?: boolean
+  /** Trechos com tempo (transcrição de arquivo); 'words' = por palavra. */
+  timestamps?: boolean | 'words'
 }
 
 export interface VoiceTranscribeResult {
@@ -578,7 +578,7 @@ export async function transcribePcm(
     engine?: VoiceEngineId
     modelId?: string | null
     language?: string
-    timestamps?: boolean
+    timestamps?: boolean | 'words'
   },
 ): Promise<VoiceTranscribeResult> {
   if (!pcm || pcm.length === 0) throw new Error("PCM vazio")
@@ -671,7 +671,7 @@ export async function synthesizeToWav(
  */
 export async function transcribeAudioPcm(
   pcm: Buffer,
-  opts: { language?: string; timestamps?: boolean } = {},
+  opts: { language?: string; timestamps?: boolean | 'words' } = {},
 ): Promise<{ text: string; engine: VoiceEngineId; segments: SttSegment[] }> {
   const stt = getAppSettings().voice.stt
   const engines = await sttEngineStatus()
@@ -697,7 +697,14 @@ export async function transcribeAudioPcm(
     // Os tempos de cada janela começam em zero: desloca para o tempo do arquivo.
     const offset = samplesToMs(start, STT_SAMPLE_RATE)
     for (const seg of out.segments ?? []) {
-      segments.push({ startMs: seg.startMs + offset, endMs: seg.endMs + offset, text: seg.text })
+      segments.push({
+        startMs: seg.startMs + offset,
+        endMs: seg.endMs + offset,
+        text: seg.text,
+        ...(seg.words
+          ? { words: seg.words.map((w) => ({ startMs: w.startMs + offset, endMs: w.endMs + offset, text: w.text })) }
+          : {}),
+      })
     }
   }
   return { text: textos.join(" "), engine: stt.engine, segments }
