@@ -45,6 +45,7 @@ export function resolveVoiceSttSettings(settings: AppSettings | null | undefined
     live: bool(stt?.live, d.live),
     threads: typeof stt?.threads === "number" && Number.isFinite(stt.threads) ? stt.threads : d.threads,
     preload: bool(stt?.preload, d.preload),
+    micDeviceId: typeof stt?.micDeviceId === "string" && stt.micDeviceId ? stt.micDeviceId : null,
   }
 }
 

@@ -138,6 +138,15 @@ export function createAudioGenerateTool(sessionId: string, ctx: ToolContext | nu
         .optional()
         .describe('F1–F5 (female) or M1–M5 (male). Omit to use the voice the user chose.'),
       speed: z.number().min(0.5).max(2).optional().describe('Speaking rate, 1 = natural. Omit unless asked.'),
+      lang: z
+        .string()
+        .regex(/^[a-z]{2}$/)
+        .optional()
+        .describe(
+          'Language of `text` as an ISO 639-1 code (pt, en, es, fr, de, it, ja, ko…) — the voice speaks with its accent. ' +
+            'Set it to the language you wrote the text in (e.g. "en" when the user asked for the audio in English). ' +
+            'Omit to detect it from the text.',
+        ),
       ...(ctx
         ? {
             savePath: z
@@ -148,9 +157,11 @@ export function createAudioGenerateTool(sessionId: string, ctx: ToolContext | nu
         : {}),
     }),
     execute: async (input) => {
-      const { text, title, voice, speed } = input
+      const { text, title, voice, speed, lang } = input
       const savePath = (input as { savePath?: string }).savePath
-      const { wav, durationMs } = await synthesizeToWav(text, { voice, speed })
+      // O idioma é o do TEXTO que o agente escreveu, não o fixo das preferências:
+      // pedir "gere em inglês" com a leitura em português tem que sair em inglês.
+      const { wav, durationMs } = await synthesizeToWav(text, { voice, speed, lang: lang ?? 'auto' })
       const { url } = await saveAudio(wav, 'wav', { sessionId, name: title || undefined, source: 'chat' })
       let savedTo: string | null = null
       if (savePath && ctx) {

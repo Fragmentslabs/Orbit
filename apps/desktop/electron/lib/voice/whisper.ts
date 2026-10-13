@@ -33,7 +33,7 @@ import { randomUUID } from 'node:crypto'
 import { userShellEnv } from '../shell-env'
 import type { SttEngine, SttEngineStatus, SttHandle, SttSegment, SttStartInput } from './engine'
 import { encodeWavPcm16, SampleBuffer, samplesToMs, STT_SAMPLE_RATE } from './audio'
-import { getSttModel } from './catalog'
+import { getSttModel, preferredWhisperModelId } from './catalog'
 import {
   bundledWhisperServerPath,
   isWhisperModelInstalled,
@@ -386,6 +386,23 @@ function runPreview(s: WhisperSession): Promise<void> {
   })
 }
 
+/**
+ * Modelo do "Automático" (`modelId` nulo): o que cabe na máquina quando está no
+ * disco, senão o padrão, senão o primeiro whisper baixado. Fixar o padrão fazia
+ * quem só baixou o small ver o microfone liberado e o start falhar com
+ * "whisper-base não baixado".
+ */
+export function whisperAutoModelId(): string {
+  const installed = whisperInstalledIds()
+  const preferred = preferredWhisperModelId(os.totalmem() / 1024 ** 3)
+  for (const id of [preferred, DEFAULT_MODEL_ID]) if (installed.includes(id)) return id
+  return installed[0] ?? preferred
+}
+
+function resolveModelId(modelId: string | null): string {
+  return modelId || whisperAutoModelId()
+}
+
 async function status(): Promise<SttEngineStatus> {
   const bin = resolveWhisperServer()
   const installed = whisperInstalledIds()
@@ -424,7 +441,7 @@ async function status(): Promise<SttEngineStatus> {
 async function start(input: SttStartInput, onPartial: (text: string) => void): Promise<SttHandle> {
   // Valida o modelo ANTES do binário: um id que não é do whisper é erro de
   // integração e o motivo específico ajuda mais que "faltou o servidor".
-  const modelId = input.modelId || DEFAULT_MODEL_ID
+  const modelId = resolveModelId(input.modelId)
   const def = getSttModel(modelId)
   if (!def || def.engine !== 'whisper') throw new Error(`o motor whisper não tem o modelo "${modelId}"`)
 
@@ -497,7 +514,7 @@ async function start(input: SttStartInput, onPartial: (text: string) => void): P
  * primeira sessão do usuário não pagar o `spawn` + a leitura do ggml.
  */
 async function warmEngine(modelId: string | null, threads?: number): Promise<void> {
-  const id = modelId || DEFAULT_MODEL_ID
+  const id = resolveModelId(modelId)
   const def = getSttModel(id)
   if (!def || def.engine !== ENGINE_ID) return
   try {

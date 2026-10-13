@@ -169,6 +169,7 @@ function voiceSettings(raw: unknown, d: VoiceSettings): VoiceSettings {
       live: typeof stt.live === 'boolean' ? stt.live : d.stt.live,
       preload: typeof stt.preload === 'boolean' ? stt.preload : d.stt.preload,
       threads,
+      micDeviceId: typeof stt.micDeviceId === 'string' && stt.micDeviceId ? stt.micDeviceId : null,
     },
     call: {
       enabled: typeof call.enabled === 'boolean' ? call.enabled : d.call.enabled,

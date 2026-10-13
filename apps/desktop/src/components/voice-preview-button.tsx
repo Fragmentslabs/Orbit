@@ -7,8 +7,9 @@ import { cn } from "@/lib/utils"
 
 /**
  * Frase de amostra por idioma da LEITURA (`voice.tts.lang`), não da interface:
- * é a língua em que a voz vai falar de verdade. "na" (agnóstico) e idiomas
- * sem frase própria caem no inglês.
+ * é a língua em que a voz vai falar de verdade. No "Automático" a voz fala o
+ * idioma do texto, então a amostra é a da interface (é nela que a pessoa
+ * lê). "na" (agnóstico) e idiomas sem frase própria caem no inglês.
  */
 const SAMPLES: Record<string, string> = {
   pt: "Olá! Esta é a minha voz. É assim que vou ler as suas respostas.",
@@ -40,8 +41,9 @@ export function VoicePreviewButton({
   speed: number
   engine: VoiceTtsEngine
 }) {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
   const { speak, stop, speaking, generating, error, dismissError } = useSpeak()
+  const sampleLang = lang === "auto" ? (i18n.language || "en").slice(0, 2).toLowerCase() : lang
 
   // Trocou a voz no meio da amostra: a que está tocando já não é a escolhida.
   useEffect(() => {
@@ -66,7 +68,7 @@ export function VoicePreviewButton({
         type="button"
         aria-label={label}
         title={label}
-        onClick={() => (speaking ? stop() : speak(voiceSample(lang), { voice, lang, speed, engine }))}
+        onClick={() => (speaking ? stop() : speak(voiceSample(sampleLang), { voice, lang, speed, engine }))}
         className={cn(
           "flex size-8 shrink-0 items-center justify-center rounded-md border border-input transition-colors",
           speaking

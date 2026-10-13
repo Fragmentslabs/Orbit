@@ -357,6 +357,12 @@ export function resolveMainLocale(language: string | undefined): MainLocale {
   return value.startsWith('pt') || value.startsWith('portuguese') ? 'pt-BR' : 'en'
 }
 
+/** O idioma já em memória (sem ler o storage) — para quem não pode esperar,
+ *  como a fala que precisa de um idioma de reserva. */
+export function currentMainLocale(): MainLocale | undefined {
+  return cached
+}
+
 /** Espelha o idioma publicado pelo renderer (`app:setLanguage`). */
 export function setMainLocale(language: string): void {
   cached = resolveMainLocale(language)

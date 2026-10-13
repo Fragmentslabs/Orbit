@@ -81,7 +81,7 @@ export function readTtsPrefs(voice: unknown): TtsPrefs {
   return {
     enabled: typeof tts?.enabled === "boolean" ? tts.enabled : true,
     voice: text(tts?.voice, "F2"),
-    lang: text(tts?.lang, "pt"),
+    lang: text(tts?.lang, "auto"),
     speed: typeof tts?.speed === "number" && tts.speed > 0 ? tts.speed : 1,
   }
 }

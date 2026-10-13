@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next"
 import {
   AudioLines,
   Check,
+  ChevronDown,
   Cpu,
   Download,
   Gauge,
@@ -37,6 +38,7 @@ import {
   type EnginePhase,
   type VoiceModelRow,
 } from "@/src/components/voice-models-section"
+import { useAudioInputs } from "@/src/hooks/use-audio-inputs"
 import { useAppSettings } from "@/src/stores/app-settings"
 import { formatSizeMb, modelViews } from "@/src/lib/voice-models"
 import { voiceApi } from "@/src/lib/voice-ipc"
@@ -60,8 +62,9 @@ const STT_ENGINES: readonly VoiceEngineId[] = ["parakeet", "whisper"]
 /** Vozes do TTS: F1–F5 femininas, M1–M5 masculinas (Supertonic 3). */
 const VOICE_IDS = ["F1", "F2", "F3", "F4", "F5", "M1", "M2", "M3", "M4", "M5"] as const
 
-/** Idiomas da leitura; `na` deixa a voz sem idioma (agnóstica). */
-const TTS_LANGS = ["pt", "en", "es", "fr", "de", "it", "na"] as const
+/** Idiomas da leitura: `auto` segue o idioma de cada resposta; os demais
+ *  forçam o sotaque; `na` deixa a voz sem idioma (agnóstica). */
+const TTS_LANGS = ["auto", "pt", "en", "es", "fr", "de", "it", "na"] as const
 
 /** Idiomas do ditado ("auto" deixa o motor detectar). */
 const STT_LANGS = ["auto", "pt", "en", "es", "fr", "de", "it", "ja", "zh"] as const
@@ -114,6 +117,10 @@ interface CompactOption {
   label: string
   /** Texto completo (o rótulo cortado do catálogo) para o `title`. */
   title?: string
+  /** Aparece na lista mas não dá para escolher (modelo ainda não baixado). */
+  disabled?: boolean
+  /** Complemento discreto depois do rótulo, só na lista ("não baixado · 488 MB"). */
+  hint?: string
 }
 
 /**
@@ -145,10 +152,16 @@ function CompactSelect({
       >
         <span className="min-w-0 flex-1 truncate text-left">{selected?.label ?? value}</span>
       </SelectTrigger>
-      <SelectContent className="w-56!">
+      <SelectContent className="w-64!">
         {options.map((option) => (
-          <SelectItem key={option.value} value={option.value} title={option.title ?? option.label}>
+          <SelectItem
+            key={option.value}
+            value={option.value}
+            disabled={option.disabled}
+            title={option.title ?? option.label}
+          >
             {option.label}
+            {option.hint && <span className="text-muted-foreground">{option.hint}</span>}
           </SelectItem>
         ))}
       </SelectContent>
@@ -169,6 +182,8 @@ export function VoicePanel() {
   const [catalog, setCatalog] = useState<VoiceModelInfo[] | null>(null)
   const [status, setStatus] = useState<VoiceStatusSnapshot | null>(null)
   const [loadError, setLoadError] = useState(false)
+  const [showMoreModels, setShowMoreModels] = useState(false)
+  const micInputs = useAudioInputs()
 
   const models = useMemo(() => catalogRows(catalog), [catalog])
 
@@ -235,11 +250,13 @@ export function VoicePanel() {
           ? "voice.settings.stt.engineUnavailable"
           : "voice.settings.stt.engineMissing"
 
-  // Modelo "em uso": o escolhido; sem escolha, o que o hardware recomenda e,
-  // na falta dele, o primeiro que já está no disco.
+  // Modelo "em uso": o escolhido; sem escolha, o que o PRÓPRIO motor usa no
+  // "Automático" (`autoModelId` — ele sabe o que está no disco) e, com um main
+  // que ainda não publica isso, a recomendação ou o primeiro já baixado.
+  const autoModelId = engineInfo?.autoModelId ?? hardware?.recommendedModel ?? null
   const inUseModel =
     selectedModel ??
-    (hardware?.recommendedModel ? sttModels.find((model) => model.id === hardware.recommendedModel) ?? null : null) ??
+    (autoModelId ? sttModels.find((model) => model.id === autoModelId) ?? null : null) ??
     sttModels.find((model) => downloadedOf(model.id) === true) ??
     null
   const inUseAuto = stt.modelId === null
@@ -250,7 +267,34 @@ export function VoicePanel() {
         .join(" · ")
     : ""
   const recommendedDownloaded = downloadedOf(hardware?.recommendedModel ?? null)
+  // A recomendação já está valendo: o mesmo motor e o mesmo modelo — escolhido
+  // à mão ou pelo "Automático", que o motor resolve para ele. Aí o cartão vira
+  // uma linha de confirmação; o botão de aplicar não teria o que fazer.
+  const recommendationActive =
+    !!hardware &&
+    stt.engine === hardware.recommendedEngine &&
+    (stt.modelId ?? autoModelId) === hardware.recommendedModel
   const engineModelId = selectedModel?.id ?? sttModels[0]?.id ?? null
+  /** Bytes no disco (o pacote do Parakeet conta antes de extrair: o motor
+   *  prepara sozinho). Sem status, não sabemos — e aí nada fica bloqueado. */
+  const modelOnDisk = (modelId: string): boolean | null => {
+    const model = status?.models[modelId]
+    if (!model) return null
+    return model.downloaded ?? model.installed
+  }
+  const missingModels = status ? sttModels.filter((model) => modelOnDisk(model.id) === false) : []
+
+  // Microfone escolhido que não está plugado agora: continua na lista (e
+  // selecionado) com o aviso, em vez de o seletor mostrar um valor vazio.
+  const micMissing = !!stt.micDeviceId && !micInputs.some((input) => input.deviceId === stt.micDeviceId)
+  const micOptions: CompactOption[] = [
+    { value: "", label: t("voice.settings.stt.micDefault") },
+    ...micInputs.map((input, index) => ({
+      value: input.deviceId,
+      label: input.label || t("voice.settings.stt.micUnnamed", { n: index + 1 }),
+    })),
+    ...(micMissing ? [{ value: stt.micDeviceId as string, label: t("voice.settings.stt.micMissing") }] : []),
+  ]
   const ttsModel = models.find((model) => model.kind === "tts") ?? null
   const ttsDownloaded = downloadedOf(ttsModel?.id ?? null)
   const ttsPhase: EnginePhase = status?.ttsReady ? "ready" : ttsDownloaded ? "preparing" : "missing"
@@ -435,6 +479,19 @@ export function VoicePanel() {
         </SettingRow>
 
         <SettingRow
+          icon={Mic}
+          title={t("voice.settings.stt.micTitle")}
+          description={t("voice.settings.stt.micHint")}
+        >
+          <CompactSelect
+            label={t("voice.settings.stt.micTitle")}
+            value={stt.micDeviceId ?? ""}
+            onChange={(micDeviceId) => updateVoice({ tts, stt: { ...stt, micDeviceId: micDeviceId || null } })}
+            options={micOptions}
+          />
+        </SettingRow>
+
+        <SettingRow
           icon={Cpu}
           title={t("voice.settings.stt.engineTitle")}
           description={t("voice.settings.stt.engineHint")}
@@ -507,11 +564,22 @@ export function VoicePanel() {
               onChange={(modelId) => updateVoice({ tts, stt: { ...stt, modelId: modelId || null } })}
               options={[
                 { value: "", label: t("voice.settings.stt.modelAuto") },
-                ...sttModels.map((model) => ({
-                  value: model.id,
-                  label: shortModelName(model.label, model.id),
-                  title: model.label,
-                })),
+                // Só o que está no disco dá para escolher; o resto aparece
+                // desabilitado com o tamanho, e o download fica logo abaixo.
+                ...sttModels.map((model) => {
+                  const missing = modelOnDisk(model.id) === false && model.id !== stt.modelId
+                  return {
+                    value: model.id,
+                    label: shortModelName(model.label, model.id),
+                    title: model.label,
+                    disabled: missing,
+                    hint: missing
+                      ? t("voice.settings.stt.modelNotDownloadedHint", {
+                          size: formatSizeMb(model.sizeMb) ?? t("voice.settings.models.sizeUnknown"),
+                        })
+                      : undefined,
+                  }
+                }),
               ]}
             />
           )}
@@ -555,6 +623,39 @@ export function VoicePanel() {
               </>
             ) : (
               <p>{t("voice.settings.stt.modelNoneSelected")}</p>
+            )}
+          </div>
+        )}
+
+        {/* Atalho para baixar outro modelo do motor sem descer até a lista
+            completa: baixado por aqui, ele já fica escolhido. */}
+        {missingModels.length > 0 && (
+          <div className="flex flex-col gap-2 px-1">
+            <Button
+              size="sm"
+              variant="ghost"
+              className="w-fit gap-1 px-1.5 text-[11px] text-muted-foreground"
+              aria-expanded={showMoreModels}
+              onClick={() => setShowMoreModels((open) => !open)}
+            >
+              <ChevronDown className={showMoreModels ? "size-3 rotate-180" : "size-3"} />
+              {t(showMoreModels ? "voice.settings.stt.moreModelsHide" : "voice.settings.stt.moreModels", {
+                count: missingModels.length,
+              })}
+            </Button>
+            {showMoreModels && (
+              <VoiceModelsSection
+                models={missingModels}
+                status={status}
+                onChanged={refresh}
+                onDownloaded={(modelId) => {
+                  // Lido na hora do fim do download: a preferência pode ter
+                  // mudado enquanto ele corria (outro motor, outro modelo).
+                  const current = useAppSettings.getState().settings.voice
+                  if (!current || current.stt.engine !== stt.engine) return
+                  updateVoice({ tts: current.tts, stt: { ...current.stt, modelId } })
+                }}
+              />
             )}
           </div>
         )}
@@ -614,7 +715,17 @@ export function VoicePanel() {
 
         {/* O que esta máquina comporta: motivo, avisos e o próximo passo em
             destaque quando o modelo recomendado ainda não está no disco. */}
-        {hardware && (
+        {hardware && recommendationActive && (
+          <p className="flex items-center gap-1.5 px-1 text-[11px] text-muted-foreground" title={hardware.reason}>
+            <Sparkles className="size-3 shrink-0" />
+            {t("voice.settings.stt.recommendActive", {
+              engine: engineLabel(hardware.recommendedEngine),
+              model: shortModelName(recommendedModelLabel, hardware.recommendedModel),
+            })}
+          </p>
+        )}
+
+        {hardware && !recommendationActive && (
           <div className="mt-1 rounded-lg border border-border bg-muted/20 p-3">
             <div className="flex items-center gap-2">
               <Sparkles className="size-3.5 shrink-0 text-muted-foreground" />

@@ -23,7 +23,7 @@ import { getAppSettings } from '../app-settings'
 import { getSttModel, STT_MODEL_DEFS } from './catalog'
 import { ensureParakeetExtracted, fileComplete, isParakeetReady } from './models-store'
 import { parakeetEngine } from './parakeet'
-import { whisperEngine } from './whisper'
+import { whisperAutoModelId, whisperEngine } from './whisper'
 import { pcm16ToFloat32, samplesToMs, STT_SAMPLE_RATE, StreamResampler } from './audio'
 import type { SttEngine, SttHandle, SttSegment } from './engine'
 
@@ -157,6 +157,7 @@ export async function sttEngineStatus(): Promise<VoiceEngineStatus[]> {
     // não chamar de "não baixado" o que já está lá.
     downloaded: STT_MODEL_DEFS.some((m) => m.engine === s.engine && fileComplete(m)),
     reason: s.reason,
+    autoModelId: s.engine === 'whisper' ? whisperAutoModelId() : ENGINES[s.engine].defaultModelId,
   }))
 }
 
