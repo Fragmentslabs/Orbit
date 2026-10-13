@@ -1,5 +1,7 @@
 import { app, BrowserWindow, ipcMain, dialog, shell, Menu, clipboard, nativeImage, nativeTheme, ClipboardItem, session, type MenuItemConstructorOptions } from 'electron'
 import { registerAudioProtocol } from './lib/audio-store'
+import { registerVideoProtocol } from './lib/video/store'
+import { registerBundledFfmpeg } from './lib/video/ffmpeg'
 import sharp from 'sharp'
 import { createRequire } from 'node:module'
 import { fileURLToPath } from 'node:url'
@@ -1979,6 +1981,10 @@ app.whenReady().then(() => {
   registerMediaProtocol()
   // Áudios anexados e gerados (orbit-audio://)
   registerAudioProtocol()
+  // Vídeos que o agente mostrou (orbit-video://) e o ffmpeg do app no PATH
+  // dos shells do agente.
+  registerVideoProtocol()
+  registerBundledFfmpeg()
   // Artefatos HTML das respostas (orbit-artifact://) — os privilégios do
   // scheme já foram declarados no topo do módulo.
   registerArtifactProtocol()

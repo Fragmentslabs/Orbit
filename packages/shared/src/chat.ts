@@ -190,6 +190,22 @@ export interface AudioPart {
   durationMs?: number
 }
 
+/**
+ * Vídeo produzido pelo agente (video_render, motion_render, show_video): a
+ * resposta mostra um player. O arquivo continua no projeto do usuário; a URL
+ * orbit-video://vid_xxx aponta para ele pelo registro do main (video-store.ts).
+ */
+export interface VideoPart {
+  id: string
+  type: "video"
+  /** URL orbit-video://vid_xxx */
+  src: string
+  title?: string
+  durationMs?: number
+  /** Caminho do arquivo no disco (para "mostrar na pasta"). */
+  path?: string
+}
+
 /** Arquivo anexado pelo usuário à mensagem (data URL vinda do input) */
 export interface FilePart {
   id: string
@@ -420,6 +436,7 @@ export type MessagePart =
   | ToolPart
   | ImagePart
   | AudioPart
+  | VideoPart
   | FilePart
   | AgentPart
   | ArtifactPart

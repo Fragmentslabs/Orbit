@@ -5,6 +5,7 @@ import { loadPromptContext } from './memory/service'
 import type { MapNode, ProjectMap } from './memory/project-map'
 import { buildPastChatsContext, detectPastChatsIntent } from './past-chats'
 import { loadSkills } from './skills'
+import { resolveFfmpeg } from './video/ffmpeg'
 import { listMcpToolDescriptions } from './mcp'
 import { pastaNoRepositorioPrincipal } from './worktrees/principal'
 
@@ -326,6 +327,8 @@ const AUDIO_GENERATE_OFF = `Creating audio files (text-to-speech) is DISABLED in
 
 const AUDIO_TRANSCRIBE_OFF = `Transcribing audio (speech-to-text) is DISABLED in this Orbit: Settings → Voice → "Speech to text" is turned off. If the user sends an audio and asks what it says, or the request depends on it, say plainly that you can't listen to it because this feature is turned off, and that they can enable it in Settings → Voice if this machine has a dictation engine ready (the screen shows whether it meets the requirements). Never guess the content of an audio.`
 
+const VIDEO_INSTRUCTION = `VIDEO. You can edit video and make motion graphics: video_probe, video_transcribe (word-timed transcript — how you read footage), video_timeline (look at a window: frames + waveform + words), video_render (EDL → finished cut with snapped cuts, fades, subtitles, loudness), motion_render (HTML/CSS/GSAP composition → clip, alpha supported), show_video; ffmpeg/ffprobe are also on the bash PATH. Before planning any edit, call video_guide("editing") once in the conversation; before writing an animation, video_guide("motion"); for Remotion, video_guide("remotion"). Never cut before the user approves your plan. Outputs go to an edit/ folder next to the footage — never overwrite the user's sources.`
+
 const BRAIN_CHAT_PROMPT = `BRAIN MODE ACTIVE. You have memory tools (memory_save / memory_search / memory_link / memory_open).
 
 PHILOSOPHY: Build a knowledge tree about the user over time.
@@ -599,6 +602,8 @@ export async function buildSystemPrompt(
         )
       }
     }
+    // Só um parágrafo: o guia de ofício vem sob demanda (video_guide).
+    if (input.directory && resolveFfmpeg()) parts.push(VIDEO_INSTRUCTION)
     const permissionMode = input.options.permissionMode ?? 'ask'
     if (permissionMode === 'ask') parts.push(PERMISSION_ASK_INSTRUCTION)
     else if (permissionMode === 'approve') parts.push(PERMISSION_APPROVE_INSTRUCTION)

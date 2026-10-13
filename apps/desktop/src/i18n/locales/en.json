@@ -3,6 +3,10 @@
     "generated": "Generated audio",
     "attachment": "Attached audio"
   },
+  "video": {
+    "generated": "Video",
+    "showInFolder": "Show in folder"
+  },
   "settings": {
     "beta": "Beta",
     "title": "Settings",

@@ -1787,6 +1787,21 @@ async function runChatTurn(win: BrowserWindow, input: SendMessageInput): Promise
                 void attachMediaMessage(output.audioUrl, assistantMessage.id, sessionId)
               }
             }
+            // Vídeo renderizado/mostrado: player na resposta. O arquivo segue
+            // no projeto; o resultado traz a URL orbit-video:// já registrada.
+            if (part.toolName === 'video_render' || part.toolName === 'motion_render' || part.toolName === 'show_video') {
+              const output = part.output as { videoUrl?: string; title?: string; durationMs?: number; path?: string } | string
+              if (typeof output === 'object' && output?.videoUrl) {
+                upsertPart({
+                  id: `${part.toolCallId}-video`,
+                  type: 'video',
+                  src: output.videoUrl,
+                  title: output.title || undefined,
+                  durationMs: output.durationMs,
+                  path: output.path,
+                })
+              }
+            }
             // show_image e image_edit: a imagem vira parte da resposta
             // (renderizada pelo ai/image). No image_edit isso é o ponto — uma
             // edição descrita em texto obrigaria o usuário a abrir a galeria

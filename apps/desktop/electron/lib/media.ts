@@ -13,7 +13,7 @@ import {
   type MediaKind,
   type MediaSource,
   type MediaUsage,
-  type DocumentFormat, AUDIO_SCHEME } from '@shared/media'
+  type DocumentFormat, AUDIO_SCHEME, VIDEO_SCHEME } from '@shared/media'
 import { listKeys, readJson } from './storage'
 import { buildDocx } from './docx-package'
 import mammoth from 'mammoth'
@@ -577,6 +577,12 @@ export function registerArtifactSchemePrivileges(): void {
     // `stream` é o que deixa o <audio> tocar e buscar posição.
     {
       scheme: AUDIO_SCHEME,
+      privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true },
+    },
+    // Vídeos renderizados pelo agente (ver video/store.ts) — mesma razão:
+    // sem `stream` o <video> não toca nem busca posição.
+    {
+      scheme: VIDEO_SCHEME,
       privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true },
     },
   ])

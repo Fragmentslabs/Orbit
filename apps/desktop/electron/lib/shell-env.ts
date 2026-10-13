@@ -19,9 +19,29 @@ export function loginShellArgs(): string[] {
   return process.platform === 'win32' ? [] : ['-l']
 }
 
+/**
+ * Pastas de binários que vêm com o app (o ffmpeg da edição de vídeo), postas
+ * no FIM do PATH: o agente acha `ffmpeg` no bash mesmo sem o usuário ter um,
+ * e um instalado por ele continua vencendo. Registradas pelo main na partida —
+ * este módulo não conhece o Electron.
+ */
+const bundledToolDirs: string[] = []
+
+export function addBundledToolDir(dir: string): void {
+  if (!bundledToolDirs.includes(dir)) bundledToolDirs.push(dir)
+}
+
 /** env de spawn que garante o PATH completo do usuário (dirs do /etc, Homebrew, nvm). */
 export function userShellEnv(): NodeJS.ProcessEnv {
-  if (process.platform === 'win32') return process.env
+  if (process.platform === 'win32') {
+    if (bundledToolDirs.length === 0) return process.env
+    // O env do Windows ignora caixa ("Path"), a cópia não: reescreve a MESMA
+    // chave, senão o filho recebe duas e fica com uma qualquer.
+    const env = { ...process.env }
+    const key = Object.keys(env).find((k) => k.toUpperCase() === 'PATH') ?? 'PATH'
+    env[key] = [...(env[key] ?? '').split(';').filter(Boolean), ...bundledToolDirs].join(';')
+    return env
+  }
 
   const parts = new Set(pathList(process.env.PATH ?? ''))
 
@@ -34,6 +54,7 @@ export function userShellEnv(): NodeJS.ProcessEnv {
 
   const nvmBin = latestNvmBin()
   if (nvmBin) parts.add(nvmBin)
+  for (const dir of bundledToolDirs) parts.add(dir)
 
   return { ...process.env, PATH: [...parts].join(':') }
 }

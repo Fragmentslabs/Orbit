@@ -39,6 +39,8 @@ import { createDescribeImageTool } from './describe-image'
 import { createWebFetchTool, createWebSearchTool } from './web'
 import { agentMayUseBrowser, getAppSettings } from '../app-settings'
 import { createAudioGenerateTool, createAudioTranscribeTool } from './audio'
+import { createVideoTools } from './video'
+import { resolveFfmpeg } from '../video/ffmpeg'
 
 export { destroyBrowserWindow } from './browser'
 export type { ToolContext, TurnSnapshot } from './context'
@@ -242,6 +244,21 @@ export function buildToolSet(input: SendMessageInput, ctx: ToolContext | null, i
       Object.assign(tools, createBackgroundTools(ctx))
     }
   }
+  // Vídeo e motion: precisam de pasta (as saídas vão para edit/ ao lado do
+  // material) e do ffmpeg que vem com o app. Workers entram — a skill manda
+  // fazer cada animação num sub-agente em paralelo —, mas não mostram player:
+  // quem fala com o usuário é a sessão principal.
+  if (ctx && resolveFfmpeg()) {
+    Object.assign(
+      tools,
+      createVideoTools(ctx, {
+        sessionId: input.sessionId,
+        canShow: input.orchestrationRole !== 'worker',
+        readOnly: Boolean(input.options.plan),
+      }),
+    )
+  }
+
   // Browser do painel direito: teste de apps web + modo documentação.
   // Workers ficam de fora — o painel é um recurso único e visível. Com as
   // ferramentas de navegador desligadas nas Preferências, só quando o pedido

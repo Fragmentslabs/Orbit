@@ -3,6 +3,10 @@
     "generated": "Áudio gerado",
     "attachment": "Áudio anexado"
   },
+  "video": {
+    "generated": "Vídeo",
+    "showInFolder": "Mostrar na pasta"
+  },
   "settings": {
     "beta": "Beta",
     "title": "Configurações",
