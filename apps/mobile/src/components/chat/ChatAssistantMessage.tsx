@@ -32,6 +32,7 @@ import { TodoChecklist } from './TodoChecklist'
 import { MessageActions } from './MessageActions'
 import { MessageAttachment } from './Attachment'
 import { ImageLightbox } from './ImageLightbox'
+import { McpProposalCard } from './McpProposalCard'
 import { SkillProposalCard } from './SkillProposalCard'
 import { Shimmer } from '~/components/ai/Shimmer'
 import { SubAgentCard } from '~/components/chat/SubAgentCard'
@@ -652,6 +653,9 @@ const SPECIAL_TOOLS = new Set([
   'subagent',
   'todowrite',
   'create_skill',
+  // Conexão MCP é uma decisão do usuário no card — igual à proposta de skill.
+  'mcp_connect',
+  'mcp_update',
   'show_image',
   'create_artifact',
   'update_artifact',
@@ -784,6 +788,9 @@ export function ChatAssistantMessage({ message, compact, isLast, isBusy, onRever
             }
             if (part.tool === 'create_skill') {
               return <SkillProposalCard key={part.id} part={part as ToolPart} />
+            }
+            if (part.tool === 'mcp_connect' || part.tool === 'mcp_update') {
+              return <McpProposalCard key={part.id} part={part as ToolPart} />
             }
             if (part.tool === 'todowrite') {
               return <TodoChecklist key={part.id} part={part} stale={part.id !== lastTodoId} />

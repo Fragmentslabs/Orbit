@@ -359,6 +359,20 @@
     "defaultTask": "Subtarefa delegada",
     "runningBackground": "Rodando em segundo plano…"
   },
+  "mcpProposal": {
+    "building": "Preparando a conexão.",
+    "connect": "Conectar",
+    "discard": "Dispensar",
+    "discarded": "Proposta dispensada.",
+    "connected": "Conectado - {{count}} ferramenta(s) disponível(is)",
+    "needsAuth": "Este servidor pede login: o botão abre a página de autorização no navegador do computador.",
+    "authorize": "Autorizar",
+    "authorizing": "Autorizando...",
+    "reauthorize": "Autorizar de novo",
+    "retry": "Tentar de novo",
+    "retrying": "Reconectando...",
+    "failed": "Falha na conexão: {{error}}"
+  },
   "skillProposal": {
     "building": "Montando a skill…",
     "added": "Skill adicionada",
