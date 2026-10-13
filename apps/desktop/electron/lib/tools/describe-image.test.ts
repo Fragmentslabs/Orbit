@@ -120,7 +120,7 @@ describe('describe_image', () => {
 
   it('referência inexistente na galeria não vira descrição inventada', async () => {
     await expect(tool.execute({ ref: 'orbit-media://img_naoexiste.png' })).rejects.toThrow(
-      /não encontrada/,
+      /not found/,
     )
     expect(recebido.imageDataUrl).toBeUndefined()
   })

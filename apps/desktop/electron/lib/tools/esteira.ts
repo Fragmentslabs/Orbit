@@ -88,10 +88,10 @@ export function createEsteiraTools(
           branch,
         })
         return [
-          `Esteira "${esteira.nome}" criada — id: ${esteira.id}`,
-          `fases: ${esteira.fases.map((f) => f.nome).join(' → ')}`,
-          `repositório principal: ${pastas[0]}`,
-          'Ela aparece na página Esteira (sidebar do modo código). Use esteira_create_task para adicionar tasks.',
+          `Esteira "${esteira.nome}" created — id: ${esteira.id}`,
+          `phases: ${esteira.fases.map((f) => f.nome).join(' → ')}`,
+          `main repository: ${pastas[0]}`,
+          'It shows up on the Esteira page (code mode sidebar). Use esteira_create_task to add tasks.',
         ].join('\n')
       },
     }),
@@ -103,12 +103,12 @@ export function createEsteiraTools(
       execute: async () => {
         const esteiras = await resumoEsteiras()
         if (esteiras.length === 0) {
-          return 'Nenhuma esteira configurada. O usuário precisa criar um projeto e uma esteira na aba Esteira antes de receber tasks.'
+          return 'No esteira configured. The user needs to create a project and an esteira in the Esteira tab before it can receive tasks.'
         }
         return esteiras
           .map(
             (e) =>
-              `- ${e.nome} (projeto: ${e.projeto}) — id: ${e.id}\n  fases: ${e.fases.join(' → ')}\n  pastas: ${e.pastas.join(', ') || '(nenhuma)'}`,
+              `- ${e.nome} (project: ${e.projeto}) — id: ${e.id}\n  phases: ${e.fases.join(' → ')}\n  folders: ${e.pastas.join(', ') || '(none)'}`,
           )
           .join('\n')
       },
@@ -131,12 +131,12 @@ export function createEsteiraTools(
       execute: async ({ titulo, descricao, esteiraId, esteira, iniciar }) => {
         const disponiveis = await resumoEsteiras()
         if (disponiveis.length === 0) {
-          return 'Nenhuma esteira configurada — não há onde criar a task. Peça ao usuário para criar um projeto e uma esteira na aba Esteira.'
+          return 'No esteira configured — there is nowhere to create the task. Ask the user to create a project and an esteira in the Esteira tab.'
         }
 
         let alvo = esteiraId ? disponiveis.find((e) => e.id === esteiraId) : undefined
         if (!alvo && esteiraId) {
-          return `Esteira "${esteiraId}" não encontrada. Esteiras disponíveis:\n${disponiveis
+          return `Esteira "${esteiraId}" not found. Available esteiras:\n${disponiveis
             .map((e) => `- ${e.nome} (${e.projeto}) — id: ${e.id}`)
             .join('\n')}`
         }
@@ -145,11 +145,11 @@ export function createEsteiraTools(
           const candidatas = filtrarPorNome(disponiveis, esteira)
           if (candidatas.length === 1) alvo = candidatas[0]
           else if (candidatas.length > 1) {
-            return `Mais de uma esteira casa com "${esteira}". Pergunte ao usuário qual delas (tool question) e chame de novo com esteiraId:\n${candidatas
+            return `More than one esteira matches "${esteira}". Ask the user which one (question tool) and call again with esteiraId:\n${candidatas
               .map((e) => `- ${e.nome} (${e.projeto}) — id: ${e.id}`)
               .join('\n')}`
           } else {
-            return `Nenhuma esteira casa com "${esteira}". Disponíveis:\n${disponiveis
+            return `No esteira matches "${esteira}". Available:\n${disponiveis
               .map((e) => `- ${e.nome} (${e.projeto}) — id: ${e.id}`)
               .join('\n')}`
           }
@@ -160,8 +160,8 @@ export function createEsteiraTools(
         if (!alvo) {
           if (disponiveis.length === 1) alvo = disponiveis[0]
           else {
-            return `Há ${disponiveis.length} esteiras — pergunte ao usuário em qual criar a task (tool question) e chame de novo com esteiraId:\n${disponiveis
-              .map((e) => `- ${e.nome} (${e.projeto}) — id: ${e.id}\n  fases: ${e.fases.join(' → ')}`)
+            return `There are ${disponiveis.length} esteiras — ask the user which one to create the task in (question tool) and call again with esteiraId:\n${disponiveis
+              .map((e) => `- ${e.nome} (${e.projeto}) — id: ${e.id}\n  phases: ${e.fases.join(' → ')}`)
               .join('\n')}`
           }
         }
@@ -175,10 +175,10 @@ export function createEsteiraTools(
         if (iniciar) await iniciarTask(alvo.id, task.id, 0)
 
         return [
-          `Task criada na esteira "${alvo.nome}" (projeto ${alvo.projeto}).`,
-          `id: ${task.id} · título: ${task.titulo}`,
-          `fases: ${alvo.fases.join(' → ')}`,
-          iniciar ? 'A task já foi iniciada.' : 'A task ficou pendente — o usuário inicia pelo board.',
+          `Task created in esteira "${alvo.nome}" (project ${alvo.projeto}).`,
+          `id: ${task.id} · title: ${task.titulo}`,
+          `phases: ${alvo.fases.join(' → ')}`,
+          iniciar ? 'The task has already been started.' : 'The task is pending — the user starts it from the board.',
         ].join('\n')
       },
     }),
@@ -191,18 +191,18 @@ export function createEsteiraTools(
       }),
       execute: async ({ esteiraId }) => {
         const esteiras = await listarEsteiras()
-        if (esteiras.length === 0) return 'Nenhuma esteira configurada.'
+        if (esteiras.length === 0) return 'No esteira configured.'
         const alvo = esteiraId ? esteiras.find((e) => e.id === esteiraId) : esteiras.length === 1 ? esteiras[0] : undefined
         if (!alvo) {
-          return `Informe a esteira. Disponíveis:\n${esteiras.map((e) => `- ${e.nome} — id: ${e.id}`).join('\n')}`
+          return `Specify the esteira. Available:\n${esteiras.map((e) => `- ${e.nome} — id: ${e.id}`).join('\n')}`
         }
         const tasks = await listarTasks(alvo.id)
-        if (tasks.length === 0) return `A esteira "${alvo.nome}" não tem tasks.`
+        if (tasks.length === 0) return `Esteira "${alvo.nome}" has no tasks.`
         return tasks
           .map((t) => {
-            const fase = t.faseAtual != null ? alvo.fases[t.faseAtual]?.nome ?? `fase ${t.faseAtual}` : '—'
-            const erro = t.pausaMotivo === 'erro' ? ` · erro: ${t.erro ?? 'sem detalhe'}` : ''
-            return `- [${t.status}] ${t.titulo} (fase: ${fase})${erro}`
+            const fase = t.faseAtual != null ? alvo.fases[t.faseAtual]?.nome ?? `phase ${t.faseAtual}` : '—'
+            const erro = t.pausaMotivo === 'erro' ? ` · error: ${t.erro ?? 'no details'}` : ''
+            return `- [${t.status}] ${t.titulo} (phase: ${fase})${erro}`
           })
           .join('\n')
       },

@@ -39,15 +39,15 @@ export function createSkillTool() {
         const proposal = await proposeSkill({ name, description, content, slug, files })
         notifySkillsChanged()
         const extras = proposal.files.length
-          ? ` com ${proposal.files.length} arquivo(s) auxiliar(es): ${proposal.files.join(', ')}`
+          ? ` with ${proposal.files.length} auxiliary file(s): ${proposal.files.join(', ')}`
           : ''
         return (
           `Skill @${proposal.slug} proposta${extras}. ` +
-          'Um card "Adicionar skill" apareceu na conversa — a skill só entra em uso quando o usuário aprovar. ' +
-          'Explique agora, em 2-4 frases, o que a skill faz e como usá-la.'
+          'An "Add skill" card appeared in the conversation — the skill is only used once the user approves it. ' +
+          'Now explain, in 2-4 sentences, what the skill does and how to use it.'
         )
       } catch (err) {
-        return `Erro ao propor a skill: ${err instanceof Error ? err.message : String(err)}`
+        return `Failed to propose the skill: ${err instanceof Error ? err.message : String(err)}`
       }
     },
   })

@@ -23,7 +23,7 @@ export function createTodoTool() {
     }),
     execute: async ({ items }) => {
       const done = items.filter((i) => i.status === 'completed').length
-      return `TODO atualizada (${items.length} itens, ${done} concluídos).`
+      return `TODO updated (${items.length} items, ${done} done).`
     },
   })
 }

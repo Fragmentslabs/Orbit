@@ -1,3 +1,4 @@
+import type { TFunction } from "i18next"
 import { useState } from "react"
 import { useTranslation } from "react-i18next"
 import { Bot, ChevronLeft, ChevronRight, ChevronDown, HelpCircle, MessageSquare, ShieldAlert, TriangleAlert } from "lucide-react"
@@ -128,24 +129,24 @@ export function QuestionItem({ question, selected, free, onToggle, onFree }: {
   )
 }
 
-function buildComparisonPrompt(questions: Question[], currentIndex: number): string {
+function buildComparisonPrompt(questions: Question[], currentIndex: number, t: TFunction): string {
   const current = questions[currentIndex]
   const otherLines = questions
     .filter((_, i) => i !== currentIndex)
     .map((q, i) => {
-      const opts = q.options?.length ? `\nOpções:\n${q.options.map((o) => `  - ${o}`).join("\n")}` : ""
+      const opts = q.options?.length ? `\n${t("ask.comparePrompt.options")}\n${q.options.map((o) => `  - ${o}`).join("\n")}` : ""
       return `### ${i + 1}. ${q.text}${opts}`
     })
   return [
-    `Preciso de ajuda para decidir entre as opções da pergunta abaixo. Por favor, analise cada opção listando vantagens, desvantagens e em qual cenário é mais indicada:`,
+    t("ask.comparePrompt.intro"),
     "",
     `## ${current.text}`,
-    ...(current.options?.length ? [`\nOpções:\n${current.options.map((o) => `  - ${o}`).join("\n")}`] : []),
+    ...(current.options?.length ? [`\n${t("ask.comparePrompt.options")}\n${current.options.map((o) => `  - ${o}`).join("\n")}`] : []),
     ...(otherLines.length > 0
-      ? ["", "---", "Contexto adicional (outras perguntas do agente):", ...otherLines]
+      ? ["", "---", t("ask.comparePrompt.context"), ...otherLines]
       : []),
     "",
-    "Para cada opção, explique:\n- Vantagens\n- Desvantagens\n- Em qual cenário é mais indicada",
+    t("ask.comparePrompt.explain"),
   ].join("\n")
 }
 
@@ -185,7 +186,7 @@ function DiscussInPanelButton({ questions, currentIndex, parentSessionId }: {
               ? { directory: parent?.directory, extraDirectories: parent?.extraDirectories }
               : {}),
           })
-          openChatTabWithPendingInput(session.id, title, buildComparisonPrompt(questions, currentIndex))
+          openChatTabWithPendingInput(session.id, title, buildComparisonPrompt(questions, currentIndex, t))
         } finally {
           setWorking(false)
         }

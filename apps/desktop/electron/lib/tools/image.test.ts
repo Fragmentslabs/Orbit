@@ -68,7 +68,7 @@ describe('tools de imagem', () => {
     })
     const listed = (await tools.image_list.execute({})) as string
     expect(listed).toContain('produto.png')
-    expect(listed).toContain('anexada pelo usuário')
+    expect(listed).toContain('attached by the user')
     expect(listed).toMatch(/orbit-media:\/\/img_\w+\.png/)
   })
 
@@ -122,7 +122,7 @@ describe('tools de imagem', () => {
       ref: url,
       removeBackground: {},
     })) as { message: string }
-    expect(result.message).toMatch(/fundo #ffffff recortado em 8\d%/)
+    expect(result.message).toMatch(/background #ffffff removed from 8\d%/)
   })
 
   it('avisa quando o recorte de fundo não pegou nada, em vez de entregar calado', async () => {
@@ -135,7 +135,7 @@ describe('tools de imagem', () => {
       ref: url,
       removeBackground: { color: '#00ff00', tolerance: 0 },
     })) as { message: string }
-    expect(result.message).toContain('quase nada saiu')
+    expect(result.message).toContain('almost nothing was removed')
   })
 
   it('o original continua intacto na galeria depois da edição', async () => {
@@ -154,7 +154,7 @@ describe('tools de imagem', () => {
       ref: 'orbit-media://img_naoexiste.png',
       resize: { width: 10 },
     })) as string
-    expect(out).toContain('não encontrada')
+    expect(out).toContain('not found')
   })
 
   it('pedido sem nenhuma operação não gera uma cópia silenciosa', async () => {
@@ -164,14 +164,14 @@ describe('tools de imagem', () => {
       name: 'vazia.png',
     })
     const out = (await tools.image_edit.execute({ ref: url })) as string
-    expect(out).toContain('Nenhuma operação pedida')
+    expect(out).toContain('No operation requested')
   })
 
   it('no chat, um caminho de arquivo não vira leitura de disco', async () => {
     // Sem pasta de trabalho não há o que resolver, e aceitar o caminho seria
     // ler um arquivo qualquer da máquina a partir de um texto do modelo.
     const out = (await tools.image_info.execute({ ref: '../../etc/passwd.png' })) as string
-    expect(out).toContain('Imagem não encontrada')
+    expect(out).toContain('Image not found')
   })
 })
 
@@ -186,7 +186,7 @@ describe('image_delete', () => {
       name: 'passo-de-ontem.png',
     })
     const out = (await tools.image_delete.execute({ refs: [url] })) as string
-    expect(out).toContain('excluída')
+    expect(out).toContain('deleted')
     expect(await media.getMediaEntry(media.mediaIdFromUrl(url)!)).toBeNull()
   })
 
@@ -214,7 +214,7 @@ describe('image_delete', () => {
     turnMediaUrls.add(edited.mediaUrl)
 
     const out = (await hookedTools.image_delete.execute({ refs: [edited.mediaUrl] })) as string
-    expect(out).toContain('excluída')
+    expect(out).toContain('deleted')
     expect(removeImageParts).toHaveBeenCalledWith([edited.mediaUrl])
     expect(await media.getMediaEntry(media.mediaIdFromUrl(edited.mediaUrl)!)).toBeNull()
   })
@@ -238,7 +238,7 @@ describe('image_delete', () => {
     turnMediaUrls.add(url)
 
     const out = (await hookedTools.image_delete.execute({ refs: [url] })) as string
-    expect(out).toContain('anexo do usuário')
+    expect(out).toContain('user attachment')
     expect(removeImageParts).not.toHaveBeenCalled()
     expect(await media.getMediaEntry(media.mediaIdFromUrl(url)!)).not.toBeNull()
   })
@@ -257,7 +257,7 @@ describe('image_delete', () => {
       name: 'de-outro-chat.png',
     })
     const out = (await outrosTools.image_delete.execute({ refs: [url] })) as string
-    expect(out).toContain('outra conversa')
+    expect(out).toContain('another conversation')
     expect(await media.getMediaEntry(media.mediaIdFromUrl(url)!)).not.toBeNull()
   })
 

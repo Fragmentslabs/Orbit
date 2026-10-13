@@ -38,13 +38,13 @@ function diasInativo(sessao: SessionInfo, agora: number): number {
 function descrever(sessao: SessionInfo, pastas: Map<string, string>, agora: number): string {
   const pasta = sessao.folderId ? pastas.get(sessao.folderId) : undefined
   const marcas = [
-    sessao.pinned ? 'fixado' : null,
-    sessao.archived ? 'arquivado' : null,
-    pasta ? `pasta: ${pasta}` : null,
+    sessao.pinned ? 'pinned' : null,
+    sessao.archived ? 'archived' : null,
+    pasta ? `folder: ${pasta}` : null,
     sessao.directory ? `dir: ${sessao.directory}` : null,
   ].filter(Boolean)
   const extra = marcas.length ? ` (${marcas.join(', ')})` : ''
-  return `#${sessao.id} [${sessao.mode}] ${diasInativo(sessao, agora)}d sem interação — "${sessao.title}"${extra}`
+  return `#${sessao.id} [${sessao.mode}] ${diasInativo(sessao, agora)}d without interaction — "${sessao.title}"${extra}`
 }
 
 export function createSessionTools(): ToolSet {
@@ -95,9 +95,9 @@ export function createSessionTools(): ToolSet {
           .sort((a, b) => a.updatedAt - b.updatedAt)
           .slice(0, limit ?? 50)
 
-        if (filtradas.length === 0) return 'Nenhum chat corresponde a esses critérios.'
+        if (filtradas.length === 0) return 'No chat matches these criteria.'
         return [
-          `${filtradas.length} chat(s), do mais antigo para o mais recente:`,
+          `${filtradas.length} chat(s), oldest to newest:`,
           ...filtradas.map((s) => descrever(s, nomePorId, agora)),
         ].join('\n')
       },
@@ -121,11 +121,11 @@ export function createSessionTools(): ToolSet {
         for (const id of ids) {
           const sessao = await readJson<SessionInfo>(StorageKeys.session(id))
           if (!sessao) {
-            resultados.push(`#${id}: não encontrado`)
+            resultados.push(`#${id}: not found`)
             continue
           }
           if (sessao.pinned && alvo) {
-            resultados.push(`#${id}: fixado pelo usuário — não arquivado`)
+            resultados.push(`#${id}: pinned by the user — not archived`)
             continue
           }
           if (sessao.archived === alvo) continue
@@ -134,7 +134,7 @@ export function createSessionTools(): ToolSet {
           broadcastSessionEvent({ type: 'session', sessionId: id, session: proxima })
           alterados++
         }
-        const verbo = alvo ? 'arquivado(s)' : 'desarquivado(s)'
+        const verbo = alvo ? 'archived' : 'unarchived'
         return [`${alterados} chat(s) ${verbo}.`, ...resultados].join('\n')
       },
     }),
@@ -158,18 +158,18 @@ export function createSessionTools(): ToolSet {
       }),
       execute: async ({ ids, motivo }) => {
         if (ids.length > LIMITE_EXCLUSAO) {
-          return `Erro: ${ids.length} chats numa só chamada excede o limite de ${LIMITE_EXCLUSAO}. Exclusão é irreversível — reveja a lista e faça em lotes menores.`
+          return `Error: ${ids.length} chats in a single call exceeds the limit of ${LIMITE_EXCLUSAO}. Deletion is irreversible — review the list and do it in smaller batches.`
         }
         const resultados: string[] = []
         let apagados = 0
         for (const id of ids) {
           const sessao = await readJson<SessionInfo>(StorageKeys.session(id))
           if (!sessao) {
-            resultados.push(`#${id}: não encontrado`)
+            resultados.push(`#${id}: not found`)
             continue
           }
           if (sessao.pinned) {
-            resultados.push(`#${id}: fixado pelo usuário — não excluído`)
+            resultados.push(`#${id}: pinned by the user — not deleted`)
             continue
           }
           // Encerra o que estiver rodando antes de apagar: um stream órfão
@@ -182,7 +182,7 @@ export function createSessionTools(): ToolSet {
           broadcastSessionEvent({ type: 'session:deleted', sessionId: id })
           apagados++
         }
-        return [`${apagados} chat(s) excluído(s) permanentemente. Motivo: ${motivo}`, ...resultados].join('\n')
+        return [`${apagados} chat(s) permanently deleted. Reason: ${motivo}`, ...resultados].join('\n')
       },
     }),
   }

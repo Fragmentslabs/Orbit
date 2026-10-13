@@ -127,8 +127,8 @@ export function BranchSelector({ repoPath, onRequestAgentAction, open: openProp,
     if (!pendingBranch) return
     setConflictError(null)
     setPendingBranch(null)
-    onRequestAgentAction?.(`Tenho mudanças não commitadas no repositório e preciso trocar para a branch "${pendingBranch}". Faça commit ou stash das mudanças e depois execute o checkout para a branch "${pendingBranch}".`)
-  }, [pendingBranch, onRequestAgentAction])
+    onRequestAgentAction?.(t("branch.agentResolvePrompt", { branch: pendingBranch }))
+  }, [pendingBranch, onRequestAgentAction, t])
 
   const openCreateDialog = useCallback(() => {
     setOpen(false)

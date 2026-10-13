@@ -33,13 +33,13 @@ export function underscoreBlankWarning(markdown: string): string | null {
 
   const onde =
     atingidas.length === 1
-      ? `a linha ${atingidas[0]}`
-      : `as linhas ${atingidas.slice(0, 5).join(', ')}${atingidas.length > 5 ? '…' : ''}`
+      ? `line ${atingidas[0]} has`
+      : `lines ${atingidas.slice(0, 5).join(', ')}${atingidas.length > 5 ? '…' : ''} have`
   return (
-    `Atenção: ${onde} tem campos como "____/____/____", e em Markdown dois grupos de ` +
-    'underscores viram negrito — na TELA (resposta do chat e painel do documento) o usuário ' +
-    'vê "//" no lugar do campo. No PDF e no DOCX ele sai certo, mas o documento é lido nos ' +
-    'dois lugares. Escreva "\\_\\_\\_\\_/\\_\\_\\_\\_/\\_\\_\\_\\_" (escapados, que valem em ' +
-    'todos) ou separe com espaço ("____ / ____ / ____"), e chame update_document de novo.'
+    `Warning: ${onde} fields like "____/____/____", and in Markdown two groups of ` +
+    'underscores become bold — on SCREEN (the chat reply and the document panel) the user ' +
+    'sees "//" instead of the field. In the PDF and DOCX it comes out right, but the document is read in ' +
+    'both places. Write "\\_\\_\\_\\_/\\_\\_\\_\\_/\\_\\_\\_\\_" (escaped, which works ' +
+    'everywhere) or separate with spaces ("____ / ____ / ____"), and call update_document again.'
   )
 }

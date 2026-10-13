@@ -4,6 +4,7 @@ import path from 'node:path'
 import sharp from 'sharp'
 import { saveMedia, type MediaSource } from './media'
 import { panelActivity } from './panel-browser'
+import { tNow } from './i18n'
 import {
   ConsoleBuffer,
   attachConsole,
@@ -306,7 +307,7 @@ export async function runBrowserScript(options: RunScriptOptions): Promise<Scrip
           win.setContentSize(Math.round(opts.viewport.width), Math.round(opts.viewport.height))
           await delay(200)
         }
-        panelActivity(`Script: abrindo ${url}`)
+        panelActivity(tNow('panel.activity.scriptOpen', { url }))
         try {
           await Promise.race([win.loadURL(url), delay(LOAD_TIMEOUT_MS)])
         } catch (err) {
@@ -320,7 +321,7 @@ export async function runBrowserScript(options: RunScriptOptions): Promise<Scrip
         return await win.webContents.executeJavaScript(String(args.code ?? ''), true)
       case 'capture': {
         const name = String(args.name ?? `shot-${captures.length + 1}`)
-        panelActivity(`Script: capturando ${name}`)
+        panelActivity(tNow('panel.activity.scriptCapture', { name }))
         return await capture(name, (args.options ?? {}) as { fullPage?: boolean; format?: CaptureFormat; maxWidth?: number })
       }
       case 'waitFor': {
@@ -459,7 +460,7 @@ export async function captureUrl(options: {
   const viewport = options.viewport ?? DEFAULT_VIEWPORT
   const win = createHiddenWindow(viewport)
   try {
-    panelActivity('Capturando a página inteira')
+    panelActivity(tNow('panel.activity.fullPage'))
     try {
       await Promise.race([win.loadURL(options.url), delay(LOAD_TIMEOUT_MS)])
     } catch (err) {

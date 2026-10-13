@@ -50,9 +50,9 @@ export function createSessionContextTool(ctx: ToolContext) {
       try {
         messages = (await readJson<ChatMessage[]>(StorageKeys.messages(ctx.sessionId))) ?? []
       } catch (err) {
-        return { turns: [], note: `histórico indisponível: ${err instanceof Error ? err.message : String(err)}` }
+        return { turns: [], note: `history unavailable: ${err instanceof Error ? err.message : String(err)}` }
       }
-      if (messages.length === 0) return { turns: [], note: 'nenhum histórico nesta sessão' }
+      if (messages.length === 0) return { turns: [], note: 'no history in this session' }
 
       const records: TurnRecord[] = []
       let current: TurnRecord | null = null
@@ -82,7 +82,7 @@ export function createSessionContextTool(ctx: ToolContext) {
           }
           for (const part of message.parts) {
             if (part.type === 'tool' && part.state === 'error') {
-              current.errors.push({ tool: part.tool, error: part.error ?? 'erro desconhecido' })
+              current.errors.push({ tool: part.tool, error: part.error ?? 'unknown error' })
             }
           }
         }

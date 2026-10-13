@@ -7,6 +7,7 @@ import { documentKindOf } from './document-pages'
 import { pageThumb, textThumb } from './document-thumb'
 import { readJson } from './storage'
 import { fetchReadablePage } from './tools/web'
+import { t } from './i18n'
 import {
   MAX_RASTER_PAGES,
   printFile,
@@ -747,11 +748,11 @@ export async function printSessionDocument(
   docId: string,
 ): Promise<{ ok: boolean; error?: string }> {
   const source = await sessionDocumentFile(sessionId, docId)
-  if (!source) return { ok: false, error: 'Este tipo de fonte não tem arquivo para imprimir.' }
+  if (!source) return { ok: false, error: await t('sources.error.noFileToPrint') }
   // Mesma regra do documento da galeria: o Chromium só pagina PDF. Com .docx
   // ele baixaria o arquivo em vez de abrir o diálogo de impressão.
   if (source.ext !== 'pdf') {
-    return { ok: false, error: 'Só PDF pode ser impresso daqui. Baixe o arquivo e imprima pelo Word.' }
+    return { ok: false, error: await t('sources.error.onlyPdfPrint') }
   }
   const found = await readSessionDocument(sessionId, docId)
   return printFile(source.path, found?.doc.filename)
@@ -769,13 +770,13 @@ export async function exportSessionDocument(
   docId: string,
 ): Promise<{ ok: true; path: string } | { ok: false; canceled?: true; error?: string }> {
   const found = await readSessionDocument(sessionId, docId)
-  if (!found) return { ok: false, error: 'Documento não encontrado.' }
+  if (!found) return { ok: false, error: await t('sources.error.notFound') }
   const source = await sessionDocumentFile(sessionId, docId)
   const ext = source?.ext ?? 'txt'
   const base = found.doc.filename.replace(/\.[a-z0-9]+$/i, '').replace(/[\\/:*?"<>|]/g, '-')
 
   const result = await dialog.showSaveDialog({
-    defaultPath: `${base || 'documento'}.${ext}`,
+    defaultPath: `${base || (await t('sources.defaultFileName'))}.${ext}`,
     filters: [{ name: ext.toUpperCase(), extensions: [ext] }],
   })
   if (result.canceled || !result.filePath) return { ok: false, canceled: true }
@@ -875,7 +876,7 @@ export async function addSessionDocument(
 ): Promise<{ ok: true; doc: SessionDocument } | { ok: false; error: string }> {
   const kind = documentKindOf(filename)
   if (!kind) {
-    return { ok: false, error: `${filename}: só PDF, DOCX e planilhas entram como fonte.` }
+    return { ok: false, error: await t('sources.error.unsupportedKind', { filename }) }
   }
   try {
     const { doc } = await saveSessionDocument(sessionId, bytes, filename, kind, { shared })
@@ -900,7 +901,7 @@ export async function addSessionText(
   shared: boolean,
 ): Promise<{ ok: true; doc: SessionDocument } | { ok: false; error: string }> {
   const content = text.trim()
-  if (!content) return { ok: false, error: 'O texto está vazio.' }
+  if (!content) return { ok: false, error: await t('sources.error.emptyText') }
   try {
     const { doc } = await saveSessionDocument(
       sessionId,
@@ -932,7 +933,7 @@ export async function addSessionUrl(
   try {
     const page = await fetchReadablePage(url)
     if (!page.text.trim()) {
-      return { ok: false, error: `${url}: a página não trouxe texto legível (pode depender de JavaScript).` }
+      return { ok: false, error: await t('sources.error.noReadableText', { url }) }
     }
     const { doc } = await saveSessionDocument(
       sessionId,
@@ -962,18 +963,18 @@ export async function setSessionDocumentShared(
   docId: string,
   shared: boolean,
 ): Promise<{ ok: true; id: string } | { ok: false; error: string }> {
-  if (!SAFE_ID.test(docId)) return { ok: false, error: 'Id inválido.' }
+  if (!SAFE_ID.test(docId)) return { ok: false, error: await t('sources.error.invalidId') }
   if (isShared(docId) === shared) return { ok: true, id: docId }
   const scopes = await scopesOf(sessionId)
   if (!scopes.folder) {
-    return { ok: false, error: 'Esta conversa não está em nenhuma pasta, então não há com quem compartilhar.' }
+    return { ok: false, error: await t('sources.error.noFolder') }
   }
   const from = dirForId(scopes, docId)
   const target = shared ? (scopes.folder as string) : scopes.session
-  if (!from) return { ok: false, error: 'Documento não encontrado.' }
+  if (!from) return { ok: false, error: await t('sources.error.notFound') }
 
   const stored = await readStoredAt(from, docId)
-  if (!stored) return { ok: false, error: 'Documento não encontrado.' }
+  if (!stored) return { ok: false, error: await t('sources.error.notFound') }
 
   const id = await allocateId(target, shared ? 'src' : 'doc')
   const dir = scopeDir(target)

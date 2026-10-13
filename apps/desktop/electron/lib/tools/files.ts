@@ -38,11 +38,11 @@ const MAX_DOC_PAGES = 20
 async function readDocument(file: string, offset?: number, limit?: number): Promise<string> {
   const doc = await extractDocumentFile(file)
   if (doc.totalPages === 0) {
-    return `<document path="${file}" kind="${doc.kind}">\n(nenhum texto extraível — provavelmente um PDF digitalizado. Use pdf_view_page para VER a página: sem camada de texto, olhar é a única forma de ler.)\n</document>`
+    return `<document path="${file}" kind="${doc.kind}">\n(no extractable text — probably a scanned PDF. Use pdf_view_page to SEE the page: with no text layer, looking is the only way to read it.)\n</document>`
   }
   const { from, to, pages } = pageWindow(doc, offset, limit, DEFAULT_DOC_PAGES, MAX_DOC_PAGES)
   const body = pages
-    .map((page) => `--- ${pageLabel(page, doc.kind)} ---\n${page.text || '(página sem texto)'}`)
+    .map((page) => `--- ${pageLabel(page, doc.kind)} ---\n${page.text || '(page has no text)'}`)
     .join('\n\n')
   return `${documentHeader(file, doc, { from, to })}\n${body}\n</document>`
 }
@@ -67,7 +67,7 @@ export function createReadTool(ctx: ToolContext) {
       const body = slice
         .map((line, i) => `${String(start + i + 1).padStart(5)}| ${line.slice(0, MAX_LINE_LENGTH)}`)
         .join('\n')
-      const truncated = start + count < lines.length ? `\n… (${lines.length} linhas no total)` : ''
+      const truncated = start + count < lines.length ? `\n… (${lines.length} lines in total)` : ''
       return `<file path="${file}">\n${body}${truncated}\n</file>`
     },
   })
@@ -84,7 +84,7 @@ export function createWriteTool(ctx: ToolContext) {
       const file = resolveSafePath(ctx, filePath)
       await fs.mkdir(path.dirname(file), { recursive: true })
       await fs.writeFile(file, content, 'utf8')
-      return `Arquivo escrito: ${file} (${content.length} caracteres)`
+      return `File written: ${file} (${content.length} characters)`
     },
   })
 }
@@ -125,22 +125,22 @@ export function createEditTool(ctx: ToolContext) {
     execute: async ({ filePath, oldString, newString, replaceAll }) => {
       const file = resolveSafePath(ctx, filePath)
       const content = await fs.readFile(file, 'utf8')
-      if (oldString === newString) throw new Error('oldString e newString são iguais')
+      if (oldString === newString) throw new Error('oldString and newString are identical')
 
       let next: string | null
       if (replaceAll) {
-        if (!content.includes(oldString)) throw new Error('oldString não encontrado no arquivo')
+        if (!content.includes(oldString)) throw new Error('oldString not found in the file')
         next = content.split(oldString).join(newString)
       } else {
         const occurrences = content.split(oldString).length - 1
         if (occurrences > 1) {
-          throw new Error(`oldString aparece ${occurrences} vezes; inclua mais contexto ou use replaceAll`)
+          throw new Error(`oldString appears ${occurrences} times; include more context or use replaceAll`)
         }
         next = replaceOnce(content, oldString, newString)
-        if (next === null) throw new Error('oldString não encontrado no arquivo')
+        if (next === null) throw new Error('oldString not found in the file')
       }
       await fs.writeFile(file, next, 'utf8')
-      return `Arquivo editado: ${file}`
+      return `File edited: ${file}`
     },
   })
 }
@@ -159,7 +159,7 @@ export function createListTool(ctx: ToolContext) {
         .sort((a, b) => Number(b.isDirectory()) - Number(a.isDirectory()) || a.name.localeCompare(b.name))
         .map((e) => (e.isDirectory() ? `${e.name}/` : e.name))
         .join('\n')
-      return listing || '(diretório vazio)'
+      return listing || '(empty directory)'
     },
   })
 }
@@ -213,7 +213,7 @@ export function createGlobTool(ctx: ToolContext) {
           if (matches.length >= MAX_GLOB_RESULTS) break
         }
       }
-      if (matches.length === 0) return 'Nenhum arquivo encontrado'
+      if (matches.length === 0) return 'No files found'
       const suffix = matches.length >= MAX_GLOB_RESULTS ? '\n… (resultados truncados)' : ''
       return matches.join('\n') + suffix
     },
@@ -281,7 +281,7 @@ export function createGrepTool(ctx: ToolContext) {
         if (results.length >= MAX_GREP_MATCHES) break
       }
 
-      if (results.length === 0) return 'Nenhuma ocorrência encontrada'
+      if (results.length === 0) return 'No matches found'
       const suffix = results.length >= MAX_GREP_MATCHES ? '\n… (resultados truncados)' : ''
       return results.join('\n') + suffix
     },

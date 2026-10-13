@@ -37,27 +37,27 @@ export function createDocxEditTools(scope: DocumentToolScope, ctx: ToolContext |
     filePath: string | undefined,
   ): Promise<{ bytes: Buffer; name: string } | string> => {
     if (filePath) {
-      if (!ctx) return 'filePath só funciona no modo código. Use docId.'
-      if (documentKindOf(filePath) !== 'docx') return `Não é um .docx: ${filePath}.`
+      if (!ctx) return 'filePath only works in code mode. Use docId.'
+      if (documentKindOf(filePath) !== 'docx') return `Not a .docx: ${filePath}.`
       try {
         return { bytes: await fsp.readFile(resolveSafePath(ctx, filePath)), name: path.basename(filePath) }
       } catch (err) {
-        return `Não foi possível abrir ${filePath}: ${(err as Error).message}`
+        return `Could not open ${filePath}: ${(err as Error).message}`
       }
     }
     if (docId) {
       const found = await readSessionDocument(scope.sessionId, docId)
-      if (!found) return `Documento não encontrado: ${docId}. Use doc_list.`
+      if (!found) return `Document not found: ${docId}. Use doc_list.`
       if (found.doc.kind !== 'docx') {
-        return `${docId} (${found.doc.filename}) não é .docx — é ${found.doc.kind}.`
+        return `${docId} (${found.doc.filename}) is not a .docx — it is ${found.doc.kind}.`
       }
       const bytes = await readSessionDocumentBytes(scope.sessionId, docId)
       if (!bytes) {
-        return `O arquivo original de ${found.doc.filename} não foi preservado (anexo anterior a este suporte). Peça ao usuário para anexá-lo de novo.`
+        return `The original file of ${found.doc.filename} was not kept (attached before this feature existed). Ask the user to attach it again.`
       }
       return { bytes, name: found.doc.filename }
     }
-    return 'Informe docId (documento anexado) ou filePath (.docx da pasta de trabalho).'
+    return 'Provide docId (attached document) or filePath (.docx in the working folder).'
   }
 
   return {
@@ -118,7 +118,7 @@ export function createDocxEditTools(scope: DocumentToolScope, ctx: ToolContext |
           (rows?.length ?? 0) +
           (removeRows?.length ?? 0)
         if (total === 0) {
-          return 'Nenhuma alteração pedida — informe replacements, insert, remove, rows ou removeRows.'
+          return 'No change requested — provide replacements, insert, remove, rows or removeRows.'
         }
 
         const source = await loadSource(docId, filePath)
@@ -128,26 +128,26 @@ export function createDocxEditTools(scope: DocumentToolScope, ctx: ToolContext |
         try {
           edited = await editDocx(source.bytes, replacements, { insert, remove, rows, removeRows })
         } catch (err) {
-          return `Erro ao editar ${source.name}: ${(err as Error).message}`
+          return `Failed to edit ${source.name}: ${(err as Error).message}`
         }
 
         // Âncora não encontrada é o erro mais provável e o mais silencioso: o
         // Word fragmenta o texto, e o agente costuma buscar por algo que ele
         // parafraseou. Dizer QUAIS falharam é o que permite corrigir.
         const missed = [
-          ...replacements.map((r, i) => ({ what: `trocar "${r.find}"`, count: edited.applied[i] })),
-          ...(insert ?? []).map((op, i) => ({ what: `inserir depois de "${op.after}"`, count: edited.structural.insert[i] })),
-          ...(remove ?? []).map((op, i) => ({ what: `remover "${op.containing}"`, count: edited.structural.remove[i] })),
-          ...(rows ?? []).map((op, i) => ({ what: `linha depois de "${op.after}"`, count: edited.structural.rows[i] })),
+          ...replacements.map((r, i) => ({ what: `replace "${r.find}"`, count: edited.applied[i] })),
+          ...(insert ?? []).map((op, i) => ({ what: `insert after "${op.after}"`, count: edited.structural.insert[i] })),
+          ...(remove ?? []).map((op, i) => ({ what: `remove "${op.containing}"`, count: edited.structural.remove[i] })),
+          ...(rows ?? []).map((op, i) => ({ what: `row after "${op.after}"`, count: edited.structural.rows[i] })),
           ...(removeRows ?? []).map((op, i) => ({
-            what: `remover a linha com "${op.containing}"`,
+            what: `remove the row containing "${op.containing}"`,
             count: edited.structural.removeRows[i],
           })),
         ].filter((m) => m.count === 0)
         if (missed.length === total) {
-          return `Nada foi aplicado em ${source.name}: ${missed
+          return `Nothing was applied to ${source.name}: ${missed
             .map((m) => m.what)
-            .join('; ')}. Use docx_paragraphs para ver o texto exato — a busca é literal, sem normalizar espaços nem acentos. Linha de tabela precisa de um texto que esteja numa célula; e a última linha de uma tabela não é removida.`
+            .join('; ')}. Use docx_paragraphs to see the exact text — the search is literal, with no normalization of spaces or accents. A table row needs a text that is inside a cell; and the last row of a table is not removed.`
         }
 
         const name = title || source.name.replace(/\.docx$/i, '')
@@ -166,7 +166,7 @@ export function createDocxEditTools(scope: DocumentToolScope, ctx: ToolContext |
             await fsp.writeFile(target, edited.bytes)
             savedTo = savePath
           } catch (err) {
-            savedTo = `(falhou ao gravar em ${savePath}: ${(err as Error).message})`
+            savedTo = `(failed to write to ${savePath}: ${(err as Error).message})`
           }
         }
 
@@ -179,11 +179,11 @@ export function createDocxEditTools(scope: DocumentToolScope, ctx: ToolContext |
           revision: ref.revision,
           applied: edited.applied,
           structural: edited.structural,
-          naoAplicados: missed.map((m) => m.what),
+          notApplied: missed.map((m) => m.what),
           savedTo,
-          message: `Cópia editada de ${source.name} criada — o original não foi alterado. O usuário já a vê na resposta e pode baixá-la pelo card.${
+          message: `Edited copy of ${source.name} created — the original was not changed. The user already sees it in the reply and can download it from the card.${
             missed.length > 0
-              ? ` Atenção: ${missed.length} operação(ões) não foram aplicadas: ${missed.map((m) => m.what).join('; ')}.`
+              ? ` Warning: ${missed.length} operation(s) were not applied: ${missed.map((m) => m.what).join('; ')}.`
               : ''
           }`,
         }
@@ -208,15 +208,15 @@ export function createDocxEditTools(scope: DocumentToolScope, ctx: ToolContext |
           const count = Math.min(Math.max(1, Math.round(limit ?? 40)), 200)
           const slice = paragraphs.slice(start - 1, start - 1 + count)
           const body = slice
-            .map((text, i) => `${start + i}: ${text || '(vazio)'}`)
+            .map((text, i) => `${start + i}: ${text || '(empty)'}`)
             .join('\n')
           const rest =
             start - 1 + slice.length < paragraphs.length
-              ? `\n… mais ${paragraphs.length - (start - 1 + slice.length)} parágrafos (use from para continuar)`
+              ? `\n… ${paragraphs.length - (start - 1 + slice.length)} more paragraphs (use from to continue)`
               : ''
-          return `${source.name} — ${paragraphs.length} parágrafos\n\n${body}${rest}`
+          return `${source.name} — ${paragraphs.length} paragraphs\n\n${body}${rest}`
         } catch (err) {
-          return `Erro ao ler ${source.name}: ${(err as Error).message}`
+          return `Failed to read ${source.name}: ${(err as Error).message}`
         }
       },
     }),

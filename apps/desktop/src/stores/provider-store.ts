@@ -1,3 +1,4 @@
+import i18n from "@/src/i18n"
 import { create } from "zustand"
 import type { Catalog, CatalogModel, CatalogProvider, OrchestrationSettings, ReasoningConfig } from "@shared/chat"
 import { modelSupportsVision, normalizeOrchestrationSettings } from "@shared/chat"
@@ -158,7 +159,7 @@ export const useProviderStore = create<ProviderState>((set, get) => ({
       }
     } catch (err) {
       console.error("[provider-store] initialize failed:", err)
-      set({ loading: false, error: "Falha ao carregar provedores. Verifique sua conexão e tente novamente." })
+      set({ loading: false, error: i18n.t("providers.loadError") })
     }
   },
 

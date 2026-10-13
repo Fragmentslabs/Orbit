@@ -66,7 +66,7 @@ export function createArtifactTools(sessionId: string) {
       }),
       execute: async ({ title, html }) => {
         if (Buffer.byteLength(html, 'utf8') > MAX_HTML_BYTES) {
-          return `HTML muito grande (limite de ${Math.round(MAX_HTML_BYTES / 1024)}KB). Reduza os dados embutidos ou carregue-os sob demanda.`
+          return `HTML too large (limit ${Math.round(MAX_HTML_BYTES / 1024)}KB). Reduce the embedded data or load it on demand.`
         }
         const ref = await saveArtifact(ensureDocument(html, title), { title, sessionId })
         return {
@@ -76,7 +76,7 @@ export function createArtifactTools(sessionId: string) {
           thumb: ref.thumb,
           revision: ref.revision,
           message:
-            'Artefato anexado à resposta — o usuário já o vê renderizado no chat e ele está salvo na galeria. Para alterá-lo depois, use update_artifact com este artifactId.',
+            'Artifact attached to the reply — the user already sees it rendered in the chat and it is saved in the gallery. To change it later, use update_artifact with this artifactId.',
         }
       },
     }),
@@ -90,17 +90,17 @@ export function createArtifactTools(sessionId: string) {
       }),
       execute: async ({ artifactId, html, title }) => {
         if (Buffer.byteLength(html, 'utf8') > MAX_HTML_BYTES) {
-          return `HTML muito grande (limite de ${Math.round(MAX_HTML_BYTES / 1024)}KB).`
+          return `HTML too large (limit ${Math.round(MAX_HTML_BYTES / 1024)}KB).`
         }
         const ref = await updateArtifact(artifactId, ensureDocument(html, title ?? artifactId), title)
-        if (!ref) return `Artefato não encontrado: ${artifactId}. Crie um novo com create_artifact.`
+        if (!ref) return `Artifact not found: ${artifactId}. Create a new one with create_artifact.`
         return {
           artifactId: ref.id,
           url: ref.url,
           title: ref.title,
           thumb: ref.thumb,
           revision: ref.revision,
-          message: 'Artefato atualizado — o usuário já vê a nova versão no chat.',
+          message: 'Artifact updated — the user already sees the new version in the chat.',
         }
       },
     }),

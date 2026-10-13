@@ -115,8 +115,8 @@ export function capPages(
 
 /** Rótulo da página para exibir ao modelo ("p. 12" ou o nome da aba). */
 export function pageLabel(page: DocumentPage, kind: DocumentKind): string {
-  if (page.label) return `aba "${page.label}"`
-  return kind === 'docx' ? `bloco ${page.num}` : `p. ${page.num}`
+  if (page.label) return `sheet "${page.label}"`
+  return kind === 'docx' ? `block ${page.num}` : `p. ${page.num}`
 }
 
 /**
@@ -130,8 +130,8 @@ export function pageLabel(page: DocumentPage, kind: DocumentKind): string {
  * sintética), e numa planilha faria "página 3" significar a terceira aba.
  */
 export function pageLocator(page: DocumentPage, kind: DocumentKind): string {
-  if (kind === 'spreadsheet') return `aba${page.num}${page.label ? ` (${page.label})` : ''}`
-  return kind === 'docx' ? `bloco${page.num}` : `p${page.num}`
+  if (kind === 'spreadsheet') return `sheet${page.num}${page.label ? ` (${page.label})` : ''}`
+  return kind === 'docx' ? `block${page.num}` : `p${page.num}`
 }
 
 /**
@@ -199,12 +199,12 @@ export function documentHeader(
   doc: ExtractedDocument,
   shown: { from: number; to: number },
 ): string {
-  const unit = doc.kind === 'spreadsheet' ? 'abas' : doc.kind === 'docx' ? 'blocos' : 'paginas'
+  const unit = doc.kind === 'spreadsheet' ? 'sheets' : doc.kind === 'docx' ? 'blocks' : 'pages'
   const range = shown.from === shown.to ? `${shown.from}` : `${shown.from}-${shown.to}`
   const rest =
     shown.to < doc.totalPages
-      ? ` Ha mais documento: use offset=${shown.to + 1} para continuar, ou grep para localizar o trecho relevante.`
+      ? ` There is more document: use offset=${shown.to + 1} to continue, or grep to find the relevant part.`
       : ''
-  const cut = doc.truncated ? ' (documento cortado no limite de tamanho)' : ''
-  return `<document path="${filePath}" kind="${doc.kind}" ${unit}="${doc.totalPages}" mostrando="${range}"${cut}>${rest}`
+  const cut = doc.truncated ? ' (document truncated at the size limit)' : ''
+  return `<document path="${filePath}" kind="${doc.kind}" ${unit}="${doc.totalPages}" showing="${range}"${cut}>${rest}`
 }

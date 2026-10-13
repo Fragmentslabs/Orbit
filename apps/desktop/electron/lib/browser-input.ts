@@ -93,15 +93,15 @@ export function attachConsole(wc: WebContents, sink: () => ConsoleBuffer | undef
     if (code === -3) return
     sink()?.push({
       level: 'error',
-      message: `Falha ao carregar ${isMainFrame ? 'a página' : 'um frame'} ${url}: ${description} (${code})`,
+      message: `Failed to load ${isMainFrame ? 'the page' : 'a frame'} ${url}: ${description} (${code})`,
     })
   })
   wc.on('did-start-navigation', (event) => {
     if (!event.isMainFrame || event.isSameDocument) return
-    sink()?.push({ level: 'info', message: `── navegou para ${event.url} ──` })
+    sink()?.push({ level: 'info', message: `── navigated to ${event.url} ──` })
   })
   wc.on('render-process-gone', (_event, details) => {
-    sink()?.push({ level: 'error', message: `O processo da página caiu (${details.reason}, código ${details.exitCode})` })
+    sink()?.push({ level: 'error', message: `The page process crashed (${details.reason}, code ${details.exitCode})` })
   })
 }
 
@@ -164,14 +164,14 @@ ${asFunctionBody(code)}
   try {
     outcome = await Promise.race([wc.executeJavaScript(script, true), delay(EVAL_TIMEOUT_MS).then(() => TIMED_OUT)])
   } catch (err) {
-    return `Erro ao executar: ${(err as Error)?.message ?? String(err)}`
+    return `Execution failed: ${(err as Error)?.message ?? String(err)}`
   }
-  if (outcome === TIMED_OUT) return `O código não terminou em ${EVAL_TIMEOUT_MS / 1000}s (promise pendente ou laço longo).`
+  if (outcome === TIMED_OUT) return `The code did not finish within ${EVAL_TIMEOUT_MS / 1000}s (pending promise or long loop).`
   if (outcome && typeof outcome === 'object' && '__orbitError' in outcome) {
-    return `Erro na página:\n${String((outcome as { __orbitError: string }).__orbitError).slice(0, 4000)}`
+    return `Page error:\n${String((outcome as { __orbitError: string }).__orbitError).slice(0, 4000)}`
   }
   const text = String(outcome)
-  return text.length > MAX_EVAL_CHARS ? `${text.slice(0, MAX_EVAL_CHARS)}\n… (cortado em ${MAX_EVAL_CHARS} caracteres)` : text
+  return text.length > MAX_EVAL_CHARS ? `${text.slice(0, MAX_EVAL_CHARS)}\n… (cut at ${MAX_EVAL_CHARS} characters)` : text
 }
 
 // ─── Mouse ──────────────────────────────────────────────────────────────────
@@ -193,7 +193,7 @@ export async function resolveTarget(
       : target.selector
         ? `document.querySelector(${JSON.stringify(target.selector)})`
         : null
-  if (!finder) return 'Informe ref, selector ou x/y.'
+  if (!finder) return 'Provide ref, selector or x/y.'
   const point = (await wc.executeJavaScript(`(() => {
     const el = ${finder}
     if (!el) return null
@@ -202,7 +202,7 @@ export async function resolveTarget(
     return { x: r.left + r.width / 2, y: r.top + r.height / 2 }
   })()`)) as { x: number; y: number } | null
   if (!point) {
-    return `Elemento não encontrado (${target.ref != null ? `ref=${target.ref}` : target.selector}). Rode panel_read para atualizar as refs.`
+    return `Element not found (${target.ref != null ? `ref=${target.ref}` : target.selector}). Run panel_read to refresh the refs.`
   }
   return point
 }
@@ -250,7 +250,7 @@ export async function dragBetween(
     mouseDown(wc, start)
     await delay(60)
   } else {
-    if (!options.held) throw new Error('Nenhum arrasto em andamento — informe from.')
+    if (!options.held) throw new Error('No drag in progress — provide from.')
     start = options.held
   }
   for (let i = 1; i <= steps; i += 1) {

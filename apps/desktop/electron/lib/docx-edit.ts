@@ -336,7 +336,7 @@ export async function editDocx(
 
   const zip = await JSZip.loadAsync(original)
   const entry = zip.file('word/document.xml')
-  if (!entry) throw new Error('Arquivo .docx inválido: word/document.xml não encontrado.')
+  if (!entry) throw new Error('Invalid .docx file: word/document.xml not found.')
 
   const xml = await entry.async('string')
   const doc = new DOMParser().parseFromString(xml, 'text/xml') as unknown as XmlDoc
@@ -354,7 +354,7 @@ export async function readDocxParagraphs(original: Buffer): Promise<string[]> {
   const { DOMParser } = _require('@xmldom/xmldom') as typeof import('@xmldom/xmldom')
   const zip = await JSZip.loadAsync(original)
   const entry = zip.file('word/document.xml')
-  if (!entry) throw new Error('Arquivo .docx inválido: word/document.xml não encontrado.')
+  if (!entry) throw new Error('Invalid .docx file: word/document.xml not found.')
   const doc = new DOMParser().parseFromString(await entry.async('string'), 'text/xml')
   const paragraphs = doc.getElementsByTagName('w:p')
   const out: string[] = []

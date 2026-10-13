@@ -58,32 +58,32 @@ export function createSheetQueryTool(sessionId: string, ctx: ToolContext | null)
       let bytes: Buffer
       let label: string
       if (filePath) {
-        if (!ctx) return 'filePath só funciona no modo código (não há pasta de trabalho aqui). Use docId.'
+        if (!ctx) return 'filePath only works in code mode (there is no working folder here). Use docId.'
         if (documentKindOf(filePath) !== 'spreadsheet') {
-          return `Não é uma planilha: ${filePath}. Esta tool só lê .xlsx/.xls/.ods/.csv.`
+          return `Not a spreadsheet: ${filePath}. This tool only reads .xlsx/.xls/.ods/.csv.`
         }
         try {
           bytes = await fsp.readFile(resolveSafePath(ctx, filePath))
         } catch (err) {
-          return `Não foi possível abrir ${filePath}: ${(err as Error).message}`
+          return `Could not open ${filePath}: ${(err as Error).message}`
         }
         label = filePath
       } else if (docId) {
         const found = await readSessionDocument(sessionId, docId)
-        if (!found) return `Documento não encontrado: ${docId}. Use doc_list para ver os disponíveis.`
+        if (!found) return `Document not found: ${docId}. Use doc_list to see the available ones.`
         if (found.doc.kind !== 'spreadsheet') {
-          return `${docId} (${found.doc.filename}) não é planilha — é ${found.doc.kind}. Use doc_read/doc_search.`
+          return `${docId} (${found.doc.filename}) is not a spreadsheet — it is ${found.doc.kind}. Use doc_read/doc_search.`
         }
         const stored = await readSessionDocumentBytes(sessionId, docId)
         if (!stored) {
           // Anexo anterior a esta cópia: melhor avisar do que calcular sobre o
           // texto formatado e devolver um número silenciosamente errado.
-          return `A planilha ${found.doc.filename} foi anexada antes do suporte a consulta e não tem mais o arquivo original. Anexe de novo para poder somar; por ora dá para lê-la com doc_read.`
+          return `The spreadsheet ${found.doc.filename} was attached before query support existed and no longer has the original file. Attach it again to be able to aggregate; for now it can be read with doc_read.`
         }
         bytes = stored
         label = found.doc.filename
       } else {
-        return 'Informe filePath (planilha da pasta de trabalho) ou docId (planilha anexada).'
+        return 'Provide filePath (spreadsheet in the working folder) or docId (attached spreadsheet).'
       }
 
       // ── consulta ────────────────────────────────────────────────────────
@@ -97,7 +97,7 @@ export function createSheetQueryTool(sessionId: string, ctx: ToolContext | null)
         // Erro de consulta (coluna inexistente, aba errada) é informação útil
         // para o modelo corrigir a chamada, não falha da tool.
         if (err instanceof SheetQueryError) return err.message
-        return `Erro ao consultar ${label}: ${(err as Error).message}`
+        return `Failed to query ${label}: ${(err as Error).message}`
       }
     },
   })

@@ -20,6 +20,7 @@ import { compactHistory, findLastSummaryIndex, shouldCompact } from './compactio
 import { contextBudget, estimateTokens, maxStepsFor, trimTurnContext } from './context-budget'
 import { clearManualSaves, manualSavesUnder, stripFilesFromPatch } from './manual-saves'
 import { createToolApproval, takeDenialReason } from './permission'
+import { t as mainT } from './i18n'
 import { classifyProviderError, errorToText, isRecoverableErrorKind, isTransientErrorKind } from './errors'
 import { selectDraftImages } from './image-drafts'
 import { hasStreamedContent, resolveRotation, retryDelay, waitUnlessAborted } from './model-rotation'
@@ -153,25 +154,26 @@ function hasTodoInProgress(parts: MessagePart[]): boolean {
   return items.some((i) => i.status === 'in_progress')
 }
 
-/** Mensagem final do /init: o que foi gravado na árvore, ou por que nada foi. */
-function initSummary(result: InitResult): string {
+/** Mensagem final do /init: o que foi gravado na árvore, ou por que nada foi.
+ *  É texto do produto para o usuário, então segue o idioma do app. */
+async function initSummary(result: InitResult): Promise<string> {
   const note = result.note ? `\n\n${result.note}` : ''
-  const limit = result.unfinished
-    ? '\n\n_O coordenador parou sem confirmar a revisão final; o rascunho estava consistente e foi gravado como estava._'
-    : ''
+  const limit = result.unfinished ? `\n\n${await mainT('init.unfinished')}` : ''
   if (!result.saved) {
-    return `## Nada para memorizar${note || '\n\nA análise não encontrou nada específico o bastante para valer uma memória.'}${limit}`
+    return `${await mainT('init.nothing.title')}${note || `\n\n${await mainT('init.nothing.body')}`}${limit}`
   }
-  const counts = [
-    result.created ? `${result.created} nova(s)` : '',
-    result.updated ? `${result.updated} atualizada(s)` : '',
-    result.retired ? `${result.retired} antiga(s) removida(s)` : '',
-    result.learnings ? `${result.learnings} aprendizado(s) para outros projetos` : '',
-  ].filter(Boolean)
+  const counts = (
+    await Promise.all([
+      result.created ? mainT('init.count.created', { count: result.created }) : '',
+      result.updated ? mainT('init.count.updated', { count: result.updated }) : '',
+      result.retired ? mainT('init.count.retired', { count: result.retired }) : '',
+      result.learnings ? mainT('init.count.learnings', { count: result.learnings }) : '',
+    ])
+  ).filter(Boolean)
   const titles = result.titles.length ? `: **${result.titles.join('**, **')}**` : ''
   return (
-    `## Projeto memorizado\n\nÁrvore gravada (${counts.join(', ')})${titles}.${note}\n\n` +
-    'Todo chat novo nesta pasta, ou numa subpasta dela, começa com o mapa dessa árvore e abre os detalhes conforme a tarefa. Dá para ver e editar tudo na aba Memórias.' +
+    `${await mainT('init.saved.title')}\n\n${await mainT('init.saved.tree', { counts: counts.join(', ') })}${titles}.${note}\n\n` +
+    (await mainT('init.saved.footer')) +
     limit
   )
 }
@@ -255,11 +257,11 @@ function attachmentDocumentKind(mime: string, filename: string): DocumentKind | 
  * que precisa ficar pequeno — é aqui que a economia acontece.
  */
 function documentAttachmentPreview(doc: SessionDocument, pages: DocumentPage[]): string {
-  const unit = doc.kind === 'spreadsheet' ? 'abas' : doc.kind === 'docx' ? 'blocos' : 'páginas'
-  const head = `[Documento anexado: ${doc.filename} — ${doc.totalPages} ${unit}, id ${doc.id}]`
+  const unit = doc.kind === 'spreadsheet' ? 'sheets' : doc.kind === 'docx' ? 'blocks' : 'pages'
+  const head = `[Document attached: ${doc.filename} — ${doc.totalPages} ${unit}, id ${doc.id}]`
   const render = (list: DocumentPage[]) =>
     list
-      .map((page) => `--- ${pageLabel(page, doc.kind)} ---\n${page.text || '(sem texto)'}`)
+      .map((page) => `--- ${pageLabel(page, doc.kind)} ---\n${page.text || '(no text)'}`)
       .join('\n\n')
 
   if (doc.totalChars <= INLINE_DOC_CHARS && !doc.truncated) {
@@ -267,9 +269,9 @@ function documentAttachmentPreview(doc: SessionDocument, pages: DocumentPage[]):
   }
   const shown = pages.slice(0, PREVIEW_PAGES)
   return (
-    `${head}\n\nTrecho inicial (${unit} 1-${shown.length} de ${doc.totalPages}):\n\n${render(shown)}\n\n` +
-    `[O documento NÃO está inteiro aqui. Para o resto: doc_search({ pattern }) localiza a ${unit === 'abas' ? 'aba' : 'página'} e doc_read({ docId: "${doc.id}", offset }) lê a partir dela. ` +
-    `Não responda sobre o conteúdo além deste trecho sem consultar — e nunca peça ao usuário para colar o texto.]`
+    `${head}\n\nOpening excerpt (${unit} 1-${shown.length} of ${doc.totalPages}):\n\n${render(shown)}\n\n` +
+    `[The document is NOT all here. For the rest: doc_search({ pattern }) finds the ${unit === 'sheets' ? 'sheet' : unit === 'blocks' ? 'block' : 'page'} and doc_read({ docId: "${doc.id}", offset }) reads from there. ` +
+    `Do not answer about content beyond this excerpt without looking it up — and never ask the user to paste the text.]`
   )
 }
 
@@ -285,18 +287,18 @@ function fileToModelContent(file: FilePart, modelVision: boolean): Exclude<UserC
     if (modelVision) return { type: 'file', data: file.url, mediaType: file.mime }
     // Modelo sem visão (histórico): nota de texto — a descrição, quando
     // existe, já está no TextPart irmão gerado em preprocessAttachment.
-    return { type: 'text', text: `[Imagem anexada anteriormente: ${file.filename ?? 'imagem'}]` }
+    return { type: 'text', text: `[Image attached earlier: ${file.filename ?? 'image'}]` }
   }
   if (file.mime === 'application/pdf' || PDF_EXT.test(file.filename ?? '')) {
-    return { type: 'text', text: `[PDF anexado anteriormente: ${file.filename ?? 'documento'}]` }
+    return { type: 'text', text: `[PDF attached earlier: ${file.filename ?? 'document'}]` }
   }
   if (TEXT_MIME.test(file.mime) || TEXT_EXT_FALLBACK.test(file.filename ?? '')) {
     const text = decodeDataUrlText(file.url)
     if (text != null) {
-      return { type: 'text', text: `[Arquivo anexado: ${file.filename ?? 'sem nome'}]\n\n${text}` }
+      return { type: 'text', text: `[File attached: ${file.filename ?? 'unnamed'}]\n\n${text}` }
     }
   }
-  return { type: 'text', text: `[Arquivo anexado não suportado: ${file.filename ?? file.mime}]` }
+  return { type: 'text', text: `[Unsupported file attached: ${file.filename ?? file.mime}]` }
 }
 
 /** Chip de anexo sem o data URL original (evita duplicar bytes grandes no
@@ -436,14 +438,14 @@ async function preprocessAttachment(
   // bolha do usuário mostra só o chip.
   if (file.mime === BROWSER_SELECTION_MIME) {
     const raw = decodeDataUrlText(file.url)
-    let text = `[Elemento selecionado no browser do painel — ${file.filename || 'elemento'}]`
+    let text = `[Element selected in the panel browser — ${file.filename || 'element'}]`
     if (raw) {
       try {
         const sel = JSON.parse(raw) as { tag?: string; url?: string; selector?: string; text?: string; html?: string }
         text = [
-          `[Elemento selecionado no browser do painel — <${sel.tag ?? '?'}> em ${sel.url ?? ''}]`,
+          `[Element selected in the panel browser — <${sel.tag ?? '?'}> on ${sel.url ?? ''}]`,
           `selector: ${sel.selector ?? ''}`,
-          `texto: ${sel.text || '(sem texto)'}`,
+          `text: ${sel.text || '(no text)'}`,
           `html: ${sel.html ?? ''}`,
         ].join('\n')
       } catch {
@@ -463,7 +465,7 @@ async function preprocessAttachment(
   // na conversa seria mostrar ao usuário o que ele mesmo acabou de marcar.
   if (file.mime === DOCUMENT_QUOTE_MIME) {
     const raw = decodeDataUrlText(file.url)
-    let text = `[Trecho citado pelo usuário — ${file.filename || 'documento'}]`
+    let text = `[Excerpt quoted by the user — ${file.filename || 'document'}]`
     if (raw) {
       try {
         const quote = JSON.parse(raw) as {
@@ -476,13 +478,13 @@ async function preprocessAttachment(
           text?: string
         }
         const onde = quote.page
-          ? `, página ${quote.page}${
+          ? `, page ${quote.page}${
               quote.fromLine
-                ? `, linha${quote.toLine && quote.toLine > quote.fromLine ? `s ${quote.fromLine}-${quote.toLine}` : ` ${quote.fromLine}`}`
+                ? `, line${quote.toLine && quote.toLine > quote.fromLine ? `s ${quote.fromLine}-${quote.toLine}` : ` ${quote.fromLine}`}`
                 : ''
             }`
           : ''
-        const linhas = [`[Trecho citado pelo usuário — ${quote.name ?? 'documento'}${onde}]`]
+        const linhas = [`[Excerpt quoted by the user — ${quote.name ?? 'document'}${onde}]`]
 
         // O ENDEREÇO do que foi citado, na linguagem da ferramenta que o
         // alcança. Sem isto o modelo recebia um nome e um texto, ia procurar o
@@ -493,15 +495,15 @@ async function preprocessAttachment(
         if (quote.docId) {
           linhas.push(
             quote.kind === 'source'
-              ? `Fonte desta conversa: ${quote.docId} — use doc_read/doc_search com este docId para ver o resto.`
-              : `Documento do agente: ${quote.docId} — use read_document com este documentId para ver o texto inteiro, e update_document para alterá-lo (leia antes: o baseRevision vem da leitura).`,
+              ? `Source in this conversation: ${quote.docId} — use doc_read/doc_search with this docId to see the rest.`
+              : `Agent document: ${quote.docId} — use read_document with this documentId to see the full text, and update_document to change it (read first: baseRevision comes from the read).`,
           )
         }
         if (quote.docId && quote.page) {
           const alvo = `#orbit-source/${quote.docId}/p${quote.page}${
             quote.fromLine ? `L${quote.fromLine}${quote.toLine ? `-${quote.toLine}` : ''}` : ''
           }`
-          linhas.push(`Para citar de volta na resposta: [${quote.name ?? 'documento'}](${alvo})`)
+          linhas.push(`To cite it back in your reply: [${quote.name ?? 'document'}](${alvo})`)
         }
         linhas.push('---', quote.text ?? '')
         text = linhas.join('\n')
@@ -530,7 +532,7 @@ async function preprocessAttachment(
     if (!bytes) {
       return [
         attachmentChip(file),
-        { id: newId('prt'), type: 'text', text: `[Documento anexado: ${filename}] (não foi possível ler o arquivo)`, state: 'done', source: 'attachment' },
+        { id: newId('prt'), type: 'text', text: `[Document attached: ${filename}] (could not read the file)`, state: 'done', source: 'attachment' },
       ]
     }
     try {
@@ -555,7 +557,7 @@ async function preprocessAttachment(
     } catch (err) {
       return [
         attachmentChip(file),
-        { id: newId('prt'), type: 'text', text: `[Documento anexado: ${filename}] (erro ao extrair: ${errorToText(err)})`, state: 'done', source: 'attachment' },
+        { id: newId('prt'), type: 'text', text: `[Document attached: ${filename}] (extraction failed: ${errorToText(err)})`, state: 'done', source: 'attachment' },
       ]
     }
   }
@@ -573,8 +575,8 @@ async function preprocessAttachment(
           id: newId('prt'),
           type: 'text',
           text:
-            `[Skill anexada: ${filename}]\n\n${description}\n\n` +
-            '(Se o usuário pedir para adicionar isso como skill, ou fizer sentido pelo contexto, use a tool create_skill com este conteúdo — não presuma sem que o pedido/contexto justifique.)',
+            `[Skill attached: ${filename}]\n\n${description}\n\n` +
+            '(If the user asks to add this as a skill, or the context makes it clear, use the create_skill tool with this content — do not assume it unless the request/context justifies it.)',
           state: 'done',
           source: 'attachment',
         },
@@ -587,7 +589,7 @@ async function preprocessAttachment(
     if (text != null) {
       return [
         attachmentChip(file),
-        { id: newId('prt'), type: 'text', text: `[Arquivo anexado: ${filename || 'sem nome'}]\n\n${text}`, state: 'done', source: 'attachment' },
+        { id: newId('prt'), type: 'text', text: `[File attached: ${filename || 'unnamed'}]\n\n${text}`, state: 'done', source: 'attachment' },
       ]
     }
   }
@@ -646,9 +648,9 @@ async function preprocessAttachment(
           id: partId,
           type: 'text',
           text:
-            `[Imagem anexada: ${filename || 'sem nome'} — ref #${ref}]\n\n` +
-            `(Modo Visão: a imagem não é descrita automaticamente — use a ferramenta describe_image com ref #${ref} ` +
-            'para vê-la; em "focus" diga o que precisa saber e, se depender do contexto da conversa, inclua o contexto necessário no pedido.)',
+            `[Image attached: ${filename || 'unnamed'} — ref #${ref}]\n\n` +
+            `(Vision mode: the image is not described automatically — use the describe_image tool with ref #${ref} ` +
+            'to see it; in "focus" say what you need to know and, if it depends on the conversation, include the necessary context in the request.)',
           state: 'done',
           source: 'attachment',
         },
@@ -661,7 +663,7 @@ async function preprocessAttachment(
       {
         id: newId('prt'),
         type: 'text',
-        text: `[Imagem anexada: ${filename || 'sem nome'}] — o modelo atual não tem visão e nenhum modelo de visão está configurado; a imagem não foi enviada ao modelo.`,
+        text: `[Image attached: ${filename || 'unnamed'}] — the current model has no vision and no vision model is configured; the image was not sent to the model.`,
         state: 'done',
         source: 'attachment',
       },
@@ -693,8 +695,8 @@ async function persistImageDescription(opts: {
   const part = userMsg.parts[idx]
   if (idx < 0 || part.type !== 'text') return
   const text = entry.persisted
-    ? `${part.text}\n\n[Informação adicional sobre a imagem]\n${opts.text}`
-    : `[Imagem anexada: ${entry.filename || 'sem nome'}]\n\nDescrição gerada pelo modelo de visão:\n${opts.text}`
+    ? `${part.text}\n\n[Additional information about the image]\n${opts.text}`
+    : `[Image attached: ${entry.filename || 'unnamed'}]\n\nDescription generated by the vision model:\n${opts.text}`
   entry.persisted = true
   const updated: ChatMessage = {
     ...userMsg,
@@ -888,13 +890,13 @@ async function generateTitle(input: SendMessageInput, win: BrowserWindow) {
       model: aux.model,
       providerOptions: aux.providerOptions,
       system:
-        'Gere um título curto e descritivo para a conversa, em texto puro, no idioma da mensagem do usuário. ' +
-        'Regras: sem negrito, sem asteriscos, sem aspas, sem emojis e sem formatação de qualquer tipo; no máximo 50 caracteres. ' +
-        'Responda APENAS com o título final, nada mais.',
+        "Write a short, descriptive title for the conversation, in plain text, in the language of the user's message. " +
+        'Rules: no bold, no asterisks, no quotes, no emojis and no formatting of any kind; at most 50 characters. ' +
+        'Reply with ONLY the final title, nothing else.',
       prompt: isCommand
-        ? `A sessão de código começou com um comando (${input.text.trim().slice(0, 100)}) — não use o comando como título. ` +
-          `Gere um título genérico curto em ${input.language ?? 'português'}${projectName ? ` para o projeto "${projectName}"` : ''}, ` +
-          'como "Análise do projeto". Responda apenas com o título.'
+        ? `The code session started with a command (${input.text.trim().slice(0, 100)}) — do not use the command as the title. ` +
+          `Write a short generic title in ${input.language ?? 'Portuguese'}${projectName ? ` for the project "${projectName}"` : ''}, ` +
+          'such as "Project analysis". Reply with the title only.'
         : input.text.slice(0, 2000),
     })
     const title = truncateTitle(text)
@@ -1411,7 +1413,7 @@ async function runChatTurn(win: BrowserWindow, input: SendMessageInput): Promise
         mainPart.durationMs = Date.now() - mainStart
         upsertPart(mainPart)
 
-        upsertPart({ id: newId('prt'), type: 'text', text: initSummary(result), state: 'done' })
+        upsertPart({ id: newId('prt'), type: 'text', text: await initSummary(result), state: 'done' })
       } catch (err) {
         const cancelled = isInitAborted(err) || controller.signal.aborted
         mainPart.state = cancelled ? 'done' : 'error'
@@ -1429,8 +1431,8 @@ async function runChatTurn(win: BrowserWindow, input: SendMessageInput): Promise
           // Cancelar é uma escolha do usuário, não uma falha. A árvore só é
           // gravada no fim, depois da revisão, então nada ficou pela metade.
           text: cancelled
-            ? '## Análise cancelada\n\nNada foi gravado: as memórias só são salvas no fim, depois que a árvore inteira é revisada. Rode `/init` de novo quando quiser.'
-            : `## Análise falhou\n\n${errorToText(err)}\n\nNada foi gravado.`,
+            ? await mainT('init.cancelled')
+            : `${await mainT('init.failed.title')}\n\n${errorToText(err)}\n\n${await mainT('init.failed.nothingSaved')}`,
           state: 'done',
         })
       }
@@ -1883,7 +1885,7 @@ async function runChatTurn(win: BrowserWindow, input: SendMessageInput): Promise
               tool: part.toolName,
               state: 'error',
               input: existing?.input,
-              error: takeDenialReason(part.toolCallId) ?? 'Ação negada pela política de permissões.',
+              error: takeDenialReason(part.toolCallId) ?? 'Action denied by the permission policy.',
             })
             if (part.toolName === 'bash') activeBashCommands.delete(sessionId)
             break
@@ -1975,7 +1977,7 @@ async function runChatTurn(win: BrowserWindow, input: SendMessageInput): Promise
           upsertPart({
             ...pending,
             state: 'error',
-            error: 'Chamada de ferramenta cortada pelo limite de tokens de saída — não executada.',
+            error: 'Tool call cut off by the output token limit — not executed.',
           })
         }
         truncatedToolNames = pendingToolCalls.map((p) => p.tool).join(', ')
@@ -2058,7 +2060,7 @@ async function runChatTurn(win: BrowserWindow, input: SendMessageInput): Promise
       // "Working" eternos mesmo com o turno já encerrado e salvo.
       if (part.type === 'tool' && part.state === 'running') {
         part.state = 'error'
-        part.error = 'Chamada de ferramenta sem resultado — turno encerrado antes dela terminar.'
+        part.error = 'Tool call has no result — the turn ended before it finished.'
       }
     }
     // Degraus da escada saem antes de a resposta ser gravada: o que fica é o
@@ -2196,7 +2198,7 @@ async function runChatTurn(win: BrowserWindow, input: SendMessageInput): Promise
       // turno já encerrado.
       if (part.type === 'tool' && part.state === 'running') {
         part.state = 'error'
-        part.error = aborted ? 'Interrompida.' : (message ?? 'A execução não terminou.')
+        part.error = aborted ? 'Interrupted.' : (message ?? 'Execution did not finish.')
       }
     }
     assistantMessage.completedAt = Date.now()

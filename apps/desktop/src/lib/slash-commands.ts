@@ -1,4 +1,5 @@
 import { useEffect, useMemo } from "react"
+import { useTranslation } from "react-i18next"
 
 import type { SessionMode } from "@shared/chat"
 import { actionsForMode } from "@/src/lib/slash-actions"
@@ -26,6 +27,7 @@ export function useReferenceCommands(mode?: SessionMode): SlashCommand[] {
   const skills = useSkillsStore((s) => s.skills)
   const mcpServers = useSkillsStore((s) => s.mcpServers)
   const initialize = useSkillsStore((s) => s.initialize)
+  const { t } = useTranslation()
 
   useEffect(() => {
     void initialize()
@@ -38,7 +40,7 @@ export function useReferenceCommands(mode?: SessionMode): SlashCommand[] {
         ...skills.map<SlashCommand>((skill) => ({
           id: `skill-${skill.slug}`,
           label: `@${skill.slug}`,
-          description: skill.description || "Skill do usuário",
+          description: skill.description || t("input.slash.userSkill"),
           keywords: [skill.slug, skill.name],
           group: "Skills",
           run: ({ setText }) => setText(`@${skill.slug} `),
@@ -54,7 +56,7 @@ export function useReferenceCommands(mode?: SessionMode): SlashCommand[] {
           })),
       ]
     },
-    [skills, mcpServers, mode],
+    [skills, mcpServers, mode, t],
   )
 }
 

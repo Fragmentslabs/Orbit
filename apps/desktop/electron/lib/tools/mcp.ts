@@ -43,7 +43,7 @@ const connectionFields = {
 
 /** Falha de validação devolvida ao modelo — ele consegue corrigir e repetir. */
 function invalid(message: string): string {
-  return `Conexão não proposta: ${message}`
+  return `Connection not proposed: ${message}`
 }
 
 function describeEntry(input: { name: string; type: string; url?: string; command?: string }): string {
@@ -57,10 +57,10 @@ function describeEntry(input: { name: string; type: string; url?: string; comman
  */
 function proposedText(entry: string, extra?: string): string {
   return (
-    `Conexão ${entry} proposta${extra ? ` (${extra})` : ''}. ` +
-    'Um card apareceu na conversa — quem aceita, autoriza o login e conecta é o usuário, ali. ' +
-    'Nada foi gravado ainda: não diga que a conexão está feita e não tente usar as ferramentas ' +
-    'desse servidor antes de ele aceitar.'
+    `Connection ${entry} proposed${extra ? ` (${extra})` : ''}. ` +
+    'A card appeared in the conversation — the user is the one who accepts, authorizes the login and connects, there. ' +
+    'Nothing has been saved yet: do not say the connection is done and do not try to use the tools ' +
+    'of this server before the user accepts.'
   )
 }
 
@@ -75,12 +75,12 @@ export function createMcpConnectTool() {
       ...connectionFields,
     }),
     execute: async (input) => {
-      if (input.type === 'http' && !input.url?.trim()) return invalid('type=http exige "url".')
-      if (input.type === 'stdio' && !input.command?.trim()) return invalid('type=stdio exige "command".')
+      if (input.type === 'http' && !input.url?.trim()) return invalid('type=http requires "url".')
+      if (input.type === 'stdio' && !input.command?.trim()) return invalid('type=stdio requires "command".')
       const existing = listMcpStatus().find((server) => server.config.name === input.name)
       if (existing) {
         return invalid(
-          `já existe uma conexão chamada "${input.name}" (${existing.state}). Para mudá-la use mcp_update.`,
+          `a connection named "${input.name}" already exists (${existing.state}). To change it use mcp_update.`,
         )
       }
       return proposedText(describeEntry(input))
@@ -108,7 +108,7 @@ export function createMcpUpdateTool() {
     execute: async (input) => {
       const existing = listMcpStatus().find((server) => server.config.name === input.name)
       if (!existing) {
-        return invalid(`não existe conexão chamada "${input.name}". Use mcp_servers para ver as que existem.`)
+        return invalid(`there is no connection named "${input.name}". Use mcp_servers to see the existing ones.`)
       }
       // O que vale é a config RESULTANTE: o que não vem no pedido continua
       // como está (o card faz a mesma mescla sobre a entrada atual).
@@ -116,15 +116,15 @@ export function createMcpUpdateTool() {
       const url = input.url ?? existing.config.url
       const command = input.command ?? existing.config.command
       const target = type === 'http' ? url : command
-      if (type === 'http' && !url?.trim()) return invalid('type=http exige "url".')
-      if (type === 'stdio' && !command?.trim()) return invalid('type=stdio exige "command".')
+      if (type === 'http' && !url?.trim()) return invalid('type=http requires "url".')
+      if (type === 'stdio' && !command?.trim()) return invalid('type=stdio requires "command".')
       // `type` é estrutural (diz como ler o resto), não uma alteração: uma
       // chamada só com ele não muda nada e seria uma proposta vazia.
       const changes = Object.keys(input).filter(
         (key) => key !== 'name' && key !== 'reason' && key !== 'type',
       )
-      if (changes.length === 0) return invalid('nenhum campo para alterar foi informado.')
-      return proposedText(`"${input.name}" (${type}: ${target})`, `altera ${changes.join(', ')}`)
+      if (changes.length === 0) return invalid('no field to change was provided.')
+      return proposedText(`"${input.name}" (${type}: ${target})`, `changes ${changes.join(', ')}`)
     },
   })
 }
@@ -136,14 +136,14 @@ export function createMcpServersTool() {
     inputSchema: z.object({}),
     execute: async () => {
       const servers = listMcpStatus()
-      if (servers.length === 0) return 'Nenhum servidor MCP configurado no Orbit.'
+      if (servers.length === 0) return 'No MCP servers configured in Orbit.'
       return servers
         .map((server) => {
           const target = server.config.url ?? server.config.command ?? ''
           const parts = [`- ${server.config.name} (${server.config.type}) — ${server.state}`]
           if (target) parts.push(target)
-          if (server.usesOAuth) parts.push(server.authorized ? 'oauth: autorizado' : 'oauth: sem autorização')
-          if (server.error) parts.push(`erro: ${server.error}`)
+          if (server.usesOAuth) parts.push(server.authorized ? 'oauth: authorized' : 'oauth: not authorized')
+          if (server.error) parts.push(`error: ${server.error}`)
           if (server.toolNames.length > 0) parts.push(`tools: ${server.toolNames.join(', ')}`)
           return parts.join(' | ')
         })

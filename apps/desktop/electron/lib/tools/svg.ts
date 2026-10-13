@@ -28,21 +28,21 @@ export function createSvgTools(scope: DocumentToolScope, ctx: ToolContext | null
   const load = async (ref: string): Promise<{ markup: string; name: string } | string> => {
     const mediaId = mediaIdFromUrl(ref)
     if (mediaId) {
-      if (!mediaId.endsWith('.svg')) return `${ref} não é um SVG — use image_edit para imagem raster.`
+      if (!mediaId.endsWith('.svg')) return `${ref} is not an SVG — use image_edit for raster images.`
       const entry = await getMediaEntry(mediaId)
       if (entry) {
         const file = await readMedia(mediaId)
-        if (!file) return `O SVG ${ref} está no registro mas o arquivo sumiu do disco.`
+        if (!file) return `SVG ${ref} is in the registry but its file is gone from disk.`
         return { markup: file.buffer.toString('utf8'), name: entry.name || mediaId }
       }
-      if (ref.startsWith('orbit-media://')) return `SVG não encontrado na galeria: ${ref}`
+      if (ref.startsWith('orbit-media://')) return `SVG not found in the gallery: ${ref}`
     }
-    if (!ctx) return `SVG não encontrado: ${ref}. No chat a referência é a URL orbit-media:// da galeria.`
-    if (!ref.toLowerCase().endsWith('.svg')) return `Não é um arquivo .svg: ${ref}`
+    if (!ctx) return `SVG not found: ${ref}. In chat the reference is the gallery's orbit-media:// URL.`
+    if (!ref.toLowerCase().endsWith('.svg')) return `Not an .svg file: ${ref}`
     try {
       return { markup: await fsp.readFile(resolveSafePath(ctx, ref), 'utf8'), name: path.basename(ref) }
     } catch (err) {
-      return `Não foi possível abrir ${ref}: ${(err as Error).message}`
+      return `Could not open ${ref}: ${(err as Error).message}`
     }
   }
 
@@ -65,7 +65,7 @@ export function createSvgTools(scope: DocumentToolScope, ctx: ToolContext | null
         await fsp.writeFile(target, markup, 'utf8')
         savedTo = savePath
       } catch (err) {
-        savedTo = `falhou (${(err as Error).message})`
+        savedTo = `failed (${(err as Error).message})`
       }
     }
     return { mediaUrl, savedTo }
@@ -75,20 +75,20 @@ export function createSvgTools(scope: DocumentToolScope, ctx: ToolContext | null
   const loadRaster = async (ref: string): Promise<{ bytes: Buffer; name: string } | string> => {
     const id = mediaIdFromUrl(ref)
     if (id) {
-      if (id.endsWith('.svg')) return `${ref} já é um SVG.`
+      if (id.endsWith('.svg')) return `${ref} is already an SVG.`
       const entry = await getMediaEntry(id)
       if (entry) {
         const file = await readMedia(id)
-        if (!file) return `A imagem ${ref} está no registro mas o arquivo sumiu do disco.`
+        if (!file) return `Image ${ref} is in the registry but its file is gone from disk.`
         return { bytes: file.buffer, name: entry.name || id }
       }
-      if (ref.startsWith('orbit-media://')) return `Imagem não encontrada na galeria: ${ref}`
+      if (ref.startsWith('orbit-media://')) return `Image not found in the gallery: ${ref}`
     }
-    if (!ctx) return `Imagem não encontrada: ${ref}. No chat a referência é a URL orbit-media:// da galeria.`
+    if (!ctx) return `Image not found: ${ref}. In chat the reference is the gallery's orbit-media:// URL.`
     try {
       return { bytes: await fsp.readFile(resolveSafePath(ctx, ref)), name: path.basename(ref) }
     } catch (err) {
-      return `Não foi possível abrir ${ref}: ${(err as Error).message}`
+      return `Could not open ${ref}: ${(err as Error).message}`
     }
   }
 
@@ -116,10 +116,10 @@ export function createSvgTools(scope: DocumentToolScope, ctx: ToolContext | null
         try {
           out = await vectorizeImage(src.bytes, { colors, dropBackground, tolerance })
         } catch (err) {
-          return `Não foi possível vetorizar ${src.name}: ${(err as Error).message}`
+          return `Could not vectorize ${src.name}: ${(err as Error).message}`
         }
         if (out.paths === 0) {
-          return `${src.name}: nada foi traçado — a imagem não tem região de cor chapada que vire forma.`
+          return `${src.name}: nothing was traced — the image has no flat-colour region that can become a shape.`
         }
         const base = src.name.replace(/\.[^.]+$/, '')
         const { mediaUrl, savedTo } = await deliver(out.svg, `${base} (vetor)`, savePath)
@@ -127,10 +127,10 @@ export function createSvgTools(scope: DocumentToolScope, ctx: ToolContext | null
           mediaUrl,
           alt: alt ?? '',
           message:
-            `${src.name} → SVG ${out.width}x${out.height}, ${out.usedColors} cores, ${out.paths} camada(s), ` +
-            `${out.points} pontos, cores ${out.colors.join(' ')}` +
-            `${savedTo ? `, gravado em ${savedTo}` : ''}.` +
-            (out.warnings.length > 0 ? ` AVISO: ${out.warnings.join(' ')}` : ''),
+            `${src.name} → SVG ${out.width}x${out.height}, ${out.usedColors} colours, ${out.paths} layer(s), ` +
+            `${out.points} points, colours ${out.colors.join(' ')}` +
+            `${savedTo ? `, saved to ${savedTo}` : ''}.` +
+            (out.warnings.length > 0 ? ` WARNING: ${out.warnings.join(' ')}` : ''),
         }
       },
     }),
@@ -154,15 +154,15 @@ export function createSvgTools(scope: DocumentToolScope, ctx: ToolContext | null
         }
         const info = svgInfo(markup)
         if (!info.viewBox) {
-          return 'Falta o viewBox: sem ele o SVG não escala, que é a razão de ser do formato. Repita incluindo viewBox.'
+          return 'Missing viewBox: without it the SVG does not scale, which is the whole point of the format. Retry including viewBox.'
         }
         const { mediaUrl, savedTo } = await deliver(markup, title || 'ícone', savePath)
         return {
           mediaUrl,
           alt: title ?? '',
-          message: `SVG criado (viewBox ${info.viewBox}${
-            info.colors.length > 0 ? `, cores ${info.colors.join(' ')}` : ''
-          })${savedTo ? `, gravado em ${savedTo}` : ''}. Está na resposta e pode ser baixado.`,
+          message: `SVG created (viewBox ${info.viewBox}${
+            info.colors.length > 0 ? `, colours ${info.colors.join(' ')}` : ''
+          })${savedTo ? `, saved to ${savedTo}` : ''}. It is in the reply and can be downloaded.`,
         }
       },
     }),
@@ -179,10 +179,10 @@ export function createSvgTools(scope: DocumentToolScope, ctx: ToolContext | null
         try {
           const info = svgInfo(src.markup)
           return `${src.name}: ${info.width ?? '?'}x${info.height ?? '?'}, viewBox ${
-            info.viewBox ?? 'ausente'
-          }, cores: ${info.colors.length > 0 ? info.colors.join(' ') : 'nenhuma fixa (usa currentColor ou CSS)'}`
+            info.viewBox ?? 'missing'
+          }, colours: ${info.colors.length > 0 ? info.colors.join(' ') : 'none fixed (uses currentColor or CSS)'}`
         } catch (err) {
-          return `Não foi possível ler ${src.name}: ${(err as Error).message}`
+          return `Could not read ${src.name}: ${(err as Error).message}`
         }
       },
     }),
@@ -219,19 +219,19 @@ export function createSvgTools(scope: DocumentToolScope, ctx: ToolContext | null
             markup = out.markup
             notes.push(
               out.changed === 0
-                ? 'nenhuma pintura casou — confira as cores com svg_info, ou o arquivo se pinta por <style>'
-                : `${out.changed} pintura(s) trocada(s)`,
+                ? 'no paint matched — check the colours with svg_info, or the file is painted via <style>'
+                : `${out.changed} paint(s) replaced`,
             )
           }
           if (width || height) {
             markup = resizeSvg(markup, { width, height })
-            notes.push(`tamanho ${width ?? 'auto'}x${height ?? 'auto'}`)
+            notes.push(`size ${width ?? 'auto'}x${height ?? 'auto'}`)
           }
         } catch (err) {
-          return `Não foi possível editar ${src.name}: ${(err as Error).message}`
+          return `Could not edit ${src.name}: ${(err as Error).message}`
         }
         if (notes.length === 0) {
-          return 'Nenhuma operação pedida — informe recolorMap, recolorAll, width/height ou rasterize.'
+          return 'No operation requested — provide recolorMap, recolorAll, width/height or rasterize.'
         }
 
         const base = src.name.replace(/\.svg$/i, '')
@@ -251,7 +251,7 @@ export function createSvgTools(scope: DocumentToolScope, ctx: ToolContext | null
           return {
             mediaUrl,
             alt: alt ?? '',
-            message: `${src.name} → ${rasterize} ${meta.width}x${meta.height} · ${notes.join(' · ')}. O SVG original não foi alterado.`,
+            message: `${src.name} → ${rasterize} ${meta.width}x${meta.height} · ${notes.join(' · ')}. The original SVG was not changed.`,
           }
         }
 
@@ -260,8 +260,8 @@ export function createSvgTools(scope: DocumentToolScope, ctx: ToolContext | null
           mediaUrl,
           alt: alt ?? '',
           message: `${src.name} → ${notes.join(' · ')}${
-            savedTo ? `, gravado em ${savedTo}` : ''
-          }. O original não foi alterado.`,
+            savedTo ? `, saved to ${savedTo}` : ''
+          }. The original was not changed.`,
         }
       },
     }),

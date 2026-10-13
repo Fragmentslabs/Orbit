@@ -52,7 +52,7 @@ export function resolveSafePath(ctx: ToolContext, target: string): string {
   })
   if (!allowed) {
     throw new PathAccessError(
-      `Acesso negado: ${resolved} está fora das pastas de trabalho (${roots.join(', ')})`,
+      `Access denied: ${resolved} is outside the working folders (${roots.join(', ')})`,
     )
   }
   return resolved

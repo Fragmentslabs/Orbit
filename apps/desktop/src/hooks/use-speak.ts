@@ -1,3 +1,4 @@
+import i18n from "@/src/i18n"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import type { VoiceTtsEngine } from "@shared/voice"
 import { parseVoiceStatus, type VoiceStatus } from "@/src/lib/dictation"
@@ -632,7 +633,7 @@ export function useSpeak() {
     (invoke: (ipc: NonNullable<typeof window.ipcRenderer>) => Promise<unknown>, onId?: (id: string) => void) => {
       const ipc = window.ipcRenderer
       if (!ipc) {
-        setError("sem canal de voz")
+        setError(i18n.t("voice.tts.noChannel"))
         return false
       }
       // Uma fala por vez: o clique repetido cai no stop() do botão.

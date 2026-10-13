@@ -357,7 +357,9 @@
   },
   "subAgentCard": {
     "defaultTask": "Subtarefa delegada",
-    "runningBackground": "Rodando em segundo plano…"
+    "runningBackground": "Rodando em segundo plano…",
+    "noFolder": "Não há pasta de trabalho nesta conversa — o subagente rodou em modo chat, sem acesso a arquivos.",
+    "empty": "O subagente não retornou texto."
   },
   "skillProposal": {
     "building": "Montando a skill…",
@@ -946,7 +948,14 @@
     "userSkill": "Skill do usuário",
     "useMcpTools": "Usar as ferramentas deste servidor MCP ({{count}} tools)",
     "newConversation": "Nova conversa",
-    "newConversationDesc": "Começa um chat em branco"
+    "newConversationDesc": "Começa um chat em branco",
+    "groups": {
+      "actions": "Ações",
+      "skills": "Skills",
+      "mcp": "MCP",
+      "memory": "Memória",
+      "modes": "Modos"
+    }
   },
   "sessionStore": {
     "queuedOffline": "Sem conexão com o desktop. Mensagem enfileirada para envio automático.",
@@ -1240,7 +1249,8 @@
     "commitPromptTitulo": "Mensagem do commit final",
     "commitPromptDica": "Prompt usado pelo agente que escreve a mensagem do commit final. Ele recebe a task, as anotações de todas as fases e os arquivos alterados — o mesmo contexto que uma fase recebe. Vazio usa o padrão: seguir as preferências de commits do usuário salvas na memória, com fallback em Conventional Commits (header + body de tópicos resumidos).",
     "commitPromptVazio": "Vazio = prompt padrão (preferências da memória → Conventional Commits).",
-    "commitFalhou": "Commit final falhou"
+    "commitFalhou": "Commit final falhou",
+    "conecteDesktop": "Conecte-se ao Orbit Desktop para carregar as esteiras"
   },
   "branch": {
     "title": "Branch",
