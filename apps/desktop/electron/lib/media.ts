@@ -13,8 +13,7 @@ import {
   type MediaKind,
   type MediaSource,
   type MediaUsage,
-  type DocumentFormat,
-} from '@shared/media'
+  type DocumentFormat, AUDIO_SCHEME } from '@shared/media'
 import { listKeys, readJson } from './storage'
 import { buildDocx } from './docx-package'
 import mammoth from 'mammoth'
@@ -193,6 +192,38 @@ function notifyMediaChanged(): void {
   }
 }
 
+/** Ids dos áudios (ver audio-store.ts): minúsculos, prefixo `aud_`. */
+export const SAFE_AUDIO_ID = /^aud_[a-z0-9]+\.(wav|mp3|m4a|aac|ogg|oga|opus|webm|flac)$/
+
+/** Id de um áudio a partir da URL orbit-audio:// ou do id cru. */
+export function audioMediaId(url: string): string | null {
+  const id = url.trim().replace(`${AUDIO_SCHEME}://`, '').replace(/\/+$/, '')
+  return SAFE_AUDIO_ID.test(id) ? id : null
+}
+
+/**
+ * Registra no acervo um áudio já gravado em disco (anexo ou gerado). O arquivo
+ * mora na pasta de áudio, não em media/ — o backfill de lá registraria tudo
+ * como imagem —, e o registro aponta para ele pelo `path`.
+ */
+export async function registerAudioMedia(entry: {
+  id: string
+  path: string
+  size: number
+  source: MediaSource
+  sessionId?: string
+  messageId?: string
+  name?: string
+}): Promise<void> {
+  if (!SAFE_AUDIO_ID.test(entry.id)) throw new Error(`id de áudio inválido: ${entry.id}`)
+  await withIndexLock(async () => {
+    const entries = await readIndex()
+    entries.push({ ...entry, createdAt: Date.now(), kind: 'audio' })
+    await writeIndex(entries)
+  })
+  notifyMediaChanged()
+}
+
 /** Extrai o id de uma URL orbit-media:// (ou devolve a entrada se já for um id). */
 export function mediaIdFromUrl(url: string): string | null {
   const id = url.startsWith(`${SCHEME}://`) ? url.slice(`${SCHEME}://`.length).replace(/\/+$/, '') : url
@@ -233,7 +264,7 @@ export async function linkMediaSessions(ids: string[], sessionId: string): Promi
  * completa o registro quando materializa a ImagePart.
  */
 export async function attachMediaMessage(url: string, messageId: string, sessionId?: string): Promise<void> {
-  const id = mediaIdFromUrl(url)
+  const id = mediaIdFromUrl(url) ?? audioMediaId(url)
   if (!id) return
   await withIndexLock(async () => {
     const entries = await readIndex()
@@ -296,7 +327,7 @@ export async function getMediaEntry(id: string): Promise<MediaEntry | null> {
  */
 export async function deleteMedia(id: string): Promise<boolean> {
   const isImage = SAFE_ID.test(id)
-  if (!isImage && !SAFE_ARTIFACT_ID.test(id)) return false
+  if (!isImage && !SAFE_ARTIFACT_ID.test(id) && !SAFE_AUDIO_ID.test(id)) return false
 
   const entry = await getMediaEntry(id)
   const file = entry?.path ?? (isImage ? path.join(mediaDir(), id) : null)
@@ -540,6 +571,13 @@ export function registerArtifactSchemePrivileges(): void {
         corsEnabled: true,
         stream: true,
       },
+    },
+    // Áudios das conversas (ver audio-store.ts). O Chromium aceita UMA chamada
+    // de registro, antes do app ficar pronto — por isso o scheme mora aqui.
+    // `stream` é o que deixa o <audio> tocar e buscar posição.
+    {
+      scheme: AUDIO_SCHEME,
+      privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true },
     },
   ])
 }

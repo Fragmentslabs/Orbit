@@ -1,5 +1,10 @@
 {
+  "audio": {
+    "generated": "Áudio gerado",
+    "attachment": "Áudio anexado"
+  },
   "settings": {
+    "beta": "Beta",
     "title": "Configurações",
     "description": "Configurações do Orbit",
     "tabs": {
@@ -110,7 +115,15 @@
       "newChat": "Nova conversa",
       "newChatDescription": "Começa um chat em branco",
       "settings": "Configurações",
-      "settingsDescription": "Abre as configurações do Orbit"
+      "settingsDescription": "Abre as configurações do Orbit",
+      "userSkill": "Skill do usuário",
+      "groups": {
+        "actions": "Ações",
+        "skills": "Skills",
+        "mcp": "MCP",
+        "memory": "Memória",
+        "modes": "Modos"
+      }
     },
     "quickSettings": "Configurações rápidas",
     "quickSettingsModel": "Modelo",
@@ -784,7 +797,8 @@
     "summaryCard": "Resumo das mensagens anteriores (contexto compactado)",
     "brokenMessage": "Não foi possível mostrar esta mensagem.",
     "earlierMessages_one": "Mostrar {{count}} mensagem anterior",
-    "earlierMessages_other": "Mostrar {{count}} mensagens anteriores"
+    "earlierMessages_other": "Mostrar {{count}} mensagens anteriores",
+    "noModelSelected": "Nenhum modelo selecionado. Configure um provedor em Configurações."
   },
   "usage": {
     "inputIn": "{{count}} de entrada",
@@ -808,6 +822,7 @@
     "atLimit": "Limite atingido — a compactação automática falhou",
     "estimated": "Estimativa",
     "live": "Ao vivo",
+    "compactWaitTurn": "Espere a resposta terminar para compactar.",
     "compactNow": "Compactar histórico agora"
   },
   "images": {
@@ -831,7 +846,9 @@
   },
   "subagent": {
     "defaultTask": "Subtarefa delegada",
-    "running": "Rodando em segundo plano…"
+    "running": "Rodando em segundo plano…",
+    "noFolder": "Não há pasta de trabalho nesta conversa — o subagente rodou em modo chat, sem acesso a arquivos.",
+    "empty": "O subagente não retornou texto."
   },
   "attachments": {
     "image": "Imagem",
@@ -896,7 +913,13 @@
     "batchWaiting_one": "{{count}} pedido de worker aguardando — responda tudo de uma vez",
     "batchWaiting_other": "{{count}} pedidos de workers aguardando — responda tudo de uma vez",
     "dismissAll": "Negar/dispensar tudo",
-    "answerAll": "Responder tudo"
+    "answerAll": "Responder tudo",
+    "comparePrompt": {
+      "intro": "Preciso de ajuda para decidir entre as opções da pergunta abaixo. Por favor, analise cada opção listando vantagens, desvantagens e em qual cenário é mais indicada:",
+      "options": "Opções:",
+      "context": "Contexto adicional (outras perguntas do agente):",
+      "explain": "Para cada opção, explique:\n- Vantagens\n- Desvantagens\n- Em qual cenário é mais indicada"
+    }
   },
   "connectApp": {
     "title": "Conectar App",
@@ -940,7 +963,8 @@
     "createDesc": "Nome da branch a criar. Você será trocado para ela imediatamente.",
     "createPlaceholder": "feature/minha-mudanca",
     "createAndSwitch": "Criar e trocar",
-    "creating": "Criando…"
+    "creating": "Criando…",
+    "agentResolvePrompt": "Tenho mudanças não commitadas no repositório e preciso trocar para a branch \"{{branch}}\". Faça commit ou stash das mudanças e depois execute o checkout para a branch \"{{branch}}\"."
   },
   "search": {
     "placeholder": "Buscar conversas...",
@@ -971,7 +995,8 @@
     "title": "Projeto novo por aqui",
     "description": "Posso analisar o projeto e guardar numa árvore de memórias só o que importa (regras de negócio, como as partes conversam, decisões, convenções) — assim os próximos chats já começam sabendo o contexto, sem você explicar de novo.",
     "analyze": "Analisar projeto",
-    "later": "Agora não"
+    "later": "Agora não",
+    "noModel": "Nenhum modelo selecionado — configure um provedor."
   },
   "loopConfig": {
     "title": "Configuração do Loop",
@@ -1802,7 +1827,8 @@
       "apiKey": "Chave de API",
       "optional": "(opcional)",
       "apiKeyPlaceholder": "Deixe em branco para manter a atual"
-    }
+    },
+    "loadError": "Falha ao carregar provedores. Verifique sua conexão e tente novamente."
   },
   "media": {
     "searchPlaceholder": "Buscar por nome ou tarefa",
@@ -2368,17 +2394,32 @@
   "voice": {
     "tts": {
       "speak": "Ler em voz alta",
+      "generating": "Gerando o áudio… clique para cancelar",
       "stop": "Parar",
       "error": "Não foi possível ler esta mensagem em voz alta.",
       "needsModel": "Baixe uma voz de leitura em Configurações → Voz.",
-      "setupModel": "Configure uma voz de leitura em Configurações → Voz."
+      "setupModel": "Configure uma voz de leitura em Configurações → Voz.",
+      "noChannel": "sem canal de voz"
     },
     "stt": {
       "dictate": "Ditar",
       "listening": "Ouvindo…",
+      "listeningTap": "Ouvindo… clique para parar (Esc descarta)",
       "error": "Não foi possível transcrever o áudio.",
       "needsModel": "Baixe um modelo de fala em Configurações → Voz.",
       "setupModel": "Configure o ditado em Configurações → Voz."
+    },
+    "call": {
+      "start": "Iniciar chamada de voz",
+      "setup": "Configure o ditado em Configurações → Voz para usar a chamada.",
+      "listening": "Ouvindo… pode falar",
+      "thinking": "Pensando…",
+      "speaking": "Falando…",
+      "interrupt": "Interromper e falar",
+      "interruptShort": "Interromper",
+      "hangUp": "Encerrar chamada",
+      "failed": "A chamada caiu.",
+      "replyError": "O agente não conseguiu responder."
     },
     "settings": {
       "sections": {
@@ -2387,7 +2428,17 @@
         "stt": "Fala em texto",
         "sttHint": "Transforma sua voz em texto no campo de mensagem.",
         "models": "Modelos",
-        "modelsHint": "Baixe e remova os modelos usados na leitura e na transcrição."
+        "modelsHint": "Baixe e remova os modelos usados na leitura e na transcrição.",
+        "call": "Modo chamada",
+        "callHint": "Conversa por voz em tempo real: você fala, o agente responde curto e em voz alta."
+      },
+      "call": {
+        "enableTitle": "Botão de chamada",
+        "enableHint": "Mostra o botão de chamada ao lado do microfone. As respostas na chamada vêm curtas e sem formatação.",
+        "silenceTitle": "Pausa para responder",
+        "silenceHint": "Quanto silêncio depois da sua fala encerra a sua vez e envia a mensagem.",
+        "silenceValue": "{{seconds}} s",
+        "needs": "A chamada usa o motor de ditado e a leitura em voz alta configurados acima."
       },
       "languages": {
         "auto": "Detectar automaticamente",
@@ -2417,6 +2468,8 @@
         "engineModelFallback": "O modelo de voz não está disponível, então a leitura usa o motor local. {{reason}}",
         "voiceTitle": "Voz",
         "voiceHint": "Voz usada na leitura. F1–F5 são femininas, M1–M5 masculinas.",
+        "preview": "Ouvir esta voz",
+        "previewStop": "Parar",
         "voiceF1": "F1",
         "voiceF2": "F2 (padrão)",
         "voiceF3": "F3",

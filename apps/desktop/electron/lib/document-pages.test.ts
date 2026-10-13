@@ -126,7 +126,7 @@ describe('documentHeader', () => {
       from: 1,
       to: 3,
     })
-    expect(header).toContain('paginas="40"')
+    expect(header).toContain('pages="40"')
     expect(header).toContain('offset=4')
   })
 
@@ -137,22 +137,22 @@ describe('documentHeader', () => {
 
   it('planilha é anunciada em abas, não em páginas', () => {
     const planilha = doc([{ num: 1, text: 'a', label: 'Custos' }], { kind: 'spreadsheet' })
-    expect(documentHeader('c.xlsx', planilha, { from: 1, to: 1 })).toContain('abas="1"')
+    expect(documentHeader('c.xlsx', planilha, { from: 1, to: 1 })).toContain('sheets="1"')
   })
 
   it('documento cortado avisa o corte', () => {
     const cortado = doc([page(1)], { truncated: true })
-    expect(documentHeader('g.pdf', cortado, { from: 1, to: 1 })).toContain('cortado')
+    expect(documentHeader('g.pdf', cortado, { from: 1, to: 1 })).toContain('truncated')
   })
 })
 
 describe('pageLabel', () => {
   it('usa o nome da aba quando existe', () => {
-    expect(pageLabel({ num: 2, text: '', label: 'Custos' }, 'spreadsheet')).toBe('aba "Custos"')
+    expect(pageLabel({ num: 2, text: '', label: 'Custos' }, 'spreadsheet')).toBe('sheet "Custos"')
   })
 
   it('DOCX fala em bloco, porque a paginação ali é sintética', () => {
-    expect(pageLabel({ num: 2, text: '' }, 'docx')).toBe('bloco 2')
+    expect(pageLabel({ num: 2, text: '' }, 'docx')).toBe('block 2')
   })
 
   it('PDF fala em página, que é a paginação real do arquivo', () => {
@@ -173,12 +173,12 @@ describe('pageLocator', () => {
 
   it('DOCX não finge ter página do Word', () => {
     const locator = pageLocator({ num: 12, text: '' }, 'docx')
-    expect(locator).toBe('bloco12')
+    expect(locator).toBe('block12')
     expect(locator).not.toMatch(/^p\d/)
   })
 
   it('planilha leva o nome da aba junto do offset', () => {
-    expect(pageLocator({ num: 3, text: '', label: 'Custos' }, 'spreadsheet')).toBe('aba3 (Custos)')
+    expect(pageLocator({ num: 3, text: '', label: 'Custos' }, 'spreadsheet')).toBe('sheet3 (Custos)')
   })
 
   it('sempre carrega o número que serve de offset na leitura', () => {

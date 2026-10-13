@@ -35,8 +35,8 @@ export async function verifyTurnChanges(ctx: ToolContext): Promise<VerifyChanges
     return {
       changes: [],
       note: turn?.failed
-        ? 'nenhuma alteração gravada (snapshot inicial do turno falhou: ' + (turn.error ?? 'motivo desconhecido') + ')'
-        : 'nenhuma alteração gravada',
+        ? 'no changes recorded (the turn\'s initial snapshot failed: ' + (turn.error ?? 'unknown reason') + ')'
+        : 'no changes recorded',
     }
   }
   try {
@@ -67,7 +67,7 @@ export async function verifyTurnChanges(ctx: ToolContext): Promise<VerifyChanges
     }
     return { changes }
   } catch (err) {
-    return { changes: [], note: `erro ao verificar alterações: ${errorToText(err)}` }
+    return { changes: [], note: `failed to check changes: ${errorToText(err)}` }
   }
 }
 

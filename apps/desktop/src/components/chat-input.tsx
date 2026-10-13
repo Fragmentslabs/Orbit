@@ -30,6 +30,7 @@ import { ChatInputDraft } from "@/src/components/chat-input-draft"
 import { ReplyBar } from "@/src/components/reply-bar"
 import { withReplyPrefix } from "@/src/stores/message-reply"
 import { DictationButton } from "@/src/components/dictation-button"
+import { VoiceCallButton, VoiceCallPanel, useVoiceCallControl } from "@/src/components/voice-call"
 import { PendingAttachmentSync } from "@/src/components/pending-attachment-sync"
 import { clearInputDraft } from "@/src/stores/chat-draft"
 import { QueueIndicator } from "@/src/components/queue-indicator"
@@ -146,6 +147,27 @@ export function ChatInput({ onSubmit, status, onStop, sessionId, draftKey, onPro
     reasoning: { enabled: thinking, variantId },
   }), [search, browser, simple, brain, brainContext, thinking, variantId])
 
+  /** Turno do modo chamada: mesmo caminho do Enter (fila quando ocupado), com
+   *  `voiceCall` para o agente responder curto e falado. */
+  const submitVoice = useCallback(
+    (text: string): boolean => {
+      if (noProvider) {
+        onProviderBlocked?.()
+        return false
+      }
+      const options = { ...buildOptions(), voiceCall: true }
+      if (busy) {
+        if (!sessionId) return false
+        enqueueForSend(sessionId, text, options, mode, { files: [] })
+        return true
+      }
+      void onSubmit(text, options)
+      return true
+    },
+    [noProvider, onProviderBlocked, buildOptions, busy, sessionId, enqueueForSend, mode, onSubmit],
+  )
+  const voiceCall = useVoiceCallControl({ sessionId, submit: submitVoice })
+
   const slashCommands = useMemo<SlashCommand[]>(() => {
     const toggle = (fn: () => void) => ({ setText }: { setText: (t: string) => void }) => {
       fn()
@@ -255,7 +277,8 @@ export function ChatInput({ onSubmit, status, onStop, sessionId, draftKey, onPro
         {/* Microfone no canto SUPERIOR direito, no nível da primeira linha do
             texto: absoluto para não empurrar o conteúdo, com a folga à direita
             reservada no próprio textarea (pr-10). */}
-        <div className="absolute right-2 top-2 z-10 flex items-center">
+        <div className="absolute right-2 top-2 z-10 flex items-center gap-0.5">
+          <VoiceCallPanel control={voiceCall} />
           <DictationButton sessionId={sessionId} />
         </div>
         <PromptInputAttachments className="!px-3 !py-1.5">
@@ -293,6 +316,8 @@ export function ChatInput({ onSubmit, status, onStop, sessionId, draftKey, onPro
               <ModelPicker sessionId={sessionId} />
             </div>
             <SendButtonGroup
+              emptySlot={voiceCall.inSlot ? <VoiceCallButton control={voiceCall} /> : undefined}
+              emptySlotAlways={voiceCall.call.active}
               busy={busy}
               cancelling={status === "cancelling"}
               disabled={false}

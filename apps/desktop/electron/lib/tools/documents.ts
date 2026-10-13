@@ -48,9 +48,9 @@ async function produzidosAqui(sessionId: string): Promise<string | null> {
   if (escritos.length === 0) return null
   const nomes = escritos
     .slice(0, 10)
-    .map((entry) => `${entry.id} (${entry.name ?? 'sem título'})`)
+    .map((entry) => `${entry.id} (${entry.name ?? 'untitled'})`)
     .join(', ')
-  return `Além destes, ${escritos.length} documento(s) escrito(s) por você nesta conversa — use read_document/update_document com o id: ${nomes}.`
+  return `Besides these, ${escritos.length} document(s) written by you in this conversation — use read_document/update_document with the id: ${nomes}.`
 }
 
 export function createDocumentTools(sessionId: string) {
@@ -62,13 +62,13 @@ export function createDocumentTools(sessionId: string) {
       execute: async () => {
         const docs = await listSessionDocuments(sessionId)
         const escritos = await produzidosAqui(sessionId)
-        if (docs.length === 0 && !escritos) return 'Nenhum documento disponível nesta conversa.'
+        if (docs.length === 0 && !escritos) return 'No documents available in this conversation.'
         const linhas = docs.map((d) => {
-          const unit = d.kind === 'spreadsheet' ? 'abas' : d.kind === 'docx' ? 'blocos' : 'páginas'
-          const escopo = d.shared ? 'fonte da pasta' : 'anexo desta conversa'
-          return `${d.id}: ${d.filename} (${d.kind}, ${d.totalPages} ${unit}, ${escopo}${d.truncated ? ', cortado no limite de tamanho' : ''})`
+          const unit = d.kind === 'spreadsheet' ? 'sheets' : d.kind === 'docx' ? 'blocks' : 'pages'
+          const escopo = d.shared ? 'folder source' : 'attached in this conversation'
+          return `${d.id}: ${d.filename} (${d.kind}, ${d.totalPages} ${unit}, ${escopo}${d.truncated ? ', truncated at the size limit' : ''})`
         })
-        if (docs.length === 0) linhas.push('Nenhum documento ANEXADO nesta conversa.')
+        if (docs.length === 0) linhas.push('No documents ATTACHED in this conversation.')
         if (escritos) linhas.push(escritos)
         return linhas.join('\n')
       },
@@ -91,11 +91,11 @@ export function createDocumentTools(sessionId: string) {
         try {
           regex = new RegExp(pattern, 'i')
         } catch (err) {
-          return `Expressão inválida: ${(err as Error).message}`
+          return `Invalid expression: ${(err as Error).message}`
         }
         const hits = await searchSessionDocuments(sessionId, regex, docId, MAX_HITS)
         if (hits.length === 0) {
-          return 'Nenhuma ocorrência. Tente outros termos (sinônimos, o termo em outro idioma) ou doc_read para percorrer o documento.'
+          return 'No matches. Try other terms (synonyms, the term in another language) or doc_read to go through the document.'
         }
         const suffix = hits.length >= MAX_HITS ? '\n… (resultados truncados)' : ''
         return (
@@ -119,10 +119,10 @@ export function createDocumentTools(sessionId: string) {
       }),
       execute: async ({ docId, offset, limit }) => {
         const found = await readSessionDocument(sessionId, docId)
-        if (!found) return `Documento não encontrado: ${docId}. Use doc_list para ver os disponíveis.`
+        if (!found) return `Document not found: ${docId}. Use doc_list to see the available ones.`
         const { doc, extracted } = found
         if (extracted.totalPages === 0) {
-          return `<document name="${doc.filename}">\n(nenhum texto extraível — provavelmente um PDF digitalizado. Use pdf_view_page para VER a página: sem camada de texto, olhar é a única forma de ler.)\n</document>`
+          return `<document name="${doc.filename}">\n(no extractable text — probably a scanned PDF. Use pdf_view_page to SEE the page: with no text layer, looking is the only way to read it.)\n</document>`
         }
         const { from, to, pages } = pageWindow(extracted, offset, limit, DEFAULT_DOC_PAGES, MAX_DOC_PAGES)
         // As linhas vêm numeradas para a citação poder apontar o trecho, e não
@@ -131,7 +131,7 @@ export function createDocumentTools(sessionId: string) {
           .map(
             (page) =>
               `--- ${pageLabel(page, extracted.kind)} ---\n${
-                page.text ? numberLines(page.text) : '(página sem texto)'
+                page.text ? numberLines(page.text) : '(page has no text)'
               }`,
           )
           .join('\n\n')
@@ -166,34 +166,34 @@ export function createPdfViewTool(sessionId: string, ctx: ToolContext | null, mo
     }),
     execute: async ({ docId, filePath, page, scale }) => {
       if (!modelVision) {
-        return 'Este modelo não enxerga imagens, então renderizar a página não ajudaria. Use doc_read/doc_search para o texto, ou peça ao usuário para trocar para um modelo com visão.'
+        return 'This model cannot see images, so rendering the page would not help. Use doc_read/doc_search for the text, or ask the user to switch to a model with vision.'
       }
 
       let bytes: Buffer
       let label: string
       if (filePath) {
-        if (!ctx) return 'filePath só funciona no modo código. Use docId.'
-        if (documentKindOf(filePath) !== 'pdf') return `Não é um PDF: ${filePath}.`
+        if (!ctx) return 'filePath only works in code mode. Use docId.'
+        if (documentKindOf(filePath) !== 'pdf') return `Not a PDF: ${filePath}.`
         try {
           bytes = await fsp.readFile(resolveSafePath(ctx, filePath))
         } catch (err) {
-          return `Não foi possível abrir ${filePath}: ${(err as Error).message}`
+          return `Could not open ${filePath}: ${(err as Error).message}`
         }
         label = filePath
       } else if (docId) {
         const found = await readSessionDocument(sessionId, docId)
-        if (!found) return `Documento não encontrado: ${docId}.`
+        if (!found) return `Document not found: ${docId}.`
         if (found.doc.kind !== 'pdf') {
-          return `${docId} (${found.doc.filename}) não é PDF — é ${found.doc.kind}. Use doc_read.`
+          return `${docId} (${found.doc.filename}) is not a PDF — it is ${found.doc.kind}. Use doc_read.`
         }
         const stored = await readSessionDocumentBytes(sessionId, docId)
         if (!stored) {
-          return `O arquivo original de ${found.doc.filename} não foi preservado (anexo anterior a este suporte). Anexe de novo para poder ver as páginas.`
+          return `The original file of ${found.doc.filename} was not kept (attached before this feature existed). Attach it again to be able to see the pages.`
         }
         bytes = stored
         label = found.doc.filename
       } else {
-        return 'Informe docId (documento anexado) ou filePath (PDF da pasta de trabalho).'
+        return 'Provide docId (attached document) or filePath (PDF in the working folder).'
       }
 
       const wanted = Math.max(1, Math.round(page ?? 1))
@@ -201,23 +201,23 @@ export function createPdfViewTool(sessionId: string, ctx: ToolContext | null, mo
         const rendered = await rasterizePdf(bytes, { pages: [wanted], scale })
         const first = rendered.pages[0]
         if (!first) {
-          return `Página ${wanted} não existe em ${label} — o documento tem ${rendered.total}.`
+          return `Page ${wanted} does not exist in ${label} — the document has ${rendered.total}.`
         }
 
         // Acima do teto o provedor rejeita a imagem; reduzir a escala é a saída
         // que o modelo tem, então a mensagem diz isso em vez de só falhar.
         if (first.png.length > MAX_MODEL_IMAGE_BYTES) {
-          return `A página ${wanted} renderizada ficou com ${Math.round(first.png.length / 1024)}KB, acima do limite de ${Math.round(MAX_MODEL_IMAGE_BYTES / 1024)}KB. Repita com scale menor (ex.: 1).`
+          return `Rendered page ${wanted} is ${Math.round(first.png.length / 1024)}KB, above the ${Math.round(MAX_MODEL_IMAGE_BYTES / 1024)}KB limit. Retry with a smaller scale (e.g. 1).`
         }
         return {
           type: 'content' as const,
           value: [
-            { type: 'text' as const, text: `${label} — página ${first.pageNumber} (${first.width}×${first.height})` },
+            { type: 'text' as const, text: `${label} — page ${first.pageNumber} (${first.width}×${first.height})` },
             { type: 'image-data' as const, data: first.png.toString('base64'), mediaType: 'image/png' },
           ],
         }
       } catch (err) {
-        return `Erro ao renderizar ${label}: ${(err as Error).message}`
+        return `Failed to render ${label}: ${(err as Error).message}`
       }
     },
   })

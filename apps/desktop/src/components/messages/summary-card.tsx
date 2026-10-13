@@ -4,6 +4,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { cn } from "@/lib/utils"
 import type { ChatMessage } from "@shared/chat"
 import { messageText } from "@/src/lib/message-utils"
+import { summaryBody } from "@/src/lib/summary"
 import { AssistantMarkdown } from "@/src/components/messages/shared"
 import { useTranslation } from "react-i18next"
 
@@ -24,7 +25,7 @@ export function SummaryCard({ message }: { message: ChatMessage }) {
       </CollapsibleTrigger>
       <CollapsibleContent>
         <div className="rounded-b-lg border border-t-0 bg-muted/10 px-3 py-2 text-sm">
-          <AssistantMarkdown muted>{messageText(message)}</AssistantMarkdown>
+          <AssistantMarkdown muted>{summaryBody(messageText(message))}</AssistantMarkdown>
         </div>
       </CollapsibleContent>
     </Collapsible>

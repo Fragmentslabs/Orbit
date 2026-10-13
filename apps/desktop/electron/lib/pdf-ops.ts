@@ -110,13 +110,13 @@ async function stampWatermark(doc: PDFDocument, text: string): Promise<void> {
 
 /** Junta vários PDFs num só, na ordem recebida. */
 export async function mergePdfs(sources: Buffer[]): Promise<{ bytes: Buffer; pages: number }> {
-  if (sources.length === 0) throw new Error('Nenhum PDF para juntar.')
+  if (sources.length === 0) throw new Error('No PDFs to merge.')
   const out = await PDFDocument.create()
   for (const source of sources) {
     const doc = await PDFDocument.load(source)
     const copied = await out.copyPages(doc, doc.getPageIndices())
     for (const page of copied) out.addPage(page)
-    if (out.getPageCount() > MAX_PAGES) throw new Error(`Resultado passaria de ${MAX_PAGES} páginas.`)
+    if (out.getPageCount() > MAX_PAGES) throw new Error(`The result would exceed ${MAX_PAGES} pages.`)
   }
   const bytes = Buffer.from(await out.save())
   return { bytes, pages: out.getPageCount() }
@@ -139,7 +139,7 @@ export async function transformPdf(
   if (wanted) {
     out = await PDFDocument.create()
     const indices = wanted.filter((n) => n >= 1 && n <= total).map((n) => n - 1)
-    if (indices.length === 0) throw new Error(`Nenhuma página válida (o documento tem ${total}).`)
+    if (indices.length === 0) throw new Error(`No valid pages (the document has ${total}).`)
     const copied = await out.copyPages(doc, indices)
     for (const page of copied) out.addPage(page)
   } else {

@@ -31,7 +31,7 @@ const API_DOC = `Available inside the script (global \`orbit\`, all async — us
 - console.log(...)  → comes back in the result`
 
 function describeCaptures(captures: CaptureItem[]): string {
-  if (captures.length === 0) return 'Nenhuma imagem capturada.'
+  if (captures.length === 0) return 'No images captured.'
   return captures
     .map((c) => `- ${c.name}: ${c.mediaUrl} (${c.width}×${c.height}, ${Math.round(c.size / 1024)}KB)`)
     .join('\n')
@@ -49,12 +49,12 @@ function formatResult(
     lines.push('', `## Retorno\n${JSON.stringify(result.returned, null, 2).slice(0, 2000)}`)
   }
   if (result.error) {
-    lines.push('', `## Erro\n${result.error}`)
+    lines.push('', `## Error\n${result.error}`)
   }
   if (result.captures.length > 0) {
     lines.push(
       '',
-      'As imagens ficaram salvas (não estão no seu contexto). Para mostrar uma ao usuário: show_image({ media: "<mediaUrl>" }).',
+      'The images were saved (they are not in your context). To show one to the user: show_image({ media: "<mediaUrl>" }).',
     )
   }
   return lines.join('\n')
@@ -85,8 +85,8 @@ export function createBrowserScriptTools(ctx: ToolContext): ToolSet {
           source: 'script',
         })
         const header = result.timedOut
-          ? `Script "${result.taskId}" interrompido por timeout — capturas até ali:`
-          : `Script "${result.taskId}" executado — ${result.captures.length} imagem(ns):`
+          ? `Script "${result.taskId}" stopped by timeout — captures up to that point:`
+          : `Script "${result.taskId}" finished — ${result.captures.length} image(s):`
         return formatResult(result, header)
       },
     }),
@@ -127,8 +127,8 @@ for (let i = 0; i < steps.length; i++) {
           source: 'batch',
         })
         const header = result.timedOut
-          ? `Lote "${result.taskId}" interrompido por timeout — capturas até ali:`
-          : `Lote "${result.taskId}": ${result.captures.length}/${steps.length} imagem(ns) capturada(s):`
+          ? `Batch "${result.taskId}" stopped by timeout — captures up to that point:`
+          : `Batch "${result.taskId}": ${result.captures.length}/${steps.length} image(s) captured:`
         return formatResult(result, header)
       },
     }),

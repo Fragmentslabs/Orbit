@@ -1,3 +1,4 @@
+import i18n from "@/src/i18n"
 import { create } from "zustand"
 
 import type { ModelRotation, RotationConfig } from "@shared/chat"
@@ -84,7 +85,7 @@ export const useModelRotationStore = create<ModelRotationState>((set, get) => {
     ...loadState(),
 
     create: (name) => {
-      const rotation: ModelRotation = { id: newRotationId(), name: name.trim() || "Rotação", models: [] }
+      const rotation: ModelRotation = { id: newRotationId(), name: name.trim() || i18n.t("rotation.newName"), models: [] }
       const { rotations, sessionOverrides } = get()
       persist({ rotations: [...rotations, rotation], sessionOverrides })
       return rotation

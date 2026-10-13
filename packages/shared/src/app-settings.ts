@@ -1,5 +1,5 @@
 import type { ReasoningConfig } from './chat'
-import { VOICE_DEFAULTS, type VoiceEngineId, type VoiceSettings, type VoiceTtsEngine } from './voice'
+import { VOICE_CALL_SILENCE_OPTIONS, VOICE_DEFAULTS, type VoiceEngineId, type VoiceSettings, type VoiceTtsEngine } from './voice'
 
 /**
  * Configurações gerais do app (Preferências → Geral e Navegador).
@@ -120,7 +120,7 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   },
   // Cópia própria dos padrões: o objeto do voice.ts é constante compartilhada e
   // não pode virar o alvo de uma edição acidental da UI.
-  voice: { tts: { ...VOICE_DEFAULTS.tts }, stt: { ...VOICE_DEFAULTS.stt } },
+  voice: { tts: { ...VOICE_DEFAULTS.tts }, stt: { ...VOICE_DEFAULTS.stt }, call: { ...VOICE_DEFAULTS.call } },
 }
 
 export const AUTO_ARCHIVE_DAY_OPTIONS = [2, 3, 7, 14, 30, 90] as const
@@ -142,6 +142,7 @@ function voiceSettings(raw: unknown, d: VoiceSettings): VoiceSettings {
   const v = (raw && typeof raw === 'object' ? raw : {}) as Partial<VoiceSettings>
   const tts = (v.tts && typeof v.tts === 'object' ? v.tts : {}) as Partial<VoiceSettings['tts']>
   const stt = (v.stt && typeof v.stt === 'object' ? v.stt : {}) as Partial<VoiceSettings['stt']>
+  const call = (v.call && typeof v.call === 'object' ? v.call : {}) as Partial<VoiceSettings['call']>
   const voz = typeof tts.voice === 'string' ? tts.voice.trim().toUpperCase() : ''
   const lang = typeof tts.lang === 'string' ? tts.lang.trim().toLowerCase() : ''
   const speed = typeof tts.speed === 'number' && Number.isFinite(tts.speed)
@@ -168,6 +169,13 @@ function voiceSettings(raw: unknown, d: VoiceSettings): VoiceSettings {
       live: typeof stt.live === 'boolean' ? stt.live : d.stt.live,
       preload: typeof stt.preload === 'boolean' ? stt.preload : d.stt.preload,
       threads,
+    },
+    call: {
+      enabled: typeof call.enabled === 'boolean' ? call.enabled : d.call.enabled,
+      // Só os valores que a tela oferece: um número qualquer salvo volta ao padrão.
+      silenceMs: (VOICE_CALL_SILENCE_OPTIONS as readonly number[]).includes(call.silenceMs as number)
+        ? (call.silenceMs as number)
+        : d.call.silenceMs,
     },
   }
 }

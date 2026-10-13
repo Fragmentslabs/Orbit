@@ -1,3 +1,4 @@
+import i18n from "@/src/i18n"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import type { VoiceTtsEngine } from "@shared/voice"
 import { parseVoiceStatus, type VoiceStatus } from "@/src/lib/dictation"
@@ -23,6 +24,10 @@ const CHANNEL = {
   chunk: "voice:tts:chunk",
   done: "voice:tts:done",
   cancel: "voice:tts:cancel",
+  streamStart: "voice:tts:stream-start",
+  streamAppend: "voice:tts:stream-append",
+  streamEnd: "voice:tts:stream-end",
+  streamClear: "voice:tts:stream-clear",
 } as const
 
 /** Folga entre pedaços que chegam atrasados e o agendamento em si. */
@@ -54,6 +59,8 @@ interface ChunkPayload {
   sr?: number
   i?: number
   n?: number
+  /** Nº da frase, só na fala contínua (o modo chamada mostra a que está tocando). */
+  seg?: number
 }
 
 /** O que o main manda em `voice:tts:done` (com `error` quando a síntese falhou). */
@@ -169,6 +176,8 @@ export class ChunkPlayer {
   private readonly createContext: AudioContextFactory
   private context: AudioContext | null = null
   private sources: AudioBufferSourceNode[] = []
+  /** Frase (fala contínua) e fim, no relógio do contexto, de cada pedaço agendado. */
+  private meta = new Map<AudioBufferSourceNode, { seg?: number; end: number }>()
   private nextAt = 0
 
   constructor(createContext: AudioContextFactory) {
@@ -197,9 +206,12 @@ export class ChunkPlayer {
     return this.sources.length
   }
 
-  /** Agenda um pedaço emendado no fim do anterior. Um pedaço vazio não agenda nada. */
-  schedule(samples: Float32Array, sampleRate: number): void {
-    if (samples.length === 0) return
+  /**
+   * Agenda um pedaço emendado no fim do anterior e devolve em quantos segundos
+   * ele começa a tocar. Um pedaço vazio não agenda nada (devolve `null`).
+   */
+  schedule(samples: Float32Array, sampleRate: number, seg?: number): number | null {
+    if (samples.length === 0) return null
     const context = this.ensure()
     if (context.state === "suspended") void context.resume()
     const buffer = context.createBuffer(1, samples.length, sampleRate)
@@ -212,11 +224,43 @@ export class ChunkPlayer {
     source.start(at)
     this.nextAt = at + buffer.duration
     this.sources.push(source)
+    this.meta.set(source, { seg, end: this.nextAt })
     source.onended = () => {
       this.sources = this.sources.filter((current) => current !== source)
+      this.meta.delete(source)
       source.disconnect()
       this.onEnded?.()
     }
+    return Math.max(0, at - context.currentTime)
+  }
+
+  /**
+   * Tira da fila o áudio das frases DEPOIS de `seg` (a que está tocando segue
+   * até o fim). Os pedaços seguintes passam a emendar no fim do que ficou.
+   */
+  dropAfter(seg: number): void {
+    const keep: AudioBufferSourceNode[] = []
+    let end = 0
+    for (const source of this.sources) {
+      const info = this.meta.get(source)
+      if (info?.seg !== undefined && info.seg > seg) {
+        source.onended = null
+        try {
+          source.stop()
+        } catch {
+          // Já tinha terminado sozinho.
+        }
+        source.disconnect()
+        this.meta.delete(source)
+        continue
+      }
+      keep.push(source)
+      end = Math.max(end, info?.end ?? 0)
+    }
+    const dropped = keep.length !== this.sources.length
+    this.sources = keep
+    this.nextAt = end
+    if (dropped) this.onEnded?.()
   }
 
   /** Interrompe o que está agendado — o que já tocou não volta atrás. */
@@ -231,6 +275,7 @@ export class ChunkPlayer {
       source.disconnect()
     }
     this.sources = []
+    this.meta.clear()
     this.nextAt = 0
   }
 
@@ -357,6 +402,34 @@ export function useTtsStatus(enabled: boolean, engine: VoiceTtsEngine = "model")
  */
 export function useSpeak() {
   const [speaking, setSpeaking] = useState(false)
+  /** Pediu a fala e nenhum pedaço chegou ainda: o motor está gerando o áudio. */
+  const [generating, setGenerating] = useState(false)
+  /** Frase da fala contínua que está tocando AGORA (`seg` dos pedaços). */
+  const [segment, setSegment] = useState<number | null>(null)
+  /** Texto da frase que está tocando (o que foi anexado com aquele `seg`). */
+  const [segmentText, setSegmentText] = useState<string | null>(null)
+  const segTextsRef = useRef(new Map<number, string>())
+  /** Há som saindo neste instante (na fala contínua pode haver vãos entre frases). */
+  const [audible, setAudible] = useState(false)
+  const lastSegRef = useRef<number | null>(null)
+  const segTimersRef = useRef<{ seg: number; timer: ReturnType<typeof setTimeout> }[]>([])
+  const clearSegments = useCallback(() => {
+    for (const { timer } of segTimersRef.current) clearTimeout(timer)
+    segTimersRef.current = []
+    lastSegRef.current = null
+    playingSegRef.current = null
+    droppedRef.current = null
+    segTextsRef.current.clear()
+    setSegmentText(null)
+    setSegment(null)
+    setAudible(false)
+  }, [])
+  const generatingRef = useRef(false)
+  const setGen = useCallback((value: boolean) => {
+    if (generatingRef.current === value) return
+    generatingRef.current = value
+    setGenerating(value)
+  }, [])
   const [error, setError] = useState<string | null>(null)
 
   const playerRef = useRef<ChunkPlayer | null>(null)
@@ -364,6 +437,20 @@ export function useSpeak() {
   /** `voice:tts:start` ainda não devolveu o id (pedaços podem ter chegado antes). */
   const awaitingRef = useRef(false)
   const earlyRef = useRef<ChunkPayload[]>([])
+  /** `done` que chegou antes do id: sem guardá-lo, um erro imediato do main se
+   *  perdia e o botão ficava "falando" (vermelho, pulsando) para sempre. */
+  const earlyDoneRef = useRef<DonePayload | null>(null)
+  /** Fala contínua ainda aberta (chegam mais frases): a rede do `done` espera. */
+  const streamOpenRef = useRef(false)
+  /** Frases anexadas antes de o main devolver o id; e se o fim também já veio. */
+  const pendingAppendRef = useRef<string[]>([])
+  const pendingEndRef = useRef(false)
+  /** Frases já mandadas ao main nesta fala contínua (= o `seg` da próxima). */
+  const sentCountRef = useRef(0)
+  /** Depois de um corte: pedaços com `seg` em (keep, até] chegam mortos. */
+  const droppedRef = useRef<{ keep: number; upTo: number } | null>(null)
+  /** Frase tocando agora, para o corte saber o que preservar. */
+  const playingSegRef = useRef<number | null>(null)
   const doneRef = useRef(false)
   const cancelledRef = useRef(false)
   const guardRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -387,10 +474,16 @@ export function useSpeak() {
     idRef.current = null
     awaitingRef.current = false
     earlyRef.current = []
+    earlyDoneRef.current = null
+    streamOpenRef.current = false
+    pendingAppendRef.current = []
+    pendingEndRef.current = false
     doneRef.current = false
     cancelledRef.current = false
     setSpeaking(false)
-  }, [clearGuard, getPlayer])
+    setGen(false)
+    clearSegments()
+  }, [clearGuard, clearSegments, getPlayer, setGen])
 
   /** Fim normal: o áudio acabou e o main confirmou a fala. */
   const finish = useCallback(() => {
@@ -416,6 +509,12 @@ export function useSpeak() {
    * fila, então um bloco final longo não é cortado por ela).
    */
   const armGuard = useCallback(() => {
+    // Fala contínua aberta: o agente pode demorar a mandar a próxima frase, e
+    // isso não é um `done` perdido. A rede só arma depois do fim.
+    if (streamOpenRef.current) {
+      clearGuard()
+      return
+    }
     const player = getPlayer()
     const seconds = Math.max(player.scheduledEnd - player.clock, 0) + DONE_GRACE_SECONDS
     clearGuard()
@@ -428,15 +527,36 @@ export function useSpeak() {
       // Pedaço vazio não agenda nada — mas não pode quebrar o encadeamento.
       if (samples.length === 0) return
       const sampleRate = typeof chunk.sr === "number" && chunk.sr > 0 ? chunk.sr : TTS_SAMPLE_RATE
-      getPlayer().schedule(samples, sampleRate)
+      const seg = chunk.seg
+      // Frase descartada por um corte que ainda estava sendo gerada: chega morta.
+      const dropped = droppedRef.current
+      if (typeof seg === "number" && dropped && seg > dropped.keep && seg <= dropped.upTo) return
+      const startsIn = getPlayer().schedule(samples, sampleRate, seg)
+      setGen(false)
+      setAudible(true)
+      // Frase nova na fala contínua: ela passa a ser "a que está tocando" no
+      // instante em que o áudio dela começa, não quando chega (chega antes).
+      if (typeof seg === "number" && seg !== lastSegRef.current && startsIn !== null) {
+        lastSegRef.current = seg
+        const timer = setTimeout(() => {
+          playingSegRef.current = seg
+          setSegment(seg)
+          setSegmentText(segTextsRef.current.get(seg) ?? null)
+        }, startsIn * 1000)
+        segTimersRef.current.push({ seg, timer })
+      }
       armGuard()
     },
-    [armGuard, getPlayer],
+    [armGuard, getPlayer, setGen],
   )
 
   useEffect(() => {
     const player = getPlayer()
-    player.onEnded = maybeFinish
+    player.onEnded = () => {
+      // Fila de áudio vazia: silêncio (na fala contínua, à espera da próxima frase).
+      if (player.pending === 0) setAudible(false)
+      maybeFinish()
+    }
     return () => {
       player.onEnded = null
     }
@@ -461,7 +581,12 @@ export function useSpeak() {
 
     const onDone = (...args: unknown[]) => {
       const payload = args[0] as DonePayload | undefined
-      if (!payload || payload.id !== idRef.current) return
+      if (!payload) return
+      if (idRef.current === null) {
+        if (awaitingRef.current && !cancelledRef.current) earlyDoneRef.current = payload
+        return
+      }
+      if (payload.id !== idRef.current) return
       if (payload.error) {
         finishWithError(payload.error)
         return
@@ -487,20 +612,29 @@ export function useSpeak() {
     idRef.current = null
     awaitingRef.current = false
     earlyRef.current = []
+    earlyDoneRef.current = null
+    streamOpenRef.current = false
+    pendingAppendRef.current = []
+    pendingEndRef.current = false
     doneRef.current = false
     setSpeaking(false)
+    setGen(false)
+    clearSegments()
     setError(null)
     if (id) cancelRequest(id)
-  }, [clearGuard, getPlayer])
+  }, [clearGuard, clearSegments, getPlayer, setGen])
 
-  const speak = useCallback(
-    (text: string, request: SpeakRequest = {}) => {
-      const trimmed = text.trim()
-      if (!trimmed) return
+  /**
+   * Abre uma fala: corta a anterior, prepara o áudio no gesto e pede o id ao
+   * main (`invoke`). Os pedaços que chegarem antes do id são guardados e tocados
+   * na ordem; o mesmo vale para um `done` precoce.
+   */
+  const open = useCallback(
+    (invoke: (ipc: NonNullable<typeof window.ipcRenderer>) => Promise<unknown>, onId?: (id: string) => void) => {
       const ipc = window.ipcRenderer
       if (!ipc) {
-        setError("sem canal de voz")
-        return
+        setError(i18n.t("voice.tts.noChannel"))
+        return false
       }
       // Uma fala por vez: o clique repetido cai no stop() do botão.
       stop()
@@ -508,23 +642,17 @@ export function useSpeak() {
       cancelledRef.current = false
       setError(null)
       setSpeaking(true)
+      setGen(true)
       awaitingRef.current = true
       // O contexto nasce no gesto do clique — é ele que libera o áudio no Chromium.
       try {
         void getPlayer().ensure().resume()
       } catch (reason) {
         finishWithError(reason instanceof Error ? reason.message : String(reason))
-        return
+        return false
       }
 
-      void ipc
-        .invoke(CHANNEL.start, {
-          text: trimmed,
-          voice: request.voice,
-          lang: request.lang,
-          speed: request.speed,
-          engine: request.engine,
-        })
+      void invoke(ipc)
         .then((raw) => {
           const id = (raw as { id?: string } | null)?.id
           if (!id) {
@@ -537,18 +665,128 @@ export function useSpeak() {
           }
           awaitingRef.current = false
           idRef.current = id
+          onId?.(id)
           const early = earlyRef.current
           earlyRef.current = []
           for (const chunk of early) {
             if (chunk.id === id || chunk.id === undefined) playChunk(chunk)
           }
+          const earlyDone = earlyDoneRef.current
+          earlyDoneRef.current = null
+          if (earlyDone && (earlyDone.id === id || earlyDone.id === undefined)) {
+            if (earlyDone.error) {
+              finishWithError(earlyDone.error)
+              return
+            }
+            doneRef.current = true
+            maybeFinish()
+          }
         })
         .catch((reason: unknown) => {
           finishWithError(reason instanceof Error ? reason.message : String(reason))
         })
+      return true
     },
-    [finishWithError, getPlayer, playChunk, stop],
+    [finishWithError, getPlayer, maybeFinish, playChunk, setGen, stop],
   )
+
+  const speak = useCallback(
+    (text: string, request: SpeakRequest = {}) => {
+      const trimmed = text.trim()
+      if (!trimmed) return
+      open((ipc) =>
+        ipc.invoke(CHANNEL.start, {
+          text: trimmed,
+          voice: request.voice,
+          lang: request.lang,
+          speed: request.speed,
+          engine: request.engine,
+        }),
+      )
+    },
+    [open],
+  )
+
+  /**
+   * Fala CONTÍNUA: abre uma fala sem texto, que recebe frases com
+   * `appendSpeech` e termina com `endSpeech`. O main gera a próxima frase
+   * enquanto a anterior toca — é o que tira o silêncio entre as frases de uma
+   * resposta que chega aos pedaços (modo chamada).
+   */
+  const speakStream = useCallback(
+    (request: SpeakRequest = {}) => {
+      pendingAppendRef.current = []
+      pendingEndRef.current = false
+      sentCountRef.current = 0
+      const opened = open(
+        (ipc) =>
+          ipc.invoke(CHANNEL.streamStart, {
+            voice: request.voice,
+            lang: request.lang,
+            speed: request.speed,
+            engine: request.engine,
+          }),
+        (id) => {
+          const ipc = window.ipcRenderer
+          for (const text of pendingAppendRef.current) {
+            segTextsRef.current.set(sentCountRef.current++, text)
+            void ipc?.invoke(CHANNEL.streamAppend, { id, text })
+          }
+          pendingAppendRef.current = []
+          if (pendingEndRef.current) void ipc?.invoke(CHANNEL.streamEnd, { id })
+        },
+      )
+      // Depois do open: o stop() lá dentro zera esta marca.
+      if (opened) streamOpenRef.current = true
+    },
+    [open],
+  )
+
+  /** Próxima frase da fala contínua (na ordem em que deve ser dita). */
+  const appendSpeech = useCallback((text: string) => {
+    const trimmed = text.trim()
+    if (!trimmed || !streamOpenRef.current) return
+    const id = idRef.current
+    if (id) {
+      // Mesma numeração do main: a frase N mandada é o `seg` N dos pedaços.
+      segTextsRef.current.set(sentCountRef.current++, trimmed)
+      void window.ipcRenderer?.invoke(CHANNEL.streamAppend, { id, text: trimmed })
+    } else if (awaitingRef.current) pendingAppendRef.current.push(trimmed)
+  }, [])
+
+  /**
+   * Corta a fala contínua depois da frase que está tocando (ou da primeira, se
+   * nada tocou ainda): o que já foi gerado e agendado sai do player, o que
+   * ainda espera síntese sai da fila do main, e a fala continua aberta para
+   * frases novas. É o "agente partiu para as ferramentas" do modo chamada.
+   */
+  const trimSpeech = useCallback(() => {
+    if (!streamOpenRef.current) return
+    const keep = Math.max(playingSegRef.current ?? 0, 0)
+    const id = idRef.current
+    if (!id) {
+      // Nada saiu ainda: fica só a primeira frase pedida.
+      pendingAppendRef.current = pendingAppendRef.current.slice(0, 1)
+      return
+    }
+    droppedRef.current = { keep, upTo: sentCountRef.current - 1 }
+    void window.ipcRenderer?.invoke(CHANNEL.streamClear, { id })
+    for (const entry of segTimersRef.current) if (entry.seg > keep) clearTimeout(entry.timer)
+    segTimersRef.current = segTimersRef.current.filter((entry) => entry.seg <= keep)
+    if (lastSegRef.current !== null && lastSegRef.current > keep) lastSegRef.current = keep
+    getPlayer().dropAfter(keep)
+  }, [getPlayer])
+
+  /** Não vêm mais frases: a fala acaba quando o que já foi pedido terminar de tocar. */
+  const endSpeech = useCallback(() => {
+    if (!streamOpenRef.current) return
+    streamOpenRef.current = false
+    const id = idRef.current
+    if (id) void window.ipcRenderer?.invoke(CHANNEL.streamEnd, { id })
+    else if (awaitingRef.current) pendingEndRef.current = true
+    // Agora sim vale a rede para um `done` que não chegue.
+    if (getPlayer().pending > 0) armGuard()
+  }, [armGuard, getPlayer])
 
   // A persona reage ao áudio que está SAINDO, e ela vive em outro ramo da
   // árvore: o sinal vai por um store global (ver stores/voice-activity).
@@ -564,11 +802,15 @@ export function useSpeak() {
       idRef.current = null
       awaitingRef.current = false
       clearGuard()
+      for (const { timer } of segTimersRef.current) clearTimeout(timer)
       playerRef.current?.close()
       playerRef.current = null
       if (id) cancelRequest(id)
     }
   }, [clearGuard])
 
-  return { speak, stop, speaking, error }
+  /** Some com o aviso de erro sem tocar em fala nenhuma (o botão volta ao normal). */
+  const dismissError = useCallback(() => setError(null), [])
+
+  return { speak, speakStream, appendSpeech, endSpeech, trimSpeech, stop, speaking, generating, segment, segmentText, audible, error, dismissError }
 }

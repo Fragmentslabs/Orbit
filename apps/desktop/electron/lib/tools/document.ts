@@ -124,7 +124,7 @@ export function createDocumentAuthoringTools(scope: DocumentToolScope) {
       }),
       execute: async ({ title, markdown, formats, style }) => {
         if (Buffer.byteLength(markdown, 'utf8') > MAX_MARKDOWN_BYTES) {
-          return `Documento muito grande (limite de ${Math.round(MAX_MARKDOWN_BYTES / 1024)}KB de Markdown).`
+          return `Document too large (limit ${Math.round(MAX_MARKDOWN_BYTES / 1024)}KB of Markdown).`
         }
         // Sem `formats`, nada é renderizado: o documento nasce em Markdown e o
         // usuário escolhe o formato na hora de baixar.
@@ -139,7 +139,7 @@ export function createDocumentAuthoringTools(scope: DocumentToolScope) {
         // Só é falha quando havia o que renderizar: `formats` vazio é o caso
         // normal, e o documento em Markdown já está inteiro na conversa.
         if (wanted.length > 0 && ref.formats.length === 0) {
-          return `O documento "${title}" foi salvo, mas nenhuma renderização foi gerada. Tente novamente; se persistir, avise o usuário.`
+          return `The document "${title}" was saved, but no rendering was generated. Try again; if it persists, tell the user.`
         }
         return {
           documentId: ref.id,
@@ -150,8 +150,8 @@ export function createDocumentAuthoringTools(scope: DocumentToolScope) {
           revision: ref.revision,
           message: [
             ref.formats.length > 0
-              ? `Documento criado em ${ref.formats.join(' e ')} — o usuário já o vê na resposta e ele está na galeria. Para alterá-lo, use update_document com este documentId.`
-              : 'Documento criado — o usuário já o vê na resposta e pode baixá-lo em PDF ou DOCX pelo próprio card quando quiser. Para alterá-lo, use update_document com este documentId.',
+              ? `Document created as ${ref.formats.join(' and ')} — the user already sees it in the reply and it is in the gallery. To change it, use update_document with this documentId.`
+              : 'Document created — the user already sees it in the reply and can download it as PDF or DOCX from the card whenever they want. To change it, use update_document with this documentId.',
             // O documento foi gravado como veio; o que volta é o aviso de que
             // uma linha não vai chegar assim na tela de quem for ler.
             underscoreBlankWarning(markdown),
@@ -179,7 +179,7 @@ export function createDocumentAuthoringTools(scope: DocumentToolScope) {
       }),
       execute: async ({ documentId, markdown, baseRevision, title, formats, style }) => {
         if (Buffer.byteLength(markdown, 'utf8') > MAX_MARKDOWN_BYTES) {
-          return `Documento muito grande (limite de ${Math.round(MAX_MARKDOWN_BYTES / 1024)}KB de Markdown).`
+          return `Document too large (limit ${Math.round(MAX_MARKDOWN_BYTES / 1024)}KB of Markdown).`
         }
         const result = await updateDocument(documentId, markdown, {
           title,
@@ -189,11 +189,11 @@ export function createDocumentAuthoringTools(scope: DocumentToolScope) {
         })
         if (!result.ok) {
           if (result.reason === 'notFound') {
-            return `Documento não encontrado: ${documentId}. Use list_documents para ver os disponíveis.`
+            return `Document not found: ${documentId}. Use list_documents to see the available ones.`
           }
           // Nada foi gravado. Repetir a mesma reescrita repetiria o erro: o
           // caminho é reler e reaplicar a mudança sobre a versão nova.
-          return `O documento mudou desde a versão em que você se baseou — provavelmente o usuário o editou no painel (ele está agora na revisão ${result.revision}). NADA foi gravado. Chame read_document, reaplique sua alteração sobre o texto que voltar e chame update_document de novo com o baseRevision que a leitura informar. Não repita a mesma reescrita: ela apagaria a edição dele.`
+          return `The document changed since the version you based your edit on — the user probably edited it in the panel (it is now at revision ${result.revision}). NOTHING was saved. Call read_document, reapply your change on the text it returns and call update_document again with the baseRevision that read reports. Do not repeat the same rewrite: it would erase the user's edit.`
         }
         const ref = result.ref
         return {
@@ -203,7 +203,7 @@ export function createDocumentAuthoringTools(scope: DocumentToolScope) {
           formats: ref.formats,
           thumb: ref.thumb,
           revision: ref.revision,
-          message: ['Documento atualizado — o usuário já vê a nova versão.', underscoreBlankWarning(markdown)]
+          message: ['Document updated — the user already sees the new version.', underscoreBlankWarning(markdown)]
             .filter(Boolean)
             .join(' '),
         }
@@ -218,11 +218,11 @@ export function createDocumentAuthoringTools(scope: DocumentToolScope) {
       }),
       execute: async ({ documentId }) => {
         const found = await readDocumentSource(documentId)
-        if (!found) return `Documento não encontrado: ${documentId}.`
+        if (!found) return `Document not found: ${documentId}.`
         // A revisão volta no próprio envelope: é o que o update_document pede
         // de volta para provar que a reescrita partiu DESTA versão.
         const revision = found.entry.revision ?? 1
-        return `<document id="${documentId}" title="${found.entry.name ?? ''}" revision="${revision}">\n${found.markdown}\n</document>\nAo reescrever este documento, passe baseRevision=${revision}.`
+        return `<document id="${documentId}" title="${found.entry.name ?? ''}" revision="${revision}">\n${found.markdown}\n</document>\nWhen rewriting this document, pass baseRevision=${revision}.`
       },
     }),
 
@@ -238,13 +238,13 @@ export function createDocumentAuthoringTools(scope: DocumentToolScope) {
       execute: async ({ scope: wanted }) => {
         const folderId = scope.directory ? undefined : await resolveFolderId(scope.sessionId)
         const docs = await listMedia(documentFilter(scope, wanted ?? 'project', folderId))
-        if (docs.length === 0) return 'Nenhum documento encontrado neste escopo.'
+        if (docs.length === 0) return 'No documents found in this scope.'
         return docs
           .map((d) => {
             const when = new Date(d.createdAt).toISOString().slice(0, 10)
-            const formats = (d.formats ?? []).join('/') || 'sem renderização'
+            const formats = (d.formats ?? []).join('/') || 'not rendered'
             const rev = (d.revision ?? 1) > 1 ? `, v${d.revision}` : ''
-            return `${d.id}: ${d.name ?? '(sem título)'} (${formats}, ${when}${rev})`
+            return `${d.id}: ${d.name ?? '(untitled)'} (${formats}, ${when}${rev})`
           })
           .join('\n')
       },

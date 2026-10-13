@@ -48,15 +48,15 @@ type Periodo = { since: number; until: number }
 
 function resolverPeriodo(input: { from?: string; to?: string; days?: number }): Periodo | string {
   const fim = input.to ? lerData(input.to) : new Date()
-  if (!fim) return `Erro: "${input.to}" não é uma data válida (use YYYY-MM-DD).`
+  if (!fim) return `Error: "${input.to}" is not a valid date (use YYYY-MM-DD).`
   fim.setHours(23, 59, 59, 999)
 
   if (input.from) {
     const inicio = lerData(input.from)
-    if (!inicio) return `Erro: "${input.from}" não é uma data válida (use YYYY-MM-DD).`
+    if (!inicio) return `Error: "${input.from}" is not a valid date (use YYYY-MM-DD).`
     inicio.setHours(0, 0, 0, 0)
     if (inicio.getTime() > fim.getTime()) {
-      return `Erro: o início (${input.from}) é depois do fim (${input.to ?? 'hoje'}).`
+      return `Error: the start (${input.from}) is after the end (${input.to ?? 'today'}).`
     }
     return { since: inicio.getTime(), until: fim.getTime() }
   }
@@ -96,7 +96,7 @@ function cortarNoLimite(linhas: string[]): string {
     return [
       ...linhas.slice(0, i),
       '',
-      `[relatório cortado em ${i} de ${linhas.length} linhas por tamanho. Reduza o período (from/to ou days), aponte um projeto (project) ou peça detail=false para ver só as horas.]`,
+      `[report cut at ${i} of ${linhas.length} lines for size. Narrow the period (from/to or days), name a project (project) or pass detail=false for hours only.]`,
     ].join('\n')
   }
   return linhas.join('\n')
@@ -104,17 +104,17 @@ function cortarNoLimite(linhas: string[]): string {
 
 function escreverProjeto(proj: WorkReportProject, comDetalhe: boolean): string[] {
   const linhas: string[] = []
-  const nome = proj.name || 'Sem projeto (chat)'
+  const nome = proj.name || 'No project (chat)'
   linhas.push('')
   linhas.push(`## ${nome}${proj.directory ? ` — ${proj.directory}` : ''}`)
   linhas.push(
-    `Total: ${horas(proj.hours)} · ${proj.days.length} dia(s) · ${proj.sessions} conversa(s) · ${tokens(proj.tokens)} tokens · ${dinheiro(proj.cost)}`,
+    `Total: ${horas(proj.hours)} · ${proj.days.length} day(s) · ${proj.sessions} conversation(s) · ${tokens(proj.tokens)} tokens · ${dinheiro(proj.cost)}`,
   )
 
   for (const dia of proj.days) {
     linhas.push('')
     linhas.push(
-      `### ${dia.date} — ${horas(dia.hours)} (${hora(dia.firstAt)}–${hora(dia.lastAt)}, ${dia.messages} resposta(s), ${dinheiro(dia.cost)})`,
+      `### ${dia.date} — ${horas(dia.hours)} (${hora(dia.firstAt)}–${hora(dia.lastAt)}, ${dia.messages} reply(ies), ${dinheiro(dia.cost)})`,
     )
     for (const sessao of dia.sessions) {
       linhas.push(`- "${sessao.title}" — ${horas(sessao.hours)}`)
@@ -146,7 +146,7 @@ export function createUsageTools(): ToolSet {
           .string()
           .optional()
           .describe(
-            'Project folder name, or a stretch of its path for two folders with the same name. Omit to sweep every project and chat, including ones unrelated to the folder open here. Use "sem projeto" for chats with no working folder.',
+            'Project folder name, or a stretch of its path for two folders with the same name. Omit to sweep every project and chat, including ones unrelated to the folder open here. Use "no project" for chats with no working folder.',
           ),
         ...PERIODO,
         detail: z
@@ -172,17 +172,17 @@ export function createUsageTools(): ToolSet {
           promptsPerDay: comDetalhe ? 6 : 0,
         })
 
-        const cabecalho = `Período: ${dataCurta(since)} a ${dataCurta(until)}`
+        const cabecalho = `Period: ${dataCurta(since)} to ${dataCurta(until)}`
         if (relatorio.projects.length === 0) {
           if (project) {
             return [
-              `${cabecalho}. Nenhuma atividade em um projeto que case com "${project}".`,
+              `${cabecalho}. No activity in a project matching "${project}".`,
               relatorio.knownProjects.length
-                ? `Projetos com atividade no período: ${relatorio.knownProjects.join(', ')}.`
-                : 'Não houve atividade nenhuma nesse período.',
+                ? `Projects with activity in the period: ${relatorio.knownProjects.join(', ')}.`
+                : 'There was no activity at all in this period.',
             ].join('\n')
           }
-          return `${cabecalho}. Nenhuma atividade registrada.`
+          return `${cabecalho}. No activity recorded.`
         }
 
         const linhas = [
@@ -210,27 +210,27 @@ export function createUsageTools(): ToolSet {
         const { since, until } = periodo
         const data = await computeAnalytics({ type: 'custom', from: since, to: until })
         const cabecalho = [
-          `Período: ${dataCurta(since)} a ${dataCurta(until)}`,
-          `Total: ${tokens(data.totalTokens)} tokens · ${horas(data.totalHours)} · ${dinheiro(data.totalCost)} · ${data.totalSessions} conversa(s) · ${data.totalMessages} resposta(s)`,
+          `Period: ${dataCurta(since)} to ${dataCurta(until)}`,
+          `Total: ${tokens(data.totalTokens)} tokens · ${horas(data.totalHours)} · ${dinheiro(data.totalCost)} · ${data.totalSessions} conversation(s) · ${data.totalMessages} reply(ies)`,
         ]
 
         if (groupBy === 'project') {
-          if (data.byProject.length === 0) return `${cabecalho.join('\n')}\nSem projetos no período.`
+          if (data.byProject.length === 0) return `${cabecalho.join('\n')}\nNo projects in the period.`
           return [
             ...cabecalho,
-            'Por projeto (nome · horas · tokens · custo · conversas):',
+            'By project (name · hours · tokens · cost · conversations):',
             ...data.byProject.map(
               (p) =>
-                `- ${p.name || 'Sem projeto (chat)'} · ${horas(p.hours)} · ${tokens(p.tokens)} · ${dinheiro(p.cost)} · ${p.sessions}`,
+                `- ${p.name || 'No project (chat)'} · ${horas(p.hours)} · ${tokens(p.tokens)} · ${dinheiro(p.cost)} · ${p.sessions}`,
             ),
           ].join('\n')
         }
 
         if (groupBy === 'day') {
-          if (data.days.length === 0) return `${cabecalho.join('\n')}\nSem dias com atividade.`
+          if (data.days.length === 0) return `${cabecalho.join('\n')}\nNo days with activity.`
           return [
             ...cabecalho,
-            'Por dia (data · horas · tokens · custo):',
+            'By day (date · hours · tokens · cost):',
             ...data.days.map(
               (d) =>
                 `- ${d.date} · ${horas(d.totalHours)} · ${tokens(d.totalTokens)} · ${dinheiro(d.totalCost)}`,
@@ -238,10 +238,10 @@ export function createUsageTools(): ToolSet {
           ].join('\n')
         }
 
-        if (data.byModel.length === 0) return `${cabecalho.join('\n')}\nSem modelos no período.`
+        if (data.byModel.length === 0) return `${cabecalho.join('\n')}\nNo models in the period.`
         return [
           ...cabecalho,
-          'Por modelo (provider/modelo · tokens · horas · custo):',
+          'By model (provider/model · tokens · hours · cost):',
           ...data.byModel.map(
             (m) =>
               `- ${m.providerId}/${m.modelId} · ${tokens(m.tokens)} · ${horas(m.hours)} · ${dinheiro(m.cost)}`,

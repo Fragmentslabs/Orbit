@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 
-import { loadMainLocale, MESSAGES, resolveMainLocale, setMainLocale, t } from './i18n'
+import { loadMainLocale, MESSAGES, resolveMainLocale, setMainLocale, t, tNow } from './i18n'
 
 /**
  * As notificações nativas nascem no main, longe do i18next do renderer: sem
@@ -61,5 +61,14 @@ describe('t', () => {
       expect(byLocale.en.length, `${key} sem en`).toBeGreaterThan(0)
       expect(byLocale['pt-BR'], `${key} igual nos dois idiomas`).not.toBe(byLocale.en)
     }
+  })
+})
+
+describe('tNow', () => {
+  it('traduz na hora com o idioma em memória, para o feed de atividade', () => {
+    setMainLocale('Portuguese')
+    expect(tNow('panel.activity.navigate', { url: 'https://x.dev' })).toBe('Navegando para https://x.dev')
+    setMainLocale('English')
+    expect(tNow('panel.activity.navigate', { url: 'https://x.dev' })).toBe('Navigating to https://x.dev')
   })
 })

@@ -1,3 +1,4 @@
+import { tNow } from './i18n'
 import { BrowserWindow, webContents, type NativeImage, type WebContents } from 'electron'
 import sharp from 'sharp'
 import {
@@ -165,7 +166,7 @@ export async function ensurePanelBrowser(sessionId: string, url?: string): Promi
     if (wc) return wc
     await delay(200)
   }
-  throw new Error('O browser do painel não abriu a tempo (o painel direito está disponível?)')
+  throw new Error('The panel browser did not open in time (is the right panel available?)')
 }
 
 async function waitForLoad(wc: WebContents): Promise<void> {
@@ -182,13 +183,13 @@ export async function panelResize(
   label: string,
 ): Promise<string> {
   await ensurePanelBrowser(sessionId)
-  activity(`Redimensionando para ${label}`, sessionId)
+  activity(tNow('panel.activity.resize', { label }), sessionId)
   lastViewport = width && height ? { width, height } : null
   broadcastPanelEvent({ type: 'resize', width, height, label })
   await delay(700) // deixa o layout refluir na nova largura
   return width
-    ? `Viewport ajustado para ${label} (${width}×${height}px). Use panel_screenshot para ver o resultado.`
-    : `Viewport ajustado para ${label} (preenche o painel).`
+    ? `Viewport set to ${label} (${width}×${height}px). Use panel_screenshot to see the result.`
+    : `Viewport set to ${label} (fills the panel).`
 }
 
 /** Liga/desliga a tela cheia do browser do painel. */
@@ -199,7 +200,7 @@ export async function panelFullscreen(on: boolean): Promise<void> {
 
 export async function panelNavigate(sessionId: string, url: string): Promise<{ title: string; url: string }> {
   const wc = await ensurePanelBrowser(sessionId, url)
-  activity(`Navegando para ${url}`, sessionId)
+  activity(tNow('panel.activity.navigate', { url }), sessionId)
   try {
     await Promise.race([wc.loadURL(url), delay(LOAD_TIMEOUT_MS)])
   } catch (err) {
@@ -248,7 +249,7 @@ const READ_SCRIPT = `(() => {
 
 export async function panelRead(sessionId: string): Promise<string> {
   const wc = await ensurePanelBrowser(sessionId)
-  activity('Lendo a página', sessionId)
+  activity(tNow('panel.activity.read'), sessionId)
   const result = (await wc.executeJavaScript(READ_SCRIPT)) as {
     title: string
     url: string
@@ -256,13 +257,13 @@ export async function panelRead(sessionId: string): Promise<string> {
     interactive: string[]
   }
   return [
-    `Página: ${result.title} — ${result.url}`,
+    `Page: ${result.title} — ${result.url}`,
     '',
-    '## Conteúdo visível',
-    result.text || '(página vazia)',
+    '## Visible content',
+    result.text || '(empty page)',
     '',
-    `## Elementos interativos (use ref em panel_click/panel_type)`,
-    result.interactive.join('\n') || '(nenhum encontrado)',
+    `## Interactive elements (use ref in panel_click/panel_type)`,
+    result.interactive.join('\n') || '(none found)',
   ].join('\n')
 }
 
@@ -273,7 +274,7 @@ function findScript(ref?: number, selector?: string): string {
 
 export async function panelClick(sessionId: string, ref?: number, selector?: string): Promise<string> {
   const wc = await ensurePanelBrowser(sessionId)
-  activity(`Clicando em ${ref != null ? `ref ${ref}` : selector}`, sessionId)
+  activity(tNow('panel.activity.click', { target: ref != null ? `ref ${ref}` : (selector ?? '') }), sessionId)
   const outcome = (await wc.executeJavaScript(`(() => {
     const el = ${findScript(ref, selector)}
     if (!el) return null
@@ -281,9 +282,9 @@ export async function panelClick(sessionId: string, ref?: number, selector?: str
     el.click()
     return true
   })()`)) as boolean | null
-  if (!outcome) return `Elemento não encontrado (${ref != null ? `ref=${ref}` : selector}). Rode panel_read para atualizar as refs.`
+  if (!outcome) return `Element not found (${ref != null ? `ref=${ref}` : selector}). Run panel_read to refresh the refs.`
   await waitForLoad(wc)
-  return `Clique executado. Agora em: ${wc.getTitle()} — ${wc.getURL()}`
+  return `Clicked. Now on: ${wc.getTitle()} — ${wc.getURL()}`
 }
 
 export async function panelType(
@@ -294,7 +295,7 @@ export async function panelType(
   pressEnter?: boolean,
 ): Promise<string> {
   const wc = await ensurePanelBrowser(sessionId)
-  activity('Digitando…', sessionId)
+  activity(tNow('panel.activity.type'), sessionId)
   const outcome = (await wc.executeJavaScript(`(() => {
     const el = ${findScript(ref, selector)}
     if (!el) return null
@@ -313,9 +314,9 @@ export async function panelType(
     }
     return true
   })()`)) as boolean | null
-  if (!outcome) return `Campo não encontrado (${ref != null ? `ref=${ref}` : selector}). Rode panel_read para atualizar as refs.`
+  if (!outcome) return `Field not found (${ref != null ? `ref=${ref}` : selector}). Run panel_read to refresh the refs.`
   await waitForLoad(wc)
-  return `Texto digitado${pressEnter ? ' e enviado' : ''}. Agora em: ${wc.getTitle()} — ${wc.getURL()}`
+  return `Text typed${pressEnter ? ' and submitted' : ''}. Now on: ${wc.getTitle()} — ${wc.getURL()}`
 }
 
 /**
@@ -334,7 +335,7 @@ export async function panelScreenshot(
   options?: { format?: 'webp' | 'png'; maxWidth?: number },
 ): Promise<Buffer> {
   const wc = await ensurePanelBrowser(sessionId)
-  activity('Capturando a tela', sessionId)
+  activity(tNow('panel.activity.screenshot'), sessionId)
 
   /**
    * Captura com proteções: o capturePage do webview oculto do painel devolve
@@ -368,8 +369,8 @@ export async function panelScreenshot(
     }
     throw new PanelCaptureError(
       timedOut
-        ? 'O webview do painel não respondeu à captura a tempo — o browser pode estar ocupado ou travado; tente de novo (ou panel_navigate) e, se persistir, abra o painel.'
-        : 'O webview do painel está oculto ou sem pintura (captura vazia) — o browser precisa estar visível; tente panel_resize desktop ou abra o painel e capture de novo.',
+        ? 'The panel webview did not answer the capture in time — the browser may be busy or stuck; try again (or panel_navigate) and, if it persists, open the panel.'
+        : 'The panel webview is hidden or not painting (empty capture) — the browser needs to be visible; try panel_resize desktop or open the panel and capture again.',
       timedOut ? 'timeout' : 'empty',
     )
   }
@@ -392,20 +393,20 @@ export function panelConsole(
   const buffer = consoleBySession.get(sessionId)
   if (!buffer || buffer.size === 0) {
     return getWc(sessionId)
-      ? 'Console vazio — nenhuma mensagem desde que o browser abriu.'
-      : 'O browser desta sessão ainda não abriu — use panel_navigate antes.'
+      ? 'Console empty — no messages since the browser opened.'
+      : 'This session\'s browser has not opened yet — use panel_navigate first.'
   }
   const entries = buffer.query(options)
   if (options.clear) buffer.clear()
-  const filtro = options.level && options.level !== 'all' ? ` (nível ${options.level}+)` : ''
-  if (entries.length === 0) return `Nenhuma mensagem${filtro}${options.pattern ? ` contendo "${options.pattern}"` : ''}.`
-  return `${entries.length} mensagem(ns)${filtro}${options.clear ? ' — console limpo em seguida' : ''}:\n${formatConsoleEntries(entries)}`
+  const filtro = options.level && options.level !== 'all' ? ` (level ${options.level}+)` : ''
+  if (entries.length === 0) return `No messages${filtro}${options.pattern ? ` containing "${options.pattern}"` : ''}.`
+  return `${entries.length} message(s)${filtro}${options.clear ? ' — console cleared afterwards' : ''}:\n${formatConsoleEntries(entries)}`
 }
 
 /** Roda JS na página do painel (a mesma que o usuário vê) e devolve o resultado. */
 export async function panelEval(sessionId: string, code: string): Promise<string> {
   const wc = await ensurePanelBrowser(sessionId)
-  activity('Executando JavaScript na página', sessionId)
+  activity(tNow('panel.activity.eval'), sessionId)
   return evaluateInPage(wc, code)
 }
 
@@ -414,10 +415,10 @@ export async function panelHover(sessionId: string, target: BrowserTarget): Prom
   const wc = await ensurePanelBrowser(sessionId)
   const point = await resolveTarget(wc, target, true)
   if (typeof point === 'string') return point
-  activity('Passando o mouse', sessionId)
+  activity(tNow('panel.activity.hover'), sessionId)
   mouseMove(wc, point, heldPointer.has(sessionId))
   await delay(300)
-  return `Mouse sobre (${Math.round(point.x)}, ${Math.round(point.y)}). Use panel_screenshot para ver o estado de hover.`
+  return `Mouse over (${Math.round(point.x)}, ${Math.round(point.y)}). Use panel_screenshot to see the hover state.`
 }
 
 /**
@@ -437,12 +438,12 @@ export async function panelDrag(
     heldPointer.delete(sessionId)
     await delay(150)
   }
-  if (!options.from && !held) return 'Nenhum arrasto em andamento — informe from (ref, selector ou x/y).'
+  if (!options.from && !held) return 'No drag in progress — provide from (ref, selector or x/y).'
   const from = options.from ? await resolveTarget(wc, options.from, true) : null
   if (typeof from === 'string') return from
   const to = await resolveTarget(wc, options.to, false)
   if (typeof to === 'string') return to
-  activity(options.release === false ? 'Arrastando (segurando)' : 'Arrastando', sessionId)
+  activity(tNow(options.release === false ? 'panel.activity.dragHold' : 'panel.activity.drag'), sessionId)
   const end = await dragBetween(wc, from, to, {
     held: options.from ? null : held,
     steps: options.steps,
@@ -450,8 +451,8 @@ export async function panelDrag(
   })
   if (options.release === false) {
     heldPointer.set(sessionId, end)
-    return `Arrastando — botão ainda pressionado em (${Math.round(end.x)}, ${Math.round(end.y)}). Tire o panel_screenshot agora; depois chame panel_drag sem from para mover mais ou soltar (release: true).`
+    return `Dragging — button still held at (${Math.round(end.x)}, ${Math.round(end.y)}). Take the panel_screenshot now; then call panel_drag without from to move further or release (release: true).`
   }
   heldPointer.delete(sessionId)
-  return `Solto em (${Math.round(end.x)}, ${Math.round(end.y)}). Agora em: ${wc.getTitle()} — ${wc.getURL()}`
+  return `Released at (${Math.round(end.x)}, ${Math.round(end.y)}). Now on: ${wc.getTitle()} — ${wc.getURL()}`
 }

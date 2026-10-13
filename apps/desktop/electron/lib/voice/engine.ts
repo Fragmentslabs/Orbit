@@ -22,12 +22,23 @@ export interface SttStartInput {
   threads?: number
   /** Pedir texto ao vivo enquanto a fala acontece. */
   live: boolean
+  /** Pedir os trechos com tempo (transcrição de arquivo com timestamps). */
+  timestamps?: boolean
+}
+
+/** Trecho transcrito com a posição no áudio da sessão. */
+export interface SttSegment {
+  startMs: number
+  endMs: number
+  text: string
 }
 
 /** Sessão de um motor, já com o modelo carregado/pronto. */
 export interface SttHandle {
   pushAudio(samples: Float32Array): void
-  stop(): Promise<{ text: string; audioMs: number }>
+  /** `segments` vem quando o motor sabe dar tempos (Parakeet: trechos do VAD;
+   *  whisper: segmentos do servidor, só com `timestamps` pedido). */
+  stop(): Promise<{ text: string; audioMs: number; segments?: SttSegment[] }>
   cancel(): Promise<void>
 }
 

@@ -1,3 +1,4 @@
+import i18n from '~/i18n'
 import { create } from 'zustand'
 import type { ModelRotation, RotationConfig } from '@orbit/shared'
 import { Storage } from '~/lib/storage'
@@ -118,7 +119,7 @@ export const useModelRotationStore = create<ModelRotationState>((set, get) => {
     },
 
     create: (name) => {
-      const rotation: ModelRotation = { id: newRotationId(), name: name.trim() || 'Rotação', models: [] }
+      const rotation: ModelRotation = { id: newRotationId(), name: name.trim() || i18n.t('rotation.newName'), models: [] }
       const rotations = [...get().rotations, rotation]
       persist({ rotations, sessionOverrides: get().sessionOverrides })
       pushRotations(rotations)

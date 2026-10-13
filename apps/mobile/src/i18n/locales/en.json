@@ -357,7 +357,9 @@
   },
   "subAgentCard": {
     "defaultTask": "Delegated subtask",
-    "runningBackground": "Running in the background…"
+    "runningBackground": "Running in the background…",
+    "noFolder": "No working folder in this conversation — the subagent ran in chat mode, without file access.",
+    "empty": "The subagent returned no text."
   },
   "mcpProposal": {
     "building": "Preparing the connection.",
@@ -960,7 +962,14 @@
     "userSkill": "User skill",
     "useMcpTools": "Use this MCP server's tools ({{count}} tools)",
     "newConversation": "New conversation",
-    "newConversationDesc": "Starts a blank chat"
+    "newConversationDesc": "Starts a blank chat",
+    "groups": {
+      "actions": "Actions",
+      "skills": "Skills",
+      "mcp": "MCP",
+      "memory": "Memory",
+      "modes": "Modes"
+    }
   },
   "sessionStore": {
     "queuedOffline": "No connection to the desktop. Message queued for automatic delivery.",
@@ -1254,7 +1263,8 @@
     "commitPromptTitulo": "Final commit message",
     "commitPromptDica": "Prompt used by the agent that writes the final commit message. It receives the task, the notes from every phase and the changed files — exactly the same context a phase gets. Empty uses the default: follow the user's commit preferences from memory, falling back to Conventional Commits (header + body of summarized topics).",
     "commitPromptVazio": "Empty = default prompt (memory preferences → Conventional Commits).",
-    "commitFalhou": "Final commit failed"
+    "commitFalhou": "Final commit failed",
+    "conecteDesktop": "Connect to Orbit Desktop to load the esteiras"
   },
   "branch": {
     "title": "Branch",

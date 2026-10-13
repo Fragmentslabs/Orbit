@@ -5,6 +5,7 @@ import {
   PCM_WORKLET_PROCESSOR,
   dictationSupported,
   pcm16ToBase64,
+  pcmLevel,
   pcmWorkletUrl,
   resolveVoiceSttSettings,
   type VoiceSttSettings,
@@ -59,6 +60,8 @@ export interface DictationCallbacks {
   /** Fim da captura. Vem vazio quando ninguém falou — quem mostrou provisório
    *  usa isso para devolver o input ao que era. */
   onFinal?: (text: string) => void
+  /** Nível (0..1) de cada bloco do microfone (~64 ms) — alimenta a onda. */
+  onLevel?: (level: number) => void
 }
 
 export interface Dictation {
@@ -68,6 +71,7 @@ export interface Dictation {
   /** Permissão/motor a caminho — o botão já pode se mostrar ativo. */
   starting: boolean
   error: string | null
+  dismissError: () => void
   start: () => Promise<void>
   stop: () => Promise<void>
   cancel: () => void
@@ -104,9 +108,20 @@ function releaseCapture(capture: Capture) {
   void capture.ctx.close().catch(() => {})
 }
 
-export function useDictation(callbacks: DictationCallbacks = {}): Dictation {
+/** Marca de "cancelado durante a abertura" — não é erro para mostrar. */
+const CANCELLED = Symbol("dictation-cancelled")
+
+export function useDictation(
+  callbacks: DictationCallbacks = {},
+  /** Força preferências nesta captura (a chamada sempre quer o texto ao vivo). */
+  overrides: { live?: boolean } = {},
+): Dictation {
   const settings = useAppSettings((s) => s.settings)
-  const voice = useMemo(() => resolveVoiceSttSettings(settings), [settings])
+  const forceLive = overrides.live
+  const voice = useMemo(() => {
+    const resolved = resolveVoiceSttSettings(settings)
+    return forceLive === undefined ? resolved : { ...resolved, live: forceLive }
+  }, [settings, forceLive])
   const [listening, setListening] = useState(false)
   const [starting, setStarting] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -116,6 +131,13 @@ export function useDictation(callbacks: DictationCallbacks = {}): Dictation {
   const startingRef = useRef(false)
   // O botão pode ser solto antes de o microfone abrir: encerra assim que abrir.
   const stopRequestedRef = useRef(false)
+  /**
+   * Cancelamento pedido com a captura AINDA ABRINDO (motor iniciando, pedido do
+   * microfone em curso). Sem isto o cancel() não tinha o que cancelar, a
+   * abertura terminava sozinha e deixava o microfone aberto sem dono — o
+   * próximo start() via a captura órfã, não abria outra e herdava o texto dela.
+   */
+  const cancelRequestedRef = useRef(false)
   const callbacksRef = useRef(callbacks)
   useEffect(() => {
     callbacksRef.current = callbacks
@@ -170,9 +192,14 @@ export function useDictation(callbacks: DictationCallbacks = {}): Dictation {
     if (!voice.enabled || !dictationSupported()) return
     const ipc = window.ipcRenderer
     stopRequestedRef.current = false
+    cancelRequestedRef.current = false
     startingRef.current = true
     setStarting(true)
     setError(null)
+    // Cada etapa assíncrona da abertura confere se ainda é para abrir.
+    const bail = () => {
+      if (cancelRequestedRef.current) throw CANCELLED
+    }
 
     let ctx: AudioContext | null = null
     let stream: MediaStream | null = null
@@ -183,6 +210,7 @@ export function useDictation(callbacks: DictationCallbacks = {}): Dictation {
       //    worklet nunca roda — a "gravação" ficaria muda (vozlab §14).
       ctx = new AudioContext({ sampleRate: DICTATION_SAMPLE_RATE })
       if (ctx.state === "suspended") await ctx.resume()
+      bail()
       if (ctx.state !== "running") throw new Error("audio-context-nao-rodou")
 
       // 2) Sessão no motor antes de abrir o microfone: modelo não baixado falha
@@ -197,12 +225,15 @@ export function useDictation(callbacks: DictationCallbacks = {}): Dictation {
       })) as { id?: unknown } | undefined
       if (!started || typeof started.id !== "string") throw new Error("voice:stt:start sem id")
       sessionId = started.id
+      bail()
 
       // 3) Microfone e worklet
       stream = await navigator.mediaDevices.getUserMedia({
         audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true, autoGainControl: true },
       })
+      bail()
       await ctx.audioWorklet.addModule(pcmWorkletUrl(document.baseURI))
+      bail()
       const node = new AudioWorkletNode(ctx, PCM_WORKLET_PROCESSOR)
       const source = ctx.createMediaStreamSource(stream)
       const sink = ctx.createGain()
@@ -217,6 +248,7 @@ export function useDictation(callbacks: DictationCallbacks = {}): Dictation {
       node.port.onmessage = (event) => {
         const pcm = (event.data as { pcm?: Int16Array } | undefined)?.pcm
         if (!pcm || pcm.length === 0) return
+        callbacksRef.current.onLevel?.(pcmLevel(pcm))
         capture.pending.push(pcm)
         capture.frames += pcm.length
         if (capture.frames >= DICTATION_CHUNK_FRAMES) void pushPending(capture).catch(() => {})
@@ -241,7 +273,8 @@ export function useDictation(callbacks: DictationCallbacks = {}): Dictation {
       sessionIdRef.current = null
       if (stream) for (const track of stream.getTracks()) track.stop()
       if (ctx) void ctx.close().catch(() => {})
-      setError(err instanceof Error ? err.message : String(err))
+      // Cancelado no meio da abertura não é erro: só não abre.
+      if (err !== CANCELLED) setError(err instanceof Error ? err.message : String(err))
     } finally {
       startingRef.current = false
       setStarting(false)
@@ -261,7 +294,11 @@ export function useDictation(callbacks: DictationCallbacks = {}): Dictation {
   const cancel = useCallback(() => {
     stopRequestedRef.current = false
     const capture = captureRef.current
-    if (!capture) return
+    if (!capture) {
+      // Ainda abrindo: quem está abrindo desiste na próxima etapa.
+      if (startingRef.current) cancelRequestedRef.current = true
+      return
+    }
     void finish(capture, true)
   }, [finish])
 
@@ -269,6 +306,8 @@ export function useDictation(callbacks: DictationCallbacks = {}): Dictation {
   // microfone e cancela a sessão, sem esperar texto.
   useEffect(
     () => () => {
+      // Desmontou com a captura ainda abrindo: ela não pode terminar de abrir.
+      cancelRequestedRef.current = true
       const capture = captureRef.current
       captureRef.current = null
       sessionIdRef.current = null
@@ -287,5 +326,8 @@ export function useDictation(callbacks: DictationCallbacks = {}): Dictation {
   }, [listening, starting])
   useEffect(() => () => useVoiceActivity.getState().setListening(false), [])
 
-  return { settings: voice, listening, starting, error, start, stop, cancel }
+  /** Some com o aviso de erro (o botão volta ao normal sem nova tentativa). */
+  const dismissError = useCallback(() => setError(null), [])
+
+  return { settings: voice, listening, starting, error, start, stop, cancel, dismissError }
 }

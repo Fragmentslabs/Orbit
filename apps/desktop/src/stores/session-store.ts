@@ -1,3 +1,4 @@
+import i18n from "@/src/i18n"
 import { nanoid } from "nanoid"
 import { create } from "zustand"
 import type {
@@ -1021,7 +1022,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     const targetSessionId = config.sessionId ?? get().activeIds[mode]
     const selected = sessionModelFor(targetSessionId) ?? provider.selectedModel
     if (!selected) {
-      throw new Error("Nenhum modelo selecionado. Configure um provedor em Configurações.")
+      throw new Error(i18n.t("chat.noModelSelected"))
     }
 
     let sessionId = config.sessionId ?? get().activeIds[mode]

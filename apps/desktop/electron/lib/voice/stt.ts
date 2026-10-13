@@ -25,7 +25,7 @@ import { ensureParakeetExtracted, fileComplete, isParakeetReady } from './models
 import { parakeetEngine } from './parakeet'
 import { whisperEngine } from './whisper'
 import { pcm16ToFloat32, samplesToMs, STT_SAMPLE_RATE, StreamResampler } from './audio'
-import type { SttEngine, SttHandle } from './engine'
+import type { SttEngine, SttHandle, SttSegment } from './engine'
 
 /**
  * Catálogo declarativo dos modelos de ditado: id, motor, rótulo, bytes, URL e
@@ -188,6 +188,8 @@ interface StartSttInput {
   threads?: number
   /** Pedir texto ao vivo enquanto a fala acontece. */
   live: boolean
+  /** Pedir os trechos com tempo (transcrição de arquivo). */
+  timestamps?: boolean
 }
 
 /**
@@ -217,6 +219,7 @@ export async function startSttSession(
       language: input.language || 'pt',
       threads: input.threads,
       live: Boolean(input.live),
+      timestamps: Boolean(input.timestamps),
     },
     partial,
   )
@@ -251,7 +254,9 @@ export function pushSttAudio(id: string, pcm: Buffer): void {
 }
 
 /** Fecha a sessão e devolve o texto final, a duração do áudio e o tempo gasto. */
-export async function stopSttSession(id: string): Promise<{ text: string; audioMs: number; ms: number }> {
+export async function stopSttSession(
+  id: string,
+): Promise<{ text: string; audioMs: number; ms: number; segments?: SttSegment[] }> {
   const s = sessions.get(id)
   if (!s) throw new Error(`sessão de ditado inexistente: ${id}`)
   sessions.delete(id)
@@ -263,6 +268,7 @@ export async function stopSttSession(id: string): Promise<{ text: string; audioM
     text: result.text,
     audioMs: samplesToMs(s.inputSamples, s.inputRate),
     ms: Date.now() - t0,
+    segments: result.segments,
   }
 }
 

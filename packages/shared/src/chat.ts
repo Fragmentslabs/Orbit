@@ -177,6 +177,19 @@ export interface ImagePart {
   alt?: string
 }
 
+/**
+ * Áudio produzido pelo agente (tool audio_generate): a resposta mostra um
+ * player. O arquivo mora em orbit-data/audio e é servido por orbit-audio://.
+ */
+export interface AudioPart {
+  id: string
+  type: "audio"
+  /** URL orbit-audio://aud_xxx.wav */
+  src: string
+  title?: string
+  durationMs?: number
+}
+
 /** Arquivo anexado pelo usuário à mensagem (data URL vinda do input) */
 export interface FilePart {
   id: string
@@ -406,6 +419,7 @@ export type MessagePart =
   | ReasoningPart
   | ToolPart
   | ImagePart
+  | AudioPart
   | FilePart
   | AgentPart
   | ArtifactPart
@@ -610,6 +624,34 @@ export function formatAskLine(index: number, question: string, answer: string): 
   return `${index + 1}. ${question}\n   → ${answer.replace(/\n/g, "\n     ")}`
 }
 
+/** Aviso que abre o resultado da tool subagent quando o modo código foi
+ *  pedido sem pasta de trabalho. Em inglês porque o destinatário é o modelo. */
+export const SUBAGENT_NO_FOLDER_NOTICE =
+  "[Notice: there is no working folder in this conversation — the subagent ran in chat mode, without file access.]"
+
+/** Resultado da tool subagent quando o subagente não devolveu texto. */
+export const SUBAGENT_EMPTY_OUTPUT = "(the subagent returned no text)"
+
+// Versões em português: conversas antigas no disco ainda as carregam.
+const SUBAGENT_NO_FOLDER_PREFIXES = ["[Notice: there is no working folder", "[Aviso: não há pasta de trabalho"]
+const SUBAGENT_EMPTY_OUTPUTS = [SUBAGENT_EMPTY_OUTPUT, "(o subagente não retornou texto)"]
+
+/**
+ * Separa o resultado da tool subagent para o card: o aviso de "sem pasta" e o
+ * resultado vazio são texto para o modelo, e a UI os troca por i18n. O resto
+ * (a resposta do subagente) vai como está.
+ */
+export function parseSubagentOutput(output: string): { noFolder: boolean; empty: boolean; text: string } {
+  let text = output
+  const noFolder = SUBAGENT_NO_FOLDER_PREFIXES.some((prefix) => output.startsWith(prefix))
+  if (noFolder) {
+    const end = text.indexOf("]")
+    text = end >= 0 ? text.slice(end + 1).replace(/^\s+/, "") : ""
+  }
+  const empty = SUBAGENT_EMPTY_OUTPUTS.includes(text.trim())
+  return { noFolder, empty, text: empty ? "" : text }
+}
+
 /** Origem de um pedido vindo de worker (exibido no chat do orquestrador) */
 export interface AskOrigin {
   workerSessionId: string
@@ -644,6 +686,9 @@ export interface SendMessageOptions {
   planReview?: PlanReview
   /** Modo simples: respostas diretas em texto puro, sem formatação */
   simple?: boolean
+  /** Modo chamada (conversa por voz): a resposta será LIDA em voz alta, então
+   *  vem curta, direta e sem formatação. */
+  voiceCall?: boolean
   /** Configuração de reasoning/thinking do modelo quando suportado */
   reasoning?: ReasoningConfig
   /** Modo subagents: expõe a tool subagent (workers efêmeros em background) */

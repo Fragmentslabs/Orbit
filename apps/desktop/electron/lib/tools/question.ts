@@ -12,7 +12,7 @@ interface QuestionReply {
   rejected?: boolean
 }
 
-const DISMISSED = 'O usuário dispensou as perguntas — prossiga com a opção mais razoável.'
+const DISMISSED = 'The user dismissed the questions — proceed with the most reasonable option.'
 
 async function autoAnswer(input: SendMessageInput, questions: Omit<Question, 'id'>[]): Promise<string> {
   try {
@@ -28,9 +28,9 @@ async function autoAnswer(input: SendMessageInput, questions: Omit<Question, 'id
         )
         .join('\n'),
     })
-    return `Decisões tomadas automaticamente (modo autônomo):\n${text.trim()}`
+    return `Decisions made automatically (autonomous mode):\n${text.trim()}`
   } catch {
-    return 'Não foi possível decidir automaticamente — prossiga com a opção mais razoável.'
+    return 'Could not decide automatically — proceed with the most reasonable option.'
   }
 }
 
@@ -76,7 +76,7 @@ export function createQuestionTool(input: SendMessageInput, signal?: AbortSignal
         )
         if (reply?.rejected || !reply?.answers) return DISMISSED
         return questions
-          .map((q, i) => formatAskLine(i, q.text, reply.answers?.[i] || '(sem resposta)'))
+          .map((q, i) => formatAskLine(i, q.text, reply.answers?.[i] || '(no answer)'))
           .join('\n')
       } catch {
         return DISMISSED

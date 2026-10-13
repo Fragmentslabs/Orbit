@@ -61,7 +61,7 @@ export function createDescribeImageTool(input: SendMessageInput) {
   return tool({
     description:
       'Describes an image using the configured vision model (Vision mode). The image itself never enters your context — this tool is the only way to see it, so call it whenever an image is relevant to the task; you can call it multiple times with different focus questions.\n' +
-      'ref: either the #N of an image attached to the CURRENT message (from the "[Imagem anexada ... ref #N]" placeholder), or an orbit-media:// URL from image_list — which is how you look at an image from an earlier turn, or at the result of an edit you just made.\n' +
+      'ref: either the #N of an image attached to the CURRENT message (from the "[Image attached ... ref #N]" placeholder), or an orbit-media:// URL from image_list — which is how you look at an image from an earlier turn, or at the result of an edit you just made.\n' +
       'focus: what you need to know about the image (layout, colors, texts, specific elements, state...). The vision model sees ONLY the image and this focus — never the conversation. So when the task depends on earlier context (instructions, preferences, what was built so far), COMPLEMENT the focus with the necessary context so the description answers the real question instead of being generic. Omit focus when a general description is enough.',
     inputSchema: z.object({
       ref: z
@@ -81,9 +81,9 @@ export function createDescribeImageTool(input: SendMessageInput) {
       if (!image) {
         throw new Error(
           typeof ref === 'number'
-            ? `A imagem #${ref} não está disponível: esse número vale só para as imagens anexadas ao turno atual. ` +
-              'Use image_list para pegar a URL orbit-media:// da imagem que você quer ver.'
-            : `Imagem não encontrada: ${ref}. Use image_list para ver as referências desta conversa.`,
+            ? `Image #${ref} is not available: that number only applies to images attached in the current turn. ` +
+              'Use image_list to get the orbit-media:// URL of the image you want to see.'
+            : `Image not found: ${ref}. Use image_list to see the references in this conversation.`,
         )
       }
       const desc = await describeImage({
@@ -93,7 +93,7 @@ export function createDescribeImageTool(input: SendMessageInput) {
         focus: focus ?? input.text,
       })
       if (!desc) {
-        throw new Error('O modelo de visão configurado falhou ao descrever a imagem — tente novamente ou informe o usuário.')
+        throw new Error('The configured vision model failed to describe the image — try again or tell the user.')
       }
       return desc
     },

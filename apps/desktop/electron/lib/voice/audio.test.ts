@@ -5,8 +5,11 @@ import {
   encodeWavPcm16,
   float32ToPcm16,
   pcm16ToFloat32,
+  resampleLinear,
   SampleBuffer,
   samplesToMs,
+  splitForSynthesis,
+  splitPcmWindows,
   StreamResampler,
 } from './audio'
 
@@ -124,5 +127,50 @@ describe('samplesToMs', () => {
     expect(samplesToMs(16000, 16000)).toBe(1000)
     expect(samplesToMs(8000, 16000)).toBe(500)
     expect(samplesToMs(100, 48000)).toBe(2)
+  })
+})
+
+describe('splitForSynthesis', () => {
+  it('texto curto vai inteiro', () => {
+    expect(splitForSynthesis('Olá, tudo bem?')).toEqual(['Olá, tudo bem?'])
+  })
+
+  it('texto longo corta em fim de frase, sem passar do teto', () => {
+    const frase = 'Esta é uma frase de teste com algumas palavras. '
+    const parts = splitForSynthesis(frase.repeat(30), 200)
+    expect(parts.length).toBeGreaterThan(1)
+    for (const part of parts) {
+      expect(part.length).toBeLessThanOrEqual(200)
+      expect(part.endsWith('.')).toBe(true)
+    }
+    expect(parts.join(' ')).toBe(frase.repeat(30).trim())
+  })
+})
+
+describe('splitPcmWindows', () => {
+  it('áudio curto é uma janela só', () => {
+    expect(splitPcmWindows(new Float32Array(16000 * 10))).toEqual([[0, 160000]])
+  })
+
+  it('áudio longo corta no silêncio perto da fronteira e cobre tudo', () => {
+    const rate = 1000
+    // 25 s de "fala" (1.0) com um silêncio entre 9,5 s e 9,7 s.
+    const samples = new Float32Array(25 * rate).fill(1)
+    samples.fill(0, 9500, 9700)
+    const windows = splitPcmWindows(samples, rate, 10, 1)
+    expect(windows[0][0]).toBe(0)
+    expect(windows[0][1]).toBeGreaterThanOrEqual(9500)
+    expect(windows[0][1]).toBeLessThan(9700)
+    // Contíguas e até o fim.
+    for (let i = 1; i < windows.length; i++) expect(windows[i][0]).toBe(windows[i - 1][1])
+    expect(windows[windows.length - 1][1]).toBe(samples.length)
+  })
+})
+
+describe('resampleLinear', () => {
+  it('muda o número de amostras na proporção das taxas', () => {
+    expect(resampleLinear(new Float32Array(48000), 48000, 24000).length).toBe(24000)
+    const same = new Float32Array([1, 2, 3])
+    expect(resampleLinear(same, 16000, 16000)).toBe(same)
   })
 })

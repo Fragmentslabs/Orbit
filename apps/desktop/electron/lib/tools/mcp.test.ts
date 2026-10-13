@@ -35,12 +35,12 @@ beforeEach(() => {
 describe('mcp_connect', () => {
   it('exige url quando o tipo é http', async () => {
     const out = await call(createMcpConnectTool(), { name: 'notion', type: 'http' })
-    expect(out).toContain('exige "url"')
+    expect(out).toContain('requires "url"')
   })
 
   it('exige command quando o tipo é stdio', async () => {
     const out = await call(createMcpConnectTool(), { name: 'local', type: 'stdio' })
-    expect(out).toContain('exige "command"')
+    expect(out).toContain('requires "command"')
   })
 
   it('não sobrescreve uma conexão existente: manda usar mcp_update', async () => {
@@ -50,7 +50,7 @@ describe('mcp_connect', () => {
       type: 'http',
       url: 'https://outro.exemplo/mcp',
     })
-    expect(out).toContain('já existe uma conexão')
+    expect(out).toContain('already exists')
     expect(out).toContain('mcp_update')
   })
 
@@ -60,23 +60,23 @@ describe('mcp_connect', () => {
       type: 'http',
       url: 'https://mcp.notion.com/mcp',
     })
-    expect(out).toContain('proposta')
-    expect(out).toContain('card apareceu')
-    expect(out).toContain('Nada foi gravado')
+    expect(out).toContain('proposed')
+    expect(out).toContain('card appeared')
+    expect(out).toContain('Nothing has been saved')
   })
 })
 
 describe('mcp_update', () => {
   it('recusa um nome que não existe', async () => {
     const out = await call(createMcpUpdateTool(), { name: 'inexistente', type: 'http', url: 'https://x/mcp' })
-    expect(out).toContain('não existe conexão')
+    expect(out).toContain('no connection named')
     expect(out).toContain('mcp_servers')
   })
 
   it('recusa quando nenhum campo muda', async () => {
     status.mockReturnValue([server()])
     const out = await call(createMcpUpdateTool(), { name: 'figma', type: 'http' })
-    expect(out).toContain('nenhum campo')
+    expect(out).toContain('no field to change')
   })
 
   it('propõe a troca de um header (o caso do token expirado)', async () => {
@@ -87,15 +87,15 @@ describe('mcp_update', () => {
       headers: { Authorization: 'Bearer novo' },
       reason: 'token expirado',
     })
-    expect(out).toContain('proposta')
+    expect(out).toContain('proposed')
     expect(out).toContain('figma')
-    expect(out).toContain('Nada foi gravado')
+    expect(out).toContain('Nothing has been saved')
   })
 })
 
 describe('mcp_servers', () => {
   it('diz quando não há nenhum', async () => {
-    expect(await call(createMcpServersTool(), {})).toContain('Nenhum servidor MCP')
+    expect(await call(createMcpServersTool(), {})).toContain('No MCP servers')
   })
 
   it('traz estado, erro, oauth e tools', async () => {
@@ -110,8 +110,8 @@ describe('mcp_servers', () => {
     ])
     const out = await call(createMcpServersTool(), {})
     expect(out).toContain('figma (http) — unauthorized')
-    expect(out).toContain('oauth: sem autorização')
-    expect(out).toContain('erro: Authorization required')
+    expect(out).toContain('oauth: not authorized')
+    expect(out).toContain('error: Authorization required')
     expect(out).toContain('figma_get_file')
   })
 })

@@ -196,6 +196,154 @@ export const MESSAGES = {
     'pt-BR': 'Orbit — clique para abrir',
     en: 'Orbit — click to open',
   },
+
+  // ── Resultado do /init (mensagem do assistente no chat) ───────────────────
+  'init.unfinished': {
+    'pt-BR': '_O coordenador parou sem confirmar a revisão final; o rascunho estava consistente e foi gravado como estava._',
+    en: '_The coordinator stopped without confirming the final review; the draft was consistent and was saved as it was._',
+  },
+  'init.nothing.title': {
+    'pt-BR': '## Nada para memorizar',
+    en: '## Nothing to memorize',
+  },
+  'init.nothing.body': {
+    'pt-BR': 'A análise não encontrou nada específico o bastante para valer uma memória.',
+    en: 'The analysis found nothing specific enough to be worth a memory.',
+  },
+  'init.count.created': {
+    'pt-BR': '{{count}} nova(s)',
+    en: '{{count}} new',
+  },
+  'init.count.updated': {
+    'pt-BR': '{{count}} atualizada(s)',
+    en: '{{count}} updated',
+  },
+  'init.count.retired': {
+    'pt-BR': '{{count}} antiga(s) removida(s)',
+    en: '{{count}} old removed',
+  },
+  'init.count.learnings': {
+    'pt-BR': '{{count}} aprendizado(s) para outros projetos',
+    en: '{{count}} learning(s) for other projects',
+  },
+  'init.saved.title': {
+    'pt-BR': '## Projeto memorizado',
+    en: '## Project memorized',
+  },
+  'init.saved.tree': {
+    'pt-BR': 'Árvore gravada ({{counts}})',
+    en: 'Tree saved ({{counts}})',
+  },
+  'init.saved.footer': {
+    'pt-BR':
+      'Todo chat novo nesta pasta, ou numa subpasta dela, começa com o mapa dessa árvore e abre os detalhes conforme a tarefa. Dá para ver e editar tudo na aba Memórias.',
+    en: 'Every new chat in this folder, or in one of its subfolders, starts with the map of this tree and opens the details as the task needs. You can see and edit everything in the Memories tab.',
+  },
+  'init.cancelled': {
+    'pt-BR':
+      '## Análise cancelada\n\nNada foi gravado: as memórias só são salvas no fim, depois que a árvore inteira é revisada. Rode `/init` de novo quando quiser.',
+    en: '## Analysis cancelled\n\nNothing was saved: memories are only written at the end, after the whole tree is reviewed. Run `/init` again whenever you want.',
+  },
+  'init.failed.title': {
+    'pt-BR': '## Análise falhou',
+    en: '## Analysis failed',
+  },
+  'init.failed.nothingSaved': {
+    'pt-BR': 'Nada foi gravado.',
+    en: 'Nothing was saved.',
+  },
+
+  // ── Feed de atividade do browser do painel ────────────────────────────────
+  'panel.activity.resize': {
+    'pt-BR': 'Redimensionando para {{label}}',
+    en: 'Resizing to {{label}}',
+  },
+  'panel.activity.navigate': {
+    'pt-BR': 'Navegando para {{url}}',
+    en: 'Navigating to {{url}}',
+  },
+  'panel.activity.read': {
+    'pt-BR': 'Lendo a página',
+    en: 'Reading the page',
+  },
+  'panel.activity.click': {
+    'pt-BR': 'Clicando em {{target}}',
+    en: 'Clicking {{target}}',
+  },
+  'panel.activity.type': {
+    'pt-BR': 'Digitando…',
+    en: 'Typing…',
+  },
+  'panel.activity.screenshot': {
+    'pt-BR': 'Capturando a tela',
+    en: 'Capturing the screen',
+  },
+  'panel.activity.eval': {
+    'pt-BR': 'Executando JavaScript na página',
+    en: 'Running JavaScript on the page',
+  },
+  'panel.activity.hover': {
+    'pt-BR': 'Passando o mouse',
+    en: 'Hovering',
+  },
+  'panel.activity.drag': {
+    'pt-BR': 'Arrastando',
+    en: 'Dragging',
+  },
+  'panel.activity.dragHold': {
+    'pt-BR': 'Arrastando (segurando)',
+    en: 'Dragging (holding)',
+  },
+  'panel.activity.scriptOpen': {
+    'pt-BR': 'Script: abrindo {{url}}',
+    en: 'Script: opening {{url}}',
+  },
+  'panel.activity.scriptCapture': {
+    'pt-BR': 'Script: capturando {{name}}',
+    en: 'Script: capturing {{name}}',
+  },
+  'panel.activity.fullPage': {
+    'pt-BR': 'Capturando a página inteira',
+    en: 'Capturing the full page',
+  },
+
+  // ── Fontes da conversa (erros devolvidos à UI) ────────────────────────────
+  'sources.error.noFileToPrint': {
+    'pt-BR': 'Este tipo de fonte não tem arquivo para imprimir.',
+    en: 'This kind of source has no file to print.',
+  },
+  'sources.error.onlyPdfPrint': {
+    'pt-BR': 'Só PDF pode ser impresso daqui. Baixe o arquivo e imprima pelo Word.',
+    en: 'Only PDFs can be printed from here. Download the file and print it from Word.',
+  },
+  'sources.error.notFound': {
+    'pt-BR': 'Documento não encontrado.',
+    en: 'Document not found.',
+  },
+  'sources.error.unsupportedKind': {
+    'pt-BR': '{{filename}}: só PDF, DOCX e planilhas entram como fonte.',
+    en: '{{filename}}: only PDF, DOCX and spreadsheets can be added as sources.',
+  },
+  'sources.error.emptyText': {
+    'pt-BR': 'O texto está vazio.',
+    en: 'The text is empty.',
+  },
+  'sources.error.noReadableText': {
+    'pt-BR': '{{url}}: a página não trouxe texto legível (pode depender de JavaScript).',
+    en: '{{url}}: the page returned no readable text (it may depend on JavaScript).',
+  },
+  'sources.error.invalidId': {
+    'pt-BR': 'Id inválido.',
+    en: 'Invalid id.',
+  },
+  'sources.error.noFolder': {
+    'pt-BR': 'Esta conversa não está em nenhuma pasta, então não há com quem compartilhar.',
+    en: 'This conversation is not in any folder, so there is nothing to share it with.',
+  },
+  'sources.defaultFileName': {
+    'pt-BR': 'documento',
+    en: 'document',
+  },
 } as const satisfies Record<string, Record<MainLocale, string>>
 
 export type MainMessageKey = keyof typeof MESSAGES
@@ -238,7 +386,19 @@ export async function t(
   vars?: Record<string, string | number>,
 ): Promise<string> {
   if (cached === undefined) await loadMainLocale()
-  const locale = cached ?? 'en'
+  return format(key, cached ?? 'en', vars)
+}
+
+/**
+ * Versão síncrona, para caminhos que não podem esperar (o feed de atividade
+ * do painel sai na ordem das ações). Usa o idioma já em memória — o boot
+ * carrega com `loadMainLocale` — e cai em inglês se ainda não houver.
+ */
+export function tNow(key: MainMessageKey, vars?: Record<string, string | number>): string {
+  return format(key, cached ?? 'en', vars)
+}
+
+function format(key: MainMessageKey, locale: MainLocale, vars?: Record<string, string | number>): string {
   let text: string = MESSAGES[key][locale]
   if (vars) {
     for (const [name, value] of Object.entries(vars)) {

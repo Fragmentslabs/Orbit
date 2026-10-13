@@ -11,7 +11,7 @@ import { underscoreBlankWarning } from './markdown-blanks'
 describe('underscoreBlankWarning', () => {
   it('avisa sobre o campo de data que vira "//"', () => {
     const aviso = underscoreBlankWarning('**Nome:** ______\n\n**Data:** ____/____/______')
-    expect(aviso).toContain('linha 3')
+    expect(aviso).toContain('line 3')
     expect(aviso).toContain('update_document')
   })
 
@@ -30,8 +30,8 @@ describe('underscoreBlankWarning', () => {
   })
 
   it('pega telefone e CPF pelo mesmo motivo', () => {
-    expect(underscoreBlankWarning('Telefone: (__)_____-____')).toContain('linha 1')
-    expect(underscoreBlankWarning('CPF: ___.___.___-__')).toContain('linha 1')
+    expect(underscoreBlankWarning('Telefone: (__)_____-____')).toContain('line 1')
+    expect(underscoreBlankWarning('CPF: ___.___.___-__')).toContain('line 1')
   })
 
   it('cala quando os grupos estão separados por espaço', () => {
@@ -40,6 +40,6 @@ describe('underscoreBlankWarning', () => {
 
   it('lista as linhas quando há várias', () => {
     const aviso = underscoreBlankWarning('Data: __/__/__\nx\nCPF: ___.___.___-__')
-    expect(aviso).toContain('linhas 1, 3')
+    expect(aviso).toContain('lines 1, 3')
   })
 })

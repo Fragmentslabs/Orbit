@@ -17,18 +17,18 @@ function describe(m: Memory): string {
   const kind = m.kind === 'project' ? `project/${m.category}` : m.kind
   const area = m.area ? ` area=${m.area}` : ''
   const sub = m.subproject ? ` sub=${m.subproject}` : ''
-  const doc = m.hasDoc ? ' (doc anexado — use memory_open para ler)' : ''
+  const doc = m.hasDoc ? ' (doc attached — use memory_open to read it)' : ''
   const tags = m.tags.length ? ` tags: ${m.tags.join(', ')}` : ''
   // A vizinhança entra no describe de propósito: é lendo daqui que o agente
   // descobre a que nó pendurar a próxima memória, em vez de criar uma solta.
-  const links = m.relatedIds.length ? ` ligada a: ${m.relatedIds.join(', ')}` : ' SEM CONEXÕES'
-  return `#${m.id} [${kind}]${area}${sub} (peso ${m.weight.toFixed(2)}, hits ${m.hits}) ${m.text}${tags}${doc}${links}`
+  const links = m.relatedIds.length ? ` linked to: ${m.relatedIds.join(', ')}` : ' NO CONNECTIONS'
+  return `#${m.id} [${kind}]${area}${sub} (weight ${m.weight.toFixed(2)}, hits ${m.hits}) ${m.text}${tags}${doc}${links}`
 }
 
 function saveReply(result: { id: string; merged: boolean; text: string }): string {
   return result.merged
-    ? `Fundido com memória já existente #${result.id}: "${result.text}" — não foi criada duplicata.`
-    : `Memória #${result.id} salva.`
+    ? `Merged into existing memory #${result.id}: "${result.text}" — no duplicate was created.`
+    : `Memory #${result.id} saved.`
 }
 
 /** Rótulo de um nó no esqueleto da árvore devolvido ao agente. */
@@ -41,7 +41,7 @@ function treeLine(node: memory.TreeNodeSummary): string {
 }
 
 function treeReply(nodes: memory.TreeNodeSummary[]): string {
-  if (nodes.length === 0) return 'Este projeto ainda não tem árvore de memórias. Rode /init ou crie o nó raiz.'
+  if (nodes.length === 0) return 'This project has no memory tree yet. Run /init or create the root node.'
   return nodes.map(treeLine).join('\n')
 }
 
@@ -55,16 +55,16 @@ async function requireParent(projectId: string, relatedIds: string[] | undefined
   const skeleton = await memory.tree(projectId)
   if (skeleton.length === 0) return null
   return [
-    'Erro: memória de projeto exige relatedIds — sem pai ela fica órfã na árvore.',
-    'Escolha abaixo o nó ao qual ela pertence (use relatedTypes: { "<id>": "parent" })',
-    'ou, se já existir uma memória sobre o mesmo assunto, edite-a com memory_update.',
+    'Error: a project memory requires relatedIds — without a parent it is orphaned in the tree.',
+    'Pick below the node it belongs to (use relatedTypes: { "<id>": "parent" })',
+    'or, if a memory on the same subject already exists, edit it with memory_update.',
     '',
     ...skeleton.map(treeLine),
   ].join('\n')
 }
 
 function searchReply(results: Memory[]): string {
-  if (results.length === 0) return 'Nenhuma memória relevante encontrada.'
+  if (results.length === 0) return 'No relevant memories found.'
   return results.map(describe).join('\n')
 }
 
@@ -134,12 +134,12 @@ function createListTool(projectIdOf?: () => Promise<string>) {
         .sort((a, b) => a.hits - b.hits || a.createdAt - b.createdAt)
         .slice(0, limit ?? 30)
 
-      if (filtradas.length === 0) return 'Nenhuma memória corresponde a esses critérios.'
+      if (filtradas.length === 0) return 'No memories match these criteria.'
       return [
-        `${filtradas.length} memória(s), da menos usada para a mais usada:`,
+        `${filtradas.length} memory(ies), least used first:`,
         ...filtradas.map((m) => {
-          const usoRecente = m.lastHitAt ? `, último uso há ${dias(m.lastHitAt)}d` : ', nunca usada'
-          return `${describe(m)} — criada há ${dias(m.createdAt)}d${usoRecente}`
+          const usoRecente = m.lastHitAt ? `, last used ${dias(m.lastHitAt)}d ago` : ', never used'
+          return `${describe(m)} — created ${dias(m.createdAt)}d ago${usoRecente}`
         }),
       ].join('\n')
     },
@@ -172,13 +172,13 @@ function createDeleteTool() {
       for (const id of ids) {
         const existente = await memory.getFull(id)
         if (!existente) {
-          linhas.push(`#${id}: não encontrada`)
+          linhas.push(`#${id}: not found`)
           continue
         }
         await memory.remove(id)
         apagadas++
       }
-      return [`${apagadas} memória(s) excluída(s). Motivo: ${motivo}`, ...linhas].join('\n')
+      return [`${apagadas} memory(ies) deleted. Reason: ${motivo}`, ...linhas].join('\n')
     },
   })
 }
@@ -192,10 +192,10 @@ function createOpenTool() {
     }),
     execute: async ({ id }) => {
       const full = await memory.open(id)
-      if (!full) return `Memória #${id} não encontrada.`
+      if (!full) return `Memory #${id} not found.`
       const parts = [describe(full.memory)]
-      if (full.memory.relatedIds.length) parts.push(`Relacionadas: ${full.memory.relatedIds.join(', ')}`)
-      if (full.document) parts.push(`--- documento anexado ---\n${full.document}`)
+      if (full.memory.relatedIds.length) parts.push(`Related: ${full.memory.relatedIds.join(', ')}`)
+      if (full.document) parts.push(`--- attached document ---\n${full.document}`)
       return parts.join('\n')
     },
   })
@@ -263,10 +263,10 @@ export function createChatMemoryTools(input: SendMessageInput): ToolSet {
       execute: async ({ id, text, addTags, tags, weight, kind }) => {
         try {
           const updated = await memory.revise(id, { text, addTags, tags, weight, kind })
-          if (!updated) return `Memória #${id} não encontrada.`
-          return `Memória #${id} atualizada: ${describe(updated)}`
+          if (!updated) return `Memory #${id} not found.`
+          return `Memory #${id} updated: ${describe(updated)}`
         } catch (err) {
-          return `Erro: ${err instanceof Error ? err.message : String(err)}`
+          return `Error: ${err instanceof Error ? err.message : String(err)}`
         }
       },
     }),
@@ -280,7 +280,7 @@ export function createChatMemoryTools(input: SendMessageInput): ToolSet {
       }),
       execute: async ({ sourceId, targetId, type }) => {
         const ok = await memory.link(sourceId, targetId, type)
-        return ok ? 'Memórias conectadas.' : 'Não foi possível conectar: alguma das memórias não existe.'
+        return ok ? 'Memories connected.' : 'Could not connect: one of the memories does not exist.'
       },
     }),
     memory_list: createListTool(),
@@ -315,7 +315,7 @@ export function createGraphTool(_input: SendMessageInput, ctx: ToolContext) {
         projectId: (await scope()).projectId,
         limit,
       })
-      if (results.length === 0) return 'Nenhuma memória encontrada para esta consulta.'
+      if (results.length === 0) return 'No memories found for this query.'
       const lines: string[] = []
       for (const m of results) {
         const area = m.area ? ` [${m.area}]` : ''
@@ -396,10 +396,10 @@ export function createCodeMemoryTools(input: SendMessageInput, ctx: ToolContext)
       execute: async ({ text, kind, category, area, subproject, weight, tags, document, relatedIds, relatedTypes }) => {
         const resolvedKind = kind ?? 'project'
         if (resolvedKind === 'project' && !category) {
-          return 'Erro: memórias de projeto exigem o campo category (preference | convention | structure | decision | context | database | standard).'
+          return 'Error: project memories require the category field (preference | convention | structure | decision | context | database | standard).'
         }
         if (resolvedKind === 'general' && category && category !== 'learning') {
-          return 'Erro: kind=general só aceita category="learning" (ou nenhuma category).'
+          return 'Error: kind=general only accepts category="learning" (or no category).'
         }
         if (resolvedKind === 'project') {
           const missingParent = await requireParent(await projectId(), relatedIds)
@@ -456,12 +456,12 @@ export function createCodeMemoryTools(input: SendMessageInput, ctx: ToolContext)
             text, addTags, tags, weight, kind, category, area, document,
             directory: (await scope()).directory,
           })
-          if (!updated) return `Memória #${id} não encontrada.`
-          return `Memória #${id} atualizada: ${describe(updated)}`
+          if (!updated) return `Memory #${id} not found.`
+          return `Memory #${id} updated: ${describe(updated)}`
         } catch (err) {
           // Reclassificação inválida volta como texto para o agente corrigir a
           // chamada, em vez de derrubar o turno com uma exceção.
-          return `Erro: ${err instanceof Error ? err.message : String(err)}`
+          return `Error: ${err instanceof Error ? err.message : String(err)}`
         }
       },
     }),
@@ -512,7 +512,7 @@ export function createCodeMemoryTools(input: SendMessageInput, ctx: ToolContext)
       }),
       execute: async ({ sourceId, targetId, type }) => {
         const ok = await memory.link(sourceId, targetId, type)
-        return ok ? 'Memórias conectadas.' : 'Não foi possível conectar: alguma das memórias não existe.'
+        return ok ? 'Memories connected.' : 'Could not connect: one of the memories does not exist.'
       },
     }),
 

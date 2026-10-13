@@ -56,9 +56,9 @@ export async function searchWeb(query: string, numResults = 8): Promise<string> 
     }),
     signal: AbortSignal.timeout(25_000),
   })
-  if (!res.ok) throw new Error(`Busca falhou com status ${res.status}`)
+  if (!res.ok) throw new Error(`Search failed with status ${res.status}`)
   const body = await res.text()
-  return parseMcpResponse(body) ?? 'Nenhum resultado encontrado. Tente outra consulta.'
+  return parseMcpResponse(body) ?? 'No results found. Try a different query.'
 }
 
 export function createWebSearchTool() {
@@ -113,7 +113,7 @@ export async function fetchReadablePage(
   maxChars = 100_000,
 ): Promise<{ title: string; text: string }> {
   if (!url.startsWith('http://') && !url.startsWith('https://')) {
-    throw new Error('A URL deve começar com http:// ou https://')
+    throw new Error('The URL must start with http:// or https://')
   }
   const res = await fetch(url, {
     headers: {
@@ -123,10 +123,10 @@ export async function fetchReadablePage(
     },
     signal: AbortSignal.timeout(FETCH_TIMEOUT),
   })
-  if (!res.ok) throw new Error(`Requisição falhou com status ${res.status}`)
+  if (!res.ok) throw new Error(`Request failed with status ${res.status}`)
 
   const raw = await res.text()
-  if (raw.length > MAX_RESPONSE_SIZE) throw new Error('Resposta excede o limite de 5MB')
+  if (raw.length > MAX_RESPONSE_SIZE) throw new Error('Response exceeds the 5MB limit')
 
   const isHtml = (res.headers.get('content-type') ?? '').includes('text/html')
   const title = isHtml ? decodeEntities(/<title[^>]*>([\s\S]*?)<\/title>/i.exec(raw)?.[1] ?? '').trim() : ''

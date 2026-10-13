@@ -1,6 +1,6 @@
 import { useTranslation } from "react-i18next"
 import { BotIcon, XCircleIcon } from "lucide-react"
-import type { ToolPart } from "@shared/chat"
+import { parseSubagentOutput, type ToolPart } from "@shared/chat"
 import { Shimmer } from "@/src/components/ai/shimmer"
 
 /**
@@ -11,6 +11,8 @@ import { Shimmer } from "@/src/components/ai/shimmer"
 export function SubAgentCard({ part }: { part: ToolPart }) {
   const { t } = useTranslation()
   const task = typeof part.input?.task === "string" ? part.input.task : t("subagent.defaultTask")
+  // O resultado é texto para o modelo: o aviso de "sem pasta" e o vazio viram i18n.
+  const result = part.output ? parseSubagentOutput(part.output) : null
 
   return (
     <div className="not-prose my-1.5 w-full rounded-lg border bg-muted/40 px-3 py-2 text-xs">
@@ -28,9 +30,12 @@ export function SubAgentCard({ part }: { part: ToolPart }) {
       {part.state === "error" && part.error && (
         <p className="mt-1.5 text-destructive">{part.error}</p>
       )}
-      {part.state === "done" && part.output && (
+      {part.state === "done" && result?.noFolder && (
+        <p className="mt-1.5 text-muted-foreground italic">{t("subagent.noFolder")}</p>
+      )}
+      {part.state === "done" && result && (result.empty || result.text) && (
         <p className="mt-1.5 max-h-48 overflow-y-auto whitespace-pre-wrap text-muted-foreground">
-          {part.output}
+          {result.empty ? t("subagent.empty") : result.text}
         </p>
       )}
     </div>

@@ -1,6 +1,6 @@
 import type { SendMessageInput } from '@shared/chat'
 import type { Memory } from '@shared/memory'
-import { agentMayUseBrowser } from './app-settings'
+import { agentMayUseBrowser, getAppSettings } from './app-settings'
 import { loadPromptContext } from './memory/service'
 import type { MapNode, ProjectMap } from './memory/project-map'
 import { buildPastChatsContext, detectPastChatsIntent } from './past-chats'
@@ -307,6 +307,24 @@ const SIMPLE_INSTRUCTION = `SIMPLE MODE ACTIVE. Direct answers, no unnecessary t
 - Use Markdown when it helps readability: short lists, occasional bold, and fenced code blocks (\`\`\`language) for code snippets.
 - Avoid long reports, dense tables, and numbered citations.
 - Only use the available tools when strictly necessary to answer; when in doubt, answer directly without tools.`
+
+const VOICE_CALL_INSTRUCTION = `VOICE CALL ACTIVE. The user is talking to you out loud, and your reply will be read aloud by a text-to-speech engine as soon as you write it. Their message is a live transcription, so it may have small recognition errors: infer what they meant.
+- Reply like a person on a phone call: short, precise, natural spoken sentences. Usually one to three sentences; never more than about 60 words unless the user explicitly asks for detail.
+- Lead with the answer itself. No preamble, no recap of the question, no closing offers like "let me know if...".
+- Plain text only: no Markdown, lists, headings, tables, code blocks, emojis, links or URLs. Nothing that only makes sense on screen.
+- Write numbers, dates, units and symbols the way they are spoken.
+- If the request is ambiguous, ask one short question instead of guessing at length.
+- Use tools only when the answer really needs them, and say only the outcome.
+- Silence on a call feels broken. Before any tool call or slow step (searching, reading files, running commands), FIRST write one short, natural sentence saying what you are about to do, in the user's language (for example "Deixa eu pesquisar isso, um instante."). It is spoken immediately while you work. Say it once, not before every step.`
+
+/**
+ * Áudio desligado nas Preferências → Voz: a tool correspondente nem existe, e
+ * o agente precisa saber dizer POR QUÊ em vez de improvisar ("não sei fazer
+ * áudio") ou fingir que fez.
+ */
+const AUDIO_GENERATE_OFF = `Creating audio files (text-to-speech) is DISABLED in this Orbit: Settings → Voice → "Text to speech" is turned off. If the user asks for an audio, a voice message or a narration, say plainly that you can't right now because this feature is turned off, and that they can enable it in Settings → Voice (it needs the voice model downloaded there, or a provider that supports speech). Never pretend to produce audio another way.`
+
+const AUDIO_TRANSCRIBE_OFF = `Transcribing audio (speech-to-text) is DISABLED in this Orbit: Settings → Voice → "Speech to text" is turned off. If the user sends an audio and asks what it says, or the request depends on it, say plainly that you can't listen to it because this feature is turned off, and that they can enable it in Settings → Voice if this machine has a dictation engine ready (the screen shows whether it meets the requirements). Never guess the content of an audio.`
 
 const BRAIN_CHAT_PROMPT = `BRAIN MODE ACTIVE. You have memory tools (memory_save / memory_search / memory_link / memory_open).
 
@@ -657,6 +675,13 @@ export async function buildSystemPrompt(
     }
   }
   if (input.options.simple) parts.push(SIMPLE_INSTRUCTION)
+  if (input.options.voiceCall) parts.push(VOICE_CALL_INSTRUCTION)
+  // Áudio: só quem fala com o usuário precisa explicar um recurso desligado.
+  if (input.orchestrationRole !== 'worker') {
+    const voice = getAppSettings().voice
+    if (!voice.tts.enabled) parts.push(AUDIO_GENERATE_OFF)
+    if (!voice.stt.enabled) parts.push(AUDIO_TRANSCRIBE_OFF)
+  }
 
   parts.push(VERIFIED_RECORD_INSTRUCTION)
   parts.push(`Current date: ${new Date().toISOString().slice(0, 10)}`)

@@ -118,9 +118,9 @@ export function describeSkillAttachment(buffer: Buffer, filename?: string): stri
     if (!parsed) return null
     const extras = names.filter((n) => n !== manifestName)
     return [
-      `Nome: ${parsed.name}`,
-      `Descrição: ${parsed.description}`,
-      extras.length ? `Arquivos auxiliares: ${extras.join(', ')}` : '',
+      `Name: ${parsed.name}`,
+      `Description: ${parsed.description}`,
+      extras.length ? `Auxiliary files: ${extras.join(', ')}` : '',
       '',
       parsed.content,
     ]
@@ -136,7 +136,7 @@ export function describeSkillAttachment(buffer: Buffer, filename?: string): stri
   }
   const parsed = parseSkill(raw, 'global', filename ?? 'attachment.skill')
   if (!parsed) return null
-  return [`Nome: ${parsed.name}`, `Descrição: ${parsed.description}`, '', parsed.content].join('\n')
+  return [`Name: ${parsed.name}`, `Description: ${parsed.description}`, '', parsed.content].join('\n')
 }
 
 /** Importa a seleção do dialog (arquivo zip OU manifesto texto + extras). */

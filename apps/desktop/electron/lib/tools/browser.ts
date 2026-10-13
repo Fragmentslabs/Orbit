@@ -68,7 +68,7 @@ export function createBrowserOpenTool(sessionId: string) {
       const win = await Promise.race([
         navigate(sessionId, url),
         new Promise<never>((_, reject) =>
-          setTimeout(() => reject(new Error('Tempo de navegação esgotado')), NAVIGATION_TIMEOUT),
+          setTimeout(() => reject(new Error('Navigation timed out')), NAVIGATION_TIMEOUT),
         ),
       ])
       const page = (await win.webContents.executeJavaScript(EXTRACT_TEXT)) as {
@@ -87,12 +87,12 @@ export function createBrowserLinksTool(sessionId: string) {
     inputSchema: z.object({}),
     execute: async () => {
       const win = browserWindows.get(sessionId)
-      if (!win || win.isDestroyed()) return 'Nenhuma página aberta. Use browser_open primeiro.'
+      if (!win || win.isDestroyed()) return 'No page open. Use browser_open first.'
       const links = (await win.webContents.executeJavaScript(EXTRACT_LINKS)) as {
         text: string
         href: string
       }[]
-      if (links.length === 0) return 'Nenhum link encontrado na página.'
+      if (links.length === 0) return 'No links found on the page.'
       return links.map((l) => `- [${l.text}](${l.href})`).join('\n')
     },
   })

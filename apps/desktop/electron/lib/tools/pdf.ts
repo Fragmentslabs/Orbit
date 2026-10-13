@@ -27,18 +27,18 @@ export function createPdfOpsTools(scope: DocumentToolScope, ctx: ToolContext | n
     if (/^(doc|src)[0-9]+$/.test(ref)) {
       const found = await readSessionDocument(scope.sessionId, ref)
       if (found) {
-        if (found.doc.kind !== 'pdf') return `${ref} (${found.doc.filename}) não é PDF.`
+        if (found.doc.kind !== 'pdf') return `${ref} (${found.doc.filename}) is not a PDF.`
         const bytes = await readSessionDocumentBytes(scope.sessionId, ref)
-        if (!bytes) return `O arquivo original de ${found.doc.filename} não foi preservado. Peça para anexar de novo.`
+        if (!bytes) return `The original file of ${found.doc.filename} was not kept. Ask for it to be attached again.`
         return { bytes, name: found.doc.filename }
       }
     }
-    if (!ctx) return `Documento não encontrado: ${ref}. Use doc_list para ver os anexos.`
-    if (documentKindOf(ref) !== 'pdf') return `Não é um PDF: ${ref}.`
+    if (!ctx) return `Document not found: ${ref}. Use doc_list to see the attachments.`
+    if (documentKindOf(ref) !== 'pdf') return `Not a PDF: ${ref}.`
     try {
       return { bytes: await fsp.readFile(resolveSafePath(ctx, ref)), name: path.basename(ref) }
     } catch (err) {
-      return `Não foi possível abrir ${ref}: ${(err as Error).message}`
+      return `Could not open ${ref}: ${(err as Error).message}`
     }
   }
 
@@ -63,7 +63,7 @@ export function createPdfOpsTools(scope: DocumentToolScope, ctx: ToolContext | n
         await fsp.writeFile(target, bytes)
         savedTo = savePath
       } catch (err) {
-        savedTo = `(falhou ao gravar em ${savePath}: ${(err as Error).message})`
+        savedTo = `(failed to write to ${savePath}: ${(err as Error).message})`
       }
     }
     return {
@@ -112,9 +112,9 @@ export function createPdfOpsTools(scope: DocumentToolScope, ctx: ToolContext | n
             loaded.map((l) => l.name).join(', '),
             savePath,
           )
-          return { ...out, pages, message: `${loaded.length} PDFs juntados em ${pages} páginas.` }
+          return { ...out, pages, message: `${loaded.length} PDFs merged into ${pages} pages.` }
         } catch (err) {
-          return `Erro ao juntar: ${(err as Error).message}`
+          return `Failed to merge: ${(err as Error).message}`
         }
       },
     }),
@@ -151,7 +151,7 @@ export function createPdfOpsTools(scope: DocumentToolScope, ctx: ToolContext | n
           const probe = await transformPdf(src.bytes, {})
           const selected = pages ? parsePageRange(pages, probe.total) : undefined
           if (pages && (!selected || selected.length === 0)) {
-            return `Nenhuma página válida em "${pages}" — o documento tem ${probe.total}.`
+            return `No valid pages in "${pages}" — the document has ${probe.total}.`
           }
           const result = await transformPdf(src.bytes, {
             pages: selected,
@@ -169,10 +169,10 @@ export function createPdfOpsTools(scope: DocumentToolScope, ctx: ToolContext | n
             ...out,
             pages: result.pages,
             totalOriginal: result.total,
-            message: `Novo PDF com ${result.pages} de ${result.total} páginas${watermark ? ', com marca d’água' : ''}.`,
+            message: `New PDF with ${result.pages} of ${result.total} pages${watermark ? ', with a watermark' : ''}.`,
           }
         } catch (err) {
-          return `Erro ao transformar ${src.name}: ${(err as Error).message}`
+          return `Failed to transform ${src.name}: ${(err as Error).message}`
         }
       },
     }),
@@ -187,7 +187,7 @@ export function createPdfOpsTools(scope: DocumentToolScope, ctx: ToolContext | n
         try {
           const fields = await readFormFields(src.bytes)
           if (fields.length === 0) {
-            return `${src.name} não tem campos de formulário. Se o formulário for impresso (linhas para preencher à mão), não há o que preencher programaticamente.`
+            return `${src.name} has no form fields. If the form is a printed one (lines to fill in by hand), there is nothing to fill in programmatically.`
           }
           return fields
             .map((f) => {
@@ -197,7 +197,7 @@ export function createPdfOpsTools(scope: DocumentToolScope, ctx: ToolContext | n
             })
             .join('\n')
         } catch (err) {
-          return `Erro ao ler campos de ${src.name}: ${(err as Error).message}`
+          return `Failed to read the fields of ${src.name}: ${(err as Error).message}`
         }
       },
     }),
@@ -220,7 +220,7 @@ export function createPdfOpsTools(scope: DocumentToolScope, ctx: ToolContext | n
         try {
           const result = await fillForm(src.bytes, values, flatten ?? false)
           if (result.filled.length === 0) {
-            return `Nenhum campo foi preenchido em ${src.name} — os nomes não bateram: ${result.missing.join(', ')}. Use pdf_form_fields para os nomes exatos.`
+            return `No field was filled in ${src.name} — the names did not match: ${result.missing.join(', ')}. Use pdf_form_fields for the exact names.`
           }
           const out = await deliver(
             result.bytes,
@@ -230,14 +230,14 @@ export function createPdfOpsTools(scope: DocumentToolScope, ctx: ToolContext | n
           )
           return {
             ...out,
-            preenchidos: result.filled,
-            naoEncontrados: result.missing,
-            message: `${result.filled.length} campo(s) preenchidos${
-              result.missing.length > 0 ? `; ${result.missing.length} não encontrados` : ''
-            }${flatten ? ', formulário achatado' : ''}.`,
+            filled: result.filled,
+            notFound: result.missing,
+            message: `${result.filled.length} field(s) filled${
+              result.missing.length > 0 ? `; ${result.missing.length} not found` : ''
+            }${flatten ? ', form flattened' : ''}.`,
           }
         } catch (err) {
-          return `Erro ao preencher ${src.name}: ${(err as Error).message}`
+          return `Failed to fill ${src.name}: ${(err as Error).message}`
         }
       },
     }),
@@ -255,9 +255,9 @@ export function createPdfOpsTools(scope: DocumentToolScope, ctx: ToolContext | n
             .map(([k, v]) => `${k}: ${v}`)
           return linhas.length > 0
             ? `${src.name}\n${linhas.join('\n')}`
-            : `${src.name} não declara nenhum metadado.`
+            : `${src.name} declares no metadata.`
         } catch (err) {
-          return `Erro ao ler metadados de ${src.name}: ${(err as Error).message}`
+          return `Failed to read the metadata of ${src.name}: ${(err as Error).message}`
         }
       },
     }),
@@ -292,13 +292,13 @@ export function createPdfOpsTools(scope: DocumentToolScope, ctx: ToolContext | n
           if (images.length === 0) {
             // Dizer só "não encontrei" seria enganoso: o piso descarta em
             // silêncio, e a saída é justamente baixá-lo.
-            return `Nenhuma imagem de mais de ${floor}px encontrada em ${src.name}${
-              pages ? ` nas páginas ${pages}` : ''
+            return `No image larger than ${floor}px found in ${src.name}${
+              pages ? ` on pages ${pages}` : ''
             }.${
               floor > 0
-                ? ` Se a figura procurada for pequena (logotipo, assinatura), repita com minSize menor — 0 traz todas.`
+                ? ` If the figure you are after is small (a logo, a signature), retry with a smaller minSize — 0 returns all of them.`
                 : ''
-            } Um PDF só de texto não tem imagens; para ver a aparência da página use pdf_view_page.`
+            } A text-only PDF has no images; to see how the page looks use pdf_view_page.`
           }
           const saved: string[] = []
           for (const image of images) {
@@ -307,13 +307,13 @@ export function createPdfOpsTools(scope: DocumentToolScope, ctx: ToolContext | n
               sessionId: scope.sessionId,
               name: `${src.name} p${image.pageNumber} ${image.name}`,
             })
-            saved.push(`${url} — página ${image.pageNumber}, ${image.width}×${image.height}`)
+            saved.push(`${url} — page ${image.pageNumber}, ${image.width}×${image.height}`)
           }
-          return `${saved.length} imagem(ns) extraída(s) de ${src.name} e salvas na galeria:\n${saved.join(
+          return `${saved.length} image(s) extracted from ${src.name} and saved to the gallery:\n${saved.join(
             '\n',
-          )}\n\nPara mostrar alguma ao usuário na resposta: show_image({ media: "<orbit-media://…>" }).`
+          )}\n\nTo show one to the user in your reply: show_image({ media: "<orbit-media://…>" }).`
         } catch (err) {
-          return `Erro ao extrair imagens de ${src.name}: ${(err as Error).message}`
+          return `Failed to extract images from ${src.name}: ${(err as Error).message}`
         }
       },
     }),

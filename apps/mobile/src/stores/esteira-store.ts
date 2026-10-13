@@ -1,3 +1,4 @@
+import i18n from '~/i18n'
 import { create } from 'zustand'
 import type {
   Esteira,
@@ -106,7 +107,7 @@ export const useEsteiraStore = create<EsteiraState>((set, get) => ({
       // Sem conexão o send() ficaria enfileirado para sempre — falha rápido
       // com uma mensagem que a tela consegue mostrar (com botão de retry).
       if (connection.status !== 'connected') {
-        const falha = 'Conecte-se ao Orbit Desktop para carregar as esteiras'
+        const falha = i18n.t('esteira.conecteDesktop')
         set({ erro: falha })
         console.warn('[esteira] fetch falhou:', falha)
         return

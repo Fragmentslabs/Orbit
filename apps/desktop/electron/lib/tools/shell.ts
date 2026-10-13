@@ -95,7 +95,7 @@ function runShell(command: string, cwd: string, timeout: number, abort: AbortSig
           child.removeAllListeners('close')
           child.removeAllListeners('error')
           abort.removeEventListener('abort', onAbort)
-          const truncated = output.length >= MAX_OUTPUT ? '\n… (saída truncada)' : ''
+          const truncated = output.length >= MAX_OUTPUT ? '\n… (output truncated)' : ''
           if (pid == null) {
             resolve({ output: output.slice(0, MAX_OUTPUT) + truncated, exitCode: null })
             return
@@ -159,7 +159,7 @@ function runShell(command: string, cwd: string, timeout: number, abort: AbortSig
         clearTimeout(timer)
         if (settleTimer) clearTimeout(settleTimer)
         abort.removeEventListener('abort', onAbort)
-        const truncated = output.length >= MAX_OUTPUT ? '\n… (saída truncada)' : ''
+        const truncated = output.length >= MAX_OUTPUT ? '\n… (output truncated)' : ''
         resolve({ output: output.slice(0, MAX_OUTPUT) + truncated, exitCode })
       })
     },
@@ -188,14 +188,14 @@ export function createBashTool(ctx: ToolContext) {
       if (background) {
         const partial = output.slice(0, 4000)
         return (
-          `(timeout após ${ms / 1000}s — o comando NÃO foi encerrado, continua rodando em segundo plano)\n` +
+          `(timeout after ${ms / 1000}s — the command was NOT killed, it keeps running in the background)\n` +
           `PID ${background.pid} (label "${background.label}")\n` +
-          `Acompanhe com bash_output e bash_list; encerre com bash_kill (pid ${background.pid}) quando não precisar mais.\n\n` +
-          `Comando: ${command}\n\nSaída parcial:\n${partial || '(sem saída ainda)'}`
+          `Follow it with bash_output and bash_list; stop it with bash_kill (pid ${background.pid}) when no longer needed.\n\n` +
+          `Command: ${command}\n\nPartial output:\n${partial || '(no output yet)'}`
         )
       }
       const status = exitCode === 0 ? '' : `\n(exit code: ${exitCode})`
-      return `${output || '(sem saída)'}${status}`
+      return `${output || '(no output)'}${status}`
     },
   })
 }

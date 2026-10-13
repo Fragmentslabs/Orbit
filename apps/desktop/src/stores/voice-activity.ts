@@ -15,15 +15,20 @@ interface VoiceActivityState {
   speaking: boolean
   /** Microfone aberto, capturando ditado. */
   listening: boolean
+  /** Modo chamada ligado: o microfone de ditado sai de cena enquanto isso. */
+  inCall: boolean
   setSpeaking: (speaking: boolean) => void
   setListening: (listening: boolean) => void
+  setInCall: (inCall: boolean) => void
 }
 
 export const useVoiceActivity = create<VoiceActivityState>((set) => ({
   speaking: false,
   listening: false,
+  inCall: false,
   setSpeaking: (speaking) => set({ speaking }),
   setListening: (listening) => set({ listening }),
+  setInCall: (inCall) => set({ inCall }),
 }))
 
 /**

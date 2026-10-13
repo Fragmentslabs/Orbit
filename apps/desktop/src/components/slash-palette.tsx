@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState, type KeyboardEvent, type ReactNode } from "react"
+import { useTranslation } from "react-i18next"
 import { BrainCircuit, Layers, Sparkles, Wrench, Zap } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { normalizeText } from "@shared/memory"
@@ -30,6 +31,15 @@ const GROUP_ICON: Record<SlashCommand["group"], typeof Sparkles> = {
 /** Ordem de exibição das seções: ações primeiro, modos por último (já têm chips na UI) */
 const GROUP_ORDER: SlashCommand["group"][] = ["Ações", "Skills", "MCP", "Memória", "Modos"]
 
+/** Chave i18n de cada seção: o valor do grupo é identificador, não rótulo. */
+const GROUP_KEY: Record<SlashCommand["group"], string> = {
+  Ações: "actions",
+  Skills: "skills",
+  MCP: "mcp",
+  Memória: "memory",
+  Modos: "modes",
+}
+
 function matches(command: SlashCommand, query: string): boolean {
   if (!query) return true
   const haystack = normalizeText(
@@ -48,6 +58,7 @@ export function SlashPalette({ commands, children, className }: {
   children: ReactNode
   className?: string
 }) {
+  const { t } = useTranslation()
   const controller = usePromptInputController()
   const value = controller.textInput.value
   const open =
@@ -113,7 +124,7 @@ export function SlashPalette({ commands, children, className }: {
             return (
               <div key={group}>
                 <p className="flex items-center gap-1 px-2 pb-0.5 pt-1.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
-                  <Icon className="size-3" /> {group}
+                  <Icon className="size-3" /> {t(`input.slash.groups.${GROUP_KEY[group]}`)}
                 </p>
                 {items.map((command) => {
                   const index = filtered.indexOf(command)

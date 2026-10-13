@@ -16,7 +16,10 @@ vi.mock('./memory/service', () => ({ loadPromptContext: (...args: unknown[]) => 
 vi.mock('./skills', () => ({ loadSkills: async () => [] }))
 vi.mock('./mcp', () => ({ listMcpToolDescriptions: () => [] }))
 vi.mock('./past-chats', () => ({ buildPastChatsContext: async () => '', detectPastChatsIntent: () => false }))
-vi.mock('./app-settings', () => ({ agentMayUseBrowser: () => false }))
+vi.mock('./app-settings', async () => {
+  const { DEFAULT_APP_SETTINGS } = await import('@shared/app-settings')
+  return { agentMayUseBrowser: () => false, getAppSettings: () => DEFAULT_APP_SETTINGS }
+})
 
 const { buildSystemPrompt } = await import('./prompts')
 

@@ -1,4 +1,5 @@
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react"
+import { AudioPlayerCard } from "@/src/components/messages/audio-part"
 import { useStickToBottomContext, type StickToBottomContext } from "use-stick-to-bottom"
 import { useTranslation } from "react-i18next"
 import { ChevronRight, PaperclipIcon } from "lucide-react"
@@ -127,6 +128,7 @@ const MessageItem = memo(
     index: number
   }) {
   const AssistantMessage = mode === "chat" ? ChatAssistantMessage : CodeAssistantMessage
+  const { t } = useTranslation()
 
   const handleRetry = useCallback(() => {
     const prevUser = [...messages].slice(0, index).reverse().find((m) => m.role === "user")
@@ -157,6 +159,15 @@ const MessageItem = memo(
                       url: file.url,
                       mediaUrl: file.mediaUrl,
                     }}
+                  />
+                ) : file.mime.startsWith("audio/") && file.mediaUrl ? (
+                  // Áudio anexado: toca na própria bolha. O que ele diz (se o
+                  // agente transcrever) fica na nota do anexo, não aqui.
+                  <AudioPlayerCard
+                    key={file.id}
+                    className="w-72 max-w-full"
+                    src={file.mediaUrl}
+                    title={file.filename || t("audio.attachment")}
                   />
                 ) : (
                   // Anexo que virou documento abre no painel; os demais (texto

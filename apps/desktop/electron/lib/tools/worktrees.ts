@@ -45,7 +45,7 @@ function encontrar(worktrees: WorktreeInfo[], destino: string): WorktreeInfo | u
 /** Troca a pasta principal da sessão (o renderer acompanha pelo evento "session"). */
 async function trocarPasta(sessionId: string, pasta: string): Promise<void> {
   const session = await readJson<SessionInfo>(StorageKeys.session(sessionId))
-  if (!session) throw new Error('Sessão não encontrada.')
+  if (!session) throw new Error('Session not found.')
   const next: SessionInfo = { ...session, directory: pasta, updatedAt: Date.now() }
   await writeJson(StorageKeys.session(sessionId), next)
   broadcastChatEvent({ type: 'session', sessionId, session: next })

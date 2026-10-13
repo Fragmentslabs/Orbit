@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
-import { CheckIcon, ChevronDown, ChevronLeft, ChevronRight, CodeXml, FileText, Filter, Folder, FolderGit2, HardDriveIcon, ImageOff, Layers, MessageSquare, RefreshCw, Search, Trash2, X } from "lucide-react"
+import { AudioLines, CheckIcon, ChevronDown, Pause, ChevronLeft, ChevronRight, CodeXml, FileText, Filter, Folder, FolderGit2, HardDriveIcon, ImageOff, Layers, MessageSquare, RefreshCw, Search, Trash2, X } from "lucide-react"
 import type { LucideIcon } from "lucide-react"
-import { mediaKind, thumbUrl, type MediaEntry, type MediaSource } from "@shared/media"
+import { assetUrl, mediaKind, thumbUrl, type MediaEntry, type MediaSource } from "@shared/media"
 import { folderKey, normalizeFolderName } from "@shared/chat"
 import {
   Dialog,
@@ -115,14 +115,34 @@ function Thumb({ entry, selected, selecting, onToggle, onOpen, versions = 1 }: {
   const kind = mediaKind(entry)
   const isArtifact = kind === "artifact"
   const isDocument = kind === "document"
-  const FallbackIcon = isDocument ? FileText : isArtifact ? CodeXml : ImageOff
+  const isAudio = kind === "audio"
+  const FallbackIcon = isAudio ? AudioLines : isDocument ? FileText : isArtifact ? CodeXml : ImageOff
+  // Áudio toca no próprio tile: não há o que ver num visor, e abrir uma aba
+  // só para ouvir seria um passo a mais.
+  const audioRef = useRef<HTMLAudioElement | null>(null)
+  const [playing, setPlaying] = useState(false)
+  useEffect(() => () => audioRef.current?.pause(), [])
+  const togglePlay = () => {
+    if (!audioRef.current) {
+      const audio = new Audio(assetUrl(entry))
+      audio.onended = () => setPlaying(false)
+      audio.onpause = () => setPlaying(false)
+      audio.onplay = () => setPlaying(true)
+      audioRef.current = audio
+    }
+    const audio = audioRef.current
+    if (audio.paused) void audio.play().catch(() => setPlaying(false))
+    else audio.pause()
+  }
   // Selo por tipo: o grid mistura imagem, página e documento, e o clique faz
   // coisas diferentes em cada um — sem o selo a diferença é invisível.
   const badge = isDocument
     ? (entry.formats ?? []).map((f) => f.toUpperCase()).join("/") || "DOC"
     : isArtifact
       ? "HTML"
-      : null
+      : isAudio
+        ? (entry.id.split(".").pop() ?? "").toUpperCase()
+        : null
 
   return (
     <div
@@ -133,13 +153,13 @@ function Thumb({ entry, selected, selecting, onToggle, onOpen, versions = 1 }: {
     >
       <button
         type="button"
-        onClick={() => (selecting ? onToggle() : onOpen())}
+        onClick={() => (selecting ? onToggle() : isAudio ? togglePlay() : onOpen())}
         className="block size-full cursor-pointer"
         title={entry.name || entry.id}
       >
         {failed || !preview ? (
-          <div className="flex size-full items-center justify-center text-muted-foreground">
-            <FallbackIcon className="size-4" />
+          <div className={cn("flex size-full items-center justify-center", playing ? "text-primary" : "text-muted-foreground")}>
+            {isAudio && playing ? <Pause className="size-5" /> : <FallbackIcon className={isAudio ? "size-5" : "size-4"} />}
           </div>
         ) : (
           <img
@@ -153,7 +173,7 @@ function Thumb({ entry, selected, selecting, onToggle, onOpen, versions = 1 }: {
       </button>
       {badge && (
         <span className="pointer-events-none absolute right-1.5 top-1.5 flex items-center gap-1 rounded bg-background/85 px-1.5 py-0.5 text-[10px] font-medium text-foreground">
-          {isDocument ? <FileText className="size-3" /> : <CodeXml className="size-3" />}
+          {isDocument ? <FileText className="size-3" /> : isAudio ? <AudioLines className="size-3" /> : <CodeXml className="size-3" />}
           {badge}
         </span>
       )}
@@ -592,6 +612,8 @@ export function MediaGallery() {
       const kind = mediaKind(entry)
       // Documento abre na aba do painel igual ao artefato: o preview dele é
       // HTML, e o lightbox só sabe mostrar <img>.
+      // Áudio toca no próprio tile (ver Thumb) — não há visor para ele.
+      if (kind === "audio") return
       if (kind !== "artifact" && kind !== "document") {
         setPreview(entry)
         // A cadeia é fixada na abertura: trocar de versão dentro do visor não

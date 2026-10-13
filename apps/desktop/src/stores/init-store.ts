@@ -1,3 +1,4 @@
+import i18n from "@/src/i18n"
 import { create } from "zustand"
 
 import type { InitStage, ProjectArea } from "@shared/memory"
@@ -87,7 +88,7 @@ export const useInitStore = create<InitState>((set, get) => ({
       set((state) => ({
         progress: {
           ...state.progress,
-          [directory]: { stage: "error", error: "Nenhum modelo selecionado — configure um provedor." },
+          [directory]: { stage: "error", error: i18n.t("initProject.noModel") },
         },
       }))
       return

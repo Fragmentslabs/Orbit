@@ -1,5 +1,6 @@
 import { useMemo, useCallback, type ReactNode } from 'react'
 import { View, Text, Pressable, ScrollView } from 'react-native'
+import { useTranslation } from 'react-i18next'
 import { Sparkles, Wrench, Layers, Zap, BrainCircuit } from 'lucide-react-native'
 import { normalizeText, SLASH_ACTION_COMMANDS } from '@orbit/shared'
 import type { SlashCommand } from '~/hooks/useSlashCommands'
@@ -14,6 +15,15 @@ const GROUP_ICON: Record<SlashCommand['group'], typeof Sparkles> = {
   MCP: Layers,
   Memória: BrainCircuit,
   Ações: Zap,
+}
+
+/** Chave i18n de cada seção: o valor do grupo é identificador, não rótulo. */
+const GROUP_KEY: Record<SlashCommand['group'], string> = {
+  Ações: 'actions',
+  Skills: 'skills',
+  MCP: 'mcp',
+  Memória: 'memory',
+  Modos: 'modes',
 }
 
 function matches(command: SlashCommand, query: string): boolean {
@@ -34,6 +44,7 @@ interface SlashPaletteProps {
 }
 
 export function SlashPalette({ value, setText, commands, children }: SlashPaletteProps) {
+  const { t } = useTranslation()
   const tokens = getThemeTokens(useThemeStore((s) => s.resolved))
   const open = value.startsWith('/') && !LITERAL_COMMANDS.some((literal) => value.startsWith(literal))
   const query = open ? normalizeText(value.slice(1)) : ''
@@ -111,7 +122,7 @@ export function SlashPalette({ value, setText, commands, children }: SlashPalett
                       color: tokens.mutedForeground,
                     }}
                   >
-                    {group}
+                    {t(`slashCommands.groups.${GROUP_KEY[group]}`)}
                   </Text>
                 </View>
                 {items.map((command) => (

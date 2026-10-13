@@ -444,7 +444,9 @@ function mediaUrlFor(req: IncomingMessage, id: string): string {
 }
 
 async function handleListMedia(req: IncomingMessage, res: ServerResponse) {
-  const entries = await listMedia()
+  // Áudio fica de fora: o app do celular ainda não toca áudio, e o tile dele
+  // é uma imagem — viraria um quadrado quebrado na galeria.
+  const entries = (await listMedia()).filter((entry) => entry.kind !== 'audio')
   jsonResponse(res, 200, entries.map((entry) => ({ ...entry, url: mediaUrlFor(req, entry.id) })))
 }
 

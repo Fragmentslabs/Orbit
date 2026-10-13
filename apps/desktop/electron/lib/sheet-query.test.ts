@@ -151,7 +151,7 @@ describe('runSheetQuery — agregação', () => {
     const result = runSheetQuery(sujo, { aggregate: [{ fn: 'sum', column: 'valor' }] })
     expect(result.rows[0][0]).toBe(150)
     expect(result.skippedCells).toBe(2)
-    expect(formatQueryResult(result)).toContain('ignorada')
+    expect(formatQueryResult(result)).toContain('skipped')
   })
 
   it('célula vazia é ausência, não erro de tipo — não entra na contagem de ignoradas', () => {
@@ -211,11 +211,11 @@ describe('runSheetQuery — projeção e limites', () => {
 describe('formatQueryResult', () => {
   it('declara quantas linhas foram varridas — é o que torna o número auditável', () => {
     const out = formatQueryResult(runSheetQuery(rows, { aggregate: [{ fn: 'sum', column: 'valor' }] }))
-    expect(out).toContain('5 linhas na aba')
+    expect(out).toContain('5 rows in the sheet')
   })
 
   it('avisa o corte quando houve truncamento', () => {
-    expect(formatQueryResult(runSheetQuery(rows, { limit: 2 }))).toContain('mostrando 2')
+    expect(formatQueryResult(runSheetQuery(rows, { limit: 2 }))).toContain('showing 2')
   })
 })
 
@@ -260,8 +260,8 @@ describe('runSheetQuery — chave de grupo e contagens do rodapé', () => {
     expect(result.matched).toBe(5)
     expect(result.groups).toBe(2)
     const out = formatQueryResult(result)
-    expect(out).toContain('5 consideradas')
-    expect(out).toContain('2 grupo(s)')
+    expect(out).toContain('5 considered')
+    expect(out).toContain('2 group(s)')
   })
 
   it('consulta sem agregação não reporta grupos', () => {

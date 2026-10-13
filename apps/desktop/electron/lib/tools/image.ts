@@ -55,22 +55,22 @@ export function createImageTools(scope: DocumentToolScope, ctx: ToolContext | nu
       const entry = await getMediaEntry(mediaId)
       if (entry) {
         const file = await readMedia(mediaId)
-        if (!file) return `A imagem ${ref} está no registro mas o arquivo sumiu do disco.`
+        if (!file) return `Image ${ref} is in the registry but its file is gone from disk.`
         return { bytes: file.buffer, name: entry.name || mediaId, id: mediaId }
       }
-      if (ref.startsWith('orbit-media://')) return `Imagem não encontrada na galeria: ${ref}`
+      if (ref.startsWith('orbit-media://')) return `Image not found in the gallery: ${ref}`
     }
     if (!ctx) {
-      return `Imagem não encontrada: ${ref}. No chat a referência é a URL orbit-media:// de uma imagem da galeria.`
+      return `Image not found: ${ref}. In chat the reference is the orbit-media:// URL of a gallery image.`
     }
     const ext = path.extname(ref).slice(1).toLowerCase()
     if (!IMAGE_EXTENSIONS.has(ext)) {
-      return `Não parece uma imagem: ${ref} (aceita ${[...IMAGE_EXTENSIONS].join(', ')}).`
+      return `Does not look like an image: ${ref} (accepted: ${[...IMAGE_EXTENSIONS].join(', ')}).`
     }
     try {
       return { bytes: await fsp.readFile(resolveSafePath(ctx, ref)), name: path.basename(ref) }
     } catch (err) {
-      return `Não foi possível abrir ${ref}: ${(err as Error).message}`
+      return `Could not open ${ref}: ${(err as Error).message}`
     }
   }
 
@@ -87,19 +87,19 @@ export function createImageTools(scope: DocumentToolScope, ctx: ToolContext | nu
       execute: async ({ limit }) => {
         const entries = await listMedia({ sessionId: scope.sessionId, kind: 'image' })
         if (entries.length === 0) {
-          return 'Nenhuma imagem nesta conversa ainda. O usuário precisa anexar uma, ou ela precisa ser produzida aqui.'
+          return 'No images in this conversation yet. The user needs to attach one, or it needs to be produced here.'
         }
         const recent = entries
           .sort((a, b) => b.createdAt - a.createdAt)
           .slice(0, limit ?? 10)
           .map((entry) => {
             const size = entry.width && entry.height ? `${entry.width}x${entry.height}, ` : ''
-            const origin = entry.source === 'user' ? 'anexada pelo usuário' : 'produzida aqui'
-            return `orbit-media://${entry.id} — ${entry.name || 'sem nome'} (${size}${bytesLabel(
+            const origin = entry.source === 'user' ? 'attached by the user' : 'produced here'
+            return `orbit-media://${entry.id} — ${entry.name || 'unnamed'} (${size}${bytesLabel(
               entry.size,
             )}, ${origin})`
           })
-        return `${recent.length} imagem(ns):\n${recent.join('\n')}`
+        return `${recent.length} image(s):\n${recent.join('\n')}`
       },
     }),
 
@@ -116,11 +116,11 @@ export function createImageTools(scope: DocumentToolScope, ctx: ToolContext | nu
           const info = await imageInfo(src.bytes)
           return `${src.name}: ${info.format} ${info.width}x${info.height}, ${bytesLabel(
             info.sizeBytes,
-          )}, ${info.hasAlpha ? 'com transparência' : 'sem transparência'}, cor predominante ${
+          )}, ${info.hasAlpha ? 'with transparency' : 'no transparency'}, dominant colour ${
             info.dominant
-          } (aproximada).`
+          } (approximate).`
         } catch (err) {
-          return `Não foi possível ler ${src.name}: ${(err as Error).message}`
+          return `Could not read ${src.name}: ${(err as Error).message}`
         }
       },
     }),
@@ -229,14 +229,14 @@ export function createImageTools(scope: DocumentToolScope, ctx: ToolContext | nu
 
         const requested = Object.entries(edit).filter(([, value]) => value !== undefined)
         if (requested.length === 0) {
-          return 'Nenhuma operação pedida — informe ao menos uma (resize, crop, removeBackground, format…).'
+          return 'No operation requested — provide at least one (resize, crop, removeBackground, format…).'
         }
 
         let result
         try {
           result = await editImage(src.bytes, edit as ImageEdit)
         } catch (err) {
-          return `Não foi possível editar ${src.name}: ${(err as Error).message}`
+          return `Could not edit ${src.name}: ${(err as Error).message}`
         }
 
         const base = src.name.replace(/\.[^.]+$/, '')
@@ -258,7 +258,7 @@ export function createImageTools(scope: DocumentToolScope, ctx: ToolContext | nu
             await fsp.writeFile(target, result.bytes)
             savedTo = savePath
           } catch (err) {
-            savedTo = `falhou (${(err as Error).message})`
+            savedTo = `failed (${(err as Error).message})`
           }
         }
 
@@ -272,26 +272,26 @@ export function createImageTools(scope: DocumentToolScope, ctx: ToolContext | nu
           const limiar =
             result.backgroundLimit === undefined
               ? ''
-              : ` (limiar ${result.backgroundLimit.toFixed(0)} de 100)`
+              : ` (threshold ${result.backgroundLimit.toFixed(0)} of 100)`
           notes.push(
-            `fundo ${result.backgroundColor} recortado em ${percent}% da imagem${limiar}${
+            `background ${result.backgroundColor} removed from ${percent}% of the image${limiar}${
               percent < 5
-                ? ' — quase nada saiu: confira a cor do fundo ou aumente a tolerância'
+                ? ' — almost nothing was removed: check the background colour or raise the tolerance'
                 : percent > 97
-                  ? ' — saiu quase tudo: a tolerância provavelmente comeu o assunto'
+                  ? ' — almost everything was removed: the tolerance probably ate the subject'
                   : ''
             }`,
           )
         }
-        if (result.compression) notes.push(`compressão: ${result.compression}`)
-        if (savedTo) notes.push(`gravada em ${savedTo}`)
+        if (result.compression) notes.push(`compression: ${result.compression}`)
+        if (savedTo) notes.push(`saved to ${savedTo}`)
 
         // Mesmo formato do show_image: o chat-engine transforma isto numa
         // ImagePart, então o usuário VÊ o resultado em vez de ler sobre ele.
         return {
           mediaUrl,
           alt: alt ?? '',
-          message: `${src.name} → ${notes.join(' · ')}. A imagem está na resposta; o original não foi alterado.`,
+          message: `${src.name} → ${notes.join(' · ')}. The image is in the reply; the original was not changed.`,
         }
       },
     }),
@@ -312,7 +312,7 @@ export function createImageTools(scope: DocumentToolScope, ctx: ToolContext | nu
           const id = mediaIdFromUrl(ref)
           const entry = id ? await getMediaEntry(id) : null
           if (!id || !entry) {
-            notes.push(`${ref}: não encontrada na galeria`)
+            notes.push(`${ref}: not found in the gallery`)
             continue
           }
           // A proteção mora na ORIGEM, não no turno: o anexo do usuário é dele
@@ -320,18 +320,18 @@ export function createImageTools(scope: DocumentToolScope, ctx: ToolContext | nu
           // sendo dele três turnos depois. Prender a limpeza ao turno atual
           // era o que tornava impossível arrumar a bagunça já feita.
           if (entry.source === 'user') {
-            notes.push(`${ref}: anexo do usuário — não pode ser apagado`)
+            notes.push(`${ref}: user attachment — cannot be deleted`)
             continue
           }
           if (entry.sessionId && entry.sessionId !== scope.sessionId) {
-            notes.push(`${ref}: pertence a outra conversa`)
+            notes.push(`${ref}: belongs to another conversation`)
             continue
           }
           if (await deleteMedia(id)) {
             removed.push(ref)
-            notes.push(`${ref}: excluída`)
+            notes.push(`${ref}: deleted`)
           } else {
-            notes.push(`${ref}: falhou ao excluir`)
+            notes.push(`${ref}: failed to delete`)
           }
         }
         if (removed.length > 0) hooks?.removeImageParts(removed)

@@ -226,9 +226,24 @@ export interface VoiceSttSettings {
   preload: boolean
 }
 
+/** Opções do silêncio que encerra a fala no modo chamada (ms). */
+export const VOICE_CALL_SILENCE_OPTIONS = [900, 1300, 1800, 2500] as const
+
+/**
+ * Modo chamada: conversa por voz em tempo real — o ditado ouve (com prévia ao
+ * vivo), a fala lê a resposta enquanto ela chega, e o agente responde curto.
+ */
+export interface VoiceCallSettings {
+  /** Mostra o botão de chamada ao lado do microfone. */
+  enabled: boolean
+  /** Silêncio (ms) depois da fala que encerra a sua vez e envia a mensagem. */
+  silenceMs: number
+}
+
 export interface VoiceSettings {
   tts: VoiceTtsSettings
   stt: VoiceSttSettings
+  call: VoiceCallSettings
 }
 
 /**
@@ -238,4 +253,5 @@ export interface VoiceSettings {
 export const VOICE_DEFAULTS: VoiceSettings = {
   tts: { enabled: true, voice: "F2", lang: "pt", speed: 1, engine: "model" },
   stt: { enabled: true, engine: "parakeet", modelId: null, language: "pt", live: true, threads: 4, preload: true },
+  call: { enabled: true, silenceMs: 1300 },
 }

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { Mic } from "lucide-react"
 import { usePromptInputController } from "@/src/components/ai/prompt-input"
+import { DictationWave, type WaveLevels } from "@/src/components/dictation-wave"
 import { useDictation } from "@/src/hooks/use-dictation"
 import {
   appendDictation,
@@ -17,6 +18,7 @@ import { useAppSettings } from "@/src/stores/app-settings"
 import { useProviderStore } from "@/src/stores/provider-store"
 import { useSessionModel } from "@/src/stores/session-model-prefs"
 import { useSettingsUi } from "@/src/stores/settings-ui"
+import { useVoiceActivity } from "@/src/stores/voice-activity"
 import { cn } from "@/lib/utils"
 
 /**
@@ -44,6 +46,9 @@ function modelAcceptsAudio(model: unknown): boolean {
  * e clicar (ou Espaço/Enter) abre as Preferências na aba de voz, onde o
  * download acontece.
  */
+/** Abaixo disto a soltura conta como toque (liga o mãos livres), não "segurar". */
+const TAP_MS = 300
+
 export function DictationButton({ className, sessionId }: { className?: string; sessionId?: string }) {
   const { t } = useTranslation()
   const controller = usePromptInputController()
@@ -64,6 +69,8 @@ export function DictationButton({ className, sessionId }: { className?: string; 
   // A aba de voz é onde o modelo é baixado: fechá-la é o sinal para reavaliar
   // o estado do alvo (ainda não há evento reativo de status de voz).
   const settingsOpen = useSettingsUi((s) => s.open)
+  // Em chamada, quem usa o microfone é ela: o botão de ditado sai de cena.
+  const inCall = useVoiceActivity((s) => s.inCall)
   const [status, setStatus] = useState<VoiceStatus | null>(null)
   const [partial, setPartial] = useState("")
   // Texto do input ao começar o ditado e o último valor que NÓS escrevemos:
@@ -71,6 +78,14 @@ export function DictationButton({ className, sessionId }: { className?: string; 
   const baseRef = useRef("")
   const appliedRef = useRef("")
   const pressedRef = useRef(false)
+  // Toque rápido = mãos livres: o microfone fica aberto até o próximo clique.
+  // Segurar continua sendo "segurar para falar". Sem isso, um clique abria e
+  // fechava a captura no mesmo gesto (a persona piscava e nada era transcrito).
+  const pressAtRef = useRef(0)
+  const latchedRef = useRef(false)
+  const [latched, setLatched] = useState(false)
+  // O aperto que encerra o modo mãos livres: a soltura dele não faz mais nada.
+  const releaseHandledRef = useRef(false)
   const aliveRef = useRef(true)
 
   const handlePartial = useCallback(
@@ -106,9 +121,25 @@ export function DictationButton({ className, sessionId }: { className?: string; 
     [controller, live],
   )
 
-  const dictation = useDictation({ onPartial: handlePartial, onFinal: handleFinal })
+  // Níveis do microfone para a onda: ref, não estado — chegam a cada ~64 ms e o
+  // canvas lê direto, sem re-render por bloco.
+  const levelsRef = useRef<WaveLevels>({ values: [], at: 0 })
+  const handleLevel = useCallback((level: number) => {
+    levelsRef.current.values.push(level)
+    levelsRef.current.at = performance.now()
+  }, [])
+
+  const dictation = useDictation({ onPartial: handlePartial, onFinal: handleFinal, onLevel: handleLevel })
   const { enabled, engine, modelId, threads, preload } = dictation.settings
-  const { listening, starting, error, start, stop, cancel } = dictation
+  const { listening, starting, error, start, stop, cancel, dismissError } = dictation
+
+  // O motivo do erro aparece ao lado do botão e some sozinho — antes ficava só
+  // no `title` (hover) e o microfone seguia vermelho até a próxima tentativa.
+  useEffect(() => {
+    if (!error) return
+    const timer = setTimeout(dismissError, 6000)
+    return () => clearTimeout(timer)
+  }, [error, dismissError])
 
   // Estado do motor no disco (não baixa nada aqui — o download é na aba de
   // preferências). Sem resposta confiável o botão fica habilitado.
@@ -150,36 +181,61 @@ export function DictationButton({ className, sessionId }: { className?: string; 
     if (!localReady || !preload) return
     void voiceApi.sttWarm({ engine, modelId: modelId ?? undefined, threads })
   }, [localReady, preload, engine, modelId, threads])
-  // Regra do ícone: ele só aparece com um alvo utilizável — o motor de ditado
-  // pronto no disco, OU o modelo de IA do chat aceitando áudio com a prioridade
-  // de áudio apontando para o modelo. Sem nenhum dos dois não há ditado a
-  // oferecer, e o botão simplesmente não existe.
+  // Alvo do ditado: o motor pronto no disco (`localReady`), OU o modelo de IA do
+  // chat aceitando áudio com a prioridade de áudio apontando para ele. Sem
+  // nenhum dos dois o botão NÃO desaparece: ele passa a levar ao download
+  // (`needsModel`), que é o caminho de quem ainda não tem modelo nenhum.
   const viaModel = audioPriority === "model" && modelAcceptsAudio(model)
   const usable = localReady || viaModel
   const needsModel = !usable
   const active = listening || starting
 
-  // Sem alvo utilizável o botão nem é montado (ver `usable` acima), então este
-  // caminho só existe como rede: um status que chegue tarde não deixa o clique
-  // num botão recém-inutilizável sem para onde ir.
+  // Caminho principal de quem ainda não baixou modelo: o botão está à vista e o
+  // clique (ou Espaço/Enter) leva ao download, em vez de ditar.
   const openVoiceSettings = useCallback(() => openSettings("voice"), [openSettings])
+
+  /**
+   * Abre as Preferências na aba de voz — é o que o botão faz com quem ainda não
+   * tem modelo. Roda no CLIQUE (soltura), não no `pointerdown`, de propósito: o
+   * modal monta embaixo do ponteiro ainda pressionado, e o `click` que o
+   * navegador dispara ao soltar cai FORA dele. O Base UI dispensa no `click`
+   * (`useDismiss`), então o modal abria e fechava no mesmo gesto.
+   */
+  const openVoiceSettingsOnClick = useCallback(() => {
+    if (!needsModel) return
+    openVoiceSettings()
+  }, [needsModel, openVoiceSettings])
 
   const beginPress = useCallback(() => {
     // Âncora do ditado: o que já estava no campo neste instante.
     baseRef.current = controller.textInput.value
     appliedRef.current = baseRef.current
     setPartial("")
+    levelsRef.current = { values: [], at: performance.now() }
     void start()
   }, [controller, start])
+
+  /** Aperto: encerra o modo mãos livres, se estiver nele; senão começa a ouvir. */
+  const beginOrEndPress = useCallback(() => {
+    if (latchedRef.current) {
+      latchedRef.current = false
+      setLatched(false)
+      releaseHandledRef.current = true
+      void stop()
+      return
+    }
+    pressAtRef.current = Date.now()
+    beginPress()
+  }, [beginPress, stop])
 
   const press = useCallback(
     (event: React.PointerEvent<HTMLButtonElement>) => {
       if (event.pointerType === "mouse" && event.button !== 0) return
+      // Sem alvo, o aperto não faz nada: quem abre as Preferências é o `click`
+      // da soltura (ver `openVoiceSettingsOnClick`). Abrir aqui montava o modal
+      // sob o ponteiro ainda pressionado e o `click` seguinte o dispensava.
+      if (needsModel) return
       event.preventDefault()
-      if (needsModel) {
-        openVoiceSettings()
-        return
-      }
       if (pressedRef.current) return
       pressedRef.current = true
       // Captura o ponteiro: soltar fora do botão ainda encerra o ditado.
@@ -188,54 +244,101 @@ export function DictationButton({ className, sessionId }: { className?: string; 
       } catch {
         // ponteiro já solto — o pointerup chega de qualquer forma
       }
-      beginPress()
+      beginOrEndPress()
     },
-    [beginPress, needsModel, openVoiceSettings],
+    [beginOrEndPress, needsModel],
   )
 
   const endPress = useCallback(() => {
     if (!pressedRef.current) return
     pressedRef.current = false
+    if (releaseHandledRef.current) {
+      releaseHandledRef.current = false
+      return
+    }
+    // Soltou logo: foi um toque, não um "segurar" — o microfone fica aberto.
+    if (Date.now() - pressAtRef.current < TAP_MS) {
+      latchedRef.current = true
+      setLatched(true)
+      return
+    }
     void stop()
   }, [stop])
 
   const keyDown = useCallback(
     (event: React.KeyboardEvent<HTMLButtonElement>) => {
       if (event.key !== " " && event.key !== "Enter") return
+      // Sem alvo, deixa o teclado acionar o botão do jeito nativo: o `click`
+      // resultante abre as Preferências, igual ao mouse.
+      if (needsModel) return
       // Espaço/Enter seguram a fala: o padrão (acionar no keyup) viraria um
       // ditado de duração zero.
       event.preventDefault()
-      if (needsModel) {
-        openVoiceSettings()
-        return
-      }
       if (event.repeat || pressedRef.current) return
       pressedRef.current = true
-      beginPress()
+      beginOrEndPress()
     },
-    [beginPress, needsModel, openVoiceSettings],
+    [beginOrEndPress, needsModel],
   )
+
+  // A captura acabou por outro caminho (erro, cancelamento): sai do mãos livres.
+  useEffect(() => {
+    if (!listening && !starting && latchedRef.current) {
+      latchedRef.current = false
+      setLatched(false)
+    }
+  }, [listening, starting])
+
+  // Mãos livres: Esc descarta a fala sem transcrever.
+  useEffect(() => {
+    if (!latched) return
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return
+      latchedRef.current = false
+      setLatched(false)
+      cancel()
+    }
+    window.addEventListener("keydown", onKey)
+    return () => window.removeEventListener("keydown", onKey)
+  }, [latched, cancel])
 
   // Desligaram o ditado nas preferências no meio da fala: encerra já.
   useEffect(() => {
     if (!enabled && listening) cancel()
   }, [enabled, listening, cancel])
 
-  if (!enabled || !dictationSupported() || !usable) return null
+  // O botão fica à vista mesmo SEM alvo pronto: é ele que leva ao download (o
+  // clique com `needsModel` abre as Preferências na aba de voz). Exigir `usable`
+  // aqui escondia o microfone de quem ainda não baixou modelo — que é
+  // exatamente quem precisa vê-lo para baixar.
+  if (!enabled || !dictationSupported() || inCall) return null
+
+  // Sem texto ao vivo no campo (preferência desligada, ou o áudio indo para o
+  // modelo) a onda é o retorno de que está gravando.
+  const showWave = active && (!live || viaModel)
+
 
   const title = error
-    ? t("voice.stt.error")
+    ? `${t("voice.stt.error")} ${error}`
     : needsModel
       ? t("voice.stt.setupModel")
       : active
-        ? t("voice.stt.listening")
+        ? latched
+          ? t("voice.stt.listeningTap")
+          : t("voice.stt.listening")
         : t("voice.stt.dictate")
 
   return (
     <div className="flex shrink-0 items-center gap-1.5">
-      {active && !live && partial && (
+      {showWave && <DictationWave levels={levelsRef} className="w-[calc(100cqw-3.25rem)]" />}
+      {active && !live && !showWave && partial && (
         <span aria-live="polite" className="max-w-40 truncate text-xs text-muted-foreground">
           {partial}
+        </span>
+      )}
+      {error && !active && (
+        <span role="status" title={error} className="max-w-56 truncate text-xs text-destructive">
+          {t("voice.stt.error")} {error}
         </span>
       )}
       <button
@@ -247,6 +350,9 @@ export function DictationButton({ className, sessionId }: { className?: string; 
         onPointerUp={endPress}
         onPointerCancel={endPress}
         onLostPointerCapture={endPress}
+        /* Sem alvo de ditado, quem abre as Preferências é o CLIQUE (soltura) e
+           não o aperto — ver `openVoiceSettingsOnClick`. */
+        onClick={openVoiceSettingsOnClick}
         onKeyDown={keyDown}
         onKeyUp={(event) => {
           if (event.key === " " || event.key === "Enter") endPress()
@@ -255,8 +361,9 @@ export function DictationButton({ className, sessionId }: { className?: string; 
         className={cn(
           "flex size-7 shrink-0 touch-none items-center justify-center rounded-md text-muted-foreground transition-colors select-none",
           "hover:bg-muted hover:text-foreground",
-          active && "animate-pulse bg-destructive/10 text-destructive",
-          Boolean(error) && !active && "text-destructive",
+          // Gravando, o hover não "desliga" o vermelho: continua dizendo que está ouvindo.
+          active && "animate-pulse bg-destructive/10 text-destructive hover:bg-destructive/15 hover:text-destructive",
+          Boolean(error) && !active && "text-destructive hover:text-destructive",
           className,
         )}
       >

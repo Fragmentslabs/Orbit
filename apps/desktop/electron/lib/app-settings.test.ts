@@ -55,6 +55,19 @@ describe('normalizeAppSettings', () => {
     expect(normalizeAppSettings({ sidebarWidth: 10 }).sidebarWidth).toBe(240)
     expect(normalizeAppSettings({ sidebarWidth: Number.NaN }).sidebarWidth).toBe(256)
   })
+
+  it('modo chamada: completa o que falta e só aceita as pausas oferecidas', () => {
+    expect(normalizeAppSettings({}).voice.call).toEqual({ enabled: true, silenceMs: 1300 })
+    // Configuração salva antes do modo chamada existir: tts/stt ficam, call ganha o padrão.
+    const antigo = normalizeAppSettings({ voice: { tts: { voice: 'M1' }, stt: { engine: 'whisper' } } })
+    expect(antigo.voice.tts.voice).toBe('M1')
+    expect(antigo.voice.call).toEqual({ enabled: true, silenceMs: 1300 })
+    expect(normalizeAppSettings({ voice: { call: { enabled: false, silenceMs: 1800 } } }).voice.call).toEqual({
+      enabled: false,
+      silenceMs: 1800,
+    })
+    expect(normalizeAppSettings({ voice: { call: { silenceMs: 37 } } }).voice.call.silenceMs).toBe(1300)
+  })
 })
 
 describe('agentMayUseBrowser', () => {

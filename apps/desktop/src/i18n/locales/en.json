@@ -1,5 +1,10 @@
 {
+  "audio": {
+    "generated": "Generated audio",
+    "attachment": "Attached audio"
+  },
   "settings": {
+    "beta": "Beta",
     "title": "Settings",
     "description": "Orbit settings",
     "tabs": {
@@ -110,7 +115,15 @@
       "newChat": "New chat",
       "newChatDescription": "Starts a blank chat",
       "settings": "Settings",
-      "settingsDescription": "Opens Orbit's settings"
+      "settingsDescription": "Opens Orbit's settings",
+      "userSkill": "User skill",
+      "groups": {
+        "actions": "Actions",
+        "skills": "Skills",
+        "mcp": "MCP",
+        "memory": "Memory",
+        "modes": "Modes"
+      }
     },
     "quickSettings": "Quick settings",
     "quickSettingsModel": "Model",
@@ -784,7 +797,8 @@
     "summaryCard": "Summary of earlier messages (compacted context)",
     "brokenMessage": "This message could not be displayed.",
     "earlierMessages_one": "Show {{count}} earlier message",
-    "earlierMessages_other": "Show {{count}} earlier messages"
+    "earlierMessages_other": "Show {{count}} earlier messages",
+    "noModelSelected": "No model selected. Set up a provider in Settings."
   },
   "usage": {
     "inputIn": "{{count}} in",
@@ -808,6 +822,7 @@
     "atLimit": "Limit reached — automatic compaction failed",
     "estimated": "Estimate",
     "live": "Live",
+    "compactWaitTurn": "Wait for the reply to finish to compact.",
     "compactNow": "Compact history now"
   },
   "images": {
@@ -831,7 +846,9 @@
   },
   "subagent": {
     "defaultTask": "Delegated subtask",
-    "running": "Running in the background…"
+    "running": "Running in the background…",
+    "noFolder": "No working folder in this conversation — the subagent ran in chat mode, without file access.",
+    "empty": "The subagent returned no text."
   },
   "attachments": {
     "image": "Image",
@@ -896,7 +913,13 @@
     "batchWaiting_one": "{{count}} worker request waiting — answer all at once",
     "batchWaiting_other": "{{count}} worker requests waiting — answer all at once",
     "dismissAll": "Deny/dismiss all",
-    "answerAll": "Answer all"
+    "answerAll": "Answer all",
+    "comparePrompt": {
+      "intro": "I need help deciding between the options of the question below. Please analyze each option, listing pros, cons and the scenario where it fits best:",
+      "options": "Options:",
+      "context": "Additional context (the agent's other questions):",
+      "explain": "For each option, explain:\n- Pros\n- Cons\n- The scenario where it fits best"
+    }
   },
   "connectApp": {
     "title": "Connect App",
@@ -940,7 +963,8 @@
     "createDesc": "Name of the branch to create. You'll be switched to it right away.",
     "createPlaceholder": "feature/my-change",
     "createAndSwitch": "Create & switch",
-    "creating": "Creating…"
+    "creating": "Creating…",
+    "agentResolvePrompt": "I have uncommitted changes in the repository and need to switch to the branch \"{{branch}}\". Commit or stash the changes and then check out the branch \"{{branch}}\"."
   },
   "search": {
     "placeholder": "Search conversations...",
@@ -971,7 +995,8 @@
     "title": "New project here",
     "description": "I can analyze the project and keep only what matters in a memory tree (business rules, how the parts talk, decisions, conventions) — so the next chats already start with the context, without you explaining it again.",
     "analyze": "Analyze project",
-    "later": "Not now"
+    "later": "Not now",
+    "noModel": "No model selected — set up a provider."
   },
   "loopConfig": {
     "title": "Loop Configuration",
@@ -1802,7 +1827,8 @@
       "apiKey": "API Key",
       "optional": "(optional)",
       "apiKeyPlaceholder": "Leave blank to keep the current one"
-    }
+    },
+    "loadError": "Failed to load providers. Check your connection and try again."
   },
   "media": {
     "searchPlaceholder": "Search by name or task",
@@ -2368,17 +2394,32 @@
   "voice": {
     "tts": {
       "speak": "Read aloud",
+      "generating": "Generating audio… click to cancel",
       "stop": "Stop",
       "error": "Could not read this message aloud.",
       "needsModel": "Download a reading voice in Settings → Voice.",
-      "setupModel": "Set up a reading voice in Settings → Voice."
+      "setupModel": "Set up a reading voice in Settings → Voice.",
+      "noChannel": "no voice channel"
     },
     "stt": {
       "dictate": "Dictate",
       "listening": "Listening…",
+      "listeningTap": "Listening… click to stop (Esc discards)",
       "error": "Could not transcribe the audio.",
       "needsModel": "Download a speech model in Settings → Voice.",
       "setupModel": "Set up dictation in Settings → Voice."
+    },
+    "call": {
+      "start": "Start voice call",
+      "setup": "Set up dictation in Settings → Voice to use calls.",
+      "listening": "Listening… go ahead",
+      "thinking": "Thinking…",
+      "speaking": "Speaking…",
+      "interrupt": "Interrupt and talk",
+      "interruptShort": "Interrupt",
+      "hangUp": "End call",
+      "failed": "The call dropped.",
+      "replyError": "The agent couldn't reply."
     },
     "settings": {
       "sections": {
@@ -2387,7 +2428,17 @@
         "stt": "Speech to text",
         "sttHint": "Turns your voice into text in the message field.",
         "models": "Models",
-        "modelsHint": "Download and remove the models used for reading and transcription."
+        "modelsHint": "Download and remove the models used for reading and transcription.",
+        "call": "Call mode",
+        "callHint": "Real-time voice conversation: you talk, the agent answers briefly and out loud."
+      },
+      "call": {
+        "enableTitle": "Call button",
+        "enableHint": "Shows the call button next to the microphone. Replies during a call are short and unformatted.",
+        "silenceTitle": "Pause before replying",
+        "silenceHint": "How much silence after you speak ends your turn and sends the message.",
+        "silenceValue": "{{seconds}} s",
+        "needs": "Calls use the dictation engine and the read-aloud voice set above."
       },
       "languages": {
         "auto": "Detect automatically",
@@ -2417,6 +2468,8 @@
         "engineModelFallback": "The voice model is not available, so reading uses the local engine. {{reason}}",
         "voiceTitle": "Voice",
         "voiceHint": "Voice used for reading. F1–F5 are female, M1–M5 male.",
+        "preview": "Listen to this voice",
+        "previewStop": "Stop",
         "voiceF1": "F1",
         "voiceF2": "F2 (default)",
         "voiceF3": "F3",

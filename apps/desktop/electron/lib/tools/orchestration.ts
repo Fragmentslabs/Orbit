@@ -1,6 +1,7 @@
 import { generateText, stepCountIs, tool } from 'ai'
 import { z } from 'zod'
 import type { OrchestrationTask, SendMessageInput } from '@shared/chat'
+import { SUBAGENT_EMPTY_OUTPUT, SUBAGENT_NO_FOLDER_NOTICE } from '@shared/chat'
 import { createToolApproval } from '../permission'
 import { buildSystemPrompt } from '../prompts'
 import { getProvider } from '../catalog'
@@ -56,7 +57,7 @@ export function createSubagentTool(
     execute: async ({ task, research, browser, code, brain, simple }) => {
       calls++
       if (maxCalls !== undefined && calls > maxCalls) {
-        return `Limite de ${maxCalls} chamadas de subagent atingido — prossiga com o que já foi levantado (não peça mais pesquisas).`
+        return `Limit of ${maxCalls} subagent calls reached — proceed with what has been gathered so far (do not request more research).`
       }
       const worker = input.workerModel ?? { providerId: input.providerId, modelId: input.modelId }
       const codeUnavailable = code === true && !input.directory
@@ -118,10 +119,8 @@ export function createSubagentTool(
         providerOptions: await buildProviderOptions(workerInput),
         prepareStep: reasoningPrepareStep(workerProvider, worker.modelId),
       })
-      const notice = codeUnavailable
-        ? '[Aviso: não há pasta de trabalho nesta conversa — o subagente rodou em modo chat, sem acesso a arquivos.]\n\n'
-        : ''
-      return notice + (result.text || '(o subagente não retornou texto)')
+      const notice = codeUnavailable ? `${SUBAGENT_NO_FOLDER_NOTICE}\n\n` : ''
+      return notice + (result.text || SUBAGENT_EMPTY_OUTPUT)
     },
   })
 }
@@ -192,12 +191,12 @@ export function createTaskTool(
       for (const titulo of dependsOn ?? []) {
         const id = taskIdByTitle(titulo)
         if (!id) {
-          return `A tarefa "${title}" NÃO foi registrada: "${titulo}" não é uma tarefa já registrada neste plano. Registre os pré-requisitos primeiro e repita, usando o título exato em dependsOn.`
+          return `Task "${title}" was NOT registered: "${titulo}" is not a task already registered in this plan. Register the prerequisites first and try again, using the exact title in dependsOn.`
         }
         if (!dependeDe.includes(id)) dependeDe.push(id)
       }
       if (titleTaken(title)) {
-        return `Já existe um worker chamado "${title}" nesta conversa — a tarefa NÃO foi registrada. Chame create_task de novo com um título que a diferencie (a área ou entrega específica), ou use message_worker se o trabalho é continuação desse worker.`
+        return `A worker named "${title}" already exists in this conversation — the task was NOT registered. Call create_task again with a title that sets it apart (the specific area or deliverable), or use message_worker if the work continues that worker's.`
       }
       // Rebaixa o que passa do teto e conta para avisar o modelo.
       const denied: string[] = []
@@ -223,11 +222,11 @@ export function createTaskTool(
         status: 'idle',
         ...(dependeDe.length > 0 ? { dependeDe } : {}),
       })
-      if (!accepted) return 'Limite de tarefas do plano atingido — não registre mais tarefas.'
+      if (!accepted) return 'Plan task limit reached — do not register more tasks.'
       if (denied.length > 0) {
-        return `Tarefa "${title}" registrada, mas sem ${denied.join(', ')}: o usuário não ativou ${denied.length > 1 ? 'esses modos' : 'esse modo'} nesta conversa. Ajuste o prompt da tarefa se ela dependia disso.`
+        return `Task "${title}" registered, but without ${denied.join(', ')}: the user did not enable ${denied.length > 1 ? 'those modes' : 'that mode'} in this conversation. Adjust the task prompt if it depended on it.`
       }
-      return `Tarefa "${title}" registrada no plano.`
+      return `Task "${title}" registered in the plan.`
     },
   })
 }

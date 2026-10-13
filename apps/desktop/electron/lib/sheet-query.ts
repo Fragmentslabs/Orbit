@@ -100,7 +100,7 @@ function columnIndex(header: string[], name: string): number {
   const index = header.findIndex((h) => String(h ?? '').trim().toLowerCase() === wanted)
   if (index < 0) {
     throw new SheetQueryError(
-      `Coluna não encontrada: "${name}". Colunas disponíveis: ${header.join(', ')}`,
+      `Column not found: "${name}". Available columns: ${header.join(', ')}`,
     )
   }
   return index
@@ -224,7 +224,7 @@ function applyAggregate(
     case 'max':
       return { value: Math.max(...numbers), skipped }
     default:
-      throw new SheetQueryError(`Agregação desconhecida: ${agg.fn}`)
+      throw new SheetQueryError(`Unknown aggregation: ${agg.fn}`)
   }
 }
 
@@ -291,7 +291,7 @@ export function runSheetQuery(rows: CellValue[][], query: SheetQuery): QueryResu
     )
     if (index < 0) {
       throw new SheetQueryError(
-        `orderBy: coluna "${query.orderBy.column}" não está no resultado. Disponíveis: ${columns.join(', ')}`,
+        `orderBy: column "${query.orderBy.column}" is not in the result. Available: ${columns.join(', ')}`,
       )
     }
     const dir = query.orderBy.direction === 'desc' ? -1 : 1
@@ -322,7 +322,7 @@ export function runSheetQuery(rows: CellValue[][], query: SheetQuery): QueryResu
 
 /** Resultado como texto compacto para o modelo — tabela + o que foi coberto. */
 export function formatQueryResult(result: QueryResult): string {
-  if (result.columns.length === 0) return '(planilha vazia)'
+  if (result.columns.length === 0) return '(empty spreadsheet)'
 
   const cell = (v: CellValue) => {
     if (v === null || v === undefined) return ''
@@ -334,12 +334,12 @@ export function formatQueryResult(result: QueryResult): string {
 
   // O rodapé é o que torna o número auditável: sem ele, uma soma que ignorou
   // 300 células não numéricas chega com a mesma cara de uma soma completa.
-  const notes = [`${result.scanned} linhas na aba`, `${result.matched} consideradas`]
-  if (result.groups !== undefined) notes.push(`${result.groups} grupo(s)`)
-  if (result.truncated) notes.push(`mostrando ${result.returned} (use limit/groupBy para reduzir)`)
+  const notes = [`${result.scanned} rows in the sheet`, `${result.matched} considered`]
+  if (result.groups !== undefined) notes.push(`${result.groups} group(s)`)
+  if (result.truncated) notes.push(`showing ${result.returned} (use limit/groupBy to narrow)`)
   if (result.skippedCells > 0) {
     notes.push(
-      `${result.skippedCells} célula(s) ignorada(s) na agregação por não serem número — o total NÃO as inclui`,
+      `${result.skippedCells} cell(s) skipped in the aggregation for not being numbers — the total does NOT include them`,
     )
   }
   return `${table}\n\n[${notes.join(' · ')}]`

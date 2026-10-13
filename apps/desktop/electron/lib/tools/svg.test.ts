@@ -93,7 +93,7 @@ describe('svg_info e svg_edit', () => {
       ref: url,
       recolorMap: { '#ff0000': '#2563eb' },
     })) as { mediaUrl: string; message: string }
-    expect(out.message).toContain('1 pintura')
+    expect(out.message).toContain('1 paint')
 
     const lido = await media.readMedia(media.mediaIdFromUrl(out.mediaUrl)!)
     expect(lido!.buffer.toString('utf8')).toContain('#2563eb')
@@ -104,7 +104,7 @@ describe('svg_info e svg_edit', () => {
       ref: url,
       recolorMap: { '#00ff00': '#000000' },
     })) as { message: string }
-    expect(out.message).toContain('nenhuma pintura casou')
+    expect(out.message).toContain('no paint matched')
   })
 
   it('rasteriza nítido no tamanho pedido — o caminho do favicon', async () => {
@@ -128,7 +128,7 @@ describe('svg_info e svg_edit', () => {
 
   it('pedido sem operação nenhuma não gera cópia silenciosa', async () => {
     const out = (await tools.svg_edit.execute({ ref: url })) as string
-    expect(out).toContain('Nenhuma operação pedida')
+    expect(out).toContain('No operation requested')
   })
 
   it('apontar para um raster explica em vez de estourar', async () => {
@@ -139,6 +139,6 @@ describe('svg_info e svg_edit', () => {
       .toBuffer()
     const raster = await media.saveMedia(png, 'png', { source: 'chat', sessionId: 'sessao1' })
     const out = (await tools.svg_info.execute({ ref: raster })) as string
-    expect(out).toContain('não é um SVG')
+    expect(out).toContain('is not an SVG')
   })
 })
