@@ -305,8 +305,28 @@ export function syncWhisperServer(next: AppSettings, prev?: AppSettings): void {
   if (changed) void warmSttModel(stt.modelId, "whisper", stt.threads)
 }
 
+/**
+ * Desligar a voz devolve a memória NA HORA, em vez de esperar o ciclo ocioso de
+ * cinco minutos: ditado desligado (ou trocado de motor, ou sem pré-carga) solta
+ * o modelo carregado; leitura desligada encerra o processo do motor de fala.
+ * Roda antes do `syncWhisperServer`, que pode subir o servidor do motor novo.
+ */
+export function releaseDisabledVoice(next: AppSettings, prev?: AppSettings): void {
+  if (!prev) return
+  const stt = next.voice.stt
+  const before = prev.voice.stt
+  const sttOff = before.enabled && !stt.enabled
+  const engineChanged = before.engine !== stt.engine
+  const preloadOff = before.preload && !stt.preload
+  if (sttOff || engineChanged || preloadOff) releaseSttModels()
+  if (prev.voice.tts.enabled && !next.voice.tts.enabled) shutdownTts()
+}
+
 export function registerVoiceIpc(): void {
-  onAppSettingsChange((next, prev) => syncWhisperServer(next, prev))
+  onAppSettingsChange((next, prev) => {
+    releaseDisabledVoice(next, prev)
+    syncWhisperServer(next, prev)
+  })
 
   // A extração do pacote começa por dois caminhos (logo após o download ou no
   // primeiro uso, dentro do motor). Um só aviso cobre os dois: cada mudança de

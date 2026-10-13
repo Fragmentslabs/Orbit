@@ -39,6 +39,7 @@ import {
   sileroVadPath,
   modelsDir,
 } from './models-store'
+import { collectGarbageSoon } from '../gc'
 import { PARAKEET_FILES, SILERO_VAD_URL } from './catalog'
 import { SampleBuffer, samplesToMs, STT_SAMPLE_RATE } from './audio'
 import type { SttEngine, SttEngineStatus, SttHandle, SttStartInput, SttSegment, SttWord } from './engine'
@@ -205,7 +206,11 @@ export async function warm(modelId?: string | null, threads = DEFAULT_THREADS): 
  * de MB de ficar residente a sessão inteira.
  */
 export function release(): void {
+  if (!recognizerEntry) return
   recognizerEntry = null
+  // Soltar a referência não basta: os ~700 MB são nativos e só voltam quando o
+  // GC coleta o wrapper — o que, sem pressão no heap JS, não acontece nunca.
+  collectGarbageSoon()
 }
 
 // ---------------------------------------------------------------------------

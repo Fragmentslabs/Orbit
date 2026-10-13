@@ -97,8 +97,10 @@ export async function warmSttModel(modelId?: string | null, engine?: string, thr
  * decide é o usuário). Vem das configurações do main, não do payload.
  */
 export function sttPreloadEnabled(): boolean {
-  const settings = getAppSettings() as { voice?: { stt?: { preload?: unknown } } } | null
-  return settings?.voice?.stt?.preload !== false
+  const settings = getAppSettings() as { voice?: { stt?: { preload?: unknown; enabled?: unknown } } } | null
+  // Ditado desligado também não pré-carrega: nenhum chamador (o botão, o fim
+  // de um download) deve prender o modelo na memória de quem desligou a voz.
+  return settings?.voice?.stt?.preload !== false && settings?.voice?.stt?.enabled !== false
 }
 
 /** Quanto tempo sem ditado antes de soltar o modelo que o `warm` carregou. */

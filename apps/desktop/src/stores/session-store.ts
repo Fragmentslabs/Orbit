@@ -191,6 +191,28 @@ function persistAutoFolderMap(map: Record<string, string>) {
  *  persistido (o sinal de "carregada" não pode ser a chave definida). */
 const loadedMessages = new Set<string>()
 
+/**
+ * Quantas conversas mantêm o histórico em memória. Sem teto, cada conversa
+ * aberta desde o boot ficava inteira no renderer — com as saídas de tool,
+ * leituras de arquivo e anexos — e a RAM só crescia. O main é quem grava o
+ * histórico (chat-engine), então o renderer é só um espelho: soltar uma
+ * conversa ociosa não perde nada, e reabri-la relê do disco (`ensureMessages`).
+ */
+const MAX_CACHED_SESSIONS = 6
+
+/** Conversas na ordem em que foram exibidas (a mais recente no fim). */
+const recentSessions: string[] = []
+
+/** Marca a conversa como vista e devolve as que passaram do teto. */
+function touchRecent(sessionId: string): string[] {
+  const at = recentSessions.indexOf(sessionId)
+  if (at >= 0) recentSessions.splice(at, 1)
+  recentSessions.push(sessionId)
+  return recentSessions.length > MAX_CACHED_SESSIONS
+    ? recentSessions.slice(0, recentSessions.length - MAX_CACHED_SESSIONS)
+    : []
+}
+
 /** Mescla o histórico persistido com o buffer de eventos (buffer é mais
  *  fresco por part — eventos pós-reload — mas pode não ter as parts emitidas
  *  antes do reload; o disco preenche as lacunas). */
@@ -421,6 +443,33 @@ export const useSessionStore = create<SessionState>((set, get) => ({
   setPendingFolder: (folderId) => set({ pendingFolderId: folderId }),
 
   ensureMessages: async (sessionId) => {
+    // Teto do histórico em memória: as conversas vistas há mais tempo soltam
+    // as mensagens — menos as abertas em algum modo, as com agente rodando e
+    // as com um plano para revisar (o fim do stream ainda lê o buffer).
+    const stale = touchRecent(sessionId)
+    if (stale.length > 0) {
+      const state = get()
+      const open = new Set(Object.values(state.activeIds).filter(Boolean))
+      const drop: string[] = []
+      for (const sid of stale) {
+        const busy =
+          open.has(sid) ||
+          state.status[sid] === "streaming" ||
+          state.status[sid] === "submitted" ||
+          state._planReviewOutbox[sid] === true
+        if (busy) continue
+        recentSessions.splice(recentSessions.indexOf(sid), 1)
+        if (state.messages[sid] !== undefined) drop.push(sid)
+      }
+      if (drop.length > 0) {
+        for (const sid of drop) loadedMessages.delete(sid)
+        set((current) => {
+          const messages = { ...current.messages }
+          for (const sid of drop) delete messages[sid]
+          return { messages }
+        })
+      }
+    }
     // Plano, review e pedidos pendentes carregam aqui, e nao no selectSession:
     // o chat-view chama ensureMessages sempre que exibe uma sessao (inclusive
     // na que ja estava ativa no boot, que nunca passa por selectSession). Preso
