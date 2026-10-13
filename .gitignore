@@ -23,6 +23,9 @@ apps/*/.expo
 # (apps/desktop/scripts/build-whisper-server.mjs)
 apps/desktop/.whisper-build
 apps/desktop/resources/whisper
+# ffmpeg/ffprobe estáticos da edição de vídeo (apps/desktop/scripts/fetch-ffmpeg.mjs)
+apps/desktop/.ffmpeg-build
+apps/desktop/resources/ffmpeg
 
 # Packages
 packages/*/node_modules
