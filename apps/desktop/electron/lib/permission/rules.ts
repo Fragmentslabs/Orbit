@@ -94,6 +94,11 @@ const NATIVE_TOOLS = new Set([
   'svg_create',
   'svg_info',
   'svg_edit',
+  // Áudio: transcrever lê um anexo (ou um arquivo da pasta) com o motor
+  // local; gerar grava o áudio no storage do Orbit — no projeto só com
+  // savePath, restrito ao pedido explícito. Mesma convenção das de imagem.
+  'audio_transcribe',
+  'audio_generate',
   // Automação em lote na engine oculta (mesmo threat model do bash: o agente
   // já executa código arbitrário; o script roda isolado num utilityProcess)
   'run_browser_script',
