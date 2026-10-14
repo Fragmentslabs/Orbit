@@ -88,9 +88,10 @@ Padrões sem botão: revisar ao terminar cada worker; várias ações por rodada
 
 - A decisão deixa de ser um JSON único: o revisor vira um **agente com ferramentas**, num loop curto:
   - `ver_diff(worker)` — arquivos e patch do worker (limitado, ~20 kB, com os nomes de todos os arquivos);
-  - `rodar_verificacao(comando)` — só no *Rigoroso*; comandos de leitura/verificação do projeto (typecheck, testes, lint), com a política de comandos da esteira;
+  - `rodar_verificacao(comando)` — comandos de leitura/verificação do projeto (typecheck, testes, lint), com a política de comandos da esteira. No *Rigoroso* é obrigatório antes de aceitar; nos outros modos é o segundo canal, para quando o diff não veio ou não decide;
   - `pedir_ajuste(worker, instrução)`, `criar_worker(título, prompt, depende_de?)`, `aceitar(worker)`, `marcar_falha(worker, motivo)`.
 - O diff vem do snapshot de cada worker (mesmo mecanismo do diff por turno). Com workers na mesma pasta (sem worktrees), o diff mede a pasta toda — a revisão recebe o aviso de que pode haver mudanças de outros workers; com worktrees (etapa 6), é exato.
+- Um turno cuja captura de snapshot falha não deixa patch nenhum, e isso **não** é lido como "não escreveu": o `ver_diff` avisa que o diff está indisponível (com o motivo) e o estado atual da pasta entra como segunda evidência. Só depois disso a ausência de diff pode pesar numa decisão.
 - O texto final do worker continua entrando, mas sem o corte de 2.000 caracteres (limite maior, com resumo se passar).
 
 ## Etapa 3 — Várias ações por rodada, orçamento por worker

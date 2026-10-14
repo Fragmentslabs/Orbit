@@ -1042,6 +1042,7 @@
     "noTools": "sem tools",
     "noSelectionHint": "Sem seleção, os workers usam o mesmo modelo do chat principal.",
     "thinking": "Thinking",
+    "modelsTitle": "Modelos",
     "conductorModel": "Modelo do orquestrador",
     "conductorHint": "Planeja as tarefas e escreve a resposta final. Sem seleção, o modelo do chat faz isso.",
     "useChatModel": "Usar o modelo do chat",

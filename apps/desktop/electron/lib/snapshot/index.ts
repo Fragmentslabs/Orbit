@@ -123,19 +123,67 @@ function gitDirFor(directory: string): string {
 }
 
 /**
- * Executa git no repositório auxiliar de snapshots (--git-dir em
- * userData/snapshots/<hash> + --work-tree no projeto) usando o binário e o
- * PATH resolvidos no load. Único ponto de verdade da invocação — exportado
- * para ferramentas externas (ex.: verify_changes) não duplicarem gitDirFor
- * nem a resolução do binário.
+ * Fila de operações por pasta (chave = repositório auxiliar).
+ *
+ * O repositório de snapshot é POR PASTA (`gitDirFor`), então workers em
+ * paralelo na MESMA pasta — o padrão da orquestra, quando não há worktree —
+ * batem no mesmo `.git/index`: `git add`, `write-tree` e `git gc` disputam o
+ * `index.lock`, e quem perde não grava snapshot nenhum. O turno termina com o
+ * veredito 'unknown' e daí saem os dois sintomas vistos em campo: o chat não
+ * mostra o badge de alterações e o `ver_diff` do revisor responde "no changes
+ * found" para um turno que trabalhou.
+ *
+ * É um encadeamento de promises por pasta: uma operação de git por vez naquela
+ * pasta, e pastas diferentes seguem em paralelo. Nenhuma função pública pega a
+ * trava duas vezes (por dentro todas usam `snapshotGitCru`), então não há
+ * reentrância nem deadlock.
  */
-export async function snapshotGit(directory: string, args: string[]): Promise<string> {
+const filas = new Map<string, Promise<unknown>>()
+
+function comTrava<T>(gitDir: string, fn: () => Promise<T>): Promise<T> {
+  const anterior = filas.get(gitDir) ?? Promise.resolve()
+  // `fn` nos dois ramos: a falha de uma operação não pode travar a pasta.
+  const atual = anterior.then(fn, fn)
+  // A cauda guardada já vem resolvida — um erro de um turno não contamina os
+  // próximos. Sem isto, um único `index.lock` azedaria a fila da pasta toda.
+  const cauda = atual.then(
+    () => {},
+    () => {},
+  )
+  filas.set(gitDir, cauda)
+  // Chave liberada quando a fila esvazia; se alguém entrou atrás, a cauda já é outra.
+  void cauda.then(() => {
+    if (filas.get(gitDir) === cauda) filas.delete(gitDir)
+  })
+  return atual
+}
+
+/**
+ * Invocação CRUA do git no repositório auxiliar — sem a trava da pasta.
+ * Interna de propósito: é o que as operações abaixo usam quando JÁ estão com a
+ * fila da pasta nas mãos (pegar a trava aqui dentro seria reentrância).
+ */
+async function snapshotGitCru(directory: string, args: string[]): Promise<string> {
   const { stdout } = await execFileAsync(
     gitBinary.binary,
     ['--git-dir', gitDirFor(directory), '--work-tree', directory, ...args],
     { cwd: directory, env: gitBinary.env, maxBuffer: MAX_BUFFER },
   )
   return stdout
+}
+
+/**
+ * Executa git no repositório auxiliar de snapshots (--git-dir em
+ * userData/snapshots/<hash> + --work-tree no projeto) usando o binário e o
+ * PATH resolvidos no load. Único ponto de verdade da invocação — exportado
+ * para ferramentas externas (ex.: verify_changes) não duplicarem gitDirFor
+ * nem a resolução do binário.
+ *
+ * Passa pela fila da pasta: uma invocação por vez naquele repositório, para
+ * não disputar o `index.lock` com uma captura do mesmo projeto.
+ */
+export function snapshotGit(directory: string, args: string[]): Promise<string> {
+  return comTrava(gitDirFor(directory), () => snapshotGitCru(directory, args))
 }
 
 async function ensureRepo(directory: string): Promise<void> {
@@ -164,7 +212,13 @@ async function ensureRepo(directory: string): Promise<void> {
   excludesConferidos.add(gitDir)
 }
 
-/** git gc --prune=7.days em background, no máximo 1x/hora por projeto. */
+/**
+ * `git gc --prune=7.days`, no máximo 1x/hora por projeto.
+ *
+ * Vai pela fila da pasta (`snapshotGit`), e não na frente dela: o gc espera a
+ * captura que estiver rodando e nunca segura o `index.lock` no meio de um
+ * `add --all` — era essa corrida que fazia o turno perder o snapshot.
+ */
 function maybeGc(directory: string) {
   const key = gitDirFor(directory)
   const last = lastGc.get(key) ?? 0
@@ -176,25 +230,37 @@ function maybeGc(directory: string) {
 /**
  * Apaga o repositório auxiliar de snapshots de uma pasta que deixou de existir
  * (ex.: o worktree de uma task da esteira, ao ser removido).
+ *
+ * Pela fila da pasta: o que estiver rodando termina antes, e nenhum git fica
+ * com o repositório aberto no instante da remoção.
  */
 export async function descartarSnapshots(directory: string): Promise<void> {
-  lastGc.delete(gitDirFor(directory))
-  await fs.rm(gitDirFor(directory), { recursive: true, force: true })
+  const gitDir = gitDirFor(directory)
+  lastGc.delete(gitDir)
+  await comTrava(gitDir, () => fs.rm(gitDir, { recursive: true, force: true }))
 }
 
-/** Captura o estado atual do worktree como tree hash. */
+/**
+ * Captura o estado atual do worktree como tree hash.
+ *
+ * `add --all` + `write-tree` são uma operação só: a trava fica com a pasta até
+ * o fim, senão outra captura do mesmo projeto entraria entre os dois comandos.
+ */
 export async function capture(directory: string): Promise<string> {
-  await ensureRepo(directory)
-  // B4 — Limitação documentada: `git add --all` NÃO versiona arquivos
-  // ignorados pelo .gitignore do projeto (nem pelos excludes deste módulo).
-  // Logo, esses arquivos nunca entram no snapshot e não são revertidos pelo
-  // restore — comportamento intencional. Não usamos -f de propósito: ele
-  // quebraria os excludes de node_modules/ etc. e incharia o repositório
-  // auxiliar com lixo que não devemos restaurar.
-  await snapshotGit(directory, ['add', '--all'])
-  const tree = (await snapshotGit(directory, ['write-tree'])).trim()
-  maybeGc(directory)
-  return tree
+  return comTrava(gitDirFor(directory), async () => {
+    await ensureRepo(directory)
+    // B4 — Limitação documentada: `git add --all` NÃO versiona arquivos
+    // ignorados pelo .gitignore do projeto (nem pelos excludes deste módulo).
+    // Logo, esses arquivos nunca entram no snapshot e não são revertidos pelo
+    // restore — comportamento intencional. Não usamos -f de propósito: ele
+    // quebraria os excludes de node_modules/ etc. e incharia o repositório
+    // auxiliar com lixo que não devemos restaurar.
+    await snapshotGitCru(directory, ['add', '--all'])
+    const tree = (await snapshotGitCru(directory, ['write-tree'])).trim()
+    // Fire-and-forget: o gc só entra na fila (não é aguardado aqui).
+    maybeGc(directory)
+    return tree
+  })
 }
 
 /**
@@ -203,9 +269,11 @@ export async function capture(directory: string): Promise<string> {
  * remova arquivos criados depois do snapshot.
  */
 export async function restore(directory: string, tree: string): Promise<void> {
-  await ensureRepo(directory)
-  await snapshotGit(directory, ['add', '--all'])
-  await snapshotGit(directory, ['read-tree', '--reset', '-u', tree])
+  return comTrava(gitDirFor(directory), async () => {
+    await ensureRepo(directory)
+    await snapshotGitCru(directory, ['add', '--all'])
+    await snapshotGitCru(directory, ['read-tree', '--reset', '-u', tree])
+  })
 }
 
 export interface SnapshotDiff {
@@ -218,16 +286,18 @@ const MAX_PATCH_CHARS = 200_000
 
 /** Diferença entre dois snapshots (tree hashes). */
 export async function diff(directory: string, from: string, to: string): Promise<SnapshotDiff> {
-  const files = (await snapshotGit(directory, ['diff', '--name-only', from, to]))
-    .split('\n')
-    .map((f) => f.trim())
-    .filter(Boolean)
-  let patch = ''
-  if (files.length > 0) {
-    patch = await snapshotGit(directory, ['diff', from, to])
-    if (patch.length > MAX_PATCH_CHARS) {
-      patch = patch.slice(0, MAX_PATCH_CHARS) + '\n… (diff truncado)'
+  return comTrava(gitDirFor(directory), async () => {
+    const files = (await snapshotGitCru(directory, ['diff', '--name-only', from, to]))
+      .split('\n')
+      .map((f) => f.trim())
+      .filter(Boolean)
+    let patch = ''
+    if (files.length > 0) {
+      patch = await snapshotGitCru(directory, ['diff', from, to])
+      if (patch.length > MAX_PATCH_CHARS) {
+        patch = patch.slice(0, MAX_PATCH_CHARS) + '\n… (diff truncado)'
+      }
     }
-  }
-  return { files, patch }
+    return { files, patch }
+  })
 }

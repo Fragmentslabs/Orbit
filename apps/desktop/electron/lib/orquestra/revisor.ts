@@ -6,8 +6,9 @@ import type { Verificacao } from './verificacoes'
 
 /**
  * O orquestrador revisando: um agente curto, com ferramentas, em vez do JSON
- * único de antes. Ele vê o resultado e o diff do worker, pode rodar as
- * verificações do projeto (no Rigoroso) e decide pelas ações da execução.
+ * único de antes. Ele vê o resultado e o diff do worker, roda as verificações
+ * do projeto (obrigatórias no Rigoroso, segundo canal nos outros modos) e
+ * decide pelas ações da execução.
  */
 
 const PASSOS_MAX = 12
@@ -23,9 +24,13 @@ export interface DepsRevisor {
   plan: OrchestrationPlan
   config: OrchestrationSettings
   signal: AbortSignal
-  /** Diff do trabalho do worker (worktree ou snapshots do chat dele) */
+  /**
+   * Diff do trabalho do worker (worktree ou snapshots do chat dele). Volta com
+   * o aviso de diff INDISPONÍVEL quando a captura dos snapshots falhou — não
+   * houve como registrar o que os turnos escreveram.
+   */
   diff(task: OrchestrationTask): Promise<string>
-  /** Verificações disponíveis para a pasta do worker (só no Rigoroso) */
+  /** Verificações do projeto disponíveis para a pasta do worker */
   verificacoes?(task: OrchestrationTask): Promise<Verificacao[]>
   rodarVerificacao?(task: OrchestrationTask, v: Verificacao): Promise<{ ok: boolean; saida: string }>
   /** Uso de tokens da revisão (somado ao plano) */
@@ -36,11 +41,12 @@ const SISTEMA = (config: OrchestrationSettings) => `You are the Orbit orchestrat
 
 How to review:
 - Judge the WORK, not the worker's story: look at the diff (ver_diff) before accepting anything that should have changed files. If the summary claims something the diff does not show, that is a problem.
-- aceitar when the task is done well enough for the user's request. Do not chase perfection: every adjustment costs a full worker turn and comes out of a limited budget.
+- A diff reported as UNAVAILABLE is NOT "nothing was written": the engine failed to record what a turn did. Never pedir_ajuste just because the diff is empty in that case — check the folder or run rodar_verificacao and judge by what it says.
+- aceitar when the task is done well enough for the user's request.
 - pedir_ajuste with a concrete, actionable instruction (what is wrong, where, what to do) when something is missing or broken. The same worker continues in its own chat, so it remembers what it did.
 - marcar_falha when the task cannot be fixed within the budget or went in a wrong direction — say why, so the final answer can tell the user.
 - criar_worker only for work that is genuinely missing and belongs to no existing worker (it also costs budget).
-${config.comportamento === 'rigoroso' ? '- RIGOROUS mode: before accepting a task that changed code, run at least one relevant verification with rodar_verificacao. A failing check means pedir_ajuste (or marcar_falha without budget), never aceitar.\n' : ''}- Workers may share the same folder: a diff can include changes from other workers running at the same time. Judge only what belongs to this task.`
+${config.comportamento === 'rigoroso' ? '- RIGOROUS mode: before accepting a task that changed code, run at least one relevant verification with rodar_verificacao. A failing check means pedir_ajuste (or marcar_falha without budget), never aceitar.\n' : '- rodar_verificacao is available in this mode: run one of the project checks (typecheck, tests, lint) when the diff is unavailable or when reading the diff is not enough to decide.\n'}- Workers may share the same folder: a diff can include changes from other workers running at the same time. Judge only what belongs to this task.`
 
 function textoBudget(plan: OrchestrationPlan, config: OrchestrationSettings, task?: OrchestrationTask): string {
   const r = plan.revisao
@@ -128,11 +134,16 @@ export async function revisarComModelo(d: DepsRevisor, pedido: PedidoRevisao, ac
     }),
   }
 
-  if (config.comportamento === 'rigoroso' && d.verificacoes && d.rodarVerificacao) {
+  if (d.verificacoes && d.rodarVerificacao) {
     const verificacoes = d.verificacoes
     const rodar = d.rodarVerificacao
     tools.rodar_verificacao = tool({
-      description: "Runs one of the project's own checks (typecheck, tests, lint) in the worker's folder. Call without `verificacao` to list them.",
+      // No Rigoroso a verificação é o caminho obrigatório; nos outros modos é o
+      // segundo canal, para quando o diff não veio (captura falhada) ou não dá
+      // para decidir só lendo o patch.
+      description:
+        "Runs one of the project's own checks (typecheck, tests, lint) in the worker's folder. Call without `verificacao` to list them." +
+        (config.comportamento === 'rigoroso' ? '' : ' Use it when the diff is unavailable or inconclusive.'),
       inputSchema: z.object({ ...campoTarefa, verificacao: z.string().optional().describe('Name from the list') }),
       execute: async (args: { tarefa?: string; verificacao?: string }) => {
         const t = alvo(args.tarefa)
