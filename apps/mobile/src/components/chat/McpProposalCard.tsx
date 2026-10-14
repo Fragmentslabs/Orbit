@@ -43,8 +43,8 @@ function mask(value: string): string {
 }
 
 /** Cabeçalhos e client_secret não podem aparecer inteiros no card. */
-function secretsOf(input: ProposalInput): Array<{ key: string; value: string }> {
-  const out: Array<{ key: string; value: string }> = []
+function secretsOf(input: ProposalInput): { key: string; value: string }[] {
+  const out: { key: string; value: string }[] = []
   for (const [key, value] of Object.entries(input.headers ?? {})) {
     if (/authorization|token|key|secret|cookie/i.test(key)) out.push({ key, value: mask(value) })
   }
