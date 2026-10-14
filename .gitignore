@@ -26,6 +26,9 @@ apps/desktop/resources/whisper
 # ffmpeg/ffprobe estáticos da edição de vídeo (apps/desktop/scripts/fetch-ffmpeg.mjs)
 apps/desktop/.ffmpeg-build
 apps/desktop/resources/ffmpeg
+# Saídas da edição de vídeo/motion: a pasta edit/ que as ferramentas criam ao lado do
+# footage (renders, transcrições, folhas de contato) é sempre gerada, nunca autoria.
+edit/
 
 # Packages
 packages/*/node_modules
