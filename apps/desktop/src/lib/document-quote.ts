@@ -1,13 +1,16 @@
-import { DOCUMENT_QUOTE_MIME, type FilePart } from "@shared/chat"
-import type { DocumentQuote } from "@/src/stores/panel-store"
+import { DOCUMENT_QUOTE_MIME, motionTimecode, type FilePart, type QuotePayload } from "@shared/chat"
+import type { DocumentQuote, PanelQuote } from "@/src/stores/panel-store"
 
 /**
- * Trecho citado → anexo da mensagem.
+ * Citação → anexo da mensagem.
  *
  * Os dois compositores (chat e código) precisam disso na hora de enviar, e o
  * formato tem que ser idêntico nos dois: quem lê do outro lado é um `if` só no
  * preprocessAttachment do engine. Duplicar a serialização seria a forma mais
  * fácil de eles divergirem sem ninguém perceber.
+ *
+ * Vale para as duas origens: o trecho de documento (página/linhas) e o instante
+ * de motion (arquivo/quadro/fps). O `kind` do payload diz qual é.
  */
 
 /** Onde o trecho está, no formato curto que o chip e o nome do anexo usam. */
@@ -18,24 +21,59 @@ export function quoteLocationLabel(quote: DocumentQuote): string {
   return ` p${quote.page}L${quote.fromLine}${ate}`
 }
 
-export function quotesToFileParts(quotes: DocumentQuote[]): FilePart[] {
+const baseName = (p: string) => p.split(/[\\/]/).filter(Boolean).pop() ?? p
+
+/** O rótulo do chip: `contrato.pdf p3L10-14` ou `Motion · index.html @ 00:02:09`.
+ *  "Motion" é o nome do produto (o mesmo rótulo da aba), não uma palavra a
+ *  traduzir. */
+export function quoteChipLabel(quote: PanelQuote): string {
+  if (quote.kind === "motion") {
+    return `Motion · ${baseName(quote.file)} @ ${motionTimecode(quote.frame, quote.fps)}${quote.layer ? ` · ${quote.layer}` : ""}`
+  }
+  return `${quote.name}${quoteLocationLabel(quote)}`
+}
+
+/** O que o cursor parado sobre o chip mostra: o trecho citado ou o caminho da
+ *  composição — o que a pessoa precisa para saber O QUE está anexado. */
+export function quoteChipTitle(quote: PanelQuote): string {
+  return quote.kind === "motion" ? quote.file : quote.text
+}
+
+/** O payload como ele viaja no data URL. Cada tipo leva SÓ os seus campos: a
+ *  citação de motion não tem página nem linha, e emitir as chaves vazias faria
+ *  o texto do modelo nascer com campos órfãos. */
+function quotePayload(quote: PanelQuote): QuotePayload {
+  if (quote.kind === "motion") {
+    return {
+      kind: "motion",
+      file: quote.file,
+      name: quote.name,
+      frame: quote.frame,
+      fps: quote.fps,
+      ...(quote.path ? { path: quote.path } : {}),
+      ...(quote.layer ? { layer: quote.layer } : {}),
+      ...(quote.onScreen?.length ? { onScreen: quote.onScreen } : {}),
+    }
+  }
+  return {
+    kind: quote.kind,
+    docId: quote.docId,
+    name: quote.name,
+    page: quote.page,
+    fromLine: quote.fromLine,
+    toLine: quote.toLine,
+    text: quote.text,
+  }
+}
+
+export function quotesToFileParts(quotes: PanelQuote[]): FilePart[] {
   return quotes.map((quote) => {
-    const payload = encodeURIComponent(
-      JSON.stringify({
-        kind: quote.kind,
-        docId: quote.docId,
-        name: quote.name,
-        page: quote.page,
-        fromLine: quote.fromLine,
-        toLine: quote.toLine,
-        text: quote.text,
-      }),
-    )
+    const payload = encodeURIComponent(JSON.stringify(quotePayload(quote)))
     return {
       id: quote.id,
       type: "file",
       mime: DOCUMENT_QUOTE_MIME,
-      filename: `${quote.name}${quoteLocationLabel(quote)}`,
+      filename: quoteChipLabel(quote),
       url: `data:${DOCUMENT_QUOTE_MIME},${payload}`,
     }
   })

@@ -352,21 +352,29 @@ export function PromptInputAttachment({ data, className, ...props }: PromptInput
 
 export type PromptInputAttachmentsProps = Omit<HTMLAttributes<HTMLDivElement>, "children"> & {
   children: (attachment: FileUIPart & { id: string }) => ReactNode
+  /** Elemento que entra na MESMA linha dos badges, antes deles (ex.: o badge da
+   *  resposta citada). */
+  leading?: ReactNode
 }
 
 export function PromptInputAttachments({
   children,
   className,
+  leading,
   ...props
 }: PromptInputAttachmentsProps) {
   const attachments = usePromptInputAttachments()
 
-  if (!attachments.files.length) {
+  // A linha existe se houver anexo OU algo que anda junto com eles (o badge da
+  // resposta citada, por exemplo): sem isso, responder sem anexo nenhum
+  // esconderia a citação pendente.
+  if (!attachments.files.length && !leading) {
     return null
   }
 
   return (
     <div className={cn("flex flex-wrap items-center gap-2 p-3 w-full", className)} {...props}>
+      {leading}
       {attachments.files.map(file => (
         <Fragment key={file.id}>{children(file)}</Fragment>
       ))}

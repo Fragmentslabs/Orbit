@@ -8,8 +8,8 @@ import {
   Eye,
   FileTextIcon,
   LoaderIcon,
+  MessageSquareQuoteIcon,
   RefreshCwIcon,
-  ReplyIcon,
   RotateCwIcon,
   SparklesIcon,
   TerminalIcon,
@@ -530,7 +530,7 @@ export function ReplyAction({ message, sessionId }: { message: ChatMessage; sess
       label={t("reply.action")}
       onClick={() => setReply(sessionId, { role: message.role, text })}
     >
-      <ReplyIcon className="size-3.5" />
+      <MessageSquareQuoteIcon className="size-3.5" />
     </Action>
   )
 }

@@ -14,7 +14,13 @@ import type {
   TextPart,
   ToolPart,
 } from '@shared/chat'
-import { BROWSER_SELECTION_MIME, DOCUMENT_QUOTE_MIME, StorageKeys } from '@shared/chat'
+import {
+  BROWSER_SELECTION_MIME,
+  DOCUMENT_QUOTE_MIME,
+  formatMotionQuoteText,
+  StorageKeys,
+  type QuotePayload,
+} from '@shared/chat'
 import { getProvider, modelSupportsVision } from './catalog'
 import { compactHistory, findLastSummaryIndex, shouldCompact } from './compaction'
 import { contextBudget, estimateTokens, maxStepsFor, trimTurnContext } from './context-budget'
@@ -427,6 +433,9 @@ async function preprocessAttachment(
     messageId?: string
     /** Registro do turno (modo Visão): onde as imagens ficam para a tool describe_image */
     turnImages?: TurnImage[]
+    /** Texto que o usuário escreveu neste turno — o anexo de motion o cola ao
+     *  instante apontado (ver formatMotionQuoteText). */
+    userText?: string
   },
 ): Promise<MessagePart[]> {
   const filename = file.filename ?? ''
@@ -458,55 +467,56 @@ async function preprocessAttachment(
     ]
   }
 
-  // Trecho citado no visualizador de documento. O usuário grifou e mandou:
-  // o modelo recebe o texto JÁ AQUI, sem precisar de uma ida ao documento
-  // para responder, e recebe junto a citação clicável para devolver na
-  // resposta. A bolha mostra só o chip — o trecho pode ser longo, e repeti-lo
-  // na conversa seria mostrar ao usuário o que ele mesmo acabou de marcar.
+  // Trecho citado no visualizador de documento, ou INSTANTE apontado na aba
+  // Motion — os dois chegam pelo mesmo MIME (ver DOCUMENT_QUOTE_MIME) e o
+  // `kind` do payload diz qual é. O usuário grifou/apontou e mandou: o modelo
+  // recebe o essencial JÁ AQUI, sem precisar de uma ida ao documento ou à
+  // composição para responder, e recebe junto a citação clicável para devolver
+  // na resposta. A bolha mostra só o chip — o trecho pode ser longo, e
+  // repeti-lo na conversa seria mostrar ao usuário o que ele acabou de marcar.
   if (file.mime === DOCUMENT_QUOTE_MIME) {
     const raw = decodeDataUrlText(file.url)
     let text = `[Excerpt quoted by the user — ${file.filename || 'document'}]`
     if (raw) {
       try {
-        const quote = JSON.parse(raw) as {
-          kind?: 'document' | 'source'
-          docId?: string
-          name?: string
-          page?: number
-          fromLine?: number
-          toLine?: number
-          text?: string
-        }
-        const onde = quote.page
-          ? `, page ${quote.page}${
-              quote.fromLine
-                ? `, line${quote.toLine && quote.toLine > quote.fromLine ? `s ${quote.fromLine}-${quote.toLine}` : ` ${quote.fromLine}`}`
-                : ''
-            }`
-          : ''
-        const linhas = [`[Excerpt quoted by the user — ${quote.name ?? 'document'}${onde}]`]
+        const quote = JSON.parse(raw) as QuotePayload
+        if (quote.kind === 'motion') {
+          // O instante: arquivo, quadro e fps (e os segundos com vírgula, que
+          // são só exibição), com o texto do usuário colado — ver
+          // formatMotionQuoteText.
+          text = formatMotionQuoteText(quote, deps.userText)
+        } else {
+          const onde = quote.page
+            ? `, page ${quote.page}${
+                quote.fromLine
+                  ? `, line${quote.toLine && quote.toLine > quote.fromLine ? `s ${quote.fromLine}-${quote.toLine}` : ` ${quote.fromLine}`}`
+                  : ''
+              }`
+            : ''
+          const linhas = [`[Excerpt quoted by the user — ${quote.name ?? 'document'}${onde}]`]
 
-        // O ENDEREÇO do que foi citado, na linguagem da ferramenta que o
-        // alcança. Sem isto o modelo recebia um nome e um texto, ia procurar o
-        // arquivo com as tools que tinha e respondia que não achou — com o
-        // documento inteiro a um id de distância. O id vale por si: ler um
-        // documento não depende de ele ser fonte da conversa, nem de a
-        // conversa ser a mesma em que ele nasceu.
-        if (quote.docId) {
-          linhas.push(
-            quote.kind === 'source'
-              ? `Source in this conversation: ${quote.docId} — use doc_read/doc_search with this docId to see the rest.`
-              : `Agent document: ${quote.docId} — use read_document with this documentId to see the full text, and update_document to change it (read first: baseRevision comes from the read).`,
-          )
+          // O ENDEREÇO do que foi citado, na linguagem da ferramenta que o
+          // alcança. Sem isto o modelo recebia um nome e um texto, ia procurar
+          // o arquivo com as tools que tinha e respondia que não achou — com o
+          // documento inteiro a um id de distância. O id vale por si: ler um
+          // documento não depende de ele ser fonte da conversa, nem de a
+          // conversa ser a mesma em que ele nasceu.
+          if (quote.docId) {
+            linhas.push(
+              quote.kind === 'source'
+                ? `Source in this conversation: ${quote.docId} — use doc_read/doc_search with this docId to see the rest.`
+                : `Agent document: ${quote.docId} — use read_document with this documentId to see the full text, and update_document to change it (read first: baseRevision comes from the read).`,
+            )
+          }
+          if (quote.docId && quote.page) {
+            const alvo = `#orbit-source/${quote.docId}/p${quote.page}${
+              quote.fromLine ? `L${quote.fromLine}${quote.toLine ? `-${quote.toLine}` : ''}` : ''
+            }`
+            linhas.push(`To cite it back in your reply: [${quote.name ?? 'document'}](${alvo})`)
+          }
+          linhas.push('---', quote.text ?? '')
+          text = linhas.join('\n')
         }
-        if (quote.docId && quote.page) {
-          const alvo = `#orbit-source/${quote.docId}/p${quote.page}${
-            quote.fromLine ? `L${quote.fromLine}${quote.toLine ? `-${quote.toLine}` : ''}` : ''
-          }`
-          linhas.push(`To cite it back in your reply: [${quote.name ?? 'document'}](${alvo})`)
-        }
-        linhas.push('---', quote.text ?? '')
-        text = linhas.join('\n')
       } catch {
         // payload inválido — o filename do chip já dá o contexto mínimo
       }
@@ -1105,6 +1115,7 @@ async function runChatTurn(win: BrowserWindow, input: SendMessageInput): Promise
         sessionId,
         messageId: userMessage.id,
         turnImages,
+        userText: input.text,
       })))
     }
     // Substitui a mensagem do usuário (objeto NOVO — o MessageItem é memoizado

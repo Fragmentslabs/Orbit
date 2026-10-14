@@ -2411,6 +2411,7 @@
   "reply": {
     "action": "Responder",
     "excerpt": "Responder trecho",
+    "speak": "Ler trecho",
     "cancel": "Cancelar resposta",
     "you": "Você",
     "assistant": "Assistente"
