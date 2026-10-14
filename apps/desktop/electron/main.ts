@@ -1,5 +1,5 @@
 import { app, BrowserWindow, ipcMain, dialog, shell, Menu, clipboard, nativeImage, nativeTheme, ClipboardItem, session, type MenuItemConstructorOptions } from 'electron'
-import { registerAudioProtocol } from './lib/audio-store'
+import { audioIdFrom, readAudio, registerAudioProtocol } from './lib/audio-store'
 import sharp from 'sharp'
 import { createRequire } from 'node:module'
 import { fileURLToPath } from 'node:url'
@@ -2260,6 +2260,22 @@ app.whenReady().then(() => {
    * orbit-media:// ou o id cru — e um data URL tambem, que e como chega uma
    * imagem que ainda nao foi para a galeria.
    */
+  /** Salvar um áudio do chat (anexado ou gerado) pelo diálogo do sistema. */
+  ipcMain.handle('audio:export', async (_event, ref: string, suggestedName?: string) => {
+    const id = audioIdFrom(String(ref ?? ''))
+    const audio = id ? await readAudio(id) : null
+    if (!id || !audio) return { ok: false as const, error: 'audio not found' }
+    const ext = id.split('.').pop() ?? 'wav'
+    const base = (suggestedName || audio.name || 'audio').replace(/\.[a-z0-9]+$/i, '').replace(/[\\/:*?"<>|]/g, '-').slice(0, 60)
+    const result = await dialog.showSaveDialog({
+      defaultPath: `${base}.${ext}`,
+      filters: [{ name: ext.toUpperCase(), extensions: [ext] }],
+    })
+    if (result.canceled || !result.filePath) return { ok: false as const, canceled: true as const }
+    await fs.writeFile(result.filePath, audio.buffer)
+    return { ok: true as const, path: result.filePath }
+  })
+
   ipcMain.handle('media:export', async (_event, ref: string, suggestedName?: string) => {
     const bytes = await bytesOfImageRef(ref)
     if (!bytes) return { ok: false as const, error: 'Imagem nao encontrada' }

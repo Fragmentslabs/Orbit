@@ -621,6 +621,11 @@ export const mediaApi = {
     const wrapper = window.ipcRenderer.on("media:changed", () => listener())
     return () => window.ipcRenderer.off("media:changed", wrapper)
   },
+  /** Salva um áudio do chat (orbit-audio:// ou o id) pelo diálogo do sistema. */
+  exportAudio: (ref: string, suggestedName?: string) =>
+    window.ipcRenderer.invoke("audio:export", ref, suggestedName) as Promise<
+      { ok: true; path: string } | { ok: false; canceled?: boolean; error?: string }
+    >,
   /** Salva a imagem em disco pelo diálogo do sistema. Aceita orbit-media://,
    *  o id cru ou um data URL (anexo que ainda não foi para a galeria). */
   exportImage: (ref: string, suggestedName?: string) =>
