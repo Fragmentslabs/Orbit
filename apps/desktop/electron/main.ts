@@ -1,5 +1,18 @@
 import { app, BrowserWindow, ipcMain, dialog, shell, Menu, clipboard, nativeImage, nativeTheme, ClipboardItem, session, type MenuItemConstructorOptions } from 'electron'
 import { audioIdFrom, readAudio, registerAudioProtocol } from './lib/audio-store'
+import { registerVideoProtocol } from './lib/video/store'
+import {
+  MOTION_PROGRESS_CHANNEL,
+  getMotion,
+  motionAudioUrl,
+  registerMotionProtocol,
+  registeredMotionUrl,
+  renderRegisteredMotion,
+  type MotionRenderRequest,
+} from './lib/video/motion-store'
+import { measureMotionLayers } from './lib/video/motion-layers'
+import { motionAudioTracks } from './lib/video/motion-audio'
+import { registerBundledFfmpeg } from './lib/video/ffmpeg'
 import sharp from 'sharp'
 import { createRequire } from 'node:module'
 import { fileURLToPath } from 'node:url'
@@ -1979,9 +1992,63 @@ app.whenReady().then(() => {
   registerMediaProtocol()
   // Áudios anexados e gerados (orbit-audio://)
   registerAudioProtocol()
+  // Vídeos que o agente mostrou (orbit-video://) e o ffmpeg do app no PATH
+  // dos shells do agente.
+  registerVideoProtocol()
+  registerBundledFfmpeg()
   // Artefatos HTML das respostas (orbit-artifact://) — os privilégios do
   // scheme já foram declarados no topo do módulo.
   registerArtifactProtocol()
+  // Composições de motion do preview (orbit-motion://, ver video/motion-store):
+  // serve a PASTA registrada e o script do runtime que o render também usa.
+  registerMotionProtocol()
+
+  // Render de uma composição REGISTRADA, pedido pela aba de motion do painel. O
+  // renderer manda só o id e o formato; o caminho de entrada é revalidado no
+  // main (resolveSafePath) e o progresso volta por 'motion:render:progress'.
+  ipcMain.handle('motion:render', (event, input: { id: string } & MotionRenderRequest) => {
+    const { id, ...req } = input
+    return renderRegisteredMotion(id, req, (frame, total) => {
+      if (!event.sender.isDestroyed()) {
+        event.sender.send(MOTION_PROGRESS_CHANNEL, { id, frame, total })
+      }
+    })
+  })
+
+  // Camadas da composição (quem entra e sai, e quando), medidas numa janela
+  // offscreen pelo mesmo scheme do preview, e a TRILHA da peça junto delas. A aba
+  // pede ao carregar e a cada mudança do arquivo; um erro aqui é o "não carregou"
+  // com o motivo.
+  ipcMain.handle('motion:layers', async (_event, id: string) => {
+    const url = await registeredMotionUrl(id)
+    if (!url) throw new Error('this composition is no longer registered — ask the agent to open it again (motion_preview)')
+    const measured = await measureMotionLayers(id, url)
+    const entry = await getMotion(id)
+    // As faixas saem da MESMA resolução que o render usa (motion-audio): o que a
+    // aba desenha e toca é, por construção, o que o render vai misturar — nos
+    // mesmos instantes. Um manifest quebrado NÃO derruba a medição das camadas:
+    // vira uma faixa de erro, porque uma peça muda sem explicação é pior que uma
+    // que diz o que houve.
+    const audio = await (async () => {
+      if (!entry) return null
+      try {
+        const tracks = await motionAudioTracks(entry.folder)
+        if (!tracks.length) return null
+        return {
+          tracks: tracks.map((track) => ({
+            name: track.name,
+            url: motionAudioUrl(id, track.path),
+            start: track.start,
+            end: track.end ?? null,
+          })),
+          error: null,
+        }
+      } catch (err) {
+        return { tracks: [], error: err instanceof Error ? err.message : String(err) }
+      }
+    })()
+    return { ...measured, audio }
+  })
 
   // Modo esteira: board de projetos/esteiras/tasks e o engine de execução.
   // As mutações voltam ao renderer por 'esteira:event' (o engine emite).

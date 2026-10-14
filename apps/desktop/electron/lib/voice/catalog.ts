@@ -121,6 +121,15 @@ export const STT_MODEL_DEFS: SttModelDef[] = [
   },
 ]
 
+/**
+ * Whisper que cabe na máquina: o small (boa precisão em pt-BR, ~0,5 GB) e,
+ * abaixo de 7 GB de RAM, o base. É a regra da recomendação (`hardware.ts`) e do
+ * "Automático" do motor (`whisper.ts`) — uma só, para os dois não divergirem.
+ */
+export function preferredWhisperModelId(totalMemGb: number): string {
+  return totalMemGb >= 7 ? 'whisper-small' : 'whisper-base'
+}
+
 export function getSttModel(id: string | null | undefined): SttModelDef | null {
   if (!id) return null
   return STT_MODEL_DEFS.find((m) => m.id === id) || null

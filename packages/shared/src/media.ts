@@ -182,6 +182,17 @@ export const MEDIA_SCHEME = "orbit-media"
 export const ARTIFACT_SCHEME = "orbit-artifact"
 /** Áudios (anexados e gerados): scheme próprio, com o privilégio `stream` que o <audio> exige. */
 export const AUDIO_SCHEME = "orbit-audio"
+/**
+ * Vídeos que o agente renderizou (edição de vídeo): servidos direto do arquivo
+ * do projeto, com Range — um vídeo não é copiado para a pasta do app.
+ */
+export const VIDEO_SCHEME = "orbit-video"
+/**
+ * Composições de motion (pasta do projeto: entrada HTML + dependências que o
+ * preview serve, com `corsEnabled` — fontes e `<script type="module">` numa
+ * origem opaca exigem CORS). Diferente dos vídeos, aqui se serve uma PASTA.
+ */
+export const MOTION_SCHEME = "orbit-motion"
 
 /** `kind` normalizado — registros antigos não têm o campo. */
 export function mediaKind(entry: Pick<MediaEntry, "kind">): MediaKind {

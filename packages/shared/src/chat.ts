@@ -190,6 +190,22 @@ export interface AudioPart {
   durationMs?: number
 }
 
+/**
+ * Vídeo produzido pelo agente (video_render, motion_render, show_video): a
+ * resposta mostra um player. O arquivo continua no projeto do usuário; a URL
+ * orbit-video://vid_xxx aponta para ele pelo registro do main (video-store.ts).
+ */
+export interface VideoPart {
+  id: string
+  type: "video"
+  /** URL orbit-video://vid_xxx */
+  src: string
+  title?: string
+  durationMs?: number
+  /** Caminho do arquivo no disco (para "mostrar na pasta"). */
+  path?: string
+}
+
 /** Arquivo anexado pelo usuário à mensagem (data URL vinda do input) */
 export interface FilePart {
   id: string
@@ -235,12 +251,17 @@ export interface FilePart {
  * o detalhe completo, a bolha do usuário mostra só o chip. */
 export const BROWSER_SELECTION_MIME = "application/x-orbit-browser-selection"
 
-/** MIME marcador de um trecho selecionado no visualizador de documento. Mesmo
- * contrato do BROWSER_SELECTION_MIME: o renderer serializa o payload
- * (documento, página, linhas e o texto) como data URL neste MIME, e o
+/** MIME marcador de um trecho citado num painel. Mesmo contrato do
+ * BROWSER_SELECTION_MIME: o renderer serializa o payload (o `kind` diz se é
+ * trecho de documento — página, linhas e texto — ou INSTANTE de uma composição
+ * de motion — arquivo, quadro e fps) como data URL neste MIME, e o
  * preprocessAttachment do engine o transforma em chip (badge na bolha) +
- * TextPart com source "attachment". O modelo recebe o trecho e a citação
- * clicável; a bolha do usuário mostra só o chip. */
+ * TextPart com source "attachment". O modelo recebe o trecho/instante e a
+ * citação clicável; a bolha do usuário mostra só o chip.
+ *
+ * Os dois tipos dividem o MIME porque o gesto é um só — apontar algo num painel
+ * e anexar à próxima mensagem. Um caminho paralelo só para o instante de motion
+ * duplicaria chip, serialização e limpeza para divergirem depois. */
 export const DOCUMENT_QUOTE_MIME = "application/x-orbit-document-quote"
 
 /** O que o chip de citação carrega. `page`/`fromLine`/`toLine` só existem
@@ -262,6 +283,82 @@ export interface DocumentQuotePayload {
   fromLine?: number
   toLine?: number
   text: string
+}
+
+/**
+ * Instante apontado na aba Motion — o usuário congela o quadro e pede um ajuste
+ * naquele ponto ("no 2,30 s, deixe o título maior") sem o modelo ter de
+ * adivinhar a qual quadro a frase se refere.
+ *
+ * O QUADRO é a verdade. A unidade de tempo do sistema é quadro inteiro (é o que
+ * o runtime do preview e o render consomem); os segundos existem para o olho
+ * humano e saem de `motionSeconds` na hora de exibir. Guardar os dois seria
+ * criar uma segunda verdade, que diverge no arredondamento.
+ */
+export interface MotionQuotePayload {
+  kind: "motion"
+  /** Caminho da entrada DENTRO da pasta registrada (ex.: `index.html`). */
+  file: string
+  /** Nome exibível da composição. */
+  name: string
+  /** Quadro inteiro do playhead no momento do clique. */
+  frame: number
+  /** fps da composição — é ele que converte o quadro em segundos. */
+  fps: number
+  /** Caminho absoluto da entrada — o endereço que o agente edita. */
+  path?: string
+  /** Camada selecionada pelo usuário na faixa de camadas. */
+  layer?: string
+  /** Camadas em cena naquele quadro (medidas, não declaradas). */
+  onScreen?: string[]
+}
+
+/** O que um anexo de citação carrega: trecho de documento (document|source) ou
+ *  instante de composição (motion). Ver DOCUMENT_QUOTE_MIME. */
+export type QuotePayload = DocumentQuotePayload | MotionQuotePayload
+
+/** fps assumido quando a composição não declarou nenhum — o mesmo do runtime. */
+export const MOTION_FALLBACK_FPS = 30
+
+const pad2 = (n: number) => String(n).padStart(2, "0")
+
+/** Timecode `mm:ss:ff` do quadro — a composição fala em quadros, o olho em
+ *  mm:ss:ff. Divide o cálculo com o painel para o chip e o texto do modelo não
+ *  discordarem no mesmo instante. */
+export function motionTimecode(frame: number, fps: number): string {
+  const rate = fps > 0 ? fps : MOTION_FALLBACK_FPS
+  const total = Math.max(0, Math.round(frame))
+  return `${pad2(Math.floor(total / (rate * 60)))}:${pad2(Math.floor(total / rate) % 60)}:${pad2(total % rate)}`
+}
+
+/** Os segundos com vírgula (`2,30 s`) — é como o usuário digita no chat. */
+export function motionSeconds(frame: number, fps: number): string {
+  const rate = fps > 0 ? fps : MOTION_FALLBACK_FPS
+  return `${(Math.max(0, frame) / rate).toFixed(2).replace(".", ",")} s`
+}
+
+/**
+ * O texto que o modelo lê ao receber um instante apontado.
+ *
+ * Em inglês porque o destinatário é o modelo. O texto do usuário vem colado ao
+ * instante de propósito: numa parte separada, "deixe o título maior" chegaria
+ * sem dizer de QUE ponto da composição se fala, e o modelo teria de descobrir
+ * sozinho — que é justamente a ambiguidade que este anexo existe para matar.
+ * Sem texto (o usuário só apontou o quadro), nada é acrescentado: nem `---` nem
+ * linha vazia sobrando no fim.
+ */
+export function formatMotionQuoteText(quote: MotionQuotePayload, userText?: string): string {
+  const frame = Math.max(0, Math.round(quote.frame))
+  const linhas = [
+    `[Motion composition — ${quote.name || quote.file}]`,
+    `File: ${quote.path || quote.file}`,
+    `Frame ${frame} at ${quote.fps} fps — ${motionSeconds(quote.frame, quote.fps)} (${motionTimecode(quote.frame, quote.fps)})`,
+  ]
+  if (quote.layer) linhas.push(`Selected layer: ${quote.layer}`)
+  if (quote.onScreen?.length) linhas.push(`On screen at this frame: ${quote.onScreen.join(", ")}`)
+  const note = userText?.trim()
+  if (note) linhas.push("---", note)
+  return linhas.join("\n")
 }
 
 /**
@@ -420,6 +517,7 @@ export type MessagePart =
   | ToolPart
   | ImagePart
   | AudioPart
+  | VideoPart
   | FilePart
   | AgentPart
   | ArtifactPart

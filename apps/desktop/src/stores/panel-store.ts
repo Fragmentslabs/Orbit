@@ -1,6 +1,6 @@
 import { create } from "zustand"
 
-export type TabType = "chat" | "terminal" | "process" | "folders" | "browser" | "diff" | "media" | "artifact" | "sources" | "source" | "document"
+export type TabType = "chat" | "terminal" | "process" | "folders" | "browser" | "diff" | "media" | "artifact" | "sources" | "source" | "document" | "motion"
 
 export interface PanelTab {
   id: string
@@ -20,6 +20,14 @@ export interface PanelTab {
   artifactId?: string
   /** Aba Documento: id do registro (doc_xxx.md) aberto no canvas de Markdown. */
   documentId?: string
+  /** Aba Motion: id do registro (mv_xxx) da composição que a aba renderiza. */
+  motionId?: string
+  /** Caminho da entrada da composição DENTRO da pasta registrada — é o que a
+   *  URL `orbit-motion://<id>/<caminho-relativo>` serve. */
+  motionEntry?: string
+  /** Caminho ABSOLUTO da entrada — o que a nota de motion entrega ao agente
+   *  (a entrada sozinha, "index.html", não diz de qual composição se fala). */
+  motionPath?: string
   /** Aba Fonte: documento aberto por uma citacao, e o trecho a grifar. */
   sourceDocId?: string
   sourcePage?: number
@@ -56,6 +64,35 @@ export interface DocumentQuote {
   text: string
 }
 
+/**
+ * Instante apontado na aba Motion, esperando para ser enviado.
+ *
+ * Mesmo lugar e mesmo gesto dos trechos citados — apontar algo num painel e
+ * anexar à próxima mensagem — mas o que se aponta é um INSTANTE, não um trecho
+ * de texto: por isso os campos são outros (composição, quadro, fps). O quadro é
+ * a verdade; os segundos são derivados para exibição (ver MotionQuotePayload).
+ */
+export interface MotionQuote {
+  id: string
+  kind: "motion"
+  /** Caminho da entrada DENTRO da pasta registrada (ver PanelTab.motionEntry). */
+  file: string
+  /** Nome exibível da composição. */
+  name: string
+  /** Quadro inteiro do playhead no momento do clique. */
+  frame: number
+  fps: number
+  /** Caminho absoluto da entrada (ver PanelTab.motionPath). */
+  path?: string
+  /** Camada selecionada na faixa de camadas, quando houver. */
+  layer?: string
+  /** Camadas em cena naquele quadro. */
+  onScreen?: string[]
+}
+
+/** O que um anexo de citação pode ser — ver QuotePayload. */
+export type PanelQuote = DocumentQuote | MotionQuote
+
 export interface Viewport {
   width: number
   height: number
@@ -73,6 +110,14 @@ export type PanelEvent =
   | { type: "resize"; width: number | null; height: number | null; label: string }
   | { type: "fullscreen"; on: boolean }
   | { type: "activity"; label: string; sessionId?: string }
+  /**
+   * A tool registrou uma composição de motion e quer o preview no painel.
+   * `id` é o registro do main (mv_xxx), `entry` a entrada dentro da pasta que o
+   * scheme serve e `title` o nome exibível. `sessionId` é opcional: o contrato
+   * do evento é só `{id, entry, title}`, e sem ele a aba cai no balde do chat
+   * ativo (resolvido no App) ou no órfão.
+   */
+  | { type: "motion"; id: string; entry: string; title: string; sessionId?: string; path?: string }
 
 /** Registro do browser do agente por sessão de chat/task. */
 export interface AgentBrowserEntry {
@@ -107,6 +152,10 @@ interface PanelState {
   /** Abre (ou reaproveita) a aba que renderiza um artefato em tela cheia.
    *  Chamada pelo card na conversa e pela galeria. */
   openArtifactTab: (sessionId: string, artifactId: string, title: string) => void
+  /** Abre (ou reaproveita) o preview de uma composição de motion. Chamada pelo
+   *  evento `motion` do main (a tool registrou a pasta) — nunca pelo seletor.
+   *  Reabrir a MESMA composição foca a aba onde ela estiver. */
+  openMotionTab: (ref: { id: string; entry: string; title: string; sessionId?: string; path?: string }) => void
   /** Abre (ou reaproveita) o canvas de Markdown de um documento vivo — o que
    *  foi PEDIDO como PDF/Word abre no visualizador, pelo openSourceTab. */
   openDocumentTab: (sessionId: string, ref: { documentId: string; title: string }) => void
@@ -143,8 +192,11 @@ interface PanelState {
   addSelection: (selection: Omit<BrowserSelection, "id">) => void
   removeSelection: (id: string) => void
   clearSelections: () => void
-  quotes: DocumentQuote[]
-  addQuote: (quote: Omit<DocumentQuote, "id">) => void
+  quotes: PanelQuote[]
+  /** Anexa um trecho citado ou um instante de motion. O instante SUBSTITUI o
+   *  anterior em vez de acumular: dois quadros da mesma composição não formam um
+   *  pedido só — o usuário quer "este ponto", não "estes pontos". */
+  addQuote: (quote: Omit<DocumentQuote, "id"> | Omit<MotionQuote, "id">) => void
   removeQuote: (id: string) => void
   clearQuotes: () => void
   viewport: Viewport | null
@@ -308,6 +360,79 @@ export const usePanelStore = create<PanelState>((set, get) => {
           selectorOpen: false,
           tabsBySession: { ...state.tabsBySession, [sessionId]: [...tabs, tab] },
           activeTabBySession: { ...state.activeTabBySession, [sessionId]: tab.id },
+        }
+      }),
+
+    // A composição de motion é um recurso do PROJETO, não de uma mensagem: a
+    // aba nasce do evento do main que registrou a pasta. A mesma peça é UMA
+    // aba, onde ela estiver — duas seriam dois iframes e dois playheads da
+    // mesma coisa.
+    openMotionTab: (ref) =>
+      set((state) => {
+        const bucket = ref.sessionId ?? ORPHAN_KEY
+        const tabsBySession = { ...state.tabsBySession }
+        for (const [key, tabs] of Object.entries(tabsBySession)) {
+          // A mesma composição pelo id OU pelo arquivo: uma aba antiga (de antes
+          // do id estável) é reaproveitada e passa a apontar para o id novo.
+          const existing = tabs.find(
+            (t) => t.type === "motion" && (t.motionId === ref.id || (ref.path != null && t.motionPath === ref.path)),
+          )
+          if (!existing) continue
+          if (key === bucket) {
+            const refreshed: PanelTab = {
+              ...existing,
+              motionId: ref.id,
+              motionEntry: ref.entry,
+              motionPath: ref.path ?? existing.motionPath,
+            }
+            tabsBySession[key] = tabs.map((t) => (t === existing ? refreshed : t))
+            return {
+              rightPanelOpen: true,
+              selectorOpen: false,
+              tabsBySession,
+              activeTabBySession: { ...state.activeTabBySession, [bucket]: existing.id },
+            }
+          }
+          // Já aberta em OUTRO balde: a aba VEM para o balde em que o usuário
+          // está. O painel só mostra as abas do chat ativo — "focar" uma aba
+          // de outro balde seria focar no que não se vê. É o mesmo movimento do
+          // adoptOrphanTabs, com o sessionId do balde novo.
+          const rest = tabs.filter((t) => t !== existing)
+          if (rest.length > 0) tabsBySession[key] = rest
+          else delete tabsBySession[key]
+          const moved: PanelTab = {
+            ...existing,
+            title: ref.title,
+            motionId: ref.id,
+            motionEntry: ref.entry,
+            motionPath: ref.path ?? existing.motionPath,
+            sessionId: tabSession(bucket),
+          }
+          tabsBySession[bucket] = [...(tabsBySession[bucket] ?? []), moved]
+          return {
+            rightPanelOpen: true,
+            selectorOpen: false,
+            tabsBySession,
+            activeTabBySession: { ...state.activeTabBySession, [bucket]: moved.id },
+          }
+        }
+        // Sem sessão no evento, o balde é o do chat ativo — resolvido pelo
+        // consumidor do evento (App), que conhece o modo corrente; aqui sobra o
+        // órfão, que é o balde que o painel mostra quando não há chat ativo.
+        const tab: PanelTab = {
+          id: `motion-${nextTabId()}`,
+          type: "motion",
+          title: ref.title,
+          sessionId: tabSession(bucket),
+          motionId: ref.id,
+          motionEntry: ref.entry,
+          motionPath: ref.path,
+        }
+        return {
+          rightPanelOpen: true,
+          selectorOpen: false,
+          tabsBySession: { ...tabsBySession, [bucket]: [...(tabsBySession[bucket] ?? []), tab] },
+          activeTabBySession: { ...state.activeTabBySession, [bucket]: tab.id },
         }
       }),
 
@@ -490,9 +615,14 @@ export const usePanelStore = create<PanelState>((set, get) => {
 
     quotes: [],
     addQuote: (quote) =>
-      set((state) => ({
-        quotes: [...state.quotes, { ...quote, id: `quote-${Date.now()}-${state.quotes.length}` }],
-      })),
+      set((state) => {
+        // Um instante de motion substitui o anterior (ver PanelState.addQuote);
+        // os trechos de documento seguem acumulando.
+        const atuais = quote.kind === "motion" ? state.quotes.filter((q) => q.kind !== "motion") : state.quotes
+        return {
+          quotes: [...atuais, { ...quote, id: `quote-${Date.now()}-${atuais.length}` } as PanelQuote],
+        }
+      }),
     removeQuote: (id) => set((state) => ({ quotes: state.quotes.filter((q) => q.id !== id) })),
     clearQuotes: () => set({ quotes: [] }),
     viewport: null,
@@ -542,6 +672,19 @@ export const usePanelStore = create<PanelState>((set, get) => {
         case "fullscreen":
           markActive()
           set({ fullscreen: event.on })
+          break
+        case "motion":
+          markActive()
+          // Espelha o "ensure" do browser: o evento é do main (o agente
+          // registrou a composição) e abre a aba — aqui o painel abre sozinho,
+          // porque a composição é o que o usuário pediu para ver.
+          get().openMotionTab({
+            id: event.id,
+            entry: event.entry,
+            title: event.title,
+            sessionId: event.sessionId,
+            path: event.path,
+          })
           break
         case "activity": {
           usePanelStore.getState().pushActivity(event.label)

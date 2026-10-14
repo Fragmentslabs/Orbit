@@ -18,6 +18,8 @@ import { downloadedModelIds, voiceStatusSnapshot } from "./status"
 import { detectHardware } from "./hardware"
 import { shutdownTts, speak, ttsStatus } from "./tts"
 import { shutdownWhisperServers } from "./whisper"
+import { pickSpeechLang } from "./lang-detect"
+import { currentMainLocale } from "../i18n"
 import type { SttSegment } from "./engine"
 import {
   STT_SAMPLE_RATE,
@@ -137,6 +139,9 @@ interface Fluxo {
   fechado: boolean
   rodando: boolean
   signal: AbortSignal
+  /** Idioma já decidido nesta fala (no "Automático"): uma frase ambígua
+   *  ("Claro.") herda o das anteriores em vez de trocar o sotaque. */
+  idioma: { lang?: string }
 }
 
 const fluxos = new Map<string, Fluxo>()
@@ -153,7 +158,7 @@ async function drenarFluxo(id: string): Promise<void> {
   try {
     while (fluxo.fila.length > 0 && !fluxo.signal.aborted) {
       const { texto, seg } = fluxo.fila.shift() as { texto: string; seg: number }
-      await rodarFala(id, texto, fluxo.pedido, fluxo.signal, seg)
+      await rodarFala(id, texto, fluxo.pedido, fluxo.signal, seg, fluxo.idioma)
     }
   } catch (err) {
     fluxos.delete(id)
@@ -210,10 +215,26 @@ async function rodarFala(
   signal: AbortSignal,
   /** Número da frase na fala contínua: o renderer mostra a frase que está tocando. */
   seg?: number,
+  idioma?: { lang?: string },
 ): Promise<void> {
-  await sintetizar(texto, payload, signal, (chunk) =>
-    emitir("voice:tts:chunk", { id, pcm: chunk.pcm.toString("base64"), sr: chunk.sr, i: chunk.i, n: chunk.n, seg }),
+  await sintetizar(
+    texto,
+    payload,
+    signal,
+    (chunk) =>
+      emitir("voice:tts:chunk", { id, pcm: chunk.pcm.toString("base64"), sr: chunk.sr, i: chunk.i, n: chunk.n, seg }),
+    idioma,
   )
+}
+
+/**
+ * Idioma quando o "Automático" não tem evidência (texto curto, ambíguo): o
+ * idioma fixo, se houver, senão o da interface do app.
+ */
+function idiomaReserva(): string {
+  const fixo = getAppSettings().voice.tts.lang
+  if (fixo && fixo !== "auto") return fixo
+  return currentMainLocale() === "pt-BR" ? "pt" : "en"
 }
 
 /**
@@ -226,8 +247,12 @@ async function sintetizar(
   payload: FalaPedido,
   signal: AbortSignal,
   emitirChunk: (chunk: FalaChunk) => void,
+  idioma?: { lang?: string },
 ): Promise<void> {
-  const pedido = { voice: payload?.voice, lang: payload?.lang, speed: payload?.speed }
+  // "auto" (o padrão) decide pelo texto: é ele que vai ser falado, e o motor
+  // local fala com o sotaque do idioma que recebe. Um idioma fixo é forçado.
+  const lang = pickSpeechLang(payload?.lang ?? getAppSettings().voice.tts.lang, texto, idiomaReserva(), idioma)
+  const pedido = { voice: payload?.voice, lang, speed: payload?.speed }
   const engine: VoiceTtsEngine = payload?.engine ?? getAppSettings().voice.tts.engine
   if (engine === "model") {
     let entregou = false
@@ -280,8 +305,28 @@ export function syncWhisperServer(next: AppSettings, prev?: AppSettings): void {
   if (changed) void warmSttModel(stt.modelId, "whisper", stt.threads)
 }
 
+/**
+ * Desligar a voz devolve a memória NA HORA, em vez de esperar o ciclo ocioso de
+ * cinco minutos: ditado desligado (ou trocado de motor, ou sem pré-carga) solta
+ * o modelo carregado; leitura desligada encerra o processo do motor de fala.
+ * Roda antes do `syncWhisperServer`, que pode subir o servidor do motor novo.
+ */
+export function releaseDisabledVoice(next: AppSettings, prev?: AppSettings): void {
+  if (!prev) return
+  const stt = next.voice.stt
+  const before = prev.voice.stt
+  const sttOff = before.enabled && !stt.enabled
+  const engineChanged = before.engine !== stt.engine
+  const preloadOff = before.preload && !stt.preload
+  if (sttOff || engineChanged || preloadOff) releaseSttModels()
+  if (prev.voice.tts.enabled && !next.voice.tts.enabled) shutdownTts()
+}
+
 export function registerVoiceIpc(): void {
-  onAppSettingsChange((next, prev) => syncWhisperServer(next, prev))
+  onAppSettingsChange((next, prev) => {
+    releaseDisabledVoice(next, prev)
+    syncWhisperServer(next, prev)
+  })
 
   // A extração do pacote começa por dois caminhos (logo após o download ou no
   // primeiro uso, dentro do motor). Um só aviso cobre os dois: cada mudança de
@@ -420,7 +465,15 @@ export function registerVoiceIpc(): void {
     const id = randomUUID()
     const controller = new AbortController()
     falas.set(id, controller)
-    fluxos.set(id, { pedido: payload, fila: [], proxima: 0, fechado: false, rodando: false, signal: controller.signal })
+    fluxos.set(id, {
+      pedido: payload,
+      fila: [],
+      proxima: 0,
+      fechado: false,
+      rodando: false,
+      signal: controller.signal,
+      idioma: {},
+    })
     return { id }
   })
 
@@ -506,8 +559,8 @@ export interface VoiceSttSessionStart {
   threads?: number
   /** Texto ao vivo enquanto a fala acontece (padrão: sim). */
   live?: boolean
-  /** Trechos com tempo (transcrição de arquivo). */
-  timestamps?: boolean
+  /** Trechos com tempo (transcrição de arquivo); 'words' = por palavra. */
+  timestamps?: boolean | 'words'
 }
 
 export interface VoiceTranscribeResult {
@@ -578,7 +631,7 @@ export async function transcribePcm(
     engine?: VoiceEngineId
     modelId?: string | null
     language?: string
-    timestamps?: boolean
+    timestamps?: boolean | 'words'
   },
 ): Promise<VoiceTranscribeResult> {
   if (!pcm || pcm.length === 0) throw new Error("PCM vazio")
@@ -649,13 +702,15 @@ export async function synthesizeToWav(
   }
   const pieces: Float32Array[] = []
   let rate = 0
+  // Um arquivo, um idioma: as partes de um texto longo herdam o da primeira.
+  const idioma: { lang?: string } = {}
   for (const parte of splitForSynthesis(text)) {
     await sintetizar(parte, payload, signal, (chunk) => {
       const samples = pcm16ToFloat32(chunk.pcm)
       if (!rate) rate = chunk.sr
       // A reserva local pode falar noutra taxa que o provedor: tudo na primeira.
       pieces.push(chunk.sr === rate ? samples : resampleLinear(samples, chunk.sr, rate))
-    })
+    }, idioma)
   }
   if (!rate || pieces.length === 0) throw new Error("the speech engine returned no audio")
   const all = concatFloat32(pieces)
@@ -671,7 +726,7 @@ export async function synthesizeToWav(
  */
 export async function transcribeAudioPcm(
   pcm: Buffer,
-  opts: { language?: string; timestamps?: boolean } = {},
+  opts: { language?: string; timestamps?: boolean | 'words' } = {},
 ): Promise<{ text: string; engine: VoiceEngineId; segments: SttSegment[] }> {
   const stt = getAppSettings().voice.stt
   const engines = await sttEngineStatus()
@@ -697,7 +752,14 @@ export async function transcribeAudioPcm(
     // Os tempos de cada janela começam em zero: desloca para o tempo do arquivo.
     const offset = samplesToMs(start, STT_SAMPLE_RATE)
     for (const seg of out.segments ?? []) {
-      segments.push({ startMs: seg.startMs + offset, endMs: seg.endMs + offset, text: seg.text })
+      segments.push({
+        startMs: seg.startMs + offset,
+        endMs: seg.endMs + offset,
+        text: seg.text,
+        ...(seg.words
+          ? { words: seg.words.map((w) => ({ startMs: w.startMs + offset, endMs: w.endMs + offset, text: w.text })) }
+          : {}),
+      })
     }
   }
   return { text: textos.join(" "), engine: stt.engine, segments }

@@ -113,6 +113,15 @@ export type PanelEvent =
   | { type: 'ensure'; url?: string; sessionId: string }
   | { type: 'resize'; width: number | null; height: number | null; label: string }
   | { type: 'fullscreen'; on: boolean }
+  // Abre (ou foca) a aba Motion do painel para uma composição de motion já
+  // registrada — quem emite é a tool motion_preview, logo depois de escrever a
+  // composição e antes de qualquer render. `id` identifica a composição no
+  // registro (video/motion-store) e `entry` é o caminho da entrada DENTRO da
+  // pasta da composição, como ele aparece na URL do scheme (`index.html`, quase
+  // sempre): o painel guarda os dois (`motionId`/`motionEntry`) e monta
+  // `orbit-motion://<id>/<entry>`. O mesmo id volta à MESMA aba; quem serve o
+  // conteúdo é o scheme, não este canal.
+  | { type: 'motion'; id: string; entry: string; title: string }
   | { type: 'activity'; label: string; sessionId?: string }
 
 function broadcastPanelEvent(event: PanelEvent): void {
@@ -134,6 +143,16 @@ function activity(label: string, sessionId?: string): void {
 /** Mesmo feed, para quem captura fora do painel (engine oculta de scripts). */
 export function panelActivity(label: string): void {
   activity(label)
+}
+
+/**
+ * Abre (ou foca) a aba Motion do painel para uma composição já registrada —
+ * `motion_preview` é o único chamador. Não valida nem carrega nada aqui (o
+ * registro e o scheme fazem isso): só avisa a UI, que resolve o resto pelo id
+ * recebido — chamar de novo com o mesmo id traz a MESMA aba ao foco.
+ */
+export function panelMotionPreview(event: { id: string; entry: string; title: string; path?: string; sessionId?: string }): void {
+  broadcastPanelEvent({ type: 'motion', ...event })
 }
 
 /** URL atual do browser do painel — vazia quando a sessão não tem webview. */

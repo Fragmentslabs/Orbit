@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { useDroppable, useDndContext } from "@dnd-kit/core"
-import { CodeXml, FileCode, FileText, Globe, Folder, Images, Library, Quote, MessageSquare, Terminal, X, PlusIcon, Bot, Loader2, Trash2, GripVertical } from "lucide-react"
+import { Clapperboard, CodeXml, FileCode, FileText, Globe, Folder, Images, Library, Quote, MessageSquare, Terminal, X, PlusIcon, Bot, Loader2, Trash2, GripVertical } from "lucide-react"
 import { ChatView } from "@/src/components/chat-view"
 import { ChatInput } from "@/src/components/chat-input"
 import { BranchSelector } from "@/src/components/branch-selector"
@@ -16,6 +16,7 @@ import { DiffTab } from "@/src/components/diff-tab"
 import { MediaGallery } from "@/src/components/media-gallery"
 import { ProcessTab } from "@/src/components/process-tab"
 import { ArtifactTab } from "@/src/components/artifact-tab"
+import { MotionTab } from "@/src/components/motion-tab"
 import { DocumentTab } from "@/src/components/document-tab"
 import { SourcesTab } from "@/src/components/sources-tab"
 import { SourceViewer } from "@/src/components/source-viewer"
@@ -56,7 +57,18 @@ function isSelectableTab(type: TabType, mode: WorkspaceMode): boolean {
   // "diff" saiu junto: ela só existe apontando para UMA mensagem do chat ou UMA
   // task da esteira. As mudanças ATUAIS se leem na aba de pastas (Alterações), e
   // o diff de um turno é contexto da conversa — não uma aba que se abre vazia.
-  if (type === "artifact" || type === "source" || type === "document" || type === "process" || type === "diff") return false
+  // "motion" também não: o preview existe para UMA composição registrada e
+  // nasce do evento que o agente dispara ao registrá-la (motion_preview), nunca
+  // vazio — como o artefato.
+  if (
+    type === "artifact" ||
+    type === "source" ||
+    type === "document" ||
+    type === "process" ||
+    type === "diff" ||
+    type === "motion"
+  )
+    return false
   if (mode === "code") return true
   return type === "chat" || type === "media" || type === "sources"
 }
@@ -75,6 +87,7 @@ function useTabMeta(): Record<TabType, TabMeta> {
     sources: { icon: Library, label: t("panel.tabs.sources.label"), description: t("panel.tabs.sources.description") },
     source: { icon: Quote, label: t("panel.tabs.source.label"), description: t("panel.tabs.source.description") },
     document: { icon: FileText, label: t("panel.tabs.document.label"), description: t("panel.tabs.document.description") },
+    motion: { icon: Clapperboard, label: t("panel.tabs.motion.label"), description: t("panel.tabs.motion.description") },
   }
 }
 
@@ -238,6 +251,12 @@ function TabContent({ tab, sessionId, onUpdateTab }: { tab: PanelTab; sessionId?
       return (
         <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
           <ArtifactTab artifactId={tab.artifactId} title={tab.title} />
+        </div>
+      )
+    case "motion":
+      return (
+        <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
+          <MotionTab motionId={tab.motionId} entry={tab.motionEntry} path={tab.motionPath} title={tab.title} />
         </div>
       )
     case "document":

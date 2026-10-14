@@ -555,6 +555,77 @@ export const artifactApi = {
     >,
 }
 
+/**
+ * Composição de motion do preview (orbit-motion://). Quem registra a pasta é a
+ * tool do agente; aqui fica só o que a aba do painel precisa: pedir o render,
+ * acompanhar o progresso e recarregar quando o arquivo muda no disco (fs.watch
+ * do main). O render devolve o caminho do arquivo gerado.
+ */
+export const motionApi = {
+  /** Contrato congelado com o render: `format` já diz se o arquivo sai com alfa
+   *  (mov/webm), então o renderer nunca manda `transparent` — a escolha do
+   *  usuário no menu é o formato, e só ele. */
+  render: (id: string, format: MotionRenderFormat = "mp4") =>
+    window.ipcRenderer.invoke("motion:render", { id, format }) as Promise<MotionRenderResult>,
+  /** Um evento por quadro renderizado: a linha fina do cabeçalho. */
+  onProgress: (listener: (payload: { id: string; frame: number; total: number }) => void) => {
+    const wrapper = window.ipcRenderer.on("motion:render:progress", (payload) =>
+      listener(payload as { id: string; frame: number; total: number }),
+    )
+    return () => window.ipcRenderer.off("motion:render:progress", wrapper)
+  },
+  /** Quem entra e sai de cena, e quando (medido no main, offscreen). */
+  layers: (id: string) => window.ipcRenderer.invoke("motion:layers", id) as Promise<MotionLayersResult>,
+  /** A pasta da composição mudou no disco: remonta o iframe. */
+  onChanged: (listener: (payload: { id: string }) => void) => {
+    const wrapper = window.ipcRenderer.on("motion:changed", (payload) => listener(payload as { id: string }))
+    return () => window.ipcRenderer.off("motion:changed", wrapper)
+  },
+}
+
+/**
+ * Formatos de saída do render de motion. `-alpha` é o arquivo com transparência:
+ * mov (ProRes 4444) para edição, webm (VP9) para web/overlay. Mesma união do
+ * `MotionRenderRequest.format` do main — mudar aqui sem mudar lá quebra o IPC.
+ */
+export type MotionRenderFormat = "mp4" | "mov-alpha" | "webm-alpha"
+
+/** Espelho do MotionLayers do main (electron/lib/video/motion-layers.ts). */
+export interface MotionLayersResult {
+  width: number
+  height: number
+  fps: number
+  durationInFrames: number
+  /** Ordem do documento (de trás para a frente). Intervalos em quadros, inclusivos. */
+  layers: { name: string; named: boolean; spans: [number, number][] }[]
+  failedFonts: string[]
+  /**
+   * As faixas da peça, quando ela tem alguma (o manifest `audio.json` da pasta, o
+   * arquivo convencional, ou o caminho que a tool passou). `url` é o arquivo
+   * servido pelo scheme — a aba toca junto com o preview — e vem null quando o
+   * áudio está FORA da pasta da composição: o render o muxa, o preview não o
+   * alcança. `start`/`end` são os segundos da peça em que a faixa entra e sai
+   * (`end` null = até o fim do arquivo); `error` é o manifest que não deu para
+   * ler, e nesse caso a peça toca muda e a aba diz por quê.
+   */
+  audio: {
+    tracks: { name: string; url: string | null; start: number; end: number | null }[]
+    error: string | null
+  } | null
+}
+
+/** Espelho do MotionRenderResult do main (electron/lib/video/motion-store.ts). */
+export interface MotionRenderResult {
+  id: string
+  /** Caminho absoluto do arquivo renderizado. */
+  path: string
+  width: number
+  height: number
+  fps: number
+  duration: number
+  frames: number
+}
+
 /** Documentos do agente (orbit-data/documents). O fonte é Markdown: o canvas
  *  do painel lê e grava por aqui, e o export renderiza o arquivo na hora. */
 export const documentApi = {

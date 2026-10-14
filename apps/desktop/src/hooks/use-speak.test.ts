@@ -226,7 +226,7 @@ describe("ChunkPlayer", () => {
 
 describe("readTtsPrefs", () => {
   it("sem o bloco `voice` no store, valem os padrões do app", () => {
-    expect(readTtsPrefs(undefined)).toEqual({ enabled: true, voice: "F2", lang: "pt", speed: 1 })
+    expect(readTtsPrefs(undefined)).toEqual({ enabled: true, voice: "F2", lang: "auto", speed: 1 })
   })
 
   it("lê o que estiver gravado", () => {
@@ -238,7 +238,7 @@ describe("readTtsPrefs", () => {
   it("valor fora do domínio cai no padrão em vez de quebrar a fala", () => {
     const prefs = readTtsPrefs({ tts: { voice: "  ", lang: 7, speed: 0 } })
 
-    expect(prefs).toEqual({ enabled: true, voice: "F2", lang: "pt", speed: 1 })
+    expect(prefs).toEqual({ enabled: true, voice: "F2", lang: "auto", speed: 1 })
   })
 })
 

@@ -105,6 +105,11 @@ export interface VoiceEngineStatus {
   available: boolean
   /** Motivo, sempre que `available` for false (ou quando vale avisar algo). */
   reason?: string
+  /**
+   * O modelo que o motor usa com o "Automático" (`modelId` nulo) — quem decide
+   * é o motor, então a tela mostra o "Em uso" daqui em vez de adivinhar.
+   */
+  autoModelId?: string
 }
 
 /**
@@ -224,6 +229,12 @@ export interface VoiceSttSettings {
    * só o primeiro ditado paga o carregamento — e ele fica esperando.
    */
   preload: boolean
+  /**
+   * Microfone da captura (`deviceId` do `enumerateDevices`); null = o padrão do
+   * sistema. Vale para o ditado e para o modo chamada (os dois abrem o
+   * microfone pelo mesmo hook). Um aparelho que sumiu cai no padrão.
+   */
+  micDeviceId: string | null
 }
 
 /** Opções do silêncio que encerra a fala no modo chamada (ms). */
@@ -251,7 +262,7 @@ export interface VoiceSettings {
  * prioridade de áudio no MODELO (cai no motor local quando não há rota).
  */
 export const VOICE_DEFAULTS: VoiceSettings = {
-  tts: { enabled: true, voice: "F2", lang: "pt", speed: 1, engine: "model" },
-  stt: { enabled: true, engine: "parakeet", modelId: null, language: "pt", live: true, threads: 4, preload: true },
+  tts: { enabled: true, voice: "F2", lang: "auto", speed: 1, engine: "model" },
+  stt: { enabled: true, engine: "parakeet", modelId: null, language: "auto", live: true, threads: 4, preload: true, micDeviceId: null },
   call: { enabled: true, silenceMs: 1300 },
 }

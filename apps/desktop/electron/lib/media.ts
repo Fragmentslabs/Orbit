@@ -13,7 +13,7 @@ import {
   type MediaKind,
   type MediaSource,
   type MediaUsage,
-  type DocumentFormat, AUDIO_SCHEME } from '@shared/media'
+  type DocumentFormat, AUDIO_SCHEME, VIDEO_SCHEME, MOTION_SCHEME } from '@shared/media'
 import { listKeys, readJson } from './storage'
 import { buildDocx } from './docx-package'
 import mammoth from 'mammoth'
@@ -578,6 +578,25 @@ export function registerArtifactSchemePrivileges(): void {
     {
       scheme: AUDIO_SCHEME,
       privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true },
+    },
+    // Vídeos renderizados pelo agente (ver video/store.ts) — mesma razão:
+    // sem `stream` o <video> não toca nem busca posição.
+    {
+      scheme: VIDEO_SCHEME,
+      privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true },
+    },
+    // Composições de motion (ver video/motion-store.ts). Mesmas flags do
+    // artefato, e por um motivo a mais: o preview roda num iframe de origem
+    // opaca, onde o módulo do gsap e as fontes só carregam com CORS.
+    {
+      scheme: MOTION_SCHEME,
+      privileges: {
+        standard: true,
+        secure: true,
+        supportFetchAPI: true,
+        corsEnabled: true,
+        stream: true,
+      },
     },
   ])
 }

@@ -22,10 +22,11 @@ describe("resolveVoiceSttSettings", () => {
       enabled: true,
       engine: "parakeet",
       modelId: null,
-      language: "pt",
+      language: "auto",
       live: true,
       threads: 4,
       preload: true,
+      micDeviceId: null,
     })
   })
 
@@ -39,6 +40,7 @@ describe("resolveVoiceSttSettings", () => {
         live: false,
         threads: 8,
         preload: false,
+        micDeviceId: "usb-mic",
       }),
     )
     expect(voice).toEqual({
@@ -49,21 +51,23 @@ describe("resolveVoiceSttSettings", () => {
       live: false,
       threads: 8,
       preload: false,
+      micDeviceId: "usb-mic",
     })
   })
 
   it("valores de tipo errado não vazam para o motor", () => {
     const voice = resolveVoiceSttSettings(
-      comVoz({ enabled: "sim", engine: 42, modelId: "", language: null, live: "on", threads: NaN, preload: "sim" }),
+      comVoz({ enabled: "sim", engine: 42, modelId: "", language: null, live: "on", threads: NaN, preload: "sim", micDeviceId: 7 }),
     )
     expect(voice).toEqual({
       enabled: true,
       engine: "parakeet",
       modelId: null,
-      language: "pt",
+      language: "auto",
       live: true,
       threads: 4,
       preload: true,
+      micDeviceId: null,
     })
   })
 

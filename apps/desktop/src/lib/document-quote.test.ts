@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest"
-import { DOCUMENT_QUOTE_MIME } from "@shared/chat"
-import type { DocumentQuote } from "@/src/stores/panel-store"
-import { locateLines, quoteLocationLabel, quotesToFileParts } from "./document-quote"
+import { DOCUMENT_QUOTE_MIME, formatMotionQuoteText, type MotionQuotePayload } from "@shared/chat"
+import type { DocumentQuote, MotionQuote } from "@/src/stores/panel-store"
+import { locateLines, quoteChipLabel, quoteLocationLabel, quotesToFileParts } from "./document-quote"
 
 /**
  * O formato é contrato entre três lugares: os dois compositores, que
@@ -60,6 +60,100 @@ describe("quotesToFileParts", () => {
     expect(part.filename).toBe("contrato.pdf")
     expect(payload.page).toBeUndefined()
     expect(payload.text).toBe(base.text)
+  })
+})
+
+const instante: MotionQuote = {
+  id: "m1",
+  kind: "motion",
+  file: "res/cartela/index.html",
+  name: "Cartela de abertura",
+  // 2,30 s a 30 fps = quadro 69. É o caso que o usuário confere no app: o
+  // playhead parado no 2,30 s tem de chegar no chat como 00:02:09.
+  frame: 69,
+  fps: 30,
+}
+
+describe("quoteChipLabel", () => {
+  it("o instante vira `Motion · arquivo @ mm:ss:ff`", () => {
+    expect(quoteChipLabel(instante)).toBe("Motion · index.html @ 00:02:09")
+  })
+
+  it("o trecho de documento continua com a coordenada", () => {
+    expect(quoteChipLabel({ ...base, page: 3, fromLine: 10, toLine: 14 })).toBe("contrato.pdf p3L10-14")
+  })
+})
+
+describe("quotesToFileParts de um instante de motion", () => {
+  it("leva arquivo, quadro e fps — e nenhuma chave de página/linha", () => {
+    const [part] = quotesToFileParts([instante])
+    expect(part.mime).toBe(DOCUMENT_QUOTE_MIME)
+    expect(part.filename).toBe("Motion · index.html @ 00:02:09")
+
+    const payload = JSON.parse(decodeURIComponent(part.url.split(",")[1]))
+    expect(payload).toEqual({
+      kind: "motion",
+      file: "res/cartela/index.html",
+      name: "Cartela de abertura",
+      frame: 69,
+      fps: 30,
+    })
+    // A citação de motion não tem página nem linha: a chave ausente é o
+    // contrato, e uma chave vazia aqui viraria campo órfão no texto do modelo.
+    expect("page" in payload).toBe(false)
+    expect("fromLine" in payload).toBe(false)
+    expect("toLine" in payload).toBe(false)
+  })
+})
+
+describe("formatMotionQuoteText", () => {
+  const payload: MotionQuotePayload = {
+    kind: "motion",
+    file: "res/cartela/index.html",
+    name: "Cartela de abertura",
+    frame: 69,
+    fps: 30,
+  }
+
+  it("anexo completo: arquivo, quadro, fps e os segundos com vírgula", () => {
+    expect(formatMotionQuoteText(payload, "deixe o título maior")).toBe(
+      [
+        "[Motion composition — Cartela de abertura]",
+        "File: res/cartela/index.html",
+        "Frame 69 at 30 fps — 2,30 s (00:02:09)",
+        "---",
+        "deixe o título maior",
+      ].join("\n"),
+    )
+  })
+
+  it("com o usuário sem escrever nada, o texto termina limpo", () => {
+    // Sem texto não entra o `---` nem sobra linha vazia no fim: o anexo sai
+    // inteiro e sem separador órfão.
+    const semTexto = formatMotionQuoteText(payload, "")
+    expect(semTexto).toBe(formatMotionQuoteText(payload, undefined))
+    expect(semTexto.endsWith("(00:02:09)")).toBe(true)
+    expect(semTexto).not.toContain("---")
+    expect(semTexto.trim()).toBe(semTexto)
+  })
+
+  it("com caminho, camada e o que está em cena: o endereço completo e o elemento apontado", () => {
+    const texto = formatMotionQuoteText(
+      { ...payload, path: "C:/proj/res/cartela/index.html", layer: "title", onScreen: ["bg", "title"] },
+      "entra rápido demais",
+    )
+    expect(texto).toContain("File: C:/proj/res/cartela/index.html")
+    expect(texto).toContain("Selected layer: title")
+    expect(texto).toContain("On screen at this frame: bg, title")
+    // A nota do usuário continua por último, depois do separador.
+    expect(texto.endsWith("---\nentra rápido demais")).toBe(true)
+  })
+
+  it("não sobra campo de página/linha no texto do modelo", () => {
+    const texto = formatMotionQuoteText(payload, "aumente o contraste")
+    expect(texto).not.toMatch(/\b(page|line|página|linha)\b/i)
+    expect(texto).not.toContain("undefined")
+    expect(texto).not.toContain("null")
   })
 })
 

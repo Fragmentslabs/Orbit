@@ -1,6 +1,6 @@
 import { useCallback, useMemo } from "react"
 import { useTranslation } from "react-i18next"
-import { AlignLeft, BrainCircuit, Eye, Globe, PlusIcon, Quote, Search, X } from "lucide-react"
+import { AlignLeft, BrainCircuit, Clapperboard, Eye, Globe, PlusIcon, Quote, Search, X } from "lucide-react"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -53,7 +53,7 @@ import { usePromptSuggestion } from "@/src/stores/prompt-suggestion"
 import { useSimpleMode, useSimplePrefs } from "@/src/stores/simple-prefs"
 import type { ChatStatus, FilePart, SendMessageOptions } from "@shared/chat"
 import { closestVariant } from "@shared/chat"
-import { quotesToFileParts } from "@/src/lib/document-quote"
+import { quoteChipLabel, quoteChipTitle, quotesToFileParts } from "@/src/lib/document-quote"
 import { toFileParts } from "@/src/lib/message-utils"
 import { resolveSlashAction } from "@/src/lib/slash-actions"
 import { useAppearanceStore } from "@/src/stores/appearance-store"
@@ -197,12 +197,13 @@ export function ChatInput({ onSubmit, status, onStop, sessionId, draftKey, onPro
           {quotes.map((q) => (
             <span
               key={q.id}
-              title={q.text}
+              title={quoteChipTitle(q)}
               className="flex items-center gap-1 rounded-md border border-primary/30 bg-primary/10 px-1.5 py-0.5 text-[11px] text-primary"
             >
-              <Quote className="size-3" />
-              {q.name}
-              {q.page ? ` p${q.page}${q.fromLine ? `L${q.fromLine}` : ""}` : ""}
+              {/* O ícone diz de onde o anexo veio sem gastar espaço: trecho de
+                  documento ou instante de composição. */}
+              {q.kind === "motion" ? <Clapperboard className="size-3" /> : <Quote className="size-3" />}
+              {quoteChipLabel(q)}
               <button
                 type="button"
                 onClick={() => removeQuote(q.id)}
@@ -274,19 +275,23 @@ export function ChatInput({ onSubmit, status, onStop, sessionId, draftKey, onPro
         }}
         className="relative rounded-xl border-2 border-sidebar-border [&>div]:!rounded-[calc(var(--radius-xl)-2px)] [&>div]:!border-none [&>div]:!bg-transparent"
       >
-        {/* Microfone no canto SUPERIOR direito, no nível da primeira linha do
-            texto: absoluto para não empurrar o conteúdo, com a folga à direita
-            reservada no próprio textarea (pr-10). */}
-        <div className="absolute right-2 top-2 z-10 flex items-center gap-0.5">
-          <VoiceCallPanel control={voiceCall} />
-          <DictationButton sessionId={sessionId} />
-        </div>
-        <PromptInputAttachments className="!px-3 !py-1.5">
+        <PromptInputAttachments className="!px-3 !py-1.5" leading={<ReplyBar replyKey={replyKey} />}>
           {(attachment) => <PromptInputAttachment data={attachment} />}
         </PromptInputAttachments>
-        <ReplyBar replyKey={replyKey} />
         <PromptInputBody>
-          <PromptInputTextarea placeholder={t("input.placeholder")} suggestion={suggestion} className="px-3 pr-10 text-base md:text-base" />
+          {/* O microfone é ancorado na LINHA do textarea, e não no topo da
+              caixa: assim ele segue o texto onde ele começa, mesmo que alguma
+              linha entre em cima da caixa. */}
+          <div className="relative w-full">
+            {/* Canto SUPERIOR direito, no nível da primeira linha do texto:
+                absoluto para não empurrar o conteúdo, com a folga à direita
+                reservada no próprio textarea (pr-10). */}
+            <div className="absolute right-2 top-2 z-10 flex items-center gap-0.5">
+              <VoiceCallPanel control={voiceCall} />
+              <DictationButton sessionId={sessionId} />
+            </div>
+            <PromptInputTextarea placeholder={t("input.placeholder")} suggestion={suggestion} className="px-3 pr-10 text-base md:text-base" />
+          </div>
         </PromptInputBody>
         <PromptInputFooter>
           <div className="flex items-center gap-1">

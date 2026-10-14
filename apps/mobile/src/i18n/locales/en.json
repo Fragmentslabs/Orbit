@@ -361,6 +361,20 @@
     "noFolder": "No working folder in this conversation — the subagent ran in chat mode, without file access.",
     "empty": "The subagent returned no text."
   },
+  "mcpProposal": {
+    "building": "Preparing the connection.",
+    "connect": "Connect",
+    "discard": "Dismiss",
+    "discarded": "Proposal dismissed.",
+    "connected": "Connected - {{count}} tool(s) available",
+    "needsAuth": "This server requires login: the button opens the authorization page in the computer's browser.",
+    "authorize": "Authorize",
+    "authorizing": "Authorizing...",
+    "reauthorize": "Authorize again",
+    "retry": "Try again",
+    "retrying": "Reconnecting...",
+    "failed": "Connection failed: {{error}}"
+  },
   "skillProposal": {
     "building": "Assembling the skill…",
     "added": "Skill added",

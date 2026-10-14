@@ -229,7 +229,15 @@ export function useDictation(
 
       // 3) Microfone e worklet
       stream = await navigator.mediaDevices.getUserMedia({
-        audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+        audio: {
+          channelCount: 1,
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+          // `ideal`, não `exact`: o microfone escolhido desplugado cai no padrão
+          // do sistema em vez de derrubar o ditado com OverconstrainedError.
+          ...(voice.micDeviceId ? { deviceId: { ideal: voice.micDeviceId } } : {}),
+        },
       })
       bail()
       await ctx.audioWorklet.addModule(pcmWorkletUrl(document.baseURI))

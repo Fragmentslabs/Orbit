@@ -54,6 +54,14 @@
     {
       "from": "resources/whisper/${platform}-${arch}",
       "to": "whisper"
+    },
+    // ffmpeg + ffprobe estáticos da edição de vídeo do agente, um par por
+    // plataforma/arquitetura: baixados por `npm run ffmpeg:fetch` antes do
+    // electron-builder (scripts/fetch-ffmpeg.mjs).
+    {
+      "from": "resources/ffmpeg/${platform}-${arch}",
+      "to": "ffmpeg",
+      "filter": ["ffmpeg*", "ffprobe*"]
     }
   ],
   "mac": {

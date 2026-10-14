@@ -23,7 +23,7 @@ import { getAppSettings } from '../app-settings'
 import { getSttModel, STT_MODEL_DEFS } from './catalog'
 import { ensureParakeetExtracted, fileComplete, isParakeetReady } from './models-store'
 import { parakeetEngine } from './parakeet'
-import { whisperEngine } from './whisper'
+import { whisperAutoModelId, whisperEngine } from './whisper'
 import { pcm16ToFloat32, samplesToMs, STT_SAMPLE_RATE, StreamResampler } from './audio'
 import type { SttEngine, SttHandle, SttSegment } from './engine'
 
@@ -97,8 +97,10 @@ export async function warmSttModel(modelId?: string | null, engine?: string, thr
  * decide é o usuário). Vem das configurações do main, não do payload.
  */
 export function sttPreloadEnabled(): boolean {
-  const settings = getAppSettings() as { voice?: { stt?: { preload?: unknown } } } | null
-  return settings?.voice?.stt?.preload !== false
+  const settings = getAppSettings() as { voice?: { stt?: { preload?: unknown; enabled?: unknown } } } | null
+  // Ditado desligado também não pré-carrega: nenhum chamador (o botão, o fim
+  // de um download) deve prender o modelo na memória de quem desligou a voz.
+  return settings?.voice?.stt?.preload !== false && settings?.voice?.stt?.enabled !== false
 }
 
 /** Quanto tempo sem ditado antes de soltar o modelo que o `warm` carregou. */
@@ -157,6 +159,7 @@ export async function sttEngineStatus(): Promise<VoiceEngineStatus[]> {
     // não chamar de "não baixado" o que já está lá.
     downloaded: STT_MODEL_DEFS.some((m) => m.engine === s.engine && fileComplete(m)),
     reason: s.reason,
+    autoModelId: s.engine === 'whisper' ? whisperAutoModelId() : ENGINES[s.engine].defaultModelId,
   }))
 }
 
@@ -188,8 +191,8 @@ interface StartSttInput {
   threads?: number
   /** Pedir texto ao vivo enquanto a fala acontece. */
   live: boolean
-  /** Pedir os trechos com tempo (transcrição de arquivo). */
-  timestamps?: boolean
+  /** Pedir os trechos com tempo (transcrição de arquivo); 'words' = por palavra. */
+  timestamps?: boolean | 'words'
 }
 
 /**
@@ -219,7 +222,7 @@ export async function startSttSession(
       language: input.language || 'pt',
       threads: input.threads,
       live: Boolean(input.live),
-      timestamps: Boolean(input.timestamps),
+      timestamps: input.timestamps || false,
     },
     partial,
   )

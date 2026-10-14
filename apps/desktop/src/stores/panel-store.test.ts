@@ -91,3 +91,136 @@ describe("abrir uma aba no chat novo, antes de ele virar sessão", () => {
     expect(tabsOf("s1")[0].sessionId).toBe("s1")
   })
 })
+
+/**
+ * A aba de motion não tem seletor: ela nasce do evento que o main dispara
+ * quando o agente registra uma composição (a tool motion_preview). O balde vem
+ * no evento; sem sessão nele, o App resolve a do chat ATIVO e o que sobra é o
+ * órfão — o balde que o painel mostra quando não há chat aberto.
+ */
+describe("abrir a aba de motion pelo evento do main", () => {
+  beforeEach(reset)
+
+  const motionEvent = (id: string, sessionId?: string) => ({
+    type: "motion" as const,
+    id,
+    entry: "index.html",
+    title: "Título",
+    sessionId,
+  })
+
+  it("abre a aba na sessão do evento e dispensa o selector", () => {
+    usePanelStore.getState().setSelectorOpen(true)
+
+    usePanelStore.getState().applyEvent(motionEvent("mv_abc", "s1"))
+
+    const state = usePanelStore.getState()
+    expect(state.rightPanelOpen).toBe(true)
+    expect(state.selectorOpen).toBe(false)
+    const tabs = tabsOf("s1")
+    expect(tabs).toHaveLength(1)
+    expect(tabs[0]).toMatchObject({
+      type: "motion",
+      motionId: "mv_abc",
+      motionEntry: "index.html",
+      title: "Título",
+      sessionId: "s1",
+    })
+    expect(state.activeTabBySession.s1).toBe(tabs[0].id)
+  })
+
+  it("registrar a MESMA composição de novo traz a aba para o chat atual — uma só", () => {
+    usePanelStore.getState().applyEvent(motionEvent("mv_abc", "s1"))
+    const first = tabsOf("s1")[0].id
+    usePanelStore.getState().setSelectorOpen(true)
+
+    // O usuário trocou de chat: a composição é uma só, e o painel só mostra as
+    // abas do chat ATIVO — então a aba vem para o balde dele, mantendo o id.
+    // (Focar no balde antigo seria focar numa aba que não está à vista.)
+    usePanelStore.getState().applyEvent(motionEvent("mv_abc", "s2"))
+
+    const state = usePanelStore.getState()
+    expect(tabsOf("s1")).toHaveLength(0)
+    expect(tabsOf("s2")).toHaveLength(1)
+    expect(tabsOf("s2")[0].id).toBe(first)
+    expect(tabsOf("s2")[0]).toMatchObject({ type: "motion", motionId: "mv_abc", sessionId: "s2" })
+    expect(state.activeTabBySession.s2).toBe(first)
+    expect(state.selectorOpen).toBe(false)
+  })
+
+  it("a mesma composição, já adotada pelo chat, é reusada em vez de duplicada", () => {
+    usePanelStore.getState().applyEvent(motionEvent("mv_abc"))
+    const orphanId = tabsOf(ORPHAN_KEY)[0].id
+
+    usePanelStore.getState().adoptOrphanTabs("s1")
+    usePanelStore.getState().applyEvent(motionEvent("mv_abc", "s1"))
+
+    expect(tabsOf("s1")).toHaveLength(1)
+    expect(tabsOf("s1")[0].id).toBe(orphanId)
+    expect(usePanelStore.getState().activeTabBySession.s1).toBe(orphanId)
+  })
+
+  it("composições diferentes abrem abas diferentes", () => {
+    usePanelStore.getState().applyEvent(motionEvent("mv_1", "s1"))
+    usePanelStore.getState().applyEvent(motionEvent("mv_2", "s1"))
+
+    expect(tabsOf("s1").map((t) => t.motionId)).toEqual(["mv_1", "mv_2"])
+    expect(usePanelStore.getState().activeTabBySession.s1).toBe(tabsOf("s1")[1].id)
+  })
+
+  it("sem sessão no evento, a aba cai no balde órfão e o chat novo a adota", () => {
+    // O contrato do evento é {id, entry, title}: quem resolve a sessão do chat
+    // ativo é o App; sem chat nenhum, o balde é o órfão.
+    usePanelStore.getState().applyEvent(motionEvent("mv_xyz"))
+    expect(tabsOf(ORPHAN_KEY)).toHaveLength(1)
+    expect(tabsOf(ORPHAN_KEY)[0].sessionId).toBeUndefined()
+
+    usePanelStore.getState().adoptOrphanTabs("s1")
+
+    expect(tabsOf(ORPHAN_KEY)).toHaveLength(0)
+    expect(tabsOf("s1")[0]).toMatchObject({ type: "motion", motionId: "mv_xyz", sessionId: "s1" })
+  })
+})
+
+/**
+ * O instante de motion é um só: o gesto é apontar UM ponto da composição
+ * ("faça isso neste quadro"), então clicar de novo troca o anexo em vez de
+ * empilhar dois instantes que não formam um pedido só. Os trechos de documento
+ * seguem acumulando — são pedaços diferentes de uma leitura.
+ */
+describe("anexos de citação no compositor", () => {
+  beforeEach(() => usePanelStore.setState({ quotes: [] }))
+
+  const instante = (frame: number) =>
+    ({ kind: "motion" as const, file: "index.html", name: "Título", frame, fps: 30 })
+
+  it("o segundo comentário substitui o primeiro instante", () => {
+    usePanelStore.getState().addQuote(instante(30))
+    usePanelStore.getState().addQuote(instante(69))
+
+    const quotes = usePanelStore.getState().quotes
+    expect(quotes).toHaveLength(1)
+    expect(quotes[0]).toMatchObject({ kind: "motion", frame: 69 })
+  })
+
+  it("o instante não apaga os trechos de documento já anexados", () => {
+    usePanelStore.getState().addQuote({ kind: "source", docId: "src1", name: "contrato.pdf", text: "prazo" })
+    usePanelStore.getState().addQuote(instante(69))
+
+    expect(usePanelStore.getState().quotes.map((q) => q.kind)).toEqual(["source", "motion"])
+  })
+
+  it("os trechos de documento continuam acumulando", () => {
+    usePanelStore.getState().addQuote({ kind: "source", docId: "src1", name: "contrato.pdf", text: "prazo" })
+    usePanelStore.getState().addQuote({ kind: "document", docId: "doc_1.md", name: "relatório.md", text: "resumo" })
+
+    expect(usePanelStore.getState().quotes).toHaveLength(2)
+  })
+
+  it("enviar a mensagem limpa o anexo (mesmo ciclo de vida da citação)", () => {
+    usePanelStore.getState().addQuote(instante(69))
+    usePanelStore.getState().clearQuotes()
+
+    expect(usePanelStore.getState().quotes).toHaveLength(0)
+  })
+})

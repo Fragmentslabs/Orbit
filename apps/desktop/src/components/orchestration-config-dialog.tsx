@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useState, type ReactNode } from "react"
 import { useTranslation } from "react-i18next"
 import { BrainIcon, ChevronDownIcon, MinusIcon, PlusIcon } from "lucide-react"
 import type { OrchestrationSettings, ReasoningConfig } from "@shared/chat"
@@ -102,6 +102,16 @@ function ModelSection({
   )
 }
 
+/** Bloco do modal: um título e a moldura que separa o painel em duas colunas. */
+function Section({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <section className="flex flex-col gap-3 rounded-lg border border-border/60 bg-muted/20 p-3">
+      <p className="text-xs font-medium">{title}</p>
+      {children}
+    </section>
+  )
+}
+
 /**
  * Configuração da delegação, aberta pela engrenagem de Subagentes ou de Orquestra
  * no "+". Subagentes: o modelo dos workers. Orquestra: quem conduz (planeja e
@@ -135,7 +145,10 @@ export function OrchestrationConfigDialog({ kind, onOpenChange }: {
 
   return (
     <Dialog open={kind !== null} onOpenChange={onOpenChange}>
-      <DialogContent className={orchestra ? "sm:max-w-md" : "sm:max-w-sm"} showCloseButton={false}>
+      {/* Orquestra tem configuração demais para uma coluna só: os papéis
+          (orquestrador, worker) ficam à esquerda e o comportamento à direita,
+          em vez de uma lista que passa da altura da tela. */}
+      <DialogContent className={orchestra ? "sm:max-w-3xl" : "sm:max-w-sm"} showCloseButton={false}>
         <DialogHeader>
           <DialogTitle>{orchestra ? t("orchestrationConfig.titleOrchestra") : t("orchestrationConfig.titleSubagents")}</DialogTitle>
         </DialogHeader>
@@ -144,27 +157,41 @@ export function OrchestrationConfigDialog({ kind, onOpenChange }: {
           <div className="rounded-md border border-amber-500/30 bg-amber-500/10 p-2 text-xs text-amber-600 dark:text-amber-400">
             <strong>{t("orchestrationConfig.attention")}</strong> {t("orchestrationConfig.attentionText")}
           </div>
-          {orchestra && (
+          {orchestra ? (
+            <div className="grid gap-4 sm:grid-cols-2 sm:items-start">
+              <Section title={t("orchestrationConfig.modelsTitle")}>
+                <ModelSection
+                  label={t("orchestrationConfig.conductorModel")}
+                  hint={t("orchestrationConfig.conductorHint")}
+                  nullLabel={t("orchestrationConfig.useChatModel")}
+                  model={orchestratorModel}
+                  reasoning={orchestratorReasoning}
+                  onModelChange={setOrchestratorModel}
+                  onReasoningChange={setOrchestratorReasoning}
+                />
+                <ModelSection
+                  label={t("orchestrationConfig.workerModel")}
+                  hint={t("orchestrationConfig.workerSharedHint")}
+                  nullLabel={t("orchestrationConfig.useMainModel")}
+                  model={workerModel}
+                  reasoning={workerReasoning}
+                  onModelChange={setWorkerModel}
+                  onReasoningChange={setWorkerReasoning}
+                />
+              </Section>
+              <BehaviorSection />
+            </div>
+          ) : (
             <ModelSection
-              label={t("orchestrationConfig.conductorModel")}
-              hint={t("orchestrationConfig.conductorHint")}
-              nullLabel={t("orchestrationConfig.useChatModel")}
-              model={orchestratorModel}
-              reasoning={orchestratorReasoning}
-              onModelChange={setOrchestratorModel}
-              onReasoningChange={setOrchestratorReasoning}
+              label={t("orchestrationConfig.workerModel")}
+              hint={t("orchestrationConfig.noSelectionHint")}
+              nullLabel={t("orchestrationConfig.useMainModel")}
+              model={workerModel}
+              reasoning={workerReasoning}
+              onModelChange={setWorkerModel}
+              onReasoningChange={setWorkerReasoning}
             />
           )}
-          <ModelSection
-            label={t("orchestrationConfig.workerModel")}
-            hint={orchestra ? t("orchestrationConfig.workerSharedHint") : t("orchestrationConfig.noSelectionHint")}
-            nullLabel={t("orchestrationConfig.useMainModel")}
-            model={workerModel}
-            reasoning={workerReasoning}
-            onModelChange={setWorkerModel}
-            onReasoningChange={setWorkerReasoning}
-          />
-          {orchestra && <BehaviorSection />}
         </div>
 
         <DialogFooter>
@@ -197,9 +224,8 @@ function BehaviorSection() {
   const revisa = settings.comportamento !== "orquestrar"
 
   return (
-    <div className="flex flex-col gap-3 border-t pt-3">
+    <Section title={t("orchestrationConfig.behavior.title")}>
       <div className="flex flex-col gap-1.5">
-        <span className="text-xs font-medium">{t("orchestrationConfig.behavior.title")}</span>
         {opcoes.map((o) => (
           <button
             key={o.id}
@@ -253,6 +279,6 @@ function BehaviorSection() {
         </div>
         <Switch checked={settings.worktrees} onCheckedChange={(v) => update({ worktrees: v })} />
       </label>
-    </div>
+    </Section>
   )
 }

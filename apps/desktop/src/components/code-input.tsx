@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
-import { AlignLeft, Bot, BrainCircuit, Eye, FileText, MousePointerClick, Network, PlusIcon, Quote, RefreshCw, Search, X } from "lucide-react"
+import { AlignLeft, Bot, BrainCircuit, Clapperboard, Eye, FileText, MousePointerClick, Network, PlusIcon, Quote, RefreshCw, Search, X } from "lucide-react"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -48,7 +48,7 @@ import { useBrainEnabled, useBrainPrefs, useCodeContext } from "@/src/stores/bra
 import { useMessageQueueStore } from "@/src/stores/message-queue-store"
 import { useModeActive, useModeOverrides } from "@/src/stores/mode-overrides"
 import { usePanelStore } from "@/src/stores/panel-store"
-import { quotesToFileParts } from "@/src/lib/document-quote"
+import { quoteChipLabel, quoteChipTitle, quotesToFileParts } from "@/src/lib/document-quote"
 import { usePermissionPrefs } from "@/src/stores/permission-prefs"
 import { useModelModePrefs } from "@/src/stores/model-mode-prefs"
 import { useProviderStore, useNoProviderConnected } from "@/src/stores/provider-store"
@@ -120,6 +120,11 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId, on
   }, [mode, isWorker, sessionId, setModeActive])
   const [configKind, setConfigKind] = useState<DelegationConfigKind | null>(null)
   const [loopConfigOpen, setLoopConfigOpen] = useState(false)
+  // O menu "+" é controlado para poder FECHAR quando a engrenagem abre um dos
+  // modais de configuração: o popup do menu vive em z-[999], acima dos modais
+  // (z-[80]) de propósito, e a engrenagem corta a propagação do clique — sem
+  // fechar na mão, ele fica aberto por cima do formulário.
+  const [addMenuOpen, setAddMenuOpen] = useState(false)
   const simple = useSimpleMode(sessionId, codeActiveModes.simple)
   const setSimple = useSimplePrefs((s) => s.setEnabled)
   const brain = useBrainEnabled(sessionId, codeActiveModes.brain)
@@ -389,21 +394,21 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId, on
             <FolderSelector folders={folders} onFoldersChange={setFolders} />
           </div>
         )}
-        <PromptInputAttachments className="!w-auto !p-0 mb-2">
+        <PromptInputAttachments className="!w-auto !p-0 mb-2" leading={<ReplyBar replyKey={replyKey} />}>
           {(attachment) => <PromptInputAttachment data={attachment} />}
         </PromptInputAttachments>
-        {/* Trechos citados do visualizador de documento */}
+        {/* Trechos citados do visualizador de documento e instantes apontados
+            na aba Motion */}
         {quotes.length > 0 && (
           <div className="flex flex-wrap items-center gap-1.5 px-3 pb-1.5">
             {quotes.map((q) => (
               <span
                 key={q.id}
-                title={q.text}
+                title={quoteChipTitle(q)}
                 className="flex items-center gap-1 rounded-md border border-primary/30 bg-primary/10 px-1.5 py-0.5 text-[11px] text-primary"
               >
-                <Quote className="size-3" />
-                {q.name}
-                {q.page ? ` p${q.page}${q.fromLine ? `L${q.fromLine}` : ""}` : ""}
+                {q.kind === "motion" ? <Clapperboard className="size-3" /> : <Quote className="size-3" />}
+                {quoteChipLabel(q)}
                 <button
                   type="button"
                   onClick={() => removeQuote(q.id)}
@@ -448,23 +453,28 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId, on
           onSubmit={handleSubmit}
           className="relative rounded-xl border-2 border-sidebar-border [&>div]:!rounded-[calc(var(--radius-xl)-2px)] [&>div]:!border-none [&>div]:!bg-transparent"
         >
-          <ReplyBar replyKey={replyKey} />
-          {/* Microfone no canto SUPERIOR direito, no nível da primeira linha do
-              texto — a mesma posição do input do chat. */}
-          <div className="absolute right-2 top-2 z-10 flex items-center gap-0.5">
-            <VoiceCallPanel control={voiceCall} />
-            <DictationButton sessionId={sessionId} />
-          </div>
           <PromptInputBody>
-            <PromptInputTextarea
-              placeholder={folders.length === 0 ? t("codeInput.placeholderNoFolder") : t("codeInput.placeholder")}
-              suggestion={suggestion}
-              className="px-3 pr-10 text-base md:text-base"
-            />
+            {/* O microfone é ancorado na LINHA do textarea, e não no topo da
+                caixa — a mesma posição do input do chat. */}
+            <div className="relative w-full">
+              {/* Canto SUPERIOR direito, no nível da primeira linha do texto —
+                  a mesma posição do input do chat: absoluto para não empurrar o
+                  conteúdo, com a folga à direita reservada no próprio textarea
+                  (pr-10). */}
+              <div className="absolute right-2 top-2 z-10 flex items-center gap-0.5">
+                <VoiceCallPanel control={voiceCall} />
+                <DictationButton sessionId={sessionId} />
+              </div>
+              <PromptInputTextarea
+                placeholder={folders.length === 0 ? t("codeInput.placeholderNoFolder") : t("codeInput.placeholder")}
+                suggestion={suggestion}
+                className="px-3 pr-10 text-base md:text-base"
+              />
+            </div>
           </PromptInputBody>
           <PromptInputFooter>
             <div className="flex items-center gap-1">
-              <DropdownMenu>
+              <DropdownMenu open={addMenuOpen} onOpenChange={setAddMenuOpen}>
                 <DropdownMenuTrigger className="flex size-7 items-center justify-center rounded-md hover:bg-muted hover:text-foreground aria-expanded:bg-muted aria-expanded:text-foreground">
                   <PlusIcon className="size-4" />
                 </DropdownMenuTrigger>
@@ -493,8 +503,16 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId, on
                       }
                     }}
                     onLoopChange={setLoop}
-                    onOpenConfig={setConfigKind}
-                    onOpenLoopConfig={() => setLoopConfigOpen(true)}
+                    onOpenConfig={(kind) => {
+                      // Fecha o "+" antes de abrir o modal (ver comentário do
+                      // estado): o popup do menu cobriria o formulário.
+                      setAddMenuOpen(false)
+                      setConfigKind(kind)
+                    }}
+                    onOpenLoopConfig={() => {
+                      setAddMenuOpen(false)
+                      setLoopConfigOpen(true)
+                    }}
                     mode={mode}
                   />
                   <DropdownMenuSeparator />

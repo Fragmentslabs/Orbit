@@ -31,6 +31,7 @@ import { buildWorkersNotice, createWorkerTools, loadWorkers } from './tools/work
 import type { ToolContext } from './tools/context'
 import { addTokenUsage, toTokenUsage } from './usage'
 import { getWorkerConfigCache } from './companion-http'
+import { diffDaPasta, diffDosTurnos } from './orquestra/diff'
 import { executarPlano } from './orquestra/execucao'
 import { revisarComModelo } from './orquestra/revisor'
 import { descobrirVerificacoes, rodarVerificacao } from './orquestra/verificacoes'
@@ -786,17 +787,24 @@ async function approvePlanTurn(
     const revisorOptions = await buildProviderOptions(revisor)
     const raizRepo = await raizDoRepositorio(input.directory!).catch(() => undefined)
 
+    /**
+     * Diff do trabalho do worker, para o revisor. Com worktree o git responde
+     * direto; sem worktree, a evidência são os snapshots dos turnos do chat
+     * dele — e um turno cuja captura falhou não deixa patch nenhum. Devolver
+     * vazio aí faria o revisor ler "não escreveu nada" onde a verdade é "não
+     * deu para registrar" (é o que a verificação discriminada do chat-engine
+     * existe para separar), então a falha é dita e o estado da pasta — a prova
+     * real, ainda que compartilhada com os outros workers — é consultado.
+     */
     const diffDaTarefa = async (task: OrchestrationTask): Promise<string> => {
       if (task.worktree) return diffDoWorktree(task.worktree)
-      // Sem worktree: os snapshots dos turnos do worker. Na pasta compartilhada
-      // podem incluir mudanças de outros workers rodando ao mesmo tempo — o
-      // revisor é avisado disso no prompt.
       if (!task.workerSessionId) return ''
       const msgs = await loadMessages(task.workerSessionId)
-      return msgs
-        .filter((m) => m.role === 'assistant' && m.snapshot?.patch)
-        .map((m) => `${(m.snapshot!.files ?? []).map((f) => `- ${f}`).join('\n')}\n${m.snapshot!.patch}`)
-        .join('\n\n')
+      const snaps = msgs.filter((m) => m.role === 'assistant' && m.snapshot).map((m) => m.snapshot!)
+      const { patch, indisponivel } = diffDosTurnos(snaps)
+      if (!indisponivel) return patch
+      const daPasta = await diffDaPasta(input.directory!)
+      return [indisponivel, patch, daPasta].filter(Boolean).join('\n\n')
     }
 
     const workerResultados = await executarPlano({

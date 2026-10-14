@@ -2,6 +2,7 @@ import os from "node:os"
 import type { VoiceEngineId, VoiceHardwareInfo } from "@shared/voice"
 import { STT_MODELS } from "./stt"
 import { modelInfo } from "./manifest"
+import { preferredWhisperModelId } from "./catalog"
 
 /**
  * Detecção da máquina e recomendação do motor de transcrição.
@@ -10,8 +11,8 @@ import { modelInfo } from "./manifest"
  *  - Parakeet TDT 0.6B v3 pelo `sherpa-onnx` é o preferido (binários prontos
  *    para darwin/win/linux x64 e arm64, N-API, só CPU). Em troca, o processo
  *    cresce ~1,3 GB com o modelo carregado;
- *  - então ele exige memória de verdade: com menos de 16 GB de RAM, o custo em
- *    RAM de um notebook pequeno estoura e vale um modelo menor;
+ *  - então ele exige memória de verdade: numa máquina de 8 GB o custo em RAM
+ *    estoura e vale um whisper menor (o small, ou o base abaixo de 8 GB);
  *  - arch fora de x64/arm64 (ou sistema sem binário do sherpa-onnx) não roda
  *    Parakeet de jeito nenhum — aí a recomendação é whisper.
  *
@@ -22,8 +23,14 @@ import { modelInfo } from "./manifest"
 /** id preferido do Parakeet no catálogo do STT (o concreto vem de STT_MODELS). */
 export const PARAKEET_MODEL_ID = "parakeet-tdt-0.6b-v3"
 
-/** Abaixo disto, o Parakeet (1,3 GB de RSS) pesa demais na máquina. */
-const MIN_MEMORY_GB = 16
+/**
+ * Abaixo disto, o Parakeet (1,3 GB de RSS) pesa demais na máquina. Não é 16:
+ * o `os.totalmem()` desconta o que o firmware e a GPU integrada reservam, e uma
+ * máquina de 16 GB aparece com 15,3 GB — ficava de fora justamente quem tem
+ * folga de sobra. 12 separa as de 16 GB das de 8 GB com margem.
+ */
+const MIN_MEMORY_GB = 12
+
 /** RAM que o Parakeet ocupa com o modelo carregado (medido no laboratório). */
 const PARAKEET_RAM_GB = 1.3
 
@@ -44,7 +51,7 @@ function sherpaSupported(platform: string, arch: string): boolean {
  * é do outro worker — a recomendação nunca aponta para um id inventado).
  */
 function pickModel(engine: VoiceEngineId, preferredId: string): string {
-  if (STT_MODELS.some((model) => model.id === preferredId)) return preferredId
+  if (STT_MODELS.some((model) => model.id === preferredId && model.engine === engine)) return preferredId
   const same = STT_MODELS.filter((model) => model.engine === engine)
   if (same.length === 0) return preferredId
   return same.reduce((menor, model) => (model.bytes < menor.bytes ? model : menor)).id
@@ -66,13 +73,17 @@ export function detectHardware(options: HardwareOptions = {}): VoiceHardwareInfo
   const rodaParakeet = sherpaSupported(platform, arch)
   const memoriaSuficiente = totalMemGb >= MIN_MEMORY_GB
   const recommendedEngine: VoiceEngineId = rodaParakeet && memoriaSuficiente ? "parakeet" : "whisper"
-  const recommendedModel = pickModel(recommendedEngine, PARAKEET_MODEL_ID)
+  // O modelo é SEMPRE do motor recomendado: pedir o id do Parakeet para o
+  // whisper devolvia o próprio Parakeet (existe no catálogo), e a tela dizia
+  // "whisper.cpp com o Parakeet".
+  const preferredModel = recommendedEngine === "parakeet" ? PARAKEET_MODEL_ID : preferredWhisperModelId(totalMemGb)
+  const recommendedModel = pickModel(recommendedEngine, preferredModel)
 
   let reason: string
   if (!rodaParakeet) {
     reason = `Sem binário do sherpa-onnx para ${platform}/${arch}: o Parakeet não roda aqui, então a recomendação é o whisper (${arch} fora de x64/arm64 ou sistema não coberto).`
   } else if (!memoriaSuficiente) {
-    reason = `A máquina tem ${totalMemGb} GB de RAM (abaixo de ${MIN_MEMORY_GB} GB): o Parakeet carrega ~${PARAKEET_RAM_GB} GB em memória, então vale um modelo de whisper menor para não pesar.`
+    reason = `A máquina tem ${totalMemGb} GB de RAM: o Parakeet carrega ~${PARAKEET_RAM_GB} GB em memória, então vale um modelo de whisper menor para não pesar.`
   } else {
     reason = `Parakeet TDT 0.6B v3 em CPU pelo sherpa-onnx: binário pronto para ${platform}/${arch}, sem compilar nada, e a máquina tem ${totalMemGb} GB de RAM para os ~${PARAKEET_RAM_GB} GB que ele carrega.`
   }

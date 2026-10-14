@@ -178,9 +178,11 @@ export function DictationButton({ className, sessionId }: { className?: string; 
   useEffect(() => {
     // Desligado, o usuário escolheu pagar a carga no primeiro ditado — não
     // aquece por antecipação (o main confere a mesma preferência de novo).
-    if (!localReady || !preload) return
+    // Ditado desligado não aquece nada: o botão nem aparece, e carregar o
+    // modelo aqui prendia centenas de MB para quem desligou justamente a voz.
+    if (!enabled || !localReady || !preload) return
     void voiceApi.sttWarm({ engine, modelId: modelId ?? undefined, threads })
-  }, [localReady, preload, engine, modelId, threads])
+  }, [enabled, localReady, preload, engine, modelId, threads])
   // Alvo do ditado: o motor pronto no disco (`localReady`), OU o modelo de IA do
   // chat aceitando áudio com a prioridade de áudio apontando para ele. Sem
   // nenhum dos dois o botão NÃO desaparece: ele passa a levar ao download

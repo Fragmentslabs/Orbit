@@ -68,13 +68,27 @@ function Layout() {
   const setRightPanelOpen = usePanelStore((s) => s.setRightPanelOpen)
   const hideTimer = useRef<ReturnType<typeof setTimeout>>()
   const showTimer = useRef<ReturnType<typeof setTimeout>>()
+  // Modo corrente para o handler de eventos do main: ele é registrado UMA vez e
+  // não pode depender do render para saber em que workspace o usuário está.
+  const modeRef = useRef(workspaceMode)
+  useEffect(() => {
+    modeRef.current = workspaceMode
+  }, [workspaceMode])
+
   // Eventos do main (tools panel_*): o agente pediu o browser — registra no
   // store e garante o webview NO HOST OCULTO, sem abrir o painel (a UI só
   // aparece quando o usuário clica no indicador "testando…").
   useEffect(() => {
     return panelApi.onEvent((event) => {
       const store = usePanelStore.getState()
-      store.applyEvent(event)
+      // O evento de motion não traz a sessão (o contrato é {id, entry, title}):
+      // sem ela a aba nasceria no balde órfão, escondida atrás do chat aberto.
+      // O balde é o do chat ATIVO — é onde o painel está apontado agora.
+      const resolved =
+        event.type === "motion" && !event.sessionId
+          ? { ...event, sessionId: useSessionStore.getState().activeIds[modeRef.current] ?? undefined }
+          : event
+      store.applyEvent(resolved)
       if (event.type === "ensure") {
         ensureAgentBrowser(event.sessionId, event.url)
       }

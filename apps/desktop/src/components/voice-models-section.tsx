@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { Download, Loader2, Mic, Timer, Trash2, Volume2 } from "lucide-react"
 import type { VoiceDownloadProgress, VoiceModelKind, VoiceStatusSnapshot } from "@shared/voice"
@@ -104,23 +104,35 @@ export function VoiceModelsSection({
   models,
   status,
   onChanged,
+  onDownloaded,
 }: {
   models: VoiceModelRow[]
   status: VoiceStatusSnapshot | null
   /** Recarrega catálogo e estado (quando um download termina ou um modelo sai). */
   onChanged: () => void
+  /**
+   * Um download começado NESTA lista terminou bem. Só os daqui: as duas listas
+   * da tela (a rápida, junto do seletor, e a completa) ouvem os mesmos eventos.
+   */
+  onDownloaded?: (modelId: string) => void
 }) {
   const { t } = useTranslation()
   const [progress, setProgress] = useState<Record<string, VoiceDownloadProgress>>({})
   /** Modelo com ação em andamento antes de o primeiro evento de progresso chegar. */
   const [busy, setBusy] = useState<Record<string, boolean>>({})
+  const startedHere = useRef(new Set<string>())
+  const onDownloadedRef = useRef(onDownloaded)
+  onDownloadedRef.current = onDownloaded
 
   useEffect(
     () =>
       voiceApi.onDownloadProgress((event) => {
         setProgress((current) => ({ ...current, [event.modelId]: event }))
         setBusy((current) => (current[event.modelId] ? { ...current, [event.modelId]: false } : current))
-        if (event.done) onChanged()
+        if (event.done) {
+          if (startedHere.current.delete(event.modelId) && !event.error) onDownloadedRef.current?.(event.modelId)
+          onChanged()
+        }
       }),
     [onChanged],
   )
@@ -134,6 +146,7 @@ export function VoiceModelsSection({
     })
 
   const startDownload = (modelId: string) => {
+    startedHere.current.add(modelId)
     setBusy((current) => ({ ...current, [modelId]: true }))
     drop(modelId)
     void voiceApi
@@ -143,6 +156,7 @@ export function VoiceModelsSection({
         // o giro ficaria ligado para sempre, sem evento de progresso que o
         // desligasse — era o clique que "não fazia nada".
         if (!(result as { started?: boolean } | undefined)?.started) {
+          startedHere.current.delete(modelId)
           setBusy((current) => ({ ...current, [modelId]: false }))
         }
       })
@@ -150,6 +164,7 @@ export function VoiceModelsSection({
   }
 
   const cancelDownload = (modelId: string) => {
+    startedHere.current.delete(modelId)
     drop(modelId)
     setBusy((current) => ({ ...current, [modelId]: false }))
     void voiceApi.cancelDownload(modelId).catch(() => undefined)

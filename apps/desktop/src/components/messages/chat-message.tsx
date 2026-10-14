@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react"
 import { AudioPartView } from "@/src/components/messages/audio-part"
+import { VideoPartView } from "@/src/components/messages/video-part"
 import { useTranslation } from "react-i18next"
 import { GlobeIcon, LinkIcon, SearchIcon, XCircleIcon } from "lucide-react"
 import type { ChatMessage, ImagePart, MessagePart, ToolPart } from "@shared/chat"
@@ -230,6 +231,8 @@ export function ChatAssistantMessage({ message, sessionId, isLast, isBusy, busyL
           <DocumentPartView key={segment.id} part={segment.part} sessionId={sessionId} live={isLast && isBusy} />
         ) : segment.part.type === "audio" ? (
           <AudioPartView key={segment.id} part={segment.part} />
+        ) : segment.part.type === "video" ? (
+          <VideoPartView key={segment.id} part={segment.part} />
         ) : segment.part.type === "file" ? null : segment.part.type === "image" ? (
           // Nunca acontece de fato — segmentParts sempre roteia "image" para
           // um segmento "image-group" — mas o TS não sabe disso estaticamente.
