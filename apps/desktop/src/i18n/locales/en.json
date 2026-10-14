@@ -712,6 +712,10 @@
       "document": {
         "label": "Document",
         "description": "Document in Markdown, to read and edit"
+      },
+      "motion": {
+        "label": "Motion",
+        "description": "Preview of a motion composition"
       }
     },
     "unreadMessages": "Unread messages"
@@ -2291,6 +2295,51 @@
     "zoomOut": "Zoom out",
     "zoomReset": "Reset zoom (100%)",
     "unavailable": "Artifact unavailable"
+  },
+  "motion": {
+    "unavailable": "Composition unavailable",
+    "loading": "Loading the composition…",
+    "reload": "Reload",
+    "comment": "Comment this instant — attaches the current frame to the next chat message",
+    "fullscreen": "Full screen",
+    "exitFullscreen": "Exit full screen",
+    "render": "Render",
+    "renderFormat": "Render format",
+    "formatMp4": "MP4",
+    "formatMp4Hint": "plain video",
+    "formatMovAlpha": "MOV with alpha",
+    "formatMovAlphaHint": "for editing",
+    "formatWebmAlpha": "WebM with alpha",
+    "formatWebmAlphaHint": "for the web",
+    "rendering": "Rendering {{percent}}%",
+    "renderFailed": "The render failed",
+    "rendered": "Rendered: {{file}}",
+    "showInFolder": "Show in folder",
+    "dismiss": "Dismiss",
+    "play": "Play",
+    "pause": "Pause",
+    "prevFrame": "Previous frame",
+    "nextFrame": "Next frame",
+    "loop": "Loop",
+    "measuredFps": "{{fps}} fps",
+    "measuredFpsHint": "Frames per second measured in the preview. Below 30, the composition is dropping frames while playing.",
+    "error": "The composition failed",
+    "fontsFailed": "Fonts that failed to load",
+    "timeline": "Timeline",
+    "layers": "Layers",
+    "layersLoading": "Measuring when each element enters and leaves…",
+    "layersEmpty": "No element enters or leaves the frame. Ask the agent to name the parts with data-layer.",
+    "audioHint": "A track of the piece: plays with the preview at the instant it declares, and goes into the rendered file.",
+    "audioOutside": "This audio is outside the composition folder: it goes into the rendered file, but the preview cannot reach it.",
+    "audioFailed": "Invalid audio manifest ({{error}}) — the piece is silent.",
+    "layersFailed": "Could not measure the layers: {{error}}",
+    "layerSpan": "{{name}} · enters {{from}} · leaves {{to}}",
+    "layerSelect": "Select the {{name}} layer as context",
+    "commentHint": "Comment on this instant (and the selected layer) in the chat",
+    "loadFailed": "The composition did not load",
+    "loadFailedHttp": "The server answered {{status}}: {{text}}",
+    "loadTimeout": "The page did not respond in {{seconds}} s.",
+    "retry": "Try again"
   },
   "documents": {
     "download": "Download",

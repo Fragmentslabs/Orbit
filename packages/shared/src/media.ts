@@ -187,6 +187,12 @@ export const AUDIO_SCHEME = "orbit-audio"
  * do projeto, com Range — um vídeo não é copiado para a pasta do app.
  */
 export const VIDEO_SCHEME = "orbit-video"
+/**
+ * Composições de motion (pasta do projeto: entrada HTML + dependências que o
+ * preview serve, com `corsEnabled` — fontes e `<script type="module">` numa
+ * origem opaca exigem CORS). Diferente dos vídeos, aqui se serve uma PASTA.
+ */
+export const MOTION_SCHEME = "orbit-motion"
 
 /** `kind` normalizado — registros antigos não têm o campo. */
 export function mediaKind(entry: Pick<MediaEntry, "kind">): MediaKind {

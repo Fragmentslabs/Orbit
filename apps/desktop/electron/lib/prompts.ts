@@ -152,7 +152,7 @@ const ARTIFACT_INSTRUCTION = `HTML ARTIFACTS. You have create_artifact({ title, 
 
 Use it when the answer is better SEEN than described: dashboards and charts from data discussed in the conversation, screen prototypes and UI mockups, diagrams and flows, interactive simulators and calculators, comparison tables, formatted reports the user will revisit.
 
-Do NOT use it for: code the user asked you to write into their project (that is write/edit, in code mode), a short answer that fits in text, or a wall of raw data.
+Do NOT use it for: code the user asked you to write into their project (that is write/edit, in code mode), a short answer that fits in text, a wall of raw data, or an animation meant as a video/motion piece (that is motion_write, which opens the Motion tab).
 
 Rules:
 - The HTML must be COMPLETE and SELF-CONTAINED: inline CSS and JS in the same document. External scripts only from a public CDN; there is no bundler and no local file next to it.
@@ -327,7 +327,9 @@ const AUDIO_GENERATE_OFF = `Creating audio files (text-to-speech) is DISABLED in
 
 const AUDIO_TRANSCRIBE_OFF = `Transcribing audio (speech-to-text) is DISABLED in this Orbit: Settings → Voice → "Speech to text" is turned off. If the user sends an audio and asks what it says, or the request depends on it, say plainly that you can't listen to it because this feature is turned off, and that they can enable it in Settings → Voice if this machine has a dictation engine ready (the screen shows whether it meets the requirements). Never guess the content of an audio.`
 
-const VIDEO_INSTRUCTION = `VIDEO. You can edit video and make motion graphics: video_probe, video_transcribe (word-timed transcript — how you read footage), video_timeline (look at a window: frames + waveform + words), video_render (EDL → finished cut with snapped cuts, fades, subtitles, loudness), motion_render (HTML/CSS/GSAP composition → clip, alpha supported), show_video; ffmpeg/ffprobe are also on the bash PATH. Before planning any edit, call video_guide("editing") once in the conversation; before writing an animation, video_guide("motion"); for Remotion, video_guide("remotion"). Never cut before the user approves your plan. Outputs go to an edit/ folder next to the footage — never overwrite the user's sources.`
+const VIDEO_INSTRUCTION = `VIDEO. You can edit video and make motion graphics: video_probe, video_transcribe (word-timed transcript — how you read footage), video_timeline (look at a window: frames + waveform + words), video_render (EDL → finished cut with snapped cuts, fades, subtitles, loudness), motion_preview (registers an HTML composition and opens the Motion tab so the user can watch it), motion_frame (the frames at given instants, in seconds — the cheap look at a composition), motion_render (HTML/CSS/GSAP composition seeked by frame → clip, mp4 or alpha), show_video; ffmpeg/ffprobe are also on the bash PATH. Before planning any edit, call video_guide("editing") once in the conversation; before writing an animation, video_guide("motion"); for Remotion, video_guide("remotion"). Never cut before the user approves your plan. Motion is LIVE: write the composition, open it ONCE with motion_preview, then keep editing the file — the Motion tab reloads on every save at the same frame and the user watches each change there. Check your own work with motion_frame, never by rendering. Do not call motion_render, nor show a video in the chat, unless the user explicitly asks for the file (the tab has its own Render button). Outputs go to an edit/ folder next to the footage — never overwrite the user's sources.`
+
+const MOTION_CHAT_INSTRUCTION = `MOTION. When the user wants an animation as a video or motion piece — an intro, an animated title, kinetic text, a logo reveal, a lower third, "a motion video" — do NOT make it an artifact: use the motion tools. motion_write({ name, html }) creates the composition and opens the Motion tab in the side panel, where the user watches it live with a timeline and a track per layer; motion_edit changes it with exact replacements and the tab reloads live; motion_frame lets you look at a few instants; motion_render produces the video file only when the user asks for it (the tab also has its own Render button). Call video_guide("motion") once before your first composition.`
 
 const BRAIN_CHAT_PROMPT = `BRAIN MODE ACTIVE. You have memory tools (memory_save / memory_search / memory_link / memory_open).
 
@@ -610,6 +612,7 @@ export async function buildSystemPrompt(
     else parts.push(PERMISSION_FULL_INSTRUCTION)
   } else {
     parts.push(input.options.research ? researchPrompt(input.language) : chatPrompt(input.language))
+    if (input.orchestrationRole !== 'worker') parts.push(MOTION_CHAT_INSTRUCTION)
     if (input.options.browser) {
       parts.push(
         'You also have browser_open and browser_links to navigate JavaScript-powered pages like a real browser.',

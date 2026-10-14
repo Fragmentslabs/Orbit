@@ -6,6 +6,8 @@ import { edlSchema, type Edl } from '../video/edl'
 import { VIDEO_GUIDES } from '../video/guide'
 import { probeMedia, type MediaProbe } from '../video/ffmpeg'
 import { renderMotion } from '../video/motion'
+import { MAX_FRAME_TIMES, captureMotionFrames, frameLabel, sheetFileName } from '../video/motion-frame'
+import { openMotionAndReport } from '../video/motion-open'
 import { renderEdl } from '../video/render'
 import { registerVideo } from '../video/store'
 import { renderTimeline } from '../video/timeline'
@@ -18,8 +20,11 @@ import { resolveSafePath, type ToolContext } from './context'
  * A divisão segue o video-use: o agente LÊ o material pela transcrição por
  * palavra (video_transcribe), OLHA só nos pontos de decisão (video_timeline),
  * DECIDE num EDL e o código renderiza (video_render). Motion é HTML que o
- * próprio Chromium do app renderiza quadro a quadro (motion_render). O
- * ffmpeg completo continua no `bash` para o que o EDL não cobre.
+ * próprio Chromium do app renderiza quadro a quadro (motion_render) — e antes
+ * disso o usuário confere a composição viva no painel (motion_preview), com a
+ * olhada barata do agente no meio (motion_frame: só os instantes pedidos, numa
+ * folha de contato). O ffmpeg completo continua no `bash` para o que o EDL não
+ * cobre.
  *
  * Os vídeos que vão para o usuário entram na resposta como player (VideoPart,
  * montado pelo chat-engine a partir do `videoUrl` do resultado).
@@ -31,6 +36,35 @@ const MAX_MODEL_IMAGE_BYTES = 300_000
 const MAX_PACKED_CHARS = 40_000
 
 const timelineStash = new Map<string, { base64: string }>()
+const frameStash = new Map<string, { base64: string }>()
+
+/**
+ * Métricas por quadro do render, em ms (`msPerFrame`, `seekPaint`, `capture`,
+ * `encodeWrite`). Tipo local e OPCIONAL de propósito: o contrato real vive no
+ * motion.ts (`MotionMetrics`) e a tool lê o campo de forma tolerante — sem os
+ * campos, a linha de timing simplesmente não aparece e nada quebra.
+ */
+interface MotionTiming {
+  msPerFrame?: number
+  seekPaint?: number
+  capture?: number
+  encodeWrite?: number
+}
+
+/** "Render timing (ms, per frame): msPerFrame 41.2 · seekPaint 12.4 · capture 20.8 · encodeWrite 8.0." */
+function describeMetrics(metrics: MotionTiming | undefined): string | null {
+  const parts = (
+    [
+      ['msPerFrame', metrics?.msPerFrame],
+      ['seekPaint', metrics?.seekPaint],
+      ['capture', metrics?.capture],
+      ['encodeWrite', metrics?.encodeWrite],
+    ] as const
+  )
+    .map(([name, value]) => (typeof value === 'number' && Number.isFinite(value) ? `${name} ${value.toFixed(1)}` : null))
+    .filter((part): part is string => part !== null)
+  return parts.length ? `Render timing (ms, per frame): ${parts.join(' · ')}.` : null
+}
 
 function describeProbe(p: MediaProbe, rel: string): string {
   const v = p.video[0]
@@ -248,11 +282,100 @@ export function createVideoTools(
       },
     }),
 
+    motion_preview: tool({
+      description:
+        'Opens an HTML motion composition in the Motion tab of the right panel, where the USER watches it live (play/pause, frame slider, a layer track showing when each element enters and leaves) — it does NOT render and writes no video. ' +
+        'This is how motion work is done in Orbit: write the composition, open it here once, then keep EDITING the file — the tab reloads on every save and comes back to the same frame, so the user sees each change in real time. Do not render to show progress. ' +
+        'The result tells you whether the composition loaded (format, duration) and lists its layers with the frames where each one enters and leaves — read it: a composition that did not load must be fixed before anything else. ' +
+        'path: the entry .html (e.g. edit/animations/<slot>/index.html) or its folder (then index.html is assumed). The folder is what gets served, so the local dependencies (gsap.min.js, fonts, images) stay next to the entry. ' +
+        'Size/duration are declared by the composition and only known once the page loads — this tool reports neither.',
+      inputSchema: z.object({
+        path: z.string().describe('Entry .html, or its folder (then index.html) — inside the working folder'),
+      }),
+      execute: async ({ path: p }) => {
+        const target = resolveSafePath(ctx, p)
+        return openMotionAndReport({
+          target,
+          root: ctx.directory,
+          sessionId: scope.sessionId,
+          label: rel(target),
+          nextStep:
+            'From here on, edit the composition file and the tab updates live — tell the user what you changed and let them watch. Render only if the user asks for the video file (they also have a Render button in the tab).',
+          fixHint: 'fix the composition (edit the file; the tab reloads by itself) and call motion_preview again to confirm.',
+        })
+      },
+    }),
+
+    motion_frame: tool({
+      description:
+        'Looks at ONLY the instants you ask for in a motion composition: one offscreen window seeks each time (in the order you pass) and the result is a webp contact sheet with the time and the frame number printed in every cell — milliseconds, not seconds (no ffmpeg, no video). ' +
+        'This is how you check the composition WHILE writing it: the entrance, the payoff, the hold at the end — a few moments, not the whole clip (that is what motion_render is for). ' +
+        'times are in SECONDS from the start of the composition (converted to whole frames internally, at the composition\'s fps). 1–8 instants, inside the declared duration. ' +
+        'path: the entry .html or its folder (then index.html is assumed), like motion_preview. Use it after motion_preview and BEFORE motion_render: the final render only runs once the user approved the composition.',
+      inputSchema: z.object({
+        path: z.string().describe('Entry .html, or its folder (then index.html) — inside the working folder'),
+        times: z
+          .array(z.number().positive())
+          .min(1)
+          .max(MAX_FRAME_TIMES)
+          .describe('Seconds from the start, in the order you want them (the entrance, the payoff, the hold)'),
+      }),
+      execute: async ({ path: p, times }, { toolCallId, abortSignal }) => {
+        const target = resolveSafePath(ctx, p)
+        const result = await captureMotionFrames({
+          target,
+          times,
+          root: ctx.directory,
+          sessionId: scope.sessionId,
+          signal: abortSignal,
+        })
+        // A folha fica sob edit/, nunca DENTRO da pasta da composição: aquela
+        // pasta é observada para a recarga ao vivo do preview e um arquivo novo
+        // ali recarregaria a aba justo enquanto o usuário olha.
+        const sheetFile = resolveSafePath(ctx, path.join('edit', 'motion-frames', sheetFileName(result.name)))
+        await fs.mkdir(path.dirname(sheetFile), { recursive: true })
+        await fs.writeFile(sheetFile, result.image)
+        const text = [
+          `Frames of ${result.name} (${result.width}x${result.height} · ${result.fps} fps · ${result.durationInFrames} frames): ${result.cells
+            .map((c) => frameLabel(c.timeMs, c.frame))
+            .join(' · ')}.`,
+          `Contact sheet: ${rel(sheetFile)}.`,
+          result.failedFonts.length
+            ? `Fonts failed to load (the text fell back to another font): ${[...new Set(result.failedFonts)].join(', ')}.`
+            : '',
+          'Look at the moments you will be judged on (entrance, payoff, hold), edit the composition and look again — motion_render only after the user approves.',
+        ]
+          .filter((line): line is string => Boolean(line))
+          .join('\n')
+        if (ctx.modelVision !== false) frameStash.set(toolCallId, { base64: result.image.toString('base64') })
+        return text
+      },
+      toModelOutput: ({ toolCallId, output }) => {
+        const stashed = frameStash.get(toolCallId)
+        frameStash.delete(toolCallId)
+        if (!stashed) return { type: 'text', value: String(output) }
+        if (Buffer.byteLength(stashed.base64, 'base64') > MAX_MODEL_IMAGE_BYTES) {
+          return { type: 'text', value: `${String(output)}\n[Image omitted: too large — ask for fewer instants.]` }
+        }
+        return {
+          type: 'content',
+          value: [
+            { type: 'text', text: String(output) },
+            { type: 'image-data', data: stashed.base64, mediaType: 'image/webp' },
+          ],
+        }
+      },
+    }),
+
     motion_render: tool({
       description:
-        'Renders an HTML motion composition (HTML/CSS/GSAP, Web Animations, <video>, or a custom window.orbitMotion.seek(t)) to a video, frame by frame and deterministically, inside the app (no Chrome download, no network). ' +
-        'Declare size/fps/duration with <meta name="orbit-motion" content="width=1920,height=1080,fps=30,duration=5"> or window.orbitMotion = { duration, … }, or pass them here. ' +
-        'transparent: true + a .mov (ProRes 4444) or .webm output gives an alpha overlay for the EDL. Time only moves through seek: animations driven by requestAnimationFrame clocks or setTimeout freeze.',
+        'Renders an HTML motion composition to a video inside the app (no Chrome download, no network) by capturing every frame at 30 fps through the composition\'s window.orbitMotion.seek(frame) — an integer frame per captured image, so the result is deterministic. ' +
+        'Only when the user explicitly asks YOU for the video file (or you need the clip as an overlay in an EDL): the normal flow is live editing in the Motion tab, and the user renders from the tab\'s Render button. Never render to show progress or to check your work (motion_frame is the cheap look) and never post the result in the chat unless asked. ' +
+        'The output must be OUTSIDE the composition folder (e.g. edit/renders/<slot>.mp4). ' +
+        'Every frame must depend only on the frame number: setTimeout, Date.now() and requestAnimationFrame loops with their own clock freeze, a counter or Math.random() reused across frames breaks the parallel render. ' +
+        'Declare size/fps/duration with <meta name="orbit-motion" content="width=1920,height=1080,fps=30,duration=5"> or window.orbitMotion = { durationInFrames, … }, or pass them here. ' +
+        'transparent: true + a .mov (ProRes 4444) or .webm output gives an alpha overlay for the EDL. ' +
+        'Only call it AFTER the user approved the composition in motion_preview — check the key moments with motion_frame first; rendering the whole clip is not how you find out what the piece looks like.',
       inputSchema: z.object({
         path: z.string().describe('HTML file in the working folder'),
         output: z.string().describe('Output file (relative), .mp4 / .mov / .webm'),
@@ -261,28 +384,73 @@ export function createVideoTools(
         height: z.number().int().positive().max(4096).optional(),
         fps: z.number().positive().max(60).optional(),
         transparent: z.boolean().optional(),
+        audio: z
+          .string()
+          .optional()
+          .describe(
+            'Audio to carry with the video, in the working folder. Normally you do NOT pass it: declare the tracks of the piece in audio.json inside the composition folder — that is what the tab plays and the render mixes, at the declared instants (see the motion guide for the fields: start/end, gain, fades, duck). Pass this only for a one-off file from OUTSIDE the folder (audio_generate writes the file; pass its savePath here): it plays from the start of the piece. A single loose audio.mp3/audio.wav in the folder also counts, as one track. The capture takes no sound, so the tracks are mixed in a final pass and the video is NOT re-encoded; the composition sets the length and the render warns about any track that runs past the end.',
+          ),
         show: z.boolean().optional().describe('Show it to the user as a player (default false — usually an ingredient of an edit)'),
       }),
       execute: async ({ path: p, output, show: showIt = false, ...spec }, { abortSignal }) => {
         const file = resolveSafePath(ctx, p)
         const out = resolveSafePath(ctx, output)
+        // A pasta da composição é observada pelo preview: um vídeo gravado ali
+        // dentro é ruído no projeto (e cada pedaço escrito era uma recarga).
+        const folder = path.dirname(file)
+        const relOut = path.relative(folder, out)
+        if (!relOut.startsWith('..') && !path.isAbsolute(relOut)) {
+          throw new Error(
+            `write the render outside the composition folder (${rel(folder)}), e.g. ${rel(path.join(path.dirname(folder), '..', 'renders', `${path.basename(folder)}${path.extname(out) || '.mp4'}`))}`,
+          )
+        }
         await fs.mkdir(path.dirname(out), { recursive: true })
-        const result = await renderMotion({ file, output: out, signal: abortSignal, ...spec })
+        // O caminho do áudio vem do modelo, relativo como qualquer outro: resolve
+        // contra a pasta de trabalho (o render só abre caminho absoluto). Sem
+        // áudio explícito, o render ainda procura o convencional na pasta da
+        // composição — por isso `audio` é reescrito DEPOIS do spread.
+        const audio = spec.audio ? resolveSafePath(ctx, spec.audio) : undefined
+        const result = await renderMotion({
+          file,
+          output: out,
+          signal: abortSignal,
+          root: ctx.directory,
+          sessionId: scope.sessionId,
+          ...spec,
+          audio,
+        })
+        // As métricas por quadro do render (contrato do motion.ts) vão na
+        // resposta, compactas e em ms. Leitura tolerante: sem elas, sem linha.
+        const metrics = (result as unknown as { metrics?: MotionTiming }).metrics
         const message = [
           `Rendered ${rel(out)} — ${result.duration}s, ${result.width}x${result.height} @ ${result.fps} fps (${result.frames} frames)${spec.transparent ? ', with alpha' : ''}.`,
           ...result.warnings.map((w) => `Warning: ${w}`),
+          describeMetrics(metrics),
           'Check key moments with video_timeline before using it.',
-        ].join('\n')
+        ]
+          .filter((line): line is string => Boolean(line))
+          .join('\n')
         return { message, ...(showIt ? await show(out, path.basename(out), result.duration * 1000) : {}) }
       },
     }),
   }
 
-  // Modo plano: olhar e ler sim, renderizar não (escreve arquivos).
+  // Modo plano: olhar e ler sim, escrever não. Os dois renders saem porque
+  // escrevem o vídeo na pasta de trabalho — e o motion_frame sai com eles: é
+  // olhar, mas grava a folha de contato em edit/motion-frames.
   if (scope.readOnly) {
     delete tools.video_render
     delete tools.motion_render
+    delete tools.motion_frame
   }
+
+  // O preview abre uma ABA do painel — recurso único e visível, que não vai
+  // para workers (mesma regra do browser do painel, em tools/index.ts): o
+  // worker escreve a composição; quem mostra ao usuário é a sessão principal.
+  // No modo plano ele FICA, ao contrário dos dois renders acima: não escreve
+  // nada na pasta de trabalho (o único estado é o índice interno do registro,
+  // em userData) nem renderiza — é o olhar, não o render.
+  if (!scope.canShow) delete tools.motion_preview
 
   if (scope.canShow) {
     tools.show_video = tool({

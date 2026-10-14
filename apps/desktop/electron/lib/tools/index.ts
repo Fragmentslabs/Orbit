@@ -40,6 +40,7 @@ import { createWebFetchTool, createWebSearchTool } from './web'
 import { agentMayUseBrowser, getAppSettings } from '../app-settings'
 import { createAudioGenerateTool, createAudioTranscribeTool } from './audio'
 import { createVideoTools } from './video'
+import { createChatMotionTools } from './motion-chat'
 import { resolveFfmpeg } from '../video/ffmpeg'
 
 export { destroyBrowserWindow } from './browser'
@@ -126,6 +127,17 @@ export function buildToolSet(input: SendMessageInput, ctx: ToolContext | null, i
       Object.assign(tools, createSvgTools({ sessionId: input.sessionId }, null))
       // No chat o áudio vem sempre de um anexo (não há pasta de trabalho).
       addAudioTools(null)
+      // Motion: sem pasta de trabalho, a composição mora no armazenamento do
+      // Orbit (uma pasta por conversa) e é escrita/editada por nome — a mesma
+      // aba Motion, ao vivo. O render só existe com o ffmpeg do app.
+      Object.assign(
+        tools,
+        createChatMotionTools({
+          sessionId: input.sessionId,
+          modelVision: ctx?.modelVision !== false,
+          canRender: resolveFfmpeg() !== null,
+        }),
+      )
     }
     if (allowBrain) Object.assign(tools, createChatMemoryTools(input))
     // Esteira: transformar o que foi discutido no chat em esteira/task de um
