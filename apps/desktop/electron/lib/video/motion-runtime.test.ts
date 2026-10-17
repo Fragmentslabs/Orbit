@@ -127,7 +127,13 @@ const tick = (times = 3) =>
   })()
 
 function makePage(
-  options: { meta?: string | null; predeclared?: Record<string, unknown>; manual?: boolean } = {},
+  options: {
+    meta?: string | null
+    predeclared?: Record<string, unknown>
+    manual?: boolean
+    /** Elementos que o `querySelector` encontra, por seletor. */
+    elements?: Record<string, unknown>
+  } = {},
 ) {
   const posted: Array<Record<string, unknown>> = []
   const writes: number[] = []
@@ -156,7 +162,9 @@ function makePage(
     readyState: 'complete',
     documentElement: { style: {} as Record<string, string>, getBoundingClientRect: () => ({ height: 1080 }) },
     querySelector: (selector: string) =>
-      options.meta && selector.includes('orbit-motion') ? { getAttribute: () => options.meta } : null,
+      options.meta && selector.includes('orbit-motion')
+        ? { getAttribute: () => options.meta }
+        : (options.elements?.[selector] ?? null),
     querySelectorAll: () => [] as unknown[],
     getAnimations: () => [animation],
     fonts: Object.assign([] as unknown[], { ready: Promise.resolve() }),
@@ -419,5 +427,93 @@ describe('injectMotionRuntime', () => {
   it('never injects twice', () => {
     const once = injectMotionRuntime('<head></head>', 'orbit-motion', 'mv_abc')
     expect(injectMotionRuntime(once, 'orbit-motion', 'mv_abc')).toBe(once)
+  })
+})
+
+describe('orbitMotion.transition', () => {
+  /** Um elemento falso: guarda cada `animate()` e devolve uma animação que registra o tempo. */
+  function fakeElement(id?: string) {
+    const calls: Array<{ frames: Array<Record<string, string>>; timing: Record<string, unknown> }> = []
+    const animations: Array<{ paused: boolean; currentTime: number }> = []
+    return {
+      id,
+      calls,
+      animations,
+      animate(frames: Array<Record<string, string>>, timing: Record<string, unknown>) {
+        calls.push({ frames, timing })
+        const animation = {
+          paused: false,
+          currentTime: 0,
+          pause() {
+            this.paused = true
+          },
+        }
+        animations.push(animation)
+        return animation
+      },
+    }
+  }
+  type TransitionApi = FakeApi & {
+    transition(raw: Record<string, unknown>): Record<string, unknown>
+    transitions: Array<Record<string, unknown>>
+  }
+
+  it('creates one paused animation per side, timed on the piece clock', () => {
+    const a = fakeElement('scene-a')
+    const b = fakeElement()
+    const page = makePage({ meta: 'fps=30,duration=4', elements: { '.a': a, '.b': b } })
+    const api = page.api as TransitionApi
+    const done = api.transition({ out: '.a', in: '.b', at: 1.5, duration: 0.5, type: 'push', direction: 'up' })
+    expect(done).toMatchObject({ end: 2, type: 'push', direction: 'up', out: '.a', in: '.b' })
+    // A saída fica escondida DEPOIS do fim; a entrada, ANTES do começo.
+    expect(a.calls[0].timing).toEqual({ delay: 1500, duration: 500, easing: 'ease-in-out', fill: 'forwards' })
+    expect(b.calls[0].timing).toEqual({ delay: 1500, duration: 500, easing: 'ease-in-out', fill: 'backwards' })
+    expect(a.animations[0].paused).toBe(true)
+    expect(b.animations[0].paused).toBe(true)
+  })
+
+  it('is seeked on every frame, even after it left document.getAnimations()', async () => {
+    const a = fakeElement()
+    const page = makePage({ meta: 'fps=30,duration=4', elements: { '.a': a } })
+    ;(page.api as TransitionApi).transition({ out: '.a', at: 1, type: 'fade' })
+    await page.api.seek(45)
+    // A página falsa só lista a animação dela: a da transição NÃO está em
+    // document.getAnimations() (é o que acontece com uma que já terminou) e mesmo
+    // assim é posicionada — sem isso, voltar no tempo a deixaria presa no fim.
+    expect(page.writes).toEqual([1500])
+    expect(a.animations[0].currentTime).toBe(1500)
+    await page.api.seek(0)
+    expect(a.animations[0].currentTime).toBe(0)
+  })
+
+  it('accepts an element and labels it by id or tag', () => {
+    const a = fakeElement('scene-a')
+    const api = makePage({ meta: 'fps=30,duration=4' }).api as TransitionApi
+    api.transition({ out: a, at: 0 })
+    expect(api.transitions).toEqual([
+      { type: 'fade', direction: null, at: 0, duration: 0.6, out: '#scene-a', in: null },
+    ])
+  })
+
+  it('throws, naming the selector, when nothing matches', () => {
+    const api = makePage({ meta: 'fps=30,duration=4' }).api as TransitionApi
+    expect(() => api.transition({ out: '.missing', at: 0 })).toThrow(/no element matches ".missing"/)
+  })
+
+  it('throws on a bad request and on the same element in both sides', () => {
+    const a = fakeElement()
+    const api = makePage({ meta: 'fps=30,duration=4', elements: { '.a': a } }).api as TransitionApi
+    expect(() => api.transition({ out: '.a', at: 0, type: 'spin' })).toThrow(/unknown type/)
+    expect(() => api.transition({ out: '.a', in: '.a', at: 0 })).toThrow(/same element/)
+    expect(a.calls).toHaveLength(0)
+  })
+
+  it('announces what was registered in the spec snapshot the render and the lint read', () => {
+    const page = makePage({ meta: 'fps=30,duration=4', elements: { '.a': fakeElement(), '.b': fakeElement() } })
+    ;(page.api as TransitionApi).transition({ out: '.a', in: '.b', at: 1, type: 'wipe' })
+    const spec = (page.win as unknown as { __orbitMotionSpec(): { transitions: unknown[] } }).__orbitMotionSpec()
+    expect(spec.transitions).toEqual([
+      { type: 'wipe', direction: 'left', at: 1, duration: 0.6, out: '.a', in: '.b' },
+    ])
   })
 })

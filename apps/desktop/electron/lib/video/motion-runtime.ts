@@ -1,3 +1,5 @@
+import { MOTION_TRANSITIONS_SCRIPT } from './motion-transitions'
+
 /**
  * Runtime de seek das composições de motion — o ÚNICO lugar onde o contrato de
  * busca vive, compartilhado por dois caminhos:
@@ -69,6 +71,30 @@ export const MOTION_RUNTIME = `(() => {
     if (typeof seed.seek === 'function') customSeek = seed.seek
   }
   const api = seed || {}
+
+  // ----------------------------------------------------------- transições
+  // Validação e keyframes das transições (motion-transitions.ts): o mesmo texto
+  // que os testes executam, embutido aqui porque a página não tem import.
+${MOTION_TRANSITIONS_SCRIPT}
+  const transitions = []       // o que a composição registrou (lint e relatório)
+  // As animações que o runtime criou (as das transições). document.getAnimations()
+  // só devolve as RELEVANTES: uma que terminou, sem fill que a mantenha em efeito,
+  // sai da lista — e voltar no tempo (arrastar a régua para trás, o laço do play)
+  // a deixaria presa no fim, com a cena "de depois" ainda visível no quadro 0.
+  const ownAnimations = []
+  // Põe TODA animação da página no instante t: as que a página tem (CSS, WAAPI) e
+  // as nossas, mesmo as que já saíram da lista.
+  function positionAnimations(t) {
+    const seen = new Set()
+    for (const a of document.getAnimations()) {
+      seen.add(a)
+      try { a.pause(); a.currentTime = t * 1000 } catch (err) {}
+    }
+    for (const a of ownAnimations) {
+      if (seen.has(a)) continue
+      try { a.pause(); a.currentTime = t * 1000 } catch (err) {}
+    }
+  }
 
   // --------------------------------------------------------------- spec
   function metaContent() {
@@ -208,7 +234,7 @@ export const MOTION_RUNTIME = `(() => {
         else g.globalTimeline.seek(gsapBase + t, false)
       }
     }
-    for (const a of document.getAnimations()) { try { a.pause(); a.currentTime = t * 1000 } catch (err) {} }
+    positionAnimations(t)
     await Promise.all(videos().map(function (v) {
       return new Promise(function (res) {
         const target = v.duration ? (v.loop ? t % v.duration : Math.min(t, v.duration - 0.001)) : t
@@ -306,6 +332,61 @@ export const MOTION_RUNTIME = `(() => {
     rafId = 0
   }
 
+  // ------------------------------------------------------------- transição
+  // orbitMotion.transition({ out, in, at, duration, type, direction, easing, amount })
+  // vira uma animação pausada por elemento. NÃO há nada a fazer no quadro: o
+  // applyFrame já põe todo document.getAnimations() em t * 1000, então a
+  // transição é buscada como qualquer @keyframes — preview, medição e render.
+  function transitionTarget(ref, role) {
+    if (ref === undefined || ref === null) return null
+    if (typeof ref === 'string') {
+      const found = document.querySelector(ref)
+      if (!found) throw new Error('orbit-motion transition: no element matches "' + ref + '" (' + role + ')')
+      return found
+    }
+    if (typeof ref.animate === 'function') return ref
+    throw new Error('orbit-motion transition: "' + role + '" must be a selector or an element')
+  }
+  function transitionLabel(ref) {
+    if (ref === undefined || ref === null) return null
+    if (typeof ref === 'string') return ref
+    if (ref.id) return '#' + ref.id
+    return String(ref.tagName || 'element').toLowerCase()
+  }
+  function addTransition(raw) {
+    const parsed = orbitNormalizeTransition(raw)
+    if (parsed.error) throw new Error('orbit-motion transition: ' + parsed.error)
+    const spec = parsed.spec
+    const outEl = transitionTarget(raw.out, 'out')
+    const inEl = transitionTarget(raw.in, 'in')
+    if (outEl && outEl === inEl) throw new Error('orbit-motion transition: "out" and "in" are the same element')
+    const plan = orbitTransitionKeyframes(spec)
+    const now = (currentFrame / resolved.fps) * 1000
+    function run(el, frames, fill) {
+      const animation = el.animate(frames, {
+        delay: spec.at * 1000,
+        duration: spec.duration * 1000,
+        easing: spec.easing,
+        fill: fill,
+      })
+      animation.pause()
+      try { animation.currentTime = now } catch (err) {}
+      ownAnimations.push(animation)
+    }
+    if (outEl) run(outEl, plan.out, 'forwards')
+    if (inEl) run(inEl, plan.in, 'backwards')
+    const info = {
+      type: spec.type,
+      direction: spec.direction,
+      at: spec.at,
+      duration: spec.duration,
+      out: transitionLabel(raw.out),
+      in: transitionLabel(raw.in),
+    }
+    transitions.push(info)
+    return Object.assign({ end: spec.at + spec.duration }, info)
+  }
+
   // --------------------------------------------------------------- API
   // window.orbitMotion é o contrato: a composição lê fps/width/height/
   // durationInFrames e usa delayRender/continueRender; o host chama seek(frame).
@@ -351,6 +432,12 @@ export const MOTION_RUNTIME = `(() => {
     Object.defineProperty(api, 'version', { value: VERSION, writable: true, enumerable: true, configurable: true })
     api.delayRender = delayRender
     api.continueRender = continueRender
+    api.transition = addTransition
+    Object.defineProperty(api, 'transitions', {
+      configurable: true,
+      enumerable: true,
+      get: function () { return transitions.map(function (t) { return Object.assign({}, t) }) },
+    })
   }
   try {
     defineNumbers()
@@ -385,6 +472,7 @@ export const MOTION_RUNTIME = `(() => {
       durationInFrames: resolved.durationInFrames,
       failedFonts: failedFonts.slice(),
       devicePixelRatio: window.devicePixelRatio || 1,
+      transitions: transitions.map(function (t) { return Object.assign({}, t) }),
     }
   }
 
@@ -455,7 +543,7 @@ export const MOTION_RUNTIME = `(() => {
         else g.globalTimeline.seek(gsapBase + t, false)
       }
     }
-    for (const a of document.getAnimations()) { try { a.pause(); a.currentTime = t * 1000 } catch (err) {} }
+    positionAnimations(t)
   }
 
   // ------------------------------------------------------- realce da camada
