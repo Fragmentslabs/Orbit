@@ -68,9 +68,25 @@ function ArtifactFrame({
   /** Muda para forçar o remount do iframe (revisão nova ou "recarregar"). */
   nonce: string
 }) {
+  const frameRef = useRef<HTMLIFrameElement>(null)
+
+  // Espelha o tema do app dentro do iframe (ver ARTIFACT_CHROME em media.ts):
+  // o documento é de origem opaca e não enxerga as classes do pai.
+  const sendTheme = useCallback(() => {
+    const theme = document.documentElement.classList.contains("dark") ? "dark" : "light"
+    frameRef.current?.contentWindow?.postMessage({ type: "orbit:theme", theme }, "*")
+  }, [])
+
+  useEffect(() => {
+    const observer = new MutationObserver(sendTheme)
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ["class"] })
+    return () => observer.disconnect()
+  }, [sendTheme])
+
   return (
     <iframe
       key={nonce}
+      ref={frameRef}
       src={src}
       title={title}
       sandbox={SANDBOX}
@@ -78,6 +94,7 @@ function ArtifactFrame({
       // nada no caso de uso justifica, e o sandbox sozinho não cobre isso.
       allow=""
       referrerPolicy="no-referrer"
+      onLoad={sendTheme}
       className={cn("w-full border-0 bg-white", className)}
       style={style}
     />

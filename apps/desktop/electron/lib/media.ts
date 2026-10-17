@@ -744,15 +744,30 @@ const ARTIFACT_CONTENT_TYPES: Record<string, string> = {
 const ARTIFACT_CHROME_MARK = '<!-- orbit-artifact-chrome -->'
 const ARTIFACT_CHROME = `${ARTIFACT_CHROME_MARK}
 <style>
-  :root { --orbit-scroll-thumb: oklch(0.92 0.004 286.32); }
-  @media (prefers-color-scheme: dark) { :root { --orbit-scroll-thumb: oklch(1 0 0 / 18%); } }
-  *::-webkit-scrollbar { width: 6px; height: 6px; }
-  *::-webkit-scrollbar-button { display: none; }
-  *::-webkit-scrollbar-track { background: transparent; }
-  *::-webkit-scrollbar-thumb { background: var(--orbit-scroll-thumb); border-radius: 9999px; min-height: 20px; }
-  *::-webkit-scrollbar-corner { background: transparent; }
+  :root { --orbit-scroll-thumb: oklch(0.92 0.004 286.32); --orbit-scroll-track: oklch(1 0 0); }
+  @media (prefers-color-scheme: dark) { :root { --orbit-scroll-thumb: oklch(1 0 0 / 10%); --orbit-scroll-track: oklch(0.21 0.006 285.885); } }
+  :root.orbit-dark { --orbit-scroll-thumb: oklch(1 0 0 / 10%); --orbit-scroll-track: oklch(0.21 0.006 285.885); }
+  :root.orbit-light { --orbit-scroll-thumb: oklch(0.92 0.004 286.32); --orbit-scroll-track: oklch(1 0 0); }
+  *::-webkit-scrollbar, html::-webkit-scrollbar, :root::-webkit-scrollbar { width: 6px; height: 6px; }
+  *::-webkit-scrollbar-button, html::-webkit-scrollbar-button { display: none; }
+  *::-webkit-scrollbar-track, html::-webkit-scrollbar-track { background: transparent; }
+  *::-webkit-scrollbar-thumb, html::-webkit-scrollbar-thumb { background: var(--orbit-scroll-thumb); border-radius: 9999px; min-height: 20px; }
+  *::-webkit-scrollbar-corner, html::-webkit-scrollbar-corner { background: transparent; }
   * { scrollbar-width: thin; scrollbar-color: var(--orbit-scroll-thumb) transparent; }
-</style>`
+  /* Barra da raiz: a trilha transparente deixava ver o fundo branco do iframe
+     (a faixa branca no tema escuro). Aqui ela leva a cor do card do app. */
+  html { scrollbar-width: thin; scrollbar-color: var(--orbit-scroll-thumb) var(--orbit-scroll-track); }
+</style>
+<script>
+  // O tema do Orbit (claro/escuro/sistema) chega do pai; sem isso o artefato
+  // seguiria só o sistema operacional e destoaria da barra do chat.
+  window.addEventListener('message', function (e) {
+    var d = e.data
+    if (!d || d.type !== 'orbit:theme') return
+    document.documentElement.classList.toggle('orbit-dark', d.theme === 'dark')
+    document.documentElement.classList.toggle('orbit-light', d.theme !== 'dark')
+  })
+</script>`
 
 /**
  * Injeta a barra uma única vez, imediatamente antes do fecho do body (o
