@@ -53,6 +53,10 @@ Do NOT read the rows and do the arithmetic yourself. Over hundreds of rows that 
 
 The result tells you how many rows were scanned and whether any cells were skipped for not being numeric. Pass that on when it matters: a total that ignored 300 cells is not the total the user asked for.`
 
+const IMAGE_SEARCH_INSTRUCTION = `FINDING IMAGES. image_search looks for openly licensed photos (Wikimedia Commons, Openverse) and shows you a numbered sheet of thumbnails; choose by what the picture shows, not by the title, and search in English. image_import brings the chosen ones in — they appear in your reply on their own, and it gives you each image's credit line. The license usually requires that credit to be shown with the image: include it in what you write (or in the piece you build) and say it to the user. Only use images found this way for a published piece; do not hotlink or download images from other sites.`
+
+const IMAGE_DISPLAY_INSTRUCTION = `SHOWING IMAGES. The chat does NOT render markdown images: ![alt](url) is replaced by "[Image blocked]", for web URLs and for orbit-media:// alike. An image reaches the user only through a tool — image_import and image_edit put theirs in your reply on their own, and show_image({ media }) shows one that is already in the app. Never link or embed an image in text; describe it by number or title and let the tool show it.`
+
 const IMAGE_EDIT_INSTRUCTION = `EDITING IMAGES. image_edit changes an existing image by pixel processing — resize, crop, compress to a byte limit, convert format, adjust brightness/saturation/hue/contrast, greyscale, blur/sharpen, remove a background, and write text on it. No generation model is involved, so the image that comes back is the SAME one, only altered. Never tell the user you cannot edit an image or write on one, and never hand back an image you only described.
 
 - You need the image's REFERENCE, and seeing it in the conversation does not give you one. image_list returns the orbit-media:// reference of every image here, including the one the user just attached — start there.
@@ -627,6 +631,8 @@ export async function buildSystemPrompt(
     parts.push(ARTIFACT_INSTRUCTION)
     parts.push(DOCUMENT_AUTHORING_INSTRUCTION)
     parts.push(imageEditInstruction(modelVision, Boolean(input.visionModel)))
+    parts.push(IMAGE_DISPLAY_INSTRUCTION)
+    if (input.options.research) parts.push(IMAGE_SEARCH_INSTRUCTION)
   }
 
   // Documentos: as tools doc_* existem nos dois modos (o anexo pode chegar em

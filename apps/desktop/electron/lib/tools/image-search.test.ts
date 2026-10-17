@@ -26,7 +26,7 @@ const fixtures = path.join(__dirname, '..', 'image-search', 'fixtures')
 const commonsJson = fs.readFileSync(path.join(fixtures, 'commons.json'), 'utf8')
 const openverseJson = fs.readFileSync(path.join(fixtures, 'openverse.json'), 'utf8')
 
-const { createImageSearchTools } = await import('./image-search')
+const { createGalleryShowImageTool, createImageSearchTools } = await import('./image-search')
 const { clearResultCache } = await import('../image-search/cache')
 const media = await import('../media')
 const { importAttachmentInto } = await import('../video/motion-asset')
@@ -38,6 +38,10 @@ const call = async (tools: Record<string, unknown>, name: string, input: unknown
   (tools[name] as { execute: Exec }).execute(input, { toolCallId: id, messages: [], abortSignal: undefined })
 
 let photo: Buffer
+
+/** image_import devolve { message, images }: o texto é para o modelo, as imagens vão para a resposta. */
+type Imported = { message: string; images: Array<{ mediaUrl: string; alt: string }> }
+const importIds = async (tools: Record<string, unknown>, ids: string[]) => (await call(tools, 'image_import', { ids })) as Imported | string
 
 /** A rede falsa: as duas APIs, miniaturas e os arquivos das imagens. */
 function installNetwork(opts: { failDownload?: boolean } = {}): string[] {
@@ -124,7 +128,8 @@ describe('image_import', () => {
     const search = String(await call(tools, 'image_search', { query: 'lion', minWidth: 500 }))
     const id = /\d+\. (wc:\d+)/.exec(search)![1]
 
-    const out = String(await call(tools, 'image_import', { ids: [id] }))
+    const imported = (await importIds(tools, [id])) as Imported
+    const out = imported.message
     const ref = /ref (img_[a-z0-9]+\.jpg)/.exec(out)![1]
     expect(out).toContain('1600x900')
     expect(out).toContain('CC BY-SA 4.0')
@@ -141,7 +146,7 @@ describe('image_import', () => {
     const tools = createImageSearchTools({ sessionId: 's2', modelVision: false })
     const search = String(await call(tools, 'image_search', { query: 'lion', minWidth: 500, provider: 'openverse' }))
     const id = /ov:[0-9a-f-]{36}/.exec(search)![0]
-    const imported0 = String(await call(tools, 'image_import', { ids: [id] }))
+    const imported0 = ((await importIds(tools, [id])) as Imported).message
     const ref = /ref (img_[a-z0-9]+\.[a-z]+)/.exec(imported0)![1]
     expect((await resolveAttachmentRef(ref))?.credit?.license).toMatch(/^CC0/)
 
@@ -154,7 +159,7 @@ describe('image_import', () => {
 
   it('id que não está na última busca: pede para buscar de novo', async () => {
     const tools = createImageSearchTools({ sessionId: 's1', modelVision: false })
-    expect(String(await call(tools, 'image_import', { ids: ['wc:404'] }))).toContain('not in the last search results')
+    expect(((await importIds(tools, ['wc:404'])) as Imported).message).toContain('not in the last search results')
   })
 
   it('o download recusado não derruba os outros; o erro vem com o motivo', async () => {
@@ -164,7 +169,7 @@ describe('image_import', () => {
     installNetwork({ failDownload: true })
     const search = String(await call(tools, 'image_search', { query: 'lion', minWidth: 500 }))
     const id = /\d+\. (wc:\d+)/.exec(search)![1]
-    const out = String(await call(tools, 'image_import', { ids: [id] }))
+    const out = ((await importIds(tools, [id])) as Imported).message
     expect(out).toContain('could not be imported')
     expect(out).toContain('answered 403')
   })
@@ -181,7 +186,62 @@ describe('image_import', () => {
     )
     const tools = createImageSearchTools({ sessionId: 's1', modelVision: false })
     const search = String(await call(tools, 'image_search', { query: 'lion', minWidth: 500 }))
-    const out = String(await call(tools, 'image_import', { ids: [/(wc:\d+)/.exec(search)![1]] }))
+    const out = ((await importIds(tools, [/(wc:\d+)/.exec(search)![1]])) as Imported).message
     expect(out).toContain('could not be imported')
+  })
+})
+
+describe('as imagens aparecem na resposta', () => {
+  it('image_import devolve as imagens para o chat-engine mostrar, e diz ao modelo para não reincorporar', async () => {
+    installNetwork()
+    const tools = createImageSearchTools({ sessionId: 's5', modelVision: false })
+    const search = String(await call(tools, 'image_search', { query: 'lion', minWidth: 500 }))
+    const ids = [...search.matchAll(/\d+\. (wc:\d+)/g)].slice(0, 2).map((m) => m[1])
+    const out = (await importIds(tools, ids)) as Imported
+
+    expect(out.images).toHaveLength(2)
+    for (const image of out.images) {
+      expect(image.mediaUrl).toMatch(/^orbit-media:\/\/img_[a-z0-9]+\.jpg$/)
+      expect(image.alt).toMatch(/^Lion/)
+      // Cada uma é um item do app, que o "abrir no chat" e a galeria enxergam.
+      expect(await media.getMediaEntry(image.mediaUrl.replace('orbit-media://', ''))).not.toBeNull()
+    }
+    expect(out.message).toContain('already appear in your reply')
+    expect(out.message).toContain('do NOT embed them again with markdown')
+  })
+
+  it('o modelo recebe só o relatório em texto (as imagens não entram no contexto dele)', async () => {
+    installNetwork()
+    const tools = createImageSearchTools({ sessionId: 's5', modelVision: false })
+    const toModel = (tools.image_import as unknown as { toModelOutput: Output }).toModelOutput
+    const result = toModel({ toolCallId: 'x', output: { message: 'relatório', images: [{ mediaUrl: 'orbit-media://img_a.jpg', alt: '' }] } })
+    expect(result).toEqual({ type: 'text', value: 'relatório' })
+  })
+
+  it('nada importado: lista vazia e a mensagem diz isso', async () => {
+    const tools = createImageSearchTools({ sessionId: 's5', modelVision: false })
+    const out = (await importIds(tools, ['wc:404'])) as Imported
+    expect(out.images).toEqual([])
+    expect(out.message).toContain('Nothing was imported')
+  })
+})
+
+describe('show_image no modo chat', () => {
+  it('mostra uma imagem do app na resposta, pelo ref ou pela URL', async () => {
+    installNetwork()
+    const search = createImageSearchTools({ sessionId: 's6', modelVision: false })
+    const found = String(await call(search, 'image_search', { query: 'lion', minWidth: 500 }))
+    const imported = (await importIds(search, [/(wc:\d+)/.exec(found)![1]])) as Imported
+    const ref = imported.images[0].mediaUrl.replace('orbit-media://', '')
+
+    const show = createGalleryShowImageTool()
+    expect(await call(show, 'show_image', { media: ref, alt: 'um leão' })).toMatchObject({ mediaUrl: `orbit-media://${ref}`, alt: 'um leão' })
+    expect(await call(show, 'show_image', { media: `orbit-media://${ref}` })).toMatchObject({ mediaUrl: `orbit-media://${ref}` })
+  })
+
+  it('referência inválida ou inexistente volta como texto, sem derrubar', async () => {
+    const show = createGalleryShowImageTool()
+    expect(String(await call(show, 'show_image', { media: 'https://example.com/a.png' }))).toContain('Invalid media reference')
+    expect(String(await call(show, 'show_image', { media: 'img_naoexiste.png' }))).toContain('not found')
   })
 })

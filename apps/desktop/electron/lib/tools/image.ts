@@ -240,11 +240,15 @@ export function createImageTools(scope: DocumentToolScope, ctx: ToolContext | nu
         }
 
         const base = src.name.replace(/\.[^.]+$/, '')
+        // Uma imagem buscada na web leva o crédito dela: recortar ou escrever por cima
+        // é uma adaptação, e a licença (CC BY, CC BY-SA) continua exigindo o autor.
+        const parentCredit = src.id ? (await getMediaEntry(src.id))?.credit : undefined
         const mediaUrl = await saveMedia(result.bytes, result.format === 'jpeg' ? 'jpg' : result.format, {
           source: 'chat',
           sessionId: scope.sessionId,
           name: `${base} (editada)`,
           parentId: src.id,
+          ...(parentCredit ? { credit: parentCredit } : {}),
         })
         // Proveniência: é o que permite o runtime descartar os degraus no fim
         // do turno e a galeria empilhar as versões em vez de espalhá-las.

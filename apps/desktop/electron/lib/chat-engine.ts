@@ -1923,6 +1923,24 @@ async function runChatTurn(win: BrowserWindow, input: SendMessageInput): Promise
                 void attachMediaMessage(output.mediaUrl, assistantMessage.id, sessionId)
               }
             }
+            // image_import: as imagens que o agente trouxe de um acervo aberto
+            // aparecem na resposta, uma parte para cada. Ficam FORA do turnMediaUrls
+            // de propósito: aquele conjunto é o dos degraus de uma edição, que
+            // somem no fim do turno — e uma foto escolhida não é um degrau.
+            if (part.toolName === 'image_import') {
+              const output = part.output as { images?: Array<{ mediaUrl: string; alt?: string }> } | string
+              if (typeof output === 'object' && Array.isArray(output?.images)) {
+                output.images.forEach((image, index) => {
+                  upsertPart({
+                    id: `${part.toolCallId}-img-${index}`,
+                    type: 'image',
+                    src: image.mediaUrl,
+                    alt: image.alt || undefined,
+                  })
+                  void attachMediaMessage(image.mediaUrl, assistantMessage.id, sessionId)
+                })
+              }
+            }
             // create_artifact/update_artifact: o HTML vira parte da resposta
             // (renderizada pelo ai/artifact-part). O update emite uma part NOVA
             // no turno atual em vez de mexer na mensagem antiga: o arquivo é o

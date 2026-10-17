@@ -287,3 +287,31 @@ describe('image_delete', () => {
     expect(noteDerived).toHaveBeenCalledWith(editada.mediaUrl, original, false)
   })
 })
+
+describe('a edição de uma imagem buscada na web mantém o crédito', () => {
+  it('recortar ou escrever por cima é adaptar: a licença continua exigindo o autor', async () => {
+    const credit = {
+      title: 'Leão',
+      creator: 'Ana',
+      license: 'CC BY 4.0',
+      licenseUrl: 'https://creativecommons.org/licenses/by/4.0',
+      sourceUrl: 'https://commons.wikimedia.org/wiki/File:Leao.jpg',
+      provider: 'commons' as const,
+      attribution: '"Leão" by Ana, licensed under CC BY 4.0',
+    }
+    const url = await media.saveMedia(await productShot(), 'png', { source: 'chat', sessionId: 'sessao1', name: 'Leão', credit })
+    const id = media.mediaIdFromUrl(url)!
+
+    const edited = (await tools.image_edit.execute({ ref: url, resize: { width: 40 } })) as { mediaUrl: string }
+    const entry = await media.getMediaEntry(media.mediaIdFromUrl(edited.mediaUrl)!)
+
+    expect(entry?.parentId).toBe(id)
+    expect(entry?.credit).toEqual(credit)
+  })
+
+  it('uma imagem sem crédito (anexo do usuário) continua sem', async () => {
+    const url = await media.saveMedia(await productShot(), 'png', { source: 'user', sessionId: 'sessao1', name: 'foto' })
+    const edited = (await tools.image_edit.execute({ ref: url, resize: { width: 40 } })) as { mediaUrl: string }
+    expect((await media.getMediaEntry(media.mediaIdFromUrl(edited.mediaUrl)!))?.credit).toBeUndefined()
+  })
+})

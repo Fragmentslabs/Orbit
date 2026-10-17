@@ -41,7 +41,7 @@ import { agentMayUseBrowser, getAppSettings } from '../app-settings'
 import { createAudioGenerateTool, createAudioTranscribeTool } from './audio'
 import { createVideoTools } from './video'
 import { createChatMotionTools } from './motion-chat'
-import { createImageSearchTools } from './image-search'
+import { createGalleryShowImageTool, createImageSearchTools } from './image-search'
 import { resolveFfmpeg } from '../video/ffmpeg'
 
 export { destroyBrowserWindow } from './browser'
@@ -99,6 +99,9 @@ export function buildToolSet(input: SendMessageInput, ctx: ToolContext | null, i
     // sessão principal.
     if (input.orchestrationRole !== 'worker') {
       Object.assign(tools, createArtifactTools(input.sessionId))
+      // Mostrar uma imagem do app na resposta: no chat o markdown de imagem é
+      // bloqueado, e este é o único caminho.
+      Object.assign(tools, createGalleryShowImageTool())
     }
     // Documentos anexados: o equivalente do read/grep para o chat, que não
     // tem nenhum dos dois. Sempre disponíveis — quando não há anexo, doc_list
