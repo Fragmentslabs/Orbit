@@ -13,7 +13,7 @@ import type { AppSettings } from "@shared/app-settings"
 import type { AppPreferences, ChatModeKey, MessageQueueOp, MessageQueueSnapshot, ModelReasoningPref, ReasoningPrefsMap, SessionModeOverrides, WorkerConfigSnapshot } from "@shared/companion"
 import type { CriarWorktreeResultado, ListaWorktrees, ValidacaoPastaWorktrees } from "@shared/worktrees"
 import type { McpConfig, McpServerStatus } from "@shared/mcp"
-import type { DocumentDownload, MediaEntry, MediaFilter, MediaUsage } from "@shared/media"
+import type { DocumentDownload, MaterialView, MediaEntry, MediaFilter, MediaUsage } from "@shared/media"
 import type {
   Esteira,
   EsteiraEvent,
@@ -805,6 +805,31 @@ export interface SourceText {
  * pasta, declaradas de propósito e válidas para todas as conversas dela. Nada
  * passa de um para o outro sozinho — quem move é o usuário, na aba.
  */
+/** Foto, GIF, áudio e vídeo da aba Fontes (o arquivo é um item da galeria). */
+export const materialsApi = {
+  list: (scope: string) =>
+    window.ipcRenderer.invoke("materials:list", scope) as Promise<{
+      shared: MaterialView[]
+      own: MaterialView[]
+      bytes: number
+    }>,
+  /** Vídeo de arquivo vai por `path` (o main copia); o resto, em `data` base64. */
+  add: (
+    scope: string,
+    files: { filename: string; mime: string; data?: string; path?: string }[],
+    shared: boolean,
+  ) =>
+    window.ipcRenderer.invoke("materials:add", scope, files, shared) as Promise<{
+      added: number
+      errors: string[]
+    }>,
+  /** Move entre a conversa e a pasta. A referência não muda. */
+  setShared: (scope: string, id: string, shared: boolean) =>
+    window.ipcRenderer.invoke("materials:setShared", scope, id, shared) as Promise<
+      { ok: true } | { ok: false; error: string }
+    >,
+}
+
 export const docsApi = {
   list: (sessionId: string) =>
     window.ipcRenderer.invoke("docs:list", sessionId) as Promise<{

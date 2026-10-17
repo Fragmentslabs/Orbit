@@ -707,6 +707,13 @@
         "description": "HTML page produced by the assistant"
       },
       "sources": {
+    "removeMaterial": "Delete the file (frees the space)",
+    "materialKind": {
+      "image": "Photo",
+      "gif": "GIF",
+      "audio": "Audio",
+      "video": "Video"
+    },
         "label": "Sources",
         "description": "Documents this conversation works with"
       },
@@ -2403,13 +2410,13 @@
     "usage_one": "{{count}} source · {{size}}",
     "usage_other": "{{count}} sources · {{size}}",
     "sharedTitle": "“{{folder}}” sources",
-    "sharedHint": "Drop documents here to talk to them from any conversation in this folder.",
+    "sharedHint": "Drop documents, photos, GIFs, audio or videos here to use them from any conversation in this folder.",
     "ownTitle": "This conversation",
-    "ownHint": "Whatever you attach in the chat shows up here, and stays in this conversation.",
+    "ownHint": "Whatever you attach in the chat shows up here (documents, photos, GIFs, audio, videos) and stays in this conversation. The agent only reads or uses a file when the request needs it.",
     "noFolderHint": "This conversation is not in a folder. Move it into a sidebar folder to share sources across conversations.",
     "share": "Add to the folder sources",
     "unshare": "Keep in this conversation only",
-    "addFile": "File…",
+    "addFile": "File (document, photo, GIF, audio, video)…",
     "addText": "Pasted text…",
     "addSite": "Website…",
     "textTitlePlaceholder": "Title (e.g. Minutes of the March 12 meeting)",

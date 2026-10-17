@@ -375,6 +375,25 @@ export async function listMedia(filter?: MediaFilter): Promise<MediaEntry[]> {
   return filtered.sort((a, b) => b.createdAt - a.createdAt)
 }
 
+/** Atualiza campos de um item do acervo (o escopo de um material, por exemplo). */
+export async function updateMediaEntry(id: string, patch: Partial<MediaEntry>): Promise<MediaEntry | null> {
+  const updated = await withIndexLock(async () => {
+    const entries = await readIndex()
+    const at = entries.findIndex((e) => e.id === id)
+    if (at < 0) return null
+    // Chaves com `undefined` APAGAM o campo (é assim que se tira o escopo da pasta).
+    const next = { ...entries[at], ...patch } as MediaEntry
+    for (const key of Object.keys(patch) as Array<keyof MediaEntry>) {
+      if (patch[key] === undefined) delete next[key]
+    }
+    entries[at] = next
+    await writeIndex(entries)
+    return next
+  })
+  if (updated) notifyMediaChanged()
+  return updated
+}
+
 export async function getMediaEntry(id: string): Promise<MediaEntry | null> {
   const entries = await readIndex()
   return entries.find((e) => e.id === id) ?? null

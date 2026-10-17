@@ -108,6 +108,12 @@ export interface MediaEntry {
    * e nada dela é copiado para a galeria.
    */
   motionId?: string
+  /**
+   * Material da aba Fontes: a pasta da sidebar com que este arquivo é
+   * COMPARTILHADO. Ausente = é só da conversa (`sessionId`). É o equivalente, para
+   * foto, GIF, áudio e vídeo, do escopo `srcN` dos documentos.
+   */
+  sharedFolderId?: string
   /** Só em vídeos: a URL orbit-video:// que o visor da galeria toca. */
   videoUrl?: string
   /** Só em vídeos: duração em ms (a etiqueta do tile). */
@@ -285,4 +291,28 @@ export function documentOpensAsFile(
 export function documentFileName(title: string, format: DocumentDownload): string {
   const base = title.replace(/[\\/:*?"<>|]/g, "-").trim().slice(0, 60) || "documento"
   return `${base}.${format}`
+}
+
+/**
+ * Um MATERIAL da aba Fontes — foto, GIF, áudio ou vídeo que a conversa tem à mão.
+ * É a visão de um item de mídia: o arquivo mora na galeria (e some de lá se for
+ * excluído de lá), e a aba só o lista no escopo certo.
+ */
+export interface MaterialView {
+  /** A referência que o agente usa: `img_…`, `aud_…` ou `vdo_…`. */
+  id: string
+  kind: "image" | "audio" | "video"
+  name: string
+  sizeBytes: number
+  createdAt: number
+  durationMs?: number
+  width?: number
+  height?: number
+  /** Capa para a lista; null quando não há (áudio). */
+  thumbUrl: string | null
+  /** O que o visor da aba toca ou mostra. */
+  playUrl: string | null
+  /** Está no escopo da pasta (compartilhado com as outras conversas dela). */
+  shared: boolean
+  animated: boolean
 }

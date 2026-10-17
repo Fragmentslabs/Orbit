@@ -18,6 +18,7 @@ import {
   readSessionDocumentBytes,
   searchSessionDocuments,
 } from '../session-documents'
+import { describeMaterialsForAgent, listSessionMaterials } from '../session-materials'
 
 /**
  * Consulta aos documentos anexados na conversa (modo chat).
@@ -55,6 +56,19 @@ async function produzidosAqui(sessionId: string): Promise<string | null> {
 
 export function createDocumentTools(sessionId: string) {
   return {
+    attachment_list: tool({
+      description:
+        'Lists the PHOTOS, GIFs, AUDIO and VIDEOS this conversation has at hand — what the user attached in the messages and what they put in the Sources tab (their own, and the ones shared by the sidebar folder) — each with its ref (img_…, aud_…, vdo_…), name and basic facts. ' +
+        'They are NOT in your context: this is only the list. Read one when the request needs it (video_probe / video_transcribe / video_timeline accept the vdo_… ref, audio_transcribe the aud_… ref, describe_image the images) and put one INTO a piece or an edit with motion_asset({ ref, … }) only when you decide to use it. ' +
+        'Use it when the user mentions material you cannot see in the conversation ("use the video I added", "the photo from the sources").',
+      inputSchema: z.object({}),
+      execute: async () => {
+        const list = await listSessionMaterials(sessionId)
+        if (list.shared.length + list.own.length === 0) return 'No photos, GIFs, audio or videos available in this conversation.'
+        return describeMaterialsForAgent(list)
+      },
+    }),
+
     doc_list: tool({
       description:
         'Lists the documents (PDF, DOCX, spreadsheets) this conversation can read, with their id and page count. Two kinds: srcN are the SOURCES of the sidebar folder, declared by the user and shared with its other conversations (so they can be listed here without having been attached in this one); docN are the files attached in THIS conversation. Use it when you are unsure which document the user means, or to check what is available at all.',

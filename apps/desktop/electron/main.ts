@@ -17,6 +17,13 @@ import { measureMotionLayers } from './lib/video/motion-layers'
 import { motionAudioTracks } from './lib/video/motion-audio'
 import { motionVideoAudioTracks } from './lib/video/motion-video-audio'
 import { reopenMotion } from './lib/video/motion-open'
+import {
+  addSessionMaterial,
+  adoptDraftMaterials,
+  listSessionMaterials,
+  setMaterialShared,
+  type MaterialInput,
+} from './lib/session-materials'
 import { registerBundledFfmpeg } from './lib/video/ffmpeg'
 import sharp from 'sharp'
 import { createRequire } from 'node:module'
@@ -2269,8 +2276,27 @@ app.whenReady().then(() => {
   ipcMain.handle('docs:setDraftFolder', (_event, folderId: string | null) =>
     setDraftFolder(folderId),
   )
-  ipcMain.handle('docs:adoptDraft', (_event, sessionId: string) =>
-    adoptDraftDocuments(sessionId),
+  ipcMain.handle('docs:adoptDraft', async (_event, sessionId: string) => {
+    // Os materiais (foto, GIF, áudio, vídeo) trazidos no rascunho passam junto.
+    const [docs] = await Promise.all([adoptDraftDocuments(sessionId), adoptDraftMaterials(sessionId)])
+    return docs
+  })
+
+  // Materiais da aba Fontes: foto, GIF, áudio e vídeo. O arquivo é um item da
+  // galeria de mídia; a aba só o lista no escopo certo (conversa ou pasta).
+  ipcMain.handle('materials:list', (_event, scope: string) => listSessionMaterials(scope))
+  ipcMain.handle('materials:add', async (_event, scope: string, files: MaterialInput[], shared: boolean) => {
+    const errors: string[] = []
+    let added = 0
+    for (const file of files) {
+      const result = await addSessionMaterial(scope, file, shared)
+      if (result.ok) added += 1
+      else errors.push(result.error)
+    }
+    return { added, errors }
+  })
+  ipcMain.handle('materials:setShared', (_event, scope: string, id: string, shared: boolean) =>
+    setMaterialShared(scope, id, shared),
   )
   ipcMain.handle('docs:clearSession', (_event, sessionId: string) =>
     deleteSessionDocuments(sessionId),

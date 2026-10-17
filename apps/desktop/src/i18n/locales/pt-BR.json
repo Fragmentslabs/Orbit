@@ -707,6 +707,13 @@
         "description": "Página HTML produzida pelo assistente"
       },
       "sources": {
+    "removeMaterial": "Excluir o arquivo (libera o espaço)",
+    "materialKind": {
+      "image": "Foto",
+      "gif": "GIF",
+      "audio": "Áudio",
+      "video": "Vídeo"
+    },
         "label": "Fontes",
         "description": "Documentos com que a conversa trabalha"
       },
@@ -2403,13 +2410,13 @@
     "usage_one": "{{count}} fonte · {{size}}",
     "usage_other": "{{count}} fontes · {{size}}",
     "sharedTitle": "Fontes de “{{folder}}”",
-    "sharedHint": "Arraste documentos aqui para conversar com eles em qualquer conversa desta pasta.",
+    "sharedHint": "Arraste documentos, fotos, GIFs, áudios ou vídeos aqui para usá-los em qualquer conversa desta pasta.",
     "ownTitle": "Desta conversa",
-    "ownHint": "O que você anexar no chat aparece aqui, e vale só nesta conversa.",
+    "ownHint": "O que você anexar no chat aparece aqui (documentos, fotos, GIFs, áudios, vídeos) e vale só nesta conversa. O agente só lê ou usa um arquivo quando o pedido precisa dele.",
     "noFolderHint": "Esta conversa não está em nenhuma pasta. Mova-a para uma pasta da sidebar para compartilhar fontes entre conversas.",
     "share": "Adicionar às fontes da pasta",
     "unshare": "Deixar só nesta conversa",
-    "addFile": "Arquivo…",
+    "addFile": "Arquivo (documento, foto, GIF, áudio, vídeo)…",
     "addText": "Texto colado…",
     "addSite": "Site…",
     "textTitlePlaceholder": "Título (ex.: Ata da reunião de 12/03)",

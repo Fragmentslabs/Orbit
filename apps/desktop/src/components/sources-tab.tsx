@@ -14,6 +14,9 @@ import {
   Plus,
   RefreshCw,
   StickyNote,
+  Film,
+  ImageIcon,
+  AudioLines,
   Trash2,
   Upload,
 } from "lucide-react"
@@ -26,8 +29,8 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
-import { documentOpensAsFile } from "@shared/media"
-import { docsApi, documentApi, type SourceDocument } from "@/src/lib/ipc"
+import { documentOpensAsFile, type MaterialView } from "@shared/media"
+import { docsApi, documentApi, materialsApi, mediaApi, type SourceDocument } from "@/src/lib/ipc"
 import { useSessionStore } from "@/src/stores/session-store"
 import { usePanelStore } from "@/src/stores/panel-store"
 import { cn } from "@/lib/utils"
@@ -64,7 +67,27 @@ import { cn } from "@/lib/utils"
  * disponível em toda conversa daquele repositório.
  */
 
-const ACCEPT = ".pdf,.docx,.xlsx,.xls,.ods,.csv"
+const ACCEPT = ".pdf,.docx,.xlsx,.xls,.ods,.csv,image/*,video/*,audio/*,.gif,.mp4,.mov,.m4v,.webm,.mkv,.avi"
+
+/** Arrasto interno de um MATERIAL (foto, GIF, áudio, vídeo) entre as áreas. */
+const DRAG_MIME_MATERIAL = "application/x-orbit-material"
+
+/** Foto, GIF, áudio e vídeo não são documentos: seguem pelo caminho dos materiais. */
+function materialKindOf(file: File): "image" | "audio" | "video" | null {
+  const type = file.type.toLowerCase()
+  if (type.startsWith("video/") || /\.(mp4|m4v|mov|webm|mkv|avi)$/i.test(file.name)) return "video"
+  if (type.startsWith("audio/") || /\.(wav|mp3|m4a|aac|ogg|oga|opus|flac)$/i.test(file.name)) return "audio"
+  if (type.startsWith("image/") || /\.(png|jpe?g|webp|gif)$/i.test(file.name)) return "image"
+  return null
+}
+
+function formatDuration(ms: number): string {
+  const total = Math.max(0, Math.round(ms / 1000))
+  const h = Math.floor(total / 3600)
+  const m = Math.floor((total % 3600) / 60)
+  const sec = String(total % 60).padStart(2, "0")
+  return h > 0 ? `${h}:${String(m).padStart(2, "0")}:${sec}` : `${m}:${sec}`
+}
 
 /** Tipo de arrasto interno — distingue mover um documento entre as áreas de
  *  um arquivo vindo de fora do app. */
@@ -72,6 +95,8 @@ const DRAG_MIME = "application/x-orbit-document"
 
 /** Teto por arquivo — barreira contra arquivo patológico, não limite de uso. */
 const MAX_FILE_BYTES = 100 * 1024 * 1024
+/** Vídeo SEM arquivo no disco (colado) só existe como bytes na memória. */
+const MAX_PASTED_VIDEO_BYTES = 150 * 1024 * 1024
 
 function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`
@@ -234,6 +259,112 @@ function DocumentRow({
   )
 }
 
+const MATERIAL_ICON = { image: ImageIcon, audio: AudioLines, video: Film } as const
+
+/**
+ * Uma linha de MATERIAL: foto, GIF, áudio ou vídeo. Mostra a capa (um quadro, no
+ * vídeo), o nome, a referência que o agente usa e o tamanho. Excluir apaga o
+ * arquivo de verdade — é o mesmo item da galeria de mídia.
+ */
+function MaterialRow({
+  material,
+  moveLabel,
+  MoveIcon,
+  onMove,
+  onOpen,
+  onRemove,
+}: {
+  material: MaterialView
+  moveLabel?: string
+  MoveIcon?: typeof ArrowUpToLine
+  onMove?: () => void
+  onOpen: () => void
+  onRemove: () => void
+}) {
+  const { t, i18n } = useTranslation()
+  const Icon = MATERIAL_ICON[material.kind]
+  return (
+    <li
+      draggable
+      onDragStart={(e) => {
+        e.dataTransfer.setData(DRAG_MIME_MATERIAL, material.id)
+        e.dataTransfer.effectAllowed = "move"
+      }}
+      className="group flex cursor-grab items-center gap-2.5 rounded-md px-2 py-2 active:cursor-grabbing hover:bg-accent/50"
+    >
+      <div className="relative flex size-10 shrink-0 items-center justify-center overflow-hidden rounded-sm border border-border/60 bg-background">
+        {material.thumbUrl ? (
+          <img src={material.thumbUrl} alt="" className="size-full object-cover" draggable={false} />
+        ) : (
+          <Icon className="size-4 text-muted-foreground" />
+        )}
+        {material.kind === "video" && material.thumbUrl && (
+          <Film className="absolute bottom-0.5 right-0.5 size-3 rounded-sm bg-background/80 p-0.5 text-foreground" />
+        )}
+      </div>
+      <div
+        role="button"
+        tabIndex={0}
+        onClick={onOpen}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") onOpen()
+        }}
+        className="min-w-0 flex-1 cursor-pointer text-left"
+      >
+        <p className="truncate text-xs font-medium text-foreground">{material.name}</p>
+        <p className="truncate text-[11px] text-muted-foreground">
+          {material.id} · {t(`sources.materialKind.${material.animated ? "gif" : material.kind}`)}
+          {material.durationMs ? ` · ${formatDuration(material.durationMs)}` : ""}
+          {material.width && material.height ? ` · ${material.width}×${material.height}` : ""}
+          {` · ${formatBytes(material.sizeBytes)}`}
+          {" · "}
+          {new Date(material.createdAt).toLocaleDateString(i18n.language, { day: "2-digit", month: "2-digit" })}
+        </p>
+      </div>
+      {onMove && MoveIcon && (
+        <button
+          type="button"
+          onClick={onMove}
+          className="flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-md text-muted-foreground opacity-0 group-hover:opacity-100 hover:bg-accent hover:text-foreground"
+          title={moveLabel}
+        >
+          <MoveIcon className="size-3.5" />
+        </button>
+      )}
+      <button
+        type="button"
+        onClick={onRemove}
+        className="flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-md text-muted-foreground opacity-0 group-hover:opacity-100 hover:bg-destructive/10 hover:text-destructive"
+        title={t("sources.removeMaterial")}
+      >
+        <Trash2 className="size-3.5" />
+      </button>
+    </li>
+  )
+}
+
+/** O visor de um material: a foto/GIF ampliada, o vídeo e o áudio com controles. */
+function MaterialViewer({ material, onClose }: { material: MaterialView | null; onClose: () => void }) {
+  if (!material?.playUrl) return null
+  return (
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="max-w-3xl p-2">
+        <DialogTitle className="sr-only">{material.name}</DialogTitle>
+        {material.kind === "video" ? (
+          <video key={material.id} src={material.playUrl} controls autoPlay className="max-h-[76vh] w-full rounded-md bg-black object-contain" />
+        ) : material.kind === "audio" ? (
+          <div className="flex flex-col gap-2 p-4">
+            <p className="truncate text-sm font-medium">{material.name}</p>
+            <audio key={material.id} src={material.playUrl} controls autoPlay className="w-full" />
+          </div>
+        ) : (
+          <img src={material.playUrl} alt={material.name} className="max-h-[76vh] w-full rounded-md object-contain" />
+        )}
+      </DialogContent>
+    </Dialog>
+  )
+}
+
 /**
  * Escopo do chat que ainda nao virou sessao. Precisa bater com o DRAFT_SCOPE
  * do main: e a mesma pasta em disco, e o rascunho e adotado pela sessao na
@@ -250,6 +381,10 @@ export function SourcesTab({ sessionId }: { sessionId?: string }) {
   const { t } = useTranslation()
   const [shared, setShared] = useState<SourceDocument[]>([])
   const [own, setOwn] = useState<SourceDocument[]>([])
+  const [sharedMaterials, setSharedMaterials] = useState<MaterialView[]>([])
+  const [ownMaterials, setOwnMaterials] = useState<MaterialView[]>([])
+  const [materialBytes, setMaterialBytes] = useState(0)
+  const [viewing, setViewing] = useState<MaterialView | null>(null)
   const [folderId, setFolderId] = useState<string | null>(null)
   const [usage, setUsage] = useState(0)
   const [busy, setBusy] = useState(false)
@@ -309,11 +444,14 @@ export function SourcesTab({ sessionId }: { sessionId?: string }) {
     // listar, senão a área compartilhada sairia vazia num chat aberto pelo
     // "+" de uma pasta — justamente onde ela mais deveria aparecer.
     if (isDraft) await docsApi.setDraftFolder(pendingFolderId)
-    const result = await docsApi.list(scope)
+    const [result, materials] = await Promise.all([docsApi.list(scope), materialsApi.list(scope)])
     setShared(result.shared)
     setOwn(result.own)
     setFolderId(result.folderId)
     setUsage(result.usage)
+    setSharedMaterials(materials.shared)
+    setOwnMaterials(materials.own)
+    setMaterialBytes(materials.bytes)
   }, [scope, isDraft, pendingFolderId])
 
   useEffect(() => {
@@ -323,6 +461,9 @@ export function SourcesTab({ sessionId }: { sessionId?: string }) {
   // O anexo também chega pela conversa (e por outro chat da mesma pasta): sem
   // este aviso, a aba aberta ao lado mostraria a lista de antes.
   useEffect(() => docsApi.onChanged(() => void refresh()), [refresh])
+  // Um material é um item da galeria: excluído de lá (ou trazido por uma mensagem),
+  // a lista desta aba muda junto.
+  useEffect(() => mediaApi.onChanged(() => void refresh()), [refresh])
 
   const addFiles = useCallback(
     async (files: File[], toShared: boolean) => {
@@ -330,8 +471,29 @@ export function SourcesTab({ sessionId }: { sessionId?: string }) {
       setBusy(true)
       setErrors([])
       const payload: { filename: string; data: string }[] = []
+      const materials: { filename: string; mime: string; data?: string; path?: string }[] = []
       const failed: string[] = []
       for (const file of files) {
+        const materialKind = materialKindOf(file)
+        if (materialKind) {
+          try {
+            // Um vídeo de arquivo vai por CAMINHO: o main o copia, e o filme nunca
+            // passa inteiro pela memória do renderer.
+            const diskPath = materialKind === "video" ? window.getPathForFile?.(file) || undefined : undefined
+            if (materialKind === "video" && !diskPath && file.size > MAX_PASTED_VIDEO_BYTES) {
+              failed.push(t("attachments.errorPastedVideo", { name: file.name }))
+              continue
+            }
+            materials.push({
+              filename: file.name,
+              mime: file.type,
+              ...(diskPath ? { path: diskPath } : { data: await readAsBase64(file) }),
+            })
+          } catch (err) {
+            failed.push(`${file.name}: ${(err as Error).message}`)
+          }
+          continue
+        }
         if (file.size > MAX_FILE_BYTES) {
           failed.push(t("sources.tooBig", { name: file.name, size: formatBytes(MAX_FILE_BYTES) }))
           continue
@@ -344,6 +506,10 @@ export function SourcesTab({ sessionId }: { sessionId?: string }) {
       }
       if (payload.length > 0) {
         const result = await docsApi.add(scope, payload, toShared)
+        failed.push(...result.errors)
+      }
+      if (materials.length > 0) {
+        const result = await materialsApi.add(scope, materials, toShared)
         failed.push(...result.errors)
       }
       setErrors(failed)
@@ -392,12 +558,35 @@ export function SourcesTab({ sessionId }: { sessionId?: string }) {
     [scope, refresh],
   )
 
+  const moveMaterial = useCallback(
+    async (id: string, toShared: boolean) => {
+      const result = await materialsApi.setShared(scope, id, toShared)
+      setErrors(result.ok ? [] : [result.error])
+      await refresh()
+    },
+    [scope, refresh],
+  )
+
+  /** Excluir um material apaga o ARQUIVO (é o item da galeria): libera o espaço. */
+  const removeMaterial = useCallback(
+    async (id: string) => {
+      await mediaApi.remove([id])
+      await refresh()
+    },
+    [refresh],
+  )
+
   /** Soltar na área decide o escopo: arquivo de fora entra ali, documento
    *  arrastado da outra área muda de lado. */
   const handleDrop = useCallback(
     (e: React.DragEvent, toShared: boolean) => {
       e.preventDefault()
       setDropZone(null)
+      const draggedMaterial = e.dataTransfer.getData(DRAG_MIME_MATERIAL)
+      if (draggedMaterial) {
+        void moveMaterial(draggedMaterial, toShared)
+        return
+      }
       const dragged = e.dataTransfer.getData(DRAG_MIME)
       if (dragged) {
         void move(dragged, toShared)
@@ -405,7 +594,7 @@ export function SourcesTab({ sessionId }: { sessionId?: string }) {
       }
       void addFiles(Array.from(e.dataTransfer.files), toShared)
     },
-    [addFiles, move],
+    [addFiles, move, moveMaterial],
   )
 
   const section = (
@@ -413,6 +602,7 @@ export function SourcesTab({ sessionId }: { sessionId?: string }) {
     title: string,
     hint: string,
     docs: SourceDocument[],
+    materials: MaterialView[],
     input: React.RefObject<HTMLInputElement>,
   ) => {
     const isShared = kind === "shared"
@@ -469,7 +659,7 @@ export function SourcesTab({ sessionId }: { sessionId?: string }) {
             e.target.value = ""
           }}
         />
-        {docs.length === 0 ? (
+        {docs.length + materials.length === 0 ? (
           <p className="px-1 py-2 text-[11px] text-muted-foreground/80">{hint}</p>
         ) : (
           <ul className="flex flex-col">
@@ -488,6 +678,17 @@ export function SourcesTab({ sessionId }: { sessionId?: string }) {
                 onMove={folderId ? () => void move(doc.id, !isShared) : undefined}
                 onOpen={() => sessionId && void abrir(doc)}
                 onRemove={() => void remove(doc.id)}
+              />
+            ))}
+            {materials.map((material) => (
+              <MaterialRow
+                key={material.id}
+                material={material}
+                moveLabel={isShared ? t("sources.unshare") : t("sources.share")}
+                MoveIcon={isShared ? ArrowDownToLine : ArrowUpToLine}
+                onMove={folderId ? () => void moveMaterial(material.id, !isShared) : undefined}
+                onOpen={() => setViewing(material)}
+                onRemove={() => void removeMaterial(material.id)}
               />
             ))}
           </ul>
@@ -533,6 +734,7 @@ export function SourcesTab({ sessionId }: { sessionId?: string }) {
                 t("sources.sharedTitle", { folder: folderName }),
                 t("sources.sharedHint"),
                 shared,
+                sharedMaterials,
                 sharedInput,
               )}
             {section(
@@ -540,6 +742,7 @@ export function SourcesTab({ sessionId }: { sessionId?: string }) {
               isDraft ? t("sources.draftTitle") : t("sources.ownTitle"),
               isDraft ? t("sources.draftHint") : t("sources.ownHint"),
               own,
+              ownMaterials,
               ownInput,
             )}
             {!folderName && !isDraft && (
@@ -551,12 +754,17 @@ export function SourcesTab({ sessionId }: { sessionId?: string }) {
         )}
       </div>
 
-      {shared.length + own.length > 0 && (
+      {shared.length + own.length + sharedMaterials.length + ownMaterials.length > 0 && (
         <div className="flex items-center gap-1.5 border-t border-border/60 px-4 py-2 text-[11px] text-muted-foreground">
           <HardDriveIcon className="size-3" />
-          {t("sources.usage", { count: shared.length + own.length, size: formatBytes(usage) })}
+          {t("sources.usage", {
+            count: shared.length + own.length + sharedMaterials.length + ownMaterials.length,
+            size: formatBytes(usage + materialBytes),
+          })}
         </div>
       )}
+
+      <MaterialViewer material={viewing} onClose={() => setViewing(null)} />
 
       <AddSourceDialog
         request={dialog}
