@@ -8,6 +8,7 @@ import { VIDEO_GUIDES } from '../video/guide'
 import { probeMedia, type MediaProbe } from '../video/ffmpeg'
 import { renderMotion } from '../video/motion'
 import { MAX_FRAME_TIMES, captureMotionFrames, frameLabel, sheetFileName } from '../video/motion-frame'
+import { addVideoToGallery } from '../video/video-gallery'
 import { importAttachmentInto } from '../video/motion-asset'
 import { openMotionAndReport } from '../video/motion-open'
 import { renderEdl } from '../video/render'
@@ -88,21 +89,37 @@ function outputName(name: string | undefined, fallback: string): string {
   return base
 }
 
-/** Caminhos do EDL resolvidos contra a pasta de trabalho (e checados). */
-function resolveEdl(ctx: ToolContext, edl: Edl): Edl {
-  const r = (p: string) => resolveSafePath(ctx, p)
+/**
+ * Caminhos do EDL resolvidos: contra a pasta de trabalho (e checados) ou, quando
+ * são a referência de um anexo (vdo_…, aud_…, img_…), para o arquivo do app. É por
+ * aqui que um vídeo anexado vira fonte de um corte sem passar por pasta nenhuma.
+ */
+async function resolveEdl(edl: Edl, resolvePath: (p: string) => Promise<string>): Promise<Edl> {
+  const sources = Object.fromEntries(await Promise.all(Object.entries(edl.sources).map(async ([id, p]) => [id, await resolvePath(p)] as const)))
   return {
     ...edl,
-    sources: Object.fromEntries(Object.entries(edl.sources).map(([id, p]) => [id, r(p)])),
-    overlays: edl.overlays?.map((o) => ({ ...o, file: r(o.file) })),
-    music: edl.music ? { ...edl.music, file: r(edl.music.file) } : undefined,
-    subtitles: edl.subtitles && edl.subtitles.file ? { ...edl.subtitles, file: r(edl.subtitles.file) } : edl.subtitles,
+    sources,
+    overlays: edl.overlays ? await Promise.all(edl.overlays.map(async (o) => ({ ...o, file: await resolvePath(o.file) }))) : undefined,
+    music: edl.music ? { ...edl.music, file: await resolvePath(edl.music.file) } : undefined,
+    subtitles:
+      edl.subtitles && edl.subtitles.file ? { ...edl.subtitles, file: await resolvePath(edl.subtitles.file) } : edl.subtitles,
   }
 }
 
 export function createVideoTools(
   ctx: ToolContext,
-  scope: { sessionId: string; canShow: boolean; readOnly: boolean },
+  scope: {
+    sessionId: string
+    canShow: boolean
+    readOnly: boolean
+    /**
+     * Modo chat: não há pasta de projeto. O que o agente produz mora no
+     * armazenamento do app (`outputDir`, dentro da pasta da conversa) e entra na
+     * galeria de mídia como vídeo, onde pode ser visto e excluído — liberando o
+     * arquivo. No modo código a saída fica no projeto, que é do usuário.
+     */
+    chat?: { outputDir: string }
+  },
 ): ToolSet {
   const rel = (abs: string) => path.relative(ctx.directory, abs) || abs
 
@@ -121,8 +138,14 @@ export function createVideoTools(
     return { file, label: rel(file) }
   }
 
-  const show = async (file: string, title: string, durationMs?: number) => {
+  const show = async (file: string, title: string, durationMs?: number, opts: { preview?: boolean } = {}) => {
     if (!scope.canShow) return {}
+    // No chat o vídeo final é do app: entra na galeria (e some de lá com a
+    // exclusão). A prévia não — é descartável e se sobrescreve a cada render.
+    if (scope.chat && !opts.preview) {
+      const { entry } = await addVideoToGallery({ file, name: title, sessionId: scope.sessionId, source: 'chat' })
+      return { videoUrl: entry.videoUrl, title, durationMs, path: file }
+    }
     const { url } = await registerVideo(file, scope.sessionId)
     return { videoUrl: url, title, durationMs, path: file }
   }
@@ -256,7 +279,7 @@ export function createVideoTools(
         'Renders an EDL (edit decision list) into a video in the edit/ folder next to the first source, and shows it to the user as a player. ' +
         'The code enforces the production rules: cut edges snapped OUT of words with a little air (needs video_transcribe first), 30 ms audio fades at every cut, ranges concatenated without a second re-encode, overlays time-shifted into their window, subtitles burned LAST, loudness normalized (default -14 LUFS, true peak -1 dBTP) and measured. ' +
         'Render a preview (720p, fast) first, check the cut points it returns with video_timeline, then the final. ' +
-        'Pass the EDL inline or as a JSON file path (edl/edlPath). Times: ranges in SOURCE seconds; overlays/subtitle files in OUTPUT seconds.',
+        'Pass the EDL inline or as a JSON file path (edl/edlPath). Times: ranges in SOURCE seconds; overlays/subtitle files in OUTPUT seconds. A source, overlay or music file can be the ref (vdo_…, img_…, aud_…) of an attachment — no need to copy it anywhere first.',
       inputSchema: z.object({
         edl: edlSchema.optional(),
         edlPath: z.string().optional().describe('JSON file with the EDL (relative to the working folder)'),
@@ -269,10 +292,22 @@ export function createVideoTools(
         let raw: Edl | undefined = edl
         if (!raw && edlPath) raw = edlSchema.parse(JSON.parse(await fs.readFile(resolveSafePath(ctx, edlPath), 'utf8')))
         if (!raw) throw new Error('pass the EDL inline (edl) or its JSON file (edlPath)')
-        const resolved = resolveEdl(ctx, raw)
-        const editDir = editDirFor(resolved.sources[resolved.ranges[0].source])
+        const resolved = await resolveEdl(raw, async (p) => (await mediaFile(p)).file)
+        const firstSource = resolved.sources[resolved.ranges[0].source]
+        // A saída vai ao lado da fonte — a menos que a fonte seja um anexo (que
+        // mora no armazenamento do app) ou que estejamos no chat: aí vai para a
+        // pasta de saída desta conversa (chat) ou para edit/ do projeto (código).
+        const fromAttachment = path.relative(ctx.directory, firstSource).startsWith('..')
+        const editDir = scope.chat
+          ? path.join(ctx.directory, scope.chat.outputDir)
+          : fromAttachment
+            ? path.join(ctx.directory, 'edit')
+            : editDirFor(firstSource)
         resolveSafePath(ctx, editDir)
-        const outName = outputName(output, preview ? 'preview.mp4' : 'final.mp4')
+        // No chat cada vídeo final tem nome próprio (cada um é um item da
+        // galeria); a prévia é uma só, sobrescrita.
+        const finalName = scope.chat ? `video-${Date.now().toString(36)}.mp4` : 'final.mp4'
+        const outName = outputName(output, preview ? 'preview.mp4' : finalName)
         const result = await renderEdl(resolved, { editDir, outName, preview, language, signal: abortSignal })
         // O EDL efetivo (com as bordas já encaixadas) fica ao lado: dá para refazer e revisar.
         const planFile = path.join(editDir, `${path.parse(outName).name}.edl.json`)
@@ -299,7 +334,7 @@ export function createVideoTools(
         ].filter(Boolean)
         return {
           message: lines.join('\n'),
-          ...(showIt ? await show(result.output, path.basename(result.output), result.durationMs) : {}),
+          ...(showIt ? await show(result.output, path.basename(result.output), result.durationMs, { preview }) : {}),
         }
       },
     }),

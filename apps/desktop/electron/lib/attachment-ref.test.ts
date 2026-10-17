@@ -160,3 +160,16 @@ describe('excluir um vídeo anexado na galeria', () => {
     expect((await resolveAttachmentRef(saved.id))?.name).toBe(saved.id)
   })
 })
+
+describe('excluir um vídeo leva a transcrição em cache junto', () => {
+  it('apaga edit/transcripts/<arquivo>.json ao lado do vídeo', async () => {
+    const saved = await saveVideoAttachment({ bytes: Buffer.from('v') }, 'mp4', { name: 'fala.mp4' })
+    const cache = path.join(path.dirname(saved.file), 'edit', 'transcripts', `${path.basename(saved.file)}.json`)
+    await fsp.mkdir(path.dirname(cache), { recursive: true })
+    await fsp.writeFile(cache, '{}')
+
+    await deleteHooks.get('video')!({ id: saved.id, path: saved.file })
+
+    await expect(fsp.stat(cache)).rejects.toThrow()
+  })
+})

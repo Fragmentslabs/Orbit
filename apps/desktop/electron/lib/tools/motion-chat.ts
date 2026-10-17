@@ -98,7 +98,9 @@ export function createChatMotionTools(scope: { sessionId: string; modelVision?: 
     })
 
   // Olhar e renderizar são os MESMOS do modo código, só endereçados por nome.
-  const base = createVideoTools(ctx, { sessionId: scope.sessionId, canShow: true, readOnly: false })
+  // `chat`: sem pasta de projeto — o que sai daqui mora no armazenamento do app
+  // (renders/ da conversa) e entra na galeria como vídeo, onde dá para excluir.
+  const base = createVideoTools(ctx, { sessionId: scope.sessionId, canShow: true, readOnly: false, chat: { outputDir: 'renders' } })
 
   const tools: ToolSet = {
     video_guide: base.video_guide,
@@ -209,6 +211,11 @@ export function createChatMotionTools(scope: { sessionId: string; modelVision?: 
       toModelOutput: base.motion_frame.toModelOutput,
     })
   }
+
+  // Edição de vídeo (EDL) sem pasta: cortar, juntar, legendar, sobrepor e normalizar
+  // o vídeo que o usuário anexou. As fontes são referências de anexo (vdo_…); a
+  // saída vira um item da galeria.
+  if (scope.canRender && base.video_render) tools.video_render = base.video_render
 
   if (scope.canRender && base.motion_render) {
     tools.motion_render = tool({

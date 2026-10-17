@@ -2,7 +2,7 @@ import { randomBytes } from 'node:crypto'
 import fsp from 'node:fs/promises'
 import path from 'node:path'
 import type { MediaEntry, MediaSource } from '@shared/media'
-import { saveVideoMedia } from '../media'
+import { listMedia, saveVideoMedia } from '../media'
 import type { MediaProbe } from './ffmpeg'
 import { probeVideoAttachment, videoPosterPng } from './attachment-note'
 import { registerVideo } from './store'
@@ -42,11 +42,14 @@ export async function addVideoToGallery(input: {
 }): Promise<GalleryVideo> {
   const probe = input.probe === undefined ? await probeVideoAttachment(input.file) : input.probe
   const poster = probe ? await videoPosterPng(input.file, probe.durationMs) : undefined
+  // O mesmo arquivo (um render refeito por cima do anterior) é o MESMO item: a
+  // galeria não ganha um cartão novo a cada execução.
+  const id = input.id ?? (await listMedia({ kind: 'video' })).find((e) => e.path === input.file)?.id ?? newVideoId(input.file)
   const { url } = await registerVideo(input.file, input.sessionId)
   const size = (await fsp.stat(input.file)).size
   const first = probe?.video[0]
   const entry = await saveVideoMedia(poster ?? null, {
-    id: input.id ?? newVideoId(input.file),
+    id,
     file: input.file,
     size,
     name: input.name ?? path.basename(input.file),

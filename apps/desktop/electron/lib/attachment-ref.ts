@@ -161,6 +161,9 @@ function forgetName(id: string): Promise<void> {
 setMediaDeleteHook('video', async (entry) => {
   await unregisterVideosFor(entry.path)
   await forgetName(entry.id)
+  // A transcrição em cache mora ao lado do arquivo (video_transcribe): sem o
+  // vídeo ela não serve para nada e ocuparia espaço para sempre.
+  await fsp.rm(path.join(path.dirname(entry.path), 'edit', 'transcripts', `${path.basename(entry.path)}.json`), { force: true })
 })
 
 // ------------------------------------------------------------ referências
