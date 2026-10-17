@@ -553,6 +553,16 @@ describe('<video> na página', () => {
     expect(v.muted).toBe(true)
   })
 
+  it('silencia também o vídeo que a página cria DEPOIS do runtime (o caso real: o runtime é o primeiro script)', async () => {
+    const list: unknown[] = []
+    const { api } = makePage({ meta: 'fps=30,duration=4', lists: { video: list } })
+    const v = fakeVideo()
+    list.push(v)
+    expect(v.muted).toBe(false)
+    await api.seek(3)
+    expect(v.muted).toBe(true)
+  })
+
   it('sem atributos o vídeo anda com o tempo da peça, como sempre', async () => {
     const v = fakeVideo()
     const { api } = makePage({ meta: 'fps=30,duration=4', lists: { video: [v] } })

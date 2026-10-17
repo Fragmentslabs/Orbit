@@ -337,6 +337,12 @@ ${MOTION_TIMING_SCRIPT}
     positionAnimations(t)
     await Promise.all(videos().map(function (v) {
       return new Promise(function (res) {
+        // O runtime é o primeiro script do <head>: no boot os <video> da página
+        // AINDA NÃO EXISTEM, então silenciar só lá não pegava nenhum. É aqui, a cada
+        // quadro, que o vídeo deixa de tocar sozinho (autoplay) — o som dele entra
+        // pela mixagem do host, nunca pela página.
+        v.muted = true
+        v.pause()
         const target = orbitVideoTime(t, mediaTiming(v))
         if (Math.abs(v.currentTime - target) < 0.001) return res()
         v.addEventListener('seeked', res, { once: true })

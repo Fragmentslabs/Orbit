@@ -33,6 +33,7 @@ vi.mock('electron', () => ({
 
 const { runFfmpeg, runFfprobe } = await import('./ffmpeg')
 const { motionAudioFfmpegArgs, motionAudioMixFfmpegArgs, motionFfmpegArgs } = await import('./motion-render-args')
+const { motionVideoAudioTracks } = await import('./motion-video-audio')
 
 const W = 64
 const H = 64
@@ -383,6 +384,27 @@ describe.skipIf(!hasFfmpeg)('áudio da composição (ffmpeg real)', () => {
       )
       expect(await peak(out, 0.6, 0.78)).toBeGreaterThan(0.01)
       expect(await duration(out)).toBeCloseTo(PIECE, 1)
+    })
+
+    it('o som de um <video> só entra quando o arquivo TEM faixa de áudio (ffprobe de verdade)', async () => {
+      const silent = path.join(work, 'clip-silent.mp4')
+      await muteVideo(silent, 'mp4')
+      const voice = path.join(work, 'clip-voice.wav')
+      await tone(voice, PIECE)
+      const talking = path.join(work, 'clip-talking.mp4')
+      await runFfmpeg(motionAudioFfmpegArgs({ video: silent, audio: voice, output: talking, duration: PIECE, format: 'mp4' }))
+
+      const fact = (file: string) => ({
+        src: `orbit-motion://mv_x/${path.basename(file)}`,
+        muted: false,
+        loop: false,
+        gain: 0,
+        start: 0,
+        in: 0,
+      })
+      // Sem passar o sondador: é o ffprobe do app que responde.
+      const tracks = await motionVideoAudioTracks(work, [fact(silent), fact(talking)])
+      expect(tracks.map((t) => t.name)).toEqual(['clip-talking.mp4 (video)'])
     })
 
     it('o duck personalizado roda com os rótulos do grafo', async () => {
