@@ -1,4 +1,16 @@
 import path from 'node:path'
+import {
+  DEFAULT_DUCK,
+  automationFilter,
+  duckFilter,
+  hasMasterFx,
+  hasTrackFx,
+  masterFilters,
+  toneFilters,
+  type DuckSettings,
+  type MasterFx,
+  type TrackFx,
+} from './motion-audio-fx'
 
 /**
  * A parte PURA do render de motion: os argumentos do ffmpeg, a desmultiplicação
@@ -359,6 +371,10 @@ export interface MotionAudioEvent {
   fadeOut: number
   /** Cama que abaixa sob as outras faixas. */
   duck: boolean
+  /** Como ela abaixa; ausente = os números de sempre (DEFAULT_DUCK). */
+  duckSettings?: DuckSettings
+  /** Timbre, dinâmica e curva de volume; ausente = faixa como está. */
+  fx?: TrackFx
 }
 
 export interface MotionAudioMixSpec {
@@ -368,6 +384,8 @@ export interface MotionAudioMixSpec {
   duration: number
   format: MotionFormat
   events: MotionAudioEvent[]
+  /** Acabamento da mixagem inteira (teto de pico, volume de entrega). */
+  master?: MasterFx | null
 }
 
 /**
@@ -382,8 +400,17 @@ export function isPlainAudioEvent(event: MotionAudioEvent): boolean {
     event.gainDb === 0 &&
     event.fadeIn === 0 &&
     event.fadeOut === 0 &&
-    !event.duck
+    !event.duck &&
+    !hasTrackFx(event.fx)
   )
+}
+
+/**
+ * O caminho simples só serve quando NADA mexe no som: nem a faixa (isPlainAudioEvent),
+ * nem o acabamento da mixagem. Um teto de pico numa faixa única ainda precisa do grafo.
+ */
+export function isPlainAudioMix(events: MotionAudioEvent[], master?: MasterFx | null): boolean {
+  return events.length === 1 && isPlainAudioEvent(events[0]) && !hasMasterFx(master)
 }
 
 /**
@@ -414,6 +441,9 @@ export function motionAudioMixFfmpegArgs(spec: MotionAudioMixSpec): string[] {
     // saída tem que começar.
     const length = event.end === undefined ? spec.duration - event.start : event.end - event.start
     if (event.end !== undefined) chain.push(`atrim=end=${Math.max(0, length).toFixed(3)}`)
+    // Timbre e dinâmica antes do nível: o compressor reage ao sinal como a faixa
+    // é, e o ganho (e as rampas) vêm por cima do resultado.
+    if (event.fx) chain.push(...toneFilters(event.fx))
     if (event.gainDb !== 0) chain.push(`volume=${event.gainDb.toFixed(2)}dB`)
     if (event.fadeIn > 0) chain.push(`afade=in:st=0:d=${event.fadeIn.toFixed(3)}`)
     if (event.fadeOut > 0) {
@@ -421,6 +451,10 @@ export function motionAudioMixFfmpegArgs(spec: MotionAudioMixSpec): string[] {
     }
     // `all=1` cobre mono e estéreo sem precisar saber quantos canais o arquivo tem.
     if (event.start > 0) chain.push(`adelay=${Math.round(event.start * 1000)}:all=1`)
+    // A curva de volume depois do atraso: ali o `t` do filtro já é o tempo da
+    // PEÇA, que é a régua em que o manifest escreve os pontos.
+    const curve = event.fx ? automationFilter(event.fx.automation) : null
+    if (curve) chain.push(curve)
     // Cadeia vazia (faixa crua: nada a recortar, nenhum nível, nenhuma rampa)
     // precisa de um filtro mesmo assim — `[1:a][t0]` sem filtro entre os rótulos é
     // grafo inválido, e o ffmpeg responde "No such filter: ''". `anull` é a
@@ -448,9 +482,18 @@ export function motionAudioMixFfmpegArgs(spec: MotionAudioMixSpec): string[] {
     sum(front, 'front')
     graph.push('[front]asplit=2[frontmix][frontsc]')
     sum(bed, 'bed')
-    graph.push('[bed][frontsc]sidechaincompress=threshold=0.02:ratio=10:attack=15:release=350[bedducked]')
+    // Os números do duck vêm da primeira cama que os personalizou (todas as camas
+    // são somadas ANTES de passar pelo gatilho, então há um duck só).
+    const settings = spec.events.find((event) => event.duck && event.duckSettings)?.duckSettings ?? DEFAULT_DUCK
+    graph.push(`[bed][frontsc]${duckFilter(settings)}[bedducked]`)
     output = 'mix'
     sum(['bedducked', 'frontmix'], output)
+  }
+
+  const finish = masterFilters(spec.master)
+  if (finish.length > 0) {
+    graph.push(`[${output}]${finish.join(',')}[master]`)
+    output = 'master'
   }
 
   return [

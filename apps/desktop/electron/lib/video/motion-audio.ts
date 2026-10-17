@@ -1,5 +1,13 @@
 import fsp from 'node:fs/promises'
 import path from 'node:path'
+import {
+  parseDuck,
+  parseMasterFx,
+  parseTrackFx,
+  type DuckSettings,
+  type MasterFx,
+  type TrackFx,
+} from './motion-audio-fx'
 import { isMotionAudioFile } from './motion-render-args'
 
 /**
@@ -47,6 +55,16 @@ export interface MotionAudioTrack {
   fadeOut: number
   /** Cama que abaixa sozinha enquanto as outras faixas estão tocando. */
   duck: boolean
+  /** Como ela abaixa, quando o manifest personalizou; ausente = os números de sempre. */
+  duckSettings?: DuckSettings
+  /** Tratamento de timbre, dinâmica e curva de volume (motion-audio-fx.ts). */
+  fx: TrackFx
+}
+
+/** O que o render mistura: as faixas e o acabamento da mixagem inteira. */
+export interface MotionAudioPlan {
+  tracks: MotionAudioTrack[]
+  master: MasterFx | null
 }
 
 /** O que o manifest aceita por faixa: só `file` é obrigatório. */
@@ -58,7 +76,15 @@ interface ManifestTrack {
   gain?: number
   fadeIn?: number
   fadeOut?: number
-  duck?: boolean
+  /** `true`, ou `{ threshold, ratio, attack, release }` para personalizar. */
+  duck?: boolean | Record<string, unknown>
+  /** Atalho de tratamento (voice, bed, phone) e os campos de motion-audio-fx.ts. */
+  preset?: string
+  highpass?: number
+  lowpass?: number
+  eq?: unknown
+  compress?: unknown
+  automation?: unknown
 }
 
 /**
@@ -70,19 +96,33 @@ interface ManifestTrack {
  * ou JSON quebrado são erro com o motivo. Uma trilha declarada que some em
  * silêncio é pior que um render que falha dizendo o que houve.
  */
-export async function motionAudioTracks(folder: string, explicit?: string): Promise<MotionAudioTrack[]> {
+export async function motionAudioPlan(folder: string, explicit?: string): Promise<MotionAudioPlan> {
   const root = path.resolve(folder)
-  if (explicit) return [await one(root, path.resolve(explicit), path.basename(explicit), {})]
+  if (explicit) return { tracks: [await one(root, path.resolve(explicit), path.basename(explicit), {}, 'audio')], master: null }
   const declared = await manifest(root)
   if (declared) {
-    return Promise.all(
-      declared.map((entry) =>
-        one(root, path.resolve(root, entry.file), entry.name?.trim() || path.basename(entry.file), entry),
+    return {
+      tracks: await Promise.all(
+        declared.tracks.map((entry, index) =>
+          one(
+            root,
+            path.resolve(root, entry.file),
+            entry.name?.trim() || path.basename(entry.file),
+            entry,
+            `${MOTION_AUDIO_MANIFEST}: track ${index + 1} (${entry.file})`,
+          ),
+        ),
       ),
-    )
+      master: declared.master,
+    }
   }
   const loose = await conventionalAudio(root)
-  return loose ? [await one(root, loose, path.basename(loose), {})] : []
+  return { tracks: loose ? [await one(root, loose, path.basename(loose), {}, 'audio')] : [], master: null }
+}
+
+/** Só as faixas — quem não precisa do acabamento (a aba, o relatório). */
+export async function motionAudioTracks(folder: string, explicit?: string): Promise<MotionAudioTrack[]> {
+  return (await motionAudioPlan(folder, explicit)).tracks
 }
 
 /** Uma faixa: arquivo conferido, caminho servível calculado, defaults aplicados. */
@@ -93,12 +133,15 @@ async function one(
   // Sem `file`: o caminho já veio resolvido por quem chamou (o manifest só
   // declara o resto).
   spec: Omit<ManifestTrack, 'file'>,
+  // Prefixo das mensagens de erro do tratamento: diz QUAL faixa do manifest.
+  where: string,
 ): Promise<MotionAudioTrack> {
   const stat = await fsp.stat(file).catch(() => null)
   if (!stat?.isFile()) throw new Error(`audio file not found: ${file}`)
   const relative = path.relative(root, file)
   const inside = relative !== '' && !relative.startsWith('..') && !path.isAbsolute(relative)
   const start = seconds(spec.start, 0)
+  const duck = parseDuck(spec.duck, where)
   return {
     file,
     name,
@@ -111,7 +154,9 @@ async function one(
     gainDb: number(spec.gain, 0),
     fadeIn: Math.max(0, seconds(spec.fadeIn, 0)),
     fadeOut: Math.max(0, seconds(spec.fadeOut, 0)),
-    duck: spec.duck === true,
+    duck: duck.duck,
+    ...(duck.settings ? { duckSettings: duck.settings } : {}),
+    fx: parseTrackFx(spec as Record<string, unknown>, where),
   }
 }
 
@@ -119,7 +164,7 @@ async function one(
  * O manifest da pasta, ou null quando não existe. Aceita `{ "tracks": [...] }` e a
  * lista solta; `file` é o único campo obrigatório, e o resto tem padrão.
  */
-async function manifest(root: string): Promise<ManifestTrack[] | null> {
+async function manifest(root: string): Promise<{ tracks: ManifestTrack[]; master: MasterFx | null } | null> {
   const raw = await fsp.readFile(path.join(root, MOTION_AUDIO_MANIFEST), 'utf8').catch(() => null)
   if (raw === null) return null
   let parsed: unknown
@@ -132,12 +177,15 @@ async function manifest(root: string): Promise<ManifestTrack[] | null> {
   if (!Array.isArray(list)) {
     throw new Error(`${MOTION_AUDIO_MANIFEST} must be a list of tracks, or an object with a "tracks" list`)
   }
-  return list.map((entry, index) => {
+  const tracks = list.map((entry, index) => {
     const track = (entry ?? {}) as Partial<ManifestTrack>
     const file = typeof track.file === 'string' ? track.file.trim() : ''
     if (!file) throw new Error(`${MOTION_AUDIO_MANIFEST}: track ${index + 1} has no "file"`)
     return { ...track, file }
   })
+  // O acabamento só existe na forma de objeto (a lista solta não tem onde pô-lo).
+  const master = Array.isArray(parsed) ? null : parseMasterFx((parsed as { master?: unknown } | null)?.master)
+  return { tracks, master }
 }
 
 /** O `audio.<ext>` da pasta, se houver (ordem estável quando há mais de um). */

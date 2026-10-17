@@ -227,4 +227,135 @@ describe.skipIf(!hasFfmpeg)('áudio da composição (ffmpeg real)', () => {
     expect(await duration(out)).toBeCloseTo(PIECE, 1)
     expect(await duration(out)).toBeLessThan(PIECE + 0.2)
   })
+
+  // O tratamento é filtro de ffmpeg escrito à mão: só rodar prova que o grafo é
+  // válido (nome de opção, aspas da expressão, rótulos) E que faz o que diz.
+  describe('tratamento', () => {
+    const plainEvent = { start: 0, gainDb: 0, fadeIn: 0, fadeOut: 0, duck: false }
+    const noFx = { eq: [], automation: [] }
+
+    it('passa-alta, eq, compressor e curva de volume: o grafo roda e a curva SOBE o nível', async () => {
+      const video = path.join(work, 'fx-video.mp4')
+      await muteVideo(video, 'mp4')
+      const voice = path.join(work, 'fx-voice.wav')
+      await tone(voice, PIECE)
+      const out = path.join(work, 'fx.mp4')
+
+      await runFfmpeg(
+        motionAudioMixFfmpegArgs({
+          video,
+          output: out,
+          duration: PIECE,
+          format: 'mp4',
+          events: [
+            {
+              ...plainEvent,
+              file: voice,
+              fx: {
+                ...noFx,
+                highpass: 80,
+                eq: [{ freq: 440, gain: 3, q: 1 }],
+                compress: { threshold: -24, ratio: 3, attack: 5, release: 100, makeup: 0 },
+                // Começa 30 dB abaixo e chega a 0 dB no fim da peça.
+                automation: [
+                  { at: 0, db: -30 },
+                  { at: PIECE, db: 0 },
+                ],
+              },
+            },
+          ],
+        }),
+      )
+
+      expect(await audioCodec(out)).toBe('aac')
+      expect(await frameCount(out)).toBe(FRAMES)
+      // A curva é por TEMPO DA PEÇA: o começo sai bem mais baixo que o fim.
+      expect(await peak(out, 0.05, 0.2)).toBeLessThan(await peak(out, 0.6, 0.78))
+    })
+
+    it('a curva também vale para uma faixa que entra tarde (o t é o da peça, depois do atraso)', async () => {
+      const video = path.join(work, 'fx-late-video.mp4')
+      await muteVideo(video, 'mp4')
+      const hit = path.join(work, 'fx-late.wav')
+      await tone(hit, 0.4)
+      const out = path.join(work, 'fx-late.mp4')
+
+      await runFfmpeg(
+        motionAudioMixFfmpegArgs({
+          video,
+          output: out,
+          duration: PIECE,
+          format: 'mp4',
+          // Entra em 0,4s; a curva diz "mudo até 0,5s". Se o t fosse o da faixa
+          // (e não o da peça), o trecho 0,4–0,5 ainda seria mudo por mais 0,5s.
+          events: [
+            {
+              ...plainEvent,
+              start: 0.4,
+              file: hit,
+              fx: {
+                ...noFx,
+                automation: [
+                  { at: 0.5, db: -60 },
+                  { at: 0.52, db: 0 },
+                ],
+              },
+            },
+          ],
+        }),
+      )
+
+      expect(await peak(out, 0.41, 0.49)).toBeLessThan(0.001)
+      expect(await peak(out, 0.6, 0.78)).toBeGreaterThan(0.01)
+    })
+
+    it('o teto de pico de verdade segura o som, e o volume de entrega roda no mesmo grafo', async () => {
+      const video = path.join(work, 'master-video.mp4')
+      await muteVideo(video, 'mp4')
+      const loud = path.join(work, 'master-loud.wav')
+      await tone(loud, PIECE)
+      const raw = path.join(work, 'master-raw.mp4')
+      const limited = path.join(work, 'master-limited.mp4')
+      const normalized = path.join(work, 'master-normalized.mp4')
+      const base = { video, duration: PIECE, format: 'mp4' as const }
+      // +12 dB sobre um tom já forte: passa de 1.0 sem teto.
+      const events = [{ ...plainEvent, file: loud, gainDb: 12 }]
+
+      await runFfmpeg(motionAudioMixFfmpegArgs({ ...base, output: raw, events }))
+      await runFfmpeg(motionAudioMixFfmpegArgs({ ...base, output: limited, events, master: { limit: -6 } }))
+      await runFfmpeg(motionAudioMixFfmpegArgs({ ...base, output: normalized, events, master: { loudness: -16, limit: -1 } }))
+
+      const ceiling = Math.pow(10, -6 / 20)
+      expect(await peak(limited, 0.1, 0.7)).toBeLessThanOrEqual(ceiling + 0.03)
+      expect(await peak(limited, 0.1, 0.7)).toBeLessThan(await peak(raw, 0.1, 0.7))
+      // O loudnorm devolve 192 kHz; sem o aresample o aac sairia em taxa absurda.
+      const { stdout } = await runFfprobe(['-v', 'error', '-select_streams', 'a:0', '-show_entries', 'stream=sample_rate', '-of', 'csv=p=0', normalized])
+      expect(Number(stdout.toString().trim())).toBe(48000)
+      expect(await frameCount(normalized)).toBe(FRAMES)
+    })
+
+    it('o duck personalizado roda com os rótulos do grafo', async () => {
+      const video = path.join(work, 'duck-video.mp4')
+      await muteVideo(video, 'mp4')
+      const voice = path.join(work, 'duck-voice.wav')
+      const bed = path.join(work, 'duck-bed.wav')
+      await tone(voice, 0.3)
+      await tone(bed, PIECE)
+      const out = path.join(work, 'duck.mp4')
+
+      await runFfmpeg(
+        motionAudioMixFfmpegArgs({
+          video,
+          output: out,
+          duration: PIECE,
+          format: 'mp4',
+          events: [
+            { ...plainEvent, file: voice },
+            { ...plainEvent, file: bed, duck: true, duckSettings: { threshold: 0.01, ratio: 8, attack: 10, release: 100 } },
+          ],
+        }),
+      )
+      expect(await frameCount(out)).toBe(FRAMES)
+    })
+  })
 })

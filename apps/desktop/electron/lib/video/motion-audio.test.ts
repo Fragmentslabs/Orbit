@@ -2,7 +2,7 @@ import fsp from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
-import { motionAudioTracks } from './motion-audio'
+import { motionAudioPlan, motionAudioTracks } from './motion-audio'
 
 /**
  * A escolha do áudio da peça: o que o render mistura, o que a aba toca e o que o
@@ -126,5 +126,56 @@ describe('motionAudioTracks', () => {
     await touch(path.join(composition, 'audio.wav'))
     const tracks = await motionAudioTracks(composition)
     expect(tracks.map((track) => track.name)).toEqual(['audio.wav'])
+  })
+})
+
+describe('tratamento no manifest', () => {
+  it('lê preset, eq, compressor, curva e duck personalizado por faixa', async () => {
+    await touch(path.join(composition, 'voz.mp3'))
+    await touch(path.join(composition, 'cama.mp3'))
+    await writeManifest({
+      tracks: [
+        { file: 'voz.mp3', preset: 'voice', highpass: 100, automation: [[0, -12], [1, 0]] },
+        { file: 'cama.mp3', preset: 'bed', duck: { ratio: 6, release: 0.8 } },
+      ],
+    })
+    const tracks = await motionAudioTracks(composition)
+    expect(tracks[0].fx.highpass).toBe(100)
+    expect(tracks[0].fx.eq).toHaveLength(2)
+    expect(tracks[0].fx.automation).toEqual([
+      { at: 0, db: -12 },
+      { at: 1, db: 0 },
+    ])
+    expect(tracks[0].duck).toBe(false)
+    expect(tracks[0]).not.toHaveProperty('duckSettings')
+    expect(tracks[1].fx.lowpass).toBe(14000)
+    expect(tracks[1].duck).toBe(true)
+    expect(tracks[1].duckSettings).toMatchObject({ ratio: 6, release: 800 })
+  })
+
+  it('a faixa sem tratamento continua sem tratamento', async () => {
+    await touch(path.join(composition, 'voz.mp3'))
+    await writeManifest({ tracks: [{ file: 'voz.mp3' }] })
+    const [track] = await motionAudioTracks(composition)
+    expect(track.fx).toEqual({ eq: [], automation: [], highpass: undefined, lowpass: undefined, compress: undefined })
+  })
+
+  it('o erro de um campo diz qual faixa do manifest', async () => {
+    await touch(path.join(composition, 'voz.mp3'))
+    await touch(path.join(composition, 'cama.mp3'))
+    await writeManifest({ tracks: [{ file: 'voz.mp3' }, { file: 'cama.mp3', eq: [{ freq: 1000, gain: 99 }] }] })
+    await expect(motionAudioTracks(composition)).rejects.toThrow(/audio\.json: track 2 \(cama\.mp3\): eq band 1 gain 99/)
+  })
+
+  it('o acabamento só existe na forma de objeto', async () => {
+    await touch(path.join(composition, 'voz.mp3'))
+    await writeManifest({ tracks: [{ file: 'voz.mp3' }], master: { loudness: -16, limit: -1 } })
+    expect((await motionAudioPlan(composition)).master).toEqual({ loudness: -16, limit: -1 })
+
+    await writeManifest([{ file: 'voz.mp3' }])
+    expect((await motionAudioPlan(composition)).master).toBeNull()
+
+    await writeManifest({ tracks: [{ file: 'voz.mp3' }], master: { loudness: 10 } })
+    await expect(motionAudioPlan(composition)).rejects.toThrow(/master: loudness 10/)
   })
 })

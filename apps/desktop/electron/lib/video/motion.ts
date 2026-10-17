@@ -4,14 +4,14 @@ import os from 'node:os'
 import path from 'node:path'
 import { PassThrough } from 'node:stream'
 import { probeMedia, runFfmpeg } from './ffmpeg'
-import { motionAudioTracks } from './motion-audio'
+import { motionAudioPlan } from './motion-audio'
 import {
   assertFrameBytes,
   bandCount,
   concatFfmpegArgs,
   concatList,
   isAlphaFormat,
-  isPlainAudioEvent,
+  isPlainAudioMix,
   motionAudioFfmpegArgs,
   motionAudioMixFfmpegArgs,
   motionFfmpegArgs,
@@ -410,7 +410,7 @@ export async function renderMotion(opts: MotionOptions): Promise<MotionResult> {
     // o manifest da pasta, ou o nome convencional). A MESMA resolução alimenta as
     // faixas que a aba desenha e toca, então o som do preview e o do arquivo final
     // são necessariamente os mesmos arquivos, nos mesmos instantes.
-    const tracks = await motionAudioTracks(path.dirname(path.resolve(opts.file)), opts.audio)
+    const { tracks, master } = await motionAudioPlan(path.dirname(path.resolve(opts.file)), opts.audio)
     let videoOut = opts.output
     if (bands.length > 1 || tracks.length > 0) {
       // Pasta de trabalho ao lado da saída, limpa no finally — como o render de EDL.
@@ -492,7 +492,7 @@ export async function renderMotion(opts: MotionOptions): Promise<MotionResult> {
       // há o que misturar.
       const only = tracks.length === 1 ? tracks[0] : null
       const args =
-        only && isPlainAudioEvent(only)
+        only && isPlainAudioMix(tracks, master)
           ? motionAudioFfmpegArgs({
               video: videoOut,
               audio: only.file,
@@ -500,7 +500,14 @@ export async function renderMotion(opts: MotionOptions): Promise<MotionResult> {
               duration,
               format,
             })
-          : motionAudioMixFfmpegArgs({ video: videoOut, output: path.resolve(opts.output), duration, format, events: tracks })
+          : motionAudioMixFfmpegArgs({
+              video: videoOut,
+              output: path.resolve(opts.output),
+              duration,
+              format,
+              events: tracks,
+              master,
+            })
       await runFfmpeg(args, { signal: opts.signal })
     }
 

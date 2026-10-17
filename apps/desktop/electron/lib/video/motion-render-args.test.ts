@@ -8,6 +8,7 @@ import {
   expectedFrameBytes,
   isMotionAudioFile,
   isPlainAudioEvent,
+  isPlainAudioMix,
   motionAudioCodec,
   motionAudioFfmpegArgs,
   motionAudioMixFfmpegArgs,
@@ -396,5 +397,74 @@ describe('áudio da peça', () => {
     }).join(' ')
     expect(single).toContain('-map [t0]')
     expect(single).not.toContain('amix')
+  })
+
+  it('o tratamento da faixa entra antes do nível, e a curva de volume depois do atraso', () => {
+    const graph = graphOf([
+      {
+        file: 'voz.wav',
+        start: 2,
+        gainDb: -3,
+        fadeIn: 0,
+        fadeOut: 0,
+        duck: false,
+        fx: {
+          highpass: 80,
+          eq: [{ freq: 3500, gain: 2, q: 1 }],
+          compress: { threshold: -20, ratio: 3, attack: 8, release: 200, makeup: 0 },
+          automation: [
+            { at: 0, db: -20 },
+            { at: 4, db: 0 },
+          ],
+        },
+      },
+    ])
+    const chain = graph.split(';')[0]
+    const order = ['highpass=f=80', 'equalizer=', 'acompressor=', 'volume=-3.00dB', 'adelay=2000:all=1', "volume='pow(10"]
+    const at = order.map((piece) => chain.indexOf(piece))
+    expect(at.every((i) => i >= 0)).toBe(true)
+    expect([...at].sort((a, b) => a - b)).toEqual(at)
+  })
+
+  it('uma faixa com tratamento já não é o caso simples', () => {
+    const plain = { file: 'a.wav', start: 0, gainDb: 0, fadeIn: 0, fadeOut: 0, duck: false }
+    expect(isPlainAudioEvent({ ...plain, fx: { eq: [], automation: [] } })).toBe(true)
+    expect(isPlainAudioEvent({ ...plain, fx: { highpass: 80, eq: [], automation: [] } })).toBe(false)
+  })
+
+  it('o acabamento torna até a faixa única um mix, e a saída dele é a do grafo', () => {
+    const plain = { file: 'a.wav', start: 0, gainDb: 0, fadeIn: 0, fadeOut: 0, duck: false }
+    expect(isPlainAudioMix([plain])).toBe(true)
+    expect(isPlainAudioMix([plain], { limit: -1 })).toBe(false)
+    expect(isPlainAudioMix([plain, plain])).toBe(false)
+
+    const args = motionAudioMixFfmpegArgs({
+      video: 'v.mp4',
+      output: 'o.mp4',
+      duration: 5,
+      format: 'mp4',
+      events: [plain],
+      master: { loudness: -16, limit: -1 },
+    })
+    const graph = args[args.indexOf('-filter_complex') + 1]
+    expect(graph).toContain('[t0]loudnorm=I=-16:TP=-1:LRA=11,aresample=48000,alimiter=limit=0.8913:level=0[master]')
+    expect(args.join(' ')).toContain('-map [master]')
+  })
+
+  it('o duck personalizado vem da primeira cama que o declarou', () => {
+    const graph = graphOf([
+      { file: 'voz.wav', start: 0, gainDb: 0, fadeIn: 0, fadeOut: 0, duck: false },
+      {
+        file: 'cama.wav',
+        start: 0,
+        gainDb: -18,
+        fadeIn: 0,
+        fadeOut: 0,
+        duck: true,
+        duckSettings: { threshold: 0.01, ratio: 6, attack: 50, release: 800 },
+      },
+    ])
+    expect(graph).toContain('sidechaincompress=threshold=0.01:ratio=6:attack=50:release=800')
+    expect(graph).not.toContain('attack=15')
   })
 })
