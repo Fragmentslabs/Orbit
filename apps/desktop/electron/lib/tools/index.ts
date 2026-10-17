@@ -41,6 +41,7 @@ import { agentMayUseBrowser, getAppSettings } from '../app-settings'
 import { createAudioGenerateTool, createAudioTranscribeTool } from './audio'
 import { createVideoTools } from './video'
 import { createChatMotionTools } from './motion-chat'
+import { createImageSearchTools } from './image-search'
 import { resolveFfmpeg } from '../video/ffmpeg'
 
 export { destroyBrowserWindow } from './browser'
@@ -85,6 +86,7 @@ export function buildToolSet(input: SendMessageInput, ctx: ToolContext | null, i
     if (input.options.research) {
       tools.websearch = createWebSearchTool()
       tools.webfetch = createWebFetchTool()
+      Object.assign(tools, createImageSearchTools({ sessionId: input.sessionId, modelVision: ctx?.modelVision !== false }))
     }
     if (input.options.browser) {
       tools.browser_open = createBrowserOpenTool(input.sessionId)
@@ -236,6 +238,7 @@ export function buildToolSet(input: SendMessageInput, ctx: ToolContext | null, i
   if (input.options.research) {
     tools.websearch = createWebSearchTool()
     tools.webfetch = createWebFetchTool()
+    Object.assign(tools, createImageSearchTools({ sessionId: input.sessionId, modelVision: ctx?.modelVision !== false }))
   }
   if (ctx) {
     tools.read = createReadTool(ctx)

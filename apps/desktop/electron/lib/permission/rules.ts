@@ -182,6 +182,10 @@ const NATIVE_TOOLS = new Set([
   'motion_edit',
   'motion_render',
   'motion_asset',
+  // Buscar e importar imagem de acervo aberto (Commons, Openverse): só rede de
+  // leitura para dois provedores conhecidos, e o arquivo cai no armazenamento do app.
+  'image_search',
+  'image_import',
   'motion_frame',
   'show_video',
   'video_guide',

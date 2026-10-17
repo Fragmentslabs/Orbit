@@ -109,6 +109,12 @@ export async function importAttachmentInto(folder: string, ref: string, wantedNa
     report: [
       `${reuse ? 'Already in the folder' : 'Copied'}: ${label} "${resolved.name}" → ${name}${facts ? ` (${facts})` : ''}.`,
       usage(resolved.kind, name, isGif, hasSound),
-    ].join('\n'),
+      // A licença costuma exigir o crédito junto da imagem: ele viaja com ela até a peça.
+      resolved.credit
+        ? `CREDIT REQUIRED by the license (${resolved.credit.license}) — show it in the piece (a caption, or a credits card at the end): ${resolved.credit.attribution}`
+        : '',
+    ]
+      .filter(Boolean)
+      .join('\n'),
   }
 }

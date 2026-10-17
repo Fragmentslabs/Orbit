@@ -8,6 +8,7 @@ import {
   ARTIFACT_SCHEME,
   MEDIA_SCHEME,
   mediaKind,
+  type MediaCredit,
   type MediaEntry,
   type MediaFilter,
   type MediaKind,
@@ -76,6 +77,8 @@ export interface SaveMediaMeta {
   name?: string
   /** Id da imagem de origem, quando esta nasceu de uma edição de outra. */
   parentId?: string
+  /** Autor e licença, quando a imagem veio de uma busca na web. */
+  credit?: MediaCredit
 }
 
 function mediaDir(): string {
@@ -166,6 +169,7 @@ export async function saveMedia(buffer: Buffer, ext: string, meta?: SaveMediaMet
     taskId: meta?.taskId,
     name: meta?.name,
     parentId: meta?.parentId,
+    ...(meta?.credit ? { credit: meta.credit } : {}),
     width,
     height,
   }

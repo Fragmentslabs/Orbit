@@ -27,6 +27,9 @@ describe('assess — nativas x MCP', () => {
     expect(assess('show_video', { path: 'edit/anim/render.mp4' }, null)).toBeNull()
     // Copiar um anexo do chat para a peça: a referência é a única entrada.
     expect(assess('motion_asset', { ref: 'vdo_x.mp4', path: 'edit/anim' }, null)).toBeNull()
+    // Buscar imagem em acervo aberto e importar a escolhida.
+    expect(assess('image_search', { query: 'lion' }, null)).toBeNull()
+    expect(assess('image_import', { ids: ['wc:1'] }, null)).toBeNull()
   })
 
   it('uma tool de servidor MCP de verdade continua pedindo', () => {

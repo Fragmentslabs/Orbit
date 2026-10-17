@@ -5,6 +5,7 @@ import fsp from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { audioFilePath, audioIdFrom } from './audio-store'
+import type { MediaCredit } from '@shared/media'
 import { getMediaEntry, mediaIdFromUrl, setMediaDeleteHook } from './media'
 import { unregisterVideosFor } from './video/store'
 
@@ -177,6 +178,8 @@ export interface ResolvedAttachment {
   file: string
   /** Nome para mostrar e para dar ao arquivo dentro de uma peça. */
   name: string
+  /** Autor e licença, quando a imagem veio de uma busca na web. */
+  credit?: MediaCredit
 }
 
 /** A string parece uma referência de anexo (e não um caminho do projeto)? */
@@ -215,7 +218,7 @@ export async function resolveAttachmentRef(raw: string): Promise<ResolvedAttachm
   if (imageId) {
     const entry = await getMediaEntry(imageId)
     if (!entry || !fs.existsSync(entry.path)) return null
-    return { kind: 'image', id: imageId, file: entry.path, name: entry.name || imageId }
+    return { kind: 'image', id: imageId, file: entry.path, name: entry.name || imageId, ...(entry.credit ? { credit: entry.credit } : {}) }
   }
   return null
 }

@@ -1022,6 +1022,12 @@ export function MediaGallery() {
                 )}
                 <span>·</span>
                 <span>{formatBytes(preview.size)}</span>
+                {preview.credit && (
+                  <span title={preview.credit.attribution} className="truncate">
+                    {preview.credit.license}
+                    {preview.credit.creator ? ` · ${preview.credit.creator}` : ""}
+                  </span>
+                )}
                 <div className="ml-auto flex items-center gap-1">
                   {preview.sessionId && (
                     <button

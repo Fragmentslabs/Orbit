@@ -12,6 +12,24 @@
 export type MediaSource = "chat" | "user" | "screenshot" | "script" | "batch"
 
 /**
+ * De onde veio uma imagem buscada na web e sob que licença — o que a licença
+ * costuma exigir que apareça junto quando ela é usada (CC BY, CC BY-SA). Fica no
+ * item de mídia para o crédito acompanhar a imagem até a peça.
+ */
+export interface MediaCredit {
+  title?: string
+  creator?: string
+  /** "CC BY-SA 4.0", "CC0 1.0", "Public domain"… */
+  license: string
+  licenseUrl?: string
+  /** Página de origem da imagem (onde o autor e a licença se confirmam). */
+  sourceUrl: string
+  provider: "commons" | "openverse"
+  /** A linha de crédito pronta, para pôr numa legenda ou na tela final. */
+  attribution: string
+}
+
+/**
  * Imagem (o caso histórico), artefato HTML renderizável, documento
  * (relatório/proposta autorado pelo agente, entregue em PDF e/ou DOCX), áudio
  * (anexado pelo usuário ou gerado pelo agente) ou motion (uma peça: a
@@ -101,6 +119,8 @@ export interface MediaEntry {
   /** Só em artefatos: incrementa a cada update_artifact. O arquivo é reescrito
    *  no lugar (a URL não muda), então é isto que invalida o cache do iframe. */
   revision?: number
+  /** Só em imagens buscadas na web: autor e licença (ver MediaCredit). */
+  credit?: MediaCredit
   /**
    * Só em peças de motion: o id da composição no registro do main
    * (`orbit-data/motion.json`). É por ele que a aba Motion reabre a peça — e o
