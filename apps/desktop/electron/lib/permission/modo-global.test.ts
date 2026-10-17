@@ -9,7 +9,13 @@ vi.mock('../ask-dispatch', () => ({
   }),
 }))
 vi.mock('../broadcast', () => ({ broadcastChatEvent: vi.fn() }))
-vi.mock('../mcp', () => ({ getMcpPermissionMode: () => undefined }))
+vi.mock('../mcp', () => ({
+  getMcpPermissionMode: () => undefined,
+  // O teste usa "servidor_acao" como se fosse uma tool de MCP: é o catch-all de
+  // permission/rules.ts que a reconhece assim — e ele só trata como MCP quando
+  // o prefixo é um servidor cadastrado.
+  isMcpServerName: (name: string) => name === 'servidor',
+}))
 vi.mock('./trust-rules', () => ({ checkTrust: () => false, addTrust: vi.fn() }))
 vi.mock('electron', () => ({ app: { getPath: () => '/tmp' } }))
 

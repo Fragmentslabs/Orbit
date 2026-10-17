@@ -1,6 +1,7 @@
 import path from 'node:path'
 import { readFileSync, statSync } from 'node:fs'
 import { dataDir } from '../storage'
+import { isMcpServerName } from '../mcp'
 import type { PermissionClaim } from '@shared/chat'
 
 export interface Assessment {
@@ -170,6 +171,23 @@ const NATIVE_TOOLS = new Set([
   'mcp_connect',
   'mcp_update',
   'mcp_servers',
+  // Vídeo e motion (peças do painel): o motor roda LOCAL, e a entrega é um
+  // arquivo — no storage do Orbit ou no destino que o próprio usuário escolher
+  // (o render da aba passa por um diálogo de salvar do sistema). Mesmo threat
+  // model das de imagem e de áudio, que já estavam aqui. Sem entrar nesta lista,
+  // motion_preview e companhia caíam no catch-all de MCP como servidor "motion"
+  // e pediam permissão a cada chamada.
+  'motion_preview',
+  'motion_write',
+  'motion_edit',
+  'motion_render',
+  'motion_frame',
+  'show_video',
+  'video_guide',
+  'video_probe',
+  'video_transcribe',
+  'video_timeline',
+  'video_render',
 ])
 
 const USER_RULES_FILE = () => path.join(dataDir(), 'permissions.json')
@@ -326,16 +344,22 @@ export function assess(toolName: string, input: unknown, dir: string | null): As
       },
     }
   }
-  // Catch-all "_" exclusivo para servidores MCP (Nodara_*, N8N_-_Vlk_*, ...)
+  // Catch-all "_" para servidores MCP (Nodara_*, N8N_-_Vlk_*, ...) — mas só
+  // quando o prefixo é um servidor REALMENTE configurado. Tools nativas em
+  // snake_case também têm "_": sem esta checagem, motion_preview, video_render,
+  // audio_generate e pdf_merge pediam permissão como "Ferramenta do servidor MCP
+  // motion" — o usuário tinha de aprovar a própria ferramenta a cada chamada.
   if (toolName.includes('_')) {
     const serverName = toolName.split('_')[0]
-    return {
-      ruleId: `mcp:${serverName}`,
-      claim: {
-        tool: toolName,
-        title: toolName,
-        detail: `Ferramenta do servidor MCP "${serverName}"`,
-      },
+    if (isMcpServerName(serverName)) {
+      return {
+        ruleId: `mcp:${serverName}`,
+        claim: {
+          tool: toolName,
+          title: toolName,
+          detail: `Ferramenta do servidor MCP "${serverName}"`,
+        },
+      }
     }
   }
   return null

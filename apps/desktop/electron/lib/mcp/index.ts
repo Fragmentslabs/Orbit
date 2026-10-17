@@ -446,6 +446,18 @@ export function getMcpPermissionMode(toolName: string): PermissionMode | undefin
   return servers.get(serverName)?.config.permissionMode
 }
 
+/**
+ * O prefixo deste nome é um servidor MCP REALMENTE configurado?
+ *
+ * É a checagem que faltava em permission/rules.ts: lá, qualquer tool com "_" era
+ * dada como MCP, então `motion_preview`, `audio_generate`, `pdf_merge` e
+ * companhia pediam permissão como "Ferramenta do servidor MCP motion". O nome só
+ * significa "servidor" se existir um servidor com esse nome.
+ */
+export function isMcpServerName(name: string): boolean {
+  return servers.has(name)
+}
+
 /* ------------------------------------------------------------------ */
 /*  Background reconnect watcher                                        */
 /* ------------------------------------------------------------------ */
