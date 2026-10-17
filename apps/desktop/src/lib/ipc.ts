@@ -628,10 +628,11 @@ export interface MotionLayersResult {
    * áudio está FORA da pasta da composição: o render o muxa, o preview não o
    * alcança. `start`/`end` são os segundos da peça em que a faixa entra e sai
    * (`end` null = até o fim do arquivo); `error` é o manifest que não deu para
-   * ler, e nesse caso a peça toca muda e a aba diz por quê.
+   * ler, e nesse caso a peça toca muda e a aba diz por quê. `offset` é o segundo
+   * DO ARQUIVO em que o som começa (o corte inicial de um vídeo da página).
    */
   audio: {
-    tracks: { name: string; url: string | null; start: number; end: number | null }[]
+    tracks: { name: string; url: string | null; start: number; end: number | null; offset?: number }[]
     error: string | null
   } | null
 }

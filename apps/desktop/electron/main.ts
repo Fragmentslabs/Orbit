@@ -15,6 +15,7 @@ import {
 } from './lib/video/motion-store'
 import { measureMotionLayers } from './lib/video/motion-layers'
 import { motionAudioTracks } from './lib/video/motion-audio'
+import { motionVideoAudioTracks } from './lib/video/motion-video-audio'
 import { reopenMotion } from './lib/video/motion-open'
 import { registerBundledFfmpeg } from './lib/video/ffmpeg'
 import sharp from 'sharp'
@@ -2081,7 +2082,7 @@ app.whenReady().then(() => {
     const audio = await (async () => {
       if (!entry) return null
       try {
-        const tracks = await motionAudioTracks(entry.folder)
+        const tracks = await motionAudioTracks(entry.folder, undefined, await motionVideoAudioTracks(entry.folder, measured.videos))
         if (!tracks.length) return null
         return {
           tracks: tracks.map((track) => ({
@@ -2089,6 +2090,7 @@ app.whenReady().then(() => {
             url: motionAudioUrl(id, track.path),
             start: track.start,
             end: track.end ?? null,
+            offset: track.offset ?? 0,
           })),
           error: null,
         }

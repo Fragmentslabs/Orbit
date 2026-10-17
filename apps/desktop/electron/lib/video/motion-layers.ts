@@ -1,6 +1,7 @@
 import { BrowserWindow } from 'electron'
 import { MOTION_SPEC } from './motion-runtime'
 import type { MotionTransitionInfo } from './motion-transitions'
+import type { MotionVideoFact } from './motion-video-audio'
 
 /**
  * As CAMADAS de uma composição de motion: quem entra e sai de cena, e quando.
@@ -60,6 +61,8 @@ export interface MotionLayers {
   failedFonts: string[]
   /** As transições que a composição registrou (orbitMotion.transition). */
   transitions: MotionTransitionInfo[]
+  /** Os `<video>` da página, para o som deles entrar no plano de áudio. */
+  videos: MotionVideoFact[]
 }
 
 /** Teto de faixas: além disso a aba vira ruído (e o texto ao agente também). */
@@ -204,6 +207,7 @@ async function runMeasure(url: string): Promise<MotionLayers> {
       durationInFrames?: number
       failedFonts?: string[]
       transitions?: MotionTransitionInfo[]
+      videos?: MotionVideoFact[]
     } | null
     if (!spec) {
       const body = String(await win.webContents.executeJavaScript('document.body ? document.body.innerText.slice(0, 120) : ""', true))
@@ -230,6 +234,7 @@ async function runMeasure(url: string): Promise<MotionLayers> {
       layers: pickLayers(raw.layers ?? [], spec.durationInFrames),
       failedFonts: spec.failedFonts ?? [],
       transitions: spec.transitions ?? [],
+      videos: spec.videos ?? [],
     }
   } catch (err) {
     if (win.isDestroyed()) throw new Error(`the composition did not finish loading in ${LOAD_TIMEOUT_MS / 1000}s`)

@@ -5,6 +5,7 @@ import path from 'node:path'
 import { PassThrough } from 'node:stream'
 import { probeMedia, runFfmpeg } from './ffmpeg'
 import { motionAudioPlan } from './motion-audio'
+import { motionVideoAudioTracks, type MotionVideoFact } from './motion-video-audio'
 import { lintMotionComposition } from './motion-lint-run'
 import {
   assertFrameBytes,
@@ -156,6 +157,7 @@ interface MotionPageSpec {
   durationInFrames?: number
   failedFonts: string[]
   transitions?: MotionTransitionInfo[]
+  videos?: MotionVideoFact[]
 }
 
 interface CapturedFrame {
@@ -413,7 +415,11 @@ export async function renderMotion(opts: MotionOptions): Promise<MotionResult> {
     // o manifest da pasta, ou o nome convencional). A MESMA resolução alimenta as
     // faixas que a aba desenha e toca, então o som do preview e o do arquivo final
     // são necessariamente os mesmos arquivos, nos mesmos instantes.
-    const { tracks, master } = await motionAudioPlan(path.dirname(path.resolve(opts.file)), opts.audio)
+    const folder = path.dirname(path.resolve(opts.file))
+    // O som dos <video> da página entra como faixas: o runtime os silencia, e sem
+    // isto a fala de um depoimento sumia do arquivo final.
+    const videoTracks = await motionVideoAudioTracks(folder, page.videos)
+    const { tracks, master } = await motionAudioPlan(folder, opts.audio, videoTracks)
     // O lint do que dá para ver ANTES de pagar o render: um relógio de parede ou
     // um sorteio fariam o arquivo sair diferente do que o usuário viu na aba.
     // Informação, nunca bloqueio — vai junto dos avisos do resultado.

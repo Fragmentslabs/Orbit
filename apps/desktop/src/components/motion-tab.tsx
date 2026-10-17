@@ -246,7 +246,7 @@ export function MotionTab({
    *  resolução que o render usa: o que a linha de tempo desenha e o que toca no
    *  preview são os arquivos que vão no vídeo, nos mesmos instantes. */
   const [audio, setAudio] = useState<{
-    tracks: { name: string; url: string | null; start: number; end: number | null }[]
+    tracks: { name: string; url: string | null; start: number; end: number | null; offset?: number }[]
     error: string | null
   } | null>(null)
   /** O comprimento REAL de cada arquivo, medido pelo próprio elemento quando o
@@ -267,8 +267,12 @@ export function MotionTab({
    *  assim uma peça nova não herda por um instante a medida da anterior. Estável
    *  entre renders — ela entra nas dependências do efeito que comanda o som. */
   const trackDuration = useCallback(
-    (track: { url: string | null }): number | null =>
-      track.url ? (audioDurations[track.url] ?? null) : null,
+    (track: { url: string | null; offset?: number }): number | null => {
+      const duration = track.url ? (audioDurations[track.url] ?? null) : null
+      // O arquivo toca a partir do `offset` (corte inicial de um vídeo): o que
+      // sobra para a janela da faixa é o resto dele, não o comprimento inteiro.
+      return duration === null ? null : Math.max(0, duration - (track.offset ?? 0))
+    },
     [audioDurations],
   )
   /** `?r=` é o que faz a voz regerada entrar em cena: a URL muda a cada recarga,
@@ -295,7 +299,8 @@ export function MotionTab({
     tracks.forEach((track, index) => {
       const el = audioRefs.current[index]
       if (!el || !track.url) return
-      const local = at - track.start
+      // Posição no ARQUIVO: o tempo desde a entrada da faixa, mais o corte inicial.
+      const local = at - track.start + (track.offset ?? 0)
       // A janela sai da MESMA função que desenha a barra: sem `end` no manifest
       // ela é fechada pelo comprimento real do arquivo, e não pelo fim da peça.
       const within = motionTrackIsLive(track, trackDuration(track), at)

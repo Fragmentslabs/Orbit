@@ -9,6 +9,7 @@ import { lintMotionComposition } from './motion-lint-run'
 import { describeMasterFx, describeTrackFx } from './motion-audio-fx'
 import { prepareMotionPreview } from './motion-preview'
 import { describeTransitions } from './motion-transitions'
+import { motionVideoAudioTracks } from './motion-video-audio'
 import { getMotion, registerMotion } from './motion-store'
 
 /** A peça já tem item na galeria? O `motionId` é o vínculo, não a pasta. */
@@ -91,10 +92,10 @@ export async function openMotionAndReport(input: {
     let audio = ''
     let plan: MotionAudioPlan | null = null
     try {
-      plan = await motionAudioPlan(preview.folder)
+      plan = await motionAudioPlan(preview.folder, undefined, await motionVideoAudioTracks(preview.folder, measured.videos))
       const { tracks, master } = plan
       if (tracks.length) {
-        audio = `Audio (${tracks.length} track${tracks.length > 1 ? 's' : ''} declared in audio.json, mixed by the render): ${tracks
+        audio = `Audio (${tracks.length} track${tracks.length > 1 ? 's' : ''}, mixed by the render — from audio.json and from the <video> elements that are not muted): ${tracks
           .map((track) => {
             const span = track.end === undefined ? `${track.start}s→end` : `${track.start}s→${track.end}s`
             const level = track.gainDb === 0 ? '' : `, ${track.gainDb}dB`

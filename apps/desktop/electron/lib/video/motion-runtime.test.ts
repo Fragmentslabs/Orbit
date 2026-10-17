@@ -133,6 +133,8 @@ function makePage(
     manual?: boolean
     /** Elementos que o `querySelector` encontra, por seletor. */
     elements?: Record<string, unknown>
+    /** Listas que o `querySelectorAll` devolve, por seletor (os <video>, por exemplo). */
+    lists?: Record<string, unknown[]>
   } = {},
 ) {
   const posted: Array<Record<string, unknown>> = []
@@ -165,7 +167,7 @@ function makePage(
       options.meta && selector.includes('orbit-motion')
         ? { getAttribute: () => options.meta }
         : (options.elements?.[selector] ?? null),
-    querySelectorAll: () => [] as unknown[],
+    querySelectorAll: (selector: string) => (options.lists?.[selector] ?? []) as unknown[],
     getAnimations: () => [animation],
     fonts: Object.assign([] as unknown[], { ready: Promise.resolve() }),
   }
@@ -514,6 +516,69 @@ describe('orbitMotion.transition', () => {
     const spec = (page.win as unknown as { __orbitMotionSpec(): { transitions: unknown[] } }).__orbitMotionSpec()
     expect(spec.transitions).toEqual([
       { type: 'wipe', direction: 'left', at: 1, duration: 0.6, out: '.a', in: '.b' },
+    ])
+  })
+})
+
+describe('<video> na página', () => {
+  /** Um <video> falso: guarda cada posição que o runtime pede e responde `seeked`. */
+  function fakeVideo(attrs: Record<string, string> = {}, over: { duration?: number; loop?: boolean } = {}) {
+    const seen: number[] = []
+    const video = {
+      muted: false,
+      duration: over.duration ?? 10,
+      loop: over.loop ?? false,
+      currentTime: 0,
+      seen,
+      pause() {},
+      getAttribute: (name: string) => attrs[name] ?? null,
+      hasAttribute: (name: string) => name in attrs,
+      currentSrc: 'orbit-motion://mv_x/clip.mp4',
+      addEventListener(_type: string, fn: () => void) {
+        queueMicrotask(fn)
+      },
+    }
+    Object.defineProperty(video, 'currentTime', {
+      get: () => seen[seen.length - 1] ?? 0,
+      set: (value: number) => {
+        seen.push(value)
+      },
+    })
+    return video
+  }
+
+  it('silencia o vídeo da página: o som dele entra pela mixagem, não pela janela', () => {
+    const v = fakeVideo()
+    makePage({ meta: 'fps=30,duration=4', lists: { video: [v] } })
+    expect(v.muted).toBe(true)
+  })
+
+  it('sem atributos o vídeo anda com o tempo da peça, como sempre', async () => {
+    const v = fakeVideo()
+    const { api } = makePage({ meta: 'fps=30,duration=4', lists: { video: [v] } })
+    await api.seek(45)
+    expect(v.seen).toEqual([1.5])
+  })
+
+  it('data-start, data-in e data-end mandam na posição do arquivo', async () => {
+    const v = fakeVideo({ 'data-start': '1', 'data-in': '5', 'data-end': '2' })
+    const { api } = makePage({ meta: 'fps=30,duration=4', lists: { video: [v] } })
+    await api.seek(15) // 0,5 s: antes do start → parado em data-in
+    await api.seek(60) // 2 s: 1 s depois do start → 6
+    await api.seek(105) // 3,5 s: passou do data-end (2) → preso no mesmo 6: nada novo a pedir
+    expect(v.seen).toEqual([5, 6])
+  })
+
+  it('publica o retrato dos vídeos para o host montar a faixa de áudio', () => {
+    const calado = fakeVideo({ muted: '' })
+    const comSom = fakeVideo({ 'data-start': '2', 'data-in': '1', 'data-end': '6', 'data-gain': '-4' }, { loop: true })
+    const optOut = fakeVideo({ 'data-audio': 'false' })
+    const page = makePage({ meta: 'fps=30,duration=4', lists: { video: [calado, comSom, optOut] } })
+    const spec = (page.win as unknown as { __orbitMotionSpec(): { videos: unknown[] } }).__orbitMotionSpec()
+    expect(spec.videos).toEqual([
+      { src: 'orbit-motion://mv_x/clip.mp4', muted: true, loop: false, gain: 0, start: 0, in: 0, end: undefined },
+      { src: 'orbit-motion://mv_x/clip.mp4', muted: false, loop: true, gain: -4, start: 2, in: 1, end: 6 },
+      { src: 'orbit-motion://mv_x/clip.mp4', muted: true, loop: false, gain: 0, start: 0, in: 0, end: undefined },
     ])
   })
 })

@@ -375,6 +375,10 @@ export interface MotionAudioEvent {
   duckSettings?: DuckSettings
   /** Timbre, dinâmica e curva de volume; ausente = faixa como está. */
   fx?: TrackFx
+  /** Segundo do ARQUIVO em que o som começa (corte no início). */
+  offset?: number
+  /** Repete o arquivo até o fim do trecho. */
+  loop?: boolean
 }
 
 export interface MotionAudioMixSpec {
@@ -401,6 +405,8 @@ export function isPlainAudioEvent(event: MotionAudioEvent): boolean {
     event.fadeIn === 0 &&
     event.fadeOut === 0 &&
     !event.duck &&
+    !event.offset &&
+    !event.loop &&
     !hasTrackFx(event.fx)
   )
 }
@@ -440,7 +446,17 @@ export function motionAudioMixFfmpegArgs(spec: MotionAudioMixSpec): string[] {
     // recorte; sem ele, o que resta da peça depois do `start` — é onde a rampa de
     // saída tem que começar.
     const length = event.end === undefined ? spec.duration - event.start : event.end - event.start
-    if (event.end !== undefined) chain.push(`atrim=end=${Math.max(0, length).toFixed(3)}`)
+    const offset = event.offset ?? 0
+    // Um arquivo curto que se repete é infinito: sem o recorte o mix não teria fim.
+    if (event.loop) chain.push('aloop=loop=-1:size=2147483647')
+    if (offset > 0) {
+      // Corte no início: o som começa de `offset`, e o relógio da faixa volta a zero
+      // para o atraso (adelay) contar a partir dele.
+      const end = event.end !== undefined || event.loop ? `:end=${(offset + Math.max(0, length)).toFixed(3)}` : ''
+      chain.push(`atrim=start=${offset.toFixed(3)}${end}`, 'asetpts=PTS-STARTPTS')
+    } else if (event.end !== undefined || event.loop) {
+      chain.push(`atrim=end=${Math.max(0, length).toFixed(3)}`)
+    }
     // Timbre e dinâmica antes do nível: o compressor reage ao sinal como a faixa
     // é, e o ganho (e as rampas) vêm por cima do resultado.
     if (event.fx) chain.push(...toneFilters(event.fx))
@@ -451,6 +467,11 @@ export function motionAudioMixFfmpegArgs(spec: MotionAudioMixSpec): string[] {
     }
     // `all=1` cobre mono e estéreo sem precisar saber quantos canais o arquivo tem.
     if (event.start > 0) chain.push(`adelay=${Math.round(event.start * 1000)}:all=1`)
+    // `atrim=start` seguido de `adelay` faz o ffmpeg perder o silêncio do atraso
+    // quando o resultado vai para mp4/aac (o som aparece adiantado, e a faixa sai
+    // mais curta). O `atrim=end` + `adelay` de antes não sofre disso; o corte
+    // inicial sim. O resample por timestamp devolve o atraso inteiro.
+    if (offset > 0 && event.start > 0) chain.push('aresample=async=1:first_pts=0')
     // A curva de volume depois do atraso: ali o `t` do filtro já é o tempo da
     // PEÇA, que é a régua em que o manifest escreve os pontos.
     const curve = event.fx ? automationFilter(event.fx.automation) : null

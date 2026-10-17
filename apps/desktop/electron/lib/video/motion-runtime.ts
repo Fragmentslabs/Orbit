@@ -1,3 +1,4 @@
+import { MOTION_TIMING_SCRIPT } from './motion-timing'
 import { MOTION_TRANSITIONS_SCRIPT } from './motion-transitions'
 
 /**
@@ -76,6 +77,8 @@ export const MOTION_RUNTIME = `(() => {
   // Validação e keyframes das transições (motion-transitions.ts): o mesmo texto
   // que os testes executam, embutido aqui porque a página não tem import.
 ${MOTION_TRANSITIONS_SCRIPT}
+  // O tempo das mídias (vídeo e GIF) em função do instante da peça (motion-timing.ts).
+${MOTION_TIMING_SCRIPT}
   const transitions = []       // o que a composição registrou (lint e relatório)
   // As animações que o runtime criou (as das transições). document.getAnimations()
   // só devolve as RELEVANTES: uma que terminou, sem fill que a mantenha em efeito,
@@ -213,6 +216,103 @@ ${MOTION_TRANSITIONS_SCRIPT}
   function videos() {
     return Array.prototype.slice.call(document.querySelectorAll('video'))
   }
+  // Os atributos de tempo de um <video> (data-start / data-in / data-end), em segundos.
+  function numberAttr(el, name) {
+    const raw = el.getAttribute(name)
+    if (raw === null || raw === '') return undefined
+    const n = Number(raw)
+    return isFinite(n) ? n : undefined
+  }
+  function mediaTiming(v) {
+    return {
+      start: numberAttr(v, 'data-start'),
+      in: numberAttr(v, 'data-in'),
+      end: numberAttr(v, 'data-end'),
+      loop: v.loop,
+      duration: v.duration,
+    }
+  }
+  // O que o host precisa saber dos <video>: de onde vem o som, e com que tempo.
+  // O runtime SILENCIA o vídeo da página (a janela do render não tem som), então é
+  // o host quem põe o som dele na mixagem — a partir deste retrato.
+  function videoFacts() {
+    return videos().map(function (v) {
+      return {
+        src: v.currentSrc || v.getAttribute('src') || '',
+        muted: v.hasAttribute('muted') || v.getAttribute('data-audio') === 'false',
+        loop: v.loop,
+        gain: numberAttr(v, 'data-gain') || 0,
+        start: numberAttr(v, 'data-start') || 0,
+        in: numberAttr(v, 'data-in') || 0,
+        end: numberAttr(v, 'data-end'),
+      }
+    })
+  }
+
+  // ----------------------------------------------------------------- GIF
+  // Um <img> GIF anima sozinho, no relógio de parede: dois renders mostrariam
+  // quadros diferentes. Aqui o GIF é decodificado (ImageDecoder) em quadros
+  // inteiros e o <img> passa a mostrar o quadro que o INSTANTE manda — o elemento
+  // continua o mesmo, então CSS, object-fit, transform e data-layer seguem valendo.
+  const gifs = []
+  const MAX_GIF_FRAMES = 1500
+  function isGifImage(img) {
+    const src = (img.getAttribute('src') || '').split('#')[0].split('?')[0].toLowerCase()
+    return src.slice(-4) === '.gif'
+  }
+  async function prepareGif(img) {
+    const response = await fetch(img.currentSrc || img.src)
+    const data = await response.arrayBuffer()
+    const decoder = new ImageDecoder({ data: data, type: 'image/gif' })
+    await decoder.tracks.ready
+    const count = decoder.tracks.selectedTrack.frameCount
+    if (count > MAX_GIF_FRAMES) throw new Error('GIF has ' + count + ' frames (more than ' + MAX_GIF_FRAMES + ')')
+    const urls = []
+    const durations = []
+    for (let i = 0; i < count; i++) {
+      const result = await decoder.decode({ frameIndex: i })
+      const frame = result.image
+      const canvas = document.createElement('canvas')
+      canvas.width = frame.displayWidth
+      canvas.height = frame.displayHeight
+      canvas.getContext('2d').drawImage(frame, 0, 0)
+      durations.push(orbitGifDelay(frame.duration === null ? undefined : frame.duration / 1000000))
+      frame.close()
+      const blob = await new Promise(function (r) { canvas.toBlob(r, 'image/png') })
+      urls.push(URL.createObjectURL(blob))
+    }
+    decoder.close()
+    img.removeAttribute('srcset')
+    gifs.push({
+      img: img,
+      urls: urls,
+      durations: durations,
+      start: numberAttr(img, 'data-start') || 0,
+      loop: img.getAttribute('data-loop') !== 'false',
+      shown: -1,
+    })
+  }
+  async function prepareGifs() {
+    if (typeof ImageDecoder === 'undefined') return
+    const handle = delayRender()
+    try {
+      for (const img of Array.prototype.slice.call(document.querySelectorAll('img'))) {
+        if (!isGifImage(img)) continue
+        try { await prepareGif(img) } catch (err) { reportError(err) }
+      }
+    } finally {
+      continueRender(handle)
+    }
+  }
+  async function applyGifs(t) {
+    for (const g of gifs) {
+      const index = orbitGifFrame(t - g.start, g.durations, g.loop)
+      if (index === g.shown) continue
+      g.shown = index
+      g.img.src = g.urls[index]
+      try { await g.img.decode() } catch (err) {}
+    }
+  }
   for (const v of videos()) { v.muted = true; v.pause() }
   // Pausa o GSAP já na entrada (como o render antigo fazia): a composição não
   // pode andar sozinha antes do primeiro seek.
@@ -237,13 +337,14 @@ ${MOTION_TRANSITIONS_SCRIPT}
     positionAnimations(t)
     await Promise.all(videos().map(function (v) {
       return new Promise(function (res) {
-        const target = v.duration ? (v.loop ? t % v.duration : Math.min(t, v.duration - 0.001)) : t
+        const target = orbitVideoTime(t, mediaTiming(v))
         if (Math.abs(v.currentTime - target) < 0.001) return res()
         v.addEventListener('seeked', res, { once: true })
         v.currentTime = target
         setTimeout(res, 2000)
       })
     }))
+    await applyGifs(t)
     await nextFrame()
   }
 
@@ -473,6 +574,7 @@ ${MOTION_TRANSITIONS_SCRIPT}
       failedFonts: failedFonts.slice(),
       devicePixelRatio: window.devicePixelRatio || 1,
       transitions: transitions.map(function (t) { return Object.assign({}, t) }),
+      videos: videoFacts(),
     }
   }
 
@@ -664,6 +766,10 @@ ${MOTION_TRANSITIONS_SCRIPT}
     syncDocumentHeight()
     announce()
   }
+  // Os GIFs são decodificados assim que o documento existe (e não só no load: o
+  // render espera o delayRender, e o load já pode ter passado).
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', function () { prepareGifs() }, { once: true })
+  else prepareGifs()
   if (document.fonts && document.fonts.ready) {
     document.fonts.ready.then(function () { reportAssets(); announce() })
   }

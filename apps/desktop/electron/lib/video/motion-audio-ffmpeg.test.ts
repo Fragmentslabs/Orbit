@@ -334,6 +334,57 @@ describe.skipIf(!hasFfmpeg)('áudio da composição (ffmpeg real)', () => {
       expect(await frameCount(normalized)).toBe(FRAMES)
     })
 
+    it('corte inicial: o som sai do ponto do ARQUIVO pedido, no instante da peça', async () => {
+      const video = path.join(work, 'offset-video.mp4')
+      await muteVideo(video, 'mp4')
+      // 0,3s de silêncio e depois 0,5s de tom: cortar em 0,3 deixa só o tom.
+      const src = path.join(work, 'offset-src.wav')
+      const rate = 44100
+      const pcm = Buffer.alloc(Math.round(rate * 0.8) * 2)
+      for (let i = Math.round(rate * 0.3); i < rate * 0.8; i++) {
+        pcm.writeInt16LE(Math.round(Math.sin((i / rate) * 2 * Math.PI * 440) * 8000), i * 2)
+      }
+      await runFfmpeg(['-v', 'error', '-f', 's16le', '-ar', String(rate), '-ac', '1', '-i', 'pipe:0', src], {
+        stdin: Readable.from([pcm]),
+      })
+      const out = path.join(work, 'offset.mp4')
+
+      await runFfmpeg(
+        motionAudioMixFfmpegArgs({
+          video,
+          output: out,
+          duration: PIECE,
+          format: 'mp4',
+          events: [{ ...plainEvent, file: src, start: 0.2, offset: 0.3 }],
+        }),
+      )
+      // Antes do start: silêncio. Logo depois dele já há tom (o silêncio do começo do
+      // arquivo foi cortado) — sem o corte, o tom só chegaria em 0,5s. Esta é a
+      // medição que pegou o mp4/aac comendo o silêncio do atraso.
+      expect(await peak(out, 0, 0.18)).toBeLessThan(0.001)
+      expect(await peak(out, 0.25, 0.4)).toBeGreaterThan(0.01)
+    })
+
+    it('loop: um arquivo curto cobre a peça inteira', async () => {
+      const video = path.join(work, 'loop-video.mp4')
+      await muteVideo(video, 'mp4')
+      const short = path.join(work, 'loop-short.wav')
+      await tone(short, 0.2)
+      const out = path.join(work, 'loop.mp4')
+
+      await runFfmpeg(
+        motionAudioMixFfmpegArgs({
+          video,
+          output: out,
+          duration: PIECE,
+          format: 'mp4',
+          events: [{ ...plainEvent, file: short, loop: true }],
+        }),
+      )
+      expect(await peak(out, 0.6, 0.78)).toBeGreaterThan(0.01)
+      expect(await duration(out)).toBeCloseTo(PIECE, 1)
+    })
+
     it('o duck personalizado roda com os rótulos do grafo', async () => {
       const video = path.join(work, 'duck-video.mp4')
       await muteVideo(video, 'mp4')

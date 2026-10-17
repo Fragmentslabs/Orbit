@@ -451,6 +451,35 @@ describe('áudio da peça', () => {
     expect(args.join(' ')).toContain('-map [master]')
   })
 
+  it('o corte inicial (offset) recorta o ARQUIVO antes do atraso', () => {
+    const graph = graphOf([{ file: 'clip.mp4', start: 2, gainDb: 0, fadeIn: 0, fadeOut: 0, duck: false, offset: 5 }], 10)
+    const chain = graph.split(';')[0]
+    // Sem fim declarado, só o começo é cortado; o relógio da faixa volta a zero.
+    expect(chain).toContain('atrim=start=5.000,asetpts=PTS-STARTPTS')
+    expect(chain.indexOf('atrim=start=5')).toBeLessThan(chain.indexOf('adelay=2000'))
+    // O atraso depois de um corte inicial precisa do resample por timestamp (ver a
+    // nota no render-args): sem ele o mp4/aac perde o silêncio do atraso.
+    expect(chain).toContain('adelay=2000:all=1,aresample=async=1:first_pts=0')
+    // Com fim, a janela do arquivo é offset … offset+comprimento (aqui 5 + (8-2)).
+    const bounded = graphOf([{ file: 'clip.mp4', start: 2, end: 8, gainDb: 0, fadeIn: 0, fadeOut: 0, duck: false, offset: 5 }], 10)
+    expect(bounded).toContain('atrim=start=5.000:end=11.000')
+    // Sem atraso (start 0) o resample não é preciso.
+    const noDelay = graphOf([{ file: 'clip.mp4', start: 0, gainDb: 0, fadeIn: 0, fadeOut: 0, duck: false, offset: 5 }], 10)
+    expect(noDelay).not.toContain('aresample')
+  })
+
+  it('loop repete o arquivo e o recorte garante que a faixa acaba', () => {
+    const graph = graphOf([{ file: 'clip.mp4', start: 0, gainDb: 0, fadeIn: 0, fadeOut: 0, duck: false, loop: true }], 6)
+    const chain = graph.split(';')[0]
+    expect(chain).toContain('aloop=loop=-1:size=2147483647,atrim=end=6.000')
+  })
+
+  it('offset e loop também tiram a faixa do caso simples', () => {
+    const plain = { file: 'a.wav', start: 0, gainDb: 0, fadeIn: 0, fadeOut: 0, duck: false }
+    expect(isPlainAudioEvent({ ...plain, offset: 3 })).toBe(false)
+    expect(isPlainAudioEvent({ ...plain, loop: true })).toBe(false)
+  })
+
   it('o duck personalizado vem da primeira cama que o declarou', () => {
     const graph = graphOf([
       { file: 'voz.wav', start: 0, gainDb: 0, fadeIn: 0, fadeOut: 0, duck: false },

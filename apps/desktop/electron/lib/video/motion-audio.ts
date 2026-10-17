@@ -59,6 +59,10 @@ export interface MotionAudioTrack {
   duckSettings?: DuckSettings
   /** Tratamento de timbre, dinâmica e curva de volume (motion-audio-fx.ts). */
   fx: TrackFx
+  /** Segundo DO ARQUIVO em que o som começa (o `data-in` de um vídeo). */
+  offset?: number
+  /** Repete o arquivo até a faixa acabar (um vídeo com `loop`). */
+  loop?: boolean
 }
 
 /** O que o render mistura: as faixas e o acabamento da mixagem inteira. */
@@ -96,7 +100,17 @@ interface ManifestTrack {
  * ou JSON quebrado são erro com o motivo. Uma trilha declarada que some em
  * silêncio é pior que um render que falha dizendo o que houve.
  */
-export async function motionAudioPlan(folder: string, explicit?: string): Promise<MotionAudioPlan> {
+export async function motionAudioPlan(
+  folder: string,
+  explicit?: string,
+  /** Faixas que não vêm do manifest — o som dos `<video>` da página (motion-video-audio.ts). */
+  extra: MotionAudioTrack[] = [],
+): Promise<MotionAudioPlan> {
+  const plan = await declaredAudioPlan(folder, explicit)
+  return extra.length ? { ...plan, tracks: [...plan.tracks, ...extra] } : plan
+}
+
+async function declaredAudioPlan(folder: string, explicit?: string): Promise<MotionAudioPlan> {
   const root = path.resolve(folder)
   if (explicit) return { tracks: [await one(root, path.resolve(explicit), path.basename(explicit), {}, 'audio')], master: null }
   const declared = await manifest(root)
@@ -121,8 +135,12 @@ export async function motionAudioPlan(folder: string, explicit?: string): Promis
 }
 
 /** Só as faixas — quem não precisa do acabamento (a aba, o relatório). */
-export async function motionAudioTracks(folder: string, explicit?: string): Promise<MotionAudioTrack[]> {
-  return (await motionAudioPlan(folder, explicit)).tracks
+export async function motionAudioTracks(
+  folder: string,
+  explicit?: string,
+  extra: MotionAudioTrack[] = [],
+): Promise<MotionAudioTrack[]> {
+  return (await motionAudioPlan(folder, explicit, extra)).tracks
 }
 
 /** Uma faixa: arquivo conferido, caminho servível calculado, defaults aplicados. */
