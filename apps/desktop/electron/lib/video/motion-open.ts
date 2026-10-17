@@ -1,10 +1,14 @@
 import path from 'node:path'
 import { listMedia } from '../media'
 import { panelMotionPreview } from '../panel-browser'
-import { motionAudioTracks } from './motion-audio'
+import { motionAudioPlan, type MotionAudioPlan } from './motion-audio'
 import { registerMotionCover } from './motion-gallery'
 import { describeLayers, measureMotionLayers } from './motion-layers'
+import { describeLint } from './motion-lint'
+import { lintMotionComposition } from './motion-lint-run'
+import { describeMasterFx, describeTrackFx } from './motion-audio-fx'
 import { prepareMotionPreview } from './motion-preview'
+import { describeTransitions } from './motion-transitions'
 import { getMotion, registerMotion } from './motion-store'
 
 /** A peça já tem item na galeria? O `motionId` é o vínculo, não a pasta. */
@@ -85,36 +89,58 @@ export async function openMotionAndReport(input: {
     // (a aba o toca com o preview e o render o mistura) e em que instantes, antes
     // de mexer no comprimento dela ou de reescrever a composição.
     let audio = ''
+    let plan: MotionAudioPlan | null = null
     try {
-      const tracks = await motionAudioTracks(preview.folder)
+      plan = await motionAudioPlan(preview.folder)
+      const { tracks, master } = plan
       if (tracks.length) {
         audio = `Audio (${tracks.length} track${tracks.length > 1 ? 's' : ''} declared in audio.json, mixed by the render): ${tracks
           .map((track) => {
             const span = track.end === undefined ? `${track.start}s→end` : `${track.start}s→${track.end}s`
             const level = track.gainDb === 0 ? '' : `, ${track.gainDb}dB`
             const bed = track.duck ? ', ducked under the others' : ''
+            const treated = describeTrackFx(track.fx)
             const where = track.path ? '' : ', OUTSIDE the composition folder (the tab cannot play it)'
-            return `"${track.name}" (${span}${level}${bed}${where})`
+            return `"${track.name}" (${span}${level}${bed}${treated ? `, ${treated}` : ''}${where})`
           })
           .join('; ')}.`
+        const finish = describeMasterFx(master)
+        if (finish) audio += ` Master: ${finish}.`
       }
     } catch (err) {
       audio = `Audio: the manifest in the composition folder is broken — ${err instanceof Error ? err.message : String(err)}. The render will fail on it.`
     }
+    // O lint junta o que só se vê no texto da composição (relógio de parede,
+    // arquivo que falta…) com o que só se vê rodando (transição fora da peça,
+    // faixa de áudio depois do fim).
+    const lint = await lintMotionComposition({
+      entry: preview.file,
+      folder: preview.folder,
+      runtime: { fps: measured.fps, durationInFrames: measured.durationInFrames, transitions: measured.transitions },
+      audio: plan,
+    })
     return [
       `Motion "${name}" is open in the Motion tab of the right panel (${input.label}) and loads fine: ${measured.width}x${measured.height}, ${measured.durationInFrames} frames at ${measured.fps} fps (${(measured.durationInFrames / measured.fps).toFixed(2)} s).`,
       measured.failedFonts.length ? `Fonts that failed to load: ${measured.failedFonts.join(', ')}.` : '',
       audio,
+      describeTransitions(measured.transitions),
       'Layers (when each enters and leaves the frame):',
       describeLayers(measured.layers, measured.fps),
+      describeLint(lint),
       input.nextStep,
     ]
       .filter(Boolean)
       .join('\n')
   } catch (err) {
-    return (
+    // A composição não carregou: o lint estático (sem rodar nada) costuma apontar
+    // o motivo — um arquivo que falta, um script que não existe.
+    const lint = await lintMotionComposition({ entry: preview.file, folder: preview.folder })
+    return [
       `Motion "${name}" is open in the Motion tab, but it DID NOT LOAD: ${err instanceof Error ? err.message : String(err)}. ` +
-      `The user is looking at an empty stage — ${input.fixHint}`
-    )
+        `The user is looking at an empty stage — ${input.fixHint}`,
+      lint.length ? describeLint(lint) : '',
+    ]
+      .filter(Boolean)
+      .join('\n')
   }
 }

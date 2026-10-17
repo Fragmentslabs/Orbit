@@ -5,6 +5,7 @@ import path from 'node:path'
 import { PassThrough } from 'node:stream'
 import { probeMedia, runFfmpeg } from './ffmpeg'
 import { motionAudioPlan } from './motion-audio'
+import { lintMotionComposition } from './motion-lint-run'
 import {
   assertFrameBytes,
   bandCount,
@@ -22,6 +23,7 @@ import {
 } from './motion-render-args'
 import { capturePageReliably } from './capture'
 import { MOTION_SPEC } from './motion-runtime'
+import type { MotionTransitionInfo } from './motion-transitions'
 
 /**
  * Motion a partir de HTML: o Orbit já é um Chromium, então uma composição
@@ -153,6 +155,7 @@ interface MotionPageSpec {
   duration?: number
   durationInFrames?: number
   failedFonts: string[]
+  transitions?: MotionTransitionInfo[]
 }
 
 interface CapturedFrame {
@@ -411,6 +414,18 @@ export async function renderMotion(opts: MotionOptions): Promise<MotionResult> {
     // faixas que a aba desenha e toca, então o som do preview e o do arquivo final
     // são necessariamente os mesmos arquivos, nos mesmos instantes.
     const { tracks, master } = await motionAudioPlan(path.dirname(path.resolve(opts.file)), opts.audio)
+    // O lint do que dá para ver ANTES de pagar o render: um relógio de parede ou
+    // um sorteio fariam o arquivo sair diferente do que o usuário viu na aba.
+    // Informação, nunca bloqueio — vai junto dos avisos do resultado.
+    const lint = await lintMotionComposition({
+      entry: path.resolve(opts.file),
+      folder: path.dirname(path.resolve(opts.file)),
+      runtime: { fps, durationInFrames: Math.max(1, Math.round(duration * fps)), transitions: page.transitions ?? [] },
+      audio: { tracks, master },
+    })
+    for (const finding of lint) {
+      warnings.push(`lint ${finding.severity} ${finding.rule}${finding.line ? ` (line ${finding.line})` : ''}: ${finding.message}${finding.hint ? ` → ${finding.hint}` : ''}`)
+    }
     let videoOut = opts.output
     if (bands.length > 1 || tracks.length > 0) {
       // Pasta de trabalho ao lado da saída, limpa no finally — como o render de EDL.
