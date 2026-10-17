@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
-import { AudioLines, CheckIcon, ChevronDown, Pause, ChevronLeft, ChevronRight, CodeXml, FileText, Filter, Folder, FolderGit2, HardDriveIcon, ImageOff, Layers, MessageSquare, RefreshCw, Search, Trash2, X } from "lucide-react"
+import { AudioLines, CheckIcon, ChevronDown, Clapperboard, Pause, ChevronLeft, ChevronRight, CodeXml, FileText, Filter, Folder, FolderGit2, HardDriveIcon, ImageIcon, ImageOff, Layers, LayoutGrid, MessageSquare, RefreshCw, Search, Trash2, X } from "lucide-react"
 import type { LucideIcon } from "lucide-react"
-import { assetUrl, mediaKind, thumbUrl, type MediaEntry, type MediaSource } from "@shared/media"
+import { assetUrl, mediaKind, thumbUrl, type MediaEntry, type MediaKind, type MediaSource } from "@shared/media"
 import { folderKey, normalizeFolderName } from "@shared/chat"
 import {
   Dialog,
@@ -23,7 +23,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { artifactApi, mediaApi } from "@/src/lib/ipc"
+import { artifactApi, mediaApi, motionApi } from "@/src/lib/ipc"
 import { useSessionStore } from "@/src/stores/session-store"
 import { ORPHAN_KEY, usePanelStore } from "@/src/stores/panel-store"
 import { useTheme } from "@/components/theme-provider"
@@ -50,6 +50,22 @@ import { scrollToMessage } from "@/src/lib/message-jump"
 
 type SourceFilter = "all" | MediaSource
 type PeriodFilter = "all" | "today" | "week" | "month"
+/** Filtro por TIPO: o que a grade mostra — imagem, página, documento, áudio ou
+ *  peça de motion. */
+type KindFilter = "all" | MediaKind
+
+/**
+ * O ícone de cada tipo, num lugar só: é o MESMO desenho no selo do tile e no
+ * chip do filtro, e é isso que faz o filtro parecer um filtro daquilo que se vê
+ * na grade. Tipo ausente em registro antigo conta como "image" (ver mediaKind).
+ */
+const KIND_ICON: Record<MediaKind, LucideIcon> = {
+  image: ImageIcon,
+  artifact: CodeXml,
+  document: FileText,
+  audio: AudioLines,
+  motion: Clapperboard,
+}
 
 /**
  * ESCOPO da galeria — um filtro só, com quatro naturezas.
@@ -103,6 +119,7 @@ function Thumb({ entry, selected, selecting, onToggle, onOpen, versions = 1 }: {
   versions?: number
 }) {
   const [failed, setFailed] = useState(false)
+  const { t } = useTranslation()
   const { theme } = useTheme()
   const isDark =
     theme === "dark" ||
@@ -134,15 +151,12 @@ function Thumb({ entry, selected, selecting, onToggle, onOpen, versions = 1 }: {
     if (audio.paused) void audio.play().catch(() => setPlaying(false))
     else audio.pause()
   }
-  // Selo por tipo: o grid mistura imagem, página e documento, e o clique faz
-  // coisas diferentes em cada um — sem o selo a diferença é invisível.
-  const badge = isDocument
-    ? (entry.formats ?? []).map((f) => f.toUpperCase()).join("/") || "DOC"
-    : isArtifact
-      ? "HTML"
-      : isAudio
-        ? (entry.id.split(".").pop() ?? "").toUpperCase()
-        : null
+  // Selo por tipo — só o ÍCONE, e agora em TODO tile. O grid mistura imagem,
+  // página, documento, áudio e peça de motion, e o clique faz coisa diferente
+  // em cada um; sem o selo a diferença é invisível. Escrever "HTML", "WAV" ou
+  // "PDF/DOCX" gastava a largura do tile para repetir o que o desenho já diz —
+  // quem quiser o nome por extenso passa o mouse.
+  const KindIcon = KIND_ICON[kind]
 
   return (
     <div
@@ -171,20 +185,25 @@ function Thumb({ entry, selected, selecting, onToggle, onOpen, versions = 1 }: {
           />
         )}
       </button>
-      {badge && (
-        <span className="pointer-events-none absolute right-1.5 top-1.5 flex items-center gap-1 rounded bg-background/85 px-1.5 py-0.5 text-[10px] font-medium text-foreground">
-          {isDocument ? <FileText className="size-3" /> : isAudio ? <AudioLines className="size-3" /> : <CodeXml className="size-3" />}
-          {badge}
+      {/* Selo do tipo e pilha de versões no MESMO canto. Agora que todo tile tem
+          selo, o `!badge` de antes esconderia a pilha justamente na imagem — que
+          é onde ela mais aparece. */}
+      <span className="pointer-events-none absolute right-1.5 top-1.5 flex items-center gap-1">
+        {/* Pilha de edições: o tile é a versão atual, e a pilha diz que existe
+            histórico atrás dela — sem ela, o colapso pareceria perda. */}
+        {versions > 1 && (
+          <span className="flex items-center gap-1 rounded bg-background/85 px-1.5 py-0.5 text-[10px] font-medium text-foreground">
+            <Layers className="size-3" />
+            {versions}
+          </span>
+        )}
+        <span
+          title={t(`media.kind.${kind}`)}
+          className="flex items-center rounded bg-background/85 px-1 py-0.5 text-foreground"
+        >
+          <KindIcon className="size-3" />
         </span>
-      )}
-      {/* Pilha de edições: o tile é a versão atual, e o selo diz que existe
-          histórico atrás dela — sem ele, o colapso pareceria perda. */}
-      {!badge && versions > 1 && (
-        <span className="pointer-events-none absolute right-1.5 top-1.5 flex items-center gap-1 rounded bg-background/85 px-1.5 py-0.5 text-[10px] font-medium text-foreground">
-          <Layers className="size-3" />
-          {versions}
-        </span>
-      )}
+      </span>
       <button
         type="button"
         onClick={onToggle}
@@ -319,6 +338,61 @@ function ScopeFilterMenu({
   )
 }
 
+/**
+ * Filtro por TIPO de mídia, no mesmo molde do filtro de escopo: um chip só, que
+ * mostra o tipo ativo — com o MESMO ícone que o tile leva no selo — e abre a
+ * lista.
+ *
+ * Chip por tipo seria uma parede de botões: são cinco, e cada um repetiria na
+ * barra o que o selo já diz na grade. O menu é também onde "todos os tipos" cabe
+ * como escolha explícita, em vez de virar um sexto chip colado no "Tudo" do
+ * escopo — que quer dizer outra coisa.
+ */
+function KindFilterMenu({
+  kind,
+  onSelect,
+}: {
+  kind: KindFilter
+  onSelect: (value: KindFilter) => void
+}) {
+  const { t } = useTranslation()
+  const kinds = Object.keys(KIND_ICON) as MediaKind[]
+  const ActiveIcon = kind === "all" ? LayoutGrid : KIND_ICON[kind]
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger
+        title={t(`media.kind.${kind}`)}
+        className={cn(
+          "flex max-w-40 items-center gap-1 rounded-full px-2 py-0.5 text-[11px] transition-colors",
+          kind !== "all"
+            ? "bg-sidebar-accent text-sidebar-accent-foreground"
+            : "text-muted-foreground hover:bg-sidebar-accent/50",
+        )}
+      >
+        <ActiveIcon className="size-3 shrink-0" />
+        <span className="truncate">{t(`media.kind.${kind}`)}</span>
+        <ChevronDown className="size-3 shrink-0" />
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start" className="w-48">
+        <DropdownMenuItem onClick={() => onSelect("all")}>
+          <LayoutGrid className="size-3.5" />
+          <span className="truncate">{t("media.kind.all")}</span>
+        </DropdownMenuItem>
+        <DropdownMenuSeparator />
+        {kinds.map((value) => {
+          const Icon = KIND_ICON[value]
+          return (
+            <DropdownMenuItem key={value} onClick={() => onSelect(value)}>
+              <Icon className="size-3.5" />
+              <span className="truncate">{t(`media.kind.${value}`)}</span>
+            </DropdownMenuItem>
+          )
+        })}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  )
+}
+
 export function MediaGallery() {
   const { t, i18n } = useTranslation()
   const { mode, setMode, folders } = useWorkspace()
@@ -332,6 +406,7 @@ export function MediaGallery() {
   const [loading, setLoading] = useState(true)
   const [source, setSource] = useState<SourceFilter>("all")
   const [period, setPeriod] = useState<PeriodFilter>("all")
+  const [kind, setKind] = useState<KindFilter>("all")
   /** Escolha explícita do usuário; null = segue o padrão do contexto atual. */
   const [scopeOverride, setScopeOverride] = useState<string | null>(null)
   const [query, setQuery] = useState("")
@@ -554,6 +629,10 @@ export function MediaGallery() {
     const since = period === "all" ? 0 : Date.now() - PERIOD_MS[period]
     const filtrados = scopedEntries.filter((entry) => {
       if (source !== "all" && entry.source !== source) return false
+      // Tipo é o filtro mais direto que existe aqui ("cadê as peças?"): vai
+      // junto do escopo, antes da data, porque é ele que costuma estar errado
+      // quando a grade parece vazia.
+      if (kind !== "all" && mediaKind(entry) !== kind) return false
       if (!matchesScope(entry, scope)) return false
       if (entry.createdAt < since) return false
       if (!needle) return true
@@ -561,7 +640,7 @@ export function MediaGallery() {
     })
     const { covers, versions } = groupMediaByRoot(scopedEntries, filtrados)
     return { visible: covers, versionsByHead: versions }
-  }, [scopedEntries, source, period, query, scope, matchesScope])
+  }, [scopedEntries, source, period, kind, query, scope, matchesScope])
 
   /** Apagar um item da grade leva o grupo dele — ver expandToGroups. */
   const comVersoes = useCallback(
@@ -614,6 +693,13 @@ export function MediaGallery() {
       // HTML, e o lightbox só sabe mostrar <img>.
       // Áudio toca no próprio tile (ver Thumb) — não há visor para ele.
       if (kind === "audio") return
+      // Peça de motion: o clique abre a ABA, e não o visor — a capa é só a
+      // capa, e o que se quer ver é a apresentação rodando. O vínculo com a
+      // composição é o motionId, e quem sabe reabri-la é o main.
+      if (kind === "motion") {
+        if (entry.motionId) void motionApi.open({ id: entry.motionId })
+        return
+      }
       if (kind !== "artifact" && kind !== "document") {
         setPreview(entry)
         // A cadeia é fixada na abertura: trocar de versão dentro do visor não
@@ -713,6 +799,8 @@ export function MediaGallery() {
             hasLoose={hasLoose}
             onSelect={(value) => setScopeOverride(value)}
           />
+          <span className="mx-1 h-3 w-px bg-sidebar-border" />
+          <KindFilterMenu kind={kind} onSelect={setKind} />
         </div>
         <div className="flex flex-wrap items-center gap-1">
           {sourceFilters.map((value) => (

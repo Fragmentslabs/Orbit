@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto'
 import fs from 'node:fs'
 import fsp from 'node:fs/promises'
 import path from 'node:path'
+import { Readable } from 'node:stream'
 import { MOTION_SCHEME } from '@shared/media'
 import { resolveSafePath, type ToolContext } from '../tools/context'
 import { isAlphaFormat, motionFormatExt, normalizeMotionFormat, type MotionFormatInput } from './motion-render-args'
@@ -104,6 +105,60 @@ async function load(fresh = false): Promise<Record<string, MotionEntry>> {
 export function motionIdFor(folder: string, entry: string): string {
   const key = `${path.resolve(folder).toLowerCase()}|${path.resolve(entry).toLowerCase()}`
   return `mv_${createHash('sha1').update(key).digest('hex').slice(0, 16)}`
+}
+
+/**
+ * A peça registrada a partir do caminho que o agente usou no preview.
+ *
+ * É o que o card do chat tem em mãos: o `input.path` da tool, que pode ser a
+ * pasta da composição ou o HTML de entrada. O renderer não conhece id nenhum —
+ * quem sabe traduzir caminho em peça é o registro, aqui.
+ */
+export async function motionIdForPath(target: string): Promise<string | null> {
+  const wanted = path.resolve(target).toLowerCase()
+  const entries = await load(true)
+  for (const [id, entry] of Object.entries(entries)) {
+    if (path.resolve(entry.entry).toLowerCase() === wanted) return id
+    if (path.resolve(entry.folder).toLowerCase() === wanted) return id
+  }
+  // O agente costuma dar o caminho RELATIVO à pasta da sessão (é o que a tool
+  // recebe), e aqui não há sessão para resolver contra: `path.resolve` cairia no
+  // cwd do app e não casaria com nada. O FIM do caminho ainda distingue a peça —
+  // o registro é curto, uma pasta por composição —, e a barra no início evita
+  // que `…/intro` case com `…/orbit-intro`.
+  const tail = normalize(target)
+  if (!tail.includes("/")) return null
+  for (const [id, entry] of Object.entries(entries)) {
+    if (normalize(entry.entry).endsWith(`/${tail}`)) return id
+    if (normalize(entry.folder).endsWith(`/${tail}`)) return id
+  }
+  return null
+}
+
+/** Caminho comparável: separador normalizado, sem `./` na frente, minúsculo. */
+function normalize(value: string): string {
+  return value.replace(/\\/g, "/").replace(/^\.\//, "").replace(/\/+$/, "").toLowerCase()
+}
+
+/**
+ * A peça registrada a partir do NOME que a composição tem na conversa.
+ *
+ * É o caso do modo CHAT: `motion_write({ name, html })` não tem caminho nenhum
+ * no `input`, só o nome — a composição mora no armazenamento do Orbit, uma pasta
+ * por conversa, e a pasta leva o slug do nome. O card manda o nome que a tool
+ * relatou (já normalizado) e a sessão; quem sabe em que pasta ele caiu é o
+ * registro. A sessão faz parte da chave porque o mesmo nome em duas conversas
+ * são duas peças diferentes.
+ */
+export async function motionIdForName(sessionId: string, name: string): Promise<string | null> {
+  const wanted = name.trim().toLowerCase()
+  if (!wanted) return null
+  const entries = await load(true)
+  for (const [id, entry] of Object.entries(entries)) {
+    if (entry.sessionId !== sessionId) continue
+    if (path.basename(entry.folder).toLowerCase() === wanted) return id
+  }
+  return null
 }
 
 let writing: Promise<void> = Promise.resolve()
@@ -323,7 +378,16 @@ export function unwatchMotion(id: string): void {
 // ----------------------------------------------------------------- protocol
 const CORS_HEADERS = { 'Access-Control-Allow-Origin': '*' } as const
 
-function respond(body: BodyInit | null, type: string, status = 200): Response {
+function respond(
+  body: BodyInit | null,
+  type: string,
+  status = 200,
+  extra: Record<string, string> = {},
+): Response {
+  // Um corpo de stream não tem comprimento conhecido: quem o monta diz o
+  // `Content-Length` no `extra` (é o tamanho da FAIXA, não do arquivo).
+  const length =
+    typeof body === 'string' ? Buffer.byteLength(body) : body instanceof Uint8Array ? body.byteLength : null
   return new Response(body, {
     status,
     headers: {
@@ -332,6 +396,66 @@ function respond(body: BodyInit | null, type: string, status = 200): Response {
       // A composição é editada com o preview aberto: cache serviria a versão
       // antiga e a recarga ao vivo pareceria não funcionar.
       'Cache-Control': 'no-store',
+      // É ESTA linha que diz ao Chromium que o recurso aceita reposicionar.
+      // Sem ela um <audio> da peça ainda toca (o fluxo é sequencial), mas
+      // `currentTime` vira sugestão: pausar e voltar recomeça do zero.
+      'Accept-Ranges': 'bytes',
+      ...(length === null ? {} : { 'Content-Length': String(length) }),
+      ...extra,
+    },
+  })
+}
+
+/**
+ * O que o Chromium carrega como MÍDIA (o `<audio>`/`<video>` da peça). Só estes
+ * arquivos dispensam o `no-store` — ver `respondMedia`.
+ */
+const MEDIA_EXTENSIONS = new Set([
+  '.mp3',
+  '.m4a',
+  '.aac',
+  '.wav',
+  '.ogg',
+  '.oga',
+  '.opus',
+  '.flac',
+  '.mp4',
+  '.webm',
+  '.mov',
+])
+
+/**
+ * Resposta de MÍDIA (o `<audio>`/`<video>` da peça): `respond` SEM `Cache-Control`.
+ *
+ * O `no-store` existe para a recarga ao vivo — a composição é editada com o
+ * preview aberto, e cache serviria os bytes antigos. Mas ele é veneno para uma
+ * mídia: sem poder guardar o que já baixou, o elemento refaz o pedido a cada
+ * reposicionamento. Enquanto o scheme não anunciava faixas isso não aparecia
+ * (todo pedido era sequencial, e o seek era ignorado); agora que ele anuncia — e
+ * o Chromium REPOSICIONA de verdade — cada reata descartava o buffer e rebaixava
+ * o arquivo, e o som picotava em vez de tocar. É por isso que o `video/store.ts`
+ * e o `audio-store.ts`, que sempre tocaram bem, não mandam esse cabeçalho.
+ *
+ * A recarga ao vivo não perde nada: o preview põe `?r=` na URL da mídia também,
+ * então a voz regerada chega por uma URL nova.
+ *
+ * Só vale para `MEDIA_EXTENSIONS`. O JS/CSS/imagem da composição é pedido pela
+ * MESMA URL a cada recarga, e para esses o `no-store` continua sendo o que faz a
+ * edição aparecer.
+ */
+function respondMedia(
+  body: BodyInit | null,
+  type: string,
+  status: number,
+  extra: Record<string, string>,
+): Response {
+  return new Response(body, {
+    status,
+    headers: {
+      ...CORS_HEADERS,
+      'Content-Type': type,
+      'Accept-Ranges': 'bytes',
+      ...extra,
     },
   })
 }
@@ -355,19 +479,44 @@ export function registerMotionProtocol(): void {
     }
     const file = resolveMotionFile(entry.folder, url.pathname)
     if (!file) return respond('not found', 'text/plain; charset=utf-8', 404)
-    let buffer: Buffer
-    try {
-      buffer = await fsp.readFile(file)
-    } catch {
-      return respond('file moved or deleted', 'text/plain; charset=utf-8', 404)
-    }
     const ext = path.extname(file).toLowerCase()
     const type = CONTENT_TYPES[ext] ?? 'application/octet-stream'
-    const body: BodyInit =
-      ext === '.html' || ext === '.htm'
-        ? injectMotionRuntime(buffer.toString('utf8'), MOTION_SCHEME, id)
-        : new Uint8Array(buffer)
-    return respond(body, type)
+    // O HTML não sai como está: o runtime entra no <head>, então o corpo deixa de
+    // ser o arquivo e faixa não se aplica.
+    if (ext === '.html' || ext === '.htm') {
+      const html = await fsp.readFile(file, 'utf8').catch(() => null)
+      if (html === null) return respond('file moved or deleted', 'text/plain; charset=utf-8', 404)
+      return respond(injectMotionRuntime(html, MOTION_SCHEME, id), type)
+    }
+    const size = await fsp
+      .stat(file)
+      .then((stat) => (stat.isFile() ? stat.size : null))
+      .catch(() => null)
+    if (size === null) return respond('file moved or deleted', 'text/plain; charset=utf-8', 404)
+    const stream = (start: number, end: number) =>
+      Readable.toWeb(fs.createReadStream(file, { start, end })) as unknown as ReadableStream
+    // Só a mídia perde o `no-store` (ver `respondMedia`): para todo o resto ele
+    // continua sendo o que faz a recarga ao vivo mostrar a edição.
+    const send = MEDIA_EXTENSIONS.has(ext) ? respondMedia : respond
+    // Faixa (a mesma resposta que o video/store.ts dá ao <video>): é por aqui que
+    // o Chromium REPOSICIONA a narração da peça no preview. Sem esta resposta o
+    // recurso é tratado como não-buscável — o som toca na minutagem certa, mas
+    // pausar no meio e voltar recomeça o arquivo do zero.
+    const range = /^bytes=(\d*)-(\d*)$/.exec(request.headers.get('range') ?? '')
+    if (range) {
+      const start = range[1] ? Number(range[1]) : Math.max(0, size - Number(range[2] || 0))
+      const end = range[1] && range[2] ? Math.min(Number(range[2]), size - 1) : size - 1
+      if (!Number.isFinite(start) || !Number.isFinite(end) || start >= size || start > end) {
+        return respond(null, 'text/plain; charset=utf-8', 416, { 'Content-Range': `bytes */${size}` })
+      }
+      return send(stream(start, end), type, 206, {
+        'Content-Length': String(end - start + 1),
+        'Content-Range': `bytes ${start}-${end}/${size}`,
+      })
+    }
+    return send(size > 0 ? stream(0, size - 1) : new Uint8Array(0), type, 200, {
+      'Content-Length': String(size),
+    })
   })
 }
 
@@ -381,6 +530,16 @@ export interface MotionRenderRequest {
   format?: MotionFormatInput
   /** Caminho de saída relativo à pasta de trabalho (padrão: render.<ext>). */
   output?: string
+  /**
+   * Destino ABSOLUTO escolhido pela PESSOA no diálogo nativo — o render da aba
+   * do painel.
+   *
+   * Diferente de `output`, não passa pelo resolveSafePath: quem escolheu foi o
+   * dono da máquina, num diálogo do sistema, e a gravação pode legitimamente
+   * cair fora das pastas do projeto. `output` continua sendo o caminho do
+   * AGENTE, e por isso continua preso às raízes autorizadas.
+   */
+  saveAs?: string
   /** Redundante com os formatos `-alpha`, mas continua valendo para os antigos. */
   transparent?: boolean
   /** Faixas paralelas; 1 = sequencial (determinístico). */
@@ -400,6 +559,22 @@ export interface MotionRenderResult {
   fps: number
   duration: number
   frames: number
+}
+
+/**
+ * Onde o render da peça nasceria se ninguém escolhesse: ao lado da composição.
+ *
+ * É o ponto de partida do diálogo de salvar do main — a pessoa confirma ou
+ * troca a pasta, mas abre já no lugar certo, com o nome e a extensão do formato
+ * que ela pediu. `null` quando a composição não está mais registrada.
+ */
+export async function suggestedMotionOutput(
+  id: string,
+  format?: MotionFormatInput,
+): Promise<string | null> {
+  const entry = await getMotion(id)
+  if (!entry) return null
+  return path.join(entry.folder, `render${motionFormatExt(normalizeMotionFormat(format, false))}`)
 }
 
 /**
@@ -437,9 +612,11 @@ export async function renderRegisteredMotion(
   if (req.transparent && !alpha) {
     throw new Error('transparent render needs format "mov-alpha" (ProRes 4444) or "webm-alpha" (VP9 with alpha)')
   }
-  const output = req.output
-    ? resolveSafePath(ctx, req.output)
-    : path.join(entry.folder, `render${motionFormatExt(format)}`)
+  const output = req.saveAs
+    ? path.resolve(req.saveAs)
+    : req.output
+      ? resolveSafePath(ctx, req.output)
+      : path.join(entry.folder, `render${motionFormatExt(format)}`)
   await fsp.mkdir(path.dirname(output), { recursive: true })
   const result = await renderMotion({
     // Já está registrada: o render não registra de novo nem libera no fim.

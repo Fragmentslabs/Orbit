@@ -12,12 +12,14 @@
 export type MediaSource = "chat" | "user" | "screenshot" | "script" | "batch"
 
 /**
- * Imagem (o caso histórico), artefato HTML renderizável, ou documento
- * (relatório/proposta autorado pelo agente, entregue em PDF e/ou DOCX), ou
- * áudio (anexado pelo usuário ou gerado pelo agente).
+ * Imagem (o caso histórico), artefato HTML renderizável, documento
+ * (relatório/proposta autorado pelo agente, entregue em PDF e/ou DOCX), áudio
+ * (anexado pelo usuário ou gerado pelo agente) ou motion (uma peça: a
+ * composição é uma PASTA do projeto e nada dela é copiado para cá — o registro
+ * guarda a capa e o `motionId`, e abrir é reabrir a aba Motion).
  * Ausente em registros gravados antes disso existir = "image".
  */
-export type MediaKind = "image" | "artifact" | "document" | "audio"
+export type MediaKind = "image" | "artifact" | "document" | "audio" | "motion"
 
 /** Formatos de entrega de um documento. O fonte é sempre Markdown; estes são
  *  os arquivos renderizados a partir dele. */
@@ -97,6 +99,13 @@ export interface MediaEntry {
   /** Só em artefatos: incrementa a cada update_artifact. O arquivo é reescrito
    *  no lugar (a URL não muda), então é isto que invalida o cache do iframe. */
   revision?: number
+  /**
+   * Só em peças de motion: o id da composição no registro do main
+   * (`orbit-data/motion.json`). É por ele que a aba Motion reabre a peça — e o
+   * ÚNICO vínculo com o conteúdo, já que a composição mora na pasta do projeto
+   * e nada dela é copiado para a galeria.
+   */
+  motionId?: string
   /** Só em documentos: quais renderizações existem em disco. Vazio é o caso
    *  normal — o documento nasce só em Markdown e o arquivo é gerado no
    *  primeiro download. */
@@ -210,6 +219,11 @@ export function assetUrl(entry: Pick<MediaEntry, "id" | "kind">): string {
   if (kind === "artifact") return `${ARTIFACT_SCHEME}://${entry.id}`
   if (kind === "document") return `${ARTIFACT_SCHEME}://${documentPreviewId(entry.id)}`
   if (kind === "audio") return `${AUDIO_SCHEME}://${entry.id}`
+  // A peça não tem arquivo próprio para abrir: o único byte guardado na galeria
+  // é a CAPA (a composição é uma pasta do projeto, servida pelo
+  // orbit-motion:// e reaberta pela aba). Sem esta linha o id da capa seria
+  // pedido ao scheme errado e voltaria vazio.
+  if (kind === "motion") return thumbUrl(entry) ?? `${MEDIA_SCHEME}://${entry.id}`
   return `${MEDIA_SCHEME}://${entry.id}`
 }
 

@@ -5,11 +5,18 @@ vi.mock('electron', () => ({ BrowserWindow: class {} }))
 const { describeLayers, mergeSpans, pickLayers } = await import('./motion-layers')
 type RawLayer = import('./motion-layers').RawLayer
 
-const raw = (name: string, parent: number, spans: [number, number][], named = false): RawLayer => ({
+const raw = (
+  name: string,
+  parent: number,
+  spans: [number, number][],
+  named = false,
+  extra: Partial<RawLayer> = {},
+): RawLayer => ({
   name,
   named,
   parent,
   spans,
+  ...extra,
 })
 
 describe('mergeSpans', () => {
@@ -45,7 +52,28 @@ describe('pickLayers', () => {
       name: 'VOCÊ NÃO PRECISA',
       named: false,
       spans: [[30, 89]],
+      // A posição na lista é o endereço do elemento (o retrato cru não declarou
+      // `index`, então vale a ordem) e o tipo fica em "other" sem medição.
+      index: 2,
+      kind: 'other',
     })
+  })
+
+  it('leva o ENDEREÇO e o TIPO de cada camada — é o que a aba realça e desenha', () => {
+    const typed: RawLayer[] = [
+      raw('stage', -1, [[0, 299]], true),
+      raw('titulo', 0, [[10, 90]], true, { kind: 'text' }),
+      raw('foto', 0, [[20, 80]], true, { kind: 'image' }),
+      raw('player', 0, [[30, 70]], true, { kind: 'video', index: 9 }),
+    ]
+    expect(pickLayers(typed, 300).map((l) => [l.name, l.index, l.kind])).toEqual([
+      ['stage', 0, 'other'],
+      ['titulo', 1, 'text'],
+      ['foto', 2, 'image'],
+      // O índice DECLARADO vence a posição na lista: é o runtime que sabe o
+      // endereço, e um retrato reordenado não pode trocar o realce de elemento.
+      ['player', 9, 'video'],
+    ])
   })
 
   it('drops the words of a NAMED phrase that enters and leaves (they are parts of it)', () => {

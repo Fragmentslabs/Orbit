@@ -566,7 +566,17 @@ export const motionApi = {
    *  (mov/webm), então o renderer nunca manda `transparent` — a escolha do
    *  usuário no menu é o formato, e só ele. */
   render: (id: string, format: MotionRenderFormat = "mp4") =>
-    window.ipcRenderer.invoke("motion:render", { id, format }) as Promise<MotionRenderResult>,
+    window.ipcRenderer.invoke("motion:render", { id, format }) as Promise<MotionRenderResult | MotionRenderCanceled>,
+  /**
+   * Reabre uma peça já registrada. O card da galeria manda o `id` (o vínculo
+   * dele é o motionId); o card do chat manda o que a tool deixou no `input` — o
+   * `path` que o agente usou no preview (modo código) ou o `name` da composição
+   * com a `sessionId` (modo chat, onde não existe caminho) —, e o main traduz
+   * pelo registro. `false` quando a peça saiu do registro: o projeto pode ter
+   * sido apagado, ou a composição da conversa, removida.
+   */
+  open: (ref: { id?: string; path?: string; sessionId?: string; name?: string }) =>
+    window.ipcRenderer.invoke("motion:open", ref) as Promise<boolean>,
   /** Um evento por quadro renderizado: a linha fina do cabeçalho. */
   onProgress: (listener: (payload: { id: string; frame: number; total: number }) => void) => {
     const wrapper = window.ipcRenderer.on("motion:render:progress", (payload) =>
@@ -596,8 +606,20 @@ export interface MotionLayersResult {
   height: number
   fps: number
   durationInFrames: number
-  /** Ordem do documento (de trás para a frente). Intervalos em quadros, inclusivos. */
-  layers: { name: string; named: boolean; spans: [number, number][] }[]
+  /**
+   * Ordem do documento (de trás para a frente). Intervalos em quadros, inclusivos.
+   * `index` é a posição do elemento na caminhada da página: o rótulo NÃO
+   * identifica um elemento (dois podem se chamar ".caption"), então é por ele que
+   * o preview reencontra o elemento para contorná-lo quando a camada é
+   * selecionada na aba. `kind` é o que ele é, medido no DOM.
+   */
+  layers: {
+    name: string
+    named: boolean
+    spans: [number, number][]
+    index: number
+    kind: "text" | "image" | "video" | "audio" | "other"
+  }[]
   failedFonts: string[]
   /**
    * As faixas da peça, quando ela tem alguma (o manifest `audio.json` da pasta, o
@@ -612,6 +634,15 @@ export interface MotionLayersResult {
     tracks: { name: string; url: string | null; start: number; end: number | null }[]
     error: string | null
   } | null
+}
+
+/**
+ * O render da aba começa por um diálogo de salvar do SISTEMA, para o arquivo
+ * nascer onde a pessoa quiser. Cancelar não é erro: é ela desistindo, e a aba
+ * volta ao repouso em vez de mostrar uma falha que não houve.
+ */
+export interface MotionRenderCanceled {
+  canceled: true
 }
 
 /** Espelho do MotionRenderResult do main (electron/lib/video/motion-store.ts). */

@@ -20,6 +20,9 @@ import { MOTION_SPEC } from './motion-runtime'
 
 export type FrameSpan = [number, number]
 
+/** Que tipo de coisa a camada é (medido no DOM pelo runtime, não declarado). */
+export type LayerKind = 'text' | 'image' | 'video' | 'audio' | 'other'
+
 /** O que o runtime devolve por elemento (ordem do documento). */
 export interface RawLayer {
   name: string
@@ -27,6 +30,9 @@ export interface RawLayer {
   /** Índice do elemento-pai entre os candidatos (-1 = filho do body). */
   parent: number
   spans: FrameSpan[]
+  /** Posição na caminhada da página — o endereço do elemento para o realce. */
+  index?: number
+  kind?: LayerKind
 }
 
 export interface MotionLayer {
@@ -35,6 +41,13 @@ export interface MotionLayer {
   named: boolean
   /** Intervalos visíveis, em quadros inteiros, inclusivos. */
   spans: FrameSpan[]
+  /**
+   * Índice na caminhada da página. O rótulo NÃO identifica um elemento (dois
+   * podem se chamar ".caption"), então é por aqui que o preview reencontra o
+   * elemento para contorná-lo quando a camada é selecionada na aba.
+   */
+  index: number
+  kind: LayerKind
 }
 
 export interface MotionLayers {
@@ -84,12 +97,22 @@ export function pickLayers(raw: RawLayer[], durationInFrames: number, max = MAX_
     return -1
   }
   const out: MotionLayer[] = []
+  /**
+   * O endereço do elemento: por onde o preview o reencontra para contorná-lo, e
+   * o que ele é. O runtime manda os dois campos e a posição na lista é o mesmo
+   * número — os defaults existem para um retrato cru montado à mão (teste) não
+   * precisar repeti-los.
+   */
+  const address = (item: RawLayer, i: number): { index: number; kind: LayerKind } => ({
+    index: item.index ?? i,
+    kind: item.kind ?? 'other',
+  })
   raw.forEach((item, i) => {
     if (spans[i].length === 0) return
     const ancestor = keptAncestor(i)
     if (item.named) {
       kept[i] = true
-      out.push({ name: item.name, named: true, spans: spans[i] })
+      out.push({ name: item.name, named: true, spans: spans[i], ...address(item, i) })
       return
     }
     // Sem nome: só quem entra/sai, e só o mais externo. Dentro de uma camada já
@@ -102,7 +125,7 @@ export function pickLayers(raw: RawLayer[], durationInFrames: number, max = MAX_
       if (!parent.named || !always(spans[ancestor], durationInFrames) || sameSpans(spans[ancestor], spans[i])) return
     }
     kept[i] = true
-    out.push({ name: item.name, named: false, spans: spans[i] })
+    out.push({ name: item.name, named: false, spans: spans[i], ...address(item, i) })
   })
   return out.slice(0, max)
 }
@@ -114,8 +137,12 @@ function clock(frame: number, fps: number): string {
   return `${m}:${(s - m * 60).toFixed(2).padStart(5, '0')}`
 }
 
-/** Resumo das camadas para o agente (uma linha por camada, com entrada e saída). */
-export function describeLayers(layers: MotionLayer[], fps: number): string {
+/**
+ * Resumo das camadas para o agente (uma linha por camada, com entrada e saída).
+ * Só o tempo interessa aqui — o tipo e o endereço são para a aba, não para o
+ * texto que o agente lê.
+ */
+export function describeLayers(layers: Array<Pick<MotionLayer, 'name' | 'named' | 'spans'>>, fps: number): string {
   if (!layers.length) return 'No element enters or leaves the frame (and none has data-layer).'
   return layers
     .map((l) => {

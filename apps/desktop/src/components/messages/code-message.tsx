@@ -19,6 +19,7 @@ import {
 import { ImageGroupView } from "@/src/components/ai/image"
 import { ArtifactPartView } from "@/src/components/ai/artifact-part"
 import { DocumentPartView } from "@/src/components/ai/document-part"
+import { MotionPartView } from "@/src/components/ai/motion-part"
 import { Shimmer } from "@/src/components/ai/shimmer"
 import { SubAgentCard } from "@/src/components/ai/sub-agent-card"
 import { TodoList } from "@/src/components/ai/todo-list"
@@ -228,7 +229,12 @@ function segmentParts(parts: MessagePart[]): Segment[] {
       part.tool !== "create_artifact" &&
       part.tool !== "update_artifact" &&
       part.tool !== "create_document" &&
-      part.tool !== "update_document"
+      part.tool !== "update_document" &&
+      // A peça de motion tem card próprio: sem ele, fechar a aba do painel era
+      // perder a composição de vista — nada a listava na conversa.
+      part.tool !== "motion_preview" &&
+      part.tool !== "motion_write" &&
+      part.tool !== "motion_edit"
     ) {
       const last = segments[segments.length - 1]
       if (last?.kind === "task") last.parts.push(part)
@@ -330,6 +336,11 @@ export function CodeAssistantMessage({ message, sessionId, isLast, isBusy, busyL
           <AudioPartView key={segment.id} part={segment.part} />
         ) : segment.part.type === "video" ? (
           <VideoPartView key={segment.id} part={segment.part} />
+        ) : segment.part.type === "tool" &&
+          (segment.part.tool === "motion_preview" ||
+            segment.part.tool === "motion_write" ||
+            segment.part.tool === "motion_edit") ? (
+          <MotionPartView key={segment.id} part={segment.part} sessionId={sessionId} />
         ) : null,
       )}
       {message.error && (

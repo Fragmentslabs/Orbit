@@ -1,8 +1,49 @@
 import path from 'node:path'
+import { listMedia } from '../media'
 import { panelMotionPreview } from '../panel-browser'
 import { motionAudioTracks } from './motion-audio'
+import { registerMotionCover } from './motion-gallery'
 import { describeLayers, measureMotionLayers } from './motion-layers'
 import { prepareMotionPreview } from './motion-preview'
+import { getMotion, registerMotion } from './motion-store'
+
+/** A peça já tem item na galeria? O `motionId` é o vínculo, não a pasta. */
+async function isInGallery(id: string): Promise<boolean> {
+  try {
+    const items = await listMedia({ kind: 'motion' })
+    return items.some((item) => item.motionId === id)
+  } catch {
+    // Índice ilegível: trata como "não está", e o registro abaixo o reescreve.
+    return false
+  }
+}
+
+/**
+ * Reabre uma peça que JÁ está no registro — o card do chat, o tile da Mídia.
+ *
+ * Não mede nem reporta nada: quem clicou quer ver a peça, não um relatório.
+ * `false` quando a composição saiu do registro (uma peça de projeto apagado
+ * some com ele), e aí quem chamou diz que ela não está mais lá.
+ */
+export async function reopenMotion(id: string): Promise<boolean> {
+  const entry = await getMotion(id)
+  if (!entry) return false
+  // Depois de reiniciar o app o registro volta do disco, mas o watcher não: sem
+  // registrar de novo a peça reaberta abriria sem recarga ao vivo. É idempotente
+  // (mesmo id, mesma entrada) e só religa o watcher.
+  await registerMotion(entry.folder, entry.entry).catch(() => {})
+  // Sem `sessionId` de propósito: o renderer resolve o balde pelo chat ATIVO. A
+  // sessão gravada no registro é a de ORIGEM — para uma peça antiga é outra
+  // conversa, e a aba nasceria num painel que não está na tela (o clique
+  // parecia não fazer nada).
+  panelMotionPreview({
+    id,
+    entry: path.relative(entry.folder, entry.entry),
+    title: path.basename(entry.folder),
+    path: entry.entry,
+  })
+  return true
+}
 
 /**
  * Abre uma composição na aba Motion e conta ao agente como ela ficou.
@@ -34,6 +75,12 @@ export async function openMotionAndReport(input: {
   panelMotionPreview({ id: preview.id, entry: preview.entry, title: name, path: preview.file, sessionId: input.sessionId })
   try {
     const measured = await measureMotionLayers(preview.id, preview.url)
+    // A peça entra na galeria na PRIMEIRA vez que abre: é isso que a deixa
+    // reabrível quando a aba do painel for fechada. Uma vez só (a capa custa uma
+    // janela offscreen a mais) e best-effort — o preview nunca depende disso.
+    if (!(await isInGallery(preview.id))) {
+      await registerMotionCover(preview.id, { sessionId: input.sessionId }).catch(() => false)
+    }
     // As faixas entram no relatório: o agente precisa saber que a peça JÁ tem som
     // (a aba o toca com o preview e o render o mistura) e em que instantes, antes
     // de mexer no comprimento dela ou de reescrever a composição.

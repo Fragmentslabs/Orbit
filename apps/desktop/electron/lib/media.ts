@@ -827,6 +827,69 @@ async function captureNativeThumbs(
   }
 }
 
+/** O que uma peça de motion precisa para entrar na galeria (ver abaixo). */
+export interface SaveMotionMeta {
+  /** Id da composição no registro do main (`orbit-data/motion.json`). */
+  motionId: string
+  title: string
+  /** Pasta de trabalho da peça — o projeto a que ela pertence, para agrupar. */
+  directory?: string
+  sessionId?: string
+  messageId?: string
+  width?: number
+  height?: number
+}
+
+/**
+ * Registra uma PEÇA de motion na galeria.
+ *
+ * Irmão de `saveArtifact`, com uma diferença que decide o resto: o conteúdo NÃO
+ * é um arquivo do Orbit. A composição é uma pasta do PROJETO (a entrada HTML
+ * mais as dependências dela) e nada dela é copiado para cá — o registro aponta
+ * para ela pelo `motionId`, e abrir é reabrir a aba Motion.
+ *
+ * Por isso o `path` aponta para a CAPA: apagar o item da galeria tem de apagar
+ * a NOSSA cópia (a miniatura), nunca o arquivo de quem fez a peça. E por isso o
+ * id é derivado do motionId — registrar de novo a mesma peça ATUALIZA o mesmo
+ * item, em vez de encher a galeria de cards da mesma composição.
+ */
+export async function saveMotionMedia(
+  thumb: Buffer | null,
+  meta: SaveMotionMeta,
+): Promise<MediaEntry> {
+  // O id sai do motionId (que já é `mv_<hex>`): estável entre execuções e sem
+  // nada que o SAFE_ARTIFACT_ID recuse.
+  const id = `mot_${meta.motionId.replace(/[^a-zA-Z0-9]/g, '').slice(0, 40)}.png`
+  await fsp.mkdir(artifactsDir(), { recursive: true })
+  const file = path.join(artifactsDir(), id)
+  if (thumb) await fsp.writeFile(file, thumb)
+  return withIndexLock(async () => {
+    const entries = await readIndex()
+    const existing = entries.find((e) => mediaKind(e) === 'motion' && e.motionId === meta.motionId)
+    const entry: MediaEntry = {
+      ...existing,
+      id,
+      path: file,
+      size: thumb ? thumb.length : (existing?.size ?? 0),
+      createdAt: existing?.createdAt ?? Date.now(),
+      source: 'chat',
+      kind: 'motion',
+      motionId: meta.motionId,
+      name: meta.title,
+      thumb: thumb ? id : existing?.thumb,
+      sessionId: meta.sessionId ?? existing?.sessionId,
+      messageId: meta.messageId ?? existing?.messageId,
+      directory: meta.directory ?? existing?.directory,
+      width: meta.width ?? existing?.width,
+      height: meta.height ?? existing?.height,
+    }
+    if (existing) entries[entries.indexOf(existing)] = entry
+    else entries.push(entry)
+    await writeIndex(entries)
+    return entry
+  })
+}
+
 /** Salva o HTML, captura a miniatura e registra o artefato na galeria. */
 export async function saveArtifact(html: string, meta: SaveArtifactMeta): Promise<ArtifactRef> {
   const id = `art_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}.html`

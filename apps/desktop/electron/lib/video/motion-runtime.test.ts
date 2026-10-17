@@ -36,6 +36,27 @@ describe('parseMotionCommand (host → iframe)', () => {
     expect(parseMotionCommand({ source: MOTION_SOURCE, type: 'loop', on: false })).toEqual({ type: 'loop', on: false })
   })
 
+  it('aceita o realce: o endereço do elemento, com o rótulo para conferir', () => {
+    expect(parseMotionCommand({ source: MOTION_SOURCE, type: 'highlight', index: 12, name: '.caption' })).toEqual({
+      type: 'highlight',
+      index: 12,
+      name: '.caption',
+    })
+    // O nome é opcional (serve de conferência, não de endereço).
+    expect(parseMotionCommand({ source: MOTION_SOURCE, type: 'highlight', index: 12.4 })).toEqual({
+      type: 'highlight',
+      index: 12,
+      name: null,
+    })
+    // Desmarcar é um COMANDO (índice -1), não a ausência dele: sem isso a marca
+    // ficaria na tela até a próxima seleção.
+    expect(parseMotionCommand({ source: MOTION_SOURCE, type: 'highlight', index: null })).toEqual({
+      type: 'highlight',
+      index: -1,
+      name: null,
+    })
+  })
+
   it('rejects anything that is not one of ours', () => {
     expect(parseMotionCommand(null)).toBeNull()
     expect(parseMotionCommand('seek')).toBeNull()

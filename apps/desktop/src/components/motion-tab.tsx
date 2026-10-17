@@ -2,22 +2,27 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import {
   AlertTriangle,
+  Box,
   ChevronDown,
   CircleCheck,
   Clapperboard,
   Film,
+  ImageIcon,
   Layers,
   Loader2,
   Maximize2,
   MessageSquarePlus,
   Minimize2,
+  Music,
   Pause,
   Play,
   Repeat,
   RotateCw,
   SkipBack,
   SkipForward,
+  Type,
   X,
+  type LucideIcon,
 } from "lucide-react"
 import { motionSeconds, motionTimecode } from "@shared/chat"
 import { MOTION_SCHEME } from "@shared/media"
@@ -34,6 +39,12 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { IconAction } from "@/src/components/ai/artifact-part"
 import { motionApi, windowApi, type MotionLayersResult, type MotionRenderFormat } from "@/src/lib/ipc"
+import {
+  MOTION_AUDIO_SEEK_S,
+  motionAudioRate,
+  motionTrackEnd,
+  motionTrackIsLive,
+} from "@/src/lib/motion-audio-range"
 import { usePanelStore } from "@/src/stores/panel-store"
 import { cn } from "@/lib/utils"
 
@@ -89,6 +100,19 @@ interface MotionSpec {
 }
 
 type MotionLayer = MotionLayersResult["layers"][number]
+
+/**
+ * O ícone de cada tipo de camada. O rótulo diz o NOME, não o que o elemento é —
+ * um título e uma foto podem se chamar os dois de ".caption" —, então o tipo vem
+ * medido do DOM pelo runtime e é o que diferencia dois elementos na lista.
+ */
+const LAYER_ICON: Record<MotionLayer["kind"], LucideIcon> = {
+  text: Type,
+  image: ImageIcon,
+  video: Film,
+  audio: Music,
+  other: Box,
+}
 
 type RuntimeMessage =
   | { type: "ready"; durationInFrames: number; width: number; height: number; version: number }
@@ -217,7 +241,7 @@ export function MotionTab({
   const [box, setBox] = useState({ width: 0, height: 0 })
   const [render, setRender] = useState<RenderState>({ status: "idle" })
   const [layers, setLayers] = useState<LayersState>({ status: "idle" })
-  const [selectedLayer, setSelectedLayer] = useState<string | null>(null)
+  const [selectedName, setSelectedName] = useState<string | null>(null)
   /** As faixas da peça, medidas no main junto com as camadas — pela MESMA
    *  resolução que o render usa: o que a linha de tempo desenha e o que toca no
    *  preview são os arquivos que vão no vídeo, nos mesmos instantes. */
@@ -225,10 +249,31 @@ export function MotionTab({
     tracks: { name: string; url: string | null; start: number; end: number | null }[]
     error: string | null
   } | null>(null)
+  /** O comprimento REAL de cada arquivo, medido pelo próprio elemento quando o
+   *  metadata chega: é o que fecha a janela de uma faixa que o manifest não
+   *  delimitou (ver `motionTrackEnd`), em vez de esticá-la até o fim da peça. */
+  const [audioDurations, setAudioDurations] = useState<Record<string, number>>({})
   const audioTracks = audio?.tracks ?? []
-  /** `?r=` é o mesmo truque do iframe: o scheme responde `no-store`, e sem trocar
-   *  a URL os elementos seguiriam tocando os bytes antigos depois de o agente
-   *  regerar a voz. */
+  // O que está em foco pode ser uma CAMADA do DOM ou uma faixa de SOM. O som não
+  // é elemento (toca fora do palco — ver motion-audio.ts), mas se seleciona do
+  // mesmo jeito; é por aqui que a aba sabe qual dos dois está selecionado.
+  const selectedAudio = audioTracks.find((track) => track.name === selectedName) ?? null
+  const measureAudio = (url: string | null, el: HTMLAudioElement | null) => {
+    const duration = el?.duration
+    if (!url || duration === undefined || !Number.isFinite(duration) || duration <= 0) return
+    setAudioDurations((prev) => (prev[url] === duration ? prev : { ...prev, [url]: duration }))
+  }
+  /** A medida do arquivo da faixa. A chave é a URL (e não a posição na lista):
+   *  assim uma peça nova não herda por um instante a medida da anterior. Estável
+   *  entre renders — ela entra nas dependências do efeito que comanda o som. */
+  const trackDuration = useCallback(
+    (track: { url: string | null }): number | null =>
+      track.url ? (audioDurations[track.url] ?? null) : null,
+    [audioDurations],
+  )
+  /** `?r=` é o que faz a voz regerada entrar em cena: a URL muda a cada recarga,
+   *  e sem trocá-la os elementos seguiriam tocando os bytes antigos. É também por
+   *  isso que a mídia pode ser servida sem `no-store` (ver o handler do scheme). */
   const audioSrc = (url: string | null): string | null => (url ? `${url}?r=${reloads}` : null)
 
   /**
@@ -245,28 +290,70 @@ export function MotionTab({
    */
   useEffect(() => {
     const at = frame / FPS
-    // Folga antes de reatar: o `time` chega com o atraso da ponte, e perseguir o
-    // áudio a cada quadro seria pior que a deriva que se quer corrigir.
-    const RESYNC_S = 0.15
     const SEEK_EPSILON_S = 0.02
     const tracks = audio?.tracks ?? []
     tracks.forEach((track, index) => {
       const el = audioRefs.current[index]
       if (!el || !track.url) return
       const local = at - track.start
-      const within = local >= 0 && (track.end === null || at < track.end)
-      if (playing && within) {
-        if (Math.abs(el.currentTime - local) > RESYNC_S) el.currentTime = local
-        if (el.paused) void el.play().catch(() => {})
+      // A janela sai da MESMA função que desenha a barra: sem `end` no manifest
+      // ela é fechada pelo comprimento real do arquivo, e não pelo fim da peça.
+      const within = motionTrackIsLive(track, trackDuration(track), at)
+      if (!within) {
+        if (!el.paused) el.pause()
+        if (el.playbackRate !== 1) el.playbackRate = 1
         return
       }
-      if (!el.paused) el.pause()
-      // Parado, o som fica no quadro do playhead: o play seguinte sai do lugar
-      // certo, e arrastar a régua dá o som daquele instante.
-      if (!playing && within && Math.abs(el.currentTime - local) > SEEK_EPSILON_S) el.currentTime = local
+      if (!playing) {
+        // Parado, o som senta no quadro do playhead — e no ritmo natural, para o
+        // play seguinte sair do lugar certo e no tempo certo.
+        if (el.playbackRate !== 1) el.playbackRate = 1
+        if (Math.abs(el.currentTime - local) > SEEK_EPSILON_S) el.currentTime = local
+        if (!el.paused) el.pause()
+        return
+      }
+      // Rodando, o reata se divide em dois: reposicionamento DE VERDADE (arrasto
+      // da régua, corte, entrada na faixa) é seek; deriva é ritmo.
+      //
+      // Era só seek, e isso passou a doer quando o scheme começou a anunciar
+      // faixas: antes o Chromium IGNORAVA o `currentTime` (o som tocava com uma
+      // folga fixa e ninguém notava); agora que ele obedece, cada deriva virava
+      // descarte de buffer e rebaixamento do arquivo — o som picotava e nunca
+      // assentava. Seek volta a ser só o que é reposicionamento.
+      const drift = el.currentTime - local
+      if (Math.abs(drift) > MOTION_AUDIO_SEEK_S) {
+        el.currentTime = local
+        if (el.playbackRate !== 1) el.playbackRate = 1
+      } else {
+        // O estado do PRÓPRIO elemento é a histerese: ele já está corrigindo?
+        // Sem isso, com a deriva oscilando no limiar, o ritmo ficava ligando e
+        // desligando — e cada reinício do resample é um estalo.
+        const engaged = Math.abs(el.playbackRate - 1) > 0.001
+        const rate = motionAudioRate(drift, engaged)
+        // Folga de 0,5%: reajustar o ritmo a cada quadro seria trocar um
+        // artefato por outro.
+        if (Math.abs(el.playbackRate - rate) > 0.005) el.playbackRate = rate
+      }
+      if (el.paused) void el.play().catch(() => {})
     })
-  }, [audio, playing, frame, reloads])
+  }, [audio, playing, frame, reloads, trackDuration])
   const addQuote = usePanelStore((s) => s.addQuote)
+  const quotes = usePanelStore((s) => s.quotes)
+  /**
+   * A camada que está presa na próxima mensagem do chat (o "marcar"). O botão da
+   * linha fica aceso enquanto for ela — sem isso o gesto não teria resposta
+   * visível, e a única prova estaria lá no anexo do compositor.
+   */
+  const quoteLayer = useMemo(() => {
+    const quote = quotes.find((item) => item.kind === "motion")
+    return quote?.kind === "motion" ? (quote.layer ?? null) : null
+  }, [quotes])
+
+  /** O outro lado do "marcar": a faixa de SOM presa na próxima mensagem. */
+  const quoteAudio = useMemo(() => {
+    const quote = quotes.find((item) => item.kind === "motion")
+    return quote?.kind === "motion" ? (quote.audio ?? null) : null
+  }, [quotes])
 
   // Espelhos para os handlers que não podem depender do render (o listener de
   // mensagem e os atalhos ficam registrados uma vez só).
@@ -358,28 +445,38 @@ export function MotionTab({
 
   /**
    * Comentar o instante: prende o quadro de AGORA à próxima mensagem do chat,
-   * com a camada selecionada e as que estão em cena — o agente sabe de qual
-   * momento E de qual elemento a frase fala ("aqui o título entra rápido").
+   * com o que está em foco — a camada do DOM ou a faixa de som — e as camadas em
+   * cena. O agente sabe de qual momento E de qual elemento a frase fala ("aqui o
+   * título entra rápido").
    *
    * O quadro é congelado no clique — o anexo é um gesto de apontar, não um
    * playhead que segue tocando. Clicar de novo substitui o instante anterior em
    * vez de acumular (ver addQuote no panel-store).
    */
-  const comment = useCallback(() => {
-    if (!entry) return
-    const at = frameRef.current
-    const onScreen = layerList.filter((l) => onScreenAt(l, at)).map((l) => l.name)
-    addQuote({
-      kind: "motion",
-      file: entry,
-      name: title,
-      frame: at,
-      fps: FPS,
-      ...(path ? { path } : {}),
-      ...(selectedLayer ? { layer: selectedLayer } : {}),
-      ...(onScreen.length ? { onScreen: onScreen.slice(0, 12) } : {}),
-    })
-  }, [addQuote, entry, title, path, selectedLayer, layerList])
+  const comment = useCallback(
+    (target?: { layer?: string; audio?: string }) => {
+      if (!entry) return
+      const at = frameRef.current
+      const onScreen = layerList.filter((l) => onScreenAt(l, at)).map((l) => l.name)
+      // O alvo vem do botão da LINHA quando foi ele que chamou; sem ele vale o que
+      // está em foco. Camada e som são campos DIFERENTES: dizer "camada" de um som
+      // mandaria o agente procurar no palco um elemento que não existe lá.
+      const layer = target ? target.layer : selectedAudio ? undefined : (selectedName ?? undefined)
+      const audio = target ? target.audio : (selectedAudio?.name ?? undefined)
+      addQuote({
+        kind: "motion",
+        file: entry,
+        name: title,
+        frame: at,
+        fps: FPS,
+        ...(path ? { path } : {}),
+        ...(layer ? { layer } : {}),
+        ...(audio ? { audio } : {}),
+        ...(onScreen.length ? { onScreen: onScreen.slice(0, 12) } : {}),
+      })
+    },
+    [addQuote, entry, title, path, selectedName, selectedAudio, layerList],
+  )
 
   // ------------------------------------------------------------ ponte iframe
   useEffect(() => {
@@ -535,10 +632,31 @@ export function MotionTab({
 
   // A camada selecionada sumiu da composição (o agente a removeu ou renomeou).
   useEffect(() => {
-    if (selectedLayer && layers.status === "ready" && !layers.layers.some((l) => l.name === selectedLayer)) {
-      setSelectedLayer(null)
+    // Uma faixa de som também tem nome e NÃO é camada: sem a ressalva, o som
+    // selecionado seria desmarcado no mesmo instante em que fosse clicado.
+    if (
+      selectedName &&
+      !selectedAudio &&
+      layers.status === "ready" &&
+      !layers.layers.some((l) => l.name === selectedName)
+    ) {
+      setSelectedName(null)
     }
-  }, [layers, selectedLayer])
+  }, [layers, selectedName, selectedAudio])
+
+  /**
+   * O realce de quem está selecionado mora no PREVIEW, não aqui: o palco é um
+   * sandbox sem same-origin, então quem contorna o elemento é o runtime, a nosso
+   * pedido. E o endereço é o ÍNDICE na caminhada da página, não o rótulo — dois
+   * elementos podem se chamar ".caption".
+   *
+   * Reenvia quando a lista de camadas muda: um save remonta o iframe, e o
+   * documento novo não sabe de realce nenhum. `index: -1` é "tire o realce".
+   */
+  useEffect(() => {
+    const layer = layers.status === "ready" ? layers.layers.find((l) => l.name === selectedName) : undefined
+    post(layer ? { type: "highlight", index: layer.index, name: layer.name } : { type: "highlight", index: -1, name: null })
+  }, [selectedName, layers, post])
 
   // ----------------------------------------------------------- atalhos
   useEffect(() => {
@@ -658,7 +776,15 @@ export function MotionTab({
       setRender({ status: "running", frame: 0, total: 0 })
       motionApi
         .render(motionId, format)
-        .then((result) => setRender({ status: "done", path: result.path }))
+        .then((result) => {
+          // O render começa por um diálogo de salvar do sistema: cancelar não é
+          // falha, é a pessoa desistindo — a aba volta ao repouso.
+          if ("canceled" in result) {
+            setRender({ status: "idle" })
+            return
+          }
+          setRender({ status: "done", path: result.path })
+        })
         .catch((err: unknown) =>
           setRender({ status: "error", message: err instanceof Error ? err.message : String(err) }),
         )
@@ -685,7 +811,10 @@ export function MotionTab({
   const seconds = total / FPS
   const step = rulerStep(seconds)
   const marks = total > 0 ? Array.from({ length: Math.floor(seconds / step) + 1 }, (_, i) => i * step) : []
-  const nameColumn = fullscreen ? "w-40" : "w-24"
+  // A coluna do nome cresceu para caber o ÍCONE do tipo e o botão de marcar sem
+  // espremer o nome. É UMA largura, usada pela régua, pelas faixas de áudio e
+  // pelas camadas: é ela que mantém as três na mesma escala (playhead incluído).
+  const nameColumn = fullscreen ? "w-44" : "w-32"
   const failed = loadError
 
   return (
@@ -694,13 +823,16 @@ export function MotionTab({
     <div
       ref={rootRef}
       className={cn(
-        "group/motion flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-background",
+        // `bg-sidebar`, o mesmo das outras abas do painel (o terminal e o browser
+        // usam esse): com `bg-background` a aba destoava do resto e o cabeçalho
+        // parecia colado na faixa de abas.
+        "group/motion flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-sidebar",
         fullscreen && cn("fixed inset-0 z-[70] h-auto w-auto rounded-none border-0", isMac && "top-8"),
       )}
     >
       {/* Cabeçalho: composição + arquivo à esquerda; recarregar, tela cheia e
-          render à direita. */}
-      <div className="flex shrink-0 items-center justify-between gap-2 border-b border-border/60 px-2.5 py-1.5">
+          render à direita. Mesmo respiro do cabeçalho do browser (p-2). */}
+      <div className="flex shrink-0 items-center justify-between gap-2 border-b border-border/60 p-2">
         <div className="flex min-w-0 items-center gap-2">
           <Clapperboard className="size-3.5 shrink-0 text-muted-foreground" />
           <span className="truncate text-xs font-medium text-muted-foreground">{title}</span>
@@ -935,7 +1067,7 @@ export function MotionTab({
           disabled={!entry || total <= 0}
           title={t("motion.commentHint")}
           aria-label={t("motion.commentHint")}
-          onClick={comment}
+          onClick={() => comment()}
         >
           <MessageSquarePlus className="size-3.5" />
         </Button>
@@ -945,8 +1077,15 @@ export function MotionTab({
           mesmo playhead. Clicar ou arrastar em qualquer ponto busca o quadro;
           clicar no nome seleciona a camada para a nota do chat. */}
       <div className="flex min-h-0 flex-1 flex-col border-t border-border/60">
-        <div className="flex shrink-0 items-center">
-          <div className={cn("flex shrink-0 items-center gap-1.5 px-3 text-[10px] font-medium text-muted-foreground", nameColumn)}>
+        {/* A régua vive DENTRO da área rolável, grudada no topo. Fora dela, a
+            largura da régua não batia com a das linhas assim que a barra de
+            rolagem aparecia (ela ocupa 6px — ver `*::-webkit-scrollbar`), e o
+            playhead saía do lugar em relação às camadas. Aqui régua e linhas têm
+            a mesma largura por construção; o fundo opaco é o que deixa as linhas
+            passarem por baixo. */}
+        <div className="relative min-h-0 flex-1 overflow-y-auto pb-2">
+          <div className="sticky top-0 z-10 flex items-center bg-sidebar">
+            <div className={cn("flex shrink-0 items-center gap-1.5 px-3 text-[10px] font-medium text-muted-foreground", nameColumn)}>
             <Layers className="size-3" />
             {t("motion.layers")}
           </div>
@@ -976,8 +1115,6 @@ export function MotionTab({
             <div className="absolute inset-y-0 w-0.5 -translate-x-1/2 bg-primary" style={{ left: `${position}%` }} />
           </div>
         </div>
-
-        <div className="relative min-h-0 flex-1 overflow-y-auto pb-2">
           {/* O som da peça toca FORA do iframe (o palco é sandbox: sem autoplay,
               sem controle próprio), então os elementos vivem aqui — invisíveis —
               e quem os comanda é o transporte, pelo efeito acima. Um por faixa, na
@@ -990,6 +1127,7 @@ export function MotionTab({
               }}
               src={audioSrc(track.url) ?? undefined}
               preload="auto"
+              onLoadedMetadata={(e) => measureAudio(track.url, e.currentTarget)}
             />
           ))}
           {/* Cada faixa é uma LINHA, desenhada onde ela toca: a régua é a peça
@@ -1001,25 +1139,66 @@ export function MotionTab({
             const seconds = total / FPS
             const at = frame / FPS
             const from = seconds > 0 ? Math.min(100, Math.max(0, (track.start / seconds) * 100)) : 0
-            const to = seconds > 0 ? Math.min(100, Math.max(from, ((track.end ?? seconds) / seconds) * 100)) : 100
-            const live = playing && track.url !== null && at >= track.start && (track.end === null || at < track.end)
+            // Sem `end` no manifest a barra esticava até a borda direita; agora ela
+            // termina onde o arquivo realmente tem som (ver motionTrackEnd).
+            const end = motionTrackEnd(track, trackDuration(track)) ?? seconds
+            const to = seconds > 0 ? Math.min(100, Math.max(from, (end / seconds) * 100)) : 100
+            const live = playing && track.url !== null && motionTrackIsLive(track, trackDuration(track), at)
+            const selected = selectedName === track.name
+            const markedAudio = quoteAudio === track.name
             return (
               <div
                 key={`track-${track.name}-${index}`}
-                className="flex h-6 items-center"
+                className={cn("group/audio flex h-6 items-center", selected && "bg-primary/10")}
                 title={t(track.url ? "motion.audioHint" : "motion.audioOutside")}
               >
                 <div
                   className={cn(
-                    "flex h-full shrink-0 items-center gap-1.5 truncate px-3 text-[11px]",
+                    "flex h-full min-w-0 shrink-0 items-center gap-1.5 truncate px-3 text-[11px] transition-colors",
                     nameColumn,
-                    live ? "text-foreground/90" : "text-muted-foreground",
+                    selected
+                      ? "font-medium text-foreground"
+                      : live
+                        ? "text-foreground/90"
+                        : "text-muted-foreground",
                   )}
                 >
-                  <span
-                    className={cn("size-1.5 shrink-0 rounded-full", live ? "bg-emerald-500" : "bg-muted-foreground/30")}
-                  />
-                  <span className="truncate italic">{track.name}</span>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedName(selected ? null : track.name)}
+                    title={t("motion.audioSelect", { name: track.name })}
+                    className="flex min-w-0 flex-1 items-center gap-1.5 text-left"
+                  >
+                    <span
+                      className={cn("size-1.5 shrink-0 rounded-full", live ? "bg-emerald-500" : "bg-muted-foreground/30")}
+                    />
+                    {/* O ícone de SOM também nesta linha: a faixa não é elemento
+                        do DOM (toca fora do palco), mas é do mesmo tipo que uma
+                        camada de áudio de composição — o desenho diz isso sem
+                        precisar de palavra. */}
+                    <Music className="size-3 shrink-0 opacity-70" />
+                    <span className="truncate italic">{track.name}</span>
+                  </button>
+                  {/* Marcar a FAIXA, como se marca a camada — mas em `audio`: o
+                      agente precisa saber que é som, senão procura no palco um
+                      elemento com o nome da trilha. */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSelectedName(track.name)
+                      comment({ audio: track.name })
+                    }}
+                    title={t("motion.audioMarkHint", { name: track.name })}
+                    aria-label={t("motion.audioMarkHint", { name: track.name })}
+                    className={cn(
+                      "flex size-4 shrink-0 items-center justify-center rounded transition-opacity",
+                      markedAudio
+                        ? "text-primary opacity-100"
+                        : "text-muted-foreground opacity-0 group-hover/audio:opacity-100",
+                    )}
+                  >
+                    <MessageSquarePlus className="size-3" />
+                  </button>
                 </div>
                 <div className="relative mr-3 h-full flex-1">
                   <div
@@ -1053,33 +1232,65 @@ export function MotionTab({
             <p className="px-3 py-2 text-[11px] text-muted-foreground">{t("motion.layersEmpty")}</p>
           )}
           {layerList.map((layer, index) => {
-            const selected = selectedLayer === layer.name
+            const selected = selectedName === layer.name
             const visible = onScreenAt(layer, frame)
+            const marked = quoteLayer === layer.name
             const first = layer.spans[0]
             const last = layer.spans[layer.spans.length - 1]
+            const KindIcon = LAYER_ICON[layer.kind] ?? Box
+            const mark = () => {
+              setSelectedName(layer.name)
+              comment({ layer: layer.name })
+            }
             return (
               <div
                 key={`${layer.name}-${index}`}
-                className={cn("flex h-6 items-center", selected && "bg-primary/10")}
+                className={cn("group/layer flex h-6 items-center", selected && "bg-primary/10")}
               >
-                <button
-                  type="button"
-                  onClick={() => setSelectedLayer(selected ? null : layer.name)}
-                  title={t("motion.layerSelect", { name: layer.name })}
+                <div
                   className={cn(
-                    "flex h-full shrink-0 items-center gap-1.5 truncate px-3 text-left text-[11px] transition-colors",
+                    "flex h-full min-w-0 shrink-0 items-center gap-1.5 truncate px-3 text-[11px] transition-colors",
                     nameColumn,
                     selected ? "font-medium text-foreground" : visible ? "text-foreground/90" : "text-muted-foreground",
                   )}
                 >
-                  <span
+                  <button
+                    type="button"
+                    onClick={() => setSelectedName(selected ? null : layer.name)}
+                    title={t("motion.layerSelect", { name: layer.name })}
+                    className="flex min-w-0 flex-1 items-center gap-1.5 text-left"
+                  >
+                    <span
+                      className={cn(
+                        "size-1.5 shrink-0 rounded-full",
+                        visible ? "bg-emerald-500" : "bg-muted-foreground/30",
+                      )}
+                    />
+                    {/* O `title` vai no invólucro: o ícone do lucide não aceita o
+                        atributo, e o nome do tipo tem de estar a um hover. */}
+                    <span className="flex shrink-0" title={t(`motion.kind.${layer.kind}`)}>
+                      <KindIcon className="size-3 opacity-70" />
+                    </span>
+                    <span className={cn("truncate", !layer.named && "italic")}>{layer.name}</span>
+                  </button>
+                  {/* Marcar: prende ESTA camada — e o quadro de agora — à próxima
+                      mensagem do chat. Aparece no hover e fica aceso quando é a
+                      marcada: em quarenta faixas, botão sempre visível é ruído. */}
+                  <button
+                    type="button"
+                    onClick={mark}
+                    title={t("motion.layerMarkHint", { name: layer.name })}
+                    aria-label={t("motion.layerMarkHint", { name: layer.name })}
                     className={cn(
-                      "size-1.5 shrink-0 rounded-full",
-                      visible ? "bg-emerald-500" : "bg-muted-foreground/30",
+                      "flex size-4 shrink-0 items-center justify-center rounded transition-opacity",
+                      marked
+                        ? "text-primary opacity-100"
+                        : "text-muted-foreground opacity-0 group-hover/layer:opacity-100",
                     )}
-                  />
-                  <span className={cn("truncate", !layer.named && "italic")}>{layer.name}</span>
-                </button>
+                  >
+                    <MessageSquarePlus className="size-3" />
+                  </button>
+                </div>
                 <div
                   className="relative mr-3 h-full flex-1 cursor-pointer touch-none select-none"
                   onPointerDown={onTrackDown}
@@ -1099,6 +1310,12 @@ export function MotionTab({
                   {layer.spans.map(([a, b]) => (
                     <div
                       key={`${a}-${b}`}
+                      // Clicar na própria BARRA seleciona a camada — e o evento
+                      // segue para a faixa, que reposiciona o playhead: os dois
+                      // gestos pedem a mesma coisa ("ir até ali e me mostrar quem
+                      // é"). Não é preciso parar a propagação; este chega antes,
+                      // o da faixa logo depois.
+                      onPointerDown={() => setSelectedName(layer.name)}
                       className={cn(
                         "absolute inset-y-1 rounded-sm",
                         selected ? "bg-primary" : layer.named ? "bg-primary/45" : "bg-muted-foreground/35",

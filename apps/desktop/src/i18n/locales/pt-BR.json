@@ -1863,6 +1863,14 @@
       "script": "Script",
       "batch": "Lote"
     },
+    "kind": {
+      "all": "Todos os tipos",
+      "image": "Imagem",
+      "artifact": "Artefato HTML",
+      "document": "Documento",
+      "audio": "Áudio",
+      "motion": "Peça"
+    },
     "period": {
       "all": "Qualquer data",
       "today": "24h",
@@ -2304,6 +2312,9 @@
   },
   "motion": {
     "unavailable": "Composição indisponível",
+    "composition": "Composição da conversa",
+    "openTab": "Abrir na aba Motion",
+    "gone": "Esta peça não está mais no registro — a pasta do projeto pode ter sido apagada.",
     "loading": "Carregando a composição…",
     "reload": "Recarregar",
     "comment": "Comentar o instante — anexa o quadro atual à próxima mensagem do chat",
@@ -2341,7 +2352,17 @@
     "layersFailed": "Não deu para medir as camadas: {{error}}",
     "layerSpan": "{{name}} · entra {{from}} · sai {{to}}",
     "layerSelect": "Selecionar a camada {{name}} para o contexto",
-    "commentHint": "Comentar este instante (e a camada selecionada) no chat",
+    "layerMarkHint": "Marcar a camada \"{{name}}\" e comentar no chat",
+    "audioSelect": "Selecionar a faixa de som {{name}} para o contexto",
+    "audioMarkHint": "Marcar a faixa de som \"{{name}}\" e comentar no chat",
+    "kind": {
+      "text": "Texto",
+      "image": "Imagem",
+      "video": "Vídeo",
+      "audio": "Áudio",
+      "other": "Outro"
+    },
+    "commentHint": "Comentar este instante (e o que está em foco) no chat",
     "loadFailed": "A composição não carregou",
     "loadFailedHttp": "O servidor respondeu {{status}}: {{text}}",
     "loadTimeout": "A página não respondeu em {{seconds}} s.",

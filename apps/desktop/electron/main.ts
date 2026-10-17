@@ -5,13 +5,17 @@ import {
   MOTION_PROGRESS_CHANNEL,
   getMotion,
   motionAudioUrl,
+  motionIdForName,
+  motionIdForPath,
   registerMotionProtocol,
   registeredMotionUrl,
   renderRegisteredMotion,
+  suggestedMotionOutput,
   type MotionRenderRequest,
 } from './lib/video/motion-store'
 import { measureMotionLayers } from './lib/video/motion-layers'
 import { motionAudioTracks } from './lib/video/motion-audio'
+import { reopenMotion } from './lib/video/motion-open'
 import { registerBundledFfmpeg } from './lib/video/ffmpeg'
 import sharp from 'sharp'
 import { createRequire } from 'node:module'
@@ -2003,12 +2007,57 @@ app.whenReady().then(() => {
   // serve a PASTA registrada e o script do runtime que o render também usa.
   registerMotionProtocol()
 
+  // Reabrir uma peça que já está no registro: o card do chat e o tile da Mídia
+  // mandam só o id. A composição (pasta + entrada) sai do registro do main — o
+  // renderer não tem por que conhecer caminho de projeto nenhum.
+  ipcMain.handle(
+    'motion:open',
+    async (_event, ref: { id?: string; path?: string; sessionId?: string; name?: string }) => {
+      // O card da galeria manda o id (o vínculo dele é o motionId); o card do
+      // chat manda o que a tool deixou no `input` — o caminho da pasta do projeto
+      // (motion_preview, modo código) ou o NOME da composição da conversa
+      // (motion_write/motion_edit, modo chat) — e o registro traduz. Nesta ordem:
+      // o id já é a resposta, o caminho é mais preciso que o nome.
+      let id = ref.id ?? null
+      if (!id && ref.path) id = await motionIdForPath(ref.path)
+      if (!id && ref.sessionId && ref.name) id = await motionIdForName(ref.sessionId, ref.name)
+      return id ? reopenMotion(id) : false
+    },
+  )
+
   // Render de uma composição REGISTRADA, pedido pela aba de motion do painel. O
   // renderer manda só o id e o formato; o caminho de entrada é revalidado no
   // main (resolveSafePath) e o progresso volta por 'motion:render:progress'.
-  ipcMain.handle('motion:render', (event, input: { id: string } & MotionRenderRequest) => {
+  ipcMain.handle('motion:render', async (event, input: { id: string } & MotionRenderRequest) => {
     const { id, ...req } = input
-    return renderRegisteredMotion(id, req, (frame, total) => {
+    // O render da aba é um pedido da PESSOA, não do agente: o arquivo nasce onde
+    // ela disser. Sem este diálogo o vídeo caía sempre na pasta da peça, com um
+    // nome fixo, e achá-lo depois virava caça ao tesouro. O caminho escolhido
+    // entra por `saveAs` e por isso NÃO passa pelo resolveSafePath — é a única
+    // saída do render que pode cair fora das pastas do projeto, e é justamente
+    // porque houve uma escolha explícita num diálogo do sistema.
+    const suggested = await suggestedMotionOutput(id, req.format)
+    if (!suggested) {
+      // Composição desconhecida: sem diálogo, para o erro real subir ("unknown
+      // motion composition") em vez de a pessoa escolher um arquivo em vão.
+      return renderRegisteredMotion(id, req, (frame, total) => {
+        if (!event.sender.isDestroyed()) event.sender.send(MOTION_PROGRESS_CHANNEL, { id, frame, total })
+      })
+    }
+    const ext = path.extname(suggested).replace(/^\./, '') || 'mp4'
+    const labels: Record<string, string> = {
+      mov: 'QuickTime (ProRes 4444, com alfa)',
+      webm: 'WebM (VP9, com alfa)',
+    }
+    const options = {
+      title: 'Salvar o vídeo',
+      defaultPath: suggested,
+      filters: [{ name: labels[ext] ?? 'Vídeo MP4 (H.264)', extensions: [ext] }],
+    }
+    const win = BrowserWindow.fromWebContents(event.sender)
+    const picked = win ? await dialog.showSaveDialog(win, options) : await dialog.showSaveDialog(options)
+    if (picked.canceled || !picked.filePath) return { canceled: true }
+    return renderRegisteredMotion(id, { ...req, saveAs: picked.filePath }, (frame, total) => {
       if (!event.sender.isDestroyed()) {
         event.sender.send(MOTION_PROGRESS_CHANNEL, { id, frame, total })
       }

@@ -405,6 +405,22 @@ export const MOTION_RUNTIME = `(() => {
     const cls = (el.getAttribute('class') || '').trim().split(/\\s+/)[0]
     return cls ? '.' + cls : el.tagName.toLowerCase()
   }
+  // Que tipo de coisa a camada é. O rótulo diz o NOME, não o que o elemento é:
+  // um título e uma foto podem se chamar os dois de ".caption". A ordem vai do
+  // concreto para o vago — um contêiner que TEM mídia dentro é a mídia (é o que
+  // se vê), e só o que não tem mídia nem texto sobra como "outro".
+  function layerKind(el) {
+    const tag = (el.tagName || '').toUpperCase()
+    if (tag === 'VIDEO') return 'video'
+    if (tag === 'AUDIO') return 'audio'
+    if (tag === 'IMG' || tag === 'PICTURE' || tag === 'CANVAS' || tag === 'SVG') return 'image'
+    if (el.querySelector) {
+      if (el.querySelector('video')) return 'video'
+      if (el.querySelector('audio')) return 'audio'
+      if (el.querySelector('img,picture,canvas,svg')) return 'image'
+    }
+    return (el.textContent || '').trim() ? 'text' : 'other'
+  }
   function layerCandidates() {
     const out = []
     function walk(el, parent, depth) {
@@ -441,6 +457,47 @@ export const MOTION_RUNTIME = `(() => {
     }
     for (const a of document.getAnimations()) { try { a.pause(); a.currentTime = t * 1000 } catch (err) {} }
   }
+
+  // ------------------------------------------------------- realce da camada
+  // A camada selecionada na aba ganha um contorno AQUI, no documento do preview.
+  // O host não alcança este DOM (o palco é sandbox sem same-origin), então quem
+  // desenha é o runtime, a pedido dele. Duas regras:
+  //   - guardar o 'outline' que já estava lá e devolvê-lo ao desmarcar: a
+  //     composição pode ter o seu, e sair da seleção não pode deixar marca;
+  //   - o índice vem da MEDIÇÃO, feita noutra janela da mesma composição. Se o
+  //     rótulo não bater, a página mexeu no meio — melhor não contornar nada do
+  //     que contornar o elemento errado.
+  // Não passa por applyFrame(): o contorno é do ELEMENTO, não do quadro, então
+  // ele acompanha sozinho o que a composição fizer com ele (transform, keyframe).
+  // A cor vai literal porque a página da composição não tem as variáveis de CSS
+  // do app: é o dourado do tema (o mesmo hsl(44 100% 47%) do mobile).
+  const HIGHLIGHT_RING = '2px solid #f0b000'
+  let highlighted = null
+  let highlightedOutline = null
+  function clearHighlight() {
+    if (!highlighted) return
+    highlighted.style.outline = highlightedOutline.outline
+    highlighted.style.outlineOffset = highlightedOutline.offset
+    highlighted = null
+    highlightedOutline = null
+  }
+  function applyHighlight(index, name) {
+    clearHighlight()
+    if (typeof index !== 'number' || index < 0) return
+    const item = layerCandidates()[index]
+    if (!item) return
+    if (name && layerLabel(item.el) !== name) return
+    highlighted = item.el
+    highlightedOutline = { outline: item.el.style.outline || '', offset: item.el.style.outlineOffset || '' }
+    item.el.style.outline = HIGHLIGHT_RING
+    // POR DENTRO (-2px) de propósito: o contorno é pintado fora da caixa do
+    // elemento, e a camada mais comum de todas é a que ocupa a tela inteira — ali
+    // um contorno externo cairia fora do viewport (ou seria cortado pelo
+    // overflow:hidden do palco) e não apareceria justamente na camada que mais
+    // precisa ser identificada. Por dentro ele aparece sempre.
+    item.el.style.outlineOffset = '-2px'
+  }
+
   window.__orbitMotionLayers = async function (maxSamples) {
     refresh()
     const total = resolved.durationInFrames
@@ -475,6 +532,10 @@ export const MOTION_RUNTIME = `(() => {
           named: item.el.hasAttribute('data-layer'),
           parent: item.parent,
           spans: spans[i],
+          // Posição na caminhada da página: é o endereço do elemento para o
+          // realce (o preview percorre os mesmos candidatos, na mesma ordem).
+          index: i,
+          kind: layerKind(item.el),
         }
       }),
     }
@@ -531,6 +592,7 @@ export const MOTION_RUNTIME = `(() => {
     else if (cmd.type === 'play') play()
     else if (cmd.type === 'pause') pause()
     else if (cmd.type === 'loop') loopOn = cmd.on
+    else if (cmd.type === 'highlight') applyHighlight(cmd.index, cmd.name)
   })
 
   // Mesmas regras da função pura parseMotionCommand (motion-runtime.ts) — aqui em
@@ -541,6 +603,15 @@ export const MOTION_RUNTIME = `(() => {
     if (data.type === 'play') return { type: 'play' }
     if (data.type === 'pause') return { type: 'pause' }
     if (data.type === 'loop') return { type: 'loop', on: Boolean(data.on) }
+    // Índice negativo é "tire o realce": desmarcar é um comando, não a ausência
+    // de um — sem ele a marca ficaria na tela até a próxima seleção.
+    if (data.type === 'highlight') {
+      return {
+        type: 'highlight',
+        index: typeof data.index === 'number' && isFinite(data.index) ? Math.round(data.index) : -1,
+        name: typeof data.name === 'string' ? data.name : null,
+      }
+    }
     return null
   }
 
@@ -562,6 +633,7 @@ export type MotionHostCommand =
   | { type: 'play' }
   | { type: 'pause' }
   | { type: 'loop'; on: boolean }
+  | { type: 'highlight'; index: number; name: string | null }
 
 /** Mensagem do iframe para o host. */
 export type MotionRuntimeMessage =
@@ -583,6 +655,13 @@ export function parseMotionCommand(raw: unknown): MotionHostCommand | null {
   if (msg.type === 'play') return { type: 'play' }
   if (msg.type === 'pause') return { type: 'pause' }
   if (msg.type === 'loop') return { type: 'loop', on: Boolean(msg.on) }
+  if (msg.type === 'highlight') {
+    return {
+      type: 'highlight',
+      index: typeof msg.index === 'number' && Number.isFinite(msg.index) ? Math.round(msg.index) : -1,
+      name: typeof msg.name === 'string' ? msg.name : null,
+    }
+  }
   return null
 }
 
