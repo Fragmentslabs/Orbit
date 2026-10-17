@@ -149,6 +149,15 @@ describe("formatMotionQuoteText", () => {
     expect(texto.endsWith("---\nentra rápido demais")).toBe(true)
   })
 
+  it("com uma faixa de som em foco, o agente lê som — não uma camada", () => {
+    // O som da peça toca FORA do palco (ver motion-audio.ts): chamá-lo de camada
+    // mandaria o agente procurar no DOM um elemento com o nome da trilha, e não
+    // existe nenhum. São campos distintos de propósito.
+    const texto = formatMotionQuoteText({ ...payload, audio: "Cama roxa (cartão 3)" }, "abaixa essa cama")
+    expect(texto).toContain("Selected audio track: Cama roxa (cartão 3)")
+    expect(texto).not.toContain("Selected layer")
+  })
+
   it("não sobra campo de página/linha no texto do modelo", () => {
     const texto = formatMotionQuoteText(payload, "aumente o contraste")
     expect(texto).not.toMatch(/\b(page|line|página|linha)\b/i)

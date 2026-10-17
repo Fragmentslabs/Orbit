@@ -86,6 +86,9 @@ export interface MotionQuote {
   path?: string
   /** Camada selecionada na faixa de camadas, quando houver. */
   layer?: string
+  /** Faixa de som selecionada, quando o foco é um som e não um elemento do DOM
+   *  (o áudio da peça vive fora do palco — ver motion-audio.ts). */
+  audio?: string
   /** Camadas em cena naquele quadro. */
   onScreen?: string[]
 }

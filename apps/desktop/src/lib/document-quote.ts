@@ -28,7 +28,11 @@ const baseName = (p: string) => p.split(/[\\/]/).filter(Boolean).pop() ?? p
  *  traduzir. */
 export function quoteChipLabel(quote: PanelQuote): string {
   if (quote.kind === "motion") {
-    return `Motion · ${baseName(quote.file)} @ ${motionTimecode(quote.frame, quote.fps)}${quote.layer ? ` · ${quote.layer}` : ""}`
+    // O foco da peça pode ser uma camada (elemento do DOM) ou uma faixa de som:
+    // os dois se selecionam do mesmo jeito, e o chip mostra o nome que foi
+    // clicado sem precisar dizer qual dos dois é.
+    const focused = quote.layer ?? quote.audio
+    return `Motion · ${baseName(quote.file)} @ ${motionTimecode(quote.frame, quote.fps)}${focused ? ` · ${focused}` : ""}`
   }
   return `${quote.name}${quoteLocationLabel(quote)}`
 }
@@ -52,6 +56,7 @@ function quotePayload(quote: PanelQuote): QuotePayload {
       fps: quote.fps,
       ...(quote.path ? { path: quote.path } : {}),
       ...(quote.layer ? { layer: quote.layer } : {}),
+      ...(quote.audio ? { audio: quote.audio } : {}),
       ...(quote.onScreen?.length ? { onScreen: quote.onScreen } : {}),
     }
   }

@@ -309,6 +309,10 @@ export interface MotionQuotePayload {
   path?: string
   /** Camada selecionada pelo usuário na faixa de camadas. */
   layer?: string
+  /** Faixa de SOM selecionada, quando o foco é um som e não um elemento do DOM.
+   *  O áudio da peça toca fora do palco (ver motion-audio.ts), então não é uma
+   *  camada — chamá-la de camada mandaria o agente procurar no lugar errado. */
+  audio?: string
   /** Camadas em cena naquele quadro (medidas, não declaradas). */
   onScreen?: string[]
 }
@@ -355,6 +359,7 @@ export function formatMotionQuoteText(quote: MotionQuotePayload, userText?: stri
     `Frame ${frame} at ${quote.fps} fps — ${motionSeconds(quote.frame, quote.fps)} (${motionTimecode(quote.frame, quote.fps)})`,
   ]
   if (quote.layer) linhas.push(`Selected layer: ${quote.layer}`)
+  if (quote.audio) linhas.push(`Selected audio track: ${quote.audio}`)
   if (quote.onScreen?.length) linhas.push(`On screen at this frame: ${quote.onScreen.join(", ")}`)
   const note = userText?.trim()
   if (note) linhas.push("---", note)
