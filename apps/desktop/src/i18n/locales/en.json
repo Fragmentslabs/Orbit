@@ -872,7 +872,8 @@
     "unnamedFile": "File",
     "errorAccept": "No files match the accepted types.",
     "errorMaxFileSize": "All files exceed the maximum size.",
-    "errorMaxFiles": "Too many files. Some were not added."
+    "errorMaxFiles": "Too many files. Some were not added.",
+    "errorPastedVideo": "\"{{name}}\" is a video with no file on disk (pasted) and is too large to attach. Save it and attach the file instead."
   },
   "webPreview": {
     "back": "Go back",

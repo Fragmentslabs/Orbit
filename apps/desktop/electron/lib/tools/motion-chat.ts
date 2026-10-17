@@ -3,6 +3,7 @@ import { tool, type ToolSet } from 'ai'
 import fs from 'node:fs/promises'
 import path from 'node:path'
 import { z } from 'zod'
+import { importAttachmentInto } from '../video/motion-asset'
 import { openMotionAndReport } from '../video/motion-open'
 import type { ToolContext } from './context'
 import { createVideoTools } from './video'
@@ -170,6 +171,29 @@ export function createChatMotionTools(scope: { sessionId: string; modelVision?: 
       },
     }),
   }
+
+  // Ler o material anexado: as mesmas tools do modo código, que aqui só recebem a
+  // REFERÊNCIA do anexo (vdo_…) — o chat não tem pasta de trabalho de onde ler.
+  for (const name of ['video_probe', 'video_transcribe', 'video_timeline'] as const) {
+    if (base[name]) tools[name] = base[name]
+  }
+
+  tools.motion_asset = tool({
+    description:
+      'Copies an ATTACHED file (a video, photo, GIF or audio the user sent in this chat) into a composition, so the piece can use it. ' +
+      'Call it only when you decide to USE the material in the piece; attaching does not copy it anywhere, and reading it (video_probe / video_transcribe / video_timeline, or audio_transcribe) does not need it. ' +
+      'ref: the vdo_… / aud_… / img_… reference from the attachment note. name: the composition (created later by motion_write if it does not exist yet). ' +
+      'The result gives the file name to put in the HTML (relative: src="clip.mp4") and how to use it — timing attributes, crop, sound. The same ref twice gives the same file.',
+    inputSchema: z.object({
+      ref: z.string().describe('Reference from the attachment note: vdo_…, aud_… or img_…'),
+      name: NAME,
+      filename: z.string().optional().describe('Name for the copy (default: the original name, made safe)'),
+    }),
+    execute: async ({ ref, name, filename }) => {
+      const imported = await importAttachmentInto(path.dirname(entryOf(name)), ref, filename)
+      return imported.report
+    },
+  })
 
   if (base.motion_frame) {
     tools.motion_frame = tool({

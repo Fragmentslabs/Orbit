@@ -2,11 +2,13 @@ import { tool, type ToolSet } from 'ai'
 import fs from 'node:fs/promises'
 import path from 'node:path'
 import { z } from 'zod'
+import { looksLikeAttachmentRef, resolveAttachmentRef } from '../attachment-ref'
 import { edlSchema, type Edl } from '../video/edl'
 import { VIDEO_GUIDES } from '../video/guide'
 import { probeMedia, type MediaProbe } from '../video/ffmpeg'
 import { renderMotion } from '../video/motion'
 import { MAX_FRAME_TIMES, captureMotionFrames, frameLabel, sheetFileName } from '../video/motion-frame'
+import { importAttachmentInto } from '../video/motion-asset'
 import { openMotionAndReport } from '../video/motion-open'
 import { renderEdl } from '../video/render'
 import { registerVideo } from '../video/store'
@@ -104,6 +106,21 @@ export function createVideoTools(
 ): ToolSet {
   const rel = (abs: string) => path.relative(ctx.directory, abs) || abs
 
+  /**
+   * O arquivo de uma tool de LEITURA: um caminho da pasta de trabalho, ou a
+   * referência de um anexo do chat (vdo_…). A referência é a única forma de o
+   * agente alcançar o que está fora da pasta — o app a traduz para o arquivo dele.
+   */
+  const mediaFile = async (p: string): Promise<{ file: string; label: string }> => {
+    if (looksLikeAttachmentRef(p)) {
+      const attachment = await resolveAttachmentRef(p)
+      if (!attachment) throw new Error(`attachment not found: ${p} — use the ref from the attachment note`)
+      return { file: attachment.file, label: attachment.id }
+    }
+    const file = resolveSafePath(ctx, p)
+    return { file, label: rel(file) }
+  }
+
   const show = async (file: string, title: string, durationMs?: number) => {
     if (!scope.canShow) return {}
     const { url } = await registerVideo(file, scope.sessionId)
@@ -122,14 +139,14 @@ export function createVideoTools(
       description:
         'Inspects video/audio files: duration, resolution (as displayed, rotation applied), fps, codecs, audio tracks. Cheap — call it first on any footage.',
       inputSchema: z.object({
-        paths: z.array(z.string()).min(1).describe('Files relative to the working folder'),
+        paths: z.array(z.string()).min(1).describe('Files relative to the working folder, or the ref (vdo_… / aud_…) of an attachment'),
       }),
       execute: async ({ paths }) => {
         const lines: string[] = []
         for (const p of paths) {
           try {
-            const abs = resolveSafePath(ctx, p)
-            lines.push(describeProbe(await probeMedia(abs), rel(abs)))
+            const { file, label } = await mediaFile(p)
+            lines.push(describeProbe(await probeMedia(file), label))
           } catch (err) {
             lines.push(`${p}: ${err instanceof Error ? err.message : String(err)}`)
           }
@@ -145,7 +162,12 @@ export function createVideoTools(
         'The packed text is also written to edit/takes_packed.md. Use ids (A, B, C… or take1…) to refer to sources in the EDL.',
       inputSchema: z.object({
         sources: z
-          .array(z.object({ id: z.string().min(1).describe('Short id used in the EDL'), path: z.string() }))
+          .array(
+            z.object({
+              id: z.string().min(1).describe('Short id used in the EDL'),
+              path: z.string().describe('File in the working folder, or the ref (vdo_…) of an attached video'),
+            }),
+          )
           .min(1),
         language: z.string().optional().describe("Spoken language code (pt, en…) when it differs from the user's dictation language"),
         force: z.boolean().optional().describe('Ignore the cache and transcribe again'),
@@ -154,7 +176,7 @@ export function createVideoTools(
         const entries: Parameters<typeof packTranscript>[0] = []
         const notes: string[] = []
         for (const s of sources) {
-          const abs = resolveSafePath(ctx, s.path)
+          const { file: abs } = await mediaFile(s.path)
           const { transcript, cached } = await transcribeVideo(abs, { language, force, signal: abortSignal })
           entries.push({ id: s.id, file: abs, transcript })
           notes.push(`${s.id}: ${cached ? 'cache' : `transcribed (${transcript.engine})`}`)
@@ -176,14 +198,14 @@ export function createVideoTools(
         'Looks at a time window of a video: an image with a filmstrip, the audio waveform and each transcribed word placed where it is spoken; silences ≥ 0.4 s (clean cut points) highlighted in green; optional red marks. ' +
         'Use it at DECISION POINTS — an ambiguous pause, comparing two takes, checking a cut in a rendered output (pass its cut times as marks) — not to scan whole videos. Keep windows short (2–20 s).',
       inputSchema: z.object({
-        path: z.string(),
+        path: z.string().describe('File in the working folder, or the ref (vdo_…) of an attached video'),
         start: z.number().min(0).describe('Seconds'),
         end: z.number().positive().describe('Seconds'),
         frames: z.number().int().min(1).max(16).optional().describe('Filmstrip frames, default 8'),
         marks: z.array(z.number()).optional().describe('Seconds to mark with a red line (e.g. cut points of a rendered output)'),
       }),
       execute: async ({ path: p, start, end, frames, marks }, { toolCallId }) => {
-        const abs = resolveSafePath(ctx, p)
+        const { file: abs, label } = await mediaFile(p)
         if (end <= start) throw new Error('end must be after start')
         const probe = await probeMedia(abs)
         const endMs = Math.min(end * 1000, probe.durationMs)
@@ -202,7 +224,7 @@ export function createVideoTools(
         })
         const inside = words.filter((w) => w.endMs > startMs && w.startMs < endMs)
         const text = [
-          `Timeline of ${rel(abs)} ${sec(startMs)}–${sec(endMs)} s.`,
+          `Timeline of ${label} ${sec(startMs)}–${sec(endMs)} s.`,
           transcript ? '' : 'No transcript cached for this file — words are not shown (run video_transcribe).',
           inside.length ? `Words: ${inside.map((w) => `${w.text}@${sec(w.startMs)}-${sec(w.endMs)}`).join(' ')}` : '',
           silences.length ? `Silences ≥0.4s: ${silences.map((s) => `${sec(s.startMs)}–${sec(s.endMs)}`).join(', ')}` : 'No silence ≥0.4s in this window.',
@@ -435,6 +457,26 @@ export function createVideoTools(
     }),
   }
 
+  tools.motion_asset = tool({
+    description:
+      'Copies an ATTACHED file (a video, photo, GIF or audio the user sent in the chat) into a folder of the working folder, so a composition can use it — or so a video can be cut/joined with the EDL tools, which only read the working folder. ' +
+      'Call it only when you decide to USE the material; attaching does not copy it anywhere. ref: the vdo_… / aud_… / img_… reference from the attachment note. ' +
+      'path: the composition folder (or its index.html) — or any folder in the working folder; it is created if missing. The result says the file name to put in the HTML and how to use it (timing attributes, crop, sound). ' +
+      'The same ref twice gives the same file.',
+    inputSchema: z.object({
+      ref: z.string().describe('Reference from the attachment note: vdo_…, aud_… or img_…'),
+      path: z.string().describe('Destination folder in the working folder, or the composition entry .html'),
+      filename: z.string().optional().describe('Name for the copy (default: the original name, made safe)'),
+    }),
+    execute: async ({ ref, path: p, filename }) => {
+      const target = resolveSafePath(ctx, p)
+      const isFile = (await fs.stat(target).catch(() => null))?.isFile() ?? false
+      const folder = isFile ? path.dirname(target) : target
+      const imported = await importAttachmentInto(folder, ref, filename)
+      return `${imported.report}\nFile: ${rel(imported.file)}`
+    },
+  })
+
   // Modo plano: olhar e ler sim, escrever não. Os dois renders saem porque
   // escrevem o vídeo na pasta de trabalho — e o motion_frame sai com eles: é
   // olhar, mas grava a folha de contato em edit/motion-frames.
@@ -442,6 +484,7 @@ export function createVideoTools(
     delete tools.video_render
     delete tools.motion_render
     delete tools.motion_frame
+    delete tools.motion_asset
   }
 
   // O preview abre uma ABA do painel — recurso único e visível, que não vai

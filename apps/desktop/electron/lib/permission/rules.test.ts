@@ -25,6 +25,8 @@ describe('assess — nativas x MCP', () => {
     expect(assess('motion_render', { path: 'edit/anim' }, null)).toBeNull()
     expect(assess('video_render', { path: 'edit/anim' }, null)).toBeNull()
     expect(assess('show_video', { path: 'edit/anim/render.mp4' }, null)).toBeNull()
+    // Copiar um anexo do chat para a peça: a referência é a única entrada.
+    expect(assess('motion_asset', { ref: 'vdo_x.mp4', path: 'edit/anim' }, null)).toBeNull()
   })
 
   it('uma tool de servidor MCP de verdade continua pedindo', () => {

@@ -67,7 +67,13 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { cn } from "@/lib/utils"
-import { blobUrlsToDataUrls } from "@/src/lib/message-utils"
+import i18n from "@/src/i18n"
+import {
+  MAX_PASTED_VIDEO_BYTES,
+  blobUrlsToDataUrls,
+  isLargeMediaType,
+  rememberAttachmentPath,
+} from "@/src/lib/message-utils"
 
 // ============================================================================
 // Provider Context & Types
@@ -131,6 +137,48 @@ export type PromptInputProviderProps = PropsWithChildren<{
  * Optional global provider that lifts PromptInput state outside of PromptInput.
  * If you don't use it, PromptInput stays fully self-managed.
  */
+/**
+ * Blob URL de um anexo, guardando o caminho do arquivo no disco quando ele existe.
+ * Um vídeo de arquivo vai para o main POR CAMINHO (ver blobUrlsToDataUrls): é o
+ * que evita transformar um filme em base64 dentro do renderer.
+ */
+function objectUrlFor(file: File): string {
+  const url = URL.createObjectURL(file)
+  if (isLargeMediaType(file.type, file.name)) {
+    try {
+      rememberAttachmentPath(url, window.getPathForFile?.(file) ?? "")
+    } catch {
+      // sem caminho (arquivo colado): cai no limite de tamanho de readableAttachments
+    }
+  }
+  return url
+}
+
+/**
+ * Um vídeo SEM caminho (colado da área de transferência) só existe como bytes, e
+ * bytes viram base64 na memória do renderer — acima de um limite isso derruba o
+ * app. Esses são recusados com um aviso; os de arquivo passam por caminho.
+ */
+function readableAttachments(files: File[]): File[] {
+  const kept: File[] = []
+  for (const file of files) {
+    if (isLargeMediaType(file.type, file.name) && file.size > MAX_PASTED_VIDEO_BYTES) {
+      let path = ""
+      try {
+        path = window.getPathForFile?.(file) ?? ""
+      } catch {
+        path = ""
+      }
+      if (!path) {
+        window.alert(i18n.t("attachments.errorPastedVideo", { name: file.name }))
+        continue
+      }
+    }
+    kept.push(file)
+  }
+  return kept
+}
+
 export function PromptInputProvider({
   initialInput: initialTextInput = "",
   children,
@@ -145,7 +193,7 @@ export function PromptInputProvider({
   const openRef = useRef<() => void>(() => {})
 
   const add = useCallback((files: File[] | FileList) => {
-    const incoming = Array.from(files)
+    const incoming = readableAttachments(Array.from(files))
     if (incoming.length === 0) {
       return
     }
@@ -155,7 +203,7 @@ export function PromptInputProvider({
         incoming.map(file => ({
           id: nanoid(),
           type: "file" as const,
-          url: URL.createObjectURL(file),
+          url: objectUrlFor(file),
           mediaType: file.type,
           filename: file.name,
         })),
@@ -518,7 +566,7 @@ export const PromptInput = ({
           next.push({
             id: nanoid(),
             type: "file",
-            url: URL.createObjectURL(file),
+            url: objectUrlFor(file),
             mediaType: file.type,
             filename: file.name,
           })

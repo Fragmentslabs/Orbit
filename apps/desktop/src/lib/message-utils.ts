@@ -2,16 +2,52 @@ import type { ChatViewMode } from "@shared/app-settings"
 import { parseMessageReply } from "@shared/chat"
 import type { ChatMessage, FilePart, MessagePart, ReasoningPart, TextPart, ToolPart } from "@shared/chat"
 
+/**
+ * Caminho real, no disco, de cada anexo cujo conteúdo NÃO deve atravessar a
+ * memória do renderer (vídeos). Registrado quando o arquivo é adicionado ao
+ * input — é a única hora em que o `File` ainda existe — e consumido na
+ * conversão para data URL logo abaixo.
+ */
+const attachmentPaths = new Map<string, string>()
+
+/** Um vídeo é pesado demais para virar data URL: passa por caminho quando há um. */
+export function isLargeMediaType(mediaType: string | undefined, filename?: string): boolean {
+  return !!mediaType?.startsWith("video/") || /\.(mp4|m4v|mov|webm|mkv|avi)$/i.test(filename ?? "")
+}
+
+/** O maior vídeo que ainda se aceita SEM caminho (colado da área de transferência). */
+export const MAX_PASTED_VIDEO_BYTES = 150 * 1024 * 1024
+
+/** `/home/a b/c.mp4` → `file:///home/a%20b/c.mp4` (e `C:\x\y.mp4` → `file:///C:/x/y.mp4`). */
+export function pathToFileUrl(filePath: string): string {
+  const normalized = filePath.replace(/\\/g, "/")
+  const withRoot = normalized.startsWith("/") ? normalized : `/${normalized}`
+  return `file://${encodeURI(withRoot).replace(/[?#]/g, (c) => (c === "?" ? "%3F" : "%23"))}`
+}
+
+/** Guarda o caminho de um arquivo do disco para o blob URL dele (ver acima). */
+export function rememberAttachmentPath(blobUrl: string, filePath: string): void {
+  if (filePath) attachmentPaths.set(blobUrl, filePath)
+}
+
 /** Converte blob URLs dos anexos do input em data URLs estáveis. O input
  * trabalha com blob URLs (URL.createObjectURL) e os REVOGA ao limpar — a fila
  * e o agendamento guardam a mensagem para enviar depois, então precisam da
  * data URL (blob URL revogado vira anexo morto). O envio imediato também usa
  * este caminho (handleSubmit do PromptInput), pela mesma razão: clear() roda
- * antes do submit. */
-export async function blobUrlsToDataUrls<T extends { url?: string }>(files: T[]): Promise<T[]> {
+ * antes do submit. Vídeos de arquivo seguem outro caminho: viram um `file://`
+ * para o main copiar do disco, em vez de gigabytes de base64 no renderer. */
+export async function blobUrlsToDataUrls<T extends { url?: string; mediaType?: string; filename?: string }>(
+  files: T[],
+): Promise<T[]> {
   return Promise.all(
     files.map(async (item) => {
       if (!item.url?.startsWith("blob:")) return item
+      const diskPath = attachmentPaths.get(item.url)
+      if (diskPath && isLargeMediaType(item.mediaType, item.filename)) {
+        attachmentPaths.delete(item.url)
+        return { ...item, url: pathToFileUrl(diskPath) }
+      }
       try {
         const blob = await (await fetch(item.url)).blob()
         const dataUrl = await new Promise<string | null>((resolve) => {

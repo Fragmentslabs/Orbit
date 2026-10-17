@@ -1,4 +1,5 @@
 import { generateText, stepCountIs, streamText, type ModelMessage, type UserContent } from 'ai'
+import fs from 'node:fs/promises'
 import { basename } from 'node:path'
 import type { BrowserWindow } from 'electron'
 import type {
@@ -64,6 +65,8 @@ import { isInitAborted, runProjectInit, type InitHooks, type InitResult } from '
 import { readJson, writeJson } from './storage'
 import { getAppSettings } from './app-settings'
 import { audioExt, audioIdFrom, isAudioFile, saveAudio } from './audio-store'
+import { isVideoFile, saveVideoAttachment, videoAttachmentExt, videoPathFromFileUrl } from './attachment-ref'
+import { imageRefLine, probeVideoAttachment, videoAttachmentNote, videoPoster } from './video/attachment-note'
 import { MIN_COMPACTION_CONTEXT, resolveAuxModel } from './aux-model'
 import { notifyChatError, notifyNewMessage } from './notifications'
 import { buildToolSet, type ImageToolHooks, type ToolContext, type TurnSnapshot } from './tools'
@@ -415,6 +418,65 @@ function audioAttachmentNote(filename: string, id: string, file: string): string
   )
 }
 
+/**
+ * Um vídeo anexado vira: o arquivo guardado no app (o agente só recebe a
+ * REFERÊNCIA e uma linha de metadados), uma miniatura para a bolha e a nota.
+ *
+ * O vídeo chega de duas formas. Escolhido ou arrastado do disco, o renderer manda
+ * só o CAMINHO (`file://…`) e o arquivo é copiado aqui, por clone quando o
+ * sistema de arquivos permite — nunca passa inteiro pela memória. Colado da área
+ * de transferência não há caminho, e vêm os bytes (data URL).
+ */
+async function preprocessVideoAttachment(
+  file: FilePart,
+  deps: { sessionId?: string },
+): Promise<MessagePart[]> {
+  const filename = file.filename ?? ''
+  const refuse = (problem: string): MessagePart[] => [
+    attachmentChip(file),
+    {
+      id: newId('prt'),
+      type: 'text',
+      text: videoAttachmentNote({ filename, id: 'unavailable', file: '', probe: null, problem }),
+      state: 'done',
+      source: 'attachment',
+    },
+  ]
+  const ext = videoAttachmentExt(file.mime, filename)
+  if (!ext) return refuse('Attachment, not a user message. Unsupported video format.')
+  try {
+    let saved
+    if (file.url.startsWith('file://')) {
+      const source = videoPathFromFileUrl(file.url)
+      if (!source) return refuse('Attachment, not a user message. The path is not a video file.')
+      saved = await saveVideoAttachment({ copyFrom: source }, ext, { sessionId: deps.sessionId, name: filename || undefined })
+    } else {
+      const bytes = decodeDataUrlBytes(file.url)
+      if (!bytes) return refuse('Attachment, not a user message. The file could not be read.')
+      saved = await saveVideoAttachment({ bytes }, ext, { sessionId: deps.sessionId, name: filename || undefined })
+    }
+    const probe = await probeVideoAttachment(saved.file)
+    if (!probe || probe.video.length === 0) {
+      // Não é um vídeo de verdade: não deixa a cópia para trás.
+      await fs.rm(saved.file, { force: true })
+      return refuse('Attachment, not a user message. The file is not a readable video.')
+    }
+    const poster = await videoPoster(saved.file, probe.durationMs)
+    return [
+      attachmentChip(file, poster),
+      {
+        id: newId('prt'),
+        type: 'text',
+        text: videoAttachmentNote({ filename, id: saved.id, file: saved.file, probe }),
+        state: 'done',
+        source: 'attachment',
+      },
+    ]
+  } catch (err) {
+    return refuse(`Attachment, not a user message. ${errorToText(err)}`)
+  }
+}
+
 /** Pré-processa um anexo NOVO antes de persistir: PDF, planilha e skill viram
  * texto extraído (evita data URLs enormes no histórico) + um chip sem dados
  * pra UI continuar mostrando o anexo; imagem continua nativa (o modelo lê
@@ -604,6 +666,9 @@ async function preprocessAttachment(
     }
   }
 
+  // Vídeo: guardado no app, o agente recebe a referência e a ficha — nunca o conteúdo.
+  if (isVideoFile(file.mime, filename)) return preprocessVideoAttachment(file, deps)
+
   // Áudio: vai para o acervo de áudio (a bolha toca o anexo pelo chip) e NÃO é
   // transcrito aqui — pode ser uma música ou um efeito para usar em algum
   // lugar. O agente recebe a referência e decide (tool audio_transcribe). A
@@ -647,6 +712,7 @@ async function preprocessAttachment(
     // Thumbnail só para a bolha do chat: o chip não leva os bytes originais
     // (o histórico não duplica imagens inteiras), mas a UI mostra a imagem.
     const thumbUrl = await imageThumbDataUrl(file.url)
+    const refLine = imageRefLine(mediaUrl, file.filename ?? '', file.mime)
     if (deps.visionModel) {
       const filename = file.filename ?? ''
       const ref = (deps.turnImages?.length ?? 0) + 1
@@ -660,20 +726,27 @@ async function preprocessAttachment(
           text:
             `[Image attached: ${filename || 'unnamed'} — ref #${ref}]\n\n` +
             `(Vision mode: the image is not described automatically — use the describe_image tool with ref #${ref} ` +
-            'to see it; in "focus" say what you need to know and, if it depends on the conversation, include the necessary context in the request.)',
+            'to see it; in "focus" say what you need to know and, if it depends on the conversation, include the necessary context in the request.)' +
+            (refLine ? `\n${refLine}` : ''),
           state: 'done',
           source: 'attachment',
         },
       ]
     }
-    if (deps.modelVision) return [file]
+    if (deps.modelVision) {
+      return refLine
+        ? [file, { id: newId('prt'), type: 'text', text: refLine, state: 'done', source: 'attachment' }]
+        : [file]
+    }
     const filename = file.filename ?? ''
     return [
       attachmentChip(file, thumbUrl, undefined, mediaUrl),
       {
         id: newId('prt'),
         type: 'text',
-        text: `[Image attached: ${filename || 'unnamed'}] — the current model has no vision and no vision model is configured; the image was not sent to the model.`,
+        text:
+          `[Image attached: ${filename || 'unnamed'}] — the current model has no vision and no vision model is configured; the image was not sent to the model.` +
+          (refLine ? `\n${refLine}` : ''),
         state: 'done',
         source: 'attachment',
       },

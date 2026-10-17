@@ -181,6 +181,7 @@ const NATIVE_TOOLS = new Set([
   'motion_write',
   'motion_edit',
   'motion_render',
+  'motion_asset',
   'motion_frame',
   'show_video',
   'video_guide',

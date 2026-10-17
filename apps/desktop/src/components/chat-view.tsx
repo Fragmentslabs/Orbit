@@ -160,6 +160,14 @@ const MessageItem = memo(
                       mediaUrl: file.mediaUrl,
                     }}
                   />
+                ) : file.mime.startsWith("video/") && file.url ? (
+                  // Vídeo anexado: o main guardou o arquivo e deixou um quadro como
+                  // miniatura no chip. A bolha mostra esse quadro (o vídeo em si só
+                  // o agente alcança, por referência).
+                  <MessageAttachment
+                    key={file.id}
+                    data={{ type: "file", mediaType: "image/webp", filename: file.filename, url: file.url }}
+                  />
                 ) : file.mime.startsWith("audio/") && file.mediaUrl ? (
                   // Áudio anexado: toca na própria bolha. O que ele diz (se o
                   // agente transcrever) fica na nota do anexo, não aqui.
