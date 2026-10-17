@@ -73,6 +73,24 @@ export async function registerVideo(file: string, sessionId?: string): Promise<{
   return { id, url: `${VIDEO_SCHEME}://${id}` }
 }
 
+/**
+ * Tira do registro do player todo vídeo que aponta para este arquivo. Chamado
+ * quando o arquivo é apagado (galeria): sem isso o índice guardaria para sempre
+ * um caminho morto, e o `orbit-video://` responderia "moved or deleted".
+ */
+export async function unregisterVideosFor(file: string): Promise<void> {
+  const entries = await load()
+  const resolved = path.resolve(file)
+  let changed = false
+  for (const [id, entry] of Object.entries(entries)) {
+    if (entry.path === resolved) {
+      delete entries[id]
+      changed = true
+    }
+  }
+  if (changed) await persist()
+}
+
 /** O <video> busca posição e lê a duração por Range — sem isso não há barra. */
 export function registerVideoProtocol(): void {
   protocol.handle(VIDEO_SCHEME, async (request) => {

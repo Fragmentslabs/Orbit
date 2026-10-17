@@ -13,6 +13,7 @@ import {
   type MediaKind,
   type MediaSource,
   type MediaUsage,
+  SAFE_VIDEO_MEDIA_ID,
   type DocumentFormat, AUDIO_SCHEME, VIDEO_SCHEME, MOTION_SCHEME } from '@shared/media'
 import { listKeys, readJson } from './storage'
 import { buildDocx } from './docx-package'
@@ -224,6 +225,67 @@ export async function registerAudioMedia(entry: {
   notifyMediaChanged()
 }
 
+/** O que um vídeo precisa para entrar na galeria. */
+export interface SaveVideoMeta {
+  /** Id do arquivo (`vdo_….mp4`) — o mesmo da referência que o agente recebe. */
+  id: string
+  /** Arquivo do vídeo, no app. */
+  file: string
+  size: number
+  name?: string
+  sessionId?: string
+  messageId?: string
+  source: MediaSource
+  width?: number
+  height?: number
+  durationMs?: number
+  /** URL do player (orbit-video://) que o visor da galeria toca. */
+  videoUrl?: string
+}
+
+/**
+ * Registra um vídeo na galeria. Como o áudio, o arquivo mora fora de media/ (o
+ * backfill de lá o registraria como imagem) e o registro aponta para ele pelo
+ * `path`; a CAPA é um quadro, gravado na pasta de artefatos como a de uma peça de
+ * motion. Registrar o mesmo id de novo atualiza o item.
+ */
+export async function saveVideoMedia(poster: Buffer | null, meta: SaveVideoMeta): Promise<MediaEntry> {
+  if (!SAFE_VIDEO_MEDIA_ID.test(meta.id)) throw new Error(`id de vídeo inválido: ${meta.id}`)
+  let thumb: string | undefined
+  if (poster) {
+    thumb = `vdp_${meta.id.replace(/^vdo_/, '').replace(/\.[a-z0-9]+$/, '')}.png`
+    await fsp.mkdir(artifactsDir(), { recursive: true })
+    await fsp.writeFile(path.join(artifactsDir(), thumb), poster)
+  }
+  const entry = await withIndexLock(async () => {
+    const entries = await readIndex()
+    const existing = entries.find((e) => e.id === meta.id)
+    const next: MediaEntry = {
+      ...existing,
+      id: meta.id,
+      path: meta.file,
+      size: meta.size,
+      createdAt: existing?.createdAt ?? Date.now(),
+      source: meta.source,
+      kind: 'video',
+      name: meta.name ?? existing?.name,
+      sessionId: meta.sessionId ?? existing?.sessionId,
+      messageId: meta.messageId ?? existing?.messageId,
+      width: meta.width ?? existing?.width,
+      height: meta.height ?? existing?.height,
+      durationMs: meta.durationMs ?? existing?.durationMs,
+      videoUrl: meta.videoUrl ?? existing?.videoUrl,
+      thumb: thumb ?? existing?.thumb,
+    }
+    if (existing) entries[entries.indexOf(existing)] = next
+    else entries.push(next)
+    await writeIndex(entries)
+    return next
+  })
+  notifyMediaChanged()
+  return entry
+}
+
 /** Extrai o id de uma URL orbit-media:// (ou devolve a entrada se já for um id). */
 export function mediaIdFromUrl(url: string): string | null {
   const id = url.startsWith(`${SCHEME}://`) ? url.slice(`${SCHEME}://`.length).replace(/\/+$/, '') : url
@@ -327,11 +389,17 @@ export async function getMediaEntry(id: string): Promise<MediaEntry | null> {
  */
 export async function deleteMedia(id: string): Promise<boolean> {
   const isImage = SAFE_ID.test(id)
-  if (!isImage && !SAFE_ARTIFACT_ID.test(id) && !SAFE_AUDIO_ID.test(id)) return false
+  if (!isImage && !SAFE_ARTIFACT_ID.test(id) && !SAFE_AUDIO_ID.test(id) && !SAFE_VIDEO_MEDIA_ID.test(id)) return false
 
   const entry = await getMediaEntry(id)
   const file = entry?.path ?? (isImage ? path.join(mediaDir(), id) : null)
   if (!file) return false
+  // Quem guarda MAIS que o arquivo do registro (a pasta de uma peça de motion, o
+  // índice de vídeos) limpa o resto ANTES de o registro sumir: se limpar falhar,
+  // o item continua na galeria e a pessoa pode tentar de novo, em vez de sobrar
+  // espaço ocupado que nada mais aponta.
+  const hook = entry ? deleteHooks.get(mediaKind(entry)) : undefined
+  if (entry && hook) await hook(entry)
   await fsp.rm(file, { force: true })
   for (const thumb of [entry?.thumb, entry?.thumbDark]) {
     if (thumb && SAFE_ARTIFACT_ID.test(thumb)) {
@@ -346,6 +414,18 @@ export async function deleteMedia(id: string): Promise<boolean> {
   })
   notifyMediaChanged()
   return true
+}
+
+/**
+ * Ganchos de exclusão por TIPO. Alguns ativos têm o que apagar além do arquivo do
+ * registro: a peça de motion é uma pasta inteira, o vídeo está no índice do
+ * player. Quem sabe fazer isso (e importa media.ts) registra aqui, em vez de
+ * media.ts importar todos eles e fechar um ciclo.
+ */
+const deleteHooks = new Map<MediaKind, (entry: MediaEntry) => Promise<void>>()
+
+export function setMediaDeleteHook(kind: MediaKind, hook: (entry: MediaEntry) => Promise<void>): void {
+  deleteHooks.set(kind, hook)
 }
 
 /** Remove vários ativos de uma vez (seleção em lote na galeria). */
@@ -401,6 +481,19 @@ export async function mediaDiskUsage(): Promise<MediaUsage> {
 
   await scan(mediaDir(), SAFE_ID, () => true)
   await scan(artifactsDir(), SAFE_ARTIFACT_ID, (name) => name.endsWith('.html'))
+  // Vídeos e áudios moram em pastas próprias (fora do que o scan acima varre) e
+  // são, de longe, o que mais ocupa disco: contam pelo registro, que aponta o
+  // arquivo. Sem isto "excluir libera espaço" não apareceria no número.
+  for (const entry of await readIndex()) {
+    const kind = mediaKind(entry)
+    if (kind !== 'video' && kind !== 'audio') continue
+    try {
+      bytes += (await fsp.stat(entry.path)).size
+      count += 1
+    } catch {
+      // arquivo já removido: o registro órfão não conta
+    }
+  }
   return { count, bytes }
 }
 

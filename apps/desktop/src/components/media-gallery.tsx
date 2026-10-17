@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
-import { AudioLines, CheckIcon, ChevronDown, Clapperboard, Pause, ChevronLeft, ChevronRight, CodeXml, FileText, Filter, Folder, FolderGit2, HardDriveIcon, ImageIcon, ImageOff, Layers, LayoutGrid, MessageSquare, RefreshCw, Search, Trash2, X } from "lucide-react"
+import { AudioLines, CheckIcon, Film, ChevronDown, Clapperboard, Pause, ChevronLeft, ChevronRight, CodeXml, FileText, Filter, Folder, FolderGit2, HardDriveIcon, ImageIcon, ImageOff, Layers, LayoutGrid, MessageSquare, RefreshCw, Search, Trash2, X } from "lucide-react"
 import type { LucideIcon } from "lucide-react"
 import { assetUrl, mediaKind, thumbUrl, type MediaEntry, type MediaKind, type MediaSource } from "@shared/media"
 import { folderKey, normalizeFolderName } from "@shared/chat"
@@ -50,8 +50,8 @@ import { scrollToMessage } from "@/src/lib/message-jump"
 
 type SourceFilter = "all" | MediaSource
 type PeriodFilter = "all" | "today" | "week" | "month"
-/** Filtro por TIPO: o que a grade mostra — imagem, página, documento, áudio ou
- *  peça de motion. */
+/** Filtro por TIPO: o que a grade mostra — imagem, página, documento, áudio,
+ *  peça de motion ou vídeo. */
 type KindFilter = "all" | MediaKind
 
 /**
@@ -65,6 +65,7 @@ const KIND_ICON: Record<MediaKind, LucideIcon> = {
   document: FileText,
   audio: AudioLines,
   motion: Clapperboard,
+  video: Film,
 }
 
 /**
@@ -98,6 +99,15 @@ function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`
   if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+}
+
+/** 754300 → "12:34"; passa de uma hora: "1:02:03". */
+function formatDuration(ms: number): string {
+  const total = Math.max(0, Math.round(ms / 1000))
+  const h = Math.floor(total / 3600)
+  const m = Math.floor((total % 3600) / 60)
+  const sec = String(total % 60).padStart(2, "0")
+  return h > 0 ? `${h}:${String(m).padStart(2, "0")}:${sec}` : `${m}:${sec}`
 }
 
 function formatDate(timestamp: number, locale: string): string {
@@ -214,8 +224,11 @@ function Thumb({ entry, selected, selecting, onToggle, onOpen, versions = 1 }: {
       >
         {selected && <CheckIcon className="size-3" />}
       </button>
-      <div className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/70 to-transparent px-1.5 pb-1 pt-3">
-        <p className="truncate text-[10px] font-medium text-white">{entry.name || entry.id}</p>
+      <div className="pointer-events-none absolute inset-x-0 bottom-0 flex items-end justify-between gap-1 bg-gradient-to-t from-black/70 to-transparent px-1.5 pb-1 pt-3">
+        <p className="min-w-0 truncate text-[10px] font-medium text-white">{entry.name || entry.id}</p>
+        {kind === "video" && entry.durationMs ? (
+          <span className="shrink-0 text-[10px] font-medium tabular-nums text-white/90">{formatDuration(entry.durationMs)}</span>
+        ) : null}
       </div>
     </div>
   )
@@ -740,14 +753,23 @@ export function MediaGallery() {
   const runDelete = useCallback(
     async (ids: string[]) => {
       if (ids.length === 0) return
+      // As abas das peças que vão embora fecham junto: a pasta some, e uma aba
+      // aberta num motion excluído só mostraria um erro.
+      const motionIds = entries.flatMap((e) => (ids.includes(e.id) && e.motionId ? [e.motionId] : []))
       await mediaApi.remove(ids)
+      usePanelStore.getState().closeMotionTabs(motionIds)
       setConfirmDelete(null)
       setSelected(new Set())
       setPreview((current) => (current && ids.includes(current.id) ? null : current))
       setPreviewChain(null)
       await refresh()
     },
-    [refresh],
+    [entries, refresh],
+  )
+
+  const selectedMotionCount = useMemo(
+    () => entries.filter((e) => selected.has(e.id) && mediaKind(e) === "motion").length,
+    [entries, selected],
   )
 
   const sourceFilters: SourceFilter[] = ["all", "user", "chat", "screenshot", "script", "batch"]
@@ -908,11 +930,21 @@ export function MediaGallery() {
           {preview && (
             <>
               <div className="relative">
-                <img
-                  src={`orbit-media://${preview.id}`}
-                  alt={preview.name ?? preview.id}
-                  className="max-h-[76vh] w-full rounded-md object-contain"
-                />
+                {mediaKind(preview) === "video" && preview.videoUrl ? (
+                  <video
+                    key={preview.id}
+                    src={preview.videoUrl}
+                    controls
+                    autoPlay
+                    className="max-h-[76vh] w-full rounded-md bg-black object-contain"
+                  />
+                ) : (
+                  <img
+                    src={`orbit-media://${preview.id}`}
+                    alt={preview.name ?? preview.id}
+                    className="max-h-[76vh] w-full rounded-md object-contain"
+                  />
+                )}
                 {/* Setas só quando há para onde ir: numa foto sem histórico
                     elas seriam dois botões mortos em cima da imagem. */}
                 {previewChain && previewIndex > 0 && (
@@ -1031,6 +1063,7 @@ export function MediaGallery() {
                 items: selected.size,
                 files: comVersoes([...selected]).length,
               })}
+              {selectedMotionCount > 0 && ` ${t("media.confirmDelete.motionNote", { count: selectedMotionCount })}`}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>

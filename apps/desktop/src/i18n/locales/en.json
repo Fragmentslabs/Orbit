@@ -1870,7 +1870,8 @@
       "artifact": "HTML artifact",
       "document": "Document",
       "audio": "Audio",
-      "motion": "Motion piece"
+      "motion": "Motion piece",
+      "video": "Video"
     },
     "period": {
       "all": "Any time",
@@ -1892,11 +1893,12 @@
     "previousVersion": "Previous version",
     "nextVersion": "Next version",
     "confirmDelete": {
-      "title": "Delete images?",
+      "title": "Delete items?",
       "selection": "{{items}} item(s) selected, {{files}} file(s) in total — every version of each one goes. This cannot be undone.",
       "viewerChain": "You are looking at version {{version}} of {{count}}.",
-      "viewerSingle": "This image will be deleted. This cannot be undone.",
+      "viewerSingle": "This item will be deleted. This cannot be undone.",
       "confirmAll": "Delete everything",
+      "motionNote": "{{count}} motion piece(s) included: their composition folder (with the clips, GIFs and audio copied into it) is deleted too. Videos you rendered are kept.",
       "allVersions": "Delete all {{count}} versions",
       "onlyThis": "Delete only v{{version}}"
     }

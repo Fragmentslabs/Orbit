@@ -59,10 +59,11 @@ export async function probeVideoAttachment(file: string): Promise<MediaProbe | n
 }
 
 /**
- * Um quadro do vídeo como miniatura (WebP, até 320 px) para a bolha do chat.
- * Não é o quadro 0, que costuma ser preto: um pouco adiante, sem passar do meio.
+ * Um quadro do vídeo como imagem PNG (até 480 px de largura): é a capa do item na
+ * galeria. Não é o quadro 0, que costuma ser preto: um pouco adiante, sem passar
+ * do meio. `undefined` quando o ffmpeg não consegue ler o arquivo.
  */
-export async function videoPoster(file: string, durationMs: number): Promise<string | undefined> {
+export async function videoPosterPng(file: string, durationMs: number): Promise<Buffer | undefined> {
   try {
     const at = Math.min(1, durationMs / 1000 / 2)
     const { stdout } = await runFfmpeg(
@@ -70,10 +71,16 @@ export async function videoPoster(file: string, durationMs: number): Promise<str
       {},
     )
     if (!stdout.length) return undefined
-    const out = await sharp(stdout)
-      .resize({ width: 320, height: 320, fit: 'inside', withoutEnlargement: true })
-      .webp({ quality: 70 })
-      .toBuffer()
+    return await sharp(stdout).resize({ width: 480, withoutEnlargement: true }).png().toBuffer()
+  } catch {
+    return undefined
+  }
+}
+
+/** A capa em miniatura (WebP, até 320 px) para a bolha do chat, como data URL. */
+export async function posterDataUrl(png: Buffer): Promise<string | undefined> {
+  try {
+    const out = await sharp(png).resize({ width: 320, height: 320, fit: 'inside', withoutEnlargement: true }).webp({ quality: 70 }).toBuffer()
     return `data:image/webp;base64,${out.toString('base64')}`
   } catch {
     return undefined

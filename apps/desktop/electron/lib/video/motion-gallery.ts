@@ -1,10 +1,10 @@
 import { BrowserWindow } from 'electron'
 import path from 'node:path'
 import sharp from 'sharp'
-import { saveMotionMedia } from '../media'
+import { saveMotionMedia, setMediaDeleteHook } from '../media'
 import { MOTION_SPEC } from './motion-runtime'
 import { capturePageReliably } from './capture'
-import { getMotion, registeredMotionUrl } from './motion-store'
+import { deleteMotionComposition, getMotion, registeredMotionUrl } from './motion-store'
 
 /**
  * A CAPA de uma peça de motion, e o registro dela na galeria.
@@ -122,3 +122,10 @@ export async function registerMotionCover(
   })
   return true
 }
+
+// Excluir a peça na galeria apaga a composição de verdade (a pasta, o registro e
+// o watcher), e não só a capa: excluir é liberar espaço. As travas de segurança
+// ficam em deleteMotionComposition.
+setMediaDeleteHook('motion', async (entry) => {
+  if (entry.motionId) await deleteMotionComposition(entry.motionId)
+})

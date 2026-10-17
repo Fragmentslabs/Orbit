@@ -11,7 +11,11 @@ vi.mock('electron', () => ({
 }))
 
 const mediaEntries: Record<string, { id: string; path: string; name?: string }> = {}
+const deleteHooks = new Map<string, (entry: { id: string; path: string }) => Promise<void>>()
 vi.mock('./media', () => ({
+  setMediaDeleteHook: (kind: string, hook: (entry: { id: string; path: string }) => Promise<void>) => {
+    deleteHooks.set(kind, hook)
+  },
   SAFE_AUDIO_ID: /^aud_[a-z0-9]+\.(wav|mp3)$/,
   audioMediaId: (value: string) => (/^aud_[a-z0-9]+\.(wav|mp3)$/.test(value.trim()) ? value.trim() : null),
   mediaIdFromUrl: (value: string) => {
@@ -20,6 +24,13 @@ vi.mock('./media', () => ({
   },
   getMediaEntry: async (id: string) => mediaEntries[id] ?? null,
   registerAudioMedia: async () => {},
+}))
+
+const unregistered: string[] = []
+vi.mock('./video/store', () => ({
+  unregisterVideosFor: async (file: string) => {
+    unregistered.push(file)
+  },
 }))
 
 const {
@@ -131,5 +142,21 @@ describe('videoPathFromFileUrl', () => {
     expect(videoPathFromFileUrl('file:///Users/a/segredo.txt')).toBeNull()
     expect(videoPathFromFileUrl('data:video/mp4;base64,AAAA')).toBeNull()
     expect(videoPathFromFileUrl('/Users/a/clip.mp4')).toBeNull()
+  })
+})
+
+describe('excluir um vídeo anexado na galeria', () => {
+  it('o gancho do tipo tira o vídeo do player e o nome do índice de anexos', async () => {
+    const saved = await saveVideoAttachment({ bytes: Buffer.from('v') }, 'mp4', { name: 'Aula.mp4' })
+    expect((await resolveAttachmentRef(saved.id))?.name).toBe('Aula.mp4')
+
+    const hook = deleteHooks.get('video')
+    expect(hook).toBeTypeOf('function')
+    await hook!({ id: saved.id, path: saved.file })
+
+    expect(unregistered).toContain(saved.file)
+    // Sem o nome no índice a referência ainda resolve (o arquivo é apagado por
+    // quem chama o gancho), só que pelo id — não sobra rótulo de um vídeo excluído.
+    expect((await resolveAttachmentRef(saved.id))?.name).toBe(saved.id)
   })
 })

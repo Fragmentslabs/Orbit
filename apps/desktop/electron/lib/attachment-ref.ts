@@ -5,7 +5,8 @@ import fsp from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { audioFilePath, audioIdFrom } from './audio-store'
-import { getMediaEntry, mediaIdFromUrl } from './media'
+import { getMediaEntry, mediaIdFromUrl, setMediaDeleteHook } from './media'
+import { unregisterVideosFor } from './video/store'
 
 /**
  * ANEXOS do chat que o agente usa como material de trabalho: o vídeo que o
@@ -140,6 +141,27 @@ function rememberName(id: string, name: string | undefined, sessionId: string | 
   })
   return writing.catch(() => {})
 }
+
+/** Tira o nome do vídeo do índice de anexos (o arquivo sai por quem apaga). */
+function forgetName(id: string): Promise<void> {
+  writing = writing.then(async () => {
+    const names = await readNames()
+    if (!(id in names)) return
+    delete names[id]
+    const tmp = `${indexPath()}.tmp`
+    await fsp.writeFile(tmp, JSON.stringify(names))
+    await fsp.rename(tmp, indexPath())
+  })
+  return writing.catch(() => {})
+}
+
+// Excluir o vídeo na galeria apaga o arquivo (deleteMedia) e, aqui, o que mais o
+// aponta: a URL do player e o nome no índice de anexos. Sem isto sobrariam
+// registros apontando para um arquivo que não existe mais.
+setMediaDeleteHook('video', async (entry) => {
+  await unregisterVideosFor(entry.path)
+  await forgetName(entry.id)
+})
 
 // ------------------------------------------------------------ referências
 

@@ -309,6 +309,64 @@ export async function unregisterMotion(id: string): Promise<void> {
   unwatchMotion(id)
 }
 
+/**
+ * Pastas de composição que o próprio Orbit guarda (o modo chat). Tudo que mora
+ * aqui é dele — pode ser apagado sem pedir licença ao projeto de ninguém.
+ */
+function chatCompositionsRoot(): string {
+  return path.join(app.getPath('userData'), 'orbit-data', 'motion')
+}
+
+/** `child` está estritamente DENTRO de `parent` (nunca igual a ele)? */
+function isStrictlyInside(parent: string, child: string): boolean {
+  const rel = path.relative(path.resolve(parent), path.resolve(child))
+  return rel !== '' && !rel.startsWith('..') && !path.isAbsolute(rel)
+}
+
+export interface MotionDeletion {
+  /** A pasta da composição foi apagada do disco. */
+  removedFolder: boolean
+  /** Por que a pasta ficou, quando ficou (a peça saiu do registro de qualquer jeito). */
+  keptBecause?: string
+}
+
+/**
+ * Apaga uma composição: a PASTA dela, o registro e o watcher.
+ *
+ * Excluir na galeria é liberar espaço, então a pasta vai embora — mas uma pasta
+ * de projeto é do usuário, e o registro só sabe o que o agente declarou. As
+ * travas: a pasta tem que ser a composição de verdade (conter o arquivo de
+ * entrada) e estar DENTRO de um lugar que este app pode limpar — o
+ * armazenamento do modo chat, ou estritamente dentro da pasta de trabalho que
+ * registrou a peça. Uma composição que É a pasta de trabalho (index.html na raiz
+ * do projeto) nunca apaga a pasta: só sai do registro. Os vídeos renderizados
+ * ficam fora da pasta da composição (edit/renders) e não são tocados.
+ */
+export async function deleteMotionComposition(id: string): Promise<MotionDeletion> {
+  const entry = await getMotion(id)
+  if (!entry) return { removedFolder: false, keptBecause: 'not registered' }
+  const folder = path.resolve(entry.folder)
+
+  let keptBecause: string | undefined
+  const stat = await fsp.stat(folder).catch(() => null)
+  const hasEntry = await fsp.stat(entry.entry).then((s) => s.isFile()).catch(() => false)
+  if (!stat?.isDirectory()) {
+    keptBecause = 'the folder no longer exists'
+  } else if (!hasEntry) {
+    keptBecause = 'the folder does not contain the composition entry'
+  } else if (isStrictlyInside(chatCompositionsRoot(), folder)) {
+    // do Orbit
+  } else if (entry.root && isStrictlyInside(entry.root, folder)) {
+    // dentro do projeto que a registrou, e não o projeto em si
+  } else {
+    keptBecause = 'the folder is the project itself (or outside the working folder it was registered from)'
+  }
+
+  if (!keptBecause) await fsp.rm(folder, { recursive: true, force: true })
+  await unregisterMotion(id)
+  return keptBecause ? { removedFolder: false, keptBecause } : { removedFolder: true }
+}
+
 // ------------------------------------------------------------------ watcher
 // Recarga ao vivo: o watcher só existe enquanto o id estiver registrado.
 const watchers = new Map<string, fs.FSWatcher>()

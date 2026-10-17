@@ -1,4 +1,4 @@
-import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises'
+import { mkdtemp, mkdir, readdir, rm, stat, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import { afterAll, describe, expect, it, vi } from 'vitest'
@@ -26,6 +26,7 @@ vi.mock('electron', async () => {
 })
 
 const {
+  deleteMotionComposition,
   getMotion,
   isMotionSourceChange,
   motionIdFor,
@@ -267,5 +268,102 @@ describe('protocolo', () => {
     expect(code.headers.get('cache-control')).toBe('no-store')
 
     await rm(folder, { recursive: true, force: true })
+  })
+})
+
+describe('deleteMotionComposition', () => {
+  const exists = (target: string) =>
+    stat(target).then(
+      () => true,
+      () => false,
+    )
+
+  async function project(): Promise<string> {
+    return mkdtemp(path.join(os.tmpdir(), 'orbit-motion-delete-'))
+  }
+
+  async function composition(folder: string): Promise<string> {
+    await mkdir(path.join(folder, 'assets'), { recursive: true })
+    const entry = path.join(folder, 'index.html')
+    await writeFile(entry, '<html></html>')
+    await writeFile(path.join(folder, 'assets', 'clip.mp4'), 'video-bytes')
+    return entry
+  }
+
+  it('apaga a pasta da composição inteira (com o que foi copiado para ela) e tira do registro', async () => {
+    const root = await project()
+    const folder = path.join(root, 'edit', 'animations', 'intro')
+    const entry = await composition(folder)
+    const renders = path.join(root, 'edit', 'renders')
+    await mkdir(renders, { recursive: true })
+    await writeFile(path.join(renders, 'intro.mp4'), 'render')
+    const { id } = await registerMotion(folder, entry, { root })
+
+    const result = await deleteMotionComposition(id)
+
+    expect(result).toEqual({ removedFolder: true })
+    expect(await exists(folder)).toBe(false)
+    expect(await getMotion(id)).toBeUndefined()
+    // O que o usuário renderizou fica fora da pasta da composição e não é tocado.
+    expect(await readdir(renders)).toEqual(['intro.mp4'])
+    await rm(root, { recursive: true, force: true })
+  })
+
+  it('uma composição que É o projeto (index.html na raiz) sai do registro, mas a pasta fica', async () => {
+    const root = await project()
+    const entry = await composition(root)
+    await writeFile(path.join(root, 'package.json'), '{}')
+    const { id } = await registerMotion(root, entry, { root })
+
+    const result = await deleteMotionComposition(id)
+
+    expect(result.removedFolder).toBe(false)
+    expect(result.keptBecause).toMatch(/project itself/)
+    expect(await exists(path.join(root, 'package.json'))).toBe(true)
+    expect(await getMotion(id)).toBeUndefined()
+    await rm(root, { recursive: true, force: true })
+  })
+
+  it('a pasta do modo chat é do Orbit: apaga mesmo sem pasta de trabalho registrada', async () => {
+    const folder = path.join(tempRoot, 'orbit-data', 'motion', 'sess1', 'minha-peca')
+    const entry = await composition(folder)
+    const { id } = await registerMotion(folder, entry)
+
+    expect(await deleteMotionComposition(id)).toEqual({ removedFolder: true })
+    expect(await exists(folder)).toBe(false)
+  })
+
+  it('fora de qualquer lugar que o app pode limpar, a pasta fica', async () => {
+    const root = await project()
+    const elsewhere = await project()
+    const entry = await composition(elsewhere)
+    const { id } = await registerMotion(elsewhere, entry, { root })
+
+    const result = await deleteMotionComposition(id)
+
+    expect(result.removedFolder).toBe(false)
+    expect(await exists(entry)).toBe(true)
+    expect(await getMotion(id)).toBeUndefined()
+    await rm(root, { recursive: true, force: true })
+    await rm(elsewhere, { recursive: true, force: true })
+  })
+
+  it('sem composição de verdade na pasta (entrada sumiu), nada é apagado', async () => {
+    const root = await project()
+    const folder = path.join(root, 'edit', 'animations', 'vazia')
+    const entry = await composition(folder)
+    const { id } = await registerMotion(folder, entry, { root })
+    await rm(entry)
+    await writeFile(path.join(folder, 'notas-do-usuario.txt'), 'importante')
+
+    const result = await deleteMotionComposition(id)
+
+    expect(result.keptBecause).toMatch(/entry/)
+    expect(await exists(path.join(folder, 'notas-do-usuario.txt'))).toBe(true)
+    await rm(root, { recursive: true, force: true })
+  })
+
+  it('id desconhecido não faz nada', async () => {
+    expect(await deleteMotionComposition('mv_000000000000dead')).toEqual({ removedFolder: false, keptBecause: 'not registered' })
   })
 })

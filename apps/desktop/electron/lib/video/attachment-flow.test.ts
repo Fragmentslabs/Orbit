@@ -25,7 +25,7 @@ vi.mock('electron', () => ({
 const { runFfmpeg } = await import('./ffmpeg')
 const { motionFfmpegArgs, motionAudioFfmpegArgs } = await import('./motion-render-args')
 const { saveVideoAttachment, resolveAttachmentRef } = await import('../attachment-ref')
-const { probeVideoAttachment, videoAttachmentNote, videoPoster } = await import('./attachment-note')
+const { posterDataUrl, probeVideoAttachment, videoAttachmentNote, videoPosterPng } = await import('./attachment-note')
 const { importAttachmentInto } = await import('./motion-asset')
 
 const W = 64
@@ -67,8 +67,9 @@ describe.skipIf(!hasFfmpeg)('vídeo anexado (ffmpeg real)', () => {
     expect(probe?.audio).toHaveLength(1)
     expect(probe!.durationMs).toBeGreaterThan(1500)
 
-    const poster = await videoPoster(saved.file, probe!.durationMs)
-    expect(poster).toMatch(/^data:image\/webp;base64,/)
+    const png = await videoPosterPng(saved.file, probe!.durationMs)
+    expect(png?.subarray(1, 4).toString()).toBe('PNG')
+    expect(await posterDataUrl(png!)).toMatch(/^data:image\/webp;base64,/)
 
     const note = videoAttachmentNote({ filename: 'Entrevista.mp4', id: saved.id, file: saved.file, probe })
     expect(note).toContain(`ref ${saved.id}`)

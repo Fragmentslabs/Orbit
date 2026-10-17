@@ -66,7 +66,8 @@ import { readJson, writeJson } from './storage'
 import { getAppSettings } from './app-settings'
 import { audioExt, audioIdFrom, isAudioFile, saveAudio } from './audio-store'
 import { isVideoFile, saveVideoAttachment, videoAttachmentExt, videoPathFromFileUrl } from './attachment-ref'
-import { imageRefLine, probeVideoAttachment, videoAttachmentNote, videoPoster } from './video/attachment-note'
+import { imageRefLine, posterDataUrl, probeVideoAttachment, videoAttachmentNote } from './video/attachment-note'
+import { addVideoToGallery } from './video/video-gallery'
 import { MIN_COMPACTION_CONTEXT, resolveAuxModel } from './aux-model'
 import { notifyChatError, notifyNewMessage } from './notifications'
 import { buildToolSet, type ImageToolHooks, type ToolContext, type TurnSnapshot } from './tools'
@@ -429,7 +430,7 @@ function audioAttachmentNote(filename: string, id: string, file: string): string
  */
 async function preprocessVideoAttachment(
   file: FilePart,
-  deps: { sessionId?: string },
+  deps: { sessionId?: string; messageId?: string },
 ): Promise<MessagePart[]> {
   const filename = file.filename ?? ''
   const refuse = (problem: string): MessagePart[] => [
@@ -461,7 +462,17 @@ async function preprocessVideoAttachment(
       await fs.rm(saved.file, { force: true })
       return refuse('Attachment, not a user message. The file is not a readable video.')
     }
-    const poster = await videoPoster(saved.file, probe.durationMs)
+    // Entra na galeria de mídia (aba Mídia, filtro de vídeo, excluir libera o arquivo).
+    const gallery = await addVideoToGallery({
+      file: saved.file,
+      id: saved.id,
+      name: filename || undefined,
+      sessionId: deps.sessionId,
+      messageId: deps.messageId,
+      source: 'user',
+      probe,
+    }).catch(() => null)
+    const poster = gallery?.poster ? await posterDataUrl(gallery.poster) : undefined
     return [
       attachmentChip(file, poster),
       {

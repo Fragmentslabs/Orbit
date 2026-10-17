@@ -150,6 +150,8 @@ interface PanelState {
   activeTabBySession: Record<string, string | null>
   addTab: (sessionId: string, tab: PanelTab) => void
   removeTab: (sessionId: string, tabId: string) => void
+  /** Fecha as abas das composições de motion que foram excluídas (em qualquer conversa). */
+  closeMotionTabs: (motionIds: string[]) => void
   setActiveTab: (sessionId: string, tabId: string | null) => void
   setTabsForSession: (sessionId: string, tabs: PanelTab[], activeId: string | null) => void
   /** Abre (ou reaproveita) a aba que renderiza um artefato em tela cheia.
@@ -304,6 +306,22 @@ export const usePanelStore = create<PanelState>((set, get) => {
           [sessionId]: [...(state.tabsBySession[sessionId] ?? []), tab],
         },
       })),
+
+    closeMotionTabs: (motionIds) =>
+      set((state) => {
+        if (motionIds.length === 0) return state
+        const gone = new Set(motionIds)
+        const tabsBySession: typeof state.tabsBySession = {}
+        const activeTabBySession = { ...state.activeTabBySession }
+        for (const [key, tabs] of Object.entries(state.tabsBySession)) {
+          const next = tabs.filter((t) => !(t.type === "motion" && t.motionId && gone.has(t.motionId)))
+          tabsBySession[key] = next
+          if (next.length !== tabs.length && !next.some((t) => t.id === activeTabBySession[key])) {
+            activeTabBySession[key] = next.length > 0 ? next[0].id : null
+          }
+        }
+        return { tabsBySession, activeTabBySession }
+      }),
 
     removeTab: (sessionId, tabId) =>
       set((state) => {

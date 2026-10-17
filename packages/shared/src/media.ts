@@ -16,10 +16,12 @@ export type MediaSource = "chat" | "user" | "screenshot" | "script" | "batch"
  * (relatório/proposta autorado pelo agente, entregue em PDF e/ou DOCX), áudio
  * (anexado pelo usuário ou gerado pelo agente) ou motion (uma peça: a
  * composição é uma PASTA do projeto e nada dela é copiado para cá — o registro
- * guarda a capa e o `motionId`, e abrir é reabrir a aba Motion).
+ * guarda a capa e o `motionId`, e abrir é reabrir a aba Motion) ou video (um
+ * vídeo anexado pelo usuário, ou produzido no chat: o arquivo mora no app, o
+ * registro guarda a capa e a URL de reprodução).
  * Ausente em registros gravados antes disso existir = "image".
  */
-export type MediaKind = "image" | "artifact" | "document" | "audio" | "motion"
+export type MediaKind = "image" | "artifact" | "document" | "audio" | "motion" | "video"
 
 /** Formatos de entrega de um documento. O fonte é sempre Markdown; estes são
  *  os arquivos renderizados a partir dele. */
@@ -106,6 +108,10 @@ export interface MediaEntry {
    * e nada dela é copiado para a galeria.
    */
   motionId?: string
+  /** Só em vídeos: a URL orbit-video:// que o visor da galeria toca. */
+  videoUrl?: string
+  /** Só em vídeos: duração em ms (a etiqueta do tile). */
+  durationMs?: number
   /** Só em documentos: quais renderizações existem em disco. Vazio é o caso
    *  normal — o documento nasce só em Markdown e o arquivo é gerado no
    *  primeiro download. */
@@ -203,6 +209,13 @@ export const VIDEO_SCHEME = "orbit-video"
  */
 export const MOTION_SCHEME = "orbit-motion"
 
+/**
+ * Id de um vídeo anexado (`vdo_…`): o nome do arquivo na pasta de anexos de
+ * vídeo do app. Fica aqui, e não no main, porque media.ts (que apaga o arquivo) e
+ * attachment-ref.ts (que o guarda) precisam do MESMO formato e um importa o outro.
+ */
+export const SAFE_VIDEO_MEDIA_ID = /^vdo_[a-z0-9]+\.(mp4|m4v|mov|webm|mkv|avi)$/
+
 /** `kind` normalizado — registros antigos não têm o campo. */
 export function mediaKind(entry: Pick<MediaEntry, "kind">): MediaKind {
   return entry.kind ?? "image"
@@ -214,7 +227,7 @@ export function mediaKind(entry: Pick<MediaEntry, "kind">): MediaKind {
  * PDF e o .docx não é renderizável no navegador. PDF e DOCX são entrega
  * (abrir fora, exportar), não visualização embutida.
  */
-export function assetUrl(entry: Pick<MediaEntry, "id" | "kind">): string {
+export function assetUrl(entry: Pick<MediaEntry, "id" | "kind" | "thumb" | "thumbDark" | "revision" | "videoUrl">): string {
   const kind = mediaKind(entry)
   if (kind === "artifact") return `${ARTIFACT_SCHEME}://${entry.id}`
   if (kind === "document") return `${ARTIFACT_SCHEME}://${documentPreviewId(entry.id)}`
@@ -224,6 +237,8 @@ export function assetUrl(entry: Pick<MediaEntry, "id" | "kind">): string {
   // orbit-motion:// e reaberta pela aba). Sem esta linha o id da capa seria
   // pedido ao scheme errado e voltaria vazio.
   if (kind === "motion") return thumbUrl(entry) ?? `${MEDIA_SCHEME}://${entry.id}`
+  // O vídeo toca pela URL do player; sem ela (registro sem player) cai na capa.
+  if (kind === "video") return entry.videoUrl ?? thumbUrl(entry) ?? `${MEDIA_SCHEME}://${entry.id}`
   return `${MEDIA_SCHEME}://${entry.id}`
 }
 

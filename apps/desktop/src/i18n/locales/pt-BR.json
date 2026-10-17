@@ -1870,7 +1870,8 @@
       "artifact": "Artefato HTML",
       "document": "Documento",
       "audio": "Áudio",
-      "motion": "Peça"
+      "motion": "Peça",
+      "video": "Vídeo"
     },
     "period": {
       "all": "Qualquer data",
@@ -1892,11 +1893,12 @@
     "previousVersion": "Versão anterior",
     "nextVersion": "Próxima versão",
     "confirmDelete": {
-      "title": "Excluir imagens?",
+      "title": "Excluir itens?",
       "selection": "{{items}} item(ns) selecionado(s), {{files}} arquivo(s) no total — todas as versões de cada um vão junto. Não dá para desfazer.",
       "viewerChain": "Você está vendo a versão {{version}} de {{count}}.",
-      "viewerSingle": "Esta imagem será excluída. Não dá para desfazer.",
+      "viewerSingle": "Este item será excluído. Não dá para desfazer.",
       "confirmAll": "Excluir tudo",
+      "motionNote": "{{count}} peça(s) de motion incluída(s): a pasta da composição (com os vídeos, GIFs e áudios copiados para ela) também é excluída. Os vídeos que você renderizou ficam.",
       "allVersions": "Excluir as {{count}} versões",
       "onlyThis": "Excluir só a v{{version}}"
     }
