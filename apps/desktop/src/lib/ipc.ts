@@ -539,6 +539,14 @@ export const rotinasApi = {
  * renderizar — o iframe carrega direto de orbit-artifact://. Estas chamadas
  * existem só para tirar o artefato do Orbit (exportar/copiar).
  */
+/** Diagramas Mermaid do chat: o main desenha (SVG/PNG, como nos documentos) e salva. */
+export const diagramApi = {
+  export: (source: string, format: "svg" | "png" | "mmd") =>
+    window.ipcRenderer.invoke("diagram:export", source, format) as Promise<
+      { ok: true; path: string } | { ok: false; canceled?: boolean; error?: string }
+    >,
+}
+
 export const artifactApi = {
   read: (id: string) => window.ipcRenderer.invoke("artifact:read", id) as Promise<string | null>,
   /** update_artifact reescreveu o arquivo: quem já está renderizando aquele

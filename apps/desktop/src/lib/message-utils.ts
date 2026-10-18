@@ -192,6 +192,8 @@ export function speakableText(message: ChatMessage): string {
     .filter((part): part is TextPart => isProse(part))
     .map((part) => part.text)
     .join("\n")
+    // Visual inline não se lê em voz alta: o JSON do orbit-ui e o código do diagrama.
+    .replace(/```(?:orbit-ui|mermaid)[\s\S]*?(?:```|$)/g, "")
     .trim()
 }
 

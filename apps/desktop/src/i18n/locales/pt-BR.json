@@ -1,4 +1,13 @@
 {
+  "mermaid": {
+    "failed": "Não foi possível desenhar este diagrama.",
+    "copy": "Copiar código do diagrama",
+    "download": "Baixar diagrama",
+    "asPng": "Imagem PNG",
+    "asSvg": "SVG (vetor)",
+    "asMmd": "Código Mermaid (.mmd)",
+    "expand": "Ampliar diagrama"
+  },
   "audio": {
     "play": "Tocar",
     "pause": "Pausar",

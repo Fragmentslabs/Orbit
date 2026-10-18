@@ -113,6 +113,7 @@ import {
 } from './lib/session-documents'
 import { viewExport, viewHtml, viewPrint, viewRender, viewText } from './lib/document-view'
 import { documentForSource, isDocumentSource, useDocumentAsSource } from './lib/document-source'
+import { renderDiagrams } from './lib/mermaid-render'
 import { loadMainLocale, setMainLocale, t as tMain } from './lib/i18n'
 import { loginShellArgs, userShellEnv } from './lib/shell-env'
 import { searchSessions } from './lib/search-sessions'
@@ -2473,6 +2474,31 @@ app.whenReady().then(() => {
     })
     if (result.canceled || !result.filePath) return { ok: false as const, canceled: true as const }
     await fs.writeFile(result.filePath, artifact.html, 'utf8')
+    return { ok: true as const, path: result.filePath }
+  })
+
+  /**
+   * Baixar um diagrama Mermaid mostrado no chat. É o mesmo desenho que sai nos
+   * documentos (renderDiagrams): SVG vetorial, PNG em 2x ou o código `.mmd`.
+   * Fica no main porque o PNG precisa da janela oculta com DOM que o PDF/DOCX
+   * já usam — e porque o diálogo de salvar é daqui.
+   */
+  ipcMain.handle('diagram:export', async (_event, source: string, format: 'svg' | 'png' | 'mmd') => {
+    const code = String(source ?? '').trim()
+    if (!code || !['svg', 'png', 'mmd'].includes(format)) return { ok: false as const, error: 'invalid' }
+    let data: Buffer | string = code
+    if (format !== 'mmd') {
+      const lookup = await renderDiagrams([{ type: 'code', lang: 'mermaid', lines: code.split('\n') }])
+      const diagram = lookup(code)
+      if (!diagram) return { ok: false as const, error: 'render' }
+      data = format === 'svg' ? diagram.svg : diagram.png
+    }
+    const result = await dialog.showSaveDialog({
+      defaultPath: `diagrama.${format}`,
+      filters: [{ name: format.toUpperCase(), extensions: [format] }],
+    })
+    if (result.canceled || !result.filePath) return { ok: false as const, canceled: true as const }
+    await fs.writeFile(result.filePath, data)
     return { ok: true as const, path: result.filePath }
   })
 

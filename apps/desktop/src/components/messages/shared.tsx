@@ -49,6 +49,7 @@ import {
   InlineCitationSource,
 } from "@/src/components/ai/inline-citation"
 import { MessageResponse } from "@/src/components/ai/message"
+import { OrbitUiHostContext } from "@/src/components/ai/generative-ui"
 import { MessageUsage } from "@/src/components/messages/message-usage"
 import { SpeakAction } from "@/src/components/messages/speak-action"
 import { Reasoning, ReasoningContent, ReasoningTrigger, useReasoning } from "@/src/components/ai/reasoning"
@@ -144,6 +145,8 @@ export function AssistantMarkdown({ children, muted = false, sessionId }: {
   sessionId?: string
 }) {
   const components = useMemo(() => ({ a: makeMarkdownLink(sessionId) }), [sessionId])
+  // Os botões dos blocos orbit-ui falam com a sessão desta resposta.
+  const host = useMemo(() => ({ sessionId }), [sessionId])
   // Respostas gravadas antes da mudanca de formato guardam a citacao antiga,
   // que o sanitizador derruba; a reescrita aqui devolve o clique a elas sem
   // mexer no historico em disco.
@@ -156,7 +159,9 @@ export function AssistantMarkdown({ children, muted = false, sessionId }: {
         "[&_[data-streamdown=code-block]]:text-foreground",
       )}
     >
-      <MessageResponse components={components}>{text}</MessageResponse>
+      <OrbitUiHostContext.Provider value={host}>
+        <MessageResponse components={components}>{text}</MessageResponse>
+      </OrbitUiHostContext.Provider>
     </div>
   )
 }

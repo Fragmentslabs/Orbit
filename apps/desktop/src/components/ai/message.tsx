@@ -1,7 +1,6 @@
 import type { FileUIPart, UIMessage } from "ai"
 import { useTranslation } from "react-i18next"
 import { code } from "@streamdown/code"
-import { mermaid } from "@streamdown/mermaid"
 import { ChevronLeftIcon, ChevronRightIcon, PaperclipIcon, XIcon } from "lucide-react"
 import type { ComponentProps, HTMLAttributes, ReactElement } from "react"
 import { createContext, memo, useContext, useEffect, useMemo, useState } from "react"
@@ -10,12 +9,22 @@ import { Button } from "~/components/ui/button"
 import { ButtonGroup, ButtonGroupText } from "~/components/ui/button-group"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "~/components/ui/tooltip"
 import { ImageLightbox } from "~/src/components/ai/image"
+import { OrbitUiRenderer } from "~/src/components/ai/generative-ui"
+import { MermaidDiagram } from "~/src/components/ai/mermaid-diagram"
 import { cn } from "~/lib/utils"
 
 // Mermaid: um bloco ```mermaid vira diagrama em qualquer Markdown do app — a
-// resposta do chat e o canvas do documento. O mesmo bloco sai desenhado no PDF
-// e no .docx, pelo caminho do main (electron/lib/mermaid-render.ts).
-const streamdownPlugins = { code, mermaid }
+// resposta do chat e o canvas do documento — sem moldura e no tema do Orbit
+// (ver mermaid-diagram.tsx). O mesmo bloco sai desenhado no PDF e no .docx,
+// pelo caminho do main (electron/lib/mermaid-render.ts). O fence `orbit-ui`
+// são os componentes inline da resposta (ver generative-ui.tsx).
+const streamdownPlugins = {
+  code,
+  renderers: [
+    { language: "mermaid", component: MermaidDiagram },
+    { language: "orbit-ui", component: OrbitUiRenderer },
+  ],
+}
 
 export type MessageProps = HTMLAttributes<HTMLDivElement> & {
   from: UIMessage["role"]
