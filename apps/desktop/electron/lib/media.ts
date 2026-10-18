@@ -741,9 +741,56 @@ const ARTIFACT_CONTENT_TYPES: Record<string, string> = {
  * app. A cor vem resolvida em variável local porque o documento não tem os
  * tokens do Orbit.
  */
+/**
+ * Os tokens do design system do Orbit, para o artefato usar por padrão.
+ *
+ * O iframe é de origem opaca e não herda a folha do app, então as variáveis
+ * (as mesmas de src/index.css, claro e escuro) viajam no HTML. Tudo vai dentro
+ * de `@layer`: declaração em camada PERDE de qualquer declaração sem camada,
+ * então se o artefato define o próprio `--background`, `body { ... }` ou a
+ * própria fonte — porque o usuário pediu outro visual —, a dele vale e a nossa
+ * só preenche o que ficou em branco.
+ *
+ * O tema segue o mesmo caminho da barra de rolagem: `prefers-color-scheme` até
+ * o pai avisar (`orbit-dark` / `orbit-light` na raiz).
+ */
+const ORBIT_LIGHT_TOKENS = `--background: oklch(1 0 0); --foreground: oklch(0.141 0.005 285.823);
+  --card: oklch(1 0 0); --card-foreground: oklch(0.141 0.005 285.823);
+  --popover: oklch(1 0 0); --popover-foreground: oklch(0.141 0.005 285.823);
+  --primary: oklch(0.852 0.199 91.936); --primary-foreground: oklch(0.421 0.095 57.708);
+  --secondary: oklch(0.967 0.001 286.375); --secondary-foreground: oklch(0.21 0.006 285.885);
+  --muted: oklch(0.967 0.001 286.375); --muted-foreground: oklch(0.552 0.016 285.938);
+  --accent: oklch(0.967 0.001 286.375); --accent-foreground: oklch(0.21 0.006 285.885);
+  --destructive: oklch(0.577 0.245 27.325);
+  --border: oklch(0.92 0.004 286.32); --input: oklch(0.92 0.004 286.32); --ring: oklch(0.705 0.015 286.067);
+  --chart-1: oklch(0.837 0.128 66.29); --chart-2: oklch(0.705 0.213 47.604); --chart-3: oklch(0.646 0.222 41.116);
+  --chart-4: oklch(0.553 0.195 38.402); --chart-5: oklch(0.47 0.157 37.304);
+  color-scheme: light;`
+const ORBIT_DARK_TOKENS = `--background: oklch(0.141 0.005 285.823); --foreground: oklch(0.985 0 0);
+  --card: oklch(0.21 0.006 285.885); --card-foreground: oklch(0.985 0 0);
+  --popover: oklch(0.21 0.006 285.885); --popover-foreground: oklch(0.985 0 0);
+  --primary: oklch(0.795 0.184 86.047); --primary-foreground: oklch(0.421 0.095 57.708);
+  --secondary: oklch(0.274 0.006 286.033); --secondary-foreground: oklch(0.985 0 0);
+  --muted: oklch(0.274 0.006 286.033); --muted-foreground: oklch(0.705 0.015 286.067);
+  --accent: oklch(0.274 0.006 286.033); --accent-foreground: oklch(0.985 0 0);
+  --destructive: oklch(0.704 0.191 22.216);
+  --border: oklch(1 0 0 / 10%); --input: oklch(1 0 0 / 15%); --ring: oklch(0.552 0.016 285.938);
+  --chart-1: oklch(0.837 0.128 66.29); --chart-2: oklch(0.705 0.213 47.604); --chart-3: oklch(0.646 0.222 41.116);
+  --chart-4: oklch(0.553 0.195 38.402); --chart-5: oklch(0.47 0.157 37.304);
+  color-scheme: dark;`
+const ARTIFACT_TOKENS_CSS = `@layer orbit-tokens {
+  :root { ${ORBIT_LIGHT_TOKENS} --radius: 0.875rem;
+    --font-sans: 'Geist Variable', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif; }
+  @media (prefers-color-scheme: dark) { :root:not(.orbit-light) { ${ORBIT_DARK_TOKENS} } }
+  :root.orbit-dark { ${ORBIT_DARK_TOKENS} }
+  :root.orbit-light { ${ORBIT_LIGHT_TOKENS} }
+  body { background: var(--background); color: var(--foreground); font-family: var(--font-sans); }
+}`
+
 const ARTIFACT_CHROME_MARK = '<!-- orbit-artifact-chrome -->'
 const ARTIFACT_CHROME = `${ARTIFACT_CHROME_MARK}
 <style>
+  ${ARTIFACT_TOKENS_CSS}
   :root { --orbit-scroll-thumb: oklch(0.92 0.004 286.32); --orbit-scroll-track: oklch(1 0 0); }
   @media (prefers-color-scheme: dark) { :root { --orbit-scroll-thumb: oklch(1 0 0 / 10%); --orbit-scroll-track: oklch(0.21 0.006 285.885); } }
   :root.orbit-dark { --orbit-scroll-thumb: oklch(1 0 0 / 10%); --orbit-scroll-track: oklch(0.21 0.006 285.885); }

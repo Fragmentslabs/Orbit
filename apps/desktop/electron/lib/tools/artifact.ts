@@ -38,7 +38,7 @@ function ensureDocument(html: string, title: string): string {
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>${title.replace(/[<>&]/g, '')}</title>
-<style>:root { color-scheme: light dark } body { margin: 0; font: 14px/1.5 system-ui, sans-serif }</style>
+<style>:root { color-scheme: light dark } body { margin: 0; font-size: 14px; line-height: 1.5 }</style>
 </head>
 <body>
 ${html}
@@ -47,7 +47,7 @@ ${html}
 }
 
 const DESCRIPTION =
-  'Creates an HTML artifact that renders INSIDE your response, visible and interactive for the user in the chat — and saved to the media gallery. Use it whenever the answer is better seen than described: dashboards, charts, screen prototypes, diagrams, interactive simulations, formatted reports, comparison tables. Send a complete, self-contained HTML document (inline CSS/JS; external scripts must come from a CDN). Do NOT use it for source code the user asked to have written into a project file — that is write/edit. After calling it, do not repeat the content in text: the user is already looking at it.'
+  'Creates an HTML artifact that renders INSIDE your response, visible and interactive for the user in the chat — and saved to the media gallery. Use it whenever the answer is better seen than described: dashboards, charts, screen prototypes, diagrams, interactive simulations, formatted reports, comparison tables. Send a complete, self-contained HTML document (inline CSS/JS; external scripts must come from a CDN). The page already carries the Orbit design-system CSS variables (--background, --card, --primary, --border, --radius…): style with them unless the user asked for another look. Do NOT use it for source code the user asked to have written into a project file — that is write/edit. After calling it, do not repeat the content in text: the user is already looking at it.'
 
 export function createArtifactTools(sessionId: string) {
   return {

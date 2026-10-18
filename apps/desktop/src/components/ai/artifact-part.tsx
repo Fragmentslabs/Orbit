@@ -51,6 +51,13 @@ const SANDBOX = "allow-scripts allow-popups allow-forms allow-modals"
 const ZOOM_MIN = 0.5
 const ZOOM_MAX = 3
 const ZOOM_STEP = 0.25
+/**
+ * Zoom ao abrir a tela cheia. Em 100% o artefato (dashboard, página) já enche o
+ * diálogo e parece grande demais; 75% cabe com folga e ainda lê bem. Múltiplo
+ * do passo, para o +/− continuar caindo em 50/75/100/125… O "100%" do botão
+ * volta para ESTE valor — é o ponto de partida da janela, não o tamanho real.
+ */
+const ZOOM_DEFAULT = 0.75
 
 const clampZoom = (z: number) => Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, Math.round(z * 100) / 100))
 
@@ -263,11 +270,11 @@ export function ArtifactPartView({
  * Palco do artefato em tela cheia: aplica o zoom e ancora a barra de controles.
  *
  * Monta junto com o diálogo (o Dialog não mantém o conteúdo quando fechado),
- * então o zoom volta a 100% a cada abertura — que é o que se espera de uma
+ * então o zoom volta ao padrão a cada abertura — que é o que se espera de uma
  * janela recém-aberta.
  */
 function ArtifactStage({ src, title, nonce }: { src: string; title: string; nonce: string }) {
-  const [zoom, setZoom] = useState(1)
+  const [zoom, setZoom] = useState(ZOOM_DEFAULT)
   const stageRef = useRef<HTMLDivElement | null>(null)
 
   // Ctrl+roda. O listener é nativo porque `preventDefault` num handler passivo
@@ -297,7 +304,7 @@ function ArtifactStage({ src, title, nonce }: { src: string; title: string; nonc
         setZoom((z) => clampZoom(z - ZOOM_STEP))
       } else if (e.key === '0') {
         e.preventDefault()
-        setZoom(1)
+        setZoom(ZOOM_DEFAULT)
       }
     }
     window.addEventListener('keydown', onKey)
@@ -336,7 +343,7 @@ function ZoomBar({ zoom, onChange }: { zoom: number; onChange: (z: number) => vo
       />
       <button
         type="button"
-        onClick={() => onChange(1)}
+        onClick={() => onChange(ZOOM_DEFAULT)}
         title={t("artifacts.zoomReset")}
         aria-label={t("artifacts.zoomReset")}
         className="min-w-11 rounded-full px-1 text-[11px] font-medium tabular-nums text-muted-foreground transition-colors hover:text-foreground"
