@@ -37,7 +37,8 @@ import { QueueIndicator } from "@/src/components/queue-indicator"
 import { ContextMeter } from "@/src/components/context-meter"
 import { SendButtonGroup } from "@/src/components/send-button-group"
 import { SlashPalette } from "@/src/components/slash-palette"
-import { useReferenceCommands, useSlashActionCommands, type SlashCommand } from "@/src/lib/slash-commands"
+import { ReferencePalette } from "@/src/components/reference-palette"
+import { useSlashActionCommands, type SlashCommand } from "@/src/lib/slash-commands"
 import { useWorkspace } from "@/lib/workspace-context"
 import { useBrainEnabled, useBrainPrefs, useChatContext } from "@/src/stores/brain-prefs"
 import { useMessageQueueStore } from "@/src/stores/message-queue-store"
@@ -116,7 +117,6 @@ export function ChatInput({ onSubmit, status, onStop, sessionId, draftKey, onPro
   const openChatTab = usePanelStore((s) => s.openChatTab)
   const modesInRow = useAppearanceStore((s) => s.modesInRow)
   const modeLabelStyle = useAppearanceStore((s) => s.modeLabelStyle)
-  const referenceCommands = useReferenceCommands("chat")
   const actionCommands = useSlashActionCommands("chat")
 
   const modeToggleItems = useMemo<ModeToggleDef[]>(() => [
@@ -178,15 +178,20 @@ export function ChatInput({ onSubmit, status, onStop, sessionId, draftKey, onPro
       { id: "browser", label: t("input.modes.browser.label"), description: t("input.slash.browserDescription"), keywords: ["navegador", "web"], group: "Modos" as const, active: browser, run: toggle(() => setModeActive("browser", sessionId, !browser)) },
       { id: "simples", label: t("input.modes.simple.label"), description: t("input.slash.simpleDescription"), keywords: ["texto", "plain"], group: "Modos" as const, active: simple, run: toggle(() => setSimple(sessionId, !simple)) },
       { id: "brain", label: t("input.slash.brainLabel"), description: t("input.slash.brainDescription"), keywords: ["memoria", "brain"], group: "Modos" as const, active: brain, run: toggle(() => setBrainEnabled(sessionId, !brain)) },
+      // Visão: primeira ativação sem modelo configurado abre a configuração.
+      { id: "vision", label: t("input.modes.vision.label"), description: t("input.modes.vision.description"), keywords: ["visao", "imagem", "vision"], group: "Modos" as const, active: vision, run: toggle(() => {
+        if (!vision && !visionModel) setVisionConfigOpen(true)
+        else setModeActive("vision", sessionId, !vision)
+      }) },
       ...actionCommands,
-      ...referenceCommands,
       { id: "novo-chat", label: t("input.slash.newChat"), description: t("input.slash.newChatDescription"), keywords: ["clear", "limpar", "novo"], group: "Ações" as const, run: toggle(() => void selectSession(mode, null)) },
       { id: "settings", label: t("input.slash.settings"), description: t("input.slash.settingsDescription"), keywords: ["settings", "config"], group: "Ações" as const, run: toggle(() => openSettings()) },
     ]
-  }, [search, browser, simple, brain, sessionId, setBrainEnabled, setSimple, setModeActive, actionCommands, referenceCommands, selectSession, mode, openSettings, t])
+  }, [search, browser, simple, brain, vision, visionModel, sessionId, setBrainEnabled, setSimple, setModeActive, setVisionConfigOpen, actionCommands, selectSession, mode, openSettings, t])
 
   return (
     <PromptInputProvider>
+    <ReferencePalette>
     <SlashPalette commands={slashCommands} className="mx-auto w-full max-w-2xl">
     <DraftInputBridge sessionId={sessionId} />
     <ChatInputDraft sessionId={sessionId} draftKey={draftKey} />
@@ -412,6 +417,7 @@ export function ChatInput({ onSubmit, status, onStop, sessionId, draftKey, onPro
     </div>
     <VisionConfigDialog open={visionConfigOpen} onOpenChange={setVisionConfigOpen} targetSession={sessionId} />
     </SlashPalette>
+    </ReferencePalette>
     </PromptInputProvider>
   )
 }

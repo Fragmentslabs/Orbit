@@ -4,7 +4,7 @@ import { BrainCircuit, Layers, Sparkles, Wrench, Zap } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { normalizeText } from "@shared/memory"
 import { SLASH_ACTION_COMMANDS } from "@/src/lib/slash-actions"
-import type { SlashCommand } from "@/src/lib/slash-commands"
+import { commandMatches, type SlashCommand } from "@/src/lib/slash-commands"
 import { usePromptInputController } from "@/src/components/ai/prompt-input"
 
 /**
@@ -13,9 +13,9 @@ import { usePromptInputController } from "@/src/components/ai/prompt-input"
  * wrapper — roda ANTES do handler interno do PromptInputTextarea, então o
  * Enter-para-enviar continua intacto quando a paleta está fechada.
  *
- * Comandos: modos do input (toggles), skills (@nome), servidores MCP
- * (@mcp:nome), busca explícita na memória (@memoria) e ações (nova conversa,
- * settings). Selecionar uma referência substitui o texto; modos limpam o "/".
+ * A "/" é de COMANDOS E MODOS: o que se executa (pipelines como /init) e o
+ * que se liga (Pesquisa, Plano, Loop, Visão…). As REFERÊNCIAS (skills, MCP,
+ * arquivos) ficam na paleta "@".
  */
 
 export type { SlashCommand } from "@/src/lib/slash-commands"
@@ -29,7 +29,7 @@ const GROUP_ICON: Record<SlashCommand["group"], typeof Sparkles> = {
 }
 
 /** Ordem de exibição das seções: ações primeiro, modos por último (já têm chips na UI) */
-const GROUP_ORDER: SlashCommand["group"][] = ["Ações", "Skills", "MCP", "Memória", "Modos"]
+const GROUP_ORDER: SlashCommand["group"][] = ["Ações", "Modos"]
 
 /** Chave i18n de cada seção: o valor do grupo é identificador, não rótulo. */
 const GROUP_KEY: Record<SlashCommand["group"], string> = {
@@ -38,14 +38,6 @@ const GROUP_KEY: Record<SlashCommand["group"], string> = {
   MCP: "mcp",
   Memória: "memory",
   Modos: "modes",
-}
-
-function matches(command: SlashCommand, query: string): boolean {
-  if (!query) return true
-  const haystack = normalizeText(
-    [command.label, command.description ?? "", ...(command.keywords ?? [])].join(" "),
-  )
-  return query.split(" ").every((token) => haystack.includes(token))
 }
 
 /** Comandos literais enviados como texto — a paleta não abre sobre eles.
@@ -69,7 +61,7 @@ export function SlashPalette({ commands, children, className }: {
     () =>
       open
         ? commands
-            .filter((c) => matches(c, query))
+            .filter((c) => commandMatches(c, query))
             .sort((a, b) => GROUP_ORDER.indexOf(a.group) - GROUP_ORDER.indexOf(b.group))
         : [],
     [commands, open, query],
@@ -81,6 +73,7 @@ export function SlashPalette({ commands, children, className }: {
   }, [query, open])
 
   const select = (command: SlashCommand) => {
+    if (command.disabled) return
     command.run({ setText: controller.textInput.setInput })
   }
 
@@ -132,9 +125,11 @@ export function SlashPalette({ commands, children, className }: {
                     <button
                       key={command.id}
                       type="button"
+                      disabled={command.disabled}
                       className={cn(
                         "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm",
                         index === highlight && "bg-accent text-accent-foreground",
+                        command.disabled && "cursor-not-allowed opacity-50",
                       )}
                       onMouseEnter={() => setHighlight(index)}
                       onMouseDown={(e) => {

@@ -195,9 +195,7 @@
       "permFullDescription": "Sem perguntas (piso de segurança mantido)",
       "newSession": "Nova sessão",
       "newSessionDescription": "Começa uma sessão de código em branco",
-      "createSkill": "Criar skill",
       "createSkillDescription": "Pede ao Orbit para criar uma skill (com scripts, se precisar)",
-      "documentApp": "Documentar aplicação",
       "documentAppDescription": "Navega pelo app no painel, tira screenshots e documenta em docs/"
     }
   },
@@ -1001,7 +999,9 @@
     "empty": "Nenhum resultado encontrado",
     "hint": "Digite para buscar em todas as conversas"
   },
-  "filePalette": {
+  "referencePalette": {
+    "skills": "Skills",
+    "mcp": "MCP",
     "files": "Arquivos",
     "loading": "Carregando..."
   },

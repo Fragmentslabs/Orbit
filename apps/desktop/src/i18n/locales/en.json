@@ -195,9 +195,7 @@
       "permFullDescription": "No questions asked (safety floor still enforced)",
       "newSession": "New session",
       "newSessionDescription": "Starts a blank code session",
-      "createSkill": "Create skill",
       "createSkillDescription": "Asks Orbit to create a skill (with scripts, if needed)",
-      "documentApp": "Document app",
       "documentAppDescription": "Navigates the app in the panel, takes screenshots, and documents it in docs/"
     }
   },
@@ -1001,7 +999,9 @@
     "empty": "No results found",
     "hint": "Type to search across all conversations"
   },
-  "filePalette": {
+  "referencePalette": {
+    "skills": "Skills",
+    "mcp": "MCP",
     "files": "Files",
     "loading": "Loading..."
   },

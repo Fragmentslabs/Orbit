@@ -15,19 +15,16 @@ export interface SlashCommand {
   run: (ctx: { setText: (text: string) => void }) => void
 }
 
+/** Comandos da paleta "/" — o que se EXECUTA (pipelines) e o que se age na
+ *  UI. As referências (skills, MCP) ficam na paleta "@". */
 export function useSlashCommands(): SlashCommand[] {
   const { t } = useTranslation()
   const mode = useWorkspaceStore((s) => s.mode) as SessionMode
-  const skills = useToolsStore((s) => s.skills)
-  const mcpServers = useToolsStore((s) => s.mcpServers)
-  const fetchSkills = useToolsStore((s) => s.fetchSkills)
-  const fetchMcpStatus = useToolsStore((s) => s.fetchMcpStatus)
   const hydrateCache = useToolsStore((s) => s.hydrateCache)
 
   useEffect(() => {
     void hydrateCache()
-    void Promise.all([fetchSkills(), fetchMcpStatus()])
-  }, [fetchSkills, fetchMcpStatus, hydrateCache])
+  }, [hydrateCache])
 
   return useMemo(() => {
     const toggle = (fn: () => void) => ({ setText }: { setText: (t: string) => void }) => {
@@ -37,7 +34,8 @@ export function useSlashCommands(): SlashCommand[] {
 
     const items: SlashCommand[] = []
 
-    // Actions
+    // A "/" é de COMANDOS: o que se executa. As REFERÊNCIAS (skills, MCP)
+    // ficam na paleta "@" — ver useReferenceCommands.
     items.push(
       ...actionsForMode(mode).map((action) => ({
         id: `action-${action.id}`,
@@ -48,31 +46,6 @@ export function useSlashCommands(): SlashCommand[] {
         run: ({ setText }: { setText: (t: string) => void }) =>
           setText(action.kind === 'insert' && action.insertText ? action.insertText : `${action.command} `),
       })),
-    )
-
-    // Skills (@slug)
-    items.push(
-      ...skills.map<SlashCommand>((skill) => ({
-        id: `skill-${skill.slug}`,
-        label: `@${skill.slug}`,
-        description: skill.description || t('slashCommands.userSkill'),
-        keywords: [skill.slug, skill.name],
-        group: 'Skills' as const,
-        run: ({ setText }) => setText(`@${skill.slug} `),
-      })),
-    )
-
-    // MCP (@mcp:name)
-    items.push(
-      ...mcpServers
-        .filter((s) => s.state === 'connected')
-        .map<SlashCommand>((server) => ({
-          id: `mcp-${server.config.name}`,
-          label: `@mcp:${server.config.name}`,
-          description: t('slashCommands.useMcpTools', { count: server.toolNames.length }),
-          group: 'MCP' as const,
-          run: ({ setText }) => setText(`@mcp:${server.config.name} `),
-        })),
     )
 
     // Modos - toggles simples
@@ -86,5 +59,45 @@ export function useSlashCommands(): SlashCommand[] {
     })
 
     return items
-  }, [mode, skills, mcpServers, t])
+  }, [mode, t])
+}
+
+/** Referências da paleta "@": skills e servidores MCP — o que entra no
+ *  contexto do pedido. No mobile não há pasta de trabalho, então não há
+ *  arquivos para citar. */
+export function useReferenceCommands(): SlashCommand[] {
+  const { t } = useTranslation()
+  const skills = useToolsStore((s) => s.skills)
+  const mcpServers = useToolsStore((s) => s.mcpServers)
+  const fetchSkills = useToolsStore((s) => s.fetchSkills)
+  const fetchMcpStatus = useToolsStore((s) => s.fetchMcpStatus)
+  const hydrateCache = useToolsStore((s) => s.hydrateCache)
+
+  useEffect(() => {
+    void hydrateCache()
+    void Promise.all([fetchSkills(), fetchMcpStatus()])
+  }, [fetchSkills, fetchMcpStatus, hydrateCache])
+
+  return useMemo(
+    () => [
+      ...skills.map<SlashCommand>((skill) => ({
+        id: `skill-${skill.slug}`,
+        label: `@${skill.slug}`,
+        description: skill.description || t('slashCommands.userSkill'),
+        keywords: [skill.slug, skill.name],
+        group: 'Skills' as const,
+        run: ({ setText }: { setText: (t: string) => void }) => setText(`@${skill.slug} `),
+      })),
+      ...mcpServers
+        .filter((s) => s.state === 'connected')
+        .map<SlashCommand>((server) => ({
+          id: `mcp-${server.config.name}`,
+          label: `@mcp:${server.config.name}`,
+          description: t('slashCommands.useMcpTools', { count: server.toolNames.length }),
+          group: 'MCP' as const,
+          run: ({ setText }: { setText: (t: string) => void }) => setText(`@mcp:${server.config.name} `),
+        })),
+    ],
+    [skills, mcpServers, t],
+  )
 }

@@ -29,7 +29,7 @@ import { LoopConfigModal } from './LoopConfigModal'
 import { InputAttachment } from './Attachment'
 import { ConfigSheet } from './ConfigSheet'
 import { SlashPalette } from './SlashPalette'
-import { useSlashCommands } from '~/hooks/useSlashCommands'
+import { useSlashCommands, useReferenceCommands } from '~/hooks/useSlashCommands'
 import { useDictation } from '~/hooks/useDictation'
 import { useConnectionStore } from '~/stores/connection-store'
 import { uriToFilePart } from '~/lib/attachments'
@@ -813,7 +813,27 @@ const SlashPaletteShell = memo(function SlashPaletteShell({
 }) {
   const commands = useSlashCommands()
   return (
-    <SlashPalette value={value} setText={setText} commands={commands}>
+    // A "@" é a paleta de REFERÊNCIAS (skills, MCP); a "/" é a de COMANDOS.
+    <ReferencePaletteShell value={value} setText={setText}>
+      <SlashPalette value={value} setText={setText} commands={commands}>
+        {children}
+      </SlashPalette>
+    </ReferencePaletteShell>
+  )
+})
+
+const ReferencePaletteShell = memo(function ReferencePaletteShell({
+  value,
+  setText,
+  children,
+}: {
+  value: string
+  setText: (t: string) => void
+  children: ReactNode
+}) {
+  const commands = useReferenceCommands()
+  return (
+    <SlashPalette value={value} setText={setText} commands={commands} trigger="@">
       {children}
     </SlashPalette>
   )
