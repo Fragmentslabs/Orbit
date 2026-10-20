@@ -714,13 +714,13 @@
         "description": "HTML page produced by the assistant"
       },
       "sources": {
-    "removeMaterial": "Delete the file (frees the space)",
-    "materialKind": {
-      "image": "Photo",
-      "gif": "GIF",
-      "audio": "Audio",
-      "video": "Video"
-    },
+        "removeMaterial": "Delete the file (frees the space)",
+        "materialKind": {
+          "image": "Photo",
+          "gif": "GIF",
+          "audio": "Audio",
+          "video": "Video"
+        },
         "label": "Sources",
         "description": "Documents this conversation works with"
       },
@@ -1507,31 +1507,52 @@
       {
         "id": "search",
         "label": "Research",
-        "modes": ["Chat", "Code"],
+        "modes": [
+          "Chat",
+          "Code"
+        ],
         "description": "Searches and reads web pages via HTTP.",
         "detail": "Adds the websearch and webfetch tools to the agent. Fast and efficient for looking up documentation, APIs, and public information. Doesn't run JavaScript — ideal for static content.",
-        "combo": ["Browser", "Thinking"]
+        "combo": [
+          "Browser",
+          "Thinking"
+        ]
       },
       {
         "id": "browser",
         "label": "Browser",
-        "modes": ["Chat"],
+        "modes": [
+          "Chat"
+        ],
         "description": "Navigates pages like a real browser.",
         "detail": "Opens the right panel with a full browser. Runs JavaScript, ideal for SPAs, forms, and dynamic pages. The agent can navigate, click, fill fields, and take screenshots.",
-        "combo": ["Research", "Thinking"]
+        "combo": [
+          "Research",
+          "Thinking"
+        ]
       },
       {
         "id": "thinking",
         "label": "Thinking",
-        "modes": ["Chat", "Code"],
+        "modes": [
+          "Chat",
+          "Code"
+        ],
         "description": "Extended model reasoning.",
         "detail": "Enables the model's reasoning/thinking mode (when supported). The model \"thinks\" before answering, resulting in deeper, better-grounded replies. Uses more tokens and time.",
-        "combo": ["Research", "Browser", "Loop"]
+        "combo": [
+          "Research",
+          "Browser",
+          "Loop"
+        ]
       },
       {
         "id": "simple",
         "label": "Simple",
-        "modes": ["Chat", "Code"],
+        "modes": [
+          "Chat",
+          "Code"
+        ],
         "description": "Direct, plain-text replies.",
         "detail": "Removes advanced formatting, citations, and tool blocks from the response. Useful when you just want the essential content, no frills.",
         "combo": []
@@ -1539,7 +1560,10 @@
       {
         "id": "brain",
         "label": "Memory (Brain)",
-        "modes": ["Chat", "Code"],
+        "modes": [
+          "Chat",
+          "Code"
+        ],
         "description": "Orbit remembers facts and preferences across conversations.",
         "detail": "Adds the memory_save/search/link/open/graph tools. Orbit can save facts, preferences, and decisions and automatically retrieve them in future conversations. Turn it off per chat if you prefer a context-free interaction.",
         "combo": []
@@ -1547,39 +1571,61 @@
       {
         "id": "subagents",
         "label": "Subagents",
-        "modes": ["Chat", "Code"],
+        "modes": [
+          "Chat",
+          "Code"
+        ],
         "description": "Ephemeral background workers for parallel tasks.",
         "detail": "Adds the subagent tool to the agent. When it spots independent subtasks, it can delegate them to ephemeral workers running in the background with the configured model. Those workers are discarded when the task ends — they never appear in the sidebar. In Orchestra mode this toggle is also what lets the orchestrator delegate research while planning: without it, it investigates the project itself by reading files.",
-        "combo": ["Loop", "Orchestra"]
+        "combo": [
+          "Loop",
+          "Orchestra"
+        ]
       },
       {
         "id": "orchestra",
         "label": "Orchestra",
-        "modes": ["Code"],
+        "modes": [
+          "Code"
+        ],
         "description": "Plans and splits work across persistent workers — when the request calls for it.",
         "detail": "The orchestrator first decides what the request is: a simple question it answers right away (and may offer \"want me to implement it?\"), an ambiguity that would change the split it asks about, and only real work becomes a plan. While planning it reads the project and registers the subtasks, with dependencies when order matters (tests after the feature, for example), and proposes the plan for your approval. Each task becomes a persistent child session, in code mode, running with the worker model — up to 4 at a time. In the gear you choose how it behaves after splitting: Orchestrate only (runs and synthesizes), Follow along (reviews each worker as it finishes, looking at the diff, asks for adjustments and creates extra workers, within the adjustments-per-worker limit) or Strict (also runs the project's checks before accepting). You can also isolate each worker in its own worktree and let the orchestrator merge everything at the end. In later messages it still sees the conversation's workers and can continue one of them instead of creating another.",
-        "combo": ["Subagents"]
+        "combo": [
+          "Subagents"
+        ]
       },
       {
         "id": "loop",
         "label": "Loop",
-        "modes": ["Code"],
+        "modes": [
+          "Code"
+        ],
         "description": "The agent reviews and iterates until the task is complete.",
         "detail": "After each answer, the result is critically reviewed. If the goal wasn't reached, the agent keeps going on its own in a new iteration, with what's missing spelled out. The only setting is the maximum number of iterations (in the gear) — a ceiling, not a target: the loop stops as soon as the review says it's done. It doesn't apply to the Orchestra: there, the orchestrator does the reviewing.",
-        "combo": ["Subagents", "Thinking"]
+        "combo": [
+          "Subagents",
+          "Thinking"
+        ]
       },
       {
         "id": "plan",
         "label": "Plan Mode",
-        "modes": ["Code"],
+        "modes": [
+          "Code"
+        ],
         "description": "Read-only — produces a plan without editing files.",
         "detail": "Blocks write tools (write, edit, bash). The agent only reads the code and produces a detailed implementation plan. Useful for review and planning before making changes.",
-        "combo": ["Thinking", "Research"]
+        "combo": [
+          "Thinking",
+          "Research"
+        ]
       },
       {
         "id": "permissions",
         "label": "Permissions",
-        "modes": ["Code"],
+        "modes": [
+          "Code"
+        ],
         "description": "Security control over the agent's actions.",
         "detail": "Three levels: Ask (asks before each critical action), Approve (shows a summary for approval), Full (executes automatically). Configurable in the Preferences modal or directly in the input.",
         "combo": []
@@ -1587,7 +1633,10 @@
       {
         "id": "vision",
         "label": "Vision",
-        "modes": ["Chat", "Code"],
+        "modes": [
+          "Chat",
+          "Code"
+        ],
         "description": "Delegates vision to a dedicated model.",
         "detail": "With the mode on, images (screenshots and attachments) are described by a configured vision model and only the text description enters the agent's context — never the raw image. Beneficial even for models with native vision: in long conversations, the image isn't reloaded into the context every turn, saving tokens and keeping the context lean.",
         "combo": []
@@ -1596,27 +1645,44 @@
     "combos": [
       {
         "label": "Deep research",
-        "items": ["Research", "Browser", "Thinking"],
+        "items": [
+          "Research",
+          "Browser",
+          "Thinking"
+        ],
         "description": "Turn on Research + Browser + Thinking together. The agent searches, navigates complex pages, and reasons deeply about what it found. Ideal for investigating technical topics, comparing documentation, or doing competitive analysis."
       },
       {
         "label": "Automatic refinement",
-        "items": ["Loop", "Thinking"],
+        "items": [
+          "Loop",
+          "Thinking"
+        ],
         "description": "Loop + Thinking: the agent reviews its own result with extended reasoning, spotting gaps and refining until the goal is achieved. Great for generating robust code, thorough tests, or detailed documentation."
       },
       {
         "label": "Workers on multiple fronts",
-        "items": ["Orchestra", "Subagents"],
+        "items": [
+          "Orchestra",
+          "Subagents"
+        ],
         "description": "Orchestra + Subagents: unlocks delegation at both levels. While planning, the orchestrator may call subagents to research before splitting (without the toggle it reads the project itself). And it can hand a worker its own subagents when a task is too broad for one."
       },
       {
         "label": "Careful planning",
-        "items": ["Plan Mode", "Thinking", "Research"],
+        "items": [
+          "Plan Mode",
+          "Thinking",
+          "Research"
+        ],
         "description": "Plan Mode + Thinking + Research: before any change, the agent researches documentation, reasons deeply, and produces a detailed implementation plan without modifying files. Approve the plan, then execute it with the normal tools."
       },
       {
         "label": "Safe coding",
-        "items": ["Permission: Ask", "Loop"],
+        "items": [
+          "Permission: Ask",
+          "Loop"
+        ],
         "description": "Ask permission + Loop: on each loop iteration, the agent can ask for permission before sensitive actions (editing files, running commands). Safe for reviewing third-party code or making changes in production."
       }
     ]
