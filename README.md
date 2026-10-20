@@ -88,6 +88,7 @@ Orbit's memory system is inspired by **Obsidian**: a persistent graph of memorie
   - **element picker** — select any element on the page to use it as context in the chat
   - **responsive testing** — switch between mobile, tablet and desktop viewports
   - **fullscreen mode** — browse full screen while staying connected to the chat in real time
+  - **headless batch automation** — a hidden browser runs scripts in bulk (loops, crawls, dozens of screenshots per call); the loop runs in the engine, so the pages never flood the context, and results are written as files
 - **Web search & read** tools for research
 - **MCP support** — connect external Model Context Protocol servers
 - **Inline diff review** before/after every change
