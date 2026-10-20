@@ -5,6 +5,9 @@ import path from 'node:path'
 import { z } from 'zod'
 import { importAttachmentInto } from '../video/motion-asset'
 import { openMotionAndReport } from '../video/motion-open'
+import { getMotion, registerMotion } from '../video/motion-store'
+import { panelMotionPreview } from '../panel-browser'
+import { withAssetLock, writeFileAtomic } from '../asset-lock'
 import type { ToolContext } from './context'
 import { createVideoTools } from './video'
 
@@ -44,6 +47,48 @@ export function motionSlug(name: string): string {
   return slug || 'motion'
 }
 
+/**
+ * HTML mínimo com o meta orbit-motion válido — o palco da aba carrega de
+ * imediato (1920x1080 escuro, vazio) enquanto o modelo ainda está transmitindo
+ * a composição de verdade. Não é "carga boa": o report() final mede a peça
+ * real e a escrita progressiva dispara o watcher (motion:changed) que recarrega
+ * a aba no mesmo instante em que o arquivo é gravado.
+ */
+const MOTION_PLACEHOLDER = `<!doctype html>
+<html>
+<head><meta charset="utf-8"><meta name="orbit-motion" content="width=1920,height=1080,fps=30,duration=1"></head>
+<body style="margin:0;background:#111"></body>
+</html>
+`
+
+/**
+ * Abre a aba Motion ANTES da tool terminar: o chat-engine chama isto assim que
+ * o nome da composição aparece no input streaming — enquanto o modelo ainda
+ * está transmitindo o HTML. Registra a composição (religa o watcher) e manda o
+ * painel abrir a aba; com `placeholder` (motion_write) grava um index.html
+ * mínimo antes, para o palco ter o que carregar até o HTML de verdade chegar
+ * (o watcher recarrega a aba no instante da gravação). `placeholder: false`
+ * (motion_edit) não cria nada: a peça já existe, e se não existir é erro do
+ * modelo — não há palco para abrir.
+ */
+export async function openMotionLive(
+  sessionId: string,
+  name: string,
+  opts: { placeholder?: boolean } = {},
+): Promise<void> {
+  const folder = path.join(chatMotionDir(sessionId), motionSlug(name))
+  const file = path.join(folder, 'index.html')
+  try {
+    await fs.access(file)
+  } catch {
+    if (opts.placeholder === false) return
+    await fs.mkdir(folder, { recursive: true })
+    await writeFileAtomic(file, MOTION_PLACEHOLDER)
+  }
+  const reg = await registerMotion(folder, file, { root: chatMotionDir(sessionId), sessionId })
+  panelMotionPreview({ id: reg.id, entry: 'index.html', title: motionSlug(name), path: file, sessionId })
+}
+
 export interface TextEdit {
   oldText: string
   newText: string
@@ -75,9 +120,19 @@ const NAME = z
   .max(80)
   .describe('Name of the composition in this conversation (e.g. "orbit-intro") — the same name addresses it in every motion tool')
 
+/**
+ * Endereço GLOBAL por id (mv_…), o mesmo que aparece na nota de anexo. Dá para
+ * ler/editar uma composição de qualquer conversa sem conhecer o nome dela. Todo
+ * write carrega a leitura sob lock, então dois chats no mesmo id não se atropelam.
+ */
+const ID = z
+  .string()
+  .min(1)
+  .optional()
+  .describe('Motion id (mv_…) of an existing composition — the "motion id" from an attachment note. Use it to read/edit a composition from any conversation; omit when addressing by name in this one')
+
 export function createChatMotionTools(scope: { sessionId: string; modelVision?: boolean; canRender: boolean }): ToolSet {
   const root = chatMotionDir(scope.sessionId)
-  const entryOf = (name: string) => path.join(root, motionSlug(name), 'index.html')
   const ctx: ToolContext = {
     sessionId: scope.sessionId,
     directory: root,
@@ -86,12 +141,32 @@ export function createChatMotionTools(scope: { sessionId: string; modelVision?: 
     modelVision: scope.modelVision,
   }
 
-  const report = (name: string, verb: string) =>
+  /**
+   * Alvo por `name` (composição desta conversa) OU por `id` (global). Puro até o
+   * `getMotion` — a autorização é só "existe"; não há checagem de dono.
+   */
+  const resolveTarget = async (input: { name?: string; id?: string }) => {
+    if (input.id) {
+      const entry = await getMotion(input.id)
+      if (!entry) throw new Error(`no motion composition with id "${input.id}"`)
+      return {
+        folder: entry.folder,
+        file: entry.entry,
+        root: entry.root ?? path.dirname(entry.folder),
+        name: path.basename(entry.folder),
+      }
+    }
+    if (!input.name) throw new Error('pass either `name` (a composition of this conversation) or `id` (the mv_… from an attachment note)')
+    const folder = path.join(root, motionSlug(input.name))
+    return { folder, file: path.join(folder, 'index.html'), root, name: motionSlug(input.name) }
+  }
+
+  const report = (target: { file: string; root: string; name: string }, verb: string) =>
     openMotionAndReport({
-      target: entryOf(name),
-      root,
+      target: target.file,
+      root: target.root,
       sessionId: scope.sessionId,
-      label: `composition "${motionSlug(name)}", ${verb}`,
+      label: `composition "${target.name}", ${verb}`,
       nextStep:
         'Keep refining with motion_edit (exact text replacements) — the tab reloads live at the same frame, so tell the user what you changed and let them watch. Check yourself with motion_frame. Render only if the user asks for the video file (they also have a Render button in the tab).',
       fixHint: 'fix it with motion_edit or motion_write (the tab reloads by itself) and read this result again.',
@@ -112,20 +187,26 @@ export function createChatMotionTools(scope: { sessionId: string; modelVision?: 
         'Call video_guide("motion") once before writing your first composition. The page must declare its format (<meta name="orbit-motion" content="width=1920,height=1080,fps=30,duration=6">) and move only through seek: CSS animations, the Web Animations API, or window.orbitMotion.seek(frame) for script-driven motion. There is NO local gsap here — no folder to copy it into — so prefer CSS/Web Animations or your own seek. Fonts: system fonts or a Google Fonts <link>. ' +
         'The result says whether it loaded and lists the layers with their enter/leave frames. After this, change it with motion_edit (small, exact replacements), not by rewriting everything.',
       inputSchema: z.object({
-        name: NAME,
+        name: NAME.optional(),
+        id: ID,
         html: z.string().min(1).describe('The COMPLETE, self-contained HTML of the composition'),
       }),
-      execute: async ({ name, html }) => {
-        const file = entryOf(name)
-        await fs.mkdir(path.dirname(file), { recursive: true })
-        let existed = true
-        try {
-          await fs.access(file)
-        } catch {
-          existed = false
-        }
-        await fs.writeFile(file, html, 'utf8')
-        return report(name, existed ? 'replaced' : 'created')
+      execute: async ({ name, id, html }) => {
+        const target = await resolveTarget({ name, id })
+        const existed = await withAssetLock(`motion:${target.folder}`, async () => {
+          await fs.mkdir(target.folder, { recursive: true })
+          // O placeholder da abertura ao vivo (openMotionLive) não conta como
+          // existente: "replaced" só quando o agente substitui uma peça escrita.
+          let existed = false
+          try {
+            existed = (await fs.readFile(target.file, 'utf8')) !== MOTION_PLACEHOLDER
+          } catch {
+            existed = false
+          }
+          await writeFileAtomic(target.file, html)
+          return existed
+        })
+        return report(target, existed ? 'replaced' : 'created')
       },
     }),
 
@@ -134,7 +215,8 @@ export function createChatMotionTools(scope: { sessionId: string; modelVision?: 
         'Edits a motion composition of this conversation with EXACT text replacements, applied in order (oldText must exist and be unique unless replaceAll). The Motion tab reloads live at the same frame, so the user watches each change. ' +
         'This is how you iterate on timing, easing, colors and copy — small edits, not full rewrites. If you are unsure of the current text, motion_read first.',
       inputSchema: z.object({
-        name: NAME,
+        name: NAME.optional(),
+        id: ID,
         edits: z
           .array(
             z.object({
@@ -145,29 +227,34 @@ export function createChatMotionTools(scope: { sessionId: string; modelVision?: 
           )
           .min(1),
       }),
-      execute: async ({ name, edits }) => {
-        const file = entryOf(name)
-        let source: string
-        try {
-          source = await fs.readFile(file, 'utf8')
-        } catch {
-          throw new Error(`no composition named "${motionSlug(name)}" in this conversation — create it with motion_write`)
-        }
-        await fs.writeFile(file, applyTextEdits(source, edits), 'utf8')
-        return report(name, `${edits.length} edit${edits.length === 1 ? '' : 's'} applied`)
+      execute: async ({ name, id, edits }) => {
+        const target = await resolveTarget({ name, id })
+        // Leitura e escrita sob o mesmo lock: se outro chat gravou no meio, os
+        // oldText não casam e o edit falha em vez de sobrescrever.
+        await withAssetLock(`motion:${target.folder}`, async () => {
+          let source: string
+          try {
+            source = await fs.readFile(target.file, 'utf8')
+          } catch {
+            throw new Error(`no composition named "${target.name}" — create it with motion_write`)
+          }
+          await writeFileAtomic(target.file, applyTextEdits(source, edits))
+        })
+        return report(target, `${edits.length} edit${edits.length === 1 ? '' : 's'} applied`)
       },
     }),
 
     motion_read: tool({
-      description: 'Returns the current HTML of a motion composition of this conversation (the user may have asked for changes since you wrote it, and edits need the exact text).',
-      inputSchema: z.object({ name: NAME }),
-      execute: async ({ name }) => {
+      description: 'Returns the current HTML of a motion composition (of this conversation by name, or any one by id). The user may have asked for changes since you wrote it, and edits need the exact text.',
+      inputSchema: z.object({ name: NAME.optional(), id: ID }),
+      execute: async ({ name, id }) => {
+        const target = await resolveTarget({ name, id })
         try {
-          return await fs.readFile(entryOf(name), 'utf8')
+          return await fs.readFile(target.file, 'utf8')
         } catch {
-          const list = await fs.readdir(root).catch(() => [] as string[])
+          const list = await fs.readdir(target.root).catch(() => [] as string[])
           throw new Error(
-            `no composition named "${motionSlug(name)}" in this conversation${list.length ? ` — existing: ${list.join(', ')}` : ''}`,
+            `no composition named "${target.name}"${list.length ? ` — existing: ${list.join(', ')}` : ''}`,
           )
         }
       },
@@ -188,11 +275,13 @@ export function createChatMotionTools(scope: { sessionId: string; modelVision?: 
       'The result gives the file name to put in the HTML (relative: src="clip.mp4") and how to use it — timing attributes, crop, sound. The same ref twice gives the same file.',
     inputSchema: z.object({
       ref: z.string().describe('Reference from the attachment note: vdo_…, aud_… or img_…'),
-      name: NAME,
+      name: NAME.optional(),
+      id: ID,
       filename: z.string().optional().describe('Name for the copy (default: the original name, made safe)'),
     }),
-    execute: async ({ ref, name, filename }) => {
-      const imported = await importAttachmentInto(path.dirname(entryOf(name)), ref, filename)
+    execute: async ({ ref, name, id, filename }) => {
+      const target = await resolveTarget({ name, id })
+      const imported = await importAttachmentInto(target.folder, ref, filename)
       return imported.report
     },
   })
@@ -203,11 +292,14 @@ export function createChatMotionTools(scope: { sessionId: string; modelVision?: 
         'Looks at ONLY the instants you ask for in a composition of this conversation and returns a contact sheet (time and frame number in each cell) — milliseconds, no video. ' +
         'This is how you check your work: the entrance, the payoff, the hold at the end. times in SECONDS, 1–8 instants.',
       inputSchema: z.object({
-        name: NAME,
+        name: NAME.optional(),
+        id: ID,
         times: z.array(z.number().positive()).min(1).max(8),
       }),
-      execute: (input, options) =>
-        base.motion_frame.execute!({ path: path.relative(root, entryOf(input.name)), times: input.times }, options),
+      execute: async (input, options) => {
+        const target = await resolveTarget(input)
+        return base.motion_frame!.execute!({ path: path.relative(target.root, target.file), times: input.times }, options)
+      },
       toModelOutput: base.motion_frame.toModelOutput,
     })
   }
@@ -223,20 +315,23 @@ export function createChatMotionTools(scope: { sessionId: string; modelVision?: 
         'Renders a composition of this conversation to a video file and shows it in your reply as a player. ONLY when the user explicitly asks for the video/file — the live preview in the Motion tab is how they watch it, and the tab has its own Render button. ' +
         'format by extension: .mp4 (normal clip), .mov (ProRes 4444) or .webm with transparent: true for an overlay with alpha.',
       inputSchema: z.object({
-        name: NAME,
+        name: NAME.optional(),
+        id: ID,
         format: z.enum(['mp4', 'mov', 'webm']).optional().describe('Default mp4'),
         transparent: z.boolean().optional(),
       }),
-      execute: (input, options) =>
-        base.motion_render.execute!(
+      execute: async (input, options) => {
+        const target = await resolveTarget(input)
+        return base.motion_render!.execute!(
           {
-            path: path.relative(root, entryOf(input.name)),
-            output: path.join('renders', `${motionSlug(input.name)}.${input.format ?? 'mp4'}`),
+            path: path.relative(target.root, target.file),
+            output: path.join('renders', `${target.name}.${input.format ?? 'mp4'}`),
             transparent: input.transparent,
             show: true,
           },
           options,
-        ),
+        )
+      },
     })
   }
 
