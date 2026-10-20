@@ -375,14 +375,19 @@ function SpacingBox({
   title,
   info,
   onStyles,
+  mixed,
 }: {
   kind: "padding" | "margin"
   title: string
   info: DesignElementInfo
   onStyles: (styles: Record<string, string>) => void
+  /** Propriedades com valores diferentes no grupo selecionado ("Misto"). */
+  mixed?: Set<string>
 }) {
   const { t } = useTranslation()
-  const sides = Object.fromEntries(SIDES.map((side) => [side, stripPx(info.computed[`${kind}-${side}`] ?? "")])) as Record<(typeof SIDES)[number], string>
+  const sides = Object.fromEntries(
+    SIDES.map((side) => [side, mixed?.has(`${kind}-${side}`) ? "" : stripPx(info.computed[`${kind}-${side}`] ?? "")]),
+  ) as Record<(typeof SIDES)[number], string>
   const symmetric = sides.top === sides.bottom && sides.left === sides.right
   const [independent, setIndependent] = useState(!symmetric)
 
@@ -452,13 +457,34 @@ function SpacingBox({
       {independent ? (
         <Fields>
           {(["left", "top", "right", "bottom"] as const).map((side) => (
-            <Field key={side} icon={icons[side]} value={sides[side]} suffix="px" onCommit={(v) => setSide(side, v)} />
+            <Field
+              key={side}
+              icon={icons[side]}
+              value={sides[side]}
+              placeholder={mixed?.has(`${kind}-${side}`) ? t("design.props.mixed") : undefined}
+              suffix="px"
+              onCommit={(v) => setSide(side, v)}
+            />
           ))}
         </Fields>
       ) : (
         <Fields>
-          <Field icon={<MoveHorizontal />} value={sides.left} suffix="px" title="X" onCommit={(v) => setSide("left", v)} />
-          <Field icon={<MoveVertical />} value={sides.top} suffix="px" title="Y" onCommit={(v) => setSide("top", v)} />
+          <Field
+            icon={<MoveHorizontal />}
+            value={sides.left}
+            placeholder={mixed?.has(`${kind}-left`) ? t("design.props.mixed") : undefined}
+            suffix="px"
+            title="X"
+            onCommit={(v) => setSide("left", v)}
+          />
+          <Field
+            icon={<MoveVertical />}
+            value={sides.top}
+            placeholder={mixed?.has(`${kind}-top`) ? t("design.props.mixed") : undefined}
+            suffix="px"
+            title="Y"
+            onCommit={(v) => setSide("top", v)}
+          />
         </Fields>
       )}
     </div>
@@ -851,8 +877,8 @@ export function DesignProperties({ target, onStyles, onAttr, onText, onBoard, on
           </div>
         )}
 
-        <SpacingBox key={`p:${elementKey}`} kind="padding" title={t("design.props.padding")} info={info} onStyles={onStyles} />
-        <SpacingBox key={`m:${elementKey}`} kind="margin" title={t("design.props.margin")} info={info} onStyles={onStyles} />
+      <SpacingBox key={`p:${elementKey}`} kind="padding" title={t("design.props.padding")} info={info} onStyles={onStyles} mixed={mixedProps} />
+      <SpacingBox key={`m:${elementKey}`} kind="margin" title={t("design.props.margin")} info={info} onStyles={onStyles} mixed={mixedProps} />
 
         <label className="flex w-fit cursor-pointer select-none items-center gap-1.5 border-t border-border/30 pt-2">
           <input
@@ -898,7 +924,7 @@ export function DesignProperties({ target, onStyles, onAttr, onText, onBoard, on
             />
             <SelectField
               value={inline("font-weight")}
-              placeholder={weight}
+              placeholder={isMixed("font-weight") ? t("design.props.mixed") : weight}
               options={["300", "400", "500", "600", "700", "800", "900"]}
               onCommit={(v) => style("font-weight", v)}
             />

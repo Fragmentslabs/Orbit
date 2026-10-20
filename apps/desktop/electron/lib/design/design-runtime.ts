@@ -384,19 +384,30 @@ export const DESIGN_RUNTIME = `(() => {
       return out
     }
     const mine = values(el.nodeType === 1 ? el : el.parentElement || el)
+    // Os valores dos outros, lidos uma vez só.
+    const othersValues = others.map(values)
     const mixed = []
+    // Com mais de um selecionado, o valor em comum passa a ser o VALOR do
+    // campo (e não um placeholder apagado): é o que os selecionados têm em
+    // comum, e o que o usuário vê. O que difere fica sem valor e mostra "Misto".
+    const inline = {}
     for (const prop of PROPS) {
-      if (others.some((other) => values(other)[prop] !== mine[prop])) mixed.push(prop)
+      const same = othersValues.every((other) => other[prop] === mine[prop])
+      if (same) inline[prop] = mine[prop]
+      else mixed.push(prop)
     }
     const mixedAttrs = []
+    const attrs = {}
     for (const name of ['id', 'class', 'src', 'href', 'alt']) {
       const value = el.getAttribute ? el.getAttribute(name) || '' : ''
-      if (others.some((other) => (other.getAttribute(name) || '') !== value)) mixedAttrs.push(name)
+      const same = others.every((other) => (other.getAttribute(name) || '') === value)
+      if (same) attrs[name] = value
+      else mixedAttrs.push(name)
     }
     // O texto também é propriedade: se um tem um texto e o outro outro, é
     // "misto" (e o que o usuário digitar vale para todos).
     const mixedText = info.text !== null && others.some((other) => (other.textContent || '') !== (el.textContent || ''))
-    return { ...info, mixed, mixedAttrs, mixedText }
+    return { ...info, inline, attrs, mixed, mixedAttrs, mixedText }
   }
 
   const sendRects = () => {

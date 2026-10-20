@@ -154,6 +154,23 @@ describe("parseRuntimeMessage", () => {
     expect(parseRuntimeMessage({ source: DESIGN_SOURCE, type: "hover", path: [1, -2] })).toMatchObject({ type: "hover" })
   })
 
+  it("lê o que difere entre os selecionados (o misto)", () => {
+    const info = parseRuntimeMessage({
+      source: DESIGN_SOURCE,
+      type: "info",
+      path: [0],
+      info: { tag: "div", kind: "box", mixed: ["width", "height"], mixedAttrs: ["class"], mixedText: true },
+    })
+    expect(info).toMatchObject({
+      type: "info",
+      path: [0],
+      info: { mixed: ["width", "height"], mixedAttrs: ["class"], mixedText: true },
+    })
+    // Sem o grupo, nada é misto.
+    const single = parseRuntimeMessage({ source: DESIGN_SOURCE, type: "info", path: [0], info: { tag: "div", kind: "box" } })
+    expect(single).toMatchObject({ info: { mixed: [], mixedAttrs: [], mixedText: false } })
+  })
+
   it("normaliza a roda e as teclas", () => {
     expect(parseRuntimeMessage({ source: DESIGN_SOURCE, type: "wheel", dx: 0, dy: 10, ctrl: true, shift: false, x: 5, y: 6 })).toEqual({
       type: "wheel",
