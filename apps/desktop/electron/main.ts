@@ -18,6 +18,15 @@ import { motionAudioTracks } from './lib/video/motion-audio'
 import { motionVideoAudioTracks } from './lib/video/motion-video-audio'
 import { reopenMotion } from './lib/video/motion-open'
 import {
+  designIdForName,
+  designIdForPath,
+  readDesignBoard,
+  registerDesignProtocol,
+  updateDesignBoard,
+  writeDesignBoard,
+} from './lib/design/design-store'
+import { reopenDesign } from './lib/design/design-open'
+import {
   addSessionMaterial,
   adoptDraftMaterials,
   listSessionMaterials,
@@ -2021,6 +2030,11 @@ app.whenReady().then(() => {
   // serve a PASTA registrada e o script do runtime que o render também usa.
   registerMotionProtocol()
 
+  // Canvas de design (orbit-design://, ver lib/design/design-store): serve a
+  // pasta registrada (canvas.json + artboards), sem runtime injetado — o
+  // conteúdo é HTML estático.
+  registerDesignProtocol()
+
   // Reabrir uma peça que já está no registro: o card do chat e o tile da Mídia
   // mandam só o id. A composição (pasta + entrada) sai do registro do main — o
   // renderer não tem por que conhecer caminho de projeto nenhum.
@@ -2037,6 +2051,30 @@ app.whenReady().then(() => {
       if (!id && ref.sessionId && ref.name) id = await motionIdForName(ref.sessionId, ref.name)
       return id ? reopenMotion(id) : false
     },
+  )
+
+  // Reabrir um canvas de design já registrado — mesmo contrato do motion:open:
+  // o card da galeria manda o id; o card do chat manda o caminho da pasta
+  // (modo código, design_preview) ou o NOME do canvas com a sessão (modo chat,
+  // design_write/design_edit), e o registro traduz.
+  ipcMain.handle('design:open', async (_event, ref: { id?: string; path?: string; sessionId?: string; name?: string }) => {
+    let id = ref.id ?? null
+    if (!id && ref.path) id = await designIdForPath(ref.path)
+    if (!id && ref.sessionId && ref.name) id = await designIdForName(ref.sessionId, ref.name)
+    return id ? reopenDesign(id) : false
+  })
+
+  // Edição feita pela PESSOA no canvas (propriedades, texto, código, mover e
+  // redimensionar artboards). O renderer manda id + nome do arquivo; a pasta e
+  // a trava do nome ficam no main (ver design-store).
+  ipcMain.handle('design:readBoard', (_event, input: { id: string; file: string }) => readDesignBoard(input.id, input.file))
+  ipcMain.handle('design:writeBoard', (_event, input: { id: string; file: string; html: string }) =>
+    writeDesignBoard(input.id, input.file, input.html),
+  )
+  ipcMain.handle(
+    'design:updateBoard',
+    (_event, input: { id: string; file: string; patch: { title?: string; x?: number; y?: number; w?: number; h?: number } }) =>
+      updateDesignBoard(input.id, input.file, input.patch),
   )
 
   // Render de uma composição REGISTRADA, pedido pela aba de motion do painel. O

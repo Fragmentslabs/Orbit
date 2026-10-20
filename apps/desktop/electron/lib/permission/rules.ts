@@ -182,6 +182,14 @@ const NATIVE_TOOLS = new Set([
   'motion_edit',
   'motion_render',
   'motion_asset',
+  // Design (canvas de artboards no painel): mesmo threat model — motor local,
+  // entrega é um arquivo no storage do Orbit. Sem entrar aqui cairia no
+  // catch-all de MCP como servidor "design" e pediria permissão a cada chamada.
+  'design_write',
+  'design_edit',
+  'design_read',
+  'design_preview',
+  'design_asset',
   // Buscar e importar imagem de acervo aberto (Commons, Openverse): só rede de
   // leitura para dois provedores conhecidos, e o arquivo cai no armazenamento do app.
   'image_search',

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { useDroppable, useDndContext } from "@dnd-kit/core"
-import { Clapperboard, CodeXml, FileCode, FileText, Globe, Folder, Images, Library, Quote, MessageSquare, Terminal, X, PlusIcon, Bot, Loader2, Trash2, GripVertical } from "lucide-react"
+import { Clapperboard, CodeXml, FileCode, FileText, Globe, Folder, Images, LayoutGrid, Library, Play, Quote, MessageSquare, Terminal, X, PlusIcon, Bot, Loader2, Trash2, GripVertical } from "lucide-react"
 import { ChatView } from "@/src/components/chat-view"
 import { ChatInput } from "@/src/components/chat-input"
 import { BranchSelector } from "@/src/components/branch-selector"
@@ -57,20 +57,23 @@ function isSelectableTab(type: TabType, mode: WorkspaceMode): boolean {
   // "diff" saiu junto: ela só existe apontando para UMA mensagem do chat ou UMA
   // task da esteira. As mudanças ATUAIS se leem na aba de pastas (Alterações), e
   // o diff de um turno é contexto da conversa — não uma aba que se abre vazia.
-  // "motion" também não: o preview existe para UMA composição registrada e
-  // nasce do evento que o agente dispara ao registrá-la (motion_preview), nunca
-  // vazio — como o artefato.
+  // "motion" e "design" também não: o preview existe para UMA peça registrada e
+  // nasce do evento que o agente dispara ao registrá-la (motion_preview /
+  // design_write), nunca vazio — como o artefato.
   if (
     type === "artifact" ||
     type === "source" ||
     type === "document" ||
     type === "process" ||
     type === "diff" ||
-    type === "motion"
+    type === "motion" ||
+    type === "design"
   )
     return false
   if (mode === "code") return true
-  return type === "chat" || type === "media" || type === "sources"
+  // "browser" entra no chat: o browser não depende de pasta de trabalho (o modo
+  // "browser" do input já vale nos dois modos, e a lista de servidores vem da sessão).
+  return type === "chat" || type === "media" || type === "sources" || type === "browser"
 }
 
 function useTabMeta(): Record<TabType, TabMeta> {
@@ -88,6 +91,7 @@ function useTabMeta(): Record<TabType, TabMeta> {
     source: { icon: Quote, label: t("panel.tabs.source.label"), description: t("panel.tabs.source.description") },
     document: { icon: FileText, label: t("panel.tabs.document.label"), description: t("panel.tabs.document.description") },
     motion: { icon: Clapperboard, label: t("panel.tabs.motion.label"), description: t("panel.tabs.motion.description") },
+    design: { icon: LayoutGrid, label: t("panel.tabs.design.label"), description: t("panel.tabs.design.description") },
   }
 }
 
@@ -756,7 +760,10 @@ export function RightPanel() {
         <div className="flex items-center gap-0.5 px-2 pt-2 overflow-x-auto">
           {tabs.map((tab) => {
             const { icon: Icon } = tabMeta[tab.type]
-            const TabIcon = tab.type === "chat" && tab.sessionId ? Bot : Icon
+            // A aba em modo apresentação é a MESMA aba de Design (designPlay),
+            // mas o que ela faz ali é rodar o protótipo — daí o Play, no lugar
+            // do ícone de canvas, para as duas não se confundirem na fila.
+            const TabIcon = tab.type === "chat" && tab.sessionId ? Bot : tab.type === "design" && tab.designPlay ? Play : Icon
             // Os três indicadores falam da CONVERSA — está respondendo, deu
             // erro, chegou mensagem — e só a aba de chat mostra uma conversa.
             // Várias outras carregam um sessionId por serem daquele chat (a

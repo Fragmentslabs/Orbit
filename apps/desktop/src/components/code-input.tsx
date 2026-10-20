@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
-import { AlignLeft, Bot, BrainCircuit, Clapperboard, Eye, FileText, MousePointerClick, Network, PlusIcon, Quote, RefreshCw, Search, X } from "lucide-react"
+import { AlignLeft, Bot, BrainCircuit, Clapperboard, Eye, FileText, LayoutGrid, MousePointerClick, Network, PlusIcon, Quote, RefreshCw, Search, X } from "lucide-react"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -420,7 +420,13 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId, on
                 title={quoteChipTitle(q)}
                 className="flex items-center gap-1 rounded-md border border-primary/30 bg-primary/10 px-1.5 py-0.5 text-[11px] text-primary"
               >
-                {q.kind === "motion" ? <Clapperboard className="size-3" /> : <Quote className="size-3" />}
+                {q.kind === "motion" ? (
+                  <Clapperboard className="size-3" />
+                ) : q.kind === "design" ? (
+                  <LayoutGrid className="size-3" />
+                ) : (
+                  <Quote className="size-3" />
+                )}
                 {quoteChipLabel(q)}
                 <button
                   type="button"

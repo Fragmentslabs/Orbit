@@ -1,6 +1,6 @@
 import { useCallback, useMemo } from "react"
 import { useTranslation } from "react-i18next"
-import { AlignLeft, BrainCircuit, Clapperboard, Eye, Globe, PlusIcon, Quote, Search, X } from "lucide-react"
+import { AlignLeft, BrainCircuit, Clapperboard, Eye, Globe, LayoutGrid, PlusIcon, Quote, Search, X } from "lucide-react"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -207,7 +207,13 @@ export function ChatInput({ onSubmit, status, onStop, sessionId, draftKey, onPro
             >
               {/* O ícone diz de onde o anexo veio sem gastar espaço: trecho de
                   documento ou instante de composição. */}
-              {q.kind === "motion" ? <Clapperboard className="size-3" /> : <Quote className="size-3" />}
+              {q.kind === "motion" ? (
+                <Clapperboard className="size-3" />
+              ) : q.kind === "design" ? (
+                <LayoutGrid className="size-3" />
+              ) : (
+                <Quote className="size-3" />
+              )}
               {quoteChipLabel(q)}
               <button
                 type="button"

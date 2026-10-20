@@ -19,6 +19,7 @@ import {
   BROWSER_SELECTION_MIME,
   DOCUMENT_QUOTE_MIME,
   formatMotionQuoteText,
+  formatDesignQuoteText,
   StorageKeys,
   type QuotePayload,
 } from '@shared/chat'
@@ -74,10 +75,23 @@ import { addVideoToGallery } from './video/video-gallery'
 import { MIN_COMPACTION_CONTEXT, resolveAuxModel } from './aux-model'
 import { notifyChatError, notifyNewMessage } from './notifications'
 import { buildToolSet, type ImageToolHooks, type ToolContext, type TurnSnapshot } from './tools'
+import { designNameFromInputJson, openDesignLive } from './tools/design-chat'
+import { openMotionLive } from './tools/motion-chat'
 import { addTokenUsage, costOfUsage, toStepUsage, toTokenUsage } from './usage'
 import { engineAnnotations, stripEngineMarkers } from './todo-context'
 import { forwardChatEvent } from './companion-server'
 import { modoGlobal } from './permission/modo-global'
+
+// Tools cujo input (ainda em streaming) abre a aba correspondente AO VIVO,
+// assim que o campo `name` aparece no JSON — antes do modelo terminar de
+// transmitir o payload (o HTML dos artboards ou da composição). O report()
+// final da tool segue como estava; isto só adianta a abertura.
+const LIVE_OPEN_TOOLS: Record<string, (sessionId: string, name: string) => Promise<void>> = {
+  design_write: openDesignLive,
+  design_edit: (sessionId, name) => openDesignLive(sessionId, name, { placeholder: false }),
+  motion_write: openMotionLive,
+  motion_edit: (sessionId, name) => openMotionLive(sessionId, name, { placeholder: false }),
+}
 
 /**
  * Motor de chat portado do processador de sessões do opencode: converte o
@@ -496,6 +510,7 @@ const MEDIA_REF_LABEL: Record<string, string> = {
   artifact: 'Artifact',
   document: 'Document',
   motion: 'Motion composition',
+  design: 'Design canvas',
 }
 
 /**
@@ -514,6 +529,10 @@ function mediaRefNote(kind: string, name: string, entry: MediaEntry): string {
   } else if (kind === 'motion') {
     lines.push(
       `Linked to this conversation. Read it with motion_read and change it with motion_edit/motion_write using${entry.motionId ? ` id "${entry.motionId}"` : ' its name'} — no need to recreate it. It is open in the Motion tab.`,
+    )
+  } else if (kind === 'design') {
+    lines.push(
+      `Linked to this conversation. Read it with design_read and change it with design_edit/design_write using${entry.designId ? ` id "${entry.designId}"` : ' its name'} — no need to recreate it. It is open in the Design tab.`,
     )
   } else if (kind === 'artifact') {
     lines.push(
@@ -708,6 +727,10 @@ async function preprocessAttachment(
           // são só exibição), com o texto do usuário colado — ver
           // formatMotionQuoteText.
           text = formatMotionQuoteText(quote, deps.userText)
+        } else if (quote.kind === 'design') {
+          // O elemento apontado no canvas: artboard, caminho e o HTML dele, com
+          // o texto do usuário colado — ver formatDesignQuoteText.
+          text = formatDesignQuoteText(quote, deps.userText)
         } else {
           const onde = quote.page
             ? `, page ${quote.page}${
@@ -1839,6 +1862,11 @@ async function runChatTurn(win: BrowserWindow, input: SendMessageInput): Promise
       let sawFinish = false
       let lastSave = Date.now()
       const reasoningStart = new Map<string, number>()
+      // Input das tools de LIVE_OPEN_TOOLS ainda em streaming: o JSON vai
+      // chegando em pedaços (tool-input-delta) e o nome do canvas/composição
+      // aparece MUITO antes do modelo terminar de transmitir o HTML — abrir a
+      // aba ali é o que deixa o usuário ver a peça montar ao vivo.
+      const liveOpen = new Map<string, { toolName: string; json: string; opened: boolean }>()
       // Usage do último step (última chamada real ao modelo) — ao contrário do
       // total do turno (soma de todos os steps), reflete o tamanho real do
       // contexto no momento em que a resposta terminou.
@@ -1951,7 +1979,35 @@ async function runChatTurn(win: BrowserWindow, input: SendMessageInput): Promise
             }
             break
           }
-          case 'tool-call':
+          case 'tool-input-start':
+            liveOpen.set(part.id, { toolName: part.toolName, json: '', opened: false })
+            break
+          case 'tool-input-delta': {
+            const entry = liveOpen.get(part.id)
+            if (!entry || entry.opened) break
+            entry.json += part.delta
+            const open = LIVE_OPEN_TOOLS[entry.toolName]
+            if (!open) break
+            const liveName = designNameFromInputJson(entry.json)
+            if (liveName) {
+              entry.opened = true
+              void open(sessionId, liveName).catch(() => {})
+            }
+            break
+          }
+          case 'tool-input-end':
+            liveOpen.delete(part.id)
+            break
+          case 'tool-call': {
+            // Provedor sem streaming de input: o nome só chega aqui, no tool-call
+            // completo — antes do execute, então a aba ainda abre cedo.
+            const live = liveOpen.get(part.toolCallId)
+            liveOpen.delete(part.toolCallId)
+            const openLive = live && !live.opened ? LIVE_OPEN_TOOLS[live.toolName] : undefined
+            if (openLive) {
+              const name = (part.input as { name?: unknown } | undefined)?.name
+              if (typeof name === 'string' && name) void openLive(sessionId, name).catch(() => {})
+            }
             upsertPart({
               id: part.toolCallId,
               type: 'tool',
@@ -1964,6 +2020,7 @@ async function runChatTurn(win: BrowserWindow, input: SendMessageInput): Promise
               activeBashCommands.set(sessionId, typeof input?.command === 'string' ? input.command : '')
             }
             break
+          }
           case 'tool-result': {
             const existing = assistantMessage.parts.find((p) => p.id === part.toolCallId) as
               | ToolPart

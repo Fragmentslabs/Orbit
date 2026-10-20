@@ -602,6 +602,34 @@ export const motionApi = {
 }
 
 /**
+ * Canvas de design do preview (orbit-design://). Espelha motionApi, bem mais
+ * enxuto: não há render nem camadas — o artboard é HTML estático, e a aba só
+ * precisa reabrir e recarregar ao vivo.
+ */
+export const designApi = {
+  /** Reabre um canvas já registrado. O card da galeria manda o `id`; o card do
+   *  chat manda o que a tool deixou no `input` — o `path` da pasta (modo
+   *  código, design_preview) ou o `name` do canvas com a `sessionId` (modo
+   *  chat, design_write/design_edit) — e o main traduz pelo registro. `false`
+   *  quando o canvas saiu do registro. */
+  open: (ref: { id?: string; path?: string; sessionId?: string; name?: string }) =>
+    window.ipcRenderer.invoke("design:open", ref) as Promise<boolean>,
+  /** A pasta do canvas mudou no disco: remonta os iframes dos artboards. */
+  onChanged: (listener: (payload: { id: string }) => void) => {
+    const wrapper = window.ipcRenderer.on("design:changed", (payload) => listener(payload as { id: string }))
+    return () => window.ipcRenderer.off("design:changed", wrapper)
+  },
+  /** O fonte de um artboard, como está no disco (sem a ponte do editor). */
+  readBoard: (id: string, file: string) => window.ipcRenderer.invoke("design:readBoard", { id, file }) as Promise<string>,
+  /** Reescreve o fonte de um artboard — edição feita pela pessoa no canvas. */
+  writeBoard: (id: string, file: string, html: string) =>
+    window.ipcRenderer.invoke("design:writeBoard", { id, file, html }) as Promise<void>,
+  /** Move, redimensiona ou renomeia um artboard no canvas.json. */
+  updateBoard: (id: string, file: string, patch: { title?: string; x?: number; y?: number; w?: number; h?: number }) =>
+    window.ipcRenderer.invoke("design:updateBoard", { id, file, patch }) as Promise<void>,
+}
+
+/**
  * Formatos de saída do render de motion. `-alpha` é o arquivo com transparência:
  * mov (ProRes 4444) para edição, webm (VP9) para web/overlay. Mesma união do
  * `MotionRenderRequest.format` do main — mudar aqui sem mudar lá quebra o IPC.

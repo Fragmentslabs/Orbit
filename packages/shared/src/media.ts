@@ -39,7 +39,7 @@ export interface MediaCredit {
  * registro guarda a capa e a URL de reprodução).
  * Ausente em registros gravados antes disso existir = "image".
  */
-export type MediaKind = "image" | "artifact" | "document" | "audio" | "motion" | "video"
+export type MediaKind = "image" | "artifact" | "document" | "audio" | "motion" | "video" | "design"
 
 /** Formatos de entrega de um documento. O fonte é sempre Markdown; estes são
  *  os arquivos renderizados a partir dele. */
@@ -128,6 +128,13 @@ export interface MediaEntry {
    * e nada dela é copiado para a galeria.
    */
   motionId?: string
+  /**
+   * Só em canvas de design: o id do canvas no registro do main
+   * (`orbit-data/design.json`). Espelha `motionId` — a pasta mora no
+   * armazenamento do app (modo chat) e nada dela é copiado para a galeria além
+   * da capa; abrir é reabrir a aba Design.
+   */
+  designId?: string
   /**
    * Material da aba Fontes: a pasta da sidebar com que este arquivo é
    * COMPARTILHADO. Ausente = é só da conversa (`sessionId`). É o equivalente, para
@@ -234,6 +241,12 @@ export const VIDEO_SCHEME = "orbit-video"
  * origem opaca exigem CORS). Diferente dos vídeos, aqui se serve uma PASTA.
  */
 export const MOTION_SCHEME = "orbit-motion"
+/**
+ * Canvas de design (pasta do app: canvas.json + um .html por artboard, servidos
+ * estáticos — sem runtime injetado, já que não há linha do tempo nem seek). Mesmo
+ * `corsEnabled` do motion: fonte @font-face e fetch dentro do artboard exigem CORS.
+ */
+export const DESIGN_SCHEME = "orbit-design"
 
 /**
  * MIME do drag & drop interno: o tile da aba Mídia arrasta o item COMO ANEXO
@@ -291,6 +304,7 @@ const KIND_FALLBACK_MIME: Record<MediaKind, string> = {
   artifact: "text/html",
   document: "text/markdown",
   motion: "text/html",
+  design: "text/html",
 }
 
 export function mediaMime(entry: Pick<MediaEntry, "id" | "kind">): string {
@@ -321,6 +335,9 @@ export function assetUrl(entry: Pick<MediaEntry, "id" | "kind" | "thumb" | "thum
   // orbit-motion:// e reaberta pela aba). Sem esta linha o id da capa seria
   // pedido ao scheme errado e voltaria vazio.
   if (kind === "motion") return thumbUrl(entry) ?? `${MEDIA_SCHEME}://${entry.id}`
+  // Mesmo caso do motion: o canvas mora na pasta do app, não na galeria — o
+  // único byte guardado aqui é a capa.
+  if (kind === "design") return thumbUrl(entry) ?? `${MEDIA_SCHEME}://${entry.id}`
   // O vídeo toca pela URL do player; sem ela (registro sem player) cai na capa.
   if (kind === "video") return entry.videoUrl ?? thumbUrl(entry) ?? `${MEDIA_SCHEME}://${entry.id}`
   return `${MEDIA_SCHEME}://${entry.id}`

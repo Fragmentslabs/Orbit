@@ -42,7 +42,9 @@ import { agentMayUseBrowser, getAppSettings } from '../app-settings'
 import { createAudioGenerateTool, createAudioTranscribeTool } from './audio'
 import { createVideoTools } from './video'
 import { createChatMotionTools } from './motion-chat'
+import { createChatDesignTools } from './design-chat'
 import { createPanelTools } from './panel'
+import { createDesignTools } from './design'
 import { createGalleryShowImageTool, createImageSearchTools } from './image-search'
 import { resolveFfmpeg } from '../video/ffmpeg'
 
@@ -152,6 +154,10 @@ export function buildToolSet(input: SendMessageInput, ctx: ToolContext | null, i
           canRender: resolveFfmpeg() !== null,
         }),
       )
+      // Design: mesmo molde do motion acima — sem pasta de trabalho, o canvas
+      // mora no armazenamento do Orbit e é escrito/editado por nome, a mesma
+      // aba Design, ao vivo.
+      Object.assign(tools, createChatDesignTools({ sessionId: input.sessionId }))
     }
     if (allowBrain) Object.assign(tools, createChatMemoryTools(input))
     // Esteira: transformar o que foi discutido no chat em esteira/task de um
@@ -286,6 +292,13 @@ export function buildToolSet(input: SendMessageInput, ctx: ToolContext | null, i
         readOnly: Boolean(input.options.plan),
       }),
     )
+  }
+  // Design: só precisa de pasta (sem ffmpeg nenhum) — o agente escreve o
+  // canvas com write/edit e design_preview abre a aba, como motion_preview faz
+  // com a composição. Workers ficam de fora: o painel é um recurso visível, só
+  // da sessão principal.
+  if (ctx && input.orchestrationRole !== 'worker') {
+    Object.assign(tools, createDesignTools(ctx, { sessionId: input.sessionId }))
   }
 
   // Browser do painel direito: teste de apps web + modo documentação.

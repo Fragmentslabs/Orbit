@@ -72,9 +72,15 @@ function usage(kind: AttachmentKind, name: string, isGif: boolean, hasSound: boo
 
 /**
  * Copia o anexo da referência para `folder` e devolve o relatório. Idempotente: o
- * mesmo anexo duas vezes dá o mesmo arquivo, sem duplicar.
+ * mesmo anexo duas vezes dá o mesmo arquivo, sem duplicar. `usageNote` troca a
+ * linha de uso (design_asset fala em artboard; aqui dentro é linguagem de peça).
  */
-export async function importAttachmentInto(folder: string, ref: string, wantedName?: string): Promise<ImportedAsset> {
+export async function importAttachmentInto(
+  folder: string,
+  ref: string,
+  wantedName?: string,
+  opts: { usageNote?: string | ((kind: AttachmentKind, name: string) => string) } = {},
+): Promise<ImportedAsset> {
   const resolved: ResolvedAttachment | null = await resolveAttachmentRef(ref)
   if (!resolved) {
     throw new Error(
@@ -108,7 +114,7 @@ export async function importAttachmentInto(folder: string, ref: string, wantedNa
     file: target,
     report: [
       `${reuse ? 'Already in the folder' : 'Copied'}: ${label} "${resolved.name}" → ${name}${facts ? ` (${facts})` : ''}.`,
-      usage(resolved.kind, name, isGif, hasSound),
+      typeof opts.usageNote === 'function' ? opts.usageNote(resolved.kind, name) : (opts.usageNote ?? usage(resolved.kind, name, isGif, hasSound)),
       // A licença costuma exigir o crédito junto da imagem: ele viaja com ela até a peça.
       resolved.credit
         ? `CREDIT REQUIRED by the license (${resolved.credit.license}) — show it in the piece (a caption, or a credits card at the end): ${resolved.credit.attribution}`

@@ -15,7 +15,7 @@ import {
   type MediaSource,
   type MediaUsage,
   SAFE_VIDEO_MEDIA_ID,
-  type DocumentFormat, AUDIO_SCHEME, VIDEO_SCHEME, MOTION_SCHEME } from '@shared/media'
+  type DocumentFormat, AUDIO_SCHEME, VIDEO_SCHEME, MOTION_SCHEME, DESIGN_SCHEME } from '@shared/media'
 import { listKeys, readJson } from './storage'
 import { buildDocx } from './docx-package'
 import mammoth from 'mammoth'
@@ -715,6 +715,17 @@ export function registerArtifactSchemePrivileges(): void {
         stream: true,
       },
     },
+    // Canvas de design (ver design/design-store.ts): mesmas flags do motion,
+    // sem `stream` — o artboard é HTML estático, sem faixa de mídia.
+    {
+      scheme: DESIGN_SCHEME,
+      privileges: {
+        standard: true,
+        secure: true,
+        supportFetchAPI: true,
+        corsEnabled: true,
+      },
+    },
   ])
 }
 
@@ -1069,12 +1080,62 @@ export async function saveMotionMedia(
   })
 }
 
+/** O que um canvas de design precisa para entrar na galeria — espelha SaveMotionMeta. */
+export interface SaveDesignMeta {
+  /** Id do canvas no registro do main (`orbit-data/design.json`). */
+  designId: string
+  title: string
+  directory?: string
+  sessionId?: string
+  messageId?: string
+  width?: number
+  height?: number
+}
+
+/**
+ * Registra um CANVAS de design na galeria — irmão de `saveMotionMedia`: o
+ * conteúdo não é um arquivo do Orbit, é uma pasta (canvas.json + artboards) no
+ * armazenamento do app; o registro só guarda a capa (do primeiro artboard) e o
+ * `designId`, e abrir é reabrir a aba Design.
+ */
+export async function saveDesignMedia(thumb: Buffer | null, meta: SaveDesignMeta): Promise<MediaEntry> {
+  const id = `dsn_${meta.designId.replace(/[^a-zA-Z0-9]/g, '').slice(0, 40)}.png`
+  await fsp.mkdir(artifactsDir(), { recursive: true })
+  const file = path.join(artifactsDir(), id)
+  if (thumb) await fsp.writeFile(file, thumb)
+  return withIndexLock(async () => {
+    const entries = await readIndex()
+    const existing = entries.find((e) => mediaKind(e) === 'design' && e.designId === meta.designId)
+    const entry: MediaEntry = {
+      ...existing,
+      id,
+      path: file,
+      size: thumb ? thumb.length : (existing?.size ?? 0),
+      createdAt: existing?.createdAt ?? Date.now(),
+      source: 'chat',
+      kind: 'design',
+      designId: meta.designId,
+      name: meta.title,
+      thumb: thumb ? id : existing?.thumb,
+      sessionId: meta.sessionId ?? existing?.sessionId,
+      messageId: meta.messageId ?? existing?.messageId,
+      directory: meta.directory ?? existing?.directory,
+      width: meta.width ?? existing?.width,
+      height: meta.height ?? existing?.height,
+    }
+    if (existing) entries[entries.indexOf(existing)] = entry
+    else entries.push(entry)
+    await writeIndex(entries)
+    return entry
+  })
+}
+
 /** Salva o HTML, captura a miniatura e registra o artefato na galeria. */
 export async function saveArtifact(html: string, meta: SaveArtifactMeta): Promise<ArtifactRef> {
   const id = `art_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}.html`
   await fsp.mkdir(artifactsDir(), { recursive: true })
   const file = path.join(artifactsDir(), id)
-  await fsp.writeFile(file, html, 'utf8')
+  await writeFileAtomic(file, html)
 
   const thumb = await captureThumbnail(id)
   const entry: MediaEntry = {

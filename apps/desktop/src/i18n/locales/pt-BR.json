@@ -735,6 +735,10 @@
       "motion": {
         "label": "Motion",
         "description": "Pré-visualização de uma composição de motion"
+      },
+      "design": {
+        "label": "Design",
+        "description": "Canvas com os artboards de um design"
       }
     },
     "unreadMessages": "Mensagens não lidas"
@@ -1888,7 +1892,8 @@
       "document": "Documento",
       "audio": "Áudio",
       "motion": "Peça",
-      "video": "Vídeo"
+      "video": "Vídeo",
+      "design": "Design"
     },
     "period": {
       "all": "Qualquer data",
@@ -1916,6 +1921,7 @@
       "viewerSingle": "Este item será excluído. Não dá para desfazer.",
       "confirmAll": "Excluir tudo",
       "motionNote": "{{count}} peça(s) de motion incluída(s): a pasta da composição (com os vídeos, GIFs e áudios copiados para ela) também é excluída. Os vídeos que você renderizou ficam.",
+      "designNote": "{{count}} canvas de design incluído(s): a pasta com os artboards também é excluída.",
       "allVersions": "Excluir as {{count}} versões",
       "onlyThis": "Excluir só a v{{version}}"
     }
@@ -2389,6 +2395,143 @@
     "loadFailedHttp": "O servidor respondeu {{status}}: {{text}}",
     "loadTimeout": "A página não respondeu em {{seconds}} s.",
     "retry": "Tentar de novo"
+  },
+  "design": {
+    "unavailable": "Canvas indisponível",
+    "composition": "Canvas da conversa",
+    "openTab": "Abrir na aba Design",
+    "gone": "Este canvas não está mais no registro — pode ter sido apagado.",
+    "loading": "Carregando o canvas…",
+    "empty": "Este canvas ainda não tem artboards.",
+    "reload": "Recarregar",
+    "zoomIn": "Aumentar o zoom",
+    "zoomOut": "Diminuir o zoom",
+    "fit": "Ajustar à tela (Shift+1)",
+    "zoomReset": "Zoom em 100% (Ctrl+0)",
+    "boardsCount_one": "{{count}} artboard",
+    "boardsCount_other": "{{count}} artboards",
+    "tools": {
+      "select": "Mover e selecionar (V)",
+      "hand": "Mão — arrastar o canvas (H, ou segure Espaço)"
+    },
+    "present": {
+      "playHere": "Apresentar aqui no canvas",
+      "playTab": "Apresentar em uma nova aba",
+      "stop": "Parar a apresentação (Esc)",
+      "back": "Voltar à tela anterior",
+      "restart": "Recomeçar do início",
+      "missing": "A tela {{file}} não está mais neste canvas.",
+      "play": "Apresentar",
+      "screens": "Telas",
+      "showScreens": "Mostrar a lista de telas",
+      "hideScreens": "Esconder a lista de telas",
+      "fit": "Ajustar à área da aba",
+      "real": "Tamanho real (100%)"
+    },
+    "undo": "Desfazer (Ctrl+Z)",
+    "fullscreen": "Tela cheia",
+    "exitFullscreen": "Sair da tela cheia",
+    "hideInspector": "Esconder o painel de propriedades",
+    "showInspector": "Mostrar o painel de propriedades",
+    "hideLayers": "Esconder o painel de camadas",
+    "showLayers": "Mostrar o painel de camadas",
+    "saveFailed": "Não foi possível salvar: {{error}}",
+    "inspector": {
+      "properties": "Propriedades",
+      "layers": "Camadas",
+      "code": "Código"
+    },
+    "noSelection": "Clique num elemento do canvas para ver e editar as propriedades dele. Clique no nome de um artboard para movê-lo ou redimensioná-lo.",
+    "comment": "Comentar no chat — anexa a seleção à próxima mensagem",
+    "selectParent": "Selecionar o elemento pai (Esc)",
+    "delete": "Excluir elemento (Delete)",
+    "boardHint": "Arraste o nome do artboard para movê-lo e as alças dos cantos para redimensionar.",
+    "editHint": "Dica: duplo clique no texto, direto no canvas, para editá-lo ali.",
+    "layersExpand": "Expandir",
+    "layersCollapse": "Recolher",
+    "props": {
+      "artboard": "Artboard",
+      "title": "Título",
+      "content": "Conteúdo",
+      "width": "Largura",
+      "height": "Altura",
+      "position": "Posição",
+      "layout": "Layout",
+      "gap": "Espaço",
+      "padding": "Padding",
+      "margin": "Margem",
+      "typography": "Tipografia",
+      "fontSize": "Tamanho/peso",
+      "lineHeight": "Altura da linha",
+      "letterSpacing": "Espaçamento",
+      "color": "Cor",
+      "appearance": "Aparência",
+      "fill": "Preenchimento",
+      "opacity": "Opacidade",
+      "radius": "Raio",
+      "effects": "Efeitos",
+      "shadow": "Sombra",
+      "attributes": "Atributos",
+      "independentSides": "Lados independentes",
+      "independentCorners": "Cantos independentes",
+      "mixed": "Misto",
+      "mode": {
+        "block": "Bloco (sem layout)",
+        "col": "Coluna",
+        "row": "Linha",
+        "wrap": "Linha com quebra",
+        "grid": "Grade"
+      },
+      "sizing": {
+        "fixed": "Fix",
+        "fill": "Fill",
+        "hug": "Hug"
+      },
+      "lockRatio": "Travar proporção",
+      "unlockRatio": "Destravar proporção",
+      "alignHint": "Alinhamento do conteúdo (duplo clique alterna o espaço automático)",
+      "auto": "Auto",
+      "spaceBetween": "Espaço automático entre os itens",
+      "columns": "Colunas",
+      "clip": "Cortar o conteúdo",
+      "alignOpt": {
+        "left": "À esquerda",
+        "center": "Centralizado",
+        "right": "À direita",
+        "justify": "Justificado"
+      },
+      "style": {
+        "bold": "Negrito",
+        "italic": "Itálico",
+        "underline": "Sublinhado",
+        "strike": "Tachado"
+      },
+      "background": "Fundo (gradiente ou imagem)",
+      "stroke": "Borda",
+      "strokeWidth": "Espessura",
+      "strokeStyle": {
+        "solid": "Sólida",
+        "dashed": "Tracejada",
+        "dotted": "Pontilhada",
+        "none": "Sem borda"
+      },
+      "shadowPreset": {
+        "none": "Sem sombra",
+        "soft": "Suave",
+        "medium": "Média",
+        "strong": "Forte"
+      },
+      "css": "CSS do elemento (Ctrl+Enter aplica)"
+    },
+    "code": {
+      "save": "Salvar",
+      "saving": "salvando…",
+      "saved": "salvo",
+      "unsaved": "alterações não salvas",
+      "loading": "Carregando o código…",
+      "stale": "O arquivo mudou no disco enquanto você editava. Nada foi gravado por cima.",
+      "reloadFromDisk": "Carregar a versão do disco"
+    }
   },
   "documents": {
     "download": "Baixar",

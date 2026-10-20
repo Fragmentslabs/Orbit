@@ -735,6 +735,10 @@
       "motion": {
         "label": "Motion",
         "description": "Preview of a motion composition"
+      },
+      "design": {
+        "label": "Design",
+        "description": "Canvas with a design's artboards"
       }
     },
     "unreadMessages": "Unread messages"
@@ -1888,7 +1892,8 @@
       "document": "Document",
       "audio": "Audio",
       "motion": "Motion piece",
-      "video": "Video"
+      "video": "Video",
+      "design": "Design"
     },
     "period": {
       "all": "Any time",
@@ -1916,6 +1921,7 @@
       "viewerSingle": "This item will be deleted. This cannot be undone.",
       "confirmAll": "Delete everything",
       "motionNote": "{{count}} motion piece(s) included: their composition folder (with the clips, GIFs and audio copied into it) is deleted too. Videos you rendered are kept.",
+      "designNote": "{{count}} design canvas(es) included: the folder with their artboards is deleted too.",
       "allVersions": "Delete all {{count}} versions",
       "onlyThis": "Delete only v{{version}}"
     }
@@ -2389,6 +2395,143 @@
     "loadFailedHttp": "The server answered {{status}}: {{text}}",
     "loadTimeout": "The page did not respond in {{seconds}} s.",
     "retry": "Try again"
+  },
+  "design": {
+    "unavailable": "Canvas unavailable",
+    "composition": "Canvas of this conversation",
+    "openTab": "Open in the Design tab",
+    "gone": "This canvas is no longer registered — it may have been deleted.",
+    "loading": "Loading the canvas…",
+    "empty": "This canvas has no artboards yet.",
+    "reload": "Reload",
+    "zoomIn": "Zoom in",
+    "zoomOut": "Zoom out",
+    "fit": "Fit to view (Shift+1)",
+    "zoomReset": "Zoom to 100% (Ctrl+0)",
+    "boardsCount_one": "{{count}} artboard",
+    "boardsCount_other": "{{count}} artboards",
+    "tools": {
+      "select": "Move and select (V)",
+      "hand": "Hand — drag the canvas (H, or hold Space)"
+    },
+    "present": {
+      "playHere": "Present here on the canvas",
+      "playTab": "Present in a new tab",
+      "stop": "Stop presenting (Esc)",
+      "back": "Back to the previous screen",
+      "restart": "Restart from the beginning",
+      "missing": "The screen {{file}} is no longer in this canvas.",
+      "play": "Present",
+      "screens": "Screens",
+      "showScreens": "Show the screens list",
+      "hideScreens": "Hide the screens list",
+      "fit": "Fit to the tab area",
+      "real": "Actual size (100%)"
+    },
+    "undo": "Undo (Ctrl+Z)",
+    "fullscreen": "Fullscreen",
+    "exitFullscreen": "Exit fullscreen",
+    "hideInspector": "Hide the properties panel",
+    "showInspector": "Show the properties panel",
+    "hideLayers": "Hide the layers panel",
+    "showLayers": "Show the layers panel",
+    "saveFailed": "Could not save: {{error}}",
+    "inspector": {
+      "properties": "Properties",
+      "layers": "Layers",
+      "code": "Code"
+    },
+    "noSelection": "Click an element on the canvas to see and edit its properties. Click an artboard's name to move or resize it.",
+    "comment": "Comment in the chat — attaches the selection to the next message",
+    "selectParent": "Select the parent element (Esc)",
+    "delete": "Delete element (Delete)",
+    "boardHint": "Drag the artboard's name to move it and the corner handles to resize it.",
+    "editHint": "Tip: double-click the text right on the canvas to edit it there.",
+    "layersExpand": "Expand",
+    "layersCollapse": "Collapse",
+    "props": {
+      "artboard": "Artboard",
+      "title": "Title",
+      "content": "Content",
+      "width": "Width",
+      "height": "Height",
+      "position": "Position",
+      "layout": "Layout",
+      "gap": "Gap",
+      "padding": "Padding",
+      "margin": "Margin",
+      "typography": "Typography",
+      "fontSize": "Size/weight",
+      "lineHeight": "Line height",
+      "letterSpacing": "Letter spacing",
+      "color": "Color",
+      "appearance": "Appearance",
+      "fill": "Fill",
+      "opacity": "Opacity",
+      "radius": "Radius",
+      "effects": "Effects",
+      "shadow": "Shadow",
+      "attributes": "Attributes",
+      "independentSides": "Independent sides",
+      "independentCorners": "Independent corners",
+      "mixed": "Mixed",
+      "mode": {
+        "block": "Block (no layout)",
+        "col": "Column",
+        "row": "Row",
+        "wrap": "Row with wrap",
+        "grid": "Grid"
+      },
+      "sizing": {
+        "fixed": "Fix",
+        "fill": "Fill",
+        "hug": "Hug"
+      },
+      "lockRatio": "Lock proportions",
+      "unlockRatio": "Unlock proportions",
+      "alignHint": "Content alignment (double-click toggles automatic spacing)",
+      "auto": "Auto",
+      "spaceBetween": "Automatic space between items",
+      "columns": "Columns",
+      "clip": "Clip content",
+      "alignOpt": {
+        "left": "Align left",
+        "center": "Align center",
+        "right": "Align right",
+        "justify": "Justify"
+      },
+      "style": {
+        "bold": "Bold",
+        "italic": "Italic",
+        "underline": "Underline",
+        "strike": "Strikethrough"
+      },
+      "background": "Background (gradient or image)",
+      "stroke": "Stroke",
+      "strokeWidth": "Width",
+      "strokeStyle": {
+        "solid": "Solid",
+        "dashed": "Dashed",
+        "dotted": "Dotted",
+        "none": "No stroke"
+      },
+      "shadowPreset": {
+        "none": "No shadow",
+        "soft": "Soft",
+        "medium": "Medium",
+        "strong": "Strong"
+      },
+      "css": "Element CSS (Ctrl+Enter applies)"
+    },
+    "code": {
+      "save": "Save",
+      "saving": "saving…",
+      "saved": "saved",
+      "unsaved": "unsaved changes",
+      "loading": "Loading the code…",
+      "stale": "The file changed on disk while you were editing. Nothing was overwritten.",
+      "reloadFromDisk": "Load the version on disk"
+    }
   },
   "documents": {
     "download": "Download",

@@ -122,6 +122,12 @@ export type PanelEvent =
   // `orbit-motion://<id>/<entry>`. O mesmo id volta à MESMA aba; quem serve o
   // conteúdo é o scheme, não este canal.
   | { type: 'motion'; id: string; entry: string; title: string }
+  // Abre (ou foca) a aba Design do painel para um canvas já registrado — quem
+  // emite é design_write/design_edit, logo depois de escrever o canvas. `id`
+  // identifica o canvas no registro (design/design-store); diferente do
+  // motion não há `entry` (o canvas não tem UM arquivo de entrada — a aba lê
+  // `canvas.json` e desenha todos os artboards).
+  | { type: 'design'; id: string; title: string; sessionId?: string; path?: string }
   | { type: 'activity'; label: string; sessionId?: string }
 
 function broadcastPanelEvent(event: PanelEvent): void {
@@ -153,6 +159,14 @@ export function panelActivity(label: string): void {
  */
 export function panelMotionPreview(event: { id: string; entry: string; title: string; path?: string; sessionId?: string }): void {
   broadcastPanelEvent({ type: 'motion', ...event })
+}
+
+/**
+ * Abre (ou foca) a aba Design do painel para um canvas já registrado —
+ * design_write/design_edit são os únicos chamadores. Espelha panelMotionPreview.
+ */
+export function panelDesignPreview(event: { id: string; title: string; path?: string; sessionId?: string }): void {
+  broadcastPanelEvent({ type: 'design', ...event })
 }
 
 /** URL atual do browser do painel — vazia quando a sessão não tem webview. */
