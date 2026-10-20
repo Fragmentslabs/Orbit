@@ -410,6 +410,10 @@ export const panelApi = {
   /** Registra (ou limpa, com null) o webContents do <webview> do painel — por sessão de chat */
   register: (sessionId: string | null, webContentsId: number | null) =>
     window.ipcRenderer.send("panel:register", sessionId, webContentsId),
+  /** Solta o registro SÓ se ele for o webContents informado (o <webview> que
+   *  acabou de morrer). Não derruba o registro de outro webview vivo. */
+  unregister: (sessionId: string | null, webContentsId: number | null) =>
+    window.ipcRenderer.send("panel:unregister", sessionId, webContentsId),
   onEvent: (listener: (event: PanelEvent) => void) => {
     const wrapper = window.ipcRenderer.on("panel:event", (event) => listener(event as PanelEvent))
     return () => window.ipcRenderer.off("panel:event", wrapper)

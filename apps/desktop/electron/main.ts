@@ -90,7 +90,7 @@ import { startCompanionServer, getCompanionStatus, setPairingMode, forwardChatEv
 import { setSessionModelsCache, setSessionModesCache, setWorkerConfigCache, setRotationHttpCache, setReasoningPrefsCache } from './lib/companion-http'
 import { setRotationConfigCache } from './lib/model-rotation'
 import { readJson as readStorageJson } from './lib/storage'
-import { registerPanelWebContents } from './lib/panel-browser'
+import { registerPanelWebContents, unregisterPanelWebContents } from './lib/panel-browser'
 import { registerPanelStateIpc } from './lib/panel-state'
 import { registerVoiceIpc, syncWhisperServer } from './lib/voice'
 import { setupMemoryScheduler } from './lib/memory/scheduler'
@@ -1945,6 +1945,12 @@ app.whenReady().then(() => {
   // por sessão de chat (panel:register) — cada chat tem seu próprio browser.
   ipcMain.on('panel:register', (_event, sessionId: string | null, id: number | null) =>
     registerPanelWebContents(sessionId, id),
+  )
+
+  // <webview> descartado (aba desmontada): solta o registro só se ele for o
+  // webContents que morreu — o browser do agente da sessão é outro e continua.
+  ipcMain.on('panel:unregister', (_event, sessionId: string | null, id: number | null) =>
+    unregisterPanelWebContents(sessionId, id),
   )
 
   // Snapshot do painel lateral que o renderer empurra a cada mudança de aba

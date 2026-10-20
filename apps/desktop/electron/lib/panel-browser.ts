@@ -102,6 +102,18 @@ export function registerPanelWebContents(sessionId: string | null, id: number | 
   wc.once('destroyed', () => consoleOwners.delete(id))
 }
 
+/**
+ * Solta o registro de um <webview> que morreu — mas SÓ se o registro for
+ * aquele webContents. Sem essa condição, fechar uma aba derrubaria o browser
+ * do agente da sessão (que é outro webview, ainda vivo).
+ */
+export function unregisterPanelWebContents(sessionId: string | null, id: number | null): void {
+  if (!sessionId || id == null) return
+  if (panelWcs.get(sessionId) !== id) return
+  panelWcs.delete(sessionId)
+  consoleOwners.delete(id)
+}
+
 function getWc(sessionId: string): WebContents | null {
   const wcId = panelWcs.get(sessionId)
   if (wcId == null) return null
