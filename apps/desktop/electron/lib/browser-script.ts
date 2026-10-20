@@ -5,6 +5,7 @@ import sharp from 'sharp'
 import { saveMedia, type MediaSource } from './media'
 import { panelActivity } from './panel-browser'
 import { tNow } from './i18n'
+import { resolveArtifactPath } from './artifact-path'
 import {
   ConsoleBuffer,
   attachConsole,
@@ -43,6 +44,8 @@ const DEFAULT_VIEWPORT = { width: 1280, height: 800 }
 const DEFAULT_TIMEOUT_MS = 120_000
 const LOAD_TIMEOUT_MS = 20_000
 const MAX_LOGS = 200
+/** Limite de caracteres por resposta de orbit.fetch (o corpo vai por IPC). */
+const MAX_FETCH_CHARS = 200_000
 
 export type CaptureFormat = 'webp' | 'png' | 'jpeg'
 
@@ -54,9 +57,19 @@ export interface CaptureItem {
   size: number
 }
 
+/** Artefato textual salvo pelo script (orbit.save). */
+export interface ArtifactItem {
+  name: string
+  path: string
+  bytes: number
+}
+
 export interface ScriptRunResult {
   taskId: string
   captures: CaptureItem[]
+  artifacts: ArtifactItem[]
+  /** Pasta onde os artefatos foram gravados (undefined se o script não salvou nada). */
+  artifactsDir?: string
   logs: string[]
   returned?: unknown
   error?: string
@@ -74,6 +87,9 @@ export interface RunScriptOptions {
   keep?: boolean
   timeoutMs?: number
   viewport?: { width: number; height: number }
+  /** Pasta (absoluta) onde orbit.save grava os artefatos. Sem ela, os
+   *  artefatos vão para a pasta da tarefa e ela é preservada. */
+  outDir?: string
 }
 
 function scriptsDir(): string {
@@ -142,6 +158,8 @@ const orbit = {
   hover: (target) => call('hover', { target }),
   drag: (from, to, options) => call('drag', { from, to, options: options || {} }),
   mouseUp: () => call('mouseUp', {}),
+  fetch: (url, options) => call('fetch', { url, options: options || {} }),
+  save: (name, data, options) => call('save', { name, data, options: options || {} }),
   log: (...parts) => call('log', { message: parts.map((p) => (typeof p === 'string' ? p : JSON.stringify(p))).join(' ') }),
   wait: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
 }
@@ -224,6 +242,10 @@ export async function runBrowserScript(options: RunScriptOptions): Promise<Scrip
   await fsp.writeFile(runnerFile, RUNNER_SOURCE, 'utf8')
 
   const captures: CaptureItem[] = []
+  const artifacts: ArtifactItem[] = []
+  // Artefatos vão para a pasta pedida (dentro da pasta de trabalho) ou, sem
+  // ela, para a pasta da tarefa — que então é preservada no final.
+  const artifactsBase = options.outDir ? path.resolve(options.outDir) : path.join(taskDir, 'artifacts')
   const logs: string[] = []
   const pushLog = (line: string) => {
     if (logs.length < MAX_LOGS) logs.push(line)
@@ -378,6 +400,52 @@ export async function runBrowserScript(options: RunScriptOptions): Promise<Scrip
       case 'log':
         pushLog(String(args.message ?? ''))
         return true
+      case 'fetch': {
+        // Busca na sessão do browser (cookies/logins do painel inclusos) —
+        // serve para robots.txt, sitemap, bundles JS e APIs autenticadas.
+        const url = String(args.url ?? '')
+        const opts = (args.options ?? {}) as {
+          method?: string
+          headers?: Record<string, string>
+          body?: string
+          as?: 'text' | 'json'
+        }
+        const response = await win.webContents.session.fetch(url, {
+          method: opts.method,
+          headers: opts.headers,
+          body: opts.body,
+        })
+        const text = await response.text()
+        let body: unknown = text
+        if (opts.as === 'json') {
+          try {
+            body = JSON.parse(text)
+          } catch {
+            body = text
+          }
+        }
+        return {
+          status: response.status,
+          url: response.url,
+          headers: Object.fromEntries(response.headers.entries()),
+          body: typeof body === 'string' ? body.slice(0, MAX_FETCH_CHARS) : body,
+        }
+      }
+      case 'save': {
+        const name = String(args.name ?? '')
+        const opts = (args.options ?? {}) as { format?: 'text' | 'json' | 'base64' }
+        const data = args.data
+        const target = resolveArtifactPath(artifactsBase, name)
+        await fsp.mkdir(path.dirname(target), { recursive: true })
+        let buffer: Buffer
+        if (opts.format === 'base64') buffer = Buffer.from(String(data ?? ''), 'base64')
+        else if (typeof data === 'string') buffer = Buffer.from(data, 'utf8')
+        else buffer = Buffer.from(JSON.stringify(data, null, 2) ?? 'null', 'utf8')
+        await fsp.writeFile(target, buffer)
+        const relative = path.relative(artifactsBase, target).split(path.sep).join('/')
+        artifacts.push({ name: relative, path: target, bytes: buffer.length })
+        return { path: target, name: relative, bytes: buffer.length }
+      }
       default:
         throw new Error(`Operação desconhecida: ${op}`)
     }
@@ -436,7 +504,11 @@ export async function runBrowserScript(options: RunScriptOptions): Promise<Scrip
     // já morreu
   }
   if (!win.isDestroyed()) win.destroy()
-  if (!options.keep) await fsp.rm(taskDir, { recursive: true, force: true })
+  // A pasta da tarefa só é apagada quando não há artefato dentro dela: com
+  // outDir, os artefatos estão fora e a limpeza continua valendo.
+  if (!options.keep && artifacts.length === 0) {
+    await fsp.rm(taskDir, { recursive: true, force: true })
+  }
 
   // Só os erros da página vão para o resultado sozinhos — o resto o script
   // pede com orbit.console() quando quiser.
@@ -445,7 +517,16 @@ export async function runBrowserScript(options: RunScriptOptions): Promise<Scrip
     pushLog(`[página] ${pageErrors.length} erro(s) no console:\n${formatConsoleEntries(pageErrors)}`)
   }
 
-  return { taskId, captures, logs, returned: outcome.returned, error: outcome.error, timedOut }
+  return {
+    taskId,
+    captures,
+    artifacts,
+    artifactsDir: artifacts.length > 0 ? artifactsBase : undefined,
+    logs,
+    returned: outcome.returned,
+    error: outcome.error,
+    timedOut,
+  }
 }
 
 /** Captura única fora de um script (usada pelo panel_screenshot com fullPage). */
