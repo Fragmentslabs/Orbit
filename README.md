@@ -54,7 +54,7 @@ Unlike cloud-only coding assistants, Orbit runs locally and lets you decide how 
 - **Reasoning control** — adjustable reasoning levels per task, with lightweight model variants for cheap fast passes
 - **Permission modes** — from "ask before every action" to full autonomy, per chat
 - **Scheduled messages** — queue prompts to run at a later time
-- **Skills** — reusable instruction sets that the agent applies on demand
+- **Skills** — reusable instruction sets that the agent applies on demand, plus built-in ones (e.g. *Web Recon*: crawl and map a site with the agent's own browser)
 
 #### Multi-agent workflows
 
