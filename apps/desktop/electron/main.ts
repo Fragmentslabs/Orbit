@@ -82,6 +82,7 @@ import { setSessionModelsCache, setSessionModesCache, setWorkerConfigCache, setR
 import { setRotationConfigCache } from './lib/model-rotation'
 import { readJson as readStorageJson } from './lib/storage'
 import { registerPanelWebContents } from './lib/panel-browser'
+import { registerPanelStateIpc } from './lib/panel-state'
 import { registerVoiceIpc, syncWhisperServer } from './lib/voice'
 import { setupMemoryScheduler } from './lib/memory/scheduler'
 import { getAppSettings, loadAppSettings, onAppSettingsChange, setAppSettings } from './lib/app-settings'
@@ -1936,6 +1937,10 @@ app.whenReady().then(() => {
   ipcMain.on('panel:register', (_event, sessionId: string | null, id: number | null) =>
     registerPanelWebContents(sessionId, id),
   )
+
+  // Snapshot do painel lateral que o renderer empurra a cada mudança de aba
+  // (tool read_open_panel: o que o usuário está vendo agora).
+  registerPanelStateIpc()
 
   // Eventos de sessão/pasta emitidos pelo renderer (novo chat, renomear, pin,
   // arquivar, mover, deletar...). O remetente já aplicou a mudança no store

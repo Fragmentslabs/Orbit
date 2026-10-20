@@ -42,6 +42,7 @@ import { agentMayUseBrowser, getAppSettings } from '../app-settings'
 import { createAudioGenerateTool, createAudioTranscribeTool } from './audio'
 import { createVideoTools } from './video'
 import { createChatMotionTools } from './motion-chat'
+import { createPanelTools } from './panel'
 import { createGalleryShowImageTool, createImageSearchTools } from './image-search'
 import { resolveFfmpeg } from '../video/ffmpeg'
 
@@ -104,6 +105,9 @@ export function buildToolSet(input: SendMessageInput, ctx: ToolContext | null, i
     // sessão principal.
     if (input.orchestrationRole !== 'worker') {
       Object.assign(tools, createArtifactTools(input.sessionId))
+      // O que está aberto na aba lateral agora — deixa o agente responder a
+      // "isso"/"aqui" sem o usuário reanexar. Read-only, sem permissão.
+      Object.assign(tools, createPanelTools(input.sessionId))
       // Mostrar uma imagem do app na resposta: no chat o markdown de imagem é
       // bloqueado, e este é o único caminho.
       Object.assign(tools, createGalleryShowImageTool())
@@ -202,6 +206,8 @@ export function buildToolSet(input: SendMessageInput, ctx: ToolContext | null, i
     // arquitetura, comparativo — coisas que o usuário quer VER e que não
     // deveriam virar arquivo solto no repositório dele.
     Object.assign(tools, createArtifactTools(input.sessionId))
+    // O que está aberto no painel (tool read_open_panel) — vale nos dois modos.
+    Object.assign(tools, createPanelTools(input.sessionId))
   }
   // Documentos anexados também no código: `read`/`grep` alcançam o
   // repositório, não o que o usuário arrastou para a conversa. Sem isto, o

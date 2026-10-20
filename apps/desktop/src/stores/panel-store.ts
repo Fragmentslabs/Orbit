@@ -1,4 +1,5 @@
 import { create } from "zustand"
+import type { PanelSnapshot, PanelSnapshotTab } from "@shared/panel"
 
 export type TabType = "chat" | "terminal" | "process" | "folders" | "browser" | "diff" | "media" | "artifact" | "sources" | "source" | "document" | "motion"
 
@@ -776,3 +777,43 @@ export const usePanelStore = create<PanelState>((set, get) => {
     setPendingInput: (val) => set({ pendingInput: val }),
   }
 })
+
+/**
+ * Espelha o painel para o main, para a tool `read_open_panel`.
+ *
+ * As abas são por sessão de chat; o agente lê o snapshot da sessão dele. O envio
+ * é deduplicado por sessão — o store muda muito (eventos de browser, atividade),
+ * e não faz sentido reenviar um retrato idêntico a cada tick.
+ */
+const lastPanelSnapshots = new Map<string, string>()
+
+function emitPanelSnapshots(state: ReturnType<typeof usePanelStore.getState>): void {
+  const sessions = new Set([...Object.keys(state.tabsBySession), ...Object.keys(state.activeTabBySession)])
+  for (const sessionId of sessions) {
+    const tabs = state.tabsBySession[sessionId] ?? []
+    const activeTabId = state.activeTabBySession[sessionId] ?? null
+    const snapshotTabs: PanelSnapshotTab[] = tabs.map((t) => ({
+      id: t.id,
+      type: t.type,
+      title: t.title,
+      artifactId: t.artifactId,
+      motionId: t.motionId,
+      motionPath: t.motionPath,
+      documentId: t.documentId,
+      url: t.url,
+      sourceDocId: t.sourceDocId,
+    }))
+    const key = JSON.stringify({ activeTabId, snapshotTabs })
+    if (lastPanelSnapshots.get(sessionId) === key) continue
+    lastPanelSnapshots.set(sessionId, key)
+    const snapshot: PanelSnapshot = { sessionId, activeTabId, tabs: snapshotTabs, updatedAt: Date.now() }
+    // O store é importado também em teste (node, sem DOM): sem renderer, sem
+    // snapshot — e tudo bem, a tool só responde o que chegou.
+    if (typeof window === 'undefined') return
+    window.ipcRenderer?.send("panel:snapshot", snapshot)
+  }
+}
+
+usePanelStore.subscribe(emitPanelSnapshots)
+queueMicrotask(() => emitPanelSnapshots(usePanelStore.getState()))
+
