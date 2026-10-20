@@ -38,7 +38,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { IconAction } from "@/src/components/ai/artifact-part"
-import { motionApi, windowApi, type MotionLayersResult, type MotionRenderFormat } from "@/src/lib/ipc"
+import { motionApi, type MotionLayersResult, type MotionRenderFormat } from "@/src/lib/ipc"
 import {
   MOTION_AUDIO_SEEK_S,
   motionAudioRate,
@@ -47,6 +47,8 @@ import {
 } from "@/src/lib/motion-audio-range"
 import { usePanelStore } from "@/src/stores/panel-store"
 import { cn } from "@/lib/utils"
+import { FULLSCREEN_OVERLAY_CLASS } from "@/src/lib/fullscreen-overlay"
+import { FullscreenComposer } from "@/src/components/fullscreen-dock"
 
 /**
  * Preview de uma composição de motion na aba do painel direito — o palco onde o
@@ -238,6 +240,10 @@ export function MotionTab({
   const [failedFonts, setFailedFonts] = useState<string[]>([])
   const [reloads, setReloads] = useState(0)
   const [fullscreen, setFullscreen] = useState(false)
+  const [composerPinned, setComposerPinned] = useState(false)
+  useEffect(() => {
+    if (!fullscreen) setComposerPinned(false)
+  }, [fullscreen])
   const [box, setBox] = useState({ width: 0, height: 0 })
   const [render, setRender] = useState<RenderState>({ status: "idle" })
   const [layers, setLayers] = useState<LayersState>({ status: "idle" })
@@ -376,7 +382,6 @@ export function MotionTab({
 
   const layout = spec ?? DEFAULT_SPEC
   const total = spec?.durationInFrames ?? 0
-  const isMac = windowApi.platform === "darwin"
 
   const src = useMemo(
     () => (motionId && entry ? `${MOTION_SCHEME}://${motionId}/${entryPath(entry)}?r=${reloads}` : ""),
@@ -832,7 +837,7 @@ export function MotionTab({
         // usam esse): com `bg-background` a aba destoava do resto e o cabeçalho
         // parecia colado na faixa de abas.
         "group/motion flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-sidebar",
-        fullscreen && cn("fixed inset-0 z-[70] h-auto w-auto rounded-none border-0", isMac && "top-8"),
+        fullscreen && FULLSCREEN_OVERLAY_CLASS,
       )}
     >
       {/* Cabeçalho: composição + arquivo à esquerda; recarregar, tela cheia e
@@ -1338,6 +1343,9 @@ export function MotionTab({
           })}
         </div>
       </div>
+      {/* Composer do chat na tela cheia: recolhido na borda inferior, abre no
+          hover (ou fixado) — o mesmo do browser. */}
+      {fullscreen && <FullscreenComposer pinned={composerPinned} onTogglePin={() => setComposerPinned((v) => !v)} />}
     </div>
   )
 }
