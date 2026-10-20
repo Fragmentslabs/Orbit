@@ -210,8 +210,14 @@ function SkillCard({
 
   const menuItems: ActionMenuItem[] = [
     { icon: Eye, label: t('toolsScreen.view'), onPress: () => onView(skill) },
-    { icon: Pencil, label: t('toolsScreen.edit'), onPress: () => onEdit(skill) },
-    { icon: Trash2, label: t('toolsScreen.delete'), destructive: true, onPress: () => onDelete(skill.slug) },
+    // Skills nativas do app são somente leitura: para customizar, o usuário
+    // cria uma skill própria com o mesmo slug.
+    ...(skill.source === 'builtin'
+      ? []
+      : [
+          { icon: Pencil, label: t('toolsScreen.edit'), onPress: () => onEdit(skill) },
+          { icon: Trash2, label: t('toolsScreen.delete'), destructive: true, onPress: () => onDelete(skill.slug) },
+        ]),
   ]
 
   return (
@@ -228,7 +234,11 @@ function SkillCard({
         </View>
         <View style={[s.sourceBadge, { backgroundColor: tokens.muted }]}>
           <Text style={[s.sourceLabel, { color: tokens.mutedForeground }]}>
-            {skill.source === 'global' ? t('toolsScreen.global') : t('toolsScreen.project')}
+            {skill.source === 'builtin'
+              ? t('toolsScreen.builtin')
+              : skill.source === 'global'
+                ? t('toolsScreen.global')
+                : t('toolsScreen.project')}
           </Text>
         </View>
         <Pressable ref={triggerRef} onPress={openMenu} hitSlop={10} style={s.menuTrigger}>
