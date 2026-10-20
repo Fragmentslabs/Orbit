@@ -25,6 +25,7 @@ import {
   createWriteTool,
 } from './files'
 import { createSkillTool } from './create-skill'
+import { createSkillReadTool } from './skill-read'
 import { createMcpTools } from './mcp'
 import { createChatMemoryTools, createCodeMemoryTools, createGraphTool } from './memory'
 import { createSubagentTool } from './orchestration'
@@ -59,6 +60,10 @@ export type { ImageToolHooks } from './image'
  */
 export function buildToolSet(input: SendMessageInput, ctx: ToolContext | null, imageHooks?: ImageToolHooks): ToolSet {
   const tools: ToolSet = {}
+  // Skills: no prompt entram com a descrição; o conteúdo completo vem sob
+  // demanda (skill_read), para que uma skill nativa não pague o texto inteiro
+  // em todo turno. Não expõe capacidade nova — só lê o que o agente já vê.
+  tools.skill_read = createSkillReadTool(ctx?.directory)
   // Áudio: sem interruptor próprio — cada metade segue a da voz nas
   // Preferências (Fala em texto → transcrever; Texto em fala → gerar).
   // Desligada, a tool nem existe e o prompt explica ao agente como ativar.

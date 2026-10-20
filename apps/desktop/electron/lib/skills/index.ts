@@ -4,12 +4,14 @@ import fsp from 'node:fs/promises'
 import path from 'node:path'
 import type { Skill, SkillSource } from '@shared/skills'
 import { parseSkill } from './parser'
+import { BUILTIN_SKILLS } from './builtin'
 
 /**
- * Loader de skills: mescla a fonte global (orbit-data/skills) com a do projeto
- * ({workspace}/.orbit/skills — vence em conflito de nome). Leitura fresca a
- * cada chamada (arquivos pequenos); o watcher da pasta global avisa o renderer
- * para recarregar a paleta.
+ * Loader de skills: mescla as fontes nativas (somente leitura), global
+ * (orbit-data/skills) e do projeto ({workspace}/.orbit/skills). Precedência da
+ * mais específica para a menos: projeto > global > nativo — quem sobrescreve
+ * é sempre a do usuário. Leitura fresca a cada chamada (arquivos pequenos); o
+ * watcher da pasta global avisa o renderer para recarregar a paleta.
  */
 
 const EXTENSIONS = new Set(['.skill', '.md'])
@@ -89,9 +91,10 @@ async function loadDir(dir: string, source: SkillSource): Promise<Skill[]> {
   return skills
 }
 
-/** Global + projeto mesclados; skill de projeto sobrepõe global de mesmo slug. */
+/** Nativas + global + projeto mesclados; a do projeto sobrepõe a global. */
 export async function loadSkills(directory?: string): Promise<Skill[]> {
   const bySlug = new Map<string, Skill>()
+  for (const skill of BUILTIN_SKILLS) bySlug.set(skill.slug, skill)
   for (const skill of await loadDir(globalSkillsDir(), 'global')) bySlug.set(skill.slug, skill)
   if (directory) {
     for (const skill of await loadDir(projectSkillsDir(directory), 'project')) {

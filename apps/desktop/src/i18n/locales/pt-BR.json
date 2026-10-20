@@ -1407,6 +1407,7 @@
       "noContent": "Nenhum conteúdo.",
       "scripts_one": "{{count}} script",
       "scripts_other": "{{count}} scripts",
+      "builtin": "Nativos",
       "edit": "Editar",
       "remove": "Remover",
       "createMenu": {
