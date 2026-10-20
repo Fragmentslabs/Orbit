@@ -150,8 +150,16 @@ export function Segmented<T extends string>({
 
 // ------------------------------------------------------------------ campos
 
+/**
+ * A casca de todo campo do inspetor: 28px de altura, sempre. `flex-auto` (e não
+ * `flex-1`) porque `flex: 1` é `flex-basis: 0%` — numa COLUNA flex o basis vale
+ * para a ALTURA e anula o `h-7`, e o campo colapsa para a altura do texto. Nos
+ * campos dentro de `Fields` (grade) e das linhas flex o `h-7` valia; nos que são
+ * filhos diretos de uma `Section` (coluna), não — era o que fazia metade do
+ * painel parecer espremida. `min-h-7` segura a altura mesmo numa coluna apertada.
+ */
 const SHELL =
-  "flex h-7 min-w-0 flex-1 items-center gap-1.5 rounded-md border border-input bg-input/20 px-1.5 transition-shadow focus-within:border-ring focus-within:ring-2 focus-within:ring-ring/30 dark:bg-input/30"
+  "flex h-7 min-h-7 min-w-0 flex-auto items-center gap-1.5 rounded-md border border-input bg-input/20 px-1.5 transition-shadow focus-within:border-ring focus-within:ring-2 focus-within:ring-ring/30 dark:bg-input/30"
 
 const INPUT = "w-0 min-w-0 flex-1 border-0 bg-transparent p-0 text-[10px] font-semibold outline-none placeholder:font-normal placeholder:text-muted-foreground/60 disabled:text-muted-foreground/40"
 

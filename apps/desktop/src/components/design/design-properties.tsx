@@ -293,7 +293,7 @@ function SelectField({
   const UNSET = "__unset"
   return (
     <Select value={value || UNSET} onValueChange={(next) => next !== null && onCommit(next === UNSET ? "" : String(next))}>
-      <SelectTrigger size="sm" className="h-7 w-full min-w-0 flex-1 font-mono text-[10px] font-semibold">
+      <SelectTrigger size="sm" className="h-7 min-h-7 w-full min-w-0 font-mono text-[10px] font-semibold">
         <SelectValue>{value || <span className="font-normal text-muted-foreground">{placeholder}</span>}</SelectValue>
       </SelectTrigger>
       <SelectContent>
