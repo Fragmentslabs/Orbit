@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { AudioLines, CheckIcon, Film, ChevronDown, Clapperboard, Pause, ChevronLeft, ChevronRight, CodeXml, FileText, Filter, Folder, FolderGit2, HardDriveIcon, ImageIcon, ImageOff, Layers, LayoutGrid, MessageSquare, RefreshCw, Search, Trash2, X } from "lucide-react"
 import type { LucideIcon } from "lucide-react"
-import { assetUrl, mediaKind, thumbUrl, type MediaEntry, type MediaKind, type MediaSource } from "@shared/media"
+import { assetUrl, mediaKind, mediaMime, thumbUrl, MEDIA_DND_MIME, type MediaEntry, type MediaKind, type MediaSource } from "@shared/media"
 import { folderKey, normalizeFolderName } from "@shared/chat"
 import {
   Dialog,
@@ -177,9 +177,30 @@ function Thumb({ entry, selected, selecting, onToggle, onOpen, versions = 1 }: {
     >
       <button
         type="button"
+        draggable
         onClick={() => (selecting ? onToggle() : isAudio ? togglePlay() : onOpen())}
         className="block size-full cursor-pointer"
         title={entry.name || entry.id}
+        onDragStart={(event) => {
+          // TODO tile — imagem, vídeo, motion, artefato, documento, áudio — é
+          // arrastável para o composer COMO ANEXO: o payload leva só a
+          // IDENTIDADE do item (id, nome, tipo e uma URL de preview). O anexo
+          // fica sendo uma REFERÊNCIA ao arquivo que já está aqui — nada é
+          // copiado, e o drop não cola caminho nenhum como texto no input.
+          // `draggable` é obrigatório nos tiles sem <img> (áudio cai no ícone).
+          event.dataTransfer.setData(
+            MEDIA_DND_MIME,
+            JSON.stringify({
+              id: entry.id,
+              name: entry.name || entry.id,
+              kind,
+              mime: mediaMime(entry),
+              url: thumbUrl(entry, isDark) ?? assetUrl(entry),
+            }),
+          )
+          event.dataTransfer.setData("text/plain", assetUrl(entry))
+          event.dataTransfer.effectAllowed = "copy"
+        }}
       >
         {failed || !preview ? (
           <div className={cn("flex size-full items-center justify-center", playing ? "text-primary" : "text-muted-foreground")}>

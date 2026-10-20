@@ -242,6 +242,14 @@ export interface FilePart {
    * anexos anteriores a este campo existir (aí o thumbnail é tudo que há).
    */
   mediaUrl?: string
+  /**
+   * O anexo JÁ É um item da galeria (arrastado da aba Mídia): o arquivo existe
+   * em disco, e o engine NÃO copia nada — o agente recebe a referência e o
+   * caminho, e a bolha mostra o chip. `url` é só o preview (thumbnail), não o
+   * conteúdo. Ausente nos anexos comuns (colados/escolhidos), que viram cópia
+   * própria na galeria.
+   */
+  mediaId?: string
 }
 
 /** MIME marcador de um elemento selecionado no browser do painel (modo
