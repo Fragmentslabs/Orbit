@@ -2325,6 +2325,8 @@
     "openInPanel": "Abrir no painel",
     "export": "Exportar HTML",
     "expand": "Expandir",
+    "fullscreen": "Tela cheia",
+    "exitFullscreen": "Sair da tela cheia",
     "zoomIn": "Aumentar zoom",
     "zoomOut": "Diminuir zoom",
     "zoomReset": "Zoom padrão (100%)",

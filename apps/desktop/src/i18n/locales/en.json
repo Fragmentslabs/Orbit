@@ -2325,6 +2325,8 @@
     "openInPanel": "Open in panel",
     "export": "Export HTML",
     "expand": "Expand",
+    "fullscreen": "Full screen",
+    "exitFullscreen": "Exit full screen",
     "zoomIn": "Zoom in",
     "zoomOut": "Zoom out",
     "zoomReset": "Reset zoom (100%)",

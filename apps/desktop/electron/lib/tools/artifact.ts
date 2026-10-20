@@ -1,6 +1,9 @@
 import { tool } from 'ai'
+import fsp from 'node:fs/promises'
 import { z } from 'zod'
-import { saveArtifact, updateArtifact } from '../media'
+import { mediaKind } from '@shared/media'
+import { getMediaEntry, mutateArtifact, saveArtifact, updateArtifact } from '../media'
+import { applyTextEdits } from './motion-chat'
 
 /**
  * Artefatos HTML: o agente entrega uma página renderizável DENTRO da resposta
@@ -82,7 +85,7 @@ export function createArtifactTools(sessionId: string) {
     }),
     update_artifact: tool({
       description:
-        'Rewrites an artifact you already created in this conversation, keeping its place in the chat and its entry in the gallery. Pass the FULL new HTML (it replaces the file, there is no patching). Use this when the user asks for changes to something you rendered instead of creating a second artifact.',
+        'Rewrites an artifact — any artifact of this or another conversation whose artifactId you were given. Keeps its place in the chat and its entry in the gallery. Pass the FULL new HTML (it replaces the file, there is no patching). Use this when the user asks for changes to something you rendered instead of creating a second artifact; read_artifact first if you need the current HTML.',
       inputSchema: z.object({
         artifactId: z.string().describe('The artifactId returned by create_artifact (art_....html)'),
         html: z.string().min(1).describe('The complete new HTML document'),
@@ -101,6 +104,61 @@ export function createArtifactTools(sessionId: string) {
           thumb: ref.thumb,
           revision: ref.revision,
           message: 'Artifact updated — the user already sees the new version in the chat.',
+        }
+      },
+    }),
+    edit_artifact: tool({
+      description:
+        'Edits an artifact with EXACT text replacements, applied in order (oldText must exist and be unique unless replaceAll) — like the edit tool. Prefer this over update_artifact for small changes: it does not resend the whole document. If another conversation changed the artifact since you read it, your oldText will not match and the edit fails — then read_artifact and retry with the current text.',
+      inputSchema: z.object({
+        artifactId: z.string().describe('The artifactId (art_....html) from an attachment note or a previous create_artifact'),
+        edits: z
+          .array(
+            z.object({
+              oldText: z.string().describe('Exact current text (copy it, including indentation)'),
+              newText: z.string(),
+              replaceAll: z.boolean().optional(),
+            }),
+          )
+          .min(1),
+        title: z.string().max(120).optional().describe('New title, if it changed'),
+      }),
+      execute: async ({ artifactId, edits, title }) => {
+        const ref = await mutateArtifact(
+          artifactId,
+          (html) => {
+            const next = applyTextEdits(html, edits)
+            if (Buffer.byteLength(next, 'utf8') > MAX_HTML_BYTES) {
+              throw new Error(`HTML too large (limit ${Math.round(MAX_HTML_BYTES / 1024)}KB).`)
+            }
+            return next
+          },
+          title,
+        )
+        if (!ref) return `Artifact not found: ${artifactId}. Create a new one with create_artifact.`
+        return {
+          artifactId: ref.id,
+          url: ref.url,
+          title: ref.title,
+          thumb: ref.thumb,
+          revision: ref.revision,
+          message: `Artifact updated with ${edits.length} edit${edits.length === 1 ? '' : 's'} — the user already sees the new version in the chat.`,
+        }
+      },
+    }),
+    read_artifact: tool({
+      description:
+        'Returns the current HTML of an artifact by artifactId (from any conversation). Use it before update_artifact when you need the exact current content — the user may have asked for changes since you wrote it.',
+      inputSchema: z.object({
+        artifactId: z.string().describe('The artifactId (art_....html) from an attachment note or a previous create_artifact'),
+      }),
+      execute: async ({ artifactId }) => {
+        const entry = await getMediaEntry(artifactId)
+        if (!entry || mediaKind(entry) !== 'artifact') return `Artifact not found: ${artifactId}`
+        try {
+          return await fsp.readFile(entry.path, 'utf8')
+        } catch {
+          return `Artifact file is missing on disk: ${artifactId}`
         }
       },
     }),

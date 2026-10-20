@@ -22,6 +22,7 @@ import mammoth from 'mammoth'
 import { rasterizePdf } from './pdf-raster'
 import { parseMarkdown, renderHtml, renderThumbHtml, type DocumentStyle } from './document-render'
 import { renderDiagrams } from './mermaid-render'
+import { withAssetLock, writeFileAtomic } from './asset-lock'
 
 export type { MediaEntry, MediaFilter, MediaSource, MediaUsage }
 
@@ -1107,40 +1108,63 @@ export async function updateArtifact(
   html: string,
   title?: string,
 ): Promise<ArtifactRef | null> {
+  return mutateArtifact(id, () => html, title)
+}
+
+/**
+ * Lê o HTML atual, deixa o chamador transformá-lo e grava — tudo dentro do
+ * mesmo lock. É o que sustenta a EDIÇÃO como fila: dois chats no mesmo artefato
+ * são serializados, e quem chega depois aplica sobre o resultado do primeiro;
+ * se o texto que ele ia trocar já não existe, `mutate` lança e nada é gravado.
+ */
+export async function mutateArtifact(
+  id: string,
+  mutate: (html: string) => string | Promise<string>,
+  title?: string,
+): Promise<ArtifactRef | null> {
   if (!SAFE_ARTIFACT_ID.test(id) || !id.endsWith('.html')) return null
-  const entry = await getMediaEntry(id)
-  if (!entry || mediaKind(entry) !== 'artifact') return null
+  return withAssetLock(`artifact:${id}`, async () => {
+    const entry = await getMediaEntry(id)
+    if (!entry || mediaKind(entry) !== 'artifact') return null
 
-  await fsp.writeFile(entry.path, html, 'utf8')
-  const thumb = (await captureThumbnail(id)) ?? entry.thumb
-  const revision = (entry.revision ?? 1) + 1
-  const name = title ?? entry.name ?? id
+    let current = ''
+    try {
+      current = await fsp.readFile(entry.path, 'utf8')
+    } catch {
+      current = ''
+    }
+    const html = await mutate(current)
+    await writeFileAtomic(entry.path, html)
+    const thumb = (await captureThumbnail(id)) ?? entry.thumb
+    const revision = (entry.revision ?? 1) + 1
+    const name = title ?? entry.name ?? id
 
-  await withIndexLock(async () => {
-    const entries = await readIndex()
-    const current = entries.find((e) => e.id === id)
-    if (!current) return
-    current.size = Buffer.byteLength(html, 'utf8')
-    current.thumb = thumb
-    current.revision = revision
-    current.name = name
-    await writeIndex(entries)
+    await withIndexLock(async () => {
+      const entries = await readIndex()
+      const current = entries.find((e) => e.id === id)
+      if (!current) return
+      current.size = Buffer.byteLength(html, 'utf8')
+      current.thumb = thumb
+      current.revision = revision
+      current.name = name
+      await writeIndex(entries)
+    })
+
+    /**
+     * Avisa as janelas. O arquivo é um só, mas quem JÁ está na tela não
+     * descobre sozinho: o iframe do card antigo foi montado com a revisão
+     * anterior e não recarrega por conta própria. Sem este evento o usuário
+     * veria a versão velha logo acima da nova, na mesma conversa.
+     *
+     * Emitido direto daqui (e não pelo broadcast.ts) para não criar o ciclo
+     * media → broadcast → companion-server → companion-http → media.
+     */
+    for (const win of BrowserWindow.getAllWindows()) {
+      if (!win.isDestroyed()) win.webContents.send('artifact:updated', { artifactId: id, revision })
+    }
+
+    return { id, url: `${ARTIFACT_SCHEME}://${id}`, title: name, thumb, revision }
   })
-
-  /**
-   * Avisa as janelas. O arquivo é um só, mas quem JÁ está na tela não
-   * descobre sozinho: o iframe do card antigo foi montado com a revisão
-   * anterior e não recarrega por conta própria. Sem este evento o usuário
-   * veria a versão velha logo acima da nova, na mesma conversa.
-   *
-   * Emitido direto daqui (e não pelo broadcast.ts) para não criar o ciclo
-   * media → broadcast → companion-server → companion-http → media.
-   */
-  for (const win of BrowserWindow.getAllWindows()) {
-    if (!win.isDestroyed()) win.webContents.send('artifact:updated', { artifactId: id, revision })
-  }
-
-  return { id, url: `${ARTIFACT_SCHEME}://${id}`, title: name, thumb, revision }
 }
 
 /**
