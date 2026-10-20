@@ -89,7 +89,7 @@ export function ToggleButton({
       aria-pressed={active}
       onClick={onClick}
       className={cn(
-        "flex size-6 shrink-0 items-center justify-center rounded-md border transition-colors [&_svg]:size-3",
+        "flex size-7 shrink-0 items-center justify-center rounded-md border transition-colors [&_svg]:size-3",
         active
           ? "border-primary/30 bg-primary/10 text-primary"
           : "border-border/60 text-muted-foreground/60 hover:bg-accent hover:text-foreground",
@@ -135,7 +135,7 @@ export function Segmented<T extends string>({
           aria-pressed={value === option.value}
           onClick={() => onChange(option.value)}
           className={cn(
-            "flex h-6 min-w-7 items-center justify-center rounded-md border px-2 transition-all [&_svg]:size-3.5",
+            "flex h-7 min-w-7 items-center justify-center rounded-md border px-2 transition-all [&_svg]:size-3.5",
             value === option.value
               ? "border-border/50 bg-background text-foreground shadow-sm"
               : "border-transparent text-muted-foreground/70 hover:text-foreground",
