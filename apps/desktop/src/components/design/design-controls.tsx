@@ -1,6 +1,7 @@
 import { useEffect, useState, type ReactNode } from "react"
 import { X } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { ColorPicker } from "./design-color"
 import { toHex } from "./design-protocol"
 
 /**
@@ -237,7 +238,10 @@ export function Field({
   )
 }
 
-/** Cor: amostra clicável (o seletor do sistema), valor em texto e botão de limpar. */
+/**
+ * Cor: amostra clicável (abre o seletor do app), valor em texto e botão de
+ * limpar. O seletor é o do design (design-color.tsx), não o do sistema.
+ */
 export function ColorField({
   value,
   computed,
@@ -253,28 +257,13 @@ export function ColorField({
   useEffect(() => setDraft(value), [value])
   const shown = value || computed
   const hex = toHex(shown)
-  const transparent = !shown || hex === null
   const commit = (next = draft) => {
     if (next !== value) onCommit(next.trim())
   }
   return (
     <div className={SHELL}>
       {icon !== undefined && <Lead>{icon}</Lead>}
-      <label
-        className="relative size-4 shrink-0 cursor-pointer overflow-hidden rounded-[4px] border border-border/70"
-        style={{
-          background: transparent
-            ? "repeating-conic-gradient(var(--muted) 0% 25%, var(--background) 0% 50%) 50% / 6px 6px"
-            : shown,
-        }}
-      >
-        <input
-          type="color"
-          value={hex ?? "#000000"}
-          onChange={(e) => onCommit(e.target.value)}
-          className="absolute inset-0 size-full cursor-pointer opacity-0"
-        />
-      </label>
+      <ColorPicker value={value} computed={computed} onCommit={onCommit} />
       <input
         value={draft}
         placeholder={hex ?? computed}

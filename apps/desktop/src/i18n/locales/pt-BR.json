@@ -2541,6 +2541,9 @@
       "independentSides": "Lados independentes",
       "independentCorners": "Cantos independentes",
       "mixed": "Misto",
+      "colorPicker": "Escolher uma cor",
+      "eyedropper": "Pegar uma cor da tela",
+      "noColor": "Sem cor",
       "mode": {
         "block": "Bloco (sem layout)",
         "col": "Coluna",

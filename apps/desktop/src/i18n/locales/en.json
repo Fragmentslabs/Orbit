@@ -2541,6 +2541,9 @@
       "independentSides": "Independent sides",
       "independentCorners": "Independent corners",
       "mixed": "Mixed",
+      "colorPicker": "Pick a color",
+      "eyedropper": "Pick a color from the screen",
+      "noColor": "No color",
       "mode": {
         "block": "Block (no layout)",
         "col": "Column",

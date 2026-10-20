@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 import { formatDesignQuoteText } from "@shared/chat"
-import { DESIGN_SOURCE, boardForHref, isTextPath, orderAfterMove, parseRuntimeMessage, samePath, splitDeclarations, toHex, withDeclaration } from "./design-protocol"
+import { DESIGN_SOURCE, boardForHref, hexToRgb, hsvToHex, isTextPath, orderAfterMove, parseRuntimeMessage, rgbToHex, rgbToHsv, samePath, splitDeclarations, toHex, withDeclaration } from "./design-protocol"
 
 describe("boardForHref", () => {
   const files = ["Tela1.html", "Pricing.html", "sub/Detail.html"]
@@ -192,6 +192,29 @@ describe("orderAfterMove", () => {
     expect(orderAfterMove(4, 2, 2)).toEqual([0, 1, 2, 3])
     // Índice fora da lista não mexe em nada.
     expect(orderAfterMove(3, 9, 1)).toEqual([0, 1, 2])
+  })
+})
+
+describe("cores do seletor", () => {
+  it("lê e escreve o hex", () => {
+    expect(hexToRgb("#0a99ff")).toEqual({ r: 10, g: 153, b: 255 })
+    expect(hexToRgb("#0af")).toEqual({ r: 0, g: 170, b: 255 })
+    expect(hexToRgb("laranja")).toBeNull()
+    expect(rgbToHex({ r: 10, g: 153, b: 255 })).toBe("#0a99ff")
+  })
+
+  it("vai e volta entre RGB e HSV sem perder a cor", () => {
+    for (const hex of ["#000000", "#ffffff", "#0a99ff", "#ff8a00", "#12c48b"]) {
+      const rgb = hexToRgb(hex)!
+      expect(hsvToHex(rgbToHsv(rgb))).toBe(hex)
+    }
+  })
+
+  it("o matiz é o do vermelho quando não há saturação", () => {
+    expect(rgbToHsv({ r: 128, g: 128, b: 128 }).s).toBe(0)
+    expect(rgbToHsv({ r: 255, g: 0, b: 0 }).h).toBe(0)
+    expect(rgbToHsv({ r: 0, g: 255, b: 0 }).h).toBe(120)
+    expect(rgbToHsv({ r: 0, g: 0, b: 255 }).h).toBe(240)
   })
 })
 
