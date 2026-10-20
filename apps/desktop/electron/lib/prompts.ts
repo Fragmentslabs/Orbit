@@ -448,7 +448,7 @@ CHOOSING THE KIND — the split that actually matters:
 DOC: use document for extensive context (maps, schemas). text stays the short summary.
 Use memory_graph to navigate the project graph, memory_search for text search.`
 
-const SKILLS_INSTRUCTION = `USER SKILLS. The sections below are knowledge curated by the user (conventions, patterns, permanent instructions). Apply a skill whenever the topic is relevant — you decide contextually. When the user's message references @skill-name, applying that skill is MANDATORY.`
+const SKILLS_INSTRUCTION = `USER SKILLS. The sections below are knowledge curated by the user (conventions, patterns, permanent instructions). Apply a skill whenever the topic is relevant — you decide contextually. When the user's message references @skill-name, applying that skill is MANDATORY. A built-in skill (source: builtin) lists only its description: call skill_read({ slug }) to load its full instructions before applying it.`
 
 const CREATE_SKILL_INSTRUCTION = `/create-skill FLOW ACTIVE. The user wants you to create an Orbit skill from their description.
 
@@ -482,6 +482,11 @@ async function buildSkillsBlock(input: SendMessageInput): Promise<string[]> {
       const referenced = input.text.includes(`@${skill.slug}`)
       const header = `### Skill @${skill.slug}${referenced ? ' (REFERENCED IN THIS MESSAGE — apply it)' : ''}`
       const description = skill.description ? `\n${skill.description}` : ''
+      // Skill nativa: só a descrição entra no prompt (o corpo vem por
+      // skill_read) — assim uma skill padrão não custa tokens em todo turno.
+      if (skill.source === 'builtin' && !referenced) {
+        return `${header}${description}\n\nBuilt-in skill: the full instructions are NOT loaded. Call skill_read({ slug: "${skill.slug}" }) to get them before applying it.`
+      }
       const scripts = skill.scripts?.length
         ? `\n\nHelper files for this skill (run with bash when it says to):\n${skill.scripts.map((s) => `- ${s}`).join('\n')}`
         : ''
