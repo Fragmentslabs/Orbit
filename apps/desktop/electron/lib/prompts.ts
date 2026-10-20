@@ -460,16 +460,16 @@ const CREATE_SKILL_INSTRUCTION = `/create-skill FLOW ACTIVE. The user wants you 
 const DOCUMENT_INSTRUCTION = `DOCUMENTATION MODE ACTIVE (/document). You will navigate the web app with the panel_* tools and produce documentation in docs/ in the working folder.
 
 1. If the base URL or scope (which pages) isn't clear, ask with question — one round only.
-2. Build the TODO (todowrite) with the pages to document and keep it updated.
+2. Map the screens BEFORE capturing: read the router/nav config and the main App component (grep/read) to list every screen, its route, how to reach it and which role sees it. That list is the checklist — a screen you never navigate to is a screen you never documented. Put it in the TODO (todowrite) and keep it updated.
 3. For each page:
-   - panel_navigate to the route → panel_read to map content and functions.
-    - panel_screenshot({ savePath: 'docs/<page-slug>/screen.webp', fullscreen: true }) for the main full-page shot (you see the image in your context).
-    - Interact (panel_click/panel_type) to capture derived states — modals, tabs, filled forms — each with its own screenshot saved to a file (docs/<slug>/modal-<name>.webp etc).
-    - To show the screenshot to the USER in the chat, use show_image({ fromPanel: true }) or show_image({ path: 'docs/<slug>/screen.webp' }).
+   - panel_navigate to the route → panel_read to map content and functions. panel_read is also the wait: it returns what the page actually shows, so never blind-sleep. If the app has no URL routing, reach the screen by clicking its tab (panel_read gives the refs).
+   - panel_screenshot({ savePath: 'docs/<page-slug>/screen.webp', fullscreen: true }) for the main full-page shot (you see the image in your context).
+   - Interact (panel_click/panel_type) to capture derived states — modals, tabs, filled forms — each with its own screenshot saved to a file (docs/<slug>/modal-<name>.webp etc). Close the modal before leaving the page, or the next navigation can land on the backdrop.
+   - To show the screenshot to the USER in the chat, use show_image({ fromPanel: true }) or show_image({ path: 'docs/<page-slug>/screen.webp' }).
 4. Investigate the project code (grep/read) to identify the APIs the page consumes (method + endpoint) and the business rules.
 5. Write docs/<page-slug>/README.md with: title and route; overview; available functions/actions; business rules; consumed APIs; and the referenced images with relative links (![Screen](screen.webp), ![Modal X](modal-x.webp)).
 6. When you finish each page, show the main screenshot in the conversation with show_image({ path }).
-7. At the end, create/update docs/README.md with the index of all documented pages.`
+7. At the end, create/update docs/README.md with the index of all documented pages, then verify: every ![img](...) reference has a matching file on disk, and one of the PNGs is a real screenshot (not blank).`
 
 const VERIFIED_RECORD_INSTRUCTION = `Lines like "[Verified record: ...]" (e.g. "N file(s) modified in this turn — ..." or "NO file was modified in this turn"), "[TODO for this response]" and "[SYSTEM: ...]" may appear in the context that comes with the user's message. They are INTERNAL ENGINE BOOKKEEPING about YOUR previous turn — measured from filesystem snapshots and injected for your awareness only. They are not written by the user and are not a template for your output. NEVER quote, copy, echo or append them in your visible reply, not even at the end as a footer: the user must never see those lines. Report what changed in your own words.`
 
