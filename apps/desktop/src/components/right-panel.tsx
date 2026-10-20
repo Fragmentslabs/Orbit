@@ -17,6 +17,7 @@ import { MediaGallery } from "@/src/components/media-gallery"
 import { ProcessTab } from "@/src/components/process-tab"
 import { ArtifactTab } from "@/src/components/artifact-tab"
 import { MotionTab } from "@/src/components/motion-tab"
+import { DesignTab } from "@/src/components/design-tab"
 import { DocumentTab } from "@/src/components/document-tab"
 import { SourcesTab } from "@/src/components/sources-tab"
 import { SourceViewer } from "@/src/components/source-viewer"
@@ -261,6 +262,18 @@ function TabContent({ tab, sessionId, onUpdateTab }: { tab: PanelTab; sessionId?
       return (
         <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
           <MotionTab motionId={tab.motionId} entry={tab.motionEntry} path={tab.motionPath} title={tab.title} />
+        </div>
+      )
+    case "design":
+      return (
+        <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
+          <DesignTab
+            designId={tab.designId}
+            title={tab.title}
+            path={tab.designPath}
+            playFile={tab.designPlay}
+            playFullscreen={tab.designFullscreen}
+          />
         </div>
       )
     case "document":

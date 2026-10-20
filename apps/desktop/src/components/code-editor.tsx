@@ -26,6 +26,7 @@ import {
   bracketMatching,
   indentOnInput,
   syntaxHighlighting,
+  syntaxTree,
 } from "@codemirror/language"
 import { languages } from "@codemirror/language-data"
 import { highlightSelectionMatches, searchKeymap } from "@codemirror/search"
@@ -105,6 +106,39 @@ const agentHighlightTheme = EditorView.baseTheme({
 /** Quanto tempo o realce da escrita do agente fica na tela. */
 const AGENT_HIGHLIGHT_MS = 4000
 
+/** Realce do elemento selecionado no canvas de Design (fica até outra seleção). */
+const setElementHighlight = StateEffect.define<{ from: number; to: number } | null>()
+
+const elementMark = Decoration.mark({ class: "cm-selectedElement" })
+
+const elementHighlight = StateField.define<DecorationSet>({
+  create: () => Decoration.none,
+  update(marks, tr) {
+    let next = marks.map(tr.changes)
+    for (const effect of tr.effects) {
+      if (!effect.is(setElementHighlight)) continue
+      const value = effect.value
+      if (!value || value.from >= value.to) {
+        next = Decoration.none
+      } else {
+        const from = Math.max(0, Math.min(value.from, tr.state.doc.length))
+        const to = Math.max(0, Math.min(value.to, tr.state.doc.length))
+        next = Decoration.set([elementMark.range(from, to)])
+      }
+    }
+    return next
+  },
+  provide: (field) => EditorView.decorations.from(field),
+})
+
+const elementHighlightTheme = EditorView.baseTheme({
+  ".cm-selectedElement": {
+    backgroundColor: "color-mix(in oklab, var(--primary) 20%, transparent)",
+    boxShadow: "0 0 0 1px color-mix(in oklab, var(--primary) 55%, transparent)",
+    borderRadius: "2px",
+  },
+})
+
 /** Erro de estrutura sai da árvore que já existe: dá para ser quase imediato. */
 const SYNTAX_LINT_DELAY_MS = 300
 /** O eslint atravessa IPC e roda numa worker; não vale correr atrás de cada tecla. */
@@ -164,6 +198,8 @@ function baseExtensions(): Extension[] {
     bracketMatching(),
     agentHighlight,
     agentHighlightTheme,
+    elementHighlight,
+    elementHighlightTheme,
     lintGutter(),
     // Alt+clique para cursor extra sai daqui: o padrão do
     // `clickAddsSelectionRange` já é `altKey`, mas sem isto o segundo cursor
@@ -190,6 +226,50 @@ async function languageFor(filePath: string): Promise<Extension> {
   }
 }
 
+type HtmlNode = ReturnType<typeof syntaxTree>["topNode"]
+
+/** Tag de um `Element` do Lezer (o nome vem do primeiro `TagName`). */
+function tagNameOf(state: EditorState, node: HtmlNode): string | null {
+  const open = node.getChild("OpenTag") ?? node.getChild("SelfClosingTag")
+  const name = open?.getChild("TagName")
+  return name ? state.sliceDoc(name.from, name.to).toLowerCase() : null
+}
+
+/** Filhos-ELEMENTO diretos (a mesma numeração que o DOM do artboard usa). */
+function childElements(node: HtmlNode): HtmlNode[] {
+  const out: HtmlNode[] = []
+  for (let child = node.firstChild; child; child = child.nextSibling) {
+    if (child.name === "Element") out.push(child)
+  }
+  return out
+}
+
+/**
+ * O intervalo no FONTE do elemento apontado pelo caminho (filhos-elemento a
+ * partir do <body>) — o mesmo caminho que a ponte usa no DOM vivo. `null` se o
+ * fonte ainda não foi parseado (idioma carregando) ou o caminho não existe.
+ */
+function elementRange(state: EditorState, path: number[]): { from: number; to: number } | null {
+  let body: HtmlNode | null = null
+  const pending: HtmlNode[] = [syntaxTree(state).topNode]
+  while (pending.length > 0) {
+    const node = pending.shift()
+    if (!node) break
+    if (node.name === "Element" && tagNameOf(state, node) === "body") {
+      body = node
+      break
+    }
+    pending.push(...childElements(node))
+  }
+  if (!body) return null
+  let node: HtmlNode | null = body
+  for (const index of path) {
+    if (!node) return null
+    node = childElements(node)[index] ?? null
+  }
+  return node ? { from: node.from, to: node.to } : null
+}
+
 export interface AgentWriteOutcome {
   kind: MergePlan["kind"]
   /** O buffer estava igual ao disco antes desta escrita? */
@@ -202,6 +282,8 @@ export interface CodeEditorHandle {
   /** Funde a escrita do agente no buffer. Ver `planMerge` para os critérios. */
   applyAgentWrite: (write: AgentWrite) => AgentWriteOutcome
   getContent: () => string
+  /** Realça e rola até o elemento do caminho (filhos-elemento do <body>); `null` limpa. */
+  revealElement: (path: number[] | null) => void
 }
 
 export interface CodeEditorProps {
@@ -239,6 +321,10 @@ export const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(function
   const baseline = useRef(content)
   const dirty = useRef(false)
   const highlightTimer = useRef<number>()
+  /** Caminho do elemento a realçar (`undefined` = ninguém pediu ainda). */
+  const revealPath = useRef<number[] | null | undefined>(undefined)
+  /** Chave do último realce aplicado — evita rolar de novo a cada recarga. */
+  const appliedReveal = useRef<string | null>(null)
   /**
    * Callbacks por ref: entram no keymap e no updateListener, que são montados
    * uma vez. Sem isso, cada re-render do pai exigiria recriar o editor.
@@ -268,6 +354,34 @@ export const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(function
     if (dirty.current === next) return
     dirty.current = next
     callbacks.current.onDirtyChange?.(next)
+  }, [])
+
+  /**
+   * Aplica o realce do elemento pedido por último. `forceScroll` rola até ele
+   * (seleção nova); sem isso só reafirma o realce (recarga do arquivo, idioma
+   * que terminou de carregar). Se o caminho não resolve (árvore ainda vazia),
+   * não faz nada — a próxima chamada tenta de novo.
+   */
+  const applyReveal = useCallback((forceScroll: boolean) => {
+    const instance = view.current
+    const path = revealPath.current
+    if (!instance || path === undefined) return
+    if (path === null) {
+      appliedReveal.current = null
+      instance.dispatch({ effects: setElementHighlight.of(null) })
+      return
+    }
+    const range = elementRange(instance.state, path)
+    if (!range) return
+    const key = path.join(".")
+    const scroll = forceScroll || appliedReveal.current !== key
+    appliedReveal.current = key
+    instance.dispatch({
+      effects: [
+        setElementHighlight.of(range),
+        ...(scroll ? [EditorView.scrollIntoView(range.from, { y: "center" })] : []),
+      ],
+    })
   }, [])
 
   useEffect(() => {
@@ -336,7 +450,8 @@ export const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(function
       effects: clearAgentLines.of(null),
     })
     reportDirty(false)
-  }, [content, reportDirty])
+    applyReveal(false)
+  }, [content, reportDirty, applyReveal])
 
   // Linguagem e histórico seguem o ARQUIVO, não o conteúdo. Reconfigurar o
   // `history()` descarta a pilha de undo: sem isso, um Ctrl+Z depois de trocar
@@ -346,12 +461,14 @@ export const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(function
     view.current?.dispatch({ effects: c.history.reconfigure(history()) })
     let cancelled = false
     void languageFor(filePath).then((extension) => {
-      if (!cancelled) view.current?.dispatch({ effects: c.language.reconfigure(extension) })
+      if (cancelled) return
+      view.current?.dispatch({ effects: c.language.reconfigure(extension) })
+      applyReveal(false)
     })
     return () => {
       cancelled = true
     }
-  }, [filePath])
+  }, [filePath, applyReveal])
 
   useEffect(() => {
     view.current?.dispatch({
@@ -392,6 +509,10 @@ export const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(function
     ref,
     (): CodeEditorHandle => ({
       getContent: () => view.current?.state.doc.toString() ?? baseline.current,
+      revealElement: (path) => {
+        revealPath.current = path
+        applyReveal(true)
+      },
       applyAgentWrite: (write) => {
         const instance = view.current
         const doc = instance?.state.doc.toString() ?? baseline.current
@@ -431,7 +552,7 @@ export const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(function
         return { kind: "apply", wasClean, content: next }
       },
     }),
-    [reportDirty],
+    [reportDirty, applyReveal],
   )
 
   return <div ref={host} className="h-full min-h-0 min-w-0 overflow-hidden" />
