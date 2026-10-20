@@ -155,9 +155,16 @@ const SHELL =
 
 const INPUT = "w-0 min-w-0 flex-1 border-0 bg-transparent p-0 text-[10px] font-semibold outline-none placeholder:font-normal placeholder:text-muted-foreground/60 disabled:text-muted-foreground/40"
 
+/**
+ * A coluna do lead: 12px, SEMPRE a mesma em todos os campos — é o ícone, a
+ * amostra de cor, ou nada (quando o campo não tem ícone). É ela que faz os
+ * valores começarem no mesmo lugar em todo o inspetor.
+ */
+const LEAD = "flex size-3 shrink-0 items-center justify-center"
+
 /** Ícone (ou letra) à esquerda do campo, apagado como no Lummia. */
 function Lead({ children }: { children: ReactNode }) {
-  return <span className="flex shrink-0 select-none items-center text-[9px] font-bold text-muted-foreground/60 [&_svg]:size-3">{children}</span>
+  return <span className={cn(LEAD, "select-none text-[9px] font-bold text-muted-foreground/60 [&_svg]:size-3")}>{children}</span>
 }
 
 /**
@@ -201,7 +208,7 @@ export function Field({
 
   return (
     <div className={cn(SHELL, disabled && "opacity-60", className)} title={title}>
-      {icon !== undefined && <Lead>{icon}</Lead>}
+      {icon !== undefined ? <Lead>{icon}</Lead> : <span className={LEAD} aria-hidden />}
       <input
         value={draft}
         placeholder={placeholder}
@@ -246,12 +253,10 @@ export function ColorField({
   value,
   computed,
   onCommit,
-  icon,
 }: {
   value: string
   computed: string
   onCommit: (value: string) => void
-  icon?: ReactNode
 }) {
   const [draft, setDraft] = useState(value)
   useEffect(() => setDraft(value), [value])
@@ -262,7 +267,7 @@ export function ColorField({
   }
   return (
     <div className={SHELL}>
-      {icon !== undefined && <Lead>{icon}</Lead>}
+      {/* A amostra é o lead do campo: 12px, como o ícone dos outros campos. */}
       <ColorPicker value={value} computed={computed} onCommit={onCommit} />
       <input
         value={draft}

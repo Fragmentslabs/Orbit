@@ -128,11 +128,11 @@ export function ColorPicker({
       }}
     >
       {/* A amostra É o gatilho: a cor que o elemento tem (ou o xadrez, quando
-          não tem cor nenhuma). */}
+          não tem cor nenhuma). 12px, como o lead dos outros campos. */}
       <PopoverTrigger
         title={t("design.props.colorPicker")}
         aria-label={t("design.props.colorPicker")}
-        className="size-4 shrink-0 cursor-pointer overflow-hidden rounded-[4px] border border-border/70 transition-transform hover:scale-110"
+        className="box-border size-3 shrink-0 cursor-pointer overflow-hidden rounded-[3px] border border-border/70 transition-transform hover:scale-110"
         style={{
           background: transparent
             ? "repeating-conic-gradient(var(--muted) 0% 25%, var(--background) 0% 50%) 50% / 6px 6px"
