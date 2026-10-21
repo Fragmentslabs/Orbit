@@ -1,6 +1,7 @@
 import fsp from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
+import { pathToFileURL } from 'node:url'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 
 const work = path.join(os.tmpdir(), `orbit-attachments-${process.pid}`)
@@ -134,7 +135,11 @@ describe('resolveAttachmentRef', () => {
 
 describe('videoPathFromFileUrl', () => {
   it('desfaz o file:// do renderer, com espaços e acentos', () => {
-    expect(videoPathFromFileUrl('file:///Users/a%20b/Meu%20V%C3%ADdeo.mp4')).toBe('/Users/a b/Meu Vídeo.mp4')
+    // O caminho e o NATIVO da plataforma: no Windows o fileURLToPath recusa
+    // um caminho POSIX (sem drive), e o renderer sempre manda o caminho da
+    // maquina. Montar a URL a partir dele testa o contrato real.
+    const file = path.join(os.tmpdir(), 'a b', 'Meu V\u00eddeo.mp4')
+    expect(videoPathFromFileUrl(pathToFileURL(file).href)).toBe(file)
   })
 
   it('só serve para arquivo de vídeo de verdade: o nome declarado não conta', () => {

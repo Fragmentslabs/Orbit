@@ -2,7 +2,9 @@ import path from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { motionVideoAudioTracks, videoFileIn, type MotionVideoFact } from './motion-video-audio'
 
-const folder = path.join('/tmp', 'piece')
+// path.resolve, e nao join: o modulo resolve a pasta antes de compor o
+// caminho, e no Windows isso poe a unidade na frente (\tmp -> C:\tmp).
+const folder = path.resolve('/tmp', 'piece')
 const fact = (over: Partial<MotionVideoFact> = {}): MotionVideoFact => ({
   src: 'orbit-motion://mv_abc/clip.mp4',
   muted: false,
