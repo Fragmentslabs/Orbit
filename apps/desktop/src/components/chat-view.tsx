@@ -50,7 +50,7 @@ import { playEntranceSound, prepareEntranceSound } from "@/src/lib/entrance-soun
 import { useActiveSession, useSessionStatus, useSessionStore, type SendConfig } from "@/src/stores/session-store"
 import { pastasAposTroca, useWorktreeStore } from "@/src/stores/worktree-store"
 import { brainEnabledFor } from "@/src/stores/brain-prefs"
-import { useProviderStore, useNoProviderConnected } from "@/src/stores/provider-store"
+import { useProviderStore, useNoProviderConnected, useProvidersLoading } from "@/src/stores/provider-store"
 import { useModelModePrefs } from "@/src/stores/model-mode-prefs"
 import { useSimpleMode } from "@/src/stores/simple-prefs"
 import { useAppSettings } from "@/src/stores/app-settings"
@@ -739,6 +739,7 @@ export function ChatView({ sessionId, embedded = false }: { sessionId?: string; 
   // provider configurado (input ou sugestão) e some quando um provedor conecta
   const [providerHintVisible, setProviderHintVisible] = useState(false)
   const noProvider = useNoProviderConnected()
+  const providersLoading = useProvidersLoading()
 
   // Conectou um provedor (ou a inicialização revelou que existem) → card some
   useEffect(() => {
@@ -760,10 +761,21 @@ export function ChatView({ sessionId, embedded = false }: { sessionId?: string; 
       setIntroVisible(true)
       return
     }
+    // Os provedores ainda estão carregando: não se sabe se falta algum.
+    // Decidir agora faria o título aparecer e depois sumir, quando o
+    // loading terminasse.
+    if (providersLoading) return
+    // A abertura falada (as três palavras girando) é da primeira entrada:
+    // acontece só quando falta provedor. Com provedor conectado, o título
+    // entra direto, sem as palavras.
+    if (!noProvider) {
+      setIntroVisible(true)
+      return
+    }
     const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches
     const id = setTimeout(() => setIntroVisible(true), reduced ? 0 : INTRO_TOTAL_MS)
     return () => clearTimeout(id)
-  }, [hasChat, personaOnWelcome])
+  }, [hasChat, personaOnWelcome, providersLoading, noProvider])
 
   // Se o Rive quebrou, a persona some; trocar de chat (ou abrir um novo) é a
   // hora de tentar trazê-la de volta com um wasm novo
@@ -1013,7 +1025,7 @@ export function ChatView({ sessionId, embedded = false }: { sessionId?: string; 
                   <p className={`whitespace-nowrap text-center text-lg font-medium text-foreground ${introLine}`}>
                     {emptyState.title}
                   </p>
-                  {!introVisible && !hasChat && (
+                  {!introVisible && !hasChat && showProviderSetup && (
                     <div
                       aria-hidden
                       className="pointer-events-none absolute inset-y-0 left-1/2 grid w-max -translate-x-1/2 place-items-center"
@@ -1064,7 +1076,14 @@ export function ChatView({ sessionId, embedded = false }: { sessionId?: string; 
                 )}
               </div>
               {emptyState.suggestions.length > 0 && (
-                <div className="grid w-full max-w-md grid-cols-2 justify-center gap-2">
+                /* As sugestões entram depois do subtítulo, no mesmo passo: sem
+                    isto elas apareciam fixas enquanto a persona ainda
+                    dormia, e a tela ficava com os botões antes de qualquer
+                    texto. */
+                <div
+                  className={`grid w-full max-w-md grid-cols-2 justify-center gap-2 ${introLine}`}
+                  style={{ transitionDelay: introVisible ? `${INTRO_STEP_MS * 2}ms` : "0ms" }}
+                >
                   {emptyState.suggestions.map((s) => (
                     <Suggestion key={s} onClick={handleSuggestion} suggestion={s} />
                   ))}

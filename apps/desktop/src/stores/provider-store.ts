@@ -317,3 +317,12 @@ export function useNoProviderConnected(): boolean {
   const connectedProviders = useProviderStore((s) => s.connectedProviders)
   return !loading && !error && connectedProviders.length === 0
 }
+
+/**
+ * Os provedores ainda estão sendo carregados? Enquanto estão, não se sabe
+ * se falta algum — a UI que decide entre "primeira entrada" e "uso normal"
+ * precisa esperar por isso para não piscar.
+ */
+export function useProvidersLoading(): boolean {
+  return useProviderStore((s) => s.loading)
+}
