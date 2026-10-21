@@ -2,7 +2,7 @@ import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useStat
 import { AudioPlayerCard } from "@/src/components/messages/audio-part"
 import { useStickToBottomContext, type StickToBottomContext } from "use-stick-to-bottom"
 import { useTranslation } from "react-i18next"
-import { ChevronRight, PaperclipIcon } from "lucide-react"
+import { ChevronRight, PaperclipIcon, Plug } from "lucide-react"
 import { UserMessageNav } from "@/src/components/user-message-nav"
 import { useWorkspace } from "@/lib/workspace-context"
 import type { ChatMessage, FilePart, OrchestrationPlan, PlanReview, SendMessageOptions } from "@shared/chat"
@@ -54,6 +54,7 @@ import { useProviderStore, useNoProviderConnected } from "@/src/stores/provider-
 import { useModelModePrefs } from "@/src/stores/model-mode-prefs"
 import { useSimpleMode } from "@/src/stores/simple-prefs"
 import { useAppSettings } from "@/src/stores/app-settings"
+import { useSettingsUi } from "@/src/stores/settings-ui"
 import { detectUserName } from "@shared/user-name"
 
 // Referências estáveis para seletores do zustand (evita loop de getSnapshot)
@@ -62,6 +63,27 @@ const NO_ASKS: never[] = []
 
 /** Extensões que viram documento da conversa — é o que decide se o chip abre. */
 const DOCUMENT_FILE = /\.(pdf|docx|xlsx|xls|ods|csv)$/i
+
+/**
+ * Abertura da tela de boas-vindas: três falas antes do convite.
+ *
+ * INTRO_START_MS é o atraso que a primeira fala herda do antigo "Pronto para
+ * começar?" — o tempo que a persona leva para acordar. A partir daí tudo anda
+ * no mesmo passo (INTRO_STEP_MS): cada fala começa um passo depois da
+ * anterior, o convite final entra um passo depois da última, e o subtítulo e o
+ * botão entram um passo depois do convite. Cada fala dura INTRO_LINE_MS, um
+ * pouco mais que o passo — é o que faz a anterior ainda estar saindo quando a
+ * seguinte entra.
+ *
+ * INTRO_TOTAL_MS é quando o convite assume o lugar das falas; é o atraso que o
+ * efeito de abertura usa.
+ */
+const INTRO_START_MS = 1200
+const INTRO_STEP_MS = 1400
+const INTRO_LINE_MS = 1500
+/** Quantas falas vêm antes do convite. */
+const INTRO_STEPS = 3
+const INTRO_TOTAL_MS = INTRO_START_MS + INTRO_STEP_MS * INTRO_STEPS
 
 /**
  * Chip do anexo não-imagem. Clicar abre o arquivo no painel.
@@ -707,6 +729,12 @@ export function ChatView({ sessionId, embedded = false }: { sessionId?: string; 
   const [centerVisible, setCenterVisible] = useState(!hasChat)
   const [centerPersonaVisible, setCenterPersonaVisible] = useState(!hasChat)
   const [chatVisible, setChatVisible] = useState(hasChat)
+  /**
+   * O convite da tela inicial entra DEPOIS da persona, não junto: lado a lado
+   * de tempo os dois competem e a tela parece que piscou. Em sequência, a
+   * pessoa vê o Orbit primeiro e o texto em seguida.
+   */
+  const [introVisible, setIntroVisible] = useState(false)
   // Card de provedor ausente: aparece quando o usuário tenta enviar sem
   // provider configurado (input ou sugestão) e some quando um provedor conecta
   const [providerHintVisible, setProviderHintVisible] = useState(false)
@@ -716,6 +744,26 @@ export function ChatView({ sessionId, embedded = false }: { sessionId?: string; 
   useEffect(() => {
     if (!noProvider) setProviderHintVisible(false)
   }, [noProvider])
+
+  // O convite entra DEPOIS da persona e DEPOIS da abertura falada. Na abertura
+  // ela acorda aos 650ms (ver a transição de entrada) e, ao voltar do chat,
+  // surge aos 650ms e acorda aos 800ms. As três falas começam em seguida e
+  // terminam em INTRO_TOTAL_MS — só então o convite e o resto entram.
+  // Sem persona na tela de boas-vindas, ou com movimento reduzido, não há por
+  // que esperar.
+  useEffect(() => {
+    if (hasChat) {
+      setIntroVisible(false)
+      return
+    }
+    if (!personaOnWelcome) {
+      setIntroVisible(true)
+      return
+    }
+    const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches
+    const id = setTimeout(() => setIntroVisible(true), reduced ? 0 : INTRO_TOTAL_MS)
+    return () => clearTimeout(id)
+  }, [hasChat, personaOnWelcome])
 
   // Se o Rive quebrou, a persona some; trocar de chat (ou abrir um novo) é a
   // hora de tentar trazê-la de volta com um wasm novo
@@ -861,12 +909,46 @@ export function ChatView({ sessionId, embedded = false }: { sessionId?: string; 
   )
 
   const { t } = useTranslation()
+  const openSettings = useSettingsUi((s) => s.openSettings)
   const chatSuggestions = t("chat.suggestions.chat", { returnObjects: true }) as string[]
   const codeSuggestions = t("chat.suggestions.code", { returnObjects: true }) as string[]
 
-  const emptyState = viewMode === "chat"
-    ? { title: t("chat.empty.chatTitle"), subtitle: t("chat.empty.chatSubtitle"), suggestions: chatSuggestions }
-    : { title: t("chat.empty.codeTitle"), subtitle: t("chat.empty.codeSubtitle"), suggestions: codeSuggestions }
+  // A abertura falada: ocupa o lugar do título e sai quando o convite entra.
+  const introGreetings = [
+    t("chat.empty.greetingHello"),
+    t("chat.empty.greetingWho"),
+    t("chat.empty.greetingRole"),
+  ]
+
+  // A saudação está FIXA por enquanto: sempre "Pronto para começar?", nunca
+  // "Olá, {nome}". A lógica do nome continua viva em volta — aprendida na
+  // conversa, salva nas Preferências e injetada no system prompt — só a tela
+  // inicial ainda não a usa. Para religar, o `title` volta a escolher entre
+  // `chat.empty.hello` (quando houver `userName`) e `startTitle`.
+  //
+  // O que segue variando é informação funcional, não saudação: sem provedor o
+  // subtítulo explica o bloqueio e o botão aparece; com provedor não há o que
+  // explicar.
+  const showProviderSetup = noProvider
+
+  const suggestions = viewMode === "chat" ? chatSuggestions : codeSuggestions
+  const baseSubtitle = viewMode === "chat" ? t("chat.empty.chatSubtitle") : t("chat.empty.codeSubtitle")
+  const emptyState = {
+    title: t("chat.empty.startTitle"),
+    subtitle: showProviderSetup ? t("chat.empty.providerSubtitle") : baseSubtitle,
+    // Na tela de primeiro uso não há sugestões: o espaço é do aviso e do botão.
+    suggestions: showProviderSetup ? [] : suggestions,
+    cta: showProviderSetup ? (t("chat.empty.providerCta") as string | null) : (null as string | null),
+  }
+
+  // Cada linha da abertura entra sozinha, depois da persona: título →
+  // subtítulo → botão. O atraso vive no transition-delay porque a transição
+  // já roda no CSS; ao sair da tela os atrasos voltam a zero e tudo some junto.
+  // 1s por linha e uma curva que desacelera devagar (não o `ease-out` curto)
+  // é o que faz a entrada parecer lenta em vez de apressada.
+  const introLine = `transition-all duration-1000 ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none ${
+    introVisible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-1.5"
+  }`
 
   return (
     <div className="relative flex h-full min-w-0 flex-1 flex-col">
@@ -889,7 +971,7 @@ export function ChatView({ sessionId, embedded = false }: { sessionId?: string; 
           <span className="max-w-64 truncate text-foreground">{session.title}</span>
         </div>
       )}
-      <div className="relative flex-1">
+      <div className="relative min-h-0 flex-1">
         {showTopPersona && (
           <div
             className="absolute left-1/2 z-40 -translate-x-1/2 transition-opacity duration-300 ease-in-out"
@@ -905,11 +987,11 @@ export function ChatView({ sessionId, embedded = false }: { sessionId?: string; 
         )}
 
         <div
-          className={`flex h-full items-center justify-center transition-all duration-300 ease-in-out ${
+          className={`flex h-full items-start justify-center overflow-y-auto transition-all duration-300 ease-in-out ${
             centerVisible ? "opacity-100" : "opacity-0 pointer-events-none"
           }`}
         >
-          <div className="flex flex-col items-center gap-6">
+          <div className="flex flex-col items-center gap-4 pt-40">
             {personaOnWelcome && (
               <div
                 className="flex justify-center transition-all ease-in-out"
@@ -925,14 +1007,69 @@ export function ChatView({ sessionId, embedded = false }: { sessionId?: string; 
                 <Persona state={centerPersonaState} className="!size-full" />
               </div>
             )}
-            <div className="flex flex-col items-center gap-2">
-              <p className="text-lg font-medium text-foreground">{emptyState.title}</p>
-              <p className="text-sm text-muted-foreground">{emptyState.subtitle}</p>
-            </div>
-            <div className="grid w-full max-w-md grid-cols-2 justify-center gap-2">
-              {emptyState.suggestions.map((s) => (
-                <Suggestion key={s} onClick={handleSuggestion} suggestion={s} />
-              ))}
+            <div className="flex flex-col items-center gap-6">
+              <div className="flex flex-col items-center gap-2">
+                <div className="relative flex items-center justify-center">
+                  <p className={`whitespace-nowrap text-center text-lg font-medium text-foreground ${introLine}`}>
+                    {emptyState.title}
+                  </p>
+                  {!introVisible && !hasChat && (
+                    <div
+                      aria-hidden
+                      className="pointer-events-none absolute inset-y-0 left-1/2 grid w-max -translate-x-1/2 place-items-center"
+                    >
+                      {introGreetings.map((line, i) => (
+                        <span
+                          key={line}
+                          className="intro-greeting col-start-1 row-start-1 whitespace-nowrap text-center text-lg font-medium text-foreground"
+                          style={{
+                            animationDelay: `${INTRO_START_MS + i * INTRO_STEP_MS}ms`,
+                            animationDuration: `${INTRO_LINE_MS}ms`,
+                          }}
+                        >
+                          {line}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                <p
+                  className={`max-w-md text-center text-sm text-muted-foreground ${introLine}`}
+                  style={{ transitionDelay: introVisible ? `${INTRO_STEP_MS}ms` : "0ms" }}
+                >
+                  {emptyState.subtitle}
+                </p>
+                {emptyState.cta && (
+                  <span
+                    className={`relative mt-1 inline-flex ${introLine}`}
+                    style={{ transitionDelay: introVisible ? `${INTRO_STEP_MS}ms` : "0ms" }}
+                  >
+                    {/* Linha fina que nasce na borda do botão e se abre para
+                        fora, devagar: chama o olho para o único bloqueio real
+                        do app sem piscar o botão. Quem pediu menos movimento ao
+                        sistema não vê a pulsação. */}
+                    <span
+                      aria-hidden
+                      className="provider-pulse-ring pointer-events-none absolute inset-0 rounded-lg"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => openSettings("providers")}
+                      className="relative inline-flex items-center gap-2 rounded-lg bg-primary px-3.5 py-1.5 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
+                    >
+                      <Plug className="size-4" />
+                      {emptyState.cta}
+                    </button>
+                  </span>
+                )}
+              </div>
+              {emptyState.suggestions.length > 0 && (
+                <div className="grid w-full max-w-md grid-cols-2 justify-center gap-2">
+                  {emptyState.suggestions.map((s) => (
+                    <Suggestion key={s} onClick={handleSuggestion} suggestion={s} />
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         </div>

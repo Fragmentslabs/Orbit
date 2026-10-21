@@ -252,3 +252,74 @@
     transform: scaleY(0.6);
   }
 }
+
+/* Pulso do botão de conectar provedor: uma linha de 1px que sai da borda do
+   botão e caminha para fora, devagar e igual em todas as direções.
+   `transform: scale()` foi descartado aqui: o botão é muito mais largo que
+   alto, então escalar fazia a borda avançar mais nos lados do que em cima e
+   embaixo. `outline-offset` cresce em pixels — igual dos quatro lados. */
+@keyframes provider-pulse {
+  0% {
+    outline-offset: 0;
+    opacity: 0.55;
+  }
+  12% {
+    opacity: 0.18;
+  }
+  20% {
+    outline-offset: 6px;
+    opacity: 0;
+  }
+  100% {
+    outline-offset: 6px;
+    opacity: 0;
+  }
+}
+
+.provider-pulse-ring {
+  outline: 1px solid var(--primary);
+  animation: provider-pulse 3.2s ease-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .provider-pulse-ring {
+    animation: none;
+    opacity: 0;
+  }
+}
+
+/* Abertura da tela de boas-vindas: "Olá!", "Sou Orbit" e "Seu assistente
+   pessoal" se sucedem no mesmo lugar — cada uma entra, fica o tempo de leitura
+   e sai. Duração e atraso vêm do JS (chat-view), para as três falas e o
+   convite final não saírem de sincronia. */
+@keyframes intro-greeting {
+  0% {
+    opacity: 0;
+    transform: translateY(5px);
+  }
+  16% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  82% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-5px);
+  }
+}
+
+.intro-greeting {
+  animation-name: intro-greeting;
+  animation-timing-function: ease;
+  animation-fill-mode: both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .intro-greeting {
+    animation: none;
+    opacity: 0;
+  }
+}

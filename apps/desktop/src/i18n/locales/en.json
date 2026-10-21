@@ -804,8 +804,15 @@
       "sourcesConsulted_other": "{{count}} sources consulted"
     },
     "empty": {
+      "startTitle": "Ready to get started?",
+      "hello": "Hi, {{name}}.",
+      "providerSubtitle": "All that's missing is a provider. That's how I connect to the AI models that power me.",
+      "providerCta": "Connect a provider",
+      "greetingHello": "Hi!",
+      "greetingWho": "I'm Orbit",
+      "greetingRole": "Your personal assistant",
       "chatTitle": "Ready to chat",
-      "chatSubtitle": "Select a chat or start a new conversation",
+      "chatSubtitle": "Write what you need — or start from one of the ideas below.",
       "codeTitle": "Ready to code",
       "codeSubtitle": "Select the project folder and describe the task"
     },

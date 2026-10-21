@@ -804,8 +804,15 @@
       "sourcesConsulted_other": "{{count}} fontes consultadas"
     },
     "empty": {
+      "startTitle": "Pronto para começar?",
+      "hello": "Olá, {{name}}.",
+      "providerSubtitle": "Só falta conectar um provedor. É por meio dele que consigo acessar os modelos de IA.",
+      "providerCta": "Conectar provedor",
+      "greetingHello": "Olá!",
+      "greetingWho": "Sou Orbit",
+      "greetingRole": "Seu assistente de IA",
       "chatTitle": "Pronto para conversar",
-      "chatSubtitle": "Selecione um chat ou inicie uma nova conversa",
+      "chatSubtitle": "Escreva o que você precisa — ou comece por uma das ideias abaixo.",
       "codeTitle": "Pronto para programar",
       "codeSubtitle": "Selecione a pasta do projeto e descreva a tarefa"
     },
