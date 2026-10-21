@@ -657,6 +657,17 @@ export async function buildSystemPrompt(
     }
   }
 
+  // Identidade: o nome que o usuário contou na conversa (aprendido, nunca
+  // lido do sistema operacional). Vai como FATO — não como ordem de uso. A
+  // instrução de parcimônia existe porque agente que repete o nome a cada
+  // mensagem soa como vendedor, e isso é pior do que não saber o nome.
+  const userName = getAppSettings().userName
+  if (userName) {
+    parts.push(
+      `The user's name is ${userName}. Use it sparingly — occasionally, when it reads naturally, never in every message.`,
+    )
+  }
+
   // Artefatos HTML — a tool existe nos dois modos, mas nunca nos workers
   // (quem responde ao usuário é a sessão principal).
   if (input.orchestrationRole !== 'worker') {

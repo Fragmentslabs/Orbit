@@ -1,6 +1,8 @@
+import { useEffect, useState } from "react"
 import { useTranslation } from "react-i18next"
-import { Archive, FoldVertical, LayoutList, Lightbulb, Minimize2, RotateCw, Rocket, StepForward, Trash2 } from "lucide-react"
+import { Archive, FoldVertical, LayoutList, Lightbulb, Minimize2, RotateCw, Rocket, StepForward, Trash2, UserRound } from "lucide-react"
 import { AUTO_ARCHIVE_DAY_OPTIONS, DELETE_ARCHIVED_DAY_OPTIONS, type AutoCompactMode, type ChatViewMode } from "@shared/app-settings"
+import { USER_NAME_MAX } from "@shared/user-name"
 import { ModelField } from "@/src/components/model-field"
 import { SettingRow, SettingSelect, SettingSwitch } from "@/src/components/settings-row"
 import { useAppSettings } from "@/src/stores/app-settings"
@@ -13,6 +15,42 @@ function AuxThinkingMenu() {
   const auxReasoning = useAppSettings((s) => s.settings.auxReasoning)
   const update = useAppSettings((s) => s.update)
   return <ThinkingMenu model={auxModel} value={auxReasoning} onChange={(next) => update({ auxReasoning: next })} />
+}
+
+/**
+ * Nome com que o Orbit chama o usuário. O agente aprende na conversa; este
+ * campo é a saída para corrigir ou apagar. Grava ao sair do campo (ou Enter),
+ * não a cada tecla — não há motivo para empurrar 40 mudanças ao main.
+ */
+function UserNameField() {
+  const { t } = useTranslation()
+  const userName = useAppSettings((s) => s.settings.userName)
+  const update = useAppSettings((s) => s.update)
+  const [draft, setDraft] = useState(userName ?? "")
+
+  // O agente pode aprender o nome com esta tela aberta.
+  useEffect(() => setDraft(userName ?? ""), [userName])
+
+  return (
+    <SettingRow
+      icon={UserRound}
+      title={t("preferences.general.name.title")}
+      description={t("preferences.general.name.description")}
+    >
+      <input
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={() => update({ userName: draft })}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") e.currentTarget.blur()
+        }}
+        placeholder={t("preferences.general.name.placeholder")}
+        maxLength={USER_NAME_MAX}
+        aria-label={t("preferences.general.name.title")}
+        className="h-8 w-44 rounded-md border border-input bg-transparent px-2.5 text-xs outline-none transition-colors focus-visible:border-ring"
+      />
+    </SettingRow>
+  )
 }
 
 const COUNT_OPTIONS = [0, 1, 2, 3, 5] as const
@@ -30,6 +68,8 @@ export function GeneralSettings() {
 
   return (
     <div className="flex flex-col gap-3">
+      <UserNameField />
+
       <div>
         <ModelField
           label={t("preferences.general.auxModel")}

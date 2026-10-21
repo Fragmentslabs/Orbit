@@ -1686,6 +1686,11 @@
       "auxModel": "Modelo auxiliar",
       "auxModelNone": "O mesmo da conversa",
       "auxModelHint": "Usado para títulos, compactação do histórico e sugestões de prompt. Um modelo rápido e barato economiza sem afetar as respostas.",
+      "name": {
+        "title": "Seu nome",
+        "description": "Como o Orbit te chama. Aprendido na conversa — ou defina aqui.",
+        "placeholder": "Sem nome"
+      },
       "off": "Desligado",
       "times_one": "{{count}} vez",
       "times_other": "{{count}} vezes",

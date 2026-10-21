@@ -1686,6 +1686,11 @@
       "auxModel": "Auxiliary model",
       "auxModelNone": "Same as the conversation",
       "auxModelHint": "Used for titles, history compaction and prompt suggestions. A fast, cheap model saves cost without affecting answers.",
+      "name": {
+        "title": "Your name",
+        "description": "What Orbit calls you. Learned from the conversation — or set it here.",
+        "placeholder": "No name"
+      },
       "off": "Off",
       "times_one": "{{count}} time",
       "times_other": "{{count}} times",

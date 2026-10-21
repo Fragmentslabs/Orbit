@@ -53,6 +53,8 @@ import { brainEnabledFor } from "@/src/stores/brain-prefs"
 import { useProviderStore, useNoProviderConnected } from "@/src/stores/provider-store"
 import { useModelModePrefs } from "@/src/stores/model-mode-prefs"
 import { useSimpleMode } from "@/src/stores/simple-prefs"
+import { useAppSettings } from "@/src/stores/app-settings"
+import { detectUserName } from "@shared/user-name"
 
 // Referências estáveis para seletores do zustand (evita loop de getSnapshot)
 const NO_MESSAGES: ChatMessage[] = []
@@ -815,18 +817,28 @@ export function ChatView({ sessionId, embedded = false }: { sessionId?: string; 
   const topPersonaState = voiceState ?? displayTopState
   const showTopPersona = topVisible && !simpleMode && personaInChat && !embedded
 
+  // O nome é aprendido na conversa — nunca lido do sistema operacional. Só
+  // grava quando a pessoa DIZ o nome ("meu nome é X", "me chama de X"); o
+  // campo nas Preferências é a saída para corrigir ou apagar.
+  const rememberUserName = useCallback((text: string) => {
+    const detected = detectUserName(text)
+    if (detected) useAppSettings.getState().update({ userName: detected })
+  }, [])
+
   const handleChatSend = useCallback(
     (text: string, options: SendMessageOptions, files?: FilePart[]) => {
+      rememberUserName(text)
       return sendMessage("chat", text, { options, sessionId, files })
     },
-    [sendMessage, sessionId],
+    [sendMessage, sessionId, rememberUserName],
   )
 
   const handleCodeSend = useCallback(
     (text: string, options: SendMessageOptions, directory: string, extraDirectories: string[], files?: FilePart[]) => {
+      rememberUserName(text)
       return sendMessage("code", text, { options, directory, extraDirectories, sessionId, files })
     },
-    [sendMessage, sessionId],
+    [sendMessage, sessionId, rememberUserName],
   )
 
   const handleStop = useCallback(() => {

@@ -1,4 +1,5 @@
 import type { ReasoningConfig } from './chat'
+import { USER_NAME_MAX } from './user-name'
 import { VOICE_CALL_SILENCE_OPTIONS, VOICE_DEFAULTS, type VoiceEngineId, type VoiceSettings, type VoiceTtsEngine } from './voice'
 
 /**
@@ -48,6 +49,12 @@ export interface AppSettings {
   auxModel: { providerId: string; modelId: string } | null
   /** Raciocínio do modelo auxiliar. null = sem raciocínio. */
   auxReasoning: ReasoningConfig | null
+  /**
+   * Como o Orbit chama o usuário ("Olá, Desknik"). Aprendido na conversa —
+   * nunca lido do sistema operacional — e editável nas Preferências. null =
+   * ainda não sabe, e a tela inicial usa uma saudação neutra.
+   */
+  userName: string | null
   /** Sugere a próxima mensagem no input (Tab completa). */
   promptSuggestions: boolean
   chatView: ChatViewMode
@@ -96,6 +103,8 @@ export function clampSidebarWidth(width: number): number {
 export const DEFAULT_APP_SETTINGS: AppSettings = {
   auxModel: null,
   auxReasoning: null,
+  // Sem nome até o usuário contar: a tela inicial saúda sem ele.
+  userName: null,
   promptSuggestions: false,
   chatView: 'summary',
   autoArchiveDays: null,
@@ -215,6 +224,11 @@ export function normalizeAppSettings(raw: unknown): AppSettings {
       : null
   const dayOption = (v: unknown, options: readonly number[]) =>
     typeof v === 'number' && options.includes(v) ? v : null
+  // Nome do usuário: só texto, aparado e com teto. Vazio (ou só espaços)
+  // volta a ser "não sei" — nunca uma string vazia que a saudação teria de
+  // tratar como caso especial.
+  const userName =
+    typeof value.userName === 'string' ? value.userName.trim().slice(0, USER_NAME_MAX) : ''
   const browser = (value.browser && typeof value.browser === 'object' ? value.browser : {}) as Partial<AppSettings['browser']>
   const sidebarWidth =
     typeof value.sidebarWidth === 'number' && Number.isFinite(value.sidebarWidth)
@@ -223,6 +237,7 @@ export function normalizeAppSettings(raw: unknown): AppSettings {
   return {
     auxModel: model(value.auxModel),
     auxReasoning: reasoning(value.auxReasoning),
+    userName: userName || null,
     promptSuggestions: typeof value.promptSuggestions === 'boolean' ? value.promptSuggestions : d.promptSuggestions,
     chatView: oneOf(value.chatView, ['summary', 'steps', 'detailed'], d.chatView),
     autoArchiveDays: dayOption(value.autoArchiveDays, AUTO_ARCHIVE_DAY_OPTIONS),
