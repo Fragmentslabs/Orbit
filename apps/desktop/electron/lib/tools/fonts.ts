@@ -58,6 +58,8 @@ export function createFontTools(): ToolSet {
         'After this, the family is available BY NAME:\n' +
         '• DESIGN: just set `font-family: \'<Family>\'` in the artboard CSS — the Design tab declares every installed font automatically, so do NOT paste @font-face into the artboard.\n' +
         '• MOTION: paste the returned <style> block (it points at the local orbit-font:// file) into the composition; never use a remote font URL.\n' +
+        ' ARTIFACT: paste the same <style> block into the artifact HTML - the orbit-font:// URL resolves inside the artifact, its thumbnails and the gallery (the whole path runs in the app, with CORS).\n' +
+        ' DOCUMENT (create_document / update_document, style.fontFamily): pass the family name. The PDF embeds the installed font, so the file opens right on any machine; the .docx carries only the NAME, so whoever opens it needs the font installed.\n' +
         'The family also appears in the font picker of the Design inspector. Prefer a variable font (one file covers 100–900) when you need several weights.',
       inputSchema: z.object({
         family: z.string().min(1).describe('Family name or catalog id (e.g. "Inter", "inter", "jetbrains-mono")'),
@@ -82,6 +84,11 @@ export function createFontTools(): ToolSet {
           '',
           'MOTION — paste this into the composition (local file, renders offline):',
           motionBlock(font),
+          '',
+          'ARTIFACT - paste the same <style> block into the artifact HTML; the URL resolves there too:',
+          motionBlock(font),
+          '',
+          `DOCUMENT - create_document style.fontFamily: '${font.family}' (the PDF embeds it; the .docx keeps only the name).`,
           '',
           `It also shows up in the font picker of the Design inspector (Typography → font family).`,
         ].join('\n')

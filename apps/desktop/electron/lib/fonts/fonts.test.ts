@@ -20,7 +20,7 @@ vi.mock('electron', async () => {
   }
 })
 
-const { addFont, fontFaceCss, listFonts, registerFontProtocol, storeFontFile } = await import('./store')
+const { addFont, fontFaceCss, fontFacesForFamily, listFonts, registerFontProtocol, storeFontFile } = await import('./store')
 const { ensureFont, searchCatalog } = await import('./source')
 const { familyOf } = await import('./system')
 
@@ -205,3 +205,24 @@ describe('o índice', () => {
     expect(fonts.find((font) => font.id === 'inter')?.addedAt).toBe(10)
   })
 })
+
+describe('o @font-face de uma família instalada', () => {
+  it('só declara quando o nome está na biblioteca, sem diferenciar maiúsculas', async () => {
+    await addFont({
+      id: 'roboto',
+      family: 'Roboto',
+      variable: false,
+      weights: ['400'],
+      styles: ['normal'],
+      subsets: ['latin'],
+      files: [{ file: 'abc.woff2', subset: 'latin', weight: '400', style: 'normal' }],
+      addedAt: 20,
+    })
+    expect(await fontFacesForFamily('roboto')).toContain("font-family: 'Roboto'")
+    expect(await fontFacesForFamily('  ROBOTO ')).toContain('orbit-font://f/abc.woff2')
+    // Fonte do sistema (ou inventada) não tem declaração nenhuma.
+    expect(await fontFacesForFamily('Segoe UI')).toBe('')
+    expect(await fontFacesForFamily('')).toBe('')
+  })
+})
+

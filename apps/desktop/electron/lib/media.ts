@@ -15,14 +15,15 @@ import {
   type MediaSource,
   type MediaUsage,
   SAFE_VIDEO_MEDIA_ID,
-  type DocumentFormat, AUDIO_SCHEME, VIDEO_SCHEME, MOTION_SCHEME, DESIGN_SCHEME } from '@shared/media'
+  type DocumentFormat, AUDIO_SCHEME, VIDEO_SCHEME, MOTION_SCHEME, DESIGN_SCHEME, FONT_SCHEME } from '@shared/media'
 import { listKeys, readJson } from './storage'
 import { buildDocx } from './docx-package'
 import mammoth from 'mammoth'
 import { rasterizePdf } from './pdf-raster'
-import { parseMarkdown, renderHtml, renderThumbHtml, type DocumentStyle } from './document-render'
+import { normalizeStyle, parseMarkdown, renderHtml, renderThumbHtml, type DocumentStyle } from './document-render'
 import { renderDiagrams } from './mermaid-render'
 import { withAssetLock, writeFileAtomic } from './asset-lock'
+import { fontFacesForFamily, handleFontRequest } from './fonts/store'
 
 export type { MediaEntry, MediaFilter, MediaSource, MediaUsage }
 
@@ -893,6 +894,16 @@ export function artifactIdFromUrl(url: string): string | null {
 const INLINE_THUMB_ID = 'inline_thumb.html'
 
 /**
+ * O scheme das fontes vale só na sessão default. Toda janela que carrega HTML
+ * nosso numa partição própria - miniatura, PDF - precisa do handler também,
+ * senão a fonte instalada no Orbit não carrega e o render cai no fallback em
+ * silêncio, que é justamente o que a instalação existia para evitar.
+ */
+function serveFontsOn(partition: string): void {
+  session.fromPartition(partition).protocol.handle(FONT_SCHEME, handleFontRequest)
+}
+
+/**
  * Janela oculta e isolada para fotografar uma página.
  *
  * `inlineHtml` é servido pelo protocolo dentro da partição desta captura, que
@@ -902,6 +913,7 @@ const INLINE_THUMB_ID = 'inline_thumb.html'
  */
 function openCaptureWindow(inlineHtml: string | null): BrowserWindow {
   const partition = `artifact-thumb-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+  serveFontsOn(partition)
   // O protocolo TEM que ser registrado nesta sessão também: protocol.handle
   // vale só para a sessão default, e sem isto o loadURL fica pendurado para
   // sempre (nem carrega, nem rejeita).
@@ -1332,6 +1344,7 @@ async function renderPdf(htmlId: string): Promise<Buffer | null> {
     // Mesma armadilha do thumbnail: protocol.handle só vale na sessão default,
     // e sem registrar aqui o loadURL nunca resolve.
     session.fromPartition(partition).protocol.handle(ARTIFACT_SCHEME, handleArtifactRequest)
+    serveFontsOn(partition)
 
     win = new BrowserWindow({
       show: false,
@@ -1370,7 +1383,11 @@ async function renderPdf(htmlId: string): Promise<Buffer | null> {
  */
 async function documentHtml(markdown: string, title: string, style?: DocumentStyle): Promise<string> {
   const blocks = parseMarkdown(markdown)
-  return renderHtml(blocks, title, style, await renderDiagrams(blocks))
+   // A fonte pedida pode ser da biblioteca do Orbit: aí o PDF só a conhece se
+   // o @font-face vier junto no HTML (a janela de impressão é outra sessão).
+   // Nome de fonte do sistema não tem declaração - devolve vazio e nada muda.
+  const faces = await fontFacesForFamily(normalizeStyle(style).fontFamily)
+  return renderHtml(blocks, title, style, await renderDiagrams(blocks), faces)
 }
 
 /**

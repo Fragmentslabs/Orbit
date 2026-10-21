@@ -161,6 +161,21 @@ export async function allFontFacesCss(): Promise<string> {
   return fontFaceCss(await listFonts())
 }
 
+/**
+ * O `@font-face` da família pedida, quando ela vem da biblioteca.
+ *
+ * Vazio quando o nome não está instalado aqui - aí a fonte é do sistema (ou
+ * inventada) e não há nada a declarar: o Chromium resolve pelo nome, como
+ * sempre fez.
+ */
+export async function fontFacesForFamily(family: string): Promise<string> {
+  const wanted = family.trim().toLowerCase()
+  if (!wanted) return ''
+  const fonts = await listFonts()
+  const match = fonts.find((font) => font.family.trim().toLowerCase() === wanted)
+  return match ? fontFaceCss([match]) : ''
+}
+
 export function registerFontSchemePrivileges(): void {
   protocol.registerSchemesAsPrivileged([
     {
