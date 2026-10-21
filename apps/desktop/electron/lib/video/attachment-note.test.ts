@@ -64,7 +64,7 @@ describe('videoAttachmentNote', () => {
 describe('imageRefLine', () => {
   it('dá a referência da imagem guardada; o GIF é dito como animado', () => {
     expect(imageRefLine('orbit-media://img_ab12.png', 'foto.png', 'image/png')).toBe(
-      '[Image file: foto.png — ref img_ab12.png] (to place it in a motion piece call motion_asset with this ref; otherwise ignore this line.)',
+      '[Image file: foto.png — ref img_ab12.png] (to place it in a motion piece call motion_asset, or in a design canvas design_asset, with this ref; otherwise ignore this line.)',
     )
     expect(imageRefLine('orbit-media://img_cd34.gif', 'dança.gif', 'image/gif')).toContain('GIF (animated)')
     expect(imageRefLine('orbit-media://img_cd34.gif', 'sem-mime.gif', '')).toContain('GIF (animated)')

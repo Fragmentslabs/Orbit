@@ -242,6 +242,14 @@ export interface FilePart {
    * anexos anteriores a este campo existir (aí o thumbnail é tudo que há).
    */
   mediaUrl?: string
+  /**
+   * O anexo JÁ É um item da galeria (arrastado da aba Mídia): o arquivo existe
+   * em disco, e o engine NÃO copia nada — o agente recebe a referência e o
+   * caminho, e a bolha mostra o chip. `url` é só o preview (thumbnail), não o
+   * conteúdo. Ausente nos anexos comuns (colados/escolhidos), que viram cópia
+   * própria na galeria.
+   */
+  mediaId?: string
 }
 
 /** MIME marcador de um elemento selecionado no browser do painel (modo
@@ -317,9 +325,63 @@ export interface MotionQuotePayload {
   onScreen?: string[]
 }
 
-/** O que um anexo de citação carrega: trecho de documento (document|source) ou
- *  instante de composição (motion). Ver DOCUMENT_QUOTE_MIME. */
-export type QuotePayload = DocumentQuotePayload | MotionQuotePayload
+/**
+ * Elemento apontado na aba Design — o usuário seleciona algo no canvas e pede
+ * um ajuste naquele elemento ("deixe este botão maior") sem o modelo ter de
+ * adivinhar de qual dos artboards, e de qual pedaço dele, a frase fala.
+ *
+ * O endereço é o mesmo que a aba usa para editar: o artboard (`file`) e o
+ * caminho de filhos a partir do <body> (`elementPath`). O trecho de HTML vai
+ * junto porque é o que o modelo procura no fonte para editar.
+ */
+export interface DesignQuotePayload {
+  kind: "design"
+  /** Nome do canvas (a pasta) — o `name` das tools design_* no modo chat. */
+  name: string
+  /** Pasta absoluta do canvas — o endereço no modo código (design_preview). */
+  path?: string
+  /** Arquivo do artboard dentro do canvas (ex.: `Main.html`). */
+  file: string
+  /** Título do artboard, quando ele tem um. */
+  boardTitle?: string
+  /** Caminho de filhos-elemento a partir do <body>; ausente = o artboard inteiro. */
+  elementPath?: number[]
+  tag?: string
+  label?: string
+  text?: string
+  html?: string
+}
+
+/** O que um anexo de citação carrega: trecho de documento (document|source),
+ *  instante de composição (motion) ou elemento de design. Ver DOCUMENT_QUOTE_MIME. */
+export type QuotePayload = DocumentQuotePayload | MotionQuotePayload | DesignQuotePayload
+
+/**
+ * O texto que o modelo lê ao receber um elemento de design apontado. Em inglês
+ * porque o destinatário é o modelo; o texto do usuário vem colado, como no
+ * motion (ver formatMotionQuoteText).
+ */
+export function formatDesignQuoteText(quote: DesignQuotePayload, userText?: string): string {
+  const board = quote.boardTitle ? `${quote.file} ("${quote.boardTitle}")` : quote.file
+  const linhas = [`[Design element selected by the user — canvas "${quote.name}", artboard ${board}]`]
+  linhas.push(
+    quote.path
+      ? `Canvas folder: ${quote.path} — edit ${quote.file} there (or with design_edit, name "${quote.name}", if it is a canvas of this chat).`
+      : `Edit it with design_edit({ name: "${quote.name}", file: "${quote.file}" }) — read it first with design_read.`,
+  )
+  if (quote.elementPath && quote.elementPath.length > 0) {
+    linhas.push(
+      `Element: <${quote.tag ?? "?"}>${quote.label ? ` ${quote.label}` : ""} — child path from <body>: ${quote.elementPath.join(" > ")}`,
+    )
+    if (quote.text) linhas.push(`Text: ${quote.text}`)
+    if (quote.html) linhas.push(`HTML: ${quote.html}`)
+  } else {
+    linhas.push("Selection: the whole artboard.")
+  }
+  const note = userText?.trim()
+  if (note) linhas.push("---", note)
+  return linhas.join("\n")
+}
 
 /** fps assumido quando a composição não declarou nenhum — o mesmo do runtime. */
 export const MOTION_FALLBACK_FPS = 30

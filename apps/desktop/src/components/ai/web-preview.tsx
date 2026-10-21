@@ -34,9 +34,12 @@ export interface WebPreviewContextValue {
   canGoForward: boolean
   refreshKey: number
   /** Conteúdo extra do estado vazio (ex.: lista de servidores rodando no
-   *  browser do painel). Ausente no preview de mensagem, que é genérico. */
-  emptyExtra?: ReactNode
+   *  browser do painel). Função recebe `setUrl` para navegar sem depender
+   *  do contexto. Ausente no preview de mensagem, que é genérico. */
+  emptyExtra?: EmptyExtra
 }
+
+export type EmptyExtra = ReactNode | ((setUrl: (url: string) => void) => ReactNode)
 
 const WebPreviewContext = createContext<WebPreviewContextValue | null>(null)
 
@@ -52,7 +55,7 @@ export type WebPreviewProps = ComponentProps<"div"> & {
   defaultUrl?: string
   onUrlChange?: (url: string) => void
   /** Renderizado no estado vazio, abaixo do campo de URL. */
-  emptyExtra?: ReactNode
+  emptyExtra?: EmptyExtra
 }
 
 function formatBrowserUrl(input: string): string {
@@ -287,7 +290,8 @@ export const WebPreviewBody = ({
   onNavigate,
   ...props
 }: WebPreviewBodyProps) => {
-  const { url, setUrl, syncUrl, emptyExtra } = useWebPreview()
+  const { url, setUrl, syncUrl, emptyExtra: emptyExtraProp } = useWebPreview()
+  const emptyExtra = typeof emptyExtraProp === "function" ? emptyExtraProp(setUrl) : emptyExtraProp
   const { t } = useTranslation()
   const [localUrl, setLocalUrl] = useState("")
   const containerRef = useRef<HTMLDivElement | null>(null)

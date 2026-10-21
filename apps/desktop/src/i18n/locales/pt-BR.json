@@ -195,9 +195,7 @@
       "permFullDescription": "Sem perguntas (piso de segurança mantido)",
       "newSession": "Nova sessão",
       "newSessionDescription": "Começa uma sessão de código em branco",
-      "createSkill": "Criar skill",
       "createSkillDescription": "Pede ao Orbit para criar uma skill (com scripts, se precisar)",
-      "documentApp": "Documentar aplicação",
       "documentAppDescription": "Navega pelo app no painel, tira screenshots e documenta em docs/"
     }
   },
@@ -716,13 +714,13 @@
         "description": "Página HTML produzida pelo assistente"
       },
       "sources": {
-    "removeMaterial": "Excluir o arquivo (libera o espaço)",
-    "materialKind": {
-      "image": "Foto",
-      "gif": "GIF",
-      "audio": "Áudio",
-      "video": "Vídeo"
-    },
+        "removeMaterial": "Excluir o arquivo (libera o espaço)",
+        "materialKind": {
+          "image": "Foto",
+          "gif": "GIF",
+          "audio": "Áudio",
+          "video": "Vídeo"
+        },
         "label": "Fontes",
         "description": "Documentos com que a conversa trabalha"
       },
@@ -737,6 +735,10 @@
       "motion": {
         "label": "Motion",
         "description": "Pré-visualização de uma composição de motion"
+      },
+      "design": {
+        "label": "Design",
+        "description": "Canvas com os artboards de um design"
       }
     },
     "unreadMessages": "Mensagens não lidas"
@@ -1008,7 +1010,9 @@
     "empty": "Nenhum resultado encontrado",
     "hint": "Digite para buscar em todas as conversas"
   },
-  "filePalette": {
+  "referencePalette": {
+    "skills": "Skills",
+    "mcp": "MCP",
     "files": "Arquivos",
     "loading": "Carregando..."
   },
@@ -1414,6 +1418,7 @@
       "noContent": "Nenhum conteúdo.",
       "scripts_one": "{{count}} script",
       "scripts_other": "{{count}} scripts",
+      "builtin": "Nativos",
       "edit": "Editar",
       "remove": "Remover",
       "createMenu": {
@@ -1509,31 +1514,52 @@
       {
         "id": "search",
         "label": "Pesquisa",
-        "modes": ["Chat", "Código"],
+        "modes": [
+          "Chat",
+          "Código"
+        ],
         "description": "Busca e lê páginas da web via HTTP.",
         "detail": "Adiciona as ferramentas websearch e webfetch ao agente. Rápido e eficiente para consultar documentação, APIs e informações públicas. Não executa JavaScript — ideal para conteúdo estático.",
-        "combo": ["Browser", "Thinking"]
+        "combo": [
+          "Browser",
+          "Thinking"
+        ]
       },
       {
         "id": "browser",
         "label": "Browser",
-        "modes": ["Chat"],
+        "modes": [
+          "Chat"
+        ],
         "description": "Navega em páginas como um browser real.",
         "detail": "Abre o painel direito com um navegador completo. Executa JavaScript, ideal para SPAs, formulários e páginas dinâmicas. O agente pode navegar, clicar, preencher campos e tirar screenshots.",
-        "combo": ["Pesquisa", "Thinking"]
+        "combo": [
+          "Pesquisa",
+          "Thinking"
+        ]
       },
       {
         "id": "thinking",
         "label": "Thinking",
-        "modes": ["Chat", "Código"],
+        "modes": [
+          "Chat",
+          "Código"
+        ],
         "description": "Raciocínio estendido do modelo.",
         "detail": "Ativa o modo reasoning/thinking do modelo (quando suportado). O modelo \"pensa\" antes de responder, resultando em respostas mais profundas e bem fundamentadas. Consome mais tokens e tempo.",
-        "combo": ["Pesquisa", "Browser", "Loop"]
+        "combo": [
+          "Pesquisa",
+          "Browser",
+          "Loop"
+        ]
       },
       {
         "id": "simple",
         "label": "Simples",
-        "modes": ["Chat", "Código"],
+        "modes": [
+          "Chat",
+          "Código"
+        ],
         "description": "Respostas diretas em texto puro.",
         "detail": "Remove formatação avançada, citações e blocos de ferramentas da resposta. Útil quando você quer apenas o conteúdo essencial, sem enfeites.",
         "combo": []
@@ -1541,7 +1567,10 @@
       {
         "id": "brain",
         "label": "Memória (Brain)",
-        "modes": ["Chat", "Código"],
+        "modes": [
+          "Chat",
+          "Código"
+        ],
         "description": "Orbit lembra fatos e preferências entre conversas.",
         "detail": "Adiciona as ferramentas memory_save/search/link/open/graph. O Orbit pode salvar fatos, preferências e decisões e recuperá-los automaticamente em conversas futuras. Desative por chat se preferir uma interação sem contexto.",
         "combo": []
@@ -1549,39 +1578,61 @@
       {
         "id": "subagents",
         "label": "Subagentes",
-        "modes": ["Chat", "Código"],
+        "modes": [
+          "Chat",
+          "Código"
+        ],
         "description": "Workers efêmeros em background para tarefas paralelas.",
         "detail": "Adiciona a ferramenta subagent ao agente. Quando ele identifica subtarefas independentes, pode delegá-las a workers efêmeros que rodam em background com o modelo configurado. Os workers são descartados ao fim da tarefa — não aparecem na sidebar. No modo Orquestra, este toggle também é o que libera o orquestrador a delegar pesquisa durante o planejamento: sem ele, ele investiga o projeto sozinho, lendo os arquivos.",
-        "combo": ["Loop", "Orquestra"]
+        "combo": [
+          "Loop",
+          "Orquestra"
+        ]
       },
       {
         "id": "orchestra",
         "label": "Orquestra",
-        "modes": ["Código"],
+        "modes": [
+          "Código"
+        ],
         "description": "Planeja e divide o trabalho em workers persistentes — quando o pedido pede isso.",
         "detail": "O orquestrador primeiro decide o que o pedido é: dúvida simples ele responde na hora (e pode oferecer \"quer que eu implemente?\"), ambiguidade que mudaria a divisão ele pergunta, e só trabalho de verdade vira plano. Ao planejar, ele lê o projeto e registra as subtarefas, com dependências quando a ordem importa (testes depois da funcionalidade, por exemplo), e propõe o plano para sua aprovação. Cada tarefa vira uma sessão filha persistente, em modo código, rodando com o modelo worker — até 4 ao mesmo tempo. Na engrenagem você escolhe o comportamento dele depois de dividir: Só orquestrar (roda e sintetiza), Acompanhar (revisa cada worker ao terminar, olhando o diff, pede ajustes e cria workers extras, dentro do limite de ajustes por worker) ou Rigoroso (ainda roda as verificações do projeto antes de aceitar). Também dá para isolar cada worker num worktree próprio e deixar o orquestrador juntar tudo no fim. Nas mensagens seguintes ele continua enxergando os workers da conversa e pode continuar a conversa de um deles em vez de criar outro.",
-        "combo": ["Subagentes"]
+        "combo": [
+          "Subagentes"
+        ]
       },
       {
         "id": "loop",
         "label": "Loop",
-        "modes": ["Código"],
+        "modes": [
+          "Código"
+        ],
         "description": "Agente revisa e itera até completar a tarefa.",
         "detail": "Depois de cada resposta, o resultado é revisado criticamente. Se o objetivo não foi atingido, o agente continua sozinho numa nova iteração, com o que falta descrito explicitamente. O único ajuste é o máximo de iterações (na engrenagem) — e ele é um teto, não uma meta: o loop para assim que a revisão diz que terminou. Não se aplica à Orquestra: lá quem revisa é o orquestrador.",
-        "combo": ["Subagentes", "Thinking"]
+        "combo": [
+          "Subagentes",
+          "Thinking"
+        ]
       },
       {
         "id": "plan",
         "label": "Modo Plano",
-        "modes": ["Código"],
+        "modes": [
+          "Código"
+        ],
         "description": "Apenas leitura — produz um plano sem editar arquivos.",
         "detail": "Bloqueia ferramentas de escrita (write, edit, bash). O agente apenas lê o código e produz um plano de implementação detalhado. Útil para revisão e planejamento antes de executar alterações.",
-        "combo": ["Thinking", "Pesquisa"]
+        "combo": [
+          "Thinking",
+          "Pesquisa"
+        ]
       },
       {
         "id": "permissions",
         "label": "Permissões",
-        "modes": ["Código"],
+        "modes": [
+          "Código"
+        ],
         "description": "Controle de segurança sobre ações do agente.",
         "detail": "Três níveis: Ask (pergunta antes de cada ação crítica), Approve (mostra resumo para aprovação), Full (executa automaticamente). Configurável no modal de Preferências ou diretamente no input.",
         "combo": []
@@ -1589,7 +1640,10 @@
       {
         "id": "vision",
         "label": "Visão",
-        "modes": ["Chat", "Código"],
+        "modes": [
+          "Chat",
+          "Código"
+        ],
         "description": "Delega a visão para um modelo específico.",
         "detail": "Com o modo ativo, imagens (screenshots e anexos) são descritas por um modelo de visão configurado e apenas a descrição em texto entra no contexto do agente — nunca a imagem em si. É benéfico mesmo em modelos com visão nativa: em conversas longas, a imagem não fica sendo recarregada no contexto a cada turno, economizando tokens e mantendo o contexto enxuto.",
         "combo": []
@@ -1598,27 +1652,44 @@
     "combos": [
       {
         "label": "Pesquisa aprofundada",
-        "items": ["Pesquisa", "Browser", "Thinking"],
+        "items": [
+          "Pesquisa",
+          "Browser",
+          "Thinking"
+        ],
         "description": "Ative Pesquisa + Browser + Thinking juntos. O agente searching, navega em páginas complexas e raciocina profundamente sobre o que encontrou. Ideal para investigar tópicos técnicos, comparar documentações ou fazer análise competitiva."
       },
       {
         "label": "Refinamento automático",
-        "items": ["Loop", "Thinking"],
+        "items": [
+          "Loop",
+          "Thinking"
+        ],
         "description": "Loop + Thinking: o agente revisa o próprio resultado com raciocínio estendido, identificando gaps e refinando até o objetivo ser atingido. Excelente para gerar código robusto, testes completos ou documentação detalhada."
       },
       {
         "label": "Workers em múltiplas frentes",
-        "items": ["Orquestra", "Subagentes"],
+        "items": [
+          "Orquestra",
+          "Subagentes"
+        ],
         "description": "Orquestra + Subagentes: libera delegação nos dois níveis. No planejamento, o orquestrador pode acionar subagentes para pesquisar antes de dividir (sem o toggle, ele lê o projeto sozinho). E ele passa a poder dar subagentes próprios a um worker, quando a tarefa é ampla demais para um só."
       },
       {
         "label": "Planejamento cuidadoso",
-        "items": ["Modo Plano", "Thinking", "Pesquisa"],
+        "items": [
+          "Modo Plano",
+          "Thinking",
+          "Pesquisa"
+        ],
         "description": "Modo Plano + Thinking + Pesquisa: antes de qualquer alteração, o agente pesquisa documentação, raciocina profundamente e produz um plano detalhado de implementação sem modificar arquivos. Aprove o plano e depois execute com as ferramentas normais."
       },
       {
         "label": "Código com segurança",
-        "items": ["Permissão: Ask", "Loop"],
+        "items": [
+          "Permissão: Ask",
+          "Loop"
+        ],
         "description": "Permissão Ask + Loop: a cada iteração do loop, o agente pode pedir permissão antes de ações sensíveis (editar arquivos, executar comandos). Seguro para revisar código de terceiros ou fazer alterações em produção."
       }
     ]
@@ -1899,7 +1970,8 @@
       "document": "Documento",
       "audio": "Áudio",
       "motion": "Peça",
-      "video": "Vídeo"
+      "video": "Vídeo",
+      "design": "Design"
     },
     "period": {
       "all": "Qualquer data",
@@ -1927,6 +1999,7 @@
       "viewerSingle": "Este item será excluído. Não dá para desfazer.",
       "confirmAll": "Excluir tudo",
       "motionNote": "{{count}} peça(s) de motion incluída(s): a pasta da composição (com os vídeos, GIFs e áudios copiados para ela) também é excluída. Os vídeos que você renderizou ficam.",
+      "designNote": "{{count}} canvas de design incluído(s): a pasta com os artboards também é excluída.",
       "allVersions": "Excluir as {{count}} versões",
       "onlyThis": "Excluir só a v{{version}}"
     }
@@ -2336,6 +2409,8 @@
     "openInPanel": "Abrir no painel",
     "export": "Exportar HTML",
     "expand": "Expandir",
+    "fullscreen": "Tela cheia",
+    "exitFullscreen": "Sair da tela cheia",
     "zoomIn": "Aumentar zoom",
     "zoomOut": "Diminuir zoom",
     "zoomReset": "Zoom padrão (100%)",
@@ -2398,6 +2473,152 @@
     "loadFailedHttp": "O servidor respondeu {{status}}: {{text}}",
     "loadTimeout": "A página não respondeu em {{seconds}} s.",
     "retry": "Tentar de novo"
+  },
+  "design": {
+    "unavailable": "Canvas indisponível",
+    "composition": "Canvas da conversa",
+    "openTab": "Abrir na aba Design",
+    "gone": "Este canvas não está mais no registro — pode ter sido apagado.",
+    "loading": "Carregando o canvas…",
+    "empty": "Este canvas ainda não tem artboards.",
+    "reload": "Recarregar",
+    "zoomIn": "Aumentar o zoom",
+    "zoomOut": "Diminuir o zoom",
+    "fit": "Ajustar à tela (Shift+1)",
+    "zoomReset": "Zoom em 100% (Ctrl+0)",
+    "boardsCount_one": "{{count}} artboard",
+    "boardsCount_other": "{{count}} artboards",
+    "tools": {
+      "select": "Mover e selecionar (V)",
+      "hand": "Mão — arrastar o canvas (H, ou segure Espaço)"
+    },
+    "present": {
+      "playHere": "Apresentar aqui no canvas",
+      "playTab": "Apresentar em uma nova aba",
+      "stop": "Parar a apresentação (Esc)",
+      "back": "Voltar à tela anterior",
+      "restart": "Recomeçar do início",
+      "missing": "A tela {{file}} não está mais neste canvas.",
+      "play": "Apresentar",
+      "screens": "Telas",
+      "showScreens": "Mostrar a lista de telas",
+      "hideScreens": "Esconder a lista de telas",
+      "fit": "Ajustar à área da aba",
+      "real": "Tamanho real (100%)"
+    },
+    "undo": "Desfazer (Ctrl+Z)",
+    "fullscreen": "Tela cheia",
+    "exitFullscreen": "Sair da tela cheia",
+    "hideInspector": "Esconder o painel de propriedades",
+    "showInspector": "Mostrar o painel de propriedades",
+    "hideLayers": "Esconder o painel de camadas",
+    "showLayers": "Mostrar o painel de camadas",
+    "saveFailed": "Não foi possível salvar: {{error}}",
+    "inspector": {
+      "properties": "Propriedades",
+      "layers": "Camadas",
+      "code": "Código"
+    },
+    "noSelection": "Clique num elemento do canvas para ver e editar as propriedades dele. Clique no nome de um artboard para movê-lo ou redimensioná-lo.",
+    "comment": "Comentar no chat — anexa a seleção à próxima mensagem",
+    "selectParent": "Selecionar o elemento pai (Esc)",
+    "delete": "Excluir elemento (Delete)",
+    "boardHint": "Arraste o nome do artboard para movê-lo e as alças dos cantos para redimensionar.",
+    "editHint": "Dica: duplo clique no texto, direto no canvas, para editá-lo ali.",
+    "layersExpand": "Expandir",
+    "layersCollapse": "Recolher",
+    "props": {
+      "artboard": "Artboard",
+      "title": "Título",
+      "content": "Conteúdo",
+      "width": "Largura",
+      "height": "Altura",
+      "position": "Posição",
+      "layout": "Layout",
+      "gap": "Espaço",
+      "padding": "Padding",
+      "margin": "Margem",
+      "typography": "Tipografia",
+      "fontSize": "Tamanho/peso",
+      "lineHeight": "Altura da linha",
+      "letterSpacing": "Espaçamento",
+      "color": "Cor",
+      "appearance": "Aparência",
+      "fill": "Preenchimento",
+      "opacity": "Opacidade",
+      "radius": "Raio",
+      "effects": "Efeitos",
+      "shadow": "Sombra",
+      "attributes": "Atributos",
+      "independentSides": "Lados independentes",
+      "independentCorners": "Cantos independentes",
+      "mixed": "Misto",
+      "colorPicker": "Escolher uma cor",
+      "eyedropper": "Pegar uma cor da tela",
+      "noColor": "Sem cor",
+      "mode": {
+        "block": "Bloco (sem layout)",
+        "col": "Coluna",
+        "row": "Linha",
+        "wrap": "Linha com quebra",
+        "grid": "Grade"
+      },
+      "sizing": {
+        "fixed": "Fix",
+        "fill": "Fill",
+        "hug": "Hug"
+      },
+      "lockRatio": "Travar proporção",
+      "unlockRatio": "Destravar proporção",
+      "alignHint": "Alinhamento do conteúdo (duplo clique alterna o espaço automático)",
+      "auto": "Auto",
+      "spaceBetween": "Espaço automático entre os itens",
+      "columns": "Colunas",
+      "clip": "Cortar o conteúdo",
+      "alignOpt": {
+        "left": "À esquerda",
+        "center": "Centralizado",
+        "right": "À direita",
+        "justify": "Justificado"
+      },
+      "style": {
+        "bold": "Negrito",
+        "italic": "Itálico",
+        "underline": "Sublinhado",
+        "strike": "Tachado"
+      },
+      "background": "Fundo (gradiente ou imagem)",
+      "stroke": "Borda",
+      "strokeWidth": "Espessura",
+      "strokeStyle": {
+        "solid": "Sólida",
+        "dashed": "Tracejada",
+        "dotted": "Pontilhada",
+        "none": "Sem borda"
+      },
+      "shadowPreset": {
+        "none": "Sem sombra",
+        "soft": "Suave",
+        "medium": "Média",
+        "strong": "Forte"
+      },
+      "css": "CSS do elemento (Ctrl+Enter aplica)",
+      "fontFilter": "Filtrar fontes…",
+      "fontsSystem": "Sistema",
+      "fontsOrbit": "Orbit",
+      "fontsNone": "Nenhuma fonte encontrada.",
+      "fontsOrbitEmpty": "Nenhuma fonte do Orbit ainda — peça uma no chat e ela aparece aqui.",
+      "fontUse": "Usar \"{{name}}\""
+    },
+    "code": {
+      "save": "Salvar",
+      "saving": "salvando…",
+      "saved": "salvo",
+      "unsaved": "alterações não salvas",
+      "loading": "Carregando o código…",
+      "stale": "O arquivo mudou no disco enquanto você editava. Nada foi gravado por cima.",
+      "reloadFromDisk": "Carregar a versão do disco"
+    }
   },
   "documents": {
     "download": "Baixar",

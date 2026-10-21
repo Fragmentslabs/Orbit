@@ -17,7 +17,7 @@ export { AUDIO_SCHEME }
  *
  * Servidos por `orbit-audio://`, um scheme com o privilégio `stream` (sem ele
  * o <audio> do Chromium não toca, nem busca posição) — registrado junto com o
- * dos artefatos, antes de o app ficar pronto (ver registerArtifactSchemePrivileges).
+ * dos artefatos, antes de o app ficar pronto (ver registerSchemePrivileges).
  */
 
 const CONTENT_TYPES: Record<string, string> = {

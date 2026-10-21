@@ -1,6 +1,7 @@
 import { create } from "zustand"
+import type { PanelSnapshot, PanelSnapshotTab } from "@shared/panel"
 
-export type TabType = "chat" | "terminal" | "process" | "folders" | "browser" | "diff" | "media" | "artifact" | "sources" | "source" | "document" | "motion"
+export type TabType = "chat" | "terminal" | "process" | "folders" | "browser" | "diff" | "media" | "artifact" | "sources" | "source" | "document" | "motion" | "design"
 
 export interface PanelTab {
   id: string
@@ -28,6 +29,15 @@ export interface PanelTab {
   /** Caminho ABSOLUTO da entrada — o que a nota de motion entrega ao agente
    *  (a entrada sozinha, "index.html", não diz de qual composição se fala). */
   motionPath?: string
+  /** Aba Design: id do registro (dsg_xxx) do canvas que a aba renderiza. */
+  designId?: string
+  /** Caminho ABSOLUTO da pasta do canvas — o que a nota de design entrega ao agente. */
+  designPath?: string
+  /** Aba Design em modo APRESENTAÇÃO: o artboard em que o protótipo começa. A
+   *  aba mostra uma tela por vez e navega pelos links — não é a de edição. */
+  designPlay?: string
+  /** A apresentação foi aberta do editor em tela cheia: nasce em tela cheia. */
+  designFullscreen?: boolean
   /** Aba Fonte: documento aberto por uma citacao, e o trecho a grifar. */
   sourceDocId?: string
   sourcePage?: number
@@ -93,8 +103,28 @@ export interface MotionQuote {
   onScreen?: string[]
 }
 
+/**
+ * Elemento apontado na aba Design, esperando para ser enviado. Mesmo gesto do
+ * instante de motion — apontar algo num painel e anexar à próxima mensagem —,
+ * mas aqui vários se ACUMULAM ("estes dois botões"); o mesmo elemento duas
+ * vezes não (ver DesignQuotePayload).
+ */
+export interface DesignQuote {
+  id: string
+  kind: "design"
+  name: string
+  path?: string
+  file: string
+  boardTitle?: string
+  elementPath?: number[]
+  tag?: string
+  label?: string
+  text?: string
+  html?: string
+}
+
 /** O que um anexo de citação pode ser — ver QuotePayload. */
-export type PanelQuote = DocumentQuote | MotionQuote
+export type PanelQuote = DocumentQuote | MotionQuote | DesignQuote
 
 export interface Viewport {
   width: number
@@ -121,6 +151,12 @@ export type PanelEvent =
    * ativo (resolvido no App) ou no órfão.
    */
   | { type: "motion"; id: string; entry: string; title: string; sessionId?: string; path?: string }
+  /**
+   * A tool registrou um canvas de design e quer o preview no painel. `id` é o
+   * registro do main (dsg_xxx) e `title` o nome exibível — diferente do motion
+   * não há `entry`: a aba lê `canvas.json` e desenha todos os artboards.
+   */
+  | { type: "design"; id: string; title: string; sessionId?: string; path?: string }
 
 /** Registro do browser do agente por sessão de chat/task. */
 export interface AgentBrowserEntry {
@@ -152,6 +188,10 @@ interface PanelState {
   removeTab: (sessionId: string, tabId: string) => void
   /** Fecha as abas das composições de motion que foram excluídas (em qualquer conversa). */
   closeMotionTabs: (motionIds: string[]) => void
+  /** Fecha as abas dos canvas de design que foram excluídos (em qualquer conversa). */
+  closeDesignTabs: (designIds: string[]) => void
+  /** Fecha as abas dos artefatos que foram excluídos (em qualquer conversa). */
+  closeArtifactTabs: (artifactIds: string[]) => void
   setActiveTab: (sessionId: string, tabId: string | null) => void
   setTabsForSession: (sessionId: string, tabs: PanelTab[], activeId: string | null) => void
   /** Abre (ou reaproveita) a aba que renderiza um artefato em tela cheia.
@@ -161,6 +201,14 @@ interface PanelState {
    *  evento `motion` do main (a tool registrou a pasta) — nunca pelo seletor.
    *  Reabrir a MESMA composição foca a aba onde ela estiver. */
   openMotionTab: (ref: { id: string; entry: string; title: string; sessionId?: string; path?: string }) => void
+  /** Abre (ou reaproveita) o preview de um canvas de design. Chamada pelo
+   *  evento `design` do main (a tool registrou a pasta) — nunca pelo seletor.
+   *  Reabrir o MESMO canvas foca a aba onde ela estiver. Espelha openMotionTab. */
+  openDesignTab: (ref: { id: string; title: string; sessionId?: string; path?: string }) => void
+  /** Abre (ou reaproveita) a aba que APRESENTA um canvas navegando entre as
+   *  telas, começando em `file`. Nasce do botão Play do artboard; `fullscreen`
+   *  leva o estado do editor para a apresentação abrir no mesmo modo. */
+  openDesignPlayTab: (designId: string, file: string, fullscreen?: boolean) => void
   /** Abre (ou reaproveita) o canvas de Markdown de um documento vivo — o que
    *  foi PEDIDO como PDF/Word abre no visualizador, pelo openSourceTab. */
   openDocumentTab: (sessionId: string, ref: { documentId: string; title: string }) => void
@@ -201,7 +249,7 @@ interface PanelState {
   /** Anexa um trecho citado ou um instante de motion. O instante SUBSTITUI o
    *  anterior em vez de acumular: dois quadros da mesma composição não formam um
    *  pedido só — o usuário quer "este ponto", não "estes pontos". */
-  addQuote: (quote: Omit<DocumentQuote, "id"> | Omit<MotionQuote, "id">) => void
+  addQuote: (quote: Omit<DocumentQuote, "id"> | Omit<MotionQuote, "id"> | Omit<DesignQuote, "id">) => void
   removeQuote: (id: string) => void
   clearQuotes: () => void
   viewport: Viewport | null
@@ -315,6 +363,38 @@ export const usePanelStore = create<PanelState>((set, get) => {
         const activeTabBySession = { ...state.activeTabBySession }
         for (const [key, tabs] of Object.entries(state.tabsBySession)) {
           const next = tabs.filter((t) => !(t.type === "motion" && t.motionId && gone.has(t.motionId)))
+          tabsBySession[key] = next
+          if (next.length !== tabs.length && !next.some((t) => t.id === activeTabBySession[key])) {
+            activeTabBySession[key] = next.length > 0 ? next[0].id : null
+          }
+        }
+        return { tabsBySession, activeTabBySession }
+      }),
+
+    closeDesignTabs: (designIds) =>
+      set((state) => {
+        if (designIds.length === 0) return state
+        const gone = new Set(designIds)
+        const tabsBySession: typeof state.tabsBySession = {}
+        const activeTabBySession = { ...state.activeTabBySession }
+        for (const [key, tabs] of Object.entries(state.tabsBySession)) {
+          const next = tabs.filter((t) => !(t.type === "design" && t.designId && gone.has(t.designId)))
+          tabsBySession[key] = next
+          if (next.length !== tabs.length && !next.some((t) => t.id === activeTabBySession[key])) {
+            activeTabBySession[key] = next.length > 0 ? next[0].id : null
+          }
+        }
+        return { tabsBySession, activeTabBySession }
+      }),
+
+    closeArtifactTabs: (artifactIds) =>
+      set((state) => {
+        if (artifactIds.length === 0) return state
+        const gone = new Set(artifactIds)
+        const tabsBySession: typeof state.tabsBySession = {}
+        const activeTabBySession = { ...state.activeTabBySession }
+        for (const [key, tabs] of Object.entries(state.tabsBySession)) {
+          const next = tabs.filter((t) => !(t.type === "artifact" && t.artifactId && gone.has(t.artifactId)))
           tabsBySession[key] = next
           if (next.length !== tabs.length && !next.some((t) => t.id === activeTabBySession[key])) {
             activeTabBySession[key] = next.length > 0 ? next[0].id : null
@@ -453,6 +533,109 @@ export const usePanelStore = create<PanelState>((set, get) => {
           rightPanelOpen: true,
           selectorOpen: false,
           tabsBySession: { ...tabsBySession, [bucket]: [...(tabsBySession[bucket] ?? []), tab] },
+          activeTabBySession: { ...state.activeTabBySession, [bucket]: tab.id },
+        }
+      }),
+
+    // Mesmo raciocínio do openMotionTab: o canvas é um recurso do PROJETO
+    // (conversa, no modo chat), não de uma mensagem — a aba nasce do evento do
+    // main que registrou a pasta, e a mesma peça é UMA aba, onde ela estiver.
+    openDesignTab: (ref) =>
+      set((state) => {
+        const bucket = ref.sessionId ?? ORPHAN_KEY
+        const tabsBySession = { ...state.tabsBySession }
+        for (const [key, tabs] of Object.entries(tabsBySession)) {
+          const existing = tabs.find((t) => t.type === "design" && !t.designPlay && t.designId === ref.id)
+          if (!existing) continue
+          if (key === bucket) {
+            const refreshed: PanelTab = { ...existing, designPath: ref.path ?? existing.designPath }
+            tabsBySession[key] = tabs.map((t) => (t === existing ? refreshed : t))
+            return {
+              rightPanelOpen: true,
+              selectorOpen: false,
+              tabsBySession,
+              activeTabBySession: { ...state.activeTabBySession, [bucket]: existing.id },
+            }
+          }
+          // Já aberta em OUTRO balde: a aba VEM para o balde em que o usuário
+          // está — o painel só mostra as abas do chat ativo.
+          const rest = tabs.filter((t) => t !== existing)
+          if (rest.length > 0) tabsBySession[key] = rest
+          else delete tabsBySession[key]
+          const moved: PanelTab = {
+            ...existing,
+            title: ref.title,
+            designPath: ref.path ?? existing.designPath,
+            sessionId: tabSession(bucket),
+          }
+          tabsBySession[bucket] = [...(tabsBySession[bucket] ?? []), moved]
+          return {
+            rightPanelOpen: true,
+            selectorOpen: false,
+            tabsBySession,
+            activeTabBySession: { ...state.activeTabBySession, [bucket]: moved.id },
+          }
+        }
+        const tab: PanelTab = {
+          id: `design-${nextTabId()}`,
+          type: "design",
+          title: ref.title,
+          sessionId: tabSession(bucket),
+          designId: ref.id,
+          designPath: ref.path,
+        }
+        return {
+          rightPanelOpen: true,
+          selectorOpen: false,
+          tabsBySession: { ...tabsBySession, [bucket]: [...(tabsBySession[bucket] ?? []), tab] },
+          activeTabBySession: { ...state.activeTabBySession, [bucket]: tab.id },
+        }
+      }),
+
+    // A apresentação é uma aba À PARTE da de edição: o usuário compara o
+    // protótipo rodando com o canvas ao lado. Uma por canvas — Play de outro
+    // artboard reaproveita a aba e só troca a tela inicial.
+    openDesignPlayTab: (designId, file, fullscreen) =>
+      set((state) => {
+        let bucket = ORPHAN_KEY
+        let source: PanelTab | undefined
+        for (const [key, tabs] of Object.entries(state.tabsBySession)) {
+          const editor = tabs.find((t) => t.type === "design" && !t.designPlay && t.designId === designId)
+          if (editor) {
+            bucket = key
+            source = editor
+            break
+          }
+        }
+        const tabs = state.tabsBySession[bucket] ?? []
+        const existing = tabs.find((t) => t.type === "design" && t.designPlay && t.designId === designId)
+        if (existing) {
+          return {
+            rightPanelOpen: true,
+            selectorOpen: false,
+            tabsBySession: {
+              ...state.tabsBySession,
+              [bucket]: tabs.map((t) =>
+                t === existing ? { ...t, designPlay: file, designFullscreen: fullscreen ?? t.designFullscreen } : t,
+              ),
+            },
+            activeTabBySession: { ...state.activeTabBySession, [bucket]: existing.id },
+          }
+        }
+        const tab: PanelTab = {
+          id: `design-play-${nextTabId()}`,
+          type: "design",
+          title: `${source?.title ?? "Design"} ▶`,
+          sessionId: tabSession(bucket),
+          designId,
+          designPath: source?.designPath,
+          designPlay: file,
+          designFullscreen: fullscreen,
+        }
+        return {
+          rightPanelOpen: true,
+          selectorOpen: false,
+          tabsBySession: { ...state.tabsBySession, [bucket]: [...tabs, tab] },
           activeTabBySession: { ...state.activeTabBySession, [bucket]: tab.id },
         }
       }),
@@ -638,8 +821,18 @@ export const usePanelStore = create<PanelState>((set, get) => {
     addQuote: (quote) =>
       set((state) => {
         // Um instante de motion substitui o anterior (ver PanelState.addQuote);
-        // os trechos de documento seguem acumulando.
-        const atuais = quote.kind === "motion" ? state.quotes.filter((q) => q.kind !== "motion") : state.quotes
+        // os trechos de documento seguem acumulando. Elemento de design acumula,
+        // mas o MESMO elemento (artboard + caminho) entra uma vez só.
+        const sameDesign = (q: PanelQuote) =>
+          quote.kind === "design" &&
+          q.kind === "design" &&
+          q.name === quote.name &&
+          q.file === quote.file &&
+          (q.elementPath ?? []).join(">") === (quote.elementPath ?? []).join(">")
+        const atuais =
+          quote.kind === "motion"
+            ? state.quotes.filter((q) => q.kind !== "motion")
+            : state.quotes.filter((q) => !sameDesign(q))
         return {
           quotes: [...atuais, { ...quote, id: `quote-${Date.now()}-${atuais.length}` } as PanelQuote],
         }
@@ -702,6 +895,17 @@ export const usePanelStore = create<PanelState>((set, get) => {
           get().openMotionTab({
             id: event.id,
             entry: event.entry,
+            title: event.title,
+            sessionId: event.sessionId,
+            path: event.path,
+          })
+          break
+        case "design":
+          markActive()
+          // Espelha o caso "motion": o painel abre sozinho porque o canvas é o
+          // que o usuário pediu para ver.
+          get().openDesignTab({
+            id: event.id,
             title: event.title,
             sessionId: event.sessionId,
             path: event.path,
@@ -776,3 +980,45 @@ export const usePanelStore = create<PanelState>((set, get) => {
     setPendingInput: (val) => set({ pendingInput: val }),
   }
 })
+
+/**
+ * Espelha o painel para o main, para a tool `read_open_panel`.
+ *
+ * As abas são por sessão de chat; o agente lê o snapshot da sessão dele. O envio
+ * é deduplicado por sessão — o store muda muito (eventos de browser, atividade),
+ * e não faz sentido reenviar um retrato idêntico a cada tick.
+ */
+const lastPanelSnapshots = new Map<string, string>()
+
+function emitPanelSnapshots(state: ReturnType<typeof usePanelStore.getState>): void {
+  const sessions = new Set([...Object.keys(state.tabsBySession), ...Object.keys(state.activeTabBySession)])
+  for (const sessionId of sessions) {
+    const tabs = state.tabsBySession[sessionId] ?? []
+    const activeTabId = state.activeTabBySession[sessionId] ?? null
+    const snapshotTabs: PanelSnapshotTab[] = tabs.map((t) => ({
+      id: t.id,
+      type: t.type,
+      title: t.title,
+      artifactId: t.artifactId,
+      motionId: t.motionId,
+      motionPath: t.motionPath,
+      designId: t.designId,
+      designPath: t.designPath,
+      documentId: t.documentId,
+      url: t.url,
+      sourceDocId: t.sourceDocId,
+    }))
+    const key = JSON.stringify({ activeTabId, snapshotTabs })
+    if (lastPanelSnapshots.get(sessionId) === key) continue
+    lastPanelSnapshots.set(sessionId, key)
+    const snapshot: PanelSnapshot = { sessionId, activeTabId, tabs: snapshotTabs, updatedAt: Date.now() }
+    // O store é importado também em teste (node, sem DOM): sem renderer, sem
+    // snapshot — e tudo bem, a tool só responde o que chegou.
+    if (typeof window === 'undefined') return
+    window.ipcRenderer?.send("panel:snapshot", snapshot)
+  }
+}
+
+usePanelStore.subscribe(emitPanelSnapshots)
+queueMicrotask(() => emitPanelSnapshots(usePanelStore.getState()))
+

@@ -1,10 +1,13 @@
 /**
- * Skills: conhecimento curado pelo usuário (arquivos .skill/.md com frontmatter)
- * injetado no system prompt. Duas fontes mescladas — global (orbit-data/skills)
- * e projeto ({workspace}/.orbit/skills, só no code mode).
+ * Skills: conhecimento curado (arquivos .skill/.md com frontmatter) injetado no
+ * system prompt. Três fontes mescladas — builtin (nativas do app, somente
+ * leitura), global (orbit-data/skills) e projeto ({workspace}/.orbit/skills,
+ * só no code mode). A precedência é da mais específica para a menos:
+ * projeto > global > builtin (uma skill global com o mesmo slug sobrescreve
+ * a nativa).
  */
 
-export type SkillSource = "global" | "project"
+export type SkillSource = "builtin" | "global" | "project"
 
 export interface Skill {
   /** Nome de exibição (pode conter espaços, maiúsculas) */

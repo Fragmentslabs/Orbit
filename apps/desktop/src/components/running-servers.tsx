@@ -1,7 +1,6 @@
 import { useEffect } from "react"
 import { useTranslation } from "react-i18next"
 import { useProcessStore } from "@/src/stores/process-store"
-import { useWebPreview } from "@/src/components/ai/web-preview"
 
 /**
  * Servidores de desenvolvimento rodando no chat atual, na tela inicial do
@@ -9,11 +8,11 @@ import { useWebPreview } from "@/src/components/ai/web-preview"
  *
  * A URL não é adivinhada: sai do que o próprio comando anunciou no output
  * (`npm run dev` → "Local: http://localhost:5173"), extraído no main por
- * extractLocalUrls. Um clique navega o webview da aba para lá.
+ * extractLocalUrls. Um clique chama `onSelect` com a URL — quem navega é o
+ * dono do browser, sem este componente depender do contexto do WebPreview.
  */
-export function RunningServers({ sessionId }: { sessionId?: string }) {
+export function RunningServers({ sessionId, onSelect }: { sessionId?: string; onSelect: (url: string) => void }) {
   const { t } = useTranslation()
-  const { setUrl } = useWebPreview()
   const processes = useProcessStore((s) => s.processes)
   const fetchProcesses = useProcessStore((s) => s.fetch)
 
@@ -45,7 +44,7 @@ export function RunningServers({ sessionId }: { sessionId?: string }) {
         {servers.map((server) => (
           <button
             key={server.url}
-            onClick={() => setUrl(server.url)}
+            onClick={() => onSelect(server.url)}
             title={server.url}
             className="flex min-w-0 items-center gap-2 rounded-md border border-sidebar-border bg-sidebar-accent/40 px-2.5 py-1.5 text-left transition-colors hover:bg-sidebar-accent"
           >

@@ -828,6 +828,7 @@
     "view": "View",
     "global": "Global",
     "project": "Project",
+    "builtin": "Built-in",
     "scriptsCount_one": "{{count}} script",
     "scriptsCount_other": "{{count}} scripts",
     "createManually": "Create manually",

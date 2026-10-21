@@ -41,13 +41,21 @@ interface SlashPaletteProps {
   setText: (text: string) => void
   commands: SlashCommand[]
   children: ReactNode
+  /** Prefixo que abre a paleta: "/" (comandos) ou "@" (referências) */
+  trigger?: string
 }
 
-export function SlashPalette({ value, setText, commands, children }: SlashPaletteProps) {
+export function SlashPalette({ value, setText, commands, children, trigger = '/' }: SlashPaletteProps) {
   const { t } = useTranslation()
   const tokens = getThemeTokens(useThemeStore((s) => s.resolved))
-  const open = value.startsWith('/') && !LITERAL_COMMANDS.some((literal) => value.startsWith(literal))
-  const query = open ? normalizeText(value.slice(1)) : ''
+  // "/" só não abre sobre um comando literal já digitado; "@" fecha quando há
+  // espaço depois dele (a referência já está completa).
+  const open =
+    value.startsWith(trigger) &&
+    (trigger === '/'
+      ? !LITERAL_COMMANDS.some((literal) => value.startsWith(literal))
+      : !value.slice(trigger.length).includes(' '))
+  const query = open ? normalizeText(value.slice(trigger.length)) : ''
 
   const filtered = useMemo(() => {
     if (!open) return []

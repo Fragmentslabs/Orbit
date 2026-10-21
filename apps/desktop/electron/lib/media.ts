@@ -15,13 +15,15 @@ import {
   type MediaSource,
   type MediaUsage,
   SAFE_VIDEO_MEDIA_ID,
-  type DocumentFormat, AUDIO_SCHEME, VIDEO_SCHEME, MOTION_SCHEME } from '@shared/media'
+  type DocumentFormat, AUDIO_SCHEME, VIDEO_SCHEME, MOTION_SCHEME, DESIGN_SCHEME, FONT_SCHEME } from '@shared/media'
 import { listKeys, readJson } from './storage'
 import { buildDocx } from './docx-package'
 import mammoth from 'mammoth'
 import { rasterizePdf } from './pdf-raster'
-import { parseMarkdown, renderHtml, renderThumbHtml, type DocumentStyle } from './document-render'
+import { normalizeStyle, parseMarkdown, renderHtml, renderThumbHtml, type DocumentStyle } from './document-render'
 import { renderDiagrams } from './mermaid-render'
+import { withAssetLock, writeFileAtomic } from './asset-lock'
+import { fontFacesForFamily, handleFontRequest } from './fonts/store'
 
 export type { MediaEntry, MediaFilter, MediaSource, MediaUsage }
 
@@ -638,7 +640,7 @@ export function registerMediaProtocol(): void {
  *
  * 1. Scheme próprio. `orbit-media://` não é privilegiado, e HTML sem origem
  *    não roda script nem carrega módulo. `orbit-artifact://` é registrado como
- *    standard+secure (ver registerArtifactSchemePrivileges, que PRECISA rodar
+ *    standard+secure (ver registerSchemePrivileges, que PRECISA rodar
  *    antes do app ficar pronto).
  * 2. Miniatura. A galeria é um grid de <img>; o artefato ganha um PNG
  *    capturado numa janela oculta para caber nesse grid.
@@ -673,8 +675,12 @@ export interface ArtifactRef {
  * antes de `app.whenReady()` — depois disso o Chromium já fixou a tabela de
  * schemes e a chamada não tem efeito (a página carregaria como origem opaca,
  * sem script).
+ *
+ * ATENÇÃO: o Chromium guarda só a ÚLTIMA chamada — registrar uma segunda
+ * lista faz a primeira deixar de valer. TODO scheme privilegiado do app entra
+ * NESTA lista, nunca numa chamada separada.
  */
-export function registerArtifactSchemePrivileges(): void {
+export function registerSchemePrivileges(): void {
   protocol.registerSchemesAsPrivileged([
     {
       scheme: ARTIFACT_SCHEME,
@@ -712,6 +718,31 @@ export function registerArtifactSchemePrivileges(): void {
         supportFetchAPI: true,
         corsEnabled: true,
         stream: true,
+      },
+    },
+    // Canvas de design (ver design/design-store.ts): mesmas flags do motion,
+    // sem `stream` — o artboard é HTML estático, sem faixa de mídia.
+    {
+      scheme: DESIGN_SCHEME,
+      privileges: {
+        standard: true,
+        secure: true,
+        supportFetchAPI: true,
+        corsEnabled: true,
+      },
+    },
+    // Biblioteca de fontes do Orbit (ver fonts/store.ts): scheme próprio porque
+    // o artboard, a composição de motion e a janela do app declaram o MESMO
+    // @font-face, cada um numa origem diferente.
+    {
+      scheme: FONT_SCHEME,
+      privileges: {
+        standard: true,
+        secure: true,
+        supportFetchAPI: true,
+        // Fonte é recurso CORS-obrigatório: sem isto o artboard (origem opaca)
+        // e a janela do app baixariam o arquivo e o descartariam.
+        corsEnabled: true,
       },
     },
   ])
@@ -881,6 +912,16 @@ export function artifactIdFromUrl(url: string): string | null {
 const INLINE_THUMB_ID = 'inline_thumb.html'
 
 /**
+ * O scheme das fontes vale só na sessão default. Toda janela que carrega HTML
+ * nosso numa partição própria - miniatura, PDF - precisa do handler também,
+ * senão a fonte instalada no Orbit não carrega e o render cai no fallback em
+ * silêncio, que é justamente o que a instalação existia para evitar.
+ */
+function serveFontsOn(partition: string): void {
+  session.fromPartition(partition).protocol.handle(FONT_SCHEME, handleFontRequest)
+}
+
+/**
  * Janela oculta e isolada para fotografar uma página.
  *
  * `inlineHtml` é servido pelo protocolo dentro da partição desta captura, que
@@ -890,6 +931,7 @@ const INLINE_THUMB_ID = 'inline_thumb.html'
  */
 function openCaptureWindow(inlineHtml: string | null): BrowserWindow {
   const partition = `artifact-thumb-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+  serveFontsOn(partition)
   // O protocolo TEM que ser registrado nesta sessão também: protocol.handle
   // vale só para a sessão default, e sem isto o loadURL fica pendurado para
   // sempre (nem carrega, nem rejeita).
@@ -1068,12 +1110,62 @@ export async function saveMotionMedia(
   })
 }
 
+/** O que um canvas de design precisa para entrar na galeria — espelha SaveMotionMeta. */
+export interface SaveDesignMeta {
+  /** Id do canvas no registro do main (`orbit-data/design.json`). */
+  designId: string
+  title: string
+  directory?: string
+  sessionId?: string
+  messageId?: string
+  width?: number
+  height?: number
+}
+
+/**
+ * Registra um CANVAS de design na galeria — irmão de `saveMotionMedia`: o
+ * conteúdo não é um arquivo do Orbit, é uma pasta (canvas.json + artboards) no
+ * armazenamento do app; o registro só guarda a capa (do primeiro artboard) e o
+ * `designId`, e abrir é reabrir a aba Design.
+ */
+export async function saveDesignMedia(thumb: Buffer | null, meta: SaveDesignMeta): Promise<MediaEntry> {
+  const id = `dsn_${meta.designId.replace(/[^a-zA-Z0-9]/g, '').slice(0, 40)}.png`
+  await fsp.mkdir(artifactsDir(), { recursive: true })
+  const file = path.join(artifactsDir(), id)
+  if (thumb) await fsp.writeFile(file, thumb)
+  return withIndexLock(async () => {
+    const entries = await readIndex()
+    const existing = entries.find((e) => mediaKind(e) === 'design' && e.designId === meta.designId)
+    const entry: MediaEntry = {
+      ...existing,
+      id,
+      path: file,
+      size: thumb ? thumb.length : (existing?.size ?? 0),
+      createdAt: existing?.createdAt ?? Date.now(),
+      source: 'chat',
+      kind: 'design',
+      designId: meta.designId,
+      name: meta.title,
+      thumb: thumb ? id : existing?.thumb,
+      sessionId: meta.sessionId ?? existing?.sessionId,
+      messageId: meta.messageId ?? existing?.messageId,
+      directory: meta.directory ?? existing?.directory,
+      width: meta.width ?? existing?.width,
+      height: meta.height ?? existing?.height,
+    }
+    if (existing) entries[entries.indexOf(existing)] = entry
+    else entries.push(entry)
+    await writeIndex(entries)
+    return entry
+  })
+}
+
 /** Salva o HTML, captura a miniatura e registra o artefato na galeria. */
 export async function saveArtifact(html: string, meta: SaveArtifactMeta): Promise<ArtifactRef> {
   const id = `art_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}.html`
   await fsp.mkdir(artifactsDir(), { recursive: true })
   const file = path.join(artifactsDir(), id)
-  await fsp.writeFile(file, html, 'utf8')
+  await writeFileAtomic(file, html)
 
   const thumb = await captureThumbnail(id)
   const entry: MediaEntry = {
@@ -1107,40 +1199,63 @@ export async function updateArtifact(
   html: string,
   title?: string,
 ): Promise<ArtifactRef | null> {
+  return mutateArtifact(id, () => html, title)
+}
+
+/**
+ * Lê o HTML atual, deixa o chamador transformá-lo e grava — tudo dentro do
+ * mesmo lock. É o que sustenta a EDIÇÃO como fila: dois chats no mesmo artefato
+ * são serializados, e quem chega depois aplica sobre o resultado do primeiro;
+ * se o texto que ele ia trocar já não existe, `mutate` lança e nada é gravado.
+ */
+export async function mutateArtifact(
+  id: string,
+  mutate: (html: string) => string | Promise<string>,
+  title?: string,
+): Promise<ArtifactRef | null> {
   if (!SAFE_ARTIFACT_ID.test(id) || !id.endsWith('.html')) return null
-  const entry = await getMediaEntry(id)
-  if (!entry || mediaKind(entry) !== 'artifact') return null
+  return withAssetLock(`artifact:${id}`, async () => {
+    const entry = await getMediaEntry(id)
+    if (!entry || mediaKind(entry) !== 'artifact') return null
 
-  await fsp.writeFile(entry.path, html, 'utf8')
-  const thumb = (await captureThumbnail(id)) ?? entry.thumb
-  const revision = (entry.revision ?? 1) + 1
-  const name = title ?? entry.name ?? id
+    let current = ''
+    try {
+      current = await fsp.readFile(entry.path, 'utf8')
+    } catch {
+      current = ''
+    }
+    const html = await mutate(current)
+    await writeFileAtomic(entry.path, html)
+    const thumb = (await captureThumbnail(id)) ?? entry.thumb
+    const revision = (entry.revision ?? 1) + 1
+    const name = title ?? entry.name ?? id
 
-  await withIndexLock(async () => {
-    const entries = await readIndex()
-    const current = entries.find((e) => e.id === id)
-    if (!current) return
-    current.size = Buffer.byteLength(html, 'utf8')
-    current.thumb = thumb
-    current.revision = revision
-    current.name = name
-    await writeIndex(entries)
+    await withIndexLock(async () => {
+      const entries = await readIndex()
+      const current = entries.find((e) => e.id === id)
+      if (!current) return
+      current.size = Buffer.byteLength(html, 'utf8')
+      current.thumb = thumb
+      current.revision = revision
+      current.name = name
+      await writeIndex(entries)
+    })
+
+    /**
+     * Avisa as janelas. O arquivo é um só, mas quem JÁ está na tela não
+     * descobre sozinho: o iframe do card antigo foi montado com a revisão
+     * anterior e não recarrega por conta própria. Sem este evento o usuário
+     * veria a versão velha logo acima da nova, na mesma conversa.
+     *
+     * Emitido direto daqui (e não pelo broadcast.ts) para não criar o ciclo
+     * media → broadcast → companion-server → companion-http → media.
+     */
+    for (const win of BrowserWindow.getAllWindows()) {
+      if (!win.isDestroyed()) win.webContents.send('artifact:updated', { artifactId: id, revision })
+    }
+
+    return { id, url: `${ARTIFACT_SCHEME}://${id}`, title: name, thumb, revision }
   })
-
-  /**
-   * Avisa as janelas. O arquivo é um só, mas quem JÁ está na tela não
-   * descobre sozinho: o iframe do card antigo foi montado com a revisão
-   * anterior e não recarrega por conta própria. Sem este evento o usuário
-   * veria a versão velha logo acima da nova, na mesma conversa.
-   *
-   * Emitido direto daqui (e não pelo broadcast.ts) para não criar o ciclo
-   * media → broadcast → companion-server → companion-http → media.
-   */
-  for (const win of BrowserWindow.getAllWindows()) {
-    if (!win.isDestroyed()) win.webContents.send('artifact:updated', { artifactId: id, revision })
-  }
-
-  return { id, url: `${ARTIFACT_SCHEME}://${id}`, title: name, thumb, revision }
 }
 
 /**
@@ -1247,6 +1362,7 @@ async function renderPdf(htmlId: string): Promise<Buffer | null> {
     // Mesma armadilha do thumbnail: protocol.handle só vale na sessão default,
     // e sem registrar aqui o loadURL nunca resolve.
     session.fromPartition(partition).protocol.handle(ARTIFACT_SCHEME, handleArtifactRequest)
+    serveFontsOn(partition)
 
     win = new BrowserWindow({
       show: false,
@@ -1285,7 +1401,11 @@ async function renderPdf(htmlId: string): Promise<Buffer | null> {
  */
 async function documentHtml(markdown: string, title: string, style?: DocumentStyle): Promise<string> {
   const blocks = parseMarkdown(markdown)
-  return renderHtml(blocks, title, style, await renderDiagrams(blocks))
+   // A fonte pedida pode ser da biblioteca do Orbit: aí o PDF só a conhece se
+   // o @font-face vier junto no HTML (a janela de impressão é outra sessão).
+   // Nome de fonte do sistema não tem declaração - devolve vazio e nada muda.
+  const faces = await fontFacesForFamily(normalizeStyle(style).fontFamily)
+  return renderHtml(blocks, title, style, await renderDiagrams(blocks), faces)
 }
 
 /**

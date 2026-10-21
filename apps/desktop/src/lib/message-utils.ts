@@ -197,16 +197,24 @@ export function speakableText(message: ChatMessage): string {
     .trim()
 }
 
-/** Converte anexos do PromptInput (FileUIPart, url já em data URL) em FileParts */
-export function toFileParts(files: { mediaType?: string; filename?: string; url?: string }[]): FilePart[] {
+/** Converte anexos do PromptInput (FileUIPart, url já em data URL) em FileParts.
+ *  `mediaId` marca o anexo que é uma referência à galeria — nesse caso `url` é
+ *  só o preview e o main não copia nada (ver FilePart.mediaId). */
+export function toFileParts(
+  files: { mediaType?: string; filename?: string; url?: string; mediaId?: string }[],
+): FilePart[] {
   return files
-    .filter((f): f is { mediaType?: string; filename?: string; url: string } => Boolean(f.url))
+    .filter(
+      (f): f is { mediaType?: string; filename?: string; url?: string; mediaId?: string } =>
+        Boolean(f.url) || Boolean(f.mediaId),
+    )
     .map((f) => ({
       id: `file_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`,
       type: "file" as const,
       mime: f.mediaType ?? "application/octet-stream",
       filename: f.filename,
-      url: f.url,
+      url: f.url ?? "",
+      ...(f.mediaId ? { mediaId: f.mediaId } : {}),
     }))
 }
 

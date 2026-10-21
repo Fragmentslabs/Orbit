@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
-import { AlignLeft, Bot, BrainCircuit, Clapperboard, Eye, FileText, MousePointerClick, Network, PlusIcon, Quote, RefreshCw, Search, X } from "lucide-react"
+import { AlignLeft, Bot, BrainCircuit, Clapperboard, Eye, FileText, LayoutGrid, MousePointerClick, Network, PlusIcon, Quote, RefreshCw, Search, X } from "lucide-react"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -40,8 +40,8 @@ import { QueueIndicator } from "@/src/components/queue-indicator"
 import { ContextMeter } from "@/src/components/context-meter"
 import { SendButtonGroup } from "@/src/components/send-button-group"
 import { SlashPalette } from "@/src/components/slash-palette"
-import { FilePalette } from "@/src/components/file-palette"
-import { useReferenceCommands, useSlashActionCommands, type SlashCommand } from "@/src/lib/slash-commands"
+import { ReferencePalette } from "@/src/components/reference-palette"
+import { useSlashActionCommands, type SlashCommand } from "@/src/lib/slash-commands"
 import { FolderSelector } from "@/src/components/folder-selector"
 import { useWorkspace } from "@/lib/workspace-context"
 import { useBrainEnabled, useBrainPrefs, useCodeContext } from "@/src/stores/brain-prefs"
@@ -85,7 +85,7 @@ function markWorkerConfigPrompted() {
   localStorage.setItem(WORKER_CONFIG_PROMPTED_KEY, "1")
 }
 
-export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId, onProviderBlocked }: {
+export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId, onProviderBlocked, showFolders = true }: {
   onSubmit: (text: string, options: SendMessageOptions, directory: string, extraDirectories: string[], files?: FilePart[]) => void
   status?: ChatStatus
   onStop?: () => void
@@ -94,6 +94,8 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId, on
   sessionId?: string
   /** Sem provedor configurado e o usuário tentou enviar — quem renderiza o card decide como reagir */
   onProviderBlocked?: () => void
+  /** Mostra o seletor de pastas/repositórios acima do input (some em visões como a tela cheia do browser) */
+  showFolders?: boolean
 }) {
   const { t } = useTranslation()
   // Chave da mensagem respondida: o chat de código não tem rascunho por
@@ -175,7 +177,6 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId, on
   }, [workerModel])
   const modesInRow = useAppearanceStore((s) => s.modesInRow)
   const modeLabelStyle = useAppearanceStore((s) => s.modeLabelStyle)
-  const referenceCommands = useReferenceCommands()
   const actionCommands = useSlashActionCommands("code")
 
   const buildOptions = useCallback((): SendMessageOptions => ({
@@ -372,24 +373,36 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId, on
       permission("ask", t("codeInput.slash.permAsk"), t("codeInput.slash.permAskDescription")),
       permission("approve", t("codeInput.slash.permApprove"), t("codeInput.slash.permApproveDescription")),
       permission("full", t("codeInput.slash.permFull"), t("codeInput.slash.permFullDescription")),
+      // Loop: na orquestra quem revisa é o orquestrador — o item aparece, mas
+      // desabilitado (mesma regra do chip na linha do input).
+      { id: "loop", label: t("codeInput.modes.loop.label"), description: orchestra ? t("delegation.loopOffInOrchestra") : t("codeInput.modes.loop.description"), keywords: ["loop", "iterar", "revisao"], group: "Modos" as const, active: loop && !orchestra, disabled: orchestra, run: toggle(() => setLoop((v) => !v)) },
+      // Visão: primeira ativação sem modelo configurado abre a configuração.
+      { id: "vision", label: t("input.modes.vision.label"), description: t("input.modes.vision.description"), keywords: ["visao", "imagem", "vision"], group: "Modos" as const, active: vision, run: toggle(() => {
+        if (!vision && !visionModel) setVisionConfigOpen(true)
+        else setModeActive("vision", sessionId, !vision)
+      }) },
       ...actionCommands,
-      ...referenceCommands,
       { id: "nova-sessao", label: t("codeInput.slash.newSession"), description: t("codeInput.slash.newSessionDescription"), keywords: ["clear", "limpar", "novo"], group: "Ações" as const, run: toggle(() => void useSessionStore.getState().selectSession(mode, null)) },
-      { id: "create-skill", label: t("codeInput.slash.createSkill"), description: t("codeInput.slash.createSkillDescription"), keywords: ["skill", "criar", "aprender"], group: "Skills" as const, run: ({ setText }) => setText("/create-skill ") },
-      { id: "document", label: t("codeInput.slash.documentApp"), description: t("codeInput.slash.documentAppDescription"), keywords: ["docs", "documentacao", "screenshot"], group: "Ações" as const, run: ({ setText }) => setText("/document ") },
+      // Regra da paleta: o que ESCREVE texto no input aparece com o texto
+      // literal (o que será enviado); o que só age na UI (modos, nova sessão,
+      // settings) aparece com rótulo em prosa. Assim "/init" e "/document" são
+      // iguais ao que o usuário digita, e nada mente sobre o que vai ser
+      // enviado. As REFERÊNCIAS (skills, MCP, arquivos) ficam na paleta "@".
+      { id: "create-skill", label: "/create-skill", description: t("codeInput.slash.createSkillDescription"), keywords: ["skill", "criar", "aprender"], group: "Ações" as const, run: ({ setText }) => setText("/create-skill ") },
+      { id: "document", label: "/document", description: t("codeInput.slash.documentAppDescription"), keywords: ["docs", "documentacao", "screenshot"], group: "Ações" as const, run: ({ setText }) => setText("/document ") },
       { id: "settings", label: t("input.slash.settings"), description: t("input.slash.settingsDescription"), keywords: ["settings", "config"], group: "Ações" as const, run: toggle(() => openSettings()) },
     ]
-  }, [search, plan, simple, brain, subagents, orchestra, isWorker, permissionMode, sessionId, setBrainEnabled, setSimple, setModeActive, setPermissionMode, actionCommands, referenceCommands, mode, openSettings, maybePromptWorkerConfig, t])
+  }, [search, plan, simple, brain, subagents, orchestra, isWorker, permissionMode, sessionId, setBrainEnabled, setSimple, setModeActive, setPermissionMode, actionCommands, mode, openSettings, maybePromptWorkerConfig, loop, vision, visionModel, setVisionConfigOpen, t])
 
   return (
     <PromptInputProvider>
-      <FilePalette directory={sessionDir ?? folders[0]} className="mx-auto w-full max-w-2xl">
+      <ReferencePalette directory={sessionDir ?? folders[0]} className="mx-auto w-full max-w-2xl">
       <SlashPalette commands={slashCommands} className="mx-auto w-full max-w-2xl">
       <DraftInputBridge sessionId={sessionId} />
       <ChatInputDraft sessionId={sessionId} />
       <PendingAttachmentSync sessionId={sessionId} />
       <div className="w-full max-w-2xl mx-auto pb-4 @container">
-        {!hasMessages && (
+        {!hasMessages && showFolders && (
           <div className="flex flex-wrap items-center gap-2 px-3 py-1.5">
             <FolderSelector folders={folders} onFoldersChange={setFolders} />
           </div>
@@ -407,7 +420,13 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId, on
                 title={quoteChipTitle(q)}
                 className="flex items-center gap-1 rounded-md border border-primary/30 bg-primary/10 px-1.5 py-0.5 text-[11px] text-primary"
               >
-                {q.kind === "motion" ? <Clapperboard className="size-3" /> : <Quote className="size-3" />}
+                {q.kind === "motion" ? (
+                  <Clapperboard className="size-3" />
+                ) : q.kind === "design" ? (
+                  <LayoutGrid className="size-3" />
+                ) : (
+                  <Quote className="size-3" />
+                )}
                 {quoteChipLabel(q)}
                 <button
                   type="button"
@@ -686,7 +705,7 @@ export function CodeInput({ onSubmit, status, onStop, hasMessages, sessionId, on
         <VisionConfigDialog open={visionConfigOpen} onOpenChange={setVisionConfigOpen} targetSession={sessionId} />
       </div>
       </SlashPalette>
-      </FilePalette>
+      </ReferencePalette>
     </PromptInputProvider>
   )
 }

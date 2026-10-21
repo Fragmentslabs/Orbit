@@ -1,5 +1,5 @@
 import { useEffect } from "react"
-import { usePromptInputController } from "@/src/components/ai/prompt-input"
+import { usePromptInputController, type MediaAttachmentRef } from "@/src/components/ai/prompt-input"
 import { useDraftInput } from "@/src/stores/draft-input"
 import { usePanelStore } from "@/src/stores/panel-store"
 import type { FilePart } from "@shared/chat"
@@ -8,20 +8,32 @@ import type { FilePart } from "@shared/chat"
  * Anexos persistidos guardam data URL; o input trabalha com File (converte para
  * blob URL no chip e de volta para data URL no submit). Esta é a volta desse
  * caminho, usada quando um revert devolve a mensagem para o input.
+ *
+ * O anexo que é uma REFERÊNCIA à galeria (`mediaId`) NÃO volta como File: montar
+ * um File a partir da URL o faria virar cópia nova no reenvio. Ele volta pelo
+ * mesmo caminho do drag da aba Mídia (addMedia), mantendo a referência.
  */
-async function toFiles(parts: FilePart[]): Promise<File[]> {
-  const files = await Promise.all(
+async function restoreAttachments(parts: FilePart[]): Promise<{
+  files: File[]
+  media: MediaAttachmentRef[]
+}> {
+  const files: File[] = []
+  const media: MediaAttachmentRef[] = []
+  await Promise.all(
     parts.map(async (part) => {
+      if (part.mediaId) {
+        media.push({ id: part.mediaId, name: part.filename, mime: part.mime, url: part.url })
+        return
+      }
       try {
         const blob = await (await fetch(part.url)).blob()
-        return new File([blob], part.filename ?? "anexo", { type: part.mime })
+        files.push(new File([blob], part.filename ?? "anexo", { type: part.mime }))
       } catch {
         // Anexo corrompido não pode impedir o texto de voltar ao input
-        return null
       }
     }),
   )
-  return files.filter((f): f is File => f !== null)
+  return { files, media }
 }
 
 export function DraftInputBridge({ sessionId }: { sessionId?: string }) {
@@ -36,7 +48,8 @@ export function DraftInputBridge({ sessionId }: { sessionId?: string }) {
     if (payload === null) return
     controller.textInput.setInput(payload.text)
     if (payload.files?.length) {
-      void toFiles(payload.files).then((files) => {
+      void restoreAttachments(payload.files).then(({ files, media }) => {
+        for (const ref of media) controller.attachments.addMedia(ref)
         if (files.length > 0) controller.attachments.add(files)
       })
     }

@@ -486,3 +486,13 @@ describe('barra invertida do Markdown', () => {
     expect(parseInline('caminho C:\\temp')).toEqual([{ text: 'caminho C:\\temp' }])
   })
 })
+
+describe('a fonte da biblioteca no documento', () => {
+  it('declara o @font-face antes do CSS, e nada quando a família é do sistema', () => {
+    const html = renderHtml([], 'T', { fontFamily: 'Inter' }, undefined, "@font-face{font-family:'Inter'}")
+    expect(html).toContain('<style data-orbit-fonts>')
+    expect(html.indexOf('data-orbit-fonts')).toBeLessThan(html.indexOf('<style>'))
+    expect(renderHtml([], 'T', { fontFamily: 'Georgia' })).not.toContain('data-orbit-fonts')
+  })
+})
+

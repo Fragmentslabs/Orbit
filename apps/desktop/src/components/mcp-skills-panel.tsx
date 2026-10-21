@@ -1007,7 +1007,7 @@ export function McpSkillsPanel() {
                   <div className="flex items-center gap-2">
                     <span className="text-sm font-medium">@{skill.slug}</span>
                     <span className="rounded bg-muted px-1 py-0.5 text-[10px] text-muted-foreground">
-                      {skill.source}
+                      {skill.source === "builtin" ? t("mcp.skills.builtin") : skill.source}
                     </span>
                     {skill.scripts && skill.scripts.length > 0 && (
                       <span className="rounded bg-muted px-1 py-0.5 text-[10px] text-muted-foreground">
@@ -1028,17 +1028,22 @@ export function McpSkillsPanel() {
                     {t("mcp.skills.viewContent")}
                   </Button>
                 </div>
-                <div className="flex items-center gap-1 self-start pt-1">
-                  <Button size="icon-sm" variant="ghost" title={t("mcp.skills.edit")} onClick={() => { setSkillEdit(skill); setSkillDialogOpen(true) }}>
-                    <Pencil className="size-3.5" />
-                  </Button>
-                  <Button size="icon-sm" variant="ghost" title={t("mcp.skills.remove")} className="text-destructive hover:text-destructive" onClick={async () => {
-                    await skillsApi.remove(skill.slug)
-                    await refresh()
-                  }}>
-                    <Trash2 className="size-3.5" />
-                  </Button>
-                </div>
+                {/* Skills nativas do app são somente leitura: para customizar,
+                    o usuário cria uma skill própria com o mesmo slug (a global
+                    sobrescreve a nativa). */}
+                {skill.source !== "builtin" && (
+                  <div className="flex items-center gap-1 self-start pt-1">
+                    <Button size="icon-sm" variant="ghost" title={t("mcp.skills.edit")} onClick={() => { setSkillEdit(skill); setSkillDialogOpen(true) }}>
+                      <Pencil className="size-3.5" />
+                    </Button>
+                    <Button size="icon-sm" variant="ghost" title={t("mcp.skills.remove")} className="text-destructive hover:text-destructive" onClick={async () => {
+                      await skillsApi.remove(skill.slug)
+                      await refresh()
+                    }}>
+                      <Trash2 className="size-3.5" />
+                    </Button>
+                  </div>
+                )}
               </div>
             ))}
           </div>

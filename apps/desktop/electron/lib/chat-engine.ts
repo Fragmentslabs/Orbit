@@ -19,6 +19,7 @@ import {
   BROWSER_SELECTION_MIME,
   DOCUMENT_QUOTE_MIME,
   formatMotionQuoteText,
+  formatDesignQuoteText,
   StorageKeys,
   type QuotePayload,
 } from '@shared/chat'
@@ -40,9 +41,12 @@ import {
   attachDocumentMessage,
   attachMediaMessage,
   deleteMedia,
+  getMediaEntry,
   mediaIdFromUrl,
+  readMedia,
   saveMedia,
 } from './media'
+import { assetUrl, mediaKind, thumbUrl, type MediaEntry } from '@shared/media'
 import sharp from 'sharp'
 import { claimsCompletion, isNoCorrectionReply } from './overclaim'
 import {
@@ -71,10 +75,23 @@ import { addVideoToGallery } from './video/video-gallery'
 import { MIN_COMPACTION_CONTEXT, resolveAuxModel } from './aux-model'
 import { notifyChatError, notifyNewMessage } from './notifications'
 import { buildToolSet, type ImageToolHooks, type ToolContext, type TurnSnapshot } from './tools'
+import { designNameFromInputJson, openDesignLive } from './tools/design-chat'
+import { openMotionLive } from './tools/motion-chat'
 import { addTokenUsage, costOfUsage, toStepUsage, toTokenUsage } from './usage'
 import { engineAnnotations, stripEngineMarkers } from './todo-context'
 import { forwardChatEvent } from './companion-server'
 import { modoGlobal } from './permission/modo-global'
+
+// Tools cujo input (ainda em streaming) abre a aba correspondente AO VIVO,
+// assim que o campo `name` aparece no JSON — antes do modelo terminar de
+// transmitir o payload (o HTML dos artboards ou da composição). O report()
+// final da tool segue como estava; isto só adianta a abertura.
+const LIVE_OPEN_TOOLS: Record<string, (sessionId: string, name: string) => Promise<void>> = {
+  design_write: openDesignLive,
+  design_edit: (sessionId, name) => openDesignLive(sessionId, name, { placeholder: false }),
+  motion_write: openMotionLive,
+  motion_edit: (sessionId, name) => openMotionLive(sessionId, name, { placeholder: false }),
+}
 
 /**
  * Motor de chat portado do processador de sessões do opencode: converte o
@@ -488,11 +505,158 @@ async function preprocessVideoAttachment(
   }
 }
 
+/** Rótulo do tipo na nota que o agente lê para um anexo da galeria. */
+const MEDIA_REF_LABEL: Record<string, string> = {
+  artifact: 'Artifact',
+  document: 'Document',
+  motion: 'Motion composition',
+  design: 'Design canvas',
+}
+
+/**
+ * A nota de um anexo que JÁ é um item da galeria (arrastado da aba Mídia).
+ * O arquivo está em disco; a nota dá o caminho e como abrir, sem prometer
+ * nenhuma cópia — que é justamente o que não acontece.
+ */
+function mediaRefNote(kind: string, name: string, entry: MediaEntry): string {
+  const label = MEDIA_REF_LABEL[kind] ?? 'File'
+  const lines = [
+    `[${label} attached: ${name} — ref ${entry.id}]`,
+    `File: ${entry.path} (already in this app's media library — do not copy it)`,
+  ]
+  if (kind === 'document') {
+    lines.push(`Read or update it with the document tools using id "${entry.id}".`)
+  } else if (kind === 'motion') {
+    lines.push(
+      `Linked to this conversation. Read it with motion_read and change it with motion_edit/motion_write using${entry.motionId ? ` id "${entry.motionId}"` : ' its name'} — no need to recreate it. It is open in the Motion tab.`,
+    )
+  } else if (kind === 'design') {
+    lines.push(
+      `Linked to this conversation. Read it with design_read and change it with design_edit/design_write using${entry.designId ? ` id "${entry.designId}"` : ' its name'} — no need to recreate it. It is open in the Design tab.`,
+    )
+  } else if (kind === 'artifact') {
+    lines.push(
+      `Linked to this conversation. Read it with read_artifact and rewrite it with update_artifact using artifactId "${entry.id}" — no need to create a second one. It opens in the artifact tab.`,
+    )
+  }
+  return lines.join('\n')
+}
+
+/**
+ * Anexo que JÁ é um item da galeria (arrastado da aba Mídia). Diferente de todo
+ * outro caminho, AQUI NADA É COPIADO: o arquivo existe, e o agente recebe uma
+ * referência (`img_/vdo_/aud_…` ou o caminho) com a mesma nota dos anexos por
+ * referência. A bolha mostra o chip — a imagem/vídeo só vai para o modelo
+ * quando a visão exige os pixels (lidos de disco, sem reescrever).
+ */
+async function preprocessMediaRefAttachment(
+  file: FilePart,
+  deps: {
+    modelVision: boolean
+    visionModel?: { providerId: string; modelId: string }
+    sessionId?: string
+    messageId?: string
+    turnImages?: TurnImage[]
+  },
+): Promise<MessagePart[]> {
+  const id = file.mediaId ?? ''
+  const entry = await getMediaEntry(id)
+  if (!entry) {
+    return [
+      attachmentChip(file),
+      {
+        id: newId('prt'),
+        type: 'text',
+        text: `[Attachment: ${file.filename ?? id}] (it is no longer in the media library)`,
+        state: 'done',
+        source: 'attachment',
+      },
+    ]
+  }
+  const kind = mediaKind(entry)
+  const name = entry.name || file.filename || entry.id
+  const mediaUrl = assetUrl(entry)
+
+  if (kind === 'audio') {
+    return [
+      attachmentChip(file, undefined, undefined, mediaUrl),
+      { id: newId('prt'), type: 'text', text: audioAttachmentNote(name, entry.id, entry.path), state: 'done', source: 'attachment' },
+    ]
+  }
+
+  if (kind === 'video') {
+    const probe = await probeVideoAttachment(entry.path)
+    return [
+      attachmentChip(file, thumbUrl(entry) ?? undefined, undefined, mediaUrl),
+      {
+        id: newId('prt'),
+        type: 'text',
+        text: videoAttachmentNote({ filename: name, id: entry.id, file: entry.path, probe }),
+        state: 'done',
+        source: 'attachment',
+      },
+    ]
+  }
+
+  if (kind === 'image') {
+    // A imagem já está em disco: os bytes são lidos só para a VISÃO (o modelo
+    // precisa dos pixels) e para o thumbnail do chip — o arquivo NÃO é reescrito.
+    const media = await readMedia(entry.id)
+    const dataUrl = media ? `data:${media.contentType};base64,${media.buffer.toString('base64')}` : undefined
+    const thumb = dataUrl ? await imageThumbDataUrl(dataUrl) : undefined
+    const refLine = imageRefLine(mediaUrl, name, file.mime || media?.contentType || 'image/png')
+    if (deps.visionModel && dataUrl) {
+      const ref = (deps.turnImages?.length ?? 0) + 1
+      const partId = newId('prt')
+      deps.turnImages?.push({ url: dataUrl, filename: name, partId })
+      return [
+        attachmentChip(file, thumb, undefined, mediaUrl),
+        {
+          id: partId,
+          type: 'text',
+          text:
+            `[Image attached: ${name} — ref #${ref}]\n\n` +
+            `(Vision mode: the image is not described automatically — use the describe_image tool with ref #${ref} ` +
+            'to see it; in "focus" say what you need to know and, if it depends on the conversation, include the necessary context in the request.)' +
+            (refLine ? `\n${refLine}` : ''),
+          state: 'done',
+          source: 'attachment',
+        },
+      ]
+    }
+    if (deps.modelVision && dataUrl && media) {
+      const withData: FilePart = { ...file, mime: media.contentType, url: dataUrl }
+      return refLine
+        ? [withData, { id: newId('prt'), type: 'text', text: refLine, state: 'done', source: 'attachment' }]
+        : [withData]
+    }
+    return [
+      attachmentChip(file, thumb, undefined, mediaUrl),
+      {
+        id: newId('prt'),
+        type: 'text',
+        text:
+          `[Image attached: ${name}] — the current model has no vision and no vision model is configured; the image was not sent to the model.` +
+          (refLine ? `\n${refLine}` : ''),
+        state: 'done',
+        source: 'attachment',
+      },
+    ]
+  }
+
+  // Artefato, documento, peça de motion, canvas de design: o arquivo/pasta já
+  // vive no app — a nota dá o caminho e como abrir.
+  return [
+    attachmentChip(file, thumbUrl(entry) ?? undefined),
+    { id: newId('prt'), type: 'text', text: mediaRefNote(kind, name, entry), state: 'done', source: 'attachment' },
+  ]
+}
+
 /** Pré-processa um anexo NOVO antes de persistir: PDF, planilha e skill viram
- * texto extraído (evita data URLs enormes no histórico) + um chip sem dados
- * pra UI continuar mostrando o anexo; imagem continua nativa (o modelo lê
- * melhor via image part). Espelha o mesmo padrão para cada tipo — extrai,
- * embrulha em TextPart, nunca falha o envio da mensagem. */
+ *  texto extraído (evita data URLs enormes no histórico) + um chip sem dados
+ *  pra UI continuar mostrando o anexo; imagem continua nativa (o modelo lê
+ *  melhor via image part). Espelha o mesmo padrão para cada tipo — extrai,
+ *  embrulha em TextPart, nunca falha o envio da mensagem. */
 async function preprocessAttachment(
   file: FilePart,
   deps: {
@@ -512,6 +676,11 @@ async function preprocessAttachment(
   },
 ): Promise<MessagePart[]> {
   const filename = file.filename ?? ''
+
+  // Anexo que já é um item da galeria (arrastado da aba Mídia): nada é copiado,
+  // o agente recebe a referência e o caminho. É o primeiro corte porque `url`
+  // aqui é só o preview — nenhum dos caminhos abaixo vale para ele.
+  if (file.mediaId) return preprocessMediaRefAttachment(file, deps)
 
   // Elemento selecionado no browser do painel (modo seleção): o renderer
   // serializa o elemento (tag/url/selector/texto/html) como data URL JSON no
@@ -558,6 +727,10 @@ async function preprocessAttachment(
           // são só exibição), com o texto do usuário colado — ver
           // formatMotionQuoteText.
           text = formatMotionQuoteText(quote, deps.userText)
+        } else if (quote.kind === 'design') {
+          // O elemento apontado no canvas: artboard, caminho e o HTML dele, com
+          // o texto do usuário colado — ver formatDesignQuoteText.
+          text = formatDesignQuoteText(quote, deps.userText)
         } else {
           const onde = quote.page
             ? `, page ${quote.page}${
@@ -1689,6 +1862,11 @@ async function runChatTurn(win: BrowserWindow, input: SendMessageInput): Promise
       let sawFinish = false
       let lastSave = Date.now()
       const reasoningStart = new Map<string, number>()
+      // Input das tools de LIVE_OPEN_TOOLS ainda em streaming: o JSON vai
+      // chegando em pedaços (tool-input-delta) e o nome do canvas/composição
+      // aparece MUITO antes do modelo terminar de transmitir o HTML — abrir a
+      // aba ali é o que deixa o usuário ver a peça montar ao vivo.
+      const liveOpen = new Map<string, { toolName: string; json: string; opened: boolean }>()
       // Usage do último step (última chamada real ao modelo) — ao contrário do
       // total do turno (soma de todos os steps), reflete o tamanho real do
       // contexto no momento em que a resposta terminou.
@@ -1801,7 +1979,35 @@ async function runChatTurn(win: BrowserWindow, input: SendMessageInput): Promise
             }
             break
           }
-          case 'tool-call':
+          case 'tool-input-start':
+            liveOpen.set(part.id, { toolName: part.toolName, json: '', opened: false })
+            break
+          case 'tool-input-delta': {
+            const entry = liveOpen.get(part.id)
+            if (!entry || entry.opened) break
+            entry.json += part.delta
+            const open = LIVE_OPEN_TOOLS[entry.toolName]
+            if (!open) break
+            const liveName = designNameFromInputJson(entry.json)
+            if (liveName) {
+              entry.opened = true
+              void open(sessionId, liveName).catch(() => {})
+            }
+            break
+          }
+          case 'tool-input-end':
+            liveOpen.delete(part.id)
+            break
+          case 'tool-call': {
+            // Provedor sem streaming de input: o nome só chega aqui, no tool-call
+            // completo — antes do execute, então a aba ainda abre cedo.
+            const live = liveOpen.get(part.toolCallId)
+            liveOpen.delete(part.toolCallId)
+            const openLive = live && !live.opened ? LIVE_OPEN_TOOLS[live.toolName] : undefined
+            if (openLive) {
+              const name = (part.input as { name?: unknown } | undefined)?.name
+              if (typeof name === 'string' && name) void openLive(sessionId, name).catch(() => {})
+            }
             upsertPart({
               id: part.toolCallId,
               type: 'tool',
@@ -1814,6 +2020,7 @@ async function runChatTurn(win: BrowserWindow, input: SendMessageInput): Promise
               activeBashCommands.set(sessionId, typeof input?.command === 'string' ? input.command : '')
             }
             break
+          }
           case 'tool-result': {
             const existing = assistantMessage.parts.find((p) => p.id === part.toolCallId) as
               | ToolPart

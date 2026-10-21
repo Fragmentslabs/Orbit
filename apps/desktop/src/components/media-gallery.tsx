@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { AudioLines, CheckIcon, Film, ChevronDown, Clapperboard, Pause, ChevronLeft, ChevronRight, CodeXml, FileText, Filter, Folder, FolderGit2, HardDriveIcon, ImageIcon, ImageOff, Layers, LayoutGrid, MessageSquare, RefreshCw, Search, Trash2, X } from "lucide-react"
 import type { LucideIcon } from "lucide-react"
-import { assetUrl, mediaKind, thumbUrl, type MediaEntry, type MediaKind, type MediaSource } from "@shared/media"
+import { assetUrl, mediaKind, mediaMime, thumbUrl, MEDIA_DND_MIME, type MediaEntry, type MediaKind, type MediaSource } from "@shared/media"
 import { folderKey, normalizeFolderName } from "@shared/chat"
 import {
   Dialog,
@@ -23,7 +23,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { artifactApi, mediaApi, motionApi } from "@/src/lib/ipc"
+import { artifactApi, designApi, mediaApi, motionApi } from "@/src/lib/ipc"
 import { useSessionStore } from "@/src/stores/session-store"
 import { ORPHAN_KEY, usePanelStore } from "@/src/stores/panel-store"
 import { useTheme } from "@/components/theme-provider"
@@ -66,6 +66,7 @@ const KIND_ICON: Record<MediaKind, LucideIcon> = {
   audio: AudioLines,
   motion: Clapperboard,
   video: Film,
+  design: LayoutGrid,
 }
 
 /**
@@ -85,6 +86,19 @@ const SCOPE_SESSION = "session"
 const SCOPE_LOOSE = "__loose__"
 const FOLDER_PREFIX = "folder:"
 const PROJECT_PREFIX = "project:"
+
+/**
+ * Canvas de design e peça de motion são ATIVOS DO APP, não mídia da conversa:
+ * a pasta mora no armazenamento do Orbit e continua válida fora da conversa
+ * que a criou. Por isso o ESCOPO (pasta/repositório/conversa) não os esconde —
+ * senão a pasta de design some da aba sempre que o escopo cair noutra conversa.
+ * O que ainda os esconde é o filtro de TIPO, que é uma escolha explícita de quem
+ * olha ("só imagens" não mostra canvas de design).
+ */
+function isAppAsset(entry: MediaEntry): boolean {
+  const kind = mediaKind(entry)
+  return kind === "design" || kind === "motion"
+}
 
 const PERIOD_MS: Record<Exclude<PeriodFilter, "all">, number> = {
   today: 24 * 60 * 60 * 1000,
@@ -177,9 +191,30 @@ function Thumb({ entry, selected, selecting, onToggle, onOpen, versions = 1 }: {
     >
       <button
         type="button"
+        draggable
         onClick={() => (selecting ? onToggle() : isAudio ? togglePlay() : onOpen())}
         className="block size-full cursor-pointer"
         title={entry.name || entry.id}
+        onDragStart={(event) => {
+          // TODO tile — imagem, vídeo, motion, artefato, documento, áudio — é
+          // arrastável para o composer COMO ANEXO: o payload leva só a
+          // IDENTIDADE do item (id, nome, tipo e uma URL de preview). O anexo
+          // fica sendo uma REFERÊNCIA ao arquivo que já está aqui — nada é
+          // copiado, e o drop não cola caminho nenhum como texto no input.
+          // `draggable` é obrigatório nos tiles sem <img> (áudio cai no ícone).
+          event.dataTransfer.setData(
+            MEDIA_DND_MIME,
+            JSON.stringify({
+              id: entry.id,
+              name: entry.name || entry.id,
+              kind,
+              mime: mediaMime(entry),
+              url: thumbUrl(entry, isDark) ?? assetUrl(entry),
+            }),
+          )
+          event.dataTransfer.setData("text/plain", assetUrl(entry))
+          event.dataTransfer.effectAllowed = "copy"
+        }}
       >
         {failed || !preview ? (
           <div className={cn("flex size-full items-center justify-center", playing ? "text-primary" : "text-muted-foreground")}>
@@ -552,7 +587,7 @@ export function MediaGallery() {
   }, [scopedEntries, projectOf])
 
   const hasLoose = useMemo(
-    () => scopedEntries.some((entry) => !folderOf(entry) && !projectOf(entry)),
+    () => scopedEntries.some((entry) => !isAppAsset(entry) && !folderOf(entry) && !projectOf(entry)),
     [scopedEntries, folderOf, projectOf],
   )
 
@@ -598,7 +633,10 @@ export function MediaGallery() {
    * apertado.
    */
   const defaultScope = useMemo(() => {
-    const has = (value: string) => scopedEntries.some((entry) => matchesScope(entry, value))
+    // O escopo padrão é escolhido pelo que é mídia DE CONVERSA: um canvas de
+    // design não pode decidir o escopo, senão a galeria abriria num filtro
+    // vazio só porque ele existe.
+    const has = (value: string) => scopedEntries.some((entry) => !isAppAsset(entry) && matchesScope(entry, value))
     if (activeSession?.folderId) {
       const value = `${FOLDER_PREFIX}${activeSession.folderId}`
       if (has(value)) return value
@@ -646,7 +684,7 @@ export function MediaGallery() {
       // junto do escopo, antes da data, porque é ele que costuma estar errado
       // quando a grade parece vazia.
       if (kind !== "all" && mediaKind(entry) !== kind) return false
-      if (!matchesScope(entry, scope)) return false
+      if (!isAppAsset(entry) && !matchesScope(entry, scope)) return false
       if (entry.createdAt < since) return false
       if (!needle) return true
       return `${entry.name ?? ""} ${entry.taskId ?? ""} ${entry.id}`.toLowerCase().includes(needle)
@@ -713,6 +751,12 @@ export function MediaGallery() {
         if (entry.motionId) void motionApi.open({ id: entry.motionId })
         return
       }
+      // Canvas de design: mesmo caso do motion — o clique abre a ABA, não o
+      // visor; o vínculo é o designId, e quem sabe reabrir é o main.
+      if (kind === "design") {
+        if (entry.designId) void designApi.open({ id: entry.designId })
+        return
+      }
       if (kind !== "artifact" && kind !== "document") {
         setPreview(entry)
         // A cadeia é fixada na abertura: trocar de versão dentro do visor não
@@ -756,8 +800,10 @@ export function MediaGallery() {
       // As abas das peças que vão embora fecham junto: a pasta some, e uma aba
       // aberta num motion excluído só mostraria um erro.
       const motionIds = entries.flatMap((e) => (ids.includes(e.id) && e.motionId ? [e.motionId] : []))
+      const designIds = entries.flatMap((e) => (ids.includes(e.id) && e.designId ? [e.designId] : []))
       await mediaApi.remove(ids)
       usePanelStore.getState().closeMotionTabs(motionIds)
+      usePanelStore.getState().closeDesignTabs(designIds)
       setConfirmDelete(null)
       setSelected(new Set())
       setPreview((current) => (current && ids.includes(current.id) ? null : current))
@@ -765,6 +811,11 @@ export function MediaGallery() {
       await refresh()
     },
     [entries, refresh],
+  )
+
+  const selectedDesignCount = useMemo(
+    () => entries.filter((e) => selected.has(e.id) && mediaKind(e) === "design").length,
+    [entries, selected],
   )
 
   const selectedMotionCount = useMemo(
@@ -1070,6 +1121,7 @@ export function MediaGallery() {
                 files: comVersoes([...selected]).length,
               })}
               {selectedMotionCount > 0 && ` ${t("media.confirmDelete.motionNote", { count: selectedMotionCount })}`}
+              {selectedDesignCount > 0 && ` ${t("media.confirmDelete.designNote", { count: selectedDesignCount })}`}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>

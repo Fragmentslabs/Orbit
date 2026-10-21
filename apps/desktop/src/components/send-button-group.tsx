@@ -20,6 +20,8 @@ export interface QueueAttachment {
   mediaType?: string;
   filename?: string;
   url?: string;
+  /** Anexo que é uma referência à galeria (aba Mídia) — ver FilePart.mediaId. */
+  mediaId?: string;
 }
 
 interface SendButtonGroupProps {

@@ -39,7 +39,7 @@ export interface MediaCredit {
  * registro guarda a capa e a URL de reprodução).
  * Ausente em registros gravados antes disso existir = "image".
  */
-export type MediaKind = "image" | "artifact" | "document" | "audio" | "motion" | "video"
+export type MediaKind = "image" | "artifact" | "document" | "audio" | "motion" | "video" | "design"
 
 /** Formatos de entrega de um documento. O fonte é sempre Markdown; estes são
  *  os arquivos renderizados a partir dele. */
@@ -128,6 +128,13 @@ export interface MediaEntry {
    * e nada dela é copiado para a galeria.
    */
   motionId?: string
+  /**
+   * Só em canvas de design: o id do canvas no registro do main
+   * (`orbit-data/design.json`). Espelha `motionId` — a pasta mora no
+   * armazenamento do app (modo chat) e nada dela é copiado para a galeria além
+   * da capa; abrir é reabrir a aba Design.
+   */
+  designId?: string
   /**
    * Material da aba Fontes: a pasta da sidebar com que este arquivo é
    * COMPARTILHADO. Ausente = é só da conversa (`sessionId`). É o equivalente, para
@@ -234,6 +241,83 @@ export const VIDEO_SCHEME = "orbit-video"
  * origem opaca exigem CORS). Diferente dos vídeos, aqui se serve uma PASTA.
  */
 export const MOTION_SCHEME = "orbit-motion"
+/**
+ * Canvas de design (pasta do app: canvas.json + um .html por artboard, servidos
+ * estáticos — sem runtime injetado, já que não há linha do tempo nem seek). Mesmo
+ * `corsEnabled` do motion: fonte @font-face e fetch dentro do artboard exigem CORS.
+ */
+export const DESIGN_SCHEME = "orbit-design"
+/**
+ * Fontes baixadas pelo Orbit (biblioteca em `orbit-data/fonts`). Servidas por
+ * arquivo com hash no nome, `corsEnabled` e `Access-Control-Allow-Origin: *`:
+ * o artboard, a composição de motion e a própria janela do app (outra origem)
+ * declaram a mesma fonte por `@font-face`.
+ */
+export const FONT_SCHEME = "orbit-font"
+
+/**
+ * MIME do drag & drop interno: o tile da aba Mídia arrasta o item COMO ANEXO
+ * para o composer. O payload leva só a IDENTIDADE do item (id, nome, tipo e uma
+ * URL de preview) — nunca os bytes: o anexo é uma REFERÊNCIA ao arquivo que já
+ * existe na galeria, então nada é copiado nem colado como texto no input. Sem
+ * isso o drag nativo do <img> só levava o texto da URL e o drop colava o
+ * caminho no campo.
+ */
+export const MEDIA_DND_MIME = "application/x-orbit-media"
+
+/** `kind` normalizado — registros antigos não têm o campo. */
+export function mediaKind(entry: Pick<MediaEntry, "kind">): MediaKind {
+  return entry.kind ?? "image"
+}
+
+/**
+ * MIME de uma entrada da galeria. O registro não guarda MIME (o id é a fonte da
+ * verdade) — ele sai da extensão do id e, se ela não for reconhecida, do `kind`.
+ * É o que o composer usa para decidir se mostra o thumbnail no chip.
+ */
+const MIME_BY_EXT: Record<string, string> = {
+  png: "image/png",
+  jpg: "image/jpeg",
+  jpeg: "image/jpeg",
+  webp: "image/webp",
+  gif: "image/gif",
+  svg: "image/svg+xml",
+  mp4: "video/mp4",
+  m4v: "video/x-m4v",
+  mov: "video/quicktime",
+  webm: "video/webm",
+  mkv: "video/x-matroska",
+  avi: "video/x-msvideo",
+  mp3: "audio/mpeg",
+  wav: "audio/wav",
+  m4a: "audio/mp4",
+  aac: "audio/aac",
+  ogg: "audio/ogg",
+  oga: "audio/ogg",
+  opus: "audio/opus",
+  flac: "audio/flac",
+  weba: "audio/webm",
+  html: "text/html",
+  htm: "text/html",
+  md: "text/markdown",
+  pdf: "application/pdf",
+  docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+}
+
+const KIND_FALLBACK_MIME: Record<MediaKind, string> = {
+  image: "image/png",
+  video: "video/mp4",
+  audio: "audio/mpeg",
+  artifact: "text/html",
+  document: "text/markdown",
+  motion: "text/html",
+  design: "text/html",
+}
+
+export function mediaMime(entry: Pick<MediaEntry, "id" | "kind">): string {
+  const ext = entry.id.split(".").pop()?.toLowerCase() ?? ""
+  return MIME_BY_EXT[ext] ?? KIND_FALLBACK_MIME[mediaKind(entry)]
+}
 
 /**
  * Id de um vídeo anexado (`vdo_…`): o nome do arquivo na pasta de anexos de
@@ -241,11 +325,6 @@ export const MOTION_SCHEME = "orbit-motion"
  * attachment-ref.ts (que o guarda) precisam do MESMO formato e um importa o outro.
  */
 export const SAFE_VIDEO_MEDIA_ID = /^vdo_[a-z0-9]+\.(mp4|m4v|mov|webm|mkv|avi)$/
-
-/** `kind` normalizado — registros antigos não têm o campo. */
-export function mediaKind(entry: Pick<MediaEntry, "kind">): MediaKind {
-  return entry.kind ?? "image"
-}
 
 /**
  * URL que ABRE o ativo: a imagem em si, o HTML do artefato, ou — no
@@ -263,6 +342,9 @@ export function assetUrl(entry: Pick<MediaEntry, "id" | "kind" | "thumb" | "thum
   // orbit-motion:// e reaberta pela aba). Sem esta linha o id da capa seria
   // pedido ao scheme errado e voltaria vazio.
   if (kind === "motion") return thumbUrl(entry) ?? `${MEDIA_SCHEME}://${entry.id}`
+  // Mesmo caso do motion: o canvas mora na pasta do app, não na galeria — o
+  // único byte guardado aqui é a capa.
+  if (kind === "design") return thumbUrl(entry) ?? `${MEDIA_SCHEME}://${entry.id}`
   // O vídeo toca pela URL do player; sem ela (registro sem player) cai na capa.
   if (kind === "video") return entry.videoUrl ?? thumbUrl(entry) ?? `${MEDIA_SCHEME}://${entry.id}`
   return `${MEDIA_SCHEME}://${entry.id}`

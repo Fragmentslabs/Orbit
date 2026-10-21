@@ -828,6 +828,7 @@
     "view": "Ver",
     "global": "Global",
     "project": "Projeto",
+    "builtin": "Nativos",
     "scriptsCount_one": "{{count}} script",
     "scriptsCount_other": "{{count}} scripts",
     "createManually": "Criar manualmente",

@@ -97,5 +97,5 @@ export function imageRefLine(mediaUrl: string | undefined, filename: string, mim
   const id = mediaUrl ? mediaUrl.replace(/^orbit-media:\/\//, '') : ''
   if (!id) return ''
   const kind = mime === 'image/gif' || /\.gif$/i.test(filename) ? 'GIF (animated)' : 'Image'
-  return `[${kind} file: ${filename || 'unnamed'} — ref ${id}] (to place it in a motion piece call motion_asset with this ref; otherwise ignore this line.)`
+  return `[${kind} file: ${filename || 'unnamed'} — ref ${id}] (to place it in a motion piece call motion_asset, or in a design canvas design_asset, with this ref; otherwise ignore this line.)`
 }

@@ -1,4 +1,5 @@
 import type { ChatStatus } from "@shared/chat"
+import { MEDIA_DND_MIME } from "@shared/media"
 import type { FileUIPart } from "ai"
 import { useTranslation } from "react-i18next"
 import {
@@ -79,9 +80,27 @@ import {
 // Provider Context & Types
 // ============================================================================
 
+/**
+ * Um anexo do composer. Igual ao FileUIPart + id, com `mediaId` para o anexo
+ * que é uma REFERÊNCIA à galeria (arrastado da aba Mídia): nesse caso `url` é só
+ * o preview e os bytes nunca passam pelo renderer.
+ */
+export type PromptInputFile = FileUIPart & { id: string; mediaId?: string }
+
+/** O que o tile da aba Mídia manda no drop — a identidade do item, nunca bytes. */
+export interface MediaAttachmentRef {
+  id: string
+  name?: string
+  mime?: string
+  /** URL de preview (thumbnail) do item na galeria. */
+  url?: string
+}
+
 export interface AttachmentsContext {
-  files: (FileUIPart & { id: string })[]
+  files: PromptInputFile[]
   add: (files: File[] | FileList) => void
+  /** Anexa um item da galeria POR REFERÊNCIA — sem File e sem copiar bytes. */
+  addMedia: (ref: MediaAttachmentRef) => void
   remove: (id: string) => void
   clear: () => void
   openFileDialog: () => void
@@ -188,7 +207,7 @@ export function PromptInputProvider({
   const clearInput = useCallback(() => setTextInput(""), [])
 
   // ----- attachments state (global when wrapped)
-  const [attachmentFiles, setAttachmentFiles] = useState<(FileUIPart & { id: string })[]>([])
+  const [attachmentFiles, setAttachmentFiles] = useState<PromptInputFile[]>([])
   const fileInputRef = useRef<HTMLInputElement | null>(null)
   const openRef = useRef<() => void>(() => {})
 
@@ -209,6 +228,20 @@ export function PromptInputProvider({
         })),
       ),
     )
+  }, [])
+
+  const addMedia = useCallback((ref: MediaAttachmentRef) => {
+    if (!ref.id) {
+      return
+    }
+    setAttachmentFiles(prev => prev.concat({
+      id: nanoid(),
+      type: "file" as const,
+      url: ref.url ?? "",
+      mediaType: ref.mime ?? "",
+      filename: ref.name,
+      mediaId: ref.id,
+    }))
   }, [])
 
   const remove = useCallback((id: string) => {
@@ -255,12 +288,13 @@ export function PromptInputProvider({
     () => ({
       files: attachmentFiles,
       add,
+      addMedia,
       remove,
       clear,
       openFileDialog,
       fileInputRef,
     }),
-    [attachmentFiles, add, remove, clear, openFileDialog],
+    [attachmentFiles, add, addMedia, remove, clear, openFileDialog],
   )
 
   const __registerFileInput = useCallback(
@@ -313,7 +347,7 @@ export const usePromptInputAttachments = () => {
 }
 
 export type PromptInputAttachmentProps = HTMLAttributes<HTMLDivElement> & {
-  data: FileUIPart & { id: string }
+  data: PromptInputFile
   className?: string
 }
 
@@ -399,7 +433,7 @@ export function PromptInputAttachment({ data, className, ...props }: PromptInput
 }
 
 export type PromptInputAttachmentsProps = Omit<HTMLAttributes<HTMLDivElement>, "children"> & {
-  children: (attachment: FileUIPart & { id: string }) => ReactNode
+  children: (attachment: PromptInputFile) => ReactNode
   /** Elemento que entra na MESMA linha dos badges, antes deles (ex.: o badge da
    *  resposta citada). */
   leading?: ReactNode
@@ -497,7 +531,7 @@ export const PromptInput = ({
   const formRef = useRef<HTMLFormElement | null>(null)
 
   // ----- Local attachments (only used when no provider)
-  const [items, setItems] = useState<(FileUIPart & { id: string })[]>([])
+  const [items, setItems] = useState<PromptInputFile[]>([])
   const files = usingProvider ? controller.attachments.files : items
 
   // Keep a ref to files for cleanup on unmount (avoids stale closure)
@@ -561,7 +595,7 @@ export const PromptInput = ({
             message: t("attachments.errorMaxFiles"),
           })
         }
-        const next: (FileUIPart & { id: string })[] = []
+        const next: PromptInputFile[] = []
         for (const file of capped) {
           next.push({
             id: nanoid(),
@@ -576,6 +610,20 @@ export const PromptInput = ({
     },
     [matchesAccept, maxFiles, maxFileSize, onError, t],
   )
+
+  const addMediaLocal = useCallback((ref: MediaAttachmentRef) => {
+    if (!ref.id) {
+      return
+    }
+    setItems(prev => prev.concat({
+      id: nanoid(),
+      type: "file" as const,
+      url: ref.url ?? "",
+      mediaType: ref.mime ?? "",
+      filename: ref.name,
+      mediaId: ref.id,
+    }))
+  }, [])
 
   const removeLocal = useCallback(
     (id: string) =>
@@ -603,6 +651,7 @@ export const PromptInput = ({
   )
 
   const add = usingProvider ? controller.attachments.add : addLocal
+  const addMedia = usingProvider ? controller.attachments.addMedia : addMediaLocal
   const remove = usingProvider ? controller.attachments.remove : removeLocal
   const clear = usingProvider ? controller.attachments.clear : clearLocal
   const openFileDialog = usingProvider ? controller.attachments.openFileDialog : openFileDialogLocal
@@ -623,6 +672,38 @@ export const PromptInput = ({
     }
   }, [files, syncHiddenInput])
 
+  /**
+   * Tile da aba Mídia arrastado até o composer: vira um anexo POR REFERÊNCIA.
+   * O payload traz só a identidade (id, nome, tipo e preview) — os bytes ficam
+   * onde estão, na galeria, e o main NÃO copia nada no envio (ver
+   * preprocessAttachment). Serve a qualquer tipo: imagem, vídeo, áudio, motion,
+   * artefato, documento, canvas de design.
+   */
+  const attachMediaDrag = useCallback(
+    (payload: string) => {
+      try {
+        const parsed = JSON.parse(payload) as {
+          id?: unknown
+          name?: unknown
+          mime?: unknown
+          url?: unknown
+        }
+        if (typeof parsed.id !== "string" || !parsed.id) {
+          return
+        }
+        addMedia({
+          id: parsed.id,
+          name: typeof parsed.name === "string" ? parsed.name : undefined,
+          mime: typeof parsed.mime === "string" ? parsed.mime : undefined,
+          url: typeof parsed.url === "string" ? parsed.url : undefined,
+        })
+      } catch {
+        // payload inválido — ignora o drop
+      }
+    },
+    [addMedia],
+  )
+
   // Attach drop handlers on nearest form and document (opt-in)
   useEffect(() => {
     const form = formRef.current
@@ -634,11 +715,19 @@ export const PromptInput = ({
     }
 
     const onDragOver = (e: DragEvent) => {
-      if (e.dataTransfer?.types?.includes("Files")) {
+      if (e.dataTransfer?.types?.includes("Files") || e.dataTransfer?.types?.includes(MEDIA_DND_MIME)) {
         e.preventDefault()
       }
     }
     const onDrop = (e: DragEvent) => {
+      // Item da aba Mídia: anexa (por cima do drop nativo do <textarea>, que
+      // colaria o texto da URL no campo).
+      const media = e.dataTransfer?.getData(MEDIA_DND_MIME)
+      if (media) {
+        e.preventDefault()
+        attachMediaDrag(media)
+        return
+      }
       if (e.dataTransfer?.types?.includes("Files")) {
         e.preventDefault()
       }
@@ -652,7 +741,7 @@ export const PromptInput = ({
       form.removeEventListener("dragover", onDragOver)
       form.removeEventListener("drop", onDrop)
     }
-  }, [add, globalDrop])
+  }, [add, attachMediaDrag, globalDrop])
 
   useEffect(() => {
     if (!globalDrop) {
@@ -660,11 +749,17 @@ export const PromptInput = ({
     }
 
     const onDragOver = (e: DragEvent) => {
-      if (e.dataTransfer?.types?.includes("Files")) {
+      if (e.dataTransfer?.types?.includes("Files") || e.dataTransfer?.types?.includes(MEDIA_DND_MIME)) {
         e.preventDefault()
       }
     }
     const onDrop = (e: DragEvent) => {
+      const media = e.dataTransfer?.getData(MEDIA_DND_MIME)
+      if (media) {
+        e.preventDefault()
+        attachMediaDrag(media)
+        return
+      }
       if (e.dataTransfer?.types?.includes("Files")) {
         e.preventDefault()
       }
@@ -678,7 +773,7 @@ export const PromptInput = ({
       document.removeEventListener("dragover", onDragOver)
       document.removeEventListener("drop", onDrop)
     }
-  }, [add, globalDrop])
+  }, [add, attachMediaDrag, globalDrop])
 
   useEffect(
     () => () => {
@@ -706,12 +801,13 @@ export const PromptInput = ({
     () => ({
       files: files.map(item => ({ ...item, id: item.id })),
       add,
+      addMedia,
       remove,
       clear,
       openFileDialog,
       fileInputRef: inputRef,
     }),
-    [files, add, remove, clear, openFileDialog],
+    [files, add, addMedia, remove, clear, openFileDialog],
   )
 
   const handleSubmit: FormEventHandler<HTMLFormElement> = event => {

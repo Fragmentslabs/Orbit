@@ -85,7 +85,7 @@ function Layout() {
       // sem ela a aba nasceria no balde órfão, escondida atrás do chat aberto.
       // O balde é o do chat ATIVO — é onde o painel está apontado agora.
       const resolved =
-        event.type === "motion" && !event.sessionId
+        (event.type === "motion" || event.type === "design") && !event.sessionId
           ? { ...event, sessionId: useSessionStore.getState().activeIds[modeRef.current] ?? undefined }
           : event
       store.applyEvent(resolved)

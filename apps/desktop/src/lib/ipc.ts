@@ -410,6 +410,10 @@ export const panelApi = {
   /** Registra (ou limpa, com null) o webContents do <webview> do painel — por sessão de chat */
   register: (sessionId: string | null, webContentsId: number | null) =>
     window.ipcRenderer.send("panel:register", sessionId, webContentsId),
+  /** Solta o registro SÓ se ele for o webContents informado (o <webview> que
+   *  acabou de morrer). Não derruba o registro de outro webview vivo. */
+  unregister: (sessionId: string | null, webContentsId: number | null) =>
+    window.ipcRenderer.send("panel:unregister", sessionId, webContentsId),
   onEvent: (listener: (event: PanelEvent) => void) => {
     const wrapper = window.ipcRenderer.on("panel:event", (event) => listener(event as PanelEvent))
     return () => window.ipcRenderer.off("panel:event", wrapper)
@@ -599,6 +603,57 @@ export const motionApi = {
     const wrapper = window.ipcRenderer.on("motion:changed", (payload) => listener(payload as { id: string }))
     return () => window.ipcRenderer.off("motion:changed", wrapper)
   },
+}
+
+/**
+ * Canvas de design do preview (orbit-design://). Espelha motionApi, bem mais
+ * enxuto: não há render nem camadas — o artboard é HTML estático, e a aba só
+ * precisa reabrir e recarregar ao vivo.
+ */
+/** Uma família instalada na biblioteca do Orbit (ver electron/lib/fonts/store). */
+export interface OrbitFontInfo {
+  id: string
+  family: string
+  category?: string
+  variable: boolean
+  weights: string[]
+  license?: string
+}
+
+export interface FontChoices {
+  /** Baixadas pela tool font_use — valem no design, no motion e nos artefatos. */
+  orbit: OrbitFontInfo[]
+  /** Instaladas no computador: o Chromium já as carrega, basta o nome. */
+  system: string[]
+  /** @font-face das fontes do Orbit — a janela do app precisa dele para a prévia. */
+  css: string
+}
+
+export const fontsApi = {
+  list: () => window.ipcRenderer.invoke("fonts:list") as Promise<FontChoices>,
+}
+
+export const designApi = {
+  /** Reabre um canvas já registrado. O card da galeria manda o `id`; o card do
+   *  chat manda o que a tool deixou no `input` — o `path` da pasta (modo
+   *  código, design_preview) ou o `name` do canvas com a `sessionId` (modo
+   *  chat, design_write/design_edit) — e o main traduz pelo registro. `false`
+   *  quando o canvas saiu do registro. */
+  open: (ref: { id?: string; path?: string; sessionId?: string; name?: string }) =>
+    window.ipcRenderer.invoke("design:open", ref) as Promise<boolean>,
+  /** A pasta do canvas mudou no disco: remonta os iframes dos artboards. */
+  onChanged: (listener: (payload: { id: string }) => void) => {
+    const wrapper = window.ipcRenderer.on("design:changed", (payload) => listener(payload as { id: string }))
+    return () => window.ipcRenderer.off("design:changed", wrapper)
+  },
+  /** O fonte de um artboard, como está no disco (sem a ponte do editor). */
+  readBoard: (id: string, file: string) => window.ipcRenderer.invoke("design:readBoard", { id, file }) as Promise<string>,
+  /** Reescreve o fonte de um artboard — edição feita pela pessoa no canvas. */
+  writeBoard: (id: string, file: string, html: string) =>
+    window.ipcRenderer.invoke("design:writeBoard", { id, file, html }) as Promise<void>,
+  /** Move, redimensiona ou renomeia um artboard no canvas.json. */
+  updateBoard: (id: string, file: string, patch: { title?: string; x?: number; y?: number; w?: number; h?: number }) =>
+    window.ipcRenderer.invoke("design:updateBoard", { id, file, patch }) as Promise<void>,
 }
 
 /**

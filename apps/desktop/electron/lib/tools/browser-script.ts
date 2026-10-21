@@ -1,7 +1,7 @@
 import { tool, type ToolSet } from 'ai'
 import { z } from 'zod'
 import { runBrowserScript, type CaptureItem } from '../browser-script'
-import type { ToolContext } from './context'
+import { resolveSafePath, type ToolContext } from './context'
 
 /**
  * Automação de browser em lote (engine oculta — ver browser-script.ts).
@@ -28,6 +28,8 @@ const API_DOC = `Available inside the script (global \`orbit\`, all async — us
 - await orbit.hover(target)  → real mouse move over the target
 - await orbit.drag(from, to, { steps, release })  → real mouse drag; release: false keeps the button pressed so you can orbit.capture() mid-drag, then orbit.drag(null, to2) to continue/drop or orbit.mouseUp()
   (target = CSS selector string or { x, y } in viewport px)
+- await orbit.fetch(url, { method, headers, body, as: 'text'|'json' })  → HTTP GET/POST with the browser session's cookies (robots.txt, sitemap, JS bundles, APIs) → { status, url, headers, body } (body capped at 200k chars)
+- await orbit.save(name, data, { format: 'text'|'json'|'base64' })  → writes an artifact under outDir (relative name, e.g. 'pages/home.json') → { path, name, bytes }; objects are saved as JSON
 - console.log(...)  → comes back in the result`
 
 function describeCaptures(captures: CaptureItem[]): string {
@@ -35,6 +37,21 @@ function describeCaptures(captures: CaptureItem[]): string {
   return captures
     .map((c) => `- ${c.name}: ${c.mediaUrl} (${c.width}×${c.height}, ${Math.round(c.size / 1024)}KB)`)
     .join('\n')
+}
+
+function describeArtifacts(result: Awaited<ReturnType<typeof runBrowserScript>>): string {
+  if (result.artifacts.length === 0) return ''
+  const lines = [
+    '',
+    `## Artifacts (${result.artifacts.length}) — saved in ${result.artifactsDir}`,
+    ...result.artifacts
+      .slice(0, 50)
+      .map((a) => `- ${a.name} (${Math.round(a.bytes / 1024)}KB)`),
+  ]
+  if (result.artifacts.length > 50) {
+    lines.push(`- … and ${result.artifacts.length - 50} more`)
+  }
+  return lines.join('\n')
 }
 
 function formatResult(
@@ -57,13 +74,15 @@ function formatResult(
       'The images were saved (they are not in your context). To show one to the user: show_image({ media: "<mediaUrl>" }).',
     )
   }
+  const artifacts = describeArtifacts(result)
+  if (artifacts) lines.push(artifacts)
   return lines.join('\n')
 }
 
 export function createBrowserScriptTools(ctx: ToolContext): ToolSet {
   return {
     run_browser_script: tool({
-      description: `Runs a JavaScript automation script in a hidden browser (shares the panel browser's cookies/logins) and takes screenshots in bulk — dozens of shots in a single call, without images entering your context. Use it for repetitive visual work: many URLs, theme/color variations, several viewports, loops with conditions.\n\n${API_DOC}`,
+      description: `Runs a JavaScript automation script in a hidden browser (shares the panel browser's cookies/logins) and takes screenshots in bulk — dozens of shots in a single call, without images entering your context. Use it for repetitive work: many URLs, theme/color variations, several viewports, loops with conditions, crawling a site.\n\nThe loop runs inside the browser engine, not in the model: one call can visit dozens of pages. Use orbit.save() to write the results as files (HTML, JSON, assets) and orbit.fetch() for cheap requests (robots.txt, sitemap, JS bundles, APIs) that reuse the session cookies.\n\n${API_DOC}`,
       inputSchema: z.object({
         script: z
           .string()
@@ -74,8 +93,14 @@ export function createBrowserScriptTools(ctx: ToolContext): ToolSet {
           .describe('Short task name (letters, digits, - and _) — groups the captures'),
         timeoutMs: z.number().int().min(5_000).max(600_000).optional().describe('Limit (default 120s)'),
         keep: z.boolean().optional().describe('Keeps the script folder after running (debugging)'),
+        outDir: z
+          .string()
+          .optional()
+          .describe(
+            'Folder inside the working folder where orbit.save() writes its artifacts (e.g. ".orbit/recon/site"). Without it, artifacts go to a temporary task folder.',
+          ),
       }),
-      execute: async ({ script, taskId, timeoutMs, keep }) => {
+      execute: async ({ script, taskId, timeoutMs, keep, outDir }) => {
         const result = await runBrowserScript({
           script,
           sessionId: ctx.sessionId,
@@ -83,6 +108,8 @@ export function createBrowserScriptTools(ctx: ToolContext): ToolSet {
           timeoutMs,
           keep,
           source: 'script',
+          // resolveSafePath mantém a saída dentro da pasta de trabalho.
+          outDir: outDir ? resolveSafePath(ctx, outDir) : undefined,
         })
         const header = result.timedOut
           ? `Script "${result.taskId}" stopped by timeout — captures up to that point:`

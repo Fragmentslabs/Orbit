@@ -18,6 +18,15 @@ import { motionAudioTracks } from './lib/video/motion-audio'
 import { motionVideoAudioTracks } from './lib/video/motion-video-audio'
 import { reopenMotion } from './lib/video/motion-open'
 import {
+  designIdForName,
+  designIdForPath,
+  readDesignBoard,
+  registerDesignProtocol,
+  updateDesignBoard,
+  writeDesignBoard,
+} from './lib/design/design-store'
+import { reopenDesign } from './lib/design/design-open'
+import {
   addSessionMaterial,
   adoptDraftMaterials,
   listSessionMaterials,
@@ -72,16 +81,23 @@ import {
   readArtifact,
   readDocumentSource,
   registerArtifactProtocol,
-  registerArtifactSchemePrivileges,
+  registerSchemePrivileges,
   readMedia,
   registerMediaProtocol,
 } from './lib/media'
+import {
+  fontFaceCss,
+  listFonts,
+  registerFontProtocol,
+} from './lib/fonts/store'
+import { listSystemFonts } from './lib/fonts/system'
 import type { AppPreferences, MessageQueueSnapshot, ReasoningPrefsMap, SessionModeOverrides, WorkerConfigSnapshot } from '@shared/companion'
 import { startCompanionServer, getCompanionStatus, setPairingMode, forwardChatEvent, broadcastSessionModels, broadcastSessionModes, broadcastWorkerConfig, broadcastAppPreferences, broadcastRotationConfig, broadcastReasoningPrefs, broadcastMessageQueue } from './lib/companion-server'
 import { setSessionModelsCache, setSessionModesCache, setWorkerConfigCache, setRotationHttpCache, setReasoningPrefsCache } from './lib/companion-http'
 import { setRotationConfigCache } from './lib/model-rotation'
 import { readJson as readStorageJson } from './lib/storage'
-import { registerPanelWebContents } from './lib/panel-browser'
+import { registerPanelWebContents, unregisterPanelWebContents } from './lib/panel-browser'
+import { registerPanelStateIpc } from './lib/panel-state'
 import { registerVoiceIpc, syncWhisperServer } from './lib/voice'
 import { setupMemoryScheduler } from './lib/memory/scheduler'
 import { getAppSettings, loadAppSettings, onAppSettingsChange, setAppSettings } from './lib/app-settings'
@@ -229,11 +245,13 @@ function windowIconPath(): string {
   return path.join(process.env.VITE_PUBLIC, 'logo.png')
 }
 
-// Privilégios do orbit-artifact:// — TEM que acontecer aqui, no topo do
-// módulo: depois de app.whenReady() o Chromium já fixou a tabela de schemes e
-// o artefato carregaria como origem opaca, sem rodar script. O protocolo em si
-// (registerArtifactProtocol) é registrado lá embaixo, com o app pronto.
-registerArtifactSchemePrivileges()
+// Privilégios de TODOS os schemes do app (artefato, áudio, vídeo, motion,
+// design e fontes) — TEM que acontecer aqui, no topo do módulo: depois de
+// app.whenReady() o Chromium já fixou a tabela de schemes e a página carregaria
+// como origem opaca, sem rodar script. E é UMA chamada só: uma segunda lista
+// anula a primeira (foi assim que o design deixou de carregar). Os protocolos
+// em si são registrados lá embaixo, com o app pronto.
+registerSchemePrivileges()
 
 let win: BrowserWindow | null
 let entranceWindowCreated = false
@@ -1937,6 +1955,16 @@ app.whenReady().then(() => {
     registerPanelWebContents(sessionId, id),
   )
 
+  // <webview> descartado (aba desmontada): solta o registro só se ele for o
+  // webContents que morreu — o browser do agente da sessão é outro e continua.
+  ipcMain.on('panel:unregister', (_event, sessionId: string | null, id: number | null) =>
+    unregisterPanelWebContents(sessionId, id),
+  )
+
+  // Snapshot do painel lateral que o renderer empurra a cada mudança de aba
+  // (tool read_open_panel: o que o usuário está vendo agora).
+  registerPanelStateIpc()
+
   // Eventos de sessão/pasta emitidos pelo renderer (novo chat, renomear, pin,
   // arquivar, mover, deletar...). O remetente já aplicou a mudança no store
   // local — aqui o evento segue para as OUTRAS janelas e para os companions
@@ -2016,6 +2044,14 @@ app.whenReady().then(() => {
   // serve a PASTA registrada e o script do runtime que o render também usa.
   registerMotionProtocol()
 
+  // Canvas de design (orbit-design://, ver lib/design/design-store): serve a
+  // pasta registrada (canvas.json + artboards), sem runtime injetado — o
+  // conteúdo é HTML estático.
+  registerDesignProtocol()
+
+  // Fontes instaladas pela tool font_use (orbit-font://<hash>.woff2).
+  registerFontProtocol()
+
   // Reabrir uma peça que já está no registro: o card do chat e o tile da Mídia
   // mandam só o id. A composição (pasta + entrada) sai do registro do main — o
   // renderer não tem por que conhecer caminho de projeto nenhum.
@@ -2032,6 +2068,48 @@ app.whenReady().then(() => {
       if (!id && ref.sessionId && ref.name) id = await motionIdForName(ref.sessionId, ref.name)
       return id ? reopenMotion(id) : false
     },
+  )
+
+  // Fontes do seletor do inspetor de design: a biblioteca do Orbit (com o CSS
+  // pronto — a janela do app também precisa do @font-face para desenhar a
+  // prévia de cada família) e as famílias instaladas no computador.
+  ipcMain.handle('fonts:list', async () => {
+    const orbit = await listFonts()
+    return {
+      orbit: orbit.map((font) => ({
+        id: font.id,
+        family: font.family,
+        category: font.category,
+        variable: font.variable,
+        weights: font.weights,
+        license: font.license?.type,
+      })),
+      system: await listSystemFonts(),
+      css: fontFaceCss(orbit),
+    }
+  })
+
+  // Reabrir um canvas pelo id: o card da galeria manda o id; o card do chat
+  // manda o caminho da pasta (modo código, design_preview) ou o NOME do canvas
+  // com a sessão (modo chat, design_write/design_edit), e o registro traduz.
+  ipcMain.handle('design:open', async (_event, ref: { id?: string; path?: string; sessionId?: string; name?: string }) => {
+    let id = ref.id ?? null
+    if (!id && ref.path) id = await designIdForPath(ref.path)
+    if (!id && ref.sessionId && ref.name) id = await designIdForName(ref.sessionId, ref.name)
+    return id ? reopenDesign(id) : false
+  })
+
+  // Edição feita pela PESSOA no canvas (propriedades, texto, código, mover e
+  // redimensionar artboards). O renderer manda id + nome do arquivo; a pasta e
+  // a trava do nome ficam no main (ver design-store).
+  ipcMain.handle('design:readBoard', (_event, input: { id: string; file: string }) => readDesignBoard(input.id, input.file))
+  ipcMain.handle('design:writeBoard', (_event, input: { id: string; file: string; html: string }) =>
+    writeDesignBoard(input.id, input.file, input.html),
+  )
+  ipcMain.handle(
+    'design:updateBoard',
+    (_event, input: { id: string; file: string; patch: { title?: string; x?: number; y?: number; w?: number; h?: number } }) =>
+      updateDesignBoard(input.id, input.file, input.patch),
   )
 
   // Render de uma composição REGISTRADA, pedido pela aba de motion do painel. O

@@ -25,6 +25,7 @@ import {
   createWriteTool,
 } from './files'
 import { createSkillTool } from './create-skill'
+import { createSkillReadTool } from './skill-read'
 import { createMcpTools } from './mcp'
 import { createChatMemoryTools, createCodeMemoryTools, createGraphTool } from './memory'
 import { createSubagentTool } from './orchestration'
@@ -41,7 +42,11 @@ import { agentMayUseBrowser, getAppSettings } from '../app-settings'
 import { createAudioGenerateTool, createAudioTranscribeTool } from './audio'
 import { createVideoTools } from './video'
 import { createChatMotionTools } from './motion-chat'
+import { createChatDesignTools } from './design-chat'
+import { createPanelTools } from './panel'
+import { createDesignTools } from './design'
 import { createGalleryShowImageTool, createImageSearchTools } from './image-search'
+import { createFontTools } from './fonts'
 import { resolveFfmpeg } from '../video/ffmpeg'
 
 export { destroyBrowserWindow } from './browser'
@@ -59,6 +64,10 @@ export type { ImageToolHooks } from './image'
  */
 export function buildToolSet(input: SendMessageInput, ctx: ToolContext | null, imageHooks?: ImageToolHooks): ToolSet {
   const tools: ToolSet = {}
+  // Skills: no prompt entram com a descrição; o conteúdo completo vem sob
+  // demanda (skill_read), para que uma skill nativa não pague o texto inteiro
+  // em todo turno. Não expõe capacidade nova — só lê o que o agente já vê.
+  tools.skill_read = createSkillReadTool(ctx?.directory)
   // Áudio: sem interruptor próprio — cada metade segue a da voz nas
   // Preferências (Fala em texto → transcrever; Texto em fala → gerar).
   // Desligada, a tool nem existe e o prompt explica ao agente como ativar.
@@ -99,6 +108,9 @@ export function buildToolSet(input: SendMessageInput, ctx: ToolContext | null, i
     // sessão principal.
     if (input.orchestrationRole !== 'worker') {
       Object.assign(tools, createArtifactTools(input.sessionId))
+      // O que está aberto na aba lateral agora — deixa o agente responder a
+      // "isso"/"aqui" sem o usuário reanexar. Read-only, sem permissão.
+      Object.assign(tools, createPanelTools(input.sessionId))
       // Mostrar uma imagem do app na resposta: no chat o markdown de imagem é
       // bloqueado, e este é o único caminho.
       Object.assign(tools, createGalleryShowImageTool())
@@ -143,6 +155,15 @@ export function buildToolSet(input: SendMessageInput, ctx: ToolContext | null, i
           canRender: resolveFfmpeg() !== null,
         }),
       )
+      // Design: mesmo molde do motion acima — sem pasta de trabalho, o canvas
+      // mora no armazenamento do Orbit e é escrito/editado por nome, a mesma
+      // aba Design, ao vivo.
+      Object.assign(tools, createChatDesignTools({ sessionId: input.sessionId }))
+      // Fontes externas (biblioteca do Orbit): instalar não pede permissão nem
+      // escreve no projeto — o scheme orbit-font:// entrega o arquivo ao
+      // artboard e à composição. Sem toggle: não expõe nada que o app já não
+      // faça ao renderizar uma fonte.
+      Object.assign(tools, createFontTools())
     }
     if (allowBrain) Object.assign(tools, createChatMemoryTools(input))
     // Esteira: transformar o que foi discutido no chat em esteira/task de um
@@ -197,6 +218,8 @@ export function buildToolSet(input: SendMessageInput, ctx: ToolContext | null, i
     // arquitetura, comparativo — coisas que o usuário quer VER e que não
     // deveriam virar arquivo solto no repositório dele.
     Object.assign(tools, createArtifactTools(input.sessionId))
+    // O que está aberto no painel (tool read_open_panel) — vale nos dois modos.
+    Object.assign(tools, createPanelTools(input.sessionId))
   }
   // Documentos anexados também no código: `read`/`grep` alcançam o
   // repositório, não o que o usuário arrastou para a conversa. Sem isto, o
@@ -275,6 +298,14 @@ export function buildToolSet(input: SendMessageInput, ctx: ToolContext | null, i
         readOnly: Boolean(input.options.plan),
       }),
     )
+  }
+  // Design: só precisa de pasta (sem ffmpeg nenhum) — o agente escreve o
+  // canvas com write/edit e design_preview abre a aba, como motion_preview faz
+  // com a composição. Workers ficam de fora: o painel é um recurso visível, só
+  // da sessão principal.
+  if (ctx && input.orchestrationRole !== 'worker') {
+    Object.assign(tools, createDesignTools(ctx, { sessionId: input.sessionId }))
+    Object.assign(tools, createFontTools())
   }
 
   // Browser do painel direito: teste de apps web + modo documentação.

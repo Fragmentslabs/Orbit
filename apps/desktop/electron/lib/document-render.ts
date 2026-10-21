@@ -573,12 +573,20 @@ export function renderHtml(
   title: string,
   style?: DocumentStyle,
   diagrams?: DiagramLookup,
+  /**
+   * `@font-face` de uma fonte da biblioteca do Orbit. Vai antes do CSS do
+   * documento porque o PDF e impresso de uma janela propria (orbit-artifact://)
+   * e so assim o Chromium conhece a familia: nome sem declaracao cai no
+   * fallback, e o PDF sairia com a fonte trocada sem avisar ninguem.
+   */
+  fontFaces?: string,
 ): string {
+  const fontStyle = fontFaces ? `<style data-orbit-fonts>${fontFaces}</style>\n` : ''
   return `<!doctype html>
 <html lang="pt-BR"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${escapeXml(title)}</title>
-<style>${documentCss(normalizeStyle(style))}</style>
+${fontStyle}<style>${documentCss(normalizeStyle(style))}</style>
 </head><body>
 ${htmlBody(blocks, diagrams)}
 </body></html>`

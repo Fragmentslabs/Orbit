@@ -23,7 +23,8 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { cn } from "@/lib/utils"
-import type { ChatMessage, FilePart, SendMessageOptions } from "@shared/chat"
+import { FULLSCREEN_OVERLAY_CLASS } from "@/src/lib/fullscreen-overlay"
+import type { ChatMessage } from "@shared/chat"
 import {
   WebPreview,
   WebPreviewBody,
@@ -41,9 +42,8 @@ import { AskCard } from "@/src/components/ask-card"
 import { AskCardBatch } from "@/src/components/ask-card-batch"
 import { CodeAssistantMessage } from "@/src/components/messages/code-message"
 import { UserMessageText } from "@/src/components/messages/shared"
-import { CodeInput } from "@/src/components/code-input"
+import { FullscreenComposer, useEdgeHover } from "@/src/components/fullscreen-dock"
 import { visibleMessageText } from "@/src/lib/message-utils"
-import { windowApi } from "@/src/lib/ipc"
 import {
   applySelectMode,
   navigateWebview,
@@ -72,36 +72,6 @@ const VIEWPORT_PRESETS: { icon: typeof MonitorIcon; labelKey: string; viewport: 
   { icon: TabletIcon, labelKey: "browser.viewportTablet", viewport: { width: 834, height: 1112, label: "tablet" } },
   { icon: MonitorIcon, labelKey: "browser.viewportDesktop", viewport: { width: 1440, height: 900, label: "desktop" } },
 ]
-
-/** Delays de hover das barras laterais da tela cheia — mesma convenção da
- *  sidebar do app (App.tsx: SIDEBAR_SHOW_DELAY=100 / SIDEBAR_HIDE_DELAY=300). */
-const EDGE_SHOW_DELAY = 100
-const EDGE_HIDE_DELAY = 300
-
-/** Hover com delay simétrico para as barras laterais: abre rápido (100ms) ao
- *  encostar na borda e fecha com folga (300ms) ao sair — evita expandir ao
- *  cruzar a borda de passagem e colapsar ao mover o mouse para a página. */
-function useEdgeHover() {
-  const [hovered, setHovered] = useState(false)
-  const showTimer = useRef<ReturnType<typeof setTimeout>>()
-  const hideTimer = useRef<ReturnType<typeof setTimeout>>()
-  const handleEnter = useCallback(() => {
-    clearTimeout(hideTimer.current)
-    showTimer.current = setTimeout(() => setHovered(true), EDGE_SHOW_DELAY)
-  }, [])
-  const handleLeave = useCallback(() => {
-    clearTimeout(showTimer.current)
-    hideTimer.current = setTimeout(() => setHovered(false), EDGE_HIDE_DELAY)
-  }, [])
-  useEffect(
-    () => () => {
-      clearTimeout(showTimer.current)
-      clearTimeout(hideTimer.current)
-    },
-    [],
-  )
-  return { hovered, handleEnter, handleLeave }
-}
 
 /**
  * Corpo da aba: só orquestra intenções (navegar, recarregar, ligar seleção).
@@ -230,11 +200,13 @@ function ActivityFeed() {
   const { t } = useTranslation()
   const { hovered, handleEnter, handleLeave } = useEdgeHover()
 
+  // z-30: acima do overlay do estado vazio (z-10, renderizado depois no DOM),
+  // que cobria a barra na tela inicial até a primeira pesquisa.
   return (
     <div
       onMouseEnter={handleEnter}
       onMouseLeave={handleLeave}
-      className="absolute inset-y-0 right-0 z-10 flex items-center"
+      className="absolute inset-y-0 right-0 z-30 flex items-center"
     >
       <div
         className={cn(
@@ -522,65 +494,6 @@ function FullscreenChatFeed({ pinned, onTogglePin }: { pinned: boolean; onToggle
   )
 }
 
-/**
- * Composer da tela cheia: é o MESMO input do chat de código (CodeInput) — com
- * modelo, modo de permissão, toggles, comandos "/", anexos e os badges de
- * elemento selecionado. Antes era um textarea próprio, que ia ficando para trás
- * a cada recurso novo do input principal.
- */
-function FullscreenComposer({ onSent }: { onSent?: () => void }) {
-  const activeSession = useActiveSession("code")
-  const sessionId = activeSession?.id
-  const sendMessage = useSessionStore((s) => s.sendMessage)
-  const stopStreaming = useSessionStore((s) => s.stopStreaming)
-  const status = useSessionStatus(sessionId)
-  const messages = useSessionStore((s) => (sessionId ? s.messages[sessionId] ?? NO_MSGS : NO_MSGS))
-
-  const handleSubmit = useCallback(
-    (
-      text: string,
-      options: SendMessageOptions,
-      directory: string,
-      extraDirectories: string[],
-      files?: FilePart[],
-    ) => {
-      // Pedido feito do próprio navegador: o agente pode usá-lo mesmo com as
-      // ferramentas de navegador desligadas nas Preferências.
-      void sendMessage("code", text, {
-        options: { ...options, fromBrowser: true },
-        directory,
-        extraDirectories,
-        sessionId,
-        files,
-      })
-      // Abre o feed de conversa para o usuário acompanhar a resposta
-      onSent?.()
-    },
-    [sendMessage, sessionId, onSent],
-  )
-
-  const handleStop = useCallback(() => {
-    if (sessionId) stopStreaming(sessionId)
-  }, [sessionId, stopStreaming])
-
-  return (
-    <div className="absolute bottom-4 left-1/2 z-20 w-full max-w-2xl -translate-x-1/2 px-4">
-      {/* Fundo opaco próprio: o InputGroup do CodeInput é semitransparente e,
-          sobre a página em tela cheia, ficaria ilegível. Sem borda aqui — a do
-          input já existe e duas viram moldura dupla. */}
-      <div className="rounded-xl bg-background/95 px-3 pt-3 shadow-lg backdrop-blur">
-        <CodeInput
-          onSubmit={handleSubmit}
-          status={status}
-          onStop={handleStop}
-          hasMessages={messages.length > 0}
-          sessionId={sessionId}
-        />
-      </div>
-    </div>
-  )
-}
-
 export function BrowserTab({
   initialUrl,
   persistKey,
@@ -597,19 +510,14 @@ export function BrowserTab({
   const fullscreen = usePanelStore((s) => s.fullscreen)
   const setFullscreen = usePanelStore((s) => s.setFullscreen)
   const [chatPinned, setChatPinned] = useState(false)
+  const [composerPinned, setComposerPinned] = useState(false)
 
-  /**
-   * No macOS a janela usa titleBarStyle 'hiddenInset': as bolinhas de fechar/
-   * minimizar/redimensionar ficam sobrepostas ao topo do conteúdo. Em tela cheia
-   * o overlay cobre a janela inteira e esbarra nesses controles; compensamos
-   * deixando a TitleBar (h-8) visível e iniciando o overlay logo abaixo dela,
-   * mantendo o header padrão do app abaixo do header nativo da janela.
-   */
-  const isMac = windowApi.platform === "darwin"
-
-  // Fecha o feed de conversa ao sair da tela cheia
+  // Fecha o feed de conversa e o composer ao sair da tela cheia
   useEffect(() => {
-    if (!fullscreen) setChatPinned(false)
+    if (!fullscreen) {
+      setChatPinned(false)
+      setComposerPinned(false)
+    }
   }, [fullscreen])
 
   // Esc sai da tela cheia
@@ -625,11 +533,11 @@ export function BrowserTab({
   return (
     <WebPreview
       defaultUrl={initialUrl ?? ""}
-      emptyExtra={<RunningServers sessionId={sessionId} />}
+      emptyExtra={(setUrl) => <RunningServers sessionId={sessionId} onSelect={setUrl} />}
       className={cn(
         "bg-sidebar",
         fullscreen
-          ? cn("fixed inset-0 z-[70] h-auto w-auto rounded-none border-0", isMac && "top-8")
+          ? FULLSCREEN_OVERLAY_CLASS
           : "h-full w-full rounded-none border-0",
       )}
     >
@@ -656,7 +564,14 @@ export function BrowserTab({
         {fullscreen && <ActivityFeed />}
         <PanelBrowserBody persistKey={persistKey} onUrlChange={onUrlChange} />
         {fullscreen && <FullscreenChatFeed pinned={chatPinned} onTogglePin={() => setChatPinned((v) => !v)} />}
-        {fullscreen && <FullscreenComposer onSent={() => setChatPinned(true)} />}
+        {fullscreen && (
+          <FullscreenComposer
+            fromBrowser
+            pinned={composerPinned}
+            onTogglePin={() => setComposerPinned((v) => !v)}
+            onSent={() => setChatPinned(true)}
+          />
+        )}
       </div>
     </WebPreview>
   )

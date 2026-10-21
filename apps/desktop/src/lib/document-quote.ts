@@ -27,6 +27,10 @@ const baseName = (p: string) => p.split(/[\\/]/).filter(Boolean).pop() ?? p
  *  "Motion" é o nome do produto (o mesmo rótulo da aba), não uma palavra a
  *  traduzir. */
 export function quoteChipLabel(quote: PanelQuote): string {
+  if (quote.kind === "design") {
+    const what = quote.elementPath?.length ? `<${quote.tag ?? "?"}>${quote.label ? ` ${quote.label}` : ""}` : (quote.boardTitle ?? quote.file)
+    return `Design · ${quote.file} · ${what}`
+  }
   if (quote.kind === "motion") {
     // O foco da peça pode ser uma camada (elemento do DOM) ou uma faixa de som:
     // os dois se selecionam do mesmo jeito, e o chip mostra o nome que foi
@@ -40,6 +44,7 @@ export function quoteChipLabel(quote: PanelQuote): string {
 /** O que o cursor parado sobre o chip mostra: o trecho citado ou o caminho da
  *  composição — o que a pessoa precisa para saber O QUE está anexado. */
 export function quoteChipTitle(quote: PanelQuote): string {
+  if (quote.kind === "design") return quote.text || quote.html || quote.file
   return quote.kind === "motion" ? quote.file : quote.text
 }
 
@@ -47,6 +52,20 @@ export function quoteChipTitle(quote: PanelQuote): string {
  *  citação de motion não tem página nem linha, e emitir as chaves vazias faria
  *  o texto do modelo nascer com campos órfãos. */
 function quotePayload(quote: PanelQuote): QuotePayload {
+  if (quote.kind === "design") {
+    return {
+      kind: "design",
+      name: quote.name,
+      file: quote.file,
+      ...(quote.path ? { path: quote.path } : {}),
+      ...(quote.boardTitle ? { boardTitle: quote.boardTitle } : {}),
+      ...(quote.elementPath?.length ? { elementPath: quote.elementPath } : {}),
+      ...(quote.tag ? { tag: quote.tag } : {}),
+      ...(quote.label ? { label: quote.label } : {}),
+      ...(quote.text ? { text: quote.text } : {}),
+      ...(quote.html ? { html: quote.html } : {}),
+    }
+  }
   if (quote.kind === "motion") {
     return {
       kind: "motion",
