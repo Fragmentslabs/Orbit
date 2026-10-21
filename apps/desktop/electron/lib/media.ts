@@ -640,7 +640,7 @@ export function registerMediaProtocol(): void {
  *
  * 1. Scheme próprio. `orbit-media://` não é privilegiado, e HTML sem origem
  *    não roda script nem carrega módulo. `orbit-artifact://` é registrado como
- *    standard+secure (ver registerArtifactSchemePrivileges, que PRECISA rodar
+ *    standard+secure (ver registerSchemePrivileges, que PRECISA rodar
  *    antes do app ficar pronto).
  * 2. Miniatura. A galeria é um grid de <img>; o artefato ganha um PNG
  *    capturado numa janela oculta para caber nesse grid.
@@ -675,8 +675,12 @@ export interface ArtifactRef {
  * antes de `app.whenReady()` — depois disso o Chromium já fixou a tabela de
  * schemes e a chamada não tem efeito (a página carregaria como origem opaca,
  * sem script).
+ *
+ * ATENÇÃO: o Chromium guarda só a ÚLTIMA chamada — registrar uma segunda
+ * lista faz a primeira deixar de valer. TODO scheme privilegiado do app entra
+ * NESTA lista, nunca numa chamada separada.
  */
-export function registerArtifactSchemePrivileges(): void {
+export function registerSchemePrivileges(): void {
   protocol.registerSchemesAsPrivileged([
     {
       scheme: ARTIFACT_SCHEME,
@@ -724,6 +728,20 @@ export function registerArtifactSchemePrivileges(): void {
         standard: true,
         secure: true,
         supportFetchAPI: true,
+        corsEnabled: true,
+      },
+    },
+    // Biblioteca de fontes do Orbit (ver fonts/store.ts): scheme próprio porque
+    // o artboard, a composição de motion e a janela do app declaram o MESMO
+    // @font-face, cada um numa origem diferente.
+    {
+      scheme: FONT_SCHEME,
+      privileges: {
+        standard: true,
+        secure: true,
+        supportFetchAPI: true,
+        // Fonte é recurso CORS-obrigatório: sem isto o artboard (origem opaca)
+        // e a janela do app baixariam o arquivo e o descartariam.
         corsEnabled: true,
       },
     },

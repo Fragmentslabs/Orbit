@@ -176,21 +176,9 @@ export async function fontFacesForFamily(family: string): Promise<string> {
   return match ? fontFaceCss([match]) : ''
 }
 
-export function registerFontSchemePrivileges(): void {
-  protocol.registerSchemesAsPrivileged([
-    {
-      scheme: FONT_SCHEME,
-      privileges: {
-        standard: true,
-        secure: true,
-        supportFetchAPI: true,
-        // Fonte é recurso CORS-obrigatório: sem isto o artboard (origem opaca)
-        // e a janela do app baixariam o arquivo e o descartariam.
-        corsEnabled: true,
-      },
-    },
-  ])
-}
+// Os privilégios do scheme moram em registerSchemePrivileges (media.ts): o
+// Chromium só honra a ÚLTIMA chamada de registerSchemesAsPrivileged, então o app
+// tem uma lista única — uma segunda aqui apagaria design, motion e áudio.
 
 export async function handleFontRequest(request: Request): Promise<Response> {
   const url = new URL(request.url)

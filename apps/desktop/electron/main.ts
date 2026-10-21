@@ -81,7 +81,7 @@ import {
   readArtifact,
   readDocumentSource,
   registerArtifactProtocol,
-  registerArtifactSchemePrivileges,
+  registerSchemePrivileges,
   readMedia,
   registerMediaProtocol,
 } from './lib/media'
@@ -89,7 +89,6 @@ import {
   fontFaceCss,
   listFonts,
   registerFontProtocol,
-  registerFontSchemePrivileges,
 } from './lib/fonts/store'
 import { listSystemFonts } from './lib/fonts/system'
 import type { AppPreferences, MessageQueueSnapshot, ReasoningPrefsMap, SessionModeOverrides, WorkerConfigSnapshot } from '@shared/companion'
@@ -246,15 +245,13 @@ function windowIconPath(): string {
   return path.join(process.env.VITE_PUBLIC, 'logo.png')
 }
 
-// Privilégios do orbit-artifact:// — TEM que acontecer aqui, no topo do
-// módulo: depois de app.whenReady() o Chromium já fixou a tabela de schemes e
-// o artefato carregaria como origem opaca, sem rodar script. O protocolo em si
-// (registerArtifactProtocol) é registrado lá embaixo, com o app pronto.
-registerArtifactSchemePrivileges()
-// Biblioteca de fontes do Orbit (orbit-font://, ver lib/fonts/store): scheme
-// próprio porque o artboard, a composição de motion e a janela do app declaram
-// o MESMO @font-face, cada um numa origem diferente.
-registerFontSchemePrivileges()
+// Privilégios de TODOS os schemes do app (artefato, áudio, vídeo, motion,
+// design e fontes) — TEM que acontecer aqui, no topo do módulo: depois de
+// app.whenReady() o Chromium já fixou a tabela de schemes e a página carregaria
+// como origem opaca, sem rodar script. E é UMA chamada só: uma segunda lista
+// anula a primeira (foi assim que o design deixou de carregar). Os protocolos
+// em si são registrados lá embaixo, com o app pronto.
+registerSchemePrivileges()
 
 let win: BrowserWindow | null
 let entranceWindowCreated = false
