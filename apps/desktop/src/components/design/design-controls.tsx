@@ -161,6 +161,9 @@ export function Segmented<T extends string>({
 const SHELL =
   "flex h-7 min-h-7 min-w-0 flex-auto items-center gap-1.5 rounded-md border border-input bg-input/20 px-1.5 transition-shadow focus-within:border-ring focus-within:ring-2 focus-within:ring-ring/30 dark:bg-input/30"
 
+/** A mesma casca para controles que IMITAM um campo (o seletor de fonte). */
+export const FIELD_SHELL = SHELL
+
 const INPUT = "w-0 min-w-0 flex-1 border-0 bg-transparent p-0 text-[10px] font-semibold outline-none placeholder:font-normal placeholder:text-muted-foreground/60 disabled:text-muted-foreground/40"
 
 /**

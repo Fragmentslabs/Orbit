@@ -610,6 +610,29 @@ export const motionApi = {
  * enxuto: não há render nem camadas — o artboard é HTML estático, e a aba só
  * precisa reabrir e recarregar ao vivo.
  */
+/** Uma família instalada na biblioteca do Orbit (ver electron/lib/fonts/store). */
+export interface OrbitFontInfo {
+  id: string
+  family: string
+  category?: string
+  variable: boolean
+  weights: string[]
+  license?: string
+}
+
+export interface FontChoices {
+  /** Baixadas pela tool font_use — valem no design, no motion e nos artefatos. */
+  orbit: OrbitFontInfo[]
+  /** Instaladas no computador: o Chromium já as carrega, basta o nome. */
+  system: string[]
+  /** @font-face das fontes do Orbit — a janela do app precisa dele para a prévia. */
+  css: string
+}
+
+export const fontsApi = {
+  list: () => window.ipcRenderer.invoke("fonts:list") as Promise<FontChoices>,
+}
+
 export const designApi = {
   /** Reabre um canvas já registrado. O card da galeria manda o `id`; o card do
    *  chat manda o que a tool deixou no `input` — o `path` da pasta (modo

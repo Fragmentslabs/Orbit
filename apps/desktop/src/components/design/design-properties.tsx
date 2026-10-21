@@ -23,13 +23,13 @@ import {
   Strikethrough,
   StretchVertical,
   Trash2,
-  Type,
   Underline,
   Unlink2,
   X,
 } from "lucide-react"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
+import { FontPicker } from "./design-font-picker"
 import { IconAction } from "@/src/components/ai/artifact-part"
 import { cn } from "@/lib/utils"
 import {
@@ -912,7 +912,7 @@ export function DesignProperties({ target, onStyles, onAttr, onText, onBoard, on
 
       {showType && (
         <Section title={t("design.props.typography")}>
-          <TextField icon={<Type />} value={inline("font-family")} placeholder={first(computed("font-family")).replace(/["']/g, "")} onCommit={(v) => style("font-family", v)} />
+          <FontPicker value={inline("font-family")} computed={computed("font-family")} onCommit={(v) => style("font-family", v)} />
           <Fields>
             <Field
               icon={<ALargeSmall />}

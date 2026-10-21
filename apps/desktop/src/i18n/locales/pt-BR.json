@@ -2590,7 +2590,13 @@
         "medium": "Média",
         "strong": "Forte"
       },
-      "css": "CSS do elemento (Ctrl+Enter aplica)"
+      "css": "CSS do elemento (Ctrl+Enter aplica)",
+      "fontFilter": "Filtrar fontes…",
+      "fontsSystem": "Sistema",
+      "fontsOrbit": "Orbit",
+      "fontsNone": "Nenhuma fonte encontrada.",
+      "fontsOrbitEmpty": "Nenhuma fonte do Orbit ainda — peça uma no chat e ela aparece aqui.",
+      "fontUse": "Usar \"{{name}}\""
     },
     "code": {
       "save": "Salvar",
