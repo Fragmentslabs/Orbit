@@ -46,6 +46,7 @@ import { createChatDesignTools } from './design-chat'
 import { createPanelTools } from './panel'
 import { createDesignTools } from './design'
 import { createGalleryShowImageTool, createImageSearchTools } from './image-search'
+import { createFontTools } from './fonts'
 import { resolveFfmpeg } from '../video/ffmpeg'
 
 export { destroyBrowserWindow } from './browser'
@@ -158,6 +159,11 @@ export function buildToolSet(input: SendMessageInput, ctx: ToolContext | null, i
       // mora no armazenamento do Orbit e é escrito/editado por nome, a mesma
       // aba Design, ao vivo.
       Object.assign(tools, createChatDesignTools({ sessionId: input.sessionId }))
+      // Fontes externas (biblioteca do Orbit): instalar não pede permissão nem
+      // escreve no projeto — o scheme orbit-font:// entrega o arquivo ao
+      // artboard e à composição. Sem toggle: não expõe nada que o app já não
+      // faça ao renderizar uma fonte.
+      Object.assign(tools, createFontTools())
     }
     if (allowBrain) Object.assign(tools, createChatMemoryTools(input))
     // Esteira: transformar o que foi discutido no chat em esteira/task de um
@@ -299,6 +305,7 @@ export function buildToolSet(input: SendMessageInput, ctx: ToolContext | null, i
   // da sessão principal.
   if (ctx && input.orchestrationRole !== 'worker') {
     Object.assign(tools, createDesignTools(ctx, { sessionId: input.sessionId }))
+    Object.assign(tools, createFontTools())
   }
 
   // Browser do painel direito: teste de apps web + modo documentação.

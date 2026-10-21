@@ -247,6 +247,13 @@ export const MOTION_SCHEME = "orbit-motion"
  * `corsEnabled` do motion: fonte @font-face e fetch dentro do artboard exigem CORS.
  */
 export const DESIGN_SCHEME = "orbit-design"
+/**
+ * Fontes baixadas pelo Orbit (biblioteca em `orbit-data/fonts`). Servidas por
+ * arquivo com hash no nome, `corsEnabled` e `Access-Control-Allow-Origin: *`:
+ * o artboard, a composição de motion e a própria janela do app (outra origem)
+ * declaram a mesma fonte por `@font-face`.
+ */
+export const FONT_SCHEME = "orbit-font"
 
 /**
  * MIME do drag & drop interno: o tile da aba Mídia arrasta o item COMO ANEXO

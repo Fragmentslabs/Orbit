@@ -1292,10 +1292,20 @@ export const DESIGN_RUNTIME = `(() => {
   if (document.fonts && document.fonts.ready) document.fonts.ready.then(sendRects)
 })()`
 
-/** Põe a ponte como primeiro script do <head> (idempotente). */
-export function injectDesignRuntime(html: string): string {
+/**
+ * Põe a ponte como primeiro script do <head> (idempotente) e, logo depois, o
+ * `@font-face` da biblioteca de fontes do Orbit.
+ *
+ * A fonte instalada vale para TODO artboard sem o agente colar CSS: o
+ * `font-family` pelo nome resolve, como uma fonte do sistema. O bloco vem antes
+ * do CSS do próprio artboard (que ainda pode sobrepor), e o `@font-face` só é
+ * baixado quando a família é usada — declarar as 20 fontes da biblioteca não
+ * custa rede nenhuma.
+ */
+export function injectDesignRuntime(html: string, fontCss = ''): string {
   if (html.includes(RUNTIME_MARK)) return html
-  const tag = `<script ${RUNTIME_MARK} src="${DESIGN_RUNTIME_PATH}"></script>`
+  const fontTag = fontCss.trim() ? `<style data-orbit-fonts>${fontCss}</style>` : ''
+  const tag = `<script ${RUNTIME_MARK} src="${DESIGN_RUNTIME_PATH}"></script>${fontTag}`
   const head = /<head[^>]*>/i.exec(html)
   if (head) return `${html.slice(0, head.index + head[0].length)}${tag}${html.slice(head.index + head[0].length)}`
   const htmlTag = /<html[^>]*>/i.exec(html)

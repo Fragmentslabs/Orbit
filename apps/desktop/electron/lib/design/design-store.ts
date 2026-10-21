@@ -7,6 +7,7 @@ import { Readable } from 'node:stream'
 import { DESIGN_SCHEME } from '@shared/media'
 import { isSafeBoardFile, readDesignCanvas, writeDesignCanvas, type DesignBoard } from './design-canvas'
 import { withAssetLock, writeFileAtomic } from '../asset-lock'
+import { allFontFacesCss } from '../fonts/store'
 import { DESIGN_RUNTIME, DESIGN_RUNTIME_PATH, injectDesignRuntime } from './design-runtime'
 
 /**
@@ -395,7 +396,9 @@ export function registerDesignProtocol(): void {
     if ((ext === '.html' || ext === '.htm') && !url.searchParams.has('raw')) {
       const html = await fsp.readFile(file, 'utf8').catch(() => null)
       if (html === null) return respond('file moved or deleted', 'text/plain; charset=utf-8', 404)
-      return respond(injectDesignRuntime(html), type)
+      // A biblioteca de fontes do Orbit entra em TODO artboard (ver
+      // injectDesignRuntime): a família instalada é usada pelo nome.
+      return respond(injectDesignRuntime(html, await allFontFacesCss()), type)
     }
     const size = await fsp
       .stat(file)

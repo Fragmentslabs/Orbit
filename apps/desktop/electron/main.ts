@@ -85,6 +85,13 @@ import {
   readMedia,
   registerMediaProtocol,
 } from './lib/media'
+import {
+  fontFaceCss,
+  listFonts,
+  registerFontProtocol,
+  registerFontSchemePrivileges,
+} from './lib/fonts/store'
+import { listSystemFonts } from './lib/fonts/system'
 import type { AppPreferences, MessageQueueSnapshot, ReasoningPrefsMap, SessionModeOverrides, WorkerConfigSnapshot } from '@shared/companion'
 import { startCompanionServer, getCompanionStatus, setPairingMode, forwardChatEvent, broadcastSessionModels, broadcastSessionModes, broadcastWorkerConfig, broadcastAppPreferences, broadcastRotationConfig, broadcastReasoningPrefs, broadcastMessageQueue } from './lib/companion-server'
 import { setSessionModelsCache, setSessionModesCache, setWorkerConfigCache, setRotationHttpCache, setReasoningPrefsCache } from './lib/companion-http'
@@ -244,6 +251,10 @@ function windowIconPath(): string {
 // o artefato carregaria como origem opaca, sem rodar script. O protocolo em si
 // (registerArtifactProtocol) é registrado lá embaixo, com o app pronto.
 registerArtifactSchemePrivileges()
+// Biblioteca de fontes do Orbit (orbit-font://, ver lib/fonts/store): scheme
+// próprio porque o artboard, a composição de motion e a janela do app declaram
+// o MESMO @font-face, cada um numa origem diferente.
+registerFontSchemePrivileges()
 
 let win: BrowserWindow | null
 let entranceWindowCreated = false
@@ -2041,6 +2052,9 @@ app.whenReady().then(() => {
   // conteúdo é HTML estático.
   registerDesignProtocol()
 
+  // Fontes instaladas pela tool font_use (orbit-font://<hash>.woff2).
+  registerFontProtocol()
+
   // Reabrir uma peça que já está no registro: o card do chat e o tile da Mídia
   // mandam só o id. A composição (pasta + entrada) sai do registro do main — o
   // renderer não tem por que conhecer caminho de projeto nenhum.
@@ -2059,10 +2073,28 @@ app.whenReady().then(() => {
     },
   )
 
-  // Reabrir um canvas de design já registrado — mesmo contrato do motion:open:
-  // o card da galeria manda o id; o card do chat manda o caminho da pasta
-  // (modo código, design_preview) ou o NOME do canvas com a sessão (modo chat,
-  // design_write/design_edit), e o registro traduz.
+  // Fontes do seletor do inspetor de design: a biblioteca do Orbit (com o CSS
+  // pronto — a janela do app também precisa do @font-face para desenhar a
+  // prévia de cada família) e as famílias instaladas no computador.
+  ipcMain.handle('fonts:list', async () => {
+    const orbit = await listFonts()
+    return {
+      orbit: orbit.map((font) => ({
+        id: font.id,
+        family: font.family,
+        category: font.category,
+        variable: font.variable,
+        weights: font.weights,
+        license: font.license?.type,
+      })),
+      system: await listSystemFonts(),
+      css: fontFaceCss(orbit),
+    }
+  })
+
+  // Reabrir um canvas pelo id: o card da galeria manda o id; o card do chat
+  // manda o caminho da pasta (modo código, design_preview) ou o NOME do canvas
+  // com a sessão (modo chat, design_write/design_edit), e o registro traduz.
   ipcMain.handle('design:open', async (_event, ref: { id?: string; path?: string; sessionId?: string; name?: string }) => {
     let id = ref.id ?? null
     if (!id && ref.path) id = await designIdForPath(ref.path)
