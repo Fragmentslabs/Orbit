@@ -1098,7 +1098,9 @@
       "menos": "Menos ajustes",
       "mais": "Mais ajustes",
       "worktrees": "Isolar workers em worktrees",
-      "worktreesHint": "Cada worker trabalha num branch e numa cópia próprios, e o orquestrador junta tudo no fim. Evita um worker mexer no arquivo do outro; só em repositório git."
+      "worktreesHint": "Cada worker trabalha num branch e numa cópia próprios, e o orquestrador junta tudo no fim. Evita um worker mexer no arquivo do outro; só em repositório git.",
+      "aprovarTarefaUnica": "Aprovar sozinho plano de uma tarefa",
+      "aprovarTarefaUnicaHint": "Quando o plano tem um worker só, ele começa direto, sem esperar você aprovar o card."
     }
   },
   "orchestration": {

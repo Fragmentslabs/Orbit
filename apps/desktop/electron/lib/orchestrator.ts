@@ -23,10 +23,19 @@ import { resolveModel } from './providers'
 import { withProviderSession } from './provider-session'
 import { buildProviderOptions, interleavedReasoningField, normalizeMessages, reasoningPrepareStep } from './reasoning'
 import { readJson, writeJson } from './storage'
-import { createRemoveTaskTool, createSubagentTool, createTaskTool } from './tools/orchestration'
+import { SUBAGENT_MAX_STEPS, createRemoveTaskTool, createSubagentTool, createTaskTool } from './tools/orchestration'
 import type { TaskModeCeiling } from './tools/orchestration'
-import { createGlobTool, createGrepTool, createListTool, createReadTool } from './tools/files'
+import {
+  createEditTool,
+  createGlobTool,
+  createGrepTool,
+  createListTool,
+  createReadTool,
+  createWriteTool,
+} from './tools/files'
 import { createCodeTools } from './tools/code'
+import { createToolApproval, takeDenialReason } from './permission'
+import { modoGlobal } from './permission/modo-global'
 import { createQuestionTool } from './tools/question'
 import { buildWorkersNotice, createWorkerTools, loadWorkers } from './tools/workers'
 import type { ToolContext } from './tools/context'
@@ -46,6 +55,8 @@ import {
   repositorioDoChat,
 } from './orquestra/worktrees'
 import { raizDoRepositorio } from './worktrees/nucleo'
+import { capture, diff } from './snapshot'
+import { clearManualSaves, manualSavesUnder, stripFilesFromPatch } from './manual-saves'
 
 /**
  * OrchestratorEngine (modo Orchestra), em quatro fases:
@@ -74,6 +85,16 @@ const PLAN_SUBAGENT_MAX_STEPS = 5
 // "2-3 chamadas", mas isso é só sugestão — sem um limite de verdade em código
 // o modelo pode ignorá-lo, como aconteceu (17 chamadas para montar um plano).
 const PLAN_SUBAGENT_MAX_CALLS = 3
+/**
+ * Mudança pequena que o orquestrador passa a um subagente em vez de montar
+ * plano (modo Subagentes ligado). Orçamento de passos de um subagente normal —
+ * é execução, não pesquisa — e poucas chamadas: mais que isso já é um plano.
+ */
+const PLAN_DELEGATE_MAX_CALLS = 2
+const PLAN_DELEGATE_DESCRIPTION =
+  'Hands a SMALL, self-contained change (a style tweak, a rename, a one-file fix) to a subagent that does it in the working folder and returns a summary. '
+  + 'Use it instead of create_task when the whole request is one small change. Set code: true. '
+  + 'The subagent does not see this conversation: name the files and say exactly what to change.'
 /**
  * Ele prometeu um plano e não registrou tarefa? Só então vale a cutucada.
  * Português e inglês porque a resposta segue o idioma do usuário.
@@ -158,6 +179,52 @@ async function loadMessages(sessionId: string): Promise<ChatMessage[]> {
 
 async function saveMessages(sessionId: string, messages: ChatMessage[]) {
   await writeJson(StorageKeys.messages(sessionId), messages)
+}
+
+/**
+ * Snapshot do turno de planejamento — o mesmo registro de um turno normal do
+ * chat-engine. Agora que o orquestrador faz mudança pequena sozinho (edit/write
+ * ou delegate_change), sem isso o que ele mudou não aparecia na aba Diff nem
+ * podia ser revertido pela mensagem.
+ */
+async function abrirSnapshot(directory: string, message: ChatMessage) {
+  clearManualSaves(directory)
+  try {
+    message.snapshot = { start: await capture(directory) }
+  } catch (err) {
+    message.snapshot = { failed: true, captureError: errorToText(err) }
+  }
+}
+
+async function fecharSnapshot(directory: string, message: ChatMessage) {
+  const snapshot = message.snapshot
+  if (!snapshot) return
+  if (!snapshot.start) {
+    snapshot.verified = 'unknown'
+    return
+  }
+  try {
+    const end = await capture(directory)
+    if (end === snapshot.start) {
+      snapshot.verified = 'unchanged'
+      return
+    }
+    const changes = await diff(directory, snapshot.start, end)
+    // O que a pessoa salvou à mão durante o turno não é obra do orquestrador.
+    const manual = manualSavesUnder(directory)
+    const files = manual.size > 0 ? changes.files.filter((f) => !manual.has(f)) : changes.files
+    if (files.length === 0) {
+      snapshot.verified = 'unchanged'
+      return
+    }
+    snapshot.verified = 'changed'
+    snapshot.end = end
+    snapshot.files = files
+    snapshot.patch = manual.size > 0 ? stripFilesFromPatch(changes.patch, manual) : changes.patch
+  } catch (err) {
+    console.error('[snapshot] captura final do orquestrador falhou:', err)
+    snapshot.verified = 'unknown'
+  }
 }
 
 async function persistPlan(win: BrowserWindow, sessionId: string, plan: OrchestrationPlan) {
@@ -294,6 +361,9 @@ async function runOrchestrationTurn(win: BrowserWindow, input: SendMessageInput)
   const lastOrchestratorTurn = history.slice(0, -2).reverse().find((m) => m.role === 'assistant')
   const workersNotice = await buildWorkersNotice(sessionId, lastOrchestratorTurn?.createdAt ?? 0)
   const existingTitles = new Set((await loadWorkers(sessionId)).map((w) => normalizeTitle(w.title)))
+  let autoAprovar: string | undefined
+  // Só quando ele pode escrever: em modo plano não há o que registrar.
+  if (!input.options.plan) await abrirSnapshot(input.directory, assistantMessage)
 
   try {
     // Loop de tentativas do PLANEJAMENTO: falha recuperável antes do primeiro
@@ -403,6 +473,31 @@ async function runOrchestrationTurn(win: BrowserWindow, input: SendMessageInput)
         createSubagentTool(input, planCtx, PLAN_SUBAGENT_MAX_STEPS, PLAN_SUBAGENT_MAX_CALLS),
       )
     }
+    // Pedido pequeno ("deixa o botão azul") não vale plano, aceite e worker.
+    // Com Subagentes ligado ele delega a mudança no próprio chat; senão faz
+    // sozinho. Em modo plano (só leitura) nenhum dos dois existe.
+    const canEdit = !input.options.plan
+    if (canEdit && ceiling.subagents) {
+      planTools.delegate_change = createSubagentTool(
+        input,
+        planCtx,
+        SUBAGENT_MAX_STEPS,
+        PLAN_DELEGATE_MAX_CALLS,
+        PLAN_DELEGATE_DESCRIPTION,
+      )
+    } else if (canEdit) {
+      planTools.edit = createEditTool(planCtx)
+      planTools.write = createWriteTool(planCtx)
+    }
+    // As escritas passam pelo mesmo gate de permissões de um turno normal.
+    const permissionMode = input.options.permissionMode ?? 'ask'
+    const toolApproval = createToolApproval(
+      input.options.followGlobalPermission ? () => modoGlobal(permissionMode) : permissionMode,
+      sessionId,
+      input.directory,
+      assistantMessage.id,
+      controller.signal,
+    )
 
     // O teto entra no prompt: sem isso o modelo pede research/browser e só
     // descobre que não tem no retorno da tool, tarefa por tarefa.
@@ -415,6 +510,11 @@ async function runOrchestrationTurn(win: BrowserWindow, input: SendMessageInput)
       ceiling.subagents
         ? 'You also have the subagent tool for research while planning (3 calls max).'
         : 'You do NOT have subagents: research the project yourself before splitting — code_outline (no filePath) for the project map and code_search to find code, then read/grep for details.',
+      !canEdit
+        ? 'This conversation is read-only (plan mode): you cannot change files yourself — small changes also go through create_task.'
+        : ceiling.subagents
+          ? 'For a SMALL change, use delegate_change (a subagent in this chat) instead of a plan.'
+          : 'For a SMALL change, do it yourself with edit/write instead of a plan.',
     ].join('\n') + workersNotice
     const provider = await getProvider(primary.providerId)
     const baseMessages = normalizeMessages(
@@ -466,6 +566,7 @@ async function runOrchestrationTurn(win: BrowserWindow, input: SendMessageInput)
         system: ORCHESTRATOR_PLAN_PROMPT + contextNote,
         messages,
         tools: planTools,
+        toolApproval,
         stopWhen: stepCountIs(PLAN_MAX_STEPS),
         abortSignal: controller.signal,
         providerOptions,
@@ -537,6 +638,32 @@ async function runOrchestrationTurn(win: BrowserWindow, input: SendMessageInput)
               state: 'done',
               input: existing?.input,
               output: typeof part.output === 'string' ? part.output : JSON.stringify(part.output, null, 2),
+            })
+            break
+          }
+          // Sem estes dois, uma escrita negada (ou um read que falhou) ficava
+          // com o card girando para sempre.
+          case 'tool-output-denied': {
+            const existing = assistantMessage.parts.find((p) => p.id === part.toolCallId) as ToolPart | undefined
+            upsertPart(win, sessionId, assistantMessage, {
+              id: part.toolCallId,
+              type: 'tool',
+              tool: part.toolName,
+              state: 'error',
+              input: existing?.input,
+              error: takeDenialReason(part.toolCallId) ?? 'Action denied by the permission policy.',
+            })
+            break
+          }
+          case 'tool-error': {
+            const existing = assistantMessage.parts.find((p) => p.id === part.toolCallId) as ToolPart | undefined
+            upsertPart(win, sessionId, assistantMessage, {
+              id: part.toolCallId,
+              type: 'tool',
+              tool: part.toolName,
+              state: 'error',
+              input: existing?.input,
+              error: errorToText(part.error),
             })
             break
           }
@@ -627,6 +754,11 @@ async function runOrchestrationTurn(win: BrowserWindow, input: SendMessageInput)
     // lembrete de continuação (mesmo tratamento do chat-engine).
     if (tasks.length === 0 && planTruncated) assistantMessage.truncated = true
 
+    // Com message_worker no turno, o que mudou na pasta é (também) do worker,
+    // e já está registrado no chat dele — creditar ao orquestrador duplicaria.
+    if (workersMessaged > 0) assistantMessage.snapshot = undefined
+    else await fecharSnapshot(input.directory, assistantMessage)
+
     await saveMessages(sessionId, history)
 
     if (tasks.length === 0) {
@@ -649,6 +781,11 @@ async function runOrchestrationTurn(win: BrowserWindow, input: SendMessageInput)
       await persistPlan(win, sessionId, plan)
         emit(win, { type: 'message', sessionId, message: assistantMessage })
         emit(win, { type: 'status', sessionId, status: 'idle' })
+        // Plano de um worker só com a opção ligada: o card aparece (é o
+        // registro do que vai rodar), mas não espera o clique.
+        if (tasks.length === 1 && normalizeOrchestrationSettings(getWorkerConfigCache().orchestration).aprovarTarefaUnica) {
+          autoAprovar = plan.id
+        }
         break
       } catch (err) {
         const aborted = controller.signal.aborted
@@ -677,6 +814,9 @@ async function runOrchestrationTurn(win: BrowserWindow, input: SendMessageInput)
     const { kind, detail: message } = classifyProviderError(err)
     assistantMessage.error = aborted ? undefined : message
     assistantMessage.errorKind = aborted || kind === 'unknown' ? undefined : kind
+    // Parou no meio (erro ou abort) depois de já ter editado: o que mudou
+    // continua precisando aparecer.
+    await fecharSnapshot(input.directory, assistantMessage)
     await saveMessages(sessionId, history)
     emit(win, { type: 'message', sessionId, message: assistantMessage })
     emit(win, {
@@ -688,6 +828,9 @@ async function runOrchestrationTurn(win: BrowserWindow, input: SendMessageInput)
   } finally {
     if (controllers.get(sessionId) === controller) controllers.delete(sessionId)
   }
+  // Fora do try: a execução tem o próprio controller e o próprio tratamento
+  // de erro. Já estamos dentro do withProviderSession do planejamento.
+  if (autoAprovar && !controller.signal.aborted) await approvePlanTurn(win, sessionId, autoAprovar)
 }
 
 /** Fase 2 (execução dos workers) + Fase 3 (síntese). */
@@ -935,46 +1078,61 @@ async function approvePlanTurn(
       })
       .join('\n\n---\n\n') + (plan.revisao?.merge ? `\n\n---\n\nMerge of the workers' branches: ${plan.revisao.merge.detalhe}` : '')
 
-    const model = await resolveModel(conductor.providerId, conductor.modelId)
-    const provider = await getProvider(conductor.providerId)
-    const stream = streamText({
-      model,
-      system: ORCHESTRATOR_SYNTHESIS_PROMPT,
-      messages: [
-        ...normalizeMessages(
-          toModelMessages(history.slice(0, -1)),
-          interleavedReasoningField(provider, conductor.modelId),
-        ),
-        { role: 'user', content: `Worker results:\n\n${resultsText}` },
-      ],
-      abortSignal: controller.signal,
-      providerOptions: await buildProviderOptions(conductor),
-    })
-
-    const part: TextPart = { id: newId('prt'), type: 'text', text: '', state: 'streaming' }
-    let started = false
-    for await (const delta of stream.textStream) {
-      if (!started) {
-        started = true
-        synthesisMessage.parts.push(part)
-        emit(win, { type: 'part', sessionId, messageId: synthesisMessage.id, part })
-      }
-      part.text += delta
-      emit(win, {
-        type: 'part-delta',
-        sessionId,
-        messageId: synthesisMessage.id,
-        partId: part.id,
-        kind: 'text',
-        delta,
+    // Uma tarefa só, aceita, sem merge com problema: a síntese seria uma
+    // chamada de modelo para reescrever o resumo do próprio worker. Entrega o
+    // resumo direto. Falha, extra criado na revisão ou merge que não fechou
+    // continuam pela síntese — aí há o que explicar.
+    const unica = plan.tasks.length === 1 ? plan.tasks[0] : undefined
+    const resumoDireto =
+      unica && unica.fase === 'aceita' && plan.revisao?.merge?.ok !== false
+        ? workerResultados.get(unica.id)?.text?.trim()
+        : undefined
+    if (resumoDireto) {
+      const part: TextPart = { id: newId('prt'), type: 'text', text: resumoDireto, state: 'done' }
+      synthesisMessage.parts.push(part)
+      emit(win, { type: 'part', sessionId, messageId: synthesisMessage.id, part })
+    } else {
+      const model = await resolveModel(conductor.providerId, conductor.modelId)
+      const provider = await getProvider(conductor.providerId)
+      const stream = streamText({
+        model,
+        system: ORCHESTRATOR_SYNTHESIS_PROMPT,
+        messages: [
+          ...normalizeMessages(
+            toModelMessages(history.slice(0, -1)),
+            interleavedReasoningField(provider, conductor.modelId),
+          ),
+          { role: 'user', content: `Worker results:\n\n${resultsText}` },
+        ],
+        abortSignal: controller.signal,
+        providerOptions: await buildProviderOptions(conductor),
       })
-    }
-    part.state = 'done'
-    if (started) emit(win, { type: 'part', sessionId, messageId: synthesisMessage.id, part })
 
-    // Usage da síntese: registrado na própria mensagem e somado ao plano
-    synthesisMessage.tokens = toTokenUsage(await stream.usage, provider?.models[conductor.modelId]?.cost)
-    plan.usage = addTokenUsage(plan.usage, synthesisMessage.tokens)
+      const part: TextPart = { id: newId('prt'), type: 'text', text: '', state: 'streaming' }
+      let started = false
+      for await (const delta of stream.textStream) {
+        if (!started) {
+          started = true
+          synthesisMessage.parts.push(part)
+          emit(win, { type: 'part', sessionId, messageId: synthesisMessage.id, part })
+        }
+        part.text += delta
+        emit(win, {
+          type: 'part-delta',
+          sessionId,
+          messageId: synthesisMessage.id,
+          partId: part.id,
+          kind: 'text',
+          delta,
+        })
+      }
+      part.state = 'done'
+      if (started) emit(win, { type: 'part', sessionId, messageId: synthesisMessage.id, part })
+
+      // Usage da síntese: registrado na própria mensagem e somado ao plano
+      synthesisMessage.tokens = toTokenUsage(await stream.usage, provider?.models[conductor.modelId]?.cost)
+      plan.usage = addTokenUsage(plan.usage, synthesisMessage.tokens)
+    }
     await saveMessages(sessionId, history)
 
     const session = await readJson<SessionInfo>(StorageKeys.session(sessionId))

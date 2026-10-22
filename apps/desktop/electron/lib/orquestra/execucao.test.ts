@@ -13,6 +13,7 @@ function plano(tasks: OrchestrationTask[]): OrchestrationPlan {
 const config = (c: Partial<OrchestrationSettings> = {}): OrchestrationSettings => ({
   comportamento: 'acompanhar',
   ajustesPorWorker: 2,
+  aprovarTarefaUnica: false,
   worktrees: false,
   ...c,
 })

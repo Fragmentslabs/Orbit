@@ -1098,7 +1098,9 @@
       "menos": "Fewer adjustments",
       "mais": "More adjustments",
       "worktrees": "Isolate workers in worktrees",
-      "worktreesHint": "Each worker works on its own branch and copy, and the orchestrator merges everything at the end. Keeps workers from touching each other's files; git repositories only."
+      "worktreesHint": "Each worker works on its own branch and copy, and the orchestrator merges everything at the end. Keeps workers from touching each other's files; git repositories only.",
+      "aprovarTarefaUnica": "Auto-approve single-task plans",
+      "aprovarTarefaUnicaHint": "When the plan has a single worker, it starts right away instead of waiting for you to approve the card."
     }
   },
   "orchestration": {

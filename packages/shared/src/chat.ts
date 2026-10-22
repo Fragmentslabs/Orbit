@@ -948,12 +948,15 @@ export interface OrchestrationSettings {
   ajustesPorWorker: number
   /** Cada worker num git worktree próprio, juntado no fim */
   worktrees: boolean
+  /** Plano de uma tarefa só começa sem esperar o "Aprovar" do card */
+  aprovarTarefaUnica: boolean
 }
 
 export const ORCHESTRATION_SETTINGS_PADRAO: OrchestrationSettings = {
   comportamento: "acompanhar",
   ajustesPorWorker: 2,
   worktrees: false,
+  aprovarTarefaUnica: false,
 }
 
 export const MAX_AJUSTES_POR_WORKER = 5
@@ -969,6 +972,7 @@ export function normalizeOrchestrationSettings(raw: unknown): OrchestrationSetti
     comportamento: v.comportamento === "orquestrar" || v.comportamento === "rigoroso" ? v.comportamento : d.comportamento,
     ajustesPorWorker: ajustes,
     worktrees: typeof v.worktrees === "boolean" ? v.worktrees : d.worktrees,
+    aprovarTarefaUnica: typeof v.aprovarTarefaUnica === "boolean" ? v.aprovarTarefaUnica : d.aprovarTarefaUnica,
   }
 }
 

@@ -20,7 +20,7 @@ import { disputasDeArquivo, esperaPor, normalizarCaminho } from '../orquestra/po
  *   na fase de planejamento do modo Orchestra).
  */
 
-const SUBAGENT_MAX_STEPS = 25
+export const SUBAGENT_MAX_STEPS = 25
 
 function newTaskId() {
   return `task_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`
@@ -42,11 +42,12 @@ export function createSubagentTool(
   ctx: ToolContext | null,
   maxSteps = SUBAGENT_MAX_STEPS,
   maxCalls?: number,
+  /** Mesma mecânica com outro propósito (ex.: a mudança pequena do orquestrador). */
+  description = 'Delegates a subtask to a worker that runs in the background and returns the result as text. Use for parallel or isolated work: research, file analysis, focused tasks. The worker does not see this conversation — include all necessary context in the task.',
 ) {
   let calls = 0
   return tool({
-    description:
-      'Delegates a subtask to a worker that runs in the background and returns the result as text. Use for parallel or isolated work: research, file analysis, focused tasks. The worker does not see this conversation — include all necessary context in the task.',
+    description,
     inputSchema: z.object({
       task: z.string().describe('Self-contained task description, with all necessary context'),
       research: z.boolean().optional().describe('Enables web search (websearch/webfetch)'),
