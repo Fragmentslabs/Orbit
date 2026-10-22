@@ -2885,6 +2885,7 @@
     "draftTitle": "Neste chat novo",
     "draftHint": "Traga o material antes de perguntar: o que você anexar aqui passa a ser da conversa assim que você enviar a primeira mensagem.",
     "quoteInChat": "Citar no chat",
+    "speak": "Ler trecho",
     "docxUnavailable": "Não foi possível mostrar o documento como ele é. O modo Texto continua mostrando o conteúdo."
   },
   "reply": {

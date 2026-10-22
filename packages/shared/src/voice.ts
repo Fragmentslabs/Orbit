@@ -30,6 +30,12 @@ export type VoiceTtsEngine = "model" | "local"
 export type VoiceModelKind = "tts" | "stt"
 
 /**
+ * As duas funções de voz, que ligam e desligam separadamente nas Preferências.
+ * Desligada, a ferramenta nem é registrada no turno.
+ */
+export type VoiceFeature = VoiceModelKind
+
+/**
  * Um modelo baixável (arquivo único de STT, ou o pacote de arquivos do TTS).
  * `bytes` é o total que o download ocupa em disco, não o tamanho de um arquivo
  * específico — é o número que a UI mostra antes de o usuário decidir baixar.

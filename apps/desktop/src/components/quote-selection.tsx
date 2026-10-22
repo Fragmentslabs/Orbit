@@ -1,7 +1,9 @@
-import { useCallback, useEffect, useRef, useState, type RefObject } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from "react"
 import { useTranslation } from "react-i18next"
 import { createPortal } from "react-dom"
-import { Quote } from "lucide-react"
+import { Quote, SquareIcon, Volume2Icon } from "lucide-react"
+import { readTtsEngine, readTtsPrefs, useSpeak, useTtsStatus } from "@/src/hooks/use-speak"
+import { useAppSettings } from "@/src/stores/app-settings"
 import { usePanelStore } from "@/src/stores/panel-store"
 
 /**
@@ -32,6 +34,7 @@ export function QuoteSelection({
   docId,
   name,
   resolve,
+  readAloud = false,
 }: {
   containerRef: RefObject<HTMLElement | null>
   /** O que o agente pode fazer com o id — ver DocumentQuotePayload. */
@@ -46,9 +49,29 @@ export function QuoteSelection({
    * texto, procurado de volta nas linhas da página.
    */
   resolve?: (range: Range, text: string) => QuoteAnchor
+  /**
+   * Oferece "Ler trecho" ao lado do "Citar no chat".
+   *
+   * É opt-in: quem não pede continua com a barra de um botão só. O documento
+   * em Markdown pede, porque lá a leitura em voz alta é o mesmo gesto da
+   * conversa; num visualizador que já tem os seus controles de fala a decisão
+   * é outra.
+   */
+  readAloud?: boolean
 }) {
   const { t } = useTranslation()
   const addQuote = usePanelStore((s) => s.addQuote)
+  // As mesmas regras do botão de fala da mensagem inteira (messages/speak-action):
+  // some com o TTS desligado nas preferências e, sem o modelo baixado, também
+  // não aparece — aqui não há espaço para o atalho que leva às Preferências, e
+  // um botão que só falha é pior que um botão ausente.
+  const voice = useAppSettings((s) => (s.settings as unknown as { voice?: unknown }).voice)
+  const prefs = useMemo(() => readTtsPrefs(voice), [voice])
+  const engine = useMemo(() => readTtsEngine(voice), [voice])
+  const { ready, known } = useTtsStatus(prefs.enabled, engine)
+  // `known: false` = ninguém respondeu (main antigo ou sem motor): não bloqueia.
+  const canSpeak = readAloud && prefs.enabled && (!known || ready)
+  const { speak, stop, speaking } = useSpeak()
   // Guardado em ref para o chamador poder passar uma arrow inline sem que o
   // listener seja reassinado a cada render.
   const resolveRef = useRef(resolve)
@@ -107,20 +130,41 @@ export function QuoteSelection({
   if (!pending) return null
 
   return createPortal(
-    <button
-      type="button"
-      onMouseDown={(e) => e.preventDefault()}
-      onClick={() => {
-        addQuote({ kind, docId, name, text: pending.text, ...pending.anchor })
-        window.getSelection()?.removeAllRanges()
-        setPending(null)
-      }}
+    <div
       style={{ left: pending.x, top: pending.y - 8 }}
-      className="fixed z-[999] flex -translate-x-1/2 -translate-y-full cursor-pointer items-center gap-1.5 rounded-md border bg-popover px-2 py-1 text-[11px] font-medium text-popover-foreground shadow-md hover:bg-accent"
+      className="fixed z-[999] flex -translate-x-1/2 -translate-y-full items-center gap-0.5 rounded-md border bg-popover p-0.5 text-popover-foreground shadow-md"
     >
-      <Quote className="size-3" />
-      {t("sources.quoteInChat")}
-    </button>,
+      {canSpeak && (
+        <button
+          type="button"
+          // Sem o preventDefault o clique desfaz a seleção e a barra some no
+          // meio da fala — com ele o mesmo trecho pode ser interrompido logo
+          // em seguida.
+          onMouseDown={(e) => e.preventDefault()}
+          onClick={() => {
+            if (speaking) stop()
+            else speak(pending.text, { voice: prefs.voice, lang: prefs.lang, speed: prefs.speed, engine })
+          }}
+          className="flex cursor-pointer items-center gap-1.5 rounded px-2 py-1 text-[11px] font-medium hover:bg-accent"
+        >
+          {speaking ? <SquareIcon className="size-3" /> : <Volume2Icon className="size-3" />}
+          {speaking ? t("voice.tts.stop") : t("sources.speak")}
+        </button>
+      )}
+      <button
+        type="button"
+        onMouseDown={(e) => e.preventDefault()}
+        onClick={() => {
+          addQuote({ kind, docId, name, text: pending.text, ...pending.anchor })
+          window.getSelection()?.removeAllRanges()
+          setPending(null)
+        }}
+        className="flex cursor-pointer items-center gap-1.5 rounded px-2 py-1 text-[11px] font-medium hover:bg-accent"
+      >
+        <Quote className="size-3" />
+        {t("sources.quoteInChat")}
+      </button>
+    </div>,
     document.body,
   )
 }
